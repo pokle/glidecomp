@@ -49,13 +49,33 @@
       font-size: 0.875rem;
       color: #60a5fa;
     }
+
+    .cta-button {
+      display: inline-block;
+      padding: 0.875rem 2rem;
+      background: #3b82f6;
+      color: white;
+      text-decoration: none;
+      border-radius: 9999px;
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+      transition: all 0.2s;
+    }
+
+    .cta-button:hover {
+      background: #2563eb;
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>TaskScore</h1>
     <p class="tagline">Competition track log analysis for hanggliding and paragliding</p>
-    <span class="status">Coming Soon</span>
+    <a href="/analysis.html" class="cta-button">Try IGC Analysis Tool</a>
+    <p class="status">More features coming soon</p>
   </div>
 </body>
 </html>

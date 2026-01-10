@@ -4,12 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler pages dev public",
-    "deploy": "wrangler pages deploy public --project-name=taskscore",
+    "build": "esbuild src/analysis/main.ts --bundle --outfile=public/js/analysis.js --format=esm --target=es2022 --minify --sourcemap",
+    "build:watch": "esbuild src/analysis/main.ts --bundle --outfile=public/js/analysis.js --format=esm --target=es2022 --sourcemap --watch",
+    "dev": "npm run build && wrangler pages dev public",
+    "deploy": "npm run build && wrangler pages deploy public --project-name=taskscore",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250528.0",
+    "esbuild": "^0.27.2",
+    "maplibre-gl": "^5.15.0",
     "typescript": "^5.7.3",
     "wrangler": "^4.6.0"
   }

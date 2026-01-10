@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TaskScore - IGC Analysis</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="/css/analysis.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-brand">
+        <a href="/" class="header-logo">TaskScore</a>
+        <span class="header-subtitle">IGC Analysis</span>
+      </div>
+      <div class="header-controls">
+        <div class="control-group">
+          <label for="igc-file" class="file-label">
+            <span class="file-label-text">Choose IGC File</span>
+            <input type="file" id="igc-file" accept=".igc" class="file-input">
+          </label>
+        </div>
+        <div class="control-group">
+          <input type="text" id="task-code" placeholder="Task code (e.g., ABCD)" class="task-input">
+          <button id="load-task-btn" class="btn btn-primary">Load Task</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main content -->
+    <main class="main">
+      <!-- Map container -->
+      <div class="map-container">
+        <div id="drop-zone" class="drop-zone">
+          <div class="drop-zone-content">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+              <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+            </svg>
+            <p>Drop IGC file here</p>
+          </div>
+        </div>
+        <div id="map"></div>
+        <div class="map-overlay">
+          <div id="flight-info" class="flight-info">Load an IGC file to see flight info</div>
+          <div id="status" class="status"></div>
+        </div>
+      </div>
+
+      <!-- Event panel -->
+      <div id="event-panel-container" class="event-panel-container"></div>
+    </main>
+  </div>
+
+  <script type="module" src="/js/analysis.js"></script>
+</body>
+</html>
