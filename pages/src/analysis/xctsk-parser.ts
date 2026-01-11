@@ -321,12 +321,13 @@ export function parseXCTask(content: string): XCTask {
 /**
  * Fetch task from XContest by task code
  *
- * Note: According to https://tools.xcontest.org/xctsk, task codes are numeric.
- * The v1 API (/api/xctsk/load/) returns the original format.
+ * Task codes can be alphanumeric (e.g., "face", "12345").
+ * The v1 API (/api/xctsk/load/) returns the original JSON format.
  * The v2 API (/api/xctsk/loadV2/) returns compact QR code format.
+ * See: https://tools.xcontest.org/xctsk
  */
 export async function fetchTaskByCode(code: string): Promise<XCTask> {
-  // Clean up code - trim whitespace only (codes are numeric, don't uppercase)
+  // Clean up code - trim whitespace only
   const cleanCode = code.trim();
 
   if (!cleanCode) {
