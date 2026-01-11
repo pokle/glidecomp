@@ -560,3 +560,40 @@ html, body {
     margin-bottom: calc(-40vh + 40px);
   }
 }
+
+/* Style Selector Control */
+.style-selector {
+  display: flex;
+  flex-direction: row !important;
+  gap: 0 !important;
+}
+
+.style-selector-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface);
+  border: none;
+  border-right: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.style-selector-btn:last-child {
+  border-right: none;
+}
+
+.style-selector-btn:hover {
+  background: var(--color-surface-hover);
+}
+
+.style-selector-btn.active {
+  background: var(--color-primary);
+}
+
+.style-selector-btn .style-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
