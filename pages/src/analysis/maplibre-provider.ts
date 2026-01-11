@@ -1,35 +1,24 @@
 /**
- * Map Renderer using MapLibre GL JS
- *
- * Handles rendering of:
- * - Base map with hillshade terrain
- * - Flight tracklog
- * - Task turnpoints and cylinders
- * - Event markers
- * - Map style switching
+ * MapLibre Provider
+ * 
+ * MapLibre GL JS implementation of the MapProvider interface.
+ * Handles rendering of flight tracks, task turnpoints, and events.
  */
 
 import maplibregl from 'maplibre-gl';
 import { IGCFix, getBoundingBox } from './igc-parser';
 import { XCTask } from './xctsk-parser';
-import { FlightEvent, getEventStyle, TrackSegment } from './event-detector';
+import { FlightEvent, getEventStyle } from './event-detector';
 import { StyleSelectorControl, MAP_STYLES, getStyleById } from './map-styles';
+import type { MapProvider } from './map-provider';
 
-export interface MapRenderer {
-  map: maplibregl.Map;
-  setTrack(fixes: IGCFix[]): void;
-  setTask(task: XCTask): void;
-  setEvents(events: FlightEvent[]): void;
-  panToEvent(event: FlightEvent): void;
-  getBounds(): { north: number; south: number; east: number; west: number };
-  onBoundsChange(callback: () => void): void;
-  destroy(): void;
-}
+// Re-export MapProvider as MapRenderer for backwards compatibility
+export type MapRenderer = MapProvider & { map: maplibregl.Map };
 
 /**
- * Create a MapLibre map with hillshade terrain
+ * Create a MapLibre map provider with hillshade terrain
  */
-export function createMap(container: HTMLElement): Promise<MapRenderer> {
+export function createMapLibreProvider(container: HTMLElement): Promise<MapProvider> {
   return new Promise((resolve, reject) => {
     try {
       // Get default style
@@ -682,3 +671,6 @@ function createCirclePolygon(
     coordinates: [coords],
   };
 }
+
+// Backwards compatibility alias
+export const createMap = createMapLibreProvider;

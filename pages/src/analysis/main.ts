@@ -10,11 +10,11 @@
 
 import { parseIGC, IGCFile, IGCFix } from './igc-parser';
 import { fetchTaskByCode, parseXCTask, XCTask } from './xctsk-parser';
-import { createMap, MapRenderer } from './map-renderer';
+import { createMapProvider, getProviderFromUrl, MapProvider } from './map-provider';
 import { detectFlightEvents, FlightEvent } from './event-detector';
 import { createEventPanel, EventPanel } from './event-panel';
 
-// CSS for maplibre-gl
+// CSS for maplibre-gl (only loaded when MapLibre is used)
 import 'maplibre-gl/dist/maplibre-gl.css';
 // App styles
 import './analysis.css';
@@ -33,7 +33,7 @@ const state: AppState = {
   events: [],
 };
 
-let mapRenderer: MapRenderer | null = null;
+let mapRenderer: MapProvider | null = null;
 let eventPanel: EventPanel | null = null;
 
 /**
@@ -54,9 +54,13 @@ async function init(): Promise<void> {
     return;
   }
 
-  // Initialize map
+  // Get provider from URL (?provider=google or default to maplibre)
+  const providerType = getProviderFromUrl();
+  console.log(`[Analysis] Using map provider: ${providerType}`);
+
+  // Initialize map with selected provider
   try {
-    mapRenderer = await createMap(mapContainer);
+    mapRenderer = await createMapProvider(providerType, mapContainer);
 
     // Update event panel when map moves
     mapRenderer.onBoundsChange(() => {
