@@ -48,3 +48,6 @@ npm run test         # Run tests
 **URLs:**
 - Production: https://taskscore.shonky.info
 - Previews: https://{branch}.taskscore.pages.dev
+
+## Troubleshooting tools
+- `npm run get-xcontest-task` - Download task from XContest

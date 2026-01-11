@@ -8,7 +8,7 @@
  *   npm run get-xcontest-task -- --json '<json>' # Parse inline JSON
  *
  * Examples:
- *   npm run get-xcontest-task -- 12345
+ *   npm run get-xcontest-task -- face
  *   npm run get-xcontest-task -- --file task.json
  *   npm run get-xcontest-task -- --json '{"taskType":"CLASSIC",...}'
  */
@@ -55,7 +55,7 @@ async function main() {
     console.error('  npm run get-xcontest-task -- --json \'<json>\' # Parse inline JSON');
     console.error('');
     console.error('Examples:');
-    console.error('  npm run get-xcontest-task -- 12345');
+    console.error('  npm run get-xcontest-task -- face');
     console.error('  npm run get-xcontest-task -- --file task.json');
     process.exit(1);
   }
