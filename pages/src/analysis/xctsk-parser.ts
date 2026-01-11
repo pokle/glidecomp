@@ -262,6 +262,35 @@ function parseV2(data: Record<string, unknown>): XCTask {
 }
 
 /**
+ * Validate that a task has valid turnpoints with coordinates
+ */
+function isValidTask(task: XCTask): boolean {
+  if (task.turnpoints.length === 0) {
+    return false;
+  }
+
+  for (const tp of task.turnpoints) {
+    const { lat, lon } = tp.waypoint;
+
+    // Check for valid coordinate ranges
+    if (typeof lat !== 'number' || typeof lon !== 'number') {
+      return false;
+    }
+    if (isNaN(lat) || isNaN(lon)) {
+      return false;
+    }
+    if (lat < -90 || lat > 90) {
+      return false;
+    }
+    if (lon < -180 || lon > 180) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
  * Parse xctsk JSON content
  */
 export function parseXCTask(content: string): XCTask {
@@ -273,13 +302,19 @@ export function parseXCTask(content: string): XCTask {
 
   const data = JSON.parse(jsonContent) as Record<string, unknown>;
 
-  // Determine format version
-  const version = data.version as number || 1;
-
-  if (version >= 2 || 't' in data) {
+  // Determine format based on structure, not just version number
+  // v1 format uses 'turnpoints' array, v2 uses 't' array
+  if ('turnpoints' in data && Array.isArray(data.turnpoints)) {
+    return parseV1(data);
+  } else if ('t' in data && Array.isArray(data.t)) {
     return parseV2(data);
   } else {
-    return parseV1(data);
+    // Fallback: try v1 first, then v2
+    const v1Task = parseV1(data);
+    if (isValidTask(v1Task)) {
+      return v1Task;
+    }
+    return parseV2(data);
   }
 }
 
@@ -290,10 +325,10 @@ export async function fetchTaskByCode(code: string): Promise<XCTask> {
   // Clean up code - remove spaces, convert to uppercase
   const cleanCode = code.trim().toUpperCase();
 
-  // Try v2 API first, then v1
+  // Try v1 API first (more reliable format), then v2
   const urls = [
-    `https://tools.xcontest.org/api/xctsk/loadV2/${cleanCode}`,
     `https://tools.xcontest.org/api/xctsk/load/${cleanCode}`,
+    `https://tools.xcontest.org/api/xctsk/loadV2/${cleanCode}`,
   ];
 
   let lastError: Error | null = null;
@@ -304,9 +339,18 @@ export async function fetchTaskByCode(code: string): Promise<XCTask> {
 
       if (response.ok) {
         const text = await response.text();
-        return parseXCTask(text);
+        const task = parseXCTask(text);
+
+        // Validate the parsed task has valid coordinates
+        if (isValidTask(task)) {
+          return task;
+        } else {
+          lastError = new Error('Parsed task has invalid coordinates');
+          // Continue to next URL
+        }
       } else if (response.status === 404) {
-        throw new Error(`Task code "${cleanCode}" not found`);
+        // Only throw 404 error if this is the last URL
+        lastError = new Error(`Task code "${cleanCode}" not found`);
       }
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
