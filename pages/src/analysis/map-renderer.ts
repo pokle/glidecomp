@@ -318,6 +318,7 @@ export function createMap(container: HTMLElement): Promise<MapRenderer> {
           }
 
           // Create line segments with altitude property for coloring
+          // Using 3D coordinates [lng, lat, alt] so track renders at GPS altitude
           const features: GeoJSON.Feature[] = [];
 
           for (let i = 0; i < fixes.length - 1; i++) {
@@ -330,8 +331,8 @@ export function createMap(container: HTMLElement): Promise<MapRenderer> {
               geometry: {
                 type: 'LineString',
                 coordinates: [
-                  [fixes[i].longitude, fixes[i].latitude],
-                  [fixes[i + 1].longitude, fixes[i + 1].latitude],
+                  [fixes[i].longitude, fixes[i].latitude, fixes[i].gnssAltitude],
+                  [fixes[i + 1].longitude, fixes[i + 1].latitude, fixes[i + 1].gnssAltitude],
                 ],
               },
             });
@@ -508,7 +509,8 @@ export function createMap(container: HTMLElement): Promise<MapRenderer> {
             const segmentFixes = currentFixes.slice(startIndex, endIndex + 1);
 
             if (segmentFixes.length > 1) {
-              const coordinates = segmentFixes.map(fix => [fix.longitude, fix.latitude]);
+              // Using 3D coordinates to match track altitude
+              const coordinates = segmentFixes.map(fix => [fix.longitude, fix.latitude, fix.gnssAltitude]);
 
               (map.getSource('highlight-segment') as maplibregl.GeoJSONSource)?.setData({
                 type: 'FeatureCollection',
