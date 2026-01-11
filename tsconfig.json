@@ -15,7 +15,8 @@
   "include": [
     "pages/src/**/*",
     "workers/**/*",
-    "tests/**/*"
+    "tests/**/*",
+    "scripts/**/*"
   ],
   "exclude": [
     "node_modules",

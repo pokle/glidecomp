@@ -9,7 +9,8 @@
     "build": "npm run build --workspace=pages",
     "deploy": "npm run deploy --workspace=pages",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "get-xcontest-task": "tsx scripts/get-xcontest-task.ts"
   },
   "workspaces": [
     "pages",
@@ -18,6 +19,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260109.0",
     "@types/node": "^25.0.5",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.3",
     "vitest": "^3.2.4",
     "wrangler": "^4.6.0"
