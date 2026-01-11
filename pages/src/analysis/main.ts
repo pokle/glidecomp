@@ -16,6 +16,8 @@ import { createEventPanel, EventPanel } from './event-panel';
 
 // CSS for maplibre-gl
 import 'maplibre-gl/dist/maplibre-gl.css';
+// App styles
+import './analysis.css';
 
 interface AppState {
   igcFile: IGCFile | null;
@@ -231,7 +233,7 @@ async function init(): Promise<void> {
 
       if (state.fixes.length > 0) {
         const duration = state.fixes[state.fixes.length - 1].time.getTime() -
-                        state.fixes[0].time.getTime();
+          state.fixes[0].time.getTime();
         const hours = Math.floor(duration / 3600000);
         const mins = Math.floor((duration % 3600000) / 60000);
         parts.push(`<strong>Duration:</strong> ${hours}h ${mins}m`);
