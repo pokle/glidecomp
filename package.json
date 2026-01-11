@@ -8,6 +8,7 @@
     "dev": "npm run dev --workspace=pages",
     "build": "npm run build --workspace=pages",
     "deploy": "npm run deploy --workspace=pages",
+    "deployments": "wrangler pages deployment list --project-name=taskscore --json | jq .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
