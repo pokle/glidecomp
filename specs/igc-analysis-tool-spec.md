@@ -69,6 +69,7 @@ Supports both v1 (full JSON) and v2 (compact QR code) formats:
 - Fetches tasks from `tools.xcontest.org/api/xctsk/load/{code}`
 - Parses turnpoint definitions, SSS/ESS markers, cylinder radii
 - Handles both WGS84 and FAI Sphere earth models
+- See https://tools.xcontest.org/xctsk for api documentation
 
 ### Event Detection Algorithms
 - **Thermals**: Rolling window analysis of vertical speed, minimum duration threshold
