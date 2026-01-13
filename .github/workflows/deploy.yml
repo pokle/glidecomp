@@ -60,4 +60,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy pages/public --project-name=taskscore --branch=${{ github.ref_name }}
+          command: pages deploy pages/dist --project-name=taskscore --branch=${{ github.ref_name }}
