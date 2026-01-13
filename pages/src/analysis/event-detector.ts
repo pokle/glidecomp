@@ -122,6 +122,8 @@ function detectThermals(fixes: IGCFix[], windowSize = 10): ThermalSegment[] {
 
   let inThermal = false;
   let thermalStart = 0;
+  let exitCounter = 0; // Count consecutive windows below threshold
+  const exitThreshold = 3; // Exit after N consecutive windows below threshold
 
   for (let i = windowSize; i < fixes.length; i++) {
     // Calculate average climb rate over window
@@ -141,40 +143,86 @@ function detectThermals(fixes: IGCFix[], windowSize = 10): ThermalSegment[] {
       // Entering thermal
       inThermal = true;
       thermalStart = i - windowSize;
-    } else if (inThermal && avgClimb <= 0) {
-      // Exiting thermal
-      const thermalEnd = i;
-      const duration = (fixes[thermalEnd].time.getTime() - fixes[thermalStart].time.getTime()) / 1000;
+      exitCounter = 0;
+    } else if (inThermal) {
+      if (avgClimb <= minClimbRate) {
+        // Climb rate below threshold - increment exit counter
+        exitCounter++;
 
-      if (duration >= minDuration) {
-        // Calculate thermal statistics
-        let sumLat = 0;
-        let sumLon = 0;
-        let count = 0;
+        if (exitCounter >= exitThreshold) {
+          // Exiting thermal - sustained drop below threshold
+          const thermalEnd = i - exitThreshold;
+          const duration = (fixes[thermalEnd].time.getTime() - fixes[thermalStart].time.getTime()) / 1000;
 
-        for (let j = thermalStart; j <= thermalEnd; j++) {
-          sumLat += fixes[j].latitude;
-          sumLon += fixes[j].longitude;
-          count++;
+          if (duration >= minDuration) {
+            // Calculate thermal statistics
+            let sumLat = 0;
+            let sumLon = 0;
+            let count = 0;
+
+            for (let j = thermalStart; j <= thermalEnd; j++) {
+              sumLat += fixes[j].latitude;
+              sumLon += fixes[j].longitude;
+              count++;
+            }
+
+            const altGain = fixes[thermalEnd].gnssAltitude - fixes[thermalStart].gnssAltitude;
+
+            thermals.push({
+              startIndex: thermalStart,
+              endIndex: thermalEnd,
+              startAltitude: fixes[thermalStart].gnssAltitude,
+              endAltitude: fixes[thermalEnd].gnssAltitude,
+              avgClimbRate: altGain / duration,
+              duration,
+              location: {
+                lat: sumLat / count,
+                lon: sumLon / count,
+              },
+            });
+          }
+
+          inThermal = false;
+          exitCounter = 0;
         }
+      } else {
+        // Climb rate back above threshold - reset exit counter
+        exitCounter = 0;
+      }
+    }
+  }
 
-        const altGain = fixes[thermalEnd].gnssAltitude - fixes[thermalStart].gnssAltitude;
+  // Handle thermal that's still active at end of flight
+  if (inThermal) {
+    const thermalEnd = fixes.length - 1;
+    const duration = (fixes[thermalEnd].time.getTime() - fixes[thermalStart].time.getTime()) / 1000;
 
-        thermals.push({
-          startIndex: thermalStart,
-          endIndex: thermalEnd,
-          startAltitude: fixes[thermalStart].gnssAltitude,
-          endAltitude: fixes[thermalEnd].gnssAltitude,
-          avgClimbRate: altGain / duration,
-          duration,
-          location: {
-            lat: sumLat / count,
-            lon: sumLon / count,
-          },
-        });
+    if (duration >= minDuration) {
+      // Calculate thermal statistics
+      let sumLat = 0;
+      let sumLon = 0;
+      let count = 0;
+
+      for (let j = thermalStart; j <= thermalEnd; j++) {
+        sumLat += fixes[j].latitude;
+        sumLon += fixes[j].longitude;
+        count++;
       }
 
-      inThermal = false;
+      const altGain = fixes[thermalEnd].gnssAltitude - fixes[thermalStart].gnssAltitude;
+
+      thermals.push({
+        startIndex: thermalStart,
+        endIndex: thermalEnd,
+        startAltitude: fixes[thermalStart].gnssAltitude,
+        endAltitude: fixes[thermalEnd].gnssAltitude,
+        avgClimbRate: altGain / duration,
+        duration,
+        location: {
+          lat: sumLat / count,
+          lon: sumLon / count,
+        },
+      });
     }
   }
 
@@ -196,7 +244,8 @@ function detectGlides(fixes: IGCFix[], thermals: ThermalSegment[]): GlideSegment
   for (const thermal of sortedThermals) {
     if (thermal.startIndex > prevEnd + 10) {
       const startIdx = prevEnd;
-      const endIdx = thermal.startIndex;
+      // Glide ends one index before the thermal starts to avoid timestamp overlap
+      const endIdx = thermal.startIndex - 1;
 
       const duration = (fixes[endIdx].time.getTime() - fixes[startIdx].time.getTime()) / 1000;
 
