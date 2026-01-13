@@ -100,11 +100,6 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
   panel.innerHTML = `
     <div class="event-panel-header">
       <h2>Flight Events</h2>
-      <button class="event-panel-toggle" aria-label="Toggle panel">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-          <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
-        </svg>
-      </button>
     </div>
     <div class="event-panel-flight-info">
       <div class="flight-info-content">Load an IGC file to see flight info</div>
@@ -126,7 +121,6 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
   container.appendChild(panel);
 
   // Get references
-  const toggleBtn = panel.querySelector('.event-panel-toggle') as HTMLButtonElement;
   const listContainer = panel.querySelector('.event-panel-list') as HTMLElement;
   const eventCountEl = panel.querySelector('.event-count') as HTMLElement;
   const filterViewCheckbox = panel.querySelector('#filter-view') as HTMLInputElement;
@@ -137,19 +131,6 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
   let filteredEvents: FlightEvent[] = [];
   let currentBounds: { north: number; south: number; east: number; west: number } | null = null;
   let isCollapsed = false;
-
-  // Event handlers
-  toggleBtn.addEventListener('click', () => {
-    isCollapsed = !isCollapsed;
-    container.classList.toggle('collapsed', isCollapsed);
-    panel.classList.toggle('collapsed', isCollapsed);
-    toggleBtn.querySelector('svg')!.style.transform = isCollapsed ? 'rotate(180deg)' : '';
-
-    // Call onToggle after transition completes (300ms matches CSS transition)
-    if (options.onToggle) {
-      setTimeout(options.onToggle, 350);
-    }
-  });
 
   filterViewCheckbox.addEventListener('change', () => {
     updateFilteredEvents();
@@ -277,7 +258,11 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
       isCollapsed = !isCollapsed;
       container.classList.toggle('collapsed', isCollapsed);
       panel.classList.toggle('collapsed', isCollapsed);
-      toggleBtn.querySelector('svg')!.style.transform = isCollapsed ? 'rotate(180deg)' : '';
+
+      // Call onToggle after transition completes (300ms matches CSS transition)
+      if (options.onToggle) {
+        setTimeout(options.onToggle, 350);
+      }
     },
 
     destroy() {

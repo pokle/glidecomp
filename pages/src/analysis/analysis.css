@@ -90,6 +90,31 @@ body {
   gap: 0.5rem;
 }
 
+/* Panel toggle button (hamburger menu) */
+.panel-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-left: 0.5rem;
+}
+
+.panel-toggle-btn:hover {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.panel-toggle-btn svg {
+  stroke: currentColor;
+}
+
 /* File input styling */
 .file-label {
   display: inline-flex;
@@ -349,29 +374,6 @@ body {
 .flight-info-separator {
   color: var(--color-border);
   margin: 0 0.125rem;
-}
-
-.event-panel-toggle {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.event-panel-toggle:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text);
-}
-
-.event-panel-toggle svg {
-  transition: transform 0.3s;
 }
 
 .event-panel-filters {

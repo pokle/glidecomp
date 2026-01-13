@@ -50,6 +50,7 @@ async function init(): Promise<void> {
   const statusEl = document.getElementById('status');
   const dropZone = document.getElementById('drop-zone');
   const mapProviderSelect = document.getElementById('map-provider') as HTMLSelectElement | null;
+  const panelToggleBtn = document.getElementById('panel-toggle');
 
   if (!mapContainer || !eventPanelContainer) {
     console.error('Required containers not found');
@@ -178,6 +179,13 @@ async function init(): Promise<void> {
         mapRenderer.invalidateSize();
       }
     },
+  });
+
+  // Panel toggle button (hamburger menu in header)
+  panelToggleBtn?.addEventListener('click', () => {
+    if (eventPanel) {
+      eventPanel.toggle();
+    }
   });
 
   // File input handler
