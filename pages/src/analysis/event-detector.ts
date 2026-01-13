@@ -459,14 +459,44 @@ export function detectFlightEvents(
 ): FlightEvent[] {
   const allEvents: FlightEvent[] = [];
 
-  // Detect thermals
-  const thermals = detectThermals(fixes);
+  // IMPORTANT: Detect takeoff and landing FIRST
+  // All other events should only be detected after takeoff
+  const takeoffLandingEvents = detectTakeoffLanding(fixes);
+  allEvents.push(...takeoffLandingEvents);
+
+  // Find the takeoff event to get the index where flight begins
+  const takeoffEvent = takeoffLandingEvents.find(e => e.type === 'takeoff');
+
+  // If no takeoff detected, we shouldn't detect flight events
+  // (pilot might still be on the ground)
+  if (!takeoffEvent) {
+    return allEvents;
+  }
+
+  // Find the index of the takeoff fix in the original array
+  const takeoffIndex = fixes.findIndex(f => f.time.getTime() === takeoffEvent.time.getTime());
+
+  if (takeoffIndex === -1) {
+    // Shouldn't happen, but safety check
+    return allEvents;
+  }
+
+  // Create a slice of fixes from takeoff onwards for analysis
+  const flightFixes = fixes.slice(takeoffIndex);
+  const indexOffset = takeoffIndex; // To adjust indices back to original array
+
+  // Detect thermals (only after takeoff)
+  const thermals = detectThermals(flightFixes);
 
   for (const thermal of thermals) {
+    // Adjust indices to reference original array
+    const adjustedStartIndex = thermal.startIndex + indexOffset;
+    const adjustedEndIndex = thermal.endIndex + indexOffset;
+
     allEvents.push({
-      id: `thermal-entry-${thermal.startIndex}`,
+      id: `thermal-entry-${adjustedStartIndex}`,
       type: 'thermal_entry',
-      time: fixes[thermal.startIndex].time,
+      time: fixes[adjustedStartIndex].time,
       latitude: thermal.location.lat,
       longitude: thermal.location.lon,
       altitude: thermal.startAltitude,
@@ -476,13 +506,13 @@ export function detectFlightEvents(
         duration: thermal.duration,
         altitudeGain: thermal.endAltitude - thermal.startAltitude,
       },
-      segment: { startIndex: thermal.startIndex, endIndex: thermal.endIndex },
+      segment: { startIndex: adjustedStartIndex, endIndex: adjustedEndIndex },
     });
 
     allEvents.push({
-      id: `thermal-exit-${thermal.endIndex}`,
+      id: `thermal-exit-${adjustedEndIndex}`,
       type: 'thermal_exit',
-      time: fixes[thermal.endIndex].time,
+      time: fixes[adjustedEndIndex].time,
       latitude: thermal.location.lat,
       longitude: thermal.location.lon,
       altitude: thermal.endAltitude,
@@ -492,20 +522,24 @@ export function detectFlightEvents(
         duration: thermal.duration,
         altitudeGain: thermal.endAltitude - thermal.startAltitude,
       },
-      segment: { startIndex: thermal.startIndex, endIndex: thermal.endIndex },
+      segment: { startIndex: adjustedStartIndex, endIndex: adjustedEndIndex },
     });
   }
 
-  // Detect glides
-  const glides = detectGlides(fixes, thermals);
+  // Detect glides (only after takeoff)
+  const glides = detectGlides(flightFixes, thermals);
 
   for (const glide of glides) {
+    // Adjust indices to reference original array
+    const adjustedStartIndex = glide.startIndex + indexOffset;
+    const adjustedEndIndex = glide.endIndex + indexOffset;
+
     allEvents.push({
-      id: `glide-start-${glide.startIndex}`,
+      id: `glide-start-${adjustedStartIndex}`,
       type: 'glide_start',
-      time: fixes[glide.startIndex].time,
-      latitude: fixes[glide.startIndex].latitude,
-      longitude: fixes[glide.startIndex].longitude,
+      time: fixes[adjustedStartIndex].time,
+      latitude: fixes[adjustedStartIndex].latitude,
+      longitude: fixes[adjustedStartIndex].longitude,
       altitude: glide.startAltitude,
       description: `Glide start (L/D ${glide.glideRatio.toFixed(0)})`,
       details: {
@@ -513,15 +547,15 @@ export function detectFlightEvents(
         glideRatio: glide.glideRatio,
         duration: glide.duration,
       },
-      segment: { startIndex: glide.startIndex, endIndex: glide.endIndex },
+      segment: { startIndex: adjustedStartIndex, endIndex: adjustedEndIndex },
     });
 
     allEvents.push({
-      id: `glide-end-${glide.endIndex}`,
+      id: `glide-end-${adjustedEndIndex}`,
       type: 'glide_end',
-      time: fixes[glide.endIndex].time,
-      latitude: fixes[glide.endIndex].latitude,
-      longitude: fixes[glide.endIndex].longitude,
+      time: fixes[adjustedEndIndex].time,
+      latitude: fixes[adjustedEndIndex].latitude,
+      longitude: fixes[adjustedEndIndex].longitude,
       altitude: glide.endAltitude,
       description: `Glide end (${(glide.distance / 1000).toFixed(1)}km)`,
       details: {
@@ -529,22 +563,30 @@ export function detectFlightEvents(
         glideRatio: glide.glideRatio,
         altitudeLost: glide.startAltitude - glide.endAltitude,
       },
-      segment: { startIndex: glide.startIndex, endIndex: glide.endIndex },
+      segment: { startIndex: adjustedStartIndex, endIndex: adjustedEndIndex },
     });
   }
 
-  // Detect takeoff and landing
-  allEvents.push(...detectTakeoffLanding(fixes));
+  // Detect altitude extremes (only after takeoff)
+  const altitudeEvents = detectAltitudeExtremes(flightFixes);
+  // Adjust indices in altitude extreme events
+  for (const event of altitudeEvents) {
+    const adjustedEvent = {
+      ...event,
+      // Time is already correct from flightFixes, no need to adjust
+    };
+    allEvents.push(adjustedEvent);
+  }
 
-  // Detect altitude extremes
-  allEvents.push(...detectAltitudeExtremes(fixes));
+  // Detect vario extremes (only after takeoff)
+  const varioEvents = detectVarioExtremes(flightFixes);
+  // Vario events already have correct time from flightFixes
+  allEvents.push(...varioEvents);
 
-  // Detect vario extremes
-  allEvents.push(...detectVarioExtremes(fixes));
-
-  // Detect turnpoint crossings if task is provided
+  // Detect turnpoint crossings if task is provided (only after takeoff)
   if (task) {
-    allEvents.push(...detectTurnpointCrossings(fixes, task));
+    const turnpointEvents = detectTurnpointCrossings(flightFixes, task);
+    allEvents.push(...turnpointEvents);
   }
 
   // Sort by time
