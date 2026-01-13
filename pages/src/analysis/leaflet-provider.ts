@@ -489,7 +489,7 @@ export async function createLeafletProvider(container: HTMLElement): Promise<Map
             updateLayerControl();
         },
 
-        setTask(task: XCTask) {
+        async setTask(task: XCTask) {
             currentTask = task;
 
             // Clear existing task elements
@@ -497,8 +497,10 @@ export async function createLeafletProvider(container: HTMLElement): Promise<Map
 
             if (!task || task.turnpoints.length === 0) return;
 
-            // Create task line
-            const linePath = task.turnpoints.map(tp => [tp.waypoint.lat, tp.waypoint.lon] as [number, number]);
+            // Create optimized task line that tags cylinder edges
+            const { calculateOptimizedTaskLine, getOptimizedSegmentDistances } = await import('./xctsk-parser');
+            const optimizedPath = calculateOptimizedTaskLine(task);
+            const linePath = optimizedPath.map(p => [p.lat, p.lon] as [number, number]);
             const taskLine = L.polyline(linePath, {
                 color: '#6366f1',
                 weight: 2,
@@ -506,6 +508,39 @@ export async function createLeafletProvider(container: HTMLElement): Promise<Map
                 dashArray: '8, 8',
             });
             taskLayerGroup.addLayer(taskLine);
+
+            // Add distance labels to each segment
+            const segmentDistances = getOptimizedSegmentDistances(task);
+            for (let i = 0; i < optimizedPath.length - 1; i++) {
+                const p1 = optimizedPath[i];
+                const p2 = optimizedPath[i + 1];
+                const distance = segmentDistances[i];
+
+                // Calculate midpoint
+                const midLat = (p1.lat + p2.lat) / 2;
+                const midLng = (p1.lon + p2.lon) / 2;
+
+                // Create distance label
+                const distanceKm = (distance / 1000).toFixed(1);
+                const labelIcon = L.divIcon({
+                    className: 'leaflet-distance-label',
+                    html: `<div style="
+                        background: white;
+                        padding: 2px 6px;
+                        border-radius: 4px;
+                        font-size: 11px;
+                        font-weight: 600;
+                        color: #6366f1;
+                        border: 1px solid #6366f1;
+                        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+                        white-space: nowrap;
+                    ">${distanceKm} km</div>`,
+                    iconSize: [60, 20],
+                    iconAnchor: [30, 10],
+                });
+                const labelMarker = L.marker([midLat, midLng], { icon: labelIcon, interactive: false });
+                taskLayerGroup.addLayer(labelMarker);
+            }
 
             // Create cylinders and markers
             for (const tp of task.turnpoints) {
