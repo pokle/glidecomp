@@ -98,6 +98,18 @@ describe('Event Detector', () => {
       const fixes: IGCFix[] = [];
       const taskCenter = { lat: 47.2, lon: 11.2 };
 
+      // Add pre-flight fixes (stationary, no takeoff)
+      for (let i = 0; i < 5; i++) {
+        fixes.push(createFix(i, 47.0, 11.0, 500));
+      }
+
+      // Add takeoff with rapid movement
+      for (let i = 5; i < 10; i++) {
+        const lat = 47.0 + (i - 5) * 0.002; // Fast movement to trigger takeoff
+        const lon = 11.0 + (i - 5) * 0.002;
+        fixes.push(createFix(i, lat, lon, 500 + (i - 5) * 50));
+      }
+
       // Create a track that enters and exits a turnpoint cylinder
       for (let i = 0; i < 60; i++) {
         const angle = (i / 60) * Math.PI;
@@ -105,7 +117,7 @@ describe('Event Detector', () => {
         const lat = taskCenter.lat + Math.sin(angle) * radius;
         const lon = taskCenter.lon + Math.cos(angle) * radius - 0.01; // Offset to cross through
 
-        fixes.push(createFix(i, lat, lon, 1500));
+        fixes.push(createFix(i + 10, lat, lon, 1500));
       }
 
       const task: XCTask = {
