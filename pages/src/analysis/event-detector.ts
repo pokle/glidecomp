@@ -124,6 +124,7 @@ function detectThermals(fixes: IGCFix[], windowSize = 10): ThermalSegment[] {
   let thermalStart = 0;
   let exitCounter = 0; // Count consecutive windows below threshold
   const exitThreshold = 3; // Exit after N consecutive windows below threshold
+  let lastThermalEnd = -1; // Track the end of the last thermal to prevent overlaps
 
   for (let i = windowSize; i < fixes.length; i++) {
     // Calculate average climb rate over window
@@ -140,10 +141,19 @@ function detectThermals(fixes: IGCFix[], windowSize = 10): ThermalSegment[] {
     const avgClimb = totalTime > 0 ? totalClimb / totalTime : 0;
 
     if (!inThermal && avgClimb > minClimbRate) {
-      // Entering thermal
-      inThermal = true;
-      thermalStart = i - windowSize;
-      exitCounter = 0;
+      // Entering thermal - but only if we're past the last thermal's end
+      // and at least minGapDuration seconds have passed
+      const potentialStart = i - windowSize;
+      const minGapDuration = 20; // seconds between thermals
+      const timeSinceLastThermal = lastThermalEnd >= 0 
+        ? (fixes[potentialStart].time.getTime() - fixes[lastThermalEnd].time.getTime()) / 1000
+        : Infinity;
+      
+      if (potentialStart > lastThermalEnd && timeSinceLastThermal >= minGapDuration) {
+        inThermal = true;
+        thermalStart = potentialStart;
+        exitCounter = 0;
+      }
     } else if (inThermal) {
       if (avgClimb <= minClimbRate) {
         // Climb rate below threshold - increment exit counter
@@ -180,6 +190,7 @@ function detectThermals(fixes: IGCFix[], windowSize = 10): ThermalSegment[] {
                 lon: sumLon / count,
               },
             });
+            lastThermalEnd = thermalEnd;
           }
 
           inThermal = false;
