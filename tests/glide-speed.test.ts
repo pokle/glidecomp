@@ -175,6 +175,19 @@ describe('Glide Speed Calculations', () => {
       // Speed label at 250m, but only 300m total, so speed calc is partial
     });
 
+    it('should calculate correct speed for partial segment (no chevron)', () => {
+      // 400m glide at 10 m/s - only has label at 250m, no chevron at 500m
+      // Speed should be based on 250m segment, NOT 500m
+      // Time to 250m = 25s, so speed = 250m / 25s * 3.6 = 36 km/h
+      const fixes = createStraightGlide(400, 10);
+      const markers = calculateGlideMarkers(fixes);
+      
+      expect(markers).toHaveLength(1);
+      expect(markers[0].type).toBe('speed-label');
+      // Speed should be 36 km/h (10 m/s * 3.6), NOT 72 km/h (which would be wrong)
+      expect(markers[0].speedKmh).toBeCloseTo(36, 0);
+    });
+
     it('should return one speed label for 499m glide', () => {
       const fixes = createStraightGlide(499, 10);
       const markers = calculateGlideMarkers(fixes);
