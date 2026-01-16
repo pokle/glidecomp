@@ -1,11 +1,18 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="sl-theme-dark">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TaskScore - IGC Analysis</title>
+
+    <!-- Shoelace -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/dark.css" />
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>
+
+    <!-- Map Libraries -->
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.css">
+
     <!-- Google Maps API for ?provider=google -->
     <script>
         (g => { var h, a, k, p = "The Google Maps JavaScript API", c = "google", l = "importLibrary", q = "__ib__", m = document, b = window; b = b[c] || (b[c] = {}); var d = b.maps || (b.maps = {}), r = new Set, e = new URLSearchParams, u = () => h || (h = new Promise(async (f, n) => { await (a = m.createElement("script")); e.set("libraries", [...r]); for (k in g) e.set(k.replace(/[A-Z]/g, t => "_" + t[0].toLowerCase()), g[k]); e.set("callback", c + ".maps." + q); a.src = `https://maps.${c}apis.com/maps/api/js?` + e; d[q] = f; a.onerror = () => h = n(Error(p + " could not load.")); a.nonce = m.querySelector("script[nonce]")?.nonce || ""; m.head.append(a) })); d[l] ? console.warn(p + " only loads once. Ignoring:", g) : d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n)) })({
@@ -13,6 +20,390 @@
             v: "weekly"
         });
     </script>
+
+    <style>
+        /* Minimal custom styles - let Shoelace handle theming */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            background: var(--sl-color-neutral-50);
+        }
+
+        .app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 var(--sl-spacing-medium);
+            height: 56px;
+            background: var(--sl-color-neutral-0);
+            border-bottom: 1px solid var(--sl-color-neutral-200);
+            flex-shrink: 0;
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: var(--sl-spacing-small);
+        }
+
+        .header-brand a {
+            font-size: var(--sl-font-size-large);
+            font-weight: var(--sl-font-weight-bold);
+            color: var(--sl-color-neutral-900);
+            text-decoration: none;
+        }
+
+        .header-brand span {
+            color: var(--sl-color-neutral-500);
+            font-size: var(--sl-font-size-small);
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: var(--sl-spacing-small);
+        }
+
+        /* Main content area */
+        .main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Map container */
+        .map-container {
+            flex: 1;
+            position: relative;
+            min-width: 0;
+        }
+
+        #map {
+            position: absolute;
+            inset: 0;
+        }
+
+        /* Drop zone overlay */
+        .drop-zone {
+            position: absolute;
+            inset: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.7);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .drop-zone.drag-over {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .drop-zone-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: var(--sl-spacing-medium);
+            color: var(--sl-color-neutral-0);
+        }
+
+        .drop-zone-content sl-icon {
+            font-size: 48px;
+            color: var(--sl-color-primary-500);
+        }
+
+        /* Status overlay */
+        .map-overlay {
+            position: absolute;
+            top: var(--sl-spacing-medium);
+            left: 160px;
+            right: var(--sl-spacing-medium);
+            z-index: 50;
+            pointer-events: none;
+        }
+
+        /* Event panel (side panel) */
+        .event-panel-wrapper {
+            width: 360px;
+            flex-shrink: 0;
+            background: var(--sl-color-neutral-0);
+            border-left: 1px solid var(--sl-color-neutral-200);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: width 0.3s ease, margin 0.3s ease;
+        }
+
+        .event-panel-wrapper.collapsed {
+            width: 0;
+            border-left: none;
+        }
+
+        .event-panel-wrapper.collapsed .event-panel {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #event-panel-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .event-panel {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            min-width: 360px;
+            overflow: hidden;
+            transition: opacity 0.2s;
+        }
+
+        .event-panel-header {
+            padding: var(--sl-spacing-medium);
+            border-bottom: 1px solid var(--sl-color-neutral-200);
+        }
+
+        .event-panel-header h2 {
+            font-size: var(--sl-font-size-medium);
+            font-weight: var(--sl-font-weight-semibold);
+            margin: 0;
+        }
+
+        .event-panel-info {
+            padding: var(--sl-spacing-small) var(--sl-spacing-medium);
+            background: var(--sl-color-neutral-100);
+            border-bottom: 1px solid var(--sl-color-neutral-200);
+            font-size: var(--sl-font-size-small);
+            color: var(--sl-color-neutral-600);
+        }
+
+        .event-panel-filters {
+            padding: var(--sl-spacing-small) var(--sl-spacing-medium);
+            border-bottom: 1px solid var(--sl-color-neutral-200);
+        }
+
+        .event-panel-stats {
+            padding: var(--sl-spacing-x-small) var(--sl-spacing-medium);
+            border-bottom: 1px solid var(--sl-color-neutral-200);
+            font-size: var(--sl-font-size-small);
+            color: var(--sl-color-neutral-500);
+        }
+
+        .event-panel-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: var(--sl-spacing-small);
+        }
+
+        .event-empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+            padding: var(--sl-spacing-large);
+            color: var(--sl-color-neutral-500);
+        }
+
+        /* Event items */
+        .event-item {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--sl-spacing-small);
+            width: 100%;
+            padding: var(--sl-spacing-small);
+            background: transparent;
+            border: none;
+            border-radius: var(--sl-border-radius-medium);
+            cursor: pointer;
+            text-align: left;
+            transition: background 0.15s;
+        }
+
+        .event-item:hover {
+            background: var(--sl-color-neutral-100);
+        }
+
+        .event-item.selected {
+            background: var(--sl-color-primary-100);
+        }
+
+        .event-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+
+        .event-icon svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .event-content {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+
+        .event-type {
+            font-size: var(--sl-font-size-x-small);
+            font-weight: var(--sl-font-weight-semibold);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--sl-color-neutral-500);
+        }
+
+        .event-desc {
+            font-size: var(--sl-font-size-small);
+            color: var(--sl-color-neutral-900);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .event-meta {
+            font-size: var(--sl-font-size-x-small);
+            color: var(--sl-color-neutral-500);
+        }
+
+        /* View mode: map only hides the panel */
+        .main.view-map .event-panel-wrapper {
+            width: 0;
+            border-left: none;
+        }
+
+        .main.view-map .event-panel-wrapper .event-panel {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* View mode: list only hides the map and expands the panel */
+        .main.view-list .map-container {
+            display: none;
+        }
+
+        .main.view-list .event-panel-wrapper {
+            width: 100%;
+            border-left: none;
+        }
+
+        .main.view-list .event-panel {
+            min-width: 100%;
+        }
+
+        .main.view-list .event-panel-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: var(--sl-spacing-small);
+        }
+
+        .main.view-list .event-timeline {
+            display: contents;
+        }
+
+        /* MapLibre overrides for light theme */
+        .maplibregl-ctrl-group {
+            background: var(--sl-color-neutral-0) !important;
+            border: 1px solid var(--sl-color-neutral-200) !important;
+        }
+
+        .maplibregl-popup-content {
+            background: var(--sl-color-neutral-0) !important;
+            padding: var(--sl-spacing-small) !important;
+            border-radius: var(--sl-border-radius-medium) !important;
+            box-shadow: var(--sl-shadow-large) !important;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                padding: 0 var(--sl-spacing-small);
+            }
+
+            .header-brand span {
+                display: none;
+            }
+
+            .event-panel-wrapper {
+                display: none;
+            }
+
+            .map-overlay {
+                left: var(--sl-spacing-small);
+                top: 60px;
+            }
+        }
+
+        /* Drawer panel for mobile */
+        sl-drawer::part(panel) {
+            background: var(--sl-color-neutral-0);
+        }
+
+        sl-drawer .event-panel {
+            min-width: auto;
+        }
+
+        /* Style Selector Control (MapLibre) */
+        .style-selector {
+            display: flex;
+            flex-direction: row !important;
+            gap: 0 !important;
+        }
+
+        .style-selector-btn {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--sl-color-neutral-0);
+            border: none;
+            border-right: 1px solid var(--sl-color-neutral-200);
+            cursor: pointer;
+            transition: all 0.15s;
+            color: var(--sl-color-neutral-900);
+        }
+
+        .style-selector-btn:last-child {
+            border-right: none;
+        }
+
+        .style-selector-btn:hover {
+            background: var(--sl-color-neutral-100);
+        }
+
+        .style-selector-btn.active {
+            background: var(--sl-color-primary-600);
+            color: var(--sl-color-neutral-0);
+        }
+
+        .style-selector-btn .style-icon {
+            font-size: 1rem;
+            line-height: 1;
+        }
+    </style>
 </head>
 
 <body>
@@ -20,73 +411,78 @@
         <!-- Header -->
         <header class="header">
             <div class="header-brand">
-                <a href="/" class="header-logo">TaskScore</a>
-                <span class="header-subtitle">IGC Analysis</span>
+                <a href="/">TaskScore</a>
+                <span>IGC Analysis</span>
             </div>
+
             <div class="header-controls">
-                <div class="control-group">
-                    <label for="igc-file" class="file-label">
-                        <span class="file-label-text">Choose IGC File</span>
-                        <input type="file" id="igc-file" accept=".igc" class="file-input">
-                    </label>
-                </div>
-                <div class="control-group">
-                    <input type="text" id="task-code" placeholder="Task code (e.g., ABCD)" class="task-input">
-                    <button id="load-task-btn" class="btn btn-primary">Load Task</button>
-                </div>
-                <div class="control-group">
-                    <select id="map-provider" class="map-select">
-                        <option value="l">Leaflet</option>
-                        <option value="g">Google Maps</option>
-                        <option value="m">MapLibre</option>
-                        <option value="b">MapBox</option>
-                    </select>
-                </div>
-                <div class="control-group" id="altitude-colors-container" style="display: none;">
-                    <label class="toggle-label">
-                        <input type="checkbox" id="altitude-colors-toggle">
-                        <span>Altitude Colors</span>
-                    </label>
-                </div>
-                <div class="control-group" id="3d-toggle-container" style="display: none;">
-                    <label class="toggle-label">
-                        <input type="checkbox" id="3d-toggle">
-                        <span>3D Track</span>
-                    </label>
-                </div>
-                <button id="panel-toggle" class="panel-toggle-btn" aria-label="Toggle event panel">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round" width="20" height="20">
-                        <line x1="3" y1="12" x2="21" y2="12"></line>
-                        <line x1="3" y1="6" x2="21" y2="6"></line>
-                        <line x1="3" y1="18" x2="21" y2="18"></line>
-                    </svg>
-                </button>
+                <!-- File input -->
+                <sl-button id="file-btn" size="small">
+                    <sl-icon slot="prefix" name="upload"></sl-icon>
+                    Choose IGC
+                </sl-button>
+                <input type="file" id="igc-file" accept=".igc" style="display: none;">
+
+                <!-- Task code input -->
+                <sl-input id="task-code" placeholder="Task code" size="small" style="width: 120px;"></sl-input>
+                <sl-button id="load-task-btn" size="small" variant="primary">Load</sl-button>
+
+                <!-- View mode toggle -->
+                <sl-button-group label="View mode">
+                    <sl-button id="view-list" size="small">List</sl-button>
+                    <sl-button id="view-map" size="small">Map</sl-button>
+                    <sl-button id="view-both" size="small" variant="primary">Both</sl-button>
+                </sl-button-group>
+
+                <!-- Settings menu (hamburger) -->
+                <sl-dropdown id="settings-dropdown">
+                    <sl-button slot="trigger" size="small" caret>
+                        <sl-icon name="three-dots-vertical"></sl-icon>
+                    </sl-button>
+                    <sl-menu>
+                        <sl-menu-label>Map Provider</sl-menu-label>
+                        <sl-menu-item type="checkbox" value="l" id="provider-leaflet">Leaflet</sl-menu-item>
+                        <sl-menu-item type="checkbox" value="g" id="provider-google">Google Maps</sl-menu-item>
+                        <sl-menu-item type="checkbox" value="m" id="provider-maplibre">MapLibre</sl-menu-item>
+                        <sl-menu-item type="checkbox" value="b" id="provider-mapbox">MapBox</sl-menu-item>
+                        <sl-divider></sl-divider>
+                        <sl-menu-label>Display Options</sl-menu-label>
+                        <sl-menu-item type="checkbox" id="menu-altitude-colors">Altitude Colors</sl-menu-item>
+                        <sl-menu-item type="checkbox" id="menu-3d-track">3D Track</sl-menu-item>
+                    </sl-menu>
+                </sl-dropdown>
             </div>
         </header>
 
         <!-- Main content -->
-        <main class="main">
+        <main class="main" id="main-container">
             <!-- Map container -->
             <div class="map-container">
                 <div id="drop-zone" class="drop-zone">
                     <div class="drop-zone-content">
-                        <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
-                            <path
-                                d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z" />
-                        </svg>
+                        <sl-icon name="cloud-upload"></sl-icon>
                         <p>Drop IGC file here</p>
                     </div>
                 </div>
                 <div id="map"></div>
                 <div class="map-overlay">
-                    <div id="status" class="status"></div>
+                    <sl-alert id="status" variant="primary" open duration="3000" closable>
+                        <sl-icon slot="icon" name="info-circle"></sl-icon>
+                        Ready - drop an IGC file or use the file picker
+                    </sl-alert>
                 </div>
             </div>
 
-            <!-- Event panel -->
-            <div id="event-panel-container" class="event-panel-container"></div>
+            <!-- Event panel (desktop) -->
+            <div id="event-panel-wrapper" class="event-panel-wrapper">
+                <div id="event-panel-container"></div>
+            </div>
         </main>
+
+        <!-- Event drawer (mobile) -->
+        <sl-drawer id="event-drawer" label="Flight Events" placement="bottom" style="--size: 60vh;">
+            <div id="event-drawer-container"></div>
+        </sl-drawer>
     </div>
 
     <script type="module" src="/analysis/main.ts"></script>

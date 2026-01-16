@@ -9,22 +9,48 @@
  */
 
 import { parseIGC, IGCFile, IGCFix } from './igc-parser';
-import { fetchTaskByCode, parseXCTask, XCTask, calculateOptimizedTaskDistance } from './xctsk-parser';
-import { createMapProvider, getProviderFromUrl, getProviderCode, MapProvider } from './map-provider';
+import { fetchTaskByCode, XCTask, calculateOptimizedTaskDistance } from './xctsk-parser';
+import { createMapProvider, getProviderFromUrl, getProviderCode, MapProvider, MapProviderType } from './map-provider';
 import { detectFlightEvents, FlightEvent } from './event-detector';
 import { createEventPanel, EventPanel, FlightInfo } from './event-panel';
 
-// CSS for maplibre-gl and mapbox-gl
+// CSS for maplibre-gl and mapbox-gl (Shoelace CSS is loaded in the HTML)
 import 'maplibre-gl/dist/maplibre-gl.css';
 import 'mapbox-gl/dist/mapbox-gl.css';
-// App styles
-import './analysis.css';
+// Note: Shoelace theme and app styles are in analysis.html
+
+// Shoelace types
+interface SlInput extends HTMLElement {
+  value: string;
+}
+
+interface SlMenuItem extends HTMLElement {
+  checked: boolean;
+  value: string;
+}
+
+interface SlButton extends HTMLElement {
+  variant: string;
+}
+
+interface SlAlert extends HTMLElement {
+  variant: string;
+  open: boolean;
+  duration: number;
+  toast(): void;
+}
+
+interface SlDrawer extends HTMLElement {
+  show(): void;
+  hide(): void;
+}
 
 interface AppState {
   igcFile: IGCFile | null;
   task: XCTask | null;
   fixes: IGCFix[];
   events: FlightEvent[];
+  viewMode: 'list' | 'both' | 'map';
 }
 
 const state: AppState = {
@@ -32,10 +58,12 @@ const state: AppState = {
   task: null,
   fixes: [],
   events: [],
+  viewMode: 'both',
 };
 
 let mapRenderer: MapProvider | null = null;
 let eventPanel: EventPanel | null = null;
+let drawerEventPanel: EventPanel | null = null;
 let isProgrammaticPan = false;
 
 /**
@@ -44,13 +72,28 @@ let isProgrammaticPan = false;
 async function init(): Promise<void> {
   const mapContainer = document.getElementById('map');
   const eventPanelContainer = document.getElementById('event-panel-container');
+  const eventDrawerContainer = document.getElementById('event-drawer-container');
+  const eventDrawer = document.getElementById('event-drawer') as SlDrawer | null;
   const igcFileInput = document.getElementById('igc-file') as HTMLInputElement;
-  const taskCodeInput = document.getElementById('task-code') as HTMLInputElement;
+  const fileBtn = document.getElementById('file-btn');
+  const taskCodeInput = document.getElementById('task-code') as SlInput | null;
   const loadTaskBtn = document.getElementById('load-task-btn');
-  const statusEl = document.getElementById('status');
   const dropZone = document.getElementById('drop-zone');
-  const mapProviderSelect = document.getElementById('map-provider') as HTMLSelectElement | null;
-  const panelToggleBtn = document.getElementById('panel-toggle');
+  const mainContainer = document.getElementById('main-container');
+  const eventPanelWrapper = document.getElementById('event-panel-wrapper');
+
+  // View mode buttons
+  const viewListBtn = document.getElementById('view-list') as SlButton | null;
+  const viewBothBtn = document.getElementById('view-both') as SlButton | null;
+  const viewMapBtn = document.getElementById('view-map') as SlButton | null;
+
+  // Settings menu items
+  const providerLeaflet = document.getElementById('provider-leaflet') as SlMenuItem | null;
+  const providerGoogle = document.getElementById('provider-google') as SlMenuItem | null;
+  const providerMaplibre = document.getElementById('provider-maplibre') as SlMenuItem | null;
+  const providerMapbox = document.getElementById('provider-mapbox') as SlMenuItem | null;
+  const menuAltitudeColors = document.getElementById('menu-altitude-colors') as SlMenuItem | null;
+  const menu3DTrack = document.getElementById('menu-3d-track') as SlMenuItem | null;
 
   if (!mapContainer || !eventPanelContainer) {
     console.error('Required containers not found');
@@ -61,15 +104,31 @@ async function init(): Promise<void> {
   const providerType = getProviderFromUrl();
   console.log(`[Analysis] Using map provider: ${providerType}`);
 
-  // Set the select to match current provider and handle changes
-  if (mapProviderSelect) {
-    mapProviderSelect.value = getProviderCode(providerType);
-    mapProviderSelect.addEventListener('change', () => {
-      const params = new URLSearchParams(window.location.search);
-      params.set('m', mapProviderSelect.value);
-      window.location.search = params.toString();
-    });
-  }
+  // Set the correct provider menu item as checked
+  const providerMap: Record<MapProviderType, SlMenuItem | null> = {
+    leaflet: providerLeaflet,
+    google: providerGoogle,
+    maplibre: providerMaplibre,
+    mapbox: providerMapbox,
+  };
+
+  Object.entries(providerMap).forEach(([type, item]) => {
+    if (item) {
+      item.checked = type === providerType;
+    }
+  });
+
+  // Handle provider menu selection
+  const handleProviderSelect = (selectedProvider: MapProviderType) => {
+    const params = new URLSearchParams(window.location.search);
+    params.set('m', getProviderCode(selectedProvider));
+    window.location.search = params.toString();
+  };
+
+  providerLeaflet?.addEventListener('click', () => handleProviderSelect('leaflet'));
+  providerGoogle?.addEventListener('click', () => handleProviderSelect('google'));
+  providerMaplibre?.addEventListener('click', () => handleProviderSelect('maplibre'));
+  providerMapbox?.addEventListener('click', () => handleProviderSelect('mapbox'));
 
   // Initialize map with selected provider
   try {
@@ -77,42 +136,36 @@ async function init(): Promise<void> {
 
     // Update event panel when map moves (but not during programmatic pans from event clicks)
     mapRenderer.onBoundsChange(() => {
-      if (eventPanel && !isProgrammaticPan) {
-        eventPanel.filterByBounds(mapRenderer!.getBounds());
+      if (!isProgrammaticPan) {
+        eventPanel?.filterByBounds(mapRenderer!.getBounds());
+        drawerEventPanel?.filterByBounds(mapRenderer!.getBounds());
       }
     });
   } catch (err) {
     console.error('Failed to initialize map:', err);
-    showStatus('Failed to initialize map', 'error');
+    showStatus('Failed to initialize map', 'danger');
     return;
   }
 
-  // Set up altitude colors toggle (only shown for providers that support it)
-  const altitudeColorsContainer = document.getElementById('altitude-colors-container');
-  const altitudeColorsToggle = document.getElementById('altitude-colors-toggle') as HTMLInputElement | null;
+  // Set up altitude colors toggle
+  const params = new URLSearchParams(window.location.search);
 
-  if (mapRenderer.supportsAltitudeColors && altitudeColorsContainer && altitudeColorsToggle) {
-    // Show the altitude colors toggle
-    altitudeColorsContainer.style.display = 'block';
-
-    // Check URL for initial altitude colors state
-    const params = new URLSearchParams(window.location.search);
+  if (mapRenderer.supportsAltitudeColors && menuAltitudeColors) {
     const isAltitudeColorsEnabled = params.get('alt') === '1';
-    altitudeColorsToggle.checked = isAltitudeColorsEnabled;
+    menuAltitudeColors.checked = isAltitudeColorsEnabled;
 
-    // Apply initial altitude colors state
     if (isAltitudeColorsEnabled && mapRenderer.setAltitudeColors) {
       mapRenderer.setAltitudeColors(true);
     }
 
-    // Handle altitude colors toggle changes
-    altitudeColorsToggle.addEventListener('change', () => {
-      if (mapRenderer?.setAltitudeColors) {
-        mapRenderer.setAltitudeColors(altitudeColorsToggle.checked);
+    menuAltitudeColors.addEventListener('click', () => {
+      const newState = !menuAltitudeColors.checked;
+      menuAltitudeColors.checked = newState;
 
-        // Update URL to persist the altitude colors state
+      if (mapRenderer?.setAltitudeColors) {
+        mapRenderer.setAltitudeColors(newState);
         const params = new URLSearchParams(window.location.search);
-        if (altitudeColorsToggle.checked) {
+        if (newState) {
           params.set('alt', '1');
         } else {
           params.delete('alt');
@@ -121,34 +174,27 @@ async function init(): Promise<void> {
         window.history.replaceState({}, '', newUrl);
       }
     });
+  } else if (menuAltitudeColors) {
+    menuAltitudeColors.style.display = 'none';
   }
 
-  // Set up 3D toggle (only shown for providers that support it)
-  const threeDToggleContainer = document.getElementById('3d-toggle-container');
-  const threeDToggle = document.getElementById('3d-toggle') as HTMLInputElement | null;
-
-  if (mapRenderer.supports3D && threeDToggleContainer && threeDToggle) {
-    // Show the 3D toggle
-    threeDToggleContainer.style.display = 'block';
-
-    // Check URL for initial 3D state
-    const params = new URLSearchParams(window.location.search);
+  // Set up 3D toggle
+  if (mapRenderer.supports3D && menu3DTrack) {
     const is3DEnabled = params.get('3d') === '1';
-    threeDToggle.checked = is3DEnabled;
+    menu3DTrack.checked = is3DEnabled;
 
-    // Apply initial 3D state
     if (is3DEnabled && mapRenderer.set3DMode) {
       mapRenderer.set3DMode(true);
     }
 
-    // Handle 3D toggle changes
-    threeDToggle.addEventListener('change', () => {
-      if (mapRenderer?.set3DMode) {
-        mapRenderer.set3DMode(threeDToggle.checked);
+    menu3DTrack.addEventListener('click', () => {
+      const newState = !menu3DTrack.checked;
+      menu3DTrack.checked = newState;
 
-        // Update URL to persist the 3D state
+      if (mapRenderer?.set3DMode) {
+        mapRenderer.set3DMode(newState);
         const params = new URLSearchParams(window.location.search);
-        if (threeDToggle.checked) {
+        if (newState) {
           params.set('3d', '1');
         } else {
           params.delete('3d');
@@ -157,35 +203,85 @@ async function init(): Promise<void> {
         window.history.replaceState({}, '', newUrl);
       }
     });
+  } else if (menu3DTrack) {
+    menu3DTrack.style.display = 'none';
   }
 
-  // Initialize event panel
+  // Handle event click
+  const handleEventClick = (event: FlightEvent) => {
+    if (mapRenderer) {
+      isProgrammaticPan = true;
+      mapRenderer.panToEvent(event);
+      setTimeout(() => {
+        isProgrammaticPan = false;
+      }, 1200);
+    }
+  };
+
+  // Handle panel toggle
+  const handlePanelToggle = () => {
+    if (mapRenderer) {
+      mapRenderer.invalidateSize();
+    }
+  };
+
+  // Initialize desktop event panel
   eventPanel = createEventPanel({
     container: eventPanelContainer,
-    onEventClick: (event) => {
-      if (mapRenderer) {
-        // Suppress bounds-based filtering during programmatic pan
-        isProgrammaticPan = true;
-        mapRenderer.panToEvent(event);
-        // Re-enable filtering after animation completes (~1 second)
-        setTimeout(() => {
-          isProgrammaticPan = false;
-        }, 1200);
-      }
-    },
-    onToggle: () => {
-      // Resize map when panel is collapsed/expanded
-      if (mapRenderer) {
-        mapRenderer.invalidateSize();
-      }
-    },
+    onEventClick: handleEventClick,
+    onToggle: handlePanelToggle,
   });
 
-  // Panel toggle button (hamburger menu in header)
-  panelToggleBtn?.addEventListener('click', () => {
-    if (eventPanel) {
-      eventPanel.toggle();
+  // Initialize drawer event panel for mobile
+  if (eventDrawerContainer) {
+    drawerEventPanel = createEventPanel({
+      container: eventDrawerContainer,
+      onEventClick: (event) => {
+        handleEventClick(event);
+        eventDrawer?.hide();
+      },
+      onToggle: handlePanelToggle,
+    });
+  }
+
+  // View mode toggle
+  const setViewMode = (mode: 'list' | 'both' | 'map') => {
+    state.viewMode = mode;
+
+    // Update button variants
+    if (viewListBtn) viewListBtn.variant = mode === 'list' ? 'primary' : 'default';
+    if (viewBothBtn) viewBothBtn.variant = mode === 'both' ? 'primary' : 'default';
+    if (viewMapBtn) viewMapBtn.variant = mode === 'map' ? 'primary' : 'default';
+
+    // Update layout
+    if (mainContainer) {
+      mainContainer.classList.remove('view-list', 'view-both', 'view-map');
+      mainContainer.classList.add(`view-${mode}`);
     }
+
+    // Handle list-only mode on mobile (show drawer)
+    if (mode === 'list' && window.innerWidth <= 768) {
+      eventDrawer?.show();
+    }
+
+    // Toggle panel visibility
+    if (eventPanelWrapper) {
+      eventPanelWrapper.classList.toggle('collapsed', mode === 'map');
+    }
+
+    // Resize map after layout change
+    setTimeout(() => {
+      mapRenderer?.invalidateSize();
+    }, 350);
+  };
+
+  viewListBtn?.addEventListener('click', () => setViewMode('list'));
+  viewBothBtn?.addEventListener('click', () => setViewMode('both'));
+  viewMapBtn?.addEventListener('click', () => setViewMode('map'));
+
+  // File button triggers hidden file input
+  fileBtn?.addEventListener('click', () => {
+    igcFileInput?.click();
   });
 
   // File input handler
@@ -198,16 +294,23 @@ async function init(): Promise<void> {
 
   // Drag and drop handlers
   if (dropZone) {
-    dropZone.addEventListener('dragover', (e) => {
+    // Enable drag and drop on the map container
+    const mapContainerEl = mapContainer.parentElement;
+
+    mapContainerEl?.addEventListener('dragover', (e) => {
       e.preventDefault();
       dropZone.classList.add('drag-over');
     });
 
-    dropZone.addEventListener('dragleave', () => {
+    mapContainerEl?.addEventListener('dragleave', (e) => {
+      // Only hide if leaving the container entirely
+      if (e.relatedTarget && mapContainerEl.contains(e.relatedTarget as Node)) {
+        return;
+      }
       dropZone.classList.remove('drag-over');
     });
 
-    dropZone.addEventListener('drop', async (e) => {
+    mapContainerEl?.addEventListener('drop', async (e) => {
       e.preventDefault();
       dropZone.classList.remove('drag-over');
 
@@ -215,7 +318,7 @@ async function init(): Promise<void> {
       if (file && file.name.toLowerCase().endsWith('.igc')) {
         await loadIGCFile(file);
       } else {
-        showStatus('Please drop an IGC file', 'error');
+        showStatus('Please drop an IGC file', 'warning');
       }
     });
   }
@@ -228,8 +331,8 @@ async function init(): Promise<void> {
     }
   });
 
-  taskCodeInput?.addEventListener('keypress', async (e) => {
-    if (e.key === 'Enter') {
+  taskCodeInput?.addEventListener('keydown', async (e: Event) => {
+    if ((e as KeyboardEvent).key === 'Enter') {
       const code = taskCodeInput.value.trim();
       if (code) {
         await loadTask(code);
@@ -241,7 +344,7 @@ async function init(): Promise<void> {
    * Load and parse an IGC file
    */
   async function loadIGCFile(file: File): Promise<void> {
-    showStatus('Loading IGC file...', 'info');
+    showStatus('Loading IGC file...', 'primary');
 
     try {
       const content = await file.text();
@@ -258,10 +361,9 @@ async function init(): Promise<void> {
       // Detect events
       state.events = detectFlightEvents(igcFile.fixes, state.task || undefined);
 
-      // Update event panel
-      if (eventPanel) {
-        eventPanel.setEvents(state.events);
-      }
+      // Update event panels
+      eventPanel?.setEvents(state.events);
+      drawerEventPanel?.setEvents(state.events);
 
       // Update map events
       if (mapRenderer) {
@@ -274,7 +376,7 @@ async function init(): Promise<void> {
       showStatus(`Loaded ${file.name} - ${igcFile.fixes.length} fixes`, 'success');
     } catch (err) {
       console.error('Failed to parse IGC file:', err);
-      showStatus(`Failed to parse IGC file: ${err}`, 'error');
+      showStatus(`Failed to parse IGC file: ${err}`, 'danger');
     }
   }
 
@@ -282,7 +384,7 @@ async function init(): Promise<void> {
    * Load task by code
    */
   async function loadTask(code: string): Promise<void> {
-    showStatus(`Loading task ${code}...`, 'info');
+    showStatus(`Loading task ${code}...`, 'primary');
 
     try {
       const task = await fetchTaskByCode(code);
@@ -297,9 +399,8 @@ async function init(): Promise<void> {
       if (state.fixes.length > 0) {
         state.events = detectFlightEvents(state.fixes, task);
 
-        if (eventPanel) {
-          eventPanel.setEvents(state.events);
-        }
+        eventPanel?.setEvents(state.events);
+        drawerEventPanel?.setEvents(state.events);
 
         if (mapRenderer) {
           mapRenderer.setEvents(state.events);
@@ -312,7 +413,7 @@ async function init(): Promise<void> {
       showStatus(`Loaded task: ${task.turnpoints.length} turnpoints`, 'success');
     } catch (err) {
       console.error('Failed to load task:', err);
-      showStatus(`Failed to load task: ${err}`, 'error');
+      showStatus(`Failed to load task: ${err}`, 'danger');
     }
   }
 
@@ -320,8 +421,6 @@ async function init(): Promise<void> {
    * Update flight info display
    */
   function updateFlightInfo(): void {
-    if (!eventPanel) return;
-
     const info: FlightInfo = {};
 
     if (state.igcFile) {
@@ -346,7 +445,6 @@ async function init(): Promise<void> {
         const mins = Math.floor((duration % 3600000) / 60000);
         info.duration = `${hours}h ${mins}m`;
 
-        // Calculate max altitude
         const maxAlt = Math.max(...state.fixes.map(f => f.gnssAltitude));
         info.maxAlt = `${maxAlt}m`;
       }
@@ -359,28 +457,41 @@ async function init(): Promise<void> {
       info.task = `${numTurnpoints} TPs, ${distanceKm} km`;
     }
 
-    eventPanel.setFlightInfo(info);
+    eventPanel?.setFlightInfo(info);
+    drawerEventPanel?.setFlightInfo(info);
   }
 
   /**
-   * Show status message
+   * Show status message using Shoelace alert
    */
-  function showStatus(message: string, type: 'info' | 'success' | 'error'): void {
+  function showStatus(message: string, variant: 'primary' | 'success' | 'warning' | 'danger'): void {
+    const statusEl = document.getElementById('status') as SlAlert | null;
     if (!statusEl) return;
 
-    statusEl.textContent = message;
-    statusEl.className = `status status-${type}`;
+    // Update the alert content
+    const iconName = {
+      primary: 'info-circle',
+      success: 'check2-circle',
+      warning: 'exclamation-triangle',
+      danger: 'exclamation-octagon',
+    }[variant];
 
-    // Auto-hide success messages
-    if (type === 'success') {
-      setTimeout(() => {
-        statusEl.textContent = '';
-        statusEl.className = 'status';
-      }, 3000);
+    statusEl.innerHTML = `
+      <sl-icon slot="icon" name="${iconName}"></sl-icon>
+      ${message}
+    `;
+    statusEl.variant = variant;
+    statusEl.open = true;
+
+    // Auto-hide for success messages
+    if (variant === 'success') {
+      statusEl.duration = 3000;
+    } else {
+      statusEl.duration = Infinity;
     }
   }
 
-  showStatus('Ready - drop an IGC file or use the file picker', 'info');
+  showStatus('Ready - drop an IGC file or use the file picker', 'primary');
 
   // Load from query params if present (e.g., ?task=buje&track=sample.igc)
   await loadFromQueryParams(loadTask, loadIGCFile);
@@ -406,7 +517,6 @@ async function loadFromQueryParams(
   // Load track from samples folder if specified
   if (trackFile) {
     // Security: validate filename to prevent directory traversal
-    // Only allow alphanumeric, dash, underscore, dot, and must end with .igc
     const safeFilenamePattern = /^[a-zA-Z0-9_\-\.]+\.igc$/i;
 
     if (!safeFilenamePattern.test(trackFile) || trackFile.includes('..')) {

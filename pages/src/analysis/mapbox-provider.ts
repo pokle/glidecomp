@@ -38,8 +38,8 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       const map = new mapboxgl.Map({
         container,
         style: defaultStyle,
-        center: [0, 45],
-        zoom: 5,
+        // center: [-36, 147],
+        zoom: 2,
         pitch: 45,
         maxPitch: 85,
       });
@@ -350,7 +350,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           this.container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
 
           const select = document.createElement('select');
-          select.style.cssText = 'padding: 6px 8px; border: none; background: white; cursor: pointer; font-size: 12px;';
+          select.style.cssText = 'padding: 6px 8px; border: none; background: white; color: #1e293b; cursor: pointer; font-size: 12px;';
 
           for (const style of MAPBOX_STYLES) {
             const option = document.createElement('option');
@@ -864,13 +864,13 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
             const radiusKm = (tp.radius / 1000).toFixed(tp.radius >= 1000 ? 0 : 1);
             const altitude = tp.waypoint.altSmoothed ? `A\u00A0${Math.round(tp.waypoint.altSmoothed)}m` : '';
             const role = tp.type || '';
-            
+
             // Build label: "NAME, R Xkm, A Ym, ROLE" (with non-breaking spaces)
             const labelParts = [name, `R\u00A0${radiusKm}km`];
             if (altitude) labelParts.push(altitude);
             if (role) labelParts.push(role);
             const label = labelParts.join(', ');
-            
+
             return {
               type: 'Feature' as const,
               properties: {
@@ -1002,7 +1002,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
               // For glide events, add direction chevrons every ~500m with speed labels
               if (event.type === 'glide_start' || event.type === 'glide_end') {
                 const glideMarkers = calculateGlideMarkers(segmentFixes);
-                
+
                 for (const marker of glideMarkers) {
                   if (marker.type === 'speed-label') {
                     // Create speed label
@@ -1015,7 +1015,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
                       text-shadow: -1px -1px 0 white, 1px -1px 0 white, -1px 1px 0 white, 1px 1px 0 white;
                     `;
                     labelEl.textContent = `${Math.round(marker.speedKmh || 0)}km/h`;
-                    
+
                     const labelMarker = new mapboxgl.Marker({ element: labelEl })
                       .setLngLat([marker.lon, marker.lat])
                       .addTo(map);
@@ -1029,7 +1029,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
                     chevronEl.innerHTML = `<svg width="20" height="12" viewBox="0 0 20 12" style="transform: rotate(${marker.bearing}deg);">
                       <path d="M2 10 L10 2 L18 10" fill="none" stroke="#3b82f6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>`;
-                    
+
                     const chevronMarker = new mapboxgl.Marker({ element: chevronEl })
                       .setLngLat([marker.lon, marker.lat])
                       .addTo(map);

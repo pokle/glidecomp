@@ -1,16 +1,22 @@
 /**
  * Event Panel Component
  *
- * A collapsible sidebar panel that displays flight events,
+ * A sidebar panel that displays flight events,
  * filtered by the current map view.
+ * Updated to work with Shoelace components.
  */
 
 import { FlightEvent, FlightEventType, getEventStyle } from './event-detector';
 
+// Shoelace types
+interface SlSwitch extends HTMLElement {
+  checked: boolean;
+}
+
 export interface EventPanelOptions {
   container: HTMLElement;
   onEventClick: (event: FlightEvent) => void;
-  onToggle?: () => void;  // Called after panel collapse/expand transition
+  onToggle?: () => void;
 }
 
 export interface FlightInfo {
@@ -94,21 +100,18 @@ function getEventIcon(type: FlightEventType): string {
 export function createEventPanel(options: EventPanelOptions): EventPanel {
   const { container, onEventClick } = options;
 
-  // Create panel structure
+  // Create panel structure using Shoelace components
   const panel = document.createElement('div');
   panel.className = 'event-panel';
   panel.innerHTML = `
     <div class="event-panel-header">
       <h2>Flight Events</h2>
     </div>
-    <div class="event-panel-flight-info">
+    <div class="event-panel-info">
       <div class="flight-info-content">Load an IGC file to see flight info</div>
     </div>
     <div class="event-panel-filters">
-      <label>
-        <input type="checkbox" id="filter-view" checked>
-        Show only visible events
-      </label>
+      <sl-switch id="filter-view" size="small" checked>Show only visible events</sl-switch>
     </div>
     <div class="event-panel-stats">
       <span class="event-count">0 events</span>
@@ -123,7 +126,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
   // Get references
   const listContainer = panel.querySelector('.event-panel-list') as HTMLElement;
   const eventCountEl = panel.querySelector('.event-count') as HTMLElement;
-  const filterViewCheckbox = panel.querySelector('#filter-view') as HTMLInputElement;
+  const filterViewSwitch = panel.querySelector('#filter-view') as SlSwitch;
   const flightInfoEl = panel.querySelector('.flight-info-content') as HTMLElement;
 
   // State
@@ -132,7 +135,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
   let currentBounds: { north: number; south: number; east: number; west: number } | null = null;
   let isCollapsed = false;
 
-  filterViewCheckbox.addEventListener('change', () => {
+  filterViewSwitch?.addEventListener('sl-change', () => {
     updateFilteredEvents();
     renderEvents();
   });
@@ -141,7 +144,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
    * Update filtered events based on bounds
    */
   function updateFilteredEvents(): void {
-    if (!filterViewCheckbox.checked || !currentBounds) {
+    if (!filterViewSwitch?.checked || !currentBounds) {
       filteredEvents = [...allEvents];
     } else {
       filteredEvents = allEvents.filter(event =>
@@ -169,7 +172,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
 
     eventCountEl.textContent = `${filteredEvents.length} of ${allEvents.length} events`;
 
-    // Render events as a timeline (already sorted by time from detectFlightEvents)
+    // Render events as a timeline
     let html = '<div class="event-timeline">';
 
     for (const event of filteredEvents) {
@@ -244,7 +247,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
       }
 
       flightInfoEl.innerHTML = parts.length > 0
-        ? parts.join(' <span class="flight-info-separator">•</span> ')
+        ? parts.join(' <sl-divider vertical></sl-divider> ')
         : 'Load an IGC file to see flight info';
     },
 
@@ -259,7 +262,6 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
       container.classList.toggle('collapsed', isCollapsed);
       panel.classList.toggle('collapsed', isCollapsed);
 
-      // Call onToggle after transition completes (300ms matches CSS transition)
       if (options.onToggle) {
         setTimeout(options.onToggle, 350);
       }

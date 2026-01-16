@@ -77,8 +77,27 @@ npm run deploy       # Manual deploy to Cloudflare Pages
 - All features documented as specifications at `specs/{feature}-spec.md`
 - See `specs/system-architecture-spec.md` for detailed architecture
 
+## Frontend UI
+
+**Shoelace Web Components:**
+- All UI components use [Shoelace](https://shoelace.style/) web components
+- Load via CDN in HTML files:
+  ```html
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/dark.css" />
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>
+  ```
+- Use dark theme: add `class="sl-theme-dark"` to `<html>` element
+- Use Shoelace design tokens for styling (`--sl-color-*`, `--sl-spacing-*`, `--sl-font-*`)
+- Common components: `sl-button`, `sl-input`, `sl-dropdown`, `sl-menu`, `sl-switch`, `sl-alert`, `sl-drawer`
+
+**Design Pattern:**
+- VicEmergency-style layout for analysis page: central map + side panel for events
+- View mode toggle (List / Map / Both) controls layout
+- Responsive: desktop shows side panel, mobile uses drawer
+
 ## Coding Preferences
 
 - MUST read library/tool documentation before use (Context7 tool, web docs)
 - Decisions MUST be explainable - return explanations for scoring decisions, audit logs, and unit testing
 - Place experimental code in `/explorations/` - never use in production
+- Use Shoelace components for all UI elements - avoid custom CSS when Shoelace provides equivalent functionality

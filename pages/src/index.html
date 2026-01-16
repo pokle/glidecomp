@@ -1,10 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="sl-theme-dark">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TaskScore - Coming Soon</title>
+
+  <!-- Shoelace -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/dark.css" />
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>
+
   <style>
     * {
       margin: 0;
@@ -13,16 +18,16 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      font-family: var(--sl-font-sans);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-      color: #ffffff;
+      background: var(--sl-color-neutral-0);
+      color: var(--sl-color-neutral-900);
       text-align: center;
-      padding: 2rem;
+      padding: var(--sl-spacing-large);
     }
 
     .container {
@@ -30,44 +35,19 @@
     }
 
     h1 {
-      font-size: 3rem;
-      font-weight: 700;
-      margin-bottom: 1rem;
-      letter-spacing: -0.02em;
+      font-size: var(--sl-font-size-3x-large);
+      font-weight: var(--sl-font-weight-bold);
+      margin-bottom: var(--sl-spacing-small);
     }
 
     .tagline {
-      font-size: 1.25rem;
-      color: #94a3b8;
-      margin-bottom: 2rem;
-    }
-
-    .status {
-      display: inline-block;
-      padding: 0.5rem 1rem;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 9999px;
-      font-size: 0.875rem;
-      color: #60a5fa;
+      font-size: var(--sl-font-size-large);
+      color: var(--sl-color-neutral-400);
+      margin-bottom: var(--sl-spacing-x-large);
     }
 
     .cta-button {
-      display: inline-block;
-      padding: 0.875rem 2rem;
-      background: #3b82f6;
-      color: white;
-      text-decoration: none;
-      border-radius: 9999px;
-      font-size: 1rem;
-      font-weight: 600;
-      margin-bottom: 1.5rem;
-      transition: all 0.2s;
-    }
-
-    .cta-button:hover {
-      background: #2563eb;
-      transform: translateY(-2px);
-      box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+      margin-bottom: var(--sl-spacing-large);
     }
   </style>
 </head>
@@ -76,10 +56,13 @@
   <div class="container">
     <h1>TaskScore</h1>
     <p class="tagline">Competition track log analysis for hanggliding and paragliding</p>
-    <a href="/analysis.html?task=buje&track=20260105-132715-GordonRigg.999.igc&m=b&alt=1" class="cta-button">Try IGC
-      Analysis
-      Tool</a>
-    <p class="status">More features coming soon</p>
+
+    <sl-button class="cta-button" variant="primary" size="large" href="/analysis.html?task=buje&track=20260105-132715-GordonRigg.999.igc&m=b&alt=1" pill>
+      <sl-icon slot="prefix" name="map"></sl-icon>
+      Try IGC Analysis Tool
+    </sl-button>
+
+    <sl-badge variant="neutral" pill>More features coming soon</sl-badge>
   </div>
   <script type="module" src="/index.ts"></script>
 </body>
