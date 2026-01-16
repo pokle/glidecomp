@@ -23,15 +23,21 @@
 
     <style>
         /* Minimal custom styles - let Shoelace handle theming */
-        * {
+        :root {
+            --sl-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        *, *::before, *::after {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            font-family: inherit;
         }
 
         html, body {
             height: 100%;
             background: var(--sl-color-neutral-50);
+            font-family: var(--sl-font-sans);
         }
 
         .app {

@@ -87,6 +87,7 @@ npm run deploy       # Manual deploy to Cloudflare Pages
   <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>
   ```
 - Use dark theme: add `class="sl-theme-dark"` to `<html>` element
+- Override font to system stack: `--sl-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;`
 - Use Shoelace design tokens for styling (`--sl-color-*`, `--sl-spacing-*`, `--sl-font-*`)
 - Common components: `sl-button`, `sl-input`, `sl-dropdown`, `sl-menu`, `sl-switch`, `sl-alert`, `sl-drawer`
 
