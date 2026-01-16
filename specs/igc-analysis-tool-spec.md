@@ -4,6 +4,8 @@
 
 The IGC Analysis Tool is a browser-based flight analysis application that allows pilots to visualize and analyze their paragliding/hanggliding flights. It parses IGC files, displays the track on an interactive 3D map, and detects flight events for analysis.
 
+Single page app (source `pages/src/analysis.html`)
+
 ## Features
 
 ### File Input
@@ -41,10 +43,10 @@ The tool automatically detects and displays:
 | Max Climb/Sink | Maximum vertical speeds |
 
 ### Event Panel
-- Collapsible sidebar listing all detected events
+- Collapsible sidebar listing all detected events (Take off, thermal, landing, etc...)
 - Filter toggle to show only events visible in current map view
-- Events grouped by category (Key Events, Thermals, Glides, Turnpoints, Statistics)
-- Click-to-pan: clicking an event centers the map on that location
+- Click on an event: Pan to event location
+- Double-click on an event: Pan and zoom in on the event location
 
 ### Event Selection Visualization
 When an event is selected from the panel:
