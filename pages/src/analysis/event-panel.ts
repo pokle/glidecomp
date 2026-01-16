@@ -94,27 +94,29 @@ function getEventIcon(type: FlightEventType): string {
 export function createEventPanel(options: EventPanelOptions): EventPanel {
   const { container, onEventClick } = options;
 
-  // Create panel structure
+  // Create panel structure using DaisyUI/Tailwind classes
   const panel = document.createElement('div');
-  panel.className = 'event-panel';
+  panel.className = 'flex flex-col h-full min-w-80';
   panel.innerHTML = `
-    <div class="event-panel-header">
-      <h2>Flight Events</h2>
+    <div class="flex items-center justify-between p-4 border-b border-base-300 shrink-0">
+      <h2 class="text-base font-semibold">Flight Events</h2>
     </div>
-    <div class="event-panel-flight-info">
-      <div class="flight-info-content">Load an IGC file to see flight info</div>
+    <div class="p-3 border-b border-base-300 bg-base-300 shrink-0">
+      <div class="flight-info-content text-xs text-base-content/60 leading-relaxed">Load an IGC file to see flight info</div>
     </div>
-    <div class="event-panel-filters">
-      <label>
-        <input type="checkbox" id="filter-view" checked>
-        Show only visible events
+    <div class="p-3 border-b border-base-300 shrink-0">
+      <label class="label cursor-pointer justify-start gap-2 p-0">
+        <input type="checkbox" id="filter-view" checked class="checkbox checkbox-sm">
+        <span class="label-text text-xs">Show only visible events</span>
       </label>
     </div>
-    <div class="event-panel-stats">
-      <span class="event-count">0 events</span>
+    <div class="px-4 py-2 border-b border-base-300 shrink-0">
+      <span class="event-count text-xs text-base-content/60">0 events</span>
     </div>
-    <div class="event-panel-list">
-      <div class="event-empty">Load an IGC file to see events</div>
+    <div class="event-panel-list flex-1 overflow-y-auto p-2">
+      <div class="flex items-center justify-center h-full text-center p-8 text-base-content/60 text-sm">
+        Load an IGC file to see events
+      </div>
     </div>
   `;
 
@@ -159,7 +161,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
   function renderEvents(): void {
     if (filteredEvents.length === 0) {
       listContainer.innerHTML = `
-        <div class="event-empty">
+        <div class="flex items-center justify-center h-full text-center p-8 text-base-content/60 text-sm">
           ${allEvents.length === 0 ? 'Load an IGC file to see events' : 'No events in current view'}
         </div>
       `;
@@ -170,21 +172,21 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
     eventCountEl.textContent = `${filteredEvents.length} of ${allEvents.length} events`;
 
     // Render events as a timeline (already sorted by time from detectFlightEvents)
-    let html = '<div class="event-timeline">';
+    let html = '<div class="space-y-1">';
 
     for (const event of filteredEvents) {
       const style = getEventStyle(event.type);
       const icon = getEventIcon(event.type);
 
       html += `
-        <button class="event-item" data-event-id="${event.id}">
-          <span class="event-icon" style="color: ${style.color}">
-            ${icon}
+        <button class="event-item flex items-start gap-3 w-full p-2.5 bg-transparent border-none rounded-lg cursor-pointer text-left transition-colors hover:bg-base-300" data-event-id="${event.id}">
+          <span class="flex items-center justify-center w-6 h-6 shrink-0" style="color: ${style.color}">
+            <span class="w-4 h-4">${icon}</span>
           </span>
-          <div class="event-content">
-            <span class="event-type">${getEventTypeLabel(event.type)}</span>
-            <span class="event-desc">${event.description}</span>
-            <span class="event-meta">
+          <div class="flex flex-col gap-0.5 min-w-0">
+            <span class="text-[0.6875rem] font-semibold uppercase tracking-wider text-base-content/60">${getEventTypeLabel(event.type)}</span>
+            <span class="text-[0.8125rem] text-base-content truncate">${event.description}</span>
+            <span class="text-[0.6875rem] text-base-content/60">
               ${formatTime(event.time)} | ${event.altitude.toFixed(0)}m
             </span>
           </div>
@@ -206,9 +208,9 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
 
           // Highlight selected item
           listContainer.querySelectorAll('.event-item').forEach(el => {
-            el.classList.remove('selected');
+            el.classList.remove('bg-primary/15');
           });
-          item.classList.add('selected');
+          item.classList.add('bg-primary/15');
         }
       });
     });
@@ -225,7 +227,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
       const parts: string[] = [];
 
       if (info.pilot) {
-        parts.push(`<strong>${info.pilot}</strong>`);
+        parts.push(`<strong class="text-base-content font-semibold">${info.pilot}</strong>`);
       }
       if (info.date) {
         parts.push(info.date);
@@ -244,7 +246,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
       }
 
       flightInfoEl.innerHTML = parts.length > 0
-        ? parts.join(' <span class="flight-info-separator">•</span> ')
+        ? parts.join(' <span class="text-base-300 mx-0.5">&#8226;</span> ')
         : 'Load an IGC file to see flight info';
     },
 
@@ -257,7 +259,8 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
     toggle() {
       isCollapsed = !isCollapsed;
       container.classList.toggle('collapsed', isCollapsed);
-      panel.classList.toggle('collapsed', isCollapsed);
+      panel.classList.toggle('opacity-0', isCollapsed);
+      panel.classList.toggle('pointer-events-none', isCollapsed);
 
       // Call onToggle after transition completes (300ms matches CSS transition)
       if (options.onToggle) {

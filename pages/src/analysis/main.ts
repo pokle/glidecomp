@@ -17,7 +17,9 @@ import { createEventPanel, EventPanel, FlightInfo } from './event-panel';
 // CSS for maplibre-gl and mapbox-gl
 import 'maplibre-gl/dist/maplibre-gl.css';
 import 'mapbox-gl/dist/mapbox-gl.css';
-// App styles
+// App styles (Tailwind + DaisyUI + custom overrides)
+import '../app.css';
+// Analysis-specific custom styles
 import './analysis.css';
 
 interface AppState {

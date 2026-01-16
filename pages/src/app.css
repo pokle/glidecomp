@@ -1,0 +1,110 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: dark --default;
+}
+
+/* App-specific custom styles that Tailwind/DaisyUI don't cover */
+
+/* Full height app layout */
+html, body {
+  height: 100%;
+}
+
+/* MapLibre overrides - these are third-party component styles */
+.maplibregl-ctrl-group {
+  background: var(--color-base-200) !important;
+  border: 1px solid color-mix(in oklch, var(--color-base-content) 20%, transparent) !important;
+}
+
+.maplibregl-ctrl-group button {
+  background-color: transparent !important;
+  border-color: color-mix(in oklch, var(--color-base-content) 20%, transparent) !important;
+}
+
+.maplibregl-ctrl-group button:hover {
+  background-color: var(--color-base-300) !important;
+}
+
+.maplibregl-ctrl-group button span {
+  filter: invert(1);
+}
+
+.maplibregl-popup-content {
+  background: var(--color-base-200) !important;
+  color: var(--color-base-content) !important;
+  padding: 0.75rem !important;
+  border-radius: var(--radius-box) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.maplibregl-popup-tip {
+  border-top-color: var(--color-base-200) !important;
+}
+
+.maplibregl-popup-close-button {
+  color: color-mix(in oklch, var(--color-base-content) 60%, transparent) !important;
+  font-size: 1.25rem !important;
+}
+
+.maplibregl-popup-close-button:hover {
+  color: var(--color-base-content) !important;
+  background: transparent !important;
+}
+
+.maplibregl-ctrl-scale {
+  background: color-mix(in oklch, var(--color-base-200) 90%, transparent) !important;
+  border-color: color-mix(in oklch, var(--color-base-content) 20%, transparent) !important;
+  color: var(--color-base-content) !important;
+}
+
+/* MapBox overrides - similar to MapLibre */
+/* Fix: MapBox sets .mapboxgl-map { position: relative } which breaks Tailwind's absolute positioning */
+#map.mapboxgl-map {
+  position: absolute !important;
+}
+
+.mapboxgl-ctrl-group {
+  background: var(--color-base-200) !important;
+  border: 1px solid color-mix(in oklch, var(--color-base-content) 20%, transparent) !important;
+}
+
+.mapboxgl-ctrl-group button {
+  background-color: transparent !important;
+  border-color: color-mix(in oklch, var(--color-base-content) 20%, transparent) !important;
+}
+
+.mapboxgl-ctrl-group button:hover {
+  background-color: var(--color-base-300) !important;
+}
+
+.mapboxgl-ctrl-group button span {
+  filter: invert(1);
+}
+
+.mapboxgl-popup-content {
+  background: var(--color-base-200) !important;
+  color: var(--color-base-content) !important;
+  padding: 0.75rem !important;
+  border-radius: var(--radius-box) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.mapboxgl-popup-tip {
+  border-top-color: var(--color-base-200) !important;
+}
+
+.mapboxgl-popup-close-button {
+  color: color-mix(in oklch, var(--color-base-content) 60%, transparent) !important;
+  font-size: 1.25rem !important;
+}
+
+.mapboxgl-popup-close-button:hover {
+  color: var(--color-base-content) !important;
+  background: transparent !important;
+}
+
+.mapboxgl-ctrl-scale {
+  background: color-mix(in oklch, var(--color-base-200) 90%, transparent) !important;
+  border-color: color-mix(in oklch, var(--color-base-content) 20%, transparent) !important;
+  color: var(--color-base-content) !important;
+}

@@ -621,16 +621,24 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         const stops: [number, string][] = [];
         const sampleInterval = Math.max(1, Math.floor(fixes.length / 100));
 
-        for (let i = 0; i < fixes.length; i += sampleInterval) {
+        // Always start at progress 0
+        const firstNormalizedAlt = altRange > 0 ? (fixes[0].gnssAltitude - minAlt) / altRange : 0;
+        stops.push([0, getAltitudeColorNormalized(firstNormalizedAlt)]);
+
+        let lastProgress = 0;
+        for (let i = sampleInterval; i < fixes.length; i += sampleInterval) {
           const progress = distances[i] / totalDistance;
+          // MapBox requires strictly ascending values - skip if not greater than last
+          if (progress <= lastProgress) continue;
           // Normalize altitude to 0-1 range based on this flight's min/max
           const normalizedAlt = altRange > 0 ? (fixes[i].gnssAltitude - minAlt) / altRange : 0;
           const color = getAltitudeColorNormalized(normalizedAlt);
           stops.push([progress, color]);
+          lastProgress = progress;
         }
 
-        // Ensure we have the last point
-        if (stops[stops.length - 1][0] < 1) {
+        // Always end at progress 1 (if not already there)
+        if (lastProgress < 1) {
           const lastFix = fixes[fixes.length - 1];
           const normalizedAlt = altRange > 0 ? (lastFix.gnssAltitude - minAlt) / altRange : 0;
           stops.push([1, getAltitudeColorNormalized(normalizedAlt)]);

@@ -76,13 +76,22 @@ This visual system helps pilots quickly identify and understand the spatial exte
 ## Technical Architecture
 
 ```
-/pages/src/analysis/
-├── main.ts           # Application entry point and orchestration
-├── igc-parser.ts     # IGC file format parser
-├── xctsk-parser.ts   # XContest task format parser
-├── event-detector.ts # Flight event detection algorithms
-├── event-panel.ts    # Event list UI component
-└── map-renderer.ts   # MapLibre GL JS wrapper
+/pages/src/
+├── app.css              # Tailwind + DaisyUI imports and global styles
+├── analysis.html        # Analysis tool page
+├── index.html           # Landing page
+└── analysis/
+    ├── main.ts          # Application entry point and orchestration
+    ├── analysis.css     # Analysis-specific custom styles
+    ├── igc-parser.ts    # IGC file format parser
+    ├── xctsk-parser.ts  # XContest task format parser
+    ├── event-detector.ts    # Flight event detection algorithms
+    ├── event-panel.ts       # Event list UI component
+    ├── map-provider.ts      # Map provider interface
+    ├── maplibre-provider.ts # MapLibre GL implementation
+    ├── mapbox-provider.ts   # MapBox GL implementation (3D support)
+    ├── leaflet-provider.ts  # Leaflet implementation
+    └── google-provider.ts   # Google Maps implementation
 ```
 
 ### IGC Parser
@@ -149,7 +158,10 @@ ext     - Optional extensions
 ## Dependencies
 
 - **maplibre-gl**: Map rendering with terrain and hillshade
+- **mapbox-gl**: Alternative map provider with 3D track support
 - **vite**: TypeScript bundling and dev server with HMR
+- **tailwindcss**: Utility-first CSS framework for rapid UI development
+- **daisyui**: Component library built on Tailwind (buttons, inputs, cards, etc.)
 
 ## URL
 

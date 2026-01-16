@@ -1,11 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TaskScore - IGC Analysis</title>
+    <link rel="stylesheet" href="/app.css">
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.css">
+    <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.css">
     <!-- Google Maps API for ?provider=google -->
     <script>
         (g => { var h, a, k, p = "The Google Maps JavaScript API", c = "google", l = "importLibrary", q = "__ib__", m = document, b = window; b = b[c] || (b[c] = {}); var d = b.maps || (b.maps = {}), r = new Set, e = new URLSearchParams, u = () => h || (h = new Promise(async (f, n) => { await (a = m.createElement("script")); e.set("libraries", [...r]); for (k in g) e.set(k.replace(/[A-Z]/g, t => "_" + t[0].toLowerCase()), g[k]); e.set("callback", c + ".maps." + q); a.src = `https://maps.${c}apis.com/maps/api/js?` + e; d[q] = f; a.onerror = () => h = n(Error(p + " could not load.")); a.nonce = m.querySelector("script[nonce]")?.nonce || ""; m.head.append(a) })); d[l] ? console.warn(p + " only loads once. Ignoring:", g) : d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n)) })({
@@ -15,48 +17,48 @@
     </script>
 </head>
 
-<body>
-    <div class="app">
+<body class="h-full">
+    <div class="flex flex-col h-screen">
         <!-- Header -->
-        <header class="header">
-            <div class="header-brand">
-                <a href="/" class="header-logo">TaskScore</a>
-                <span class="header-subtitle">IGC Analysis</span>
+        <header class="navbar bg-base-200 border-b border-base-300 px-4 gap-2 flex-wrap">
+            <div class="flex items-center gap-3">
+                <a href="/" class="text-xl font-bold hover:text-primary">TaskScore</a>
+                <span class="text-sm text-base-content/60 pl-3 border-l border-base-300">IGC Analysis</span>
             </div>
-            <div class="header-controls">
-                <div class="control-group">
-                    <label for="igc-file" class="file-label">
-                        <span class="file-label-text">Choose IGC File</span>
-                        <input type="file" id="igc-file" accept=".igc" class="file-input">
-                    </label>
+            <div class="flex-1"></div>
+            <div class="flex items-center gap-3 flex-wrap">
+                <!-- File input -->
+                <label for="igc-file" class="btn btn-sm btn-ghost border border-base-300">
+                    <span>Choose IGC File</span>
+                    <input type="file" id="igc-file" accept=".igc" class="hidden">
+                </label>
+                <!-- Task input -->
+                <div class="join">
+                    <input type="text" id="task-code" placeholder="Task code (e.g., ABCD)"
+                        class="input input-sm input-bordered join-item w-40">
+                    <button id="load-task-btn" class="btn btn-sm btn-primary join-item">Load Task</button>
                 </div>
-                <div class="control-group">
-                    <input type="text" id="task-code" placeholder="Task code (e.g., ABCD)" class="task-input">
-                    <button id="load-task-btn" class="btn btn-primary">Load Task</button>
-                </div>
-                <div class="control-group">
-                    <select id="map-provider" class="map-select">
-                        <option value="l">Leaflet</option>
-                        <option value="g">Google Maps</option>
-                        <option value="m">MapLibre</option>
-                        <option value="b">MapBox</option>
-                    </select>
-                </div>
-                <div class="control-group" id="altitude-colors-container" style="display: none;">
-                    <label class="toggle-label">
-                        <input type="checkbox" id="altitude-colors-toggle">
-                        <span>Altitude Colors</span>
-                    </label>
-                </div>
-                <div class="control-group" id="3d-toggle-container" style="display: none;">
-                    <label class="toggle-label">
-                        <input type="checkbox" id="3d-toggle">
-                        <span>3D Track</span>
-                    </label>
-                </div>
-                <button id="panel-toggle" class="panel-toggle-btn" aria-label="Toggle event panel">
+                <!-- Map provider select -->
+                <select id="map-provider" class="select select-sm select-bordered">
+                    <option value="l">Leaflet</option>
+                    <option value="g">Google Maps</option>
+                    <option value="m">MapLibre</option>
+                    <option value="b">MapBox</option>
+                </select>
+                <!-- Altitude colors toggle -->
+                <label id="altitude-colors-container" class="label cursor-pointer gap-2 hidden">
+                    <input type="checkbox" id="altitude-colors-toggle" class="checkbox checkbox-sm">
+                    <span class="label-text">Altitude Colors</span>
+                </label>
+                <!-- 3D toggle -->
+                <label id="3d-toggle-container" class="label cursor-pointer gap-2 hidden">
+                    <input type="checkbox" id="3d-toggle" class="checkbox checkbox-sm">
+                    <span class="label-text">3D Track</span>
+                </label>
+                <!-- Panel toggle button -->
+                <button id="panel-toggle" class="btn btn-sm btn-square btn-ghost" aria-label="Toggle event panel">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round" width="20" height="20">
+                        stroke-linejoin="round" class="w-5 h-5">
                         <line x1="3" y1="12" x2="21" y2="12"></line>
                         <line x1="3" y1="6" x2="21" y2="6"></line>
                         <line x1="3" y1="18" x2="21" y2="18"></line>
@@ -66,26 +68,31 @@
         </header>
 
         <!-- Main content -->
-        <main class="main">
+        <main class="flex flex-1 overflow-hidden">
             <!-- Map container -->
-            <div class="map-container">
-                <div id="drop-zone" class="drop-zone">
-                    <div class="drop-zone-content">
-                        <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+            <div class="flex-1 relative overflow-hidden">
+                <!-- Drop zone overlay -->
+                <div id="drop-zone"
+                    class="drop-zone absolute inset-0 z-10 flex items-center justify-center bg-base-300/80 opacity-0 pointer-events-none transition-opacity">
+                    <div class="flex flex-col items-center gap-4 text-base-content/60">
+                        <svg viewBox="0 0 24 24" fill="currentColor" class="w-12 h-12 text-primary">
                             <path
                                 d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z" />
                         </svg>
-                        <p>Drop IGC file here</p>
+                        <p class="text-lg font-medium">Drop IGC file here</p>
                     </div>
                 </div>
-                <div id="map"></div>
-                <div class="map-overlay">
+                <div id="map" class="absolute inset-0"></div>
+                <!-- Map overlay for status -->
+                <div class="absolute top-0 left-40 right-0 z-5 p-4 pointer-events-none">
                     <div id="status" class="status"></div>
                 </div>
             </div>
 
             <!-- Event panel -->
-            <div id="event-panel-container" class="event-panel-container"></div>
+            <div id="event-panel-container"
+                class="event-panel-container w-80 flex-shrink-0 bg-base-200 border-l border-base-300 flex flex-col overflow-hidden transition-[width] duration-300">
+            </div>
         </main>
     </div>
 
