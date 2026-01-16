@@ -959,7 +959,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
               .setPopup(
                 new mapboxgl.Popup({ offset: 25 }).setHTML(`
                   <strong>${event.description}</strong><br>
-                  <span style="color: #666">${event.time.toLocaleTimeString()}</span>
+                  ${event.time.toLocaleTimeString()}
                 `)
               )
               .addTo(map);

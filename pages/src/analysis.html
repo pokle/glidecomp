@@ -7,6 +7,7 @@
     <title>TaskScore - IGC Analysis</title>
 
     <!-- Shoelace -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/light.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/dark.css" />
     <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>
 
@@ -67,12 +68,10 @@
         .header-brand a {
             font-size: var(--sl-font-size-large);
             font-weight: var(--sl-font-weight-bold);
-            color: var(--sl-color-neutral-900);
             text-decoration: none;
         }
 
         .header-brand span {
-            color: var(--sl-color-neutral-500);
             font-size: var(--sl-font-size-small);
         }
 
@@ -166,12 +165,10 @@
             flex-direction: column;
             align-items: center;
             gap: var(--sl-spacing-medium);
-            color: var(--sl-color-neutral-0);
         }
 
         .drop-zone-content sl-icon {
             font-size: 48px;
-            color: var(--sl-color-primary-500);
         }
 
         /* Status overlay */
@@ -215,7 +212,6 @@
             background: var(--sl-color-neutral-100);
             border-bottom: 1px solid var(--sl-color-neutral-200);
             font-size: var(--sl-font-size-small);
-            color: var(--sl-color-neutral-600);
         }
 
         .event-panel-filters {
@@ -227,7 +223,6 @@
             padding: var(--sl-spacing-x-small) var(--sl-spacing-medium);
             border-bottom: 1px solid var(--sl-color-neutral-200);
             font-size: var(--sl-font-size-small);
-            color: var(--sl-color-neutral-500);
         }
 
         .event-panel-list {
@@ -243,7 +238,6 @@
             height: 100%;
             text-align: center;
             padding: var(--sl-spacing-large);
-            color: var(--sl-color-neutral-500);
         }
 
         /* Event items */
@@ -295,12 +289,10 @@
             font-weight: var(--sl-font-weight-semibold);
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            color: var(--sl-color-neutral-500);
         }
 
         .event-desc {
             font-size: var(--sl-font-size-small);
-            color: var(--sl-color-neutral-900);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -308,7 +300,6 @@
 
         .event-meta {
             font-size: var(--sl-font-size-x-small);
-            color: var(--sl-color-neutral-500);
         }
 
         /* View mode: list only hides the map and expands drawer */
@@ -328,19 +319,6 @@
 
         .main.view-list .event-timeline {
             display: contents;
-        }
-
-        /* MapLibre overrides for light theme */
-        .maplibregl-ctrl-group {
-            background: var(--sl-color-neutral-0) !important;
-            border: 1px solid var(--sl-color-neutral-200) !important;
-        }
-
-        .maplibregl-popup-content {
-            background: var(--sl-color-neutral-0) !important;
-            padding: var(--sl-spacing-small) !important;
-            border-radius: var(--sl-border-radius-medium) !important;
-            box-shadow: var(--sl-shadow-large) !important;
         }
 
         /* Responsive */
@@ -390,7 +368,6 @@
             border-right: 1px solid var(--sl-color-neutral-200);
             cursor: pointer;
             transition: all 0.15s;
-            color: var(--sl-color-neutral-900);
         }
 
         .style-selector-btn:last-child {
@@ -403,7 +380,6 @@
 
         .style-selector-btn.active {
             background: var(--sl-color-primary-600);
-            color: var(--sl-color-neutral-0);
         }
 
         .style-selector-btn .style-icon {
@@ -460,7 +436,7 @@
                         <p>Drop IGC file here</p>
                     </div>
                 </div>
-                <div id="map"></div>
+                <div id="map" class="sl-theme-light"></div>
                 <div class="map-overlay">
                     <sl-alert id="status" variant="primary" open duration="3000" closable>
                         <sl-icon slot="icon" name="info-circle"></sl-icon>

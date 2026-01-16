@@ -322,7 +322,7 @@ export async function createGoogleMapsProvider(container: HTMLElement): Promise<
                 marker.addListener('click', () => {
                     const infoWindow = new google.maps.InfoWindow({
                         content: `<strong>${event.description}</strong><br>
-                     <span style="color:#666">${event.time.toLocaleTimeString()}</span>`,
+                     ${event.time.toLocaleTimeString()}`,
                     });
                     infoWindow.open(map, marker);
                 });
