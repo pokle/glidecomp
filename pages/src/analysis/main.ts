@@ -99,6 +99,8 @@ async function init(): Promise<void> {
   const providerMapbox = document.getElementById('provider-mapbox') as SlMenuItem | null;
   const menuAltitudeColors = document.getElementById('menu-altitude-colors') as SlMenuItem | null;
   const menu3DTrack = document.getElementById('menu-3d-track') as SlMenuItem | null;
+  const menuThemeDark = document.getElementById('menu-theme-dark') as SlMenuItem | null;
+  const menuThemeLight = document.getElementById('menu-theme-light') as SlMenuItem | null;
 
   if (!mapContainer || !eventPanelContainer) {
     console.error('Required containers not found');
@@ -211,6 +213,33 @@ async function init(): Promise<void> {
   } else if (menu3DTrack) {
     menu3DTrack.style.display = 'none';
   }
+
+  // Set up theme toggle
+  const setTheme = (theme: 'dark' | 'light') => {
+    const html = document.documentElement;
+    if (theme === 'dark') {
+      html.classList.remove('sl-theme-light');
+      html.classList.add('sl-theme-dark');
+      if (menuThemeDark) menuThemeDark.checked = true;
+      if (menuThemeLight) menuThemeLight.checked = false;
+    } else {
+      html.classList.remove('sl-theme-dark');
+      html.classList.add('sl-theme-light');
+      if (menuThemeDark) menuThemeDark.checked = false;
+      if (menuThemeLight) menuThemeLight.checked = true;
+    }
+    // Save preference
+    localStorage.setItem('theme', theme);
+  };
+
+  // Load saved theme preference
+  const savedTheme = localStorage.getItem('theme') as 'dark' | 'light' | null;
+  if (savedTheme) {
+    setTheme(savedTheme);
+  }
+
+  menuThemeDark?.addEventListener('click', () => setTheme('dark'));
+  menuThemeLight?.addEventListener('click', () => setTheme('light'));
 
   // Handle event click
   const handleEventClick = (event: FlightEvent) => {
@@ -530,6 +559,35 @@ async function init(): Promise<void> {
       statusEl.duration = Infinity;
     }
   }
+
+  // Sample flights
+  const sampleFiles: Record<string, string> = {
+    'sample-rohan': '2026-01-05-RohanHolt-XFH-000-01.IGC',
+    'sample-shane': '2026-01-05-shane-dunc-XCT-SDU-02.igc',
+    'sample-gordon': '20260105-132715-GordonRigg.999.igc',
+    'sample-burkitt': 'burkitt_18393_050126.igc',
+    'sample-durand': 'durand_45515_050126.igc',
+    'sample-holtkamp': 'holtkamp_33915_050126.igc',
+  };
+
+  const loadSampleFile = async (filename: string) => {
+    try {
+      const response = await fetch(`/samples/${filename}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch: ${response.status}`);
+      }
+      const content = await response.text();
+      const file = new File([content], filename, { type: 'text/plain' });
+      await loadIGCFile(file);
+    } catch (err) {
+      console.error('Failed to load sample file:', err);
+      showStatus(`Failed to load sample: ${err}`, 'danger');
+    }
+  };
+
+  Object.entries(sampleFiles).forEach(([id, filename]) => {
+    document.getElementById(id)?.addEventListener('click', () => loadSampleFile(filename));
+  });
 
   showStatus('Ready - drop an IGC file or use the file picker', 'primary');
 
