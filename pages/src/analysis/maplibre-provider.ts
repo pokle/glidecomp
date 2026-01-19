@@ -159,6 +159,7 @@ export function createMapLibreProvider(container: HTMLElement): Promise<MapProvi
         });
 
         // 5. Track line with altitude-based coloring
+        // Earthy colors (brown) at low altitude, sky colors (blue) at high altitude
         map.addLayer({
           id: 'track-line',
           type: 'line',
@@ -172,10 +173,10 @@ export function createMapLibreProvider(container: HTMLElement): Promise<MapProvi
               'interpolate',
               ['linear'],
               ['get', 'altitude'],
-              0, '#3b82f6',
-              1000, '#22c55e',
-              2000, '#eab308',
-              3000, '#ef4444',
+              0, '#8D6E63',
+              1000, '#66BB6A',
+              2000, '#29B6F6',
+              3000, '#81D4FA',
             ],
             'line-width': 3,
             'line-opacity': 0.9,

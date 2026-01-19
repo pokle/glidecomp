@@ -158,17 +158,17 @@
 
         /**
          * Create altitude-based color for a segment
+         * Earthy colors (brown) at low altitude, sky colors (blue) at high altitude
          */
         function getAltitudeColor(altitude) {
-            // Color scale: blue (low) -> green -> yellow -> red (high)
             if (altitude < 1000) {
-                return '#3b82f6'; // blue
+                return '#8D6E63'; // brown
             } else if (altitude < 2000) {
-                return '#22c55e'; // green
+                return '#66BB6A'; // green
             } else if (altitude < 3000) {
-                return '#eab308'; // yellow
+                return '#29B6F6'; // light blue
             } else {
-                return '#ef4444'; // red
+                return '#81D4FA'; // sky blue
             }
         }
 

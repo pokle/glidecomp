@@ -59,12 +59,13 @@ export async function createGoogleMapsProvider(container: HTMLElement): Promise<
 
     /**
      * Get altitude-based color
+     * Earthy colors (brown) at low altitude, sky colors (blue) at high altitude
      */
     function getAltitudeColor(altitude: number): string {
-        if (altitude < 1000) return '#3b82f6';
-        if (altitude < 2000) return '#22c55e';
-        if (altitude < 3000) return '#eab308';
-        return '#ef4444';
+        if (altitude < 1000) return '#8D6E63';  // Brown
+        if (altitude < 2000) return '#66BB6A';  // Green
+        if (altitude < 3000) return '#29B6F6';  // Light Blue
+        return '#81D4FA';                        // Sky Blue
     }
 
     /**

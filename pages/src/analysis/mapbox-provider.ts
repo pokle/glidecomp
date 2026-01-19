@@ -524,20 +524,19 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
       /**
        * Get color based on normalized altitude (0-1 range)
-       * Uses a gradient from blue (low) through green, yellow, orange to red (high)
+       * Uses a gradient from earthy brown (low) through green to sky blue (high)
        */
       function getAltitudeColorNormalized(normalizedAlt: number): string {
         // Clamp to 0-1
         const t = Math.max(0, Math.min(1, normalizedAlt));
 
-        // Color stops: blue -> cyan -> green -> yellow -> orange -> red
+        // Color stops: brown (low) -> green -> light blue -> sky blue (high)
         const colors = [
-          { pos: 0.0, r: 59, g: 130, b: 246 },   // Blue #3b82f6
-          { pos: 0.2, r: 34, g: 197, b: 94 },    // Green #22c55e
-          { pos: 0.4, r: 132, g: 204, b: 22 },   // Lime #84cc16
-          { pos: 0.6, r: 234, g: 179, b: 8 },    // Yellow #eab308
-          { pos: 0.8, r: 249, g: 115, b: 22 },   // Orange #f97316
-          { pos: 1.0, r: 239, g: 68, b: 68 },    // Red #ef4444
+          { pos: 0.0, r: 141, g: 110, b: 99 },   // Brown #8D6E63
+          { pos: 0.25, r: 102, g: 187, b: 106 }, // Green #66BB6A
+          { pos: 0.5, r: 41, g: 182, b: 246 },   // Light Blue #29B6F6
+          { pos: 0.75, r: 129, g: 212, b: 250 }, // Sky Blue #81D4FA
+          { pos: 1.0, r: 227, g: 242, b: 253 },  // Pale Sky #E3F2FD
         ];
 
         // Find the two colors to interpolate between
@@ -563,14 +562,15 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
       /**
        * Get color based on altitude using fixed thresholds (for 3D mode)
+       * Earthy colors (brown) at low altitude, sky colors (blue) at high altitude
        */
       function getAltitudeColor(altitude: number): string {
-        if (altitude < 500) return '#3b82f6';      // Blue
-        if (altitude < 1000) return '#22c55e';     // Green
-        if (altitude < 1500) return '#84cc16';     // Lime
-        if (altitude < 2000) return '#eab308';     // Yellow
-        if (altitude < 2500) return '#f97316';     // Orange
-        return '#ef4444';                           // Red
+        if (altitude < 500) return '#8D6E63';      // Brown
+        if (altitude < 1000) return '#A1887F';     // Light Brown
+        if (altitude < 1500) return '#66BB6A';     // Green
+        if (altitude < 2000) return '#29B6F6';     // Light Blue
+        if (altitude < 2500) return '#81D4FA';     // Sky Blue
+        return '#E3F2FD';                           // Pale Sky
       }
 
       /**

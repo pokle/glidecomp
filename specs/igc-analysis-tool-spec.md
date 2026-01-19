@@ -17,10 +17,10 @@ Single page app
 ### Map Display
 - **3D Terrain**: MapLibre GL JS with hillshade and terrain elevation
 - **Track Visualization**: Flight track displayed with altitude-based coloring
-  - Blue: Low altitude (0-1000m)
-  - Green: Medium altitude (1000-2000m)
-  - Yellow: High altitude (2000-3000m)
-  - Red: Very high altitude (>3000m)
+  - Brown: Low altitude (0-1000m) - earthy colors near the ground
+  - Green: Medium altitude (1000-2000m) - transitional
+  - Light Blue: High altitude (2000-3000m) - approaching sky
+  - Sky Blue: Very high altitude (>3000m) - sky colors at altitude
 - **Task Display**:
   - Turnpoint cylinders with color coding (green=SSS, yellow=ESS, purple=intermediate)
     - Label at center of waypoint with name, radius, altitude and role (e.g. "ELLIOT, R 5km, A 3067m, SSS")
