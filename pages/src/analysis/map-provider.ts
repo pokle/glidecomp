@@ -1,8 +1,11 @@
 /**
  * Map Provider Interface
- * 
- * Abstraction layer allowing multiple map libraries (MapLibre, Google Maps)
+ *
+ * Abstraction layer allowing multiple map libraries (Leaflet, MapBox)
  * to be used interchangeably for flight visualization.
+ *
+ * Note: This file is kept for backwards compatibility with the legacy main.ts.
+ * The React components (LeafletMap.tsx and MapboxMap.tsx) handle map rendering directly.
  */
 
 import type { IGCFix } from './igc-parser';
@@ -63,24 +66,17 @@ export interface MapProvider {
 /**
  * Available map provider types
  */
-export type MapProviderType = 'maplibre' | 'google' | 'leaflet' | 'mapbox';
+export type MapProviderType = 'leaflet' | 'mapbox';
 
 /**
  * Factory function to create a map provider
+ * @deprecated Use React components LeafletMap or MapboxMap instead
  */
 export async function createMapProvider(
     type: MapProviderType,
     container: HTMLElement
 ): Promise<MapProvider> {
     switch (type) {
-        case 'maplibre': {
-            const { createMapLibreProvider } = await import('./maplibre-provider');
-            return createMapLibreProvider(container);
-        }
-        case 'google': {
-            const { createGoogleMapsProvider } = await import('./google-provider');
-            return createGoogleMapsProvider(container);
-        }
         case 'leaflet': {
             const { createLeafletProvider } = await import('./leaflet-provider');
             return createLeafletProvider(container);
@@ -96,15 +92,13 @@ export async function createMapProvider(
 
 /**
  * Get provider type from URL query params
- * ?m=l for leaflet, ?m=g for google, ?m=m for maplibre, ?m=b for mapbox
+ * ?m=l for leaflet, ?m=b for mapbox
  * Defaults to 'leaflet' if not specified
  */
 export function getProviderFromUrl(): MapProviderType {
     const params = new URLSearchParams(window.location.search);
     const provider = params.get('m');
 
-    if (provider === 'g') return 'google';
-    if (provider === 'm') return 'maplibre';
     if (provider === 'b') return 'mapbox';
     return 'leaflet';
 }
@@ -113,8 +107,6 @@ export function getProviderFromUrl(): MapProviderType {
  * Get the short code for a provider type
  */
 export function getProviderCode(type: MapProviderType): string {
-    if (type === 'google') return 'g';
-    if (type === 'maplibre') return 'm';
     if (type === 'mapbox') return 'b';
     return 'l';
 }
