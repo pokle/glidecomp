@@ -15,7 +15,7 @@ import Map, {
   ScaleControl,
   FullscreenControl,
   type MapRef,
-} from 'react-map-gl';
+} from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 import { setBounds } from '../boundsStore';
