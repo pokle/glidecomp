@@ -1005,16 +1005,28 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
                 for (const marker of glideMarkers) {
                   if (marker.type === 'speed-label') {
-                    // Create speed label
+                    // Create speed label with glide ratio and altitude
                     const labelEl = document.createElement('div');
                     labelEl.style.cssText = `
-                      font-size: 14px;
+                      font-size: 12px;
                       font-weight: 600;
                       color: #3b82f6;
                       white-space: nowrap;
                       text-shadow: -1px -1px 0 white, 1px -1px 0 white, -1px 1px 0 white, 1px 1px 0 white;
+                      text-align: center;
+                      line-height: 1.3;
                     `;
-                    labelEl.textContent = `${Math.round(marker.speedKmh || 0)}km/h`;
+
+                    // Format the label content
+                    const speed = `${Math.round(marker.speedKmh || 0)}km/h`;
+                    const glideRatio = marker.glideRatio !== undefined
+                      ? `${marker.glideRatio.toFixed(0)}:1`
+                      : '∞:1'; // Infinite glide ratio if climbing or level
+                    const altDiff = marker.altitudeDiff !== undefined
+                      ? `${marker.altitudeDiff > 0 ? '+' : ''}${marker.altitudeDiff}m`
+                      : '';
+
+                    labelEl.innerHTML = `${speed}<br>${glideRatio} ${altDiff}`;
 
                     const labelMarker = new mapboxgl.Marker({ element: labelEl })
                       .setLngLat([marker.lon, marker.lat])
