@@ -712,19 +712,36 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         const stops: [number, string][] = [];
         const sampleInterval = Math.max(1, Math.floor(fixes.length / 100));
 
-        for (let i = 0; i < fixes.length; i += sampleInterval) {
+        // Start with progress 0
+        const firstNormalizedAlt = altRange > 0 ? (fixes[0].gnssAltitude - minAlt) / altRange : 0;
+        stops.push([0, getAltitudeColorNormalized(firstNormalizedAlt)]);
+
+        let lastProgress = 0;
+        const minProgressIncrement = 0.001; // Minimum progress increment to avoid duplicates
+
+        for (let i = sampleInterval; i < fixes.length; i += sampleInterval) {
           const progress = distances[i] / totalDistance;
-          // Normalize altitude to 0-1 range based on this flight's min/max
-          const normalizedAlt = altRange > 0 ? (fixes[i].gnssAltitude - minAlt) / altRange : 0;
-          const color = getAltitudeColorNormalized(normalizedAlt);
-          stops.push([progress, color]);
+
+          // Only add if progress is strictly greater than the last value
+          if (progress > lastProgress + minProgressIncrement) {
+            // Normalize altitude to 0-1 range based on this flight's min/max
+            const normalizedAlt = altRange > 0 ? (fixes[i].gnssAltitude - minAlt) / altRange : 0;
+            const color = getAltitudeColorNormalized(normalizedAlt);
+            stops.push([progress, color]);
+            lastProgress = progress;
+          }
         }
 
-        // Ensure we have the last point
-        if (stops[stops.length - 1][0] < 1) {
+        // Ensure we have the last point at exactly 1.0
+        if (lastProgress < 1 - minProgressIncrement) {
           const lastFix = fixes[fixes.length - 1];
           const normalizedAlt = altRange > 0 ? (lastFix.gnssAltitude - minAlt) / altRange : 0;
           stops.push([1, getAltitudeColorNormalized(normalizedAlt)]);
+        } else {
+          // Replace the last stop with exactly 1.0
+          const lastFix = fixes[fixes.length - 1];
+          const normalizedAlt = altRange > 0 ? (lastFix.gnssAltitude - minAlt) / altRange : 0;
+          stops[stops.length - 1] = [1, getAltitudeColorNormalized(normalizedAlt)];
         }
 
         return stops;
