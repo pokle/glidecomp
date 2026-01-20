@@ -62,9 +62,22 @@
     @apply text-xs text-muted-foreground;
   }
 
-  /* MapBox map container */
+  /* MapBox map container - use !important to ensure it displays */
   #map {
-    @apply absolute inset-0;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  /* Ensure mapboxgl canvas fills the container */
+  #map .mapboxgl-canvas-container,
+  #map .mapboxgl-canvas {
+    width: 100% !important;
+    height: 100% !important;
   }
 
   /* Throb animation for event markers */
