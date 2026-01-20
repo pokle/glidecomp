@@ -1,0 +1,113 @@
+@import "tailwindcss";
+@import "basecoat-css";
+
+/* MapBox GL CSS */
+@import "mapbox-gl/dist/mapbox-gl.css";
+
+/* Custom application styles */
+@layer base {
+  html {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+}
+
+@layer components {
+  /* Drop zone overlay */
+  .drop-zone {
+    @apply absolute inset-0 z-50 flex items-center justify-center;
+    @apply bg-black/70 opacity-0 pointer-events-none transition-opacity duration-200;
+  }
+
+  .drop-zone.drag-over {
+    @apply opacity-100 pointer-events-auto;
+  }
+
+  /* Event item in the panel */
+  .event-item {
+    @apply flex items-start gap-2 w-full p-2 bg-transparent border-0;
+    @apply rounded-md cursor-pointer text-left transition-colors duration-150;
+  }
+
+  .event-item:hover {
+    @apply bg-muted;
+  }
+
+  .event-item.selected {
+    @apply bg-primary/20;
+  }
+
+  /* Event icon container */
+  .event-icon {
+    @apply flex items-center justify-center w-6 h-6 shrink-0;
+  }
+
+  .event-icon svg {
+    @apply w-4 h-4;
+  }
+
+  /* Event content */
+  .event-content {
+    @apply flex flex-col gap-0.5 min-w-0;
+  }
+
+  .event-type {
+    @apply text-xs font-semibold uppercase tracking-wide;
+  }
+
+  .event-desc {
+    @apply text-sm whitespace-nowrap overflow-hidden text-ellipsis;
+  }
+
+  .event-meta {
+    @apply text-xs text-muted-foreground;
+  }
+
+  /* MapBox map container */
+  #map {
+    @apply absolute inset-0;
+  }
+
+  /* Throb animation for event markers */
+  @keyframes throb {
+    0%, 100% { box-shadow: 0 0 0 0 currentColor; }
+    50% { box-shadow: 0 0 0 20px transparent; }
+  }
+
+  .throb-marker {
+    animation: throb 0.5s ease-in-out 4;
+  }
+
+  /* Glide legend styles */
+  #glide-legend {
+    @apply absolute bottom-8 right-2 z-50 font-sans;
+  }
+
+  #glide-legend .glide-legend-btn {
+    @apply w-7 h-7 rounded-full border-0 bg-primary text-primary-foreground;
+    @apply text-base font-bold cursor-pointer shadow-md transition-transform duration-200;
+  }
+
+  #glide-legend .glide-legend-btn:hover {
+    @apply scale-110;
+  }
+
+  #glide-legend .glide-legend-content {
+    @apply hidden absolute bottom-9 right-0 bg-background rounded-lg p-3 min-w-64 shadow-lg;
+  }
+
+  #glide-legend.expanded .glide-legend-content {
+    @apply block;
+  }
+
+  #glide-legend .glide-legend-title {
+    @apply font-semibold text-sm mb-2 text-primary border-b border-border pb-1.5;
+  }
+
+  #glide-legend .glide-legend-item {
+    @apply text-xs text-foreground my-1.5 leading-relaxed;
+  }
+
+  #glide-legend .glide-legend-item strong {
+    @apply text-primary;
+  }
+}

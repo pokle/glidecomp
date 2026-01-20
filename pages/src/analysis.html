@@ -1,495 +1,237 @@
 <!DOCTYPE html>
-<html lang="en" class="sl-theme-dark">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TaskScore - IGC Analysis</title>
 
-    <!-- Shoelace -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/light.css" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/dark.css" />
-    <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>
+    <!-- Styles -->
+    <link rel="stylesheet" href="/styles.css">
 
-    <!-- Map Libraries -->
-    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.css">
-
-    <!-- Google Maps API for ?provider=google -->
-    <script>
-        (g => { var h, a, k, p = "The Google Maps JavaScript API", c = "google", l = "importLibrary", q = "__ib__", m = document, b = window; b = b[c] || (b[c] = {}); var d = b.maps || (b.maps = {}), r = new Set, e = new URLSearchParams, u = () => h || (h = new Promise(async (f, n) => { await (a = m.createElement("script")); e.set("libraries", [...r]); for (k in g) e.set(k.replace(/[A-Z]/g, t => "_" + t[0].toLowerCase()), g[k]); e.set("callback", c + ".maps." + q); a.src = `https://maps.${c}apis.com/maps/api/js?` + e; d[q] = f; a.onerror = () => h = n(Error(p + " could not load.")); a.nonce = m.querySelector("script[nonce]")?.nonce || ""; m.head.append(a) })); d[l] ? console.warn(p + " only loads once. Ignoring:", g) : d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n)) })({
-            key: "AIzaSyDkHC79OXQB3ktFGxt6Kfuz_ZD06g4VBDc",
-            v: "weekly"
-        });
-    </script>
-
-    <style>
-        /* Minimal custom styles - let Shoelace handle theming */
-        :root {
-            --sl-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-
-        *, *::before, *::after {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: inherit;
-        }
-
-        html, body {
-            height: 100%;
-            background: var(--sl-color-neutral-50);
-            font-family: var(--sl-font-sans);
-        }
-
-        .app {
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-        }
-
-        /* Header */
-        .header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 var(--sl-spacing-medium);
-            height: 56px;
-            background: var(--sl-color-neutral-0);
-            border-bottom: 1px solid var(--sl-color-neutral-200);
-            flex-shrink: 0;
-        }
-
-        .header-brand {
-            display: flex;
-            align-items: center;
-            gap: var(--sl-spacing-small);
-        }
-
-        .header-brand a {
-            font-size: var(--sl-font-size-large);
-            font-weight: var(--sl-font-weight-bold);
-            text-decoration: none;
-        }
-
-        .header-brand span {
-            font-size: var(--sl-font-size-small);
-        }
-
-        .header-controls {
-            display: flex;
-            align-items: center;
-            gap: var(--sl-spacing-small);
-        }
-
-        /* Main content area */
-        .main {
-            flex: 1;
-            display: flex;
-            overflow: hidden;
-            position: relative;
-        }
-
-        /* Desktop drawer */
-        sl-drawer.desktop-drawer {
-            --size: 360px;
-        }
-
-        sl-drawer.desktop-drawer::part(panel) {
-            background: var(--sl-color-neutral-0);
-        }
-
-        sl-drawer.desktop-drawer::part(overlay) {
-            display: none;
-        }
-
-        sl-drawer.desktop-drawer::part(close-button) {
-            display: none;
-        }
-
-        /* Drawer controls */
-        .drawer-controls {
-            display: flex;
-            flex-direction: column;
-            gap: var(--sl-spacing-small);
-            padding: var(--sl-spacing-medium);
-            border-bottom: 1px solid var(--sl-color-neutral-200);
-            background: var(--sl-color-neutral-50);
-        }
-
-        .drawer-controls sl-button {
-            width: 100%;
-        }
-
-        .task-input-group {
-            display: flex;
-            gap: var(--sl-spacing-x-small);
-        }
-
-        .task-input-group sl-input {
-            flex: 1;
-        }
-
-        /* Map container */
-        .map-container {
-            flex: 1;
-            position: relative;
-            min-width: 0;
-        }
-
-        #map {
-            position: absolute;
-            inset: 0;
-        }
-
-        /* Drop zone overlay */
-        .drop-zone {
-            position: absolute;
-            inset: 0;
-            z-index: 100;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.7);
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.2s;
-        }
-
-        .drop-zone.drag-over {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        .drop-zone-content {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: var(--sl-spacing-medium);
-        }
-
-        .drop-zone-content sl-icon {
-            font-size: 48px;
-        }
-
-        /* Status overlay */
-        .map-overlay {
-            position: absolute;
-            top: var(--sl-spacing-medium);
-            left: 160px;
-            right: var(--sl-spacing-medium);
-            z-index: 50;
-            pointer-events: none;
-        }
-
-        #event-panel-container {
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            overflow: hidden;
-        }
-
-        .event-panel {
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            min-width: 100%;
-            overflow: hidden;
-        }
-
-        .event-panel-header {
-            padding: var(--sl-spacing-medium);
-            border-bottom: 1px solid var(--sl-color-neutral-200);
-        }
-
-        .event-panel-header h2 {
-            font-size: var(--sl-font-size-medium);
-            font-weight: var(--sl-font-weight-semibold);
-            margin: 0;
-        }
-
-        .event-panel-info {
-            padding: var(--sl-spacing-small) var(--sl-spacing-medium);
-            background: var(--sl-color-neutral-100);
-            border-bottom: 1px solid var(--sl-color-neutral-200);
-            font-size: var(--sl-font-size-small);
-        }
-
-        .event-panel-filters {
-            padding: var(--sl-spacing-small) var(--sl-spacing-medium);
-            border-bottom: 1px solid var(--sl-color-neutral-200);
-        }
-
-        .event-panel-stats {
-            padding: var(--sl-spacing-x-small) var(--sl-spacing-medium);
-            border-bottom: 1px solid var(--sl-color-neutral-200);
-            font-size: var(--sl-font-size-small);
-        }
-
-        .event-panel-list {
-            flex: 1;
-            overflow-y: auto;
-            padding: var(--sl-spacing-small);
-        }
-
-        .event-empty {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            text-align: center;
-            padding: var(--sl-spacing-large);
-        }
-
-        /* Event items */
-        .event-item {
-            display: flex;
-            align-items: flex-start;
-            gap: var(--sl-spacing-small);
-            width: 100%;
-            padding: var(--sl-spacing-small);
-            background: transparent;
-            border: none;
-            border-radius: var(--sl-border-radius-medium);
-            cursor: pointer;
-            text-align: left;
-            transition: background 0.15s;
-        }
-
-        .event-item:hover {
-            background: var(--sl-color-neutral-100);
-        }
-
-        .event-item.selected {
-            background: var(--sl-color-primary-100);
-        }
-
-        .event-icon {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 24px;
-            height: 24px;
-            flex-shrink: 0;
-        }
-
-        .event-icon svg {
-            width: 16px;
-            height: 16px;
-        }
-
-        .event-content {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            min-width: 0;
-        }
-
-        .event-type {
-            font-size: var(--sl-font-size-x-small);
-            font-weight: var(--sl-font-weight-semibold);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .event-desc {
-            font-size: var(--sl-font-size-small);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .event-meta {
-            font-size: var(--sl-font-size-x-small);
-        }
-
-        /* View mode: list only hides the map and expands drawer */
-        .main.view-list .map-container {
-            display: none;
-        }
-
-        .main.view-list sl-drawer.desktop-drawer {
-            --size: 100%;
-        }
-
-        .main.view-list .event-panel-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: var(--sl-spacing-small);
-        }
-
-        .main.view-list .event-timeline {
-            display: contents;
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .header {
-                padding: 0 var(--sl-spacing-small);
-            }
-
-            .header-brand span {
-                display: none;
-            }
-
-            sl-drawer.desktop-drawer {
-                display: none;
-            }
-
-            .map-overlay {
-                left: var(--sl-spacing-small);
-                top: 60px;
-            }
-        }
-
-        /* Drawer panel for mobile */
-        sl-drawer::part(panel) {
-            background: var(--sl-color-neutral-0);
-        }
-
-        sl-drawer .event-panel {
-            min-width: auto;
-        }
-
-        /* Style Selector Control (MapLibre) */
-        .style-selector {
-            display: flex;
-            flex-direction: row !important;
-            gap: 0 !important;
-        }
-
-        .style-selector-btn {
-            width: 36px;
-            height: 36px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: var(--sl-color-neutral-0);
-            border: none;
-            border-right: 1px solid var(--sl-color-neutral-200);
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-
-        .style-selector-btn:last-child {
-            border-right: none;
-        }
-
-        .style-selector-btn:hover {
-            background: var(--sl-color-neutral-100);
-        }
-
-        .style-selector-btn.active {
-            background: var(--sl-color-primary-600);
-        }
-
-        .style-selector-btn .style-icon {
-            font-size: 1rem;
-            line-height: 1;
-        }
-    </style>
+    <!-- Basecoat JS for interactive components -->
+    <script src="https://cdn.jsdelivr.net/npm/basecoat-css@0.3.10/dist/js/basecoat.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/basecoat-css@0.3.10/dist/js/dropdown-menu.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/basecoat-css@0.3.10/dist/js/command.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/basecoat-css@0.3.10/dist/js/sidebar.min.js" defer></script>
 </head>
 
-<body>
-    <div class="app">
+<body class="h-screen overflow-hidden bg-background text-foreground">
+    <div class="flex h-full flex-col">
         <!-- Header -->
-        <header class="header">
-            <div class="header-brand">
-                <a href="/">TaskScore</a>
-                <span>IGC Analysis</span>
+        <header class="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-4">
+            <div class="flex items-center gap-3">
+                <!-- Hamburger menu - mobile only -->
+                <button
+                    id="sidebar-toggle"
+                    class="btn btn-ghost btn-icon md:hidden"
+                    aria-label="Toggle waypoint panel"
+                    onclick="document.dispatchEvent(new CustomEvent('basecoat:sidebar', {detail: {id: 'waypoint-sidebar'}}))"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="4" x2="20" y1="12" y2="12"/>
+                        <line x1="4" x2="20" y1="6" y2="6"/>
+                        <line x1="4" x2="20" y1="18" y2="18"/>
+                    </svg>
+                </button>
+
+                <!-- Brand -->
+                <a href="/" class="text-lg font-bold text-foreground no-underline">TaskScore</a>
+                <span class="hidden text-sm text-muted-foreground sm:inline">IGC Analysis</span>
             </div>
 
-            <div class="header-controls">
-                <!-- View mode toggle -->
-                <sl-button-group label="View mode">
-                    <sl-button id="view-list" size="small">List</sl-button>
-                    <sl-button id="view-map" size="small">Map</sl-button>
-                    <sl-button id="view-both" size="small" variant="primary">Both</sl-button>
-                </sl-button-group>
-
-                <!-- Settings menu (hamburger) -->
-                <sl-dropdown id="settings-dropdown">
-                    <sl-button slot="trigger" size="small" caret>
-                        <sl-icon name="three-dots-vertical"></sl-icon>
-                    </sl-button>
-                    <sl-menu>
-                        <sl-menu-label>Map Provider</sl-menu-label>
-                        <sl-menu-item type="checkbox" value="l" id="provider-leaflet">Leaflet</sl-menu-item>
-                        <sl-menu-item type="checkbox" value="g" id="provider-google">Google Maps</sl-menu-item>
-                        <sl-menu-item type="checkbox" value="m" id="provider-maplibre">MapLibre</sl-menu-item>
-                        <sl-menu-item type="checkbox" value="b" id="provider-mapbox">MapBox</sl-menu-item>
-                        <sl-divider></sl-divider>
-                        <sl-menu-label>Display Options</sl-menu-label>
-                        <sl-menu-item type="checkbox" id="menu-altitude-colors">Altitude Colors</sl-menu-item>
-                        <sl-menu-item type="checkbox" id="menu-3d-track">3D Track</sl-menu-item>
-                        <sl-divider></sl-divider>
-                        <sl-menu-label>Theme</sl-menu-label>
-                        <sl-menu-item type="checkbox" id="menu-theme-dark" checked>Dark</sl-menu-item>
-                        <sl-menu-item type="checkbox" id="menu-theme-light">Light</sl-menu-item>
-                        <sl-divider></sl-divider>
-                        <sl-menu-label>Sample Flights</sl-menu-label>
-                        <sl-menu-item id="sample-rohan">Rohan Holt</sl-menu-item>
-                        <sl-menu-item id="sample-shane">Shane Duncan</sl-menu-item>
-                        <sl-menu-item id="sample-gordon">Gordon Rigg</sl-menu-item>
-                        <sl-menu-item id="sample-burkitt">Burkitt</sl-menu-item>
-                        <sl-menu-item id="sample-durand">Durand</sl-menu-item>
-                        <sl-menu-item id="sample-holtkamp">Holtkamp</sl-menu-item>
-                    </sl-menu>
-                </sl-dropdown>
+            <div class="flex items-center gap-2">
+                <!-- Settings menu (gear icon) -->
+                <button
+                    class="btn btn-ghost btn-icon"
+                    aria-label="Options"
+                    onclick="document.getElementById('command-dialog').showModal()"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                </button>
             </div>
         </header>
 
         <!-- Main content -->
-        <main class="main" id="main-container">
+        <main class="relative flex flex-1 overflow-hidden">
+            <!-- Waypoint Panel Sidebar - Mobile (slides in) -->
+            <aside
+                id="waypoint-sidebar"
+                class="sidebar fixed inset-y-0 left-0 z-40 w-80 -translate-x-full bg-card transition-transform duration-300 md:relative md:z-auto md:translate-x-0 md:border-r md:border-border"
+                aria-hidden="true"
+                data-side="left"
+            >
+                <nav class="flex h-full flex-col" aria-label="Waypoint panel">
+                    <!-- Panel header with controls -->
+                    <div class="flex flex-col gap-3 border-b border-border bg-muted/50 p-4">
+                        <!-- File upload button -->
+                        <button id="file-btn" class="btn btn-outline w-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                                <line x1="12" x2="12" y1="3" y2="15"/>
+                            </svg>
+                            Choose IGC
+                        </button>
+                        <input type="file" id="igc-file" accept=".igc" class="hidden">
+
+                        <!-- Task code input -->
+                        <div class="flex gap-2">
+                            <input
+                                type="text"
+                                id="task-code"
+                                class="input flex-1"
+                                placeholder="Task code"
+                            >
+                            <button id="load-task-btn" class="btn btn-primary">Load</button>
+                        </div>
+                    </div>
+
+                    <!-- Event panel container -->
+                    <div id="event-panel-container" class="flex flex-1 flex-col overflow-hidden"></div>
+                </nav>
+            </aside>
+
+            <!-- Sidebar backdrop (mobile only) -->
+            <div
+                id="sidebar-backdrop"
+                class="fixed inset-0 z-30 hidden bg-black/50 md:hidden"
+                onclick="document.dispatchEvent(new CustomEvent('basecoat:sidebar', {detail: {action: 'close', id: 'waypoint-sidebar'}}))"
+            ></div>
+
             <!-- Map container -->
-            <div class="map-container">
+            <div class="relative flex-1">
+                <!-- Drop zone overlay -->
                 <div id="drop-zone" class="drop-zone">
-                    <div class="drop-zone-content">
-                        <sl-icon name="cloud-upload"></sl-icon>
-                        <p>Drop IGC file here</p>
+                    <div class="flex flex-col items-center gap-4 text-white">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" x2="12" y1="3" y2="15"/>
+                        </svg>
+                        <p class="text-lg">Drop IGC file here</p>
                     </div>
                 </div>
-                <div id="map" class="sl-theme-light"></div>
-                <div class="map-overlay">
-                    <sl-alert id="status" variant="primary" open duration="3000" closable>
-                        <sl-icon slot="icon" name="info-circle"></sl-icon>
-                        Ready - drop an IGC file or use the file picker
-                    </sl-alert>
+
+                <!-- Map -->
+                <div id="map"></div>
+
+                <!-- Status alert overlay -->
+                <div class="pointer-events-none absolute left-4 right-4 top-4 z-10 md:left-auto md:max-w-md">
+                    <div id="status" class="alert pointer-events-auto" role="alert">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 16v-4"/>
+                            <path d="M12 8h.01"/>
+                        </svg>
+                        <div>
+                            <p id="status-message">Ready - drop an IGC file or use the file picker</p>
+                        </div>
+                        <button
+                            class="btn btn-ghost btn-icon -mr-2"
+                            onclick="this.closest('.alert').classList.add('hidden')"
+                            aria-label="Close alert"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M18 6 6 18"/>
+                                <path d="m6 6 12 12"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
             </div>
-
-            <!-- Event drawer (desktop) -->
-            <sl-drawer id="event-drawer-desktop" class="desktop-drawer" placement="end" contained open>
-                <div class="drawer-controls">
-                    <sl-button id="file-btn" size="small" variant="default">
-                        <sl-icon slot="prefix" name="upload"></sl-icon>
-                        Choose IGC
-                    </sl-button>
-                    <input type="file" id="igc-file" accept=".igc" style="display: none;">
-                    <div class="task-input-group">
-                        <sl-input id="task-code" placeholder="Task code" size="small"></sl-input>
-                        <sl-button id="load-task-btn" size="small" variant="primary">Load</sl-button>
-                    </div>
-                </div>
-                <div id="event-panel-container"></div>
-            </sl-drawer>
         </main>
+    </div>
 
-        <!-- Event drawer (mobile) -->
-        <sl-drawer id="event-drawer" label="Flight Events" placement="bottom" style="--size: 60vh;">
-            <div class="drawer-controls">
-                <sl-button id="file-btn-mobile" size="small" variant="default">
-                    <sl-icon slot="prefix" name="upload"></sl-icon>
-                    Choose IGC
-                </sl-button>
-                <input type="file" id="igc-file-mobile" accept=".igc" style="display: none;">
-                <div class="task-input-group">
-                    <sl-input id="task-code-mobile" placeholder="Task code" size="small"></sl-input>
-                    <sl-button id="load-task-btn-mobile" size="small" variant="primary">Load</sl-button>
+    <!-- Command Menu Dialog -->
+    <dialog id="command-dialog" class="command-dialog" onclick="if (event.target === this) this.close()">
+        <div class="command">
+            <header>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"/>
+                    <path d="m21 21-4.3-4.3"/>
+                </svg>
+                <input
+                    type="text"
+                    placeholder="Search options..."
+                    role="combobox"
+                    aria-expanded="true"
+                    aria-controls="command-menu"
+                >
+            </header>
+            <div role="menu" id="command-menu">
+                <!-- Display Options -->
+                <div role="group" aria-labelledby="display-options-heading">
+                    <div role="heading" id="display-options-heading">Display Options</div>
+                    <div role="menuitem" id="menu-altitude-colors" data-keywords="altitude colors gradient">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 20V10"/>
+                            <path d="M18 20V4"/>
+                            <path d="M6 20v-4"/>
+                        </svg>
+                        <span>Toggle Altitude Colors</span>
+                        <span class="text-muted-foreground" id="altitude-colors-status">(off)</span>
+                    </div>
+                    <div role="menuitem" id="menu-3d-track" data-keywords="3d three dimensional terrain">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="m21 16-4 4-4-4"/>
+                            <path d="M17 20V4"/>
+                            <path d="m3 8 4-4 4 4"/>
+                            <path d="M7 4v16"/>
+                        </svg>
+                        <span>Toggle 3D Track</span>
+                        <span class="text-muted-foreground" id="3d-track-status">(off)</span>
+                    </div>
+                </div>
+
+                <hr role="separator">
+
+                <!-- Sample Flights -->
+                <div role="group" aria-labelledby="samples-heading">
+                    <div role="heading" id="samples-heading">Sample Flights</div>
+                    <div role="menuitem" id="sample-rohan" data-keywords="rohan holt sample flight">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
+                        </svg>
+                        <span>Rohan Holt</span>
+                    </div>
+                    <div role="menuitem" id="sample-shane" data-keywords="shane duncan sample flight">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
+                        </svg>
+                        <span>Shane Duncan</span>
+                    </div>
+                    <div role="menuitem" id="sample-gordon" data-keywords="gordon rigg sample flight">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
+                        </svg>
+                        <span>Gordon Rigg</span>
+                    </div>
+                    <div role="menuitem" id="sample-burkitt" data-keywords="burkitt sample flight">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
+                        </svg>
+                        <span>Burkitt</span>
+                    </div>
+                    <div role="menuitem" id="sample-durand" data-keywords="durand sample flight">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
+                        </svg>
+                        <span>Durand</span>
+                    </div>
+                    <div role="menuitem" id="sample-holtkamp" data-keywords="holtkamp sample flight">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
+                        </svg>
+                        <span>Holtkamp</span>
+                    </div>
                 </div>
             </div>
-            <div id="event-drawer-container"></div>
-        </sl-drawer>
-    </div>
+        </div>
+    </dialog>
 
     <script type="module" src="/analysis/main.ts"></script>
 </body>

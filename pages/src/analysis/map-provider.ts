@@ -1,8 +1,7 @@
 /**
  * Map Provider Interface
- * 
- * Abstraction layer allowing multiple map libraries (MapLibre, Google Maps)
- * to be used interchangeably for flight visualization.
+ *
+ * Abstraction layer for map visualization using MapBox GL JS.
  */
 
 import type { IGCFix } from './igc-parser';
@@ -20,7 +19,7 @@ export interface MapBounds {
 }
 
 /**
- * Map provider interface - all map implementations must conform to this
+ * Map provider interface
  */
 export interface MapProvider {
     /** Render flight track on the map */
@@ -61,60 +60,9 @@ export interface MapProvider {
 }
 
 /**
- * Available map provider types
+ * Factory function to create the MapBox map provider
  */
-export type MapProviderType = 'maplibre' | 'google' | 'leaflet' | 'mapbox';
-
-/**
- * Factory function to create a map provider
- */
-export async function createMapProvider(
-    type: MapProviderType,
-    container: HTMLElement
-): Promise<MapProvider> {
-    switch (type) {
-        case 'maplibre': {
-            const { createMapLibreProvider } = await import('./maplibre-provider');
-            return createMapLibreProvider(container);
-        }
-        case 'google': {
-            const { createGoogleMapsProvider } = await import('./google-provider');
-            return createGoogleMapsProvider(container);
-        }
-        case 'leaflet': {
-            const { createLeafletProvider } = await import('./leaflet-provider');
-            return createLeafletProvider(container);
-        }
-        case 'mapbox': {
-            const { createMapBoxProvider } = await import('./mapbox-provider');
-            return createMapBoxProvider(container);
-        }
-        default:
-            throw new Error(`Unknown map provider: ${type}`);
-    }
-}
-
-/**
- * Get provider type from URL query params
- * ?m=l for leaflet, ?m=g for google, ?m=m for maplibre, ?m=b for mapbox
- * Defaults to 'leaflet' if not specified
- */
-export function getProviderFromUrl(): MapProviderType {
-    const params = new URLSearchParams(window.location.search);
-    const provider = params.get('m');
-
-    if (provider === 'g') return 'google';
-    if (provider === 'm') return 'maplibre';
-    if (provider === 'b') return 'mapbox';
-    return 'leaflet';
-}
-
-/**
- * Get the short code for a provider type
- */
-export function getProviderCode(type: MapProviderType): string {
-    if (type === 'google') return 'g';
-    if (type === 'maplibre') return 'm';
-    if (type === 'mapbox') return 'b';
-    return 'l';
+export async function createMapProvider(container: HTMLElement): Promise<MapProvider> {
+    const { createMapBoxProvider } = await import('./mapbox-provider');
+    return createMapBoxProvider(container);
 }

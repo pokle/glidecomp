@@ -1,74 +1,34 @@
 <!DOCTYPE html>
-<html lang="en" class="sl-theme-dark">
+<html lang="en">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TaskScore - Coming Soon</title>
 
-  <!-- Shoelace -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/dark.css" />
-  <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>
-
-  <style>
-    :root {
-      --sl-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    }
-
-    *, *::before, *::after {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      font-family: inherit;
-    }
-
-    html, body {
-      font-family: var(--sl-font-sans);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background: var(--sl-color-neutral-0);
-      color: var(--sl-color-neutral-900);
-      text-align: center;
-      padding: var(--sl-spacing-large);
-    }
-
-    .container {
-      max-width: 600px;
-    }
-
-    h1 {
-      font-size: var(--sl-font-size-3x-large);
-      font-weight: var(--sl-font-weight-bold);
-      margin-bottom: var(--sl-spacing-small);
-    }
-
-    .tagline {
-      font-size: var(--sl-font-size-large);
-      color: var(--sl-color-neutral-400);
-      margin-bottom: var(--sl-spacing-x-large);
-    }
-
-    .cta-button {
-      margin-bottom: var(--sl-spacing-large);
-    }
-  </style>
+  <!-- Styles -->
+  <link rel="stylesheet" href="/styles.css">
 </head>
 
-<body>
-  <div class="container">
-    <h1>TaskScore</h1>
-    <p class="tagline">Competition track log analysis for hanggliding and paragliding</p>
+<body class="min-h-screen flex flex-col items-center justify-center bg-background text-foreground p-6 text-center">
+  <div class="max-w-xl">
+    <h1 class="text-4xl font-bold mb-2">TaskScore</h1>
+    <p class="text-lg text-muted-foreground mb-8">Competition track log analysis for hanggliding and paragliding</p>
 
-    <sl-button class="cta-button" variant="primary" size="large" href="/analysis.html?task=buje&track=20260105-132715-GordonRigg.999.igc&m=b&alt=1" pill>
-      <sl-icon slot="prefix" name="map"></sl-icon>
+    <a
+      href="/analysis.html?task=buje&track=20260105-132715-GordonRigg.999.igc&alt=1"
+      class="btn btn-primary btn-lg mb-6 inline-flex items-center gap-2"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
+        <path d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/>
+      </svg>
       Try IGC Analysis Tool
-    </sl-button>
+    </a>
 
-    <sl-badge variant="neutral" pill>More features coming soon</sl-badge>
+    <div class="badge badge-secondary">More features coming soon</div>
   </div>
+
   <script type="module" src="/index.ts"></script>
 </body>
 

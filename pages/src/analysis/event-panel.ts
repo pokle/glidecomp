@@ -3,15 +3,10 @@
  *
  * A sidebar panel that displays flight events,
  * filtered by the current map view.
- * Updated to work with Shoelace components.
+ * Updated to use Tailwind CSS and Basecoat components.
  */
 
 import { FlightEvent, FlightEventType, getEventStyle } from './event-detector';
-
-// Shoelace types
-interface SlSwitch extends HTMLElement {
-  checked: boolean;
-}
 
 export interface EventPanelOptions {
   container: HTMLElement;
@@ -100,24 +95,29 @@ function getEventIcon(type: FlightEventType): string {
 export function createEventPanel(options: EventPanelOptions): EventPanel {
   const { container, onEventClick } = options;
 
-  // Create panel structure using Shoelace components
+  // Create panel structure using Tailwind classes
   const panel = document.createElement('div');
-  panel.className = 'event-panel';
+  panel.className = 'flex h-full flex-col overflow-hidden';
   panel.innerHTML = `
-    <div class="event-panel-header">
-      <h2>Flight Events</h2>
+    <div class="border-b border-border px-4 py-3">
+      <h2 class="text-base font-semibold">Flight Events</h2>
     </div>
-    <div class="event-panel-info">
-      <div class="flight-info-content">Load an IGC file to see flight info</div>
+    <div class="border-b border-border bg-muted/50 px-4 py-2 text-sm">
+      <div class="flight-info-content text-muted-foreground">Load an IGC file to see flight info</div>
     </div>
-    <div class="event-panel-filters">
-      <sl-switch id="filter-view" size="small" checked>Show only visible events</sl-switch>
+    <div class="flex items-center gap-2 border-b border-border px-4 py-2">
+      <label class="label flex cursor-pointer items-center gap-2">
+        <input type="checkbox" id="filter-view" role="switch" class="input" checked>
+        <span class="text-sm">Show only visible events</span>
+      </label>
     </div>
-    <div class="event-panel-stats">
+    <div class="border-b border-border px-4 py-1.5 text-sm text-muted-foreground">
       <span class="event-count">0 events</span>
     </div>
-    <div class="event-panel-list">
-      <div class="event-empty">Load an IGC file to see events</div>
+    <div class="event-panel-list flex-1 overflow-y-auto p-2 scrollbar">
+      <div class="flex h-full items-center justify-center p-6 text-center text-muted-foreground">
+        Load an IGC file to see events
+      </div>
     </div>
   `;
 
@@ -126,7 +126,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
   // Get references
   const listContainer = panel.querySelector('.event-panel-list') as HTMLElement;
   const eventCountEl = panel.querySelector('.event-count') as HTMLElement;
-  const filterViewSwitch = panel.querySelector('#filter-view') as SlSwitch;
+  const filterViewSwitch = panel.querySelector('#filter-view') as HTMLInputElement;
   const flightInfoEl = panel.querySelector('.flight-info-content') as HTMLElement;
 
   // State
@@ -135,7 +135,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
   let currentBounds: { north: number; south: number; east: number; west: number } | null = null;
   let isCollapsed = false;
 
-  filterViewSwitch?.addEventListener('sl-change', () => {
+  filterViewSwitch?.addEventListener('change', () => {
     updateFilteredEvents();
     renderEvents();
   });
@@ -162,7 +162,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
   function renderEvents(): void {
     if (filteredEvents.length === 0) {
       listContainer.innerHTML = `
-        <div class="event-empty">
+        <div class="flex h-full items-center justify-center p-6 text-center text-muted-foreground">
           ${allEvents.length === 0 ? 'Load an IGC file to see events' : 'No events in current view'}
         </div>
       `;
@@ -173,7 +173,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
     eventCountEl.textContent = `${filteredEvents.length} of ${allEvents.length} events`;
 
     // Render events as a timeline
-    let html = '<div class="event-timeline">';
+    let html = '<div class="space-y-1">';
 
     for (const event of filteredEvents) {
       const style = getEventStyle(event.type);
@@ -228,7 +228,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
       const parts: string[] = [];
 
       if (info.pilot) {
-        parts.push(`<strong>${info.pilot}</strong>`);
+        parts.push(`<strong class="text-foreground">${info.pilot}</strong>`);
       }
       if (info.date) {
         parts.push(info.date);
@@ -247,7 +247,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
       }
 
       flightInfoEl.innerHTML = parts.length > 0
-        ? parts.join(' <sl-divider vertical></sl-divider> ')
+        ? parts.join(' <span class="mx-1 text-border">|</span> ')
         : 'Load an IGC file to see flight info';
     },
 
@@ -259,8 +259,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
 
     toggle() {
       isCollapsed = !isCollapsed;
-      container.classList.toggle('collapsed', isCollapsed);
-      panel.classList.toggle('collapsed', isCollapsed);
+      container.classList.toggle('hidden', isCollapsed);
 
       if (options.onToggle) {
         setTimeout(options.onToggle, 350);

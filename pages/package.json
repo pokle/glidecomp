@@ -12,9 +12,20 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250528.0",
-    "maplibre-gl": "^5.15.0",
+    "@tailwindcss/vite": "^4.1.18",
+    "basecoat-css": "^0.3.10",
+    "tailwindcss": "^4.1.18",
     "typescript": "^5.7.3",
     "vite": "^6.0.0",
     "wrangler": "^4.6.0"
+  },
+  "dependencies": {
+    "@turf/bbox": "^7.3.2",
+    "@turf/bearing": "^7.3.2",
+    "@turf/destination": "^7.3.2",
+    "@turf/distance": "^7.3.2",
+    "@turf/helpers": "^7.3.2",
+    "mapbox-gl": "^3.18.0",
+    "threebox-plugin": "^2.2.7"
   }
 }
