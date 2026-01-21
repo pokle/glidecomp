@@ -46,13 +46,14 @@ async function init(): Promise<void> {
   const mapContainer = document.getElementById('map');
   const eventPanelContainer = document.getElementById('event-panel-container');
   const igcFileInput = document.getElementById('igc-file') as HTMLInputElement;
-  const fileBtn = document.getElementById('file-btn');
-  const taskCodeInput = document.getElementById('task-code') as HTMLInputElement | null;
-  const loadTaskBtn = document.getElementById('load-task-btn');
   const dropZone = document.getElementById('drop-zone');
   const commandDialog = document.getElementById('command-dialog') as HTMLDialogElement | null;
+  const importTaskDialog = document.getElementById('import-task-dialog') as HTMLDialogElement | null;
+  const importTaskInput = document.getElementById('import-task-input') as HTMLInputElement | null;
 
-  // Feature menu items
+  // Menu items
+  const menuOpenIgc = document.getElementById('menu-open-igc');
+  const menuImportTask = document.getElementById('menu-import-task');
   const menuAltitudeColors = document.getElementById('menu-altitude-colors');
   const menu3DTrack = document.getElementById('menu-3d-track');
   const altitudeColorsStatus = document.getElementById('altitude-colors-status');
@@ -188,8 +189,9 @@ async function init(): Promise<void> {
     onToggle: handlePanelToggle,
   });
 
-  // File button triggers hidden file input
-  fileBtn?.addEventListener('click', () => {
+  // Open IGC menu item triggers hidden file input
+  menuOpenIgc?.addEventListener('click', () => {
+    commandDialog?.close();
     igcFileInput?.click();
   });
 
@@ -232,20 +234,29 @@ async function init(): Promise<void> {
     });
   }
 
-  // Task code handler
-  loadTaskBtn?.addEventListener('click', async () => {
-    const code = taskCodeInput?.value.trim();
-    if (code) {
-      await loadTask(code);
+  // Import task menu item -> opens import dialog
+  menuImportTask?.addEventListener('click', () => {
+    commandDialog?.close();
+    if (importTaskInput) {
+      importTaskInput.value = '';
     }
+    importTaskDialog?.showModal();
+    importTaskInput?.focus();
   });
 
-  taskCodeInput?.addEventListener('keydown', async (e: Event) => {
-    if ((e as KeyboardEvent).key === 'Enter') {
-      const code = taskCodeInput.value.trim();
+  // Import task dialog input handler
+  importTaskInput?.addEventListener('keydown', async (e: Event) => {
+    const keyEvent = e as KeyboardEvent;
+    if (keyEvent.key === 'Enter') {
+      keyEvent.preventDefault();
+      keyEvent.stopPropagation();
+      const code = importTaskInput.value.trim();
       if (code) {
+        importTaskDialog?.close();
         await loadTask(code);
       }
+    } else if (keyEvent.key === 'Escape') {
+      importTaskDialog?.close();
     }
   });
 
