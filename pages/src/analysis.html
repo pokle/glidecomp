@@ -21,10 +21,10 @@
         <!-- Header -->
         <header class="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-4">
             <div class="flex items-center gap-3">
-                <!-- Hamburger menu - mobile only -->
+                <!-- Hamburger menu -->
                 <button
                     id="sidebar-toggle"
-                    class="btn btn-ghost btn-icon md:hidden"
+                    class="btn btn-ghost btn-icon"
                     aria-label="Toggle waypoint panel"
                     onclick="document.dispatchEvent(new CustomEvent('basecoat:sidebar', {detail: {id: 'waypoint-sidebar'}}))"
                 >
@@ -57,10 +57,10 @@
 
         <!-- Main content -->
         <main class="relative flex flex-1 min-h-0 overflow-hidden gap-0">
-            <!-- Waypoint Panel Sidebar - Mobile (slides in) -->
+            <!-- Waypoint Panel Sidebar (slides in) -->
             <aside
                 id="waypoint-sidebar"
-                class="fixed inset-y-0 left-0 z-40 w-80 -translate-x-full bg-card transition-transform duration-300 md:relative md:z-auto md:translate-x-0 md:border-r md:border-border md:shrink-0"
+                class="fixed top-14 bottom-0 left-0 z-40 w-80 -translate-x-full border-r border-border bg-card transition-transform duration-300"
                 aria-hidden="true"
                 data-side="left"
             >
@@ -98,7 +98,7 @@
             <!-- Sidebar backdrop (mobile only) -->
             <div
                 id="sidebar-backdrop"
-                class="fixed inset-0 z-30 hidden bg-black/50 md:hidden"
+                class="fixed top-14 bottom-0 left-0 right-0 z-30 hidden bg-black/50 md:hidden"
                 onclick="document.dispatchEvent(new CustomEvent('basecoat:sidebar', {detail: {action: 'close', id: 'waypoint-sidebar'}}))"
             ></div>
 
