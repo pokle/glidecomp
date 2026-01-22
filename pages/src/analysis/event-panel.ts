@@ -204,6 +204,9 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
     }
 
     render();
+
+    // Reset scroll position when switching tabs
+    listContainer.scrollTop = 0;
   }
 
   // Tab click handlers
