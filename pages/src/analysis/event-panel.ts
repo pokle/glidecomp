@@ -107,10 +107,8 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
       <div class="flight-info-content text-muted-foreground">Load an IGC file to see flight info</div>
     </div>
     <div class="flex items-center gap-2 border-b border-border px-4 py-2">
-      <label class="label flex cursor-pointer items-center gap-2">
-        <input type="checkbox" id="filter-view" role="switch" class="input" checked>
-        <span class="text-sm">Show only visible events</span>
-      </label>
+      <button id="filter-to-view-btn" class="btn btn-secondary btn-sm">Filter to View</button>
+      <button id="show-all-btn" class="btn btn-ghost btn-sm hidden">Show All</button>
     </div>
     <div class="border-b border-border px-4 py-1.5 text-sm text-muted-foreground">
       <span class="event-count">0 events</span>
@@ -127,7 +125,8 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
   // Get references
   const listContainer = panel.querySelector('.event-panel-list') as HTMLElement;
   const eventCountEl = panel.querySelector('.event-count') as HTMLElement;
-  const filterViewSwitch = panel.querySelector('#filter-view') as HTMLInputElement;
+  const filterToViewBtn = panel.querySelector('#filter-to-view-btn') as HTMLButtonElement;
+  const showAllBtn = panel.querySelector('#show-all-btn') as HTMLButtonElement;
   const flightInfoEl = panel.querySelector('.flight-info-content') as HTMLElement;
 
   // State
@@ -135,24 +134,43 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
   let filteredEvents: FlightEvent[] = [];
   let currentBounds: { north: number; south: number; east: number; west: number } | null = null;
   let isCollapsed = false;
+  let isFiltered = false;
+  let frozenBounds: { north: number; south: number; east: number; west: number } | null = null;
 
-  filterViewSwitch?.addEventListener('change', () => {
+  // Filter to view button - captures current bounds and filters once
+  filterToViewBtn?.addEventListener('click', () => {
+    if (currentBounds) {
+      isFiltered = true;
+      frozenBounds = { ...currentBounds };
+      updateFilteredEvents();
+      renderEvents();
+      filterToViewBtn.classList.add('hidden');
+      showAllBtn.classList.remove('hidden');
+    }
+  });
+
+  // Show all button - resets filter
+  showAllBtn?.addEventListener('click', () => {
+    isFiltered = false;
+    frozenBounds = null;
     updateFilteredEvents();
     renderEvents();
+    showAllBtn.classList.add('hidden');
+    filterToViewBtn.classList.remove('hidden');
   });
 
   /**
-   * Update filtered events based on bounds
+   * Update filtered events based on frozen bounds (if filtered)
    */
   function updateFilteredEvents(): void {
-    if (!filterViewSwitch?.checked || !currentBounds) {
+    if (!isFiltered || !frozenBounds) {
       filteredEvents = [...allEvents];
     } else {
       filteredEvents = allEvents.filter(event =>
-        event.latitude >= currentBounds!.south &&
-        event.latitude <= currentBounds!.north &&
-        event.longitude >= currentBounds!.west &&
-        event.longitude <= currentBounds!.east
+        event.latitude >= frozenBounds!.south &&
+        event.latitude <= frozenBounds!.north &&
+        event.longitude >= frozenBounds!.west &&
+        event.longitude <= frozenBounds!.east
       );
     }
   }
@@ -253,9 +271,9 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
     },
 
     filterByBounds(bounds: { north: number; south: number; east: number; west: number }) {
+      // Just store current bounds - don't auto-filter
+      // User must click "Filter to View" button to filter
       currentBounds = bounds;
-      updateFilteredEvents();
-      renderEvents();
     },
 
     clearSelection() {
