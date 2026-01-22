@@ -77,6 +77,12 @@ When an event is selected from the panel:
   - Shows explanations for: chevron spacing (500m segments), speed, L/D ratio, and altitude change
   - Automatically hidden when selecting non-glide events
 
+**Selection Clearing**: Event selection and all associated visualizations (segment highlight, markers, legend) are automatically cleared when:
+- Loading a new IGC file
+- Toggling 3D track mode
+- Toggling altitude colors mode
+- Anything else that results in the visualisation or information presented being unrelated to the track or task being shown.
+
 This visual system helps pilots quickly identify and understand the spatial extent of flight phases.
 
 ## Technical Architecture
