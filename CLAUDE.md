@@ -116,6 +116,7 @@ npm run deploy       # Manual deploy to Cloudflare Pages
 - Decisions MUST be explainable - return explanations for scoring decisions, audit logs, and unit testing
 - Place experimental code in `/explorations/` - never use in production
 - Use Basecoat components for UI elements - prefer built-in components over custom implementations
+- Before creating custom UI components, check https://basecoatui.com/docs/components for an appropriate Basecoat component
 - Use Tailwind utility classes for styling - avoid custom CSS when Tailwind provides equivalent functionality
 
 ## Geographic Calculations
