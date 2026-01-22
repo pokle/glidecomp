@@ -169,6 +169,57 @@
     @apply text-xs text-muted-foreground;
   }
 
+  /* Sink item in the panel */
+  .sink-item {
+    @apply flex items-start gap-3 w-full p-3 bg-muted/30 border border-border;
+    @apply rounded-lg cursor-pointer text-left transition-colors duration-150;
+  }
+
+  .sink-item:hover {
+    @apply bg-muted;
+  }
+
+  .sink-item.selected {
+    @apply bg-primary/20 border-primary/50;
+  }
+
+  .sink-rank {
+    @apply flex items-center justify-center w-8 h-8 shrink-0;
+    @apply bg-red-500/20 text-red-600 dark:text-red-400 font-bold text-sm rounded-full;
+  }
+
+  .sink-details {
+    @apply flex flex-col gap-1 min-w-0 flex-1;
+  }
+
+  .sink-primary {
+    @apply flex items-baseline justify-between gap-2;
+  }
+
+  .sink-drop {
+    @apply text-base font-semibold text-red-600 dark:text-red-400;
+  }
+
+  .sink-time {
+    @apply text-xs text-muted-foreground;
+  }
+
+  .sink-stats {
+    @apply flex flex-wrap gap-x-3 gap-y-1 text-xs;
+  }
+
+  .sink-stat {
+    @apply text-muted-foreground;
+  }
+
+  .sink-stat strong {
+    @apply text-foreground font-medium;
+  }
+
+  .sink-altitudes {
+    @apply text-xs text-muted-foreground;
+  }
+
   /* MapBox map container - use !important to ensure it displays */
   #map {
     position: absolute !important;

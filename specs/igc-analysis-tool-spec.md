@@ -3,7 +3,7 @@
 ## TODO
 - [ ] Add a 'Show all Events' command that's equivalent to clicking the Events button, and switching the filter to show all events. It should focus the keyboard on the event panel.
 - [x] Implement 'Highest climbs' tab - show all climbs/thermals sorted by greatest altitude gain first
-- [ ] Implement 'Deepest sinks' tab - show all descents sorted by greatest altitude drop first
+- [x] Implement 'Deepest sinks' tab - show all descents sorted by greatest altitude drop first
 - [ ] Add box plots to the 'Longest glides' view showing vertically stacked box plots per detail (use uPlot for plotting, and simple-statistics for the descriptive statistics)
 - [ ] Review code and ensure that we're using appropriate libraries for statistics and geo calculations.
 
@@ -75,7 +75,7 @@ Collapsible sidebar with tabbed interface for viewing flight data. Uses Basecoat
 - **Events** - Chronological list of all detected events (takeoff, thermals, glides, landing, etc.)
 - **Glides** - Glides sorted by distance (longest first), combining start/end info into single entries
 - **Climbs** - Thermals sorted by altitude gain (highest first), combining entry/exit info into single entries
-- **Sinks** - *(Placeholder, disabled)* Will show descents sorted by altitude lost
+- **Sinks** - Glides with poor L/D ratio (5:1 or worse), sorted by altitude lost (deepest first)
 
 **Events Tab Features:**
 - Two filter buttons (always visible, not a toggle):
@@ -84,6 +84,7 @@ Collapsible sidebar with tabbed interface for viewing flight data. Uses Basecoat
 - Click on an event: Pan to event location and highlight on map
 
 **Glides Tab Features:**
+- Header: "Sorted by distance (longest first)"
 - Each glide shows: rank (#1, #2...), distance (km), time range, and stats:
   - **L/D** - Glide ratio
   - **Spd** - Average speed (km/h)
@@ -92,17 +93,31 @@ Collapsible sidebar with tabbed interface for viewing flight data. Uses Basecoat
 - Start/end altitudes displayed
 
 **Climbs Tab Features:**
+- Header: "Sorted by altitude gain (highest first)"
 - Each climb shows: rank (#1, #2...), altitude gain (m), time range, and stats:
   - **Avg** - Average climb rate (m/s)
   - **Dur** - Duration (mm:ss)
 - Start/end altitudes displayed
 - Green accent color for climb items to distinguish from glides
 
+**Sinks Tab Features:**
+- Header: "Glides with L/D ≤ 5:1, sorted by altitude lost"
+- Only shows glides with L/D ratio of 5:1 or worse (indicating strong sink)
+- Each sink shows: rank (#1, #2...), altitude lost (m), time range, and stats:
+  - **L/D** - Glide ratio (always ≤5:1)
+  - **Avg** - Average sink rate (m/s)
+  - **Dist** - Distance covered (km)
+  - **Spd** - Average speed (km/h)
+  - **Dur** - Duration (mm:ss)
+- Start/end altitudes displayed
+- Red accent color for sink items to indicate descent
+
 **Cross-Tab Selection Sync:**
-- Selecting a glide_start or glide_end event in Events tab → switching to Glides highlights the corresponding glide
+- Selecting a glide_start or glide_end event in Events tab → switching to Glides or Sinks highlights the corresponding item
 - Selecting a thermal_entry or thermal_exit event in Events tab → switching to Climbs highlights the corresponding climb
 - Selecting a glide in Glides tab → switching to Events highlights the corresponding glide_start event
 - Selecting a climb in Climbs tab → switching to Events highlights the corresponding thermal_entry event
+- Selecting a sink in Sinks tab → switching to Events highlights the corresponding glide_start event
 - Selected item automatically scrolls into view when switching tabs
 
 ### Event Selection Visualization

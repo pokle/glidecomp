@@ -11,7 +11,7 @@ import { FlightEvent, FlightEventType, getEventStyle } from './event-detector';
 /**
  * View modes for the event panel
  */
-type ViewMode = 'all' | 'glides' | 'climbs';
+type ViewMode = 'all' | 'glides' | 'climbs' | 'sinks';
 
 /**
  * Combined glide data from start and end events
@@ -54,6 +54,31 @@ interface ClimbData {
   endLon: number;
   segment: { startIndex: number; endIndex: number };
   /** Reference to the original thermal_entry event for click handling */
+  sourceEvent: FlightEvent;
+}
+
+/**
+ * Combined sink/descent data from glide events (sorted by altitude lost)
+ * Only includes glides with L/D ratio of 5:1 or worse
+ */
+interface SinkData {
+  id: string;
+  startTime: Date;
+  endTime: Date;
+  startAltitude: number;
+  endAltitude: number;
+  altitudeLost: number;
+  distance: number;
+  duration: number;
+  averageSpeed: number;
+  avgSinkRate: number;
+  glideRatio: number;
+  startLat: number;
+  startLon: number;
+  endLat: number;
+  endLon: number;
+  segment: { startIndex: number; endIndex: number };
+  /** Reference to the original glide_start event for click handling */
   sourceEvent: FlightEvent;
 }
 
@@ -160,7 +185,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
         <button type="button" role="tab" id="tab-events" aria-selected="true">Events</button>
         <button type="button" role="tab" id="tab-glides" aria-selected="false">Glides</button>
         <button type="button" role="tab" id="tab-climbs" aria-selected="false">Climbs</button>
-        <button type="button" role="tab" id="tab-sinks" aria-selected="false" disabled>Sinks</button>
+        <button type="button" role="tab" id="tab-sinks" aria-selected="false">Sinks</button>
       </nav>
     </div>
     <div class="flex items-center gap-2 border-b border-border px-4 py-2" id="events-filter-row">
@@ -224,6 +249,8 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
       activeTab = tabGlides;
     } else if (mode === 'climbs') {
       activeTab = tabClimbs;
+    } else if (mode === 'sinks') {
+      activeTab = tabSinks;
     }
     if (activeTab) {
       activeTab.setAttribute('aria-selected', 'true');
@@ -246,6 +273,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
   tabEvents?.addEventListener('click', () => switchTab('all'));
   tabGlides?.addEventListener('click', () => switchTab('glides'));
   tabClimbs?.addEventListener('click', () => switchTab('climbs'));
+  tabSinks?.addEventListener('click', () => switchTab('sinks'));
 
   // Show all button - shows all events (no spatial filter)
   showAllBtn?.addEventListener('click', () => {
@@ -387,6 +415,71 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
   }
 
   /**
+   * Extract sink/descent data from glide events (sorted by altitude lost)
+   * Sinks are glides with poor L/D ratio (5:1 or worse), indicating strong sink
+   */
+  function extractSinks(): SinkData[] {
+    const sinks: SinkData[] = [];
+    const maxGlideRatioForSink = 5; // L/D of 5:1 or worse qualifies as a sink
+
+    for (const event of allEvents) {
+      if (event.type === 'glide_start' && event.segment && event.details) {
+        const details = event.details as {
+          distance?: number;
+          averageSpeed?: number;
+          glideRatio?: number;
+          duration?: number;
+        };
+
+        const glideRatio = details.glideRatio || 0;
+
+        // Only include glides with L/D of 5:1 or worse (lower is worse)
+        if (glideRatio > maxGlideRatioForSink) {
+          continue;
+        }
+
+        // Find matching glide_end event
+        const endEvent = allEvents.find(
+          e => e.type === 'glide_end' &&
+               e.segment?.startIndex === event.segment?.startIndex &&
+               e.segment?.endIndex === event.segment?.endIndex
+        );
+
+        if (endEvent) {
+          const altitudeLost = event.altitude - endEvent.altitude;
+          const duration = details.duration || 0;
+          const avgSinkRate = duration > 0 ? altitudeLost / duration : 0;
+
+          sinks.push({
+            id: event.id,
+            startTime: event.time,
+            endTime: endEvent.time,
+            startAltitude: event.altitude,
+            endAltitude: endEvent.altitude,
+            altitudeLost: altitudeLost,
+            distance: details.distance || 0,
+            duration: duration,
+            averageSpeed: details.averageSpeed || 0,
+            avgSinkRate: avgSinkRate,
+            glideRatio: glideRatio,
+            startLat: event.latitude,
+            startLon: event.longitude,
+            endLat: endEvent.latitude,
+            endLon: endEvent.longitude,
+            segment: event.segment,
+            sourceEvent: event,
+          });
+        }
+      }
+    }
+
+    // Sort by altitude lost (deepest first)
+    sinks.sort((a, b) => b.altitudeLost - a.altitudeLost);
+
+    return sinks;
+  }
+
+  /**
    * Format duration in mm:ss
    */
   function formatDuration(seconds: number): string {
@@ -403,6 +496,8 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
       renderGlides();
     } else if (viewMode === 'climbs') {
       renderClimbs();
+    } else if (viewMode === 'sinks') {
+      renderSinks();
     } else {
       renderEvents();
     }
@@ -507,6 +602,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
 
     // Render glides with detailed stats
     let html = '<div class="space-y-2">';
+    html += '<div class="text-xs text-muted-foreground px-1 pb-2">Sorted by distance (longest first)</div>';
 
     for (let i = 0; i < glides.length; i++) {
       const glide = glides[i];
@@ -604,6 +700,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
 
     // Render climbs with detailed stats
     let html = '<div class="space-y-2">';
+    html += '<div class="text-xs text-muted-foreground px-1 pb-2">Sorted by altitude gain (highest first)</div>';
 
     for (let i = 0; i < climbs.length; i++) {
       const climb = climbs[i];
@@ -672,6 +769,107 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
     }
   }
 
+  /**
+   * Render the sinks list (deepest altitude drop first)
+   */
+  function renderSinks(): void {
+    const sinks = extractSinks();
+
+    if (sinks.length === 0) {
+      listContainer.innerHTML = `
+        <div class="flex h-full items-center justify-center p-6 text-center text-muted-foreground">
+          ${allEvents.length === 0 ? 'Load an IGC file to see sinks' : 'No descents detected'}
+        </div>
+      `;
+      eventCountEl.textContent = '0 sinks';
+      return;
+    }
+
+    eventCountEl.textContent = `${sinks.length} sinks`;
+
+    // Render sinks with detailed stats
+    let html = '<div class="space-y-2">';
+    html += '<div class="text-xs text-muted-foreground px-1 pb-2">Glides with L/D ≤ 5:1, sorted by altitude lost</div>';
+
+    for (let i = 0; i < sinks.length; i++) {
+      const sink = sinks[i];
+      const distanceKm = (sink.distance / 1000).toFixed(2);
+      const speedKmh = (sink.averageSpeed * 3.6).toFixed(0);
+      const glideRatioStr = sink.glideRatio > 0 ? sink.glideRatio.toFixed(1) : '0';
+
+      html += `
+        <button class="sink-item" data-sink-id="${sink.id}">
+          <div class="sink-rank">#${i + 1}</div>
+          <div class="sink-details">
+            <div class="sink-primary">
+              <span class="sink-drop">-${sink.altitudeLost.toFixed(0)}m</span>
+              <span class="sink-time">${formatTime(sink.startTime)} → ${formatTime(sink.endTime)}</span>
+            </div>
+            <div class="sink-stats">
+              <span class="sink-stat" title="Glide Ratio">
+                <strong>L/D</strong> ${glideRatioStr}:1
+              </span>
+              <span class="sink-stat" title="Average Sink Rate">
+                <strong>Avg</strong> -${sink.avgSinkRate.toFixed(1)} m/s
+              </span>
+              <span class="sink-stat" title="Distance">
+                <strong>Dist</strong> ${distanceKm} km
+              </span>
+              <span class="sink-stat" title="Speed">
+                <strong>Spd</strong> ${speedKmh} km/h
+              </span>
+              <span class="sink-stat" title="Duration">
+                <strong>Dur</strong> ${formatDuration(sink.duration)}
+              </span>
+            </div>
+            <div class="sink-altitudes">
+              ${sink.startAltitude.toFixed(0)}m → ${sink.endAltitude.toFixed(0)}m
+            </div>
+          </div>
+        </button>
+      `;
+    }
+
+    html += '</div>';
+
+    listContainer.innerHTML = html;
+
+    // Add click handlers
+    listContainer.querySelectorAll('.sink-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const sinkId = item.getAttribute('data-sink-id');
+        const sink = sinks.find(s => s.id === sinkId);
+        if (sink) {
+          onEventClick(sink.sourceEvent);
+
+          // Store selected segment for cross-tab sync
+          selectedSegment = sink.segment;
+
+          // Highlight selected item
+          listContainer.querySelectorAll('.sink-item').forEach(el => {
+            el.classList.remove('selected');
+          });
+          item.classList.add('selected');
+        }
+      });
+    });
+
+    // Restore selection if there's a selected segment
+    if (selectedSegment) {
+      const matchingSink = sinks.find(s =>
+        s.segment.startIndex === selectedSegment!.startIndex &&
+        s.segment.endIndex === selectedSegment!.endIndex
+      );
+      if (matchingSink) {
+        const item = listContainer.querySelector(`[data-sink-id="${matchingSink.id}"]`);
+        if (item) {
+          item.classList.add('selected');
+          item.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+        }
+      }
+    }
+  }
+
   return {
     setEvents(events: FlightEvent[]) {
       allEvents = events;
@@ -714,7 +912,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
 
     clearSelection() {
       selectedSegment = null;
-      listContainer.querySelectorAll('.event-item.selected, .glide-item.selected, .climb-item.selected').forEach(el => {
+      listContainer.querySelectorAll('.event-item.selected, .glide-item.selected, .climb-item.selected, .sink-item.selected').forEach(el => {
         el.classList.remove('selected');
       });
     },
