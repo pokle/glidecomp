@@ -67,25 +67,6 @@
     @apply bg-primary/20 text-primary;
   }
 
-  /* Panel tabs */
-  .panel-tab {
-    @apply flex-1 px-3 py-2 text-sm font-medium text-muted-foreground;
-    @apply border-b-2 border-transparent bg-transparent;
-    @apply transition-colors duration-150 cursor-pointer;
-  }
-
-  .panel-tab:hover:not(:disabled) {
-    @apply text-foreground bg-muted/50;
-  }
-
-  .panel-tab.active {
-    @apply text-primary border-primary;
-  }
-
-  .panel-tab:disabled {
-    @apply opacity-40 cursor-not-allowed;
-  }
-
   /* Glide item in the panel */
   .glide-item {
     @apply flex items-start gap-3 w-full p-3 bg-muted/30 border border-border;

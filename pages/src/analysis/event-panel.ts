@@ -134,13 +134,13 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
     <div class="border-b border-border bg-muted/50 px-4 py-2 text-sm">
       <div class="flight-info-content text-muted-foreground">Load an IGC file to see flight info</div>
     </div>
-    <div class="border-b border-border">
-      <div class="flex" role="tablist">
-        <button role="tab" id="tab-events" class="panel-tab active" aria-selected="true">Events</button>
-        <button role="tab" id="tab-glides" class="panel-tab" aria-selected="false">Glides</button>
-        <button role="tab" id="tab-climbs" class="panel-tab" aria-selected="false" disabled>Climbs</button>
-        <button role="tab" id="tab-sinks" class="panel-tab" aria-selected="false" disabled>Sinks</button>
-      </div>
+    <div class="tabs w-full border-b border-border">
+      <nav role="tablist" class="w-full">
+        <button type="button" role="tab" id="tab-events" aria-selected="true">Events</button>
+        <button type="button" role="tab" id="tab-glides" aria-selected="false">Glides</button>
+        <button type="button" role="tab" id="tab-climbs" aria-selected="false" disabled>Climbs</button>
+        <button type="button" role="tab" id="tab-sinks" aria-selected="false" disabled>Sinks</button>
+      </nav>
     </div>
     <div class="flex items-center gap-2 border-b border-border px-4 py-2" id="events-filter-row">
       <button id="show-all-btn" class="btn btn-ghost btn-sm filter-btn active">Show all</button>
@@ -186,17 +186,15 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
   function switchTab(mode: ViewMode): void {
     viewMode = mode;
 
-    // Update tab states
+    // Update tab states (Basecoat uses aria-selected for styling)
     for (const tab of allTabs) {
       if (tab) {
-        tab.classList.remove('active');
         tab.setAttribute('aria-selected', 'false');
       }
     }
 
     const activeTab = mode === 'all' ? tabEvents : tabGlides;
     if (activeTab) {
-      activeTab.classList.add('active');
       activeTab.setAttribute('aria-selected', 'true');
     }
 
