@@ -64,6 +64,9 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       let isAltitudeColorsMode = false;
       let altitudeGradientStops: [number, string][] = [];
 
+      // Task visibility state
+      let isTaskVisible = true;
+
       /**
        * Show or hide the glide legend help button
        */
@@ -850,6 +853,24 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           isAltitudeColorsMode = enabled;
           clearEventHighlights();
           updateTrackRendering();
+        },
+
+        setTaskVisibility(visible: boolean) {
+          isTaskVisible = visible;
+          const visibility = visible ? 'visible' : 'none';
+          const taskLayers = [
+            'task-line',
+            'task-cylinders-fill',
+            'task-cylinders-stroke',
+            'task-points',
+            'task-labels',
+            'task-segment-labels',
+          ];
+          for (const layerId of taskLayers) {
+            if (map.getLayer(layerId)) {
+              map.setLayoutProperty(layerId, 'visibility', visibility);
+            }
+          }
         },
         setTrack(fixes: IGCFix[]) {
           clearEventHighlights();

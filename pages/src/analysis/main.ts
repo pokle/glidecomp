@@ -38,6 +38,7 @@ let isProgrammaticPan = false;
 // Feature states
 let isAltitudeColorsEnabled = false;
 let is3DTrackEnabled = false;
+let isTaskVisible = true;
 
 /**
  * Initialize the application
@@ -56,11 +57,13 @@ async function init(): Promise<void> {
   const menuImportTask = document.getElementById('menu-import-task');
   const menuAltitudeColors = document.getElementById('menu-altitude-colors');
   const menu3DTrack = document.getElementById('menu-3d-track');
+  const menuToggleTask = document.getElementById('menu-toggle-task');
   const menuThemeLight = document.getElementById('menu-theme-light');
   const menuThemeDark = document.getElementById('menu-theme-dark');
   const menuThemeSystem = document.getElementById('menu-theme-system');
   const altitudeColorsStatus = document.getElementById('altitude-colors-status');
   const threeDTrackStatus = document.getElementById('3d-track-status');
+  const taskVisibilityStatus = document.getElementById('task-visibility-status');
 
   // Sidebar elements
   const sidebar = document.getElementById('waypoint-sidebar');
@@ -144,6 +147,29 @@ async function init(): Promise<void> {
     });
   } else if (menu3DTrack) {
     menu3DTrack.style.display = 'none';
+  }
+
+  // Set up task visibility toggle
+  if (menuToggleTask) {
+    isTaskVisible = params.get('task-visible') !== '0';
+    updateFeatureStatus(taskVisibilityStatus, isTaskVisible);
+
+    if (!isTaskVisible && mapRenderer?.setTaskVisibility) {
+      mapRenderer.setTaskVisibility(false);
+    }
+
+    menuToggleTask.addEventListener('click', () => {
+      isTaskVisible = !isTaskVisible;
+      updateFeatureStatus(taskVisibilityStatus, isTaskVisible);
+
+      if (mapRenderer?.setTaskVisibility) {
+        mapRenderer.setTaskVisibility(isTaskVisible);
+        updateUrlParam('task-visible', isTaskVisible ? null : '0');
+      }
+
+      // Close the command dialog
+      commandDialog?.close();
+    });
   }
 
   // Theme switching handlers

@@ -57,6 +57,9 @@ export interface MapProvider {
 
     /** Enable/disable altitude-based color gradient (only available if supportsAltitudeColors is true) */
     setAltitudeColors?(enabled: boolean): void;
+
+    /** Show/hide task visualization (cylinders, lines, labels) */
+    setTaskVisibility?(visible: boolean): void;
 }
 
 /**
