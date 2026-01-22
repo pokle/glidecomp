@@ -62,6 +62,81 @@
     @apply text-xs text-muted-foreground;
   }
 
+  /* Filter button active state */
+  .filter-btn.active {
+    @apply bg-primary/20 text-primary;
+  }
+
+  /* Panel tabs */
+  .panel-tab {
+    @apply flex-1 px-3 py-2 text-sm font-medium text-muted-foreground;
+    @apply border-b-2 border-transparent bg-transparent;
+    @apply transition-colors duration-150 cursor-pointer;
+  }
+
+  .panel-tab:hover:not(:disabled) {
+    @apply text-foreground bg-muted/50;
+  }
+
+  .panel-tab.active {
+    @apply text-primary border-primary;
+  }
+
+  .panel-tab:disabled {
+    @apply opacity-40 cursor-not-allowed;
+  }
+
+  /* Glide item in the panel */
+  .glide-item {
+    @apply flex items-start gap-3 w-full p-3 bg-muted/30 border border-border;
+    @apply rounded-lg cursor-pointer text-left transition-colors duration-150;
+  }
+
+  .glide-item:hover {
+    @apply bg-muted;
+  }
+
+  .glide-item.selected {
+    @apply bg-primary/20 border-primary/50;
+  }
+
+  .glide-rank {
+    @apply flex items-center justify-center w-8 h-8 shrink-0;
+    @apply bg-primary/10 text-primary font-bold text-sm rounded-full;
+  }
+
+  .glide-details {
+    @apply flex flex-col gap-1 min-w-0 flex-1;
+  }
+
+  .glide-primary {
+    @apply flex items-baseline justify-between gap-2;
+  }
+
+  .glide-distance {
+    @apply text-base font-semibold text-foreground;
+  }
+
+  .glide-time {
+    @apply text-xs text-muted-foreground;
+  }
+
+  .glide-stats {
+    @apply flex flex-wrap gap-x-3 gap-y-1 text-xs;
+  }
+
+  .glide-stat {
+    @apply text-muted-foreground;
+  }
+
+  .glide-stat strong {
+    @apply text-foreground font-medium;
+  }
+
+  .glide-altitudes {
+    @apply text-xs text-muted-foreground;
+  }
+
   /* MapBox map container - use !important to ensure it displays */
   #map {
     position: absolute !important;

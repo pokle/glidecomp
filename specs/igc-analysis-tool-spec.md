@@ -4,9 +4,11 @@
 - [x] Add a command to show/hide task to the command palette
 - [x] Add command to show/hide track
 - [x] Convert the 'Show only visible events' toggle to a normal button - so that it only filters visible events on click of the button, and not every time the map moves.
-- [ ] Add a new events filter called 'Longest glides'. Show all glides sorted by longest to shortest. Single entry per glide combining start and end event information. Show standard segment details such as **L/D**, **Altitude**, **Duration**, **Distance**, **Speed**. Show these as vertically stacked box plots per detail (use uPlot for plotting, and simple-statistics for the descriptive statistics)
+- [x] Add a new events filter called 'Longest glides'. Show all glides sorted by longest to shortest. Single entry per glide combining start and end event information. Show standard segment details such as **L/D**, **Altitude**, **Duration**, **Distance**, **Speed**.
+- [ ] Add a 'Show all Events' command that's equivalent to clicking the Events button, and switching the filter to show all events. It should focus the keyboard on the event panel.
 - [ ] Add a new filter called 'Highest climbs'. Show all climbs/thermals sorted by the greatest altitude gain first.
 - [ ] Add a new filter called 'Deepest sinks'. Show all descents sorted by the one with the greatest altitude drop first.
+- [ ] Add box plots to the 'Longest glides' view showing vertically stacked box plots per detail (use uPlot for plotting, and simple-statistics for the descriptive statistics)
 
 ## Overview
 

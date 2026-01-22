@@ -8,6 +8,34 @@
 
 import { FlightEvent, FlightEventType, getEventStyle } from './event-detector';
 
+/**
+ * View modes for the event panel
+ */
+type ViewMode = 'all' | 'glides';
+
+/**
+ * Combined glide data from start and end events
+ */
+interface GlideData {
+  id: string;
+  startTime: Date;
+  endTime: Date;
+  startAltitude: number;
+  endAltitude: number;
+  distance: number;
+  duration: number;
+  averageSpeed: number;
+  glideRatio: number;
+  altitudeLost: number;
+  startLat: number;
+  startLon: number;
+  endLat: number;
+  endLon: number;
+  segment: { startIndex: number; endIndex: number };
+  /** Reference to the original glide_start event for click handling */
+  sourceEvent: FlightEvent;
+}
+
 export interface EventPanelOptions {
   container: HTMLElement;
   onEventClick: (event: FlightEvent) => void;
@@ -106,9 +134,17 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
     <div class="border-b border-border bg-muted/50 px-4 py-2 text-sm">
       <div class="flight-info-content text-muted-foreground">Load an IGC file to see flight info</div>
     </div>
-    <div class="flex items-center gap-2 border-b border-border px-4 py-2">
-      <button id="show-all-btn" class="btn btn-ghost btn-sm">Show all</button>
-      <button id="filter-to-view-btn" class="btn btn-ghost btn-sm">Show visible</button>
+    <div class="border-b border-border">
+      <div class="flex" role="tablist">
+        <button role="tab" id="tab-events" class="panel-tab active" aria-selected="true">Events</button>
+        <button role="tab" id="tab-glides" class="panel-tab" aria-selected="false">Glides</button>
+        <button role="tab" id="tab-climbs" class="panel-tab" aria-selected="false" disabled>Climbs</button>
+        <button role="tab" id="tab-sinks" class="panel-tab" aria-selected="false" disabled>Sinks</button>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 border-b border-border px-4 py-2" id="events-filter-row">
+      <button id="show-all-btn" class="btn btn-ghost btn-sm filter-btn active">Show all</button>
+      <button id="filter-to-view-btn" class="btn btn-ghost btn-sm filter-btn">Show visible</button>
     </div>
     <div class="border-b border-border px-4 py-1.5 text-sm text-muted-foreground">
       <span class="event-count">0 events</span>
@@ -127,6 +163,12 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
   const eventCountEl = panel.querySelector('.event-count') as HTMLElement;
   const filterToViewBtn = panel.querySelector('#filter-to-view-btn') as HTMLButtonElement;
   const showAllBtn = panel.querySelector('#show-all-btn') as HTMLButtonElement;
+  const eventsFilterRow = panel.querySelector('#events-filter-row') as HTMLElement;
+  const tabEvents = panel.querySelector('#tab-events') as HTMLButtonElement;
+  const tabGlides = panel.querySelector('#tab-glides') as HTMLButtonElement;
+  const tabClimbs = panel.querySelector('#tab-climbs') as HTMLButtonElement;
+  const tabSinks = panel.querySelector('#tab-sinks') as HTMLButtonElement;
+  const allTabs = [tabEvents, tabGlides, tabClimbs, tabSinks];
   const flightInfoEl = panel.querySelector('.flight-info-content') as HTMLElement;
 
   // State
@@ -136,13 +178,48 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
   let isCollapsed = false;
   let isFiltered = false;
   let frozenBounds: { north: number; south: number; east: number; west: number } | null = null;
+  let viewMode: ViewMode = 'all';
 
-  // Show all button - shows all events
+  /**
+   * Switch to a tab and update UI
+   */
+  function switchTab(mode: ViewMode): void {
+    viewMode = mode;
+
+    // Update tab states
+    for (const tab of allTabs) {
+      if (tab) {
+        tab.classList.remove('active');
+        tab.setAttribute('aria-selected', 'false');
+      }
+    }
+
+    const activeTab = mode === 'all' ? tabEvents : tabGlides;
+    if (activeTab) {
+      activeTab.classList.add('active');
+      activeTab.setAttribute('aria-selected', 'true');
+    }
+
+    // Show/hide filter row (only for Events tab)
+    if (eventsFilterRow) {
+      eventsFilterRow.style.display = mode === 'all' ? '' : 'none';
+    }
+
+    render();
+  }
+
+  // Tab click handlers
+  tabEvents?.addEventListener('click', () => switchTab('all'));
+  tabGlides?.addEventListener('click', () => switchTab('glides'));
+
+  // Show all button - shows all events (no spatial filter)
   showAllBtn?.addEventListener('click', () => {
     isFiltered = false;
     frozenBounds = null;
+    showAllBtn.classList.add('active');
+    filterToViewBtn?.classList.remove('active');
     updateFilteredEvents();
-    renderEvents();
+    render();
   });
 
   // Show visible button - filters to current view bounds
@@ -150,8 +227,10 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
     if (currentBounds) {
       isFiltered = true;
       frozenBounds = { ...currentBounds };
+      filterToViewBtn.classList.add('active');
+      showAllBtn?.classList.remove('active');
       updateFilteredEvents();
-      renderEvents();
+      render();
     }
   });
 
@@ -168,6 +247,78 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
         event.longitude >= frozenBounds!.west &&
         event.longitude <= frozenBounds!.east
       );
+    }
+  }
+
+  /**
+   * Extract combined glide data from glide_start events
+   * Each glide_start contains all the info we need
+   */
+  function extractGlides(): GlideData[] {
+    const glides: GlideData[] = [];
+
+    for (const event of allEvents) {
+      if (event.type === 'glide_start' && event.segment && event.details) {
+        const details = event.details as {
+          distance?: number;
+          averageSpeed?: number;
+          glideRatio?: number;
+          duration?: number;
+        };
+
+        // Find matching glide_end event
+        const endEvent = allEvents.find(
+          e => e.type === 'glide_end' &&
+               e.segment?.startIndex === event.segment?.startIndex &&
+               e.segment?.endIndex === event.segment?.endIndex
+        );
+
+        if (endEvent) {
+          glides.push({
+            id: event.id,
+            startTime: event.time,
+            endTime: endEvent.time,
+            startAltitude: event.altitude,
+            endAltitude: endEvent.altitude,
+            distance: details.distance || 0,
+            duration: details.duration || 0,
+            averageSpeed: details.averageSpeed || 0,
+            glideRatio: details.glideRatio || 0,
+            altitudeLost: event.altitude - endEvent.altitude,
+            startLat: event.latitude,
+            startLon: event.longitude,
+            endLat: endEvent.latitude,
+            endLon: endEvent.longitude,
+            segment: event.segment,
+            sourceEvent: event,
+          });
+        }
+      }
+    }
+
+    // Sort by distance (longest first)
+    glides.sort((a, b) => b.distance - a.distance);
+
+    return glides;
+  }
+
+  /**
+   * Format duration in mm:ss
+   */
+  function formatDuration(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  /**
+   * Main render function that delegates to the appropriate view
+   */
+  function render(): void {
+    if (viewMode === 'glides') {
+      renderGlides();
+    } else {
+      renderEvents();
     }
   }
 
@@ -232,11 +383,90 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
     });
   }
 
+  /**
+   * Render the glides list (longest first)
+   */
+  function renderGlides(): void {
+    const glides = extractGlides();
+
+    if (glides.length === 0) {
+      listContainer.innerHTML = `
+        <div class="flex h-full items-center justify-center p-6 text-center text-muted-foreground">
+          ${allEvents.length === 0 ? 'Load an IGC file to see glides' : 'No glides detected'}
+        </div>
+      `;
+      eventCountEl.textContent = '0 glides';
+      return;
+    }
+
+    eventCountEl.textContent = `${glides.length} glides`;
+
+    // Render glides with detailed stats
+    let html = '<div class="space-y-2">';
+
+    for (let i = 0; i < glides.length; i++) {
+      const glide = glides[i];
+      const distanceKm = (glide.distance / 1000).toFixed(2);
+      const speedKmh = (glide.averageSpeed * 3.6).toFixed(0);
+      const glideRatioStr = glide.glideRatio > 0 ? glide.glideRatio.toFixed(1) : '∞';
+
+      html += `
+        <button class="glide-item" data-glide-id="${glide.id}">
+          <div class="glide-rank">#${i + 1}</div>
+          <div class="glide-details">
+            <div class="glide-primary">
+              <span class="glide-distance">${distanceKm} km</span>
+              <span class="glide-time">${formatTime(glide.startTime)} → ${formatTime(glide.endTime)}</span>
+            </div>
+            <div class="glide-stats">
+              <span class="glide-stat" title="Glide Ratio">
+                <strong>L/D</strong> ${glideRatioStr}:1
+              </span>
+              <span class="glide-stat" title="Speed">
+                <strong>Spd</strong> ${speedKmh} km/h
+              </span>
+              <span class="glide-stat" title="Altitude Lost">
+                <strong>Alt</strong> -${glide.altitudeLost.toFixed(0)}m
+              </span>
+              <span class="glide-stat" title="Duration">
+                <strong>Dur</strong> ${formatDuration(glide.duration)}
+              </span>
+            </div>
+            <div class="glide-altitudes">
+              ${glide.startAltitude.toFixed(0)}m → ${glide.endAltitude.toFixed(0)}m
+            </div>
+          </div>
+        </button>
+      `;
+    }
+
+    html += '</div>';
+
+    listContainer.innerHTML = html;
+
+    // Add click handlers
+    listContainer.querySelectorAll('.glide-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const glideId = item.getAttribute('data-glide-id');
+        const glide = glides.find(g => g.id === glideId);
+        if (glide) {
+          onEventClick(glide.sourceEvent);
+
+          // Highlight selected item
+          listContainer.querySelectorAll('.glide-item').forEach(el => {
+            el.classList.remove('selected');
+          });
+          item.classList.add('selected');
+        }
+      });
+    });
+  }
+
   return {
     setEvents(events: FlightEvent[]) {
       allEvents = events;
       updateFilteredEvents();
-      renderEvents();
+      render();
     },
 
     setFlightInfo(info: FlightInfo) {
