@@ -165,6 +165,33 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       }
 
       /**
+       * Clear all event-related highlights from the map
+       * (segment highlight, markers, legend)
+       */
+      function clearEventHighlights(): void {
+        // Remove popup if present
+        if (activePopup) {
+          activePopup.remove();
+          activePopup = null;
+        }
+
+        // Remove all active markers (chevrons, speed labels, endpoint markers)
+        for (const marker of activeMarkers) {
+          marker.remove();
+        }
+        activeMarkers = [];
+
+        // Clear highlight segment source
+        (map.getSource('highlight-segment') as mapboxgl.GeoJSONSource)?.setData({
+          type: 'FeatureCollection',
+          features: [],
+        });
+
+        // Hide glide legend
+        showGlideLegend(false);
+      }
+
+      /**
        * Add custom sources and layers for track/task visualization
        */
       function addCustomLayers(): void {
@@ -815,14 +842,17 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
         set3DMode(enabled: boolean) {
           is3DMode = enabled;
+          clearEventHighlights();
           updateTrackRendering();
         },
 
         setAltitudeColors(enabled: boolean) {
           isAltitudeColorsMode = enabled;
+          clearEventHighlights();
           updateTrackRendering();
         },
         setTrack(fixes: IGCFix[]) {
+          clearEventHighlights();
           currentFixes = fixes;
 
           if (fixes.length === 0) {

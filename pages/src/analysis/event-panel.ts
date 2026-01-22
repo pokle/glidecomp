@@ -27,6 +27,7 @@ export interface EventPanel {
   setEvents(events: FlightEvent[]): void;
   setFlightInfo(info: FlightInfo): void;
   filterByBounds(bounds: { north: number; south: number; east: number; west: number }): void;
+  clearSelection(): void;
   toggle(): void;
   destroy(): void;
 }
@@ -255,6 +256,12 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
       currentBounds = bounds;
       updateFilteredEvents();
       renderEvents();
+    },
+
+    clearSelection() {
+      listContainer.querySelectorAll('.event-item.selected').forEach(el => {
+        el.classList.remove('selected');
+      });
     },
 
     toggle() {

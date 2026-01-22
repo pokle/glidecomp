@@ -108,6 +108,9 @@ async function init(): Promise<void> {
         updateUrlParam('alt', isAltitudeColorsEnabled ? '1' : null);
       }
 
+      // Clear event panel selection since map highlights are cleared
+      eventPanel?.clearSelection();
+
       // Close the command dialog
       commandDialog?.close();
     });
@@ -132,6 +135,9 @@ async function init(): Promise<void> {
         mapRenderer.set3DMode(is3DTrackEnabled);
         updateUrlParam('3d', is3DTrackEnabled ? '1' : null);
       }
+
+      // Clear event panel selection since map highlights are cleared
+      eventPanel?.clearSelection();
 
       // Close the command dialog
       commandDialog?.close();
