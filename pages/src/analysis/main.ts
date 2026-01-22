@@ -39,6 +39,7 @@ let isProgrammaticPan = false;
 let isAltitudeColorsEnabled = false;
 let is3DTrackEnabled = false;
 let isTaskVisible = true;
+let isTrackVisible = true;
 
 /**
  * Initialize the application
@@ -58,12 +59,14 @@ async function init(): Promise<void> {
   const menuAltitudeColors = document.getElementById('menu-altitude-colors');
   const menu3DTrack = document.getElementById('menu-3d-track');
   const menuToggleTask = document.getElementById('menu-toggle-task');
+  const menuToggleTrack = document.getElementById('menu-toggle-track');
   const menuThemeLight = document.getElementById('menu-theme-light');
   const menuThemeDark = document.getElementById('menu-theme-dark');
   const menuThemeSystem = document.getElementById('menu-theme-system');
   const altitudeColorsStatus = document.getElementById('altitude-colors-status');
   const threeDTrackStatus = document.getElementById('3d-track-status');
   const taskVisibilityStatus = document.getElementById('task-visibility-status');
+  const trackVisibilityStatus = document.getElementById('track-visibility-status');
 
   // Sidebar elements
   const sidebar = document.getElementById('waypoint-sidebar');
@@ -165,6 +168,34 @@ async function init(): Promise<void> {
       if (mapRenderer?.setTaskVisibility) {
         mapRenderer.setTaskVisibility(isTaskVisible);
         updateUrlParam('task-visible', isTaskVisible ? null : '0');
+      }
+
+      // Close the command dialog
+      commandDialog?.close();
+    });
+  }
+
+  // Set up track visibility toggle
+  if (menuToggleTrack) {
+    isTrackVisible = params.get('track-visible') !== '0';
+    updateFeatureStatus(trackVisibilityStatus, isTrackVisible);
+
+    if (!isTrackVisible && mapRenderer?.setTrackVisibility) {
+      mapRenderer.setTrackVisibility(false);
+    }
+
+    menuToggleTrack.addEventListener('click', () => {
+      isTrackVisible = !isTrackVisible;
+      updateFeatureStatus(trackVisibilityStatus, isTrackVisible);
+
+      if (mapRenderer?.setTrackVisibility) {
+        mapRenderer.setTrackVisibility(isTrackVisible);
+        updateUrlParam('track-visible', isTrackVisible ? null : '0');
+      }
+
+      // Clear event panel selection when hiding track
+      if (!isTrackVisible) {
+        eventPanel?.clearSelection();
       }
 
       // Close the command dialog

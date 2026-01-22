@@ -67,6 +67,9 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       // Task visibility state
       let isTaskVisible = true;
 
+      // Track visibility state
+      let isTrackVisible = true;
+
       /**
        * Show or hide the glide legend help button
        */
@@ -870,6 +873,43 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
             if (map.getLayer(layerId)) {
               map.setLayoutProperty(layerId, 'visibility', visibility);
             }
+          }
+        },
+
+        setTrackVisibility(visible: boolean) {
+          isTrackVisible = visible;
+
+          if (visible) {
+            // Restore track based on current mode
+            updateTrackRendering();
+          } else {
+            // Hide all track layers
+            const trackLayers = [
+              'track-line',
+              'track-line-outline',
+              'track-line-gradient',
+              'highlight-segment',
+            ];
+            for (const layerId of trackLayers) {
+              if (map.getLayer(layerId)) {
+                map.setLayoutProperty(layerId, 'visibility', 'none');
+              }
+            }
+            // Clear 3D track objects
+            clear3DTrack();
+          }
+
+          // Toggle event markers visibility
+          for (const marker of eventMarkers) {
+            const el = marker.getElement();
+            if (el) {
+              el.style.display = visible ? '' : 'none';
+            }
+          }
+
+          // Clear any active highlights when hiding
+          if (!visible) {
+            clearEventHighlights();
           }
         },
         setTrack(fixes: IGCFix[]) {

@@ -60,6 +60,9 @@ export interface MapProvider {
 
     /** Show/hide task visualization (cylinders, lines, labels) */
     setTaskVisibility?(visible: boolean): void;
+
+    /** Show/hide track visualization */
+    setTrackVisibility?(visible: boolean): void;
 }
 
 /**
