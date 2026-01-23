@@ -4,6 +4,17 @@
 /* MapBox GL CSS */
 @import "mapbox-gl/dist/mapbox-gl.css";
 
+/* MapBox popup dark mode overrides - must be outside @layer to override mapbox-gl.css */
+.dark .mapboxgl-popup-content {
+  background: var(--background) !important;
+  color: var(--foreground) !important;
+}
+
+.dark .mapboxgl-popup-tip {
+  border-top-color: var(--background) !important;
+  border-bottom-color: var(--background) !important;
+}
+
 /* Custom application styles */
 @layer base {
   html {
