@@ -20,6 +20,15 @@
   html {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
+
+  /* Prevent browser zoom gestures on UI elements (header, sidebar, dialogs)
+     while allowing the map to handle its own touch interactions */
+  body > div,
+  header,
+  aside,
+  dialog {
+    touch-action: pan-x pan-y;
+  }
 }
 
 @layer components {
