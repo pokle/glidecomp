@@ -9,7 +9,7 @@
  */
 
 import { parseIGC, IGCFile, IGCFix } from './igc-parser';
-import { fetchTaskByCode, XCTask, calculateOptimizedTaskDistance } from './xctsk-parser';
+import { fetchTaskByCode, XCTask, calculateOptimizedTaskDistance, igcTaskToXCTask } from './xctsk-parser';
 import { createMapProvider, MapProvider } from './map-provider';
 import { detectFlightEvents, FlightEvent } from './event-detector';
 import { createEventPanel, EventPanel, FlightInfo } from './event-panel';
@@ -380,6 +380,16 @@ async function init(): Promise<void> {
         mapRenderer.setTrack(igcFile.fixes);
       }
 
+      // If IGC file has a declared task and no external task is loaded, use it
+      if (igcFile.task && igcFile.task.start && !state.task) {
+        const xcTask = igcTaskToXCTask(igcFile.task);
+        state.task = xcTask;
+
+        if (mapRenderer) {
+          await mapRenderer.setTask(xcTask);
+        }
+      }
+
       // Detect events
       state.events = detectFlightEvents(igcFile.fixes, state.task || undefined);
 
@@ -394,7 +404,8 @@ async function init(): Promise<void> {
       // Update flight info
       updateFlightInfo();
 
-      showStatus(`Loaded ${file.name} - ${igcFile.fixes.length} fixes`, 'success');
+      const taskInfo = igcFile.task?.start ? ' (with task declaration)' : '';
+      showStatus(`Loaded ${file.name} - ${igcFile.fixes.length} fixes${taskInfo}`, 'success');
     } catch (err) {
       console.error('Failed to parse IGC file:', err);
       showStatus(`Failed to parse IGC file: ${err}`, 'error');

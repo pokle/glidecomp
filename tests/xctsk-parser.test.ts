@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseXCTask, getSSSIndex, getESSIndex, calculateTaskDistance } from '../pages/src/analysis/xctsk-parser';
+import { parseXCTask, getSSSIndex, getESSIndex, calculateTaskDistance, igcTaskToXCTask } from '../pages/src/analysis/xctsk-parser';
+import type { IGCTask } from '../pages/src/analysis/igc-parser';
 
 describe('XCTSK Parser', () => {
   describe('parseXCTask v1 format', () => {
@@ -161,6 +162,91 @@ describe('XCTSK Parser', () => {
 
       expect(task.turnpoints[0].waypoint.lat).toBe(-36.5);
       expect(task.turnpoints[0].waypoint.lon).toBe(148.0);
+    });
+  });
+
+  describe('igcTaskToXCTask', () => {
+    it('should convert a basic IGC task to XCTask', () => {
+      const igcTask: IGCTask = {
+        numTurnpoints: 2,
+        takeoff: { latitude: -36.186, longitude: 147.976, name: 'TAKEOFF' },
+        start: { latitude: -36.186, longitude: 147.977, name: 'START ELLIOT' },
+        turnpoints: [
+          { latitude: -36.266, longitude: 147.873, name: 'TURN HALFWY' },
+          { latitude: -36.223, longitude: 147.729, name: 'TURN CUDGWE' },
+        ],
+        finish: { latitude: -36.177, longitude: 147.924, name: 'FINISH NCORGL' },
+        landing: { latitude: 0, longitude: 0, name: 'LANDING' },
+      };
+
+      const xcTask = igcTaskToXCTask(igcTask);
+
+      expect(xcTask.taskType).toBe('CLASSIC');
+      expect(xcTask.version).toBe(1);
+      expect(xcTask.earthModel).toBe('WGS84');
+      expect(xcTask.turnpoints).toHaveLength(4); // start + 2 turnpoints + finish
+
+      // Check start is SSS
+      expect(xcTask.turnpoints[0].type).toBe('SSS');
+      expect(xcTask.turnpoints[0].waypoint.name).toBe('START ELLIOT');
+      expect(xcTask.turnpoints[0].waypoint.lat).toBeCloseTo(-36.186, 3);
+      expect(xcTask.turnpoints[0].radius).toBe(400);
+
+      // Check intermediate turnpoints have no type
+      expect(xcTask.turnpoints[1].type).toBeUndefined();
+      expect(xcTask.turnpoints[1].waypoint.name).toBe('TURN HALFWY');
+      expect(xcTask.turnpoints[2].type).toBeUndefined();
+      expect(xcTask.turnpoints[2].waypoint.name).toBe('TURN CUDGWE');
+
+      // Check finish is ESS
+      expect(xcTask.turnpoints[3].type).toBe('ESS');
+      expect(xcTask.turnpoints[3].waypoint.name).toBe('FINISH NCORGL');
+    });
+
+    it('should use custom radius when provided', () => {
+      const igcTask: IGCTask = {
+        numTurnpoints: 0,
+        start: { latitude: -36.186, longitude: 147.977, name: 'Start' },
+        turnpoints: [],
+        finish: { latitude: -36.177, longitude: 147.924, name: 'Finish' },
+      };
+
+      const xcTask = igcTaskToXCTask(igcTask, 1000);
+
+      expect(xcTask.turnpoints[0].radius).toBe(1000);
+      expect(xcTask.turnpoints[1].radius).toBe(1000);
+    });
+
+    it('should handle minimal task with only start and finish', () => {
+      const igcTask: IGCTask = {
+        numTurnpoints: 0,
+        start: { latitude: 47.0, longitude: 11.0, name: 'Start' },
+        turnpoints: [],
+        finish: { latitude: 48.0, longitude: 12.0, name: 'Goal' },
+      };
+
+      const xcTask = igcTaskToXCTask(igcTask);
+
+      expect(xcTask.turnpoints).toHaveLength(2);
+      expect(xcTask.turnpoints[0].type).toBe('SSS');
+      expect(xcTask.turnpoints[1].type).toBe('ESS');
+    });
+
+    it('should handle task with empty names', () => {
+      const igcTask: IGCTask = {
+        numTurnpoints: 1,
+        start: { latitude: 47.0, longitude: 11.0, name: '' },
+        turnpoints: [
+          { latitude: 47.5, longitude: 11.5, name: '' },
+        ],
+        finish: { latitude: 48.0, longitude: 12.0, name: '' },
+      };
+
+      const xcTask = igcTaskToXCTask(igcTask);
+
+      expect(xcTask.turnpoints[0].waypoint.name).toBe('Start');
+      expect(xcTask.turnpoints[1].waypoint.name).toBe('Turnpoint');
+      expect(xcTask.turnpoints[2].waypoint.name).toBe('Finish');
     });
   });
 

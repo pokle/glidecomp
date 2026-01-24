@@ -391,6 +391,86 @@ import {
   destinationPoint
 } from './geo';
 
+import type { IGCTask } from './igc-parser';
+
+/**
+ * Default turnpoint radius in meters.
+ * IGC files don't specify radius, so we use 400m (standard for paragliding).
+ */
+const DEFAULT_TURNPOINT_RADIUS = 400;
+
+/**
+ * Convert an IGCTask (from IGC file C records) to an XCTask.
+ *
+ * IGC task declarations include:
+ * - takeoff: informational, not part of competition task
+ * - start: first competition point (becomes SSS)
+ * - turnpoints[]: intermediate turnpoints
+ * - finish: last competition point (becomes ESS)
+ * - landing: informational, not part of competition task
+ *
+ * Since IGC files don't include cylinder radius, we use a default of 400m.
+ *
+ * @param igcTask The task declaration from an IGC file
+ * @param defaultRadius Optional radius in meters (default: 400m)
+ * @returns An XCTask suitable for map rendering and distance calculation
+ */
+export function igcTaskToXCTask(igcTask: IGCTask, defaultRadius: number = DEFAULT_TURNPOINT_RADIUS): XCTask {
+  const turnpoints: Turnpoint[] = [];
+
+  // Add start point as SSS
+  if (igcTask.start) {
+    turnpoints.push({
+      type: 'SSS',
+      radius: defaultRadius,
+      waypoint: {
+        name: igcTask.start.name || 'Start',
+        lat: igcTask.start.latitude,
+        lon: igcTask.start.longitude,
+      },
+    });
+  }
+
+  // Add intermediate turnpoints (no type)
+  for (const tp of igcTask.turnpoints) {
+    turnpoints.push({
+      radius: defaultRadius,
+      waypoint: {
+        name: tp.name || 'Turnpoint',
+        lat: tp.latitude,
+        lon: tp.longitude,
+      },
+    });
+  }
+
+  // Add finish point as ESS
+  if (igcTask.finish) {
+    turnpoints.push({
+      type: 'ESS',
+      radius: defaultRadius,
+      waypoint: {
+        name: igcTask.finish.name || 'Finish',
+        lat: igcTask.finish.latitude,
+        lon: igcTask.finish.longitude,
+      },
+    });
+  }
+
+  return {
+    taskType: 'CLASSIC',
+    version: 1,
+    earthModel: 'WGS84',
+    turnpoints,
+    sss: {
+      type: 'RACE',
+      direction: 'EXIT',
+    },
+    goal: {
+      type: 'CYLINDER',
+    },
+  };
+}
+
 /**
  * Calculate total task distance (optimized route)
  */
