@@ -248,6 +248,75 @@ describe('XCTSK Parser', () => {
       expect(xcTask.turnpoints[1].waypoint.name).toBe('Turnpoint');
       expect(xcTask.turnpoints[2].waypoint.name).toBe('Finish');
     });
+
+    it('should enrich task with waypoint database by name', () => {
+      const waypoints = [
+        { name: 'ELLIOT', latitude: -36.185833, longitude: 147.976667, description: 'Launch', radius: 5000, altitude: 935 },
+        { name: 'HALFWY', latitude: -36.265473, longitude: 147.873444, description: 'Half Way Hill', radius: 400, altitude: 818 },
+        { name: 'NCORGL', latitude: -36.177753, longitude: 147.924060, description: 'North Corry Goal', radius: 1000, altitude: 277 },
+      ];
+
+      const igcTask: IGCTask = {
+        numTurnpoints: 1,
+        start: { latitude: -36.186, longitude: 147.977, name: 'START ELLIOT' },
+        turnpoints: [
+          { latitude: -36.266, longitude: 147.873, name: 'TURN HALFWY' },
+        ],
+        finish: { latitude: -36.178, longitude: 147.924, name: 'FINISH NCORGL' },
+      };
+
+      const xcTask = igcTaskToXCTask(igcTask, { waypoints });
+
+      // Check that waypoint data was enriched
+      expect(xcTask.turnpoints[0].radius).toBe(5000); // ELLIOT has 5000m radius
+      expect(xcTask.turnpoints[0].waypoint.name).toBe('Launch'); // Uses description
+      expect(xcTask.turnpoints[0].waypoint.altSmoothed).toBe(935);
+
+      expect(xcTask.turnpoints[1].radius).toBe(400); // HALFWY has 400m radius
+      expect(xcTask.turnpoints[1].waypoint.name).toBe('Half Way Hill');
+      expect(xcTask.turnpoints[1].waypoint.altSmoothed).toBe(818);
+
+      expect(xcTask.turnpoints[2].radius).toBe(1000); // NCORGL has 1000m radius
+      expect(xcTask.turnpoints[2].waypoint.name).toBe('North Corry Goal');
+      expect(xcTask.turnpoints[2].waypoint.altSmoothed).toBe(277);
+    });
+
+    it('should fall back to coordinate matching when name not found', () => {
+      const waypoints = [
+        { name: 'ELLIOT', latitude: -36.185833, longitude: 147.976667, description: 'Launch', radius: 5000, altitude: 935 },
+      ];
+
+      const igcTask: IGCTask = {
+        numTurnpoints: 0,
+        // Name doesn't match, but coordinates are within 50m of ELLIOT
+        start: { latitude: -36.185833, longitude: 147.976667, name: 'UNKNOWN NAME' },
+        turnpoints: [],
+        finish: { latitude: 0, longitude: 0, name: 'Finish' },
+      };
+
+      const xcTask = igcTaskToXCTask(igcTask, { waypoints, coordinateTolerance: 50 });
+
+      // Start should match by coordinates
+      expect(xcTask.turnpoints[0].radius).toBe(5000);
+      expect(xcTask.turnpoints[0].waypoint.name).toBe('Launch');
+
+      // Finish should use defaults (no match)
+      expect(xcTask.turnpoints[1].radius).toBe(400);
+    });
+
+    it('should use options object with defaultRadius', () => {
+      const igcTask: IGCTask = {
+        numTurnpoints: 0,
+        start: { latitude: 47.0, longitude: 11.0, name: 'Start' },
+        turnpoints: [],
+        finish: { latitude: 48.0, longitude: 12.0, name: 'Finish' },
+      };
+
+      const xcTask = igcTaskToXCTask(igcTask, { defaultRadius: 2000 });
+
+      expect(xcTask.turnpoints[0].radius).toBe(2000);
+      expect(xcTask.turnpoints[1].radius).toBe(2000);
+    });
   });
 
   describe('helper functions', () => {

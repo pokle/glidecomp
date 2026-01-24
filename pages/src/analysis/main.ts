@@ -13,6 +13,7 @@ import { fetchTaskByCode, XCTask, calculateOptimizedTaskDistance, igcTaskToXCTas
 import { createMapProvider, MapProvider } from './map-provider';
 import { detectFlightEvents, FlightEvent } from './event-detector';
 import { createEventPanel, EventPanel, FlightInfo } from './event-panel';
+import { loadCorryongWaypoints, type WaypointRecord } from './waypoints';
 
 // Import styles
 import '../styles.css';
@@ -34,6 +35,7 @@ const state: AppState = {
 let mapRenderer: MapProvider | null = null;
 let eventPanel: EventPanel | null = null;
 let isProgrammaticPan = false;
+let waypointDatabase: WaypointRecord[] = [];
 
 // Feature states
 let isAltitudeColorsEnabled = false;
@@ -91,6 +93,14 @@ async function init(): Promise<void> {
     console.error('Failed to initialize map:', err);
     showStatus('Failed to initialize map', 'error');
     return;
+  }
+
+  // Load waypoint database for enriching IGC tasks
+  try {
+    waypointDatabase = await loadCorryongWaypoints();
+    console.log(`Loaded ${waypointDatabase.length} waypoints`);
+  } catch (err) {
+    console.warn('Failed to load waypoint database:', err);
   }
 
   // Load feature states from URL params
@@ -382,7 +392,7 @@ async function init(): Promise<void> {
 
       // If IGC file has a declared task and no external task is loaded, use it
       if (igcFile.task && igcFile.task.start && !state.task) {
-        const xcTask = igcTaskToXCTask(igcFile.task);
+        const xcTask = igcTaskToXCTask(igcFile.task, { waypoints: waypointDatabase });
         state.task = xcTask;
 
         if (mapRenderer) {
