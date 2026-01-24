@@ -391,6 +391,112 @@ import {
   destinationPoint
 } from './geo';
 
+import type { IGCTask, IGCTaskPoint } from './igc-parser';
+import { findWaypoint, type WaypointRecord } from './waypoints';
+
+/**
+ * Default turnpoint radius in meters.
+ * IGC files don't specify radius, so we use 400m (standard for paragliding).
+ */
+const DEFAULT_TURNPOINT_RADIUS = 400;
+
+/**
+ * Options for converting IGC task to XCTask.
+ */
+export interface IGCTaskConversionOptions {
+  /** Default radius in meters if waypoint not found (default: 400m) */
+  defaultRadius?: number;
+  /** Waypoint database for looking up radius and altitude */
+  waypoints?: WaypointRecord[];
+  /** Tolerance in meters for coordinate matching (default: 50m) */
+  coordinateTolerance?: number;
+}
+
+/**
+ * Convert an IGCTask (from IGC file C records) to an XCTask.
+ *
+ * IGC task declarations include:
+ * - takeoff: informational, not part of competition task
+ * - start: first competition point (becomes SSS)
+ * - turnpoints[]: intermediate turnpoints
+ * - finish: last competition point (becomes ESS)
+ * - landing: informational, not part of competition task
+ *
+ * If a waypoint database is provided, the function will look up each task point
+ * by name (with fuzzy matching) or coordinates (within tolerance) to get the
+ * correct radius and altitude.
+ *
+ * @param igcTask The task declaration from an IGC file
+ * @param options Conversion options including waypoint database
+ * @returns An XCTask suitable for map rendering and distance calculation
+ */
+export function igcTaskToXCTask(igcTask: IGCTask, options: IGCTaskConversionOptions | number = {}): XCTask {
+  // Support legacy signature: igcTaskToXCTask(task, radius)
+  const opts: IGCTaskConversionOptions = typeof options === 'number'
+    ? { defaultRadius: options }
+    : options;
+
+  const defaultRadius = opts.defaultRadius ?? DEFAULT_TURNPOINT_RADIUS;
+  const waypoints = opts.waypoints ?? [];
+  const tolerance = opts.coordinateTolerance ?? 50;
+
+  /**
+   * Create a turnpoint from an IGC task point, enriching with waypoint data if available.
+   */
+  function createTurnpoint(
+    point: IGCTaskPoint,
+    type: Turnpoint['type'],
+    fallbackName: string
+  ): Turnpoint {
+    const name = point.name || fallbackName;
+
+    // Look up waypoint by name or coordinates
+    const wp = findWaypoint(waypoints, name, point.latitude, point.longitude, tolerance);
+
+    return {
+      type,
+      radius: wp?.radius ?? defaultRadius,
+      waypoint: {
+        name: wp?.description || name,
+        lat: point.latitude,
+        lon: point.longitude,
+        altSmoothed: wp?.altitude,
+      },
+    };
+  }
+
+  const turnpoints: Turnpoint[] = [];
+
+  // Add start point as SSS
+  if (igcTask.start) {
+    turnpoints.push(createTurnpoint(igcTask.start, 'SSS', 'Start'));
+  }
+
+  // Add intermediate turnpoints (no type)
+  for (const tp of igcTask.turnpoints) {
+    turnpoints.push(createTurnpoint(tp, undefined, 'Turnpoint'));
+  }
+
+  // Add finish point as ESS
+  if (igcTask.finish) {
+    turnpoints.push(createTurnpoint(igcTask.finish, 'ESS', 'Finish'));
+  }
+
+  return {
+    taskType: 'CLASSIC',
+    version: 1,
+    earthModel: 'WGS84',
+    turnpoints,
+    sss: {
+      type: 'RACE',
+      direction: 'EXIT',
+    },
+    goal: {
+      type: 'CYLINDER',
+    },
+  };
+}
+
 /**
  * Calculate total task distance (optimized route)
  */
