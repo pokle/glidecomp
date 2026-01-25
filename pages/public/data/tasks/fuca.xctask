@@ -1,0 +1,88 @@
+{
+  "earthModel": "WGS84",
+  "goal": {
+    "deadline": "08:00:00Z",
+    "type": "CYLINDER"
+  },
+  "sss": {
+    "direction": "EXIT",
+    "timeGates": [
+      "03:30:00Z",
+      "03:45:00Z",
+      "04:00:00Z",
+      "04:15:00Z",
+      "04:30:00Z",
+      "04:45:00Z",
+      "05:00:00Z",
+      "05:15:00Z",
+      "05:30:00Z"
+    ],
+    "type": "RACE"
+  },
+  "taskType": "CLASSIC",
+  "turnpoints": [
+    {
+      "radius": 3000,
+      "type": "SSS",
+      "waypoint": {
+        "altSmoothed": 932,
+        "description": "ELLIOT",
+        "lat": -36.18583297729492,
+        "lon": 147.97666931152344,
+        "name": "ELLIOT"
+      }
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "altSmoothed": 815,
+        "description": "Half",
+        "lat": -36.265472412109375,
+        "lon": 147.87344360351562,
+        "name": "HALFWY"
+      }
+    },
+    {
+      "radius": 7000,
+      "waypoint": {
+        "altSmoothed": 309,
+        "description": "BIGARA",
+        "lat": -36.263625,
+        "lon": 148.020957,
+        "name": "BIGARA"
+      }
+    },
+    {
+      "radius": 2000,
+      "waypoint": {
+        "altSmoothed": 243,
+        "description": "GRGGRG",
+        "lat": -36.059067,
+        "lon": 148.039833,
+        "name": "GRGGRG"
+      }
+    },
+    {
+      "radius": 7000,
+      "waypoint": {
+        "altSmoothed": 407,
+        "description": "DWYERS",
+        "lat": -36.242792,
+        "lon": 147.883678,
+        "name": "DWYERS"
+      }
+    },
+    {
+      "radius": 1000,
+      "type": "ESS",
+      "waypoint": {
+        "altSmoothed": 289,
+        "description": "KHANCO",
+        "lat": -36.216217,
+        "lon": 148.109783,
+        "name": "KHANCO"
+      }
+    }
+  ],
+  "version": 1
+}

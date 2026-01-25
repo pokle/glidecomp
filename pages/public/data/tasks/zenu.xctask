@@ -1,0 +1,60 @@
+{
+  "earthModel": "WGS84",
+  "goal": {
+    "deadline": "08:00:00Z",
+    "type": "CYLINDER"
+  },
+  "sss": {
+    "direction": "EXIT",
+    "timeGates": [
+      "02:30:00Z"
+    ],
+    "type": "ELAPSED-TIME"
+  },
+  "taskType": "CLASSIC",
+  "turnpoints": [
+    {
+      "radius": 3000,
+      "type": "SSS",
+      "waypoint": {
+        "altSmoothed": 932,
+        "description": "ELLIOT",
+        "lat": -36.18583297729492,
+        "lon": 147.97666931152344,
+        "name": "ELLIOT"
+      }
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "altSmoothed": 258,
+        "description": "TOWONG",
+        "lat": -36.127133,
+        "lon": 147.985733,
+        "name": "TOWONG"
+      }
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "altSmoothed": 932,
+        "description": "ELLITP",
+        "lat": -36.185833,
+        "lon": 147.976667,
+        "name": "ELLITP"
+      }
+    },
+    {
+      "radius": 1000,
+      "type": "ESS",
+      "waypoint": {
+        "altSmoothed": 289,
+        "description": "KHANCO",
+        "lat": -36.216217041015625,
+        "lon": 148.1097869873047,
+        "name": "KHANCO"
+      }
+    }
+  ],
+  "version": 1
+}
