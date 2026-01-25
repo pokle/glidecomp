@@ -10,7 +10,7 @@
 - [ ] Add altitude chart. X axis: Time, Y axis: Altitude
 - [x] Associate tasks with tracks. When we load a track, we should use the IGC file's declared task information if available. 
 - [x] If the IGC file doesn't contain task information, we should try to associate the track with any known tasks in the region on the date.
-- [ ] USABILITY: The altitude colours should be on by default.
+- [x] USABILITY: The altitude colours should be on by default.
 
 ## Overview
 

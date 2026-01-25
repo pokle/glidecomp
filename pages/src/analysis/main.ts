@@ -108,7 +108,7 @@ async function init(): Promise<void> {
 
   // Set up altitude colors toggle
   if (mapRenderer.supportsAltitudeColors && menuAltitudeColors) {
-    isAltitudeColorsEnabled = params.get('alt') === '1';
+    isAltitudeColorsEnabled = params.get('alt') !== '0';
     updateFeatureStatus(altitudeColorsStatus, isAltitudeColorsEnabled);
 
     if (isAltitudeColorsEnabled && mapRenderer.setAltitudeColors) {
@@ -121,7 +121,7 @@ async function init(): Promise<void> {
 
       if (mapRenderer?.setAltitudeColors) {
         mapRenderer.setAltitudeColors(isAltitudeColorsEnabled);
-        updateUrlParam('alt', isAltitudeColorsEnabled ? '1' : null);
+        updateUrlParam('alt', isAltitudeColorsEnabled ? null : '0');
       }
 
       // Clear event panel selection since map highlights are cleared
