@@ -565,6 +565,7 @@ async function init(): Promise<void> {
     'sample-burkitt': 'burkitt_18393_050126.igc',
     'sample-durand': 'durand_45515_050126.igc',
     'sample-holtkamp': 'holtkamp_33915_050126.igc',
+    'sample-tushar': '2025-01-05-Tushar-Corryong.igc'
   };
 
   const loadSampleFile = async (filename: string) => {

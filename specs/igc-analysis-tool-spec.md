@@ -5,9 +5,11 @@
 - [x] Implement 'Highest climbs' tab - show all climbs/thermals sorted by greatest altitude gain first
 - [x] Implement 'Deepest sinks' tab - show all descents sorted by greatest altitude drop first
 - [ ] DEFER: Add box plots to the 'Longest glides' view showing vertically stacked box plots per detail (use uPlot for plotting, and simple-statistics for the descriptive statistics)
-- [ ] Review code and ensure that we're using appropriate libraries for statistics and geo calculations.
+- [x] Review code and ensure that we're using appropriate libraries for statistics and geo calculations.
 - [ ] Make units selectable
 - [ ] Add altitude chart. X axis: Time, Y axis: Altitude
+- [x] Associate tasks with tracks. When we load a track, we should use the IGC file's declared task information if available. 
+- [x] If the IGC file doesn't contain task information, we should try to associate the track with any known tasks in the region on the date.
 
 ## Overview
 
