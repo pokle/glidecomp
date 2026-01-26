@@ -242,40 +242,15 @@
 
                 <hr role="separator">
 
-                <!-- Units -->
-                <div role="group" aria-labelledby="units-heading">
-                    <div role="heading" id="units-heading">Units</div>
-                    <div role="menuitem" id="menu-unit-speed" data-keywords="speed unit km/h mph knots velocity">
+                <!-- Settings -->
+                <div role="group" aria-labelledby="settings-heading">
+                    <div role="heading" id="settings-heading">Settings</div>
+                    <div role="menuitem" id="menu-configure-units" data-keywords="units configure settings speed altitude distance climb rate vario">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10"/>
-                            <polyline points="12 6 12 12 16 14"/>
+                            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+                            <circle cx="12" cy="12" r="3"/>
                         </svg>
-                        <span>Speed Unit</span>
-                        <span class="text-muted-foreground" id="unit-speed-status">(km/h)</span>
-                    </div>
-                    <div role="menuitem" id="menu-unit-altitude" data-keywords="altitude unit meters feet elevation height">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="m8 3 4 8 5-5 5 15H2L8 3z"/>
-                        </svg>
-                        <span>Altitude Unit</span>
-                        <span class="text-muted-foreground" id="unit-altitude-status">(m)</span>
-                    </div>
-                    <div role="menuitem" id="menu-unit-distance" data-keywords="distance unit kilometers miles nautical">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M18 6H5a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h13l4-3.5L18 6z"/>
-                            <path d="M12 13v8"/>
-                            <path d="M12 3v3"/>
-                        </svg>
-                        <span>Distance Unit</span>
-                        <span class="text-muted-foreground" id="unit-distance-status">(km)</span>
-                    </div>
-                    <div role="menuitem" id="menu-unit-climbrate" data-keywords="climb rate vario sink thermal ft/min m/s knots">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 19V5"/>
-                            <path d="m5 12 7-7 7 7"/>
-                        </svg>
-                        <span>Climb Rate Unit</span>
-                        <span class="text-muted-foreground" id="unit-climbrate-status">(m/s)</span>
+                        <span>Configure units...</span>
                     </div>
                 </div>
 
@@ -348,6 +323,58 @@
                     autocomplete="off"
                 >
             </header>
+        </div>
+    </dialog>
+
+    <!-- Configure Units Dialog -->
+    <dialog id="units-dialog" class="rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50" onclick="if (event.target === this) this.close()">
+        <div class="w-80 p-4">
+            <div class="mb-4 flex items-center justify-between">
+                <h2 class="text-lg font-semibold">Configure Units</h2>
+                <button class="btn btn-ghost btn-icon -mr-2" onclick="this.closest('dialog').close()" aria-label="Close">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"/>
+                        <path d="m6 6 12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <form id="units-form" class="space-y-4">
+                <div class="space-y-1.5">
+                    <label for="unit-speed-select" class="text-sm font-medium">Speed</label>
+                    <select id="unit-speed-select" class="input w-full">
+                        <option value="km/h">km/h</option>
+                        <option value="mph">mph</option>
+                        <option value="knots">knots</option>
+                    </select>
+                </div>
+                <div class="space-y-1.5">
+                    <label for="unit-altitude-select" class="text-sm font-medium">Altitude</label>
+                    <select id="unit-altitude-select" class="input w-full">
+                        <option value="m">meters (m)</option>
+                        <option value="ft">feet (ft)</option>
+                    </select>
+                </div>
+                <div class="space-y-1.5">
+                    <label for="unit-distance-select" class="text-sm font-medium">Distance</label>
+                    <select id="unit-distance-select" class="input w-full">
+                        <option value="km">kilometers (km)</option>
+                        <option value="mi">miles (mi)</option>
+                        <option value="nmi">nautical miles (nmi)</option>
+                    </select>
+                </div>
+                <div class="space-y-1.5">
+                    <label for="unit-climbrate-select" class="text-sm font-medium">Climb Rate</label>
+                    <select id="unit-climbrate-select" class="input w-full">
+                        <option value="m/s">m/s</option>
+                        <option value="ft/min">ft/min</option>
+                        <option value="100ft/min">100 ft/min</option>
+                        <option value="knots">knots</option>
+                    </select>
+                </div>
+                <div class="flex justify-end pt-2">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
         </div>
     </dialog>
 
