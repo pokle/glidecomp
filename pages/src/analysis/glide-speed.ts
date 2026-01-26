@@ -24,7 +24,7 @@ export interface GlideMarker {
   lat: number;
   lon: number;
   bearing: number;
-  speedKmh?: number; // only for speed-label type
+  speedMps?: number; // speed in m/s, only for speed-label type
   glideRatio?: number; // L/D ratio for the segment (only for speed-label type)
   altitudeDiff?: number; // altitude change in meters for the segment (negative = descent, only for speed-label type)
 }
@@ -181,9 +181,9 @@ export function calculateGlideMarkers(fixes: IGCFix[]): GlideMarker[] {
         segmentDistance = endDist - startDist;
       }
 
-      let speedKmh = 0;
+      let speedMps = 0;
       if (timeDiffSeconds > 0 && segmentDistance > 0) {
-        speedKmh = (segmentDistance / timeDiffSeconds) * 3.6; // m/s to km/h
+        speedMps = segmentDistance / timeDiffSeconds; // m/s
       }
 
       // Calculate glide ratio (L/D) = horizontal distance / altitude lost
@@ -199,7 +199,7 @@ export function calculateGlideMarkers(fixes: IGCFix[]): GlideMarker[] {
         lat: pos.lat,
         lon: pos.lon,
         bearing: pos.bearing,
-        speedKmh,
+        speedMps,
         glideRatio,
         altitudeDiff: Math.round(altitudeDiff),
       });

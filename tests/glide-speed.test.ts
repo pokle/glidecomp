@@ -178,14 +178,14 @@ describe('Glide Speed Calculations', () => {
     it('should calculate correct speed for partial segment (no chevron)', () => {
       // 400m glide at 10 m/s - only has label at 250m, no chevron at 500m
       // Speed should be based on 250m segment, NOT 500m
-      // Time to 250m = 25s, so speed = 250m / 25s * 3.6 = 36 km/h
+      // Time to 250m = 25s, so speed = 250m / 25s = 10 m/s
       const fixes = createStraightGlide(400, 10);
       const markers = calculateGlideMarkers(fixes);
-      
+
       expect(markers).toHaveLength(1);
       expect(markers[0].type).toBe('speed-label');
-      // Speed should be 36 km/h (10 m/s * 3.6), NOT 72 km/h (which would be wrong)
-      expect(markers[0].speedKmh).toBeCloseTo(36, 0);
+      // Speed should be 10 m/s
+      expect(markers[0].speedMps).toBeCloseTo(10, 0);
     });
 
     it('should return one speed label for 499m glide', () => {
@@ -225,43 +225,43 @@ describe('Glide Speed Calculations', () => {
     });
 
     it('should calculate correct speed for constant velocity glide', () => {
-      // 1000m at 10 m/s = 100 seconds, speed = 36 km/h
+      // 1000m at 10 m/s = 100 seconds
       const fixes = createStraightGlide(1000, 10);
       const markers = calculateGlideMarkers(fixes);
-      
+
       // Should have: speed@250m, chevron@500m, speed@750m, chevron@1000m
       expect(markers).toHaveLength(4);
-      
+
       const speedLabels = markers.filter(m => m.type === 'speed-label');
       expect(speedLabels).toHaveLength(2);
-      
-      // Both speed labels should show ~36 km/h (10 m/s * 3.6)
+
+      // Both speed labels should show ~10 m/s
       for (const label of speedLabels) {
-        expect(label.speedKmh).toBeCloseTo(36, 0);
+        expect(label.speedMps).toBeCloseTo(10, 0);
       }
     });
 
     it('should calculate correct speed for faster glide', () => {
-      // 1000m at 20 m/s = 50 seconds, speed = 72 km/h
+      // 1000m at 20 m/s = 50 seconds
       const fixes = createStraightGlide(1000, 20);
       const markers = calculateGlideMarkers(fixes);
-      
+
       const speedLabels = markers.filter(m => m.type === 'speed-label');
-      
+
       for (const label of speedLabels) {
-        expect(label.speedKmh).toBeCloseTo(72, 0);
+        expect(label.speedMps).toBeCloseTo(20, 0);
       }
     });
 
     it('should calculate correct speed for slower glide', () => {
-      // 1000m at 5 m/s = 200 seconds, speed = 18 km/h
+      // 1000m at 5 m/s = 200 seconds
       const fixes = createStraightGlide(1000, 5);
       const markers = calculateGlideMarkers(fixes);
-      
+
       const speedLabels = markers.filter(m => m.type === 'speed-label');
-      
+
       for (const label of speedLabels) {
-        expect(label.speedKmh).toBeCloseTo(18, 0);
+        expect(label.speedMps).toBeCloseTo(5, 0);
       }
     });
 
@@ -297,12 +297,12 @@ describe('Glide Speed Calculations', () => {
       
       const speedLabels = markers.filter(m => m.type === 'speed-label') as GlideMarker[];
       expect(speedLabels).toHaveLength(2);
-      
-      // First speed label (at 250m) covers 0-500m segment at 10 m/s = 36 km/h
-      expect(speedLabels[0].speedKmh).toBeCloseTo(36, 0);
-      
-      // Second speed label (at 750m) covers 500-1000m segment at 20 m/s = 72 km/h
-      expect(speedLabels[1].speedKmh).toBeCloseTo(72, 0);
+
+      // First speed label (at 250m) covers 0-500m segment at 10 m/s
+      expect(speedLabels[0].speedMps).toBeCloseTo(10, 0);
+
+      // Second speed label (at 750m) covers 500-1000m segment at 20 m/s
+      expect(speedLabels[1].speedMps).toBeCloseTo(20, 0);
     });
   });
 

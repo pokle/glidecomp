@@ -14,6 +14,8 @@ import { createMapProvider, MapProvider } from './map-provider';
 import { detectFlightEvents, FlightEvent } from './event-detector';
 import { createEventPanel, EventPanel, FlightInfo } from './event-panel';
 import { loadCorryongWaypoints, type WaypointRecord } from './waypoints';
+import { config } from './config';
+import { formatDistance, onUnitsChanged, getCurrentUnit } from './units';
 
 // Import styles
 import '../styles.css';
@@ -69,6 +71,16 @@ async function init(): Promise<void> {
   const threeDTrackStatus = document.getElementById('3d-track-status');
   const taskVisibilityStatus = document.getElementById('task-visibility-status');
   const trackVisibilityStatus = document.getElementById('track-visibility-status');
+
+  // Unit menu items
+  const menuUnitSpeed = document.getElementById('menu-unit-speed');
+  const menuUnitAltitude = document.getElementById('menu-unit-altitude');
+  const menuUnitDistance = document.getElementById('menu-unit-distance');
+  const menuUnitClimbRate = document.getElementById('menu-unit-climbrate');
+  const unitSpeedStatus = document.getElementById('unit-speed-status');
+  const unitAltitudeStatus = document.getElementById('unit-altitude-status');
+  const unitDistanceStatus = document.getElementById('unit-distance-status');
+  const unitClimbRateStatus = document.getElementById('unit-climbrate-status');
 
   // Sidebar elements
   const sidebar = document.getElementById('waypoint-sidebar');
@@ -235,6 +247,52 @@ async function init(): Promise<void> {
     if (!localStorage.getItem('themeMode')) {
       document.documentElement.classList.toggle('dark', e.matches);
     }
+  });
+
+  // Unit preference handlers
+  const updateUnitStatusDisplays = () => {
+    if (unitSpeedStatus) unitSpeedStatus.textContent = `(${getCurrentUnit('speed')})`;
+    if (unitAltitudeStatus) unitAltitudeStatus.textContent = `(${getCurrentUnit('altitude')})`;
+    if (unitDistanceStatus) unitDistanceStatus.textContent = `(${getCurrentUnit('distance')})`;
+    if (unitClimbRateStatus) unitClimbRateStatus.textContent = `(${getCurrentUnit('climbRate')})`;
+  };
+
+  // Initialize unit status displays
+  updateUnitStatusDisplays();
+
+  // Unit menu click handlers
+  menuUnitSpeed?.addEventListener('click', () => {
+    config.cycleUnit('speed');
+    updateUnitStatusDisplays();
+    commandDialog?.close();
+  });
+
+  menuUnitAltitude?.addEventListener('click', () => {
+    config.cycleUnit('altitude');
+    updateUnitStatusDisplays();
+    commandDialog?.close();
+  });
+
+  menuUnitDistance?.addEventListener('click', () => {
+    config.cycleUnit('distance');
+    updateUnitStatusDisplays();
+    updateFlightInfo(); // Update task distance display
+    commandDialog?.close();
+  });
+
+  menuUnitClimbRate?.addEventListener('click', () => {
+    config.cycleUnit('climbRate');
+    updateUnitStatusDisplays();
+    commandDialog?.close();
+  });
+
+  // Subscribe to unit changes for reactive updates
+  onUnitsChanged(() => {
+    // Re-render event panel with new units
+    if (state.events.length > 0) {
+      eventPanel?.setEvents(state.events);
+    }
+    updateFlightInfo();
   });
 
   // Set up sidebar toggle for mobile
@@ -494,8 +552,8 @@ async function init(): Promise<void> {
     if (state.task) {
       const numTurnpoints = state.task.turnpoints.length;
       const optimizedDistance = calculateOptimizedTaskDistance(state.task);
-      const distanceKm = (optimizedDistance / 1000).toFixed(2);
-      info.task = `${numTurnpoints} TPs, ${distanceKm} km`;
+      const distanceFormatted = formatDistance(optimizedDistance);
+      info.task = `${numTurnpoints} TPs, ${distanceFormatted.withUnit}`;
     }
 
     eventPanel?.setFlightInfo(info);

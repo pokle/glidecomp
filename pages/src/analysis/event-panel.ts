@@ -7,6 +7,7 @@
  */
 
 import { FlightEvent, FlightEventType, getEventStyle } from './event-detector';
+import { formatAltitude, formatSpeed, formatDistance, formatClimbRate } from './units';
 
 /**
  * View modes for the event panel
@@ -535,7 +536,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
             <span class="event-type">${getEventTypeLabel(event.type)}</span>
             <span class="event-desc">${event.description}</span>
             <span class="event-meta">
-              ${formatTime(event.time)} | ${event.altitude.toFixed(0)}m
+              ${formatTime(event.time)} | ${formatAltitude(event.altitude).withUnit}
             </span>
           </div>
         </button>
@@ -606,16 +607,19 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
 
     for (let i = 0; i < glides.length; i++) {
       const glide = glides[i];
-      const distanceKm = (glide.distance / 1000).toFixed(2);
-      const speedKmh = (glide.averageSpeed * 3.6).toFixed(0);
+      const distanceStr = formatDistance(glide.distance).withUnit;
+      const speedStr = formatSpeed(glide.averageSpeed).withUnit;
       const glideRatioStr = glide.glideRatio > 0 ? glide.glideRatio.toFixed(1) : '∞';
+      const altLostStr = formatAltitude(glide.altitudeLost).withUnit;
+      const startAltStr = formatAltitude(glide.startAltitude).withUnit;
+      const endAltStr = formatAltitude(glide.endAltitude).withUnit;
 
       html += `
         <button class="glide-item" data-glide-id="${glide.id}">
           <div class="glide-rank">#${i + 1}</div>
           <div class="glide-details">
             <div class="glide-primary">
-              <span class="glide-distance">${distanceKm} km</span>
+              <span class="glide-distance">${distanceStr}</span>
               <span class="glide-time">${formatTime(glide.startTime)} → ${formatTime(glide.endTime)}</span>
             </div>
             <div class="glide-stats">
@@ -623,17 +627,17 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
                 <strong>L/D</strong> ${glideRatioStr}:1
               </span>
               <span class="glide-stat" title="Speed">
-                <strong>Spd</strong> ${speedKmh} km/h
+                <strong>Spd</strong> ${speedStr}
               </span>
               <span class="glide-stat" title="Altitude Lost">
-                <strong>Alt</strong> -${glide.altitudeLost.toFixed(0)}m
+                <strong>Alt</strong> -${altLostStr}
               </span>
               <span class="glide-stat" title="Duration">
                 <strong>Dur</strong> ${formatDuration(glide.duration)}
               </span>
             </div>
             <div class="glide-altitudes">
-              ${glide.startAltitude.toFixed(0)}m → ${glide.endAltitude.toFixed(0)}m
+              ${startAltStr} → ${endAltStr}
             </div>
           </div>
         </button>
@@ -704,25 +708,29 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
 
     for (let i = 0; i < climbs.length; i++) {
       const climb = climbs[i];
+      const altGainStr = formatAltitude(climb.altitudeGain).withUnit;
+      const climbRateStr = formatClimbRate(climb.avgClimbRate).withUnit;
+      const startAltStr = formatAltitude(climb.startAltitude).withUnit;
+      const endAltStr = formatAltitude(climb.endAltitude).withUnit;
 
       html += `
         <button class="climb-item" data-climb-id="${climb.id}">
           <div class="climb-rank">#${i + 1}</div>
           <div class="climb-details">
             <div class="climb-primary">
-              <span class="climb-gain">+${climb.altitudeGain.toFixed(0)}m</span>
+              <span class="climb-gain">+${altGainStr}</span>
               <span class="climb-time">${formatTime(climb.startTime)} → ${formatTime(climb.endTime)}</span>
             </div>
             <div class="climb-stats">
               <span class="climb-stat" title="Average Climb Rate">
-                <strong>Avg</strong> +${climb.avgClimbRate.toFixed(1)} m/s
+                <strong>Avg</strong> ${climbRateStr}
               </span>
               <span class="climb-stat" title="Duration">
                 <strong>Dur</strong> ${formatDuration(climb.duration)}
               </span>
             </div>
             <div class="climb-altitudes">
-              ${climb.startAltitude.toFixed(0)}m → ${climb.endAltitude.toFixed(0)}m
+              ${startAltStr} → ${endAltStr}
             </div>
           </div>
         </button>
@@ -793,16 +801,20 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
 
     for (let i = 0; i < sinks.length; i++) {
       const sink = sinks[i];
-      const distanceKm = (sink.distance / 1000).toFixed(2);
-      const speedKmh = (sink.averageSpeed * 3.6).toFixed(0);
+      const distanceStr = formatDistance(sink.distance).withUnit;
+      const speedStr = formatSpeed(sink.averageSpeed).withUnit;
       const glideRatioStr = sink.glideRatio > 0 ? sink.glideRatio.toFixed(1) : '0';
+      const altLostStr = formatAltitude(sink.altitudeLost).withUnit;
+      const sinkRateStr = formatClimbRate(-sink.avgSinkRate).withUnit;
+      const startAltStr = formatAltitude(sink.startAltitude).withUnit;
+      const endAltStr = formatAltitude(sink.endAltitude).withUnit;
 
       html += `
         <button class="sink-item" data-sink-id="${sink.id}">
           <div class="sink-rank">#${i + 1}</div>
           <div class="sink-details">
             <div class="sink-primary">
-              <span class="sink-drop">-${sink.altitudeLost.toFixed(0)}m</span>
+              <span class="sink-drop">-${altLostStr}</span>
               <span class="sink-time">${formatTime(sink.startTime)} → ${formatTime(sink.endTime)}</span>
             </div>
             <div class="sink-stats">
@@ -810,20 +822,20 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
                 <strong>L/D</strong> ${glideRatioStr}:1
               </span>
               <span class="sink-stat" title="Average Sink Rate">
-                <strong>Avg</strong> -${sink.avgSinkRate.toFixed(1)} m/s
+                <strong>Avg</strong> ${sinkRateStr}
               </span>
               <span class="sink-stat" title="Distance">
-                <strong>Dist</strong> ${distanceKm} km
+                <strong>Dist</strong> ${distanceStr}
               </span>
               <span class="sink-stat" title="Speed">
-                <strong>Spd</strong> ${speedKmh} km/h
+                <strong>Spd</strong> ${speedStr}
               </span>
               <span class="sink-stat" title="Duration">
                 <strong>Dur</strong> ${formatDuration(sink.duration)}
               </span>
             </div>
             <div class="sink-altitudes">
-              ${sink.startAltitude.toFixed(0)}m → ${sink.endAltitude.toFixed(0)}m
+              ${startAltStr} → ${endAltStr}
             </div>
           </div>
         </button>

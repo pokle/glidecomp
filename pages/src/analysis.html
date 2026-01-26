@@ -242,6 +242,45 @@
 
                 <hr role="separator">
 
+                <!-- Units -->
+                <div role="group" aria-labelledby="units-heading">
+                    <div role="heading" id="units-heading">Units</div>
+                    <div role="menuitem" id="menu-unit-speed" data-keywords="speed unit km/h mph knots velocity">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                        <span>Speed Unit</span>
+                        <span class="text-muted-foreground" id="unit-speed-status">(km/h)</span>
+                    </div>
+                    <div role="menuitem" id="menu-unit-altitude" data-keywords="altitude unit meters feet elevation height">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="m8 3 4 8 5-5 5 15H2L8 3z"/>
+                        </svg>
+                        <span>Altitude Unit</span>
+                        <span class="text-muted-foreground" id="unit-altitude-status">(m)</span>
+                    </div>
+                    <div role="menuitem" id="menu-unit-distance" data-keywords="distance unit kilometers miles nautical">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 6H5a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h13l4-3.5L18 6z"/>
+                            <path d="M12 13v8"/>
+                            <path d="M12 3v3"/>
+                        </svg>
+                        <span>Distance Unit</span>
+                        <span class="text-muted-foreground" id="unit-distance-status">(km)</span>
+                    </div>
+                    <div role="menuitem" id="menu-unit-climbrate" data-keywords="climb rate vario sink thermal ft/min m/s knots">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 19V5"/>
+                            <path d="m5 12 7-7 7 7"/>
+                        </svg>
+                        <span>Climb Rate Unit</span>
+                        <span class="text-muted-foreground" id="unit-climbrate-status">(m/s)</span>
+                    </div>
+                </div>
+
+                <hr role="separator">
+
                 <!-- Sample Flights -->
                 <div role="group" aria-labelledby="samples-heading">
                     <div role="heading" id="samples-heading">Sample Flights</div>
