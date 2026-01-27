@@ -1,13 +1,13 @@
 # IGC Analysis Tool Specification
 
 ## TODO
-- [ ] Allow users to click on the track to show details on the events panel.
+- [x] Allow users to click on the track to show details on the events panel.
   - Open the Event panel if closed
   - If the point lies within a segment, select the segment (glide, thermal, or sink)
-  - Otherwise select the closest event on the event panel. 
+  - Otherwise select the closest event on the event panel.
   - Accomodations:
-    - If possible, on hover, change the cursor to indicate that it's clickable.
-    - If possible, on hover over a segment, highlight the segment by increasing its width.
+    - [x] If possible, on hover, change the cursor to indicate that it's clickable.
+    - [ ] DEFER: If possible, on hover over a segment, highlight the segment by increasing its width.
 - [ ] Add a 'Show all Events' command that's equivalent to clicking the Events button, and switching the filter to show all events. It should focus the keyboard on the event panel.
 - [x] Implement 'Highest climbs' tab - show all climbs/thermals sorted by greatest altitude gain first
 - [x] Implement 'Deepest sinks' tab - show all descents sorted by greatest altitude drop first

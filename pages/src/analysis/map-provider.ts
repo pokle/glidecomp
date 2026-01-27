@@ -63,6 +63,9 @@ export interface MapProvider {
 
     /** Show/hide track visualization */
     setTrackVisibility?(visible: boolean): void;
+
+    /** Register callback for when user clicks on the track */
+    onTrackClick?(callback: (fixIndex: number) => void): void;
 }
 
 /**
