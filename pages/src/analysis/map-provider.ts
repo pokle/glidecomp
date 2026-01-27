@@ -25,11 +25,20 @@ export interface MapProvider {
     /** Render flight track on the map */
     setTrack(fixes: IGCFix[]): void;
 
+    /** Clear the flight track from the map */
+    clearTrack(): void;
+
     /** Render task turnpoints and cylinders */
     setTask(task: XCTask): Promise<void>;
 
+    /** Clear the task from the map */
+    clearTask(): void;
+
     /** Render event markers on the map */
     setEvents(events: FlightEvent[]): void;
+
+    /** Clear event markers from the map */
+    clearEvents(): void;
 
     /** Pan to and highlight an event location. If skipPan is true, only highlights without panning. */
     panToEvent(event: FlightEvent, options?: { skipPan?: boolean }): void;

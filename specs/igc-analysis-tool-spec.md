@@ -3,7 +3,7 @@
 ## TODO
 - [ ] **Browser Storage Management** (see `browser-storage-spec.md`):
   - [ ] Clear individual items from storage (delete a stored task or track)
-  - [x] Clear all storage (reset to empty state)
+  - [ ] Clear all storage (reset to empty state)
   - [ ] Download stored files back to user's computer (export IGC files)
 - [x] Allow users to click on the track to show details on the events panel.
   - Open the Event panel if closed

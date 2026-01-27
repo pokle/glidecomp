@@ -76,7 +76,7 @@ async function init(): Promise<void> {
 
   // Units dialog
   const menuConfigureUnits = document.getElementById('menu-configure-units');
-  const menuClearStorage = document.getElementById('menu-clear-storage');
+  const menuClearSession = document.getElementById('menu-clear-session');
   const unitsDialog = document.getElementById('units-dialog') as HTMLDialogElement | null;
   const unitsForm = document.getElementById('units-form') as HTMLFormElement | null;
   const unitSpeedSelect = document.getElementById('unit-speed-select') as HTMLSelectElement | null;
@@ -279,17 +279,28 @@ async function init(): Promise<void> {
     unitsDialog?.showModal();
   });
 
-  // Clear storage
-  menuClearStorage?.addEventListener('click', async () => {
+  // Clear current task and track (reset to initial state)
+  menuClearSession?.addEventListener('click', () => {
     commandDialog?.close();
-    try {
-      await storage.clearAll();
-      await storageMenu?.refresh();
-      showStatus('Cleared all stored tasks and tracks', 'success');
-    } catch (err) {
-      console.error('Failed to clear storage:', err);
-      showStatus('Failed to clear storage', 'error');
+
+    // Clear state
+    state.igcFile = null;
+    state.task = null;
+    state.fixes = [];
+    state.events = [];
+
+    // Clear map
+    if (mapRenderer) {
+      mapRenderer.clearTrack();
+      mapRenderer.clearTask();
+      mapRenderer.clearEvents();
     }
+
+    // Clear event panel
+    eventPanel?.setEvents([]);
+    eventPanel?.setFlightInfo({});
+
+    showStatus('Ready - drop an IGC file or use the file picker', 'info');
   });
 
   // Handle units form submission

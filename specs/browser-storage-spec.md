@@ -14,7 +14,7 @@ This specification defines a browser-based storage layer for persisting XContest
 ## Out of Scope (Future Work)
 
 - Clearing individual items from storage
-- ~~Clearing all storage~~ (implemented via "Clear all (task & track)" menu item)
+- Clearing all storage (delete all stored tasks and tracks from browser)
 - Downloading stored files back to user's computer
 - Syncing between devices
 - Storage quota management UI
