@@ -122,9 +122,6 @@ Collapsible sidebar with tabbed interface for viewing flight data. Uses Basecoat
 - **Sinks** - Glides with poor L/D ratio (5:1 or worse), sorted by altitude lost (deepest first)
 
 **Events Tab Features:**
-- Two filter buttons (always visible, not a toggle):
-  - **Show all** - Display all events
-  - **Show visible** - Filter to events within current map bounds (one-time snapshot, not continuous)
 - Click on an event: Pan to event location and highlight on map
 
 **Glides Tab Features:**
