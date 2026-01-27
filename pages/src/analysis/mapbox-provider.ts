@@ -1223,7 +1223,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           }
         },
 
-        panToEvent(event: FlightEvent) {
+        panToEvent(event: FlightEvent, options?: { skipPan?: boolean }) {
           // Close any existing popup and markers
           if (activePopup) {
             activePopup.remove();
@@ -1392,12 +1392,14 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
             activeMarkers.push(marker);
           }
 
-          // Pan to the event location (preserve current zoom level)
-          map.flyTo({
-            center: [event.longitude, event.latitude],
-            zoom: map.getZoom(),
-            duration: 1000,
-          });
+          // Pan to the event location (preserve current zoom level) unless skipPan is true
+          if (!options?.skipPan) {
+            map.flyTo({
+              center: [event.longitude, event.latitude],
+              zoom: map.getZoom(),
+              duration: 1000,
+            });
+          }
         },
 
         getBounds() {

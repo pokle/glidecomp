@@ -39,7 +39,6 @@ const state: AppState = {
 let mapRenderer: MapProvider | null = null;
 let eventPanel: EventPanel | null = null;
 let storageMenu: StorageMenu | null = null;
-let isProgrammaticPan = false;
 let waypointDatabase: WaypointRecord[] = [];
 
 // Feature states
@@ -96,13 +95,6 @@ async function init(): Promise<void> {
   // Initialize map with MapBox provider
   try {
     mapRenderer = await createMapProvider(mapContainer);
-
-    // Update event panel when map moves (but not during programmatic pans from event clicks)
-    mapRenderer.onBoundsChange(() => {
-      if (!isProgrammaticPan) {
-        eventPanel?.filterByBounds(mapRenderer!.getBounds());
-      }
-    });
   } catch (err) {
     console.error('Failed to initialize map:', err);
     showStatus('Failed to initialize map', 'error');
@@ -340,13 +332,9 @@ async function init(): Promise<void> {
   }
 
   // Handle event click
-  const handleEventClick = (event: FlightEvent) => {
+  const handleEventClick = (event: FlightEvent, options?: { skipPan?: boolean }) => {
     if (mapRenderer) {
-      isProgrammaticPan = true;
-      mapRenderer.panToEvent(event);
-      setTimeout(() => {
-        isProgrammaticPan = false;
-      }, 1200);
+      mapRenderer.panToEvent(event, options);
     }
 
     // Close sidebar on mobile after selecting an event
@@ -374,8 +362,8 @@ async function init(): Promise<void> {
     // Open event panel if closed
     eventPanel?.open();
 
-    // Select the event for this fix
-    eventPanel?.selectByFixIndex(fixIndex);
+    // Select the event for this fix (skip panning since user clicked directly on the track)
+    eventPanel?.selectByFixIndex(fixIndex, { skipPan: true });
   });
 
   // Open IGC menu item triggers hidden file input
