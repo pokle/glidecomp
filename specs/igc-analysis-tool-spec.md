@@ -1,6 +1,7 @@
 # IGC Analysis Tool Specification
 
 ## TODO
+- [ ] BUG: The `pages/public/data/tracks/2025-01-05-Tushar-Corryong.igc` IGC file has segments that aren't a glide or a thermal or sink. They're basically unclickable. These sections are near the end. I think there was so much lifty air that I was climbing on glide. Also there are sections that are identified as a thermal but are actually a climbing glide (flying straight).
 - [ ] **Browser Storage Management** (see `browser-storage-spec.md`):
   - [ ] Clear individual items from storage (delete a stored task or track)
   - [ ] Clear all storage (reset to empty state)
