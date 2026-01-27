@@ -47,6 +47,18 @@ Single page app
     - Dotted
     - Label in the centre of line with distance and leg number (e.g. "Leg 1: 15.2km")
 
+### Track Interaction
+Users can click directly on the flight track to view event details:
+
+- **Click on Track**: Clicking anywhere on the track selects the corresponding event
+  - If the clicked point is within a segment (glide, thermal, or sink), that segment is selected
+  - The event panel opens automatically if closed
+  - The panel switches to the appropriate tab (Glides, Climbs, or Sinks) based on segment type
+  - The map pans to the event location with segment highlighting
+- **Hover Feedback**: Cursor changes to pointer when hovering over the track to indicate it's clickable
+
+This provides an alternative to browsing the event panel - pilots can click directly on interesting parts of the track to see details.
+
 ### Command Palette (⌘K)
 Quick access menu for display options and actions.
 
