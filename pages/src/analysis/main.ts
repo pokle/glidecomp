@@ -318,13 +318,17 @@ async function init(): Promise<void> {
   }
 
   // Handle event click
-  const handleEventClick = (event: FlightEvent) => {
+  const handleEventClick = (event: FlightEvent, options?: { skipPan?: boolean }) => {
     if (mapRenderer) {
-      isProgrammaticPan = true;
-      mapRenderer.panToEvent(event);
-      setTimeout(() => {
-        isProgrammaticPan = false;
-      }, 1200);
+      if (!options?.skipPan) {
+        isProgrammaticPan = true;
+      }
+      mapRenderer.panToEvent(event, options);
+      if (!options?.skipPan) {
+        setTimeout(() => {
+          isProgrammaticPan = false;
+        }, 1200);
+      }
     }
 
     // Close sidebar on mobile after selecting an event
@@ -352,8 +356,8 @@ async function init(): Promise<void> {
     // Open event panel if closed
     eventPanel?.open();
 
-    // Select the event for this fix
-    eventPanel?.selectByFixIndex(fixIndex);
+    // Select the event for this fix (skip panning since user clicked directly on the track)
+    eventPanel?.selectByFixIndex(fixIndex, { skipPan: true });
   });
 
   // Open IGC menu item triggers hidden file input

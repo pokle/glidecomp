@@ -85,7 +85,7 @@ interface SinkData {
 
 export interface EventPanelOptions {
   container: HTMLElement;
-  onEventClick: (event: FlightEvent) => void;
+  onEventClick: (event: FlightEvent, options?: { skipPan?: boolean }) => void;
   onToggle?: () => void;
 }
 
@@ -105,7 +105,8 @@ export interface EventPanel {
   clearSelection(): void;
   toggle(): void;
   open(): void;
-  selectByFixIndex(fixIndex: number): void;
+  /** Select event by fix index. If skipPan is true, only highlights without panning the map. */
+  selectByFixIndex(fixIndex: number, options?: { skipPan?: boolean }): void;
   destroy(): void;
 }
 
@@ -951,7 +952,7 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
       }
     },
 
-    selectByFixIndex(fixIndex: number) {
+    selectByFixIndex(fixIndex: number, selectOptions?: { skipPan?: boolean }) {
       if (allEvents.length === 0) return;
 
       // Find event whose segment contains this fix index
@@ -1030,8 +1031,8 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
           switchTab('all');
         }
 
-        // Trigger the event click callback
-        options.onEventClick(matchingEvent);
+        // Trigger the event click callback with skipPan option if provided
+        options.onEventClick(matchingEvent, selectOptions?.skipPan ? { skipPan: true } : undefined);
       }
     },
 

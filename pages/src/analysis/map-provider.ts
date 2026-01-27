@@ -31,8 +31,8 @@ export interface MapProvider {
     /** Render event markers on the map */
     setEvents(events: FlightEvent[]): void;
 
-    /** Pan to and highlight an event location */
-    panToEvent(event: FlightEvent): void;
+    /** Pan to and highlight an event location. If skipPan is true, only highlights without panning. */
+    panToEvent(event: FlightEvent, options?: { skipPan?: boolean }): void;
 
     /** Get current visible bounds */
     getBounds(): MapBounds;
