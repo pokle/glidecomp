@@ -71,6 +71,9 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       // Track visibility state
       let isTrackVisible = true;
 
+      // Track click callback
+      let trackClickCallback: ((fixIndex: number) => void) | null = null;
+
       /**
        * Show or hide the glide legend help button
        */
@@ -548,6 +551,27 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         }
       });
 
+      /**
+       * Find the index of the fix closest to the given coordinates
+       */
+      function findNearestFixIndex(clickLat: number, clickLon: number): number {
+        if (currentFixes.length === 0) return -1;
+
+        let minDistance = Infinity;
+        let nearestIndex = 0;
+
+        for (let i = 0; i < currentFixes.length; i++) {
+          const fix = currentFixes[i];
+          const distance = haversineDistance(clickLat, clickLon, fix.latitude, fix.longitude);
+          if (distance < minDistance) {
+            minDistance = distance;
+            nearestIndex = i;
+          }
+        }
+
+        return nearestIndex;
+      }
+
       map.on('load', () => {
         isInitialLoad = false;
 
@@ -574,6 +598,35 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
             }
           },
         });
+
+        // Track click and hover handlers
+        const trackLayers = ['track-line', 'track-line-outline', 'track-line-gradient'];
+
+        // Click handler for track
+        for (const layerId of trackLayers) {
+          map.on('click', layerId, (e) => {
+            if (!trackClickCallback || currentFixes.length === 0) return;
+            if (!isTrackVisible) return;
+
+            const { lng, lat } = e.lngLat;
+            const fixIndex = findNearestFixIndex(lat, lng);
+            if (fixIndex >= 0) {
+              trackClickCallback(fixIndex);
+            }
+          });
+        }
+
+        // Hover effects - change cursor to pointer when hovering over track
+        for (const layerId of trackLayers) {
+          map.on('mouseenter', layerId, () => {
+            if (currentFixes.length === 0 || !isTrackVisible) return;
+            map.getCanvas().style.cursor = 'pointer';
+          });
+
+          map.on('mouseleave', layerId, () => {
+            map.getCanvas().style.cursor = '';
+          });
+        }
 
         resolve(renderer);
       });
@@ -1373,6 +1426,10 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
         invalidateSize() {
           map.resize();
+        },
+
+        onTrackClick(callback: (fixIndex: number) => void) {
+          trackClickCallback = callback;
         },
       };
 

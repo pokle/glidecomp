@@ -1,13 +1,13 @@
 # IGC Analysis Tool Specification
 
 ## TODO
-- [ ] Allow users to click on the track to show details on the events panel.
+- [x] Allow users to click on the track to show details on the events panel.
   - Open the Event panel if closed
   - If the point lies within a segment, select the segment (glide, thermal, or sink)
-  - Otherwise select the closest event on the event panel. 
+  - Otherwise select the closest event on the event panel.
   - Accomodations:
-    - If possible, on hover, change the cursor to indicate that it's clickable.
-    - If possible, on hover over a segment, highlight the segment by increasing its width.
+    - [x] If possible, on hover, change the cursor to indicate that it's clickable.
+    - [ ] DEFER: If possible, on hover over a segment, highlight the segment by increasing its width.
 - [ ] Add a 'Show all Events' command that's equivalent to clicking the Events button, and switching the filter to show all events. It should focus the keyboard on the event panel.
 - [x] Implement 'Highest climbs' tab - show all climbs/thermals sorted by greatest altitude gain first
 - [x] Implement 'Deepest sinks' tab - show all descents sorted by greatest altitude drop first
@@ -46,6 +46,18 @@ Single page app
   - Optimised line connecting turnpoints
     - Dotted
     - Label in the centre of line with distance and leg number (e.g. "Leg 1: 15.2km")
+
+### Track Interaction
+Users can click directly on the flight track to view event details:
+
+- **Click on Track**: Clicking anywhere on the track selects the corresponding event
+  - If the clicked point is within a segment (glide, thermal, or sink), that segment is selected
+  - The event panel opens automatically if closed
+  - The panel switches to the appropriate tab (Glides, Climbs, or Sinks) based on segment type
+  - The map pans to the event location with segment highlighting
+- **Hover Feedback**: Cursor changes to pointer when hovering over the track to indicate it's clickable
+
+This provides an alternative to browsing the event panel - pilots can click directly on interesting parts of the track to see details.
 
 ### Command Palette (⌘K)
 Quick access menu for display options and actions.
