@@ -369,6 +369,15 @@ async function init(): Promise<void> {
     onToggle: handlePanelToggle,
   });
 
+  // Register track click handler to select events when clicking on the track
+  mapRenderer.onTrackClick?.((fixIndex: number) => {
+    // Open event panel if closed
+    eventPanel?.open();
+
+    // Select the event for this fix
+    eventPanel?.selectByFixIndex(fixIndex);
+  });
+
   // Open IGC menu item triggers hidden file input
   menuOpenIgc?.addEventListener('click', () => {
     commandDialog?.close();

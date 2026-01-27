@@ -104,6 +104,8 @@ export interface EventPanel {
   filterByBounds(bounds: { north: number; south: number; east: number; west: number }): void;
   clearSelection(): void;
   toggle(): void;
+  open(): void;
+  selectByFixIndex(fixIndex: number): void;
   destroy(): void;
 }
 
@@ -935,6 +937,101 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
 
       if (options.onToggle) {
         setTimeout(options.onToggle, 350);
+      }
+    },
+
+    open() {
+      if (isCollapsed) {
+        isCollapsed = false;
+        container.classList.remove('hidden');
+
+        if (options.onToggle) {
+          setTimeout(options.onToggle, 350);
+        }
+      }
+    },
+
+    selectByFixIndex(fixIndex: number) {
+      if (allEvents.length === 0) return;
+
+      // Find event whose segment contains this fix index
+      let matchingEvent: FlightEvent | null = null;
+      let eventType: 'glide' | 'climb' | 'sink' | 'event' = 'event';
+
+      // Check glides (glide_start events)
+      for (const event of allEvents) {
+        if (event.type === 'glide_start' && event.segment) {
+          if (fixIndex >= event.segment.startIndex && fixIndex <= event.segment.endIndex) {
+            matchingEvent = event;
+            // Check if it's a sink (poor L/D ratio <= 5)
+            const details = event.details as { glideRatio?: number } | undefined;
+            if (details?.glideRatio !== undefined && details.glideRatio <= 5) {
+              eventType = 'sink';
+            } else {
+              eventType = 'glide';
+            }
+            break;
+          }
+        }
+      }
+
+      // Check thermals (thermal_entry events)
+      if (!matchingEvent) {
+        for (const event of allEvents) {
+          if (event.type === 'thermal_entry' && event.segment) {
+            if (fixIndex >= event.segment.startIndex && fixIndex <= event.segment.endIndex) {
+              matchingEvent = event;
+              eventType = 'climb';
+              break;
+            }
+          }
+        }
+      }
+
+      // If no segment match, find closest point event by index
+      if (!matchingEvent) {
+        let minDistance = Infinity;
+        for (const event of allEvents) {
+          // Skip segment events, we want point events
+          if (event.segment) continue;
+
+          // For point events, we need to find the closest one
+          // We'll use the event's index if available in details, otherwise skip
+          const eventDetails = event.details as { fixIndex?: number } | undefined;
+          if (eventDetails?.fixIndex !== undefined) {
+            const distance = Math.abs(eventDetails.fixIndex - fixIndex);
+            if (distance < minDistance) {
+              minDistance = distance;
+              matchingEvent = event;
+              eventType = 'event';
+            }
+          }
+        }
+      }
+
+      // If still no match, just use the first event
+      if (!matchingEvent && allEvents.length > 0) {
+        matchingEvent = allEvents[0];
+        eventType = 'event';
+      }
+
+      if (matchingEvent) {
+        // Set the selected segment if available
+        selectedSegment = matchingEvent.segment || null;
+
+        // Switch to appropriate tab
+        if (eventType === 'glide') {
+          switchTab('glides');
+        } else if (eventType === 'climb') {
+          switchTab('climbs');
+        } else if (eventType === 'sink') {
+          switchTab('sinks');
+        } else {
+          switchTab('all');
+        }
+
+        // Trigger the event click callback
+        options.onEventClick(matchingEvent);
       }
     },
 
