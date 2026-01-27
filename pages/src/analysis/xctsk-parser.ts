@@ -364,6 +364,51 @@ export async function fetchTaskByCode(code: string): Promise<XCTask> {
   return task;
 }
 
+export interface FetchTaskResult {
+  task: XCTask;
+  rawJson: string;
+}
+
+/**
+ * Fetch task from XContest by task code, returning both parsed task and raw JSON.
+ * Used for storing tasks in browser storage.
+ */
+export async function fetchTaskByCodeWithRaw(code: string): Promise<FetchTaskResult> {
+  // Clean up code - trim whitespace only
+  const cleanCode = code.trim();
+
+  if (!cleanCode) {
+    throw new Error('Task code cannot be empty');
+  }
+
+  const url = `https://tools.xcontest.org/api/xctsk/load/${encodeURIComponent(cleanCode)}`;
+
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error(`Task code "${cleanCode}" not found`);
+    }
+    throw new Error(`Failed to fetch task: HTTP ${response.status}`);
+  }
+
+  const rawJson = await response.text();
+
+  // Validate that we got JSON back
+  if (!rawJson.trim().startsWith('{')) {
+    throw new Error(`Invalid response from server: expected JSON`);
+  }
+
+  const task = parseXCTask(rawJson);
+
+  // Validate the parsed task has valid coordinates
+  if (!isValidTask(task)) {
+    throw new Error('Task has invalid or missing coordinates');
+  }
+
+  return { task, rawJson };
+}
+
 /**
  * Get the SSS (start) turnpoint index
  */

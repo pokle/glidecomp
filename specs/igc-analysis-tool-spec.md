@@ -1,6 +1,10 @@
 # IGC Analysis Tool Specification
 
 ## TODO
+- [ ] **Browser Storage Management** (see `browser-storage-spec.md`):
+  - [ ] Clear individual items from storage (delete a stored task or track)
+  - [ ] Clear all storage (reset to empty state)
+  - [ ] Download stored files back to user's computer (export IGC files)
 - [x] Allow users to click on the track to show details on the events panel.
   - Open the Event panel if closed
   - If the point lies within a segment, select the segment (glide, thermal, or sink)

@@ -9,13 +9,15 @@
  */
 
 import { parseIGC, IGCFile, IGCFix } from './igc-parser';
-import { fetchTaskByCode, XCTask, calculateOptimizedTaskDistance, igcTaskToXCTask } from './xctsk-parser';
+import { fetchTaskByCodeWithRaw, XCTask, calculateOptimizedTaskDistance, igcTaskToXCTask } from './xctsk-parser';
 import { createMapProvider, MapProvider } from './map-provider';
 import { detectFlightEvents, FlightEvent } from './event-detector';
 import { createEventPanel, EventPanel, FlightInfo } from './event-panel';
 import { loadCorryongWaypoints, type WaypointRecord } from './waypoints';
 import { config, type UnitPreferences } from './config';
 import { formatAltitude, formatDistance, onUnitsChanged } from './units';
+import { storage } from './storage';
+import { StorageMenu } from './storage-menu';
 
 // Import styles
 import '../styles.css';
@@ -36,6 +38,7 @@ const state: AppState = {
 
 let mapRenderer: MapProvider | null = null;
 let eventPanel: EventPanel | null = null;
+let storageMenu: StorageMenu | null = null;
 let waypointDatabase: WaypointRecord[] = [];
 
 // Feature states
@@ -73,6 +76,7 @@ async function init(): Promise<void> {
 
   // Units dialog
   const menuConfigureUnits = document.getElementById('menu-configure-units');
+  const menuClearSession = document.getElementById('menu-clear-session');
   const unitsDialog = document.getElementById('units-dialog') as HTMLDialogElement | null;
   const unitsForm = document.getElementById('units-form') as HTMLFormElement | null;
   const unitSpeedSelect = document.getElementById('unit-speed-select') as HTMLSelectElement | null;
@@ -104,6 +108,25 @@ async function init(): Promise<void> {
     console.log(`Loaded ${waypointDatabase.length} waypoints`);
   } catch (err) {
     console.warn('Failed to load waypoint database:', err);
+  }
+
+  // Initialize storage and menu
+  try {
+    await storage.init();
+    storageMenu = new StorageMenu({
+      onTaskSelect: async (taskId) => {
+        commandDialog?.close();
+        await loadStoredTask(taskId);
+      },
+      onTrackSelect: async (trackId) => {
+        commandDialog?.close();
+        await loadStoredTrack(trackId);
+      },
+    });
+    storageMenu.init();
+    await storageMenu.refresh();
+  } catch (err) {
+    console.warn('Failed to initialize storage:', err);
   }
 
   // Load feature states from URL params
@@ -254,6 +277,30 @@ async function init(): Promise<void> {
     commandDialog?.close();
     populateUnitsDialog();
     unitsDialog?.showModal();
+  });
+
+  // Clear current task and track (reset to initial state)
+  menuClearSession?.addEventListener('click', () => {
+    commandDialog?.close();
+
+    // Clear state
+    state.igcFile = null;
+    state.task = null;
+    state.fixes = [];
+    state.events = [];
+
+    // Clear map
+    if (mapRenderer) {
+      mapRenderer.clearTrack();
+      mapRenderer.clearTask();
+      mapRenderer.clearEvents();
+    }
+
+    // Clear event panel
+    eventPanel?.setEvents([]);
+    eventPanel?.setFlightInfo({});
+
+    showStatus('Ready - drop an IGC file or use the file picker', 'info');
   });
 
   // Handle units form submission
@@ -435,45 +482,84 @@ async function init(): Promise<void> {
 
     try {
       const content = await file.text();
-      const igcFile = parseIGC(content);
-
-      state.igcFile = igcFile;
-      state.fixes = igcFile.fixes;
-
-      // Update map
-      if (mapRenderer) {
-        mapRenderer.setTrack(igcFile.fixes);
-      }
-
-      // If IGC file has a declared task and no external task is loaded, use it
-      if (igcFile.task && igcFile.task.start && !state.task) {
-        const xcTask = igcTaskToXCTask(igcFile.task, { waypoints: waypointDatabase });
-        state.task = xcTask;
-
-        if (mapRenderer) {
-          await mapRenderer.setTask(xcTask);
-        }
-      }
-
-      // Detect events
-      state.events = detectFlightEvents(igcFile.fixes, state.task || undefined);
-
-      // Update event panel
-      eventPanel?.setEvents(state.events);
-
-      // Update map events
-      if (mapRenderer) {
-        mapRenderer.setEvents(state.events);
-      }
-
-      // Update flight info
-      updateFlightInfo();
-
-      const taskInfo = igcFile.task?.start ? ' (with task declaration)' : '';
-      showStatus(`Loaded ${file.name} - ${igcFile.fixes.length} fixes${taskInfo}`, 'success');
+      await loadIGCContent(content, file.name, true);
     } catch (err) {
       console.error('Failed to parse IGC file:', err);
       showStatus(`Failed to parse IGC file: ${err}`, 'error');
+    }
+  }
+
+  /**
+   * Load IGC content (from file or storage)
+   * @param shouldStore - whether to store in browser storage (true for new files, false for loading from storage)
+   */
+  async function loadIGCContent(content: string, filename: string, shouldStore: boolean): Promise<void> {
+    const igcFile = parseIGC(content);
+
+    state.igcFile = igcFile;
+    state.fixes = igcFile.fixes;
+
+    // Update map
+    if (mapRenderer) {
+      mapRenderer.setTrack(igcFile.fixes);
+    }
+
+    // If IGC file has a declared task and no external task is loaded, use it
+    if (igcFile.task && igcFile.task.start && !state.task) {
+      const xcTask = igcTaskToXCTask(igcFile.task, { waypoints: waypointDatabase });
+      state.task = xcTask;
+
+      if (mapRenderer) {
+        await mapRenderer.setTask(xcTask);
+      }
+    }
+
+    // Detect events
+    state.events = detectFlightEvents(igcFile.fixes, state.task || undefined);
+
+    // Update event panel
+    eventPanel?.setEvents(state.events);
+
+    // Update map events
+    if (mapRenderer) {
+      mapRenderer.setEvents(state.events);
+    }
+
+    // Update flight info
+    updateFlightInfo();
+
+    // Store for future use
+    if (shouldStore) {
+      try {
+        await storage.storeTrack(filename, content, igcFile);
+        await storageMenu?.refresh();
+      } catch (err) {
+        console.warn('Failed to store track:', err);
+      }
+    }
+
+    const taskInfo = igcFile.task?.start ? ' (with task declaration)' : '';
+    showStatus(`Loaded ${filename} - ${igcFile.fixes.length} fixes${taskInfo}`, 'success');
+  }
+
+  /**
+   * Load a stored track by ID
+   */
+  async function loadStoredTrack(id: string): Promise<void> {
+    showStatus('Loading stored track...', 'info');
+
+    try {
+      const stored = await storage.getTrack(id);
+      if (!stored) {
+        showStatus('Track not found in storage', 'error');
+        return;
+      }
+
+      await storage.touchTrack(id);
+      await loadIGCContent(stored.content, stored.filename, false);
+    } catch (err) {
+      console.error('Failed to load stored track:', err);
+      showStatus(`Failed to load stored track: ${err}`, 'error');
     }
   }
 
@@ -484,7 +570,27 @@ async function init(): Promise<void> {
     showStatus(`Loading task ${code}...`, 'info');
 
     try {
-      const task = await fetchTaskByCode(code);
+      // Check storage first
+      const stored = await storage.getTask(code);
+      let task: XCTask;
+
+      if (stored) {
+        task = stored.task;
+        await storage.touchTask(code);
+      } else {
+        // Fetch from XContest
+        const result = await fetchTaskByCodeWithRaw(code);
+        task = result.task;
+
+        // Store for future use
+        try {
+          await storage.storeTask(code, task, result.rawJson);
+          await storageMenu?.refresh();
+        } catch (err) {
+          console.warn('Failed to store task:', err);
+        }
+      }
+
       state.task = task;
 
       // Update map
@@ -510,6 +616,48 @@ async function init(): Promise<void> {
     } catch (err) {
       console.error('Failed to load task:', err);
       showStatus(`Failed to load task: ${err}`, 'error');
+    }
+  }
+
+  /**
+   * Load a stored task by ID (code)
+   */
+  async function loadStoredTask(code: string): Promise<void> {
+    showStatus(`Loading stored task ${code}...`, 'info');
+
+    try {
+      const stored = await storage.getTask(code);
+      if (!stored) {
+        showStatus('Task not found in storage', 'error');
+        return;
+      }
+
+      await storage.touchTask(code);
+      state.task = stored.task;
+
+      // Update map
+      if (mapRenderer) {
+        mapRenderer.setTask(stored.task);
+      }
+
+      // Re-detect events with task
+      if (state.fixes.length > 0) {
+        state.events = detectFlightEvents(state.fixes, stored.task);
+
+        eventPanel?.setEvents(state.events);
+
+        if (mapRenderer) {
+          mapRenderer.setEvents(state.events);
+        }
+      }
+
+      // Update flight info
+      updateFlightInfo();
+
+      showStatus(`Loaded task: ${stored.task.turnpoints.length} turnpoints`, 'success');
+    } catch (err) {
+      console.error('Failed to load stored task:', err);
+      showStatus(`Failed to load stored task: ${err}`, 'error');
     }
   }
 

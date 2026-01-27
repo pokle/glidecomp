@@ -1041,6 +1041,24 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           }
         },
 
+        clearTrack() {
+          clearEventHighlights();
+          currentFixes = [];
+          (map.getSource('track') as mapboxgl.GeoJSONSource)?.setData({
+            type: 'FeatureCollection',
+            features: [],
+          });
+          (map.getSource('track-gradient') as mapboxgl.GeoJSONSource)?.setData({
+            type: 'FeatureCollection',
+            features: [],
+          });
+          altitudeGradientStops = [];
+          // Clear 3D track if present
+          if (map.getLayer('track-3d')) {
+            map.setLayoutProperty('track-3d', 'visibility', 'none');
+          }
+        },
+
         async setTask(task: XCTask) {
           currentTask = task;
 
@@ -1175,6 +1193,26 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           }
         },
 
+        clearTask() {
+          currentTask = null;
+          (map.getSource('task-line') as mapboxgl.GeoJSONSource)?.setData({
+            type: 'FeatureCollection',
+            features: [],
+          });
+          (map.getSource('task-points') as mapboxgl.GeoJSONSource)?.setData({
+            type: 'FeatureCollection',
+            features: [],
+          });
+          (map.getSource('task-cylinders') as mapboxgl.GeoJSONSource)?.setData({
+            type: 'FeatureCollection',
+            features: [],
+          });
+          (map.getSource('task-segment-labels') as mapboxgl.GeoJSONSource)?.setData({
+            type: 'FeatureCollection',
+            features: [],
+          });
+        },
+
         setEvents(events: FlightEvent[]) {
           currentEvents = events;
 
@@ -1221,6 +1259,15 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
             eventMarkers.push(marker);
           }
+        },
+
+        clearEvents() {
+          currentEvents = [];
+          for (const marker of eventMarkers) {
+            marker.remove();
+          }
+          eventMarkers.length = 0;
+          clearEventHighlights();
         },
 
         panToEvent(event: FlightEvent, options?: { skipPan?: boolean }) {
