@@ -18,7 +18,7 @@ This feature allows users to configure display units for various measurements in
 #### Speed
 - **km/h** - Kilometers per hour (1 m/s = 3.6 km/h)
 - **mph** - Miles per hour (1 m/s = 2.237 mph)
-- **knots** - Nautical miles per hour (1 m/s = 1.944 knots)
+- **knots** - Nautical miles per hour (1 m/s = 1.944 knots, label: "kts")
 
 #### Altitude
 - **m** - Meters
@@ -31,70 +31,77 @@ This feature allows users to configure display units for various measurements in
 
 #### Climb Rate
 - **m/s** - Meters per second
-- **ft/min** - Feet per minute (1 m/s = 196.85 ft/min)
-- **knots** - Nautical miles per hour (1 m/s = 1.944 knots) - convenient because 1 knot ≈ 100 ft/min ≈ 0.5 m/s
+- **ft/min** - Feet per minute (1 m/s = 196.85 ft/min, label: "fpm")
+- **knots** - Nautical miles per hour (1 m/s = 1.944 knots, label: "kts")
 
 ## User Interface
 
 ### Command Menu Integration
 
-Add a new "Units" group to the command dialog (⌘K) after "Display Options":
+A "Configure units..." menu item is available under the "Settings" group in the command dialog (Cmd+K):
 
 ```
 ─────────────────────────────────────
-Units
+Settings
 ─────────────────────────────────────
-Speed Unit                      (km/h)
-Altitude Unit                      (m)
-Distance Unit                     (km)
-Climb Rate Unit                  (m/s)
+⚙  Configure units...
 ```
 
-Each menu item:
-- Shows current unit selection in parentheses (muted text)
-- Clicking cycles to the next available unit option
-- Closes the command dialog after selection
-- Immediately updates all displayed values
+Keywords for search: `units configure settings speed altitude distance climb rate vario`
 
-### Keywords for Search
+### Units Configuration Dialog
 
-| Menu Item | Keywords |
-|-----------|----------|
-| Speed Unit | speed unit km/h mph knots velocity |
-| Altitude Unit | altitude unit meters feet elevation height |
-| Distance Unit | distance unit kilometers miles nautical |
-| Climb Rate Unit | climb rate vario sink thermal ft/min m/s knots |
+Clicking "Configure units..." opens a modal dialog with dropdown selects for each unit type:
+
+- **Speed**: km/h, mph, knots
+- **Altitude**: meters (m), feet (ft)
+- **Distance**: kilometers (km), miles (mi), nautical miles (nmi)
+- **Climb Rate**: m/s, ft/min, knots
+
+The dialog has a "Save" button that applies all changes at once.
+
+### Reactive Updates
+
+When units are changed:
+
+1. Flight events are **re-detected** to regenerate descriptions with the new units
+2. Event panel is re-rendered with updated values
+3. Map event markers are re-rendered
+4. Task labels (leg distances, turnpoint radius/altitude) are re-rendered
+5. Flight info header (max altitude) is updated
+6. **No page refresh required** - all updates happen immediately
 
 ## Architecture
 
 ### File Structure
 
 ```
-/pages/src/
-├── analysis/
-│   ├── config.ts        # Configuration abstraction layer (NEW)
-│   ├── units.ts         # Unit conversion module (NEW)
-│   ├── main.ts          # Wire up unit preferences
-│   ├── event-panel.ts   # Update to use units module
-│   ├── mapbox-provider.ts # Update to use units module
-│   └── glide-speed.ts   # Update to use units module
+/pages/src/analysis/
+├── config.ts           # Configuration storage abstraction
+├── units.ts            # Unit conversion and formatting module
+├── main.ts             # Wire up unit preferences and reactive updates
+├── event-detector.ts   # Uses units module for event descriptions
+├── event-panel.ts      # Uses units module for display
+├── mapbox-provider.ts  # Uses units module for map labels
+└── glide-speed.ts      # Provides speed in m/s for formatting at display layer
 ```
 
 ### Configuration Layer (`config.ts`)
 
-Abstraction over localStorage that can be migrated to a backend database.
+The `ConfigStore` class provides an abstraction over localStorage:
 
+**Key Features:**
+- Stores preferences under `taskscore:preferences` localStorage key
+- Provides `getPreferences()`, `setPreferences()`, `getUnits()`, `setUnit()` methods
+- Dispatches `taskscore:preferences-changed` custom event when preferences change
+- Designed for future migration to backend API (same interface)
+
+**Types:**
 ```typescript
-/**
- * Configuration storage abstraction.
- * Currently backed by localStorage, designed for future migration to backend API.
- */
-
-export interface UserPreferences {
-  units: UnitPreferences;
-  theme?: 'light' | 'dark' | 'system';
-  // Future preferences can be added here
-}
+export type SpeedUnit = 'km/h' | 'mph' | 'knots';
+export type AltitudeUnit = 'm' | 'ft';
+export type DistanceUnit = 'km' | 'mi' | 'nmi';
+export type ClimbRateUnit = 'm/s' | 'ft/min' | 'knots';
 
 export interface UnitPreferences {
   speed: SpeedUnit;
@@ -102,297 +109,58 @@ export interface UnitPreferences {
   distance: DistanceUnit;
   climbRate: ClimbRateUnit;
 }
-
-export type SpeedUnit = 'km/h' | 'mph' | 'knots';
-export type AltitudeUnit = 'm' | 'ft';
-export type DistanceUnit = 'km' | 'mi' | 'nmi';
-export type ClimbRateUnit = 'm/s' | 'ft/min' | 'knots';
-
-const STORAGE_KEY = 'taskscore:preferences';
-
-const DEFAULT_PREFERENCES: UserPreferences = {
-  units: {
-    speed: 'km/h',
-    altitude: 'm',
-    distance: 'km',
-    climbRate: 'm/s',
-  },
-};
-
-class ConfigStore {
-  private cache: UserPreferences | null = null;
-
-  /**
-   * Get all user preferences
-   */
-  getPreferences(): UserPreferences {
-    if (this.cache) return this.cache;
-
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        this.cache = { ...DEFAULT_PREFERENCES, ...JSON.parse(stored) };
-      } else {
-        this.cache = { ...DEFAULT_PREFERENCES };
-      }
-    } catch {
-      this.cache = { ...DEFAULT_PREFERENCES };
-    }
-
-    return this.cache;
-  }
-
-  /**
-   * Update user preferences (partial update supported)
-   */
-  setPreferences(updates: Partial<UserPreferences>): void {
-    const current = this.getPreferences();
-    const merged = {
-      ...current,
-      ...updates,
-      units: { ...current.units, ...updates.units },
-    };
-
-    this.cache = merged;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-
-    // Dispatch event for reactive updates
-    window.dispatchEvent(new CustomEvent('taskscore:preferences-changed', {
-      detail: merged
-    }));
-  }
-
-  /**
-   * Get unit preferences
-   */
-  getUnits(): UnitPreferences {
-    return this.getPreferences().units;
-  }
-
-  /**
-   * Update a single unit preference
-   */
-  setUnit<K extends keyof UnitPreferences>(
-    unitType: K,
-    value: UnitPreferences[K]
-  ): void {
-    this.setPreferences({
-      units: { [unitType]: value } as Partial<UnitPreferences>
-    });
-  }
-
-  /**
-   * Cycle to next unit option for a given unit type
-   */
-  cycleUnit(unitType: keyof UnitPreferences): void {
-    const options: Record<keyof UnitPreferences, string[]> = {
-      speed: ['km/h', 'mph', 'knots'],
-      altitude: ['m', 'ft'],
-      distance: ['km', 'mi', 'nmi'],
-      climbRate: ['m/s', 'ft/min', 'knots'],
-    };
-
-    const current = this.getUnits()[unitType];
-    const opts = options[unitType];
-    const currentIndex = opts.indexOf(current);
-    const nextIndex = (currentIndex + 1) % opts.length;
-
-    this.setUnit(unitType, opts[nextIndex] as UnitPreferences[typeof unitType]);
-  }
-}
-
-export const config = new ConfigStore();
 ```
 
 ### Units Module (`units.ts`)
 
+Provides conversion and formatting functions:
+
+**Core Functions:**
+- `formatUnit(value, unitType, options)` - Convert and format any value
+- `formatSpeed(mps)` - Format speed from m/s
+- `formatAltitude(m)` - Format altitude from meters
+- `formatDistance(m)` - Format distance from meters
+- `formatClimbRate(mps)` - Format climb rate from m/s (shows + sign by default)
+- `formatAltitudeChange(m)` - Format altitude change (always shows sign)
+- `formatRadius(m)` - Format turnpoint radius with appropriate precision
+- `onUnitsChanged(callback)` - Subscribe to unit preference changes
+
+**FormattedValue Interface:**
 ```typescript
-/**
- * Unit conversion and formatting module.
- * All internal values are in SI units (m, m/s).
- * This module handles conversion to display units.
- */
-
-import { config, type UnitPreferences } from './config';
-
-// Conversion factors from SI base units
-const CONVERSIONS = {
-  speed: {
-    'km/h': { factor: 3.6, decimals: 0, label: 'km/h' },
-    'mph': { factor: 2.237, decimals: 0, label: 'mph' },
-    'knots': { factor: 1.944, decimals: 0, label: 'kts' },
-  },
-  altitude: {
-    'm': { factor: 1, decimals: 0, label: 'm' },
-    'ft': { factor: 3.281, decimals: 0, label: 'ft' },
-  },
-  distance: {
-    'km': { factor: 0.001, decimals: 2, label: 'km' },
-    'mi': { factor: 0.000621371, decimals: 2, label: 'mi' },
-    'nmi': { factor: 0.000539957, decimals: 2, label: 'nmi' },
-  },
-  climbRate: {
-    'm/s': { factor: 1, decimals: 1, label: 'm/s' },
-    'ft/min': { factor: 196.85, decimals: 0, label: 'fpm' },
-    'knots': { factor: 1.944, decimals: 1, label: 'kts' },
-  },
-} as const;
-
-type UnitType = keyof typeof CONVERSIONS;
-
 interface FormattedValue {
-  value: number;
-  formatted: string;    // e.g., "45"
-  withUnit: string;     // e.g., "45km/h"
-  unit: string;         // e.g., "km/h"
-}
-
-/**
- * Convert and format a value for display
- */
-export function formatUnit(
-  value: number,
-  unitType: UnitType,
-  options?: {
-    unit?: string;           // Override unit preference
-    decimals?: number;       // Override decimal places
-    showSign?: boolean;      // Show +/- prefix
-  }
-): FormattedValue {
-  const prefs = config.getUnits();
-  const unitKey = options?.unit ?? prefs[unitType];
-  const conv = CONVERSIONS[unitType][unitKey as keyof typeof CONVERSIONS[typeof unitType]];
-
-  const converted = value * conv.factor;
-  const decimals = options?.decimals ?? conv.decimals;
-  const formatted = converted.toFixed(decimals);
-
-  const sign = options?.showSign && converted > 0 ? '+' : '';
-  const displayValue = sign + formatted;
-
-  const withUnit = conv.label
-    ? `${displayValue}${conv.label}`
-    : displayValue;
-
-  return {
-    value: converted,
-    formatted: displayValue,
-    withUnit,
-    unit: conv.label || unitKey,
-  };
-}
-
-// Convenience functions
-export const formatSpeed = (mps: number, opts?: { showSign?: boolean }) =>
-  formatUnit(mps, 'speed', opts);
-
-export const formatAltitude = (m: number, opts?: { showSign?: boolean }) =>
-  formatUnit(m, 'altitude', opts);
-
-export const formatDistance = (m: number, opts?: { decimals?: number }) =>
-  formatUnit(m, 'distance', opts);
-
-export const formatClimbRate = (mps: number, opts?: { showSign?: boolean }) =>
-  formatUnit(mps, 'climbRate', { ...opts, showSign: opts?.showSign ?? true });
-
-/**
- * Get the current unit label for a unit type
- */
-export function getUnitLabel(unitType: UnitType): string {
-  const prefs = config.getUnits();
-  const unitKey = prefs[unitType];
-  return CONVERSIONS[unitType][unitKey as keyof typeof CONVERSIONS[typeof unitType]].label || unitKey;
-}
-
-/**
- * Subscribe to unit preference changes
- */
-export function onUnitsChanged(callback: (units: UnitPreferences) => void): () => void {
-  const handler = (e: Event) => {
-    const detail = (e as CustomEvent).detail;
-    callback(detail.units);
-  };
-
-  window.addEventListener('taskscore:preferences-changed', handler);
-  return () => window.removeEventListener('taskscore:preferences-changed', handler);
+  value: number;      // Converted numeric value
+  formatted: string;  // Formatted string without unit (e.g., "45")
+  withUnit: string;   // Formatted string with unit (e.g., "45km/h")
+  unit: string;       // Unit label (e.g., "km/h")
 }
 ```
 
-## Display Updates
+## Display Locations
 
-### Locations Requiring Updates
+Units are applied in the following locations:
 
-1. **event-panel.ts** - Event list display
-   - Glide speed: `speedKmh` → `formatSpeed(speed).withUnit`
-   - Altitude values: `${altitude.toFixed(0)}m` → `formatAltitude(altitude).withUnit`
-   - Distance values: `${(distance/1000).toFixed(2)} km` → `formatDistance(distance).withUnit`
-   - Climb/sink rates: `+${rate.toFixed(1)} m/s` → `formatClimbRate(rate).withUnit`
+### Event Panel
+- Glide speed and L/D ratio
+- Altitude values (start/end, gain/loss)
+- Distance values
+- Climb/sink rates
 
-2. **mapbox-provider.ts** - Map labels
-   - Turnpoint labels: radius display
-   - Glide segment markers: speed and altitude change
+### Map Labels
+- Task leg distances (e.g., "Leg 1: 15.2km")
+- Turnpoint radius (e.g., "R 5km")
+- Turnpoint altitude (e.g., "A 3067m")
+- Glide segment speed labels
+- Glide segment altitude change labels
 
-3. **glide-speed.ts** - Glide visualization
-   - Speed labels on chevron markers
-   - Altitude change labels
+### Event Descriptions
+- Max/min altitude (e.g., "Max altitude: 2767m")
+- Max climb/sink (e.g., "Max climb: +3.2m/s")
+- Thermal entry (e.g., "Thermal entry (+2.4m/s avg)")
+- Thermal exit (e.g., "Thermal exit (+178m gained)")
+- Glide end (e.g., "Glide end (5.2km)")
 
-4. **main.ts** - Task distance display
-   - Optimized distance: `${(distance/1000).toFixed(2)} km` → `formatDistance(distance).withUnit`
-
-### Reactive Updates
-
-When units change via the command menu:
-1. `config.setUnit()` dispatches `taskscore:preferences-changed` event
-2. Components listening via `onUnitsChanged()` re-render affected displays
-3. No page reload required
-
-## Command Menu HTML
-
-Add to `analysis.html` after the Display Options separator:
-
-```html
-<hr role="separator">
-
-<!-- Units -->
-<div role="group" aria-labelledby="units-heading">
-    <div role="heading" id="units-heading">Units</div>
-    <div role="menuitem" id="menu-unit-speed" data-keywords="speed unit km/h mph knots velocity">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M19 17H5c-1.1 0-2-.9-2-2V7c0-1.1.9-2 2-2h14c1.1 0 2 .9 2 2v8c0 1.1-.9 2-2 2z"/>
-            <path d="M12 17v4"/>
-            <path d="M8 21h8"/>
-        </svg>
-        <span>Speed Unit</span>
-        <span class="text-muted-foreground" id="unit-speed-status">(km/h)</span>
-    </div>
-    <div role="menuitem" id="menu-unit-altitude" data-keywords="altitude unit meters feet elevation height">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-            <path d="M2 17l10 5 10-5"/>
-            <path d="M2 12l10 5 10-5"/>
-        </svg>
-        <span>Altitude Unit</span>
-        <span class="text-muted-foreground" id="unit-altitude-status">(m)</span>
-    </div>
-    <div role="menuitem" id="menu-unit-distance" data-keywords="distance unit kilometers miles nautical">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M18 6H5a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h13l4-3.5L18 6z"/>
-            <path d="M12 13v8"/>
-            <path d="M12 3v3"/>
-        </svg>
-        <span>Distance Unit</span>
-        <span class="text-muted-foreground" id="unit-distance-status">(km)</span>
-    </div>
-    <div role="menuitem" id="menu-unit-climbrate" data-keywords="climb rate vario sink thermal ft/min m/s knots">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 19V5"/>
-            <path d="M5 12l7-7 7 7"/>
-        </svg>
-        <span>Climb Rate Unit</span>
-        <span class="text-muted-foreground" id="unit-climbrate-status">(m/s)</span>
-    </div>
-</div>
-```
+### Flight Info Header
+- Max altitude display
 
 ## Migration Path to Backend
 
@@ -411,30 +179,17 @@ The interface remains unchanged for consuming code.
 
 ## Testing
 
-### Unit Tests
+### Manual Testing Checklist
 
-- `units.ts`: Verify conversion accuracy for all unit combinations
-- `config.ts`: Verify storage/retrieval, defaults, cycling
-
-### Manual Testing
-
-1. Open command menu (⌘K)
-2. Search "units" - verify all 4 unit options appear
-3. Click each unit type - verify it cycles through options
-4. Verify status text updates immediately
-5. Verify all displayed values update (event panel, map labels)
+1. Open command menu (Cmd+K)
+2. Search "units" - verify "Configure units..." appears
+3. Open the units dialog
+4. Change each unit type and click Save
+5. Verify all displayed values update immediately:
+   - Event panel entries
+   - Flight info header
+   - Map leg distance labels
+   - Map turnpoint labels
+   - Glide markers (when a glide is selected)
 6. Reload page - verify preferences persist
 7. Clear localStorage - verify defaults restored
-
-## Implementation Order
-
-1. Create `config.ts` with storage abstraction
-2. Create `units.ts` with conversion functions
-3. Add unit menu items to `analysis.html`
-4. Wire up menu handlers in `main.ts`
-5. Update `event-panel.ts` to use `formatUnit()`
-6. Update `mapbox-provider.ts` to use `formatUnit()`
-7. Update `glide-speed.ts` to use `formatUnit()`
-8. Update `main.ts` task distance display
-9. Add reactive update listeners
-10. Write tests

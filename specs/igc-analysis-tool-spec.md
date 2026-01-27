@@ -64,6 +64,26 @@ Quick access menu for display options and actions.
 **Sample Flights:**
 - Quick load sample IGC files for testing
 
+**Settings:**
+- **Configure units...** - Opens dialog to configure display units (see below)
+
+### Units Configuration
+
+Users can configure display units for measurements via the "Configure units..." option in the command palette. See `configurable-units-spec.md` for full details.
+
+**Configurable Units:**
+| Unit Type | Options | Default |
+|-----------|---------|---------|
+| Speed | km/h, mph, knots | km/h |
+| Altitude | m, ft | m |
+| Distance | km, mi, nmi | km |
+| Climb Rate | m/s, ft/min, knots | m/s |
+
+**Key Features:**
+- All values update immediately when units are changed (no page refresh required)
+- Preferences persist in localStorage
+- Accessed via command palette: Cmd+K → "Configure units..."
+
 ### Event Detection
 The tool automatically detects and displays:
 
