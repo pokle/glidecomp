@@ -76,6 +76,7 @@ async function init(): Promise<void> {
 
   // Units dialog
   const menuConfigureUnits = document.getElementById('menu-configure-units');
+  const menuClearStorage = document.getElementById('menu-clear-storage');
   const unitsDialog = document.getElementById('units-dialog') as HTMLDialogElement | null;
   const unitsForm = document.getElementById('units-form') as HTMLFormElement | null;
   const unitSpeedSelect = document.getElementById('unit-speed-select') as HTMLSelectElement | null;
@@ -276,6 +277,19 @@ async function init(): Promise<void> {
     commandDialog?.close();
     populateUnitsDialog();
     unitsDialog?.showModal();
+  });
+
+  // Clear storage
+  menuClearStorage?.addEventListener('click', async () => {
+    commandDialog?.close();
+    try {
+      await storage.clearAll();
+      await storageMenu?.refresh();
+      showStatus('Cleared all stored tasks and tracks', 'success');
+    } catch (err) {
+      console.error('Failed to clear storage:', err);
+      showStatus('Failed to clear storage', 'error');
+    }
   });
 
   // Handle units form submission

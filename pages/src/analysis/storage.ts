@@ -377,6 +377,52 @@ class StorageService {
     });
   }
 
+  // === Clear Operations ===
+
+  /**
+   * Clear all stored tasks.
+   */
+  async clearAllTasks(): Promise<void> {
+    await this.init();
+    if (!this.db) return;
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(TASKS_STORE, 'readwrite');
+      const store = tx.objectStore(TASKS_STORE);
+      const request = store.clear();
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
+   * Clear all stored tracks.
+   */
+  async clearAllTracks(): Promise<void> {
+    await this.init();
+    if (!this.db) return;
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(TRACKS_STORE, 'readwrite');
+      const store = tx.objectStore(TRACKS_STORE);
+      const request = store.clear();
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
+   * Clear all stored tasks and tracks.
+   */
+  async clearAll(): Promise<void> {
+    await Promise.all([
+      this.clearAllTasks(),
+      this.clearAllTracks(),
+    ]);
+  }
+
   // === Utilities ===
 
   /**
