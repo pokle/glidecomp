@@ -778,8 +778,8 @@ async function init(): Promise<void> {
         throw new Error(`Failed to fetch: ${response.status}`);
       }
       const content = await response.text();
-      const file = new File([content], filename, { type: 'text/plain' });
-      await loadIGCFile(file);
+      // Don't store sample files - they're already part of the app
+      await loadIGCContent(content, filename, false);
 
       // Close the command dialog
       commandDialog?.close();

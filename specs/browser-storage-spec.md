@@ -355,6 +355,10 @@ async function loadIGCFile(file: File): Promise<void> {
 }
 ```
 
+### Exception: Sample Flights
+
+Sample flights bundled with the app are **not** stored in browser storage. They are loaded directly via `loadIGCContent()` with `shouldStore: false`. This avoids duplicating data that's already available as static assets.
+
 ### Loading from Storage
 
 ```typescript
