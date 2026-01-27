@@ -253,6 +253,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         }
 
         // Add layers in order from bottom to top
+        const width_mul = 0.7;
 
         // 1. Task line (dashed route)
         map.addLayer({
@@ -322,11 +323,11 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
               'interpolate',
               ['linear'],
               ['zoom'],
-              3, 8,    // At zoom 3, width 8
-              8, 12,   // At zoom 8, width 12
-              12, 10,  // At zoom 12, width 10
+              3, 8 * width_mul,    // At zoom 3, width 8
+              8, 12 * width_mul,   // At zoom 8, width 12
+              12, 10 * width_mul,  // At zoom 12, width 10
             ],
-            'line-opacity': 0.4,
+            'line-opacity': 0.6,
           },
         });
 
@@ -346,9 +347,9 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
               'interpolate',
               ['linear'],
               ['zoom'],
-              3, 4,    // At zoom 3, width 4
-              8, 6,    // At zoom 8, width 6
-              12, 6,   // At zoom 12, width 6
+              3, 4 * width_mul,    // At zoom 3, width 4
+              8, 6 * width_mul,    // At zoom 8, width 6
+              12, 6 * width_mul,   // At zoom 12, width 6
             ],
             'line-opacity': 0.95,
           },
@@ -377,9 +378,9 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
               'interpolate',
               ['linear'],
               ['zoom'],
-              3, 4,
-              8, 6,
-              12, 6,
+              3, 4 * width_mul,
+              8, 6 * width_mul,
+              12, 6 * width_mul,
             ],
             'line-opacity': 0.95,
           },
