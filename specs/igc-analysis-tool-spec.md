@@ -118,13 +118,33 @@ The tool automatically detects and displays:
 | Max Climb/Sink | Maximum vertical speeds |
 
 ### Event Panel
-Collapsible sidebar with tabbed interface for viewing flight data. Uses Basecoat tabs component.
+Sidebar panel with tabbed interface for viewing flight data. The main tabs appear in the header bar and control the sidebar content.
 
-**Tabs:**
+**Header Tabs (always visible):**
+- **Track** - Flight track analysis with sub-tabs for events, glides, climbs, and sinks
+- **Task** - Task turnpoints with optimized distances, radii, and altitudes
+- **Terrain** - Flying area information (planned feature - currently placeholder)
+- **>>** (Hide) - Collapses the sidebar to show full map; clicking any other tab reopens it
+
+**Track Tab Sub-tabs:**
 - **Events** - Chronological list of all detected events (takeoff, thermals, glides, landing, etc.)
 - **Glides** - Glides sorted by distance (longest first), combining start/end info into single entries
 - **Climbs** - Thermals sorted by altitude gain (highest first), combining entry/exit info into single entries
 - **Sinks** - Glides with poor L/D ratio (5:1 or worse), sorted by altitude lost (deepest first)
+
+**Task Tab Features:**
+- Lists all turnpoints in order with:
+  - Turnpoint number and name
+  - Type badge (Takeoff/Start/Turnpoint/Goal) with color coding
+  - Cylinder radius
+  - Altitude (if available)
+  - Leg distance (from previous turnpoint)
+  - Cumulative distance from start
+- Updates automatically when a task is loaded
+
+**Terrain Tab:**
+- Placeholder for future flying area features
+- Will include: common waypoints, danger zones, lift generators, thermal hotspots, competition links
 
 **Events Tab Features:**
 - Click on an event: Pan to event location and highlight on map
@@ -212,7 +232,8 @@ This visual system helps pilots quickly identify and understand the spatial exte
     ├── igc-parser.ts     # IGC file format parser
     ├── xctsk-parser.ts   # XContest task format parser
     ├── event-detector.ts # Flight event detection algorithms
-    ├── event-panel.ts    # Event list UI component (Tailwind classes)
+    ├── analysis-panel.ts # Tabbed panel UI (Track/Task/Terrain tabs)
+    ├── event-panel.ts    # Legacy event list component (deprecated)
     ├── map-provider.ts   # Map provider interface
     ├── mapbox-provider.ts # MapBox GL JS implementation
     ├── geo.ts            # Geographic calculations (Turf.js wrapper)
@@ -301,3 +322,10 @@ Available at `/analysis.html`
 - [ ] Multiple flight comparison
 - [ ] Export analysis report
 - [ ] Thermal map aggregation
+- [ ] **Terrain tab features** - Flying area information:
+  - Common waypoints used in tasks
+  - Map polygons for danger/no-landing areas
+  - Lift generators (hot rocks, ridges, etc.)
+  - Historical thermal hotspots
+  - Links to competitions flown in the area
+  - Community announcements/message board

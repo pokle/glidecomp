@@ -50,26 +50,31 @@
                 <span class="hidden text-sm text-muted-foreground sm:inline">IGC Analysis</span>
             </div>
 
-            <div class="flex items-center gap-2">
-                <!-- Events panel toggle -->
-                <button
-                    id="sidebar-toggle"
-                    class="btn btn-ghost"
-                    aria-label="Toggle events panel"
-                    onclick="document.dispatchEvent(new CustomEvent('basecoat:sidebar', {detail: {id: 'waypoint-sidebar'}}))"
-                >
-                    Events
-                </button>
+            <div class="flex items-center gap-1">
+                <!-- Panel tabs in header - always visible -->
+                <div class="tabs">
+                    <nav role="tablist" class="flex">
+                        <button type="button" role="tab" id="header-tab-track" aria-selected="true" class="px-3 py-1.5 text-sm">Track</button>
+                        <button type="button" role="tab" id="header-tab-task" aria-selected="false" class="px-3 py-1.5 text-sm">Task</button>
+                        <button type="button" role="tab" id="header-tab-terrain" aria-selected="false" class="px-3 py-1.5 text-sm">Terrain</button>
+                        <button type="button" role="tab" id="header-tab-hide" aria-selected="false" class="px-2 py-1.5" title="Hide panel">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="13 17 18 12 13 7"/>
+                                <polyline points="6 17 11 12 6 7"/>
+                            </svg>
+                        </button>
+                    </nav>
+                </div>
             </div>
         </header>
 
         <!-- Main content -->
         <main class="relative flex flex-1 min-h-0 overflow-hidden gap-0">
-            <!-- Waypoint Panel Sidebar (slides in from right) -->
+            <!-- Analysis Panel Sidebar (slides in from right) -->
             <aside
                 id="waypoint-sidebar"
-                class="fixed top-14 bottom-0 right-0 z-40 w-80 translate-x-full border-l border-border bg-card transition-transform duration-300"
-                aria-hidden="true"
+                class="fixed top-14 bottom-0 right-0 z-40 w-80 border-l border-border bg-card transition-transform duration-300"
+                aria-hidden="false"
                 data-side="right"
             >
                 <nav class="flex h-full flex-col" aria-label="Waypoint panel">
