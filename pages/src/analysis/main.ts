@@ -12,7 +12,7 @@ import { parseIGC, IGCFile, IGCFix } from './igc-parser';
 import { fetchTaskByCodeWithRaw, XCTask, calculateOptimizedTaskDistance, igcTaskToXCTask } from './xctsk-parser';
 import { createMapProvider, MapProvider } from './map-provider';
 import { detectFlightEvents, FlightEvent } from './event-detector';
-import { createEventPanel, EventPanel, FlightInfo } from './event-panel';
+import { createAnalysisPanel, AnalysisPanel, FlightInfo } from './analysis-panel';
 import { loadCorryongWaypoints, type WaypointRecord } from './waypoints';
 import { config, type UnitPreferences } from './config';
 import { formatAltitude, formatDistance, onUnitsChanged } from './units';
@@ -37,7 +37,7 @@ const state: AppState = {
 };
 
 let mapRenderer: MapProvider | null = null;
-let eventPanel: EventPanel | null = null;
+let analysisPanel: AnalysisPanel | null = null;
 let storageMenu: StorageMenu | null = null;
 let waypointDatabase: WaypointRecord[] = [];
 
@@ -150,8 +150,8 @@ async function init(): Promise<void> {
         updateUrlParam('alt', isAltitudeColorsEnabled ? null : '0');
       }
 
-      // Clear event panel selection since map highlights are cleared
-      eventPanel?.clearSelection();
+      // Clear analysis panel selection since map highlights are cleared
+      analysisPanel?.clearSelection();
 
       // Close the command dialog
       commandDialog?.close();
@@ -178,8 +178,8 @@ async function init(): Promise<void> {
         updateUrlParam('3d', is3DTrackEnabled ? '1' : null);
       }
 
-      // Clear event panel selection since map highlights are cleared
-      eventPanel?.clearSelection();
+      // Clear analysis panel selection since map highlights are cleared
+      analysisPanel?.clearSelection();
 
       // Close the command dialog
       commandDialog?.close();
@@ -229,9 +229,9 @@ async function init(): Promise<void> {
         updateUrlParam('track-visible', isTrackVisible ? null : '0');
       }
 
-      // Clear event panel selection when hiding track
+      // Clear analysis panel selection when hiding track
       if (!isTrackVisible) {
-        eventPanel?.clearSelection();
+        analysisPanel?.clearSelection();
       }
 
       // Close the command dialog
@@ -296,9 +296,10 @@ async function init(): Promise<void> {
       mapRenderer.clearEvents();
     }
 
-    // Clear event panel
-    eventPanel?.setEvents([]);
-    eventPanel?.setFlightInfo({});
+    // Clear analysis panel
+    analysisPanel?.setEvents([]);
+    analysisPanel?.setFlightInfo({});
+    analysisPanel?.setTask(null);
 
     showStatus('Ready - drop an IGC file or use the file picker', 'info');
   });
@@ -322,7 +323,7 @@ async function init(): Promise<void> {
     // Re-detect events to regenerate descriptions with new units
     if (state.fixes.length > 0) {
       state.events = detectFlightEvents(state.fixes, state.task || undefined);
-      eventPanel?.setEvents(state.events);
+      analysisPanel?.setEvents(state.events);
       mapRenderer?.setEvents(state.events);
     }
 
@@ -331,6 +332,7 @@ async function init(): Promise<void> {
     // Re-render map task labels with new units
     if (state.task && mapRenderer) {
       mapRenderer.setTask(state.task);
+      analysisPanel?.setTask(state.task);
     }
   });
 
@@ -375,20 +377,39 @@ async function init(): Promise<void> {
     }
   };
 
-  // Initialize event panel
-  eventPanel = createEventPanel({
+  // Initialize analysis panel with hide/show callbacks for sidebar visibility
+  analysisPanel = createAnalysisPanel({
     container: eventPanelContainer,
     onEventClick: handleEventClick,
     onToggle: handlePanelToggle,
+    onHide: () => {
+      if (sidebar) {
+        sidebar.setAttribute('aria-hidden', 'true');
+        sidebar.classList.add('translate-x-full');
+        sidebarBackdrop?.classList.add('hidden');
+      }
+    },
+    onShow: () => {
+      if (sidebar) {
+        sidebar.setAttribute('aria-hidden', 'false');
+        sidebar.classList.remove('translate-x-full');
+        // Only show backdrop on mobile
+        if (window.innerWidth < 768) {
+          sidebarBackdrop?.classList.remove('hidden');
+        }
+      }
+    },
   });
 
   // Register track click handler to select events when clicking on the track
   mapRenderer.onTrackClick?.((fixIndex: number) => {
-    // Open event panel if closed
-    eventPanel?.open();
+    // Open analysis panel if hidden
+    if (analysisPanel?.isHidden()) {
+      analysisPanel.show();
+    }
 
     // Select the event for this fix (skip panning since user clicked directly on the track)
-    eventPanel?.selectByFixIndex(fixIndex, { skipPan: true });
+    analysisPanel?.selectByFixIndex(fixIndex, { skipPan: true });
   });
 
   // Open IGC menu item triggers hidden file input
@@ -517,8 +538,11 @@ async function init(): Promise<void> {
     // Detect events
     state.events = detectFlightEvents(igcFile.fixes, state.task || undefined);
 
-    // Update event panel
-    eventPanel?.setEvents(state.events);
+    // Update analysis panel
+    analysisPanel?.setEvents(state.events);
+    if (state.task) {
+      analysisPanel?.setTask(state.task);
+    }
 
     // Update map events
     if (mapRenderer) {
@@ -598,11 +622,14 @@ async function init(): Promise<void> {
         mapRenderer.setTask(task);
       }
 
+      // Update analysis panel with task
+      analysisPanel?.setTask(task);
+
       // Re-detect events with task
       if (state.fixes.length > 0) {
         state.events = detectFlightEvents(state.fixes, task);
 
-        eventPanel?.setEvents(state.events);
+        analysisPanel?.setEvents(state.events);
 
         if (mapRenderer) {
           mapRenderer.setEvents(state.events);
@@ -640,11 +667,14 @@ async function init(): Promise<void> {
         mapRenderer.setTask(stored.task);
       }
 
+      // Update analysis panel with task
+      analysisPanel?.setTask(stored.task);
+
       // Re-detect events with task
       if (state.fixes.length > 0) {
         state.events = detectFlightEvents(state.fixes, stored.task);
 
-        eventPanel?.setEvents(state.events);
+        analysisPanel?.setEvents(state.events);
 
         if (mapRenderer) {
           mapRenderer.setEvents(state.events);
@@ -701,7 +731,7 @@ async function init(): Promise<void> {
       info.task = `${numTurnpoints} TPs, ${distanceFormatted.withUnit}`;
     }
 
-    eventPanel?.setFlightInfo(info);
+    analysisPanel?.setFlightInfo(info);
   }
 
   /**
