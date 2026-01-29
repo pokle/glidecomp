@@ -17,7 +17,7 @@ async function fetchTrackFromAirScore(
   baseUrl: string,
   trackId: string
 ): Promise<string> {
-  const url = `${baseUrl}/download_track.php?track_id=${trackId}`;
+  const url = `${baseUrl}/download_tracks.php?traPk=${trackId}`;
 
   const response = await fetch(url, {
     headers: {
