@@ -7,8 +7,8 @@ compatibility_date = "2024-12-01"
 # wrangler kv:namespace create AIRSCORE_CACHE --preview
 [[kv_namespaces]]
 binding = "AIRSCORE_CACHE"
-id = "placeholder-create-with-wrangler"
-preview_id = "placeholder-create-with-wrangler"
+id = "587aa70354de4a9c91df008af831c5a1"
+preview_id = "db2cf2bfcab64eac9e24b2f3c4c63e9f" # Called AIRSCORE_CACHE_PREVIEW
 
 [vars]
 AIRSCORE_BASE_URL = "https://xc.highcloud.net"
