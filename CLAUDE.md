@@ -35,16 +35,20 @@ Frontend (Pages) ←→ API Worker ←→ R2 + D1
 ```bash
 npm install          # Install dependencies
 npm run dev          # Local development server (Pages)
-npm run typecheck    # TypeScript type checking
+npm run typecheck    # TypeScript type checking (root project)
+npm run typecheck:all # Type check everything (Pages + Workers)
 npm run test         # Run tests with vitest
 npm run deploy       # Manual deploy to Cloudflare Pages
+npm run deploy:worker # Manual deploy AirScore API Worker
+npm run deploy:all   # Deploy Pages + all Workers
 ```
 
 **CI/CD:**
 - GitHub Actions runs on every push
-- Runs typecheck → tests → deploy
+- Runs `typecheck:all` → tests → deploy (Pages + Workers)
 - `master` branch deploys to production
 - Other branches deploy to preview environments
+- Worker deployment requires KV namespace setup (see Workers Development)
 
 **URLs:**
 - Production: https://taskscore.shonky.info (also https://taskscore.pages.dev)
@@ -105,6 +109,12 @@ curl "https://airscore-api.{account}.workers.dev/api/airscore/task?comPk=466&tas
 ```bash
 cd workers/airscore-api
 npm run typecheck
+```
+
+**Clear Local Cache:**
+```bash
+cd workers/airscore-api
+npm run clear-cache  # Removes .wrangler/state (local KV data)
 ```
 
 ### Running Pages + Workers Together

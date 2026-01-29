@@ -8,8 +8,12 @@
     "dev": "npm run dev --workspace=pages",
     "build": "npm run build --workspace=pages",
     "deploy": "npm run deploy --workspace=pages",
+    "deploy:worker": "npm run deploy --workspace=airscore-api",
+    "deploy:all": "npm run deploy && npm run deploy:worker",
     "deployments": "wrangler pages deployment list --project-name=taskscore --json | jq .",
     "typecheck": "tsc --noEmit",
+    "typecheck:worker": "npm run typecheck --workspace=airscore-api",
+    "typecheck:all": "npm run typecheck && npm run typecheck:worker",
     "test": "vitest run",
     "get-xcontest-task": "tsx scripts/get-xcontest-task.ts"
   },
