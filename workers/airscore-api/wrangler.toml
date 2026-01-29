@@ -1,0 +1,25 @@
+name = "airscore-api"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+# KV namespace for caching - create with:
+# wrangler kv:namespace create AIRSCORE_CACHE
+# wrangler kv:namespace create AIRSCORE_CACHE --preview
+[[kv_namespaces]]
+binding = "AIRSCORE_CACHE"
+id = "placeholder-create-with-wrangler"
+preview_id = "placeholder-create-with-wrangler"
+
+[vars]
+AIRSCORE_BASE_URL = "https://xc.highcloud.net"
+CACHE_TTL_TASK = "3600"
+CACHE_TTL_TRACK = "86400"
+
+# For local development, use a local KV store
+[dev]
+port = 8787
+
+# Production route (uncomment and configure when deploying)
+# [[routes]]
+# pattern = "taskscore.shonky.info/api/airscore/*"
+# zone_name = "shonky.info"

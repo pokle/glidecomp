@@ -54,16 +54,88 @@ npm run deploy       # Manual deploy to Cloudflare Pages
 - `CLOUDFLARE_ACCOUNT_ID` - Cloudflare account ID
 - `CLOUDFLARE_API_TOKEN` - API token with Pages write access
 
+## Workers Development
+
+Workers are located in `/workers/` with each worker in its own subdirectory.
+
+### AirScore API Worker (`workers/airscore-api`)
+
+Caching proxy for the AirScore API that transforms task/track data for the analysis tool.
+
+**Local Development:**
+```bash
+cd workers/airscore-api
+npm install                    # Install worker dependencies
+npm run dev                    # Start local worker at http://localhost:8787
+```
+
+**Testing Locally:**
+```bash
+# Test task endpoint (fetches and transforms AirScore data)
+curl "http://localhost:8787/api/airscore/task?comPk=466&tasPk=2030"
+
+# Test track endpoint (fetches IGC file)
+curl "http://localhost:8787/api/airscore/track?trackId=43826"
+
+# Test health/info endpoint
+curl "http://localhost:8787/"
+```
+
+**Deploy to Cloudflare:**
+```bash
+cd workers/airscore-api
+
+# First time: Create KV namespace for caching
+wrangler kv:namespace create AIRSCORE_CACHE
+wrangler kv:namespace create AIRSCORE_CACHE --preview
+
+# Update wrangler.toml with the namespace IDs from above commands
+
+# Deploy
+npm run deploy
+```
+
+**Testing on Cloudflare:**
+```bash
+# Replace {worker-url} with your deployed worker URL
+curl "https://airscore-api.{account}.workers.dev/api/airscore/task?comPk=466&tasPk=2030"
+```
+
+**Type Checking:**
+```bash
+cd workers/airscore-api
+npm run typecheck
+```
+
+### Running Pages + Workers Together
+
+For full local development with both Pages and Workers:
+
+```bash
+# Terminal 1: Start the worker
+cd workers/airscore-api && npm run dev
+
+# Terminal 2: Start the Pages dev server
+npm run dev
+```
+
+The frontend's AirScore client (`pages/src/analysis/airscore-client.ts`) automatically connects to `localhost:8787` in development mode.
+
 ## Project Structure
 
 ```
-/pages/           - Cloudflare Pages frontend
-  /public/        - Static assets (HTML, CSS, etc.)
-  /src/           - TypeScript source
-/workers/         - Cloudflare Workers (Email, API) - not yet implemented
-/tests/           - Test files
-/specs/           - Feature and architecture specifications
-/explorations/    - Experimental code (NOT for production use)
+/pages/                    - Cloudflare Pages frontend
+  /public/                 - Static assets (HTML, CSS, etc.)
+  /src/                    - TypeScript source
+    /analysis/             - IGC analysis tool modules
+      airscore-client.ts   - Client for AirScore API worker
+/workers/                  - Cloudflare Workers
+  /airscore-api/           - AirScore caching proxy (implemented)
+    /src/                  - Worker source code
+    wrangler.toml          - Worker configuration
+/tests/                    - Test files
+/specs/                    - Feature and architecture specifications
+/explorations/             - Experimental code (NOT for production use)
 ```
 
 ## Key Data Model
