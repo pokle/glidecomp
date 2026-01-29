@@ -20,6 +20,6 @@ CACHE_TTL_TRACK = "86400"
 port = 8787
 
 # Production route (uncomment and configure when deploying)
-# [[routes]]
-# pattern = "taskscore.shonky.info/api/airscore/*"
-# zone_name = "shonky.info"
+[[routes]]
+pattern = "taskscore.shonky.info/api/airscore/*"
+zone_name = "shonky.info"
