@@ -13,7 +13,7 @@ import { XCTask } from './xctsk-parser';
 import { FlightEvent, getEventStyle } from './event-detector';
 import { calculateGlideMarkers } from './glide-speed';
 import type { MapProvider } from './map-provider';
-import { haversineDistance, getCirclePoints } from './geo';
+import { haversineDistance, getCirclePoints, calculateBearing } from './geo';
 import { formatDistance, formatRadius, formatAltitude, formatSpeed, formatAltitudeChange } from './units';
 
 // Set MapBox access token from environment variable
@@ -452,13 +452,15 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           source: 'task-segment-labels',
           layout: {
             'text-field': ['get', 'distance'],
-            'text-size': 11,
+            'text-size': 20,
+            'text-rotate': ['get', 'bearing'],
+            'text-rotation-alignment': 'map',
             'text-offset': [0, 0],
             'text-anchor': 'center',
           },
           paint: {
             'text-color': '#6366f1',
-            'text-halo-color': '#ffffff',
+            'text-halo-color': '#eeeeee',
             'text-halo-width': 2,
           },
         });
@@ -1147,12 +1149,22 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
             const midLon = (p1.lon + p2.lon) / 2;
             const midLat = (p1.lat + p2.lat) / 2;
 
+            // Calculate bearing for text rotation
+            // Subtract 90 because MapBox text-rotate is relative to horizontal (0=left-to-right)
+            // while geographic bearing is relative to north (0=up)
+            let bearing = calculateBearing(p1.lat, p1.lon, p2.lat, p2.lon) - 90;
+
+            // Normalize to -90 to 90 range so text is never upside down
+            const bearingNormalized = (bearing > 90) ? bearing - 180 : ((bearing < -90) ? bearing + 180 : bearing);
+            const bearingArrow = (bearing > 90) ? '>>' : ((bearing < -90) ? '<<' : '>>');
             const distanceStr = formatDistance(distance, { decimals: 1 }).withUnit;
+
             const legNumber = i + 1;
             segmentLabelFeatures.push({
               type: 'Feature' as const,
               properties: {
-                distance: `Leg ${legNumber}: ${distanceStr}`,
+                distance: `${bearingArrow} Leg ${legNumber} (${distanceStr})`,
+                bearing: bearingNormalized,
               },
               geometry: {
                 type: 'Point' as const,
