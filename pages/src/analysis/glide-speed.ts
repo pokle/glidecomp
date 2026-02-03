@@ -107,13 +107,13 @@ export function calculateGlidePositions(
  * Calculate glide markers (chevrons and speed labels) for a glide segment.
  *
  * Layout:
- * - Speed labels at 250m, 750m, 1250m, ... (showing speed for the 500m segment)
- * - Chevrons at 500m, 1000m, 1500m, ...
+ * - Speed labels at 500m, 1500m, 2500m, ... (showing speed for each 1km segment)
+ * - Chevrons at 1000m, 2000m, 3000m, ...
  *
  * Speed calculation:
- * - Each speed label shows the average speed for its 500m segment
- * - First label (250m): speed from 0m to 500m (or to end if shorter)
- * - Second label (750m): speed from 500m to 1000m
+ * - Each speed label shows the average speed for its 1km segment
+ * - First label (500m): speed from 0m to 1000m (or to end if shorter)
+ * - Second label (1500m): speed from 1000m to 2000m
  * - etc.
  *
  * Glide ratio and altitude:
@@ -125,10 +125,10 @@ export function calculateGlidePositions(
  * @returns Array of markers with positions, speeds, glide ratios, and altitude differences
  */
 export function calculateGlideMarkers(fixes: IGCFix[]): GlideMarker[] {
-  const LABEL_INTERVAL = 250; // meters
-  const CHEVRON_INTERVAL = 500; // meters
+  const SEGMENT_LENGTH = 1000; // meters
+  const LABEL_INTERVAL = SEGMENT_LENGTH / 2; // label at segment midpoint
 
-  // Get positions at 250m intervals
+  // Get positions at 500m intervals
   const positions = calculateGlidePositions(fixes, LABEL_INTERVAL);
 
   if (positions.length === 0) {
@@ -141,13 +141,13 @@ export function calculateGlideMarkers(fixes: IGCFix[]): GlideMarker[] {
 
   for (let i = 0; i < positions.length; i++) {
     const pos = positions[i];
-    const isLabel = (i % 2 === 0); // 250m, 750m, 1250m, etc. (indices 0, 2, 4, ...)
+    const isLabel = (i % 2 === 0); // 500m, 1500m, 2500m, etc. (indices 0, 2, 4, ...)
 
     if (isLabel) {
-      // Calculate speed for the 500m segment that this label is in the middle of
-      // Segment boundaries: 0-500m, 500-1000m, 1000-1500m, etc.
-      // Label at 250m covers segment 0-500m
-      // Label at 750m covers segment 500-1000m
+      // Calculate speed for the 1km segment that this label is in the middle of
+      // Segment boundaries: 0-1000m, 1000-2000m, 2000-3000m, etc.
+      // Label at 500m covers segment 0-1000m
+      // Label at 1500m covers segment 1000-2000m
       // etc.
 
       // Get time at start of segment (previous chevron, or start of glide)
@@ -168,7 +168,7 @@ export function calculateGlideMarkers(fixes: IGCFix[]): GlideMarker[] {
       const altitudeDiff = segmentEndAltitude - segmentStartAltitude;
 
       // Calculate actual distance for this segment
-      // If we have both start and end positions, it's a full 500m segment
+      // If we have both start and end positions, it's a full 1km segment
       // Otherwise, it's a partial segment
       let segmentDistance: number;
       if (i === 0) {
@@ -204,7 +204,7 @@ export function calculateGlideMarkers(fixes: IGCFix[]): GlideMarker[] {
         altitudeDiff: Math.round(altitudeDiff),
       });
     } else {
-      // Chevron at 500m, 1000m, 1500m, etc. (indices 1, 3, 5, ...)
+      // Chevron at 1000m, 2000m, 3000m, etc. (indices 1, 3, 5, ...)
       markers.push({
         type: 'chevron',
         lat: pos.lat,

@@ -89,7 +89,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
               <button class="glide-legend-btn" title="Glide metrics help">?</button>
               <div class="glide-legend-content">
                 <div class="glide-legend-title">Glide Metrics</div>
-                <div class="glide-legend-item"><strong>Chevrons:</strong> 500m segment markers</div>
+                <div class="glide-legend-item"><strong>Chevrons:</strong> 1km segment markers</div>
                 <div class="glide-legend-item"><strong>Speed:</strong> Average speed of segment</div>
                 <div class="glide-legend-item"><strong>L/D:</strong> Glide ratio (distance ÷ altitude lost)</div>
                 <div class="glide-legend-item"><strong>Alt:</strong> Altitude change from segment start to end</div>
@@ -434,7 +434,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           source: 'task-points',
           layout: {
             'text-field': ['get', 'name'],
-            'text-size': 12,
+            'text-size': 20,
             'text-offset': [0, 1.5],
             'text-anchor': 'top',
           },
@@ -1352,7 +1352,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
                 }],
               });
 
-              // For glide events, add direction chevrons every ~500m with speed labels
+              // For glide events, add direction chevrons every ~1km with speed labels
               if (event.type === 'glide_start' || event.type === 'glide_end') {
                 const glideMarkers = calculateGlideMarkers(segmentFixes);
 
@@ -1361,7 +1361,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
                     // Create speed label with glide ratio and altitude
                     const labelEl = document.createElement('div');
                     labelEl.style.cssText = `
-                      font-size: 12px;
+                      font-size: 16px;
                       font-weight: 600;
                       color: #3b82f6;
                       white-space: nowrap;
