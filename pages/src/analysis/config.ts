@@ -3,9 +3,17 @@
  * Currently backed by localStorage, designed for future migration to backend API.
  */
 
+export interface MapLocation {
+  center: [lng: number, lat: number];
+  zoom: number;
+  pitch: number;
+  bearing: number;
+}
+
 export interface UserPreferences {
   units: UnitPreferences;
   theme?: 'light' | 'dark' | 'system';
+  mapLocation?: MapLocation;
 }
 
 export interface UnitPreferences {
@@ -120,6 +128,20 @@ class ConfigStore {
     const nextIndex = (currentIndex + 1) % opts.length;
 
     this.setUnit(unitType, opts[nextIndex] as UnitPreferences[typeof unitType]);
+  }
+
+  /**
+   * Get saved map location, if any
+   */
+  getMapLocation(): MapLocation | undefined {
+    return this.getPreferences().mapLocation;
+  }
+
+  /**
+   * Save map location
+   */
+  setMapLocation(location: MapLocation): void {
+    this.setPreferences({ mapLocation: location });
   }
 
   /**

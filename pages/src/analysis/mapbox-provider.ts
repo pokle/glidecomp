@@ -15,6 +15,7 @@ import { calculateGlideMarkers } from './glide-speed';
 import type { MapProvider } from './map-provider';
 import { haversineDistance, getCirclePoints, calculateBearing } from './geo';
 import { formatDistance, formatRadius, formatAltitude, formatSpeed, formatAltitudeChange } from './units';
+import { config } from './config';
 
 // Set MapBox access token from environment variable
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -42,12 +43,14 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       // Get default style
       const defaultStyle = MAPBOX_STYLES[0].style;
 
+      const savedLocation = config.getMapLocation();
       const map = new mapboxgl.Map({
         container,
         style: defaultStyle,
-        // center: [-36, 147],
-        zoom: 2,
-        pitch: 45,
+        center: savedLocation?.center,
+        zoom: savedLocation?.zoom ?? 2,
+        pitch: savedLocation?.pitch ?? 45,
+        bearing: savedLocation?.bearing ?? 0,
         maxPitch: 85,
         localFontFamily: MAP_FONT_FAMILY,
       });
@@ -710,11 +713,23 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         console.error('MapBox error:', e.error);
       });
 
-      // Track bounds changes
+      // Track bounds changes and persist map location
+      let saveLocationTimer: ReturnType<typeof setTimeout> | null = null;
       map.on('moveend', () => {
         if (boundsChangeCallback) {
           boundsChangeCallback();
         }
+        // Debounce saving to avoid excessive localStorage writes during animations
+        if (saveLocationTimer) clearTimeout(saveLocationTimer);
+        saveLocationTimer = setTimeout(() => {
+          const center = map.getCenter();
+          config.setMapLocation({
+            center: [center.lng, center.lat],
+            zoom: map.getZoom(),
+            pitch: map.getPitch(),
+            bearing: map.getBearing(),
+          });
+        }, 5000);
       });
 
       /**

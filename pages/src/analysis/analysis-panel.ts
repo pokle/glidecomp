@@ -311,7 +311,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   let allEvents: FlightEvent[] = [];
   let filteredEvents: FlightEvent[] = [];
   let currentTask: XCTask | null = null;
-  let isPanelHidden = false;
+  let isPanelHidden = true;
   let currentTab: PanelTab = 'track';
   let trackViewMode: TrackViewMode = 'all';
   let selectedSegment: { startIndex: number; endIndex: number } | null = null;

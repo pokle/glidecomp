@@ -416,6 +416,11 @@ async function init(): Promise<void> {
     },
   });
 
+  // Show panel by default on desktop; stays hidden on mobile
+  if (window.innerWidth >= 768) {
+    analysisPanel.show();
+  }
+
   // Set up header tab controls for the analysis panel
   const headerTabTrack = document.getElementById('header-tab-track');
   const headerTabTask = document.getElementById('header-tab-task');
