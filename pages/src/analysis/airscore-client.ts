@@ -71,10 +71,15 @@ export interface AirScoreError {
 
 /**
  * Base URL for the AirScore API worker.
- * In development (localhost), this points to the local worker.
+ * Uses VITE_AIRSCORE_URL env var if set (e.g. production URL during local dev).
+ * Otherwise, in development (localhost), this points to the local worker.
  * In production, this is proxied through the Pages site.
  */
 function getAirScoreApiBase(): string {
+  const envUrl = import.meta.env.VITE_AIRSCORE_URL;
+  if (envUrl) {
+    return envUrl;
+  }
   // Check if running on localhost (dev) or production
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
     return 'http://localhost:8787/api/airscore';
