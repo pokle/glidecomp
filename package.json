@@ -33,6 +33,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@fontsource/atkinson-hyperlegible-next": "^5.2.7",
     "@turf/bbox": "^7.3.2",
     "@turf/bearing": "^7.3.2",
     "@turf/destination": "^7.3.2",

@@ -19,6 +19,9 @@ import { formatDistance, formatRadius, formatAltitude, formatSpeed, formatAltitu
 // Set MapBox access token from environment variable
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
+// Font family for map text elements (loaded via Google Fonts in analysis.html)
+const MAP_FONT_FAMILY = "'Atkinson Hyperlegible Next', sans-serif";
+
 // MapBox style options
 const MAPBOX_STYLES = [
   { id: 'outdoors', name: 'Outdoors', style: 'mapbox://styles/mapbox/outdoors-v12' },
@@ -46,6 +49,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         zoom: 2,
         pitch: 45,
         maxPitch: 85,
+        localFontFamily: MAP_FONT_FAMILY,
       });
 
       // State
@@ -131,7 +135,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
               bottom: 30px;
               right: 10px;
               z-index: 1000;
-              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              font-family: ${MAP_FONT_FAMILY};
             `;
 
             // Add styles for the legend
@@ -1395,6 +1399,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
                     // Create speed label with glide ratio and altitude
                     const labelEl = document.createElement('div');
                     labelEl.style.cssText = `
+                      font-family: ${MAP_FONT_FAMILY};
                       font-size: 16px;
                       font-weight: 600;
                       color: #3b82f6;
