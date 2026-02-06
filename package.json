@@ -5,9 +5,9 @@
   "description": "Hanggliding/paragliding competition track log analysis",
   "type": "module",
   "scripts": {
-    "dev": "bun run --filter pages dev",
-    "build": "bun run --filter pages build",
-    "deploy": "bun run --filter pages deploy",
+    "dev": "bun run --filter '@taskscore/pages' dev",
+    "build": "bun run --filter '@taskscore/pages' build",
+    "deploy": "bun run --filter '@taskscore/pages' deploy",
     "deploy:worker": "bun run --filter airscore-api deploy",
     "deploy:all": "bun run deploy && bun run deploy:worker",
     "deployments": "wrangler pages deployment list --project-name=taskscore --json | jq .",
