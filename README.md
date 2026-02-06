@@ -32,13 +32,13 @@ In the last example, it's useful to know the distance to the next waypoint in th
 
 ## Development
 
-**Prerequisites:** Node.js 20+
+**Prerequisites:** [Bun](https://bun.sh/) (also requires Node.js 20+)
 
 ```bash
-npm install          # Install dependencies
-npm run dev          # Local development server
-npm run typecheck    # Type checking
-npm run test         # Run tests
+bun install          # Install dependencies
+bun run dev          # Local development server
+bun run typecheck    # Type checking
+bun run test         # Run tests
 ```
 
 **Deployment:**
@@ -50,4 +50,4 @@ npm run test         # Run tests
 - Previews: https://{branch}.taskscore.pages.dev
 
 ## Troubleshooting tools
-- `npm run get-xcontest-task` - Download task from XContest
+- `bun run get-xcontest-task` - Download task from XContest

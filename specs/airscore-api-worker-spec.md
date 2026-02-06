@@ -173,7 +173,7 @@ The frontend client (`pages/src/analysis/airscore-client.ts`) automatically dete
 
 ```bash
 cd workers/airscore-api
-npm run deploy
+bun run deploy
 ```
 
 ### Production Routing

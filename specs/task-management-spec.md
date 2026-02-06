@@ -378,7 +378,7 @@ When multiple tasks match, show a selection dialog:
 3. **Create task**: Use command menu → Create Task → fill form
 4. **Verify storage**: Check D1 database has the task
 5. **Load track**: Load an IGC file and verify matching tasks appear
-6. **Run tests**: `npm run test`
+6. **Run tests**: `bun run test`
 
 ---
 

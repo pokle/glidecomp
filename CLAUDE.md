@@ -33,14 +33,14 @@ Frontend (Pages) ←→ API Worker ←→ R2 + D1
 
 **Commands:**
 ```bash
-npm install          # Install dependencies
-npm run dev          # Local development server (Pages)
-npm run typecheck    # TypeScript type checking (root project)
-npm run typecheck:all # Type check everything (Pages + Workers)
-npm run test         # Run tests with vitest
-npm run deploy       # Manual deploy to Cloudflare Pages
-npm run deploy:worker # Manual deploy AirScore API Worker
-npm run deploy:all   # Deploy Pages + all Workers
+bun install          # Install dependencies
+bun run dev          # Local development server (Pages)
+bun run typecheck    # TypeScript type checking (root project)
+bun run typecheck:all # Type check everything (Pages + Workers)
+bun run test         # Run tests with vitest
+bun run deploy       # Manual deploy to Cloudflare Pages
+bun run deploy:worker # Manual deploy AirScore API Worker
+bun run deploy:all   # Deploy Pages + all Workers
 ```
 
 **CI/CD:**
@@ -69,8 +69,8 @@ Caching proxy for the AirScore API that transforms task/track data for the analy
 **Local Development:**
 ```bash
 cd workers/airscore-api
-npm install                    # Install worker dependencies
-npm run dev                    # Start local worker at http://localhost:8787
+bun install                    # Install worker dependencies
+bun run dev                    # Start local worker at http://localhost:8787
 ```
 
 **Testing Locally:**
@@ -96,7 +96,7 @@ wrangler kv:namespace create AIRSCORE_CACHE --preview
 # Update wrangler.toml with the namespace IDs from above commands
 
 # Deploy
-npm run deploy
+bun run deploy
 ```
 
 **Testing on Cloudflare:**
@@ -108,13 +108,13 @@ curl "https://airscore-api.{account}.workers.dev/api/airscore/task?comPk=466&tas
 **Type Checking:**
 ```bash
 cd workers/airscore-api
-npm run typecheck
+bun run typecheck
 ```
 
 **Clear Local Cache:**
 ```bash
 cd workers/airscore-api
-npm run clear-cache  # Removes .wrangler/state (local KV data)
+bun run clear-cache  # Removes .wrangler/state (local KV data)
 ```
 
 ### Running Pages + Workers Together
@@ -123,10 +123,10 @@ For full local development with both Pages and Workers:
 
 ```bash
 # Terminal 1: Start the worker
-cd workers/airscore-api && npm run dev
+cd workers/airscore-api && bun run dev
 
 # Terminal 2: Start the Pages dev server
-npm run dev
+bun run dev
 ```
 
 The frontend's AirScore client (`pages/src/analysis/airscore-client.ts`) automatically connects to `localhost:8787` in development mode.

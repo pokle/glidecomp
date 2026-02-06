@@ -11,13 +11,13 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250528.0",
+    "@cloudflare/workers-types": "^4.20260206.0",
     "@tailwindcss/vite": "^4.1.18",
-    "basecoat-css": "^0.3.10",
+    "basecoat-css": "^0.3.11",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.7.3",
     "vite": "^6.0.0",
-    "wrangler": "^4.6.0"
+    "wrangler": "^4.63.0"
   },
   "dependencies": {
     "@turf/bbox": "^7.3.2",
