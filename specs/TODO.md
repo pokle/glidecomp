@@ -56,3 +56,36 @@ These aren't items for taskscore, but ideas for feature requests in AirScore.
 - [ ] Dockerise AirScore so that I can run it locally and test it easily.
 - [ ] AirScore should load XContest tasks while creating tasks
 - [ ] Downloading IGC files from AirScore should include the task they were scored against.
+
+# code-improver suggestions 8-Feb-2026
+
+Critical (1)
+
+  - Missing transaction error handling in storage.ts — Some IndexedDB operations only handle request-level errors, not transaction-level
+  errors, which can lead to unhandled promise rejections.
+
+  Important (7)
+
+  1. Monolithic init() function in main.ts — Over 1000 lines handling too many responsibilities. Should be broken into focused functions
+  (theme, file handling, feature toggles, etc.).
+  2. Error handling loses context — Generic error messages without structured logging make production debugging harder.
+  3. Performance: multiple passes over fixes array in event-detector.ts — Thermal detection, altitude extremes, and vario extremes each
+  iterate the full array separately. Could be combined for large flights (10k+ fixes).
+  4. ~~Thermal exit detection off-by-one in event-detector.ts~~ — Analyzed and confirmed correct. `thermalEnd = i - exitThreshold` is the
+  last index where the window average was above threshold. See `specs/thermal-detection-spec.md` for full analysis.
+  5. Promise anti-pattern in storage.ts — Manual Promise wrapping around IndexedDB could be simplified with a helper or the idb library.
+  6. Missing integer overflow/negative validation in the AirScore worker — comPk/tasPk aren't checked for negative values or safe integer
+  bounds.
+  7. Potential cache poisoning in the AirScore worker — Upstream data structure isn't deeply validated before caching.
+
+  Suggestions (3)
+
+  - Inconsistent optional chaining after null checks are already done
+  - Magic numbers (e.g., 768 for mobile breakpoint) without named constants
+  - Hardcoded localhost:8787 — could use import.meta.env.DEV instead of hostname check
+
+  Top 3 recommendations by impact:
+
+  1. Break up the init() function in main.ts for maintainability
+  2. Fix IndexedDB transaction error handling to prevent silent failures
+  3. Add structured error logging for easier production debugging

@@ -232,8 +232,8 @@ Supports both v1 (full JSON) and v2 (compact QR code) formats:
 - See https://tools.xcontest.org/xctsk for api documentation
 
 ### Event Detection Algorithms
-- **Thermals**: Rolling window analysis of vertical speed, minimum duration threshold
-- **Glides**: Segments between thermals with calculated L/D ratio
+- **Thermals**: Rolling window analysis of vertical speed, minimum duration threshold (see `thermal-detection-spec.md` for detailed algorithm documentation)
+- **Glides**: Segments between thermals with calculated L/D ratio (boundaries depend on thermal detection)
 - **Cylinder crossings**: Haversine distance checks against turnpoint radii
 - **Vario extremes**: Smoothed vertical speed analysis
 
