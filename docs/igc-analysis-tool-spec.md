@@ -62,7 +62,7 @@ Quick access menu for display options and actions.
 
 ### Units Configuration
 
-Users can configure display units for measurements via the "Configure units..." option in the command palette. See `configurable-units-spec.md` for full details.
+Users can configure display units for measurements via the "Configure units..." option in the command palette. See `configurable-units-spec.md` (in this directory) for full details.
 
 **Configurable Units:**
 | Unit Type | Options | Default |
@@ -232,8 +232,8 @@ Supports both v1 (full JSON) and v2 (compact QR code) formats:
 - See https://tools.xcontest.org/xctsk for api documentation
 
 ### Event Detection Algorithms
-- **Thermals**: Rolling window analysis of vertical speed, minimum duration threshold (see `thermal-detection-spec.md` for detailed algorithm documentation)
-- **Glides**: Segments between thermals with calculated L/D ratio (boundaries depend on thermal detection)
+- **Thermals**: Rolling window analysis of vertical speed, minimum duration threshold (see `events/thermal-detection-spec.md` for detailed algorithm documentation)
+- **Glides**: Segments between thermals with calculated L/D ratio (see `events/glide-detection-spec.md` for detailed algorithm documentation)
 - **Cylinder crossings**: Haversine distance checks against turnpoint radii
 - **Vario extremes**: Smoothed vertical speed analysis
 

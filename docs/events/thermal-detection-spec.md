@@ -121,13 +121,9 @@ For each accepted thermal, the algorithm computes:
 
 ## Downstream: Glide Detection
 
-Glides are defined as the segments **between** thermals. The `detectGlides` function:
+Glides are defined as the segments **between** thermals. See `glide-detection-spec.md` (in this directory) for the full algorithm, including sink classification, map visualization, and known limitations.
 
-1. Sorts thermals by `startIndex`.
-2. For each pair of consecutive thermals, the gap from `previousThermal.endIndex` to `nextThermal.startIndex - 1` is a candidate glide.
-3. Gaps shorter than 10 fixes or 30 seconds are discarded.
-
-This means thermal boundaries directly determine glide boundaries. If a thermal ends too early, the adjacent glide absorbs climbing flight. If it ends too late, the glide loses distance.
+Thermal boundaries directly determine glide boundaries. If a thermal ends too early, the adjacent glide absorbs climbing flight. If it ends too late, the glide loses distance.
 
 ## Known Limitations
 

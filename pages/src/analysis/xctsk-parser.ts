@@ -663,7 +663,7 @@ function findOptimalCirclePoint(
  *
  * @see https://github.com/LK8000/LK8000/pull/286 - LK8000 task optimization
  * @see https://github.com/teobouvard/igclib - Python task optimization library
- * @see /specs/optimized-task-line-spec.md - Full algorithm documentation
+ * @see /docs/optimized-task-line-spec.md - Full algorithm documentation
  */
 export function calculateOptimizedTaskLine(task: XCTask): { lat: number; lon: number }[] {
   if (task.turnpoints.length === 0) return [];

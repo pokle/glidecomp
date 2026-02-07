@@ -28,7 +28,7 @@
 
 - [ ] BUG: The `pages/public/data/tracks/2025-01-05-Tushar-Corryong.igc` IGC file has segments that aren't a glide or a thermal or sink. They're basically unclickable. These sections are near the end. I think there was so much lifty air that I was climbing on glide. Also there are sections that are identified as a thermal but are actually a climbing glide (flying straight).
 - [ ] Improve usability of the glide segment visualisation (Increase font size. 1km Chevrons.)
-- [ ] **Browser Storage Management** (see `browser-storage-spec.md`):
+- [ ] **Browser Storage Management** (see `browser-storage-spec.md` in this directory):
   - [ ] Clear individual items from storage (delete a stored task or track)
   - [ ] Clear all storage (reset to empty state)
   - [ ] Download stored files back to user's computer (export IGC files)
@@ -43,7 +43,7 @@
 - [x] Implement 'Deepest sinks' tab - show all descents sorted by greatest altitude drop first
 - [ ] DEFER: Add box plots to the 'Longest glides' view showing vertically stacked box plots per detail (use uPlot for plotting, and simple-statistics for the descriptive statistics)
 - [x] Review code and ensure that we're using appropriate libraries for statistics and geo calculations.
-- [x] Make units selectable (see `configurable-units-spec.md`)
+- [x] Make units selectable (see `configurable-units-spec.md` in this directory)
 - [ ] Add altitude chart. X axis: Time, Y axis: Altitude
 - [x] Associate tasks with tracks. When we load a track, we should use the IGC file's declared task information if available. 
 - [x] If the IGC file doesn't contain task information, we should try to associate the track with any known tasks in the region on the date.
@@ -72,7 +72,7 @@ Critical (1)
   3. Performance: multiple passes over fixes array in event-detector.ts — Thermal detection, altitude extremes, and vario extremes each
   iterate the full array separately. Could be combined for large flights (10k+ fixes).
   4. ~~Thermal exit detection off-by-one in event-detector.ts~~ — Analyzed and confirmed correct. `thermalEnd = i - exitThreshold` is the
-  last index where the window average was above threshold. See `specs/thermal-detection-spec.md` for full analysis.
+  last index where the window average was above threshold. See `events/thermal-detection-spec.md` for full analysis.
   5. Promise anti-pattern in storage.ts — Manual Promise wrapping around IndexedDB could be simplified with a helper or the idb library.
   6. Missing integer overflow/negative validation in the AirScore worker — comPk/tasPk aren't checked for negative values or safe integer
   bounds.

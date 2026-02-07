@@ -153,7 +153,8 @@ Users can load task and track data from AirScore directly in the analysis tool:
     wrangler.toml          - Worker configuration
 /scripts/                  - Utility scripts for testing and development
 /tests/                    - Test files
-/specs/                    - Feature and architecture specifications
+/docs/                     - Feature and architecture specifications
+  /events/                 - Event detection algorithm specs
 /explorations/             - Experimental code (NOT for production use)
 ```
 
@@ -165,8 +166,8 @@ Users can load task and track data from AirScore directly in the analysis tool:
 
 ## Documentation Requirements
 
-- All features documented as specifications at `specs/{feature}-spec.md`
-- See `specs/system-architecture-spec.md` for detailed architecture
+- All features documented as specifications at `docs/{feature}-spec.md`
+- See `docs/system-architecture-spec.md` for detailed architecture
 
 ## Frontend UI
 
