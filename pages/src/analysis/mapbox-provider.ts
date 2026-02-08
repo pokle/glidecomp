@@ -259,6 +259,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           'track-line-outline',
           'task-cylinders-stroke',
           'task-cylinders-fill',
+          'task-line-arrows',
           'task-line',
         ];
         for (const layerId of customLayers) {
@@ -301,7 +302,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         // Add layers in order from bottom to top
         const width_mul = 0.7;
 
-        // 1. Task line (dashed route)
+        // 1. Task line (dashed route with directional arrows)
         map.addLayer({
           id: 'task-line',
           type: 'line',
@@ -315,6 +316,40 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
             'line-width': 2,
             'line-dasharray': [4, 4],
             'line-opacity': 0.8,
+          },
+        });
+
+        // 1b. Arrow icons along task line to show direction
+        if (!map.hasImage('task-arrow')) {
+          const size = 20;
+          const canvas = document.createElement('canvas');
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext('2d')!;
+          // Draw arrow matching track line style: orange fill with black outline
+          ctx.beginPath();
+          ctx.moveTo(size, size / 2);     // right tip
+          ctx.lineTo(1, 1);               // top-left
+          ctx.lineTo(1, size - 1);        // bottom-left
+          ctx.closePath();
+          ctx.fillStyle = '#6366f1';
+          ctx.globalAlpha = 0.8;
+          ctx.fill();
+          const imageData = ctx.getImageData(0, 0, size, size);
+          map.addImage('task-arrow', { width: size, height: size, data: new Uint8Array(imageData.data.buffer) });
+        }
+
+        map.addLayer({
+          id: 'task-line-arrows',
+          type: 'symbol',
+          source: 'task-line',
+          layout: {
+            'symbol-placement': 'line',
+            'symbol-spacing': 40,
+            'icon-image': 'task-arrow',
+            'icon-size': 0.55,
+            'icon-allow-overlap': true,
+            'icon-rotation-alignment': 'map',
           },
         });
 
@@ -1214,14 +1249,13 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
             // Normalize to -90 to 90 range so text is never upside down
             const bearingNormalized = (bearing > 90) ? bearing - 180 : ((bearing < -90) ? bearing + 180 : bearing);
-            const bearingArrow = (bearing > 90) ? '>>' : ((bearing < -90) ? '<<' : '>>');
             const distanceStr = formatDistance(distance, { decimals: 1 }).withUnit;
 
             const legNumber = i + 1;
             segmentLabelFeatures.push({
               type: 'Feature' as const,
               properties: {
-                distance: `${bearingArrow} Leg ${legNumber} (${distanceStr})`,
+                distance: `Leg ${legNumber} (${distanceStr})`,
                 bearing: bearingNormalized,
               },
               geometry: {
@@ -1455,7 +1489,8 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
                     chevronEl.style.alignItems = 'center';
                     chevronEl.style.justifyContent = 'center';
                     chevronEl.innerHTML = `<svg width="20" height="12" viewBox="0 0 20 12" style="transform: rotate(${marker.bearing}deg);">
-                      <path d="M2 10 L10 2 L18 10" fill="none" stroke="#3b82f6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M2 10 L10 2 L18 10" fill="none" stroke="#000000" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+                      <path d="M2 10 L10 2 L18 10" fill="none" stroke="#00ffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>`;
 
                     const chevronMarker = new mapboxgl.Marker({ element: chevronEl })
