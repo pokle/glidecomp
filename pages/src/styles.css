@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "basecoat-css";
+@import "@pokle/basecoat-css";
 
 /* Atkinson Hyperlegible Next - self-hosted via fontsource for fast loading */
 @import "@fontsource/atkinson-hyperlegible-next/latin-400.css";
