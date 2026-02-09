@@ -8,13 +8,9 @@
 
 import mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
-import { IGCFix, getBoundingBox } from './igc-parser';
-import { XCTask } from './xctsk-parser';
-import { FlightEvent, getEventStyle } from './event-detector';
-import { calculateGlideMarkers } from './glide-speed';
+import { getBoundingBox, getEventStyle, calculateGlideMarkers, haversineDistance, getCirclePoints, calculateBearing, calculateOptimizedTaskLine, getOptimizedSegmentDistances, type IGCFix, type XCTask, type FlightEvent } from '@taskscore/analysis';
 import type { MapProvider } from './map-provider';
-import { haversineDistance, getCirclePoints, calculateBearing } from './geo';
-import { formatDistance, formatRadius, formatAltitude, formatSpeed, formatAltitudeChange } from './units';
+import { formatDistance, formatRadius, formatAltitude, formatSpeed, formatAltitudeChange } from './units-browser';
 import { config } from './config';
 
 // Set MapBox access token from environment variable
@@ -1214,7 +1210,6 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           }
 
           // Create optimized task line that tags cylinder edges
-          const { calculateOptimizedTaskLine, getOptimizedSegmentDistances } = await import('./xctsk-parser');
           const optimizedPath = calculateOptimizedTaskLine(task);
           const lineCoords = optimizedPath.map(p => [p.lon, p.lat]);
 

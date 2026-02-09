@@ -325,5 +325,3 @@ export function parseIGC(content: string): IGCFile {
   return { header, fixes, events, task };
 }
 
-// Re-export geo functions from centralized module for backwards compatibility
-export { haversineDistance, getBoundingBox } from './geo';

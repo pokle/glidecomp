@@ -7,8 +7,6 @@
 import type { IGCFix } from './igc-parser';
 import { haversineDistance, calculateBearing } from './geo';
 
-// Re-export for backwards compatibility
-export { haversineDistance, calculateBearing };
 
 export interface ChevronPosition {
   lat: number;

@@ -264,7 +264,7 @@ function parseV2(data: Record<string, unknown>): XCTask {
 /**
  * Validate that a task has valid turnpoints with coordinates
  */
-function isValidTask(task: XCTask): boolean {
+export function isValidTask(task: XCTask): boolean {
   if (task.turnpoints.length === 0) {
     return false;
   }
@@ -316,97 +316,6 @@ export function parseXCTask(content: string): XCTask {
     }
     return parseV2(data);
   }
-}
-
-/**
- * Fetch task from XContest by task code
- *
- * Task codes can be alphanumeric (e.g., "face", "12345").
- * The v1 API (/api/xctsk/load/) returns the original JSON format.
- * The v2 API (/api/xctsk/loadV2/) returns compact QR code format.
- * See: https://tools.xcontest.org/xctsk
- */
-export async function fetchTaskByCode(code: string): Promise<XCTask> {
-  // Clean up code - trim whitespace only
-  const cleanCode = code.trim();
-
-  if (!cleanCode) {
-    throw new Error('Task code cannot be empty');
-  }
-
-  // Use only the v1 API which returns the original format
-  // The v2 API returns a compact format that requires different parsing
-  const url = `https://tools.xcontest.org/api/xctsk/load/${encodeURIComponent(cleanCode)}`;
-
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error(`Task code "${cleanCode}" not found`);
-    }
-    throw new Error(`Failed to fetch task: HTTP ${response.status}`);
-  }
-
-  const text = await response.text();
-
-  // Validate that we got JSON back
-  if (!text.trim().startsWith('{')) {
-    throw new Error(`Invalid response from server: expected JSON`);
-  }
-
-  const task = parseXCTask(text);
-
-  // Validate the parsed task has valid coordinates
-  if (!isValidTask(task)) {
-    throw new Error('Task has invalid or missing coordinates');
-  }
-
-  return task;
-}
-
-export interface FetchTaskResult {
-  task: XCTask;
-  rawJson: string;
-}
-
-/**
- * Fetch task from XContest by task code, returning both parsed task and raw JSON.
- * Used for storing tasks in browser storage.
- */
-export async function fetchTaskByCodeWithRaw(code: string): Promise<FetchTaskResult> {
-  // Clean up code - trim whitespace only
-  const cleanCode = code.trim();
-
-  if (!cleanCode) {
-    throw new Error('Task code cannot be empty');
-  }
-
-  const url = `https://tools.xcontest.org/api/xctsk/load/${encodeURIComponent(cleanCode)}`;
-
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error(`Task code "${cleanCode}" not found`);
-    }
-    throw new Error(`Failed to fetch task: HTTP ${response.status}`);
-  }
-
-  const rawJson = await response.text();
-
-  // Validate that we got JSON back
-  if (!rawJson.trim().startsWith('{')) {
-    throw new Error(`Invalid response from server: expected JSON`);
-  }
-
-  const task = parseXCTask(rawJson);
-
-  // Validate the parsed task has valid coordinates
-  if (!isValidTask(task)) {
-    throw new Error('Task has invalid or missing coordinates');
-  }
-
-  return { task, rawJson };
 }
 
 /**

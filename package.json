@@ -12,12 +12,14 @@
     "deploy:all": "bun run deploy && bun run deploy:worker",
     "deployments": "wrangler pages deployment list --project-name=taskscore --json | jq .",
     "typecheck": "tsc --noEmit",
+    "typecheck:analysis": "tsc --noEmit -p packages/analysis/tsconfig.json",
     "typecheck:worker": "bun run --filter airscore-api typecheck",
-    "typecheck:all": "bun run typecheck && bun run typecheck:worker",
+    "typecheck:all": "bun run typecheck && bun run typecheck:analysis && bun run typecheck:worker",
     "test": "bun test",
     "get-xcontest-task": "tsx scripts/get-xcontest-task.ts"
   },
   "workspaces": [
+    "packages/*",
     "pages",
     "workers/*"
   ],
@@ -34,11 +36,6 @@
   },
   "dependencies": {
     "@fontsource/atkinson-hyperlegible-next": "^5.2.7",
-    "@turf/bbox": "^7.3.2",
-    "@turf/bearing": "^7.3.2",
-    "@turf/destination": "^7.3.2",
-    "@turf/distance": "^7.3.2",
-    "@turf/helpers": "^7.3.2",
     "mapbox-gl": "^3.17.0",
     "threebox-plugin": "^2.2.7"
   }

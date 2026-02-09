@@ -5,9 +5,8 @@
  * Provides a unified interface for flight analysis data.
  */
 
-import { FlightEvent, FlightEventType, getEventStyle } from './event-detector';
-import { formatAltitude, formatSpeed, formatDistance, formatClimbRate } from './units';
-import { XCTask, getOptimizedSegmentDistances } from './xctsk-parser';
+import { getEventStyle, getOptimizedSegmentDistances, type FlightEvent, type FlightEventType, type XCTask } from '@taskscore/analysis';
+import { formatAltitude, formatSpeed, formatDistance, formatClimbRate } from './units-browser';
 
 /**
  * View modes for the Track sub-tabs

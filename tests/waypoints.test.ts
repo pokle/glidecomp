@@ -5,7 +5,7 @@ import {
   findWaypointByCoordinates,
   findWaypoint,
   type WaypointRecord,
-} from '../pages/src/analysis/waypoints';
+} from '../packages/analysis/src/waypoints';
 
 const sampleCSV = `Name,Latitude,Longitude,Description,Proximity Distance,Altitude
 ELLIOT,-36.185833,147.976667,Launch,5000,935

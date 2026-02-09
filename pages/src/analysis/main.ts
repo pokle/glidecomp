@@ -8,14 +8,13 @@
  * - Event detection and display
  */
 
-import { parseIGC, IGCFile, IGCFix } from './igc-parser';
-import { fetchTaskByCodeWithRaw, XCTask, calculateOptimizedTaskDistance, igcTaskToXCTask } from './xctsk-parser';
+import { parseIGC, detectFlightEvents, calculateOptimizedTaskDistance, igcTaskToXCTask, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord } from '@taskscore/analysis';
+import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
 import { createMapProvider, MapProvider } from './map-provider';
-import { detectFlightEvents, FlightEvent } from './event-detector';
 import { createAnalysisPanel, AnalysisPanel, FlightInfo, PanelTabType } from './analysis-panel';
-import { loadCorryongWaypoints, type WaypointRecord } from './waypoints';
+import { loadCorryongWaypoints } from './waypoint-loader';
 import { config, type UnitPreferences } from './config';
-import { formatAltitude, formatDistance, onUnitsChanged } from './units';
+import { formatAltitude, formatDistance, onUnitsChanged } from './units-browser';
 import { storage } from './storage';
 import { StorageMenu } from './storage-menu';
 import { fetchAirScoreTask, fetchAirScoreTrack } from './airscore-client';

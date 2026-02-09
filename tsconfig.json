@@ -13,6 +13,7 @@
     "types": ["@cloudflare/workers-types", "@types/node", "bun"]
   },
   "include": [
+    "packages/*/src/**/*",
     "pages/src/**/*",
     "workers/**/*",
     "tests/**/*",

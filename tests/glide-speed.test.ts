@@ -3,10 +3,10 @@ import {
   calculateGlideMarkers,
   calculateGlidePositions,
   calculateTotalGlideDistance,
-  haversineDistance,
   GlideMarker,
-} from '../pages/src/analysis/glide-speed';
-import type { IGCFix } from '../pages/src/analysis/igc-parser';
+} from '../packages/analysis/src/glide-speed';
+import { haversineDistance } from '../packages/analysis/src/geo';
+import type { IGCFix } from '../packages/analysis/src/igc-parser';
 
 /**
  * Helper to create a fix at a specific position and time

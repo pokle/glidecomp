@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
-import { detectFlightEvents } from '../pages/src/analysis/event-detector';
-import { IGCFix } from '../pages/src/analysis/igc-parser';
+import { detectFlightEvents } from '../packages/analysis/src/event-detector';
+import { IGCFix } from '../packages/analysis/src/igc-parser';
 
 /**
  * Helper to create a mock fix with specific time

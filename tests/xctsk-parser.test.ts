@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
-import { parseXCTask, getSSSIndex, getESSIndex, calculateTaskDistance, igcTaskToXCTask } from '../pages/src/analysis/xctsk-parser';
-import type { IGCTask } from '../pages/src/analysis/igc-parser';
+import { parseXCTask, getSSSIndex, getESSIndex, calculateTaskDistance, igcTaskToXCTask } from '../packages/analysis/src/xctsk-parser';
+import type { IGCTask } from '../packages/analysis/src/igc-parser';
 
 describe('XCTSK Parser', () => {
   describe('parseXCTask v1 format', () => {

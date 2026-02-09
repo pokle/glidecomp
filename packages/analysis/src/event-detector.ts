@@ -12,7 +12,6 @@
 import { IGCFix } from './igc-parser';
 import { haversineDistance, isInsideCylinder } from './geo';
 import { XCTask, Turnpoint } from './xctsk-parser';
-import { formatAltitude, formatAltitudeChange, formatClimbRate, formatDistance } from './units';
 
 export type FlightEventType =
   | 'takeoff'
@@ -605,7 +604,7 @@ function detectAltitudeExtremes(fixes: IGCFix[]): FlightEvent[] {
     latitude: fixes[maxAltIdx].latitude,
     longitude: fixes[maxAltIdx].longitude,
     altitude: maxAlt,
-    description: `Max altitude: ${formatAltitude(maxAlt).withUnit}`,
+    description: `Max altitude: ${maxAlt.toFixed(0)}m`,
   });
 
   events.push({
@@ -615,7 +614,7 @@ function detectAltitudeExtremes(fixes: IGCFix[]): FlightEvent[] {
     latitude: fixes[minAltIdx].latitude,
     longitude: fixes[minAltIdx].longitude,
     altitude: minAlt,
-    description: `Min altitude: ${formatAltitude(minAlt).withUnit}`,
+    description: `Min altitude: ${minAlt.toFixed(0)}m`,
   });
 
   return events;
@@ -656,7 +655,7 @@ function detectVarioExtremes(fixes: IGCFix[]): FlightEvent[] {
       latitude: fixes[maxClimbIdx].latitude,
       longitude: fixes[maxClimbIdx].longitude,
       altitude: fixes[maxClimbIdx].gnssAltitude,
-      description: `Max climb: ${formatClimbRate(maxClimb).withUnit}`,
+      description: `Max climb: +${maxClimb.toFixed(1)}m/s`,
       details: { climbRate: maxClimb },
     });
   }
@@ -669,7 +668,7 @@ function detectVarioExtremes(fixes: IGCFix[]): FlightEvent[] {
       latitude: fixes[maxSinkIdx].latitude,
       longitude: fixes[maxSinkIdx].longitude,
       altitude: fixes[maxSinkIdx].gnssAltitude,
-      description: `Max sink: ${formatClimbRate(maxSink).withUnit}`,
+      description: `Max sink: ${maxSink.toFixed(1)}m/s`,
       details: { sinkRate: maxSink },
     });
   }
@@ -727,7 +726,7 @@ export function detectFlightEvents(
       latitude: thermal.location.lat,
       longitude: thermal.location.lon,
       altitude: thermal.startAltitude,
-      description: `Thermal entry (${formatClimbRate(thermal.avgClimbRate).withUnit} avg)`,
+      description: `Thermal entry (${thermal.avgClimbRate > 0 ? '+' : ''}${thermal.avgClimbRate.toFixed(1)}m/s avg)`,
       details: {
         avgClimbRate: thermal.avgClimbRate,
         duration: thermal.duration,
@@ -743,7 +742,7 @@ export function detectFlightEvents(
       latitude: thermal.location.lat,
       longitude: thermal.location.lon,
       altitude: thermal.endAltitude,
-      description: `Thermal exit (${formatAltitudeChange(thermal.endAltitude - thermal.startAltitude).withUnit} gained)`,
+      description: `Thermal exit (${(thermal.endAltitude - thermal.startAltitude) > 0 ? '+' : ''}${(thermal.endAltitude - thermal.startAltitude).toFixed(0)}m gained)`,
       details: {
         avgClimbRate: thermal.avgClimbRate,
         duration: thermal.duration,
@@ -788,7 +787,7 @@ export function detectFlightEvents(
       latitude: fixes[adjustedEndIndex].latitude,
       longitude: fixes[adjustedEndIndex].longitude,
       altitude: glide.endAltitude,
-      description: `Glide end (${formatDistance(glide.distance).withUnit})`,
+      description: `Glide end (${(glide.distance / 1000).toFixed(2)}km)`,
       details: {
         distance: glide.distance,
         glideRatio: glide.glideRatio,

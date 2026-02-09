@@ -4,7 +4,17 @@
  * This module handles conversion to display units.
  */
 
-import { config, type UnitPreferences } from './config';
+export type SpeedUnit = 'km/h' | 'mph' | 'knots';
+export type AltitudeUnit = 'm' | 'ft';
+export type DistanceUnit = 'km' | 'mi' | 'nmi';
+export type ClimbRateUnit = 'm/s' | 'ft/min' | 'knots';
+
+export interface UnitPreferences {
+  speed: SpeedUnit;
+  altitude: AltitudeUnit;
+  distance: DistanceUnit;
+  climbRate: ClimbRateUnit;
+}
 
 interface ConversionInfo {
   factor: number;
@@ -37,6 +47,13 @@ const CONVERSIONS = {
 
 type UnitType = keyof typeof CONVERSIONS;
 
+const DEFAULT_UNITS: UnitPreferences = {
+  speed: 'km/h',
+  altitude: 'm',
+  distance: 'km',
+  climbRate: 'm/s',
+};
+
 export interface FormattedValue {
   value: number;
   formatted: string; // e.g., "45"
@@ -54,9 +71,10 @@ export function formatUnit(
     unit?: string; // Override unit preference
     decimals?: number; // Override decimal places
     showSign?: boolean; // Show +/- prefix
+    prefs?: UnitPreferences; // Unit preferences (defaults to SI units)
   }
 ): FormattedValue {
-  const prefs = config.getUnits();
+  const prefs = options?.prefs ?? DEFAULT_UNITS;
   const unitKey = options?.unit ?? prefs[unitType];
   const conv = CONVERSIONS[unitType][unitKey];
 
@@ -88,28 +106,29 @@ export function formatUnit(
 }
 
 // Convenience functions
-export const formatSpeed = (mps: number, opts?: { showSign?: boolean }) =>
+export const formatSpeed = (mps: number, opts?: { showSign?: boolean; prefs?: UnitPreferences }) =>
   formatUnit(mps, 'speed', opts);
 
-export const formatAltitude = (m: number, opts?: { showSign?: boolean; decimals?: number }) =>
+export const formatAltitude = (m: number, opts?: { showSign?: boolean; decimals?: number; prefs?: UnitPreferences }) =>
   formatUnit(m, 'altitude', opts);
 
-export const formatDistance = (m: number, opts?: { decimals?: number }) =>
+export const formatDistance = (m: number, opts?: { decimals?: number; prefs?: UnitPreferences }) =>
   formatUnit(m, 'distance', opts);
 
-export const formatClimbRate = (mps: number, opts?: { showSign?: boolean }) =>
+export const formatClimbRate = (mps: number, opts?: { showSign?: boolean; prefs?: UnitPreferences }) =>
   formatUnit(mps, 'climbRate', { ...opts, showSign: opts?.showSign ?? true });
 
 /**
  * Format altitude change (always shows sign)
  */
-export const formatAltitudeChange = (m: number) => formatAltitude(m, { showSign: true });
+export const formatAltitudeChange = (m: number, opts?: { prefs?: UnitPreferences }) =>
+  formatAltitude(m, { showSign: true, prefs: opts?.prefs });
 
 /**
  * Format a radius value (uses distance unit but with variable precision)
  */
-export function formatRadius(meters: number): FormattedValue {
-  const prefs = config.getUnits();
+export function formatRadius(meters: number, opts?: { prefs?: UnitPreferences }): FormattedValue {
+  const prefs = opts?.prefs ?? DEFAULT_UNITS;
   const unitKey = prefs.distance;
   const conv = CONVERSIONS.distance[unitKey];
 
@@ -129,9 +148,9 @@ export function formatRadius(meters: number): FormattedValue {
 /**
  * Get the current unit label for a unit type
  */
-export function getUnitLabel(unitType: UnitType): string {
-  const prefs = config.getUnits();
-  const unitKey = prefs[unitType];
+export function getUnitLabel(unitType: UnitType, prefs?: UnitPreferences): string {
+  const p = prefs ?? DEFAULT_UNITS;
+  const unitKey = p[unitType];
   const conv = CONVERSIONS[unitType][unitKey];
   return conv?.label || unitKey;
 }
@@ -139,21 +158,7 @@ export function getUnitLabel(unitType: UnitType): string {
 /**
  * Get the current unit key for a unit type (e.g., 'km/h', 'm/s')
  */
-export function getCurrentUnit(unitType: UnitType): string {
-  return config.getUnits()[unitType];
-}
-
-/**
- * Subscribe to unit preference changes
- */
-export function onUnitsChanged(
-  callback: (units: UnitPreferences) => void
-): () => void {
-  const handler = (e: Event) => {
-    const detail = (e as CustomEvent).detail;
-    callback(detail.units);
-  };
-
-  window.addEventListener('taskscore:preferences-changed', handler);
-  return () => window.removeEventListener('taskscore:preferences-changed', handler);
+export function getCurrentUnit(unitType: UnitType, prefs?: UnitPreferences): string {
+  const p = prefs ?? DEFAULT_UNITS;
+  return p[unitType];
 }
