@@ -23,6 +23,12 @@ import { fetchAirScoreTask, fetchAirScoreTrack } from './airscore-client';
 // Import styles
 import '../styles.css';
 
+// Basecoat JS for interactive components
+import "@pokle/basecoat-css/basecoat.min";
+import "@pokle/basecoat-css/dropdown-menu.min";
+import "@pokle/basecoat-css/command.min";
+import "@pokle/basecoat-css/sidebar.min";
+
 interface AppState {
   igcFile: IGCFile | null;
   task: XCTask | null;

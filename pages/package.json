@@ -10,10 +10,11 @@
     "deploy": "vite build && wrangler pages deploy dist --project-name=taskscore",
     "typecheck": "tsc --noEmit"
   },
+  "//": "Basecoat fork - see docs/basecoat-fork.md for build/publish instructions",
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260206.0",
     "@tailwindcss/vite": "^4.1.18",
-    "basecoat-css": "^0.3.11",
+    "@pokle/basecoat-css": "0.3.10-beta.fork",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.7.3",
     "vite": "^7.3.1",

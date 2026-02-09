@@ -173,7 +173,7 @@ Users can load task and track data from AirScore directly in the analysis tool:
 
 **Tailwind CSS + Basecoat:**
 - Styling uses [Tailwind CSS](https://tailwindcss.com/) for utility-first CSS
-- UI components use [Basecoat](https://basecoatui.com/) - a lightweight component library built on Tailwind
+- UI components use [Basecoat](https://basecoatui.com/) - a lightweight component library built on Tailwind (using forked `@pokle/basecoat-css`, see `docs/basecoat-fork.md`)
 - Tailwind is configured via `@tailwindcss/vite` plugin in `vite.config.ts`
 - Main stylesheet at `pages/src/styles.css` imports Tailwind, Basecoat, and MapBox GL CSS
 
@@ -181,7 +181,7 @@ Users can load task and track data from AirScore directly in the analysis tool:
 ```css
 /* pages/src/styles.css */
 @import "tailwindcss";
-@import "basecoat-css";
+@import "@pokle/basecoat-css";
 @import "mapbox-gl/dist/mapbox-gl.css";
 ```
 
