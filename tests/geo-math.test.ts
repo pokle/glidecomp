@@ -8,15 +8,13 @@
 
 import { describe, it, expect } from 'bun:test';
 
-// Import from igc-parser (the canonical export location)
+// Import from geo (the canonical export location after library extraction)
 import {
   haversineDistance as oldHaversineDistance,
   getBoundingBox as oldGetBoundingBox,
-  IGCFix
-} from '../pages/src/analysis/igc-parser';
-
-// Import bearing from glide-speed (returns degrees)
-import { calculateBearing as oldCalculateBearing } from '../pages/src/analysis/glide-speed';
+  calculateBearing as oldCalculateBearing,
+} from '../packages/analysis/src/geo';
+import type { IGCFix } from '../packages/analysis/src/igc-parser';
 
 // Import new Turf.js implementations
 import {
@@ -27,7 +25,7 @@ import {
   calculateBearingRadians as turfCalculateBearingRadians,
   isInsideCylinder as turfIsInsideCylinder,
   getCirclePoints
-} from '../pages/src/analysis/geo';
+} from '../packages/analysis/src/geo';
 
 // Use the old implementations by default for backwards compatibility tests
 const haversineDistance = oldHaversineDistance;

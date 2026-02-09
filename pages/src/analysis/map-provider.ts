@@ -4,9 +4,7 @@
  * Abstraction layer for map visualization using MapBox GL JS.
  */
 
-import type { IGCFix } from './igc-parser';
-import type { XCTask } from './xctsk-parser';
-import type { FlightEvent } from './event-detector';
+import type { IGCFix, XCTask, FlightEvent } from '@taskscore/analysis';
 
 /**
  * Bounds in degrees

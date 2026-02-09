@@ -5,7 +5,7 @@
  * via the caching proxy worker.
  */
 
-import type { XCTask } from './xctsk-parser';
+import type { XCTask } from '@taskscore/analysis';
 
 // ============================================================================
 // Types matching the worker's response format

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
-import { parseIGC, haversineDistance, getBoundingBox, IGCFix } from '../pages/src/analysis/igc-parser';
+import { parseIGC, IGCFix } from '../packages/analysis/src/igc-parser';
+import { haversineDistance, getBoundingBox } from '../packages/analysis/src/geo';
 
 describe('IGC Parser', () => {
   describe('parseIGC', () => {

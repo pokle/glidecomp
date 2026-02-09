@@ -6,8 +6,8 @@
  * Updated to use Tailwind CSS and Basecoat components.
  */
 
-import { FlightEvent, FlightEventType, getEventStyle } from './event-detector';
-import { formatAltitude, formatSpeed, formatDistance, formatClimbRate } from './units';
+import { getEventStyle, type FlightEvent, type FlightEventType } from '@taskscore/analysis';
+import { formatAltitude, formatSpeed, formatDistance, formatClimbRate } from './units-browser';
 
 /**
  * View modes for the event panel
