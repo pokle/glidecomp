@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 public enum SpeedUnit: String, CaseIterable, Sendable {
     case kmh = "km/h"
@@ -35,4 +36,23 @@ public struct UnitPreferences: Sendable {
         distance: .km,
         climbRate: .mps
     )
+}
+
+public enum MapStylePreference: String, CaseIterable, Sendable {
+    case standard = "Standard"
+    case satellite = "Satellite"
+    case hybrid = "Hybrid"
+}
+
+// MARK: - FocusedValue for event filter binding
+
+struct EventFilterKey: FocusedValueKey {
+    typealias Value = Binding<EventFilter>
+}
+
+extension FocusedValues {
+    var eventFilter: Binding<EventFilter>? {
+        get { self[EventFilterKey.self] }
+        set { self[EventFilterKey.self] = newValue }
+    }
 }

@@ -49,34 +49,6 @@ struct ContentView: View {
                 }
             }
         }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    openIGCFile()
-                } label: {
-                    Label("Open IGC", systemImage: "doc.badge.plus")
-                }
-                .keyboardShortcut("o", modifiers: .command)
-            }
-
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    openXCTaskFile()
-                } label: {
-                    Label("Open Task", systemImage: "map")
-                }
-                .keyboardShortcut("t", modifiers: [.command, .shift])
-            }
-
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showAirScoreSheet = true
-                } label: {
-                    Label("Load AirScore", systemImage: "globe")
-                }
-                .keyboardShortcut("l", modifiers: .command)
-            }
-        }
         .sheet(isPresented: $showAirScoreSheet) {
             AirScoreLoadView(isLoading: $viewModel.isLoading) { comPk, tasPk, trackId in
                 viewModel.loadFromAirScore(comPk: comPk, tasPk: tasPk, trackId: trackId)
@@ -91,6 +63,10 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .loadAirScoreTask)) { _ in
             showAirScoreSheet = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .openSampleFlight)) { _ in
+            openSampleFlight()
+        }
+        .focusedSceneValue(\.eventFilter, $eventFilter)
     }
 
     private func openIGCFile() {
@@ -114,6 +90,18 @@ struct ContentView: View {
 
         if panel.runModal() == .OK, let url = panel.url {
             viewModel.loadXCTaskFile(from: url)
+        }
+    }
+
+    private func openSampleFlight() {
+        // Load task first, then track
+        if let taskURL = SampleFlights.taskURL {
+            viewModel.loadXCTaskFile(from: taskURL)
+        }
+        if let trackURL = SampleFlights.trackURL {
+            viewModel.loadIGCFile(from: trackURL)
+        } else {
+            viewModel.errorMessage = "Sample flight not found"
         }
     }
 }

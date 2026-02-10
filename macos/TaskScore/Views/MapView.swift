@@ -1,7 +1,8 @@
 import SwiftUI
 import MapKit
 
-/// MapKit view displaying the flight track, events, task cylinders, and optimized task line
+/// MapKit view displaying the flight track, events, task cylinders, optimized task line,
+/// glide markers, and segment highlighting
 struct MapView: View {
     let fixes: [IGCFix]
     let events: [FlightEvent]
@@ -9,6 +10,12 @@ struct MapView: View {
     @Binding var selectedEvent: FlightEvent?
 
     @State private var cameraPosition: MapCameraPosition = .automatic
+
+    // Display preferences (synced via UserDefaults)
+    @AppStorage("mapStyle") private var mapStyle: String = MapStylePreference.hybrid.rawValue
+    @AppStorage("showTask") private var showTask = true
+    @AppStorage("showGlideMarkers") private var showGlideMarkers = true
+    @AppStorage("show3D") private var show3D = false
 
     var body: some View {
         Map(position: $cameraPosition) {
@@ -21,11 +28,16 @@ struct MapView: View {
                     .stroke(.blue, lineWidth: 2)
             }
 
+            // Segment highlight (cyan) for selected event
+            let segCoords = segmentCoordinates
+            if segCoords.count >= 2 {
+                MapPolyline(coordinates: segCoords)
+                    .stroke(.cyan, lineWidth: 4)
+            }
+
             // Task cylinder overlays
-            if let task = task {
-                // Turnpoint cylinders
+            if showTask, let task = task {
                 ForEach(Array(task.turnpoints.enumerated()), id: \.offset) { index, tp in
-                    // Cylinder circle
                     MapCircle(
                         center: CLLocationCoordinate2D(latitude: tp.waypoint.lat, longitude: tp.waypoint.lon),
                         radius: tp.radius
@@ -33,7 +45,6 @@ struct MapView: View {
                     .foregroundStyle(turnpointFillColor(tp).opacity(0.15))
                     .stroke(turnpointStrokeColor(tp), lineWidth: 1.5)
 
-                    // Turnpoint label
                     Annotation(
                         tp.waypoint.name,
                         coordinate: CLLocationCoordinate2D(latitude: tp.waypoint.lat, longitude: tp.waypoint.lon)
@@ -53,6 +64,23 @@ struct MapView: View {
                 }
             }
 
+            // Glide markers (chevrons + speed labels) for selected glide event
+            if showGlideMarkers {
+                let markers = computedGlideMarkers
+                ForEach(Array(markers.enumerated()), id: \.offset) { _, marker in
+                    let coord = CLLocationCoordinate2D(latitude: marker.lat, longitude: marker.lon)
+                    if marker.type == .chevron {
+                        Annotation("", coordinate: coord, anchor: .center) {
+                            ChevronView(bearing: marker.bearing)
+                        }
+                    } else {
+                        Annotation("", coordinate: coord, anchor: .center) {
+                            SpeedLabelView(marker: marker)
+                        }
+                    }
+                }
+            }
+
             // Event markers
             ForEach(events.filter { shouldShowMarker($0) }) { event in
                 Annotation(event.description, coordinate: CLLocationCoordinate2D(
@@ -65,7 +93,7 @@ struct MapView: View {
                 }
             }
         }
-        .mapStyle(.hybrid(elevation: .realistic))
+        .mapStyle(currentMapStyle)
         .onChange(of: fixes) { _, newFixes in
             updateCamera(fixes: newFixes, task: task)
         }
@@ -81,8 +109,50 @@ struct MapView: View {
         }
     }
 
+    // MARK: - Computed Properties
+
+    private var currentMapStyle: MapStyle {
+        switch MapStylePreference(rawValue: mapStyle) {
+        case .standard:
+            return .standard(elevation: show3D ? .realistic : .flat)
+        case .satellite:
+            return .imagery(elevation: show3D ? .realistic : .flat)
+        case .hybrid, .none:
+            return .hybrid(elevation: show3D ? .realistic : .flat)
+        }
+    }
+
+    /// Coordinates for highlighting the selected event's segment
+    private var segmentCoordinates: [CLLocationCoordinate2D] {
+        guard let event = selectedEvent,
+              let segment = event.segment,
+              segment.startIndex >= 0,
+              segment.endIndex < fixes.count,
+              segment.startIndex <= segment.endIndex else {
+            return []
+        }
+        return fixes[segment.startIndex...segment.endIndex].map {
+            CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+        }
+    }
+
+    /// Glide markers for the selected glide event's segment
+    private var computedGlideMarkers: [GlideMarker] {
+        guard let event = selectedEvent,
+              (event.type == .glideStart || event.type == .glideEnd),
+              let segment = event.segment,
+              segment.startIndex >= 0,
+              segment.endIndex < fixes.count,
+              segment.startIndex < segment.endIndex else {
+            return []
+        }
+        let segmentFixes = Array(fixes[segment.startIndex...segment.endIndex])
+        return GlideSpeed.calculateGlideMarkers(segmentFixes)
+    }
+
+    // MARK: - Camera
+
     private func updateCamera(fixes: [IGCFix], task: XCTask?) {
-        // Collect all coordinates (fixes + task turnpoints)
         var allPoints: [(latitude: Double, longitude: Double)] = []
 
         if !fixes.isEmpty {
@@ -108,6 +178,8 @@ struct MapView: View {
         )
         cameraPosition = .region(MKCoordinateRegion(center: center, span: span))
     }
+
+    // MARK: - Event Markers
 
     private func shouldShowMarker(_ event: FlightEvent) -> Bool {
         switch event.type {
@@ -168,6 +240,60 @@ struct MapView: View {
             .overlay(Circle().stroke(.white, lineWidth: 1))
     }
 }
+
+// MARK: - Glide Marker Views
+
+/// Chevron shape pointing in flight direction
+struct ChevronView: View {
+    let bearing: Double
+
+    var body: some View {
+        ChevronShape()
+            .stroke(.blue, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            .frame(width: 14, height: 10)
+            .rotationEffect(.degrees(bearing))
+    }
+}
+
+/// V-shape pointing up (north), rotated by bearing
+struct ChevronShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.midX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        }
+    }
+}
+
+/// Speed label showing speed, glide ratio, and altitude change
+struct SpeedLabelView: View {
+    let marker: GlideMarker
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if let speedMps = marker.speedMps {
+                Text(Units.formatSpeed(speedMps).withUnit)
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            HStack(spacing: 3) {
+                if let glideRatio = marker.glideRatio {
+                    Text(glideRatio >= 100 ? "∞:1" : String(format: "%.0f:1", glideRatio))
+                        .font(.system(size: 8))
+                }
+                if let altDiff = marker.altitudeDiff {
+                    Text(Units.formatAltitudeChange(altDiff).withUnit)
+                        .font(.system(size: 8))
+                }
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 3))
+    }
+}
+
+// MARK: - Color Extension
 
 extension Color {
     init?(hex: String) {
