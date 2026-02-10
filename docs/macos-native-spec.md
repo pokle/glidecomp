@@ -10,6 +10,49 @@ TaskScore currently runs as a Cloudflare Pages web app. A native macOS app would
 - **OS integration**: Menu bar, keyboard shortcuts, document model, Handoff, iCloud sync
 - **Distribution**: Mac App Store or direct download with notarization
 
+## Repository Structure (Monorepo)
+
+The macOS app lives alongside the existing web project in a single repository. This keeps shared test fixtures, specs, and sample data in one place while maintaining clean separation of toolchains.
+
+```
+taskscore/
+├── pages/                      # (existing) Web frontend
+├── packages/analysis/          # (existing) TS analysis engine
+├── workers/                    # (existing) Cloudflare Workers
+├── macos/                      # NEW — Xcode project
+│   ├── TaskScore.xcodeproj
+│   ├── TaskScore/
+│   │   ├── TaskScoreApp.swift
+│   │   ├── Analysis/           # Swift port of packages/analysis
+│   │   ├── Models/
+│   │   ├── Views/
+│   │   └── Services/
+│   └── TaskScoreTests/
+├── tests/
+│   └── fixtures/               # Shared test IGC files + expected outputs
+├── docs/                       # (existing) Shared specs
+├── scripts/                    # (existing)
+└── .github/workflows/
+    ├── web.yml                 # (existing, add path filter)
+    └── macos.yml               # NEW — Xcode build + test
+```
+
+**CI path filters** ensure the right pipeline runs for the right changes:
+
+```yaml
+# .github/workflows/web.yml
+on:
+  push:
+    paths: ['pages/**', 'workers/**', 'packages/**']
+
+# .github/workflows/macos.yml
+on:
+  push:
+    paths: ['macos/**', 'tests/fixtures/**']
+```
+
+Changes to shared test fixtures trigger both pipelines — which is exactly the desired behavior, since both parsers must agree on the same inputs.
+
 ## Technology Choice: SwiftUI + MapKit
 
 **Recommended stack:**
@@ -20,9 +63,9 @@ TaskScore currently runs as a Cloudflare Pages web app. A native macOS app would
 | Map | MapKit | Native Apple maps, 3D globe, no API key needed, free |
 | 3D Rendering | SceneKit (via MapKit) | Native 3D for track visualization |
 | Networking | URLSession | Native async/await HTTP |
-| Storage | SwiftData | Apple's modern persistence (SQLite under the hood) |
+| Storage | Files in `~/Documents/TaskScore/` | Transparent, offline-first, Finder-browsable |
 | Preferences | UserDefaults / @AppStorage | Native settings persistence |
-| File Handling | UTType + DocumentGroup | Native document model for IGC files |
+| File Handling | UTType + DocumentGroup | Native document model for IGC + XCTask files |
 | Geo Math | CoreLocation + native Swift | CLLocation distance/bearing calculations |
 | Testing | XCTest + Swift Testing | Native test frameworks |
 
@@ -61,14 +104,16 @@ TaskScore currently runs as a Cloudflare Pages web app. A native macOS app would
 │  └──────────────────────────────────────────┘    │
 │                                                  │
 │  ┌──────────────────────────────────────────┐    │
-│  │           Data Layer                      │    │
-│  │  SwiftData (tasks, tracks, preferences)   │    │
-│  │  FileManager (IGC document handling)      │    │
+│  │           File Layer                      │    │
+│  │  ~/Documents/TaskScore/{Tracks,Tasks}/    │    │
+│  │  .igc files · .xctsk files                │    │
+│  │  NSDocument + File > Open Recent          │    │
 │  └──────────────────────────────────────────┘    │
 │                                                  │
 │  ┌──────────────────────────────────────────┐    │
 │  │           Network Layer                   │    │
 │  │  AirScoreClient · XContestClient          │    │
+│  │  Download → save to file → then open      │    │
 │  └──────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────┘
 ```
@@ -77,14 +122,13 @@ TaskScore currently runs as a Cloudflare Pages web app. A native macOS app would
 
 ```
 TaskScore/
-├── TaskScoreApp.swift              # @main, DocumentGroup, WindowGroup
+├── TaskScoreApp.swift              # @main, WindowGroup, Settings
 ├── Models/
 │   ├── IGCFile.swift               # Parsed IGC data model
 │   ├── XCTask.swift                # Task definition model
 │   ├── FlightEvent.swift           # Event types and data
 │   ├── GlideSegment.swift          # Glide analysis results
-│   ├── Preferences.swift           # User preferences (units, theme)
-│   └── StoredItem.swift            # SwiftData persistence models
+│   └── Preferences.swift           # User preferences (units, theme)
 ├── Analysis/
 │   ├── IGCParser.swift             # Port of igc-parser.ts (327 lines)
 │   ├── XCTaskParser.swift          # Port of xctsk-parser.ts (721 lines)
@@ -105,9 +149,9 @@ TaskScore/
 │   ├── SettingsView.swift          # Preferences (units, display)
 │   └── AirScoreLoadView.swift      # AirScore URL input sheet
 ├── Services/
-│   ├── AirScoreClient.swift        # HTTP client for AirScore API
-│   ├── XContestClient.swift        # HTTP client for XContest
-│   └── DocumentHandler.swift       # IGC file open/import logic
+│   ├── AirScoreClient.swift        # Fetch from AirScore → save .igc/.xctsk
+│   ├── XContestClient.swift        # Fetch from XContest → save .xctsk
+│   └── FileStore.swift             # Manages ~/Documents/TaskScore/ directory
 └── Resources/
     ├── SampleFlights/              # Bundled demo IGC files
     └── Waypoints/                  # Bundled waypoint CSVs
@@ -115,24 +159,81 @@ TaskScore/
 
 ## Feature Mapping: Web → Native
 
-### File Handling
+### File Handling & Storage
+
+**Design principle**: Everything is a file. No database. Downloaded data is written to `~/Documents/TaskScore/` with proper extensions so it can be browsed in Finder, reopened offline, backed up by Time Machine, and synced via iCloud Drive.
+
+#### File Layout
+
+```
+~/Documents/TaskScore/
+├── Tracks/
+│   ├── 2025-01-15-John-Smith-Corryong.igc
+│   ├── 2025-01-16-Jane-Doe-Forbes.igc
+│   └── ...
+└── Tasks/
+    ├── Corryong-2025-Task-1.xctsk
+    ├── Forbes-2025-Task-3.xctsk
+    └── ...
+```
+
+The app creates this directory structure on first launch if it doesn't exist.
+
+#### File Types
+
+| Format | Extension | UTType | Contents |
+|--------|-----------|--------|----------|
+| IGC flight log | `.igc` | `com.taskscore.igc` (conforms to `.plainText`) | Standard IGC format, unchanged |
+| XCTask | `.xctsk` | `com.taskscore.xctask` (conforms to `.json`) | XCTask JSON — same format as web version |
+
+The app registers as the handler for both types. Double-clicking an `.igc` or `.xctsk` file in Finder opens it in TaskScore.
+
+#### File Naming
+
+Downloaded files get human-readable names derived from their metadata:
+
+```swift
+// Tracks: {date}-{pilot}-{competition}.igc
+func trackFilename(igc: IGCFile, competition: String?) -> String {
+    let date = igc.header.date.formatted(.iso8601.year().month().day().dateSeparator(.dash))
+    let pilot = igc.header.pilot?.sanitizedForFilename() ?? "Unknown"
+    let comp = competition?.sanitizedForFilename()
+    return [date, pilot, comp].compactMap { $0 }.joined(separator: "-") + ".igc"
+}
+
+// Tasks: {competition}-{task-name}.xctsk
+func taskFilename(competition: String, taskName: String) -> String {
+    "\(competition)-\(taskName)".sanitizedForFilename() + ".xctsk"
+}
+```
+
+If a file with the same name already exists, the app skips the download (the data is already local).
+
+#### Web → Native Mapping
 
 | Web | macOS Native |
 |-----|-------------|
-| `<input type="file">` | `NSOpenPanel` / DocumentGroup |
+| `<input type="file">` | `NSOpenPanel` / File > Open |
 | Drag-and-drop to browser | Native Finder drag-and-drop (`onDrop`) |
-| IndexedDB storage | SwiftData + file bookmarks |
-| SHA-256 via Web Crypto | `CryptoKit.SHA256` |
+| IndexedDB storage | Files in `~/Documents/TaskScore/` |
+| SHA-256 deduplication | Filename-based deduplication |
+| "Stored Items" in command menu | File > Open Recent (built-in macOS) |
+| localStorage (preferences) | `@AppStorage` / UserDefaults |
 
-The app should register as a handler for `.igc` files (UTType), so double-clicking an IGC file in Finder opens TaskScore directly.
+#### Open Recent
 
-```swift
-// Info.plist / UTType declaration
-UTType("com.taskscore.igc-file",
-       conformingTo: .plainText,
-       filenameExtension: "igc",
-       description: "IGC Flight Log")
-```
+macOS tracks recently opened files automatically when the app uses the standard document-opening APIs (`NSDocumentController`). No custom "recent items" implementation needed — File > Open Recent just works, populated with every `.igc` and `.xctsk` file the app has opened.
+
+#### Download Workflow
+
+When the user loads data from AirScore or XContest, the app:
+
+1. Fetches the data from the remote API
+2. Saves it as a file in `~/Documents/TaskScore/` (Tracks/ or Tasks/)
+3. Opens the saved file — exactly as if the user had opened it from Finder
+4. The file appears in File > Open Recent
+
+This means every remote fetch produces a durable local file. The user can go offline, open Finder, and browse all their downloaded flights and tasks. No network needed to reopen anything.
 
 ### Map Rendering
 
@@ -220,30 +321,49 @@ enum FlightEvent {
 
 ### Storage
 
-| Web | macOS Native |
-|-----|-------------|
-| IndexedDB (`taskscore` db) | SwiftData |
-| localStorage (preferences) | `@AppStorage` / UserDefaults |
+No database. The filesystem *is* the storage layer.
+
+| Concern | Implementation |
+|---------|---------------|
+| Tracks | `.igc` files in `~/Documents/TaskScore/Tracks/` |
+| Tasks | `.xctsk` files in `~/Documents/TaskScore/Tasks/` |
+| Recent items | macOS File > Open Recent (automatic) |
+| Preferences | `@AppStorage` / UserDefaults |
+| Deduplication | Filename match (skip download if file exists) |
+| Backup | Time Machine covers `~/Documents/` automatically |
+| Sync | iCloud Drive covers `~/Documents/` if enabled |
 
 ```swift
-@Model
-class StoredTrack {
-    @Attribute(.unique) var sha256: String
-    var filename: String
-    var pilotName: String?
-    var flightDate: Date?
-    var content: Data  // Raw IGC bytes
-    var storedAt: Date
-    var lastAccessedAt: Date
-}
+struct FileStore {
+    static let baseURL = FileManager.default
+        .urls(for: .documentDirectory, in: .userDomainMask)[0]
+        .appending(path: "TaskScore")
 
-@Model
-class StoredTask {
-    @Attribute(.unique) var code: String
-    var name: String
-    var taskData: Data  // Encoded XCTask
-    var storedAt: Date
-    var lastAccessedAt: Date
+    static let tracksURL = baseURL.appending(path: "Tracks")
+    static let tasksURL = baseURL.appending(path: "Tasks")
+
+    /// Creates ~/Documents/TaskScore/{Tracks,Tasks}/ if needed
+    static func ensureDirectories() throws {
+        let fm = FileManager.default
+        try fm.createDirectory(at: tracksURL, withIntermediateDirectories: true)
+        try fm.createDirectory(at: tasksURL, withIntermediateDirectories: true)
+    }
+
+    /// Save downloaded IGC track, returns URL of saved file
+    static func saveTrack(_ data: Data, filename: String) throws -> URL {
+        let url = tracksURL.appending(path: filename)
+        guard !FileManager.default.fileExists(atPath: url.path) else { return url }
+        try data.write(to: url)
+        return url
+    }
+
+    /// Save downloaded task, returns URL of saved file
+    static func saveTask(_ data: Data, filename: String) throws -> URL {
+        let url = tasksURL.appending(path: filename)
+        guard !FileManager.default.fileExists(atPath: url.path) else { return url }
+        try data.write(to: url)
+        return url
+    }
 }
 ```
 
@@ -306,74 +426,94 @@ Menu Bar:
 
 ### Network Layer
 
+The native app can call AirScore and XContest directly — no CORS proxy needed. Every fetch saves to disk first, then opens from disk.
+
 ```swift
 actor AirScoreClient {
-    private let baseURL: URL
-    private let cache: URLCache
+    private let baseURL = URL(string: "https://xc.highcloud.net")!
 
-    func fetchTask(comPk: Int, tasPk: Int) async throws -> AirScoreTaskResponse {
-        // Direct call to AirScore API (no need for CORS proxy in native)
-        // Or continue using the existing worker for caching benefits
+    /// Fetch task → save as .xctsk → return file URL
+    func fetchAndSaveTask(comPk: Int, tasPk: Int) async throws -> URL {
+        let filename = "AirScore-\(comPk)-Task-\(tasPk).xctsk"
+
+        // Skip download if already on disk
+        let existing = FileStore.tasksURL.appending(path: filename)
+        if FileManager.default.fileExists(atPath: existing.path) {
+            return existing
+        }
+
+        // Fetch, transform to XCTask JSON, save
+        let response = try await fetchTaskData(comPk: comPk, tasPk: tasPk)
+        let xctaskJSON = try JSONEncoder().encode(response.task)
+        return try FileStore.saveTask(xctaskJSON, filename: filename)
     }
 
-    func fetchTrack(trackId: Int) async throws -> Data {
-        // Returns raw IGC data
+    /// Fetch pilot track → save as .igc → return file URL
+    func fetchAndSaveTrack(trackId: Int, pilotName: String?, competition: String?) async throws -> URL {
+        let igcData = try await downloadTrack(trackId: trackId)
+        let igc = try IGCParser.parse(igcData)
+        let filename = trackFilename(igc: igc, competition: competition)
+
+        return try FileStore.saveTrack(igcData, filename: filename)
     }
 }
 ```
 
-**Key difference from web**: The native app can call AirScore's API directly (no CORS restrictions). The Cloudflare Worker could still be used for its caching benefits, or the app could implement its own URLCache-based caching.
+**Flow**: Network fetch → file on disk → open from disk → appears in Open Recent. The network layer is only used for the initial download. After that, the file is local and the app never needs the network for that data again.
 
 ## Implementation Phases
 
 ### Phase 1: Core Analysis (MVP)
 
-**Goal**: Open and analyze IGC files with event detection and map display.
+**Goal**: Open and analyze local IGC files with event detection and map display.
 
 **Deliverables:**
 1. Swift IGC parser (port `igc-parser.ts`)
 2. Event detector (port `event-detector.ts`)
 3. Geo utilities (wrap CoreLocation, port `geo.ts`)
 4. Unit conversion (port `units.ts`)
-5. MapKit view with track polyline (altitude-colored)
-6. Event list sidebar with filter tabs
-7. Click event → pan to location on map
-8. File > Open for IGC files
-9. Drag-and-drop IGC from Finder
-10. Register as `.igc` file handler
+5. FileStore — create `~/Documents/TaskScore/` structure
+6. Register as `.igc` file handler (UTType)
+7. File > Open for IGC files, drag-and-drop from Finder
+8. File > Open Recent (automatic with standard document APIs)
+9. MapKit view with track polyline (altitude-colored)
+10. Event list sidebar with filter tabs
+11. Click event → pan to location on map
 
 **Estimated scope**: ~4,000 lines of Swift
 
-### Phase 2: Task Support
+### Phase 2: Task Support + Downloads
 
-**Goal**: Load and visualize competition tasks alongside tracks.
+**Goal**: Load competition tasks from AirScore/XContest, save as files, visualize alongside tracks.
 
 **Deliverables:**
 1. XCTask parser (port `xctsk-parser.ts`)
-2. Task cylinder overlays on map
-3. Optimized task line calculation and display
-4. Turnpoint entry/exit detection integrated with events
-5. Start/goal crossing detection
-6. AirScore client (direct API or via worker)
-7. XContest task loading
-8. Load AirScore Task sheet (paste URL)
+2. Register as `.xctsk` file handler (UTType)
+3. Task cylinder overlays on map
+4. Optimized task line calculation and display
+5. Turnpoint entry/exit detection integrated with events
+6. Start/goal crossing detection
+7. AirScore client — fetch task → save `.xctsk` → open from file
+8. AirScore client — fetch track → save `.igc` → open from file
+9. XContest client — fetch task → save `.xctsk` → open from file
+10. Load AirScore Task sheet (paste URL)
 
-**Estimated scope**: ~2,500 lines of Swift
+After this phase, every downloaded item is a file in `~/Documents/TaskScore/` that appears in File > Open Recent and can be reopened offline.
 
-### Phase 3: Polish & Persistence
+**Estimated scope**: ~3,000 lines of Swift
 
-**Goal**: Full-featured app with storage, preferences, and native feel.
+### Phase 3: Polish
+
+**Goal**: Full-featured app with native feel.
 
 **Deliverables:**
-1. SwiftData persistence for tracks and tasks
-2. File > Open Recent integration
-3. Settings window (unit preferences)
-4. Glide visualization (chevrons + speed labels as map annotations)
-5. 3D track visualization (MapKit camera pitch + altitude)
-6. Sample flights bundled in app
-7. Toolbar with display toggles
-8. Keyboard shortcuts for all common actions
-9. Dark mode support (automatic via SwiftUI)
+1. Settings window (unit preferences)
+2. Glide visualization (chevrons + speed labels as map annotations)
+3. 3D track visualization (MapKit camera pitch + altitude)
+4. Sample flights bundled in app (copied to ~/Documents/TaskScore/ on first run)
+5. Toolbar with display toggles
+6. Keyboard shortcuts for all common actions
+7. Dark mode support (automatic via SwiftUI)
 
 **Estimated scope**: ~2,000 lines of Swift
 
@@ -387,7 +527,6 @@ actor AirScoreClient {
 3. Mac App Store submission (or direct DMG download)
 4. Sparkle framework for auto-updates (if direct distribution)
 5. Spotlight importer for IGC file metadata (optional)
-6. iCloud sync for preferences and stored items (optional)
 
 ## Testing Strategy
 
@@ -455,10 +594,11 @@ The native app is a **flight analysis companion** — it focuses entirely on the
 
 | Decision | Chosen | Alternatives Considered | Reason |
 |----------|--------|------------------------|--------|
+| Repository | Monorepo | Separate repos | Shared test fixtures, shared docs, low splitting cost later |
 | UI Framework | SwiftUI | AppKit, Catalyst | Modern, declarative, less code |
 | Map SDK | MapKit | MapBox Native SDK | Free, no API key, native 3D, simpler |
 | Analysis code | Swift port | JavaScriptCore bridge | Type safety, no bridging overhead, maintainable |
-| Persistence | SwiftData | Core Data, SQLite, Realm | Modern Apple persistence, less boilerplate |
+| Storage | Files in ~/Documents/TaskScore/ | SwiftData, Core Data, SQLite | Transparent, Finder-browsable, offline-first, no database to corrupt |
 | Distribution | Direct + App Store | Homebrew, App Store only | Flexibility; avoid review delays during development |
 | Geo calculations | CoreLocation | Turf.js via JSCore | Native, tested, no dependencies |
 
