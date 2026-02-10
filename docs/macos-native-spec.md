@@ -73,10 +73,10 @@ Changes to shared test fixtures trigger both pipelines — which is exactly the 
 - The web version already exists for cross-platform access
 - A native app should *feel* native — SwiftUI provides this with far less effort
 - MapKit is free and integrates perfectly; MapBox native SDK requires a paid plan for mobile/desktop
-- No runtime overhead (Electron bundles Chromium; Tauri bundles a webview)
+- No runtime overhead (Electron bundles Chromium; Tauri uses system webview but adds Rust runtime)
 
 **Why not reuse the TypeScript analysis code via JavaScriptCore?**
-- The analysis package is ~3,600 lines — manageable to port to Swift
+- The analysis package is ~2,700 lines — manageable to port to Swift
 - Swift's type system catches errors the TypeScript code works around
 - CoreLocation provides geographic calculations natively
 - Eliminates JS↔Swift bridging complexity and debugging difficulty
@@ -406,7 +406,7 @@ Menu Bar:
 ├── View
 │   ├── Show/Hide Sidebar         ⌘S (⌃⌘S)
 │   ├── Show/Hide Inspector       ⌥⌘I
-│   ├── Toggle 3D                 ⌘3
+│   ├── Toggle 3D                 ⇧⌘3
 │   ├── Map Style                ▶
 │   │   ├── Standard
 │   │   ├── Satellite
