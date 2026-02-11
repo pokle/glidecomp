@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import TaskScoreLib
 
 /// MapKit view displaying the flight track, events, task cylinders, optimized task line,
 /// glide markers, and segment highlighting
@@ -38,12 +39,14 @@ struct MapView: View {
             // Task cylinder overlays
             if showTask, let task = task {
                 ForEach(Array(task.turnpoints.enumerated()), id: \.offset) { index, tp in
-                    MapCircle(
-                        center: CLLocationCoordinate2D(latitude: tp.waypoint.lat, longitude: tp.waypoint.lon),
-                        radius: tp.radius
-                    )
-                    .foregroundStyle(turnpointFillColor(tp).opacity(0.15))
-                    .stroke(turnpointStrokeColor(tp), lineWidth: 1.5)
+                    let circleCoords = Geo.getCirclePoints(
+                        centerLat: tp.waypoint.lat, centerLon: tp.waypoint.lon,
+                        radiusMeters: tp.radius
+                    ).map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+
+                    MapPolygon(coordinates: circleCoords)
+                        .foregroundStyle(turnpointFillColor(tp).opacity(0.15))
+                        .stroke(turnpointStrokeColor(tp), lineWidth: 1.5)
 
                     Annotation(
                         tp.waypoint.name,
@@ -100,9 +103,9 @@ struct MapView: View {
         .onChange(of: selectedEvent) { _, event in
             if let event = event {
                 withAnimation {
-                    cameraPosition = .region(MKCoordinateRegion(
-                        center: CLLocationCoordinate2D(latitude: event.latitude, longitude: event.longitude),
-                        span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
+                    cameraPosition = .camera(MapCamera(
+                        centerCoordinate: CLLocationCoordinate2D(latitude: event.latitude, longitude: event.longitude),
+                        distance: cameraPosition.camera?.distance ?? 5000
                     ))
                 }
             }
@@ -270,10 +273,18 @@ struct ChevronShape: Shape {
 struct SpeedLabelView: View {
     let marker: GlideMarker
 
+    @AppStorage("speedUnit") private var speedUnit: String = SpeedUnit.kmh.rawValue
+    @AppStorage("altitudeUnit") private var altitudeUnit: String = AltitudeUnit.meters.rawValue
+
+    private var prefs: UnitPreferences {
+        UnitPreferences(speed: speedUnit, altitude: altitudeUnit,
+                        distance: DistanceUnit.km.rawValue, climbRate: ClimbRateUnit.mps.rawValue)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if let speedMps = marker.speedMps {
-                Text(Units.formatSpeed(speedMps).withUnit)
+                Text(Units.formatSpeed(speedMps, prefs: prefs).withUnit)
                     .font(.system(size: 9, weight: .semibold))
             }
             HStack(spacing: 3) {
@@ -282,7 +293,7 @@ struct SpeedLabelView: View {
                         .font(.system(size: 8))
                 }
                 if let altDiff = marker.altitudeDiff {
-                    Text(Units.formatAltitudeChange(altDiff).withUnit)
+                    Text(Units.formatAltitudeChange(altDiff, prefs: prefs).withUnit)
                         .font(.system(size: 8))
                 }
             }

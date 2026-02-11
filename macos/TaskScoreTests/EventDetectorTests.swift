@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import TaskScore
+@testable import TaskScoreLib
 
 /// Helper to create a mock fix at a given time offset (in minutes from base)
 func createFix(

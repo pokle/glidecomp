@@ -1,4 +1,5 @@
 import SwiftUI
+import TaskScoreLib
 
 // MARK: - Formatting Helpers
 
@@ -27,10 +28,12 @@ private func formatTimeRange(_ start: Date, _ end: Date) -> String {
 extension UnitPreferences {
     /// Build preferences from raw @AppStorage string values
     init(speed: String, altitude: String, distance: String, climbRate: String) {
-        self.speed = SpeedUnit(rawValue: speed) ?? .kmh
-        self.altitude = AltitudeUnit(rawValue: altitude) ?? .meters
-        self.distance = DistanceUnit(rawValue: distance) ?? .km
-        self.climbRate = ClimbRateUnit(rawValue: climbRate) ?? .mps
+        self.init(
+            speed: SpeedUnit(rawValue: speed) ?? .kmh,
+            altitude: AltitudeUnit(rawValue: altitude) ?? .meters,
+            distance: DistanceUnit(rawValue: distance) ?? .km,
+            climbRate: ClimbRateUnit(rawValue: climbRate) ?? .mps
+        )
     }
 }
 

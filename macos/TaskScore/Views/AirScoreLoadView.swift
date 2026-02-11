@@ -1,4 +1,5 @@
 import SwiftUI
+import TaskScoreLib
 
 /// Sheet for loading a task from AirScore by pasting a URL
 struct AirScoreLoadView: View {

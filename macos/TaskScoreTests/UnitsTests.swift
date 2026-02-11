@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import TaskScore
+@testable import TaskScoreLib
 
 @Suite("Units")
 struct UnitsTests {

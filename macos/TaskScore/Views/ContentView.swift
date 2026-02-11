@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import UniformTypeIdentifiers
+import TaskScoreLib
 
 /// Main app layout: NavigationSplitView with sidebar + map detail
 struct ContentView: View {
@@ -115,6 +116,19 @@ enum EventFilter: String, CaseIterable {
     case glides = "Glides"
     case climbs = "Climbs"
     case sinks = "Sinks"
+}
+
+// MARK: - FocusedValue for event filter binding
+
+struct EventFilterKey: FocusedValueKey {
+    typealias Value = Binding<EventFilter>
+}
+
+extension FocusedValues {
+    var eventFilter: Binding<EventFilter>? {
+        get { self[EventFilterKey.self] }
+        set { self[EventFilterKey.self] = newValue }
+    }
 }
 
 /// View model managing flight data and analysis

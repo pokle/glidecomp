@@ -1,4 +1,5 @@
 import SwiftUI
+import TaskScoreLib
 
 /// Summary panel showing flight metadata
 struct FlightInfoView: View {

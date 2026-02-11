@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import TaskScore
+@testable import TaskScoreLib
 
 @Suite("IGC Parser")
 struct IGCParserTests {

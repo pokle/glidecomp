@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import TaskScoreLib
 
 @main
 struct TaskScoreApp: App {
