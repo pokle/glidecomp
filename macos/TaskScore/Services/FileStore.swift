@@ -1,4 +1,5 @@
 import Foundation
+import TaskScoreLib
 
 /// Manages ~/Documents/TaskScore/ directory structure
 public struct FileStore {

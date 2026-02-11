@@ -179,6 +179,15 @@ public struct CompetitionInfo: Codable, Sendable {
         case taskName, date, taskType, taskDistance, waypointDistance
         case comment, quality, stopped
     }
+
+    public init(name: String, compClass: String, taskName: String, date: String,
+                taskType: String, taskDistance: Double, waypointDistance: Double,
+                comment: String?, quality: Double, stopped: Bool) {
+        self.name = name; self.compClass = compClass; self.taskName = taskName
+        self.date = date; self.taskType = taskType; self.taskDistance = taskDistance
+        self.waypointDistance = waypointDistance; self.comment = comment
+        self.quality = quality; self.stopped = stopped
+    }
 }
 
 public struct PilotResult: Codable, Sendable, Identifiable {
@@ -197,6 +206,15 @@ public struct PilotResult: Codable, Sendable, Identifiable {
     public let trackId: String?
 
     public var id: String { pilotId }
+
+    public init(rank: Int, pilotId: String, name: String, nationality: String,
+                glider: String, gliderClass: String, startTime: String?, finishTime: String?,
+                duration: String?, distance: Double, speed: Double, score: Double, trackId: String?) {
+        self.rank = rank; self.pilotId = pilotId; self.name = name; self.nationality = nationality
+        self.glider = glider; self.gliderClass = gliderClass; self.startTime = startTime
+        self.finishTime = finishTime; self.duration = duration; self.distance = distance
+        self.speed = speed; self.score = score; self.trackId = trackId
+    }
 }
 
 public struct FormulaInfo: Codable, Sendable {
@@ -208,6 +226,13 @@ public struct FormulaInfo: Codable, Sendable {
     public let nominalTime: String
     public let arrivalScoring: String
     public let heightBonus: String
+
+    public init(name: String, goalPenalty: Double, nominalGoal: String, minimumDistance: String,
+                nominalDistance: String, nominalTime: String, arrivalScoring: String, heightBonus: String) {
+        self.name = name; self.goalPenalty = goalPenalty; self.nominalGoal = nominalGoal
+        self.minimumDistance = minimumDistance; self.nominalDistance = nominalDistance
+        self.nominalTime = nominalTime; self.arrivalScoring = arrivalScoring; self.heightBonus = heightBonus
+    }
 }
 
 public struct AirScoreTaskResponse: Codable, Sendable {
@@ -215,10 +240,95 @@ public struct AirScoreTaskResponse: Codable, Sendable {
     public let competition: CompetitionInfo
     public let pilots: [PilotResult]
     public let formula: FormulaInfo
+
+    public init(task: XCTask, competition: CompetitionInfo, pilots: [PilotResult], formula: FormulaInfo) {
+        self.task = task; self.competition = competition; self.pilots = pilots; self.formula = formula
+    }
+}
+
+/// Combined glide segment for the Glides tab
+public struct GlideData: Identifiable, Hashable {
+    public let id: String
+    public let startTime: Date
+    public let endTime: Date
+    public let startAltitude: Double
+    public let endAltitude: Double
+    public let distance: Double
+    public let duration: Double
+    public let averageSpeed: Double
+    public let glideRatio: Double
+    public let altitudeLost: Double
+    public let segment: TrackSegment
+    public let sourceEvent: FlightEvent
+
+    public init(id: String, startTime: Date, endTime: Date, startAltitude: Double,
+                endAltitude: Double, distance: Double, duration: Double, averageSpeed: Double,
+                glideRatio: Double, altitudeLost: Double, segment: TrackSegment, sourceEvent: FlightEvent) {
+        self.id = id; self.startTime = startTime; self.endTime = endTime
+        self.startAltitude = startAltitude; self.endAltitude = endAltitude
+        self.distance = distance; self.duration = duration; self.averageSpeed = averageSpeed
+        self.glideRatio = glideRatio; self.altitudeLost = altitudeLost
+        self.segment = segment; self.sourceEvent = sourceEvent
+    }
+}
+
+/// Combined thermal/climb segment for the Climbs tab
+public struct ClimbData: Identifiable, Hashable {
+    public let id: String
+    public let startTime: Date
+    public let endTime: Date
+    public let startAltitude: Double
+    public let endAltitude: Double
+    public let altitudeGain: Double
+    public let duration: Double
+    public let avgClimbRate: Double
+    public let segment: TrackSegment
+    public let sourceEvent: FlightEvent
+
+    public init(id: String, startTime: Date, endTime: Date, startAltitude: Double,
+                endAltitude: Double, altitudeGain: Double, duration: Double, avgClimbRate: Double,
+                segment: TrackSegment, sourceEvent: FlightEvent) {
+        self.id = id; self.startTime = startTime; self.endTime = endTime
+        self.startAltitude = startAltitude; self.endAltitude = endAltitude
+        self.altitudeGain = altitudeGain; self.duration = duration; self.avgClimbRate = avgClimbRate
+        self.segment = segment; self.sourceEvent = sourceEvent
+    }
+}
+
+/// Sink segment for the Sinks tab (glides with L/D ≤ 5:1)
+public struct SinkData: Identifiable, Hashable {
+    public let id: String
+    public let startTime: Date
+    public let endTime: Date
+    public let startAltitude: Double
+    public let endAltitude: Double
+    public let altitudeLost: Double
+    public let distance: Double
+    public let duration: Double
+    public let averageSpeed: Double
+    public let avgSinkRate: Double
+    public let glideRatio: Double
+    public let segment: TrackSegment
+    public let sourceEvent: FlightEvent
+
+    public init(id: String, startTime: Date, endTime: Date, startAltitude: Double,
+                endAltitude: Double, altitudeLost: Double, distance: Double, duration: Double,
+                averageSpeed: Double, avgSinkRate: Double, glideRatio: Double,
+                segment: TrackSegment, sourceEvent: FlightEvent) {
+        self.id = id; self.startTime = startTime; self.endTime = endTime
+        self.startAltitude = startAltitude; self.endAltitude = endAltitude
+        self.altitudeLost = altitudeLost; self.distance = distance; self.duration = duration
+        self.averageSpeed = averageSpeed; self.avgSinkRate = avgSinkRate; self.glideRatio = glideRatio
+        self.segment = segment; self.sourceEvent = sourceEvent
+    }
 }
 
 /// Style information for event display
 public struct EventStyle {
     public let icon: String
     public let color: String
+
+    public init(icon: String, color: String) {
+        self.icon = icon; self.color = color
+    }
 }

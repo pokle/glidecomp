@@ -1,4 +1,5 @@
 import Foundation
+import TaskScoreLib
 
 /// Manages bundled sample flights, copying them to ~/Documents/TaskScore/ on first launch
 enum SampleFlights {

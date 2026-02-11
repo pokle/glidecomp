@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import UniformTypeIdentifiers
+import TaskScoreLib
 
 /// Main app layout: NavigationSplitView with sidebar + map detail
 struct ContentView: View {
@@ -12,7 +13,10 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             EventListView(
-                events: viewModel.filteredEvents(for: eventFilter),
+                events: viewModel.events,
+                glides: viewModel.extractGlides(),
+                climbs: viewModel.extractClimbs(),
+                sinks: viewModel.extractSinks(),
                 selectedEvent: $selectedEvent,
                 filter: $eventFilter
             )
@@ -112,6 +116,19 @@ enum EventFilter: String, CaseIterable {
     case glides = "Glides"
     case climbs = "Climbs"
     case sinks = "Sinks"
+}
+
+// MARK: - FocusedValue for event filter binding
+
+struct EventFilterKey: FocusedValueKey {
+    typealias Value = Binding<EventFilter>
+}
+
+extension FocusedValues {
+    var eventFilter: Binding<EventFilter>? {
+        get { self[EventFilterKey.self] }
+        set { self[EventFilterKey.self] = newValue }
+    }
 }
 
 /// View model managing flight data and analysis
@@ -214,17 +231,127 @@ class FlightViewModel {
         }
     }
 
-    func filteredEvents(for filter: EventFilter) -> [FlightEvent] {
-        switch filter {
-        case .all:
-            return events
-        case .glides:
-            return events.filter { $0.type == .glideStart || $0.type == .glideEnd }
-        case .climbs:
-            return events.filter { $0.type == .thermalEntry || $0.type == .thermalExit }
-        case .sinks:
-            return events.filter { $0.type == .maxSink }
+    func extractGlides() -> [GlideData] {
+        var glides: [GlideData] = []
+
+        for startEvent in events where startEvent.type == .glideStart {
+            guard let segment = startEvent.segment,
+                  let distance = startEvent.details["distance"],
+                  let glideRatio = startEvent.details["glideRatio"],
+                  let duration = startEvent.details["duration"],
+                  let averageSpeed = startEvent.details["averageSpeed"] else {
+                continue
+            }
+
+            guard let endEvent = events.first(where: {
+                $0.type == .glideEnd && $0.segment == segment
+            }) else {
+                continue
+            }
+
+            let altitudeLost = startEvent.altitude - endEvent.altitude
+
+            glides.append(GlideData(
+                id: startEvent.id,
+                startTime: startEvent.time,
+                endTime: endEvent.time,
+                startAltitude: startEvent.altitude,
+                endAltitude: endEvent.altitude,
+                distance: distance,
+                duration: duration,
+                averageSpeed: averageSpeed,
+                glideRatio: glideRatio,
+                altitudeLost: altitudeLost,
+                segment: segment,
+                sourceEvent: startEvent
+            ))
         }
+
+        // Sort by distance, longest first
+        glides.sort { $0.distance > $1.distance }
+        return glides
+    }
+
+    func extractClimbs() -> [ClimbData] {
+        var climbs: [ClimbData] = []
+
+        for entryEvent in events where entryEvent.type == .thermalEntry {
+            guard let segment = entryEvent.segment,
+                  let avgClimbRate = entryEvent.details["avgClimbRate"],
+                  let duration = entryEvent.details["duration"],
+                  let altitudeGain = entryEvent.details["altitudeGain"] else {
+                continue
+            }
+
+            guard let exitEvent = events.first(where: {
+                $0.type == .thermalExit && $0.segment == segment
+            }) else {
+                continue
+            }
+
+            climbs.append(ClimbData(
+                id: entryEvent.id,
+                startTime: entryEvent.time,
+                endTime: exitEvent.time,
+                startAltitude: entryEvent.altitude,
+                endAltitude: exitEvent.altitude,
+                altitudeGain: altitudeGain,
+                duration: duration,
+                avgClimbRate: avgClimbRate,
+                segment: segment,
+                sourceEvent: entryEvent
+            ))
+        }
+
+        // Sort by altitude gain, highest first
+        climbs.sort { $0.altitudeGain > $1.altitudeGain }
+        return climbs
+    }
+
+    func extractSinks() -> [SinkData] {
+        var sinks: [SinkData] = []
+
+        for startEvent in events where startEvent.type == .glideStart {
+            guard let segment = startEvent.segment,
+                  let glideRatio = startEvent.details["glideRatio"],
+                  let distance = startEvent.details["distance"],
+                  let duration = startEvent.details["duration"],
+                  let averageSpeed = startEvent.details["averageSpeed"] else {
+                continue
+            }
+
+            // Only include glides with L/D ≤ 5 (poor glide = sink)
+            guard glideRatio <= 5 else { continue }
+
+            guard let endEvent = events.first(where: {
+                $0.type == .glideEnd && $0.segment == segment
+            }) else {
+                continue
+            }
+
+            let altitudeLost = startEvent.altitude - endEvent.altitude
+            let avgSinkRate = duration > 0 ? altitudeLost / duration : 0
+
+            sinks.append(SinkData(
+                id: startEvent.id,
+                startTime: startEvent.time,
+                endTime: endEvent.time,
+                startAltitude: startEvent.altitude,
+                endAltitude: endEvent.altitude,
+                altitudeLost: altitudeLost,
+                distance: distance,
+                duration: duration,
+                averageSpeed: averageSpeed,
+                avgSinkRate: avgSinkRate,
+                glideRatio: glideRatio,
+                segment: segment,
+                sourceEvent: startEvent
+            ))
+        }
+
+        // Sort by altitude lost, deepest first
+        sinks.sort { $0.altitudeLost > $1.altitudeLost }
+        return sinks
     }
 }
 
@@ -233,24 +360,23 @@ struct FlightSummary {
     let pilot: String?
     let date: Date?
     let gliderType: String?
-    let maxAltitude: Int?
+    let maxAltitudeMeters: Double?
     let eventCount: Int
-    let taskDistance: String?
+    let taskDistanceMeters: Double?
     let competitionName: String?
 
     init(igc: IGCFileData, events: [FlightEvent], task: XCTask? = nil) {
         self.pilot = igc.header.pilot
         self.date = igc.header.date
         self.gliderType = igc.header.gliderType
-        self.maxAltitude = events.first(where: { $0.type == .maxAltitude }).map { Int($0.altitude) }
+        self.maxAltitudeMeters = events.first(where: { $0.type == .maxAltitude }).map { $0.altitude }
         self.eventCount = events.count
         self.competitionName = nil
 
         if let task = task, task.turnpoints.count >= 2 {
-            let dist = XCTaskParser.calculateOptimizedTaskDistance(task)
-            self.taskDistance = String(format: "%.1f km", dist / 1000)
+            self.taskDistanceMeters = XCTaskParser.calculateOptimizedTaskDistance(task)
         } else {
-            self.taskDistance = nil
+            self.taskDistanceMeters = nil
         }
     }
 }

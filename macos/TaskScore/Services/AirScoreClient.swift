@@ -1,4 +1,5 @@
 import Foundation
+import TaskScoreLib
 
 /// Client for fetching task and track data from AirScore.
 /// The native app calls AirScore directly — no CORS proxy needed.
@@ -156,26 +157,47 @@ public actor AirScoreClient {
     private func transformAirScoreTask(_ rawTask: [String: Any]) -> XCTask {
         var turnpoints: [XCTaskTurnpoint] = []
 
-        if let waypoints = rawTask["opt_var"] as? [[String: Any]] {
-            // AirScore "opt_var" contains optimized waypoints
+        if let waypoints = rawTask["waypoints"] as? [[String: Any]],
+           waypoints.first?["rwpLatDecimal"] != nil {
+            // AirScore native format: waypoints with rwpLatDecimal/rwpLongDecimal (cylinder centers)
             for wp in waypoints {
-                let tpType = mapWaypointType(wp["type"] as? String)
-                let radius = (wp["radius"] as? Double) ?? (wp["radius"] as? Int).map { Double($0) } ?? 400
+                let tpType = mapWaypointType(wp["tawType"] as? String)
+                let radius: Double = {
+                    if let s = wp["tawRadius"] as? String { return Double(s) ?? 400 }
+                    if let d = wp["tawRadius"] as? Double { return d }
+                    if let i = wp["tawRadius"] as? Int { return Double(i) }
+                    return 400
+                }()
+                let lat: Double = {
+                    if let s = wp["rwpLatDecimal"] as? String { return Double(s) ?? 0 }
+                    if let d = wp["rwpLatDecimal"] as? Double { return d }
+                    return 0
+                }()
+                let lon: Double = {
+                    if let s = wp["rwpLongDecimal"] as? String { return Double(s) ?? 0 }
+                    if let d = wp["rwpLongDecimal"] as? Double { return d }
+                    return 0
+                }()
+                let alt: Double? = {
+                    if let s = wp["rwpAltitude"] as? String { return Double(s) }
+                    if let d = wp["rwpAltitude"] as? Double { return d }
+                    return nil
+                }()
 
                 turnpoints.append(XCTaskTurnpoint(
                     type: tpType,
                     radius: radius,
                     waypoint: XCTaskWaypoint(
-                        name: (wp["name"] as? String) ?? "Unnamed",
-                        description: wp["description"] as? String,
-                        lat: (wp["lat"] as? Double) ?? 0,
-                        lon: (wp["lon"] as? Double) ?? 0,
-                        altSmoothed: wp["altitude"] as? Double
+                        name: (wp["rwpName"] as? String) ?? "Unnamed",
+                        description: wp["rwpDescription"] as? String,
+                        lat: lat,
+                        lon: lon,
+                        altSmoothed: alt
                     )
                 ))
             }
         } else if let waypoints = rawTask["turnpoints"] as? [[String: Any]] {
-            // Fallback to standard turnpoints array
+            // XCTask/xctsk format: turnpoints with nested waypoint objects
             for wp in waypoints {
                 let tpType = mapWaypointType(wp["type"] as? String)
                 let radius = (wp["radius"] as? Double) ?? (wp["radius"] as? Int).map { Double($0) } ?? 400
@@ -199,24 +221,35 @@ public actor AirScoreClient {
 
         // Extract SSS config
         var sssConfig: SSSConfig?
-        if let sssType = rawTask["SS_interval"] as? String {
-            let direction: String = (rawTask["start_direction"] as? String) == "entry" ? "ENTER" : "EXIT"
-            let raceType: String = sssType.lowercased().contains("elapsed") ? "ELAPSED-TIME" : "RACE"
 
-            var timeGates: [String]?
-            if let gates = rawTask["time_offset"] as? [Int] {
-                let formatter = DateFormatter()
-                formatter.dateFormat = "HH:mm:ss'Z'"
-                formatter.timeZone = TimeZone(identifier: "UTC")
-                timeGates = gates.map { offset in
-                    let hours = offset / 3600
-                    let minutes = (offset % 3600) / 60
-                    let seconds = offset % 60
-                    return String(format: "%02d:%02d:%02d", hours, minutes, seconds) + "Z"
-                }
+        // Try to get SSS direction from waypoint data (tawHow field)
+        let sssDirection: String = {
+            if let wps = rawTask["waypoints"] as? [[String: Any]],
+               let sssWp = wps.first(where: { ($0["tawType"] as? String) == "speed" }),
+               let how = sssWp["tawHow"] as? String {
+                return how == "exit" ? "EXIT" : "ENTER"
             }
+            return (rawTask["start_direction"] as? String) == "entry" ? "ENTER" : "EXIT"
+        }()
 
-            sssConfig = SSSConfig(type: raceType, direction: direction, timeGates: timeGates)
+        let taskType = (rawTask["task_type"] as? String) ?? "CLASSIC"
+        let raceType = taskType.uppercased().contains("ELAPSED") ? "ELAPSED-TIME" : "RACE"
+
+        // Check for time gates
+        var timeGates: [String]?
+        if let gates = rawTask["time_offset"] as? [Int] {
+            timeGates = gates.map { offset in
+                let hours = offset / 3600
+                let minutes = (offset % 3600) / 60
+                let seconds = offset % 60
+                return String(format: "%02d:%02d:%02dZ", hours, minutes, seconds)
+            }
+        } else if let start = rawTask["start"] as? String, !start.isEmpty {
+            timeGates = [start]
+        }
+
+        if !turnpoints.isEmpty {
+            sssConfig = SSSConfig(type: raceType, direction: sssDirection, timeGates: timeGates)
         }
 
         // Extract goal config

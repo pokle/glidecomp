@@ -1,4 +1,5 @@
 import SwiftUI
+import TaskScoreLib
 
 /// Settings window for unit and map preferences
 struct SettingsView: View {
