@@ -23,6 +23,17 @@ swift run TaskScore
 swift test
 ```
 
+## Open in Xcode
+
+Since the project uses Swift Package Manager, open it in Xcode with:
+
+```bash
+cd macos
+open Package.swift
+```
+
+Xcode will resolve dependencies automatically. Use the `TaskScore` scheme to run the app, or `TaskScoreTests` to run tests.
+
 ## Build .app Bundle
 
 To create a standalone `TaskScore.app` for distribution or installing in `/Applications`:
@@ -60,6 +71,6 @@ Package.swift        - Swift Package Manager manifest
 TaskScore/           - macOS app (SwiftUI)
 TaskScoreLib/        - Shared analysis library (no SwiftUI dependency)
 TaskScoreTests/      - Tests (Swift Testing framework)
-CLI/                 - Command-line tools (detect-events)
+DetectEvents/        - Command-line tools (detect-events)
 build-app.sh         - Script to build .app bundle
 ```
