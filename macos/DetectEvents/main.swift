@@ -38,27 +38,13 @@ func csvEscape(_ s: String) -> String {
 
 // MARK: - Main
 
-guard CommandLine.arguments.count >= 3 else {
-    fputs("Usage: detect-events <task.xctask> <flight.igc>\n", stderr)
+guard CommandLine.arguments.count >= 2 else {
+    fputs("Usage: detect-events <flight.igc> [task.xctask]\n", stderr)
     exit(1)
 }
 
-let taskPath = CommandLine.arguments[1]
-let igcPath = CommandLine.arguments[2]
-
-// Load task
-guard let taskContent = try? String(contentsOfFile: taskPath, encoding: .utf8) else {
-    fputs("Error: Cannot read task file: \(taskPath)\n", stderr)
-    exit(1)
-}
-
-let task: XCTask
-do {
-    task = try XCTaskParser.parseXCTask(taskContent)
-} catch {
-    fputs("Error: Failed to parse task: \(error)\n", stderr)
-    exit(1)
-}
+let igcPath = CommandLine.arguments[1]
+let taskPath = CommandLine.arguments.count >= 3 ? CommandLine.arguments[2] : nil
 
 // Load IGC
 guard let igcContent = try? String(contentsOfFile: igcPath, encoding: .utf8) else {
@@ -71,6 +57,21 @@ let igc = IGCParser.parse(igcContent)
 guard !igc.fixes.isEmpty else {
     fputs("Error: No fixes found in IGC file\n", stderr)
     exit(1)
+}
+
+// Load task (optional)
+var task: XCTask? = nil
+if let taskPath {
+    guard let taskContent = try? String(contentsOfFile: taskPath, encoding: .utf8) else {
+        fputs("Error: Cannot read task file: \(taskPath)\n", stderr)
+        exit(1)
+    }
+    do {
+        task = try XCTaskParser.parseXCTask(taskContent)
+    } catch {
+        fputs("Error: Failed to parse task: \(error)\n", stderr)
+        exit(1)
+    }
 }
 
 // Detect events

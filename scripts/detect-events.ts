@@ -20,16 +20,13 @@ function csvEscape(s: string): string {
 
 // Main
 const args = process.argv.slice(2);
-if (args.length < 2) {
-  process.stderr.write('Usage: detect-events <task.xctask> <flight.igc>\n');
+if (args.length < 1) {
+  process.stderr.write('Usage: detect-events <flight.igc> [task.xctask]\n');
   process.exit(1);
 }
 
-const taskPath = args[0];
-const igcPath = args[1];
-
-const taskContent = readFileSync(taskPath, 'utf-8');
-const task = parseXCTask(taskContent);
+const igcPath = args[0];
+const taskPath = args.length >= 2 ? args[1] : undefined;
 
 const igcContent = readFileSync(igcPath, 'utf-8');
 const igc = parseIGC(igcContent);
@@ -38,6 +35,8 @@ if (igc.fixes.length === 0) {
   process.stderr.write('Error: No fixes found in IGC file\n');
   process.exit(1);
 }
+
+const task = taskPath ? parseXCTask(readFileSync(taskPath, 'utf-8')) : undefined;
 
 const events = detectFlightEvents(igc.fixes, task);
 

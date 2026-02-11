@@ -29,7 +29,7 @@ let package = Package(
         .executableTarget(
             name: "DetectEvents",
             dependencies: ["TaskScoreLib"],
-            path: "CLI"
+            path: "DetectEvents"
         ),
         .testTarget(
             name: "TaskScoreTests",
