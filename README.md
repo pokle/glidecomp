@@ -95,10 +95,10 @@ bun run deploy:all       # Deploy Pages + all Workers
 **detect-events** - Detect flight events from an IGC file, outputting CSV:
 
 ```bash
-bun web/scripts/detect-events.ts <flight.igc> [task.xctask]
+bun run detect-events -- <flight.igc> [task.xctask]
 
 # Example with sample data
-bun web/scripts/detect-events.ts \
+bun run detect-events -- \
   web/frontend/public/data/tracks/durand_45515_050126.igc \
   web/frontend/public/data/tasks/buje.xctask
 ```

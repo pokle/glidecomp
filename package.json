@@ -16,6 +16,7 @@
     "typecheck:worker": "bun run --filter airscore-api typecheck",
     "typecheck:all": "bun run typecheck && bun run typecheck:analysis && bun run typecheck:worker",
     "test": "bun test",
+    "detect-events": "tsx web/scripts/detect-events.ts",
     "get-xcontest-task": "tsx web/scripts/get-xcontest-task.ts"
   },
   "workspaces": [
