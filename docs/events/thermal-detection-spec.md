@@ -1,6 +1,6 @@
 # Thermal Detection Algorithm
 
-Specification for the thermal detection logic in `web/frontend/src/analysis/event-detector.ts`.
+Specification for the thermal detection logic in `web/analysis/src/event-detector.ts`.
 
 ## Overview
 

@@ -1,6 +1,6 @@
 # Glide Detection Algorithm
 
-Specification for glide detection and sink classification in `web/frontend/src/analysis/event-detector.ts`, with downstream visualization in `glide-speed.ts` and `event-panel.ts`.
+Specification for glide detection and sink classification in `web/analysis/src/event-detector.ts`, with downstream visualization in `web/analysis/src/glide-speed.ts` and `web/frontend/src/analysis/event-panel.ts`.
 
 ## Overview
 

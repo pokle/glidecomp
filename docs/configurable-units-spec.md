@@ -76,14 +76,17 @@ When units are changed:
 ### File Structure
 
 ```
+/web/analysis/src/
+├── units.ts              # Unit conversion and formatting module
+├── event-detector.ts     # Uses units module for event descriptions
+└── glide-speed.ts        # Provides speed in m/s for formatting at display layer
+
 /web/frontend/src/analysis/
-├── config.ts           # Configuration storage abstraction
-├── units.ts            # Unit conversion and formatting module
-├── main.ts             # Wire up unit preferences and reactive updates
-├── event-detector.ts   # Uses units module for event descriptions
-├── event-panel.ts      # Uses units module for display
-├── mapbox-provider.ts  # Uses units module for map labels
-└── glide-speed.ts      # Provides speed in m/s for formatting at display layer
+├── config.ts             # Configuration storage abstraction
+├── units-browser.ts      # Browser-side unit formatting helpers
+├── main.ts               # Wire up unit preferences and reactive updates
+├── event-panel.ts        # Uses units module for display
+└── mapbox-provider.ts    # Uses units module for map labels
 ```
 
 ### Configuration Layer (`config.ts`)

@@ -200,20 +200,32 @@ This visual system helps pilots quickly identify and understand the spatial exte
 ## Technical Architecture
 
 ```
+/web/analysis/src/               # Shared analysis library
+├── igc-parser.ts                # IGC file format parser
+├── xctsk-parser.ts              # XContest task format parser
+├── event-detector.ts            # Flight event detection algorithms
+├── geo.ts                       # Geographic calculations (Turf.js wrapper)
+├── glide-speed.ts               # Glide segment speed calculations
+├── units.ts                     # Unit conversion
+├── waypoints.ts                 # Waypoint handling
+└── index.ts                     # Library exports
+
 /web/frontend/src/
-├── analysis.html       # Main HTML page with Tailwind/Basecoat layout
-├── styles.css          # Global styles (Tailwind, Basecoat, MapBox CSS)
+├── analysis.html                # Main HTML page with Tailwind/Basecoat layout
+├── styles.css                   # Global styles (Tailwind, Basecoat, MapBox CSS)
 └── analysis/
-    ├── main.ts           # Application entry point and orchestration
-    ├── igc-parser.ts     # IGC file format parser
-    ├── xctsk-parser.ts   # XContest task format parser
-    ├── event-detector.ts # Flight event detection algorithms
-    ├── analysis-panel.ts # Tabbed panel UI (Track/Task/Terrain tabs)
-    ├── event-panel.ts    # Legacy event list component (deprecated)
-    ├── map-provider.ts   # Map provider interface
-    ├── mapbox-provider.ts # MapBox GL JS implementation
-    ├── geo.ts            # Geographic calculations (Turf.js wrapper)
-    └── glide-speed.ts    # Glide segment visualization
+    ├── main.ts                  # Application entry point and orchestration
+    ├── analysis-panel.ts        # Tabbed panel UI (Track/Task/Terrain tabs)
+    ├── event-panel.ts           # Legacy event list component (deprecated)
+    ├── map-provider.ts          # Map provider interface
+    ├── mapbox-provider.ts       # MapBox GL JS implementation
+    ├── airscore-client.ts       # AirScore API client
+    ├── config.ts                # Configuration storage abstraction
+    ├── units-browser.ts         # Browser-side unit formatting
+    ├── storage.ts               # Browser storage (IndexedDB)
+    ├── storage-menu.ts          # Storage command menu integration
+    ├── waypoint-loader.ts       # Waypoint file loading
+    └── xctsk-fetch.ts           # XContest task fetching
 ```
 
 ### IGC Parser

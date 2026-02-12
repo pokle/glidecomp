@@ -223,7 +223,7 @@ Users can load task and track data from AirScore directly in the analysis tool:
 import { haversineDistance, calculateBearing, destinationPoint, getBoundingBox, isInsideCylinder, getCirclePoints } from './geo';
 ```
 
-**Available functions in `web/frontend/src/analysis/geo.ts`:**
+**Available functions in `web/analysis/src/geo.ts`:**
 - `haversineDistance(lat1, lon1, lat2, lon2)` - Distance between two points in meters
 - `calculateBearing(lat1, lon1, lat2, lon2)` - Bearing in degrees (-180 to 180)
 - `calculateBearingRadians(lat1, lon1, lat2, lon2)` - Bearing in radians
