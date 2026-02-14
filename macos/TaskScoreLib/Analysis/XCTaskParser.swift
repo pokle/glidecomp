@@ -133,15 +133,15 @@ public enum XCTaskParser {
                     distanceMeters: tp.radius, bearingRadians: bearing
                 ))
             } else if i == task.turnpoints.count - 1 {
-                // Last turnpoint: point along line from previous
-                let prev = task.turnpoints[i - 1]
+                // Last turnpoint (goal): entry point on cylinder nearest to previous optimized point
+                let prevPoint = path[path.count - 1]
                 let bearing = Geo.calculateBearingRadians(
-                    lat1: prev.waypoint.lat, lon1: prev.waypoint.lon,
+                    lat1: prevPoint.lat, lon1: prevPoint.lon,
                     lat2: tp.waypoint.lat, lon2: tp.waypoint.lon
                 )
                 path.append(Geo.destinationPoint(
                     lat: tp.waypoint.lat, lon: tp.waypoint.lon,
-                    distanceMeters: tp.radius, bearingRadians: bearing
+                    distanceMeters: tp.radius, bearingRadians: bearing + .pi
                 ))
             } else {
                 // Intermediate turnpoint: find optimal point minimizing total distance

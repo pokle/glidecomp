@@ -616,15 +616,15 @@ export function calculateOptimizedTaskLine(task: XCTask): { lat: number; lon: nu
       );
       path.push(destinationPoint(tp.waypoint.lat, tp.waypoint.lon, tp.radius, bearing));
     } else if (i === task.turnpoints.length - 1) {
-      // Last turnpoint: point along line from previous
-      const prev = task.turnpoints[i - 1];
+      // Last turnpoint (goal): entry point on cylinder nearest to previous optimized point
+      const prevPoint = path[path.length - 1];
       const bearing = calculateBearing(
-        prev.waypoint.lat,
-        prev.waypoint.lon,
+        prevPoint.lat,
+        prevPoint.lon,
         tp.waypoint.lat,
         tp.waypoint.lon
       );
-      path.push(destinationPoint(tp.waypoint.lat, tp.waypoint.lon, tp.radius, bearing));
+      path.push(destinationPoint(tp.waypoint.lat, tp.waypoint.lon, tp.radius, bearing + Math.PI));
     } else {
       // Intermediate turnpoint: find optimal point minimizing total distance
       const prevPoint = path[path.length - 1]; // Use the already optimized previous point
