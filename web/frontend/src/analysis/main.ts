@@ -10,7 +10,7 @@
 
 import { parseIGC, detectFlightEvents, calculateOptimizedTaskDistance, igcTaskToXCTask, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord } from '@taskscore/analysis';
 import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
-import { createMapProvider, MapProvider } from './map-provider';
+import { createMapProvider, type MapProvider, type MapProviderType } from './map-provider';
 import { createAnalysisPanel, AnalysisPanel, FlightInfo, PanelTabType } from './analysis-panel';
 import { loadCorryongWaypoints } from './waypoint-loader';
 import { config, type UnitPreferences } from './config';
@@ -97,18 +97,35 @@ async function init(): Promise<void> {
   const sidebar = document.getElementById('waypoint-sidebar');
   const sidebarBackdrop = document.getElementById('sidebar-backdrop');
 
+  // Map provider switch menu
+  const menuSwitchMap = document.getElementById('menu-switch-map');
+  const mapProviderStatus = document.getElementById('map-provider-status');
+
   if (!mapContainer || !eventPanelContainer) {
     console.error('Required containers not found');
     return;
   }
 
-  // Initialize map with MapBox provider
+  // Determine map provider: URL param > saved preference > default
+  const mapParam = new URLSearchParams(window.location.search).get('m');
+  const savedMapProvider = config.getPreferences().mapProvider;
+  const providerType: MapProviderType =
+    mapParam === 'l' ? 'leaflet' :
+    mapParam === 'm' ? 'mapbox' :
+    savedMapProvider ?? 'mapbox';
+
+  // Initialize map
   try {
-    mapRenderer = await createMapProvider(mapContainer);
+    mapRenderer = await createMapProvider(mapContainer, providerType);
   } catch (err) {
     console.error('Failed to initialize map:', err);
     showStatus('Failed to initialize map', 'error');
     return;
+  }
+
+  // Update provider status in command menu
+  if (mapProviderStatus) {
+    mapProviderStatus.textContent = providerType === 'leaflet' ? '(Leaflet)' : '(MapBox)';
   }
 
   // Load waypoint database for enriching IGC tasks
@@ -247,6 +264,17 @@ async function init(): Promise<void> {
       commandDialog?.close();
     });
   }
+
+  // Switch Map Provider handler
+  menuSwitchMap?.addEventListener('click', () => {
+    const newProvider: MapProviderType = providerType === 'mapbox' ? 'leaflet' : 'mapbox';
+    config.setPreferences({ mapProvider: newProvider });
+
+    // Update URL param and reload (provider switch requires full page reload)
+    const params = new URLSearchParams(window.location.search);
+    params.set('m', newProvider === 'leaflet' ? 'l' : 'm');
+    window.location.search = params.toString();
+  });
 
   // Theme switching handlers
   const setTheme = (mode: 'light' | 'dark' | 'system') => {

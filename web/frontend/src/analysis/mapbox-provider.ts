@@ -8,16 +8,19 @@
 
 import mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
-import { getBoundingBox, getEventStyle, calculateGlideMarkers, haversineDistance, getCirclePoints, calculateBearing, calculateOptimizedTaskLine, getOptimizedSegmentDistances, type IGCFix, type XCTask, type FlightEvent } from '@taskscore/analysis';
+import { getBoundingBox, getEventStyle, calculateGlideMarkers, haversineDistance, calculateBearing, calculateOptimizedTaskLine, getOptimizedSegmentDistances, type IGCFix, type XCTask, type FlightEvent } from '@taskscore/analysis';
 import type { MapProvider } from './map-provider';
 import { formatDistance, formatRadius, formatAltitude, formatSpeed, formatAltitudeChange } from './units-browser';
 import { config } from './config';
+import {
+  MAP_FONT_FAMILY, GLIDE_LABEL_SPEED_MIN_ZOOM, GLIDE_LABEL_DETAILS_MIN_ZOOM,
+  KEY_EVENT_TYPES, getAltitudeColorNormalized,
+  calculateAltitudeGradient, findNearestFixIndex as sharedFindNearestFixIndex,
+  createCirclePolygon, createGlideLegend, showGlideLegend as sharedShowGlideLegend,
+} from './map-provider-shared';
 
 // Set MapBox access token from environment variable
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
-
-// Font family for map text elements (loaded via Google Fonts in analysis.html)
-const MAP_FONT_FAMILY = "'Atkinson Hyperlegible Next', sans-serif";
 
 // MapBox style options
 const MAPBOX_STYLES = [
@@ -27,8 +30,6 @@ const MAPBOX_STYLES = [
   { id: 'light', name: 'Light', style: 'mapbox://styles/mapbox/light-v11' },
   { id: 'dark', name: 'Dark', style: 'mapbox://styles/mapbox/dark-v11' },
 ];
-const GLIDE_LABEL_SPEED_MIN_ZOOM = 11;
-const GLIDE_LABEL_DETAILS_MIN_ZOOM = 13;
 
 /**
  * Create a MapBox map provider
@@ -113,104 +114,13 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         }
       }
 
-      /**
-       * Show or hide the glide legend help button
-       */
+      /** Lazily create and show/hide the glide legend */
       function showGlideLegend(show: boolean): void {
-        if (show) {
-          if (!glideLegendElement) {
-            glideLegendElement = document.createElement('div');
-            glideLegendElement.id = 'glide-legend';
-            glideLegendElement.innerHTML = `
-              <button class="glide-legend-btn" title="Glide metrics help">?</button>
-              <div class="glide-legend-content">
-                <div class="glide-legend-title">Glide Metrics</div>
-                <div class="glide-legend-item"><strong>Chevrons:</strong> 1km segment markers</div>
-                <div class="glide-legend-item"><strong>Speed:</strong> Average speed of segment</div>
-                <div class="glide-legend-item"><strong>L/D:</strong> Glide ratio (distance ÷ altitude lost)</div>
-                <div class="glide-legend-item"><strong>Alt:</strong> Altitude change from segment start to end</div>
-              </div>
-            `;
-            glideLegendElement.style.cssText = `
-              position: absolute;
-              bottom: 30px;
-              right: 10px;
-              z-index: 1000;
-              font-family: ${MAP_FONT_FAMILY};
-            `;
-
-            // Add styles for the legend
-            const style = document.createElement('style');
-            style.id = 'glide-legend-style';
-            style.textContent = `
-              #glide-legend .glide-legend-btn {
-                width: 28px;
-                height: 28px;
-                border-radius: 50%;
-                border: none;
-                background: #3b82f6;
-                color: white;
-                font-size: 16px;
-                font-weight: bold;
-                cursor: pointer;
-                box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-                transition: transform 0.2s;
-              }
-              #glide-legend .glide-legend-btn:hover {
-                transform: scale(1.1);
-              }
-              #glide-legend .glide-legend-content {
-                display: none;
-                position: absolute;
-                bottom: 36px;
-                right: 0;
-                background: white;
-                border-radius: 8px;
-                padding: 12px;
-                min-width: 260px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-              }
-              #glide-legend.expanded .glide-legend-content {
-                display: block;
-              }
-              #glide-legend .glide-legend-title {
-                font-weight: 600;
-                font-size: 14px;
-                margin-bottom: 8px;
-                color: #1e3a5f;
-                border-bottom: 1px solid #e5e7eb;
-                padding-bottom: 6px;
-              }
-              #glide-legend .glide-legend-item {
-                font-size: 12px;
-                color: #374151;
-                margin: 6px 0;
-                line-height: 1.4;
-              }
-              #glide-legend .glide-legend-item strong {
-                color: #3b82f6;
-              }
-            `;
-
-            if (!document.getElementById('glide-legend-style')) {
-              document.head.appendChild(style);
-            }
-
-            // Toggle expanded state on click
-            const btn = glideLegendElement.querySelector('.glide-legend-btn');
-            btn?.addEventListener('click', () => {
-              glideLegendElement?.classList.toggle('expanded');
-            });
-
-            container.appendChild(glideLegendElement);
-          }
-          glideLegendElement.style.display = 'block';
-          glideLegendElement.classList.remove('expanded');
-        } else {
-          if (glideLegendElement) {
-            glideLegendElement.style.display = 'none';
-          }
+        if (show && !glideLegendElement) {
+          glideLegendElement = createGlideLegend(container);
+          glideLegendElement.style.display = 'none';
         }
+        sharedShowGlideLegend(glideLegendElement, show);
       }
 
       /**
@@ -634,25 +544,8 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       // Keep glide labels hidden while zoomed out.
       map.on('zoom', updateGlideLabelVisibility);
 
-      /**
-       * Find the index of the fix closest to the given coordinates
-       */
       function findNearestFixIndex(clickLat: number, clickLon: number): number {
-        if (currentFixes.length === 0) return -1;
-
-        let minDistance = Infinity;
-        let nearestIndex = 0;
-
-        for (let i = 0; i < currentFixes.length; i++) {
-          const fix = currentFixes[i];
-          const distance = haversineDistance(clickLat, clickLon, fix.latitude, fix.longitude);
-          if (distance < minDistance) {
-            minDistance = distance;
-            nearestIndex = i;
-          }
-        }
-
-        return nearestIndex;
+        return sharedFindNearestFixIndex(currentFixes, clickLat, clickLon);
       }
 
       map.on('load', () => {
@@ -839,129 +732,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         }
       }
 
-      /**
-       * Get color based on normalized altitude (0-1 range)
-       * Uses a gradient from earthy brown (low) through green to sky blue (high)
-       */
-      function getAltitudeColorNormalized(normalizedAlt: number): string {
-        // Clamp to 0-1
-        const t = Math.max(0, Math.min(1, normalizedAlt));
-
-        // Color stops: brown (low) -> green -> light blue -> sky blue (high)
-        // More saturated colors for better distinction
-        const colors = [
-          { pos: 0.0, r: 139, g: 90, b: 43 },    // Saturated Brown #8B5A2B
-          { pos: 0.25, r: 67, g: 160, b: 71 },   // Saturated Green #43A047
-          { pos: 0.5, r: 3, g: 155, b: 229 },    // Saturated Cyan #039BE5
-          { pos: 0.75, r: 41, g: 182, b: 246 },  // Bright Sky Blue #29B6F6
-          { pos: 1.0, r: 79, g: 195, b: 247 },   // Sky Blue #4FC3F7
-        ];
-
-        // Find the two colors to interpolate between
-        let lower = colors[0];
-        let upper = colors[colors.length - 1];
-        for (let i = 0; i < colors.length - 1; i++) {
-          if (t >= colors[i].pos && t <= colors[i + 1].pos) {
-            lower = colors[i];
-            upper = colors[i + 1];
-            break;
-          }
-        }
-
-        // Interpolate
-        const range = upper.pos - lower.pos;
-        const localT = range > 0 ? (t - lower.pos) / range : 0;
-        const r = Math.round(lower.r + (upper.r - lower.r) * localT);
-        const g = Math.round(lower.g + (upper.g - lower.g) * localT);
-        const b = Math.round(lower.b + (upper.b - lower.b) * localT);
-
-        return `rgb(${r}, ${g}, ${b})`;
-      }
-
-      /**
-       * Get color based on altitude using fixed thresholds (for 3D mode)
-       * Earthy colors (brown) at low altitude, sky colors (blue) at high altitude
-       */
-      function getAltitudeColor(altitude: number): string {
-        if (altitude < 500) return '#8D6E63';      // Brown
-        if (altitude < 1000) return '#A1887F';     // Light Brown
-        if (altitude < 1500) return '#66BB6A';     // Green
-        if (altitude < 2000) return '#29B6F6';     // Light Blue
-        if (altitude < 2500) return '#81D4FA';     // Sky Blue
-        return '#E3F2FD';                           // Pale Sky
-      }
-
-      // Alias for backwards compatibility with local code
-      const calculateDistance = haversineDistance;
-
-      /**
-       * Calculate altitude gradient stops based on line progress
-       * Colors are scaled relative to the flight's min/max altitude
-       */
-      function calculateAltitudeGradient(fixes: IGCFix[]): [number, string][] {
-        if (fixes.length < 2) return [[0, '#3b82f6'], [1, '#3b82f6']];
-
-        // Calculate min and max altitude for this flight
-        let minAlt = Infinity;
-        let maxAlt = -Infinity;
-        for (const fix of fixes) {
-          if (fix.gnssAltitude < minAlt) minAlt = fix.gnssAltitude;
-          if (fix.gnssAltitude > maxAlt) maxAlt = fix.gnssAltitude;
-        }
-        const altRange = maxAlt - minAlt;
-
-        // Calculate cumulative distances
-        const distances: number[] = [0];
-        let totalDistance = 0;
-        for (let i = 1; i < fixes.length; i++) {
-          const dist = calculateDistance(
-            fixes[i - 1].latitude, fixes[i - 1].longitude,
-            fixes[i].latitude, fixes[i].longitude
-          );
-          totalDistance += dist;
-          distances.push(totalDistance);
-        }
-
-        if (totalDistance === 0) return [[0, '#3b82f6'], [1, '#3b82f6']];
-
-        // Sample points along the track for gradient stops (limit to ~100 stops for smoother gradients)
-        const stops: [number, string][] = [];
-        const sampleInterval = Math.max(1, Math.floor(fixes.length / 100));
-
-        // Start with progress 0
-        const firstNormalizedAlt = altRange > 0 ? (fixes[0].gnssAltitude - minAlt) / altRange : 0;
-        stops.push([0, getAltitudeColorNormalized(firstNormalizedAlt)]);
-
-        let lastProgress = 0;
-        const minProgressIncrement = 0.001; // Minimum progress increment to avoid duplicates
-
-        for (let i = sampleInterval; i < fixes.length; i += sampleInterval) {
-          const progress = distances[i] / totalDistance;
-
-          // Only add if progress is strictly greater than the last value
-          if (progress > lastProgress + minProgressIncrement) {
-            // Normalize altitude to 0-1 range based on this flight's min/max
-            const normalizedAlt = altRange > 0 ? (fixes[i].gnssAltitude - minAlt) / altRange : 0;
-            const color = getAltitudeColorNormalized(normalizedAlt);
-            stops.push([progress, color]);
-            lastProgress = progress;
-          }
-        }
-
-        // Ensure we have the last point at exactly 1.0
-        if (lastProgress < 1 - minProgressIncrement) {
-          const lastFix = fixes[fixes.length - 1];
-          const normalizedAlt = altRange > 0 ? (lastFix.gnssAltitude - minAlt) / altRange : 0;
-          stops.push([1, getAltitudeColorNormalized(normalizedAlt)]);
-        } else {
-          // Replace the last stop with exactly 1.0
-          const lastFix = fixes[fixes.length - 1];
-          const normalizedAlt = altRange > 0 ? (lastFix.gnssAltitude - minAlt) / altRange : 0;
-          stops[stops.length - 1] = [1, getAltitudeColorNormalized(normalizedAlt)];
-        }
-
-        return stops;
-      }
+      // Altitude color functions and gradient calculation are imported from map-provider-shared
 
       /**
        * Update the gradient layer with altitude colors
@@ -1358,17 +1129,8 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           eventMarkers.length = 0;
 
           // Add new markers (only for key events to avoid clutter)
-          const keyEventTypes = new Set([
-            'takeoff',
-            'landing',
-            'start_crossing',
-            'goal_crossing',
-            'max_altitude',
-            'turnpoint_entry',
-          ]);
-
           for (const event of events) {
-            if (!keyEventTypes.has(event.type)) continue;
+            if (!KEY_EVENT_TYPES.has(event.type)) continue;
 
             const style = getEventStyle(event.type);
 
@@ -1647,21 +1409,4 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
   });
 }
 
-/**
- * Create a circle polygon for cylinder rendering using geodesic calculations
- */
-function createCirclePolygon(
-  centerLon: number,
-  centerLat: number,
-  radiusMeters: number,
-  numPoints = 64
-): GeoJSON.Polygon {
-  const points = getCirclePoints(centerLat, centerLon, radiusMeters, numPoints);
-  // Convert to GeoJSON format [lon, lat]
-  const coords: [number, number][] = points.map(p => [p.lon, p.lat]);
-
-  return {
-    type: 'Polygon',
-    coordinates: [coords],
-  };
-}
+// createCirclePolygon is imported from map-provider-shared
