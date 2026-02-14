@@ -357,7 +357,7 @@ struct XCTaskParserTests {
         @Test("should return empty for no turnpoints")
         func emptyTask() {
             let task = XCTask(taskType: "CLASSIC", version: 1, turnpoints: [])
-            let path = XCTaskParser.calculateOptimizedTaskLine(task)
+            let path = TaskOptimizer.calculateOptimizedTaskLine(task)
             #expect(path.isEmpty)
         }
 
@@ -366,7 +366,7 @@ struct XCTaskParserTests {
             let task = XCTask(taskType: "CLASSIC", version: 1, turnpoints: [
                 XCTaskTurnpoint(radius: 400, waypoint: XCTaskWaypoint(name: "TP", lat: 47.0, lon: 11.0)),
             ])
-            let path = XCTaskParser.calculateOptimizedTaskLine(task)
+            let path = TaskOptimizer.calculateOptimizedTaskLine(task)
             #expect(path.count == 1)
             #expect(path[0].lat == 47.0)
             #expect(path[0].lon == 11.0)
@@ -379,7 +379,7 @@ struct XCTaskParserTests {
                 XCTaskTurnpoint(radius: 400, waypoint: XCTaskWaypoint(name: "Goal", lat: 48.0, lon: 12.0)),
             ])
 
-            let path = XCTaskParser.calculateOptimizedTaskLine(task)
+            let path = TaskOptimizer.calculateOptimizedTaskLine(task)
             #expect(path.count == 2)
 
             // Points should be on the cylinder edges, not at centers
@@ -412,7 +412,7 @@ struct XCTaskParserTests {
 
             let task = try XCTaskParser.parseXCTask(taskJson)
             let centerDist = XCTaskParser.calculateTaskDistance(task)
-            let optimizedDist = XCTaskParser.calculateOptimizedTaskDistance(task)
+            let optimizedDist = TaskOptimizer.calculateOptimizedTaskDistance(task)
 
             #expect(optimizedDist < centerDist)
             #expect(optimizedDist > 0)
@@ -434,8 +434,8 @@ struct XCTaskParserTests {
             """
 
             let task = try XCTaskParser.parseXCTask(taskJson)
-            let segments = XCTaskParser.getOptimizedSegmentDistances(task)
-            let totalDist = XCTaskParser.calculateOptimizedTaskDistance(task)
+            let segments = TaskOptimizer.getOptimizedSegmentDistances(task)
+            let totalDist = TaskOptimizer.calculateOptimizedTaskDistance(task)
 
             #expect(segments.count == 3)
             let segmentSum = segments.reduce(0, +)

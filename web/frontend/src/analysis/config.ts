@@ -15,6 +15,7 @@ export interface UserPreferences {
   theme?: 'light' | 'dark' | 'system';
   mapLocation?: MapLocation;
   mapStyle?: string;
+  mapProvider?: 'mapbox' | 'leaflet';
 }
 
 export interface UnitPreferences {

@@ -1,10 +1,13 @@
 /**
  * Map Provider Interface
  *
- * Abstraction layer for map visualization using MapBox GL JS.
+ * Abstraction layer for map visualization.
+ * Supports MapBox GL JS and Leaflet 2.0 providers.
  */
 
 import type { IGCFix, XCTask, FlightEvent } from '@taskscore/analysis';
+
+export type MapProviderType = 'mapbox' | 'leaflet';
 
 /**
  * Bounds in degrees
@@ -82,9 +85,17 @@ export interface MapProvider {
 }
 
 /**
- * Factory function to create the MapBox map provider
+ * Factory function to create a map provider.
+ * Uses dynamic import so only the selected provider's code is bundled.
  */
-export async function createMapProvider(container: HTMLElement): Promise<MapProvider> {
+export async function createMapProvider(
+    container: HTMLElement,
+    providerType: MapProviderType = 'mapbox'
+): Promise<MapProvider> {
+    if (providerType === 'leaflet') {
+        const { createLeafletProvider } = await import('./leaflet-provider');
+        return createLeafletProvider(container);
+    }
     const { createMapBoxProvider } = await import('./mapbox-provider');
     return createMapBoxProvider(container);
 }
