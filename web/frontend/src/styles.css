@@ -292,7 +292,9 @@
     @apply text-xs text-muted-foreground;
   }
 
-  /* MapBox map container - use !important to ensure it displays */
+  /* Map container - use !important to ensure it displays.
+     z-index: 0 creates a stacking context so Leaflet's internal z-indices
+     (400–1000) don't escape and overlay the sidebar (z-40). */
   #map {
     position: absolute !important;
     top: 0 !important;
@@ -301,6 +303,7 @@
     bottom: 0 !important;
     width: 100% !important;
     height: 100% !important;
+    z-index: 0;
   }
 
   /* Ensure mapboxgl canvas fills the container */
