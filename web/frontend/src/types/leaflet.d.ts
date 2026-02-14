@@ -61,6 +61,7 @@ declare module 'leaflet' {
     constructor(element: HTMLElement | string, options?: MapOptions);
     setView(center: LatLngExpression, zoom?: number, options?: { animate?: boolean; duration?: number }): this;
     flyTo(latlng: LatLngExpression, zoom?: number, options?: { duration?: number }): this;
+    panTo(latlng: LatLngExpression, options?: { animate?: boolean; duration?: number }): this;
     fitBounds(bounds: LatLngBoundsExpression, options?: { padding?: PointExpression; maxZoom?: number; animate?: boolean; duration?: number }): this;
     getBounds(): LatLngBounds;
     getCenter(): LatLng;

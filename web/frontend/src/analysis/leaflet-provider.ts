@@ -711,9 +711,9 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
           );
         }
 
-        // Pan to event (preserve zoom)
+        // Pan to event (no zoom change)
         if (!options?.skipPan) {
-          map.flyTo([event.latitude, event.longitude], map.getZoom(), { duration: 1 });
+          map.panTo([event.latitude, event.longitude], { animate: true, duration: 1 });
         }
       },
 
@@ -752,7 +752,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
           return;
         }
         const tp = currentTask.turnpoints[turnpointIndex];
-        map.flyTo([tp.waypoint.lat, tp.waypoint.lon], map.getZoom(), { duration: 1 });
+        map.panTo([tp.waypoint.lat, tp.waypoint.lon], { animate: true, duration: 1 });
       },
     };
 
