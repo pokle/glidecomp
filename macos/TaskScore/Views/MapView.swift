@@ -57,7 +57,7 @@ struct MapView: View {
                 }
 
                 // Optimized task line
-                let optimizedPath = XCTaskParser.calculateOptimizedTaskLine(task)
+                let optimizedPath = TaskOptimizer.calculateOptimizedTaskLine(task)
                 if optimizedPath.count >= 2 {
                     let pathCoords = optimizedPath.map {
                         CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)

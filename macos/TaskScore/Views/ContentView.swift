@@ -374,7 +374,7 @@ struct FlightSummary {
         self.competitionName = nil
 
         if let task = task, task.turnpoints.count >= 2 {
-            self.taskDistanceMeters = XCTaskParser.calculateOptimizedTaskDistance(task)
+            self.taskDistanceMeters = TaskOptimizer.calculateOptimizedTaskDistance(task)
         } else {
             self.taskDistanceMeters = nil
         }
