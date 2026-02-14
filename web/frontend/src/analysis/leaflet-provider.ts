@@ -219,16 +219,15 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
       }
       const altRange = maxAlt - minAlt;
 
-      // Outline behind gradient segments
+      // Outline behind gradient segments (interactive for track click detection)
       const allLatLngs: LatLngExpression[] = fixes.map(f => [f.latitude, f.longitude]);
-      trackGradientGroup.addLayer(
-        new Polyline(allLatLngs, {
-          color: TRACK_OUTLINE_COLOR,
-          weight: 8,
-          opacity: 0.6,
-          interactive: false,
-        })
-      );
+      const gradientOutline = new Polyline(allLatLngs, {
+        color: TRACK_OUTLINE_COLOR,
+        weight: 8,
+        opacity: 0.6,
+      });
+      bindTrackClick(gradientOutline);
+      trackGradientGroup.addLayer(gradientOutline);
 
       // Leaflet doesn't support gradients natively, so we approximate with colored segments.
       // This creates separate polylines which is less efficient than MapBox's line-gradient,
