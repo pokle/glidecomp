@@ -5,9 +5,10 @@ let package = Package(
     name: "TaskScore",
     platforms: [
         .macOS(.v14),
+        .iOS(.v17),
     ],
     products: [
-        .executable(name: "TaskScore", targets: ["TaskScore"]),
+        .library(name: "TaskScoreLib", targets: ["TaskScoreLib"]),
         .executable(name: "detect-events", targets: ["DetectEvents"]),
     ],
     targets: [
@@ -15,15 +16,6 @@ let package = Package(
         .target(
             name: "TaskScoreLib",
             path: "TaskScoreLib"
-        ),
-        // macOS app
-        .executableTarget(
-            name: "TaskScore",
-            dependencies: ["TaskScoreLib"],
-            path: "TaskScore",
-            resources: [
-                .process("Resources"),
-            ]
         ),
         // CLI tool for comparing event detection output
         .executableTarget(

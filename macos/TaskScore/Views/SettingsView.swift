@@ -46,6 +46,8 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        #if os(macOS)
         .frame(width: 350, height: 300)
+        #endif
     }
 }

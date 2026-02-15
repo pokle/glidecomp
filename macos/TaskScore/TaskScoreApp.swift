@@ -1,23 +1,39 @@
 import SwiftUI
+#if os(macOS)
 import AppKit
+#endif
 import TaskScoreLib
 
 @main
 struct TaskScoreApp: App {
+    #if os(macOS)
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    #endif
 
     @AppStorage("mapStyle") private var mapStyle: String = MapStylePreference.hybrid.rawValue
     @AppStorage("showTask") private var showTask = true
     @AppStorage("showGlideMarkers") private var showGlideMarkers = true
     @AppStorage("show3D") private var show3D = false
 
+    #if os(macOS)
     @FocusedValue(\.eventFilter) var eventFilter
+    #endif
+
+    init() {
+        #if os(iOS)
+        try? FileStore.ensureDirectories()
+        SampleFlights.copyToDocumentsIfNeeded()
+        #endif
+    }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
+                #if os(macOS)
                 .frame(minWidth: 800, minHeight: 500)
+                #endif
         }
+        #if os(macOS)
         .defaultSize(width: 1200, height: 800)
         .commands {
             // File menu additions
@@ -97,13 +113,17 @@ struct TaskScoreApp: App {
                 .keyboardShortcut("4", modifiers: .command)
             }
         }
+        #endif
 
+        #if os(macOS)
         Settings {
             SettingsView()
         }
+        #endif
     }
 }
 
+#if os(macOS)
 /// App delegate to handle activation for SPM-built executables
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -116,7 +136,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         SampleFlights.copyToDocumentsIfNeeded()
 
         // Set app icon from bundled .icns resource
-        if let iconURL = Bundle.module.url(forResource: "AppIcon", withExtension: "icns"),
+        if let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
            let icon = NSImage(contentsOf: iconURL) {
             NSApplication.shared.applicationIconImage = icon
         }
@@ -126,6 +146,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         true
     }
 }
+#endif
 
 extension Notification.Name {
     static let openIGCFile = Notification.Name("openIGCFile")

@@ -23,6 +23,10 @@ struct AirScoreLoadView: View {
             TextField("https://xc.highcloud.net/tracklog_map.html?trackid=...", text: $urlText)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { loadFromURL() }
+                #if os(iOS)
+                .autocapitalization(.none)
+                .keyboardType(.URL)
+                #endif
 
             if let error = errorMessage {
                 Text(error)
@@ -44,7 +48,9 @@ struct AirScoreLoadView: View {
             }
         }
         .padding(24)
+        #if os(macOS)
         .frame(width: 440)
+        #endif
     }
 
     private func loadFromURL() {

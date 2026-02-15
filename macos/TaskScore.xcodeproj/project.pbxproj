@@ -1,0 +1,427 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1ABA84042BD48FCC5DE6FC72 /* EventListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D5C877FCB189B78B3035ABA /* EventListView.swift */; };
+		5953693069DA0C8E58A85713 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE60E524EC27BB0AA1F6CB8E /* SettingsView.swift */; };
+		7002D2705117A485CC3C921E /* TaskScoreLib in Frameworks */ = {isa = PBXBuildFile; productRef = 4C00C46610F2347A2E121D76 /* TaskScoreLib */; };
+		70D7B48CAFD1183F4110471F /* MapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E12DB4EE6996AB1AE5C52DF /* MapView.swift */; };
+		8023A344355F63FDB5297102 /* AirScoreLoadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFE2FE73B87A06A7C8E88B9C /* AirScoreLoadView.swift */; };
+		8EDC6A7041A3CDC5084BDBE1 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAE72547D96C6A65A8D55BF0 /* ContentView.swift */; };
+		A3DE89C6A9D1E1BED19F844A /* TaskScoreApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71B80E9ED134EFAE6D0EA1C3 /* TaskScoreApp.swift */; };
+		CB605CFB44D76C0D671EF840 /* FlightInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 706AEEE667E6301297AEC33A /* FlightInfoView.swift */; };
+		D42A156440A65F7736D2E0A2 /* SampleFlights.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F7091486CB0BE1CE2CCF30 /* SampleFlights.swift */; };
+		DE8CFFAD9F4BB3875B8A87A6 /* SampleFlights in Resources */ = {isa = PBXBuildFile; fileRef = 05E67CEE858391AB82BF6566 /* SampleFlights */; };
+		EB67303850B9496E8B2E97AB /* FileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E430202F1FA016C96F32C9E1 /* FileStore.swift */; };
+		EC68EC06C883BB585FF64A06 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = A4FD1B77DF2B7848C54DA7C4 /* AppIcon.icns */; };
+		EDCD53A0E3C4C951FAA00E58 /* AirScoreClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F45D2C1620C0CB716001D90E /* AirScoreClient.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		05E67CEE858391AB82BF6566 /* SampleFlights */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SampleFlights; path = TaskScore/Resources/SampleFlights; sourceTree = SOURCE_ROOT; };
+		0A1329971D3540DC9C1F5B34 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		2B03BCBB83CEE38BA9B36497 /* TaskScore.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TaskScore.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		45DF5CCD9227380C0A74F6D9 /* macos */ = {isa = PBXFileReference; lastKnownFileType = folder; name = macos; path = .; sourceTree = SOURCE_ROOT; };
+		4E12DB4EE6996AB1AE5C52DF /* MapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapView.swift; sourceTree = "<group>"; };
+		706AEEE667E6301297AEC33A /* FlightInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlightInfoView.swift; sourceTree = "<group>"; };
+		71B80E9ED134EFAE6D0EA1C3 /* TaskScoreApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskScoreApp.swift; sourceTree = "<group>"; };
+		73F7091486CB0BE1CE2CCF30 /* SampleFlights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleFlights.swift; sourceTree = "<group>"; };
+		8D5C877FCB189B78B3035ABA /* EventListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventListView.swift; sourceTree = "<group>"; };
+		A4FD1B77DF2B7848C54DA7C4 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		AAE72547D96C6A65A8D55BF0 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		E430202F1FA016C96F32C9E1 /* FileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileStore.swift; sourceTree = "<group>"; };
+		EE60E524EC27BB0AA1F6CB8E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		EFE2FE73B87A06A7C8E88B9C /* AirScoreLoadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirScoreLoadView.swift; sourceTree = "<group>"; };
+		F45D2C1620C0CB716001D90E /* AirScoreClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirScoreClient.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		38693B10BFB79455151124F1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7002D2705117A485CC3C921E /* TaskScoreLib in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		610044981CAC093027839C58 = {
+			isa = PBXGroup;
+			children = (
+				05E67CEE858391AB82BF6566 /* SampleFlights */,
+				A6C3453C1D54C7E3644AC1B9 /* Packages */,
+				68C304F1DCC1E78BAB81DE2C /* Resources */,
+				E922D6DCA67232B042E1946D /* TaskScore */,
+				A35DE7D0EA23429C5D48BC48 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		68C304F1DCC1E78BAB81DE2C /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A4FD1B77DF2B7848C54DA7C4 /* AppIcon.icns */,
+			);
+			name = Resources;
+			path = TaskScore/Resources;
+			sourceTree = "<group>";
+		};
+		6F629BE338FE3773CF713C33 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				EFE2FE73B87A06A7C8E88B9C /* AirScoreLoadView.swift */,
+				AAE72547D96C6A65A8D55BF0 /* ContentView.swift */,
+				8D5C877FCB189B78B3035ABA /* EventListView.swift */,
+				706AEEE667E6301297AEC33A /* FlightInfoView.swift */,
+				4E12DB4EE6996AB1AE5C52DF /* MapView.swift */,
+				EE60E524EC27BB0AA1F6CB8E /* SettingsView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		A35DE7D0EA23429C5D48BC48 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				2B03BCBB83CEE38BA9B36497 /* TaskScore.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A6C3453C1D54C7E3644AC1B9 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				45DF5CCD9227380C0A74F6D9 /* macos */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		E2F2B84C82309898D43F2C17 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				F45D2C1620C0CB716001D90E /* AirScoreClient.swift */,
+				E430202F1FA016C96F32C9E1 /* FileStore.swift */,
+				73F7091486CB0BE1CE2CCF30 /* SampleFlights.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		E922D6DCA67232B042E1946D /* TaskScore */ = {
+			isa = PBXGroup;
+			children = (
+				0A1329971D3540DC9C1F5B34 /* Info.plist */,
+				71B80E9ED134EFAE6D0EA1C3 /* TaskScoreApp.swift */,
+				E2F2B84C82309898D43F2C17 /* Services */,
+				6F629BE338FE3773CF713C33 /* Views */,
+			);
+			path = TaskScore;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		9B3524BCF0E69A286DCE8FDD /* TaskScore */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C4B02EA7B3BD403A4BBDAE9E /* Build configuration list for PBXNativeTarget "TaskScore" */;
+			buildPhases = (
+				AC5F815FE605579928334319 /* Sources */,
+				88968D3C2CDD466B3C6759C9 /* Resources */,
+				38693B10BFB79455151124F1 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TaskScore;
+			packageProductDependencies = (
+				4C00C46610F2347A2E121D76 /* TaskScoreLib */,
+			);
+			productName = TaskScore;
+			productReference = 2B03BCBB83CEE38BA9B36497 /* TaskScore.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		711EDB342BDC5FC57F0D7B3D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+			};
+			buildConfigurationList = D0C9541216D73FE8FDD2F277 /* Build configuration list for PBXProject "TaskScore" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 610044981CAC093027839C58;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				6C958BBB6BEECF7E2D91F50E /* XCLocalSwiftPackageReference "." */,
+			);
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				9B3524BCF0E69A286DCE8FDD /* TaskScore */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		88968D3C2CDD466B3C6759C9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EC68EC06C883BB585FF64A06 /* AppIcon.icns in Resources */,
+				DE8CFFAD9F4BB3875B8A87A6 /* SampleFlights in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AC5F815FE605579928334319 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EDCD53A0E3C4C951FAA00E58 /* AirScoreClient.swift in Sources */,
+				8023A344355F63FDB5297102 /* AirScoreLoadView.swift in Sources */,
+				8EDC6A7041A3CDC5084BDBE1 /* ContentView.swift in Sources */,
+				1ABA84042BD48FCC5DE6FC72 /* EventListView.swift in Sources */,
+				EB67303850B9496E8B2E97AB /* FileStore.swift in Sources */,
+				CB605CFB44D76C0D671EF840 /* FlightInfoView.swift in Sources */,
+				70D7B48CAFD1183F4110471F /* MapView.swift in Sources */,
+				D42A156440A65F7736D2E0A2 /* SampleFlights.swift in Sources */,
+				5953693069DA0C8E58A85713 /* SettingsView.swift in Sources */,
+				A3DE89C6A9D1E1BED19F844A /* TaskScoreApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		08509959A488D05C5A20EC2B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = TaskScore/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = info.shonky.taskscore;
+				PRODUCT_NAME = TaskScore;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		6AF8EF154A2EDD51EEC08B12 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		E4A51D5C60FD23CB2B62CDE1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		F841A46F472D4D74BE67CE90 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = TaskScore/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = info.shonky.taskscore;
+				PRODUCT_NAME = TaskScore;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		C4B02EA7B3BD403A4BBDAE9E /* Build configuration list for PBXNativeTarget "TaskScore" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				08509959A488D05C5A20EC2B /* Debug */,
+				F841A46F472D4D74BE67CE90 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D0C9541216D73FE8FDD2F277 /* Build configuration list for PBXProject "TaskScore" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E4A51D5C60FD23CB2B62CDE1 /* Debug */,
+				6AF8EF154A2EDD51EEC08B12 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		6C958BBB6BEECF7E2D91F50E /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4C00C46610F2347A2E121D76 /* TaskScoreLib */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TaskScoreLib;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 711EDB342BDC5FC57F0D7B3D /* Project object */;
+}

@@ -10,6 +10,14 @@ public actor AirScoreClient {
 
     private let baseURL = "https://xc.highcloud.net"
 
+    private var userAgent: String {
+        #if os(iOS)
+        "TaskScore-iOS/1.0"
+        #else
+        "TaskScore-macOS/1.0"
+        #endif
+    }
+
     // MARK: - URL Parsing
 
     /// Parse an AirScore tracklog URL to extract comPk, tasPk, and trackId.
@@ -29,7 +37,7 @@ public actor AirScoreClient {
 
         var request = URLRequest(url: url)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("TaskScore-macOS/1.0", forHTTPHeaderField: "User-Agent")
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -88,7 +96,7 @@ public actor AirScoreClient {
         let url = URL(string: "\(baseURL)/download_tracks.php?traPk=\(trackId)")!
 
         var request = URLRequest(url: url)
-        request.setValue("TaskScore-macOS/1.0", forHTTPHeaderField: "User-Agent")
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
