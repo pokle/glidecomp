@@ -27,7 +27,7 @@ struct ContentView: View {
                 iPadLayout
             }
         }
-        .alert("Error", isPresented: showErrorAlert, actions: {
+        .alert("", isPresented: showErrorAlert, actions: {
             Button("OK") { viewModel.errorMessage = nil }
         }, message: {
             Text(viewModel.errorMessage ?? "")
