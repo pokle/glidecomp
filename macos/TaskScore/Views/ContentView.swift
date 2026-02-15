@@ -342,8 +342,14 @@ struct ContentView: View {
 
     #if os(iOS)
     private func sendFeedback() {
-        if let url = URL(string: "mailto:tushar.pokle@gmail.com?subject=TaskScore%20Feedback%20for%20you") {
-            openURL(url)
+        let email = "tushar.pokle@gmail.com"
+        if let url = URL(string: "mailto:\(email)?subject=TaskScore%20Feedback%20for%20you") {
+            openURL(url) { accepted in
+                if !accepted {
+                    UIPasteboard.general.string = email
+                    viewModel.errorMessage = "No email app found. Email address copied to clipboard: \(email)"
+                }
+            }
         }
     }
     #endif
