@@ -16,11 +16,15 @@
 		A3DE89C6A9D1E1BED19F844A /* TaskScoreApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71B80E9ED134EFAE6D0EA1C3 /* TaskScoreApp.swift */; };
 		CB605CFB44D76C0D671EF840 /* FlightInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 706AEEE667E6301297AEC33A /* FlightInfoView.swift */; };
 		D42A156440A65F7736D2E0A2 /* SampleFlights.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F7091486CB0BE1CE2CCF30 /* SampleFlights.swift */; };
+		DE8CFFAD9F4BB3875B8A87A6 /* SampleFlights in Resources */ = {isa = PBXBuildFile; fileRef = 05E67CEE858391AB82BF6566 /* SampleFlights */; };
 		EB67303850B9496E8B2E97AB /* FileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E430202F1FA016C96F32C9E1 /* FileStore.swift */; };
+		EC68EC06C883BB585FF64A06 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = A4FD1B77DF2B7848C54DA7C4 /* AppIcon.icns */; };
 		EDCD53A0E3C4C951FAA00E58 /* AirScoreClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F45D2C1620C0CB716001D90E /* AirScoreClient.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		05E67CEE858391AB82BF6566 /* SampleFlights */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SampleFlights; path = TaskScore/Resources/SampleFlights; sourceTree = SOURCE_ROOT; };
+		0A1329971D3540DC9C1F5B34 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		2B03BCBB83CEE38BA9B36497 /* TaskScore.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TaskScore.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		45DF5CCD9227380C0A74F6D9 /* macos */ = {isa = PBXFileReference; lastKnownFileType = folder; name = macos; path = .; sourceTree = SOURCE_ROOT; };
 		4E12DB4EE6996AB1AE5C52DF /* MapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapView.swift; sourceTree = "<group>"; };
@@ -28,6 +32,7 @@
 		71B80E9ED134EFAE6D0EA1C3 /* TaskScoreApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskScoreApp.swift; sourceTree = "<group>"; };
 		73F7091486CB0BE1CE2CCF30 /* SampleFlights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleFlights.swift; sourceTree = "<group>"; };
 		8D5C877FCB189B78B3035ABA /* EventListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventListView.swift; sourceTree = "<group>"; };
+		A4FD1B77DF2B7848C54DA7C4 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		AAE72547D96C6A65A8D55BF0 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		E430202F1FA016C96F32C9E1 /* FileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileStore.swift; sourceTree = "<group>"; };
 		EE60E524EC27BB0AA1F6CB8E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -50,10 +55,21 @@
 		610044981CAC093027839C58 = {
 			isa = PBXGroup;
 			children = (
+				05E67CEE858391AB82BF6566 /* SampleFlights */,
 				A6C3453C1D54C7E3644AC1B9 /* Packages */,
+				68C304F1DCC1E78BAB81DE2C /* Resources */,
 				E922D6DCA67232B042E1946D /* TaskScore */,
 				A35DE7D0EA23429C5D48BC48 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		68C304F1DCC1E78BAB81DE2C /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A4FD1B77DF2B7848C54DA7C4 /* AppIcon.icns */,
+			);
+			name = Resources;
+			path = TaskScore/Resources;
 			sourceTree = "<group>";
 		};
 		6F629BE338FE3773CF713C33 /* Views */ = {
@@ -98,6 +114,7 @@
 		E922D6DCA67232B042E1946D /* TaskScore */ = {
 			isa = PBXGroup;
 			children = (
+				0A1329971D3540DC9C1F5B34 /* Info.plist */,
 				71B80E9ED134EFAE6D0EA1C3 /* TaskScoreApp.swift */,
 				E2F2B84C82309898D43F2C17 /* Services */,
 				6F629BE338FE3773CF713C33 /* Views */,
@@ -113,6 +130,7 @@
 			buildConfigurationList = C4B02EA7B3BD403A4BBDAE9E /* Build configuration list for PBXNativeTarget "TaskScore" */;
 			buildPhases = (
 				AC5F815FE605579928334319 /* Sources */,
+				88968D3C2CDD466B3C6759C9 /* Resources */,
 				38693B10BFB79455151124F1 /* Frameworks */,
 			);
 			buildRules = (
@@ -158,6 +176,18 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		88968D3C2CDD466B3C6759C9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EC68EC06C883BB585FF64A06 /* AppIcon.icns in Resources */,
+				DE8CFFAD9F4BB3875B8A87A6 /* SampleFlights in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		AC5F815FE605579928334319 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -188,13 +218,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = TaskScore;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports";
-				INFOPLIST_KEY_NSHighResolutionCapable = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_FILE = TaskScore/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -343,13 +367,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = TaskScore;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports";
-				INFOPLIST_KEY_NSHighResolutionCapable = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_FILE = TaskScore/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

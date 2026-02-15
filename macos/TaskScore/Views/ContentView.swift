@@ -12,22 +12,38 @@ struct ContentView: View {
     @State private var showIGCImporter = false
     @State private var showXCTaskImporter = false
     #if os(iOS)
-    @State private var showSettings = false
-    @State private var showEventList = true
+    @State private var activeSheet: iOSSheet?
+    @State private var panelDetent: PanelDetent = .collapsed
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
 
     var body: some View {
         #if os(iOS)
-        if horizontalSizeClass == .compact {
-            iPhoneLayout
-        } else {
-            iPadLayout
+        Group {
+            if horizontalSizeClass == .compact {
+                iPhoneLayout
+            } else {
+                iPadLayout
+            }
         }
+        .alert("Error", isPresented: showErrorAlert, actions: {
+            Button("OK") { viewModel.errorMessage = nil }
+        }, message: {
+            Text(viewModel.errorMessage ?? "")
+        })
         #else
         macOSLayout
         #endif
     }
+
+    #if os(iOS)
+    private var showErrorAlert: Binding<Bool> {
+        Binding(
+            get: { viewModel.errorMessage != nil },
+            set: { if !$0 { viewModel.errorMessage = nil } }
+        )
+    }
+    #endif
 
     // MARK: - macOS Layout
 
@@ -91,40 +107,57 @@ struct ContentView: View {
         } detail: {
             mapDetailView
         }
-        .sheet(isPresented: $showAirScoreSheet) {
-            AirScoreLoadView(isLoading: $viewModel.isLoading) { comPk, tasPk, trackId in
-                viewModel.loadFromAirScore(comPk: comPk, tasPk: tasPk, trackId: trackId)
-            }
-        }
-        .sheet(isPresented: $showSettings) {
-            NavigationStack {
-                SettingsView()
-                    .navigationTitle("Settings")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Done") { showSettings = false }
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .settings:
+                NavigationStack {
+                    SettingsView()
+                        .navigationTitle("Settings")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { activeSheet = nil }
+                            }
                         }
-                    }
+                }
+            case .airScore:
+                AirScoreLoadView(isLoading: $viewModel.isLoading) { comPk, tasPk, trackId in
+                    viewModel.loadFromAirScore(comPk: comPk, tasPk: tasPk, trackId: trackId)
+                }
+            case .igcImporter:
+                iOSFileImporter(contentTypes: igcContentTypes) { url in
+                    viewModel.loadIGCFile(from: url)
+                } onError: { error in
+                    viewModel.errorMessage = error
+                }
+            case .taskImporter:
+                iOSFileImporter(contentTypes: taskContentTypes) { url in
+                    viewModel.loadXCTaskFile(from: url)
+                } onError: { error in
+                    viewModel.errorMessage = error
+                }
             }
-        }
-        .fileImporter(isPresented: $showIGCImporter, allowedContentTypes: igcContentTypes) { result in
-            handleFileImport(result) { url in viewModel.loadIGCFile(from: url) }
-        }
-        .fileImporter(isPresented: $showXCTaskImporter, allowedContentTypes: taskContentTypes) { result in
-            handleFileImport(result) { url in viewModel.loadXCTaskFile(from: url) }
         }
     }
 
     // MARK: - iPhone Layout
 
     private var iPhoneLayout: some View {
-        mapDetailView
-            .overlay(alignment: .topTrailing) {
-                iPhoneMenuButtons
-            }
-            .sheet(isPresented: $showEventList) {
-                NavigationStack {
+        GeometryReader { geo in
+            ZStack(alignment: .bottom) {
+                mapDetailView
+                    .ignoresSafeArea()
+
+                // Menu buttons in a separate layer that respects safe area
+                VStack {
+                    HStack {
+                        Spacer()
+                        iPhoneMenuButtons
+                    }
+                    Spacer()
+                }
+
+                BottomPanelView(detent: $panelDetent, maxHeight: geo.size.height * 0.85) {
                     EventListView(
                         events: viewModel.events,
                         glides: viewModel.extractGlides(),
@@ -133,53 +166,59 @@ struct ContentView: View {
                         selectedEvent: $selectedEvent,
                         filter: $eventFilter
                     )
-                    .navigationTitle("Events")
-                    .navigationBarTitleDisplayMode(.inline)
                 }
-                .presentationDetents([.fraction(0.15), .medium, .large])
-                .presentationDragIndicator(.visible)
-                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-                .interactiveDismissDisabled()
+                .ignoresSafeArea(edges: .bottom)
             }
-            .sheet(isPresented: $showAirScoreSheet) {
-                AirScoreLoadView(isLoading: $viewModel.isLoading) { comPk, tasPk, trackId in
-                    viewModel.loadFromAirScore(comPk: comPk, tasPk: tasPk, trackId: trackId)
-                }
-            }
-            .sheet(isPresented: $showSettings) {
+        }
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .settings:
                 NavigationStack {
                     SettingsView()
                         .navigationTitle("Settings")
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .confirmationAction) {
-                                Button("Done") { showSettings = false }
+                                Button("Done") { activeSheet = nil }
                             }
                         }
                 }
+            case .airScore:
+                AirScoreLoadView(isLoading: $viewModel.isLoading) { comPk, tasPk, trackId in
+                    viewModel.loadFromAirScore(comPk: comPk, tasPk: tasPk, trackId: trackId)
+                }
+            case .igcImporter:
+                iOSFileImporter(contentTypes: igcContentTypes) { url in
+                    viewModel.loadIGCFile(from: url)
+                } onError: { error in
+                    viewModel.errorMessage = error
+                }
+            case .taskImporter:
+                iOSFileImporter(contentTypes: taskContentTypes) { url in
+                    viewModel.loadXCTaskFile(from: url)
+                } onError: { error in
+                    viewModel.errorMessage = error
+                }
             }
-            .fileImporter(isPresented: $showIGCImporter, allowedContentTypes: igcContentTypes) { result in
-                handleFileImport(result) { url in viewModel.loadIGCFile(from: url) }
-            }
-            .fileImporter(isPresented: $showXCTaskImporter, allowedContentTypes: taskContentTypes) { result in
-                handleFileImport(result) { url in viewModel.loadXCTaskFile(from: url) }
-            }
+        }
     }
 
     private var iPhoneMenuButtons: some View {
         HStack(spacing: 8) {
             Menu {
-                Button { showIGCImporter = true } label: {
+                Button { activeSheet = .igcImporter } label: {
                     Label("Open IGC File", systemImage: "doc")
                 }
-                Button { showXCTaskImporter = true } label: {
+                Button { activeSheet = .taskImporter } label: {
                     Label("Open Task File", systemImage: "map")
                 }
-                Button { showAirScoreSheet = true } label: {
+                Button { activeSheet = .airScore } label: {
                     Label("Load AirScore Task", systemImage: "cloud.fill")
                 }
                 Divider()
-                Button { openSampleFlight() } label: {
+                Button {
+                    DispatchQueue.main.async { openSampleFlight() }
+                } label: {
                     Label("Sample Flight", systemImage: "paperplane")
                 }
             } label: {
@@ -188,7 +227,7 @@ struct ContentView: View {
                     .symbolRenderingMode(.hierarchical)
             }
 
-            Button { showSettings = true } label: {
+            Button { activeSheet = .settings } label: {
                 Image(systemName: "gearshape.fill")
                     .font(.title2)
                     .symbolRenderingMode(.hierarchical)
@@ -201,24 +240,26 @@ struct ContentView: View {
     private var iOSToolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
             Menu {
-                Button { showIGCImporter = true } label: {
+                Button { activeSheet = .igcImporter } label: {
                     Label("Open IGC File", systemImage: "doc")
                 }
-                Button { showXCTaskImporter = true } label: {
+                Button { activeSheet = .taskImporter } label: {
                     Label("Open Task File", systemImage: "map")
                 }
-                Button { showAirScoreSheet = true } label: {
+                Button { activeSheet = .airScore } label: {
                     Label("Load AirScore Task", systemImage: "cloud.fill")
                 }
                 Divider()
-                Button { openSampleFlight() } label: {
+                Button {
+                    DispatchQueue.main.async { openSampleFlight() }
+                } label: {
                     Label("Sample Flight", systemImage: "paperplane")
                 }
             } label: {
                 Image(systemName: "plus.circle")
             }
 
-            Button { showSettings = true } label: {
+            Button { activeSheet = .settings } label: {
                 Image(systemName: "gearshape")
             }
         }
@@ -250,6 +291,7 @@ struct ContentView: View {
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
             }
         }
+        #if os(macOS)
         .overlay(alignment: .bottom) {
             if let error = viewModel.errorMessage {
                 Text(error)
@@ -261,6 +303,7 @@ struct ContentView: View {
                     .onTapGesture { viewModel.errorMessage = nil }
             }
         }
+        #endif
     }
 
     // MARK: - File Import
@@ -307,6 +350,113 @@ enum EventFilter: String, CaseIterable {
     case sinks = "Sinks"
 }
 
+// MARK: - iPhone Bottom Panel
+
+#if os(iOS)
+/// Height state for the draggable bottom panel
+enum PanelDetent {
+    case collapsed, medium, large
+
+    func height(maxHeight: CGFloat) -> CGFloat {
+        switch self {
+        case .collapsed: return 80
+        case .medium: return maxHeight * 0.45
+        case .large: return maxHeight
+        }
+    }
+}
+
+/// A draggable bottom panel overlay (replaces .sheet to avoid multiple-sheet conflicts)
+struct BottomPanelView<Content: View>: View {
+    @Binding var detent: PanelDetent
+    let maxHeight: CGFloat
+    @ViewBuilder let content: () -> Content
+
+    @State private var dragOffset: CGFloat = 0
+
+    private var panelHeight: CGFloat {
+        max(80, detent.height(maxHeight: maxHeight) - dragOffset)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Drag handle
+            Capsule()
+                .fill(Color.secondary.opacity(0.5))
+                .frame(width: 36, height: 5)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
+
+            content()
+
+            Spacer(minLength: 0)
+        }
+        .frame(height: panelHeight, alignment: .top)
+        .frame(maxWidth: .infinity)
+        .background(.regularMaterial)
+        .gesture(
+            DragGesture()
+                .onChanged { value in
+                    dragOffset = value.translation.height
+                }
+                .onEnded { value in
+                    let currentHeight = detent.height(maxHeight: maxHeight)
+                    let projected = currentHeight - value.predictedEndTranslation.height
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        detent = closestDetent(for: projected)
+                        dragOffset = 0
+                    }
+                }
+        )
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: detent)
+    }
+
+    private func closestDetent(for height: CGFloat) -> PanelDetent {
+        let detents: [PanelDetent] = [.collapsed, .medium, .large]
+        return detents.min(by: {
+            abs($0.height(maxHeight: maxHeight) - height) < abs($1.height(maxHeight: maxHeight) - height)
+        }) ?? .collapsed
+    }
+}
+
+/// Identifiable enum for single-sheet presentation on iOS
+enum iOSSheet: String, Identifiable {
+    case settings, airScore, igcImporter, taskImporter
+    var id: String { rawValue }
+}
+
+/// Wrapper that presents a document picker and auto-dismisses after selection
+struct iOSFileImporter: View {
+    let contentTypes: [UTType]
+    let onLoad: (URL) -> Void
+    let onError: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var showPicker = true
+
+    var body: some View {
+        Color.clear
+            .fileImporter(isPresented: $showPicker, allowedContentTypes: contentTypes) { result in
+                switch result {
+                case .success(let url):
+                    let gotAccess = url.startAccessingSecurityScopedResource()
+                    defer {
+                        if gotAccess { url.stopAccessingSecurityScopedResource() }
+                    }
+                    onLoad(url)
+                case .failure(let error):
+                    onError(error.localizedDescription)
+                }
+                dismiss()
+            }
+            .onChange(of: showPicker) { _, newValue in
+                // User cancelled the file picker
+                if !newValue { dismiss() }
+            }
+    }
+}
+#endif
+
 // MARK: - FocusedValue for event filter binding
 
 #if os(macOS)
@@ -331,7 +481,13 @@ class FlightViewModel {
     var task: XCTask?
     var summary: FlightSummary?
     var isLoading = false
-    var errorMessage: String?
+    var errorMessage: String? {
+        didSet {
+            if let msg = errorMessage {
+                print("[TaskScore Error] \(msg)")
+            }
+        }
+    }
     var airScoreResponse: AirScoreTaskResponse?
 
     func loadIGCFile(from url: URL) {

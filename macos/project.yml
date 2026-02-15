@@ -19,11 +19,29 @@ targets:
       - path: TaskScore
         excludes:
           - Resources
-    resources:
       - path: TaskScore/Resources/SampleFlights
         buildPhase: resources
+        type: folder
       - path: TaskScore/Resources/AppIcon.icns
         buildPhase: resources
+    info:
+      path: TaskScore/Info.plist
+      properties:
+        CFBundleDisplayName: TaskScore
+        LSApplicationCategoryType: public.app-category.sports
+        NSHighResolutionCapable: true
+        UILaunchScreen: {}
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
     dependencies:
       - package: TaskScoreLib
         product: TaskScoreLib
@@ -33,16 +51,9 @@ targets:
         PRODUCT_NAME: TaskScore
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: TaskScore
         SWIFT_VERSION: "5.9"
         ENABLE_PREVIEWS: YES
-        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.sports"
-        INFOPLIST_KEY_NSHighResolutionCapable: YES
         TARGETED_DEVICE_FAMILY: "1,2"
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGNING_REQUIRED: "NO"
         CODE_SIGNING_ALLOWED: "NO"
