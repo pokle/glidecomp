@@ -68,6 +68,7 @@ async function init(): Promise<void> {
   const importAirscoreInput = document.getElementById('import-airscore-input') as HTMLInputElement | null;
 
   // Menu items
+  const menuFeedback = document.getElementById('menu-feedback');
   const menuOpenIgc = document.getElementById('menu-open-igc');
   const menuImportTask = document.getElementById('menu-import-task');
   const menuImportAirscore = document.getElementById('menu-import-airscore');
@@ -523,6 +524,12 @@ async function init(): Promise<void> {
     // Switch to task tab and select the turnpoint
     analysisPanel?.selectTurnpoint(turnpointIndex);
     updateHeaderTabs('task');
+  });
+
+  // Feedback menu item opens mailto link
+  menuFeedback?.addEventListener('click', () => {
+    commandDialog?.close();
+    window.location.href = 'mailto:tushar.pokle@gmail.com?subject=TaskScore%20Feedback%20for%20you';
   });
 
   // Open IGC menu item triggers hidden file input
