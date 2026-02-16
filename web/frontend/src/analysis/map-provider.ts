@@ -7,7 +7,7 @@
 
 import type { IGCFix, XCTask, FlightEvent } from '@taskscore/analysis';
 
-export type MapProviderType = 'mapbox' | 'leaflet';
+export type MapProviderType = 'mapbox' | 'leaflet' | 'arcgis';
 
 /**
  * Bounds in degrees
@@ -95,6 +95,10 @@ export async function createMapProvider(
     if (providerType === 'leaflet') {
         const { createLeafletProvider } = await import('./leaflet-provider');
         return createLeafletProvider(container);
+    }
+    if (providerType === 'arcgis') {
+        const { createArcGISProvider } = await import('./arcgis-provider');
+        return createArcGISProvider(container);
     }
     const { createMapBoxProvider } = await import('./mapbox-provider');
     return createMapBoxProvider(container);

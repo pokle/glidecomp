@@ -98,9 +98,10 @@ async function init(): Promise<void> {
   const sidebar = document.getElementById('waypoint-sidebar');
   const sidebarBackdrop = document.getElementById('sidebar-backdrop');
 
-  // Map provider switch menu
-  const menuSwitchMap = document.getElementById('menu-switch-map');
-  const mapProviderLabel = document.getElementById('map-provider-label');
+  // Map provider switch menu items
+  const menuSwitchMapbox = document.getElementById('menu-switch-mapbox');
+  const menuSwitchLeaflet = document.getElementById('menu-switch-leaflet');
+  const menuSwitchArcgis = document.getElementById('menu-switch-arcgis');
 
   if (!mapContainer || !eventPanelContainer) {
     console.error('Required containers not found');
@@ -112,6 +113,7 @@ async function init(): Promise<void> {
   const savedMapProvider = config.getPreferences().mapProvider;
   const providerType: MapProviderType =
     mapParam === 'l' ? 'leaflet' :
+    mapParam === 'a' ? 'arcgis' :
     mapParam === 'm' ? 'mapbox' :
     savedMapProvider ?? 'mapbox';
 
@@ -124,10 +126,14 @@ async function init(): Promise<void> {
     return;
   }
 
-  // Update provider label in command menu to show the target provider
-  if (mapProviderLabel) {
-    const targetProvider = providerType === 'leaflet' ? 'MapBox' : 'Leaflet';
-    mapProviderLabel.textContent = `Switch Map Provider to ${targetProvider}`;
+  // Hide the menu item for the currently active provider
+  const providerMenuItems: Record<string, HTMLElement | null> = {
+    mapbox: menuSwitchMapbox,
+    leaflet: menuSwitchLeaflet,
+    arcgis: menuSwitchArcgis,
+  };
+  if (providerMenuItems[providerType]) {
+    providerMenuItems[providerType]!.style.display = 'none';
   }
 
   // Load waypoint database for enriching IGC tasks
@@ -267,16 +273,17 @@ async function init(): Promise<void> {
     });
   }
 
-  // Switch Map Provider handler
-  menuSwitchMap?.addEventListener('click', () => {
-    const newProvider: MapProviderType = providerType === 'mapbox' ? 'leaflet' : 'mapbox';
+  // Switch Map Provider handlers
+  const providerUrlParam: Record<MapProviderType, string> = { mapbox: 'm', leaflet: 'l', arcgis: 'a' };
+  function switchToProvider(newProvider: MapProviderType) {
     config.setPreferences({ mapProvider: newProvider });
-
-    // Update URL param and reload (provider switch requires full page reload)
     const params = new URLSearchParams(window.location.search);
-    params.set('m', newProvider === 'leaflet' ? 'l' : 'm');
+    params.set('m', providerUrlParam[newProvider]);
     window.location.search = params.toString();
-  });
+  }
+  menuSwitchMapbox?.addEventListener('click', () => switchToProvider('mapbox'));
+  menuSwitchLeaflet?.addEventListener('click', () => switchToProvider('leaflet'));
+  menuSwitchArcgis?.addEventListener('click', () => switchToProvider('arcgis'));
 
   // Theme switching handlers
   const setTheme = (mode: 'light' | 'dark' | 'system') => {

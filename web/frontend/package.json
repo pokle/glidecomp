@@ -21,6 +21,7 @@
     "wrangler": "^4.63.0"
   },
   "dependencies": {
+    "@arcgis/core": "^4.34.8",
     "@taskscore/analysis": "workspace:*",
     "leaflet": "2.0.0-alpha.1",
     "mapbox-gl": "^3.18.0",
