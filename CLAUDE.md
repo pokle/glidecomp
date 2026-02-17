@@ -31,6 +31,8 @@ Frontend (Pages) ←→ API Worker ←→ R2 + D1
 
 ## Build & Development
 
+**IMPORTANT:** If `node_modules/` is missing or a dependency can't be resolved, run `bun install` before proceeding.
+
 **Commands:**
 ```bash
 bun install          # Install dependencies
