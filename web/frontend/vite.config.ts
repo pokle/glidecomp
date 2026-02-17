@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, searchForWorkspaceRoot, type Plugin } from 'vite';
 import { resolve } from 'path';
 import tailwindcss from '@tailwindcss/vite';
 
@@ -45,5 +45,10 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    fs: {
+      allow: [
+        searchForWorkspaceRoot(process.cwd()),
+      ],
+    },
   },
 });
