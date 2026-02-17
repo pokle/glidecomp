@@ -100,6 +100,7 @@ export interface AnalysisPanel {
   setEvents(events: FlightEvent[]): void;
   setFlightInfo(info: FlightInfo): void;
   setTask(task: XCTask | null): void;
+  setAltitudes(altitudes: number[]): void;
   clearSelection(): void;
   toggle(): void;
   open(): void;
@@ -204,6 +205,48 @@ function getTurnpointTypeClass(type?: 'TAKEOFF' | 'SSS' | 'ESS'): string {
 }
 
 /**
+ * Generate an SVG altitude sparkline (area chart) from an array of altitude values.
+ * Returns an SVG string with a vertical gradient fill matching the track altitude colors.
+ */
+function generateAltitudeSparkline(altitudes: number[]): string {
+  if (altitudes.length < 2) return '';
+
+  // Downsample to ~200 points for performance
+  const maxPoints = 200;
+  const step = Math.max(1, Math.floor(altitudes.length / maxPoints));
+  const sampled: number[] = [];
+  for (let i = 0; i < altitudes.length; i += step) {
+    sampled.push(altitudes[i]);
+  }
+  if (sampled[sampled.length - 1] !== altitudes[altitudes.length - 1]) {
+    sampled.push(altitudes[altitudes.length - 1]);
+  }
+
+  let minAlt = Infinity;
+  let maxAlt = -Infinity;
+  for (const a of sampled) {
+    if (a < minAlt) minAlt = a;
+    if (a > maxAlt) maxAlt = a;
+  }
+  const altRange = maxAlt - minAlt || 1;
+
+  const w = sampled.length - 1;
+  const h = 100;
+
+  // Build area path: altitude line then close to bottom
+  let path = `M0,${h}`;
+  for (let i = 0; i < sampled.length; i++) {
+    const x = (i / (sampled.length - 1)) * w;
+    const y = h - ((sampled[i] - minAlt) / altRange) * h;
+    path += ` L${x.toFixed(1)},${y.toFixed(1)}`;
+  }
+  path += ` L${w},${h} Z`;
+
+  // Vertical gradient: same color stops as getAltitudeColorNormalized
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><defs><linearGradient id="ag" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="rgb(139,90,43)"/><stop offset="25%" stop-color="rgb(67,160,71)"/><stop offset="50%" stop-color="rgb(3,155,229)"/><stop offset="75%" stop-color="rgb(41,182,246)"/><stop offset="100%" stop-color="rgb(79,195,247)"/></linearGradient></defs><path d="${path}" fill="url(#ag)" opacity="0.15"/></svg>`;
+}
+
+/**
  * Create the analysis panel
  */
 export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPanel {
@@ -276,6 +319,21 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   let currentTab: PanelTabType = 'events';
   let selectedSegment: { startIndex: number; endIndex: number } | null = null;
   let selectedTurnpointIndex: number | null = null;
+
+  /**
+   * Apply altitude sparkline as CSS background on the track panel
+   */
+  function applySparklineBackground(altitudes: number[]): void {
+    const svg = generateAltitudeSparkline(altitudes);
+    if (svg) {
+      const encoded = encodeURIComponent(svg);
+      trackPanelContent.style.backgroundImage = `url('data:image/svg+xml,${encoded}')`;
+      trackPanelContent.style.backgroundSize = '100% 100%';
+      trackPanelContent.style.backgroundRepeat = 'no-repeat';
+    } else {
+      trackPanelContent.style.backgroundImage = '';
+    }
+  }
 
   /**
    * Switch to a tab (unified tab system)
@@ -976,6 +1034,10 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       if (currentTab === 'task') {
         renderTask();
       }
+    },
+
+    setAltitudes(altitudes: number[]) {
+      applySparklineBackground(altitudes);
     },
 
     clearSelection() {
