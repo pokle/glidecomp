@@ -433,7 +433,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           source: 'task-segment-labels',
           layout: {
             'text-field': ['get', 'distance'],
-            'text-size': 20,
+            'text-size': 16,
             'text-rotate': ['get', 'bearing'],
             'text-rotation-alignment': 'map',
             'text-offset': [0, 0],
@@ -1212,7 +1212,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
                     const labelEl = document.createElement('div');
                     labelEl.style.cssText = `
                       font-family: ${MAP_FONT_FAMILY};
-                      font-size: 16px;
+                      font-size: 20px;
                       font-weight: 600;
                       color: #3b82f6;
                       white-space: nowrap;

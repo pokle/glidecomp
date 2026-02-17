@@ -516,7 +516,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
             html: `<div style="
               transform: rotate(${bearing}deg);
               font-family: ${MAP_FONT_FAMILY};
-              font-size: 14px;
+              font-size: 16px;
               font-weight: 600;
               color: ${TASK_COLOR};
               white-space: nowrap;
@@ -642,7 +642,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
                   const labelEl = document.createElement('div');
                   labelEl.style.cssText = `
                     font-family: ${MAP_FONT_FAMILY};
-                    font-size: 16px; font-weight: 600; color: #3b82f6;
+                    font-size: 14px; font-weight: 600; color: #3b82f6;
                     white-space: nowrap; text-align: center; line-height: 1.3;
                     text-shadow: -1px -1px 0 white, 1px -1px 0 white, -1px 1px 0 white, 1px 1px 0 white;
                   `;
