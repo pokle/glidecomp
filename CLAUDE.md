@@ -208,6 +208,45 @@ Users can load task and track data from AirScore directly in the analysis tool:
 - MapBox GL JS exclusively (removed Leaflet, Google Maps, MapLibre)
 - Configured via `VITE_MAPBOX_TOKEN` environment variable
 
+## UI Component Index
+
+All paths relative to `web/frontend/src/`. The analysis page (`analysis.html`) is the main app.
+
+**Page layout & wiring:**
+- `analysis.html` - Page structure: header, sidebar, map container, all dialogs
+- `analysis/main.ts` - App init, event wiring, drag-and-drop, file loading, feature toggles
+
+**Analysis sidebar** (`<aside id="waypoint-sidebar">` in HTML, 320px right panel):
+- `analysis/analysis-panel.ts` → `createAnalysisPanel()` - Entire sidebar contents:
+  - Flight info banner
+  - Tab row: Task / Events / Glides / Climbs / Sinks
+  - Altitude sparkline (area chart with event markers)
+  - Event list, glide list, climb list, sink list, task/turnpoint list
+  - Event count bar
+
+**Map:**
+- `analysis/mapbox-provider.ts` - MapBox GL rendering (track, task cylinders, event markers, 3D)
+- `analysis/map-provider.ts` - Map provider interface
+- `analysis/map-provider-shared.ts` - Shared helpers (altitude colors, glide legend)
+
+**Dialogs** (all defined in `analysis.html`):
+- `#command-dialog` - Command menu (Cmd+K): file loading, display options, sample flights, stored items
+- `#import-task-dialog` - Paste XCTask JSON
+- `#import-airscore-dialog` - Paste AirScore URL
+- `#units-dialog` - Configure units (speed, altitude, distance, climb rate)
+
+**Services:**
+- `analysis/storage-menu.ts` - Populates stored tasks/tracks in command menu
+- `analysis/config.ts` - Config singleton (units, display prefs)
+- `analysis/storage.ts` - IndexedDB persistence
+- `analysis/units-browser.ts` - Unit formatting (altitude, distance, speed, etc.)
+- `analysis/airscore-client.ts` - AirScore API worker client
+- `analysis/xctsk-fetch.ts` - XContest task fetching
+
+**Shared analysis library** (used by both web and macOS):
+- `web/analysis/src/` - Core analysis logic (IGC parsing, events, geo, scoring)
+- `web/analysis/tests/` - Tests
+
 ## Coding Preferences
 
 - MUST read library/tool documentation before use (Context7 tool, web docs)
