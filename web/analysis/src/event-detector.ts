@@ -350,6 +350,7 @@ function detectTurnpointCrossings(
           altitude: fix.gnssAltitude,
           description: `Entered ${tp.waypoint.name} (${tp.type || 'TP' + (tpIdx + 1)})`,
           details: {
+            fixIndex: i,
             turnpointIndex: tpIdx,
             turnpointName: tp.waypoint.name,
             radius: tp.radius,
@@ -367,6 +368,7 @@ function detectTurnpointCrossings(
           altitude: fix.gnssAltitude,
           description: `Exited ${tp.waypoint.name}`,
           details: {
+            fixIndex: i,
             turnpointIndex: tpIdx,
             turnpointName: tp.waypoint.name,
           },
@@ -499,6 +501,7 @@ function detectTakeoffLanding(fixes: IGCFix[]): FlightEvent[] {
       altitude: takeoffFix.gnssAltitude,
       description: 'Takeoff',
       details: {
+        fixIndex: takeoffIndex,
         startAltitude,
         altitudeGain: takeoffFix.gnssAltitude - startAltitude,
       },
@@ -566,7 +569,7 @@ function detectTakeoffLanding(fixes: IGCFix[]): FlightEvent[] {
       longitude: landingFix.longitude,
       altitude: landingFix.gnssAltitude,
       description: 'Landing',
-      details: {},
+      details: { fixIndex: landingIndex },
     });
   }
 
@@ -605,6 +608,7 @@ function detectAltitudeExtremes(fixes: IGCFix[]): FlightEvent[] {
     longitude: fixes[maxAltIdx].longitude,
     altitude: maxAlt,
     description: `Max altitude: ${maxAlt.toFixed(0)}m`,
+    details: { fixIndex: maxAltIdx },
   });
 
   events.push({
@@ -615,6 +619,7 @@ function detectAltitudeExtremes(fixes: IGCFix[]): FlightEvent[] {
     longitude: fixes[minAltIdx].longitude,
     altitude: minAlt,
     description: `Min altitude: ${minAlt.toFixed(0)}m`,
+    details: { fixIndex: minAltIdx },
   });
 
   return events;
@@ -656,7 +661,7 @@ function detectVarioExtremes(fixes: IGCFix[]): FlightEvent[] {
       longitude: fixes[maxClimbIdx].longitude,
       altitude: fixes[maxClimbIdx].gnssAltitude,
       description: `Max climb: +${maxClimb.toFixed(1)}m/s`,
-      details: { climbRate: maxClimb },
+      details: { fixIndex: maxClimbIdx, climbRate: maxClimb },
     });
   }
 
@@ -669,7 +674,7 @@ function detectVarioExtremes(fixes: IGCFix[]): FlightEvent[] {
       longitude: fixes[maxSinkIdx].longitude,
       altitude: fixes[maxSinkIdx].gnssAltitude,
       description: `Max sink: ${maxSink.toFixed(1)}m/s`,
-      details: { sinkRate: maxSink },
+      details: { fixIndex: maxSinkIdx, sinkRate: maxSink },
     });
   }
 

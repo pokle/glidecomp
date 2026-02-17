@@ -253,6 +253,7 @@ public enum EventDetector {
                         altitude: Double(fix.gnssAltitude),
                         description: "Entered \(tp.waypoint.name) (\(tp.type ?? "TP\(tpIdx + 1)"))",
                         details: [
+                            "fixIndex": Double(i),
                             "turnpointIndex": Double(tpIdx),
                             "radius": tp.radius,
                         ]
@@ -267,7 +268,10 @@ public enum EventDetector {
                         longitude: fix.longitude,
                         altitude: Double(fix.gnssAltitude),
                         description: "Exited \(tp.waypoint.name)",
-                        details: ["turnpointIndex": Double(tpIdx)]
+                        details: [
+                            "fixIndex": Double(i),
+                            "turnpointIndex": Double(tpIdx),
+                        ]
                     ))
                 }
 
@@ -388,6 +392,7 @@ public enum EventDetector {
                 altitude: Double(takeoffFix.gnssAltitude),
                 description: "Takeoff",
                 details: [
+                    "fixIndex": Double(takeoffIndex),
                     "startAltitude": startAltitude,
                     "altitudeGain": Double(takeoffFix.gnssAltitude) - startAltitude,
                 ]
@@ -447,7 +452,8 @@ public enum EventDetector {
                 latitude: landingFix.latitude,
                 longitude: landingFix.longitude,
                 altitude: Double(landingFix.gnssAltitude),
-                description: "Landing"
+                description: "Landing",
+                details: ["fixIndex": Double(landingIndex)]
             ))
         }
 
@@ -484,7 +490,8 @@ public enum EventDetector {
             latitude: fixes[maxAltIdx].latitude,
             longitude: fixes[maxAltIdx].longitude,
             altitude: Double(maxAlt),
-            description: "Max altitude: \(maxAlt)m"
+            description: "Max altitude: \(maxAlt)m",
+            details: ["fixIndex": Double(maxAltIdx)]
         ))
 
         events.append(FlightEvent(
@@ -494,7 +501,8 @@ public enum EventDetector {
             latitude: fixes[minAltIdx].latitude,
             longitude: fixes[minAltIdx].longitude,
             altitude: Double(minAlt),
-            description: "Min altitude: \(minAlt)m"
+            description: "Min altitude: \(minAlt)m",
+            details: ["fixIndex": Double(minAltIdx)]
         ))
 
         return events
@@ -536,7 +544,7 @@ public enum EventDetector {
                 longitude: fixes[maxClimbIdx].longitude,
                 altitude: Double(fixes[maxClimbIdx].gnssAltitude),
                 description: String(format: "Max climb: +%.1fm/s", maxClimb),
-                details: ["climbRate": maxClimb]
+                details: ["fixIndex": Double(maxClimbIdx), "climbRate": maxClimb]
             ))
         }
 
@@ -549,7 +557,7 @@ public enum EventDetector {
                 longitude: fixes[maxSinkIdx].longitude,
                 altitude: Double(fixes[maxSinkIdx].gnssAltitude),
                 description: String(format: "Max sink: %.1fm/s", maxSink),
-                details: ["sinkRate": maxSink]
+                details: ["fixIndex": Double(maxSinkIdx), "sinkRate": maxSink]
             ))
         }
 
@@ -673,17 +681,24 @@ public enum EventDetector {
         }
 
         // Detect altitude extremes
-        let altitudeEvents = detectAltitudeExtremes(flightFixes)
-        allEvents.append(contentsOf: altitudeEvents)
+        // These operate on flightFixes (sliced from takeoff), so adjust fixIndex by indexOffset
+        for var event in detectAltitudeExtremes(flightFixes) {
+            event.details["fixIndex"] = (event.details["fixIndex"] ?? 0) + Double(indexOffset)
+            allEvents.append(event)
+        }
 
         // Detect vario extremes
-        let varioEvents = detectVarioExtremes(flightFixes)
-        allEvents.append(contentsOf: varioEvents)
+        for var event in detectVarioExtremes(flightFixes) {
+            event.details["fixIndex"] = (event.details["fixIndex"] ?? 0) + Double(indexOffset)
+            allEvents.append(event)
+        }
 
         // Detect turnpoint crossings if task provided
         if let task = task {
-            let turnpointEvents = detectTurnpointCrossings(flightFixes, task: task)
-            allEvents.append(contentsOf: turnpointEvents)
+            for var event in detectTurnpointCrossings(flightFixes, task: task) {
+                event.details["fixIndex"] = (event.details["fixIndex"] ?? 0) + Double(indexOffset)
+                allEvents.append(event)
+            }
         }
 
         // Sort by time

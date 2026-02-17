@@ -319,20 +319,53 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   let currentTab: PanelTabType = 'events';
   let selectedSegment: { startIndex: number; endIndex: number } | null = null;
   let selectedTurnpointIndex: number | null = null;
+  let sparklineDataUri = '';
+  let fixCount = 0;
 
   /**
    * Apply altitude sparkline as CSS background on the track panel
    */
   function applySparklineBackground(altitudes: number[]): void {
+    fixCount = altitudes.length;
     const svg = generateAltitudeSparkline(altitudes);
     if (svg) {
-      const encoded = encodeURIComponent(svg);
-      trackPanelContent.style.backgroundImage = `url('data:image/svg+xml,${encoded}')`;
+      sparklineDataUri = `url('data:image/svg+xml,${encodeURIComponent(svg)}')`;
+      trackPanelContent.style.backgroundImage = sparklineDataUri;
       trackPanelContent.style.backgroundSize = '100% 100%';
       trackPanelContent.style.backgroundRepeat = 'no-repeat';
     } else {
+      sparklineDataUri = '';
       trackPanelContent.style.backgroundImage = '';
     }
+  }
+
+  /**
+   * Get the fix index for an event (segment start or point fixIndex)
+   */
+  function getEventFixIndex(event: FlightEvent): number | null {
+    if (event.segment) return event.segment.startIndex;
+    const details = event.details as { fixIndex?: number } | undefined;
+    return details?.fixIndex ?? null;
+  }
+
+  /**
+   * Update the sparkline background with a vertical marker line at the given fix index
+   */
+  function updateSparklineMarker(fixIndex: number | null): void {
+    if (!sparklineDataUri) return;
+
+    if (fixIndex === null || fixCount < 2) {
+      trackPanelContent.style.backgroundImage = sparklineDataUri;
+      trackPanelContent.style.backgroundSize = '100% 100%';
+      trackPanelContent.style.backgroundRepeat = 'no-repeat';
+      return;
+    }
+
+    const p = (fixIndex / (fixCount - 1)) * 100;
+    const glow = `linear-gradient(to right, transparent calc(${p.toFixed(2)}% - 12px), rgba(249,115,22,0.15) calc(${p.toFixed(2)}% - 4px), rgba(249,115,22,0.9) calc(${p.toFixed(2)}% - 1px), rgb(249,115,22) calc(${p.toFixed(2)}%), rgba(249,115,22,0.9) calc(${p.toFixed(2)}% + 1px), rgba(249,115,22,0.15) calc(${p.toFixed(2)}% + 4px), transparent calc(${p.toFixed(2)}% + 12px))`;
+    trackPanelContent.style.backgroundImage = `${glow}, ${sparklineDataUri}`;
+    trackPanelContent.style.backgroundSize = '100% 100%, 100% 100%';
+    trackPanelContent.style.backgroundRepeat = 'no-repeat, no-repeat';
   }
 
   /**
@@ -616,6 +649,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         if (event) {
           onEventClick(event);
           selectedSegment = event.segment || null;
+          updateSparklineMarker(getEventFixIndex(event));
           listContainer.querySelectorAll('.event-item').forEach(el => el.classList.remove('selected'));
           item.classList.add('selected');
         }
@@ -699,6 +733,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         if (glide) {
           onEventClick(glide.sourceEvent);
           selectedSegment = glide.segment;
+          updateSparklineMarker(glide.segment.startIndex);
           listContainer.querySelectorAll('.glide-item').forEach(el => el.classList.remove('selected'));
           item.classList.add('selected');
         }
@@ -778,6 +813,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         if (climb) {
           onEventClick(climb.sourceEvent);
           selectedSegment = climb.segment;
+          updateSparklineMarker(climb.segment.startIndex);
           listContainer.querySelectorAll('.climb-item').forEach(el => el.classList.remove('selected'));
           item.classList.add('selected');
         }
@@ -863,6 +899,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         if (sink) {
           onEventClick(sink.sourceEvent);
           selectedSegment = sink.segment;
+          updateSparklineMarker(sink.segment.startIndex);
           listContainer.querySelectorAll('.sink-item').forEach(el => el.classList.remove('selected'));
           item.classList.add('selected');
         }
@@ -1042,6 +1079,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
     clearSelection() {
       selectedSegment = null;
+      updateSparklineMarker(null);
       listContainer.querySelectorAll('.event-item.selected, .glide-item.selected, .climb-item.selected, .sink-item.selected').forEach(el => {
         el.classList.remove('selected');
       });
@@ -1140,6 +1178,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
       if (matchingEvent) {
         selectedSegment = matchingEvent.segment || null;
+        updateSparklineMarker(fixIndex);
 
         // Switch to the appropriate tab
         if (eventType === 'glide') {
