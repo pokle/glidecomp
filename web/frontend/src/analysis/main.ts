@@ -1035,32 +1035,21 @@ async function init(): Promise<void> {
 
       updateFlightInfo();
     } catch (err) {
-      console.warn('Failed to load sample task:', err);
+      console.warn('Failed to load local task:', err);
+      throw err;
     }
   }
 
-  const loadSampleFile = async (filename: string) => {
-    try {
-      // Load associated task first if one exists
-      const taskFile = sampleTaskMap[filename];
-      if (taskFile) {
-        await loadLocalTask(taskFile);
-      }
-
-      const response = await fetch(`/data/tracks/${filename}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch: ${response.status}`);
-      }
-      const content = await response.text();
-      // Don't store sample files - they're already part of the app
-      await loadIGCContent(content, filename, false);
-
-      // Close the command dialog
-      commandDialog?.close();
-    } catch (err) {
-      console.error('Failed to load sample file:', err);
-      showStatus(`Failed to load sample: ${err}`, 'error');
+  const loadSampleFile = (filename: string) => {
+    const params = new URLSearchParams(window.location.search);
+    const taskFile = sampleTaskMap[filename];
+    if (taskFile) {
+      params.set('task', taskFile);
+    } else {
+      params.delete('task');
     }
+    params.set('track', filename);
+    window.location.search = params.toString();
   };
 
   Object.entries(sampleFiles).forEach(([id, filename]) => {
@@ -1068,7 +1057,7 @@ async function init(): Promise<void> {
   });
 
   // Load from query params if present (e.g., ?task=buje&track=sample.igc)
-  await loadFromQueryParams(loadTask, loadIGCFile);
+  await loadFromQueryParams(loadTask, loadLocalTask, loadIGCFile);
 }
 
 /**
@@ -1076,6 +1065,7 @@ async function init(): Promise<void> {
  */
 async function loadFromQueryParams(
   loadTask: (code: string) => Promise<void>,
+  loadLocalTask: (taskFile: string) => Promise<void>,
   loadIGCFile: (file: File) => Promise<void>
 ): Promise<void> {
   const params = new URLSearchParams(window.location.search);
@@ -1083,9 +1073,13 @@ async function loadFromQueryParams(
   const taskCode = params.get('task');
   const trackFile = params.get('track');
 
-  // Load task first if specified
+  // Load task first if specified - try local file first, then remote
   if (taskCode) {
-    await loadTask(taskCode);
+    try {
+      await loadLocalTask(taskCode);
+    } catch {
+      await loadTask(taskCode);
+    }
   }
 
   // Load track from samples folder if specified
