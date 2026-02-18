@@ -76,19 +76,6 @@ export function getAltitudeColorNormalized(normalizedAlt: number): string {
 }
 
 /**
- * Get color based on absolute altitude using fixed thresholds.
- * Used by 3D track rendering.
- */
-export function getAltitudeColor(altitude: number): string {
-  if (altitude < 500) return '#8D6E63';
-  if (altitude < 1000) return '#A1887F';
-  if (altitude < 1500) return '#66BB6A';
-  if (altitude < 2000) return '#29B6F6';
-  if (altitude < 2500) return '#81D4FA';
-  return '#E3F2FD';
-}
-
-/**
  * Calculate altitude gradient stops based on line progress.
  * Returns [progress, color] pairs for MapBox line-gradient or similar interpolation.
  */

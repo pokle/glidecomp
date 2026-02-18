@@ -8,33 +8,16 @@
 
 import { config, type UnitPreferences } from './config';
 import {
-  formatUnit as _formatUnit,
   formatSpeed as _formatSpeed,
   formatAltitude as _formatAltitude,
   formatDistance as _formatDistance,
   formatClimbRate as _formatClimbRate,
   formatAltitudeChange as _formatAltitudeChange,
   formatRadius as _formatRadius,
-  getUnitLabel as _getUnitLabel,
-  getCurrentUnit as _getCurrentUnit,
   type FormattedValue,
 } from '@taskscore/analysis';
 
 export type { FormattedValue, UnitPreferences };
-
-type UnitType = 'speed' | 'altitude' | 'distance' | 'climbRate';
-
-export function formatUnit(
-  value: number,
-  unitType: UnitType,
-  options?: {
-    unit?: string;
-    decimals?: number;
-    showSign?: boolean;
-  }
-): FormattedValue {
-  return _formatUnit(value, unitType, { ...options, prefs: config.getUnits() });
-}
 
 export const formatSpeed = (mps: number, opts?: { showSign?: boolean }) =>
   _formatSpeed(mps, { ...opts, prefs: config.getUnits() });
@@ -53,12 +36,6 @@ export const formatAltitudeChange = (m: number) =>
 
 export const formatRadius = (meters: number): FormattedValue =>
   _formatRadius(meters, { prefs: config.getUnits() });
-
-export const getUnitLabel = (unitType: UnitType): string =>
-  _getUnitLabel(unitType, config.getUnits());
-
-export const getCurrentUnit = (unitType: UnitType): string =>
-  _getCurrentUnit(unitType, config.getUnits());
 
 /**
  * Subscribe to unit preference changes
