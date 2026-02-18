@@ -1264,29 +1264,30 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     let matchingEvent: FlightEvent | null = null;
     let eventType: 'glide' | 'climb' | 'sink' | 'event' = 'event';
 
-    // Check glides
+    // Check thermals first — they are shorter, more specific segments and
+    // more likely what the user intended to click on.
     for (const event of allEvents) {
-      if (event.type === 'glide_start' && event.segment) {
+      if (event.type === 'thermal_entry' && event.segment) {
         if (fixIndex >= event.segment.startIndex && fixIndex <= event.segment.endIndex) {
           matchingEvent = event;
-          const details = event.details as { glideRatio?: number } | undefined;
-          if (details?.glideRatio !== undefined && details.glideRatio <= 5) {
-            eventType = 'sink';
-          } else {
-            eventType = 'glide';
-          }
+          eventType = 'climb';
           break;
         }
       }
     }
 
-    // Check thermals
+    // Check glides
     if (!matchingEvent) {
       for (const event of allEvents) {
-        if (event.type === 'thermal_entry' && event.segment) {
+        if (event.type === 'glide_start' && event.segment) {
           if (fixIndex >= event.segment.startIndex && fixIndex <= event.segment.endIndex) {
             matchingEvent = event;
-            eventType = 'climb';
+            const details = event.details as { glideRatio?: number } | undefined;
+            if (details?.glideRatio !== undefined && details.glideRatio <= 5) {
+              eventType = 'sink';
+            } else {
+              eventType = 'glide';
+            }
             break;
           }
         }

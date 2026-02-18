@@ -152,7 +152,13 @@ export function calculateAltitudeGradient(fixes: IGCFix[]): [number, string][] {
 
 // ── Geometry helpers ────────────────────────────────────────────────────────
 
-/** Find the index of the fix closest to the given lat/lon */
+/**
+ * Find the index of the fix closest to the given lat/lon.
+ * When the track crosses over itself and multiple fixes are at similar
+ * distances, prefer the latest fix (highest index) because map renderers
+ * draw later segments on top of earlier ones — so the user is clicking
+ * on the topmost (most recent) part of the track.
+ */
 export function findNearestFixIndex(fixes: IGCFix[], lat: number, lon: number): number {
   if (fixes.length === 0) return -1;
 
@@ -165,6 +171,20 @@ export function findNearestFixIndex(fixes: IGCFix[], lat: number, lon: number): 
     if (distance < minDistance) {
       minDistance = distance;
       nearestIndex = i;
+    }
+  }
+
+  // When the track crosses itself, multiple fixes can be very close to the
+  // click point. Prefer the latest one (highest index) since it's rendered
+  // on top and is what the user visually clicked on.
+  // Use a small absolute tolerance (50m) capped so we don't match distant fixes.
+  if (minDistance > 200) return nearestIndex; // click is far from track, no ambiguity
+  const tolerance = Math.max(minDistance * 2, minDistance + 30);
+  for (let i = fixes.length - 1; i > nearestIndex; i--) {
+    const fix = fixes[i];
+    const distance = haversineDistance(lat, lon, fix.latitude, fix.longitude);
+    if (distance <= tolerance) {
+      return i;
     }
   }
 

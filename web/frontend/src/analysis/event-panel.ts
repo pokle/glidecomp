@@ -906,30 +906,30 @@ export function createEventPanel(options: EventPanelOptions): EventPanel {
       let matchingEvent: FlightEvent | null = null;
       let eventType: 'glide' | 'climb' | 'sink' | 'event' = 'event';
 
-      // Check glides (glide_start events)
+      // Check thermals first — shorter, more specific segments
       for (const event of allEvents) {
-        if (event.type === 'glide_start' && event.segment) {
+        if (event.type === 'thermal_entry' && event.segment) {
           if (fixIndex >= event.segment.startIndex && fixIndex <= event.segment.endIndex) {
             matchingEvent = event;
-            // Check if it's a sink (poor L/D ratio <= 5)
-            const details = event.details as { glideRatio?: number } | undefined;
-            if (details?.glideRatio !== undefined && details.glideRatio <= 5) {
-              eventType = 'sink';
-            } else {
-              eventType = 'glide';
-            }
+            eventType = 'climb';
             break;
           }
         }
       }
 
-      // Check thermals (thermal_entry events)
+      // Check glides (glide_start events)
       if (!matchingEvent) {
         for (const event of allEvents) {
-          if (event.type === 'thermal_entry' && event.segment) {
+          if (event.type === 'glide_start' && event.segment) {
             if (fixIndex >= event.segment.startIndex && fixIndex <= event.segment.endIndex) {
               matchingEvent = event;
-              eventType = 'climb';
+              // Check if it's a sink (poor L/D ratio <= 5)
+              const details = event.details as { glideRatio?: number } | undefined;
+              if (details?.glideRatio !== undefined && details.glideRatio <= 5) {
+                eventType = 'sink';
+              } else {
+                eventType = 'glide';
+              }
               break;
             }
           }

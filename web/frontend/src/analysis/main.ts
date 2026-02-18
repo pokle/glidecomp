@@ -469,6 +469,17 @@ async function init(): Promise<void> {
 
   // Register track click handler to select events when clicking on the track
   mapRenderer.onTrackClick?.((fixIndex: number) => {
+    // Debug: show clicked fix details before any segment lookup
+    if (state.fixes.length > 0 && fixIndex >= 0 && fixIndex < state.fixes.length) {
+      const fix = state.fixes[fixIndex];
+      const time = fix.time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+      const alt = formatAltitude(fix.gnssAltitude).withUnit;
+      const inThermal = state.events.some(e => e.type === 'thermal_entry' && e.segment && fixIndex >= e.segment.startIndex && fixIndex <= e.segment.endIndex);
+      const inGlide = state.events.some(e => e.type === 'glide_start' && e.segment && fixIndex >= e.segment.startIndex && fixIndex <= e.segment.endIndex);
+      const segType = inThermal ? 'THERMAL' : inGlide ? 'GLIDE' : 'gap (no segment)';
+      console.log(`[track-click] fix #${fixIndex}  ${time}  ${fix.latitude.toFixed(5)}, ${fix.longitude.toFixed(5)}  alt ${alt}  → ${segType}`);
+    }
+
     if (analysisPanel?.isHidden()) {
       analysisPanel.show();
     }
