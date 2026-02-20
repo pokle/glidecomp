@@ -1203,8 +1203,12 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     html += `<div class="rounded-lg border border-border bg-muted/30 p-3">`;
     html += `<div class="text-xs text-muted-foreground mb-2">Legs</div>`;
     for (const leg of result.legs) {
-      const fromName = getTurnpointLabel(leg.fromTaskIndex);
-      const toName = getTurnpointLabel(leg.toTaskIndex);
+      const fromTp = currentTask.turnpoints[leg.fromTaskIndex];
+      const toTp = currentTask.turnpoints[leg.toTaskIndex];
+      const fromLabel = getTurnpointLabel(leg.fromTaskIndex);
+      const toLabel = getTurnpointLabel(leg.toTaskIndex);
+      const fromName = fromTp?.waypoint.name ? `${fromTp.waypoint.name} <span class="text-xs text-muted-foreground">(${fromLabel})</span>` : fromLabel;
+      const toName = toTp?.waypoint.name ? `${toTp.waypoint.name} <span class="text-xs text-muted-foreground">(${toLabel})</span>` : toLabel;
       const legDist = formatDistance(leg.distance).withUnit;
       const icon = leg.completed
         ? '<span class="text-green-600 dark:text-green-400">&#10003;</span>'
