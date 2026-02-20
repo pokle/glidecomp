@@ -8,7 +8,7 @@
  * - Event detection and display
  */
 
-import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistance, igcTaskToXCTask, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord } from '@taskscore/analysis';
+import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistance, igcTaskToXCTask, resolveTurnpointSequence, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord } from '@taskscore/analysis';
 import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
 import { createMapProvider, type MapProvider, type MapProviderType } from './map-provider';
 import { createAnalysisPanel, AnalysisPanel, FlightInfo } from './analysis-panel';
@@ -340,6 +340,7 @@ async function init(): Promise<void> {
     analysisPanel?.setAltitudes([]);
     analysisPanel?.setFlightInfo({});
     analysisPanel?.setTask(null);
+    analysisPanel?.setScore(null);
   });
 
   // Handle units form submission
@@ -366,6 +367,7 @@ async function init(): Promise<void> {
     }
 
     updateFlightInfo();
+    updateScore();
 
     // Re-render map task labels with new units
     if (state.task && mapRenderer) {
@@ -664,8 +666,9 @@ async function init(): Promise<void> {
       mapRenderer.setEvents(state.events);
     }
 
-    // Update flight info
+    // Update flight info and score
     updateFlightInfo();
+    updateScore();
 
     // Store for future use
     if (shouldStore) {
@@ -751,8 +754,9 @@ async function init(): Promise<void> {
         }
       }
 
-      // Update flight info
+      // Update flight info and score
       updateFlightInfo();
+      updateScore();
 
       showStatus(`Loaded task: ${task.turnpoints.length} turnpoints`, 'success');
     } catch (err) {
@@ -796,8 +800,9 @@ async function init(): Promise<void> {
         }
       }
 
-      // Update flight info
+      // Update flight info and score
       updateFlightInfo();
+      updateScore();
 
       showStatus(`Loaded task: ${stored.task.turnpoints.length} turnpoints`, 'success');
     } catch (err) {
@@ -885,8 +890,9 @@ async function init(): Promise<void> {
         mapRenderer.setEvents(state.events);
       }
 
-      // Update flight info
+      // Update flight info and score
       updateFlightInfo();
+      updateScore();
 
       // Build a descriptive filename
       const pilotName = taskData.pilots.find(p => p.trackId === params.trackId)?.name || 'Unknown';
@@ -940,6 +946,17 @@ async function init(): Promise<void> {
     }
 
     analysisPanel?.setFlightInfo(info);
+  }
+
+  /**
+   * Update score when task and track are both available
+   */
+  function updateScore(): void {
+    if (state.task && state.fixes.length > 0) {
+      analysisPanel?.setScore(resolveTurnpointSequence(state.task, state.fixes));
+    } else {
+      analysisPanel?.setScore(null);
+    }
   }
 
   /**
@@ -1045,6 +1062,7 @@ async function init(): Promise<void> {
       }
 
       updateFlightInfo();
+      updateScore();
     } catch (err) {
       console.warn('Failed to load local task:', err);
       throw err;

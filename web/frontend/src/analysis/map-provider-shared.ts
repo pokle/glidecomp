@@ -28,10 +28,11 @@ export const TURNPOINT_COLORS: Record<string, string> = {
 export const KEY_EVENT_TYPES = new Set([
   'takeoff',
   'landing',
-  'start_crossing',
-  'goal_crossing',
+  'start_reaching',
+  'turnpoint_reaching',
+  'ess_reaching',
+  'goal_reaching',
   'max_altitude',
-  'turnpoint_entry',
 ]);
 
 /** Get the display color for a turnpoint type */

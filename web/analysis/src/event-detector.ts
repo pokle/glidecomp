@@ -359,7 +359,7 @@ function detectTurnpointEvents(
       time: crossing.time,
       latitude: crossing.latitude,
       longitude: crossing.longitude,
-      altitude: fixes[crossing.fixIndex]?.gnssAltitude ?? 0,
+      altitude: crossing.altitude,
       description: `${crossing.direction === 'enter' ? 'Entered' : 'Exited'} ${tp.waypoint.name} (${tp.type || 'TP' + (crossing.taskIndex + 1)})`,
       details: {
         fixIndex: crossing.fixIndex,
@@ -408,7 +408,7 @@ function detectTurnpointEvents(
       time: reaching.time,
       latitude: reaching.latitude,
       longitude: reaching.longitude,
-      altitude: fixes[reaching.fixIndex]?.gnssAltitude ?? 0,
+      altitude: reaching.altitude,
       description,
       details: {
         fixIndex: reaching.fixIndex,

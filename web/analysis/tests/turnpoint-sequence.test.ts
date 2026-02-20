@@ -269,6 +269,25 @@ describe('detectCylinderCrossings', () => {
     }
   });
 
+  it('crossing altitude is interpolated between bracketing fixes', () => {
+    const task = threePointTask();
+    // Fixes at different altitudes: 800m outside, 1200m inside
+    const fixes = [
+      createFix(0, 47.0, 10.985, 800),   // outside SSS
+      createFix(2, 47.0, 11.0, 1200),     // inside SSS (center)
+    ];
+
+    const crossings = detectCylinderCrossings(task, fixes);
+    const sssCrossings = crossings.filter(c => c.taskIndex === 0);
+    expect(sssCrossings.length).toBeGreaterThanOrEqual(1);
+
+    // Altitude should be interpolated between 800 and 1200
+    for (const c of sssCrossings) {
+      expect(c.altitude).toBeGreaterThan(800);
+      expect(c.altitude).toBeLessThan(1200);
+    }
+  });
+
   it('crossing interpolation is close to cylinder radius', () => {
     const task = threePointTask();
     const track = createTrackThroughCylinders([
@@ -338,6 +357,28 @@ describe('resolveTurnpointSequence', () => {
       expect(result.sequence[2].time.getTime()).toBeGreaterThan(
         result.sequence[1].time.getTime()
       );
+    });
+
+    it('reachings include interpolated altitude', () => {
+      const task = threePointTask();
+      // Use varying altitudes so interpolation is visible
+      const waypoints = [
+        { lat: 47.0, lon: 11.0, radius: 1000 },
+        { lat: 47.0, lon: 11.13, radius: 400 },
+        { lat: 47.0, lon: 11.26, radius: 400 },
+      ];
+      const track = createTrackThroughCylinders(waypoints, { altitude: 1500 });
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.sequence).toHaveLength(3);
+      // All reachings should have an altitude field that's a finite number
+      for (const reaching of result.sequence) {
+        expect(typeof reaching.altitude).toBe('number');
+        expect(Number.isFinite(reaching.altitude)).toBe(true);
+        // With constant altitude=1500 in track helper, altitude should be 1500
+        expect(reaching.altitude).toBe(1500);
+      }
     });
 
     it('S2: four-position goal flight (SSS → TP1 → TP2 → ESS)', () => {

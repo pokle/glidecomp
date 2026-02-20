@@ -5,13 +5,13 @@
  * Provides a unified interface for flight analysis data.
  */
 
-import { getEventStyle, getOptimizedSegmentDistances, type FlightEvent, type FlightEventType, type XCTask } from '@taskscore/analysis';
+import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, type FlightEvent, type FlightEventType, type XCTask, type TurnpointSequenceResult } from '@taskscore/analysis';
 import { formatAltitude, formatSpeed, formatDistance, formatClimbRate } from './units-browser';
 
 /**
  * Unified panel tabs
  */
-export type PanelTabType = 'task' | 'events' | 'glides' | 'climbs' | 'sinks';
+export type PanelTabType = 'task' | 'score' | 'events' | 'glides' | 'climbs' | 'sinks';
 
 /**
  * Combined glide data from start and end events
@@ -100,6 +100,7 @@ export interface AnalysisPanel {
   setEvents(events: FlightEvent[]): void;
   setFlightInfo(info: FlightInfo): void;
   setTask(task: XCTask | null): void;
+  setScore(result: TurnpointSequenceResult | null): void;
   setAltitudes(altitudes: number[], timestamps?: Date[]): void;
   clearSelection(): void;
   toggle(): void;
@@ -269,6 +270,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     <div class="tabs w-full border-b border-border">
       <nav role="tablist" class="w-full">
         <button type="button" role="tab" id="tab-task" aria-selected="false">Task</button>
+        <button type="button" role="tab" id="tab-score" aria-selected="false">Score</button>
         <button type="button" role="tab" id="tab-events" aria-selected="true">Events</button>
         <button type="button" role="tab" id="tab-glides" aria-selected="false">Glides</button>
         <button type="button" role="tab" id="tab-climbs" aria-selected="false">Climbs</button>
@@ -303,6 +305,13 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         No task loaded
       </div>
     </div>
+
+    <!-- Score content -->
+    <div id="score-panel-content" class="hidden score-list flex-1 overflow-y-auto p-2 scrollbar">
+      <div class="flex h-full items-center justify-center p-6 text-center text-muted-foreground">
+        Load a task and track to see scoring
+      </div>
+    </div>
   `;
 
   container.appendChild(panel);
@@ -310,6 +319,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   // Get references
   const trackPanelContent = panel.querySelector('#track-panel-content') as HTMLElement;
   const taskPanelContent = panel.querySelector('#task-panel-content') as HTMLElement;
+  const scorePanelContent = panel.querySelector('#score-panel-content') as HTMLElement;
   const sparklineContainer = panel.querySelector('#sparkline-container') as HTMLElement;
   const sparklineInner = panel.querySelector('#sparkline-inner') as HTMLElement;
   const sparklineYAxis = panel.querySelector('#sparkline-y-axis') as HTMLElement;
@@ -320,11 +330,12 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   const taskListContainer = panel.querySelector('#task-panel-content') as HTMLElement;
 
   const tabTask = panel.querySelector('#tab-task') as HTMLButtonElement;
+  const tabScore = panel.querySelector('#tab-score') as HTMLButtonElement;
   const tabEvents = panel.querySelector('#tab-events') as HTMLButtonElement;
   const tabGlides = panel.querySelector('#tab-glides') as HTMLButtonElement;
   const tabClimbs = panel.querySelector('#tab-climbs') as HTMLButtonElement;
   const tabSinks = panel.querySelector('#tab-sinks') as HTMLButtonElement;
-  const allTabs = [tabTask, tabEvents, tabGlides, tabClimbs, tabSinks];
+  const allTabs = [tabTask, tabScore, tabEvents, tabGlides, tabClimbs, tabSinks];
 
   const flightInfoEl = panel.querySelector('.flight-info-content') as HTMLElement;
 
@@ -336,6 +347,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   let currentTab: PanelTabType = 'events';
   let selectedSegment: { startIndex: number; endIndex: number } | null = null;
   let selectedTurnpointIndex: number | null = null;
+  let currentScore: TurnpointSequenceResult | null = null;
   let sparklineDataUri = '';
   let fixCount = 0;
 
@@ -511,6 +523,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     }
     const tabMap: Record<PanelTabType, HTMLButtonElement | null> = {
       task: tabTask,
+      score: tabScore,
       events: tabEvents,
       glides: tabGlides,
       climbs: tabClimbs,
@@ -521,11 +534,19 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     // Show appropriate content panel
     if (tab === 'task') {
       trackPanelContent.classList.add('hidden');
+      scorePanelContent.classList.add('hidden');
       sparklineContainer.classList.add('hidden');
       taskPanelContent.classList.remove('hidden');
       renderTask();
+    } else if (tab === 'score') {
+      trackPanelContent.classList.add('hidden');
+      taskPanelContent.classList.add('hidden');
+      sparklineContainer.classList.add('hidden');
+      scorePanelContent.classList.remove('hidden');
+      renderScore();
     } else {
       taskPanelContent.classList.add('hidden');
+      scorePanelContent.classList.add('hidden');
       trackPanelContent.classList.remove('hidden');
       // Show sparkline if we have data
       if (sparklineDataUri) {
@@ -540,6 +561,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
   // Tab click handlers
   tabTask?.addEventListener('click', () => switchTabInternal('task'));
+  tabScore?.addEventListener('click', () => switchTabInternal('score'));
   tabEvents?.addEventListener('click', () => switchTabInternal('events'));
   tabGlides?.addEventListener('click', () => switchTabInternal('glides'));
   tabClimbs?.addEventListener('click', () => switchTabInternal('climbs'));
@@ -572,10 +594,21 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   }
 
   /**
+   * Event types to hide from the event list (raw crossings are
+   * superseded by the scored reaching events).
+   */
+  const hiddenEventTypes: Set<FlightEventType> = new Set([
+    'turnpoint_entry',
+    'turnpoint_exit',
+    'start_crossing',
+    'goal_crossing',
+  ]);
+
+  /**
    * Update filtered events
    */
   function updateFilteredEvents(): void {
-    filteredEvents = [...allEvents];
+    filteredEvents = allEvents.filter(e => !hiddenEventTypes.has(e.type));
   }
 
   /**
@@ -1069,6 +1102,205 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   }
 
   /**
+   * Format seconds as HH:MM:SS
+   */
+  function formatHMS(seconds: number): string {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  }
+
+  /**
+   * Get human-readable label for a turnpoint by task index
+   */
+  function getTurnpointLabel(taskIndex: number): string {
+    if (!currentTask) return `TP${taskIndex + 1}`;
+    const tp = currentTask.turnpoints[taskIndex];
+    if (!tp) return `TP${taskIndex + 1}`;
+    if (tp.type === 'SSS') return 'SSS';
+    if (tp.type === 'ESS') return 'ESS';
+    if (taskIndex === currentTask.turnpoints.length - 1) return 'Goal';
+    return `TP${taskIndex + 1}`;
+  }
+
+  /**
+   * Render the Score panel content
+   */
+  function renderScore(): void {
+    if (!currentScore || !currentTask) {
+      eventCountEl.textContent = 'No score';
+      scorePanelContent.innerHTML = `
+        <div class="flex h-full items-center justify-center p-6 text-center text-muted-foreground">
+          Load a task and track to see scoring
+        </div>
+      `;
+      return;
+    }
+
+    const result = currentScore;
+    eventCountEl.textContent = result.madeGoal ? 'Goal' : result.sequence.length > 0 ? `${result.sequence.length} TPs reached` : 'Not started';
+
+    let html = '<div class="space-y-3">';
+
+    // A. Status banner
+    if (result.madeGoal) {
+      html += `<div class="rounded-lg bg-green-500/15 px-3 py-2 text-sm font-medium text-green-700 dark:text-green-400">Goal</div>`;
+    } else if (result.sequence.length > 0) {
+      const lastTP = result.sequence[result.sequence.length - 1];
+      const tpName = currentTask.turnpoints[lastTP.taskIndex]?.waypoint.name || getTurnpointLabel(lastTP.taskIndex);
+      html += `<div class="rounded-lg bg-yellow-500/15 px-3 py-2 text-sm font-medium text-yellow-700 dark:text-yellow-400">${getTurnpointLabel(lastTP.taskIndex)} reached &ndash; ${tpName}</div>`;
+    } else {
+      html += `<div class="rounded-lg bg-muted px-3 py-2 text-sm font-medium text-muted-foreground">Not started</div>`;
+    }
+
+    // B. Distance bar
+    // For non-goal pilots, show completed leg distance (sum of completed legs)
+    // rather than the CIVL GAP flownDistance which can be misleading
+    const completedLegs = result.legs.filter(l => l.completed);
+    const completedLegDistance = completedLegs.reduce((sum, l) => sum + l.distance, 0);
+    const displayDistance = result.madeGoal ? result.taskDistance : completedLegDistance;
+    const flownStr = formatDistance(displayDistance).withUnit;
+    const taskStr = formatDistance(result.taskDistance).withUnit;
+    const pct = result.taskDistance > 0 ? Math.min(100, (displayDistance / result.taskDistance) * 100) : 0;
+
+    html += `
+      <div class="rounded-lg border border-border bg-muted/30 p-3">
+        <div class="flex items-baseline justify-between text-sm">
+          <span>${flownStr} / ${taskStr}</span>
+          <span class="font-medium">${pct.toFixed(0)}%</span>
+        </div>
+        <div class="mt-1.5 h-2 rounded-full bg-muted overflow-hidden">
+          <div class="h-full rounded-full bg-primary transition-all" style="width: ${pct.toFixed(1)}%"></div>
+        </div>
+        <div class="text-xs text-muted-foreground mt-1">${completedLegs.length} of ${result.legs.length} legs completed</div>
+      </div>
+    `;
+
+    // C. Speed section
+    if (result.speedSectionTime !== null) {
+      html += `
+        <div class="rounded-lg border border-border bg-muted/30 p-3">
+          <div class="text-xs text-muted-foreground mb-1">Speed section</div>
+          <div class="text-sm font-medium">${formatHMS(result.speedSectionTime)}</div>
+        </div>
+      `;
+    }
+
+    // D. Legs
+    html += `<div class="rounded-lg border border-border bg-muted/30 p-3">`;
+    html += `<div class="text-xs text-muted-foreground mb-2">Legs</div>`;
+    for (const leg of result.legs) {
+      const fromName = getTurnpointLabel(leg.fromTaskIndex);
+      const toName = getTurnpointLabel(leg.toTaskIndex);
+      const legDist = formatDistance(leg.distance).withUnit;
+      const icon = leg.completed
+        ? '<span class="text-green-600 dark:text-green-400">&#10003;</span>'
+        : '<span class="text-muted-foreground">&#10007;</span>';
+      html += `
+        <div class="flex items-center justify-between py-1 text-sm">
+          <span>${fromName} &rarr; ${toName}</span>
+          <span class="flex items-center gap-2"><span class="text-muted-foreground">${legDist}</span>${icon}</span>
+        </div>
+      `;
+    }
+    html += `</div>`;
+
+    // E. Sequence (reachings)
+    if (result.sequence.length > 0) {
+      html += `<div class="rounded-lg border border-border bg-muted/30 p-3">`;
+      html += `<div class="text-xs text-muted-foreground mb-2">Sequence</div>`;
+      for (const reaching of result.sequence) {
+        const tp = currentTask.turnpoints[reaching.taskIndex];
+        const tpLabel = getTurnpointLabel(reaching.taskIndex);
+        const tpName = tp?.waypoint.name || tpLabel;
+        const timeStr = formatTime(reaching.time);
+        const altStr = formatAltitude(reaching.altitude).withUnit;
+
+        let reasonStr = '';
+        if (reaching.selectionReason === 'last_before_next' && reaching.candidateCount > 1) {
+          reasonStr = `Last of ${reaching.candidateCount} crossings`;
+        } else if (reaching.selectionReason === 'last_before_next') {
+          reasonStr = 'Start';
+        } else if (reaching.selectionReason === 'first_after_previous' && reaching.candidateCount > 1) {
+          reasonStr = `First of ${reaching.candidateCount} crossings`;
+        } else if (reaching.selectionReason === 'first_crossing' && reaching.candidateCount > 1) {
+          reasonStr = `First of ${reaching.candidateCount} crossings`;
+        }
+
+        html += `
+          <button class="score-reaching-item w-full text-left py-1.5 cursor-pointer hover:bg-muted/50 rounded transition-colors" data-reaching-idx="${reaching.taskIndex}" data-lat="${reaching.latitude}" data-lon="${reaching.longitude}" data-alt="${reaching.altitude}" data-time="${reaching.time.getTime()}">
+            <div class="flex items-baseline gap-2 text-sm">
+              <span class="shrink-0 text-muted-foreground">${timeStr}</span>
+              <span class="font-medium">${tpLabel}</span>
+              <span class="truncate text-muted-foreground">${tpName}</span>
+              <span class="ml-auto shrink-0 text-muted-foreground">${altStr}</span>
+            </div>
+            ${reasonStr ? `<div class="text-xs text-muted-foreground mt-0.5 pl-[4.5rem]">${reasonStr}</div>` : ''}
+          </button>
+        `;
+      }
+      html += `</div>`;
+    }
+
+    // F. Best progress (non-goal only)
+    if (!result.madeGoal && result.bestProgress) {
+      const distToGoalStr = formatDistance(result.bestProgress.distanceToGoal).withUnit;
+      const creditStr = formatDistance(result.flownDistance).withUnit;
+      const timeStr = formatTime(result.bestProgress.time);
+      html += `
+        <button class="score-best-progress w-full rounded-lg border border-border bg-muted/30 p-3 text-left cursor-pointer hover:bg-muted/50 transition-colors" data-lat="${result.bestProgress.latitude}" data-lon="${result.bestProgress.longitude}" data-time="${result.bestProgress.time.getTime()}">
+          <div class="text-xs text-muted-foreground mb-1">Best progress</div>
+          <div class="text-sm">${distToGoalStr} from goal at ${timeStr}</div>
+          <div class="text-xs text-muted-foreground mt-1">Distance credit: ${creditStr}</div>
+        </button>
+      `;
+    }
+
+    html += '</div>';
+    scorePanelContent.innerHTML = html;
+
+    // Click handlers for reachings
+    scorePanelContent.querySelectorAll('.score-reaching-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const lat = parseFloat(item.getAttribute('data-lat') || '0');
+        const lon = parseFloat(item.getAttribute('data-lon') || '0');
+        const alt = parseFloat(item.getAttribute('data-alt') || '0');
+        const time = new Date(parseInt(item.getAttribute('data-time') || '0', 10));
+        const idx = parseInt(item.getAttribute('data-reaching-idx') || '0', 10);
+        const syntheticEvent: FlightEvent = {
+          id: `score-reaching-${idx}`,
+          type: 'turnpoint_reaching',
+          time,
+          latitude: lat,
+          longitude: lon,
+          altitude: alt,
+          description: '',
+        };
+        onEventClick(syntheticEvent);
+      });
+    });
+
+    // Click handler for best progress
+    const bpEl = scorePanelContent.querySelector('.score-best-progress');
+    if (bpEl && result.bestProgress) {
+      bpEl.addEventListener('click', () => {
+        const bp = result.bestProgress!;
+        const syntheticEvent: FlightEvent = {
+          id: 'score-best-progress',
+          type: 'max_altitude',
+          time: bp.time,
+          latitude: bp.latitude,
+          longitude: bp.longitude,
+          altitude: 0,
+          description: '',
+        };
+        onEventClick(syntheticEvent);
+      });
+    }
+  }
+
+  /**
    * Render task turnpoints list
    */
   function renderTask(): void {
@@ -1378,6 +1610,16 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       currentTask = task;
       if (currentTab === 'task') {
         renderTask();
+      }
+      if (currentTab === 'score') {
+        renderScore();
+      }
+    },
+
+    setScore(result: TurnpointSequenceResult | null) {
+      currentScore = result;
+      if (currentTab === 'score') {
+        renderScore();
       }
     },
 

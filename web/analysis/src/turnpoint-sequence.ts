@@ -50,6 +50,9 @@ export interface CylinderCrossing {
   /** Whether the pilot crossed inward (enter) or outward (exit) */
   direction: 'enter' | 'exit';
 
+  /** Interpolated GNSS altitude at the cylinder boundary (meters) */
+  altitude: number;
+
   /** Distance from the crossing point to the cylinder center (meters) */
   distanceToCenter: number;
 }
@@ -80,6 +83,9 @@ export interface TurnpointReaching {
 
   /** Longitude at the crossing point */
   longitude: number;
+
+  /** Interpolated GNSS altitude at the crossing point (meters) */
+  altitude: number;
 
   /**
    * Why this crossing was selected over other candidates.
@@ -273,6 +279,7 @@ export function detectCylinderCrossings(
 
         const crossingLat = prevFix.latitude + t * (currFix.latitude - prevFix.latitude);
         const crossingLon = prevFix.longitude + t * (currFix.longitude - prevFix.longitude);
+        const crossingAlt = prevFix.gnssAltitude + t * (currFix.gnssAltitude - prevFix.gnssAltitude);
 
         const prevTime = prevFix.time.getTime();
         const currTime = currFix.time.getTime();
@@ -288,6 +295,7 @@ export function detectCylinderCrossings(
           time: crossingTime,
           latitude: crossingLat,
           longitude: crossingLon,
+          altitude: crossingAlt,
           direction,
           distanceToCenter,
         });
@@ -323,6 +331,7 @@ function buildForwardPath(
     time: sssCrossing.time,
     latitude: sssCrossing.latitude,
     longitude: sssCrossing.longitude,
+    altitude: sssCrossing.altitude,
     selectionReason: 'last_before_next',
     candidateCount: crossingsByTP.get(sssIdx)?.length ?? 0,
   });
@@ -353,6 +362,7 @@ function buildForwardPath(
       time: validCrossing.time,
       latitude: validCrossing.latitude,
       longitude: validCrossing.longitude,
+      altitude: validCrossing.altitude,
       selectionReason: isESS ? 'first_crossing' : 'first_after_previous',
       candidateCount: tpCrossings.length,
     });
