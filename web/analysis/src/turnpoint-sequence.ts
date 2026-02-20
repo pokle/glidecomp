@@ -15,6 +15,9 @@
 
 import type { XCTask } from './xctsk-parser';
 import type { IGCFix } from './igc-parser';
+import { isInsideCylinder, haversineDistance } from './geo';
+import { getSSSIndex, getESSIndex } from './xctsk-parser';
+import { calculateOptimizedTaskDistance, getOptimizedSegmentDistances } from './task-optimizer';
 
 // ---------------------------------------------------------------------------
 // Raw crossing detection
@@ -187,7 +190,7 @@ export interface TurnpointSequenceResult {
   /**
    * Scored flown distance in meters.
    * - Goal pilots: taskDistance
-   * - Non-goal: sum of completed leg distances + progress past last TP
+   * - Non-goal: taskDistance - bestProgress.distanceToGoal
    * - No start: 0
    */
   flownDistance: number;
@@ -230,10 +233,174 @@ export function detectCylinderCrossings(
   task: XCTask,
   fixes: IGCFix[]
 ): CylinderCrossing[] {
-  // TODO: implement
-  void task;
-  void fixes;
-  return [];
+  if (fixes.length < 2) return [];
+
+  const crossings: CylinderCrossing[] = [];
+
+  for (let tpIdx = 0; tpIdx < task.turnpoints.length; tpIdx++) {
+    const tp = task.turnpoints[tpIdx];
+    const centerLat = tp.waypoint.lat;
+    const centerLon = tp.waypoint.lon;
+    const radius = tp.radius;
+
+    let prevInside = isInsideCylinder(
+      fixes[0].latitude, fixes[0].longitude,
+      centerLat, centerLon, radius
+    );
+
+    for (let fixIdx = 1; fixIdx < fixes.length; fixIdx++) {
+      const currInside = isInsideCylinder(
+        fixes[fixIdx].latitude, fixes[fixIdx].longitude,
+        centerLat, centerLon, radius
+      );
+
+      if (prevInside !== currInside) {
+        const prevFix = fixes[fixIdx - 1];
+        const currFix = fixes[fixIdx];
+        const direction: 'enter' | 'exit' = currInside ? 'enter' : 'exit';
+
+        // Interpolate crossing point between the two fixes
+        const prevDist = haversineDistance(
+          prevFix.latitude, prevFix.longitude, centerLat, centerLon
+        );
+        const currDist = haversineDistance(
+          currFix.latitude, currFix.longitude, centerLat, centerLon
+        );
+
+        // Linear interpolation factor: where along the segment does distance = radius
+        let t = (prevDist - radius) / (prevDist - currDist);
+        t = Math.max(0, Math.min(1, t));
+
+        const crossingLat = prevFix.latitude + t * (currFix.latitude - prevFix.latitude);
+        const crossingLon = prevFix.longitude + t * (currFix.longitude - prevFix.longitude);
+
+        const prevTime = prevFix.time.getTime();
+        const currTime = currFix.time.getTime();
+        const crossingTime = new Date(prevTime + t * (currTime - prevTime));
+
+        const distanceToCenter = haversineDistance(
+          crossingLat, crossingLon, centerLat, centerLon
+        );
+
+        crossings.push({
+          taskIndex: tpIdx,
+          fixIndex: fixIdx,
+          time: crossingTime,
+          latitude: crossingLat,
+          longitude: crossingLon,
+          direction,
+          distanceToCenter,
+        });
+      }
+
+      prevInside = currInside;
+    }
+  }
+
+  // Sort all crossings by time
+  crossings.sort((a, b) => a.time.getTime() - b.time.getTime());
+
+  return crossings;
+}
+
+/**
+ * Build a forward path from an SSS crossing through subsequent turnpoints.
+ * For each TP after SSS, find the first crossing with time > previous reaching time.
+ */
+function buildForwardPath(
+  sssCrossing: CylinderCrossing,
+  crossingsByTP: Map<number, CylinderCrossing[]>,
+  sssIdx: number,
+  essIdx: number,
+  goalIdx: number,
+): TurnpointReaching[] {
+  const sequence: TurnpointReaching[] = [];
+
+  // Add SSS reaching
+  sequence.push({
+    taskIndex: sssCrossing.taskIndex,
+    fixIndex: sssCrossing.fixIndex,
+    time: sssCrossing.time,
+    latitude: sssCrossing.latitude,
+    longitude: sssCrossing.longitude,
+    selectionReason: 'last_before_next',
+    candidateCount: crossingsByTP.get(sssIdx)?.length ?? 0,
+  });
+
+  let prevReachingTime = sssCrossing.time.getTime();
+
+  // For each subsequent task position
+  for (let tpIdx = sssIdx + 1; tpIdx <= goalIdx; tpIdx++) {
+    const tpCrossings = crossingsByTP.get(tpIdx) ?? [];
+    const isESS = tpIdx === essIdx;
+
+    // Find first crossing after previous reaching time
+    let validCrossing: CylinderCrossing | null = null;
+    for (const crossing of tpCrossings) {
+      if (crossing.time.getTime() > prevReachingTime) {
+        validCrossing = crossing;
+        break;
+      }
+    }
+
+    if (!validCrossing) {
+      break; // Pilot didn't reach this TP
+    }
+
+    sequence.push({
+      taskIndex: validCrossing.taskIndex,
+      fixIndex: validCrossing.fixIndex,
+      time: validCrossing.time,
+      latitude: validCrossing.latitude,
+      longitude: validCrossing.longitude,
+      selectionReason: isESS ? 'first_crossing' : 'first_after_previous',
+      candidateCount: tpCrossings.length,
+    });
+
+    prevReachingTime = validCrossing.time.getTime();
+  }
+
+  return sequence;
+}
+
+/**
+ * Compute best progress for a non-goal pilot.
+ * Scans all fixes after the last reaching time to find the point
+ * with minimum remaining distance to goal.
+ */
+function computeBestProgress(
+  fixes: IGCFix[],
+  lastReachingTime: number,
+  goalLat: number,
+  goalLon: number,
+  goalRadius: number,
+): BestProgress | null {
+  let bestFix: { index: number; distToGoal: number } | null = null;
+
+  for (let i = 0; i < fixes.length; i++) {
+    const fix = fixes[i];
+    if (fix.time.getTime() <= lastReachingTime) continue;
+
+    const distToCenter = haversineDistance(
+      fix.latitude, fix.longitude, goalLat, goalLon
+    );
+    const distToGoal = Math.max(0, distToCenter - goalRadius);
+
+    if (!bestFix || distToGoal < bestFix.distToGoal) {
+      bestFix = { index: i, distToGoal };
+    }
+  }
+
+  if (!bestFix) return null;
+
+  const fix = fixes[bestFix.index];
+  return {
+    fixIndex: bestFix.index,
+    time: fix.time,
+    latitude: fix.latitude,
+    longitude: fix.longitude,
+    distanceToGoal: bestFix.distToGoal,
+  };
 }
 
 /**
@@ -256,20 +423,154 @@ export function resolveTurnpointSequence(
   task: XCTask,
   fixes: IGCFix[]
 ): TurnpointSequenceResult {
-  // TODO: implement
-  void task;
-  void fixes;
+  const allCrossings = detectCylinderCrossings(task, fixes);
+  const segmentDistances = getOptimizedSegmentDistances(task);
+  const taskDistance = calculateOptimizedTaskDistance(task);
+  const sssIdx = getSSSIndex(task);
+  const essIdx = getESSIndex(task);
+  const goalIdx = task.turnpoints.length - 1;
+
+  // Build legs with default completed = false
+  const legs: LegDistance[] = segmentDistances.map((dist, i) => ({
+    fromTaskIndex: i,
+    toTaskIndex: i + 1,
+    distance: dist,
+    completed: false,
+  }));
+
+  // Group crossings by taskIndex
+  const crossingsByTP = new Map<number, CylinderCrossing[]>();
+  for (const crossing of allCrossings) {
+    const arr = crossingsByTP.get(crossing.taskIndex);
+    if (arr) {
+      arr.push(crossing);
+    } else {
+      crossingsByTP.set(crossing.taskIndex, [crossing]);
+    }
+  }
+
+  // No SSS defined or no SSS crossings → empty result
+  const sssCrossings = sssIdx >= 0 ? (crossingsByTP.get(sssIdx) ?? []) : [];
+  if (sssCrossings.length === 0) {
+    return {
+      crossings: allCrossings,
+      sequence: [],
+      sssReaching: null,
+      essReaching: null,
+      madeGoal: false,
+      lastTurnpointReached: -1,
+      bestProgress: null,
+      taskDistance,
+      flownDistance: 0,
+      legs,
+      speedSectionTime: null,
+    };
+  }
+
+  // Iterate SSS crossings backwards, try each, keep best path
+  let bestSequence: TurnpointReaching[] | null = null;
+  let bestTPs = 0;
+  let bestFlownDist = 0;
+  let bestSSSTime = 0;
+
+  const goalTP = task.turnpoints[goalIdx];
+  const goalLat = goalTP.waypoint.lat;
+  const goalLon = goalTP.waypoint.lon;
+  const goalRadius = goalTP.radius;
+
+  for (let i = sssCrossings.length - 1; i >= 0; i--) {
+    const sssCrossing = sssCrossings[i];
+    const candidateSequence = buildForwardPath(
+      sssCrossing, crossingsByTP, sssIdx, essIdx, goalIdx
+    );
+
+    const tpsReached = candidateSequence.length;
+    const madeGoal = tpsReached > 0 &&
+      candidateSequence[tpsReached - 1].taskIndex === goalIdx;
+
+    let candidateFlownDist: number;
+    if (madeGoal) {
+      candidateFlownDist = taskDistance;
+    } else if (tpsReached > 0) {
+      const lastReaching = candidateSequence[tpsReached - 1];
+      const progress = computeBestProgress(
+        fixes, lastReaching.time.getTime(), goalLat, goalLon, goalRadius
+      );
+      candidateFlownDist = progress
+        ? taskDistance - progress.distanceToGoal
+        : 0;
+    } else {
+      candidateFlownDist = 0;
+    }
+
+    const candidateSSSTime = sssCrossing.time.getTime();
+
+    // Compare: most TPs → most distance → latest SSS
+    const isBetter =
+      tpsReached > bestTPs ||
+      (tpsReached === bestTPs && candidateFlownDist > bestFlownDist) ||
+      (tpsReached === bestTPs && candidateFlownDist === bestFlownDist && candidateSSSTime > bestSSSTime);
+
+    if (!bestSequence || isBetter) {
+      bestSequence = candidateSequence;
+      bestTPs = tpsReached;
+      bestFlownDist = candidateFlownDist;
+      bestSSSTime = candidateSSSTime;
+    }
+  }
+
+  const sequence = bestSequence!;
+  const reachedTaskIndices = new Set(sequence.map(r => r.taskIndex));
+
+  // Mark completed legs
+  for (const leg of legs) {
+    leg.completed = reachedTaskIndices.has(leg.toTaskIndex);
+  }
+
+  // Extract SSS and ESS reachings
+  const sssReaching = sequence.find(r => r.taskIndex === sssIdx) ?? null;
+  const essReaching = sequence.find(r => r.taskIndex === essIdx) ?? null;
+
+  const madeGoal = sequence.length > 0 &&
+    sequence[sequence.length - 1].taskIndex === goalIdx;
+
+  const lastTurnpointReached = sequence.length > 0
+    ? sequence[sequence.length - 1].taskIndex
+    : -1;
+
+  // Compute bestProgress for non-goal pilots
+  let bestProgress: BestProgress | null = null;
+  let flownDistance = 0;
+
+  if (madeGoal) {
+    flownDistance = taskDistance;
+  } else if (sequence.length > 0) {
+    const lastReaching = sequence[sequence.length - 1];
+    bestProgress = computeBestProgress(
+      fixes, lastReaching.time.getTime(), goalLat, goalLon, goalRadius
+    );
+    flownDistance = bestProgress
+      ? taskDistance - bestProgress.distanceToGoal
+      : 0;
+  }
+
+  // Speed section time
+  let speedSectionTime: number | null = null;
+  if (sssReaching && essReaching) {
+    speedSectionTime = (essReaching.time.getTime() - sssReaching.time.getTime()) / 1000;
+  }
+
   return {
-    crossings: [],
-    sequence: [],
-    sssReaching: null,
-    essReaching: null,
-    madeGoal: false,
-    lastTurnpointReached: -1,
-    bestProgress: null,
-    taskDistance: 0,
-    flownDistance: 0,
-    legs: [],
-    speedSectionTime: null,
+    crossings: allCrossings,
+    sequence,
+    sssReaching,
+    essReaching,
+    madeGoal,
+    lastTurnpointReached,
+    bestProgress,
+    taskDistance,
+    flownDistance,
+    legs,
+    speedSectionTime,
   };
 }

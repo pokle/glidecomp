@@ -10,8 +10,9 @@
  */
 
 import { IGCFix } from './igc-parser';
-import { haversineDistance, isInsideCylinder } from './geo';
-import { XCTask, Turnpoint } from './xctsk-parser';
+import { haversineDistance } from './geo';
+import { XCTask, getSSSIndex, getESSIndex } from './xctsk-parser';
+import { resolveTurnpointSequence } from './turnpoint-sequence';
 
 export type FlightEventType =
   | 'takeoff'
@@ -24,6 +25,10 @@ export type FlightEventType =
   | 'turnpoint_exit'
   | 'start_crossing'
   | 'goal_crossing'
+  | 'start_reaching'
+  | 'turnpoint_reaching'
+  | 'ess_reaching'
+  | 'goal_reaching'
   | 'max_altitude'
   | 'min_altitude'
   | 'max_climb'
@@ -313,70 +318,110 @@ function detectGlides(fixes: IGCFix[], thermals: ThermalSegment[]): GlideSegment
 }
 
 /**
- * Detect turnpoint cylinder crossings
+ * Detect turnpoint cylinder crossings and scored reachings.
+ *
+ * Uses the turnpoint-sequence module for interpolated crossings and
+ * CIVL GAP sequence resolution, then converts both into FlightEvents:
+ * - Crossing events: every raw boundary transition (turnpoint_entry,
+ *   turnpoint_exit, start_crossing, goal_crossing)
+ * - Reaching events: the scored crossings selected by the algorithm
+ *   (start_reaching, turnpoint_reaching, ess_reaching, goal_reaching)
  */
-function detectTurnpointCrossings(
+function detectTurnpointEvents(
   fixes: IGCFix[],
   task: XCTask
 ): FlightEvent[] {
   const events: FlightEvent[] = [];
+  const result = resolveTurnpointSequence(task, fixes);
 
-  for (let tpIdx = 0; tpIdx < task.turnpoints.length; tpIdx++) {
-    const tp = task.turnpoints[tpIdx];
-    let wasInside = false;
-    let entryDetected = false;
+  const sssIdx = getSSSIndex(task);
+  const essIdx = getESSIndex(task);
+  const goalIdx = task.turnpoints.length - 1;
 
-    for (let i = 0; i < fixes.length; i++) {
-      const fix = fixes[i];
-      const inside = isInsideCylinder(
-        fix.latitude,
-        fix.longitude,
-        tp.waypoint.lat,
-        tp.waypoint.lon,
-        tp.radius
-      );
+  // --- Raw crossings → crossing events ---
+  for (const crossing of result.crossings) {
+    const tp = task.turnpoints[crossing.taskIndex];
 
-      if (inside && !wasInside) {
-        // Entry into cylinder
-        const eventType = tp.type === 'SSS' ? 'start_crossing' :
-          (tpIdx === task.turnpoints.length - 1 ? 'goal_crossing' : 'turnpoint_entry');
-
-        events.push({
-          id: `tp-entry-${tpIdx}-${i}`,
-          type: eventType,
-          time: fix.time,
-          latitude: fix.latitude,
-          longitude: fix.longitude,
-          altitude: fix.gnssAltitude,
-          description: `Entered ${tp.waypoint.name} (${tp.type || 'TP' + (tpIdx + 1)})`,
-          details: {
-            fixIndex: i,
-            turnpointIndex: tpIdx,
-            turnpointName: tp.waypoint.name,
-            radius: tp.radius,
-          },
-        });
-        entryDetected = true;
-      } else if (!inside && wasInside && entryDetected) {
-        // Exit from cylinder
-        events.push({
-          id: `tp-exit-${tpIdx}-${i}`,
-          type: 'turnpoint_exit',
-          time: fix.time,
-          latitude: fix.latitude,
-          longitude: fix.longitude,
-          altitude: fix.gnssAltitude,
-          description: `Exited ${tp.waypoint.name}`,
-          details: {
-            fixIndex: i,
-            turnpointIndex: tpIdx,
-            turnpointName: tp.waypoint.name,
-          },
-        });
-      }
-
-      wasInside = inside;
+    let eventType: FlightEventType;
+    if (crossing.direction === 'exit') {
+      eventType = 'turnpoint_exit';
+    } else if (crossing.taskIndex === sssIdx) {
+      eventType = 'start_crossing';
+    } else if (crossing.taskIndex === goalIdx) {
+      eventType = 'goal_crossing';
+    } else {
+      eventType = 'turnpoint_entry';
     }
+
+    events.push({
+      id: `tp-${crossing.direction}-${crossing.taskIndex}-${crossing.fixIndex}`,
+      type: eventType,
+      time: crossing.time,
+      latitude: crossing.latitude,
+      longitude: crossing.longitude,
+      altitude: fixes[crossing.fixIndex]?.gnssAltitude ?? 0,
+      description: `${crossing.direction === 'enter' ? 'Entered' : 'Exited'} ${tp.waypoint.name} (${tp.type || 'TP' + (crossing.taskIndex + 1)})`,
+      details: {
+        fixIndex: crossing.fixIndex,
+        turnpointIndex: crossing.taskIndex,
+        turnpointName: tp.waypoint.name,
+        radius: tp.radius,
+        direction: crossing.direction,
+        distanceToCenter: crossing.distanceToCenter,
+      },
+    });
+  }
+
+  // --- Scored reachings → reaching events ---
+  for (const reaching of result.sequence) {
+    const tp = task.turnpoints[reaching.taskIndex];
+
+    let eventType: FlightEventType;
+    let description: string;
+
+    if (reaching.taskIndex === sssIdx) {
+      eventType = 'start_reaching';
+      description = `Start: ${tp.waypoint.name}`;
+      if (reaching.candidateCount > 1) {
+        description += ` (selected from ${reaching.candidateCount} crossings — last before next TP)`;
+      }
+    } else if (reaching.taskIndex === goalIdx) {
+      eventType = 'goal_reaching';
+      description = `Goal: ${tp.waypoint.name}`;
+    } else if (reaching.taskIndex === essIdx) {
+      eventType = 'ess_reaching';
+      description = `ESS: ${tp.waypoint.name}`;
+      if (reaching.candidateCount > 1) {
+        description += ` (selected from ${reaching.candidateCount} crossings — first crossing)`;
+      }
+    } else {
+      eventType = 'turnpoint_reaching';
+      description = `Reached ${tp.waypoint.name}`;
+      if (reaching.candidateCount > 1) {
+        description += ` (selected from ${reaching.candidateCount} crossings — first after previous TP)`;
+      }
+    }
+
+    events.push({
+      id: `tp-reaching-${reaching.taskIndex}`,
+      type: eventType,
+      time: reaching.time,
+      latitude: reaching.latitude,
+      longitude: reaching.longitude,
+      altitude: fixes[reaching.fixIndex]?.gnssAltitude ?? 0,
+      description,
+      details: {
+        fixIndex: reaching.fixIndex,
+        turnpointIndex: reaching.taskIndex,
+        turnpointName: tp.waypoint.name,
+        selectionReason: reaching.selectionReason,
+        candidateCount: reaching.candidateCount,
+        madeGoal: result.madeGoal,
+        flownDistance: result.flownDistance,
+        taskDistance: result.taskDistance,
+        speedSectionTime: result.speedSectionTime,
+      },
+    });
   }
 
   return events;
@@ -819,9 +864,9 @@ export function detectFlightEvents(
   // Vario events already have correct time from flightFixes
   allEvents.push(...varioEvents);
 
-  // Detect turnpoint crossings if task is provided (only after takeoff)
+  // Detect turnpoint crossings and scored reachings if task is provided (only after takeoff)
   if (task) {
-    const turnpointEvents = detectTurnpointCrossings(flightFixes, task);
+    const turnpointEvents = detectTurnpointEvents(flightFixes, task);
     allEvents.push(...turnpointEvents);
   }
 
@@ -879,6 +924,14 @@ export function getEventStyle(type: FlightEventType): {
       return { icon: 'flag', color: '#22c55e' };
     case 'goal_crossing':
       return { icon: 'trophy', color: '#eab308' };
+    case 'start_reaching':
+      return { icon: 'flag', color: '#16a34a' };
+    case 'turnpoint_reaching':
+      return { icon: 'check-circle', color: '#7c3aed' };
+    case 'ess_reaching':
+      return { icon: 'check-circle', color: '#dc2626' };
+    case 'goal_reaching':
+      return { icon: 'trophy', color: '#ca8a04' };
     case 'max_altitude':
       return { icon: 'mountain', color: '#06b6d4' };
     case 'min_altitude':
