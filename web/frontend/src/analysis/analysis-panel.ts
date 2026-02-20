@@ -344,7 +344,10 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   let filteredEvents: FlightEvent[] = [];
   let currentTask: XCTask | null = null;
   let isPanelHidden = true;
-  let currentTab: PanelTabType = 'events';
+  const TAB_STORAGE_KEY = 'taskscore-active-tab';
+  const validTabs: PanelTabType[] = ['task', 'score', 'events', 'glides', 'climbs', 'sinks'];
+  const savedTab = localStorage.getItem(TAB_STORAGE_KEY) as PanelTabType | null;
+  let currentTab: PanelTabType = savedTab && validTabs.includes(savedTab) ? savedTab : 'events';
   let selectedSegment: { startIndex: number; endIndex: number } | null = null;
   let selectedTurnpointIndex: number | null = null;
   let currentScore: TurnpointSequenceResult | null = null;
@@ -459,7 +462,10 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       sparklineInner.style.backgroundImage = sparklineDataUri;
       sparklineInner.style.backgroundSize = '100% 100%';
       sparklineInner.style.backgroundRepeat = 'no-repeat';
-      sparklineContainer.classList.remove('hidden');
+      // Only show sparkline on track tabs (events/glides/climbs/sinks)
+      if (currentTab !== 'task' && currentTab !== 'score') {
+        sparklineContainer.classList.remove('hidden');
+      }
 
       // Compute min/max for Y labels
       let minAlt = Infinity;
@@ -516,6 +522,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
    */
   function switchTabInternal(tab: PanelTabType): void {
     currentTab = tab;
+    localStorage.setItem(TAB_STORAGE_KEY, tab);
 
     // Update tab visual states
     for (const t of allTabs) {
@@ -566,6 +573,11 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   tabGlides?.addEventListener('click', () => switchTabInternal('glides'));
   tabClimbs?.addEventListener('click', () => switchTabInternal('climbs'));
   tabSinks?.addEventListener('click', () => switchTabInternal('sinks'));
+
+  // Restore saved tab
+  if (currentTab !== 'events') {
+    switchTabInternal(currentTab);
+  }
 
   // Sparkline click handler - select nearest event for the current tab
   sparklineInner.addEventListener('click', (e: MouseEvent) => {
