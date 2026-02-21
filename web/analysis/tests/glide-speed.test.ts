@@ -3,7 +3,9 @@ import {
   calculateGlideMarkers,
   calculateGlidePositions,
   calculateTotalGlideDistance,
+  calculatePointMetrics,
   GlideMarker,
+  GlideContext,
 } from '../src/glide-speed';
 import { haversineDistance } from '../src/geo';
 import type { IGCFix } from '../src/igc-parser';
@@ -309,6 +311,218 @@ describe('Glide Speed Calculations', () => {
       ];
       const markers = calculateGlideMarkers(fixes);
       expect(markers).toHaveLength(0);
+    });
+  });
+
+  describe('required glide ratio', () => {
+    it('should not include requiredGlideRatio when no context provided', () => {
+      const fixes = createStraightGlide(1500, 10);
+      const markers = calculateGlideMarkers(fixes);
+      const labels = markers.filter(m => m.type === 'speed-label');
+      expect(labels.length).toBeGreaterThan(0);
+      for (const label of labels) {
+        expect(label.requiredGlideRatio).toBeUndefined();
+        expect(label.targetName).toBeUndefined();
+      }
+    });
+
+    it('should not include requiredGlideRatio when nextTurnpoint is null', () => {
+      const fixes = createStraightGlide(1500, 10);
+      const context: GlideContext = { nextTurnpoint: null };
+      const markers = calculateGlideMarkers(fixes, context);
+      const labels = markers.filter(m => m.type === 'speed-label');
+      expect(labels.length).toBeGreaterThan(0);
+      for (const label of labels) {
+        expect(label.requiredGlideRatio).toBeUndefined();
+        expect(label.targetName).toBeUndefined();
+      }
+    });
+
+    it('should calculate requiredGlideRatio when marker altitude above target', () => {
+      // Create a 1500m glide at altitude 1000m (default), target TP at 500m altitude ~10km away
+      const fixes = createStraightGlide(1500, 10, 47.0, 11.0);
+      const context: GlideContext = {
+        nextTurnpoint: { lat: 47.0, lon: 11.2, altitude: 500, name: 'TINTAL' },
+      };
+      const markers = calculateGlideMarkers(fixes, context);
+      const labels = markers.filter(m => m.type === 'speed-label');
+      expect(labels.length).toBeGreaterThan(0);
+      for (const label of labels) {
+        expect(label.requiredGlideRatio).toBeDefined();
+        expect(label.targetName).toBe('TINTAL');
+        // Required GR should be positive and reasonable
+        expect(label.requiredGlideRatio!).toBeGreaterThan(0);
+      }
+    });
+
+    it('should compute correct requiredGlideRatio for known values', () => {
+      // Marker at (47.0, 11.0) altitude 1000m, target at (47.0, 11.132) altitude 500m
+      // Distance ~10km, altitude diff 500m, so required GR ≈ 20
+      const fixes = createStraightGlide(1500, 10, 47.0, 11.0);
+      const targetLon = 11.0 + 10000 / (111320 * Math.cos(47.0 * Math.PI / 180));
+      const context: GlideContext = {
+        nextTurnpoint: { lat: 47.0, lon: targetLon, altitude: 500, name: 'GOAL' },
+      };
+      const markers = calculateGlideMarkers(fixes, context);
+      const firstLabel = markers.find(m => m.type === 'speed-label');
+      expect(firstLabel).toBeDefined();
+      // The first label is at 500m into the glide, so distance to target
+      // is slightly less than 10km. Required GR should be around 19-20.
+      expect(firstLabel!.requiredGlideRatio!).toBeCloseTo(20, -1);
+      expect(firstLabel!.targetName).toBe('GOAL');
+    });
+
+    it('should not include requiredGlideRatio when marker altitude below target', () => {
+      // Create glide at altitude 1000m (default), target TP at 1500m altitude
+      const fixes = createStraightGlide(1500, 10, 47.0, 11.0);
+      const context: GlideContext = {
+        nextTurnpoint: { lat: 47.0, lon: 11.2, altitude: 1500, name: 'HIGH_TP' },
+      };
+      const markers = calculateGlideMarkers(fixes, context);
+      const labels = markers.filter(m => m.type === 'speed-label');
+      expect(labels.length).toBeGreaterThan(0);
+      for (const label of labels) {
+        expect(label.requiredGlideRatio).toBeUndefined();
+        expect(label.targetName).toBeUndefined();
+      }
+    });
+
+    it('should not include requiredGlideRatio when marker altitude equals target', () => {
+      // Create glide at altitude 1000m (default), target TP at 1000m altitude
+      const fixes = createStraightGlide(1500, 10, 47.0, 11.0);
+      const context: GlideContext = {
+        nextTurnpoint: { lat: 47.0, lon: 11.2, altitude: 1000, name: 'LEVEL_TP' },
+      };
+      const markers = calculateGlideMarkers(fixes, context);
+      const labels = markers.filter(m => m.type === 'speed-label');
+      expect(labels.length).toBeGreaterThan(0);
+      for (const label of labels) {
+        expect(label.requiredGlideRatio).toBeUndefined();
+        expect(label.targetName).toBeUndefined();
+      }
+    });
+  });
+
+  describe('calculatePointMetrics', () => {
+    it('should return null for empty fixes', () => {
+      expect(calculatePointMetrics([], 0, 1000)).toBeNull();
+    });
+
+    it('should return null for single fix', () => {
+      const fixes = [createFix(0, 47.0, 11.0)];
+      expect(calculatePointMetrics(fixes, 0, 1000)).toBeNull();
+    });
+
+    it('should return null for out-of-bounds index', () => {
+      const fixes = createStraightGlide(2000, 10);
+      expect(calculatePointMetrics(fixes, -1, 1000)).toBeNull();
+      expect(calculatePointMetrics(fixes, fixes.length, 1000)).toBeNull();
+    });
+
+    it('should compute correct speed for a straight glide', () => {
+      // 3000m glide at 15 m/s, sample from the middle
+      const fixes = createStraightGlide(3000, 15);
+      const midIndex = Math.floor(fixes.length / 2);
+      const metrics = calculatePointMetrics(fixes, midIndex, 1000);
+
+      expect(metrics).not.toBeNull();
+      expect(metrics!.speedMps).toBeCloseTo(15, 0);
+    });
+
+    it('should work near the start of a track', () => {
+      const fixes = createStraightGlide(2000, 10);
+      // Index 1 is very near the start — backward walk is short
+      const metrics = calculatePointMetrics(fixes, 1, 1000);
+      expect(metrics).not.toBeNull();
+      expect(metrics!.speedMps).toBeCloseTo(10, 0);
+    });
+
+    it('should work near the end of a track', () => {
+      const fixes = createStraightGlide(2000, 10);
+      const metrics = calculatePointMetrics(fixes, fixes.length - 2, 1000);
+      expect(metrics).not.toBeNull();
+      expect(metrics!.speedMps).toBeCloseTo(10, 0);
+    });
+
+    it('should compute glide ratio for descending flight', () => {
+      // Create fixes that descend: start at 1000m, end at 900m over 1km
+      const fixes: IGCFix[] = [];
+      const startLat = 47.0;
+      const startLon = 11.0;
+      const metersPerDegreeLon = 111320 * Math.cos(startLat * Math.PI / 180);
+      const distanceCompensation = 1.0015;
+
+      for (let i = 0; i <= 100; i++) {
+        const distance = i * 20; // 20m intervals, 2000m total
+        const lon = startLon + (distance * distanceCompensation) / metersPerDegreeLon;
+        const altitude = 1000 - (i * 1); // Descend 1m per fix = 100m over 2000m
+        fixes.push(createFix(i * 2, startLat, lon, altitude)); // 10 m/s
+      }
+
+      const midIndex = 50;
+      const metrics = calculatePointMetrics(fixes, midIndex, 1000);
+      expect(metrics).not.toBeNull();
+      expect(metrics!.glideRatio).toBeDefined();
+      // ~1000m distance / ~50m altitude loss = ~20:1
+      expect(metrics!.glideRatio!).toBeCloseTo(20, -1);
+      expect(metrics!.altitudeDiff).toBeLessThan(0);
+    });
+
+    it('should return undefined glide ratio for climbing flight', () => {
+      const fixes: IGCFix[] = [];
+      const startLat = 47.0;
+      const startLon = 11.0;
+      const metersPerDegreeLon = 111320 * Math.cos(startLat * Math.PI / 180);
+
+      for (let i = 0; i <= 50; i++) {
+        const distance = i * 20;
+        const lon = startLon + (distance * 1.0015) / metersPerDegreeLon;
+        const altitude = 1000 + i * 2; // Climbing
+        fixes.push(createFix(i * 2, startLat, lon, altitude));
+      }
+
+      const metrics = calculatePointMetrics(fixes, 25, 1000);
+      expect(metrics).not.toBeNull();
+      expect(metrics!.glideRatio).toBeUndefined();
+      expect(metrics!.altitudeDiff).toBeGreaterThan(0);
+    });
+
+    it('should compute required GR with context', () => {
+      const fixes = createStraightGlide(2000, 10); // altitude 1000m (default)
+      const targetLon = 11.0 + 10000 / (111320 * Math.cos(47.0 * Math.PI / 180));
+      const context: GlideContext = {
+        nextTurnpoint: { lat: 47.0, lon: targetLon, altitude: 500, name: 'GOAL' },
+      };
+      const midIndex = Math.floor(fixes.length / 2);
+      const metrics = calculatePointMetrics(fixes, midIndex, 1000, context);
+
+      expect(metrics).not.toBeNull();
+      expect(metrics!.requiredGlideRatio).toBeDefined();
+      expect(metrics!.targetName).toBe('GOAL');
+      expect(metrics!.requiredGlideRatio!).toBeGreaterThan(0);
+    });
+
+    it('should not compute required GR without context', () => {
+      const fixes = createStraightGlide(2000, 10);
+      const midIndex = Math.floor(fixes.length / 2);
+      const metrics = calculatePointMetrics(fixes, midIndex, 1000);
+
+      expect(metrics).not.toBeNull();
+      expect(metrics!.requiredGlideRatio).toBeUndefined();
+      expect(metrics!.targetName).toBeUndefined();
+    });
+
+    it('should not compute required GR when below target altitude', () => {
+      const fixes = createStraightGlide(2000, 10); // altitude 1000m
+      const context: GlideContext = {
+        nextTurnpoint: { lat: 47.0, lon: 11.2, altitude: 1500, name: 'HIGH' },
+      };
+      const midIndex = Math.floor(fixes.length / 2);
+      const metrics = calculatePointMetrics(fixes, midIndex, 1000, context);
+
+      expect(metrics).not.toBeNull();
+      expect(metrics!.requiredGlideRatio).toBeUndefined();
+      expect(metrics!.targetName).toBeUndefined();
     });
   });
 });

@@ -25,6 +25,12 @@ export interface GlideMarker {
   speedMps?: number; // speed in m/s, only for speed-label type
   glideRatio?: number; // L/D ratio for the segment (only for speed-label type)
   altitudeDiff?: number; // altitude change in meters for the segment (negative = descent, only for speed-label type)
+  requiredGlideRatio?: number; // L/D needed to reach next turnpoint (only for speed-label type)
+  targetName?: string; // name of the target turnpoint (only for speed-label type)
+}
+
+export interface GlideContext {
+  nextTurnpoint: { lat: number; lon: number; altitude: number; name: string } | null;
 }
 
 /**
@@ -122,7 +128,7 @@ export function calculateGlidePositions(
  * @param fixes - Array of IGC fixes for the glide segment
  * @returns Array of markers with positions, speeds, glide ratios, and altitude differences
  */
-export function calculateGlideMarkers(fixes: IGCFix[]): GlideMarker[] {
+export function calculateGlideMarkers(fixes: IGCFix[], context?: GlideContext): GlideMarker[] {
   const SEGMENT_LENGTH = 1000; // meters
   const LABEL_INTERVAL = SEGMENT_LENGTH / 2; // label at segment midpoint
 
@@ -192,6 +198,17 @@ export function calculateGlideMarkers(fixes: IGCFix[]): GlideMarker[] {
         glideRatio = segmentDistance / altitudeLost;
       }
 
+      // Calculate required glide ratio to next turnpoint
+      let requiredGlideRatio: number | undefined;
+      let targetName: string | undefined;
+      const nextTP = context?.nextTurnpoint;
+      if (nextTP && pos.altitude > nextTP.altitude) {
+        const distToTP = haversineDistance(pos.lat, pos.lon, nextTP.lat, nextTP.lon);
+        const altDiffToTP = pos.altitude - nextTP.altitude;
+        requiredGlideRatio = distToTP / altDiffToTP;
+        targetName = nextTP.name;
+      }
+
       markers.push({
         type: 'speed-label',
         lat: pos.lat,
@@ -200,6 +217,8 @@ export function calculateGlideMarkers(fixes: IGCFix[]): GlideMarker[] {
         speedMps,
         glideRatio,
         altitudeDiff: Math.round(altitudeDiff),
+        requiredGlideRatio,
+        targetName,
       });
     } else {
       // Chevron at 1000m, 2000m, 3000m, etc. (indices 1, 3, 5, ...)
@@ -213,6 +232,112 @@ export function calculateGlideMarkers(fixes: IGCFix[]): GlideMarker[] {
   }
 
   return markers;
+}
+
+export interface PointMetrics {
+  speedMps: number;
+  glideRatio: number | undefined;
+  altitudeDiff: number;
+  requiredGlideRatio: number | undefined;
+  targetName: string | undefined;
+}
+
+/**
+ * Calculate metrics around a single track point using a symmetric distance window.
+ *
+ * Walks backward from centerIndex to accumulate ~windowMeters/2, then forward
+ * for another ~windowMeters/2.  From the resulting start/end fixes it derives
+ * speed, glide ratio, altitude change, and (optionally) required GR to the
+ * next turnpoint.
+ *
+ * Returns null when there aren't enough fixes or the window collapses to a
+ * single point.
+ */
+export function calculatePointMetrics(
+  fixes: IGCFix[],
+  centerIndex: number,
+  windowMeters: number,
+  context?: GlideContext,
+): PointMetrics | null {
+  if (fixes.length < 2) return null;
+  if (centerIndex < 0 || centerIndex >= fixes.length) return null;
+
+  const halfWindow = windowMeters / 2;
+
+  // Walk backward to find startIndex
+  let startIndex = centerIndex;
+  let backDist = 0;
+  for (let i = centerIndex; i > 0; i--) {
+    const d = haversineDistance(
+      fixes[i].latitude, fixes[i].longitude,
+      fixes[i - 1].latitude, fixes[i - 1].longitude,
+    );
+    backDist += d;
+    startIndex = i - 1;
+    if (backDist >= halfWindow) break;
+  }
+
+  // Walk forward to find endIndex
+  let endIndex = centerIndex;
+  let fwdDist = 0;
+  for (let i = centerIndex; i < fixes.length - 1; i++) {
+    const d = haversineDistance(
+      fixes[i].latitude, fixes[i].longitude,
+      fixes[i + 1].latitude, fixes[i + 1].longitude,
+    );
+    fwdDist += d;
+    endIndex = i + 1;
+    if (fwdDist >= halfWindow) break;
+  }
+
+  if (startIndex === endIndex) return null;
+
+  // Compute total distance between start and end
+  let totalDistance = 0;
+  for (let i = startIndex; i < endIndex; i++) {
+    totalDistance += haversineDistance(
+      fixes[i].latitude, fixes[i].longitude,
+      fixes[i + 1].latitude, fixes[i + 1].longitude,
+    );
+  }
+
+  const timeDiffSeconds =
+    (fixes[endIndex].time.getTime() - fixes[startIndex].time.getTime()) / 1000;
+  if (timeDiffSeconds <= 0) return null;
+
+  const speedMps = totalDistance / timeDiffSeconds;
+
+  const altitudeDiff =
+    fixes[endIndex].gnssAltitude - fixes[startIndex].gnssAltitude;
+  const altitudeLost = -altitudeDiff;
+
+  let glideRatio: number | undefined;
+  if (altitudeLost > 0 && totalDistance > 0) {
+    glideRatio = totalDistance / altitudeLost;
+  }
+
+  // Required GR to next turnpoint
+  let requiredGlideRatio: number | undefined;
+  let targetName: string | undefined;
+  const centerFix = fixes[centerIndex];
+  const nextTP = context?.nextTurnpoint;
+  if (nextTP && centerFix.gnssAltitude > nextTP.altitude) {
+    const distToTP = haversineDistance(
+      centerFix.latitude, centerFix.longitude,
+      nextTP.lat, nextTP.lon,
+    );
+    const altDiffToTP = centerFix.gnssAltitude - nextTP.altitude;
+    requiredGlideRatio = distToTP / altDiffToTP;
+    targetName = nextTP.name;
+  }
+
+  return {
+    speedMps,
+    glideRatio,
+    altitudeDiff: Math.round(altitudeDiff),
+    requiredGlideRatio,
+    targetName,
+  };
 }
 
 /**

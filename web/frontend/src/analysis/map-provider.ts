@@ -82,6 +82,12 @@ export interface MapProvider {
 
     /** Pan to a turnpoint center without changing zoom */
     panToTurnpoint?(turnpointIndex: number): void;
+
+    /** Show a HUD overlay with metrics for a non-glide track point */
+    showTrackPointHUD?(fixIndex: number): void;
+
+    /** Hide the track point HUD overlay */
+    hideTrackPointHUD?(): void;
 }
 
 /**

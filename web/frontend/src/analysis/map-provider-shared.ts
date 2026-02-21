@@ -234,6 +234,73 @@ export function showGlideLegend(element: HTMLElement | null, show: boolean): voi
   }
 }
 
+// ── Crosshair SVG ───────────────────────────────────────────────────────
+
+/** Crosshair SVG for the map marker (white with drop-shadow for visibility) */
+export const CROSSHAIR_MAP_SVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" style="filter:drop-shadow(0 0 2px rgba(0,0,0,0.8))">
+  <circle cx="12" cy="12" r="4" stroke="white" stroke-width="1.5"/>
+  <line x1="12" y1="2" x2="12" y2="8" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <line x1="12" y1="16" x2="12" y2="22" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <line x1="2" y1="12" x2="8" y2="12" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <line x1="16" y1="12" x2="22" y2="12" stroke="white" stroke-width="2" stroke-linecap="round"/>
+</svg>`;
+
+/** Crosshair SVG for the HUD (white, inline with text) */
+export const CROSSHAIR_HUD_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;margin-right:4px">
+  <circle cx="12" cy="12" r="4" stroke="white" stroke-width="2"/>
+  <line x1="12" y1="2" x2="12" y2="8" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="12" y1="16" x2="12" y2="22" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="2" y1="12" x2="8" y2="12" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="16" y1="12" x2="22" y2="12" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+</svg>`;
+
+// ── Track Point HUD helpers ──────────────────────────────────────────────
+
+/** Create the HUD container element and append it to the map container */
+export function createTrackPointHUD(container: HTMLElement): HTMLElement {
+  const hud = document.createElement('div');
+  hud.id = 'track-point-hud';
+  hud.style.display = 'none';
+  hud.innerHTML = `
+    <div class="hud-speed"></div>
+    <div class="hud-detail"></div>
+    <div class="hud-req"></div>
+    <div class="hud-window">1 km avg</div>
+  `;
+  container.appendChild(hud);
+  return hud;
+}
+
+/** Update HUD content and show it */
+export function updateTrackPointHUD(
+  el: HTMLElement,
+  speed: string,
+  detail: string,
+  req?: string,
+): void {
+  const speedEl = el.querySelector('.hud-speed') as HTMLElement;
+  const detailEl = el.querySelector('.hud-detail') as HTMLElement;
+  const reqEl = el.querySelector('.hud-req') as HTMLElement;
+
+  speedEl.innerHTML = `${CROSSHAIR_HUD_SVG}${speed}`;
+  detailEl.textContent = detail;
+
+  if (req) {
+    reqEl.textContent = req;
+    reqEl.style.display = '';
+  } else {
+    reqEl.textContent = '';
+    reqEl.style.display = 'none';
+  }
+
+  el.style.display = '';
+}
+
+/** Hide the HUD element */
+export function hideTrackPointHUD(el: HTMLElement | null): void {
+  if (el) el.style.display = 'none';
+}
+
 /** Create circle polygon points as LatLng pairs for Leaflet Polygon */
 export function createCirclePolygonLatLng(
   centerLat: number,
