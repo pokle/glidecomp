@@ -454,11 +454,6 @@ async function init(): Promise<void> {
     },
   });
 
-  // Show panel by default on desktop; stays hidden on mobile
-  if (window.innerWidth >= 768) {
-    analysisPanel.show();
-  }
-
   // Set up header panel toggle
   const headerPanelToggle = document.getElementById('header-panel-toggle');
   headerPanelToggle?.addEventListener('click', () => {
@@ -482,10 +477,12 @@ async function init(): Promise<void> {
       console.log(`[track-click] fix #${fixIndex}  ${time}  ${fix.latitude.toFixed(5)}, ${fix.longitude.toFixed(5)}  alt ${alt}  → ${segType}`);
     }
 
-    if (analysisPanel?.isHidden()) {
-      analysisPanel.show();
-    }
     analysisPanel?.selectByFixIndex(fixIndex, { skipPan: true });
+
+    // Show HUD on every track click
+    if (mapRenderer?.showTrackPointHUD) {
+      mapRenderer.showTrackPointHUD(fixIndex);
+    }
   });
 
   // Register turnpoint click handler to open Task tab when clicking on a turnpoint on the map
