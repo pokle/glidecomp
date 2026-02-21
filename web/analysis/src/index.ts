@@ -8,3 +8,4 @@ export { haversineDistance, calculateBearing, calculateBearingRadians, destinati
 export { formatUnit, formatSpeed, formatAltitude, formatAltitudeChange, formatDistance, formatClimbRate, formatRadius, getUnitLabel, getCurrentUnit, type FormattedValue, type UnitPreferences, type SpeedUnit, type AltitudeUnit, type DistanceUnit, type ClimbRateUnit } from './units';
 export { calculateGlidePositions, calculateGlideMarkers, calculateTotalGlideDistance, type ChevronPosition, type GlideMarker } from './glide-speed';
 export { resolveTurnpointSequence, detectCylinderCrossings, type TurnpointSequenceResult, type CylinderCrossing, type TurnpointReaching, type BestProgress, type LegDistance } from './turnpoint-sequence';
+export { detectCircles, computeBearingRates, fitCircleLeastSquares, normalizeBearingDelta, type CircleSegment, type CirclingSegment, type FittedCircle, type WindEstimate, type CircleDetectionResult, type TurnDirection } from './circle-detector';

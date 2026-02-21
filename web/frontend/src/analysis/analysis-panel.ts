@@ -150,6 +150,7 @@ function getEventTypeLabel(type: FlightEventType): string {
     min_altitude: 'Min Alt',
     max_climb: 'Max Climb',
     max_sink: 'Max Sink',
+    circle_complete: 'Circle',
   };
   return labels[type] || type;
 }
@@ -173,6 +174,7 @@ function getEventIcon(type: FlightEventType): string {
     min_altitude: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 6l-3.75 5 2.85 3.8-1.6 1.2C9.81 13.75 7 10 7 10l-6 8h22L14 6z"/></svg>`,
     max_climb: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>`,
     max_sink: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 18l2.29-2.29-4.88-4.88-4 4L2 7.41 3.41 6l6 6 4-4 6.3 6.29L22 12v6z"/></svg>`,
+    circle_complete: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>`,
   };
   return icons[type] || `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`;
 }
@@ -614,6 +616,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     'turnpoint_exit',
     'start_crossing',
     'goal_crossing',
+    'circle_complete',
   ]);
 
   /**

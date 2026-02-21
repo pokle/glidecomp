@@ -13,6 +13,7 @@ import { IGCFix } from './igc-parser';
 import { haversineDistance } from './geo';
 import { XCTask, getSSSIndex, getESSIndex } from './xctsk-parser';
 import { resolveTurnpointSequence } from './turnpoint-sequence';
+import { detectCircles } from './circle-detector';
 
 export type FlightEventType =
   | 'takeoff'
@@ -32,7 +33,8 @@ export type FlightEventType =
   | 'max_altitude'
   | 'min_altitude'
   | 'max_climb'
-  | 'max_sink';
+  | 'max_sink'
+  | 'circle_complete';
 
 /**
  * Base interface for track segments (thermals, glides, etc.)
@@ -870,6 +872,44 @@ export function detectFlightEvents(
     allEvents.push(...turnpointEvents);
   }
 
+  // Detect circles (only after takeoff)
+  const circleResult = detectCircles(flightFixes);
+  for (const circle of circleResult.circles) {
+    const adjustedStartIndex = circle.startIndex + indexOffset;
+    const adjustedEndIndex = circle.endIndex + indexOffset;
+    const dir = circle.turnDirection === 'right' ? 'R' : 'L';
+    const climbStr = circle.climbRate >= 0
+      ? `+${circle.climbRate.toFixed(1)}`
+      : circle.climbRate.toFixed(1);
+
+    allEvents.push({
+      id: `circle-${adjustedStartIndex}`,
+      type: 'circle_complete',
+      time: fixes[adjustedStartIndex].time,
+      latitude: circle.fittedCircle.centerLat,
+      longitude: circle.fittedCircle.centerLon,
+      altitude: fixes[adjustedStartIndex].gnssAltitude,
+      description: `Circle #${circle.circleNumber} (${dir}, ${climbStr}m/s, r=${Math.round(circle.fittedCircle.radiusMeters)}m)`,
+      details: {
+        turnDirection: circle.turnDirection,
+        duration: circle.duration,
+        climbRate: circle.climbRate,
+        radius: circle.fittedCircle.radiusMeters,
+        centerLat: circle.fittedCircle.centerLat,
+        centerLon: circle.fittedCircle.centerLon,
+        fitError: circle.fittedCircle.fitErrorRMS,
+        quality: circle.quality,
+        strongestLiftBearing: circle.strongestLiftBearing,
+        circleNumber: circle.circleNumber,
+        windSpeed: circle.windFromGroundSpeed?.speed,
+        windDirection: circle.windFromGroundSpeed?.direction,
+        driftWindSpeed: circle.windFromCenterDrift?.speed,
+        driftWindDirection: circle.windFromCenterDrift?.direction,
+      },
+      segment: { startIndex: adjustedStartIndex, endIndex: adjustedEndIndex },
+    });
+  }
+
   // Sort by time
   allEvents.sort((a, b) => a.time.getTime() - b.time.getTime());
 
@@ -940,6 +980,8 @@ export function getEventStyle(type: FlightEventType): {
       return { icon: 'trending-up', color: '#22c55e' };
     case 'max_sink':
       return { icon: 'trending-down', color: '#ef4444' };
+    case 'circle_complete':
+      return { icon: 'rotate-cw', color: '#8b5cf6' };
     default:
       return { icon: 'circle', color: '#64748b' };
   }
