@@ -88,6 +88,12 @@ export interface MapProvider {
 
     /** Hide the track point HUD overlay */
     hideTrackPointHUD?(): void;
+
+    /** Register callback for menu button click (native map control) */
+    onMenuButtonClick?(callback: () => void): void;
+
+    /** Register callback for panel toggle button click (native map control) */
+    onPanelToggleClick?(callback: () => void): void;
 }
 
 /**

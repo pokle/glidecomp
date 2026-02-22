@@ -205,9 +205,9 @@ function getTurnpointTypeLabel(type?: 'TAKEOFF' | 'SSS' | 'ESS'): string {
  */
 function getTurnpointTypeClass(type?: 'TAKEOFF' | 'SSS' | 'ESS'): string {
   switch (type) {
-    case 'SSS': return 'text-green-600 dark:text-green-400';
-    case 'ESS': return 'text-red-600 dark:text-red-400';
-    default: return 'text-blue-600 dark:text-blue-400';
+    case 'SSS': return 'text-green-600';
+    case 'ESS': return 'text-red-600';
+    default: return 'text-blue-600';
   }
 }
 
@@ -264,8 +264,11 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   panel.className = 'flex h-full flex-col overflow-hidden';
   panel.innerHTML = `
     <!-- Flight info banner -->
-    <div class="border-b border-border bg-muted/50 px-4 py-2 text-sm">
-      <div class="flight-info-content text-muted-foreground">Load an IGC file to see flight info</div>
+    <div class="flex items-start gap-2 border-b border-border bg-muted/50 pl-4 pr-[10px] py-[10px] text-sm">
+      <div class="flight-info-content text-muted-foreground flex-1 min-w-0 pt-1">Load an IGC file to see flight info</div>
+      <button type="button" id="sidebar-close" class="shrink-0" style="display:flex;align-items:center;justify-content:center;width:29px;height:29px;border:none;border-radius:4px;background:#fff;cursor:pointer;box-shadow:0 0 0 2px rgba(0,0,0,.1);" title="Close panel" aria-label="Close panel">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>
+      </button>
     </div>
 
     <!-- Unified tab row -->
@@ -1160,11 +1163,11 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
     // A. Status banner
     if (result.madeGoal) {
-      html += `<div class="rounded-lg bg-green-500/15 px-3 py-2 text-sm font-medium text-green-700 dark:text-green-400">Goal</div>`;
+      html += `<div class="rounded-lg bg-green-500/15 px-3 py-2 text-sm font-medium text-green-700">Goal</div>`;
     } else if (result.sequence.length > 0) {
       const lastTP = result.sequence[result.sequence.length - 1];
       const tpName = currentTask.turnpoints[lastTP.taskIndex]?.waypoint.name || getTurnpointLabel(lastTP.taskIndex);
-      html += `<div class="rounded-lg bg-yellow-500/15 px-3 py-2 text-sm font-medium text-yellow-700 dark:text-yellow-400">${getTurnpointLabel(lastTP.taskIndex)} reached &ndash; ${tpName}</div>`;
+      html += `<div class="rounded-lg bg-yellow-500/15 px-3 py-2 text-sm font-medium text-yellow-700">${getTurnpointLabel(lastTP.taskIndex)} reached &ndash; ${tpName}</div>`;
     } else {
       html += `<div class="rounded-lg bg-muted px-3 py-2 text-sm font-medium text-muted-foreground">Not started</div>`;
     }
@@ -1214,7 +1217,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       const toName = toTp?.waypoint.name ? `${toTp.waypoint.name} <span class="text-xs text-muted-foreground">(${toLabel})</span>` : toLabel;
       const legDist = formatDistance(leg.distance).withUnit;
       const icon = leg.completed
-        ? '<span class="text-green-600 dark:text-green-400">&#10003;</span>'
+        ? '<span class="text-green-600">&#10003;</span>'
         : '<span class="text-muted-foreground">&#10007;</span>';
       html += `
         <div class="flex items-center justify-between py-1 text-sm">
@@ -1607,14 +1610,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       if (info.date) {
         parts.push(info.date);
       }
-      if (info.glider) {
-        parts.push(info.glider);
-      }
       if (info.duration) {
         parts.push(info.duration);
-      }
-      if (info.maxAlt) {
-        parts.push(`Max: ${info.maxAlt}`);
       }
       if (info.task) {
         parts.push(info.task);
