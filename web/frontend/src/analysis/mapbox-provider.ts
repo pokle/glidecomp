@@ -513,12 +513,60 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         updateTrackRendering();
       }
 
-      // Add navigation controls
-      map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }));
-      map.addControl(new mapboxgl.ScaleControl({ maxWidth: 200 }));
-      map.addControl(new mapboxgl.FullscreenControl());
+      // Custom panel toggle control (top-right, added first so it's topmost)
+      let panelToggleCallback: (() => void) | null = null;
+      class PanelToggleControl implements mapboxgl.IControl {
+        private container: HTMLElement | null = null;
+        onAdd(): HTMLElement {
+          this.container = document.createElement('div');
+          this.container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.title = 'Toggle panel';
+          btn.setAttribute('aria-label', 'Toggle panel');
+          btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:29px;height:29px;border:none;cursor:pointer;background:transparent;';
+          btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>';
+          btn.addEventListener('click', () => panelToggleCallback?.());
+          this.container.appendChild(btn);
+          return this.container;
+        }
+        onRemove(): void {
+          this.container?.remove();
+          this.container = null;
+        }
+      }
+      map.addControl(new PanelToggleControl(), 'top-right');
 
-      // Add style selector control
+      // Navigation controls (top-right, below panel toggle)
+      map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }));
+      map.addControl(new mapboxgl.FullscreenControl());
+      map.addControl(new mapboxgl.ScaleControl({ maxWidth: 200 }));
+
+      // Custom menu button control (top-left, added first so it's topmost)
+      let menuButtonCallback: (() => void) | null = null;
+      class MenuButtonControl implements mapboxgl.IControl {
+        private container: HTMLElement | null = null;
+        onAdd(): HTMLElement {
+          this.container = document.createElement('div');
+          this.container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.title = 'Menu (\u2318K)';
+          btn.setAttribute('aria-label', 'Menu (\u2318K)');
+          btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:29px;height:29px;border:none;cursor:pointer;background:transparent;';
+          btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>';
+          btn.addEventListener('click', () => menuButtonCallback?.());
+          this.container.appendChild(btn);
+          return this.container;
+        }
+        onRemove(): void {
+          this.container?.remove();
+          this.container = null;
+        }
+      }
+      map.addControl(new MenuButtonControl(), 'top-left');
+
+      // Style selector control (top-left, below menu button)
       class MapBoxStyleControl implements mapboxgl.IControl {
         private container: HTMLElement | null = null;
 
@@ -557,54 +605,6 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       }
 
       map.addControl(new MapBoxStyleControl(), 'top-left');
-
-      // Custom menu button control (top-left, below style dropdown)
-      let menuButtonCallback: (() => void) | null = null;
-      class MenuButtonControl implements mapboxgl.IControl {
-        private container: HTMLElement | null = null;
-        onAdd(): HTMLElement {
-          this.container = document.createElement('div');
-          this.container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.title = 'Menu (\u2318K)';
-          btn.setAttribute('aria-label', 'Menu (\u2318K)');
-          btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:29px;height:29px;border:none;cursor:pointer;background:transparent;';
-          btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>';
-          btn.addEventListener('click', () => menuButtonCallback?.());
-          this.container.appendChild(btn);
-          return this.container;
-        }
-        onRemove(): void {
-          this.container?.remove();
-          this.container = null;
-        }
-      }
-      map.addControl(new MenuButtonControl(), 'top-left');
-
-      // Custom panel toggle control (top-right, below navigation/fullscreen)
-      let panelToggleCallback: (() => void) | null = null;
-      class PanelToggleControl implements mapboxgl.IControl {
-        private container: HTMLElement | null = null;
-        onAdd(): HTMLElement {
-          this.container = document.createElement('div');
-          this.container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.title = 'Toggle panel';
-          btn.setAttribute('aria-label', 'Toggle panel');
-          btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:29px;height:29px;border:none;cursor:pointer;background:transparent;';
-          btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>';
-          btn.addEventListener('click', () => panelToggleCallback?.());
-          this.container.appendChild(btn);
-          return this.container;
-        }
-        onRemove(): void {
-          this.container?.remove();
-          this.container = null;
-        }
-      }
-      map.addControl(new PanelToggleControl(), 'top-right');
 
       // Handle style changes
       let isInitialLoad = true;

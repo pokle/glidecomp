@@ -79,6 +79,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
       const map = new LeafletMap(container, {
         center,
         zoom,
+        zoomControl: false,
       });
 
     // Tile layers
@@ -94,6 +95,56 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
       ? savedStyle as keyof typeof tileLayerEntries
       : 'outdoors';
     tileLayerEntries[initialKey].addTo(map);
+
+    // Panel toggle control (top-right, added first so it's topmost)
+    let panelToggleCallback: (() => void) | null = null;
+    const panelToggleControl = new Control({ position: 'topright' });
+    panelToggleControl.onAdd = () => {
+      const div = document.createElement('div');
+      div.className = 'leaflet-bar';
+      const btn = document.createElement('a');
+      btn.href = '#';
+      btn.title = 'Toggle panel';
+      btn.setAttribute('role', 'button');
+      btn.setAttribute('aria-label', 'Toggle panel');
+      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>';
+      btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:30px;height:30px;';
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        panelToggleCallback?.();
+      });
+      div.appendChild(btn);
+      return div;
+    };
+    panelToggleControl.addTo(map);
+
+    // Menu button control (top-left, added first so it's topmost)
+    let menuButtonCallback: (() => void) | null = null;
+    const menuButtonControl = new Control({ position: 'topleft' });
+    menuButtonControl.onAdd = () => {
+      const div = document.createElement('div');
+      div.className = 'leaflet-bar';
+      const btn = document.createElement('a');
+      btn.href = '#';
+      btn.title = 'Menu (\u2318K)';
+      btn.setAttribute('role', 'button');
+      btn.setAttribute('aria-label', 'Menu (\u2318K)');
+      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>';
+      btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:30px;height:30px;';
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        menuButtonCallback?.();
+      });
+      div.appendChild(btn);
+      return div;
+    };
+    menuButtonControl.addTo(map);
+
+    // Zoom control (top-left, below menu button)
+    // Control.Zoom exists at runtime but isn't typed in Leaflet 2.0-alpha.1
+    new (Control as unknown as { Zoom: new () => Control }).Zoom().addTo(map);
 
     // Layer control
     const baseLayers: Record<string, TileLayer> = {
@@ -113,9 +164,6 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
       const key = nameToKey[e.name];
       if (key) config.setPreferences({ mapStyle: key });
     });
-
-    // Scale control
-    new Control.Scale({ maxWidth: 200 }).addTo(map);
 
     // Fullscreen control
     const fullscreenControl = new Control({ position: 'topleft' });
@@ -142,51 +190,8 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
     };
     fullscreenControl.addTo(map);
 
-    // Menu button control (top-left, stacks with zoom/layers/fullscreen)
-    let menuButtonCallback: (() => void) | null = null;
-    const menuButtonControl = new Control({ position: 'topleft' });
-    menuButtonControl.onAdd = () => {
-      const div = document.createElement('div');
-      div.className = 'leaflet-bar';
-      const btn = document.createElement('a');
-      btn.href = '#';
-      btn.title = 'Menu (\u2318K)';
-      btn.setAttribute('role', 'button');
-      btn.setAttribute('aria-label', 'Menu (\u2318K)');
-      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>';
-      btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:30px;height:30px;';
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        menuButtonCallback?.();
-      });
-      div.appendChild(btn);
-      return div;
-    };
-    menuButtonControl.addTo(map);
-
-    // Panel toggle control (top-right)
-    let panelToggleCallback: (() => void) | null = null;
-    const panelToggleControl = new Control({ position: 'topright' });
-    panelToggleControl.onAdd = () => {
-      const div = document.createElement('div');
-      div.className = 'leaflet-bar';
-      const btn = document.createElement('a');
-      btn.href = '#';
-      btn.title = 'Toggle panel';
-      btn.setAttribute('role', 'button');
-      btn.setAttribute('aria-label', 'Toggle panel');
-      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>';
-      btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:30px;height:30px;';
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        panelToggleCallback?.();
-      });
-      div.appendChild(btn);
-      return div;
-    };
-    panelToggleControl.addTo(map);
+    // Scale control
+    new Control.Scale({ maxWidth: 200 }).addTo(map);
 
     // ── State ──────────────────────────────────────────────────────────────
 

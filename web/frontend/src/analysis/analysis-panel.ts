@@ -264,10 +264,10 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   panel.className = 'flex h-full flex-col overflow-hidden';
   panel.innerHTML = `
     <!-- Flight info banner -->
-    <div class="flex items-center gap-2 border-b border-border bg-muted/50 px-4 py-2 text-sm">
-      <div class="flight-info-content text-muted-foreground flex-1 min-w-0">Load an IGC file to see flight info</div>
-      <button type="button" id="sidebar-close" class="shrink-0 flex items-center justify-center w-[29px] h-[29px] rounded bg-white border border-gray-300 shadow cursor-pointer" title="Close panel" aria-label="Close panel">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>
+    <div class="flex items-start gap-2 border-b border-border bg-muted/50 pl-4 pr-[10px] py-[10px] text-sm">
+      <div class="flight-info-content text-muted-foreground flex-1 min-w-0 pt-1">Load an IGC file to see flight info</div>
+      <button type="button" id="sidebar-close" class="shrink-0" style="display:flex;align-items:center;justify-content:center;width:29px;height:29px;border:none;border-radius:4px;background:#fff;cursor:pointer;box-shadow:0 0 0 2px rgba(0,0,0,.1);" title="Close panel" aria-label="Close panel">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>
       </button>
     </div>
 
