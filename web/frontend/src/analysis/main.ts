@@ -912,10 +912,8 @@ async function init(): Promise<void> {
     }
 
     if (state.task) {
-      const numTurnpoints = state.task.turnpoints.length;
       const optimizedDistance = calculateOptimizedTaskDistance(state.task);
-      const distanceFormatted = formatDistance(optimizedDistance);
-      info.task = `${numTurnpoints} TPs, ${distanceFormatted.withUnit}`;
+      info.task = formatDistance(optimizedDistance).withUnit;
     }
 
     analysisPanel?.setFlightInfo(info);

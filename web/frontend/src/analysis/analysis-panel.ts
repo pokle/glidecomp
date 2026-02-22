@@ -1610,14 +1610,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       if (info.date) {
         parts.push(info.date);
       }
-      if (info.glider) {
-        parts.push(info.glider);
-      }
       if (info.duration) {
         parts.push(info.duration);
-      }
-      if (info.maxAlt) {
-        parts.push(`Max: ${info.maxAlt}`);
       }
       if (info.task) {
         parts.push(info.task);
