@@ -432,11 +432,12 @@ async function init(): Promise<void> {
     commandDialog?.showModal();
   });
   mapRenderer.onPanelToggleClick?.(() => {
-    if (analysisPanel?.isHidden()) {
-      analysisPanel.show();
-    } else {
-      analysisPanel?.hide();
-    }
+    analysisPanel?.show();
+  });
+
+  // Close button inside the sidebar panel
+  document.getElementById('sidebar-close')?.addEventListener('click', () => {
+    analysisPanel?.hide();
   });
 
   // Register track click handler to select events when clicking on the track
