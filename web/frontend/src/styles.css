@@ -358,38 +358,59 @@
     @apply text-primary;
   }
 
-  /* Track-point HUD overlay — translucent dark card */
+  /* Track-point HUD overlay — translucent dark card with accordion groups */
   #track-point-hud {
-    @apply absolute bottom-8 right-2 pointer-events-none;
+    @apply absolute bottom-8 right-2;
     @apply rounded-lg px-3 py-2;
     z-index: 1100;
     background: rgba(15, 23, 42, 0.55);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
+    font-family: 'Atkinson Hyperlegible Next', ui-monospace, monospace;
+  }
+
+  #track-point-hud .hud-group {
+    @apply text-white;
+  }
+
+  #track-point-hud .hud-summary {
+    @apply text-white/60 text-xs font-semibold uppercase tracking-wide cursor-pointer;
+    @apply list-none select-none py-0.5;
+  }
+
+  #track-point-hud .hud-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  #track-point-hud .hud-summary::before {
+    content: '▸ ';
+  }
+
+  #track-point-hud details[open] > .hud-summary::before {
+    content: '▾ ';
+  }
+
+  #track-point-hud .hud-divider {
+    @apply border-t border-white/20 my-1;
+  }
+
+  #track-point-hud .hud-alt {
+    @apply text-white text-lg font-bold leading-tight pl-3;
   }
 
   #track-point-hud .hud-speed {
-    @apply text-white text-lg font-bold leading-tight;
-    font-family: 'Atkinson Hyperlegible Next', ui-monospace, monospace;
-  }
-
-  #track-point-hud .hud-detail {
-    @apply text-white/90 text-sm leading-tight;
-    font-family: 'Atkinson Hyperlegible Next', ui-monospace, monospace;
+    @apply text-white text-sm leading-tight pl-3;
   }
 
   #track-point-hud .hud-req {
-    @apply text-white/60 text-sm leading-tight;
-    font-family: 'Atkinson Hyperlegible Next', ui-monospace, monospace;
+    @apply text-white/60 text-sm leading-tight pl-3;
+  }
+
+  #track-point-hud .hud-thermal-alt {
+    @apply text-white text-sm leading-tight pl-3;
   }
 
   #track-point-hud .hud-wind {
-    @apply text-white/75 text-sm leading-tight;
-    font-family: 'Atkinson Hyperlegible Next', ui-monospace, monospace;
-  }
-
-  #track-point-hud .hud-window {
-    @apply text-white/40 text-xs leading-tight mt-0.5;
-    font-family: 'Atkinson Hyperlegible Next', ui-monospace, monospace;
+    @apply text-white/75 text-sm leading-tight pl-3;
   }
 }

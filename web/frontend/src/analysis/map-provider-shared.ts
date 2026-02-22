@@ -318,6 +318,96 @@ export const CROSSHAIR_HUD_SVG = `<svg width="16" height="16" viewBox="0 0 24 24
   <line x1="16" y1="12" x2="22" y2="12" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
 </svg>`;
 
+// ── Last-thermal lookup ──────────────────────────────────────────────────
+
+export interface LastThermalData {
+  wind: { speed: number; direction: number } | null;
+  maxAltitude: number;
+  maxAltitudeTime: Date;
+  circleCount: number;
+}
+
+/**
+ * Find the most recent climbing circles before fixIndex and return
+ * averaged wind + max altitude from those circles.
+ */
+export function findLastThermalData(
+  events: FlightEvent[],
+  fixes: IGCFix[],
+  fixIndex: number,
+  maxCircles: number = 3,
+): LastThermalData | null {
+  // Collect climbing circles that end before fixIndex
+  const climbingCircles: { endIndex: number; speed: number | null; direction: number | null; startIndex: number }[] = [];
+
+  for (const e of events) {
+    if (e.type !== 'circle_complete' || !e.segment) continue;
+    if (e.segment.endIndex >= fixIndex) continue;
+
+    const details = e.details as Record<string, unknown> | undefined;
+    if (!details) continue;
+
+    const climbRate = details.climbRate as number | undefined;
+    if (climbRate == null || climbRate <= 0) continue;
+
+    // Prefer ground-speed wind; fall back to drift wind
+    let speed = details.windSpeed as number | undefined;
+    let dir = details.windDirection as number | undefined;
+    if (speed == null || dir == null) {
+      speed = details.driftWindSpeed as number | undefined;
+      dir = details.driftWindDirection as number | undefined;
+    }
+
+    climbingCircles.push({
+      endIndex: e.segment.endIndex,
+      startIndex: e.segment.startIndex,
+      speed: speed ?? null,
+      direction: dir ?? null,
+    });
+  }
+
+  if (climbingCircles.length === 0) return null;
+
+  // Sort by endIndex descending (most recent first), take up to maxCircles
+  climbingCircles.sort((a, b) => b.endIndex - a.endIndex);
+  const selected = climbingCircles.slice(0, maxCircles);
+
+  // Find max altitude and its time across all selected circles' fixes
+  let maxAlt = -Infinity;
+  let maxAltTime = fixes[selected[0].startIndex].time;
+  for (const c of selected) {
+    const start = Math.max(0, c.startIndex);
+    const end = Math.min(fixes.length - 1, c.endIndex);
+    for (let i = start; i <= end; i++) {
+      if (fixes[i].gnssAltitude > maxAlt) {
+        maxAlt = fixes[i].gnssAltitude;
+        maxAltTime = fixes[i].time;
+      }
+    }
+  }
+
+  // Average wind using circular mean (only from circles that have wind data)
+  const withWind = selected.filter(c => c.speed != null && c.direction != null);
+  let wind: { speed: number; direction: number } | null = null;
+  if (withWind.length > 0) {
+    let sumSpeed = 0;
+    let sumSin = 0;
+    let sumCos = 0;
+    for (const c of withWind) {
+      sumSpeed += c.speed!;
+      const rad = (c.direction! * Math.PI) / 180;
+      sumSin += Math.sin(rad);
+      sumCos += Math.cos(rad);
+    }
+    const avgSpeed = sumSpeed / withWind.length;
+    let avgDirection = (Math.atan2(sumSin / withWind.length, sumCos / withWind.length) * 180) / Math.PI;
+    if (avgDirection < 0) avgDirection += 360;
+    wind = { speed: avgSpeed, direction: avgDirection };
+  }
+
+  return { wind, maxAltitude: maxAlt, maxAltitudeTime: maxAltTime, circleCount: selected.length };
+}
+
 // ── Track Point HUD helpers ──────────────────────────────────────────────
 
 /** Create the HUD container element and append it to the map container */
@@ -326,11 +416,22 @@ export function createTrackPointHUD(container: HTMLElement): HTMLElement {
   hud.id = 'track-point-hud';
   hud.style.display = 'none';
   hud.innerHTML = `
-    <div class="hud-speed"></div>
-    <div class="hud-detail"></div>
-    <div class="hud-req"></div>
-    <div class="hud-wind"></div>
-    <div class="hud-window">1 km avg</div>
+    <details open class="hud-group">
+      <summary class="hud-summary">${CROSSHAIR_HUD_SVG}Point</summary>
+      <div class="hud-alt"></div>
+    </details>
+    <div class="hud-divider"></div>
+    <details open class="hud-group">
+      <summary class="hud-summary">1 km avg</summary>
+      <div class="hud-speed"></div>
+      <div class="hud-req"></div>
+    </details>
+    <div class="hud-divider hud-thermal-divider"></div>
+    <details open class="hud-group hud-thermal-group">
+      <summary class="hud-summary">Last Thermal</summary>
+      <div class="hud-thermal-alt"></div>
+      <div class="hud-wind"></div>
+    </details>
   `;
   container.appendChild(hud);
   return hud;
@@ -347,31 +448,48 @@ function windArrowSVG(direction: number): string {
 /** Update HUD content and show it */
 export function updateTrackPointHUD(
   el: HTMLElement,
-  speed: string,
-  detail: string,
-  req?: string,
-  wind?: { direction: number; speedText: string },
+  opts: {
+    pointAlt: string;
+    speed: string;
+    altChange: string;
+    req?: string;
+    thermal?: { maxAlt: string; maxAltTime: string; wind?: { direction: number; speedText: string } };
+  },
 ): void {
+  const altEl = el.querySelector('.hud-alt') as HTMLElement;
   const speedEl = el.querySelector('.hud-speed') as HTMLElement;
-  const detailEl = el.querySelector('.hud-detail') as HTMLElement;
   const reqEl = el.querySelector('.hud-req') as HTMLElement;
+  const thermalDivider = el.querySelector('.hud-thermal-divider') as HTMLElement;
+  const thermalGroup = el.querySelector('.hud-thermal-group') as HTMLElement;
+  const thermalAltEl = el.querySelector('.hud-thermal-alt') as HTMLElement;
   const windEl = el.querySelector('.hud-wind') as HTMLElement;
 
-  speedEl.innerHTML = `${CROSSHAIR_HUD_SVG}${speed}`;
-  detailEl.textContent = detail;
+  altEl.textContent = opts.pointAlt;
+  speedEl.textContent = `${opts.speed}  ${opts.altChange}`;
 
-  if (req) {
-    reqEl.textContent = req;
+  if (opts.req) {
+    reqEl.textContent = opts.req;
     reqEl.style.display = '';
   } else {
     reqEl.textContent = '';
     reqEl.style.display = 'none';
   }
 
-  if (wind) {
-    windEl.innerHTML = `${windArrowSVG(wind.direction)}${wind.speedText}`;
-    windEl.style.display = '';
+  if (opts.thermal) {
+    thermalDivider.style.display = '';
+    thermalGroup.style.display = '';
+    thermalAltEl.textContent = `${opts.thermal.maxAlt} at ${opts.thermal.maxAltTime}`;
+
+    if (opts.thermal.wind) {
+      windEl.innerHTML = `${windArrowSVG(opts.thermal.wind.direction)}${opts.thermal.wind.speedText}`;
+      windEl.style.display = '';
+    } else {
+      windEl.innerHTML = '';
+      windEl.style.display = 'none';
+    }
   } else {
+    thermalDivider.style.display = 'none';
+    thermalGroup.style.display = 'none';
     windEl.innerHTML = '';
     windEl.style.display = 'none';
   }

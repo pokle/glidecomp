@@ -18,7 +18,7 @@ import {
   findNearestFixIndex as sharedFindNearestFixIndex,
   createCirclePolygon, createGlideLegend, showGlideLegend as sharedShowGlideLegend,
   createTrackPointHUD, updateTrackPointHUD, hideTrackPointHUD as sharedHideTrackPointHUD,
-  CROSSHAIR_MAP_SVG, estimateWindFromNearbyCircles,
+  CROSSHAIR_MAP_SVG, findLastThermalData,
 } from './map-provider-shared';
 
 // Set MapBox access token from environment variable
@@ -1474,29 +1474,31 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           }
 
           const speed = formatSpeed(metrics.speedMps).withUnit;
-
-          const glideRatio = metrics.glideRatio !== undefined
-            ? `\u2198${metrics.glideRatio.toFixed(0)}:1`
-            : '';
-          const altDiff = formatAltitudeChange(metrics.altitudeDiff).withUnit;
-          const detail = glideRatio ? `${glideRatio}  ${altDiff}` : altDiff;
+          const pointAlt = formatAltitude(fix.gnssAltitude).withUnit;
+          const altChange = formatAltitudeChange(metrics.altitudeDiff).withUnit;
 
           let req: string | undefined;
           if (metrics.requiredGlideRatio !== undefined && metrics.targetName) {
             req = `\u2198${metrics.requiredGlideRatio.toFixed(0)}:1 to ${metrics.targetName}`;
           }
 
-          // Estimate wind from nearby circles
-          let wind: { direction: number; speedText: string } | undefined;
-          const windEst = estimateWindFromNearbyCircles(currentEvents, fixIndex);
-          if (windEst) {
-            wind = {
-              direction: windEst.direction,
-              speedText: formatSpeed(windEst.speed).withUnit,
+          // Last thermal data (wind + max altitude from recent climbing circles)
+          let thermal: { maxAlt: string; maxAltTime: string; wind?: { direction: number; speedText: string } } | undefined;
+          const thermalData = findLastThermalData(currentEvents, currentFixes, fixIndex);
+          if (thermalData) {
+            thermal = {
+              maxAlt: formatAltitude(thermalData.maxAltitude).withUnit,
+              maxAltTime: thermalData.maxAltitudeTime.toLocaleTimeString(),
             };
+            if (thermalData.wind) {
+              thermal.wind = {
+                direction: thermalData.wind.direction,
+                speedText: formatSpeed(thermalData.wind.speed).withUnit,
+              };
+            }
           }
 
-          updateTrackPointHUD(hudElement, speed, detail, req, wind);
+          updateTrackPointHUD(hudElement, { pointAlt, speed, altChange, req, thermal });
         },
 
         hideTrackPointHUD() {
