@@ -2,7 +2,7 @@
  * Handler for GET /api/airscore/task endpoint
  */
 
-import type { Env, AirScoreRawResponse, AirScoreTaskResponse, ErrorResponse } from '../types';
+import { errorResponse, type Env, type AirScoreRawResponse, type AirScoreTaskResponse } from '../types';
 import { getCachedOrFetch, taskCacheKey } from '../cache';
 import { transformAirScoreTask, extractCompetitionInfo, extractFormulaInfo } from '../transforms/task';
 import { extractPilotResults } from '../transforms/pilots';
@@ -50,17 +50,6 @@ function transformResponse(raw: AirScoreRawResponse): AirScoreTaskResponse {
     formula: extractFormulaInfo(raw.formula),
     rawTask: raw.task,
   };
-}
-
-/**
- * Create a JSON error response
- */
-function errorResponse(error: string, code: string, status: number, details?: string): Response {
-  const body: ErrorResponse = { error, code, details };
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
 }
 
 /**

@@ -4,7 +4,7 @@
  * Fetches IGC track files from AirScore and caches them.
  */
 
-import type { Env, ErrorResponse } from '../types';
+import { errorResponse, type Env } from '../types';
 import { getCachedOrFetch, trackCacheKey } from '../cache';
 
 /**
@@ -37,17 +37,6 @@ async function fetchTrackFromAirScore(
   }
 
   return content;
-}
-
-/**
- * Create a JSON error response
- */
-function errorResponse(error: string, code: string, status: number, details?: string): Response {
-  const body: ErrorResponse = { error, code, details };
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
 }
 
 /**

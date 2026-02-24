@@ -186,12 +186,24 @@ function parseERecord(line: string, baseDate: Date): IGCEvent | null {
 }
 
 /**
+ * H record field definitions: [3-letter code, header property name].
+ * Each field matches both the "F"-prefixed (e.g. FPLT) and bare (e.g. PLT) forms.
+ */
+const H_RECORD_FIELDS: [string, keyof Omit<IGCHeader, 'date'>][] = [
+  ['PLT', 'pilot'],
+  ['GTY', 'gliderType'],
+  ['GID', 'gliderId'],
+  ['CID', 'competitionId'],
+  ['CCL', 'competitionClass'],
+];
+
+/**
  * Parse an H record (header)
  */
 function parseHRecord(line: string, header: IGCHeader): void {
   const content = line.substring(1);
 
-  // HFDTE - Date
+  // HFDTE / HDTE - Date (special case: value is not colon-delimited)
   if (content.startsWith('FDTE') || content.startsWith('DTE')) {
     const dateMatch = content.match(/(?:FDTE|DTE)[:\s]*(\d{6})/);
     if (dateMatch) {
@@ -200,49 +212,15 @@ function parseHRecord(line: string, header: IGCHeader): void {
     return;
   }
 
-  // HFPLT - Pilot
-  if (content.startsWith('FPLT') || content.startsWith('PLT')) {
-    const match = content.match(/(?:FPLT|PLT)[^:]*:(.+)/);
-    if (match) {
-      header.pilot = match[1].trim();
+  // All other header fields follow the same pattern: CODE[...]:value
+  for (const [code, field] of H_RECORD_FIELDS) {
+    if (content.startsWith(`F${code}`) || content.startsWith(code)) {
+      const match = content.match(new RegExp(`(?:F${code}|${code})[^:]*:(.+)`));
+      if (match) {
+        header[field] = match[1].trim();
+      }
+      return;
     }
-    return;
-  }
-
-  // HFGTY - Glider Type
-  if (content.startsWith('FGTY') || content.startsWith('GTY')) {
-    const match = content.match(/(?:FGTY|GTY)[^:]*:(.+)/);
-    if (match) {
-      header.gliderType = match[1].trim();
-    }
-    return;
-  }
-
-  // HFGID - Glider ID
-  if (content.startsWith('FGID') || content.startsWith('GID')) {
-    const match = content.match(/(?:FGID|GID)[^:]*:(.+)/);
-    if (match) {
-      header.gliderId = match[1].trim();
-    }
-    return;
-  }
-
-  // HFCID - Competition ID
-  if (content.startsWith('FCID') || content.startsWith('CID')) {
-    const match = content.match(/(?:FCID|CID)[^:]*:(.+)/);
-    if (match) {
-      header.competitionId = match[1].trim();
-    }
-    return;
-  }
-
-  // HFCCL - Competition Class
-  if (content.startsWith('FCCL') || content.startsWith('CCL')) {
-    const match = content.match(/(?:FCCL|CCL)[^:]*:(.+)/);
-    if (match) {
-      header.competitionClass = match[1].trim();
-    }
-    return;
   }
 }
 

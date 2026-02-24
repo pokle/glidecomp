@@ -45,9 +45,3 @@ export function trackCacheKey(trackId: string): string {
   return `airscore:track:${trackId}`;
 }
 
-/**
- * Invalidate cached data for a specific key
- */
-export async function invalidateCache(kv: KVNamespace, key: string): Promise<void> {
-  await kv.delete(key);
-}

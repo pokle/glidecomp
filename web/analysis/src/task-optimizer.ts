@@ -12,7 +12,7 @@
 
 import {
   haversineDistance,
-  calculateBearingRadians as calculateBearing,
+  calculateBearingRadians,
   destinationPoint
 } from './geo';
 
@@ -133,7 +133,7 @@ export function calculateOptimizedTaskLine(task: XCTask): { lat: number; lon: nu
     const tp1 = task.turnpoints[0];
     const tp2 = task.turnpoints[1];
 
-    const bearing = calculateBearing(
+    const bearing = calculateBearingRadians(
       tp1.waypoint.lat,
       tp1.waypoint.lon,
       tp2.waypoint.lat,
@@ -155,7 +155,7 @@ export function calculateOptimizedTaskLine(task: XCTask): { lat: number; lon: nu
     if (i === 0) {
       // First turnpoint: point along line towards next
       const next = task.turnpoints[i + 1];
-      const bearing = calculateBearing(
+      const bearing = calculateBearingRadians(
         tp.waypoint.lat,
         tp.waypoint.lon,
         next.waypoint.lat,
@@ -165,7 +165,7 @@ export function calculateOptimizedTaskLine(task: XCTask): { lat: number; lon: nu
     } else if (i === task.turnpoints.length - 1) {
       // Last turnpoint (goal): entry point on cylinder nearest to previous optimized point
       const prevPoint = path[path.length - 1];
-      const bearing = calculateBearing(
+      const bearing = calculateBearingRadians(
         prevPoint.lat,
         prevPoint.lon,
         tp.waypoint.lat,

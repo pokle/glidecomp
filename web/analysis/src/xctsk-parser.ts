@@ -5,6 +5,10 @@
  * Reference: http://xctrack.org/Competition_Interfaces.html
  */
 
+import { haversineDistance } from './geo';
+import type { IGCTask, IGCTaskPoint } from './igc-parser';
+import { findWaypoint, type WaypointRecord } from './waypoints';
+
 export interface Waypoint {
   name: string;
   description?: string;
@@ -339,11 +343,6 @@ export function getIntermediateTurnpoints(task: XCTask): Turnpoint[] {
   return task.turnpoints.filter(tp => !tp.type);
 }
 
-import { haversineDistance } from './geo';
-
-import type { IGCTask, IGCTaskPoint } from './igc-parser';
-import { findWaypoint, type WaypointRecord } from './waypoints';
-
 /**
  * Default turnpoint radius in meters.
  * IGC files don't specify radius, so we use 400m (standard for paragliding).
@@ -448,9 +447,11 @@ export function igcTaskToXCTask(igcTask: IGCTask, options: IGCTaskConversionOpti
 }
 
 /**
- * Calculate total task distance (optimized route)
+ * Calculate nominal task distance (center-to-center, ignoring cylinder radii).
+ * For the optimized distance that accounts for cylinder edges, use
+ * calculateOptimizedTaskDistance() from task-optimizer.ts.
  */
-export function calculateTaskDistance(task: XCTask): number {
+export function calculateNominalTaskDistance(task: XCTask): number {
   let distance = 0;
   const tps = task.turnpoints;
 

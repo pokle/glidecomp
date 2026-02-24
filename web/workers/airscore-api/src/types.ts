@@ -77,7 +77,7 @@ export interface AirScoreFormula {
   height_bonus: string;
 }
 
-export interface AirScoreMetrics {
+interface AirScoreMetrics {
   'day quality': string;
   dist_quality: string;
   time_quality: string;
@@ -194,4 +194,15 @@ export interface ErrorResponse {
   error: string;
   code: string;
   details?: string;
+}
+
+/**
+ * Create a JSON error response.
+ */
+export function errorResponse(error: string, code: string, status: number, details?: string): Response {
+  const body: ErrorResponse = { error, code, details };
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { parseXCTask, getSSSIndex, getESSIndex, calculateTaskDistance, igcTaskToXCTask } from '../src/xctsk-parser';
+import { parseXCTask, getSSSIndex, getESSIndex, calculateNominalTaskDistance, igcTaskToXCTask } from '../src/xctsk-parser';
 import type { IGCTask } from '../src/igc-parser';
 
 describe('XCTSK Parser', () => {
@@ -340,8 +340,8 @@ describe('XCTSK Parser', () => {
       expect(getESSIndex(task)).toBe(4);
     });
 
-    it('should calculate task distance', () => {
-      const distance = calculateTaskDistance(task);
+    it('should calculate nominal task distance', () => {
+      const distance = calculateNominalTaskDistance(task);
       // Should be > 0 and roughly 100km for this task
       expect(distance).toBeGreaterThan(50000);
       expect(distance).toBeLessThan(200000);
