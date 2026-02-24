@@ -8,17 +8,18 @@
 
 import mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
-import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculatePointMetrics, haversineDistance, calculateBearing, calculateOptimizedTaskLine, getOptimizedSegmentDistances, resolveTurnpointSequence, getSSSIndex, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult } from '@taskscore/analysis';
+import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateOptimizedTaskLine, getOptimizedSegmentDistances, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult } from '@taskscore/analysis';
 import type { MapProvider } from './map-provider';
-import { formatDistance, formatRadius, formatAltitude, formatSpeed, formatAltitudeChange } from './units-browser';
 import { config } from './config';
 import {
-  MAP_FONT_FAMILY, GLIDE_LABEL_SPEED_MIN_ZOOM, GLIDE_LABEL_DETAILS_MIN_ZOOM,
+  MAP_FONT_FAMILY,
   KEY_EVENT_TYPES, getAltitudeColorNormalized,
   findNearestFixIndex as sharedFindNearestFixIndex,
   createCirclePolygon, createGlideLegend, showGlideLegend as sharedShowGlideLegend,
   createTrackPointHUD, updateTrackPointHUD, hideTrackPointHUD as sharedHideTrackPointHUD,
-  CROSSHAIR_MAP_SVG, findLastThermalData,
+  CROSSHAIR_MAP_SVG,
+  buildTrackPointHUDData, buildNextTurnpointContext, ensureTurnpointCache,
+  formatGlideLabel, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement,
 } from './map-provider-shared';
 
 // Set MapBox access token from environment variable
@@ -91,34 +92,13 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       // Turnpoint click callback
       let turnpointClickCallback: ((turnpointIndex: number) => void) | null = null;
 
-      /**
-       * Hide glide speed labels when zoomed out to prevent overlap clutter.
-       */
+      /** Hide glide speed labels when zoomed out to prevent overlap clutter. */
       function updateGlideLabelVisibility(): void {
         const zoom = map.getZoom();
         for (const marker of activeMarkers) {
           const el = marker.getElement();
           if (el.dataset.glideLabel === 'true') {
-            const speed = el.dataset.speedLabel || '';
-            const details = el.dataset.detailLabel || '';
-            const req = el.dataset.reqLabel || '';
-
-            // Far zoom: hide labels (chevrons remain visible)
-            if (zoom < GLIDE_LABEL_SPEED_MIN_ZOOM) {
-              el.style.display = 'none';
-              continue;
-            }
-
-            el.style.display = '';
-
-            // Mid zoom: show speed only. Close zoom: show full details + required GR.
-            if (zoom < GLIDE_LABEL_DETAILS_MIN_ZOOM) {
-              el.innerHTML = speed;
-            } else {
-              let html = details ? `${speed}<br>${details}` : speed;
-              if (req) html += `<br>${req}`;
-              el.innerHTML = html;
-            }
+            updateGlideLabelElement(el, zoom);
           }
         }
       }
@@ -149,42 +129,17 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       function getNextTurnpointContext(glideStartTime: number): GlideContext | undefined {
         if (!currentTask || currentFixes.length === 0) return undefined;
 
-        // Lazily compute and cache sequence result
-        if (!cachedSequenceResult) {
-          cachedSequenceResult = resolveTurnpointSequence(currentTask, currentFixes);
-        }
-        if (!cachedOptimizedPath) {
-          cachedOptimizedPath = calculateOptimizedTaskLine(currentTask);
-        }
+        const cache = ensureTurnpointCache(currentTask, currentFixes, {
+          sequenceResult: cachedSequenceResult,
+          optimizedPath: cachedOptimizedPath,
+        });
+        cachedSequenceResult = cache.sequenceResult;
+        cachedOptimizedPath = cache.optimizedPath;
 
-        const sequence = cachedSequenceResult.sequence;
-
-        // Find last reaching with time <= glideStartTime
-        let nextTaskIndex: number;
-        const lastReached = sequence.filter(r => r.time.getTime() <= glideStartTime);
-        if (lastReached.length > 0) {
-          nextTaskIndex = lastReached[lastReached.length - 1].taskIndex + 1;
-        } else {
-          // No TP reached yet — next is SSS
-          nextTaskIndex = getSSSIndex(currentTask);
-          if (nextTaskIndex < 0) return undefined;
-        }
-
-        // Bounds check
-        if (nextTaskIndex >= currentTask.turnpoints.length) return undefined;
-
-        const tp = currentTask.turnpoints[nextTaskIndex];
-
-        // Use optimized path point for the target position
-        const targetLat = cachedOptimizedPath[nextTaskIndex]?.lat ?? tp.waypoint.lat;
-        const targetLon = cachedOptimizedPath[nextTaskIndex]?.lon ?? tp.waypoint.lon;
-
-        const altitude = getElevationAtPoint(targetLat, targetLon, tp.waypoint.altSmoothed);
-        if (altitude == null) return undefined;
-
-        return {
-          nextTurnpoint: { lat: targetLat, lon: targetLon, altitude, name: tp.waypoint.name || `TP${nextTaskIndex + 1}` },
-        };
+        return buildNextTurnpointContext(
+          currentTask, currentFixes, cache.sequenceResult, cache.optimizedPath,
+          glideStartTime, getElevationAtPoint,
+        );
       }
 
       /**
@@ -1077,37 +1032,18 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
           // Create segment distance labels
           const segmentDistances = getOptimizedSegmentDistances(task);
-          const segmentLabelFeatures = [];
-          for (let i = 0; i < optimizedPath.length - 1; i++) {
-            const p1 = optimizedPath[i];
-            const p2 = optimizedPath[i + 1];
-            const distance = segmentDistances[i];
-
-            const midLon = (p1.lon + p2.lon) / 2;
-            const midLat = (p1.lat + p2.lat) / 2;
-
-            // Calculate bearing for text rotation
-            // Subtract 90 because MapBox text-rotate is relative to horizontal (0=left-to-right)
-            // while geographic bearing is relative to north (0=up)
-            let bearing = calculateBearing(p1.lat, p1.lon, p2.lat, p2.lon) - 90;
-
-            // Normalize to -90 to 90 range so text is never upside down
-            const bearingNormalized = (bearing > 90) ? bearing - 180 : ((bearing < -90) ? bearing + 180 : bearing);
-            const distanceStr = formatDistance(distance, { decimals: 1 }).withUnit;
-
-            const legNumber = i + 1;
-            segmentLabelFeatures.push({
-              type: 'Feature' as const,
-              properties: {
-                distance: `Leg ${legNumber} (${distanceStr})`,
-                bearing: bearingNormalized,
-              },
-              geometry: {
-                type: 'Point' as const,
-                coordinates: [midLon, midLat],
-              },
-            });
-          }
+          const segmentLabels = computeSegmentLabels(optimizedPath, segmentDistances);
+          const segmentLabelFeatures = segmentLabels.map(label => ({
+            type: 'Feature' as const,
+            properties: {
+              distance: label.text,
+              bearing: label.bearing,
+            },
+            geometry: {
+              type: 'Point' as const,
+              coordinates: [label.midLon, label.midLat],
+            },
+          }));
 
           (map.getSource('task-segment-labels') as mapboxgl.GeoJSONSource)?.setData({
             type: 'FeatureCollection',
@@ -1115,31 +1051,18 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           });
 
           // Create turnpoint markers
-          const pointFeatures = task.turnpoints.map((tp, idx) => {
-            const name = tp.waypoint.name || `TP${idx + 1}`;
-            const radiusStr = formatRadius(tp.radius).withUnit;
-            const altitude = tp.waypoint.altSmoothed ? `A\u00A0${formatAltitude(tp.waypoint.altSmoothed).withUnit}` : '';
-            const role = tp.type || '';
-
-            // Build label: "NAME, R Xkm, A Ym, ROLE" (with non-breaking spaces)
-            const labelParts = [name, `R\u00A0${radiusStr}`];
-            if (altitude) labelParts.push(altitude);
-            if (role) labelParts.push(role);
-            const label = labelParts.join(', ');
-
-            return {
-              type: 'Feature' as const,
-              properties: {
-                name: label,
-                type: tp.type || '',
-                radius: tp.radius,
-              },
-              geometry: {
-                type: 'Point' as const,
-                coordinates: [tp.waypoint.lon, tp.waypoint.lat],
-              },
-            };
-          });
+          const pointFeatures = task.turnpoints.map((tp, idx) => ({
+            type: 'Feature' as const,
+            properties: {
+              name: formatTurnpointLabel(tp, idx),
+              type: tp.type || '',
+              radius: tp.radius,
+            },
+            geometry: {
+              type: 'Point' as const,
+              coordinates: [tp.waypoint.lon, tp.waypoint.lat],
+            },
+          }));
 
           (map.getSource('task-points') as mapboxgl.GeoJSONSource)?.setData({
             type: 'FeatureCollection',
@@ -1288,7 +1211,8 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
                 for (const marker of glideMarkers) {
                   if (marker.type === 'speed-label') {
-                    // Create speed label with glide ratio and altitude
+                    const { speed, detailText, reqText } = formatGlideLabel(marker);
+
                     const labelEl = document.createElement('div');
                     labelEl.style.cssText = `
                       font-family: ${MAP_FONT_FAMILY};
@@ -1300,24 +1224,6 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
                       text-align: center;
                       line-height: 1.3;
                     `;
-
-                    // Format the label content using units module
-                    const speed = formatSpeed(marker.speedMps || 0).withUnit;
-                    const glideRatio = marker.glideRatio !== undefined
-                      ? `\u2198${marker.glideRatio.toFixed(0)}:1`
-                      : '\u2198\u221E:1'; // Infinite glide ratio if climbing or level
-                    const altDiff = marker.altitudeDiff !== undefined
-                      ? formatAltitudeChange(marker.altitudeDiff).withUnit
-                      : '';
-
-                    const detailText = `${glideRatio} ${altDiff}`.trim();
-
-                    // Build required GR line if available
-                    let reqText = '';
-                    if (marker.requiredGlideRatio !== undefined && marker.targetName) {
-                      reqText = `\u2198${marker.requiredGlideRatio.toFixed(0)}:1 to ${marker.targetName}`;
-                    }
-
                     labelEl.innerHTML = reqText
                       ? `${speed}<br>${detailText}<br>${reqText}`
                       : `${speed}<br>${detailText}`;
@@ -1493,13 +1399,8 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         },
 
         showTrackPointHUD(fixIndex: number) {
-          if (currentFixes.length === 0) return;
-
-          const fix = currentFixes[fixIndex];
-          const glideStartTime = fix.time.getTime();
-          const glideContext = getNextTurnpointContext(glideStartTime);
-          const metrics = calculatePointMetrics(currentFixes, fixIndex, 1000, glideContext);
-          if (!metrics) return;
+          const data = buildTrackPointHUDData(currentFixes, currentEvents, fixIndex, getNextTurnpointContext);
+          if (!data) return;
 
           // Hide glide legend (same position as HUD)
           showGlideLegend(false);
@@ -1509,7 +1410,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           crosshairEl.innerHTML = CROSSHAIR_MAP_SVG;
           crosshairEl.style.pointerEvents = 'none';
           const crosshairMarker = new mapboxgl.Marker({ element: crosshairEl })
-            .setLngLat([fix.longitude, fix.latitude])
+            .setLngLat([data.fix.longitude, data.fix.latitude])
             .addTo(map);
           activeMarkers.push(crosshairMarker);
 
@@ -1517,34 +1418,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           if (!hudElement) {
             hudElement = createTrackPointHUD(container);
           }
-
-          const speed = formatSpeed(metrics.speedMps).withUnit;
-          const pointAlt = formatAltitude(fix.gnssAltitude).withUnit;
-          const pointTime = fix.time.toLocaleTimeString();
-          const altChange = formatAltitudeChange(metrics.altitudeDiff).withUnit;
-
-          let req: string | undefined;
-          if (metrics.requiredGlideRatio !== undefined && metrics.targetName) {
-            req = `\u2198${metrics.requiredGlideRatio.toFixed(0)}:1 to ${metrics.targetName}`;
-          }
-
-          // Last thermal data (wind + max altitude from recent climbing circles)
-          let thermal: { maxAlt: string; maxAltTime: string; wind?: { direction: number; speedText: string } } | undefined;
-          const thermalData = findLastThermalData(currentEvents, currentFixes, fixIndex);
-          if (thermalData) {
-            thermal = {
-              maxAlt: formatAltitude(thermalData.maxAltitude).withUnit,
-              maxAltTime: thermalData.maxAltitudeTime.toLocaleTimeString(),
-            };
-            if (thermalData.wind) {
-              thermal.wind = {
-                direction: thermalData.wind.direction,
-                speedText: formatSpeed(thermalData.wind.speed).withUnit,
-              };
-            }
-          }
-
-          updateTrackPointHUD(hudElement, { pointAlt, pointTime, speed, altChange, req, thermal });
+          updateTrackPointHUD(hudElement, data);
         },
 
         hideTrackPointHUD() {

@@ -5,7 +5,14 @@
  * can reuse the same constants, color functions, geometry helpers, and DOM builders.
  */
 
-import { haversineDistance, getCirclePoints, type IGCFix, type FlightEvent } from '@taskscore/analysis';
+import {
+  haversineDistance, getCirclePoints, calculateBearing, calculatePointMetrics,
+  calculateOptimizedTaskLine, getOptimizedSegmentDistances,
+  resolveTurnpointSequence, getSSSIndex,
+  type IGCFix, type FlightEvent, type XCTask, type Turnpoint,
+  type GlideContext, type GlideMarker, type TurnpointSequenceResult,
+} from '@taskscore/analysis';
+import { formatDistance, formatRadius, formatAltitude, formatSpeed, formatAltitudeChange } from './units-browser';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -512,4 +519,234 @@ export function createCirclePolygonLatLng(
 ): [number, number][] {
   const points = getCirclePoints(centerLat, centerLon, radiusMeters, numPoints);
   return points.map(p => [p.lat, p.lon]);
+}
+
+// ── Shared business logic ────────────────────────────────────────────────
+// Pure functions extracted from MapBox/Leaflet providers to eliminate duplication.
+// Each provider calls these, then applies the result using its own map API.
+
+// ── buildTrackPointHUDData ──────────────────────────────────────────────
+
+export interface TrackPointHUDData {
+  fix: IGCFix;
+  speed: string;
+  pointAlt: string;
+  pointTime: string;
+  altChange: string;
+  req?: string;
+  thermal?: { maxAlt: string; maxAltTime: string; wind?: { direction: number; speedText: string } };
+}
+
+/**
+ * Compute all data needed for the track-point HUD display.
+ * Returns null if metrics can't be calculated (e.g., insufficient fixes).
+ */
+export function buildTrackPointHUDData(
+  fixes: IGCFix[],
+  events: FlightEvent[],
+  fixIndex: number,
+  getNextTurnpointContext: (time: number) => GlideContext | undefined,
+): TrackPointHUDData | null {
+  if (fixes.length === 0) return null;
+
+  const fix = fixes[fixIndex];
+  const glideStartTime = fix.time.getTime();
+  const glideContext = getNextTurnpointContext(glideStartTime);
+  const metrics = calculatePointMetrics(fixes, fixIndex, 1000, glideContext);
+  if (!metrics) return null;
+
+  const speed = formatSpeed(metrics.speedMps).withUnit;
+  const pointAlt = formatAltitude(fix.gnssAltitude).withUnit;
+  const pointTime = fix.time.toLocaleTimeString();
+  const altChange = formatAltitudeChange(metrics.altitudeDiff).withUnit;
+
+  let req: string | undefined;
+  if (metrics.requiredGlideRatio !== undefined && metrics.targetName) {
+    req = `\u2198${metrics.requiredGlideRatio.toFixed(0)}:1 to ${metrics.targetName}`;
+  }
+
+  let thermal: TrackPointHUDData['thermal'];
+  const thermalData = findLastThermalData(events, fixes, fixIndex);
+  if (thermalData) {
+    thermal = {
+      maxAlt: formatAltitude(thermalData.maxAltitude).withUnit,
+      maxAltTime: thermalData.maxAltitudeTime.toLocaleTimeString(),
+    };
+    if (thermalData.wind) {
+      thermal.wind = {
+        direction: thermalData.wind.direction,
+        speedText: formatSpeed(thermalData.wind.speed).withUnit,
+      };
+    }
+  }
+
+  return { fix, speed, pointAlt, pointTime, altChange, req, thermal };
+}
+
+// ── buildNextTurnpointContext ────────────────────────────────────────────
+
+/**
+ * Resolve the next turnpoint context for glide calculations.
+ * The `resolveAltitude` callback lets each provider supply altitude differently:
+ *   - MapBox queries terrain elevation, falling back to altSmoothed
+ *   - Leaflet uses altSmoothed directly
+ */
+export function buildNextTurnpointContext(
+  task: XCTask,
+  fixes: IGCFix[],
+  sequenceResult: TurnpointSequenceResult,
+  optimizedPath: Array<{ lat: number; lon: number }>,
+  glideStartTime: number,
+  resolveAltitude: (lat: number, lon: number, altSmoothed: number | undefined) => number | null,
+): GlideContext | undefined {
+  const sequence = sequenceResult.sequence;
+
+  // Find last reaching with time <= glideStartTime
+  let nextTaskIndex: number;
+  const lastReached = sequence.filter(r => r.time.getTime() <= glideStartTime);
+  if (lastReached.length > 0) {
+    nextTaskIndex = lastReached[lastReached.length - 1].taskIndex + 1;
+  } else {
+    // No TP reached yet — next is SSS
+    nextTaskIndex = getSSSIndex(task);
+    if (nextTaskIndex < 0) return undefined;
+  }
+
+  // Bounds check
+  if (nextTaskIndex >= task.turnpoints.length) return undefined;
+
+  const tp = task.turnpoints[nextTaskIndex];
+
+  // Use optimized path point for the target position
+  const targetLat = optimizedPath[nextTaskIndex]?.lat ?? tp.waypoint.lat;
+  const targetLon = optimizedPath[nextTaskIndex]?.lon ?? tp.waypoint.lon;
+
+  const altitude = resolveAltitude(targetLat, targetLon, tp.waypoint.altSmoothed);
+  if (altitude == null) return undefined;
+
+  return {
+    nextTurnpoint: { lat: targetLat, lon: targetLon, altitude, name: tp.waypoint.name || `TP${nextTaskIndex + 1}` },
+  };
+}
+
+/**
+ * Ensure cached sequence result and optimized path are computed.
+ * Returns the pair, computing lazily if needed.
+ */
+export function ensureTurnpointCache(
+  task: XCTask,
+  fixes: IGCFix[],
+  cached: { sequenceResult: TurnpointSequenceResult | null; optimizedPath: { lat: number; lon: number }[] | null },
+): { sequenceResult: TurnpointSequenceResult; optimizedPath: { lat: number; lon: number }[] } {
+  if (!cached.sequenceResult) {
+    cached.sequenceResult = resolveTurnpointSequence(task, fixes);
+  }
+  if (!cached.optimizedPath) {
+    cached.optimizedPath = calculateOptimizedTaskLine(task);
+  }
+  return { sequenceResult: cached.sequenceResult, optimizedPath: cached.optimizedPath };
+}
+
+// ── formatGlideLabel ────────────────────────────────────────────────────
+
+export interface FormattedGlideLabel {
+  speed: string;
+  detailText: string;
+  reqText: string;
+}
+
+/** Format a glide marker's data into display strings for speed, detail, and required GR. */
+export function formatGlideLabel(marker: GlideMarker): FormattedGlideLabel {
+  const speed = formatSpeed(marker.speedMps || 0).withUnit;
+  const glideRatio = marker.glideRatio !== undefined
+    ? `\u2198${marker.glideRatio.toFixed(0)}:1`
+    : '\u2198\u221E:1';
+  const altDiff = marker.altitudeDiff !== undefined
+    ? formatAltitudeChange(marker.altitudeDiff).withUnit
+    : '';
+  const detailText = `${glideRatio} ${altDiff}`.trim();
+
+  let reqText = '';
+  if (marker.requiredGlideRatio !== undefined && marker.targetName) {
+    reqText = `\u2198${marker.requiredGlideRatio.toFixed(0)}:1 to ${marker.targetName}`;
+  }
+
+  return { speed, detailText, reqText };
+}
+
+// ── formatTurnpointLabel ────────────────────────────────────────────────
+
+/** Build the display label for a turnpoint: "NAME, R Xkm, A Ym, ROLE" */
+export function formatTurnpointLabel(tp: Turnpoint, index: number): string {
+  const name = tp.waypoint.name || `TP${index + 1}`;
+  const radiusStr = formatRadius(tp.radius).withUnit;
+  const altitude = tp.waypoint.altSmoothed ? `A\u00A0${formatAltitude(tp.waypoint.altSmoothed).withUnit}` : '';
+  const role = tp.type || '';
+
+  const labelParts = [name, `R\u00A0${radiusStr}`];
+  if (altitude) labelParts.push(altitude);
+  if (role) labelParts.push(role);
+  return labelParts.join(', ');
+}
+
+// ── computeSegmentLabels ────────────────────────────────────────────────
+
+export interface SegmentLabelData {
+  midLat: number;
+  midLon: number;
+  bearing: number;
+  text: string;
+}
+
+/** Compute segment midpoints, bearings (normalized so text is never upside down), and distance labels. */
+export function computeSegmentLabels(
+  optimizedPath: Array<{ lat: number; lon: number }>,
+  segmentDistances: number[],
+): SegmentLabelData[] {
+  const labels: SegmentLabelData[] = [];
+  for (let i = 0; i < optimizedPath.length - 1; i++) {
+    const p1 = optimizedPath[i];
+    const p2 = optimizedPath[i + 1];
+    const distance = segmentDistances[i];
+
+    const midLat = (p1.lat + p2.lat) / 2;
+    const midLon = (p1.lon + p2.lon) / 2;
+
+    // Subtract 90: MapBox/CSS text-rotate is relative to horizontal, bearing is relative to north
+    let bearing = calculateBearing(p1.lat, p1.lon, p2.lat, p2.lon) - 90;
+    // Normalize to -90..90 so text is never upside down
+    if (bearing > 90) bearing -= 180;
+    else if (bearing < -90) bearing += 180;
+
+    const distStr = formatDistance(distance, { decimals: 1 }).withUnit;
+    const legNumber = i + 1;
+    const text = `Leg ${legNumber} (${distStr})`;
+
+    labels.push({ midLat, midLon, bearing, text });
+  }
+  return labels;
+}
+
+// ── updateGlideLabelElement ─────────────────────────────────────────────
+
+/** Apply zoom-dependent display logic to a single glide-label element. */
+export function updateGlideLabelElement(el: HTMLElement, zoom: number): void {
+  const speed = el.dataset.speedLabel || '';
+  const details = el.dataset.detailLabel || '';
+  const req = el.dataset.reqLabel || '';
+
+  if (zoom < GLIDE_LABEL_SPEED_MIN_ZOOM) {
+    el.style.display = 'none';
+    return;
+  }
+
+  el.style.display = '';
+
+  if (zoom < GLIDE_LABEL_DETAILS_MIN_ZOOM) {
+    el.innerHTML = speed;
+  } else {
+    let html = details ? `${speed}<br>${details}` : speed;
+    if (req) html += `<br>${req}`;
+    el.innerHTML = html;
+  }
 }

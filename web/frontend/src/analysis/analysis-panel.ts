@@ -5,11 +5,8 @@
  * Provides a unified interface for flight analysis data.
  */
 
-import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, type FlightEvent, type FlightEventType, type XCTask, type TurnpointSequenceResult } from '@taskscore/analysis';
+import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, extractGlides, extractClimbs, extractSinks, type FlightEvent, type FlightEventType, type XCTask, type TurnpointSequenceResult, type GlideData, type ClimbData, type SinkData } from '@taskscore/analysis';
 import { formatAltitude, formatSpeed, formatDistance, formatClimbRate } from './units-browser';
-import { extractGlides, type GlideData } from './glide-extractor';
-import { extractClimbs, type ClimbData } from './climb-extractor';
-import { extractSinks, type SinkData } from './sink-extractor';
 
 /**
  * Unified panel tabs
@@ -568,27 +565,6 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   }
 
   /**
-   * Extract combined glide data
-   */
-  function extractGlidesLocal(): GlideData[] {
-    return extractGlides(allEvents);
-  }
-
-  /**
-   * Extract combined climb data
-   */
-  function extractClimbsLocal(): ClimbData[] {
-    return extractClimbs(allEvents);
-  }
-
-  /**
-   * Extract sink data
-   */
-  function extractSinksLocal(): SinkData[] {
-    return extractSinks(allEvents);
-  }
-
-  /**
    * Main render function for track panel
    */
   function renderTrack(): void {
@@ -679,7 +655,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
    * Render glides list
    */
   function renderGlides(): void {
-    const glides = extractGlidesLocal();
+    const glides = extractGlides(allEvents);
 
     if (glides.length === 0) {
       listContainer.innerHTML = `
@@ -763,7 +739,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
    * Render climbs list
    */
   function renderClimbs(): void {
-    const climbs = extractClimbsLocal();
+    const climbs = extractClimbs(allEvents);
 
     if (climbs.length === 0) {
       listContainer.innerHTML = `
@@ -843,7 +819,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
    * Render sinks list
    */
   function renderSinks(): void {
-    const sinks = extractSinksLocal();
+    const sinks = extractSinks(allEvents);
 
     if (sinks.length === 0) {
       listContainer.innerHTML = `
@@ -1273,13 +1249,13 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     let matchingEvent: FlightEvent | null = null;
 
     if (currentTab === 'glides') {
-      const glides = extractGlidesLocal();
+      const glides = extractGlides(allEvents);
       matchingEvent = findNearestSegmentEvent(fixIndex, glides);
     } else if (currentTab === 'climbs') {
-      const climbs = extractClimbsLocal();
+      const climbs = extractClimbs(allEvents);
       matchingEvent = findNearestSegmentEvent(fixIndex, climbs);
     } else if (currentTab === 'sinks') {
-      const sinks = extractSinksLocal();
+      const sinks = extractSinks(allEvents);
       matchingEvent = findNearestSegmentEvent(fixIndex, sinks);
     } else if (currentTab === 'events') {
       // For the events tab, find the nearest event by fixIndex or segment

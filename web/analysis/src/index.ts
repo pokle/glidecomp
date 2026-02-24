@@ -9,3 +9,4 @@ export { formatUnit, formatSpeed, formatAltitude, formatAltitudeChange, formatDi
 export { calculateGlidePositions, calculateGlideMarkers, calculateTotalGlideDistance, calculatePointMetrics, type ChevronPosition, type GlideMarker, type GlideContext, type GlideContextResolver, type PointMetrics } from './glide-speed';
 export { resolveTurnpointSequence, detectCylinderCrossings, type TurnpointSequenceResult, type CylinderCrossing, type TurnpointReaching, type BestProgress, type LegDistance } from './turnpoint-sequence';
 export { detectCircles, computeBearingRates, fitCircleLeastSquares, normalizeBearingDelta, type CircleSegment, type CirclingSegment, type FittedCircle, type WindEstimate, type CircleDetectionResult, type TurnDirection } from './circle-detector';
+export { extractGlides, extractClimbs, extractSinks, type GlideData, type ClimbData, type SinkData, type GlideEventDetails, type ClimbEventDetails } from './segment-extractors';

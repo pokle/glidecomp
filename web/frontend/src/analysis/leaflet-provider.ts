@@ -12,23 +12,23 @@ import {
   type LatLngExpression, type LeafletMouseEvent,
 } from 'leaflet';
 import {
-  getBoundingBox, getEventStyle, calculateGlideMarkers, calculatePointMetrics, getCirclePoints,
+  getBoundingBox, getEventStyle, calculateGlideMarkers,
   calculateOptimizedTaskLine, getOptimizedSegmentDistances,
   calculateBearing, haversineDistance, destinationPoint, calculateBearingRadians,
-  resolveTurnpointSequence, getSSSIndex,
   type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult,
 } from '@taskscore/analysis';
 import type { MapProvider } from './map-provider';
-import { formatDistance, formatRadius, formatAltitude, formatSpeed, formatAltitudeChange } from './units-browser';
 import { config } from './config';
 import {
-  MAP_FONT_FAMILY, GLIDE_LABEL_SPEED_MIN_ZOOM, GLIDE_LABEL_DETAILS_MIN_ZOOM,
+  MAP_FONT_FAMILY,
   TRACK_COLOR, TRACK_OUTLINE_COLOR, HIGHLIGHT_COLOR, TASK_COLOR,
   getTurnpointColor, KEY_EVENT_TYPES, getAltitudeColorNormalized,
   findNearestFixIndex, createGlideLegend, showGlideLegend,
   createCirclePolygonLatLng,
   createTrackPointHUD, updateTrackPointHUD, hideTrackPointHUD as sharedHideTrackPointHUD,
-  CROSSHAIR_MAP_SVG, findLastThermalData,
+  CROSSHAIR_MAP_SVG,
+  buildTrackPointHUDData, buildNextTurnpointContext, ensureTurnpointCache,
+  formatGlideLabel, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement,
 } from './map-provider-shared';
 
 // Tile layer definitions
@@ -256,22 +256,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
         if (layer instanceof Marker) {
           const el = layer.getElement();
           if (el?.dataset.glideLabel === 'true') {
-            const speed = el.dataset.speedLabel || '';
-            const details = el.dataset.detailLabel || '';
-            const req = el.dataset.reqLabel || '';
-
-            if (z < GLIDE_LABEL_SPEED_MIN_ZOOM) {
-              el.style.display = 'none';
-              return;
-            }
-            el.style.display = '';
-            if (z < GLIDE_LABEL_DETAILS_MIN_ZOOM) {
-              el.innerHTML = speed;
-            } else {
-              let html = details ? `${speed}<br>${details}` : speed;
-              if (req) html += `<br>${req}`;
-              el.innerHTML = html;
-            }
+            updateGlideLabelElement(el, z);
           }
         }
       });
@@ -288,33 +273,17 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
     function getNextTurnpointContext(glideStartTime: number): GlideContext | undefined {
       if (!currentTask || currentFixes.length === 0) return undefined;
 
-      if (!cachedSequenceResult) {
-        cachedSequenceResult = resolveTurnpointSequence(currentTask, currentFixes);
-      }
-      if (!cachedOptimizedPath) {
-        cachedOptimizedPath = calculateOptimizedTaskLine(currentTask);
-      }
+      const cache = ensureTurnpointCache(currentTask, currentFixes, {
+        sequenceResult: cachedSequenceResult,
+        optimizedPath: cachedOptimizedPath,
+      });
+      cachedSequenceResult = cache.sequenceResult;
+      cachedOptimizedPath = cache.optimizedPath;
 
-      const sequence = cachedSequenceResult.sequence;
-      let nextTaskIndex: number;
-      const lastReached = sequence.filter(r => r.time.getTime() <= glideStartTime);
-      if (lastReached.length > 0) {
-        nextTaskIndex = lastReached[lastReached.length - 1].taskIndex + 1;
-      } else {
-        nextTaskIndex = getSSSIndex(currentTask);
-        if (nextTaskIndex < 0) return undefined;
-      }
-
-      if (nextTaskIndex >= currentTask.turnpoints.length) return undefined;
-
-      const tp = currentTask.turnpoints[nextTaskIndex];
-      const altitude = tp.waypoint.altSmoothed;
-      if (altitude == null) return undefined;
-
-      const targetLat = cachedOptimizedPath[nextTaskIndex]?.lat ?? tp.waypoint.lat;
-      const targetLon = cachedOptimizedPath[nextTaskIndex]?.lon ?? tp.waypoint.lon;
-
-      return { nextTurnpoint: { lat: targetLat, lon: targetLon, altitude, name: tp.waypoint.name || `TP${nextTaskIndex + 1}` } };
+      return buildNextTurnpointContext(
+        currentTask, currentFixes, cache.sequenceResult, cache.optimizedPath,
+        glideStartTime, (_lat, _lon, alt) => alt ?? null,
+      );
     }
 
     function clearEventHighlights(): void {
@@ -611,14 +580,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
           });
 
           // Label
-          const name = tp.waypoint.name || `TP${idx + 1}`;
-          const radiusStr = formatRadius(tp.radius).withUnit;
-          const altitude = tp.waypoint.altSmoothed ? `A\u00A0${formatAltitude(tp.waypoint.altSmoothed).withUnit}` : '';
-          const role = tp.type || '';
-          const labelParts = [name, `R\u00A0${radiusStr}`];
-          if (altitude) labelParts.push(altitude);
-          if (role) labelParts.push(role);
-          const label = labelParts.join(', ');
+          const label = formatTurnpointLabel(tp, idx);
 
           const labelIcon = new DivIcon({
             html: `<div style="
@@ -650,25 +612,11 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
 
         // Segment distance labels
         const segmentDistances = getOptimizedSegmentDistances(task);
-        for (let i = 0; i < optimizedPath.length - 1; i++) {
-          const p1 = optimizedPath[i];
-          const p2 = optimizedPath[i + 1];
-          const distance = segmentDistances[i];
-
-          const midLat = (p1.lat + p2.lat) / 2;
-          const midLon = (p1.lon + p2.lon) / 2;
-
-          let bearing = calculateBearing(p1.lat, p1.lon, p2.lat, p2.lon) - 90;
-          // Normalize to -90..90 so text is never upside down
-          if (bearing > 90) bearing -= 180;
-          else if (bearing < -90) bearing += 180;
-
-          const distStr = formatDistance(distance, { decimals: 1 }).withUnit;
-          const legNumber = i + 1;
-
+        const segmentLabels = computeSegmentLabels(optimizedPath, segmentDistances);
+        for (const sl of segmentLabels) {
           const labelIcon = new DivIcon({
             html: `<div style="
-              transform: rotate(${bearing}deg);
+              transform: rotate(${sl.bearing}deg);
               font-family: ${MAP_FONT_FAMILY};
               font-size: 16px;
               font-weight: 600;
@@ -676,14 +624,14 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
               white-space: nowrap;
               text-shadow: -1px -1px 0 #eee, 1px -1px 0 #eee, -1px 1px 0 #eee, 1px 1px 0 #eee;
               text-align: center;
-            ">Leg ${legNumber} (${distStr})</div>`,
+            ">${sl.text}</div>`,
             className: '',
             iconSize: [0, 0],
             iconAnchor: [0, 0],
           });
 
           taskGroup.addLayer(
-            new Marker([midLat, midLon], { icon: labelIcon, interactive: false })
+            new Marker([sl.midLat, sl.midLon], { icon: labelIcon, interactive: false })
           );
         }
 
@@ -786,20 +734,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
 
               for (const gm of glideMarkers) {
                 if (gm.type === 'speed-label') {
-                  const speed = formatSpeed(gm.speedMps || 0).withUnit;
-                  const glideRatio = gm.glideRatio !== undefined
-                    ? `\u2198${gm.glideRatio.toFixed(0)}:1`
-                    : '\u2198\u221E:1';
-                  const altDiff = gm.altitudeDiff !== undefined
-                    ? formatAltitudeChange(gm.altitudeDiff).withUnit
-                    : '';
-                  const detailText = `${glideRatio} ${altDiff}`.trim();
-
-                  // Build required GR line if available
-                  let reqText = '';
-                  if (gm.requiredGlideRatio !== undefined && gm.targetName) {
-                    reqText = `\u2198${gm.requiredGlideRatio.toFixed(0)}:1 to ${gm.targetName}`;
-                  }
+                  const { speed, detailText, reqText } = formatGlideLabel(gm);
 
                   const labelEl = document.createElement('div');
                   labelEl.style.cssText = `
@@ -947,13 +882,8 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
       },
 
       showTrackPointHUD(fixIndex: number) {
-        if (currentFixes.length === 0) return;
-
-        const fix = currentFixes[fixIndex];
-        const glideStartTime = fix.time.getTime();
-        const glideContext = getNextTurnpointContext(glideStartTime);
-        const metrics = calculatePointMetrics(currentFixes, fixIndex, 1000, glideContext);
-        if (!metrics) return;
+        const data = buildTrackPointHUDData(currentFixes, currentEvents, fixIndex, getNextTurnpointContext);
+        if (!data) return;
 
         // Hide glide legend (same position as HUD)
         showGlideLegend(glideLegendElement, false);
@@ -966,41 +896,14 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
           iconAnchor: [12, 12],
         });
         highlightGroup.addLayer(
-          new Marker([fix.latitude, fix.longitude], { icon: crosshairIcon, interactive: false })
+          new Marker([data.fix.latitude, data.fix.longitude], { icon: crosshairIcon, interactive: false })
         );
 
         // Show HUD
         if (!hudElement) {
           hudElement = createTrackPointHUD(container);
         }
-
-        const speed = formatSpeed(metrics.speedMps).withUnit;
-        const pointAlt = formatAltitude(fix.gnssAltitude).withUnit;
-        const pointTime = fix.time.toLocaleTimeString();
-        const altChange = formatAltitudeChange(metrics.altitudeDiff).withUnit;
-
-        let req: string | undefined;
-        if (metrics.requiredGlideRatio !== undefined && metrics.targetName) {
-          req = `\u2198${metrics.requiredGlideRatio.toFixed(0)}:1 to ${metrics.targetName}`;
-        }
-
-        // Last thermal data (wind + max altitude from recent climbing circles)
-        let thermal: { maxAlt: string; maxAltTime: string; wind?: { direction: number; speedText: string } } | undefined;
-        const thermalData = findLastThermalData(currentEvents, currentFixes, fixIndex);
-        if (thermalData) {
-          thermal = {
-            maxAlt: formatAltitude(thermalData.maxAltitude).withUnit,
-            maxAltTime: thermalData.maxAltitudeTime.toLocaleTimeString(),
-          };
-          if (thermalData.wind) {
-            thermal.wind = {
-              direction: thermalData.wind.direction,
-              speedText: formatSpeed(thermalData.wind.speed).withUnit,
-            };
-          }
-        }
-
-        updateTrackPointHUD(hudElement, { pointAlt, pointTime, speed, altChange, req, thermal });
+        updateTrackPointHUD(hudElement, data);
       },
 
       hideTrackPointHUD() {
