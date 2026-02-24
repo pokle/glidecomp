@@ -159,7 +159,6 @@ Users can load task and track data from AirScore directly in the analysis tool:
       /src/                - Worker source code
       wrangler.toml        - Worker configuration
   /scripts/                - Utility scripts (was scripts/)
-/macos/                    - macOS native app
 /docs/                     - Feature and architecture specifications
   /events/                 - Event detection algorithm specs
 /explorations/             - Experimental code (NOT for production use)
@@ -246,7 +245,7 @@ All paths relative to `web/frontend/src/`. The analysis page (`analysis.html`) i
 - `analysis/airscore-client.ts` - AirScore API worker client
 - `analysis/xctsk-fetch.ts` - XContest task fetching
 
-**Shared analysis library** (used by both web and macOS):
+**Shared analysis library** (used by the web frontend):
 - `web/analysis/src/` - Core analysis logic (IGC parsing, events, geo, scoring)
 - `web/analysis/tests/` - Tests
 

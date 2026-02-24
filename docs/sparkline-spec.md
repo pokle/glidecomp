@@ -50,7 +50,7 @@ The sparkline receives data via `setAltitudes(altitudes: number[], timestamps?: 
 When the flight is cleared, `setAltitudes([])` is called, which hides the sparkline container.
 
 ### fixIndex on point events
-To position the selection marker for point events (takeoff, landing, turnpoint crossings, altitude/vario extremes), each point event includes a `fixIndex` in its `details` object. This was added to the event detector (`web/analysis/src/event-detector.ts`) and the Swift equivalent (`macos/TaskScoreLib/Analysis/EventDetector.swift`).
+To position the selection marker for point events (takeoff, landing, turnpoint crossings, altitude/vario extremes), each point event includes a `fixIndex` in its `details` object. This is defined in the event detector (`web/analysis/src/event-detector.ts`).
 
 Segment events (glides, thermals) already have `segment.startIndex` / `segment.endIndex` which serve the same purpose.
 
@@ -130,6 +130,6 @@ The public `selectByFixIndex` method (used when clicking the track on the map) d
 ## Evolution
 
 1. **Basic sparkline** (`8410a06`): Added `generateAltitudeSparkline` SVG generation and `setAltitudes` API. Rendered as a CSS background-image on the scrollable track panel at 0.15 opacity.
-2. **Selection marker and fixIndex** (`dbf7501`): Added orange marker line overlay on the sparkline when events are selected. Added `fixIndex` to all point event details in both TypeScript and Swift event detectors.
+2. **Selection marker and fixIndex** (`dbf7501`): Added orange marker line overlay on the sparkline when events are selected. Added `fixIndex` to all point event details in the event detector.
 3. **Fixed position and click interaction** (`abe47dc`): Moved sparkline to a dedicated 72px container above the scroll area. Increased opacity to 0.4. Made it clickable with per-tab nearest-event selection.
 4. **Axis labels**: Added compact Y-axis (altitude) and X-axis (time HH:MM) labels with tick marks. Container height increased to 88px. `setAltitudes` now accepts optional timestamps for X-axis rendering. Click handler moved from container to inner chart element for correct hit-testing with axis padding.

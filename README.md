@@ -110,60 +110,6 @@ bun run get-xcontest-task -- face
 bun run get-xcontest-task -- --file task.json
 ```
 
-## macOS Development
-
-### Prerequisites
-
-- macOS 14+
-- Swift 5.9+ (included with Xcode 15+)
-
-### Build and run from the terminal
-
-```bash
-cd macos
-
-swift build              # Build (debug)
-swift build -c release   # Build (release)
-swift run TaskScore      # Run the app
-swift test               # Run tests
-```
-
-### Build a .app bundle
-
-```bash
-cd macos
-./build-app.sh
-
-# Then either:
-open TaskScore.app
-# Or install:
-cp -R TaskScore.app /Applications/
-```
-
-### Open in Xcode
-
-```bash
-cd macos
-open Package.swift
-```
-
-Xcode will resolve dependencies automatically. Use the `TaskScore` scheme to run the app, or `TaskScoreTests` to run tests.
-
-### Swift detect-events CLI
-
-A command-line tool for detecting flight events from IGC files, outputting CSV:
-
-```bash
-cd macos
-
-swift run detect-events <flight.igc> [task.xctask]
-
-# Example with sample data
-swift run detect-events \
-  TaskScore/Resources/SampleFlights/durand_45515_050126.igc \
-  TaskScore/Resources/SampleFlights/buje.xctask
-```
-
 ## Project Structure
 
 ```
@@ -173,7 +119,6 @@ web/
   workers/
     airscore-api/        - AirScore caching proxy (Cloudflare Worker)
   scripts/               - CLI utilities (detect-events, get-xcontest-task)
-macos/                   - Native macOS app (SwiftUI + Swift Package Manager)
 docs/                    - Feature and architecture specifications
 explorations/            - Experimental code (not for production use)
 ```
