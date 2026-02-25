@@ -12,15 +12,15 @@
     "deploy:all": "bun run deploy && bun run deploy:worker",
     "deployments": "wrangler pages deployment list --project-name=taskscore --json | jq .",
     "typecheck": "tsc --noEmit",
-    "typecheck:analysis": "tsc --noEmit -p web/analysis/tsconfig.json",
+    "typecheck:engine": "tsc --noEmit -p web/engine/tsconfig.json",
     "typecheck:worker": "bun run --filter airscore-api typecheck",
-    "typecheck:all": "bun run typecheck && bun run typecheck:analysis && bun run typecheck:worker",
+    "typecheck:all": "bun run typecheck && bun run typecheck:engine && bun run typecheck:worker",
     "test": "bun test",
-    "detect-events": "tsx web/scripts/detect-events.ts",
-    "get-xcontest-task": "tsx web/scripts/get-xcontest-task.ts"
+    "detect-events": "tsx web/engine/cli/detect-events.ts",
+    "get-xcontest-task": "tsx web/engine/cli/get-xcontest-task.ts"
   },
   "workspaces": [
-    "web/analysis",
+    "web/engine",
     "web/frontend",
     "web/workers/*"
   ],

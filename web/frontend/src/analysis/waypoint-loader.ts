@@ -1,9 +1,9 @@
 /**
  * Waypoint loader (browser-only, uses fetch API).
- * Pure parsing logic lives in @taskscore/analysis.
+ * Pure parsing logic lives in @taskscore/engine.
  */
 
-import { parseWaypointsCSV, type WaypointRecord } from '@taskscore/analysis';
+import { parseWaypointsCSV, type WaypointRecord } from '@taskscore/engine';
 
 /**
  * Fetch and parse the default Corryong waypoints file.

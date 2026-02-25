@@ -1,8 +1,8 @@
 #!/usr/bin/env npx tsx
 import { readFileSync } from 'fs';
-import { parseIGC } from '../analysis/src/igc-parser';
-import { parseXCTask } from '../analysis/src/xctsk-parser';
-import { detectFlightEvents, type CircleEventDetails } from '../analysis/src/event-detector';
+import { parseIGC } from '../src/igc-parser';
+import { parseXCTask } from '../src/xctsk-parser';
+import { detectFlightEvents, type CircleEventDetails } from '../src/event-detector';
 
 function formatTime(date: Date): string {
   const h = String(date.getUTCHours()).padStart(2, '0');

@@ -32,5 +32,5 @@ If `node_modules/` is missing or a dependency can't be resolved, run `bun instal
 - Place experimental code in `/explorations/` - never use in production
 - Use [Basecoat](https://basecoatui.com/) components for UI - check https://basecoatui.com/docs/components before creating custom components
 - Use Tailwind utility classes for styling - avoid custom CSS when Tailwind provides equivalent functionality
-- **Never** implement inline geo math (haversine, bearing, etc.) - always use `web/analysis/src/geo.ts` which wraps Turf.js
+- **Never** implement inline geo math (haversine, bearing, etc.) - always use `web/engine/src/geo.ts` which wraps Turf.js
 - **Single source of truth for map visuals/interactions**: [`docs/mapbox-interactions-spec.md`](docs/mapbox-interactions-spec.md) - all map providers must match this spec

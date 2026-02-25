@@ -50,7 +50,7 @@ The sparkline receives data via `setAltitudes(altitudes: number[], timestamps?: 
 When the flight is cleared, `setAltitudes([])` is called, which hides the sparkline container.
 
 ### fixIndex on point events
-To position the selection marker for point events (takeoff, landing, turnpoint crossings, altitude/vario extremes), each point event includes a `fixIndex` in its `details` object. This is defined in the event detector (`web/analysis/src/event-detector.ts`).
+To position the selection marker for point events (takeoff, landing, turnpoint crossings, altitude/vario extremes), each point event includes a `fixIndex` in its `details` object. This is defined in the event detector (`web/engine/src/event-detector.ts`).
 
 Segment events (glides, thermals) already have `segment.startIndex` / `segment.endIndex` which serve the same purpose.
 

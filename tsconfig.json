@@ -9,14 +9,22 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "noEmit": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["@cloudflare/workers-types", "@types/node", "bun"]
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "@cloudflare/workers-types",
+      "@types/node",
+      "bun"
+    ]
   },
   "include": [
-    "web/analysis/src/**/*",
+    "web/engine/src/**/*",
     "web/frontend/src/**/*",
     "web/workers/**/*",
-    "web/analysis/tests/**/*",
+    "web/engine/tests/**/*",
     "web/scripts/**/*"
   ],
   "exclude": [

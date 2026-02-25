@@ -1,9 +1,9 @@
 /**
  * XContest task fetch functions (browser-only, uses fetch API).
- * Pure parsing logic lives in @taskscore/analysis.
+ * Pure parsing logic lives in @taskscore/engine.
  */
 
-import { parseXCTask, isValidTask, type XCTask } from '@taskscore/analysis';
+import { parseXCTask, isValidTask, type XCTask } from '@taskscore/engine';
 
 export interface FetchTaskResult {
   task: XCTask;

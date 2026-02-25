@@ -18,8 +18,8 @@
         "wrangler": "^4.61.0",
       },
     },
-    "web/analysis": {
-      "name": "@taskscore/analysis",
+    "web/engine": {
+      "name": "@taskscore/engine",
       "version": "0.1.0",
       "dependencies": {
         "@turf/bbox": "^7.3.2",
@@ -33,7 +33,7 @@
       "name": "@taskscore/frontend",
       "version": "0.1.0",
       "dependencies": {
-        "@taskscore/analysis": "workspace:*",
+        "@taskscore/engine": "workspace:*",
         "leaflet": "2.0.0-alpha.1",
         "mapbox-gl": "^3.18.0",
         "threebox-plugin": "^2.2.7",
@@ -299,7 +299,7 @@
 
     "@tailwindcss/vite": ["@tailwindcss/vite@4.1.18", "", { "dependencies": { "@tailwindcss/node": "4.1.18", "@tailwindcss/oxide": "4.1.18", "tailwindcss": "4.1.18" }, "peerDependencies": { "vite": "^5.2.0 || ^6 || ^7" } }, "sha512-jVA+/UpKL1vRLg6Hkao5jldawNmRo7mQYrZtNHMIVpLfLhDml5nMRUo/8MwoX2vNXvnaXNNMedrMfMugAVX1nA=="],
 
-    "@taskscore/analysis": ["@taskscore/analysis@workspace:web/analysis"],
+    "@taskscore/engine": ["@taskscore/engine@workspace:web/engine"],
 
     "@taskscore/frontend": ["@taskscore/frontend@workspace:web/frontend"],
 

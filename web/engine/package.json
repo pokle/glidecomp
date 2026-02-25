@@ -1,5 +1,5 @@
 {
-  "name": "@taskscore/analysis",
+  "name": "@taskscore/engine",
   "version": "0.1.0",
   "type": "module",
   "exports": {

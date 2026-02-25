@@ -11,7 +11,7 @@ import {
   resolveTurnpointSequence, getSSSIndex,
   type IGCFix, type FlightEvent, type XCTask, type Turnpoint,
   type GlideContext, type GlideMarker, type TurnpointSequenceResult,
-} from '@taskscore/analysis';
+} from '@taskscore/engine';
 import { formatDistance, formatRadius, formatAltitude, formatSpeed, formatAltitudeChange } from './units-browser';
 
 // ── Constants ───────────────────────────────────────────────────────────────

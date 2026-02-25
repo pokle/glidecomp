@@ -1,7 +1,7 @@
 /**
  * Browser-specific unit formatting wrappers.
  *
- * Re-exports all formatting functions from @taskscore/analysis, but wired
+ * Re-exports all formatting functions from @taskscore/engine, but wired
  * to read unit preferences from the browser config singleton.
  * Also provides onUnitsChanged() for reactive UI updates.
  */
@@ -15,7 +15,7 @@ import {
   formatAltitudeChange as _formatAltitudeChange,
   formatRadius as _formatRadius,
   type FormattedValue,
-} from '@taskscore/analysis';
+} from '@taskscore/engine';
 
 export type { FormattedValue, UnitPreferences };
 

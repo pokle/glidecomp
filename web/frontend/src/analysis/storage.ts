@@ -3,7 +3,7 @@
  * Backed by IndexedDB for capacity and performance.
  */
 
-import type { XCTask, IGCFile } from '@taskscore/analysis';
+import type { XCTask, IGCFile } from '@taskscore/engine';
 
 const DB_NAME = 'taskscore';
 const DB_VERSION = 1;

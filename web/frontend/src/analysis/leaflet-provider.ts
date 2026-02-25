@@ -16,7 +16,7 @@ import {
   calculateOptimizedTaskLine, getOptimizedSegmentDistances,
   calculateBearing, haversineDistance, destinationPoint, calculateBearingRadians,
   type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult,
-} from '@taskscore/analysis';
+} from '@taskscore/engine';
 import type { MapProvider } from './map-provider';
 import { config } from './config';
 import {

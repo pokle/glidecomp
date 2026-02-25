@@ -163,7 +163,7 @@ When an event is selected from the panel, the map highlights the event location 
 ## Technical Architecture
 
 ```
-/web/analysis/src/               # Shared analysis library
+/web/engine/src/               # Shared analysis library
 ├── igc-parser.ts                # IGC file format parser
 ├── xctsk-parser.ts              # XContest task format parser
 ├── event-detector.ts            # Flight event detection algorithms

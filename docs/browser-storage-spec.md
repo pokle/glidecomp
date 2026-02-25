@@ -496,7 +496,7 @@ Storage management features to implement:
 ### Automated Tests
 
 ```typescript
-// web/analysis/tests/storage.test.ts
+// web/engine/tests/storage.test.ts
 describe('StorageService', () => {
   // Use fake-indexeddb for Node.js testing
 

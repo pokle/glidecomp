@@ -5,7 +5,7 @@
  * Supports MapBox GL JS and Leaflet 2.0 providers.
  */
 
-import type { IGCFix, XCTask, FlightEvent } from '@taskscore/analysis';
+import type { IGCFix, XCTask, FlightEvent } from '@taskscore/engine';
 
 export type MapProviderType = 'mapbox' | 'leaflet';
 

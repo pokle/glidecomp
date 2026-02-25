@@ -76,7 +76,7 @@ When units are changed:
 ### File Structure
 
 ```
-/web/analysis/src/
+/web/engine/src/
 ├── units.ts              # Unit conversion and formatting module
 ├── event-detector.ts     # Uses units module for event descriptions
 └── glide-speed.ts        # Provides speed in m/s for formatting at display layer
