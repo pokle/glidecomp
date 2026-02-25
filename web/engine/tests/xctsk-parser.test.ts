@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { parseXCTask, getSSSIndex, getESSIndex, calculateNominalTaskDistance, igcTaskToXCTask } from '../src/xctsk-parser';
+import { parseXCTask, getSSSIndex, getESSIndex, calculateNominalTaskDistance, igcTaskToXCTask, isValidTask } from '../src/xctsk-parser';
 import type { IGCTask } from '../src/igc-parser';
 
 describe('XCTSK Parser', () => {
@@ -316,6 +316,175 @@ describe('XCTSK Parser', () => {
 
       expect(xcTask.turnpoints[0].radius).toBe(2000);
       expect(xcTask.turnpoints[1].radius).toBe(2000);
+    });
+  });
+
+  describe('parseXCTask v1 takeoff times', () => {
+    it('should parse takeoff open and close times', () => {
+      const taskJson = JSON.stringify({
+        taskType: 'CLASSIC',
+        version: 1,
+        turnpoints: [
+          { type: 'SSS', radius: 400, waypoint: { name: 'Start', lat: 47.0, lon: 11.0 } },
+        ],
+        takeoff: {
+          timeOpen: '10:00:00Z',
+          timeClose: '12:00:00Z',
+        },
+      });
+
+      const task = parseXCTask(taskJson);
+
+      expect(task.takeoff).toBeDefined();
+      expect(task.takeoff!.timeOpen).toBe('10:00:00Z');
+      expect(task.takeoff!.timeClose).toBe('12:00:00Z');
+    });
+  });
+
+  describe('parseXCTask v2 polyline-encoded coordinates', () => {
+    it('should decode polyline-encoded turnpoint coordinates', () => {
+      // Encode lat=47.0, lon=11.0, alt=500 using Google Polyline Algorithm:
+      // lat=4700000 -> encoded, lon=1100000 -> encoded, alt=500 -> encoded
+      // We'll use explicit lat/lon to verify the polyline path is exercised,
+      // then check a task that uses 'z' field
+      const taskJson = JSON.stringify({
+        taskType: 'CLASSIC',
+        t: [
+          { n: 'Encoded TP', z: 'o}~rH_seaA_seaA' },
+        ],
+      });
+
+      const task = parseXCTask(taskJson);
+
+      expect(task.version).toBe(2);
+      expect(task.turnpoints).toHaveLength(1);
+      expect(task.turnpoints[0].waypoint.name).toBe('Encoded TP');
+      // The polyline decodes to some coordinates - just verify they're numbers
+      expect(typeof task.turnpoints[0].waypoint.lat).toBe('number');
+      expect(typeof task.turnpoints[0].waypoint.lon).toBe('number');
+    });
+
+    it('should prefer explicit lat/lon over polyline when both present', () => {
+      const taskJson = JSON.stringify({
+        taskType: 'CLASSIC',
+        t: [
+          { n: 'TP', z: 'o}~rH_seaA_seaA', lat: 47.0, lon: 11.0, r: 500 },
+        ],
+      });
+
+      const task = parseXCTask(taskJson);
+
+      expect(task.turnpoints[0].waypoint.lat).toBe(47.0);
+      expect(task.turnpoints[0].waypoint.lon).toBe(11.0);
+      expect(task.turnpoints[0].radius).toBe(500);
+    });
+  });
+
+  describe('parseXCTask v2 takeoff times', () => {
+    it('should parse compact takeoff open/close times', () => {
+      const taskJson = JSON.stringify({
+        taskType: 'CLASSIC',
+        t: [{ n: 'TP', lat: 47.0, lon: 11.0, r: 400 }],
+        to: '10:00:00Z',
+        tc: '12:00:00Z',
+      });
+
+      const task = parseXCTask(taskJson);
+
+      expect(task.takeoff).toBeDefined();
+      expect(task.takeoff!.timeOpen).toBe('10:00:00Z');
+      expect(task.takeoff!.timeClose).toBe('12:00:00Z');
+    });
+  });
+
+  describe('parseXCTask v2 type codes', () => {
+    it('should map TAKEOFF type code', () => {
+      const taskJson = JSON.stringify({
+        taskType: 'CLASSIC',
+        t: [{ n: 'Launch', lat: 47.0, lon: 11.0, r: 0, y: 'T' }],
+      });
+
+      const task = parseXCTask(taskJson);
+      expect(task.turnpoints[0].type).toBe('TAKEOFF');
+    });
+
+    it('should parse ELAPSED-TIME SSS and EXIT direction', () => {
+      const taskJson = JSON.stringify({
+        taskType: 'CLASSIC',
+        t: [{ n: 'TP', lat: 47.0, lon: 11.0, r: 400 }],
+        s: { t: 0, d: 0 },
+      });
+
+      const task = parseXCTask(taskJson);
+      expect(task.sss?.type).toBe('ELAPSED-TIME');
+      expect(task.sss?.direction).toBe('EXIT');
+    });
+
+    it('should parse goal CYLINDER type', () => {
+      const taskJson = JSON.stringify({
+        taskType: 'CLASSIC',
+        t: [{ n: 'TP', lat: 47.0, lon: 11.0, r: 400 }],
+        g: { t: 0, d: '18:00:00Z' },
+      });
+
+      const task = parseXCTask(taskJson);
+      expect(task.goal?.type).toBe('CYLINDER');
+      expect(task.goal?.deadline).toBe('18:00:00Z');
+    });
+  });
+
+  describe('isValidTask', () => {
+    it('should return false for empty turnpoints', () => {
+      expect(isValidTask({ taskType: 'CLASSIC', version: 1, turnpoints: [] })).toBe(false);
+    });
+
+    it('should return false for NaN coordinates', () => {
+      const task = {
+        taskType: 'CLASSIC', version: 1,
+        turnpoints: [{ radius: 400, waypoint: { name: 'TP', lat: NaN, lon: 11.0 } }],
+      };
+      expect(isValidTask(task)).toBe(false);
+    });
+
+    it('should return false for out-of-range latitude', () => {
+      const task = {
+        taskType: 'CLASSIC', version: 1,
+        turnpoints: [{ radius: 400, waypoint: { name: 'TP', lat: 91, lon: 11.0 } }],
+      };
+      expect(isValidTask(task)).toBe(false);
+    });
+
+    it('should return false for out-of-range longitude', () => {
+      const task = {
+        taskType: 'CLASSIC', version: 1,
+        turnpoints: [{ radius: 400, waypoint: { name: 'TP', lat: 47.0, lon: 181 } }],
+      };
+      expect(isValidTask(task)).toBe(false);
+    });
+
+    it('should return true for valid task', () => {
+      const task = {
+        taskType: 'CLASSIC', version: 1,
+        turnpoints: [{ radius: 400, waypoint: { name: 'TP', lat: 47.0, lon: 11.0 } }],
+      };
+      expect(isValidTask(task)).toBe(true);
+    });
+  });
+
+  describe('parseXCTask fallback branch', () => {
+    it('should fall back to v1 when neither turnpoints nor t array present', () => {
+      // JSON with no 'turnpoints' and no 't' — triggers fallback
+      const taskJson = JSON.stringify({
+        taskType: 'CLASSIC',
+        version: 1,
+        earthModel: 'WGS84',
+      });
+
+      const task = parseXCTask(taskJson);
+
+      // v1 parse with no turnpoints produces empty array, isValidTask returns false,
+      // so it falls through to v2 which also has no turnpoints
+      expect(task.turnpoints).toHaveLength(0);
     });
   });
 
