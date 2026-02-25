@@ -423,23 +423,32 @@ export function createTrackPointHUD(container: HTMLElement): HTMLElement {
   hud.id = 'track-point-hud';
   hud.style.display = 'none';
   hud.innerHTML = `
-    <details open class="hud-group">
-      <summary class="hud-summary">${CROSSHAIR_HUD_SVG}Point</summary>
-      <div class="hud-alt"></div>
-    </details>
-    <div class="hud-divider"></div>
-    <details open class="hud-group">
-      <summary class="hud-summary">1 km avg</summary>
-      <div class="hud-speed"></div>
-      <div class="hud-req"></div>
-    </details>
-    <div class="hud-divider hud-thermal-divider"></div>
-    <details open class="hud-group hud-thermal-group">
-      <summary class="hud-summary">Last Thermal</summary>
-      <div class="hud-thermal-alt"></div>
-      <div class="hud-wind"></div>
-    </details>
+    <button class="hud-toggle" title="Minimize">−</button>
+    <div class="hud-body">
+      <details open class="hud-group">
+        <summary class="hud-summary">${CROSSHAIR_HUD_SVG}Point</summary>
+        <div class="hud-alt"></div>
+      </details>
+      <div class="hud-divider"></div>
+      <details open class="hud-group">
+        <summary class="hud-summary">1 km avg</summary>
+        <div class="hud-speed"></div>
+        <div class="hud-req"></div>
+      </details>
+      <div class="hud-divider hud-thermal-divider"></div>
+      <details open class="hud-group hud-thermal-group">
+        <summary class="hud-summary">Last Thermal</summary>
+        <div class="hud-thermal-alt"></div>
+        <div class="hud-wind"></div>
+      </details>
+    </div>
   `;
+  const toggle = hud.querySelector('.hud-toggle') as HTMLButtonElement;
+  toggle.addEventListener('click', () => {
+    const minimized = hud.classList.toggle('hud-minimized');
+    toggle.textContent = minimized ? '+' : '−';
+    toggle.title = minimized ? 'Expand' : 'Minimize';
+  });
   container.appendChild(hud);
   return hud;
 }
