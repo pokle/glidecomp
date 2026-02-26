@@ -95,9 +95,10 @@ async function init(): Promise<void> {
   const sidebar = document.getElementById('waypoint-sidebar');
   const sidebarBackdrop = document.getElementById('sidebar-backdrop');
 
-  // Map provider switch menu
-  const menuSwitchMap = document.getElementById('menu-switch-map');
-  const mapProviderLabel = document.getElementById('map-provider-label');
+  // Map provider switch menu items
+  const menuUseMapbox = document.getElementById('menu-use-mapbox');
+  const menuUseLeaflet = document.getElementById('menu-use-leaflet');
+  const menuUseThreejs = document.getElementById('menu-use-threejs');
 
   if (!mapContainer || !eventPanelContainer) {
     console.error('Required containers not found');
@@ -113,6 +114,7 @@ async function init(): Promise<void> {
   const providerType: MapProviderType =
     mapParam === 'l' ? 'leaflet' :
     mapParam === 'm' ? 'mapbox' :
+    mapParam === 't' ? 'threejs' :
     savedMapProvider ?? defaultProvider;
 
   // Initialize map
@@ -124,11 +126,14 @@ async function init(): Promise<void> {
     return;
   }
 
-  // Update provider label in command menu to show the target provider
-  if (mapProviderLabel) {
-    const targetProvider = providerType === 'leaflet' ? 'MapBox' : 'Leaflet';
-    mapProviderLabel.textContent = `Switch Map Provider to ${targetProvider}`;
-  }
+  // Mark the active provider in the command menu
+  const activeLabels: Record<MapProviderType, string> = {
+    mapbox: 'mapbox-provider-label',
+    leaflet: 'leaflet-provider-label',
+    threejs: 'threejs-provider-label',
+  };
+  const activeEl = document.getElementById(activeLabels[providerType]);
+  if (activeEl) activeEl.textContent += ' (active)';
 
   // Load waypoint database for enriching IGC tasks
   try {
@@ -267,16 +272,18 @@ async function init(): Promise<void> {
     });
   }
 
-  // Switch Map Provider handler
-  menuSwitchMap?.addEventListener('click', () => {
-    const newProvider: MapProviderType = providerType === 'mapbox' ? 'leaflet' : 'mapbox';
-    config.setPreferences({ mapProvider: newProvider });
-
-    // Update URL param and reload (provider switch requires full page reload)
+  // Switch Map Provider handlers
+  function switchToProvider(p: MapProviderType) {
+    config.setPreferences({ mapProvider: p });
     const params = new URLSearchParams(window.location.search);
-    params.set('m', newProvider === 'leaflet' ? 'l' : 'm');
+    const codes: Record<MapProviderType, string> = { mapbox: 'm', leaflet: 'l', threejs: 't' };
+    params.set('m', codes[p]);
     window.location.search = params.toString();
-  });
+  }
+
+  menuUseMapbox?.addEventListener('click', () => switchToProvider('mapbox'));
+  menuUseLeaflet?.addEventListener('click', () => switchToProvider('leaflet'));
+  menuUseThreejs?.addEventListener('click', () => switchToProvider('threejs'));
 
   // Units dialog handlers
   const populateUnitsDialog = () => {

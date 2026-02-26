@@ -15,7 +15,7 @@ export interface UserPreferences {
   theme?: 'light' | 'dark' | 'system';
   mapLocation?: MapLocation;
   mapStyle?: string;
-  mapProvider?: 'mapbox' | 'leaflet';
+  mapProvider?: 'mapbox' | 'leaflet' | 'threejs';
 }
 
 export interface UnitPreferences {

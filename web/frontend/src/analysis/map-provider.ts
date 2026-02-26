@@ -7,7 +7,7 @@
 
 import type { IGCFix, XCTask, FlightEvent } from '@taskscore/engine';
 
-export type MapProviderType = 'mapbox' | 'leaflet';
+export type MapProviderType = 'mapbox' | 'leaflet' | 'threejs';
 
 /**
  * Bounds in degrees
@@ -104,6 +104,10 @@ export async function createMapProvider(
     container: HTMLElement,
     providerType: MapProviderType = 'mapbox'
 ): Promise<MapProvider> {
+    if (providerType === 'threejs') {
+        const { createThreeJsProvider } = await import('./threejs-provider');
+        return createThreeJsProvider(container);
+    }
     if (providerType === 'leaflet') {
         const { createLeafletProvider } = await import('./leaflet-provider');
         return createLeafletProvider(container);
