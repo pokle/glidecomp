@@ -67,15 +67,13 @@ Windy plugins run in the browser context of windy.com. Standard `fetch()` / `XML
 | `GET /api/airscore/task?comPk=X&tasPk=Y` | Load competition task + pilot results | ✅ `*` |
 | `GET /api/airscore/track?trackId=X` | Download IGC file by track ID | ✅ `*` |
 
-### Loading "Escort Tasks"
+### Loading AirScore Tasks
 
-Currently there's no dedicated "escort task" endpoint, but the AirScore task endpoint returns full task definitions including turnpoints, SSS/ESS configuration, and pilot results with track IDs. From within the plugin you could:
+The AirScore task endpoint returns full task definitions including turnpoints, SSS/ESS configuration, and pilot results with track IDs. From within the plugin you could:
 
 1. Fetch a competition task via the AirScore API
 2. Fetch other pilots' IGC tracks from the same task
 3. Parse and render them alongside the user's flight
-
-If you want a more streamlined "escort task" experience, you could add a new API endpoint that bundles task + selected pilot tracks in one call.
 
 ### Example
 
