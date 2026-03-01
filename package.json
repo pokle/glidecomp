@@ -2,6 +2,7 @@
   "name": "taskscore",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "Hanggliding/paragliding competition track log analysis",
   "type": "module",
   "scripts": {
