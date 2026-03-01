@@ -23,7 +23,7 @@
         >
             <nav class="flex h-full flex-col" aria-label="Waypoint panel">
                 <!-- Hidden file input -->
-                <input type="file" id="igc-file" accept=".igc" class="hidden">
+                <input type="file" id="igc-file" accept=".igc,.xctsk" class="hidden">
 
                 <!-- Event panel container -->
                 <div id="event-panel-container" class="flex flex-1 flex-col overflow-hidden"></div>
@@ -47,7 +47,7 @@
                         <polyline points="17 8 12 3 7 8"/>
                         <line x1="12" x2="12" y1="3" y2="15"/>
                     </svg>
-                    <p class="text-lg">Drop IGC file here</p>
+                    <p class="text-lg">Drop IGC or task file here</p>
                 </div>
             </div>
 
@@ -119,7 +119,7 @@
                             <polyline points="17 8 12 3 7 8"/>
                             <line x1="12" x2="12" y1="3" y2="15"/>
                         </svg>
-                        <span>Load IGC file</span>
+                        <span>Load track (IGC) / task (XCTSK) file</span>
                     </div>
                     <div role="menuitem" id="menu-import-task" data-keywords="load import xcontest task code">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

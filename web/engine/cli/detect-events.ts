@@ -25,7 +25,7 @@ function csvEscape(s: string): string {
 // Main
 const args = process.argv.slice(2);
 if (args.length < 1) {
-  process.stderr.write('Usage: detect-events <flight.igc> [task.xctask]\n');
+  process.stderr.write('Usage: detect-events <flight.igc> [task.xctsk]\n');
   process.exit(1);
 }
 
