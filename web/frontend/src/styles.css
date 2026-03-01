@@ -306,13 +306,28 @@
 
   /* Track-point HUD overlay — translucent dark card with accordion groups */
   #track-point-hud {
-    @apply absolute bottom-8 left-2;
+    @apply absolute;
     @apply rounded-lg px-3 py-2;
     z-index: 1100;
     background: rgba(15, 23, 42, 0.55);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     font-family: 'Atkinson Hyperlegible Next', ui-monospace, monospace;
+    touch-action: none;
+    user-select: none;
+  }
+
+  #track-point-hud .hud-drag-handle {
+    cursor: grab;
+    width: 32px;
+    height: 5px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.3);
+    margin: 0 auto 4px;
+  }
+
+  #track-point-hud .hud-drag-handle:active {
+    cursor: grabbing;
   }
 
   #track-point-hud .hud-toggle {
