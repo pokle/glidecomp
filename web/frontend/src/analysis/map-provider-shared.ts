@@ -422,7 +422,10 @@ export function createTrackPointHUD(container: HTMLElement): HTMLElement {
   const hud = document.createElement('div');
   hud.id = 'track-point-hud';
   hud.style.display = 'none';
+  hud.style.left = '8px';
+  hud.style.bottom = '32px';
   hud.innerHTML = `
+    <div class="hud-drag-handle"></div>
     <button class="hud-toggle" title="Minimize">−</button>
     <div class="hud-body">
       <details open class="hud-group">
@@ -450,7 +453,88 @@ export function createTrackPointHUD(container: HTMLElement): HTMLElement {
     toggle.title = minimized ? 'Expand' : 'Minimize';
   });
   container.appendChild(hud);
+  makeHUDDraggable(hud, container);
   return hud;
+}
+
+/** Make the HUD draggable within its container via pointer events */
+function makeHUDDraggable(hud: HTMLElement, container: HTMLElement): void {
+  let anchoredToTop = false;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  function convertToTopLeft(): void {
+    if (anchoredToTop) return;
+    const rect = hud.getBoundingClientRect();
+    const parentRect = container.getBoundingClientRect();
+    hud.style.top = rect.top - parentRect.top + 'px';
+    hud.style.left = rect.left - parentRect.left + 'px';
+    hud.style.bottom = '';
+    anchoredToTop = true;
+  }
+
+  function clamp(): void {
+    if (!anchoredToTop) return;
+    const parentRect = container.getBoundingClientRect();
+    const hudRect = hud.getBoundingClientRect();
+    let top = parseFloat(hud.style.top) || 0;
+    let left = parseFloat(hud.style.left) || 0;
+    const maxTop = parentRect.height - hudRect.height;
+    const maxLeft = parentRect.width - hudRect.width;
+    top = Math.max(0, Math.min(top, maxTop));
+    left = Math.max(0, Math.min(left, maxLeft));
+    hud.style.top = top + 'px';
+    hud.style.left = left + 'px';
+  }
+
+  hud.addEventListener('pointerdown', (e: PointerEvent) => {
+    // Don't drag when interacting with buttons or accordion toggles
+    const target = e.target as HTMLElement;
+    if (target.closest('button, summary, details')) return;
+
+    convertToTopLeft();
+
+    const parentRect = container.getBoundingClientRect();
+    const hudRect = hud.getBoundingClientRect();
+    offsetX = e.clientX - (hudRect.left - parentRect.left);
+    offsetY = e.clientY - (hudRect.top - parentRect.top);
+
+    hud.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  hud.addEventListener('pointermove', (e: PointerEvent) => {
+    if (!hud.hasPointerCapture(e.pointerId)) return;
+
+    const parentRect = container.getBoundingClientRect();
+    const hudRect = hud.getBoundingClientRect();
+    let newLeft = e.clientX - offsetX;
+    let newTop = e.clientY - offsetY;
+
+    // Clamp within container
+    const maxLeft = parentRect.width - hudRect.width;
+    const maxTop = parentRect.height - hudRect.height;
+    newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+    newTop = Math.max(0, Math.min(newTop, maxTop));
+
+    hud.style.left = newLeft + 'px';
+    hud.style.top = newTop + 'px';
+  });
+
+  hud.addEventListener('pointerup', (e: PointerEvent) => {
+    if (hud.hasPointerCapture(e.pointerId)) {
+      hud.releasePointerCapture(e.pointerId);
+    }
+  });
+
+  hud.addEventListener('pointercancel', (e: PointerEvent) => {
+    if (hud.hasPointerCapture(e.pointerId)) {
+      hud.releasePointerCapture(e.pointerId);
+    }
+  });
+
+  // Re-clamp if container resizes
+  new ResizeObserver(() => clamp()).observe(container);
 }
 
 /** Wind arrow SVG pointing down (south). Rotate by wind-FROM direction to show flow. */
