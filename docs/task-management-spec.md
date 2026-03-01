@@ -8,7 +8,7 @@ Build a task management system that allows users to onboard competition tasks wi
 
 ## Problem Statement
 
-When loading a track (IGC file), we need to find matching task files (.xctask). Challenges include:
+When loading a track (IGC file), we need to find matching task files (.xctsk). Challenges include:
 1. Multiple competitions run concurrently (floater vs open class)
 2. Task files from xcontest don't contain date information
 3. The declared task in an IGC file may not exactly match any task file
@@ -387,4 +387,4 @@ When multiple tasks match, show a selection dialog:
 - **Manual waypoint selection** - Allow creating tasks by selecting waypoints from a waypoints file instead of xcontest code
 - **Task editing** - Allow modifying task metadata after creation
 - **Offline support** - Cache tasks in localStorage for offline use
-- **Migrate static tasks** - Option to import existing `/data/tasks/*.xctask` files into D1
+- **Migrate static tasks** - Option to import existing `/data/tasks/*.xctsk` files into D1

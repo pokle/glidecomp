@@ -489,40 +489,51 @@ async function init(): Promise<void> {
   igcFileInput?.addEventListener('change', async (e) => {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (file) {
-      await loadIGCFile(file);
+      const name = file.name.toLowerCase();
+      if (name.endsWith('.xctsk')) {
+        await loadXCTaskFile(file);
+      } else {
+        await loadIGCFile(file);
+      }
     }
   });
 
-  // Drag and drop handlers
-  if (dropZone) {
-    // Enable drag and drop on the map container
-    const mapContainerEl = mapContainer.parentElement;
+  // Drag and drop handlers - listen on document to work regardless of map library
+  document.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone?.classList.add('drag-over');
+  });
 
-    mapContainerEl?.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      dropZone.classList.add('drag-over');
-    });
+  document.addEventListener('dragleave', (e) => {
+    // Only hide if leaving the document entirely (relatedTarget is null)
+    if (e.relatedTarget === null) {
+      dropZone?.classList.remove('drag-over');
+    }
+  });
 
-    mapContainerEl?.addEventListener('dragleave', (e) => {
-      // Only hide if leaving the container entirely
-      if (e.relatedTarget && mapContainerEl.contains(e.relatedTarget as Node)) {
-        return;
-      }
-      dropZone.classList.remove('drag-over');
-    });
+  document.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    dropZone?.classList.remove('drag-over');
 
-    mapContainerEl?.addEventListener('drop', async (e) => {
-      e.preventDefault();
-      dropZone.classList.remove('drag-over');
+    const files = e.dataTransfer?.files;
+    if (!files?.length) return;
 
-      const file = e.dataTransfer?.files[0];
-      if (file && file.name.toLowerCase().endsWith('.igc')) {
+    let recognized = false;
+    for (const file of files) {
+      const name = file.name.toLowerCase();
+      if (name.endsWith('.igc')) {
+        recognized = true;
         await loadIGCFile(file);
-      } else {
-        showStatus('Please drop an IGC file', 'warning');
+      } else if (name.endsWith('.xctsk')) {
+        recognized = true;
+        await loadXCTaskFile(file);
       }
-    });
-  }
+    }
+
+    if (!recognized) {
+      showStatus('Please drop IGC or XCTask files', 'warning');
+    }
+  });
 
   // Import task menu item -> opens import dialog
   menuImportTask?.addEventListener('click', () => {
@@ -613,6 +624,22 @@ async function init(): Promise<void> {
     mapRenderer?.setTrack(igcFile.fixes);
     redetectEvents();
     analysisPanel?.setAltitudes(igcFile.fixes.map(f => f.gnssAltitude), igcFile.fixes.map(f => f.time));
+  }
+
+  /**
+   * Load and parse an XCTask file
+   */
+  async function loadXCTaskFile(file: File): Promise<void> {
+    showStatus('Loading task file...', 'info');
+    try {
+      const rawJson = await file.text();
+      const task = parseXCTask(rawJson);
+      applyTask(task);
+      showStatus(`Loaded task: ${task.turnpoints.length} turnpoints`, 'success');
+    } catch (err) {
+      console.error('Failed to parse task file:', err);
+      showStatus(`Failed to parse task file: ${err}`, 'error');
+    }
   }
 
   /**
@@ -921,7 +948,7 @@ async function init(): Promise<void> {
 
   async function loadLocalTask(taskFile: string): Promise<void> {
     try {
-      const response = await fetch(`/data/tasks/${taskFile}.xctask`);
+      const response = await fetch(`/data/tasks/${taskFile}.xctsk`);
       if (!response.ok) {
         throw new Error(`Failed to fetch task: ${response.status}`);
       }
