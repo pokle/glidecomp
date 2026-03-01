@@ -1100,24 +1100,31 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           }
           const altRange = maxAlt - minAlt;
 
-          // Create individual segments with normalized altitude for width/color variation
-          // Higher altitude segments render wider, creating a depth effect in top-down view
+          // Batch consecutive fixes into multi-point segments for reliable rendering.
+          // Individual 2-point segments get dropped at Mapbox vector tile boundaries,
+          // causing visible breaks on long flights. ~500 segments balances visual
+          // fidelity of altitude-based styling with rendering robustness.
+          const maxSegments = 500;
+          const step = Math.max(1, Math.floor(fixes.length / maxSegments));
           const features = [];
-          for (let i = 1; i < fixes.length; i++) {
-            const prev = fixes[i - 1];
-            const curr = fixes[i];
-            const avgAlt = (prev.gnssAltitude + curr.gnssAltitude) / 2;
-            const normalizedAlt = altRange > 0 ? (avgAlt - minAlt) / altRange : 0.5;
+
+          for (let i = 0; i < fixes.length - 1; i += step) {
+            const end = Math.min(i + step + 1, fixes.length);
+            const coordinates: [number, number][] = [];
+            for (let j = i; j < end; j++) {
+              coordinates.push([fixes[j].longitude, fixes[j].latitude]);
+            }
+            const midIdx = Math.floor((i + end - 1) / 2);
+            const normalizedAlt = altRange > 0
+              ? (fixes[midIdx].gnssAltitude - minAlt) / altRange
+              : 0.5;
 
             features.push({
               type: 'Feature' as const,
               properties: { normalizedAlt },
               geometry: {
                 type: 'LineString' as const,
-                coordinates: [
-                  [prev.longitude, prev.latitude],
-                  [curr.longitude, curr.latitude],
-                ],
+                coordinates,
               },
             });
           }
