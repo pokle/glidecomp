@@ -9,7 +9,8 @@
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
     "lib": ["ES2022"],
-    "isolatedModules": true
+    "isolatedModules": true,
+    "types": []
   },
   "include": ["src/**/*"]
 }
