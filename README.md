@@ -72,7 +72,7 @@ VITE_AIRSCORE_URL=https://taskscore.shonky.info/api/airscore bun run dev
 ```bash
 bun run test             # Run tests
 bun run typecheck        # Type check root project
-bun run typecheck:all    # Type check everything (Pages + analysis library + Workers)
+bun run typecheck:all    # Type check everything (frontend + engine + workers)
 ```
 
 ### Deployment
@@ -115,10 +115,11 @@ bun run get-xcontest-task -- --file task.json
 ```
 web/
   frontend/              - Cloudflare Pages frontend (Vite + TypeScript)
-  analysis/              - Shared analysis library (IGC parsing, event detection)
+  engine/                - Shared analysis library (IGC parsing, event detection)
+    cli/                 - CLI utilities (detect-events, get-xcontest-task)
   workers/
     airscore-api/        - AirScore caching proxy (Cloudflare Worker)
-  scripts/               - CLI utilities (detect-events, get-xcontest-task)
+  scripts/               - Operational scripts (secrets, test emails)
 docs/                    - Feature and architecture specifications
 explorations/            - Experimental code (not for production use)
 ```
