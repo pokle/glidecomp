@@ -1,10 +1,10 @@
-# Basecoat CSS Fork
+# Basecoat Fork
 
-We use a forked version of [Basecoat](https://basecoatui.com/) published as `@pokle/basecoat-css` on npm.
+We use a forked version of [Basecoat](https://basecoatui.com/) published as `@pokle/basecoat` on npm.
 
 - **Upstream:** https://github.com/hunvreus/basecoat
 - **Fork:** https://github.com/pokle/basecoat (branch: `development`)
-- **npm package:** https://www.npmjs.com/package/@pokle/basecoat-css
+- **npm package:** https://www.npmjs.com/package/@pokle/basecoat
 
 ## Why a fork?
 
@@ -21,22 +21,21 @@ npm install
 # 2. Build the CSS and JS dist files
 npm run build
 
-# 3. Publish the css sub-package
-cd packages/css
+# 3. Publish the whole monorepo package
 npm publish --access public
 ```
 
-The publishable package is in `packages/css/` (not the monorepo root). Make sure to bump the version in `packages/css/package.json` before publishing a new release.
+Make sure to bump the version in `package.json` before publishing a new release.
 
 ## Switching back to upstream
 
 When the fix is merged upstream, update `web/frontend/package.json`:
 
 ```diff
-- "@pokle/basecoat-css": "0.3.10-beta.fork",
+- "@pokle/basecoat": "0.3.10-beta2.pokle",
 + "basecoat-css": "^0.4.0",
 ```
 
 And update the import paths in:
-- `web/frontend/src/styles.css` — `@import "@pokle/basecoat-css"` → `@import "basecoat-css"`
-- `web/frontend/src/analysis/main.ts` — `@pokle/basecoat-css/...` → `basecoat-css/...`
+- `web/frontend/src/styles.css` — `@import "@pokle/basecoat/src/css/basecoat.css"` → `@import "basecoat-css"`
+- `web/frontend/src/analysis/main.ts` — `@pokle/basecoat/src/js/...` → `basecoat-css/...`

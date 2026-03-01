@@ -15,7 +15,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260304.0",
     "@tailwindcss/vite": "^4.2.1",
-    "@pokle/basecoat-css": "0.3.10-beta.fork",
+    "@pokle/basecoat": "0.3.10-beta3.pokle-selections",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",

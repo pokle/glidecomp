@@ -40,7 +40,7 @@
       },
       "devDependencies": {
         "@cloudflare/workers-types": "^4.20260304.0",
-        "@pokle/basecoat-css": "0.3.10-beta.fork",
+        "@pokle/basecoat": "0.3.10-beta3.pokle-selections",
         "@tailwindcss/vite": "^4.2.1",
         "tailwindcss": "^4.2.1",
         "typescript": "^5.9.3",
@@ -205,7 +205,7 @@
 
     "@mapbox/vector-tile": ["@mapbox/vector-tile@2.0.4", "", { "dependencies": { "@mapbox/point-geometry": "~1.1.0", "@types/geojson": "^7946.0.16", "pbf": "^4.0.1" } }, "sha512-AkOLcbgGTdXScosBWwmmD7cDlvOjkg/DetGva26pIRiZPdeJYjYKarIlb4uxVzi6bwHO6EWH82eZ5Nuv4T5DUg=="],
 
-    "@pokle/basecoat-css": ["@pokle/basecoat-css@0.3.10-beta.fork", "", {}, "sha512-5Kl4J+aOdCDnkjEZ2gY+PnNErlez9gauwfnGUi1q36foQ+gCkTuLpZsMwJ4XajheepQqZ5RzkQ2zNS4To+Mp2g=="],
+    "@pokle/basecoat": ["@pokle/basecoat@0.3.10-beta3.pokle-selections", "", {}, "sha512-Fl6dNsCZ35yzTT9Jvfx6a7dAnnK7qgKe8Rgm25Miich3dju+D/ZV4gxQJLZ+q4yE3hkhCkJxPHqcIq8BG6dTEw=="],
 
     "@poppinss/colors": ["@poppinss/colors@4.1.6", "", { "dependencies": { "kleur": "^4.1.5" } }, "sha512-H9xkIdFswbS8n1d6vmRd8+c10t2Qe+rZITbbDHHkQixH5+2x1FDGmi/0K+WgWiqQFKPSlIYB7jlH6Kpfn6Fleg=="],
 
