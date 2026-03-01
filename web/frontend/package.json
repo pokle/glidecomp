@@ -12,18 +12,18 @@
   },
   "//": "Basecoat fork - see docs/basecoat-fork.md for build/publish instructions",
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260206.0",
-    "@tailwindcss/vite": "^4.1.18",
+    "@cloudflare/workers-types": "^4.20260304.0",
+    "@tailwindcss/vite": "^4.2.1",
     "@pokle/basecoat-css": "0.3.10-beta.fork",
-    "tailwindcss": "^4.1.18",
-    "typescript": "^5.7.3",
+    "tailwindcss": "^4.2.1",
+    "typescript": "^5.9.3",
     "vite": "^7.3.1",
-    "wrangler": "^4.63.0"
+    "wrangler": "^4.69.0"
   },
   "dependencies": {
     "@taskscore/engine": "workspace:*",
     "leaflet": "2.0.0-alpha.1",
-    "mapbox-gl": "^3.18.0",
+    "mapbox-gl": "^3.19.0",
     "threebox-plugin": "^2.2.7"
   }
 }

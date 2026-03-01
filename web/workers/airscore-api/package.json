@@ -10,8 +10,8 @@
     "clear-cache": "rm -rf .wrangler/state"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260206.0",
-    "typescript": "^5.7.2",
-    "wrangler": "^4.63.0"
+    "@cloudflare/workers-types": "^4.20260304.0",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.69.0"
   }
 }
