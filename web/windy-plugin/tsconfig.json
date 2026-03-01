@@ -1,0 +1,28 @@
+{
+    "compilerOptions": {
+        "baseUrl": ".",
+        "module": "ESNext",
+        "lib": ["ES2022", "DOM"],
+        "target": "ES2022",
+        "strict": true,
+        "noEmit": true,
+        "esModuleInterop": true,
+        "isolatedModules": true,
+        "forceConsistentCasingInFileNames": true,
+        "moduleResolution": "node",
+        "resolveJsonModule": false,
+        "sourceMap": false,
+        "incremental": true,
+        "typeRoots": [
+            "./node_modules/@types/",
+            "./node_modules/@windycom/plugin-devtools/types"
+        ],
+        "paths": {
+            "@windy/*": [
+                "./node_modules/@windycom/plugin-devtools/types/*",
+                "./node_modules/@windycom/plugin-devtools/types/client/*"
+            ]
+        }
+    },
+    "include": ["src/**/*.ts", "src/**/*.svelte"]
+}

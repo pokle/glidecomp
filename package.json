@@ -33,6 +33,7 @@
   "workspaces": [
     "web/engine",
     "web/frontend",
+    "web/windy-plugin",
     "web/workers/*"
   ],
   "devDependencies": {

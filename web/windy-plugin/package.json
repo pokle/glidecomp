@@ -1,0 +1,15 @@
+{
+    "name": "@taskscore/windy-plugin",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "main": "dist/plugin.min.js",
+    "scripts": {
+        "build": "rm -rf dist && mkdir dist && SERVE=false rollup -c && cp package.json dist/",
+        "start": "rollup -w -c"
+    },
+    "dependencies": {
+        "@taskscore/engine": "workspace:*",
+        "@windycom/plugin-devtools": "^3.0.3"
+    }
+}
