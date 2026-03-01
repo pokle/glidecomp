@@ -1,0 +1,36 @@
+{
+  "name": "TaskScore",
+  "short_name": "TaskScore",
+  "description": "Competition track log analysis for hanggliding and paragliding",
+  "start_url": "/analysis.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "share_target": {
+    "action": "/share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [
+        {
+          "name": "files",
+          "accept": [
+            ".igc",
+            ".xctsk",
+            "application/octet-stream",
+            "text/plain",
+            "application/json"
+          ]
+        }
+      ]
+    }
+  }
+}

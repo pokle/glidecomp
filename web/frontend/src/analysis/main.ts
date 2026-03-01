@@ -1022,9 +1022,56 @@ async function init(): Promise<void> {
   // Load from query params if present (e.g., ?task=buje&track=sample.igc)
   await loadFromQueryParams(loadTask, loadLocalTask, loadIGCFile);
 
+  // Handle files received via Web Share Target (mobile share button)
+  if (params.get('shared') === '1') {
+    await loadSharedFiles();
+    // Clean the URL so a refresh doesn't re-trigger
+    params.delete('shared');
+    const cleanUrl = params.toString()
+      ? `${window.location.pathname}?${params.toString()}`
+      : window.location.pathname;
+    window.history.replaceState({}, '', cleanUrl);
+  }
+
   // If no task or track was loaded, open the command menu to guide users
-  if (!params.get('task') && !params.get('track')) {
+  if (!params.get('task') && !params.get('track') && params.get('shared') !== '1' && !state.igcFile && !state.task) {
     commandDialog?.showModal();
+  }
+
+  /**
+   * Load files that were shared via the Web Share Target API.
+   * The service worker stores them in a dedicated cache bucket.
+   */
+  async function loadSharedFiles(): Promise<void> {
+    const SHARE_CACHE = 'share-target-files';
+    try {
+      const cache = await caches.open(SHARE_CACHE);
+      const keys = await cache.keys();
+
+      for (const request of keys) {
+        const response = await cache.match(request);
+        if (!response) continue;
+
+        const filename = response.headers.get('X-File-Name') || new URL(request.url).pathname.split('/').pop() || 'shared-file';
+        const blob = await response.blob();
+        const file = new File([blob], filename, { type: blob.type });
+
+        const name = filename.toLowerCase();
+        if (name.endsWith('.xctsk')) {
+          await loadXCTaskFile(file);
+        } else if (name.endsWith('.igc')) {
+          await loadIGCFile(file);
+        } else {
+          showStatus(`Unsupported file type: ${filename}`, 'warning');
+        }
+      }
+
+      // Clean up the cache
+      await caches.delete(SHARE_CACHE);
+    } catch (err) {
+      console.error('Failed to load shared files:', err);
+      showStatus(`Failed to load shared files: ${err}`, 'error');
+    }
   }
 }
 
@@ -1074,6 +1121,13 @@ async function loadFromQueryParams(
       console.error('Failed to load track from URL:', err);
     }
   }
+}
+
+// Register service worker (enables PWA install + Web Share Target)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch((err) => {
+    console.warn('Service worker registration failed:', err);
+  });
 }
 
 // Initialize when DOM is ready
