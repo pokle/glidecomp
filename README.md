@@ -99,7 +99,7 @@ bun run detect-events -- <flight.igc> [task.xctask]
 
 # Example with sample data
 bun run detect-events -- \
-  web/frontend/public/data/tracks/durand_45515_050126.igc \
+  web/frontend/public/data/tracks/2025-01-05-Tushar-Corryong.igc \
   web/frontend/public/data/tasks/buje.xctask
 ```
 

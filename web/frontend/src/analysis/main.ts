@@ -903,23 +903,11 @@ async function init(): Promise<void> {
 
   // Sample flights
   const sampleFiles: Record<string, string> = {
-    'sample-rohan': '2026-01-05-RohanHolt-XFH-000-01.IGC',
-    'sample-shane': '2026-01-05-shane-dunc-XCT-SDU-02.igc',
-    'sample-gordon': '20260105-132715-GordonRigg.999.igc',
-    'sample-burkitt': 'burkitt_18393_050126.igc',
-    'sample-durand': 'durand_45515_050126.igc',
-    'sample-holtkamp': 'holtkamp_33915_050126.igc',
     'sample-tushar': '2025-01-05-Tushar-Corryong.igc'
   };
 
   // Map sample track filenames to local task files (by competition date)
   const sampleTaskMap: Record<string, string> = {
-    '2026-01-05-RohanHolt-XFH-000-01.IGC': 'buje',
-    '2026-01-05-shane-dunc-XCT-SDU-02.igc': 'doza',
-    '20260105-132715-GordonRigg.999.igc': 'buje',
-    'burkitt_18393_050126.igc': 'buje',
-    'durand_45515_050126.igc': 'buje',
-    'holtkamp_33915_050126.igc': 'buje',
   };
 
   async function loadLocalTask(taskFile: string): Promise<void> {
