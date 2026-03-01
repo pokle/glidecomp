@@ -752,8 +752,8 @@ export interface FormattedGlideLabel {
 export function formatGlideLabel(marker: GlideMarker): FormattedGlideLabel {
   const speed = formatSpeed(marker.speedMps || 0).withUnit;
   const glideRatio = marker.glideRatio !== undefined
-    ? `\u2198${marker.glideRatio.toFixed(0)}:1`
-    : '\u2198\u221E:1';
+    ? `${marker.glideRatio.toFixed(0)}:1`
+    : '\u221E:1';
   const altDiff = marker.altitudeDiff !== undefined
     ? formatAltitudeChange(marker.altitudeDiff).withUnit
     : '';
@@ -761,7 +761,7 @@ export function formatGlideLabel(marker: GlideMarker): FormattedGlideLabel {
 
   let reqText = '';
   if (marker.requiredGlideRatio !== undefined && marker.targetName) {
-    reqText = `\u2198${marker.requiredGlideRatio.toFixed(0)}:1 to ${marker.targetName}`;
+    reqText = `${marker.requiredGlideRatio.toFixed(0)}:1 to ${marker.targetName}`;
   }
 
   return { speed, detailText, reqText };
