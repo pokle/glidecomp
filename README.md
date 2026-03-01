@@ -121,5 +121,4 @@ web/
     airscore-api/        - AirScore caching proxy (Cloudflare Worker)
   scripts/               - Operational scripts (secrets, test emails)
 docs/                    - Feature and architecture specifications
-explorations/            - Experimental code (not for production use)
 ```
