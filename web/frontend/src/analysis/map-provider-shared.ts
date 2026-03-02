@@ -504,10 +504,12 @@ function makeHUDDraggable(hud: HTMLElement, container: HTMLElement): void {
 
     hud.setPointerCapture(e.pointerId);
     e.preventDefault();
+    e.stopPropagation();
   });
 
   hud.addEventListener('pointermove', (e: PointerEvent) => {
     if (!hud.hasPointerCapture(e.pointerId)) return;
+    e.stopPropagation();
 
     const parentRect = container.getBoundingClientRect();
     const hudRect = hud.getBoundingClientRect();
