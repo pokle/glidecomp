@@ -19,6 +19,19 @@
     font-family: 'Atkinson Hyperlegible Next', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
 
+  /* Prevent iOS Safari auto-zoom on form fields.
+     iOS zooms in on focus when font-size < 16px; use 16px on mobile,
+     allow the smaller 14px (text-sm) on desktop where zoom isn't an issue. */
+  input,
+  select,
+  textarea {
+    font-size: 1rem; /* 16px */
+
+    @media (width >= 48rem) {
+      font-size: unset;
+    }
+  }
+
   /* Prevent browser zoom gestures on UI elements (header, sidebar, dialogs)
      while allowing the map to handle its own touch interactions */
   body > div,

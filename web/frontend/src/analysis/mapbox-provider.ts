@@ -679,7 +679,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           this.container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
 
           const select = document.createElement('select');
-          select.style.cssText = 'padding: 6px 8px; border: none; background: white; color: #1e293b; cursor: pointer; font-size: 12px;';
+          select.style.cssText = 'padding: 6px 8px; border: none; background: white; color: #1e293b; cursor: pointer; font-size: 16px;';
 
           for (const style of MAPBOX_STYLES) {
             const option = document.createElement('option');
