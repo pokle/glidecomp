@@ -310,6 +310,93 @@ async function init(): Promise<void> {
     });
   }
 
+  // Text Shadow Tuner (debug tool for label styling)
+  document.getElementById('menu-text-shadow-tuner')?.addEventListener('click', () => {
+    commandDialog?.close();
+    // Remove existing tuner if re-opened
+    document.getElementById('ts-tuner-panel')?.remove();
+
+    const panel = document.createElement('div');
+    panel.id = 'ts-tuner-panel';
+    panel.innerHTML = `
+      <div style="position:fixed;top:10px;right:10px;z-index:99999;background:#1e1e1e;color:#eee;padding:12px;border-radius:8px;font-family:monospace;font-size:13px;min-width:260px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-weight:bold;">text-shadow tuner</span>
+          <button id="ts-close" style="background:none;border:none;color:#eee;cursor:pointer;font-size:16px;" title="Close">\u00d7</button>
+        </div>
+        <label>blur <input id="ts-blur" type="range" min="0" max="10" step="0.5" value="0" style="width:120px;vertical-align:middle;"></label> <span id="ts-blur-v">0</span>px<br>
+        <label>spread <input id="ts-spread" type="range" min="0" max="4" step="0.5" value="1" style="width:120px;vertical-align:middle;"></label> <span id="ts-spread-v">1</span>px<br>
+        <label>color <input id="ts-color" type="color" value="#ffffff" style="vertical-align:middle;"></label><br>
+        <label>opacity <input id="ts-opacity" type="range" min="0" max="1" step="0.05" value="1" style="width:120px;vertical-align:middle;"></label> <span id="ts-opacity-v">1</span><br>
+        <div style="margin-top:8px;display:flex;gap:4px;">
+          <button id="ts-preset-outline" style="padding:2px 6px;cursor:pointer;">outline</button>
+          <button id="ts-preset-glow" style="padding:2px 6px;cursor:pointer;">glow</button>
+          <button id="ts-preset-heavy" style="padding:2px 6px;cursor:pointer;">heavy</button>
+          <button id="ts-preset-none" style="padding:2px 6px;cursor:pointer;">none</button>
+        </div>
+        <div id="ts-output" style="margin-top:8px;padding:4px;background:#333;border-radius:4px;word-break:break-all;font-size:11px;user-select:all;"></div>
+      </div>`;
+    document.body.appendChild(panel);
+
+    const inputs = {
+      blur: panel.querySelector('#ts-blur') as HTMLInputElement,
+      spread: panel.querySelector('#ts-spread') as HTMLInputElement,
+      color: panel.querySelector('#ts-color') as HTMLInputElement,
+      opacity: panel.querySelector('#ts-opacity') as HTMLInputElement,
+    };
+    const displays = {
+      blur: panel.querySelector('#ts-blur-v') as HTMLElement,
+      spread: panel.querySelector('#ts-spread-v') as HTMLElement,
+      opacity: panel.querySelector('#ts-opacity-v') as HTMLElement,
+      output: panel.querySelector('#ts-output') as HTMLElement,
+    };
+
+    function applyShadow(shadow: string): void {
+      document.querySelectorAll<HTMLElement>('[data-glide-label]').forEach(el => el.style.textShadow = shadow);
+      document.querySelectorAll<HTMLElement>('[data-glide-chevron] span').forEach(el => el.style.textShadow = shadow);
+      displays.output.textContent = `text-shadow: ${shadow}`;
+    }
+
+    function apply(): void {
+      const { blur, spread, color, opacity } = inputs;
+      displays.blur.textContent = blur.value;
+      displays.spread.textContent = spread.value;
+      displays.opacity.textContent = opacity.value;
+      const r = parseInt(color.value.slice(1, 3), 16);
+      const g = parseInt(color.value.slice(3, 5), 16);
+      const b = parseInt(color.value.slice(5, 7), 16);
+      const c = `rgba(${r},${g},${b},${opacity.value})`;
+      const s = parseFloat(spread.value);
+      const bl = parseFloat(blur.value);
+      const shadow = [
+        `${-s}px ${-s}px ${bl}px ${c}`, `${s}px ${-s}px ${bl}px ${c}`,
+        `${-s}px ${s}px ${bl}px ${c}`, `${s}px ${s}px ${bl}px ${c}`,
+        `0 0 ${bl + 2}px ${c}`,
+      ].join(', ');
+      applyShadow(shadow);
+    }
+
+    function setPreset(blur: string, spread: string, opacity: string, color = '#ffffff'): void {
+      inputs.blur.value = blur;
+      inputs.spread.value = spread;
+      inputs.opacity.value = opacity;
+      inputs.color.value = color;
+      apply();
+    }
+
+    for (const input of Object.values(inputs)) {
+      input.addEventListener('input', apply);
+    }
+
+    panel.querySelector('#ts-close')!.addEventListener('click', () => panel.remove());
+    panel.querySelector('#ts-preset-outline')!.addEventListener('click', () => setPreset('0', '1', '1'));
+    panel.querySelector('#ts-preset-glow')!.addEventListener('click', () => setPreset('4', '0', '0.9'));
+    panel.querySelector('#ts-preset-heavy')!.addEventListener('click', () => setPreset('2', '2', '1'));
+    panel.querySelector('#ts-preset-none')!.addEventListener('click', () => applyShadow('none'));
+
+    apply();
+  });
+
   // Switch Map Provider handler
   menuSwitchMap?.addEventListener('click', () => {
     const newProvider: MapProviderType = providerType === 'mapbox' ? 'leaflet' : 'mapbox';

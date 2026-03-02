@@ -20,7 +20,7 @@ import {
 import type { MapProvider } from './map-provider';
 import { config } from './config';
 import {
-  MAP_FONT_FAMILY, GLIDE_LABEL_SPARSE_MIN_ZOOM, GLIDE_LABEL_SPEED_MIN_ZOOM,
+  MAP_FONT_FAMILY, GLIDE_LABEL_TEXT_SHADOW, GLIDE_LABEL_SPARSE_MIN_ZOOM, GLIDE_LABEL_SPEED_MIN_ZOOM,
   TRACK_COLOR, TRACK_OUTLINE_COLOR, HIGHLIGHT_COLOR, TASK_COLOR,
   getTurnpointColor, KEY_EVENT_TYPES, getAltitudeColorNormalized,
   findNearestFixIndex, createGlideLegend, showGlideLegend,
@@ -28,7 +28,7 @@ import {
   createTrackPointHUD, updateTrackPointHUD, hideTrackPointHUD as sharedHideTrackPointHUD,
   CROSSHAIR_MAP_SVG,
   buildTrackPointHUDData, buildNextTurnpointContext, ensureTurnpointCache,
-  formatGlideLabel, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement,
+  formatGlideLabel, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement, updateGlideChevronElement,
 } from './map-provider-shared';
 
 // Tile layer definitions
@@ -273,13 +273,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
           : null;
         if (chevronDataEl) {
           const chevronIndex = parseInt(chevronDataEl.dataset.chevronIndex || '0', 10);
-          if (z < GLIDE_LABEL_SPARSE_MIN_ZOOM) {
-            el.style.display = 'none';
-          } else if (z < GLIDE_LABEL_SPEED_MIN_ZOOM && chevronIndex % 3 !== 0) {
-            el.style.display = 'none';
-          } else {
-            el.style.display = '';
-          }
+          updateGlideChevronElement(el, z, chevronIndex);
         }
       }
 
@@ -387,9 +381,9 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
           const labelEl = document.createElement('div');
           labelEl.style.cssText = `
             font-family: ${MAP_FONT_FAMILY};
-            font-size: 14px; font-weight: 600; color: ${color};
+            font-size: 20px; font-weight: 600; color: ${isFastest ? FASTEST_COLOR : '#333'};
             white-space: nowrap; text-align: center; line-height: 1.3;
-            text-shadow: -1px -1px 0 white, 1px -1px 0 white, -1px 1px 0 white, 1px 1px 0 white;
+            text-shadow: ${GLIDE_LABEL_TEXT_SHADOW};
           `;
           labelEl.innerHTML = reqText
             ? `${speedDisplay}<br>${detailText}<br>${reqText}`
@@ -419,7 +413,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
               <svg width="20" height="12" viewBox="0 0 20 12" style="transform:rotate(${gm.bearing}deg);">
                 <path d="M2 10 L10 2 L18 10" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
-              <span style="font-size:10px;color:black;font-family:${MAP_FONT_FAMILY};white-space:nowrap;text-shadow:-1px -1px 0 white,1px -1px 0 white,-1px 1px 0 white,1px 1px 0 white;">${chevronCount}${distUnitLabel}</span>
+              <span style="font-size:10px;color:black;font-family:${MAP_FONT_FAMILY};white-space:nowrap;text-shadow:${GLIDE_LABEL_TEXT_SHADOW};">${chevronCount}${distUnitLabel}</span>
             </div>`,
             className: '',
             iconSize: [40, 24],
@@ -914,9 +908,9 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
                   const labelEl = document.createElement('div');
                   labelEl.style.cssText = `
                     font-family: ${MAP_FONT_FAMILY};
-                    font-size: 14px; font-weight: 600; color: #3b82f6;
+                    font-size: 20px; font-weight: 600; color: #333;
                     white-space: nowrap; text-align: center; line-height: 1.3;
-                    text-shadow: -1px -1px 0 white, 1px -1px 0 white, -1px 1px 0 white, 1px 1px 0 white;
+                    text-shadow: ${GLIDE_LABEL_TEXT_SHADOW};
                   `;
                   labelEl.innerHTML = reqText
                     ? `${speed}<br>${detailText}<br>${reqText}`
@@ -945,7 +939,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
                       <svg width="20" height="12" viewBox="0 0 20 12" style="transform:rotate(${gm.bearing}deg);">
                         <path d="M2 10 L10 2 L18 10" fill="none" stroke="#3b82f6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
                       </svg>
-                      <span style="font-size:10px;color:black;font-family:${MAP_FONT_FAMILY};white-space:nowrap;text-shadow:-1px -1px 0 white,1px -1px 0 white,-1px 1px 0 white,1px 1px 0 white;">${highlightChevronCount}${highlightDistLabel}</span>
+                      <span style="font-size:10px;color:black;font-family:${MAP_FONT_FAMILY};white-space:nowrap;text-shadow:${GLIDE_LABEL_TEXT_SHADOW};">${highlightChevronCount}${highlightDistLabel}</span>
                     </div>`,
                     className: '',
                     iconSize: [40, 24],

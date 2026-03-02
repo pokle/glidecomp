@@ -19,6 +19,7 @@ import { getUnitLabel } from '@taskscore/engine';
 // ── Constants ───────────────────────────────────────────────────────────────
 
 export const MAP_FONT_FAMILY = "'Atkinson Hyperlegible Next', sans-serif";
+export const GLIDE_LABEL_TEXT_SHADOW = '0 0 4px rgba(255,255,255,0.9), 0 0 4px rgba(255,255,255,0.9), 0 0 4px rgba(255,255,255,0.9), 0 0 6px rgba(255,255,255,0.9)';
 export const GLIDE_LABEL_SPARSE_MIN_ZOOM = 10;
 export const GLIDE_LABEL_SPEED_MIN_ZOOM = 11;
 export const GLIDE_LABEL_DETAILS_MIN_ZOOM = 13;
@@ -826,33 +827,41 @@ export function computeSegmentLabels(
 
 // ── updateGlideLabelElement ─────────────────────────────────────────────
 
+/** Check if an element should be hidden at this zoom based on sparse stepping. */
+function isSparseHidden(zoom: number, index: number): boolean {
+  return zoom < GLIDE_LABEL_SPEED_MIN_ZOOM && index % 3 !== 0;
+}
+
 /** Apply zoom-dependent display logic to a single glide-label element. */
 export function updateGlideLabelElement(el: HTMLElement, zoom: number, labelIndex?: number): void {
-  const speed = el.dataset.speedLabel || '';
-  const details = el.dataset.detailLabel || '';
-  const req = el.dataset.reqLabel || '';
-
   if (zoom < GLIDE_LABEL_SPARSE_MIN_ZOOM) {
     el.style.display = 'none';
     return;
   }
-  if (zoom < GLIDE_LABEL_SPEED_MIN_ZOOM && labelIndex !== undefined && labelIndex % 3 !== 0 && !el.dataset.fastest) {
+  if (labelIndex !== undefined && !el.dataset.fastest && isSparseHidden(zoom, labelIndex)) {
     el.style.display = 'none';
     return;
   }
-  if (zoom < GLIDE_LABEL_SPEED_MIN_ZOOM) {
-    el.style.display = '';
-    el.innerHTML = speed;
-    return;
-  }
 
+  const speed = el.dataset.speedLabel || '';
   el.style.display = '';
 
   if (zoom < GLIDE_LABEL_DETAILS_MIN_ZOOM) {
     el.innerHTML = speed;
   } else {
+    const details = el.dataset.detailLabel || '';
+    const req = el.dataset.reqLabel || '';
     let html = details ? `${speed}<br>${details}` : speed;
     if (req) html += `<br>${req}`;
     el.innerHTML = html;
+  }
+}
+
+/** Apply zoom-dependent display logic to a single glide-chevron element. */
+export function updateGlideChevronElement(el: HTMLElement, zoom: number, chevronIndex: number): void {
+  if (zoom < GLIDE_LABEL_SPARSE_MIN_ZOOM || isSparseHidden(zoom, chevronIndex)) {
+    el.style.display = 'none';
+  } else {
+    el.style.display = '';
   }
 }
