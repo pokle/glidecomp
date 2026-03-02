@@ -63,55 +63,97 @@ function formatTime(date: Date): string {
 }
 
 /**
- * Get human-readable event type label
+ * Unified metadata for flight event types.
+ * Each entry provides the display label and SVG icon for a given event type.
  */
+const EVENT_METADATA: Record<FlightEventType, { label: string; icon: string }> = {
+  takeoff: {
+    label: 'Takeoff',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.5 19h19v2h-19v-2zm19.57-9.36c-.21-.8-1.04-1.28-1.84-1.06L14.92 10l-6.9-6.43-1.93.51 4.14 7.17-4.97 1.33-1.97-1.54-1.45.39 1.82 3.16.77 1.33 1.6-.43 5.31-1.42 4.35-1.16L21 11.49c.81-.23 1.28-1.05 1.07-1.85z"/></svg>`,
+  },
+  landing: {
+    label: 'Landing',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.5 19h19v2h-19v-2zm17.16-5.84l-7.29 1.95-6.41-6.14-1.93.52 4.14 7.17-4.97 1.33-1.97-1.54-1.45.39 1.82 3.16.77 1.33 1.6-.43L9.4 19.4l7.29-1.95 3.49-.93c.81-.22 1.28-1.04 1.07-1.84-.22-.81-1.04-1.28-1.84-1.06l-.75.2z"/></svg>`,
+  },
+  thermal_entry: {
+    label: 'Thermal Entry',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/></svg>`,
+  },
+  thermal_exit: {
+    label: 'Thermal Exit',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg>`,
+  },
+  glide_start: {
+    label: 'Glide Start',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8-8-8z"/></svg>`,
+  },
+  glide_end: {
+    label: 'Glide End',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l1.41 1.41L7.83 11H20v2H7.83l5.58 5.59L12 20l-8-8 8-8z"/></svg>`,
+  },
+  turnpoint_entry: {
+    label: 'TP Entry',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`,
+  },
+  turnpoint_exit: {
+    label: 'TP Exit',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`,
+  },
+  start_crossing: {
+    label: 'Start',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z"/></svg>`,
+  },
+  goal_crossing: {
+    label: 'Goal',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94.63 1.5 1.98 2.63 3.61 2.96V19H7v2h10v-2h-4v-3.1c1.63-.33 2.98-1.46 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z"/></svg>`,
+  },
+  start_reaching: {
+    label: 'Start (scored)',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`,
+  },
+  turnpoint_reaching: {
+    label: 'TP Reached',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`,
+  },
+  ess_reaching: {
+    label: 'ESS Reached',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`,
+  },
+  goal_reaching: {
+    label: 'Goal Reached',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`,
+  },
+  max_altitude: {
+    label: 'Max Alt',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 6l-3.75 5 2.85 3.8-1.6 1.2C9.81 13.75 7 10 7 10l-6 8h22L14 6z"/></svg>`,
+  },
+  min_altitude: {
+    label: 'Min Alt',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 6l-3.75 5 2.85 3.8-1.6 1.2C9.81 13.75 7 10 7 10l-6 8h22L14 6z"/></svg>`,
+  },
+  max_climb: {
+    label: 'Max Climb',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>`,
+  },
+  max_sink: {
+    label: 'Max Sink',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 18l2.29-2.29-4.88-4.88-4 4L2 7.41 3.41 6l6 6 4-4 6.3 6.29L22 12v6z"/></svg>`,
+  },
+  circle_complete: {
+    label: 'Circle',
+    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>`,
+  },
+};
+
+/** Default icon used when an event type has no specific icon */
+const DEFAULT_EVENT_ICON = `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`;
+
 function getEventTypeLabel(type: FlightEventType): string {
-  const labels: Record<FlightEventType, string> = {
-    takeoff: 'Takeoff',
-    landing: 'Landing',
-    thermal_entry: 'Thermal Entry',
-    thermal_exit: 'Thermal Exit',
-    glide_start: 'Glide Start',
-    glide_end: 'Glide End',
-    turnpoint_entry: 'TP Entry',
-    turnpoint_exit: 'TP Exit',
-    start_crossing: 'Start',
-    goal_crossing: 'Goal',
-    start_reaching: 'Start (scored)',
-    turnpoint_reaching: 'TP Reached',
-    ess_reaching: 'ESS Reached',
-    goal_reaching: 'Goal Reached',
-    max_altitude: 'Max Alt',
-    min_altitude: 'Min Alt',
-    max_climb: 'Max Climb',
-    max_sink: 'Max Sink',
-    circle_complete: 'Circle',
-  };
-  return labels[type] || type;
+  return EVENT_METADATA[type]?.label || type;
 }
 
-/**
- * Get icon SVG for event type
- */
 function getEventIcon(type: FlightEventType): string {
-  const icons: Partial<Record<FlightEventType, string>> = {
-    takeoff: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.5 19h19v2h-19v-2zm19.57-9.36c-.21-.8-1.04-1.28-1.84-1.06L14.92 10l-6.9-6.43-1.93.51 4.14 7.17-4.97 1.33-1.97-1.54-1.45.39 1.82 3.16.77 1.33 1.6-.43 5.31-1.42 4.35-1.16L21 11.49c.81-.23 1.28-1.05 1.07-1.85z"/></svg>`,
-    landing: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.5 19h19v2h-19v-2zm17.16-5.84l-7.29 1.95-6.41-6.14-1.93.52 4.14 7.17-4.97 1.33-1.97-1.54-1.45.39 1.82 3.16.77 1.33 1.6-.43L9.4 19.4l7.29-1.95 3.49-.93c.81-.22 1.28-1.04 1.07-1.84-.22-.81-1.04-1.28-1.84-1.06l-.75.2z"/></svg>`,
-    thermal_entry: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/></svg>`,
-    thermal_exit: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg>`,
-    glide_start: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8-8-8z"/></svg>`,
-    glide_end: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l1.41 1.41L7.83 11H20v2H7.83l5.58 5.59L12 20l-8-8 8-8z"/></svg>`,
-    turnpoint_entry: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`,
-    turnpoint_exit: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`,
-    start_crossing: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z"/></svg>`,
-    goal_crossing: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94.63 1.5 1.98 2.63 3.61 2.96V19H7v2h10v-2h-4v-3.1c1.63-.33 2.98-1.46 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z"/></svg>`,
-    max_altitude: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 6l-3.75 5 2.85 3.8-1.6 1.2C9.81 13.75 7 10 7 10l-6 8h22L14 6z"/></svg>`,
-    min_altitude: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 6l-3.75 5 2.85 3.8-1.6 1.2C9.81 13.75 7 10 7 10l-6 8h22L14 6z"/></svg>`,
-    max_climb: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>`,
-    max_sink: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 18l2.29-2.29-4.88-4.88-4 4L2 7.41 3.41 6l6 6 4-4 6.3 6.29L22 12v6z"/></svg>`,
-    circle_complete: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>`,
-  };
-  return icons[type] || `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`;
+  return EVENT_METADATA[type]?.icon || DEFAULT_EVENT_ICON;
 }
 
 /**
@@ -124,26 +166,23 @@ function formatDuration(seconds: number): string {
 }
 
 /**
- * Get turnpoint type label
+ * Unified metadata for turnpoint types.
+ * Each entry provides the display label and CSS class for a given turnpoint type.
  */
+const TURNPOINT_METADATA: Record<string, { label: string; cssClass: string }> = {
+  TAKEOFF: { label: 'Takeoff', cssClass: 'text-blue-600' },
+  SSS: { label: 'Start', cssClass: 'text-green-600' },
+  ESS: { label: 'Goal', cssClass: 'text-red-600' },
+};
+
+const DEFAULT_TURNPOINT_METADATA = { label: 'Turnpoint', cssClass: 'text-blue-600' };
+
 function getTurnpointTypeLabel(type?: 'TAKEOFF' | 'SSS' | 'ESS'): string {
-  switch (type) {
-    case 'TAKEOFF': return 'Takeoff';
-    case 'SSS': return 'Start';
-    case 'ESS': return 'Goal';
-    default: return 'Turnpoint';
-  }
+  return (type && TURNPOINT_METADATA[type]?.label) || DEFAULT_TURNPOINT_METADATA.label;
 }
 
-/**
- * Get turnpoint type CSS class for styling
- */
 function getTurnpointTypeClass(type?: 'TAKEOFF' | 'SSS' | 'ESS'): string {
-  switch (type) {
-    case 'SSS': return 'text-green-600';
-    case 'ESS': return 'text-red-600';
-    default: return 'text-blue-600';
-  }
+  return (type && TURNPOINT_METADATA[type]?.cssClass) || DEFAULT_TURNPOINT_METADATA.cssClass;
 }
 
 /**

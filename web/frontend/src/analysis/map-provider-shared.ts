@@ -24,7 +24,6 @@ export const GLIDE_LABEL_SPARSE_MIN_ZOOM = 10;
 export const GLIDE_LABEL_SPEED_MIN_ZOOM = 11;
 export const GLIDE_LABEL_DETAILS_MIN_ZOOM = 13;
 
-export const TRACK_COLOR = '#f97316';
 export const TRACK_OUTLINE_COLOR = '#000000';
 export const HIGHLIGHT_COLOR = '#00ffff';
 export const TASK_COLOR = '#6366f1';
@@ -49,6 +48,75 @@ export const KEY_EVENT_TYPES = new Set([
 /** Get the display color for a turnpoint type */
 export function getTurnpointColor(type: string): string {
   return TURNPOINT_COLORS[type] || TURNPOINT_COLORS.DEFAULT;
+}
+
+// ── Altitude range calculation ───────────────────────────────────────────────
+
+export interface AltitudeRange {
+  minAlt: number;
+  maxAlt: number;
+  altRange: number;
+}
+
+/**
+ * Calculate the min, max, and range of GNSS altitudes across an array of fixes.
+ * Returns Infinity/-Infinity for empty arrays (caller should guard).
+ */
+export function calculateAltitudeRange(fixes: IGCFix[]): AltitudeRange {
+  let minAlt = Infinity;
+  let maxAlt = -Infinity;
+  for (const fix of fixes) {
+    if (fix.gnssAltitude < minAlt) minAlt = fix.gnssAltitude;
+    if (fix.gnssAltitude > maxAlt) maxAlt = fix.gnssAltitude;
+  }
+  return { minAlt, maxAlt, altRange: maxAlt - minAlt };
+}
+
+// ── Track segment building ──────────────────────────────────────────────────
+
+export interface TrackSegment {
+  /** Indices into the source fixes array: [startIndex, endIndex) — endIndex is exclusive. */
+  startIndex: number;
+  endIndex: number;
+  /** Altitude value normalised to 0..1 based on the mid-point fix of the segment. */
+  normalizedAlt: number;
+}
+
+/**
+ * Divide a fixes array into at most `maxSegments` contiguous segments,
+ * each carrying a normalised altitude value derived from the segment's mid-point fix.
+ *
+ * The caller is responsible for building provider-specific geometry (GeoJSON, Leaflet LatLngs, etc.)
+ * from the returned index ranges.
+ *
+ * @param fixes         Full array of IGC fixes.
+ * @param altRange      Pre-computed altitude range (from `calculateAltitudeRange`).
+ * @param minAlt        Pre-computed minimum altitude.
+ * @param maxSegments   Maximum number of segments to produce (default 500).
+ * @param defaultNormalized  Value to use when altRange is 0 (default 0.5).
+ */
+export function buildTrackSegments(
+  fixes: IGCFix[],
+  altRange: number,
+  minAlt: number,
+  maxSegments: number = 500,
+  defaultNormalized: number = 0.5,
+): TrackSegment[] {
+  if (fixes.length < 2) return [];
+
+  const step = Math.max(1, Math.floor(fixes.length / maxSegments));
+  const segments: TrackSegment[] = [];
+
+  for (let i = 0; i < fixes.length - 1; i += step) {
+    const end = Math.min(i + step + 1, fixes.length);
+    const midIdx = Math.floor((i + end - 1) / 2);
+    const normalizedAlt = altRange > 0
+      ? (fixes[midIdx].gnssAltitude - minAlt) / altRange
+      : defaultNormalized;
+    segments.push({ startIndex: i, endIndex: end, normalizedAlt });
+  }
+
+  return segments;
 }
 
 // ── Altitude color functions ────────────────────────────────────────────────
@@ -94,13 +162,7 @@ export function getAltitudeColorNormalized(normalizedAlt: number): string {
 export function calculateAltitudeGradient(fixes: IGCFix[]): [number, string][] {
   if (fixes.length < 2) return [[0, '#3b82f6'], [1, '#3b82f6']];
 
-  let minAlt = Infinity;
-  let maxAlt = -Infinity;
-  for (const fix of fixes) {
-    if (fix.gnssAltitude < minAlt) minAlt = fix.gnssAltitude;
-    if (fix.gnssAltitude > maxAlt) maxAlt = fix.gnssAltitude;
-  }
-  const altRange = maxAlt - minAlt;
+  const { minAlt, altRange } = calculateAltitudeRange(fixes);
 
   const distances: number[] = [0];
   let totalDistance = 0;
@@ -246,6 +308,25 @@ export function showGlideLegend(element: HTMLElement | null, show: boolean): voi
   }
 }
 
+// ── Circular mean helper ─────────────────────────────────────────────────
+
+/**
+ * Compute the circular (angular) mean of a set of directions in degrees.
+ * Returns a value in the range [0, 360).
+ */
+function circularMeanDirection(directions: number[]): number {
+  let sumSin = 0;
+  let sumCos = 0;
+  for (const dir of directions) {
+    const rad = (dir * Math.PI) / 180;
+    sumSin += Math.sin(rad);
+    sumCos += Math.cos(rad);
+  }
+  let avg = (Math.atan2(sumSin / directions.length, sumCos / directions.length) * 180) / Math.PI;
+  if (avg < 0) avg += 360;
+  return avg;
+}
+
 // ── Wind estimation from nearby circles ─────────────────────────────────
 
 export interface NearbyWindEstimate {
@@ -294,18 +375,11 @@ export function estimateWindFromNearbyCircles(
 
   // Average speed (arithmetic) and direction (circular mean)
   let sumSpeed = 0;
-  let sumSin = 0;
-  let sumCos = 0;
   for (const c of nearest) {
     sumSpeed += c.speed;
-    const rad = (c.direction * Math.PI) / 180;
-    sumSin += Math.sin(rad);
-    sumCos += Math.cos(rad);
   }
-
   const avgSpeed = sumSpeed / nearest.length;
-  let avgDirection = (Math.atan2(sumSin / nearest.length, sumCos / nearest.length) * 180) / Math.PI;
-  if (avgDirection < 0) avgDirection += 360;
+  const avgDirection = circularMeanDirection(nearest.map(c => c.direction));
 
   return { speed: avgSpeed, direction: avgDirection, count: nearest.length };
 }
@@ -403,17 +477,11 @@ export function findLastThermalData(
   let wind: { speed: number; direction: number } | null = null;
   if (withWind.length > 0) {
     let sumSpeed = 0;
-    let sumSin = 0;
-    let sumCos = 0;
     for (const c of withWind) {
       sumSpeed += c.speed!;
-      const rad = (c.direction! * Math.PI) / 180;
-      sumSin += Math.sin(rad);
-      sumCos += Math.cos(rad);
     }
     const avgSpeed = sumSpeed / withWind.length;
-    let avgDirection = (Math.atan2(sumSin / withWind.length, sumCos / withWind.length) * 180) / Math.PI;
-    if (avgDirection < 0) avgDirection += 360;
+    const avgDirection = circularMeanDirection(withWind.map(c => c.direction!));
     wind = { speed: avgSpeed, direction: avgDirection };
   }
 

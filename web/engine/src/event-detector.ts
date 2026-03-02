@@ -496,6 +496,95 @@ const DEFAULT_TAKEOFF_LANDING_CONFIG: TakeoffLandingConfig = {
 };
 
 /**
+ * Find the index of the fix closest to `fixes[refIndex].timestamp + deltaSeconds`.
+ * Scans forward (positive delta) or backward (negative delta) from refIndex.
+ * Returns refIndex if no fix is found at the target time offset.
+ */
+function findFixIndexAtTime(fixes: IGCFix[], refIndex: number, deltaSeconds: number): number {
+  const targetTime = fixes[refIndex].time.getTime() + deltaSeconds * 1000;
+
+  if (deltaSeconds >= 0) {
+    for (let j = refIndex + 1; j < fixes.length; j++) {
+      if (fixes[j].time.getTime() >= targetTime) return j;
+    }
+  } else {
+    for (let j = refIndex - 1; j >= 0; j--) {
+      if (fixes[j].time.getTime() <= targetTime) return j;
+    }
+  }
+
+  return refIndex;
+}
+
+/**
+ * Evaluate whether a takeoff has occurred at a given fix index by checking
+ * multiple criteria: instant ground speed, altitude gain above start, and
+ * recent climb rate. Returns the number of criteria met (0-3).
+ */
+function evaluateTakeoffCriteria(
+  fixes: IGCFix[],
+  index: number,
+  startAltitude: number,
+  config: TakeoffLandingConfig
+): number {
+  let criteriaMetCount = 0;
+
+  // Criteria 1: Instant ground speed check
+  if (index < fixes.length - 1) {
+    const speed = calculateGroundSpeed(fixes[index - 1], fixes[index]);
+    if (speed > config.minGroundSpeed) criteriaMetCount++;
+  }
+
+  // Criteria 2: Current altitude gain above start
+  if (fixes[index].gnssAltitude - startAltitude > config.minAltitudeGain) {
+    criteriaMetCount++;
+  }
+
+  // Criteria 3: Recent climb rate (over last few fixes)
+  const climbWindowSize = Math.min(5, index);
+  if (climbWindowSize > 0) {
+    const climbStartIdx = index - climbWindowSize;
+    const climbDuration = (fixes[index].time.getTime() - fixes[climbStartIdx].time.getTime()) / 1000;
+    const altitudeChange = fixes[index].gnssAltitude - fixes[climbStartIdx].gnssAltitude;
+    if (climbDuration > 0 && altitudeChange / climbDuration > config.minClimbRate) {
+      criteriaMetCount++;
+    }
+  }
+
+  return criteriaMetCount;
+}
+
+/**
+ * Verify that flight is sustained between startIdx and endIdx after a
+ * potential takeoff point. Checks altitude gain, climb rate, and ground
+ * speed within the verification window.
+ */
+function verifyFlightSustained(
+  fixes: IGCFix[],
+  startIdx: number,
+  endIdx: number,
+  startAltitude: number,
+  config: TakeoffLandingConfig
+): boolean {
+  if (fixes[endIdx].gnssAltitude - startAltitude > config.minAltitudeGain) {
+    return true;
+  }
+
+  const windowDuration = (fixes[endIdx].time.getTime() - fixes[startIdx].time.getTime()) / 1000;
+  const windowAltChange = fixes[endIdx].gnssAltitude - fixes[startIdx].gnssAltitude;
+  if (windowDuration > 0 && windowAltChange / windowDuration > config.minClimbRate) {
+    return true;
+  }
+
+  for (let j = startIdx; j < endIdx - 1; j++) {
+    const speed = calculateGroundSpeed(fixes[j], fixes[j + 1]);
+    if (speed > config.minGroundSpeed) return true;
+  }
+
+  return false;
+}
+
+/**
  * Detect takeoff index by scanning forward for sustained flight criteria.
  * Returns the fix index of takeoff, or -1 if not found.
  */
@@ -509,58 +598,16 @@ function detectTakeoff(fixes: IGCFix[], config: TakeoffLandingConfig): { index: 
   startAltitude /= startSampleSize;
 
   for (let i = 1; i < fixes.length; i++) {
-    let criteriaMetCount = 0;
-
-    // Criteria 1: Instant ground speed check
-    if (i < fixes.length - 1) {
-      const speed = calculateGroundSpeed(fixes[i - 1], fixes[i]);
-      if (speed > config.minGroundSpeed) criteriaMetCount++;
-    }
-
-    // Criteria 2: Current altitude gain above start
-    if (fixes[i].gnssAltitude - startAltitude > config.minAltitudeGain) {
-      criteriaMetCount++;
-    }
-
-    // Criteria 3: Recent climb rate (over last few fixes)
-    const climbWindowSize = Math.min(5, i);
-    if (climbWindowSize > 0) {
-      const climbStartIdx = i - climbWindowSize;
-      const climbDuration = (fixes[i].time.getTime() - fixes[climbStartIdx].time.getTime()) / 1000;
-      const altitudeChange = fixes[i].gnssAltitude - fixes[climbStartIdx].gnssAltitude;
-      if (climbDuration > 0 && altitudeChange / climbDuration > config.minClimbRate) {
-        criteriaMetCount++;
-      }
-    }
-
+    const criteriaMetCount = evaluateTakeoffCriteria(fixes, i, startAltitude, config);
     if (criteriaMetCount < 1) continue;
 
     // Verify sustained flight for takeoffTimeWindow
-    const verifyEndTime = fixes[i].time.getTime() + config.takeoffTimeWindow * 1000;
-    let verifyEndIndex = i;
-    for (let j = i + 1; j < fixes.length; j++) {
-      if (fixes[j].time.getTime() >= verifyEndTime) { verifyEndIndex = j; break; }
-    }
+    const verifyEndIndex = findFixIndexAtTime(fixes, i, config.takeoffTimeWindow);
     if (verifyEndIndex <= i) continue;
 
-    let stillFlying = false;
-
-    if (fixes[verifyEndIndex].gnssAltitude - startAltitude > config.minAltitudeGain) {
-      stillFlying = true;
+    if (verifyFlightSustained(fixes, i, verifyEndIndex, startAltitude, config)) {
+      return { index: i, startAltitude };
     }
-
-    const windowDuration = (fixes[verifyEndIndex].time.getTime() - fixes[i].time.getTime()) / 1000;
-    const windowAltChange = fixes[verifyEndIndex].gnssAltitude - fixes[i].gnssAltitude;
-    if (windowDuration > 0 && windowAltChange / windowDuration > config.minClimbRate) {
-      stillFlying = true;
-    }
-
-    for (let j = i; j < verifyEndIndex - 1; j++) {
-      const speed = calculateGroundSpeed(fixes[j], fixes[j + 1]);
-      if (speed > config.minGroundSpeed) { stillFlying = true; break; }
-    }
-
-    if (stillFlying) return { index: i, startAltitude };
   }
 
   return null;
@@ -572,12 +619,7 @@ function detectTakeoff(fixes: IGCFix[], config: TakeoffLandingConfig): { index: 
  */
 function detectLanding(fixes: IGCFix[], config: TakeoffLandingConfig): { index: number } | null {
   for (let i = fixes.length - 2; i >= config.landingTimeWindow; i--) {
-    const windowStartTime = fixes[i].time.getTime() - config.landingTimeWindow * 1000;
-
-    let windowStartIndex = i;
-    for (let j = i; j >= 0; j--) {
-      if (fixes[j].time.getTime() <= windowStartTime) { windowStartIndex = j; break; }
-    }
+    const windowStartIndex = findFixIndexAtTime(fixes, i, -config.landingTimeWindow);
     if (windowStartIndex === i) continue;
 
     let stillFlying = false;

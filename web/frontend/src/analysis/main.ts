@@ -47,12 +47,23 @@ let analysisPanel: AnalysisPanel | null = null;
 let storageMenu: StorageMenu | null = null;
 let waypointDatabase: WaypointRecord[] = [];
 
-// Feature states
-let isAltitudeColorsEnabled = false;
-let is3DTrackEnabled = false;
-let isTaskVisible = true;
-let isTrackVisible = true;
-let isSpeedOverlayEnabled = false;
+// Feature toggle state, keyed by URL parameter name
+const featureState: Record<string, boolean> = {};
+
+/** Configuration for a single feature toggle in the command menu */
+interface FeatureToggleConfig {
+  menuId: string;
+  statusId: string;
+  urlParam: string;
+  /** Whether the feature is on by default (affects URL param parsing) */
+  defaultOn: boolean;
+  /** Optional mapRenderer property that must be truthy; menu is hidden if unsupported */
+  supportsProp?: keyof MapProvider;
+  /** mapRenderer method name to call with the boolean state */
+  providerMethod: keyof MapProvider;
+  /** Called after each toggle with the new state */
+  onToggle?: (enabled: boolean) => void;
+}
 
 /**
  * Initialize the application
@@ -73,17 +84,7 @@ async function init(): Promise<void> {
   const menuOpenIgc = document.getElementById('menu-open-igc');
   const menuImportTask = document.getElementById('menu-import-task');
   const menuImportAirscore = document.getElementById('menu-import-airscore');
-  const menuAltitudeColors = document.getElementById('menu-altitude-colors');
-  const menu3DTrack = document.getElementById('menu-3d-track');
-  const menuToggleTask = document.getElementById('menu-toggle-task');
-  const menuToggleTrack = document.getElementById('menu-toggle-track');
-  const menuShowSpeed = document.getElementById('menu-show-speed');
-  const altitudeColorsStatus = document.getElementById('altitude-colors-status');
-  const threeDTrackStatus = document.getElementById('3d-track-status');
-  const taskVisibilityStatus = document.getElementById('task-visibility-status');
-  const trackVisibilityStatus = document.getElementById('track-visibility-status');
   const showSpeedLabel = document.getElementById('show-speed-label');
-  const showSpeedStatus = document.getElementById('show-speed-status');
 
   // Units dialog
   const menuConfigureUnits = document.getElementById('menu-configure-units');
@@ -170,142 +171,97 @@ async function init(): Promise<void> {
     console.warn('Failed to initialize storage:', err);
   }
 
-  // Load feature states from URL params
+  // Set up feature toggles from config (data-driven approach)
   const params = new URLSearchParams(window.location.search);
 
-  // Set up altitude colors toggle
-  if (mapRenderer.supportsAltitudeColors && menuAltitudeColors) {
-    isAltitudeColorsEnabled = params.get('alt') !== '0';
-    updateFeatureStatus(altitudeColorsStatus, isAltitudeColorsEnabled);
+  const featureToggles: FeatureToggleConfig[] = [
+    {
+      menuId: 'menu-3d-track',
+      statusId: '3d-track-status',
+      urlParam: '3d',
+      defaultOn: false,
+      supportsProp: 'supports3D',
+      providerMethod: 'set3DMode',
+      onToggle: () => analysisPanel?.clearSelection(),
+    },
+    {
+      menuId: 'menu-toggle-task',
+      statusId: 'task-visibility-status',
+      urlParam: 'task-visible',
+      defaultOn: true,
+      providerMethod: 'setTaskVisibility',
+    },
+    {
+      menuId: 'menu-toggle-track',
+      statusId: 'track-visibility-status',
+      urlParam: 'track-visible',
+      defaultOn: true,
+      providerMethod: 'setTrackVisibility',
+      onToggle: (enabled) => { if (!enabled) analysisPanel?.clearSelection(); },
+    },
+    {
+      menuId: 'menu-show-speed',
+      statusId: 'show-speed-status',
+      urlParam: 'speed',
+      defaultOn: false,
+      providerMethod: 'setSpeedOverlay',
+      onToggle: (enabled) => {
+        if (showSpeedLabel) {
+          showSpeedLabel.textContent = enabled ? 'Clear Speed' : 'Show Speed';
+        }
+      },
+    },
+  ];
 
-    if (isAltitudeColorsEnabled && mapRenderer.setAltitudeColors) {
-      mapRenderer.setAltitudeColors(true);
+  for (const toggle of featureToggles) {
+    const menuEl = document.getElementById(toggle.menuId);
+    const statusEl = document.getElementById(toggle.statusId);
+
+    // If the feature requires provider support and it's missing, hide the menu item
+    if (toggle.supportsProp && !mapRenderer[toggle.supportsProp]) {
+      if (menuEl) menuEl.style.display = 'none';
+      continue;
     }
 
-    menuAltitudeColors.addEventListener('click', () => {
-      isAltitudeColorsEnabled = !isAltitudeColorsEnabled;
-      updateFeatureStatus(altitudeColorsStatus, isAltitudeColorsEnabled);
+    if (!menuEl) continue;
 
-      if (mapRenderer?.setAltitudeColors) {
-        mapRenderer.setAltitudeColors(isAltitudeColorsEnabled);
-        updateUrlParam('alt', isAltitudeColorsEnabled ? null : '0');
-      }
+    // Read initial state from URL params
+    const paramValue = params.get(toggle.urlParam);
+    const enabled = toggle.defaultOn
+      ? paramValue !== '0'   // on-by-default: only '0' disables
+      : paramValue === '1';  // off-by-default: only '1' enables
+    featureState[toggle.urlParam] = enabled;
+    updateFeatureStatus(statusEl, enabled);
 
-      // Clear analysis panel selection since map highlights are cleared
-      analysisPanel?.clearSelection();
-
-      // Close the command dialog
-      commandDialog?.close();
-    });
-  } else if (menuAltitudeColors) {
-    menuAltitudeColors.style.display = 'none';
-  }
-
-  // Set up 3D toggle
-  if (mapRenderer.supports3D && menu3DTrack) {
-    is3DTrackEnabled = params.get('3d') === '1';
-    updateFeatureStatus(threeDTrackStatus, is3DTrackEnabled);
-
-    if (is3DTrackEnabled && mapRenderer.set3DMode) {
-      mapRenderer.set3DMode(true);
+    // Apply initial state to provider
+    const method = mapRenderer[toggle.providerMethod];
+    if (typeof method === 'function') {
+      (method as (v: boolean) => void).call(mapRenderer, enabled);
     }
 
-    menu3DTrack.addEventListener('click', () => {
-      is3DTrackEnabled = !is3DTrackEnabled;
-      updateFeatureStatus(threeDTrackStatus, is3DTrackEnabled);
-
-      if (mapRenderer?.set3DMode) {
-        mapRenderer.set3DMode(is3DTrackEnabled);
-        updateUrlParam('3d', is3DTrackEnabled ? '1' : null);
-      }
-
-      // Clear analysis panel selection since map highlights are cleared
-      analysisPanel?.clearSelection();
-
-      // Close the command dialog
-      commandDialog?.close();
-    });
-  } else if (menu3DTrack) {
-    menu3DTrack.style.display = 'none';
-  }
-
-  // Set up task visibility toggle
-  if (menuToggleTask) {
-    isTaskVisible = params.get('task-visible') !== '0';
-    updateFeatureStatus(taskVisibilityStatus, isTaskVisible);
-
-    if (!isTaskVisible && mapRenderer?.setTaskVisibility) {
-      mapRenderer.setTaskVisibility(false);
+    // Apply initial side-effects (e.g. speed label text)
+    if (enabled) {
+      toggle.onToggle?.(enabled);
     }
 
-    menuToggleTask.addEventListener('click', () => {
-      isTaskVisible = !isTaskVisible;
-      updateFeatureStatus(taskVisibilityStatus, isTaskVisible);
+    // Set up click handler
+    menuEl.addEventListener('click', () => {
+      const newState = !featureState[toggle.urlParam];
+      featureState[toggle.urlParam] = newState;
+      updateFeatureStatus(statusEl, newState);
 
-      if (mapRenderer?.setTaskVisibility) {
-        mapRenderer.setTaskVisibility(isTaskVisible);
-        updateUrlParam('task-visible', isTaskVisible ? null : '0');
+      const providerFn = mapRenderer?.[toggle.providerMethod];
+      if (typeof providerFn === 'function') {
+        (providerFn as (v: boolean) => void).call(mapRenderer, newState);
+        // For on-by-default features, remove param when on (default); set '0' when off
+        // For off-by-default features, set '1' when on; remove param when off (default)
+        const urlValue = toggle.defaultOn
+          ? (newState ? null : '0')
+          : (newState ? '1' : null);
+        updateUrlParam(toggle.urlParam, urlValue);
       }
 
-      // Close the command dialog
-      commandDialog?.close();
-    });
-  }
-
-  // Set up track visibility toggle
-  if (menuToggleTrack) {
-    isTrackVisible = params.get('track-visible') !== '0';
-    updateFeatureStatus(trackVisibilityStatus, isTrackVisible);
-
-    if (!isTrackVisible && mapRenderer?.setTrackVisibility) {
-      mapRenderer.setTrackVisibility(false);
-    }
-
-    menuToggleTrack.addEventListener('click', () => {
-      isTrackVisible = !isTrackVisible;
-      updateFeatureStatus(trackVisibilityStatus, isTrackVisible);
-
-      if (mapRenderer?.setTrackVisibility) {
-        mapRenderer.setTrackVisibility(isTrackVisible);
-        updateUrlParam('track-visible', isTrackVisible ? null : '0');
-      }
-
-      // Clear analysis panel selection when hiding track
-      if (!isTrackVisible) {
-        analysisPanel?.clearSelection();
-      }
-
-      // Close the command dialog
-      commandDialog?.close();
-    });
-  }
-
-  // Set up speed overlay toggle
-  if (menuShowSpeed) {
-    isSpeedOverlayEnabled = params.get('speed') === '1';
-    updateFeatureStatus(showSpeedStatus, isSpeedOverlayEnabled);
-    if (isSpeedOverlayEnabled && showSpeedLabel) {
-      showSpeedLabel.textContent = 'Clear Speed';
-    }
-
-    if (isSpeedOverlayEnabled && mapRenderer?.setSpeedOverlay) {
-      mapRenderer.setSpeedOverlay(true);
-    }
-
-    menuShowSpeed.addEventListener('click', () => {
-      isSpeedOverlayEnabled = !isSpeedOverlayEnabled;
-      updateFeatureStatus(showSpeedStatus, isSpeedOverlayEnabled);
-
-      if (showSpeedLabel) {
-        showSpeedLabel.textContent = isSpeedOverlayEnabled ? 'Clear Speed' : 'Show Speed';
-      }
-
-      if (mapRenderer?.setSpeedOverlay) {
-        mapRenderer.setSpeedOverlay(isSpeedOverlayEnabled);
-        updateUrlParam('speed', isSpeedOverlayEnabled ? '1' : null);
-      }
-
-      // Close the command dialog
+      toggle.onToggle?.(newState);
       commandDialog?.close();
     });
   }
@@ -442,9 +398,9 @@ async function init(): Promise<void> {
     }
 
     // Reset speed overlay state (must call setSpeedOverlay to clear provider flag)
-    isSpeedOverlayEnabled = false;
+    featureState['speed'] = false;
     mapRenderer?.setSpeedOverlay?.(false);
-    updateFeatureStatus(showSpeedStatus, false);
+    updateFeatureStatus(document.getElementById('show-speed-status'), false);
     if (showSpeedLabel) showSpeedLabel.textContent = 'Show Speed';
     updateUrlParam('speed', null);
 

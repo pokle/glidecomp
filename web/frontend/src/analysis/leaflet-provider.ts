@@ -21,7 +21,7 @@ import type { MapProvider } from './map-provider';
 import { config } from './config';
 import {
   MAP_FONT_FAMILY, GLIDE_LABEL_TEXT_SHADOW, GLIDE_LABEL_SPARSE_MIN_ZOOM, GLIDE_LABEL_SPEED_MIN_ZOOM,
-  TRACK_COLOR, TRACK_OUTLINE_COLOR, HIGHLIGHT_COLOR, TASK_COLOR,
+  TRACK_OUTLINE_COLOR, HIGHLIGHT_COLOR, TASK_COLOR,
   getTurnpointColor, KEY_EVENT_TYPES, getAltitudeColorNormalized,
   findNearestFixIndex, createGlideLegend, showGlideLegend,
   createCirclePolygonLatLng,
@@ -29,6 +29,7 @@ import {
   CROSSHAIR_MAP_SVG,
   buildTrackPointHUDData, buildNextTurnpointContext, ensureTurnpointCache,
   formatGlideLabel, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement, updateGlideChevronElement,
+  calculateAltitudeRange, buildTrackSegments,
 } from './map-provider-shared';
 
 // Tile layer definitions
@@ -58,6 +59,39 @@ const TILE_LAYERS = {
     },
   },
 };
+
+/**
+ * Factory for creating simple Leaflet control buttons with a consistent look.
+ * Returns a Control that renders as a single button inside a leaflet-bar div.
+ */
+function createLeafletControlButton(opts: {
+  position: 'topleft' | 'topright' | 'bottomleft' | 'bottomright';
+  title: string;
+  ariaLabel?: string;
+  innerHTML: string;
+  onClick: (e: MouseEvent) => void;
+}): Control {
+  const ctrl = new Control({ position: opts.position });
+  ctrl.onAdd = () => {
+    const div = document.createElement('div');
+    div.className = 'leaflet-bar';
+    const btn = document.createElement('a');
+    btn.href = '#';
+    btn.title = opts.title;
+    btn.setAttribute('role', 'button');
+    btn.setAttribute('aria-label', opts.ariaLabel ?? opts.title);
+    btn.innerHTML = opts.innerHTML;
+    btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:30px;height:30px;';
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      opts.onClick(e);
+    });
+    div.appendChild(btn);
+    return div;
+  };
+  return ctrl;
+}
 
 /**
  * Create a Leaflet map provider
@@ -98,49 +132,21 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
 
     // Panel toggle control (top-right, added first so it's topmost)
     let panelToggleCallback: (() => void) | null = null;
-    const panelToggleControl = new Control({ position: 'topright' });
-    panelToggleControl.onAdd = () => {
-      const div = document.createElement('div');
-      div.className = 'leaflet-bar';
-      const btn = document.createElement('a');
-      btn.href = '#';
-      btn.title = 'Toggle panel';
-      btn.setAttribute('role', 'button');
-      btn.setAttribute('aria-label', 'Toggle panel');
-      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>';
-      btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:30px;height:30px;';
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        panelToggleCallback?.();
-      });
-      div.appendChild(btn);
-      return div;
-    };
-    panelToggleControl.addTo(map);
+    createLeafletControlButton({
+      position: 'topright',
+      title: 'Toggle panel',
+      innerHTML: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>',
+      onClick: () => panelToggleCallback?.(),
+    }).addTo(map);
 
     // Menu button control (top-left, added first so it's topmost)
     let menuButtonCallback: (() => void) | null = null;
-    const menuButtonControl = new Control({ position: 'topleft' });
-    menuButtonControl.onAdd = () => {
-      const div = document.createElement('div');
-      div.className = 'leaflet-bar';
-      const btn = document.createElement('a');
-      btn.href = '#';
-      btn.title = 'Menu (\u2318K)';
-      btn.setAttribute('role', 'button');
-      btn.setAttribute('aria-label', 'Menu (\u2318K)');
-      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>';
-      btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:30px;height:30px;';
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        menuButtonCallback?.();
-      });
-      div.appendChild(btn);
-      return div;
-    };
-    menuButtonControl.addTo(map);
+    createLeafletControlButton({
+      position: 'topleft',
+      title: 'Menu (\u2318K)',
+      innerHTML: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>',
+      onClick: () => menuButtonCallback?.(),
+    }).addTo(map);
 
     // Zoom control (top-left, below menu button)
     // Control.Zoom exists at runtime but isn't typed in Leaflet 2.0-alpha.1
@@ -166,29 +172,18 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
     });
 
     // Fullscreen control
-    const fullscreenControl = new Control({ position: 'topleft' });
-    fullscreenControl.onAdd = () => {
-      const div = document.createElement('div');
-      div.className = 'leaflet-bar';
-      const btn = document.createElement('a');
-      btn.href = '#';
-      btn.title = 'Toggle fullscreen';
-      btn.setAttribute('role', 'button');
-      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>';
-      btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:30px;height:30px;';
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+    createLeafletControlButton({
+      position: 'topleft',
+      title: 'Toggle fullscreen',
+      innerHTML: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>',
+      onClick: () => {
         if (document.fullscreenElement) {
           document.exitFullscreen();
         } else {
           container.requestFullscreen();
         }
-      });
-      div.appendChild(btn);
-      return div;
-    };
-    fullscreenControl.addTo(map);
+      },
+    }).addTo(map);
 
     // Scale control
     new Control.Scale({ maxWidth: 200 }).addTo(map);
@@ -201,8 +196,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
     let currentEvents: FlightEvent[] = [];
 
     // Layer groups
-    const trackGroup = new LayerGroup();        // solid track (outline + colored line)
-    const trackGradientGroup = new LayerGroup(); // altitude-gradient segments
+    const trackGroup = new LayerGroup();        // altitude-gradient track
     const taskGroup = new LayerGroup();
     const eventMarkersGroup = new LayerGroup();
     const highlightGroup = new LayerGroup();
@@ -216,7 +210,6 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
     speedOverlayGroup.addTo(map);
 
     // Feature state
-    let isAltitudeColorsMode = false;
     let isTaskVisible = true;
     let isTrackVisible = true;
     let isSpeedOverlayActive = false;
@@ -434,81 +427,6 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
       sharedHideTrackPointHUD(hudElement);
     }
 
-    /** Build multi-segment altitude-gradient polylines */
-    function buildGradientTrack(fixes: IGCFix[]): void {
-      trackGradientGroup.clearLayers();
-      if (fixes.length < 2) return;
-
-      let minAlt = Infinity, maxAlt = -Infinity;
-      for (const fix of fixes) {
-        if (fix.gnssAltitude < minAlt) minAlt = fix.gnssAltitude;
-        if (fix.gnssAltitude > maxAlt) maxAlt = fix.gnssAltitude;
-      }
-      const altRange = maxAlt - minAlt;
-
-      // Invisible hit area for click detection
-      const allLatLngs: LatLngExpression[] = fixes.map(f => [f.latitude, f.longitude]);
-      const hitArea = new Polyline(allLatLngs, {
-        color: '#000000',
-        weight: 16,
-        opacity: 0.01,
-      });
-      bindTrackClick(hitArea);
-      trackGradientGroup.addLayer(hitArea);
-
-      // Pre-compute segments with altitude data
-      const maxSegments = 500;
-      const numSegments = Math.min(maxSegments, fixes.length - 1);
-      const step = Math.max(1, Math.floor(fixes.length / numSegments));
-      const segments: { latlngs: LatLngExpression[], normalizedAlt: number }[] = [];
-
-      for (let i = 0; i < fixes.length - 1; i += step) {
-        const end = Math.min(i + step + 1, fixes.length);
-        const segLatLngs: LatLngExpression[] = [];
-        for (let j = i; j < end; j++) {
-          segLatLngs.push([fixes[j].latitude, fixes[j].longitude]);
-        }
-        const midIdx = Math.floor((i + end - 1) / 2);
-        const normalizedAlt = altRange > 0
-          ? (fixes[midIdx].gnssAltitude - minAlt) / altRange
-          : 0;
-        segments.push({ latlngs: segLatLngs, normalizedAlt });
-      }
-
-      // Outline segments (bottom layer) - wider at higher altitude
-      for (const seg of segments) {
-        trackGradientGroup.addLayer(new Polyline(seg.latlngs, {
-          color: TRACK_OUTLINE_COLOR,
-          weight: 4 + seg.normalizedAlt * 8,
-          opacity: 0.6,
-          interactive: false,
-        }));
-      }
-
-      // Altitude-colored segments (top layer) - wider at higher altitude
-      for (const seg of segments) {
-        trackGradientGroup.addLayer(new Polyline(seg.latlngs, {
-          color: getAltitudeColorNormalized(seg.normalizedAlt),
-          weight: 2 + seg.normalizedAlt * 4,
-          opacity: 0.95,
-          interactive: false,
-        }));
-      }
-    }
-
-    /** Update which track rendering is visible */
-    function updateTrackRendering(): void {
-      if (isAltitudeColorsMode) {
-        // Show gradient, hide solid
-        if (!map.hasLayer(trackGradientGroup)) trackGradientGroup.addTo(map);
-        if (map.hasLayer(trackGroup)) map.removeLayer(trackGroup);
-      } else {
-        // Show solid, hide gradient
-        if (!map.hasLayer(trackGroup)) trackGroup.addTo(map);
-        if (map.hasLayer(trackGradientGroup)) map.removeLayer(trackGradientGroup);
-      }
-    }
-
     /** Make a track polyline clickable */
     function bindTrackClick(polyline: Polyline): void {
       polyline.on('click', (e: LeafletMouseEvent) => {
@@ -522,7 +440,6 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
 
     const renderer: MapProvider = {
       supports3D: false,
-      supportsAltitudeColors: true,
       supportsSpeedOverlay: true,
 
       setSpeedOverlay(enabled: boolean) {
@@ -540,12 +457,6 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
         }
       },
 
-      setAltitudeColors(enabled: boolean) {
-        isAltitudeColorsMode = enabled;
-        clearEventHighlights();
-        updateTrackRendering();
-      },
-
       setTaskVisibility(visible: boolean) {
         isTaskVisible = visible;
         if (visible) {
@@ -558,11 +469,10 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
       setTrackVisibility(visible: boolean) {
         isTrackVisible = visible;
         if (visible) {
-          updateTrackRendering();
+          if (!map.hasLayer(trackGroup)) trackGroup.addTo(map);
           if (!map.hasLayer(eventMarkersGroup)) eventMarkersGroup.addTo(map);
         } else {
           if (map.hasLayer(trackGroup)) map.removeLayer(trackGroup);
-          if (map.hasLayer(trackGradientGroup)) map.removeLayer(trackGradientGroup);
           if (map.hasLayer(eventMarkersGroup)) map.removeLayer(eventMarkersGroup);
           clearEventHighlights();
         }
@@ -574,7 +484,6 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
         cachedSequenceResult = null;
         cachedOptimizedPath = null;
         trackGroup.clearLayers();
-        trackGradientGroup.clearLayers();
 
         if (fixes.length === 0) return;
 
@@ -590,31 +499,18 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
         trackGroup.addLayer(hitArea);
 
         // Calculate altitude range for normalization
-        let minAlt = Infinity, maxAlt = -Infinity;
-        for (const fix of fixes) {
-          if (fix.gnssAltitude < minAlt) minAlt = fix.gnssAltitude;
-          if (fix.gnssAltitude > maxAlt) maxAlt = fix.gnssAltitude;
-        }
-        const altRange = maxAlt - minAlt;
+        const { minAlt, altRange } = calculateAltitudeRange(fixes);
 
         // Pre-compute segments with altitude data
         // Higher altitude segments render wider, creating a depth effect in top-down view
-        const maxSegments = 500;
-        const step = Math.max(1, Math.floor(fixes.length / maxSegments));
-        const segments: { latlngs: LatLngExpression[], normalizedAlt: number }[] = [];
-
-        for (let i = 0; i < fixes.length - 1; i += step) {
-          const end = Math.min(i + step + 1, fixes.length);
-          const segLatLngs: LatLngExpression[] = [];
-          for (let j = i; j < end; j++) {
-            segLatLngs.push([fixes[j].latitude, fixes[j].longitude]);
+        const trackSegments = buildTrackSegments(fixes, altRange, minAlt);
+        const segments = trackSegments.map(seg => {
+          const latlngs: LatLngExpression[] = [];
+          for (let j = seg.startIndex; j < seg.endIndex; j++) {
+            latlngs.push([fixes[j].latitude, fixes[j].longitude]);
           }
-          const midIdx = Math.floor((i + end - 1) / 2);
-          const normalizedAlt = altRange > 0
-            ? (fixes[midIdx].gnssAltitude - minAlt) / altRange
-            : 0.5;
-          segments.push({ latlngs: segLatLngs, normalizedAlt });
-        }
+          return { latlngs, normalizedAlt: seg.normalizedAlt };
+        });
 
         // Outline segments (bottom layer) - wider at higher altitude
         for (const seg of segments) {
@@ -626,21 +522,15 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
           }));
         }
 
-        // Track segments (top layer) - wider at higher altitude
+        // Altitude-colored segments (top layer) - wider at higher altitude
         for (const seg of segments) {
           trackGroup.addLayer(new Polyline(seg.latlngs, {
-            color: TRACK_COLOR,
+            color: getAltitudeColorNormalized(seg.normalizedAlt),
             weight: 2 + seg.normalizedAlt * 4,
             opacity: 0.95,
             interactive: false,
           }));
         }
-
-        // Build altitude gradient variant
-        buildGradientTrack(fixes);
-
-        // Show the right variant
-        updateTrackRendering();
 
         // Fit bounds
         const bbox = getBoundingBox(fixes);
@@ -657,7 +547,6 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
         cachedSequenceResult = null;
         cachedOptimizedPath = null;
         trackGroup.clearLayers();
-        trackGradientGroup.clearLayers();
       },
 
       async setTask(task: XCTask) {

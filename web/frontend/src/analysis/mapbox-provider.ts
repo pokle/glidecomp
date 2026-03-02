@@ -20,6 +20,7 @@ import {
   CROSSHAIR_MAP_SVG,
   buildTrackPointHUDData, buildNextTurnpointContext, ensureTurnpointCache,
   formatGlideLabel, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement, updateGlideChevronElement,
+  calculateAltitudeRange, buildTrackSegments,
 } from './map-provider-shared';
 
 // Set MapBox access token from environment variable
@@ -37,6 +38,18 @@ const MAPBOX_STYLES = [
   { id: 'light', name: 'Light', style: 'mapbox://styles/mapbox/light-v11' },
   { id: 'dark', name: 'Dark', style: 'mapbox://styles/mapbox/dark-v11' },
 ];
+
+/** Helper: set GeoJSON data on a named source, guarding against missing sources. */
+function updateGeoJSONSource(
+  map: mapboxgl.Map,
+  sourceId: string,
+  features: GeoJSON.Feature[],
+): void {
+  (map.getSource(sourceId) as mapboxgl.GeoJSONSource)?.setData({
+    type: 'FeatureCollection',
+    features,
+  });
+}
 
 /**
  * Create a MapBox map provider
@@ -76,9 +89,6 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       let tb: Threebox | null = null;
       let is3DMode = false;
       let threeDObjects: unknown[] = [];
-
-      // Altitude colors state
-      let isAltitudeColorsMode = false;
 
       // Task visibility state
       let isTaskVisible = true;
@@ -163,10 +173,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           marker.remove();
         }
         speedOverlayMarkers = [];
-        (map.getSource('speed-fastest-segment') as mapboxgl.GeoJSONSource)?.setData({
-          type: 'FeatureCollection',
-          features: [],
-        });
+        updateGeoJSONSource(map, 'speed-fastest-segment', []);
       }
 
       /** Render speed overlay for all glide segments */
@@ -206,14 +213,11 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           const segFixes = currentFixes.slice(startFixIdx, endFixIdx + 1);
           if (segFixes.length > 1) {
             const coordinates = segFixes.map(f => [f.longitude, f.latitude, f.gnssAltitude]);
-            (map.getSource('speed-fastest-segment') as mapboxgl.GeoJSONSource)?.setData({
-              type: 'FeatureCollection',
-              features: [{
-                type: 'Feature',
-                properties: {},
-                geometry: { type: 'LineString', coordinates },
-              }],
-            });
+            updateGeoJSONSource(map, 'speed-fastest-segment', [{
+              type: 'Feature',
+              properties: {},
+              geometry: { type: 'LineString', coordinates },
+            }]);
           }
         }
 
@@ -268,7 +272,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
             chevronEl.dataset.chevronIndex = String(chevronCount);
             chevronCount++;
             chevronEl.style.cssText = 'display:flex;flex-direction:column;align-items:center;';
-            chevronEl.innerHTML = `<svg width="20" height="12" viewBox="0 0 20 12">
+            chevronEl.innerHTML = `<svg width="20" height="12" viewBox="0 0 20 12" style="transform:rotate(${gm.bearing}deg);">
               <path d="M2 10 L10 2 L18 10" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
             </svg><span style="font-size:10px;color:black;font-family:${MAP_FONT_FAMILY};white-space:nowrap;text-shadow:${GLIDE_LABEL_TEXT_SHADOW};">${chevronCount}${distUnitLabel}</span>`;
 
@@ -276,7 +280,6 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
               element: chevronEl,
               rotationAlignment: 'map',
               pitchAlignment: 'map',
-              rotation: gm.bearing,
             })
               .setLngLat([gm.lon, gm.lat])
               .addTo(map);
@@ -306,10 +309,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         activeMarkers = [];
 
         // Clear highlight segment source
-        (map.getSource('highlight-segment') as mapboxgl.GeoJSONSource)?.setData({
-          type: 'FeatureCollection',
-          features: [],
-        });
+        updateGeoJSONSource(map, 'highlight-segment', []);
 
         // Hide glide legend and HUD
         showGlideLegend(false);
@@ -327,7 +327,6 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           'task-points',
           'highlight-segment',
           'speed-fastest-segment',
-          'track-line-gradient',
           'track-line',
           'track-line-outline',
           'task-cylinders-stroke',
@@ -473,7 +472,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           },
         });
 
-        // 5. Track line - bright orange for visibility at all zoom levels
+        // 5. Track line with altitude-based colors and width
         map.addLayer({
           id: 'track-line',
           type: 'line',
@@ -481,29 +480,6 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           layout: {
             'line-join': 'round',
             'line-cap': 'round',
-          },
-          paint: {
-            'line-color': '#f97316', // Bright orange
-            // Altitude-adaptive width: wider at high altitude for depth effect
-            'line-width': [
-              'interpolate', ['linear'], ['zoom'],
-              3, ['interpolate', ['linear'], ['get', 'normalizedAlt'], 0, 2 * width_mul, 1, 6 * width_mul],
-              8, ['interpolate', ['linear'], ['get', 'normalizedAlt'], 0, 3 * width_mul, 1, 9 * width_mul],
-              12, ['interpolate', ['linear'], ['get', 'normalizedAlt'], 0, 3 * width_mul, 1, 9 * width_mul],
-            ],
-            'line-opacity': 0.95,
-          },
-        });
-
-        // 5a. Track line with altitude-based colors and width (hidden by default)
-        map.addLayer({
-          id: 'track-line-gradient',
-          type: 'line',
-          source: 'track',
-          layout: {
-            'line-join': 'round',
-            'line-cap': 'round',
-            'visibility': 'none', // Hidden by default
           },
           paint: {
             // Altitude-based coloring: brown (low) → green → cyan → sky blue (high)
@@ -795,7 +771,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         });
 
         // Track click and hover handlers
-        const trackLayers = ['track-line', 'track-line-outline', 'track-line-gradient'];
+        const trackLayers = ['track-line', 'track-line-outline'];
 
         // Click handler for track
         for (const layerId of trackLayers) {
@@ -901,13 +877,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         clear3DTrack();
 
         // Calculate min and max altitude for color scaling
-        let minAlt = Infinity;
-        let maxAlt = -Infinity;
-        for (const fix of fixes) {
-          if (fix.gnssAltitude < minAlt) minAlt = fix.gnssAltitude;
-          if (fix.gnssAltitude > maxAlt) maxAlt = fix.gnssAltitude;
-        }
-        const altRange = maxAlt - minAlt;
+        const { minAlt, altRange } = calculateAltitudeRange(fixes);
 
         // Create line segments for the track
         // We'll create the track as connected line segments with altitude
@@ -975,34 +945,15 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           if (map.getLayer('track-line-outline')) {
             map.setLayoutProperty('track-line-outline', 'visibility', 'none');
           }
-          if (map.getLayer('track-line-gradient')) {
-            map.setLayoutProperty('track-line-gradient', 'visibility', 'none');
-          }
           // Show 3D track
           render3DTrack(currentFixes);
-        } else if (isAltitudeColorsMode) {
-          // Show gradient track, hide solid track
-          if (map.getLayer('track-line')) {
-            map.setLayoutProperty('track-line', 'visibility', 'none');
-          }
-          if (map.getLayer('track-line-outline')) {
-            map.setLayoutProperty('track-line-outline', 'visibility', 'visible');
-          }
-          if (map.getLayer('track-line-gradient')) {
-            map.setLayoutProperty('track-line-gradient', 'visibility', 'visible');
-          }
-          // Hide 3D track
-          clear3DTrack();
         } else {
-          // Show solid track, hide gradient track
+          // Show 2D track layers
           if (map.getLayer('track-line')) {
             map.setLayoutProperty('track-line', 'visibility', 'visible');
           }
           if (map.getLayer('track-line-outline')) {
             map.setLayoutProperty('track-line-outline', 'visibility', 'visible');
-          }
-          if (map.getLayer('track-line-gradient')) {
-            map.setLayoutProperty('track-line-gradient', 'visibility', 'none');
           }
           // Hide 3D track
           clear3DTrack();
@@ -1011,7 +962,6 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
       const renderer: MapProvider = {
         supports3D: true,
-        supportsAltitudeColors: true,
         supportsSpeedOverlay: true,
 
         setSpeedOverlay(enabled: boolean) {
@@ -1027,12 +977,6 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
         set3DMode(enabled: boolean) {
           is3DMode = enabled;
-          clearEventHighlights();
-          updateTrackRendering();
-        },
-
-        setAltitudeColors(enabled: boolean) {
-          isAltitudeColorsMode = enabled;
           clearEventHighlights();
           updateTrackRendering();
         },
@@ -1066,7 +1010,6 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
             const trackLayers = [
               'track-line',
               'track-line-outline',
-              'track-line-gradient',
               'highlight-segment',
             ];
             for (const layerId of trackLayers) {
@@ -1098,55 +1041,34 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           cachedOptimizedPath = null;
 
           if (fixes.length === 0) {
-            (map.getSource('track') as mapboxgl.GeoJSONSource)?.setData({
-              type: 'FeatureCollection',
-              features: [],
-            });
+            updateGeoJSONSource(map, 'track', []);
             return;
           }
 
           // Calculate altitude range for normalization
-          let minAlt = Infinity;
-          let maxAlt = -Infinity;
-          for (const fix of fixes) {
-            if (fix.gnssAltitude < minAlt) minAlt = fix.gnssAltitude;
-            if (fix.gnssAltitude > maxAlt) maxAlt = fix.gnssAltitude;
-          }
-          const altRange = maxAlt - minAlt;
+          const { minAlt, altRange } = calculateAltitudeRange(fixes);
 
           // Batch consecutive fixes into multi-point segments for reliable rendering.
           // Individual 2-point segments get dropped at Mapbox vector tile boundaries,
           // causing visible breaks on long flights. ~500 segments balances visual
           // fidelity of altitude-based styling with rendering robustness.
-          const maxSegments = 500;
-          const step = Math.max(1, Math.floor(fixes.length / maxSegments));
-          const features = [];
-
-          for (let i = 0; i < fixes.length - 1; i += step) {
-            const end = Math.min(i + step + 1, fixes.length);
+          const segments = buildTrackSegments(fixes, altRange, minAlt);
+          const features = segments.map(seg => {
             const coordinates: [number, number][] = [];
-            for (let j = i; j < end; j++) {
+            for (let j = seg.startIndex; j < seg.endIndex; j++) {
               coordinates.push([fixes[j].longitude, fixes[j].latitude]);
             }
-            const midIdx = Math.floor((i + end - 1) / 2);
-            const normalizedAlt = altRange > 0
-              ? (fixes[midIdx].gnssAltitude - minAlt) / altRange
-              : 0.5;
-
-            features.push({
+            return {
               type: 'Feature' as const,
-              properties: { normalizedAlt },
+              properties: { normalizedAlt: seg.normalizedAlt },
               geometry: {
                 type: 'LineString' as const,
                 coordinates,
               },
-            });
-          }
-
-          (map.getSource('track') as mapboxgl.GeoJSONSource)?.setData({
-            type: 'FeatureCollection',
-            features,
+            };
           });
+
+          updateGeoJSONSource(map, 'track', features);
 
           // Fit map to track bounds
           const bounds = getBoundingBox(fixes);
@@ -1172,10 +1094,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           currentFixes = [];
           cachedSequenceResult = null;
           cachedOptimizedPath = null;
-          (map.getSource('track') as mapboxgl.GeoJSONSource)?.setData({
-            type: 'FeatureCollection',
-            features: [],
-          });
+          updateGeoJSONSource(map, 'track', []);
           // Clear 3D track if present
           if (map.getLayer('track-3d')) {
             map.setLayoutProperty('track-3d', 'visibility', 'none');
@@ -1188,22 +1107,10 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           cachedOptimizedPath = null;
 
           if (!task || task.turnpoints.length === 0) {
-            (map.getSource('task-line') as mapboxgl.GeoJSONSource)?.setData({
-              type: 'FeatureCollection',
-              features: [],
-            });
-            (map.getSource('task-points') as mapboxgl.GeoJSONSource)?.setData({
-              type: 'FeatureCollection',
-              features: [],
-            });
-            (map.getSource('task-cylinders') as mapboxgl.GeoJSONSource)?.setData({
-              type: 'FeatureCollection',
-              features: [],
-            });
-            (map.getSource('task-segment-labels') as mapboxgl.GeoJSONSource)?.setData({
-              type: 'FeatureCollection',
-              features: [],
-            });
+            updateGeoJSONSource(map, 'task-line', []);
+            updateGeoJSONSource(map, 'task-points', []);
+            updateGeoJSONSource(map, 'task-cylinders', []);
+            updateGeoJSONSource(map, 'task-segment-labels', []);
             return;
           }
 
@@ -1211,19 +1118,14 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           const optimizedPath = calculateOptimizedTaskLine(task);
           const lineCoords = optimizedPath.map(p => [p.lon, p.lat]);
 
-          (map.getSource('task-line') as mapboxgl.GeoJSONSource)?.setData({
-            type: 'FeatureCollection',
-            features: [
-              {
-                type: 'Feature',
-                properties: {},
-                geometry: {
-                  type: 'LineString',
-                  coordinates: lineCoords,
-                },
-              },
-            ],
-          });
+          updateGeoJSONSource(map, 'task-line', [{
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: lineCoords,
+            },
+          }]);
 
           // Create segment distance labels
           const segmentDistances = getOptimizedSegmentDistances(task);
@@ -1240,10 +1142,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
             },
           }));
 
-          (map.getSource('task-segment-labels') as mapboxgl.GeoJSONSource)?.setData({
-            type: 'FeatureCollection',
-            features: segmentLabelFeatures,
-          });
+          updateGeoJSONSource(map, 'task-segment-labels', segmentLabelFeatures);
 
           // Create turnpoint markers
           const pointFeatures = task.turnpoints.map((tp, idx) => ({
@@ -1259,10 +1158,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
             },
           }));
 
-          (map.getSource('task-points') as mapboxgl.GeoJSONSource)?.setData({
-            type: 'FeatureCollection',
-            features: pointFeatures,
-          });
+          updateGeoJSONSource(map, 'task-points', pointFeatures);
 
           // Create cylinder polygons
           const cylinderFeatures = task.turnpoints.map((tp, idx) => ({
@@ -1279,10 +1175,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
             ),
           }));
 
-          (map.getSource('task-cylinders') as mapboxgl.GeoJSONSource)?.setData({
-            type: 'FeatureCollection',
-            features: cylinderFeatures,
-          });
+          updateGeoJSONSource(map, 'task-cylinders', cylinderFeatures);
 
           // If no track is loaded, fit to task bounds
           if (currentFixes.length === 0) {
@@ -1298,22 +1191,10 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           currentTask = null;
           cachedSequenceResult = null;
           cachedOptimizedPath = null;
-          (map.getSource('task-line') as mapboxgl.GeoJSONSource)?.setData({
-            type: 'FeatureCollection',
-            features: [],
-          });
-          (map.getSource('task-points') as mapboxgl.GeoJSONSource)?.setData({
-            type: 'FeatureCollection',
-            features: [],
-          });
-          (map.getSource('task-cylinders') as mapboxgl.GeoJSONSource)?.setData({
-            type: 'FeatureCollection',
-            features: [],
-          });
-          (map.getSource('task-segment-labels') as mapboxgl.GeoJSONSource)?.setData({
-            type: 'FeatureCollection',
-            features: [],
-          });
+          updateGeoJSONSource(map, 'task-line', []);
+          updateGeoJSONSource(map, 'task-points', []);
+          updateGeoJSONSource(map, 'task-cylinders', []);
+          updateGeoJSONSource(map, 'task-segment-labels', []);
         },
 
         setEvents(events: FlightEvent[]) {
@@ -1394,17 +1275,14 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
             if (segmentFixes.length > 1) {
               const coordinates = segmentFixes.map(fix => [fix.longitude, fix.latitude, fix.gnssAltitude]);
 
-              (map.getSource('highlight-segment') as mapboxgl.GeoJSONSource)?.setData({
-                type: 'FeatureCollection',
-                features: [{
-                  type: 'Feature',
-                  properties: {},
-                  geometry: {
-                    type: 'LineString',
-                    coordinates,
-                  },
-                }],
-              });
+              updateGeoJSONSource(map, 'highlight-segment', [{
+                type: 'Feature',
+                properties: {},
+                geometry: {
+                  type: 'LineString',
+                  coordinates,
+                },
+              }]);
 
               // For glide events, add direction chevrons every ~1km with speed labels
               if (event.type === 'glide_start' || event.type === 'glide_end') {
@@ -1449,7 +1327,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
                     chevronEl.dataset.chevronIndex = String(highlightChevronCount);
                     highlightChevronCount++;
                     chevronEl.style.cssText = 'display:flex;flex-direction:column;align-items:center;';
-                    chevronEl.innerHTML = `<svg width="20" height="12" viewBox="0 0 20 12">
+                    chevronEl.innerHTML = `<svg width="20" height="12" viewBox="0 0 20 12" style="transform:rotate(${marker.bearing}deg);">
                       <path d="M2 10 L10 2 L18 10" fill="none" stroke="#3b82f6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg><span style="font-size:10px;color:black;font-family:${MAP_FONT_FAMILY};white-space:nowrap;text-shadow:${GLIDE_LABEL_TEXT_SHADOW};">${highlightChevronCount}${highlightDistLabel}</span>`;
 
@@ -1457,7 +1335,6 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
                       element: chevronEl,
                       rotationAlignment: 'map',
                       pitchAlignment: 'map',
-                      rotation: marker.bearing,
                     })
                       .setLngLat([marker.lon, marker.lat])
                       .addTo(map);
@@ -1469,10 +1346,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
               }
             }
           } else {
-            (map.getSource('highlight-segment') as mapboxgl.GeoJSONSource)?.setData({
-              type: 'FeatureCollection',
-              features: [],
-            });
+            updateGeoJSONSource(map, 'highlight-segment', []);
           }
 
           const style = getEventStyle(event.type);
