@@ -8,18 +8,18 @@
 
 import mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
-import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult } from '@taskscore/engine';
+import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, getUnitLabel, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult } from '@taskscore/engine';
 import type { MapProvider } from './map-provider';
 import { config } from './config';
 import {
-  MAP_FONT_FAMILY,
+  MAP_FONT_FAMILY, GLIDE_LABEL_TEXT_SHADOW, GLIDE_LABEL_SPARSE_MIN_ZOOM, GLIDE_LABEL_SPEED_MIN_ZOOM,
   KEY_EVENT_TYPES, getAltitudeColorNormalized,
   findNearestFixIndex as sharedFindNearestFixIndex,
   createCirclePolygon, createGlideLegend, showGlideLegend as sharedShowGlideLegend,
   createTrackPointHUD, updateTrackPointHUD, hideTrackPointHUD as sharedHideTrackPointHUD,
   CROSSHAIR_MAP_SVG,
   buildTrackPointHUDData, buildNextTurnpointContext, ensureTurnpointCache,
-  formatGlideLabel, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement,
+  formatGlideLabel, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement, updateGlideChevronElement,
 } from './map-provider-shared';
 
 // Set MapBox access token from environment variable
@@ -100,22 +100,22 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       // Turnpoint click callback
       let turnpointClickCallback: ((turnpointIndex: number) => void) | null = null;
 
-      /** Hide glide speed labels when zoomed out to prevent overlap clutter. */
+      /** Hide glide speed labels and chevrons when zoomed out to prevent overlap clutter. */
       function updateGlideLabelVisibility(): void {
         const zoom = map.getZoom();
-        for (const marker of activeMarkers) {
-          const el = marker.getElement();
+
+        function processMarker(el: HTMLElement): void {
           if (el.dataset.glideLabel === 'true') {
-            updateGlideLabelElement(el, zoom);
+            const labelIndex = parseInt(el.dataset.labelIndex || '0', 10);
+            updateGlideLabelElement(el, zoom, labelIndex);
+          } else if (el.dataset.glideChevron === 'true') {
+            const chevronIndex = parseInt(el.dataset.chevronIndex || '0', 10);
+            updateGlideChevronElement(el, zoom, chevronIndex);
           }
         }
-        // Also update speed overlay labels
-        for (const marker of speedOverlayMarkers) {
-          const el = marker.getElement();
-          if (el.dataset.glideLabel === 'true') {
-            updateGlideLabelElement(el, zoom);
-          }
-        }
+
+        for (const marker of activeMarkers) processMarker(marker.getElement());
+        for (const marker of speedOverlayMarkers) processMarker(marker.getElement());
       }
 
       /** Lazily create and show/hide the glide legend */
@@ -220,6 +220,10 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         const FASTEST_COLOR = '#ef4444';
         const NORMAL_COLOR = '#3b82f6';
 
+        const distUnitLabel = getUnitLabel('distance', config.getUnits());
+        let chevronCount = 0;
+        let labelIndex = 0;
+
         for (let i = 0; i < markers.length; i++) {
           const gm = markers[i];
           const isFastest = i === fastestIdx ||
@@ -236,9 +240,9 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
               font-family: ${MAP_FONT_FAMILY};
               font-size: 20px;
               font-weight: 600;
-              color: ${color};
+              color: ${isFastest ? FASTEST_COLOR : '#333'};
               white-space: nowrap;
-              text-shadow: -1px -1px 0 white, 1px -1px 0 white, -1px 1px 0 white, 1px 1px 0 white;
+              text-shadow: ${GLIDE_LABEL_TEXT_SHADOW};
               text-align: center;
               line-height: 1.3;
             `;
@@ -249,21 +253,31 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
             labelEl.dataset.speedLabel = speedDisplay;
             labelEl.dataset.detailLabel = detailText;
             labelEl.dataset.reqLabel = reqText;
+            labelEl.dataset.labelIndex = String(labelIndex);
+            if (isFastest) labelEl.dataset.fastest = 'true';
+            labelIndex++;
 
             const labelMarker = new mapboxgl.Marker({ element: labelEl })
               .setLngLat([gm.lon, gm.lat])
               .addTo(map);
+            if (isFastest) labelMarker.getElement().style.zIndex = '1';
             speedOverlayMarkers.push(labelMarker);
           } else {
             const chevronEl = document.createElement('div');
-            chevronEl.style.display = 'flex';
-            chevronEl.style.alignItems = 'center';
-            chevronEl.style.justifyContent = 'center';
-            chevronEl.innerHTML = `<svg width="20" height="12" viewBox="0 0 20 12" style="transform: rotate(${gm.bearing}deg);">
+            chevronEl.dataset.glideChevron = 'true';
+            chevronEl.dataset.chevronIndex = String(chevronCount);
+            chevronCount++;
+            chevronEl.style.cssText = 'display:flex;flex-direction:column;align-items:center;';
+            chevronEl.innerHTML = `<svg width="20" height="12" viewBox="0 0 20 12">
               <path d="M2 10 L10 2 L18 10" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>`;
+            </svg><span style="font-size:10px;color:black;font-family:${MAP_FONT_FAMILY};white-space:nowrap;text-shadow:${GLIDE_LABEL_TEXT_SHADOW};">${chevronCount}${distUnitLabel}</span>`;
 
-            const chevronMarker = new mapboxgl.Marker({ element: chevronEl })
+            const chevronMarker = new mapboxgl.Marker({
+              element: chevronEl,
+              rotationAlignment: 'map',
+              pitchAlignment: 'map',
+              rotation: gm.bearing,
+            })
               .setLngLat([gm.lon, gm.lat])
               .addTo(map);
             speedOverlayMarkers.push(chevronMarker);
@@ -1396,6 +1410,10 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
               if (event.type === 'glide_start' || event.type === 'glide_end') {
                 const glideMarkers = calculateGlideMarkers(segmentFixes, getNextTurnpointContext, getSegmentLengthMeters(config.getUnits().distance));
 
+                const highlightDistLabel = getUnitLabel('distance', config.getUnits());
+                let highlightChevronCount = 0;
+                let highlightLabelIndex = 0;
+
                 for (const marker of glideMarkers) {
                   if (marker.type === 'speed-label') {
                     const { speed, detailText, reqText } = formatGlideLabel(marker);
@@ -1405,9 +1423,9 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
                       font-family: ${MAP_FONT_FAMILY};
                       font-size: 20px;
                       font-weight: 600;
-                      color: #3b82f6;
+                      color: #333;
                       white-space: nowrap;
-                      text-shadow: -1px -1px 0 white, 1px -1px 0 white, -1px 1px 0 white, 1px 1px 0 white;
+                      text-shadow: ${GLIDE_LABEL_TEXT_SHADOW};
                       text-align: center;
                       line-height: 1.3;
                     `;
@@ -1418,22 +1436,29 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
                     labelEl.dataset.speedLabel = speed;
                     labelEl.dataset.detailLabel = detailText;
                     labelEl.dataset.reqLabel = reqText;
+                    labelEl.dataset.labelIndex = String(highlightLabelIndex);
+                    highlightLabelIndex++;
 
                     const labelMarker = new mapboxgl.Marker({ element: labelEl })
                       .setLngLat([marker.lon, marker.lat])
                       .addTo(map);
                     activeMarkers.push(labelMarker);
                   } else {
-                    // Create chevron marker
                     const chevronEl = document.createElement('div');
-                    chevronEl.style.display = 'flex';
-                    chevronEl.style.alignItems = 'center';
-                    chevronEl.style.justifyContent = 'center';
-                    chevronEl.innerHTML = `<svg width="20" height="12" viewBox="0 0 20 12" style="transform: rotate(${marker.bearing}deg);">
+                    chevronEl.dataset.glideChevron = 'true';
+                    chevronEl.dataset.chevronIndex = String(highlightChevronCount);
+                    highlightChevronCount++;
+                    chevronEl.style.cssText = 'display:flex;flex-direction:column;align-items:center;';
+                    chevronEl.innerHTML = `<svg width="20" height="12" viewBox="0 0 20 12">
                       <path d="M2 10 L10 2 L18 10" fill="none" stroke="#3b82f6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>`;
+                    </svg><span style="font-size:10px;color:black;font-family:${MAP_FONT_FAMILY};white-space:nowrap;text-shadow:${GLIDE_LABEL_TEXT_SHADOW};">${highlightChevronCount}${highlightDistLabel}</span>`;
 
-                    const chevronMarker = new mapboxgl.Marker({ element: chevronEl })
+                    const chevronMarker = new mapboxgl.Marker({
+                      element: chevronEl,
+                      rotationAlignment: 'map',
+                      pitchAlignment: 'map',
+                      rotation: marker.bearing,
+                    })
                       .setLngLat([marker.lon, marker.lat])
                       .addTo(map);
                     activeMarkers.push(chevronMarker);

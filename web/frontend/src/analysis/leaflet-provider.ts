@@ -13,14 +13,14 @@ import {
 } from 'leaflet';
 import {
   getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters,
-  calculateOptimizedTaskLine, getOptimizedSegmentDistances,
+  calculateOptimizedTaskLine, getOptimizedSegmentDistances, getUnitLabel,
   calculateBearing, haversineDistance, destinationPoint, calculateBearingRadians,
   type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult,
 } from '@taskscore/engine';
 import type { MapProvider } from './map-provider';
 import { config } from './config';
 import {
-  MAP_FONT_FAMILY,
+  MAP_FONT_FAMILY, GLIDE_LABEL_TEXT_SHADOW, GLIDE_LABEL_SPARSE_MIN_ZOOM, GLIDE_LABEL_SPEED_MIN_ZOOM,
   TRACK_COLOR, TRACK_OUTLINE_COLOR, HIGHLIGHT_COLOR, TASK_COLOR,
   getTurnpointColor, KEY_EVENT_TYPES, getAltitudeColorNormalized,
   findNearestFixIndex, createGlideLegend, showGlideLegend,
@@ -28,7 +28,7 @@ import {
   createTrackPointHUD, updateTrackPointHUD, hideTrackPointHUD as sharedHideTrackPointHUD,
   CROSSHAIR_MAP_SVG,
   buildTrackPointHUDData, buildNextTurnpointContext, ensureTurnpointCache,
-  formatGlideLabel, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement,
+  formatGlideLabel, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement, updateGlideChevronElement,
 } from './map-provider-shared';
 
 // Tile layer definitions
@@ -255,22 +255,33 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
 
     function updateGlideLabelVisibility(): void {
       const z = map.getZoom();
+
+      function processMarker(el: HTMLElement | undefined): void {
+        if (!el) return;
+        // Leaflet DivIcon wraps our HTML in a container div,
+        // so check both the wrapper and its first child for data attributes.
+        const target = el.dataset.glideLabel ? el
+          : (el.firstElementChild as HTMLElement | null)?.dataset.glideLabel ? el.firstElementChild as HTMLElement
+          : null;
+        if (target) {
+          const labelIndex = parseInt(target.dataset.labelIndex || '0', 10);
+          updateGlideLabelElement(target, z, labelIndex);
+          return;
+        }
+        const chevronDataEl = el.dataset.glideChevron ? el
+          : (el.firstElementChild as HTMLElement | null)?.dataset.glideChevron ? el.firstElementChild as HTMLElement
+          : null;
+        if (chevronDataEl) {
+          const chevronIndex = parseInt(chevronDataEl.dataset.chevronIndex || '0', 10);
+          updateGlideChevronElement(el, z, chevronIndex);
+        }
+      }
+
       highlightGroup.eachLayer((layer) => {
-        if (layer instanceof Marker) {
-          const el = layer.getElement();
-          if (el?.dataset.glideLabel === 'true') {
-            updateGlideLabelElement(el, z);
-          }
-        }
+        if (layer instanceof Marker) processMarker(layer.getElement());
       });
-      // Also update speed overlay labels
       speedOverlayGroup.eachLayer((layer) => {
-        if (layer instanceof Marker) {
-          const el = layer.getElement();
-          if (el?.dataset.glideLabel === 'true') {
-            updateGlideLabelElement(el, z);
-          }
-        }
+        if (layer instanceof Marker) processMarker(layer.getElement());
       });
     }
 
@@ -352,6 +363,10 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
       const FASTEST_COLOR = '#ef4444';
       const NORMAL_COLOR = '#3b82f6';
 
+      const distUnitLabel = getUnitLabel('distance', config.getUnits());
+      let chevronCount = 0;
+      let labelIndex = 0;
+
       for (let i = 0; i < markers.length; i++) {
         const gm = markers[i];
         const isFastest = i === fastestIdx ||
@@ -366,9 +381,9 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
           const labelEl = document.createElement('div');
           labelEl.style.cssText = `
             font-family: ${MAP_FONT_FAMILY};
-            font-size: 14px; font-weight: 600; color: ${color};
+            font-size: 20px; font-weight: 600; color: ${isFastest ? FASTEST_COLOR : '#333'};
             white-space: nowrap; text-align: center; line-height: 1.3;
-            text-shadow: -1px -1px 0 white, 1px -1px 0 white, -1px 1px 0 white, 1px 1px 0 white;
+            text-shadow: ${GLIDE_LABEL_TEXT_SHADOW};
           `;
           labelEl.innerHTML = reqText
             ? `${speedDisplay}<br>${detailText}<br>${reqText}`
@@ -377,6 +392,9 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
           labelEl.dataset.speedLabel = speedDisplay;
           labelEl.dataset.detailLabel = detailText;
           labelEl.dataset.reqLabel = reqText;
+          labelEl.dataset.labelIndex = String(labelIndex);
+          if (isFastest) labelEl.dataset.fastest = 'true';
+          labelIndex++;
 
           const icon = new DivIcon({
             html: labelEl.outerHTML,
@@ -388,15 +406,18 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
             new Marker([gm.lat, gm.lon], { icon })
           );
         } else {
+          const chevronIdx = chevronCount;
+          chevronCount++;
           const icon = new DivIcon({
-            html: `<div style="display:flex;align-items:center;justify-content:center;">
+            html: `<div data-glide-chevron="true" data-chevron-index="${chevronIdx}" style="display:flex;flex-direction:column;align-items:center;">
               <svg width="20" height="12" viewBox="0 0 20 12" style="transform:rotate(${gm.bearing}deg);">
                 <path d="M2 10 L10 2 L18 10" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
+              <span style="font-size:10px;color:black;font-family:${MAP_FONT_FAMILY};white-space:nowrap;text-shadow:${GLIDE_LABEL_TEXT_SHADOW};">${chevronCount}${distUnitLabel}</span>
             </div>`,
             className: '',
-            iconSize: [20, 12],
-            iconAnchor: [10, 6],
+            iconSize: [40, 24],
+            iconAnchor: [20, 8],
           });
           speedOverlayGroup.addLayer(
             new Marker([gm.lat, gm.lon], { icon })
@@ -876,6 +897,10 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
             if (isGlideEvent) {
               const glideMarkers = calculateGlideMarkers(segmentFixes, getNextTurnpointContext, getSegmentLengthMeters(config.getUnits().distance));
 
+              const highlightDistLabel = getUnitLabel('distance', config.getUnits());
+              let highlightChevronCount = 0;
+              let highlightLabelIndex = 0;
+
               for (const gm of glideMarkers) {
                 if (gm.type === 'speed-label') {
                   const { speed, detailText, reqText } = formatGlideLabel(gm);
@@ -883,9 +908,9 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
                   const labelEl = document.createElement('div');
                   labelEl.style.cssText = `
                     font-family: ${MAP_FONT_FAMILY};
-                    font-size: 14px; font-weight: 600; color: #3b82f6;
+                    font-size: 20px; font-weight: 600; color: #333;
                     white-space: nowrap; text-align: center; line-height: 1.3;
-                    text-shadow: -1px -1px 0 white, 1px -1px 0 white, -1px 1px 0 white, 1px 1px 0 white;
+                    text-shadow: ${GLIDE_LABEL_TEXT_SHADOW};
                   `;
                   labelEl.innerHTML = reqText
                     ? `${speed}<br>${detailText}<br>${reqText}`
@@ -894,6 +919,8 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
                   labelEl.dataset.speedLabel = speed;
                   labelEl.dataset.detailLabel = detailText;
                   labelEl.dataset.reqLabel = reqText;
+                  labelEl.dataset.labelIndex = String(highlightLabelIndex);
+                  highlightLabelIndex++;
 
                   const icon = new DivIcon({
                     html: labelEl.outerHTML,
@@ -905,16 +932,18 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
                     new Marker([gm.lat, gm.lon], { icon })
                   );
                 } else {
-                  // Chevron
+                  const chevronIdx = highlightChevronCount;
+                  highlightChevronCount++;
                   const icon = new DivIcon({
-                    html: `<div style="display:flex;align-items:center;justify-content:center;">
+                    html: `<div data-glide-chevron="true" data-chevron-index="${chevronIdx}" style="display:flex;flex-direction:column;align-items:center;">
                       <svg width="20" height="12" viewBox="0 0 20 12" style="transform:rotate(${gm.bearing}deg);">
                         <path d="M2 10 L10 2 L18 10" fill="none" stroke="#3b82f6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
                       </svg>
+                      <span style="font-size:10px;color:black;font-family:${MAP_FONT_FAMILY};white-space:nowrap;text-shadow:${GLIDE_LABEL_TEXT_SHADOW};">${highlightChevronCount}${highlightDistLabel}</span>
                     </div>`,
                     className: '',
-                    iconSize: [20, 12],
-                    iconAnchor: [10, 6],
+                    iconSize: [40, 24],
+                    iconAnchor: [20, 8],
                   });
                   highlightGroup.addLayer(
                     new Marker([gm.lat, gm.lon], { icon })
