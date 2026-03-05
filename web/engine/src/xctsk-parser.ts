@@ -6,6 +6,7 @@
  */
 
 import { haversineDistance } from './geo';
+import { sanitizeText } from './sanitize';
 import type { IGCTask, IGCTaskPoint } from './igc-parser';
 import { findWaypoint, type WaypointRecord } from './waypoints';
 
@@ -122,8 +123,8 @@ function parseV1(data: Record<string, unknown>): XCTask {
             type: tpObj.type as Turnpoint['type'],
             radius: (tpObj.radius as number) || 400,
             waypoint: {
-              name: (wp.name as string) || 'Unnamed',
-              description: wp.description as string | undefined,
+              name: sanitizeText((wp.name as string) || 'Unnamed'),
+              description: wp.description ? sanitizeText(wp.description as string) : undefined,
               lat: wp.lat as number,
               lon: wp.lon as number,
               altSmoothed: wp.altSmoothed as number | undefined,
@@ -218,7 +219,7 @@ function parseV2(data: Record<string, unknown>): XCTask {
           type,
           radius,
           waypoint: {
-            name: (tpObj.n as string) || 'Unnamed',
+            name: sanitizeText((tpObj.n as string) || 'Unnamed'),
             lat,
             lon,
             altSmoothed: alt || undefined,

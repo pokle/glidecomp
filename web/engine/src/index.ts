@@ -1,4 +1,5 @@
 // Public API
+export { sanitizeText } from './sanitize';
 export { parseIGC, type IGCFile, type IGCFix, type IGCHeader, type IGCEvent, type IGCTask, type IGCTaskPoint } from './igc-parser';
 export { detectFlightEvents, filterEventsByBounds, getEventStyle, type FlightEvent, type FlightEventType, type ThermalSegment, type GlideSegment, type TrackSegment, type EventDetails, type ThermalEventDetails, type GlideEventDetails, type FixIndexDetails, type TurnpointCrossingDetails, type TurnpointReachingDetails, type CircleEventDetails } from './event-detector';
 export { parseXCTask, igcTaskToXCTask, calculateNominalTaskDistance, getSSSIndex, getESSIndex, getIntermediateTurnpoints, isValidTask, type XCTask, type Turnpoint, type Waypoint, type SSSConfig, type GoalConfig, type IGCTaskConversionOptions } from './xctsk-parser';
@@ -10,3 +11,4 @@ export { calculateGlidePositions, calculateGlideMarkers, calculateTotalGlideDist
 export { resolveTurnpointSequence, detectCylinderCrossings, type TurnpointSequenceResult, type CylinderCrossing, type TurnpointReaching, type BestProgress, type LegDistance } from './turnpoint-sequence';
 export { detectCircles, computeBearingRates, fitCircleLeastSquares, normalizeBearingDelta, type CircleSegment, type CirclingSegment, type FittedCircle, type WindEstimate, type CircleDetectionResult, type TurnDirection } from './circle-detector';
 export { extractGlides, extractClimbs, extractSinks, type GlideData, type ClimbData, type SinkData, type ClimbEventDetails } from './segment-extractors';
+export { maxBy, minBy } from './array-utils';

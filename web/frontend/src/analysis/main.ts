@@ -8,7 +8,7 @@
  * - Event detection and display
  */
 
-import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistance, igcTaskToXCTask, resolveTurnpointSequence, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord } from '@taskscore/engine';
+import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistance, igcTaskToXCTask, resolveTurnpointSequence, maxBy, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord } from '@taskscore/engine';
 import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
 import { createMapProvider, type MapProvider, type MapProviderType } from './map-provider';
 import { createAnalysisPanel, AnalysisPanel, FlightInfo } from './analysis-panel';
@@ -950,7 +950,7 @@ async function init(): Promise<void> {
         const mins = Math.floor((duration % 3600000) / 60000);
         info.duration = `${hours}h ${mins}m`;
 
-        const maxAlt = Math.max(...state.fixes.map(f => f.gnssAltitude));
+        const maxAlt = maxBy(state.fixes, f => f.gnssAltitude);
         info.maxAlt = formatAltitude(maxAlt).withUnit;
       }
     }
