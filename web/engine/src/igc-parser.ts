@@ -91,13 +91,18 @@ function parseLongitude(lon: string): number {
 
 /**
  * Parse time from IGC format: HHMMSS
+ * dayOffset handles midnight rollover — flights crossing midnight UTC get
+ * subsequent fixes on the next calendar day.
  */
-function parseTime(time: string, baseDate: Date): Date {
+function parseTime(time: string, baseDate: Date, dayOffset: number = 0): Date {
   const hours = parseInt(time.substring(0, 2), 10);
   const minutes = parseInt(time.substring(2, 4), 10);
   const seconds = parseInt(time.substring(4, 6), 10);
 
   const result = new Date(baseDate);
+  if (dayOffset > 0) {
+    result.setUTCDate(result.getUTCDate() + dayOffset);
+  }
   result.setUTCHours(hours, minutes, seconds, 0);
   return result;
 }
@@ -127,10 +132,10 @@ function parseDate(dateStr: string): Date {
  *         PPPPP - Pressure altitude (meters)
  *         GGGGG - GNSS altitude (meters)
  */
-function parseBRecord(line: string, baseDate: Date): IGCFix | null {
+function parseBRecord(line: string, baseDate: Date, dayOffset: number = 0): IGCFix | null {
   if (line.length < 35) return null;
 
-  const time = parseTime(line.substring(1, 7), baseDate);
+  const time = parseTime(line.substring(1, 7), baseDate, dayOffset);
   const latitude = parseLatitude(line.substring(7, 15));
   const longitude = parseLongitude(line.substring(15, 24));
   const valid = line.charAt(24) === 'A';
@@ -177,10 +182,10 @@ function parseCRecord(line: string): IGCTaskPoint | null {
  *         HHMMSS - UTC time
  *         TTT - Event code (e.g., PEV for pilot event)
  */
-function parseERecord(line: string, baseDate: Date): IGCEvent | null {
+function parseERecord(line: string, baseDate: Date, dayOffset: number = 0): IGCEvent | null {
   if (line.length < 10) return null;
 
-  const time = parseTime(line.substring(1, 7), baseDate);
+  const time = parseTime(line.substring(1, 7), baseDate, dayOffset);
   const code = line.substring(7, 10);
   const description = sanitizeText(line.substring(10).trim());
 
@@ -250,6 +255,11 @@ export function parseIGC(content: string): IGCFile {
     }
   }
 
+  // Midnight rollover tracking: IGC B/E records only have HHMMSS with no date,
+  // so flights crossing midnight UTC (common in Australia/Pacific) need day adjustment.
+  let prevHours = -1;
+  let dayOffset = 0;
+
   // Second pass: parse all records
   for (const line of lines) {
     if (!line.length) continue;
@@ -262,13 +272,23 @@ export function parseIGC(content: string): IGCFile {
         break;
 
       case 'B': {
-        const fix = parseBRecord(line, baseDate);
+        const hours = parseInt(line.substring(1, 3), 10);
+        if (prevHours >= 18 && hours <= 6) {
+          dayOffset++;
+        }
+        prevHours = hours;
+        const fix = parseBRecord(line, baseDate, dayOffset);
         if (fix) fixes.push(fix);
         break;
       }
 
       case 'E': {
-        const event = parseERecord(line, baseDate);
+        const hours = parseInt(line.substring(1, 3), 10);
+        if (prevHours >= 18 && hours <= 6) {
+          dayOffset++;
+        }
+        prevHours = hours;
+        const event = parseERecord(line, baseDate, dayOffset);
         if (event) events.push(event);
         break;
       }

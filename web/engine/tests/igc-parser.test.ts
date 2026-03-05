@@ -156,6 +156,70 @@ B1234564728234N01152432EA0123401567
       expect(result.task!.takeoff!.name).not.toContain('<');
     });
 
+    it('should handle midnight UTC rollover', () => {
+      const igcContent = `HFDTE150124
+B2358004728234N01152432EA0123401567
+B2359004728300N01152500EA0125001600
+B0001004728400N01152600EA0126001650
+B0002004728500N01152700EA0127001700
+`;
+
+      const result = parseIGC(igcContent);
+      expect(result.fixes).toHaveLength(4);
+
+      // Timestamps must be monotonically increasing
+      for (let i = 1; i < result.fixes.length; i++) {
+        expect(result.fixes[i].time.getTime()).toBeGreaterThan(
+          result.fixes[i - 1].time.getTime()
+        );
+      }
+
+      // Pre-midnight fixes should be on Jan 15
+      expect(result.fixes[0].time.getUTCDate()).toBe(15);
+      expect(result.fixes[1].time.getUTCDate()).toBe(15);
+
+      // Post-midnight fixes should be on Jan 16
+      expect(result.fixes[2].time.getUTCDate()).toBe(16);
+      expect(result.fixes[3].time.getUTCDate()).toBe(16);
+    });
+
+    it('should handle E records interleaved across midnight', () => {
+      const igcContent = `HFDTE150124
+B2358004728234N01152432EA0123401567
+E235900PEVBefore midnight
+B2359004728300N01152500EA0125001600
+B0001004728400N01152600EA0126001650
+E000200PEVAfter midnight
+`;
+
+      const result = parseIGC(igcContent);
+
+      expect(result.events).toHaveLength(2);
+      expect(result.events[0].time.getUTCDate()).toBe(15);
+      expect(result.events[1].time.getUTCDate()).toBe(16);
+
+      // Event after midnight must be after event before midnight
+      expect(result.events[1].time.getTime()).toBeGreaterThan(
+        result.events[0].time.getTime()
+      );
+    });
+
+    it('should not false-trigger midnight rollover on normal daytime flights', () => {
+      const igcContent = `HFDTE150124
+B1000004728234N01152432EA0123401567
+B1100004728300N01152500EA0125001600
+B1200004728400N01152600EA0126001650
+`;
+
+      const result = parseIGC(igcContent);
+      expect(result.fixes).toHaveLength(3);
+
+      // All fixes should be on the same day
+      for (const fix of result.fixes) {
+        expect(fix.time.getUTCDate()).toBe(15);
+      }
+    });
+
     it('should sanitize HTML in E record event descriptions', () => {
       const igcContent = `HFDTE150124
 B1234564728234N01152432EA0123401567
