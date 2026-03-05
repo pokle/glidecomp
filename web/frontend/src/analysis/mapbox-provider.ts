@@ -967,6 +967,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         setSpeedOverlay(enabled: boolean) {
           isSpeedOverlayActive = enabled;
           if (enabled) {
+            clearEventHighlights();
             renderSpeedOverlay();
             showGlideLegend(true);
           } else {

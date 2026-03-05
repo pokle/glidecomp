@@ -445,6 +445,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
       setSpeedOverlay(enabled: boolean) {
         isSpeedOverlayActive = enabled;
         if (enabled) {
+          clearEventHighlights();
           renderSpeedOverlay();
           if (!glideLegendElement) {
             glideLegendElement = createGlideLegend(container);

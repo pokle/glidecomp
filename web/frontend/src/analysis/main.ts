@@ -209,6 +209,10 @@ async function init(): Promise<void> {
         if (showSpeedLabel) {
           showSpeedLabel.textContent = enabled ? 'Clear Speed' : 'Show Speed';
         }
+        // Clear glide segment selection when enabling speed overlay
+        if (enabled) {
+          analysisPanel?.clearSelection();
+        }
       },
     },
   ];
@@ -530,6 +534,11 @@ async function init(): Promise<void> {
 
   // Register track click handler to select events when clicking on the track
   mapRenderer.onTrackClick?.((fixIndex: number) => {
+    // Don't allow glide segment selection when speed overlay is active
+    if (featureState['speed']) {
+      return;
+    }
+
     // Debug: show clicked fix details before any segment lookup
     if (state.fixes.length > 0 && fixIndex >= 0 && fixIndex < state.fixes.length) {
       const fix = state.fixes[fixIndex];
