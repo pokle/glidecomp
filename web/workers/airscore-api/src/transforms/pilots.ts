@@ -2,6 +2,7 @@
  * Extract pilot results from AirScore data array
  */
 
+import { sanitizeText } from '@taskscore/engine';
 import type { AirScoreDataRow, PilotResult } from '../types';
 
 /**
@@ -114,9 +115,9 @@ export function extractPilotResults(data: AirScoreDataRow[]): PilotResult[] {
     return {
       rank: parseRank(rank as string | number),
       pilotId: String(pilotId || ''),
-      name,
+      name: sanitizeText(name),
       nationality: String(nationality || ''),
-      glider: String(glider || ''),
+      glider: sanitizeText(String(glider || '')),
       gliderClass: String(gliderClass || ''),
       startTime: parseString(startTime),
       finishTime: parseString(finishTime),

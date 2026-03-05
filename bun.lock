@@ -51,6 +51,9 @@
     "web/workers/airscore-api": {
       "name": "airscore-api",
       "version": "1.0.0",
+      "dependencies": {
+        "@taskscore/engine": "workspace:*",
+      },
       "devDependencies": {
         "@cloudflare/workers-types": "^4.20260304.0",
         "typescript": "^5.9.3",

@@ -5,6 +5,8 @@
  * Reference: https://xp-soaring.github.io/igc_file_format/igc_format_2008.html
  */
 
+import { sanitizeText } from './sanitize';
+
 export interface IGCFix {
   time: Date;
   latitude: number;
@@ -164,7 +166,7 @@ function parseCRecord(line: string): IGCTaskPoint | null {
 
   const latitude = parseLatitude(latPart);
   const longitude = parseLongitude(lonPart);
-  const name = line.substring(18).trim();
+  const name = sanitizeText(line.substring(18).trim());
 
   return { latitude, longitude, name };
 }
@@ -180,7 +182,7 @@ function parseERecord(line: string, baseDate: Date): IGCEvent | null {
 
   const time = parseTime(line.substring(1, 7), baseDate);
   const code = line.substring(7, 10);
-  const description = line.substring(10).trim();
+  const description = sanitizeText(line.substring(10).trim());
 
   return { time, code, description };
 }
@@ -217,7 +219,7 @@ function parseHRecord(line: string, header: IGCHeader): void {
     if (content.startsWith(`F${code}`) || content.startsWith(code)) {
       const match = content.match(new RegExp(`(?:F${code}|${code})[^:]*:(.+)`));
       if (match) {
-        header[field] = match[1].trim();
+        header[field] = sanitizeText(match[1].trim());
       }
       return;
     }

@@ -128,6 +128,46 @@ HFCCL:Sport
       expect(result.header.competitionId).toBe('AB');
       expect(result.header.competitionClass).toBe('Sport');
     });
+
+    it('should sanitize HTML in pilot name and other headers', () => {
+      const igcContent = `HFDTE150124
+HFPLTPILOTINCHARGE:<script>alert(1)</script>
+HFGTYGLIDERTYPE:<img src=x onerror=alert(1)>Boom
+B1234564728234N01152432EA0123401567
+`;
+
+      const result = parseIGC(igcContent);
+
+      expect(result.header.pilot).toBe('alert(1)');
+      expect(result.header.gliderType).toBe('Boom');
+    });
+
+    it('should sanitize HTML in C record waypoint names', () => {
+      const igcContent = `HFDTE150124
+C4728234N01152432E<b>Start</b>
+C4729000N01153000EGoal
+B1234564728234N01152432EA0123401567
+`;
+
+      const result = parseIGC(igcContent);
+
+      expect(result.task).toBeDefined();
+      expect(result.task!.takeoff!.name).toBe('Start');
+      expect(result.task!.takeoff!.name).not.toContain('<');
+    });
+
+    it('should sanitize HTML in E record event descriptions', () => {
+      const igcContent = `HFDTE150124
+B1234564728234N01152432EA0123401567
+E123456PEV<script>xss</script>
+`;
+
+      const result = parseIGC(igcContent);
+
+      expect(result.events).toHaveLength(1);
+      expect(result.events[0].description).toBe('xss');
+      expect(result.events[0].description).not.toContain('<script>');
+    });
   });
 
 });
