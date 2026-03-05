@@ -800,6 +800,14 @@ function detectVarioExtremes(fixes: IGCFix[]): FlightEvent[] {
   return events;
 }
 
+/** Adjust fixIndex in event details by the given offset */
+function adjustFixIndex(event: FlightEvent, offset: number): void {
+  const details = event.details as Record<string, unknown> | undefined;
+  if (details && typeof details.fixIndex === 'number') {
+    details.fixIndex += offset;
+  }
+}
+
 /**
  * Main function to detect all flight events
  */
@@ -923,13 +931,22 @@ export function detectFlightEvents(
   }
 
   // Detect altitude and vario extremes (only after takeoff)
-  allEvents.push(...detectAltitudeExtremes(flightFixes));
-  allEvents.push(...detectVarioExtremes(flightFixes));
+  // Apply indexOffset so fixIndex references the original fixes array
+  for (const event of detectAltitudeExtremes(flightFixes)) {
+    adjustFixIndex(event, indexOffset);
+    allEvents.push(event);
+  }
+  for (const event of detectVarioExtremes(flightFixes)) {
+    adjustFixIndex(event, indexOffset);
+    allEvents.push(event);
+  }
 
   // Detect turnpoint crossings and scored reachings if task is provided (only after takeoff)
   if (task) {
-    const turnpointEvents = detectTurnpointEvents(flightFixes, task);
-    allEvents.push(...turnpointEvents);
+    for (const event of detectTurnpointEvents(flightFixes, task)) {
+      adjustFixIndex(event, indexOffset);
+      allEvents.push(event);
+    }
   }
 
   // Detect circles (only after takeoff)

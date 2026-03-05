@@ -121,6 +121,69 @@ describe('Event Detector', () => {
       expect(startCrossing).toBeDefined();
     });
 
+    it('should apply indexOffset to altitude/vario fixIndex (BUG-03)', () => {
+      // Create a track with stationary pre-flight fixes before takeoff
+      const fixes: IGCFix[] = [];
+
+      // 10 minutes stationary on the ground (no takeoff)
+      for (let i = 0; i < 10; i++) {
+        fixes.push(createFix(i, 47.0, 11.0, 500));
+      }
+
+      // Takeoff with rapid movement and climb
+      for (let i = 10; i < 20; i++) {
+        const progress = (i - 10) / 10;
+        fixes.push(createFix(i, 47.0 + progress * 0.01, 11.0 + progress * 0.01, 500 + (i - 10) * 100));
+      }
+
+      // Cruise at high altitude
+      for (let i = 20; i < 60; i++) {
+        const progress = (i - 20) / 40;
+        fixes.push(createFix(i, 47.01 + progress * 0.2, 11.01 + progress * 0.2, 1800 - (i - 20) * 20));
+      }
+
+      // Descend and land
+      for (let i = 60; i < 80; i++) {
+        fixes.push(createFix(i, 47.21, 11.21, 1000 - (i - 60) * 30));
+      }
+
+      const events = detectFlightEvents(fixes);
+
+      // Find the takeoff to know the expected offset
+      const takeoff = events.find(e => e.type === 'takeoff');
+      expect(takeoff).toBeDefined();
+      const takeoffIndex = fixes.findIndex(f => f.time.getTime() === takeoff!.time.getTime());
+      expect(takeoffIndex).toBeGreaterThan(0); // Must have pre-flight fixes
+
+      // Check altitude extreme fixIndex values reference the original fixes array
+      const maxAlt = events.find(e => e.type === 'max_altitude');
+      const minAlt = events.find(e => e.type === 'min_altitude');
+      expect(maxAlt).toBeDefined();
+      expect(minAlt).toBeDefined();
+
+      // fixIndex must be >= takeoffIndex (not relative to flightFixes)
+      const maxAltDetails = maxAlt!.details as { fixIndex: number };
+      const minAltDetails = minAlt!.details as { fixIndex: number };
+      expect(maxAltDetails.fixIndex).toBeGreaterThanOrEqual(takeoffIndex);
+      expect(minAltDetails.fixIndex).toBeGreaterThanOrEqual(takeoffIndex);
+
+      // Verify the fixIndex actually points to the correct fix in the original array
+      expect(fixes[maxAltDetails.fixIndex].gnssAltitude).toBe(maxAlt!.altitude);
+      expect(fixes[minAltDetails.fixIndex].gnssAltitude).toBe(minAlt!.altitude);
+
+      // Check vario extreme fixIndex values if present
+      const maxClimb = events.find(e => e.type === 'max_climb');
+      if (maxClimb?.details) {
+        const details = maxClimb.details as { fixIndex: number };
+        expect(details.fixIndex).toBeGreaterThanOrEqual(takeoffIndex);
+      }
+      const maxSink = events.find(e => e.type === 'max_sink');
+      if (maxSink?.details) {
+        const details = maxSink.details as { fixIndex: number };
+        expect(details.fixIndex).toBeGreaterThanOrEqual(takeoffIndex);
+      }
+    });
+
     it('should sort events by time', () => {
       const fixes = createFlightTrack(90);
       const events = detectFlightEvents(fixes);
