@@ -8,6 +8,14 @@ import { errorResponse, type Env } from '../types';
 import { getCachedOrFetch, trackCacheKey } from '../cache';
 
 /**
+ * Check that content looks like a valid IGC file.
+ * A valid IGC file must start with 'A' (manufacturer record) AND contain 'HFDTE' (date header).
+ */
+export function isValidIgcContent(content: string): boolean {
+  return content.startsWith('A') && content.includes('HFDTE');
+}
+
+/**
  * Fetch track IGC file from AirScore
  *
  * AirScore track URL format:
@@ -31,8 +39,7 @@ async function fetchTrackFromAirScore(
 
   const content = await response.text();
 
-  // Validate it looks like an IGC file
-  if (!content.startsWith('A') && !content.includes('HFDTE')) {
+  if (!isValidIgcContent(content)) {
     throw new Error('Response does not appear to be a valid IGC file');
   }
 
