@@ -516,4 +516,57 @@ describe('XCTSK Parser', () => {
       expect(distance).toBeLessThan(200000);
     });
   });
+
+  describe('XSS sanitization', () => {
+    it('should sanitize HTML in v1 waypoint names and descriptions', () => {
+      const taskJson = JSON.stringify({
+        taskType: 'CLASSIC',
+        version: 1,
+        turnpoints: [
+          {
+            type: 'SSS',
+            radius: 400,
+            waypoint: {
+              name: '<img src=x onerror=alert(1)>Start',
+              description: '<script>steal(cookies)</script>',
+              lat: 47.0,
+              lon: 11.0,
+            },
+          },
+          {
+            type: 'ESS',
+            radius: 400,
+            waypoint: { name: 'Goal<b>xss</b>', lat: 48.0, lon: 12.0 },
+          },
+        ],
+      });
+
+      const task = parseXCTask(taskJson);
+
+      expect(task.turnpoints[0].waypoint.name).toBe('Start');
+      expect(task.turnpoints[0].waypoint.name).not.toContain('<');
+      expect(task.turnpoints[0].waypoint.description).toBe('steal(cookies)');
+      expect(task.turnpoints[0].waypoint.description).not.toContain('<script>');
+      expect(task.turnpoints[1].waypoint.name).toBe('Goalxss');
+    });
+
+    it('should sanitize HTML in v2 waypoint names', () => {
+      const taskJson = JSON.stringify({
+        t: [
+          {
+            y: 'S',
+            r: 400,
+            lat: 47.0,
+            lon: 11.0,
+            n: '<img onerror=alert(document.cookie)>TP1',
+          },
+        ],
+      });
+
+      const task = parseXCTask(taskJson);
+
+      expect(task.turnpoints[0].waypoint.name).toBe('TP1');
+      expect(task.turnpoints[0].waypoint.name).not.toContain('<');
+    });
+  });
 });

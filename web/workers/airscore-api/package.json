@@ -10,6 +10,9 @@
     "typecheck": "tsc --noEmit",
     "clear-cache": "rm -rf .wrangler/state"
   },
+  "dependencies": {
+    "@taskscore/engine": "workspace:*"
+  },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260304.0",
     "typescript": "^5.9.3",
