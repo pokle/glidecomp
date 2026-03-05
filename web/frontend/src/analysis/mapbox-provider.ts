@@ -1489,6 +1489,12 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           const data = buildTrackPointHUDData(currentFixes, currentEvents, fixIndex, getNextTurnpointContext);
           if (!data) return;
 
+          // Clear previous crosshair/markers
+          for (const marker of activeMarkers) {
+            marker.remove();
+          }
+          activeMarkers = [];
+
           // Hide glide legend (same position as HUD)
           showGlideLegend(false);
 

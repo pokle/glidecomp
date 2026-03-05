@@ -948,6 +948,9 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
         const data = buildTrackPointHUDData(currentFixes, currentEvents, fixIndex, getNextTurnpointContext);
         if (!data) return;
 
+        // Clear previous crosshair/highlights
+        highlightGroup.clearLayers();
+
         // Hide glide legend (same position as HUD)
         showGlideLegend(glideLegendElement, false);
 
