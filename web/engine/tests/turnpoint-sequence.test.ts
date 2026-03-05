@@ -844,4 +844,68 @@ describe('resolveTurnpointSequence', () => {
       expect(result.legs[0].completed).toBe(true);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // BUG-05: SSS crossing direction validation
+  // ---------------------------------------------------------------------------
+  describe('SSS crossing direction filtering', () => {
+    // Task: TAKEOFF → SSS (radius 3000m) → TP → GOAL
+    const sssTurnpoints: TaskDef[] = [
+      { name: 'TAKEOFF', lat: 47.0, lon: 11.0, radius: 400, type: 'TAKEOFF' },
+      { name: 'SSS', lat: 47.05, lon: 11.0, radius: 3000, type: 'SSS' },
+      { name: 'TP1', lat: 47.15, lon: 11.0, radius: 1000 },
+      { name: 'GOAL', lat: 47.25, lon: 11.0, radius: 1000 },
+    ];
+
+    it('uses only EXIT crossings when sss.direction is EXIT', () => {
+      const task = createTask(sssTurnpoints, { direction: 'EXIT' });
+      // Fly through all cylinders (generates both enter and exit crossings)
+      const track = createTrackThroughCylinders(
+        sssTurnpoints.map(d => ({ lat: d.lat, lon: d.lon, radius: d.radius }))
+      );
+
+      const result = resolveTurnpointSequence(task, track);
+
+      // Should have started (exit crossing exists)
+      expect(result.sssReaching).not.toBeNull();
+      // The SSS crossing used should be an exit
+      const sssCrossingsUsed = result.crossings.filter(
+        c => c.taskIndex === 1 && c.direction === 'exit'
+      );
+      expect(sssCrossingsUsed.length).toBeGreaterThan(0);
+    });
+
+    it('uses only ENTER crossings when sss.direction is ENTER', () => {
+      const task = createTask(sssTurnpoints, { direction: 'ENTER' });
+      const track = createTrackThroughCylinders(
+        sssTurnpoints.map(d => ({ lat: d.lat, lon: d.lon, radius: d.radius }))
+      );
+
+      const result = resolveTurnpointSequence(task, track);
+
+      // Should have started (enter crossing exists)
+      expect(result.sssReaching).not.toBeNull();
+    });
+
+    it('rejects start when pilot only enters but never exits an EXIT-direction SSS', () => {
+      const task = createTask(sssTurnpoints, { direction: 'EXIT' });
+
+      // Create a track that enters the SSS cylinder but never exits it
+      // (pilot flies in and lands inside the cylinder)
+      const sss = sssTurnpoints[1];
+      const track = [
+        createFix(0, 47.0, 11.0, 1000),        // at takeoff
+        createFix(1, 47.02, 11.0, 1000),        // approaching SSS
+        createFix(2, sss.lat - 0.01, sss.lon, 1000), // outside SSS
+        createFix(3, sss.lat, sss.lon, 1000),        // inside SSS (entered)
+        createFix(4, sss.lat + 0.001, sss.lon, 1000), // still inside SSS
+      ];
+
+      const result = resolveTurnpointSequence(task, track);
+
+      // No valid exit crossing → no SSS start
+      expect(result.sssReaching).toBeNull();
+      expect(result.sequence.length).toBe(0);
+    });
+  });
 });

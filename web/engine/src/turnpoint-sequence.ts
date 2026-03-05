@@ -459,8 +459,13 @@ export function resolveTurnpointSequence(
     }
   }
 
-  // No SSS defined or no SSS crossings → empty result
-  const sssCrossings = sssIdx >= 0 ? (crossingsByTP.get(sssIdx) ?? []) : [];
+  // Filter SSS crossings by the required direction (e.g. EXIT for paragliding races).
+  // If no SSS config or direction is unspecified, accept all crossings for backward compat.
+  const requiredDirection = task.sss?.direction?.toLowerCase() as 'enter' | 'exit' | undefined;
+  const allSSSCrossings = sssIdx >= 0 ? (crossingsByTP.get(sssIdx) ?? []) : [];
+  const sssCrossings = requiredDirection
+    ? allSSSCrossings.filter(c => c.direction === requiredDirection)
+    : allSSSCrossings;
   if (sssCrossings.length === 0) {
     return {
       crossings: allCrossings,
