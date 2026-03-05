@@ -215,6 +215,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
     let isSpeedOverlayActive = false;
     let glideLegendElement: HTMLElement | null = null;
     let hudElement: HTMLElement | null = null;
+    let hudCrosshairLayer: Marker | null = null;
 
     // Cached turnpoint sequence and optimized path (invalidated on track/task change)
     let cachedSequenceResult: TurnpointSequenceResult | null = null;
@@ -423,6 +424,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
 
     function clearEventHighlights(): void {
       highlightGroup.clearLayers();
+      hudCrosshairLayer = null; // was in highlightGroup, cleared above
       showGlideLegend(glideLegendElement, false);
       sharedHideTrackPointHUD(hudElement);
     }
@@ -445,6 +447,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
       setSpeedOverlay(enabled: boolean) {
         isSpeedOverlayActive = enabled;
         if (enabled) {
+          clearEventHighlights();
           renderSpeedOverlay();
           if (!glideLegendElement) {
             glideLegendElement = createGlideLegend(container);
@@ -947,6 +950,12 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
         const data = buildTrackPointHUDData(currentFixes, currentEvents, fixIndex, getNextTurnpointContext);
         if (!data) return;
 
+        // Clear previous crosshair only (not segment markers)
+        if (hudCrosshairLayer) {
+          highlightGroup.removeLayer(hudCrosshairLayer);
+          hudCrosshairLayer = null;
+        }
+
         // Hide glide legend (same position as HUD)
         showGlideLegend(glideLegendElement, false);
 
@@ -957,9 +966,8 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
           iconSize: [24, 24],
           iconAnchor: [12, 12],
         });
-        highlightGroup.addLayer(
-          new Marker([data.fix.latitude, data.fix.longitude], { icon: crosshairIcon, interactive: false })
-        );
+        hudCrosshairLayer = new Marker([data.fix.latitude, data.fix.longitude], { icon: crosshairIcon, interactive: false });
+        highlightGroup.addLayer(hudCrosshairLayer);
 
         // Show HUD
         if (!hudElement) {
