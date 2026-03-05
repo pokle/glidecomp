@@ -100,6 +100,9 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       let isSpeedOverlayActive = false;
       let speedOverlayMarkers: mapboxgl.Marker[] = [];
 
+      // HUD crosshair marker (separate from activeMarkers so segment markers aren't cleared)
+      let hudCrosshairMarker: mapboxgl.Marker | null = null;
+
       // Cached turnpoint sequence and optimized path (invalidated on track/task change)
       let cachedSequenceResult: TurnpointSequenceResult | null = null;
       let cachedOptimizedPath: { lat: number; lon: number }[] | null = null;
@@ -307,6 +310,12 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           marker.remove();
         }
         activeMarkers = [];
+
+        // Remove HUD crosshair
+        if (hudCrosshairMarker) {
+          hudCrosshairMarker.remove();
+          hudCrosshairMarker = null;
+        }
 
         // Clear highlight segment source
         updateGeoJSONSource(map, 'highlight-segment', []);
@@ -1262,6 +1271,10 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
             marker.remove();
           }
           activeMarkers = [];
+          if (hudCrosshairMarker) {
+            hudCrosshairMarker.remove();
+            hudCrosshairMarker = null;
+          }
           sharedHideTrackPointHUD(hudElement);
 
           // Show/hide glide legend based on event type (keep visible if speed overlay is active)
@@ -1489,11 +1502,11 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           const data = buildTrackPointHUDData(currentFixes, currentEvents, fixIndex, getNextTurnpointContext);
           if (!data) return;
 
-          // Clear previous crosshair/markers
-          for (const marker of activeMarkers) {
-            marker.remove();
+          // Clear previous crosshair only (not segment markers)
+          if (hudCrosshairMarker) {
+            hudCrosshairMarker.remove();
+            hudCrosshairMarker = null;
           }
-          activeMarkers = [];
 
           // Hide glide legend (same position as HUD)
           showGlideLegend(false);
@@ -1502,10 +1515,9 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           const crosshairEl = document.createElement('div');
           crosshairEl.innerHTML = CROSSHAIR_MAP_SVG;
           crosshairEl.style.pointerEvents = 'none';
-          const crosshairMarker = new mapboxgl.Marker({ element: crosshairEl })
+          hudCrosshairMarker = new mapboxgl.Marker({ element: crosshairEl })
             .setLngLat([data.fix.longitude, data.fix.latitude])
             .addTo(map);
-          activeMarkers.push(crosshairMarker);
 
           // Show HUD
           if (!hudElement) {
