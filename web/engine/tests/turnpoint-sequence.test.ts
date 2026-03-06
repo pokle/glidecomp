@@ -887,7 +887,7 @@ describe('resolveTurnpointSequence', () => {
       expect(result.sssReaching).not.toBeNull();
     });
 
-    it('rejects start when pilot only enters but never exits an EXIT-direction SSS', () => {
+    it('rejects start when pilot only enters but never exits an EXIT-direction SSS (BUG-05)', () => {
       const task = createTask(sssTurnpoints, { direction: 'EXIT' });
 
       // Create a track that enters the SSS cylinder but never exits it
@@ -906,6 +906,131 @@ describe('resolveTurnpointSequence', () => {
       // No valid exit crossing → no SSS start
       expect(result.sssReaching).toBeNull();
       expect(result.sequence.length).toBe(0);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // BUG-12: Best progress should account for un-reached intermediate turnpoints
+  // ---------------------------------------------------------------------------
+  describe('BUG-12: best progress through un-reached intermediate turnpoints', () => {
+    // Task with TP2 far off the direct line from TP1 to Goal.
+    // SSS(47.0,11.0) → TP1(47.0,11.1) → TP2(47.1,11.2) → Goal(47.0,11.3)
+    //
+    // TP2 is ~11km north, so a pilot who tags SSS+TP1 then flies directly
+    // toward goal will have a small straight-line distance to goal but a
+    // large remaining distance through TP2.
+    const offPathTask: TaskDef[] = [
+      { name: 'SSS',  lat: 47.0, lon: 11.0, radius: 1000, type: 'SSS' },
+      { name: 'TP1',  lat: 47.0, lon: 11.1, radius: 400 },
+      { name: 'TP2',  lat: 47.1, lon: 11.2, radius: 400 },
+      { name: 'GOAL', lat: 47.0, lon: 11.3, radius: 400, type: 'ESS' },
+    ];
+
+    it('remaining distance includes path through missed intermediate TPs', () => {
+      const task = createTask(offPathTask);
+
+      // Pilot tags SSS and TP1, then flies directly east toward goal,
+      // skipping TP2 (which is far to the north)
+      const throughTP1 = createTrackThroughCylinders([
+        { lat: 47.0, lon: 11.0, radius: 1000 },  // SSS
+        { lat: 47.0, lon: 11.1, radius: 400 },    // TP1
+      ]);
+      const lastFix = throughTP1[throughTP1.length - 1];
+      const lastTime = (lastFix.time.getTime() - BASE_TIME.getTime()) / 60_000;
+
+      // Fly east past TP1 toward goal (but NOT through TP2 which is north)
+      const track = [
+        ...throughTP1,
+        createFix(lastTime + 2, 47.0, 11.2),   // directly east
+        createFix(lastTime + 4, 47.0, 11.25),  // close to goal in straight line
+      ];
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.madeGoal).toBe(false);
+      expect(result.lastTurnpointReached).toBe(1); // TP1
+      expect(result.bestProgress).not.toBeNull();
+
+      // The remaining distance must account for the path through TP2.
+      // Straight-line from best fix (47.0, 11.25) to goal (47.0, 11.3) is ~3.7km
+      // but path through TP2 (47.1, 11.2) is much longer (~11km + ~11km).
+      // So distanceToGoal should be >> 3.7km
+      const straightLineToGoal = haversineDistance(47.0, 11.25, 47.0, 11.3);
+      expect(result.bestProgress!.distanceToGoal).toBeGreaterThan(straightLineToGoal * 2);
+
+      // flownDistance should be less than it would be with straight-line remaining
+      const overestimatedFlown = result.taskDistance - straightLineToGoal;
+      expect(result.flownDistance).toBeLessThan(overestimatedFlown);
+    });
+
+    it('remaining distance is straight-line when next unreached TP is goal', () => {
+      // When pilot reaches the TP just before goal, no intermediate TPs are
+      // missed, so remaining distance degenerates to straight-line to goal.
+      const task = createTask(offPathTask);
+
+      // Pilot tags SSS, TP1, and TP2, but doesn't reach goal
+      const throughTP2 = createTrackThroughCylinders([
+        { lat: 47.0, lon: 11.0, radius: 1000 },  // SSS
+        { lat: 47.0, lon: 11.1, radius: 400 },    // TP1
+        { lat: 47.1, lon: 11.2, radius: 400 },    // TP2
+      ]);
+      const lastFix = throughTP2[throughTP2.length - 1];
+      const lastTime = (lastFix.time.getTime() - BASE_TIME.getTime()) / 60_000;
+
+      // Fly toward goal but don't reach it
+      const track = [
+        ...throughTP2,
+        createFix(lastTime + 2, 47.05, 11.25),
+        createFix(lastTime + 4, 47.02, 11.28),
+      ];
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.madeGoal).toBe(false);
+      expect(result.lastTurnpointReached).toBe(2); // TP2
+
+      // With no missed intermediate TPs, distanceToGoal ≈ straight line to goal edge
+      const bestLat = result.bestProgress!.latitude;
+      const bestLon = result.bestProgress!.longitude;
+      const straightDist = Math.max(0, haversineDistance(bestLat, bestLon, 47.0, 11.3) - 400);
+      expect(result.bestProgress!.distanceToGoal).toBeCloseTo(straightDist, -2);
+    });
+
+    it('multiple missed TPs all contribute to remaining distance', () => {
+      // 5-point task: SSS → TP1 → TP2 → TP3 → Goal
+      // TP2 and TP3 are both off the direct line
+      const fivePointDefs: TaskDef[] = [
+        { name: 'SSS',  lat: 47.0, lon: 11.0,  radius: 1000, type: 'SSS' },
+        { name: 'TP1',  lat: 47.0, lon: 11.1,  radius: 400 },
+        { name: 'TP2',  lat: 47.08, lon: 11.2, radius: 400 },
+        { name: 'TP3',  lat: 46.92, lon: 11.3, radius: 400 },
+        { name: 'GOAL', lat: 47.0, lon: 11.4,  radius: 400, type: 'ESS' },
+      ];
+      const task = createTask(fivePointDefs);
+
+      // Pilot tags only SSS and TP1, then flies straight east
+      const throughTP1 = createTrackThroughCylinders([
+        { lat: 47.0, lon: 11.0, radius: 1000 },
+        { lat: 47.0, lon: 11.1, radius: 400 },
+      ]);
+      const lastFix = throughTP1[throughTP1.length - 1];
+      const lastTime = (lastFix.time.getTime() - BASE_TIME.getTime()) / 60_000;
+
+      const track = [
+        ...throughTP1,
+        createFix(lastTime + 2, 47.0, 11.2),
+        createFix(lastTime + 4, 47.0, 11.35),  // close to goal straight-line
+      ];
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.madeGoal).toBe(false);
+      expect(result.lastTurnpointReached).toBe(1); // TP1
+
+      // Remaining distance must go through TP2 AND TP3 — much longer than
+      // the straight-line distance to goal
+      const straightLineToGoal = haversineDistance(47.0, 11.35, 47.0, 11.4);
+      expect(result.bestProgress!.distanceToGoal).toBeGreaterThan(straightLineToGoal * 3);
     });
   });
 });
