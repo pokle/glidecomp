@@ -374,27 +374,72 @@ function buildForwardPath(
 }
 
 /**
+ * Build the list of remaining turnpoints and inter-TP leg distances
+ * from the last reached task index to goal.
+ */
+function buildRemainingPath(
+  task: XCTask,
+  lastReachedIndex: number,
+  segmentDistances: number[],
+): { remainingTPs: Array<{ lat: number; lon: number; radius: number }>; remainingLegDistances: number[] } {
+  const remainingTPs: Array<{ lat: number; lon: number; radius: number }> = [];
+  for (let i = lastReachedIndex + 1; i < task.turnpoints.length; i++) {
+    const tp = task.turnpoints[i];
+    remainingTPs.push({ lat: tp.waypoint.lat, lon: tp.waypoint.lon, radius: tp.radius });
+  }
+
+  // Leg distances between consecutive remaining TPs
+  // segmentDistances[i] = optimized distance from task TP[i] to TP[i+1]
+  // We need distances from TP[lastReachedIndex+1] to TP[lastReachedIndex+2], etc.
+  const remainingLegDistances: number[] = [];
+  for (let i = lastReachedIndex + 1; i < task.turnpoints.length - 1; i++) {
+    remainingLegDistances.push(segmentDistances[i]);
+  }
+
+  return { remainingTPs, remainingLegDistances };
+}
+
+/**
  * Compute best progress for a non-goal pilot.
  * Scans all fixes after the last reaching time to find the point
  * with minimum remaining distance to goal.
+ *
+ * Per CIVL GAP, remaining distance is the shortest path from the pilot's
+ * position through any un-reached intermediate turnpoints to goal — not
+ * a straight line to goal.
+ *
+ * @param remainingTPs - Turnpoints from lastReached+1 to goal (inclusive),
+ *   each with lat/lon/radius. When the next unreached TP is goal itself,
+ *   this is a single-element array and degenerates to straight-line.
+ * @param remainingLegDistances - Optimized distances between consecutive
+ *   remaining TPs (length = remainingTPs.length - 1).
  */
 function computeBestProgress(
   fixes: IGCFix[],
   lastReachingTime: number,
-  goalLat: number,
-  goalLon: number,
-  goalRadius: number,
+  remainingTPs: Array<{ lat: number; lon: number; radius: number }>,
+  remainingLegDistances: number[],
 ): BestProgress | null {
+  // Sum of optimized leg distances between remaining TPs (TP[1]→TP[2]→...→Goal)
+  let interTPDistance = 0;
+  for (const d of remainingLegDistances) {
+    interTPDistance += d;
+  }
+
+  const nextTP = remainingTPs[0];
   let bestFix: { index: number; distToGoal: number } | null = null;
 
   for (let i = 0; i < fixes.length; i++) {
     const fix = fixes[i];
     if (fix.time.getTime() <= lastReachingTime) continue;
 
-    const distToCenter = haversineDistance(
-      fix.latitude, fix.longitude, goalLat, goalLon
+    // Distance from pilot to the nearest point on the next un-reached TP cylinder
+    const distToNextTP = Math.max(
+      0,
+      haversineDistance(fix.latitude, fix.longitude, nextTP.lat, nextTP.lon) - nextTP.radius
     );
-    const distToGoal = Math.max(0, distToCenter - goalRadius);
+    // Total remaining = distance to next TP + optimized path from there to goal
+    const distToGoal = distToNextTP + interTPDistance;
 
     if (!bestFix || distToGoal < bestFix.distToGoal) {
       bestFix = { index: i, distToGoal };
@@ -488,11 +533,6 @@ export function resolveTurnpointSequence(
   let bestFlownDist = 0;
   let bestSSSTime = 0;
 
-  const goalTP = task.turnpoints[goalIdx];
-  const goalLat = goalTP.waypoint.lat;
-  const goalLon = goalTP.waypoint.lon;
-  const goalRadius = goalTP.radius;
-
   for (let i = sssCrossings.length - 1; i >= 0; i--) {
     const sssCrossing = sssCrossings[i];
     const candidateSequence = buildForwardPath(
@@ -508,8 +548,10 @@ export function resolveTurnpointSequence(
       candidateFlownDist = taskDistance;
     } else if (tpsReached > 0) {
       const lastReaching = candidateSequence[tpsReached - 1];
+      const { remainingTPs, remainingLegDistances } =
+        buildRemainingPath(task, lastReaching.taskIndex, segmentDistances);
       const progress = computeBestProgress(
-        fixes, lastReaching.time.getTime(), goalLat, goalLon, goalRadius
+        fixes, lastReaching.time.getTime(), remainingTPs, remainingLegDistances
       );
       candidateFlownDist = progress
         ? taskDistance - progress.distanceToGoal
@@ -561,8 +603,10 @@ export function resolveTurnpointSequence(
     flownDistance = taskDistance;
   } else if (sequence.length > 0) {
     const lastReaching = sequence[sequence.length - 1];
+    const { remainingTPs, remainingLegDistances } =
+      buildRemainingPath(task, lastReaching.taskIndex, segmentDistances);
     bestProgress = computeBestProgress(
-      fixes, lastReaching.time.getTime(), goalLat, goalLon, goalRadius
+      fixes, lastReaching.time.getTime(), remainingTPs, remainingLegDistances
     );
     flownDistance = bestProgress
       ? taskDistance - bestProgress.distanceToGoal
