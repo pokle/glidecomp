@@ -43,9 +43,21 @@ export const formatRadius = (meters: number): FormattedValue =>
 export function onUnitsChanged(
   callback: (units: UnitPreferences) => void
 ): () => void {
+  let previousUnits = config.getUnits();
+
   const handler = (e: Event) => {
     const detail = (e as CustomEvent).detail;
-    callback(detail.units);
+    const newUnits: UnitPreferences = detail.units;
+    if (
+      newUnits.speed === previousUnits.speed &&
+      newUnits.altitude === previousUnits.altitude &&
+      newUnits.distance === previousUnits.distance &&
+      newUnits.climbRate === previousUnits.climbRate
+    ) {
+      return;
+    }
+    previousUnits = newUnits;
+    callback(newUnits);
   };
 
   window.addEventListener('taskscore:preferences-changed', handler);
