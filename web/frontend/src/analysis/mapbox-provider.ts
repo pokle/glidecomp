@@ -999,6 +999,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           const visibility = visible ? 'visible' : 'none';
           const taskLayers = [
             'task-line',
+            'task-line-arrows',
             'task-cylinders-fill',
             'task-cylinders-stroke',
             'task-points',

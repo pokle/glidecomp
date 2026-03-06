@@ -60,7 +60,7 @@ Track is rendered as individual per-segment LineString features (one per consecu
   - Canvas-drawn triangle icon 20x20, filled `#6366f1`, opacity 0.8
   - Placed along line every 40px symbol spacing, icon size 0.55
   - Rotation alignment: map
-  - **Bug**: `task-line-arrows` layer is not included in `setTaskVisibility` toggle — arrows remain visible when task is hidden
+
 
 - **Turnpoint cylinders**
   - Fill: 15% opacity, stroke: width 2, 80% opacity
@@ -181,7 +181,7 @@ Displayed when user clicks on a non-glide track point. Combines a map marker wit
 
 ## Visibility Toggles
 
-- **Task visibility** — toggles 6 task layers (cylinder fill/stroke, points, labels, segment labels, line). Note: `task-line-arrows` layer is currently **not toggled** (bug)
+- **Task visibility** — toggles 7 task layers (cylinder fill/stroke, points, labels, segment labels, line, line arrows)
 - **Track visibility** — toggles all track layers (`track-line`, `track-line-outline`, `track-line-gradient`, `highlight-segment`) + 3D objects + event markers (markers hidden via `display: none`); clears highlights when hiding
 
 ## Layer Ordering (bottom to top)
