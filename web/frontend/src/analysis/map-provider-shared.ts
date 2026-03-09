@@ -905,19 +905,25 @@ function isSparseHidden(zoom: number, index: number): boolean {
   return zoom < GLIDE_LABEL_SPEED_MIN_ZOOM && index % 3 !== 0;
 }
 
-/** Apply zoom-dependent display logic to a single glide-label element. */
-export function updateGlideLabelElement(el: HTMLElement, zoom: number, labelIndex?: number, occluded?: boolean): void {
+/** Apply zoom-dependent display logic to a single glide-label element.
+ *  When `skipZoomFilter` is true, zoom-based hiding is skipped (collision detection handles it instead). */
+export function updateGlideLabelElement(
+  el: HTMLElement, zoom: number, labelIndex?: number,
+  occluded?: boolean, skipZoomFilter?: boolean,
+): void {
   if (occluded) {
     el.style.display = 'none';
     return;
   }
-  if (zoom < GLIDE_LABEL_SPARSE_MIN_ZOOM) {
-    el.style.display = 'none';
-    return;
-  }
-  if (labelIndex !== undefined && !el.dataset.fastest && isSparseHidden(zoom, labelIndex)) {
-    el.style.display = 'none';
-    return;
+  if (!skipZoomFilter) {
+    if (zoom < GLIDE_LABEL_SPARSE_MIN_ZOOM) {
+      el.style.display = 'none';
+      return;
+    }
+    if (labelIndex !== undefined && !el.dataset.fastest && isSparseHidden(zoom, labelIndex)) {
+      el.style.display = 'none';
+      return;
+    }
   }
 
   const speed = el.dataset.speedLabel || '';

@@ -284,8 +284,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
       const labelInfoByIndex = new Map<number, LeafletLabelInfo>();
 
       for (const info of visibleLabels) {
-        updateGlideLabelElement(info.target, z, info.labelIndex);
-        if (info.target.style.display === 'none') continue;
+        updateGlideLabelElement(info.target, z, info.labelIndex, false, true);
 
         const latlng = info.marker.getLatLng();
         const point = map.latLngToContainerPoint(latlng);

@@ -158,9 +158,8 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
         for (const info of visibleLabels) {
           const { el, labelIndex } = info;
-          // Apply zoom/sparse check first (without occlusion)
-          updateGlideLabelElement(el, zoom, labelIndex);
-          if (el.style.display === 'none') continue; // filtered out by zoom/sparse
+          // Set format (compact vs detail) — skip zoom-based hiding since collision detection handles it
+          updateGlideLabelElement(el, zoom, labelIndex, false, true);
 
           // Project to screen
           const marker = info.source === 'active' ? activeMarkers[info.markerIdx] : speedOverlayMarkers[info.markerIdx];
