@@ -19,7 +19,7 @@ import {
   createTrackPointHUD, updateTrackPointHUD, hideTrackPointHUD as sharedHideTrackPointHUD,
   CROSSHAIR_MAP_SVG,
   buildTrackPointHUDData, buildNextTurnpointContext, ensureTurnpointCache,
-  formatGlideLabel, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement,
+  formatGlideLabel, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement, computeOccludedLabels,
   calculateAltitudeRange, buildTrackSegments,
 } from './map-provider-shared';
 
@@ -120,19 +120,89 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       // Turnpoint click callback
       let turnpointClickCallback: ((turnpointIndex: number) => void) | null = null;
 
-      /** Hide glide speed labels when zoomed out to prevent overlap clutter. */
+      /** Hide glide speed labels when zoomed out and resolve screen-space collisions. */
       function updateGlideLabelVisibility(): void {
         const zoom = map.getZoom();
 
-        function processMarker(el: HTMLElement): void {
-          if (el.dataset.glideLabel === 'true') {
-            const labelIndex = parseInt(el.dataset.labelIndex || '0', 10);
-            updateGlideLabelElement(el, zoom, labelIndex);
+        // Collect all label markers that would pass zoom/sparse checks, with screen positions
+        interface LabelInfo { el: HTMLElement; labelIndex: number; markerIdx: number; source: 'active' | 'overlay'; }
+        const visibleLabels: LabelInfo[] = [];
+
+        function collectFromActive(): void {
+          for (let i = 0; i < activeMarkers.length; i++) {
+            const el = activeMarkers[i].getElement();
+            if (el.dataset.glideLabel === 'true') {
+              const labelIndex = parseInt(el.dataset.labelIndex || '0', 10);
+              visibleLabels.push({ el, labelIndex, markerIdx: i, source: 'active' });
+            }
           }
         }
 
-        for (const marker of activeMarkers) processMarker(marker.getElement());
-        for (const marker of speedOverlayMarkers) processMarker(marker.getElement());
+        function collectFromOverlay(): void {
+          // speedOverlayMarkers: alternating chevron (2*i) and label (2*i+1)
+          for (let i = 0; i < speedOverlayMarkers.length; i++) {
+            const el = speedOverlayMarkers[i].getElement();
+            if (el.dataset.glideLabel === 'true') {
+              const labelIndex = parseInt(el.dataset.labelIndex || '0', 10);
+              visibleLabels.push({ el, labelIndex, markerIdx: i, source: 'overlay' });
+            }
+          }
+        }
+
+        collectFromActive();
+        collectFromOverlay();
+
+        // Build screen positions for labels that pass zoom/sparse filters
+        const screenPositions: import('./map-provider-shared').LabelScreenPos[] = [];
+        const labelInfoByIndex = new Map<number, LabelInfo>();
+
+        for (const info of visibleLabels) {
+          const { el, labelIndex } = info;
+          // Set format (compact vs detail) — skip zoom-based hiding since collision detection handles it
+          updateGlideLabelElement(el, zoom, labelIndex, false, true);
+
+          // Project to screen
+          const marker = info.source === 'active' ? activeMarkers[info.markerIdx] : speedOverlayMarkers[info.markerIdx];
+          const lngLat = marker.getLngLat();
+          const point = map.project(lngLat);
+
+          screenPositions.push({
+            index: labelIndex,
+            x: point.x,
+            y: point.y,
+            isFastest: el.dataset.fastest === 'true',
+          });
+          labelInfoByIndex.set(labelIndex, info);
+        }
+
+        // Compute which labels to hide due to overlap
+        const occluded = computeOccludedLabels(screenPositions, zoom);
+
+        // Apply occlusion: hide occluded labels and their paired chevrons
+        for (const labelIndex of occluded) {
+          const info = labelInfoByIndex.get(labelIndex);
+          if (!info) continue;
+          info.el.style.display = 'none';
+
+          // Hide paired chevron (chevron is at markerIdx - 1 in speedOverlayMarkers)
+          if (info.source === 'overlay' && info.markerIdx > 0) {
+            const chevronEl = speedOverlayMarkers[info.markerIdx - 1].getElement();
+            if (!chevronEl.dataset.glideLabel) {
+              chevronEl.style.display = 'none';
+            }
+          }
+        }
+
+        // Show chevrons for non-occluded labels
+        for (const [labelIndex, info] of labelInfoByIndex) {
+          if (occluded.has(labelIndex)) continue;
+          if (info.source === 'overlay' && info.markerIdx > 0) {
+            const chevronEl = speedOverlayMarkers[info.markerIdx - 1].getElement();
+            if (!chevronEl.dataset.glideLabel) {
+              chevronEl.style.display = '';
+            }
+          }
+        }
       }
 
       /** Lazily create and show/hide the glide legend */
@@ -881,6 +951,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       // Track bounds changes and persist map location
       let saveLocationTimer: ReturnType<typeof setTimeout> | null = null;
       map.on('moveend', () => {
+        updateGlideLabelVisibility();
         if (boundsChangeCallback) {
           boundsChangeCallback();
         }

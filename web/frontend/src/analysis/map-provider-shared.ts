@@ -905,15 +905,25 @@ function isSparseHidden(zoom: number, index: number): boolean {
   return zoom < GLIDE_LABEL_SPEED_MIN_ZOOM && index % 3 !== 0;
 }
 
-/** Apply zoom-dependent display logic to a single glide-label element. */
-export function updateGlideLabelElement(el: HTMLElement, zoom: number, labelIndex?: number): void {
-  if (zoom < GLIDE_LABEL_SPARSE_MIN_ZOOM) {
+/** Apply zoom-dependent display logic to a single glide-label element.
+ *  When `skipZoomFilter` is true, zoom-based hiding is skipped (collision detection handles it instead). */
+export function updateGlideLabelElement(
+  el: HTMLElement, zoom: number, labelIndex?: number,
+  occluded?: boolean, skipZoomFilter?: boolean,
+): void {
+  if (occluded) {
     el.style.display = 'none';
     return;
   }
-  if (labelIndex !== undefined && !el.dataset.fastest && isSparseHidden(zoom, labelIndex)) {
-    el.style.display = 'none';
-    return;
+  if (!skipZoomFilter) {
+    if (zoom < GLIDE_LABEL_SPARSE_MIN_ZOOM) {
+      el.style.display = 'none';
+      return;
+    }
+    if (labelIndex !== undefined && !el.dataset.fastest && isSparseHidden(zoom, labelIndex)) {
+      el.style.display = 'none';
+      return;
+    }
   }
 
   const speed = el.dataset.speedLabel || '';
@@ -932,3 +942,55 @@ export function updateGlideLabelElement(el: HTMLElement, zoom: number, labelInde
   }
 }
 
+// ── Screen-space label collision detection ─────────────────────────────────
+
+export interface LabelScreenPos {
+  index: number;
+  x: number;
+  y: number;
+  isFastest: boolean;
+}
+
+/**
+ * Greedy priority-based occlusion: project labels to screen space, sort by
+ * priority (fastest first, then lower index), and hide any that overlap an
+ * already-placed label.  Returns the set of label indices to hide.
+ */
+export function computeOccludedLabels(labels: LabelScreenPos[], zoom: number): Set<number> {
+  const occluded = new Set<number>();
+  if (labels.length === 0) return occluded;
+
+  // Estimate label dimensions based on zoom (compact vs detail mode)
+  const w = zoom < GLIDE_LABEL_DETAILS_MIN_ZOOM ? 160 : 180;
+  const h = zoom < GLIDE_LABEL_DETAILS_MIN_ZOOM ? 30 : 65;
+  const padX = 10;
+  const padY = 6;
+  const halfW = (w + padX) / 2;
+  const halfH = (h + padY) / 2;
+
+  // Sort: fastest first, then by original index (earlier in flight = higher priority)
+  const sorted = labels.slice().sort((a, b) => {
+    if (a.isFastest !== b.isFastest) return a.isFastest ? -1 : 1;
+    return a.index - b.index;
+  });
+
+  // Placed label centers for AABB overlap checks
+  const placed: { x: number; y: number }[] = [];
+
+  for (const label of sorted) {
+    let overlaps = false;
+    for (const p of placed) {
+      if (Math.abs(label.x - p.x) < halfW * 2 && Math.abs(label.y - p.y) < halfH * 2) {
+        overlaps = true;
+        break;
+      }
+    }
+    if (overlaps) {
+      occluded.add(label.index);
+    } else {
+      placed.push({ x: label.x, y: label.y });
+    }
+  }
+
+  return occluded;
+}

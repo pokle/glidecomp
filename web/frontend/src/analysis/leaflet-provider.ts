@@ -28,7 +28,7 @@ import {
   createTrackPointHUD, updateTrackPointHUD, hideTrackPointHUD as sharedHideTrackPointHUD,
   CROSSHAIR_MAP_SVG,
   buildTrackPointHUDData, buildNextTurnpointContext, ensureTurnpointCache,
-  formatGlideLabel, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement,
+  formatGlideLabel, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement, computeOccludedLabels,
   calculateAltitudeRange, buildTrackSegments,
 } from './map-provider-shared';
 
@@ -250,29 +250,65 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
     function updateGlideLabelVisibility(): void {
       const z = map.getZoom();
 
-      function processMarker(el: HTMLElement | undefined): void {
-        if (!el) return;
+      function resolveGlideLabel(el: HTMLElement | undefined): HTMLElement | null {
+        if (!el) return null;
         // Leaflet DivIcon wraps our HTML in a container div,
         // so check both the wrapper and its first child for data attributes.
-        const target = el.dataset.glideLabel ? el
-          : (el.firstElementChild as HTMLElement | null)?.dataset.glideLabel ? el.firstElementChild as HTMLElement
-          : null;
-        if (target) {
-          const labelIndex = parseInt(target.dataset.labelIndex || '0', 10);
-          updateGlideLabelElement(target, z, labelIndex);
-          return;
-        }
+        if (el.dataset.glideLabel) return el;
+        const child = el.firstElementChild as HTMLElement | null;
+        if (child?.dataset.glideLabel) return child;
+        return null;
       }
 
-      highlightGroup.eachLayer((layer) => {
-        if (layer instanceof Marker) processMarker(layer.getElement());
-      });
-      speedOverlayGroup.eachLayer((layer) => {
-        if (layer instanceof Marker) processMarker(layer.getElement());
-      });
+      // Collect all label markers with screen positions
+      interface LeafletLabelInfo { target: HTMLElement; labelIndex: number; marker: Marker; }
+      const visibleLabels: LeafletLabelInfo[] = [];
+
+      function collectLabels(group: LayerGroup): void {
+        group.eachLayer((layer) => {
+          if (layer instanceof Marker) {
+            const target = resolveGlideLabel(layer.getElement());
+            if (target) {
+              const labelIndex = parseInt(target.dataset.labelIndex || '0', 10);
+              visibleLabels.push({ target, labelIndex, marker: layer });
+            }
+          }
+        });
+      }
+
+      collectLabels(highlightGroup);
+      collectLabels(speedOverlayGroup);
+
+      // First pass: apply zoom/sparse filters, collect screen positions for survivors
+      const screenPositions: import('./map-provider-shared').LabelScreenPos[] = [];
+      const labelInfoByIndex = new Map<number, LeafletLabelInfo>();
+
+      for (const info of visibleLabels) {
+        updateGlideLabelElement(info.target, z, info.labelIndex, false, true);
+
+        const latlng = info.marker.getLatLng();
+        const point = map.latLngToContainerPoint(latlng);
+        screenPositions.push({
+          index: info.labelIndex,
+          x: point.x,
+          y: point.y,
+          isFastest: info.target.dataset.fastest === 'true',
+        });
+        labelInfoByIndex.set(info.labelIndex, info);
+      }
+
+      // Compute occlusion
+      const occluded = computeOccludedLabels(screenPositions, z);
+
+      // Apply: hide occluded labels
+      for (const labelIndex of occluded) {
+        const info = labelInfoByIndex.get(labelIndex);
+        if (info) info.target.style.display = 'none';
+      }
     }
 
     map.on('zoomend', updateGlideLabelVisibility);
+    map.on('moveend', updateGlideLabelVisibility);
 
     // ── Helpers ────────────────────────────────────────────────────────────
 

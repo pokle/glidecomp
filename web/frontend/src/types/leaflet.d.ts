@@ -75,6 +75,7 @@ declare module 'leaflet' {
     remove(): this;
     invalidateSize(options?: { animate?: boolean }): this;
     getContainer(): HTMLElement;
+    latLngToContainerPoint(latlng: LatLngExpression): Point;
   }
 
   export { LeafletMap as Map };
