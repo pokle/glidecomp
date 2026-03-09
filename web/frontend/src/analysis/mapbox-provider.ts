@@ -8,7 +8,7 @@
 
 import mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
-import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult } from '@taskscore/engine';
+import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult } from '@taskscore/engine';
 import type { MapProvider } from './map-provider';
 import { config } from './config';
 import {
@@ -22,6 +22,7 @@ import {
   formatGlideLabel, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement, computeOccludedLabels,
   calculateAltitudeRange, buildTrackSegments,
 } from './map-provider-shared';
+import { formatAltitude } from './units-browser';
 
 // Set MapBox access token from environment variable
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -89,6 +90,26 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       let tb: Threebox | null = null;
       let is3DMode = false;
       let threeDObjects: unknown[] = [];
+
+      // Drone follow camera state
+      let gliderMarker: unknown = null;
+      let currentFixIndex = 0;
+      let scrubberElement: HTMLElement | null = null;
+
+      // Camera momentum state
+      let cameraTargetLng = 0;
+      let cameraTargetLat = 0;
+      let cameraTargetAlt = 0;
+      let cameraSmoothLng = 0;
+      let cameraSmoothLat = 0;
+      let cameraSmoothAlt = 0;
+      let cameraAnimFrameId: number | null = null;
+      const CAMERA_LERP = 0.08;
+
+      // Camera preset state
+      type CameraPreset = 'side' | 'top' | 'behind' | 'front';
+      let activeCameraPreset: CameraPreset = 'side';
+      let cameraPresetControl: CameraPresetControl | null = null;
 
       // Task visibility state
       let isTaskVisible = true;
@@ -775,6 +796,68 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
       map.addControl(new MapBoxStyleControl(), 'top-left');
 
+      // Camera preset control (shown only in 3D mode)
+      const CAMERA_PRESETS: { id: CameraPreset; label: string; icon: string }[] = [
+        { id: 'side', label: 'Side', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>' },
+        { id: 'top', label: 'Top', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="10"/></svg>' },
+        { id: 'behind', label: 'Behind', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>' },
+        { id: 'front', label: 'Front', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>' },
+      ];
+
+      class CameraPresetControl {
+        private el: HTMLElement | null = null;
+        private buttons: Map<CameraPreset, HTMLButtonElement> = new Map();
+
+        create(): void {
+          if (this.el) return;
+          this.el = document.createElement('div');
+          this.el.style.cssText = 'position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:10;display:flex;gap:0;border-radius:6px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.3);';
+
+          for (const preset of CAMERA_PRESETS) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.title = preset.label;
+            btn.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:3px;padding:6px 10px;border:none;cursor:pointer;font-size:11px;font-family:inherit;color:#1e293b;background:white;border-right:1px solid #e2e8f0;';
+            btn.innerHTML = `${preset.icon}<span>${preset.label}</span>`;
+            if (preset.id === activeCameraPreset) {
+              btn.style.background = '#e2e8f0';
+              btn.style.fontWeight = 'bold';
+            }
+            btn.addEventListener('click', () => {
+              applyCameraPreset(preset.id);
+              this.updateActive(preset.id);
+            });
+            this.buttons.set(preset.id, btn);
+            this.el.appendChild(btn);
+          }
+          // Remove border-right from last button
+          const lastBtn = this.el.lastElementChild as HTMLElement;
+          if (lastBtn) lastBtn.style.borderRight = 'none';
+
+          map.getContainer().appendChild(this.el);
+        }
+
+        updateActive(id: CameraPreset): void {
+          for (const [presetId, btn] of this.buttons) {
+            if (presetId === id) {
+              btn.style.background = '#e2e8f0';
+              btn.style.fontWeight = 'bold';
+            } else {
+              btn.style.background = 'white';
+              btn.style.fontWeight = '';
+            }
+          }
+        }
+
+        remove(): void {
+          this.el?.remove();
+          this.el = null;
+          this.buttons.clear();
+        }
+      }
+
+      cameraPresetControl = new CameraPresetControl();
+
       // Handle style changes
       let isInitialLoad = true;
       map.on('style.load', () => {
@@ -837,6 +920,11 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
         if (!isInitialLoad) {
           restoreData();
+          // Re-create glider marker after style change if in 3D drone follow mode
+          if (is3DMode && currentFixes.length > 0) {
+            gliderMarker = null; // Old marker was in the abandoned Threebox instance
+            updateGliderMarker(currentFixIndex);
+          }
         }
       });
 
@@ -1044,6 +1132,419 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         map.triggerRepaint();
       }
 
+      /**
+       * Update the glider marker at the given fix index
+       */
+      function updateGliderMarker(fixIndex: number): void {
+        if (!tb || currentFixes.length === 0) return;
+
+        // Remove old marker
+        if (gliderMarker) {
+          tb.remove(gliderMarker);
+          gliderMarker = null;
+        }
+
+        const fix = currentFixes[fixIndex];
+        const alt = fix.gnssAltitude * TERRAIN_EXAGGERATION;
+
+        // Create a short vertical spike as the glider marker
+        gliderMarker = tb.line({
+          geometry: [
+            [fix.longitude, fix.latitude, alt],
+            [fix.longitude, fix.latitude, alt + 30],
+          ],
+          color: '#ff3333',
+          width: 8,
+          opacity: 1.0,
+        });
+        const mat = (gliderMarker as { material?: { depthTest: boolean } }).material;
+        if (mat) mat.depthTest = false;
+        tb.add(gliderMarker);
+        map.triggerRepaint();
+      }
+
+      /**
+       * Remove the glider marker from the scene
+       */
+      function clearGliderMarker(): void {
+        if (!tb || !gliderMarker) return;
+        tb.remove(gliderMarker);
+        gliderMarker = null;
+      }
+
+      /**
+       * Compute drone camera parameters for the given fix index.
+       * Keeps the glider centred without rotating the map.
+       */
+      function computeDroneCamera(fixIndex: number, includeZoom = false): { center: [number, number]; pitch: number; zoom?: number } {
+        const fix = currentFixes[fixIndex];
+        const cam: { center: [number, number]; pitch: number; zoom?: number } = {
+          center: [fix.longitude, fix.latitude],
+          pitch: 75,
+        };
+        if (includeZoom) cam.zoom = 14.5;
+        return cam;
+      }
+
+      /**
+       * Get track bearing at the given fix index (degrees, clockwise from north)
+       */
+      function getTrackBearing(fixIndex: number): number {
+        const fixes = currentFixes;
+        const lookAhead = Math.min(20, fixes.length - 1 - fixIndex);
+        if (lookAhead > 0) {
+          return calculateBearing(
+            fixes[fixIndex].latitude, fixes[fixIndex].longitude,
+            fixes[fixIndex + lookAhead].latitude, fixes[fixIndex + lookAhead].longitude,
+          );
+        }
+        if (fixIndex > 0) {
+          return calculateBearing(
+            fixes[fixIndex - 1].latitude, fixes[fixIndex - 1].longitude,
+            fixes[fixIndex].latitude, fixes[fixIndex].longitude,
+          );
+        }
+        return 0;
+      }
+
+      /**
+       * Apply a camera preset (bearing/pitch) with animation
+       */
+      function applyCameraPreset(preset: CameraPreset): void {
+        activeCameraPreset = preset;
+        const trackBearing = getTrackBearing(currentFixIndex);
+
+        let bearing: number;
+        let pitch: number;
+        switch (preset) {
+          case 'side':
+            bearing = trackBearing - 90;
+            pitch = 75;
+            break;
+          case 'top':
+            bearing = map.getBearing(); // keep current bearing
+            pitch = 0;
+            break;
+          case 'behind':
+            bearing = trackBearing;
+            pitch = 75;
+            break;
+          case 'front':
+            bearing = trackBearing + 180;
+            pitch = 75;
+            break;
+        }
+        map.easeTo({ bearing, pitch, duration: 800 });
+      }
+
+      /**
+       * Update bearing for presets that track the flight direction.
+       * Called during scrubbing so behind/front stay aligned with the track.
+       */
+      function updatePresetBearing(): void {
+        if (activeCameraPreset === 'side' || activeCameraPreset === 'top') return;
+        const trackBearing = getTrackBearing(currentFixIndex);
+        const bearing = activeCameraPreset === 'behind' ? trackBearing : trackBearing + 180;
+        map.easeTo({ bearing, duration: 200 });
+      }
+
+      /**
+       * Set the camera target for the momentum loop
+       */
+      function setCameraTarget(fixIndex: number): void {
+        const fix = currentFixes[fixIndex];
+        cameraTargetLng = fix.longitude;
+        cameraTargetLat = fix.latitude;
+        cameraTargetAlt = fix.gnssAltitude * TERRAIN_EXAGGERATION;
+      }
+
+      /**
+       * Start the camera momentum animation loop.
+       * Translates the camera each frame by a lerped delta in mercator space,
+       * preserving user zoom/bearing/pitch while smoothly tracking altitude.
+       */
+      function startCameraLoop(): void {
+        if (cameraAnimFrameId !== null) return;
+        // Initialize smooth values so first frame has zero delta
+        cameraSmoothLng = cameraTargetLng;
+        cameraSmoothLat = cameraTargetLat;
+        cameraSmoothAlt = cameraTargetAlt;
+
+        function tick(): void {
+          if (!is3DMode) {
+            cameraAnimFrameId = null;
+            return;
+          }
+
+          // Capture previous smoothed position in mercator space
+          const prevMerc = mapboxgl.MercatorCoordinate.fromLngLat(
+            { lng: cameraSmoothLng, lat: cameraSmoothLat }, cameraSmoothAlt
+          );
+
+          // Lerp toward target
+          cameraSmoothLng += (cameraTargetLng - cameraSmoothLng) * CAMERA_LERP;
+          cameraSmoothLat += (cameraTargetLat - cameraSmoothLat) * CAMERA_LERP;
+          cameraSmoothAlt += (cameraTargetAlt - cameraSmoothAlt) * CAMERA_LERP;
+
+          // New smoothed position in mercator space
+          const newMerc = mapboxgl.MercatorCoordinate.fromLngLat(
+            { lng: cameraSmoothLng, lat: cameraSmoothLat }, cameraSmoothAlt
+          );
+
+          // Translate camera by the delta (preserves zoom/bearing/pitch)
+          // Skip when delta is negligible so user can drag/rotate freely
+          const dx = newMerc.x - prevMerc.x;
+          const dy = newMerc.y - prevMerc.y;
+          const dz = newMerc.z - prevMerc.z;
+          if (Math.abs(dx) > 1e-12 || Math.abs(dy) > 1e-12 || Math.abs(dz) > 1e-12) {
+            const cam = map.getFreeCameraOptions();
+            if (cam.position) {
+              cam.position = new mapboxgl.MercatorCoordinate(
+                cam.position.x + dx,
+                cam.position.y + dy,
+                cam.position.z + dz,
+              );
+              map.setFreeCameraOptions(cam);
+            }
+          }
+
+          cameraAnimFrameId = requestAnimationFrame(tick);
+        }
+        cameraAnimFrameId = requestAnimationFrame(tick);
+      }
+
+      function stopCameraLoop(): void {
+        if (cameraAnimFrameId !== null) {
+          cancelAnimationFrame(cameraAnimFrameId);
+          cameraAnimFrameId = null;
+        }
+      }
+
+      /**
+       * Create the altitude scrubber overlay
+       */
+      function createAltitudeScrubber(fixes: IGCFix[]): HTMLElement {
+        // Layout constants for axis padding
+        const Y_AXIS_WIDTH = 40; // px, left padding for altitude labels
+        const X_AXIS_HEIGHT = 16; // px, bottom padding for time labels
+
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'position:absolute;bottom:0;left:0;right:0;height:15%;z-index:10;background:rgba(0,0,0,0.65);cursor:crosshair;touch-action:none;';
+
+        const { minAlt, altRange } = calculateAltitudeRange(fixes);
+        const maxAlt = minAlt + altRange;
+
+        // Chart area (inset from axes)
+        const chartArea = document.createElement('div');
+        chartArea.style.cssText = `position:absolute;top:0;left:${Y_AXIS_WIDTH}px;right:0;bottom:${X_AXIS_HEIGHT}px;`;
+
+        // Create SVG altitude profile
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', '100%');
+        svg.setAttribute('height', '100%');
+        svg.setAttribute('preserveAspectRatio', 'none');
+        svg.setAttribute('viewBox', `0 0 ${fixes.length} 100`);
+        svg.style.cssText = 'display:block;width:100%;height:100%;';
+
+        // Build filled area polygon
+        let pathD = `M 0 100 `;
+        for (let i = 0; i < fixes.length; i++) {
+          const y = altRange > 0 ? 100 - ((fixes[i].gnssAltitude - minAlt) / altRange) * 95 : 50;
+          pathD += `L ${i} ${y} `;
+        }
+        pathD += `L ${fixes.length - 1} 100 Z`;
+
+        // Create gradient definition
+        const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+        gradient.setAttribute('id', 'scrubber-grad');
+        gradient.setAttribute('x1', '0');
+        gradient.setAttribute('y1', '0');
+        gradient.setAttribute('x2', '1');
+        gradient.setAttribute('y2', '0');
+
+        const numStops = Math.min(50, fixes.length);
+        for (let i = 0; i < numStops; i++) {
+          const idx = Math.round((i / (numStops - 1)) * (fixes.length - 1));
+          const normalizedAlt = altRange > 0 ? (fixes[idx].gnssAltitude - minAlt) / altRange : 0.5;
+          const stop = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+          stop.setAttribute('offset', `${(i / (numStops - 1)) * 100}%`);
+          stop.setAttribute('stop-color', getAltitudeColorNormalized(normalizedAlt));
+          gradient.appendChild(stop);
+        }
+        defs.appendChild(gradient);
+        svg.appendChild(defs);
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', pathD);
+        path.setAttribute('fill', 'url(#scrubber-grad)');
+        path.setAttribute('opacity', '0.8');
+        svg.appendChild(path);
+
+        // Altitude profile outline
+        let outlineD = '';
+        for (let i = 0; i < fixes.length; i++) {
+          const y = altRange > 0 ? 100 - ((fixes[i].gnssAltitude - minAlt) / altRange) * 95 : 50;
+          outlineD += (i === 0 ? 'M ' : 'L ') + `${i} ${y} `;
+        }
+        const outline = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        outline.setAttribute('d', outlineD);
+        outline.setAttribute('fill', 'none');
+        outline.setAttribute('stroke', 'rgba(255,255,255,0.5)');
+        outline.setAttribute('stroke-width', '0.5');
+        outline.setAttribute('vector-effect', 'non-scaling-stroke');
+        svg.appendChild(outline);
+
+        chartArea.appendChild(svg);
+
+        // Position indicator line (within chart area)
+        const indicator = document.createElement('div');
+        indicator.style.cssText = 'position:absolute;top:0;bottom:0;width:2px;background:#ff8c00;pointer-events:none;left:0;';
+        chartArea.appendChild(indicator);
+
+        wrapper.appendChild(chartArea);
+
+        // ── Y-axis (altitude) labels ──
+        const yAxis = document.createElement('div');
+        yAxis.style.cssText = `position:absolute;top:0;left:0;width:${Y_AXIS_WIDTH}px;bottom:${X_AXIS_HEIGHT}px;pointer-events:none;`;
+
+        if (altRange > 0) {
+          const niceStep = niceAltitudeStep(altRange, 3);
+          const firstTick = Math.ceil(minAlt / niceStep) * niceStep;
+          for (let val = firstTick; val <= maxAlt; val += niceStep) {
+            const pct = ((val - minAlt) / altRange) * 100;
+            const label = document.createElement('div');
+            label.style.cssText = `position:absolute;right:2px;bottom:${pct}%;transform:translateY(50%);font-size:9px;line-height:1;color:rgba(255,255,255,0.7);display:flex;align-items:center;gap:1px;white-space:nowrap;`;
+            const fv = formatAltitude(val);
+            label.innerHTML = `<span>${fv.formatted}</span><span style="width:4px;height:1px;background:rgba(255,255,255,0.4);display:inline-block;flex-shrink:0;"></span>`;
+            yAxis.appendChild(label);
+          }
+        }
+        wrapper.appendChild(yAxis);
+
+        // ── X-axis (time) labels ──
+        const xAxis = document.createElement('div');
+        xAxis.style.cssText = `position:absolute;left:${Y_AXIS_WIDTH}px;right:0;bottom:0;height:${X_AXIS_HEIGHT}px;pointer-events:none;`;
+
+        if (fixes.length >= 2) {
+          const startMs = fixes[0].time.getTime();
+          const endMs = fixes[fixes.length - 1].time.getTime();
+          const durationMs = endMs - startMs;
+          if (durationMs > 0) {
+            const durationMin = durationMs / 60000;
+            const stepMin = niceTimeStep(durationMin, 5);
+            const stepMs = stepMin * 60000;
+
+            // Snap first tick to next multiple of stepMin
+            const startMinOfDay = fixes[0].time.getHours() * 60 + fixes[0].time.getMinutes();
+            const firstTickMin = Math.ceil(startMinOfDay / stepMin) * stepMin;
+            const firstTickMs = fixes[0].time.getTime() - startMinOfDay * 60000 + firstTickMin * 60000;
+
+            for (let tickMs = firstTickMs; tickMs <= endMs; tickMs += stepMs) {
+              if (tickMs < startMs) continue;
+              const pct = ((tickMs - startMs) / durationMs) * 100;
+              const label = document.createElement('div');
+              label.style.cssText = `position:absolute;left:${pct}%;top:0;transform:translateX(-50%);font-size:9px;line-height:1;color:rgba(255,255,255,0.7);display:flex;flex-direction:column;align-items:center;`;
+              const d = new Date(tickMs);
+              const h = d.getHours().toString().padStart(2, '0');
+              const m = d.getMinutes().toString().padStart(2, '0');
+              label.innerHTML = `<span style="width:1px;height:4px;background:rgba(255,255,255,0.4);display:block;"></span><span>${h}:${m}</span>`;
+              xAxis.appendChild(label);
+            }
+          }
+        }
+        wrapper.appendChild(xAxis);
+
+        // Scrub interaction — uses chartArea for position calculations
+        function scrubToX(clientX: number): void {
+          const rect = chartArea.getBoundingClientRect();
+          const fraction = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+          const fixIndex = Math.round(fraction * (fixes.length - 1));
+          currentFixIndex = fixIndex;
+
+          // Update indicator position
+          indicator.style.left = `${fraction * 100}%`;
+
+          // Update glider marker and camera target (momentum loop handles animation)
+          updateGliderMarker(fixIndex);
+          setCameraTarget(fixIndex);
+          updatePresetBearing();
+
+          // Update HUD for this fix
+          updateScrubberHUD(fixIndex);
+        }
+
+        wrapper.addEventListener('pointerdown', (e: PointerEvent) => {
+          wrapper.setPointerCapture(e.pointerId);
+          scrubToX(e.clientX);
+        });
+        wrapper.addEventListener('pointermove', (e: PointerEvent) => {
+          if (wrapper.hasPointerCapture(e.pointerId)) {
+            scrubToX(e.clientX);
+          }
+        });
+
+        container.appendChild(wrapper);
+        return wrapper;
+      }
+
+      /**
+       * Compute a nice round step for altitude axis
+       */
+      function niceAltitudeStep(range: number, targetTicks: number): number {
+        const rough = range / targetTicks;
+        const fv = formatAltitude(rough);
+        const unitValue = fv.value;
+        const magnitude = Math.pow(10, Math.floor(Math.log10(unitValue)));
+        const residual = unitValue / magnitude;
+        let nice: number;
+        if (residual <= 1.5) nice = 1;
+        else if (residual <= 3.5) nice = 2;
+        else if (residual <= 7.5) nice = 5;
+        else nice = 10;
+        const niceUnitValue = nice * magnitude;
+        return (niceUnitValue / unitValue) * rough;
+      }
+
+      /**
+       * Compute a nice time step in minutes
+       */
+      function niceTimeStep(durationMinutes: number, targetTicks: number): number {
+        const rough = durationMinutes / targetTicks;
+        const steps = [5, 10, 15, 20, 30, 60, 120, 180, 240];
+        for (const s of steps) {
+          if (s >= rough) return s;
+        }
+        return 240;
+      }
+
+      /**
+       * Show/update the HUD for the current scrubber position
+       */
+      function updateScrubberHUD(fixIndex: number): void {
+        const data = buildTrackPointHUDData(currentFixes, currentEvents, fixIndex, getNextTurnpointContext);
+        if (!data) return;
+        if (!hudElement) {
+          hudElement = createTrackPointHUD(container);
+        }
+        hudElement.style.bottom = 'calc(15% + 8px)';
+        updateTrackPointHUD(hudElement, data);
+      }
+
+      /**
+       * Remove the altitude scrubber overlay
+       */
+      function removeAltitudeScrubber(): void {
+        if (scrubberElement) {
+          scrubberElement.remove();
+          scrubberElement = null;
+        }
+        // Reset HUD position back to default
+        if (hudElement) {
+          hudElement.style.bottom = '32px';
+        }
+      }
+
       // Altitude color functions and gradient calculation are imported from map-provider-shared
 
 
@@ -1094,6 +1595,33 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           is3DMode = enabled;
           clearEventHighlights();
           updateTrackRendering();
+
+          if (enabled && currentFixes.length > 0) {
+            // Create scrubber and set up drone follow camera
+            scrubberElement = createAltitudeScrubber(currentFixes);
+            currentFixIndex = 0;
+            activeCameraPreset = 'side';
+            updateGliderMarker(0);
+            updateScrubberHUD(0);
+            setCameraTarget(0);
+
+            // Show camera preset control
+            cameraPresetControl?.create();
+            cameraPresetControl?.updateActive('side');
+
+            // Fly camera to initial drone position, then start momentum loop
+            const cam = computeDroneCamera(0, true);
+            map.flyTo({ ...cam, duration: 2000 });
+            map.once('moveend', () => {
+              if (is3DMode) startCameraLoop();
+            });
+          } else {
+            // Clean up drone follow state
+            stopCameraLoop();
+            removeAltitudeScrubber();
+            clearGliderMarker();
+            cameraPresetControl?.remove();
+          }
         },
 
         setTaskVisibility(visible: boolean) {
@@ -1201,6 +1729,19 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           // Update rendering based on current mode
           if (is3DMode) {
             render3DTrack(fixes);
+            // Recreate drone follow scrubber/marker for the new track
+            removeAltitudeScrubber();
+            clearGliderMarker();
+            scrubberElement = createAltitudeScrubber(fixes);
+            currentFixIndex = 0;
+            updateGliderMarker(0);
+            setCameraTarget(0);
+            stopCameraLoop();
+            const cam = computeDroneCamera(0, true);
+            map.flyTo({ ...cam, duration: 2000 });
+            map.once('moveend', () => {
+              if (is3DMode) startCameraLoop();
+            });
           }
         },
 
@@ -1211,8 +1752,11 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           cachedSequenceResult = null;
           cachedOptimizedPath = null;
           updateGeoJSONSource(map, 'track', []);
-          // Clear 3D track if present
+          // Clear 3D track and drone follow state if present
           clear3DTrack();
+          stopCameraLoop();
+          removeAltitudeScrubber();
+          clearGliderMarker();
         },
 
         async setTask(task: XCTask) {
