@@ -203,6 +203,34 @@ describe('XCTSK Parser', () => {
       expect(xcTask.turnpoints[3].waypoint.name).toBe('FINISH NCORGL');
     });
 
+    it('should use area OZ outer radius instead of default', () => {
+      const igcTask: IGCTask = {
+        numTurnpoints: 1,
+        start: {
+          latitude: -38.4, longitude: 144.2, name: 'Bells Beach',
+          areaOZ: { innerRadius: 0, outerRadius: 750, bearing1: 0, bearing2: 360, areaType: 'STARTAREA' },
+        },
+        turnpoints: [
+          {
+            latitude: -38.5, longitude: 144.3, name: 'Aireys Inlet',
+            areaOZ: { innerRadius: 0, outerRadius: 500, bearing1: 0, bearing2: 360, areaType: 'TURNAREA' },
+          },
+        ],
+        finish: {
+          latitude: -38.6, longitude: 144.4, name: 'Wild Dog Creek LZ',
+          areaOZ: { innerRadius: 0, outerRadius: 100, bearing1: 0, bearing2: 360, areaType: 'FINISHAREA' },
+        },
+      };
+
+      const xcTask = igcTaskToXCTask(igcTask);
+
+      expect(xcTask.turnpoints[0].radius).toBe(750);
+      expect(xcTask.turnpoints[0].type).toBe('SSS'); // STARTAREA confirms SSS
+      expect(xcTask.turnpoints[1].radius).toBe(500);
+      expect(xcTask.turnpoints[2].radius).toBe(100);
+      expect(xcTask.turnpoints[2].type).toBe('ESS'); // FINISHAREA confirms ESS
+    });
+
     it('should use custom radius when provided', () => {
       const igcTask: IGCTask = {
         numTurnpoints: 0,

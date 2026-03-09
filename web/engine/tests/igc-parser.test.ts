@@ -220,6 +220,52 @@ B1200004728400N01152600EA0126001650
       }
     });
 
+    it('should parse area task C records with OZ parameters', () => {
+      const igcContent = `HFDTE150124
+C3826766S14413898E00000000000400000000360000STARTAREA Bells_Beach
+C3826766S14413898E00000000000750000000360000TURNAREA Aireys_Inlet
+C3826766S14413898E00000000000100000000360000FINISHAREA Wild_Dog_Creek_LZ
+`;
+
+      const result = parseIGC(igcContent);
+      expect(result.task).toBeDefined();
+
+      // Takeoff is the first C record
+      const takeoff = result.task!.takeoff!;
+      expect(takeoff.name).toBe('Bells Beach');
+      expect(takeoff.areaOZ).toBeDefined();
+      expect(takeoff.areaOZ!.innerRadius).toBe(0);
+      expect(takeoff.areaOZ!.outerRadius).toBe(400);
+      expect(takeoff.areaOZ!.bearing1).toBe(0);
+      expect(takeoff.areaOZ!.bearing2).toBe(360);
+      expect(takeoff.areaOZ!.areaType).toBe('STARTAREA');
+
+      // Start is the second C record
+      const start = result.task!.start!;
+      expect(start.name).toBe('Aireys Inlet');
+      expect(start.areaOZ!.outerRadius).toBe(750);
+      expect(start.areaOZ!.areaType).toBe('TURNAREA');
+
+      // Landing is the last C record (only 3 points)
+      const landing = result.task!.landing!;
+      expect(landing.name).toBe('Wild Dog Creek LZ');
+      expect(landing.areaOZ!.outerRadius).toBe(100);
+      expect(landing.areaOZ!.areaType).toBe('FINISHAREA');
+    });
+
+    it('should not parse non-area C records as area tasks', () => {
+      const igcContent = `HFDTE010125
+C4728234N01152432ETakeoff
+C4730000N01155000ESSS Start
+`;
+
+      const result = parseIGC(igcContent);
+      expect(result.task!.takeoff!.name).toBe('Takeoff');
+      expect(result.task!.takeoff!.areaOZ).toBeUndefined();
+      expect(result.task!.start!.name).toBe('SSS Start');
+      expect(result.task!.start!.areaOZ).toBeUndefined();
+    });
+
     it('should sanitize HTML in E record event descriptions', () => {
       const igcContent = `HFDTE150124
 B1234564728234N01152432EA0123401567

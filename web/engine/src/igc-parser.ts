@@ -31,10 +31,19 @@ export interface IGCEvent {
   description: string;
 }
 
+export interface IGCAreaOZ {
+  innerRadius: number;  // meters
+  outerRadius: number;  // meters
+  bearing1: number;     // degrees
+  bearing2: number;     // degrees
+  areaType: 'STARTAREA' | 'TURNAREA' | 'FINISHAREA';
+}
+
 export interface IGCTaskPoint {
   latitude: number;
   longitude: number;
   name: string;
+  areaOZ?: IGCAreaOZ; // OZ = Observation Zone (FAI/IGC term)
 }
 
 export interface IGCTask {
@@ -153,6 +162,34 @@ function parseBRecord(line: string, baseDate: Date, dayOffset: number = 0): IGCF
 }
 
 /**
+ * Parse area task observation zone parameters from a C-record name field.
+ * Format: DDDDdddDDDdddBBBbbbBBBbbbTYPEAREA WaypointName
+ *   - 7 digits: inner radius in meters
+ *   - 7 digits: outer radius in meters
+ *   - 6 digits: bearing1 in degrees×1000
+ *   - 6 digits: bearing2 in degrees×1000
+ *   - Type: STARTAREA, TURNAREA, or FINISHAREA
+ *   - Remaining text: waypoint name (underscores replaced with spaces)
+ */
+const AREA_TASK_RE = /^(\d{7})(\d{7})(\d{6})(\d{6})(STARTAREA|TURNAREA|FINISHAREA)\s*(.*)$/;
+
+function parseAreaTaskName(rawName: string): { name: string; areaOZ: IGCAreaOZ } | null {
+  const m = AREA_TASK_RE.exec(rawName);
+  if (!m) return null;
+
+  return {
+    name: m[6].replace(/_/g, ' ').trim(),
+    areaOZ: {
+      innerRadius: parseInt(m[1], 10),
+      outerRadius: parseInt(m[2], 10),
+      bearing1: parseInt(m[3], 10) / 1000,
+      bearing2: parseInt(m[4], 10) / 1000,
+      areaType: m[5] as IGCAreaOZ['areaType'],
+    },
+  };
+}
+
+/**
  * Parse a C record (task declaration point)
  * Format: CDDMMmmmN/SDDDMMmmmE/W[Description]
  *         or for first C record: C[DateTime info]
@@ -171,9 +208,15 @@ function parseCRecord(line: string): IGCTaskPoint | null {
 
   const latitude = parseLatitude(latPart);
   const longitude = parseLongitude(lonPart);
-  const name = sanitizeText(line.substring(18).trim());
+  const rawName = line.substring(18).trim();
 
-  return { latitude, longitude, name };
+  // Try to parse area task OZ parameters from the name field
+  const area = parseAreaTaskName(rawName);
+  if (area) {
+    return { latitude, longitude, name: sanitizeText(area.name), areaOZ: area.areaOZ };
+  }
+
+  return { latitude, longitude, name: sanitizeText(rawName) };
 }
 
 /**
