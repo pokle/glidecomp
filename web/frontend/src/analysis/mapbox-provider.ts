@@ -741,9 +741,17 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
         addCustomLayers();
 
-        // Re-add Threebox custom layer after style changes (setStyle removes all layers).
-        // On initial load, tb is still null — the layer is added in the 'load' handler instead.
-        if (tb && !map.getLayer('threebox-layer')) {
+        // Recreate Threebox after style changes — setStyle() removes all layers
+        // and invalidates the internal Three.js renderer state.
+        // On initial load, tb is still null; it's created in the 'load' handler.
+        if (tb) {
+          // Dispose old instance and clear stale scene objects
+          tb.dispose();
+          threeDObjects = [];
+
+          const gl = map.getCanvas().getContext('webgl2') || map.getCanvas().getContext('webgl');
+          tb = new Threebox(map, gl, { defaultLights: true });
+
           map.addLayer({
             id: 'threebox-layer',
             type: 'custom',
