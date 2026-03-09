@@ -90,6 +90,11 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       let is3DMode = false;
       let threeDObjects: unknown[] = [];
 
+      // Drone follow camera state
+      let gliderMarker: unknown = null;
+      let currentFixIndex = 0;
+      let scrubberElement: HTMLElement | null = null;
+
       // Task visibility state
       let isTaskVisible = true;
 
@@ -837,6 +842,11 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
         if (!isInitialLoad) {
           restoreData();
+          // Re-create glider marker after style change if in 3D drone follow mode
+          if (is3DMode && currentFixes.length > 0) {
+            gliderMarker = null; // Old marker was in the abandoned Threebox instance
+            updateGliderMarker(currentFixIndex);
+          }
         }
       });
 
@@ -1044,6 +1054,175 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         map.triggerRepaint();
       }
 
+      /**
+       * Update the glider marker at the given fix index
+       */
+      function updateGliderMarker(fixIndex: number): void {
+        if (!tb || currentFixes.length === 0) return;
+
+        // Remove old marker
+        if (gliderMarker) {
+          tb.remove(gliderMarker);
+          gliderMarker = null;
+        }
+
+        const fix = currentFixes[fixIndex];
+        const alt = fix.gnssAltitude * TERRAIN_EXAGGERATION;
+
+        // Create a short vertical spike as the glider marker
+        gliderMarker = tb.line({
+          geometry: [
+            [fix.longitude, fix.latitude, alt],
+            [fix.longitude, fix.latitude, alt + 30],
+          ],
+          color: '#ff3333',
+          width: 8,
+          opacity: 1.0,
+        });
+        const mat = (gliderMarker as { material?: { depthTest: boolean } }).material;
+        if (mat) mat.depthTest = false;
+        tb.add(gliderMarker);
+        map.triggerRepaint();
+      }
+
+      /**
+       * Remove the glider marker from the scene
+       */
+      function clearGliderMarker(): void {
+        if (!tb || !gliderMarker) return;
+        tb.remove(gliderMarker);
+        gliderMarker = null;
+      }
+
+      /**
+       * Compute drone camera parameters for the given fix index.
+       * Keeps the glider centred without rotating the map.
+       */
+      function computeDroneCamera(fixIndex: number, includeZoom = false): { center: [number, number]; pitch: number; zoom?: number } {
+        const fix = currentFixes[fixIndex];
+        const cam: { center: [number, number]; pitch: number; zoom?: number } = {
+          center: [fix.longitude, fix.latitude],
+          pitch: 75,
+        };
+        if (includeZoom) cam.zoom = 14.5;
+        return cam;
+      }
+
+      /**
+       * Create the altitude scrubber overlay
+       */
+      function createAltitudeScrubber(fixes: IGCFix[]): HTMLElement {
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'position:absolute;bottom:0;left:0;right:0;height:15%;z-index:10;background:rgba(0,0,0,0.65);cursor:crosshair;touch-action:none;';
+
+        const { minAlt, altRange } = calculateAltitudeRange(fixes);
+
+        // Create SVG altitude profile
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', '100%');
+        svg.setAttribute('height', '100%');
+        svg.setAttribute('preserveAspectRatio', 'none');
+        svg.setAttribute('viewBox', `0 0 ${fixes.length} 100`);
+        svg.style.cssText = 'display:block;position:absolute;top:0;left:0;width:100%;height:100%;';
+
+        // Build path with altitude-colored segments
+        // Create a filled area polygon
+        let pathD = `M 0 100 `;
+        for (let i = 0; i < fixes.length; i++) {
+          const y = altRange > 0 ? 100 - ((fixes[i].gnssAltitude - minAlt) / altRange) * 90 : 50;
+          pathD += `L ${i} ${y} `;
+        }
+        pathD += `L ${fixes.length - 1} 100 Z`;
+
+        // Create gradient definition
+        const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+        gradient.setAttribute('id', 'scrubber-grad');
+        gradient.setAttribute('x1', '0');
+        gradient.setAttribute('y1', '0');
+        gradient.setAttribute('x2', '1');
+        gradient.setAttribute('y2', '0');
+
+        // Sample gradient stops
+        const numStops = Math.min(50, fixes.length);
+        for (let i = 0; i < numStops; i++) {
+          const idx = Math.round((i / (numStops - 1)) * (fixes.length - 1));
+          const normalizedAlt = altRange > 0 ? (fixes[idx].gnssAltitude - minAlt) / altRange : 0.5;
+          const stop = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+          stop.setAttribute('offset', `${(i / (numStops - 1)) * 100}%`);
+          stop.setAttribute('stop-color', getAltitudeColorNormalized(normalizedAlt));
+          gradient.appendChild(stop);
+        }
+        defs.appendChild(gradient);
+        svg.appendChild(defs);
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', pathD);
+        path.setAttribute('fill', 'url(#scrubber-grad)');
+        path.setAttribute('opacity', '0.8');
+        svg.appendChild(path);
+
+        // Altitude profile outline
+        let outlineD = '';
+        for (let i = 0; i < fixes.length; i++) {
+          const y = altRange > 0 ? 100 - ((fixes[i].gnssAltitude - minAlt) / altRange) * 90 : 50;
+          outlineD += (i === 0 ? 'M ' : 'L ') + `${i} ${y} `;
+        }
+        const outline = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        outline.setAttribute('d', outlineD);
+        outline.setAttribute('fill', 'none');
+        outline.setAttribute('stroke', 'rgba(255,255,255,0.5)');
+        outline.setAttribute('stroke-width', '0.5');
+        outline.setAttribute('vector-effect', 'non-scaling-stroke');
+        svg.appendChild(outline);
+
+        wrapper.appendChild(svg);
+
+        // Position indicator line
+        const indicator = document.createElement('div');
+        indicator.style.cssText = 'position:absolute;top:0;bottom:0;width:2px;background:#ff8c00;pointer-events:none;left:0;';
+        wrapper.appendChild(indicator);
+
+        // Scrub interaction
+        function scrubToX(clientX: number): void {
+          const rect = wrapper.getBoundingClientRect();
+          const fraction = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+          const fixIndex = Math.round(fraction * (fixes.length - 1));
+          currentFixIndex = fixIndex;
+
+          // Update indicator position
+          indicator.style.left = `${fraction * 100}%`;
+
+          // Update glider marker and camera
+          updateGliderMarker(fixIndex);
+          const cam = computeDroneCamera(fixIndex);
+          map.easeTo({ ...cam, duration: 200 });
+        }
+
+        wrapper.addEventListener('pointerdown', (e: PointerEvent) => {
+          wrapper.setPointerCapture(e.pointerId);
+          scrubToX(e.clientX);
+        });
+        wrapper.addEventListener('pointermove', (e: PointerEvent) => {
+          if (wrapper.hasPointerCapture(e.pointerId)) {
+            scrubToX(e.clientX);
+          }
+        });
+
+        container.appendChild(wrapper);
+        return wrapper;
+      }
+
+      /**
+       * Remove the altitude scrubber overlay
+       */
+      function removeAltitudeScrubber(): void {
+        if (scrubberElement) {
+          scrubberElement.remove();
+          scrubberElement = null;
+        }
+      }
+
       // Altitude color functions and gradient calculation are imported from map-provider-shared
 
 
@@ -1094,6 +1273,21 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           is3DMode = enabled;
           clearEventHighlights();
           updateTrackRendering();
+
+          if (enabled && currentFixes.length > 0) {
+            // Create scrubber and set up drone follow camera
+            scrubberElement = createAltitudeScrubber(currentFixes);
+            currentFixIndex = 0;
+            updateGliderMarker(0);
+
+            // Fly camera to initial drone position
+            const cam = computeDroneCamera(0, true);
+            map.flyTo({ ...cam, duration: 2000 });
+          } else {
+            // Clean up drone follow state
+            removeAltitudeScrubber();
+            clearGliderMarker();
+          }
         },
 
         setTaskVisibility(visible: boolean) {
@@ -1201,6 +1395,14 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           // Update rendering based on current mode
           if (is3DMode) {
             render3DTrack(fixes);
+            // Recreate drone follow scrubber/marker for the new track
+            removeAltitudeScrubber();
+            clearGliderMarker();
+            scrubberElement = createAltitudeScrubber(fixes);
+            currentFixIndex = 0;
+            updateGliderMarker(0);
+            const cam = computeDroneCamera(0, true);
+            map.flyTo({ ...cam, duration: 2000 });
           }
         },
 
@@ -1211,8 +1413,10 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           cachedSequenceResult = null;
           cachedOptimizedPath = null;
           updateGeoJSONSource(map, 'track', []);
-          // Clear 3D track if present
+          // Clear 3D track and drone follow state if present
           clear3DTrack();
+          removeAltitudeScrubber();
+          clearGliderMarker();
         },
 
         async setTask(task: XCTask) {
