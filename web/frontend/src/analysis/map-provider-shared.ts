@@ -14,7 +14,7 @@ import {
 } from '@taskscore/engine';
 import { formatDistance, formatRadius, formatAltitude, formatSpeed, formatAltitudeChange } from './units-browser';
 import { config } from './config';
-import { getUnitLabel } from '@taskscore/engine';
+
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -276,12 +276,11 @@ export function createCirclePolygon(
 export function createGlideLegend(container: HTMLElement): HTMLElement {
   const legend = document.createElement('div');
   legend.id = 'glide-legend';
-  const distLabel = getUnitLabel('distance', config.getUnits());
   legend.innerHTML = `
     <button class="glide-legend-btn" title="Glide metrics help">?</button>
     <div class="glide-legend-content">
       <div class="glide-legend-title">Glide Metrics</div>
-      <div class="glide-legend-item"><strong>Chevrons:</strong> 1\u00A0${distLabel} segment markers</div>
+      <div class="glide-legend-item"><strong>Chevrons:</strong> Direction indicators</div>
       <div class="glide-legend-item"><strong>Speed:</strong> Average speed of segment</div>
       <div class="glide-legend-item"><strong>L/D:</strong> Glide ratio (distance &divide; altitude lost)</div>
       <div class="glide-legend-item"><strong>Alt:</strong> Altitude change from segment start to end</div>
@@ -819,13 +818,17 @@ export function ensureTurnpointCache(
 
 export interface FormattedGlideLabel {
   speed: string;
+  altitude: string;
   detailText: string;
   reqText: string;
 }
 
-/** Format a glide marker's data into display strings for speed, detail, and required GR. */
+/** Format a glide marker's data into display strings for speed, altitude, detail, and required GR. */
 export function formatGlideLabel(marker: GlideMarker): FormattedGlideLabel {
-  const speed = formatSpeed(marker.speedMps || 0).withUnit;
+  const speedVal = formatSpeed(marker.speedMps || 0);
+  const speed = `${speedVal.formatted}\u00A0<span style="font-size:0.7em">${speedVal.unit}</span>`;
+  const altVal = marker.altitude !== undefined ? formatAltitude(marker.altitude) : null;
+  const altitude = altVal ? `${altVal.formatted}\u00A0<span style="font-size:0.7em">${altVal.unit}</span>` : '';
   const glideRatio = marker.glideRatio !== undefined
     ? `${marker.glideRatio.toFixed(0)}:1`
     : '\u221E:1';
@@ -839,7 +842,7 @@ export function formatGlideLabel(marker: GlideMarker): FormattedGlideLabel {
     reqText = `${marker.requiredGlideRatio.toFixed(0)}:1 to ${marker.targetName}`;
   }
 
-  return { speed, detailText, reqText };
+  return { speed, altitude, detailText, reqText };
 }
 
 // ── formatTurnpointLabel ────────────────────────────────────────────────
@@ -914,24 +917,18 @@ export function updateGlideLabelElement(el: HTMLElement, zoom: number, labelInde
   }
 
   const speed = el.dataset.speedLabel || '';
+  const alt = el.dataset.altLabel || '';
+  const metricsLine = alt ? `${speed}\u2002${alt}` : speed;
   el.style.display = '';
 
   if (zoom < GLIDE_LABEL_DETAILS_MIN_ZOOM) {
-    el.innerHTML = speed;
+    el.innerHTML = metricsLine;
   } else {
     const details = el.dataset.detailLabel || '';
     const req = el.dataset.reqLabel || '';
-    let html = details ? `${speed}<br>${details}` : speed;
+    let html = details ? `${metricsLine}<br>${details}` : metricsLine;
     if (req) html += `<br>${req}`;
     el.innerHTML = html;
   }
 }
 
-/** Apply zoom-dependent display logic to a single glide-chevron element. */
-export function updateGlideChevronElement(el: HTMLElement, zoom: number, chevronIndex: number): void {
-  if (zoom < GLIDE_LABEL_SPARSE_MIN_ZOOM || isSparseHidden(zoom, chevronIndex)) {
-    el.style.display = 'none';
-  } else {
-    el.style.display = '';
-  }
-}

@@ -27,6 +27,7 @@ export interface GlideMarker {
   altitudeDiff?: number; // altitude change in meters for the segment (negative = descent, only for speed-label type)
   requiredGlideRatio?: number; // L/D needed to reach next turnpoint (only for speed-label type)
   targetName?: string; // name of the target turnpoint (only for speed-label type)
+  altitude?: number; // altitude in meters at the label position (only for speed-label type)
 }
 
 export interface GlideContext {
@@ -116,30 +117,30 @@ export function calculateGlidePositions(
 /**
  * Calculate glide markers (chevrons and speed labels) for a glide segment.
  *
- * Layout:
- * - Speed labels at 500m, 1500m, 2500m, ... (showing speed for each 1km segment)
- * - Chevrons at 1000m, 2000m, 3000m, ...
+ * Layout (trailing 1km window):
+ * - Combined chevron + speed label at each segment boundary (1000m, 2000m, 3000m, ...)
+ * - Chevron shows flight direction; label shows trailing-window metrics
  *
  * Speed calculation:
- * - Each speed label shows the average speed for its 1km segment
- * - First label (500m): speed from 0m to 1000m (or to end if shorter)
- * - Second label (1500m): speed from 1000m to 2000m
+ * - Each label shows the average speed for the trailing 1km window
+ * - Label at 1000m: speed from 0m to 1000m
+ * - Label at 2000m: speed from 1000m to 2000m
  * - etc.
  *
  * Glide ratio and altitude:
- * - Each speed label also shows the glide ratio (L/D) for the segment
+ * - Each label shows the glide ratio (L/D) for the trailing window
  * - Glide ratio = horizontal distance / altitude lost
  * - Altitude difference shows the altitude change (negative = descent)
+ * - Altitude is the actual altitude at the boundary point
  *
  * @param fixes - Array of IGC fixes for the glide segment
- * @returns Array of markers with positions, speeds, glide ratios, and altitude differences
+ * @returns Array of speed-label markers at segment boundaries
  */
 export function calculateGlideMarkers(fixes: IGCFix[], contextResolver?: GlideContextResolver, segmentLengthMeters: number = 1000): GlideMarker[] {
   const SEGMENT_LENGTH = segmentLengthMeters;
-  const LABEL_INTERVAL = SEGMENT_LENGTH / 2; // label at segment midpoint
 
-  // Get positions at 500m intervals
-  const positions = calculateGlidePositions(fixes, LABEL_INTERVAL);
+  // Get positions at segment boundaries (1000m, 2000m, 3000m, ...)
+  const positions = calculateGlidePositions(fixes, SEGMENT_LENGTH);
 
   if (positions.length === 0) {
     return [];
@@ -151,91 +152,57 @@ export function calculateGlideMarkers(fixes: IGCFix[], contextResolver?: GlideCo
 
   for (let i = 0; i < positions.length; i++) {
     const pos = positions[i];
-    const isLabel = (i % 2 === 0); // 500m, 1500m, 2500m, etc. (indices 0, 2, 4, ...)
 
-    if (isLabel) {
-      // Calculate speed for the 1km segment that this label is in the middle of
-      // Segment boundaries: 0-1000m, 1000-2000m, 2000-3000m, etc.
-      // Label at 500m covers segment 0-1000m
-      // Label at 1500m covers segment 1000-2000m
-      // etc.
+    // Trailing window: from previous boundary (or glide start) to this boundary
+    const segmentStartTime = (i > 0) ? positions[i - 1].time : startTime;
+    const segmentEndTime = pos.time;
+    const timeDiffSeconds = (segmentEndTime - segmentStartTime) / 1000;
 
-      // Get time at start of segment (previous chevron, or start of glide)
-      const segmentStartTime = (i === 0) ? startTime : positions[i - 1].time;
+    const segmentStartAltitude = (i > 0) ? positions[i - 1].altitude : startAltitude;
+    const segmentEndAltitude = pos.altitude;
+    const altitudeDiff = segmentEndAltitude - segmentStartAltitude;
 
-      // Get time at end of segment (next chevron)
-      const segmentEndTime = (i + 1 < positions.length) ? positions[i + 1].time : pos.time;
+    const segmentDistance = (i > 0)
+      ? pos.distance - positions[i - 1].distance
+      : pos.distance;
 
-      const timeDiffSeconds = (segmentEndTime - segmentStartTime) / 1000;
-
-      // Get altitude at start of segment (previous chevron, or start of glide)
-      const segmentStartAltitude = (i === 0) ? startAltitude : positions[i - 1].altitude;
-
-      // Get altitude at end of segment (next chevron, or current pos if no next)
-      const segmentEndAltitude = (i + 1 < positions.length) ? positions[i + 1].altitude : pos.altitude;
-
-      // Altitude difference (negative = descent)
-      const altitudeDiff = segmentEndAltitude - segmentStartAltitude;
-
-      // Calculate actual distance for this segment
-      // If we have both start and end positions, it's a full 1km segment
-      // Otherwise, it's a partial segment
-      let segmentDistance: number;
-      if (i === 0) {
-        // First segment: from 0 to the chevron (or label if no chevron)
-        segmentDistance = (i + 1 < positions.length) ? positions[i + 1].distance : pos.distance;
-      } else {
-        // Subsequent segments: from previous chevron to next chevron (or current pos if no next)
-        const startDist = positions[i - 1].distance;
-        const endDist = (i + 1 < positions.length) ? positions[i + 1].distance : pos.distance;
-        segmentDistance = endDist - startDist;
-      }
-
-      let speedMps = 0;
-      if (timeDiffSeconds > 0 && segmentDistance > 0) {
-        speedMps = segmentDistance / timeDiffSeconds; // m/s
-      }
-
-      // Calculate glide ratio (L/D) = horizontal distance / altitude lost
-      // Only calculate if descending (altitude lost > 0)
-      let glideRatio: number | undefined;
-      const altitudeLost = -altitudeDiff; // Convert to positive value for descent
-      if (altitudeLost > 0 && segmentDistance > 0) {
-        glideRatio = segmentDistance / altitudeLost;
-      }
-
-      // Calculate required glide ratio to next turnpoint
-      let requiredGlideRatio: number | undefined;
-      let targetName: string | undefined;
-      const context = contextResolver?.(pos.time);
-      const nextTP = context?.nextTurnpoint;
-      if (nextTP && pos.altitude > nextTP.altitude) {
-        const distToTP = haversineDistance(pos.lat, pos.lon, nextTP.lat, nextTP.lon);
-        const altDiffToTP = pos.altitude - nextTP.altitude;
-        requiredGlideRatio = distToTP / altDiffToTP;
-        targetName = nextTP.name;
-      }
-
-      markers.push({
-        type: 'speed-label',
-        lat: pos.lat,
-        lon: pos.lon,
-        bearing: pos.bearing,
-        speedMps,
-        glideRatio,
-        altitudeDiff: Math.round(altitudeDiff),
-        requiredGlideRatio,
-        targetName,
-      });
-    } else {
-      // Chevron at 1000m, 2000m, 3000m, etc. (indices 1, 3, 5, ...)
-      markers.push({
-        type: 'chevron',
-        lat: pos.lat,
-        lon: pos.lon,
-        bearing: pos.bearing,
-      });
+    let speedMps = 0;
+    if (timeDiffSeconds > 0 && segmentDistance > 0) {
+      speedMps = segmentDistance / timeDiffSeconds; // m/s
     }
+
+    // Calculate glide ratio (L/D) = horizontal distance / altitude lost
+    // Only calculate if descending (altitude lost > 0)
+    let glideRatio: number | undefined;
+    const altitudeLost = -altitudeDiff; // Convert to positive value for descent
+    if (altitudeLost > 0 && segmentDistance > 0) {
+      glideRatio = segmentDistance / altitudeLost;
+    }
+
+    // Calculate required glide ratio to next turnpoint
+    let requiredGlideRatio: number | undefined;
+    let targetName: string | undefined;
+    const context = contextResolver?.(pos.time);
+    const nextTP = context?.nextTurnpoint;
+    if (nextTP && pos.altitude > nextTP.altitude) {
+      const distToTP = haversineDistance(pos.lat, pos.lon, nextTP.lat, nextTP.lon);
+      const altDiffToTP = pos.altitude - nextTP.altitude;
+      requiredGlideRatio = distToTP / altDiffToTP;
+      targetName = nextTP.name;
+    }
+
+    markers.push({
+      type: 'speed-label',
+      lat: pos.lat,
+      lon: pos.lon,
+      bearing: pos.bearing,
+      speedMps,
+      glideRatio,
+      altitudeDiff: Math.round(altitudeDiff),
+      requiredGlideRatio,
+      targetName,
+      altitude: Math.round(pos.altitude),
+    });
   }
 
   return markers;

@@ -207,7 +207,7 @@ async function init(): Promise<void> {
       providerMethod: 'setSpeedOverlay',
       onToggle: (enabled) => {
         if (showSpeedLabel) {
-          showSpeedLabel.textContent = enabled ? 'Clear Speed' : 'Show Speed';
+          showSpeedLabel.textContent = enabled ? 'Hide track metrics' : 'Show track metrics';
         }
         // Clear glide segment selection when enabling speed overlay
         if (enabled) {
@@ -405,7 +405,7 @@ async function init(): Promise<void> {
     featureState['speed'] = false;
     mapRenderer?.setSpeedOverlay?.(false);
     updateFeatureStatus(document.getElementById('show-speed-status'), false);
-    if (showSpeedLabel) showSpeedLabel.textContent = 'Show Speed';
+    if (showSpeedLabel) showSpeedLabel.textContent = 'Show track metrics';
     updateUrlParam('speed', null);
 
     // Clear analysis panel
