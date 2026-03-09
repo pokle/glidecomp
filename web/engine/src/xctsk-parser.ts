@@ -403,9 +403,18 @@ export function igcTaskToXCTask(igcTask: IGCTask, options: IGCTaskConversionOpti
     // Look up waypoint by name or coordinates
     const wp = findWaypoint(waypoints, name, point.latitude, point.longitude, tolerance);
 
+    // Area OZ outer radius takes priority over waypoint DB and default
+    const radius = point.areaOZ?.outerRadius ?? wp?.radius ?? defaultRadius;
+
+    // Area type can confirm SSS/ESS assignment
+    if (point.areaOZ) {
+      if (point.areaOZ.areaType === 'STARTAREA') type = 'SSS';
+      else if (point.areaOZ.areaType === 'FINISHAREA') type = 'ESS';
+    }
+
     return {
       type,
-      radius: wp?.radius ?? defaultRadius,
+      radius,
       waypoint: {
         name: wp?.description || name,
         lat: point.latitude,
