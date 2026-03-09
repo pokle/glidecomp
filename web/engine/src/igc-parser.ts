@@ -163,11 +163,11 @@ function parseBRecord(line: string, baseDate: Date, dayOffset: number = 0): IGCF
 
 /**
  * Parse area task observation zone parameters from a C-record name field.
- * Format: DDDDdddDDDdddBBBbbbBBBbbbTYPEAREA WaypointName
- *   - 7 digits: inner radius in meters
- *   - 7 digits: outer radius in meters
- *   - 6 digits: bearing1 in degrees×1000
- *   - 6 digits: bearing2 in degrees×1000
+ * IGC spec format: DDDDdddDDDDdddBBBbbbBBBbbbTYPEAREA WaypointName
+ *   - 7 digits: min distance from WP in km (DDDDddd = DDDD.ddd km, integer value = meters)
+ *   - 7 digits: max distance from WP in km (same encoding; 9999999 = no limit sentinel)
+ *   - 6 digits: bearing1 in degrees (BBBbbb = BBB.bbb°)
+ *   - 6 digits: bearing2 in degrees (same encoding, area extends clockwise from b1 to b2)
  *   - Type: STARTAREA, TURNAREA, or FINISHAREA
  *   - Remaining text: waypoint name (underscores replaced with spaces)
  */
@@ -177,11 +177,15 @@ function parseAreaTaskName(rawName: string): { name: string; areaOZ: IGCAreaOZ }
   const m = AREA_TASK_RE.exec(rawName);
   if (!m) return null;
 
+  const innerRadius = parseInt(m[1], 10);
+  const outerRadius = parseInt(m[2], 10);
+
   return {
     name: m[6].replace(/_/g, ' ').trim(),
     areaOZ: {
-      innerRadius: parseInt(m[1], 10),
-      outerRadius: parseInt(m[2], 10),
+      innerRadius,
+      // Flyskyhy uses 9999999 as a sentinel for "no outer limit" (e.g. start cylinders)
+      outerRadius: outerRadius >= 9999999 ? Infinity : outerRadius,
       bearing1: parseInt(m[3], 10) / 1000,
       bearing2: parseInt(m[4], 10) / 1000,
       areaType: m[5] as IGCAreaOZ['areaType'],
