@@ -403,8 +403,19 @@ export function igcTaskToXCTask(igcTask: IGCTask, options: IGCTaskConversionOpti
     // Look up waypoint by name or coordinates
     const wp = findWaypoint(waypoints, name, point.latitude, point.longitude, tolerance);
 
-    // Area OZ outer radius takes priority over waypoint DB and default
-    const radius = point.areaOZ?.outerRadius ?? wp?.radius ?? defaultRadius;
+    // For start areas, the meaningful radius is innerRadius (the cylinder to cross);
+    // for turn/finish areas, it's outerRadius (the cylinder to enter).
+    // Falls back to waypoint DB radius, then default.
+    let radius: number | undefined;
+    if (point.areaOZ) {
+      const oz = point.areaOZ;
+      if (oz.areaType === 'STARTAREA' && oz.innerRadius > 0) {
+        radius = oz.innerRadius;
+      } else if (isFinite(oz.outerRadius) && oz.outerRadius > 0) {
+        radius = oz.outerRadius;
+      }
+    }
+    radius = radius ?? wp?.radius ?? defaultRadius;
 
     // Area type can confirm SSS/ESS assignment
     if (point.areaOZ) {
