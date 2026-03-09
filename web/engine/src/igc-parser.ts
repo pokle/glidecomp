@@ -43,7 +43,7 @@ export interface IGCTaskPoint {
   latitude: number;
   longitude: number;
   name: string;
-  areaOZ?: IGCAreaOZ;
+  areaOZ?: IGCAreaOZ; // OZ = Observation Zone (FAI/IGC term)
 }
 
 export interface IGCTask {
