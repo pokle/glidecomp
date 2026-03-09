@@ -1032,7 +1032,8 @@ async function init(): Promise<void> {
 
   // Sample flights
   const sampleFiles: Record<string, string> = {
-    'sample-tushar': '2025-01-05-Tushar-Corryong.igc'
+    'sample-tushar': '2025-01-05-Tushar-Corryong.igc',
+    'sample-bells-apollo': '2026-03-08-Tushar-bells-to-apollo.IGC'
   };
 
   // Map sample track filenames to local task files (by competition date)
