@@ -740,6 +740,25 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         }
 
         addCustomLayers();
+
+        // Re-add Threebox custom layer after style changes (setStyle removes all layers).
+        // On initial load, tb is still null — the layer is added in the 'load' handler instead.
+        if (tb && !map.getLayer('threebox-layer')) {
+          map.addLayer({
+            id: 'threebox-layer',
+            type: 'custom',
+            renderingMode: '3d',
+            onAdd: function () {
+              // Layer added
+            },
+            render: function () {
+              if (tb) {
+                tb.update();
+              }
+            },
+          });
+        }
+
         if (!isInitialLoad) {
           restoreData();
         }
@@ -940,6 +959,9 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           tb.add(dropLine);
           threeDObjects.push(dropLine);
         }
+
+        // Trigger a repaint so the threebox-layer render callback fires
+        map.triggerRepaint();
       }
 
       // Altitude color functions and gradient calculation are imported from map-provider-shared
@@ -1110,9 +1132,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           cachedOptimizedPath = null;
           updateGeoJSONSource(map, 'track', []);
           // Clear 3D track if present
-          if (map.getLayer('track-3d')) {
-            map.setLayoutProperty('track-3d', 'visibility', 'none');
-          }
+          clear3DTrack();
         },
 
         async setTask(task: XCTask) {
