@@ -8,7 +8,7 @@
 
 import mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
-import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult } from '@taskscore/engine';
+import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, haversineDistance, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult } from '@taskscore/engine';
 import type { MapProvider } from './map-provider';
 import { config } from './config';
 import {
@@ -30,6 +30,7 @@ mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 // Terrain exaggeration factor — applied to both the Mapbox terrain and
 // Threebox 3D track altitudes so the track stays above the terrain surface.
 const TERRAIN_EXAGGERATION = 1.5;
+const SHOW_DROP_LINES = true; // Toggle vertical drop lines from track to ground
 
 // MapBox style options
 const MAPBOX_STYLES = [
@@ -1104,23 +1105,35 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           threeDObjects.push(lineSegment);
         }
 
-        // Add vertical "drop lines" every N points for depth perception
-        const dropLineInterval = Math.max(1, Math.floor(fixes.length / 50));
-        for (let i = 0; i < fixes.length; i += dropLineInterval) {
-          const fix = fixes[i];
-          const dropLine = tb.line({
-            geometry: [
-              [fix.longitude, fix.latitude, fix.gnssAltitude * TERRAIN_EXAGGERATION],
-              [fix.longitude, fix.latitude, 0],
-            ],
-            color: '#888888',
-            width: 1,
-            opacity: 0.3,
-          });
-          const dlMat = (dropLine as { material?: { depthTest: boolean } }).material;
-          if (dlMat) dlMat.depthTest = false;
-          tb.add(dropLine);
-          threeDObjects.push(dropLine);
+        // Add vertical "drop lines" once per km for depth perception
+        if (SHOW_DROP_LINES) {
+          const DROP_LINE_INTERVAL_M = 1000;
+          let distAccum = 0;
+          for (let i = 0; i < fixes.length; i++) {
+            if (i > 0) {
+              distAccum += haversineDistance(
+                fixes[i - 1].latitude, fixes[i - 1].longitude,
+                fixes[i].latitude, fixes[i].longitude
+              );
+            }
+            if (i === 0 || distAccum >= DROP_LINE_INTERVAL_M) {
+              distAccum = 0;
+              const fix = fixes[i];
+              const dropLine = tb.line({
+                geometry: [
+                  [fix.longitude, fix.latitude, fix.gnssAltitude * TERRAIN_EXAGGERATION],
+                  [fix.longitude, fix.latitude, 0],
+                ],
+                color: '#888888',
+                width: 1,
+                opacity: 0.3,
+              });
+              // Keep depthTest enabled — vertical lines don't z-fight with terrain,
+              // and disabling it makes far-side lines bleed through on rotation
+              tb.add(dropLine);
+              threeDObjects.push(dropLine);
+            }
+          }
         }
 
         // Trigger a repaint so the threebox-layer render callback fires
