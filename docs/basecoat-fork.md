@@ -32,7 +32,7 @@ Make sure to bump the version in `package.json` before publishing a new release.
 When the fix is merged upstream, update `web/frontend/package.json`:
 
 ```diff
-- "@pokle/basecoat": "0.3.10-beta2.pokle",
+- "@pokle/basecoat": "0.3.10-beta3.pokle-selections",
 + "basecoat-css": "^0.4.0",
 ```
 

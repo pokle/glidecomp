@@ -78,14 +78,14 @@ When a glide is selected, the map shows chevrons and speed labels along the path
 
 ### Layout
 
-Positions are calculated at 500m intervals along the glide path using linear interpolation between fixes:
+Positions are calculated at 1km intervals along the glide path using linear interpolation between fixes. Labels and chevrons alternate at each 1km boundary:
 
 | Distance | Marker Type | Content |
 |----------|-------------|---------|
-| 500m | Speed label | Average speed, L/D, and altitude change for the 0–1000m segment |
-| 1000m | Chevron | Flight direction indicator |
-| 1500m | Speed label | Stats for the 1000–2000m segment |
-| 2000m | Chevron | |
+| 1km | Speed label | Average speed, L/D, and altitude change for the 0–2km segment |
+| 2km | Chevron | Flight direction indicator |
+| 3km | Speed label | Stats for the 2–4km segment |
+| 4km | Chevron | |
 | ... | alternating | |
 
 **Speed labels** show three metrics for each 1km segment:

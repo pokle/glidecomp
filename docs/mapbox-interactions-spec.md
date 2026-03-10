@@ -151,6 +151,11 @@ Track is rendered as individual per-segment LineString features (one per consecu
       - Zoom 11–13: speed only
       - Zoom 13+: speed + glide ratio + altitude change + required GR (if applicable)
   - Glide legend `?` button appears (bottom of map container)
+  - **Screen-space collision detection** — labels are projected to screen coordinates and hidden if they overlap higher-priority labels:
+    - Priority: fastest glide first, then by original index (earlier in flight = higher priority)
+    - Label bounding boxes are zoom-dependent: 160×30px compact (zoom <15), 180×65px detail (zoom ≥15), with 10px horizontal / 6px vertical padding
+    - Paired chevron markers are also hidden when their label is hidden
+    - Recalculated on every viewport change (zoom, pan, rotate)
 
 - **Pan** — `flyTo` event location, maintains current zoom, 1s duration (skippable via `skipPan` option)
 
@@ -198,6 +203,27 @@ Displayed when user clicks on a non-glide track point. Combines a map marker wit
 10. `task-labels` — turnpoint name labels
 11. `task-segment-labels` — leg distance labels
 12. `threebox-layer` — 3D custom rendering layer (Threebox)
+
+## 3D Drone Follow Camera
+
+Activated when 3D track mode is enabled. Provides a cinematic perspective that follows the flight.
+
+- **Camera behaviour** — fixed-altitude 3D perspective (75° pitch) tracking the glider position, with momentum-based smooth animation (lerped each frame)
+- **Camera presets** — four dynamic angles that track flight direction:
+  - "side" (default): 90° perpendicular to flight path
+  - "behind": follow directly behind the glider
+  - "front": look from ahead toward the glider
+  - "top": orthographic overhead view
+- **Altitude scrubber** — SVG-based interactive timeline overlay at the bottom of the 3D view:
+  - Filled area graph with gradient coloring (altitude-based color ramp)
+  - Y-axis: nicely-rounded altitude labels with grid ticks
+  - X-axis: time labels snapped to round minute intervals (5, 10, 15, 30, 60 min steps)
+  - Vertical orange indicator line showing current position
+- **Scrubbing interaction** — click/drag horizontally on the scrubber to move along the flight:
+  - Updates HUD with current fix info (altitude, speed, bearing)
+  - Updates glider marker position on the 3D map
+  - Re-targets camera with smooth momentum-based animation
+  - Camera preset bearing stays aligned with flight direction
 
 ## Style Reload Behaviour
 

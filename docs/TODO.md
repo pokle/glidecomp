@@ -44,7 +44,7 @@
 - [ ] DEFER: Add box plots to the 'Longest glides' view showing vertically stacked box plots per detail (use uPlot for plotting, and simple-statistics for the descriptive statistics)
 - [x] Review code and ensure that we're using appropriate libraries for statistics and geo calculations.
 - [x] Make units selectable (see `configurable-units-spec.md` in this directory)
-- [ ] Add altitude chart. X axis: Time, Y axis: Altitude
+- [x] Add altitude chart — implemented as an interactive altitude sparkline (see `sparkline-spec.md` in this directory)
 - [x] Associate tasks with tracks. When we load a track, we should use the IGC file's declared task information if available. 
 - [x] If the IGC file doesn't contain task information, we should try to associate the track with any known tasks in the region on the date.
 - [x] USABILITY: The altitude colours should be on by default.

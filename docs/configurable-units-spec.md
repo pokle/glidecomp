@@ -85,7 +85,7 @@ When units are changed:
 ├── config.ts             # Configuration storage abstraction
 ├── units-browser.ts      # Browser-side unit formatting helpers
 ├── main.ts               # Wire up unit preferences and reactive updates
-├── event-panel.ts        # Uses units module for display
+├── analysis-panel.ts     # Uses units module for display
 └── mapbox-provider.ts    # Uses units module for map labels
 ```
 
