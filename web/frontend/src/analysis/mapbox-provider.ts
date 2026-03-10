@@ -1701,6 +1701,8 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           // Update rendering based on current mode
           if (is3DMode) {
             render3DTrack(fixes);
+            cameraPresetControl?.create();
+            cameraPresetControl?.updateActive(activeCameraPreset);
             // Recreate drone follow scrubber/marker for the new track
             removeAltitudeScrubber();
             clearGliderMarker();
@@ -1725,6 +1727,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           updateGeoJSONSource(map, 'track', []);
           // Clear 3D track and drone follow state if present
           clear3DTrack();
+          cameraPresetControl?.remove();
           removeAltitudeScrubber();
           clearGliderMarker();
         },
