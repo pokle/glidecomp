@@ -40,7 +40,8 @@ Track is rendered as individual per-segment LineString features (one per consecu
 - **3D mode** (Threebox)
   - 2D track layers hidden; track rendered as connected 3D line segments with per-segment altitude color (same ramp as altitude mode)
   - Segment width: 3, opacity: 0.9
-  - Vertical drop-lines every ~N points (N = fixes/50): from track altitude to ground, color `#888888`, width 1, opacity 0.3
+  - Vertical drop-lines every 1km of track distance: from track altitude to ground, color `#888888`, width 1, opacity 0.3, depth-tested (toggleable via `SHOW_DROP_LINES` constant)
+  - Camera preset buttons (Side/Top/Behind/Front) created when entering 3D with a track loaded, or when a track is loaded while already in 3D; removed on `clearTrack()`
 
 - **Interactions**
   - Click/tap on track → fires `onTrackClick` callback with nearest fix index
