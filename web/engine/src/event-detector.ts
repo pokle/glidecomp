@@ -11,7 +11,7 @@
 
 import { IGCFix } from './igc-parser';
 import { haversineDistance, calculateTrackDistance } from './geo';
-import { XCTask, getSSSIndex, getESSIndex } from './xctsk-parser';
+import { XCTask, getSSSIndex, getESSIndex, getGoalIndex } from './xctsk-parser';
 import { resolveTurnpointSequence } from './turnpoint-sequence';
 import { detectCircles } from './circle-detector';
 
@@ -387,7 +387,7 @@ function detectTurnpointEvents(
 
   const sssIdx = getSSSIndex(task);
   const essIdx = getESSIndex(task);
-  const goalIdx = task.turnpoints.length - 1;
+  const goalIdx = getGoalIndex(task);
 
   // --- Raw crossings → crossing events ---
   for (const crossing of result.crossings) {
@@ -411,7 +411,7 @@ function detectTurnpointEvents(
       latitude: crossing.latitude,
       longitude: crossing.longitude,
       altitude: crossing.altitude,
-      description: `${crossing.direction === 'enter' ? 'Entered' : 'Exited'} ${tp.waypoint.name} (${tp.type || 'TP' + (crossing.taskIndex + 1)})`,
+      description: `${crossing.direction === 'enter' ? 'Entered' : 'Exited'} ${tp.waypoint.name} (${tp.type})`,
       details: {
         fixIndex: crossing.fixIndex,
         turnpointIndex: crossing.taskIndex,

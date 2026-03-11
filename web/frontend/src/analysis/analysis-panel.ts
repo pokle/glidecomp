@@ -5,8 +5,9 @@
  * Provides a unified interface for flight analysis data.
  */
 
-import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, extractGlides, extractClimbs, extractSinks, type FlightEvent, type FlightEventType, type XCTask, type TurnpointSequenceResult, type GlideData, type ClimbData, type SinkData, type FixIndexDetails, type GlideEventDetails } from '@taskscore/engine';
+import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, extractGlides, extractClimbs, extractSinks, type FlightEvent, type FlightEventType, type XCTask, type TurnpointType, type Turnpoint, type TurnpointSequenceResult, type GlideData, type ClimbData, type SinkData, type FixIndexDetails, type GlideEventDetails, type WaypointRecord } from '@taskscore/engine';
 import { formatAltitude, formatSpeed, formatDistance, formatClimbRate } from './units-browser';
+import { createTaskEditor, type TaskEditor } from './task-editor';
 
 /**
  * Unified panel tabs
@@ -17,6 +18,8 @@ export interface AnalysisPanelOptions {
   container: HTMLElement;
   onEventClick: (event: FlightEvent, options?: { skipPan?: boolean }) => void;
   onTurnpointClick?: (turnpointIndex: number) => void;
+  onTaskEdited?: (task: XCTask) => void;
+  onMapClickModeRequest?: (enabled: boolean) => void;
   onToggle?: () => void;
   onHide?: () => void;
   onShow?: () => void;
@@ -37,6 +40,8 @@ export interface AnalysisPanel {
   setTask(task: XCTask | null): void;
   setScore(result: TurnpointSequenceResult | null): void;
   setAltitudes(altitudes: number[], timestamps?: Date[]): void;
+  setWaypointDatabase(waypoints: WaypointRecord[]): void;
+  addTurnpoint(lat: number, lon: number): void;
   clearSelection(): void;
   toggle(): void;
   open(): void;
@@ -171,18 +176,20 @@ function formatDuration(seconds: number): string {
  */
 const TURNPOINT_METADATA: Record<string, { label: string; cssClass: string }> = {
   TAKEOFF: { label: 'Takeoff', cssClass: 'text-blue-600' },
-  SSS: { label: 'Start', cssClass: 'text-green-600' },
-  ESS: { label: 'Goal', cssClass: 'text-red-600' },
+  SSS: { label: 'Start (SSS)', cssClass: 'text-green-600' },
+  TURNPOINT: { label: 'Turnpoint', cssClass: 'text-blue-600' },
+  ESS: { label: 'ESS', cssClass: 'text-yellow-600' },
+  GOAL: { label: 'Goal', cssClass: 'text-red-600' },
 };
 
 const DEFAULT_TURNPOINT_METADATA = { label: 'Turnpoint', cssClass: 'text-blue-600' };
 
-function getTurnpointTypeLabel(type?: 'TAKEOFF' | 'SSS' | 'ESS'): string {
-  return (type && TURNPOINT_METADATA[type]?.label) || DEFAULT_TURNPOINT_METADATA.label;
+function getTurnpointTypeLabel(type: string): string {
+  return TURNPOINT_METADATA[type]?.label || DEFAULT_TURNPOINT_METADATA.label;
 }
 
-function getTurnpointTypeClass(type?: 'TAKEOFF' | 'SSS' | 'ESS'): string {
-  return (type && TURNPOINT_METADATA[type]?.cssClass) || DEFAULT_TURNPOINT_METADATA.cssClass;
+function getTurnpointTypeClass(type: string): string {
+  return TURNPOINT_METADATA[type]?.cssClass || DEFAULT_TURNPOINT_METADATA.cssClass;
 }
 
 /**
@@ -332,6 +339,22 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   let currentScore: TurnpointSequenceResult | null = null;
   let sparklineDataUri = '';
   let fixCount = 0;
+
+  // Task editor instance
+  const taskEditor = createTaskEditor({
+    container: taskListContainer,
+    onTaskChanged: (task) => {
+      currentTask = task;
+      options.onTaskEdited?.(task);
+    },
+    onTurnpointClick: (index) => {
+      selectedTurnpointIndex = index;
+      options.onTurnpointClick?.(index);
+    },
+    onMapClickModeRequest: (enabled) => {
+      options.onMapClickModeRequest?.(enabled);
+    },
+  });
 
   /**
    * Format a time as HH:MM (24h, local timezone to match event list)
@@ -882,7 +905,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     if (!tp) return `TP${taskIndex + 1}`;
     if (tp.type === 'SSS') return 'SSS';
     if (tp.type === 'ESS') return 'ESS';
-    if (taskIndex === currentTask.turnpoints.length - 1) return 'Goal';
+    if (tp.type === 'GOAL') return 'Goal';
+    if (tp.type === 'TAKEOFF') return 'Takeoff';
     return `TP${taskIndex + 1}`;
   }
 
@@ -1067,111 +1091,20 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   }
 
   /**
-   * Render task turnpoints list
+   * Render task turnpoints list (delegates to task editor)
    */
   function renderTask(): void {
+    // Update the count bar
     if (!currentTask || currentTask.turnpoints.length === 0) {
-      eventCountEl.textContent = 'No task loaded';
-      taskListContainer.innerHTML = `
-        <div class="flex h-full items-center justify-center p-6 text-center text-muted-foreground">
-          No task loaded
-        </div>
-      `;
-      return;
+      eventCountEl.textContent = 'No task';
+    } else {
+      const segmentDistances = getOptimizedSegmentDistances(currentTask);
+      const totalDistance = segmentDistances.reduce((sum, d) => sum + d, 0);
+      eventCountEl.textContent = `${currentTask.turnpoints.length} turnpoints \u00b7 ${formatDistance(totalDistance).withUnit}`;
     }
 
-    const segmentDistances = getOptimizedSegmentDistances(currentTask);
-    const totalDistance = segmentDistances.reduce((sum, d) => sum + d, 0);
-    eventCountEl.textContent = `${currentTask.turnpoints.length} turnpoints · ${formatDistance(totalDistance).withUnit}`;
-
-    let html = '<div class="space-y-2">';
-
-    for (let i = 0; i < currentTask.turnpoints.length; i++) {
-      const tp = currentTask.turnpoints[i];
-      const typeLabel = getTurnpointTypeLabel(tp.type);
-      const typeClass = getTurnpointTypeClass(tp.type);
-      const radiusStr = formatDistance(tp.radius).withUnit;
-      const altStr = tp.waypoint.altSmoothed ? formatAltitude(tp.waypoint.altSmoothed).withUnit : '—';
-
-      // Distance to this turnpoint (sum of previous segments)
-      let distanceToHere = 0;
-      for (let j = 0; j < i && j < segmentDistances.length; j++) {
-        distanceToHere += segmentDistances[j];
-      }
-
-      // Distance of the leg TO this turnpoint
-      const legDistance = i > 0 && segmentDistances[i - 1] ? segmentDistances[i - 1] : 0;
-      const legDistanceStr = i > 0 ? formatDistance(legDistance).withUnit : '—';
-      const cumulativeDistStr = i > 0 ? formatDistance(distanceToHere).withUnit : 'Start';
-
-      const isSelected = selectedTurnpointIndex === i;
-      const selectedClass = isSelected ? 'ring-2 ring-primary' : '';
-
-      html += `
-        <button class="turnpoint-item w-full text-left rounded-lg border border-border bg-muted/30 p-3 cursor-pointer hover:bg-muted/50 transition-colors ${selectedClass}" data-turnpoint-index="${i}">
-          <div class="flex items-start gap-3">
-            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-medium ${typeClass}">
-              ${i + 1}
-            </div>
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2">
-                <span class="font-medium truncate">${tp.waypoint.name}</span>
-                <span class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs ${typeClass}">${typeLabel}</span>
-              </div>
-              <div class="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                <div class="flex items-center gap-1.5">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
-                    <circle cx="12" cy="12" r="10"/>
-                  </svg>
-                  <span title="Cylinder radius">${radiusStr}</span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
-                    <path d="M14 6l-3.75 5 2.85 3.8-1.6 1.2C9.81 13.75 7 10 7 10l-6 8h22L14 6z"/>
-                  </svg>
-                  <span title="Altitude">${altStr}</span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
-                    <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8-8-8z"/>
-                  </svg>
-                  <span title="Leg distance">${legDistanceStr}</span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
-                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-                  </svg>
-                  <span title="Cumulative distance">${cumulativeDistStr}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </button>
-      `;
-    }
-
-    html += '</div>';
-    taskListContainer.innerHTML = html;
-
-    // Add click handlers for turnpoint items
-    taskListContainer.querySelectorAll('.turnpoint-item').forEach(item => {
-      item.addEventListener('click', () => {
-        const indexStr = item.getAttribute('data-turnpoint-index');
-        if (indexStr !== null) {
-          const index = parseInt(indexStr, 10);
-          selectedTurnpointIndex = index;
-
-          // Update selection visual
-          taskListContainer.querySelectorAll('.turnpoint-item').forEach(el => {
-            el.classList.remove('ring-2', 'ring-primary');
-          });
-          item.classList.add('ring-2', 'ring-primary');
-
-          // Call the callback to pan the map
-          options.onTurnpointClick?.(index);
-        }
-      });
-    });
+    // The task editor handles its own rendering
+    taskEditor.setTask(currentTask);
   }
 
   /**
@@ -1387,6 +1320,18 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       applySparklineBackground(altitudes, timestamps);
     },
 
+    setWaypointDatabase(waypoints: WaypointRecord[]) {
+      taskEditor.setWaypointDatabase(waypoints);
+    },
+
+    addTurnpoint(lat: number, lon: number) {
+      taskEditor.addTurnpointFromMap(lat, lon);
+      // Switch to task tab to show the new waypoint
+      if (currentTab !== 'task') {
+        switchTabInternal('task');
+      }
+    },
+
     clearSelection() {
       selectedSegment = null;
       updateSparklineMarker(null);
@@ -1448,8 +1393,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         renderTask();
       }
 
-      // Scroll the selected item into view
-      const selectedItem = taskListContainer.querySelector(`[data-turnpoint-index="${turnpointIndex}"]`);
+      // Scroll the selected item into view (task editor uses data-index)
+      const selectedItem = taskListContainer.querySelector(`[data-index="${turnpointIndex}"]`);
       if (selectedItem) {
         selectedItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }

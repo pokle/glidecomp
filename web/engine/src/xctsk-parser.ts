@@ -18,8 +18,10 @@ export interface Waypoint {
   altSmoothed?: number;
 }
 
+export type TurnpointType = 'TAKEOFF' | 'SSS' | 'TURNPOINT' | 'ESS' | 'GOAL';
+
 export interface Turnpoint {
-  type?: 'TAKEOFF' | 'SSS' | 'ESS';
+  type: TurnpointType;
   radius: number;
   waypoint: Waypoint;
 }
@@ -120,7 +122,7 @@ function parseV1(data: Record<string, unknown>): XCTask {
 
         if (wp) {
           turnpoints.push({
-            type: tpObj.type as Turnpoint['type'],
+            type: (tpObj.type as Turnpoint['type']) || 'TURNPOINT',
             radius: (tpObj.radius as number) || 400,
             waypoint: {
               name: sanitizeText((wp.name as string) || 'Unnamed'),
@@ -210,10 +212,11 @@ function parseV2(data: Record<string, unknown>): XCTask {
         if (typeof tpObj.r === 'number') radius = tpObj.r;
 
         // Determine type from short code
-        let type: Turnpoint['type'] | undefined;
+        let type: TurnpointType = 'TURNPOINT';
         if (tpObj.y === 'S') type = 'SSS';
         else if (tpObj.y === 'E') type = 'ESS';
         else if (tpObj.y === 'T') type = 'TAKEOFF';
+        else if (tpObj.y === 'G') type = 'GOAL';
 
         turnpoints.push({
           type,
@@ -341,7 +344,15 @@ export function getESSIndex(task: XCTask): number {
  * Get all turnpoints that are actual turnpoints (not SSS/ESS/TAKEOFF)
  */
 export function getIntermediateTurnpoints(task: XCTask): Turnpoint[] {
-  return task.turnpoints.filter(tp => !tp.type);
+  return task.turnpoints.filter(tp => tp.type === 'TURNPOINT');
+}
+
+/**
+ * Get the goal turnpoint index
+ */
+export function getGoalIndex(task: XCTask): number {
+  const idx = task.turnpoints.findIndex(tp => tp.type === 'GOAL');
+  return idx >= 0 ? idx : task.turnpoints.length - 1;
 }
 
 /**
@@ -395,7 +406,7 @@ export function igcTaskToXCTask(igcTask: IGCTask, options: IGCTaskConversionOpti
    */
   function createTurnpoint(
     point: IGCTaskPoint,
-    type: Turnpoint['type'],
+    type: TurnpointType,
     fallbackName: string
   ): Turnpoint {
     const name = point.name || fallbackName;
@@ -420,7 +431,7 @@ export function igcTaskToXCTask(igcTask: IGCTask, options: IGCTaskConversionOpti
     // Area type can confirm SSS/ESS assignment
     if (point.areaOZ) {
       if (point.areaOZ.areaType === 'STARTAREA') type = 'SSS';
-      else if (point.areaOZ.areaType === 'FINISHAREA') type = 'ESS';
+      else if (point.areaOZ.areaType === 'FINISHAREA') type = 'GOAL';
     }
 
     return {
@@ -442,14 +453,14 @@ export function igcTaskToXCTask(igcTask: IGCTask, options: IGCTaskConversionOpti
     turnpoints.push(createTurnpoint(igcTask.start, 'SSS', 'Start'));
   }
 
-  // Add intermediate turnpoints (no type)
+  // Add intermediate turnpoints
   for (const tp of igcTask.turnpoints) {
-    turnpoints.push(createTurnpoint(tp, undefined, 'Turnpoint'));
+    turnpoints.push(createTurnpoint(tp, 'TURNPOINT', 'Turnpoint'));
   }
 
-  // Add finish point as ESS
+  // Add finish point as GOAL (in IGC tasks, finish IS goal)
   if (igcTask.finish) {
-    turnpoints.push(createTurnpoint(igcTask.finish, 'ESS', 'Finish'));
+    turnpoints.push(createTurnpoint(igcTask.finish, 'GOAL', 'Finish'));
   }
 
   return {

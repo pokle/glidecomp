@@ -132,11 +132,10 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       let cachedSequenceResult: TurnpointSequenceResult | null = null;
       let cachedOptimizedPath: { lat: number; lon: number }[] | null = null;
 
-      // Track click callback
+      // Click callbacks (mutable refs — registered once, updated via setter)
       let trackClickCallback: ((fixIndex: number) => void) | null = null;
-
-      // Turnpoint click callback
       let turnpointClickCallback: ((turnpointIndex: number) => void) | null = null;
+      let mapClickCallback: ((lat: number, lon: number) => void) | null = null;
 
       /** Hide glide speed labels when zoomed out and resolve screen-space collisions. */
       function updateGlideLabelVisibility(): void {
@@ -731,6 +730,18 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
       // Custom menu button control (top-left, added first so it's topmost)
       let menuButtonCallback: (() => void) | null = null;
+      // Interaction mode — controls which click/hover handlers are active
+      type MapInteractionMode = import('./map-provider').MapInteractionMode;
+      let interactionMode: MapInteractionMode = 'view';
+      let isHoveringInteractive = false;
+
+      function syncCursor(): void {
+        if (interactionMode !== 'view') {
+          map.getCanvas().style.cursor = 'crosshair';
+          return;
+        }
+        map.getCanvas().style.cursor = isHoveringInteractive ? 'pointer' : '';
+      }
       class MenuButtonControl implements mapboxgl.IControl {
         private container: HTMLElement | null = null;
         onAdd(): HTMLElement {
@@ -971,6 +982,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         // Click handler for track
         for (const layerId of trackLayers) {
           map.on('click', layerId, (e) => {
+            if (interactionMode !== 'view') return;
             if (!trackClickCallback || currentFixes.length === 0) return;
             if (!isTrackVisible) return;
 
@@ -985,17 +997,21 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         // Hover effects - change cursor to pointer when hovering over track
         for (const layerId of trackLayers) {
           map.on('mouseenter', layerId, () => {
+            if (interactionMode !== 'view') return;
             if (currentFixes.length === 0 || !isTrackVisible) return;
-            map.getCanvas().style.cursor = 'pointer';
+            isHoveringInteractive = true;
+            syncCursor();
           });
 
           map.on('mouseleave', layerId, () => {
-            map.getCanvas().style.cursor = '';
+            isHoveringInteractive = false;
+            syncCursor();
           });
         }
 
         // Turnpoint click handler
         map.on('click', 'task-points', (e) => {
+          if (interactionMode !== 'view') return;
           if (!turnpointClickCallback || !currentTask || !isTaskVisible) return;
           if (!e.features || e.features.length === 0) return;
 
@@ -1018,12 +1034,22 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
         // Hover effects for turnpoints
         map.on('mouseenter', 'task-points', () => {
+          if (interactionMode !== 'view') return;
           if (!currentTask || !isTaskVisible) return;
-          map.getCanvas().style.cursor = 'pointer';
+          isHoveringInteractive = true;
+          syncCursor();
         });
 
         map.on('mouseleave', 'task-points', () => {
-          map.getCanvas().style.cursor = '';
+          isHoveringInteractive = false;
+          syncCursor();
+        });
+
+        // Global map click handler (for add-waypoint mode)
+        map.on('click', (e: mapboxgl.MapMouseEvent) => {
+          if (interactionMode !== 'view' && mapClickCallback) {
+            mapClickCallback(e.lngLat.lat, e.lngLat.lng);
+          }
         });
 
         resolve(renderer);
@@ -2209,6 +2235,16 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
         onPanelToggleClick(callback: () => void) {
           panelToggleCallback = callback;
+        },
+
+        onMapClick(callback: (lat: number, lon: number) => void) {
+          mapClickCallback = callback;
+        },
+
+        setInteractionMode(mode: MapInteractionMode) {
+          interactionMode = mode;
+          isHoveringInteractive = false;
+          syncCursor();
         },
       };
 

@@ -16,7 +16,7 @@
 import type { XCTask } from './xctsk-parser';
 import type { IGCFix } from './igc-parser';
 import { isInsideCylinder, haversineDistance } from './geo';
-import { getSSSIndex, getESSIndex } from './xctsk-parser';
+import { getSSSIndex, getESSIndex, getGoalIndex } from './xctsk-parser';
 import { calculateOptimizedTaskDistance, getOptimizedSegmentDistances } from './task-optimizer';
 
 // ---------------------------------------------------------------------------
@@ -483,7 +483,7 @@ export function resolveTurnpointSequence(
   const taskDistance = calculateOptimizedTaskDistance(task);
   const sssIdx = getSSSIndex(task);
   const essIdx = getESSIndex(task);
-  const goalIdx = task.turnpoints.length - 1;
+  const goalIdx = getGoalIndex(task);
 
   // Build legs with default completed = false
   const legs: LegDistance[] = segmentDistances.map((dist, i) => ({

@@ -10,6 +10,13 @@ import type { IGCFix, XCTask, FlightEvent } from '@taskscore/engine';
 export type MapProviderType = 'mapbox' | 'leaflet';
 
 /**
+ * Interaction mode for the map. Controls which click/hover handlers are active.
+ * - 'view': default mode — track clicks, turnpoint clicks, hover cursors all active
+ * - 'add-waypoint': task editor map-click mode — crosshair cursor, all other clicks suppressed
+ */
+export type MapInteractionMode = 'view' | 'add-waypoint';
+
+/**
  * Bounds in degrees
  */
 export interface MapBounds {
@@ -94,6 +101,12 @@ export interface MapProvider {
 
     /** Register callback for panel toggle button click (native map control) */
     onPanelToggleClick?(callback: () => void): void;
+
+    /** Register callback for map click (used by task editor to add waypoints) */
+    onMapClick?(callback: (lat: number, lon: number) => void): void;
+
+    /** Set the active interaction mode (controls which click/hover handlers fire) */
+    setInteractionMode?(mode: MapInteractionMode): void;
 }
 
 /**

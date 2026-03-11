@@ -144,7 +144,7 @@ async function init(): Promise<void> {
     }
   }
 
-  // Load waypoint database for enriching IGC tasks
+  // Load waypoint database for enriching IGC tasks and task editor search
   try {
     waypointDatabase = await loadCorryongWaypoints();
     console.log(`Loaded ${waypointDatabase.length} waypoints`);
@@ -494,11 +494,26 @@ async function init(): Promise<void> {
     }
   };
 
+  // Handle task edits from the task editor
+  const handleTaskEdited = (task: XCTask) => {
+    // Apply without re-setting on the panel (it already has the task)
+    state.task = task;
+    mapRenderer?.setTask(task);
+    redetectEvents();
+  };
+
+  // Handle map click mode request from the task editor
+  const handleMapClickModeRequest = (enabled: boolean) => {
+    mapRenderer?.setInteractionMode?.(enabled ? 'add-waypoint' : 'view');
+  };
+
   // Initialize analysis panel with hide/show callbacks for sidebar visibility
   analysisPanel = createAnalysisPanel({
     container: eventPanelContainer,
     onEventClick: handleEventClick,
     onTurnpointClick: handleTurnpointClick,
+    onTaskEdited: handleTaskEdited,
+    onMapClickModeRequest: handleMapClickModeRequest,
     onToggle: handlePanelToggle,
     onHide: () => {
       if (sidebar) {
@@ -517,6 +532,16 @@ async function init(): Promise<void> {
         }
       }
     },
+  });
+
+  // Pass waypoint database to the analysis panel for task editor search
+  if (waypointDatabase.length > 0) {
+    analysisPanel.setWaypointDatabase(waypointDatabase);
+  }
+
+  // Wire map click handler for task editor "click on map" mode
+  mapRenderer.onMapClick?.((lat: number, lon: number) => {
+    analysisPanel?.addTurnpoint(lat, lon);
   });
 
   // Wire native map control buttons

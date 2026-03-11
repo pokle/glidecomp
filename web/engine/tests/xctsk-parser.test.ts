@@ -192,14 +192,14 @@ describe('XCTSK Parser', () => {
       expect(xcTask.turnpoints[0].waypoint.lat).toBeCloseTo(-36.186, 3);
       expect(xcTask.turnpoints[0].radius).toBe(400);
 
-      // Check intermediate turnpoints have no type
-      expect(xcTask.turnpoints[1].type).toBeUndefined();
+      // Check intermediate turnpoints have TURNPOINT type
+      expect(xcTask.turnpoints[1].type).toBe('TURNPOINT');
       expect(xcTask.turnpoints[1].waypoint.name).toBe('TURN HALFWY');
-      expect(xcTask.turnpoints[2].type).toBeUndefined();
+      expect(xcTask.turnpoints[2].type).toBe('TURNPOINT');
       expect(xcTask.turnpoints[2].waypoint.name).toBe('TURN CUDGWE');
 
-      // Check finish is ESS
-      expect(xcTask.turnpoints[3].type).toBe('ESS');
+      // Check finish is GOAL
+      expect(xcTask.turnpoints[3].type).toBe('GOAL');
       expect(xcTask.turnpoints[3].waypoint.name).toBe('FINISH NCORGL');
     });
 
@@ -228,7 +228,7 @@ describe('XCTSK Parser', () => {
       expect(xcTask.turnpoints[0].type).toBe('SSS'); // STARTAREA confirms SSS
       expect(xcTask.turnpoints[1].radius).toBe(500);
       expect(xcTask.turnpoints[2].radius).toBe(100);
-      expect(xcTask.turnpoints[2].type).toBe('ESS'); // FINISHAREA confirms ESS
+      expect(xcTask.turnpoints[2].type).toBe('GOAL'); // Finish is GOAL (FINISHAREA overrides to SSS in createTurnpoint, but initial type is GOAL)
     });
 
     it('should use custom radius when provided', () => {
@@ -257,7 +257,7 @@ describe('XCTSK Parser', () => {
 
       expect(xcTask.turnpoints).toHaveLength(2);
       expect(xcTask.turnpoints[0].type).toBe('SSS');
-      expect(xcTask.turnpoints[1].type).toBe('ESS');
+      expect(xcTask.turnpoints[1].type).toBe('GOAL');
     });
 
     it('should handle task with empty names', () => {
@@ -469,7 +469,7 @@ describe('XCTSK Parser', () => {
     it('should return false for NaN coordinates', () => {
       const task = {
         taskType: 'CLASSIC', version: 1,
-        turnpoints: [{ radius: 400, waypoint: { name: 'TP', lat: NaN, lon: 11.0 } }],
+        turnpoints: [{ type: 'TURNPOINT' as const, radius: 400, waypoint: { name: 'TP', lat: NaN, lon: 11.0 } }],
       };
       expect(isValidTask(task)).toBe(false);
     });
@@ -477,7 +477,7 @@ describe('XCTSK Parser', () => {
     it('should return false for out-of-range latitude', () => {
       const task = {
         taskType: 'CLASSIC', version: 1,
-        turnpoints: [{ radius: 400, waypoint: { name: 'TP', lat: 91, lon: 11.0 } }],
+        turnpoints: [{ type: 'TURNPOINT' as const, radius: 400, waypoint: { name: 'TP', lat: 91, lon: 11.0 } }],
       };
       expect(isValidTask(task)).toBe(false);
     });
@@ -485,7 +485,7 @@ describe('XCTSK Parser', () => {
     it('should return false for out-of-range longitude', () => {
       const task = {
         taskType: 'CLASSIC', version: 1,
-        turnpoints: [{ radius: 400, waypoint: { name: 'TP', lat: 47.0, lon: 181 } }],
+        turnpoints: [{ type: 'TURNPOINT' as const, radius: 400, waypoint: { name: 'TP', lat: 47.0, lon: 181 } }],
       };
       expect(isValidTask(task)).toBe(false);
     });
@@ -493,7 +493,7 @@ describe('XCTSK Parser', () => {
     it('should return true for valid task', () => {
       const task = {
         taskType: 'CLASSIC', version: 1,
-        turnpoints: [{ radius: 400, waypoint: { name: 'TP', lat: 47.0, lon: 11.0 } }],
+        turnpoints: [{ type: 'TURNPOINT' as const, radius: 400, waypoint: { name: 'TP', lat: 47.0, lon: 11.0 } }],
       };
       expect(isValidTask(task)).toBe(true);
     });
