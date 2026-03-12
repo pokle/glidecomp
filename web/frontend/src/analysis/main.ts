@@ -786,7 +786,6 @@ async function init(): Promise<void> {
       const rawJson = await file.text();
       const task = parseXCTask(rawJson);
       applyTask(task);
-      showStatus(`Loaded task: ${task.turnpoints.length} turnpoints`, 'success');
     } catch (err) {
       console.error('Failed to parse task file:', err);
       showStatus(`Failed to parse task file: ${err}`, 'error');
@@ -833,8 +832,6 @@ async function init(): Promise<void> {
       }
     }
 
-    const taskInfo = igcFile.task?.start ? ' (with task declaration)' : '';
-    showStatus(`Loaded ${filename} - ${igcFile.fixes.length} fixes${taskInfo}`, 'success');
   }
 
   /**
@@ -887,8 +884,6 @@ async function init(): Promise<void> {
       }
 
       applyTask(task);
-
-      showStatus(`Loaded task: ${task.turnpoints.length} turnpoints`, 'success');
     } catch (err) {
       console.error('Failed to load task:', err);
       showStatus(`Failed to load task: ${err}`, 'error');
@@ -910,8 +905,6 @@ async function init(): Promise<void> {
 
       await storage.touchTask(code);
       applyTask(stored.task);
-
-      showStatus(`Loaded task: ${stored.task.turnpoints.length} turnpoints`, 'success');
     } catch (err) {
       console.error('Failed to load stored task:', err);
       showStatus(`Failed to load stored task: ${err}`, 'error');
@@ -973,7 +966,6 @@ async function init(): Promise<void> {
       const pilotName = taskData.pilots.find(p => p.trackId === params.trackId)?.name || 'Unknown';
       const taskName = taskData.competition.taskName || `Task ${params.tasPk}`;
 
-      showStatus(`Loaded ${pilotName} - ${taskData.competition.name} ${taskName}`, 'success');
     } catch (err) {
       console.error('Failed to load from AirScore:', err);
       showStatus(`Failed to load from AirScore: ${err}`, 'error');
