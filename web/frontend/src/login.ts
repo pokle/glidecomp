@@ -1,22 +1,18 @@
 import { getCurrentUser, signInWithGoogle } from "./auth/client";
 
-async function init() {
-  // Check if already authenticated
-  const user = await getCurrentUser();
-  if (user) {
-    if (user.username) {
-      window.location.href = `/u/${user.username}/`;
-    } else {
-      window.location.href = "/onboarding.html";
-    }
-    return;
+// Set up sign-in button immediately so it's always clickable
+const btn = document.getElementById("google-signin");
+btn?.addEventListener("click", () => {
+  signInWithGoogle();
+});
+
+// Then check if already authenticated and redirect
+getCurrentUser().then((user) => {
+  if (user?.username) {
+    window.location.href = `/u/${user.username}/`;
+  } else if (user) {
+    window.location.href = "/onboarding.html";
   }
-
-  // Set up sign-in button
-  const btn = document.getElementById("google-signin");
-  btn?.addEventListener("click", () => {
-    signInWithGoogle();
-  });
-}
-
-init();
+}).catch(() => {
+  // Auth service unavailable — button still works
+});

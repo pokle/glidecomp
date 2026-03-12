@@ -111,12 +111,25 @@ Set in `wrangler.toml` (production) or `.dev.vars` (local dev override):
 ### D1 Database
 
 ```bash
-# Create database
-wrangler d1 create taskscore-auth
+cd web/workers/auth-api
+
+# Create database (only needed once)
+bun run wrangler d1 create taskscore-auth
 # Copy database_id into wrangler.toml
 
-# Apply schema
-wrangler d1 execute taskscore-auth --file=web/workers/auth-api/src/db/schema.sql
+# Apply schema to remote (production)
+bun run wrangler d1 execute taskscore-auth --remote --file=src/db/schema.sql
+
+# Apply schema to local (development)
+bun run wrangler d1 execute taskscore-auth --local --file=src/db/schema.sql
+```
+
+### Node.js Compatibility
+
+The auth worker requires `nodejs_compat` in `wrangler.toml` because Better Auth uses `node:async_hooks`. This is already configured:
+
+```toml
+compatibility_flags = ["nodejs_compat"]
 ```
 
 ## Local Development
@@ -131,13 +144,22 @@ bun run dev
 
 The Vite dev server proxies `/api/auth` requests to the auth worker, so cookies work on the same origin.
 
-### `.dev.vars` (create in `web/workers/auth-api/`)
+### First-time local setup
+
+1. Create `.dev.vars` in `web/workers/auth-api/`:
 
 ```
 GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
 BETTER_AUTH_SECRET=your-random-secret
 BETTER_AUTH_URL=http://localhost:3000
+```
+
+2. Apply the D1 schema locally:
+
+```bash
+cd web/workers/auth-api
+bun run wrangler d1 execute taskscore-auth --local --file=src/db/schema.sql
 ```
 
 ## Tech Stack

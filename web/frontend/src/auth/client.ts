@@ -21,9 +21,14 @@ export interface AuthUser {
 }
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
-  const res = await fetch("/api/auth/me", { credentials: "include" });
-  const data: { user: AuthUser | null } = await res.json();
-  return data.user ?? null;
+  try {
+    const res = await fetch("/api/auth/me", { credentials: "include" });
+    if (!res.ok) return null;
+    const data: { user: AuthUser | null } = await res.json();
+    return data.user ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function setUsername(
