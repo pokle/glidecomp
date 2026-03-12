@@ -269,15 +269,14 @@
     animation: throb 0.5s ease-in-out 4;
   }
 
-  /* Shake animation for the Analysis button when flight data loads */
-  @keyframes shake-attention {
-    0%, 100% { transform: translateX(0); }
-    10%, 50%, 90% { transform: translateX(-3px); }
-    30%, 70% { transform: translateX(3px); }
+  /* Throb animation for the Analysis button when flight data loads */
+  @keyframes throb-attention {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); }
   }
 
   .pulse-attention {
-    animation: shake-attention 0.6s ease-in-out 2;
+    animation: throb-attention 0.4s ease-in-out 3;
   }
 
   /* Allow labeled map control buttons to expand beyond default fixed width */
