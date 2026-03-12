@@ -701,17 +701,20 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
       // Custom panel toggle control (top-right, added first so it's topmost)
       let panelToggleCallback: (() => void) | null = null;
+      let panelToggleBtn: HTMLElement | null = null;
       class PanelToggleControl implements mapboxgl.IControl {
         private container: HTMLElement | null = null;
         onAdd(): HTMLElement {
           this.container = document.createElement('div');
           this.container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
           const btn = document.createElement('button');
+          panelToggleBtn = btn;
           btn.type = 'button';
-          btn.title = 'Toggle panel';
-          btn.setAttribute('aria-label', 'Toggle panel');
-          btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:29px;height:29px;border:none;cursor:pointer;background:transparent;';
-          btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>';
+          btn.title = 'Toggle analysis panel';
+          btn.setAttribute('aria-label', 'Toggle analysis panel');
+          btn.style.cssText = 'display:flex;align-items:center;gap:6px;height:36px;padding:0 10px;border:none;cursor:pointer;background:transparent;font-size:13px;font-weight:500;white-space:nowrap;';
+          // Bar-chart icon + label (label hidden on mobile via media query class)
+          btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></svg><span class="mapctl-label" style="color:inherit;">Analysis</span>`;
           btn.addEventListener('click', () => panelToggleCallback?.());
           this.container.appendChild(btn);
           return this.container;
@@ -719,6 +722,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         onRemove(): void {
           this.container?.remove();
           this.container = null;
+          panelToggleBtn = null;
         }
       }
       map.addControl(new PanelToggleControl(), 'top-right');
@@ -751,8 +755,10 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           btn.type = 'button';
           btn.title = 'Menu (\u2318K)';
           btn.setAttribute('aria-label', 'Menu (\u2318K)');
-          btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:29px;height:29px;border:none;cursor:pointer;background:transparent;';
-          btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>';
+          btn.style.cssText = 'display:flex;align-items:center;gap:6px;height:36px;padding:0 10px;border:none;cursor:pointer;background:transparent;font-size:13px;font-weight:500;white-space:nowrap;';
+          const isMac = /Mac|iPhone|iPad/.test(navigator.platform ?? '');
+          const kbdHint = isMac ? '\u2318K' : 'Ctrl+K';
+          btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg><span class="mapctl-label" style="color:inherit;">Menu</span><kbd class="mapctl-label" style="font-size:11px;padding:1px 5px;border-radius:3px;background:rgba(0,0,0,0.08);color:inherit;opacity:0.6;font-family:inherit;">${kbdHint}</kbd>`;
           btn.addEventListener('click', () => menuButtonCallback?.());
           this.container.appendChild(btn);
           return this.container;
@@ -2235,6 +2241,18 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
         onPanelToggleClick(callback: () => void) {
           panelToggleCallback = callback;
+        },
+
+        highlightPanelToggle() {
+          if (panelToggleBtn) {
+            panelToggleBtn.classList.remove('pulse-attention');
+            // Force reflow to restart animation
+            void panelToggleBtn.offsetWidth;
+            panelToggleBtn.classList.add('pulse-attention');
+            panelToggleBtn.addEventListener('animationend', () => {
+              panelToggleBtn?.classList.remove('pulse-attention');
+            }, { once: true });
+          }
         },
 
         onMapClick(callback: (lat: number, lon: number) => void) {

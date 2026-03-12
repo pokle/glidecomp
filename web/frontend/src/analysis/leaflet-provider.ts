@@ -132,21 +132,35 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
 
     // Panel toggle control (top-right, added first so it's topmost)
     let panelToggleCallback: (() => void) | null = null;
-    createLeafletControlButton({
+    let panelToggleBtn: HTMLElement | null = null;
+    const panelToggleCtrl = createLeafletControlButton({
       position: 'topright',
-      title: 'Toggle panel',
-      innerHTML: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>',
+      title: 'Toggle analysis panel',
+      innerHTML: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></svg><span class="mapctl-label" style="font-size:13px;font-weight:500;margin-left:4px;">Analysis</span>`,
       onClick: () => panelToggleCallback?.(),
-    }).addTo(map);
+    });
+    panelToggleCtrl.addTo(map);
+    // Grab the button element for highlighting
+    panelToggleBtn = (panelToggleCtrl as unknown as { getContainer(): HTMLElement }).getContainer?.()?.querySelector('a') ?? null;
+    if (panelToggleBtn) {
+      panelToggleBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:auto;height:36px;padding:0 10px;white-space:nowrap;';
+    }
 
     // Menu button control (top-left, added first so it's topmost)
     let menuButtonCallback: (() => void) | null = null;
-    createLeafletControlButton({
+    const isMac = /Mac|iPhone|iPad/.test(navigator.platform ?? '');
+    const kbdHint = isMac ? '\u2318K' : 'Ctrl+K';
+    const menuCtrl = createLeafletControlButton({
       position: 'topleft',
       title: 'Menu (\u2318K)',
-      innerHTML: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>',
+      innerHTML: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg><span class="mapctl-label" style="font-size:13px;font-weight:500;margin-left:4px;">Menu</span><kbd class="mapctl-label" style="font-size:11px;margin-left:4px;padding:1px 5px;border-radius:3px;background:rgba(0,0,0,0.08);opacity:0.6;font-family:inherit;">${kbdHint}</kbd>`,
       onClick: () => menuButtonCallback?.(),
-    }).addTo(map);
+    });
+    menuCtrl.addTo(map);
+    const menuBtn = (menuCtrl as unknown as { getContainer(): HTMLElement }).getContainer?.()?.querySelector('a');
+    if (menuBtn) {
+      menuBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:auto;height:36px;padding:0 10px;white-space:nowrap;';
+    }
 
     // Zoom control (top-left, below menu button)
     // Control.Zoom exists at runtime but isn't typed in Leaflet 2.0-alpha.1
@@ -1006,6 +1020,17 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
 
       onPanelToggleClick(callback: () => void) {
         panelToggleCallback = callback;
+      },
+
+      highlightPanelToggle() {
+        if (panelToggleBtn) {
+          panelToggleBtn.classList.remove('pulse-attention');
+          void panelToggleBtn.offsetWidth;
+          panelToggleBtn.classList.add('pulse-attention');
+          panelToggleBtn.addEventListener('animationend', () => {
+            panelToggleBtn?.classList.remove('pulse-attention');
+          }, { once: true });
+        }
       },
     };
 

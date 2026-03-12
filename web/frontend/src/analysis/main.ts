@@ -532,6 +532,13 @@ async function init(): Promise<void> {
         }
       }
     },
+    onLoadSampleFlight: () => {
+      // Click the first sample flight button in the command menu
+      const firstSampleBtn = document.getElementById('sample-tushar');
+      if (firstSampleBtn) {
+        firstSampleBtn.click();
+      }
+    },
   });
 
   // Pass waypoint database to the analysis panel for task editor search
@@ -556,6 +563,29 @@ async function init(): Promise<void> {
   document.getElementById('sidebar-close')?.addEventListener('click', () => {
     analysisPanel?.hide();
   });
+
+  // First-visit tooltip on Analysis button
+  if (!localStorage.getItem('taskscore-seen-analysis-hint')) {
+    // Find the panel toggle button container in the DOM (top-right control)
+    const panelToggleContainer = document.querySelector('.mapboxgl-ctrl-top-right .mapboxgl-ctrl:first-child, .leaflet-top.leaflet-right .leaflet-bar:first-child');
+    if (panelToggleContainer) {
+      (panelToggleContainer as HTMLElement).style.position = 'relative';
+      const tooltip = document.createElement('div');
+      tooltip.className = 'analysis-tooltip';
+      tooltip.textContent = 'View flight analysis here';
+      panelToggleContainer.appendChild(tooltip);
+
+      const dismissTooltip = () => {
+        tooltip.remove();
+        localStorage.setItem('taskscore-seen-analysis-hint', '1');
+        document.removeEventListener('click', dismissTooltip);
+      };
+
+      // Auto-dismiss after 4s or on any click
+      setTimeout(dismissTooltip, 4000);
+      document.addEventListener('click', dismissTooltip);
+    }
+  }
 
   // Register track click handler to select events when clicking on the track
   mapRenderer.onTrackClick?.((fixIndex: number) => {
@@ -742,6 +772,9 @@ async function init(): Promise<void> {
     mapRenderer?.setTrack(igcFile.fixes);
     redetectEvents();
     analysisPanel?.setAltitudes(igcFile.fixes.map(f => f.gnssAltitude), igcFile.fixes.map(f => f.time));
+
+    // Pulse the Analysis button to draw attention to the newly available data
+    mapRenderer?.highlightPanelToggle?.();
   }
 
   /**
