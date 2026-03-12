@@ -1,4 +1,4 @@
-import { defineConfig, searchForWorkspaceRoot, type Plugin } from 'vite';
+import { defineConfig, searchForWorkspaceRoot, type Plugin, type Connect } from 'vite';
 import { resolve } from 'path';
 import tailwindcss from '@tailwindcss/vite';
 
@@ -32,6 +32,18 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     airscoreWorkerCheck(),
+    {
+      // Rewrite /u/* to /dashboard.html in dev (mirrors Cloudflare Pages _redirects)
+      name: 'rewrite-u-routes',
+      configureServer(server) {
+        server.middlewares.use((req: Connect.IncomingMessage, _res, next) => {
+          if (req.url?.startsWith('/u/')) {
+            req.url = '/dashboard.html';
+          }
+          next();
+        });
+      },
+    },
   ],
   build: {
     outDir: '../dist',
