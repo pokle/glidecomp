@@ -587,6 +587,9 @@ async function init(): Promise<void> {
     }
   }
 
+  // Throb the Menu button on page load to guide users to load flights
+  setTimeout(() => mapRenderer?.highlightMenuButton?.(), 500);
+
   // Register track click handler to select events when clicking on the track
   mapRenderer.onTrackClick?.((fixIndex: number) => {
     // Don't allow glide segment selection when speed overlay is active,

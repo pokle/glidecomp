@@ -734,6 +734,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
       // Custom menu button control (top-left, added first so it's topmost)
       let menuButtonCallback: (() => void) | null = null;
+      let menuButtonContainer: HTMLElement | null = null;
       // Interaction mode — controls which click/hover handlers are active
       type MapInteractionMode = import('./map-provider').MapInteractionMode;
       let interactionMode: MapInteractionMode = 'view';
@@ -751,6 +752,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         onAdd(): HTMLElement {
           this.container = document.createElement('div');
           this.container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
+          menuButtonContainer = this.container;
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.title = 'Menu (\u2318K)';
@@ -766,6 +768,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         onRemove(): void {
           this.container?.remove();
           this.container = null;
+          menuButtonContainer = null;
         }
       }
       map.addControl(new MenuButtonControl(), 'top-left');
@@ -2252,6 +2255,17 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
             target.classList.add('pulse-attention');
             target.addEventListener('animationend', () => {
               target.classList.remove('pulse-attention');
+            }, { once: true });
+          }
+        },
+
+        highlightMenuButton() {
+          if (menuButtonContainer) {
+            menuButtonContainer.classList.remove('pulse-attention');
+            void menuButtonContainer.offsetWidth;
+            menuButtonContainer.classList.add('pulse-attention');
+            menuButtonContainer.addEventListener('animationend', () => {
+              menuButtonContainer?.classList.remove('pulse-attention');
             }, { once: true });
           }
         },

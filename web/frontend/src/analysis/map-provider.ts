@@ -110,6 +110,9 @@ export interface MapProvider {
 
     /** Pulse/glow the panel toggle button to draw attention (e.g. after flight load) */
     highlightPanelToggle?(): void;
+
+    /** Throb the menu button to draw attention (e.g. on initial page load) */
+    highlightMenuButton?(): void;
 }
 
 /**

@@ -1034,6 +1034,18 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
           }, { once: true });
         }
       },
+
+      highlightMenuButton() {
+        const target = menuBtn?.parentElement ?? menuBtn;
+        if (target) {
+          target.classList.remove('pulse-attention');
+          void target.offsetWidth;
+          target.classList.add('pulse-attention');
+          target.addEventListener('animationend', () => {
+            target.classList.remove('pulse-attention');
+          }, { once: true });
+        }
+      },
     };
 
     resolve(renderer);
