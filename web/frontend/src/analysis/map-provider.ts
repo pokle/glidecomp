@@ -107,6 +107,12 @@ export interface MapProvider {
 
     /** Set the active interaction mode (controls which click/hover handlers fire) */
     setInteractionMode?(mode: MapInteractionMode): void;
+
+    /** Pulse/glow the panel toggle button to draw attention (e.g. after flight load) */
+    highlightPanelToggle?(): void;
+
+    /** Throb the menu button to draw attention (e.g. on initial page load) */
+    highlightMenuButton?(): void;
 }
 
 /**

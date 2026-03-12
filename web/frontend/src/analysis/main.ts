@@ -532,6 +532,13 @@ async function init(): Promise<void> {
         }
       }
     },
+    onLoadSampleFlight: () => {
+      // Click the first sample flight button in the command menu
+      const firstSampleBtn = document.getElementById('sample-tushar');
+      if (firstSampleBtn) {
+        firstSampleBtn.click();
+      }
+    },
   });
 
   // Pass waypoint database to the analysis panel for task editor search
@@ -556,6 +563,29 @@ async function init(): Promise<void> {
   document.getElementById('sidebar-close')?.addEventListener('click', () => {
     analysisPanel?.hide();
   });
+
+  // First-visit tooltip on Analysis button
+  if (!localStorage.getItem('taskscore-seen-analysis-hint')) {
+    // Find the panel toggle button container in the DOM (top-right control)
+    const panelToggleContainer = document.querySelector('.mapboxgl-ctrl-top-right .mapboxgl-ctrl:first-child, .leaflet-top.leaflet-right .leaflet-bar:first-child');
+    if (panelToggleContainer) {
+      (panelToggleContainer as HTMLElement).style.position = 'relative';
+      const tooltip = document.createElement('div');
+      tooltip.className = 'analysis-tooltip';
+      tooltip.textContent = 'View flight analysis here';
+      panelToggleContainer.appendChild(tooltip);
+
+      const dismissTooltip = () => {
+        tooltip.remove();
+        localStorage.setItem('taskscore-seen-analysis-hint', '1');
+        document.removeEventListener('click', dismissTooltip);
+      };
+
+      // Auto-dismiss after 4s or on any click
+      setTimeout(dismissTooltip, 4000);
+      document.addEventListener('click', dismissTooltip);
+    }
+  }
 
   // Register track click handler to select events when clicking on the track
   mapRenderer.onTrackClick?.((fixIndex: number) => {
@@ -742,18 +772,20 @@ async function init(): Promise<void> {
     mapRenderer?.setTrack(igcFile.fixes);
     redetectEvents();
     analysisPanel?.setAltitudes(igcFile.fixes.map(f => f.gnssAltitude), igcFile.fixes.map(f => f.time));
+
+    // Pulse the Analysis button to draw attention to the newly available data
+    mapRenderer?.highlightPanelToggle?.();
   }
 
   /**
    * Load and parse an XCTask file
    */
   async function loadXCTaskFile(file: File): Promise<void> {
-    showStatus('Loading task file...', 'info');
+
     try {
       const rawJson = await file.text();
       const task = parseXCTask(rawJson);
       applyTask(task);
-      showStatus(`Loaded task: ${task.turnpoints.length} turnpoints`, 'success');
     } catch (err) {
       console.error('Failed to parse task file:', err);
       showStatus(`Failed to parse task file: ${err}`, 'error');
@@ -764,7 +796,7 @@ async function init(): Promise<void> {
    * Load and parse an IGC file
    */
   async function loadIGCFile(file: File): Promise<void> {
-    showStatus('Loading IGC file...', 'info');
+
 
     try {
       const content = await file.text();
@@ -800,15 +832,13 @@ async function init(): Promise<void> {
       }
     }
 
-    const taskInfo = igcFile.task?.start ? ' (with task declaration)' : '';
-    showStatus(`Loaded ${filename} - ${igcFile.fixes.length} fixes${taskInfo}`, 'success');
   }
 
   /**
    * Load a stored track by ID
    */
   async function loadStoredTrack(id: string): Promise<void> {
-    showStatus('Loading stored track...', 'info');
+
 
     try {
       const stored = await storage.getTrack(id);
@@ -829,7 +859,7 @@ async function init(): Promise<void> {
    * Load task by code
    */
   async function loadTask(code: string): Promise<void> {
-    showStatus(`Loading task ${code}...`, 'info');
+
 
     try {
       // Check storage first
@@ -854,8 +884,6 @@ async function init(): Promise<void> {
       }
 
       applyTask(task);
-
-      showStatus(`Loaded task: ${task.turnpoints.length} turnpoints`, 'success');
     } catch (err) {
       console.error('Failed to load task:', err);
       showStatus(`Failed to load task: ${err}`, 'error');
@@ -866,7 +894,7 @@ async function init(): Promise<void> {
    * Load a stored task by ID (code)
    */
   async function loadStoredTask(code: string): Promise<void> {
-    showStatus(`Loading stored task ${code}...`, 'info');
+
 
     try {
       const stored = await storage.getTask(code);
@@ -877,8 +905,6 @@ async function init(): Promise<void> {
 
       await storage.touchTask(code);
       applyTask(stored.task);
-
-      showStatus(`Loaded task: ${stored.task.turnpoints.length} turnpoints`, 'success');
     } catch (err) {
       console.error('Failed to load stored task:', err);
       showStatus(`Failed to load stored task: ${err}`, 'error');
@@ -923,7 +949,7 @@ async function init(): Promise<void> {
       return;
     }
 
-    showStatus('Loading from AirScore...', 'info');
+
 
     try {
       // Fetch task data first
@@ -940,7 +966,6 @@ async function init(): Promise<void> {
       const pilotName = taskData.pilots.find(p => p.trackId === params.trackId)?.name || 'Unknown';
       const taskName = taskData.competition.taskName || `Task ${params.tasPk}`;
 
-      showStatus(`Loaded ${pilotName} - ${taskData.competition.name} ${taskName}`, 'success');
     } catch (err) {
       console.error('Failed to load from AirScore:', err);
       showStatus(`Failed to load from AirScore: ${err}`, 'error');

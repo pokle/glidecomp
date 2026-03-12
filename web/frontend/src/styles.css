@@ -269,6 +269,67 @@
     animation: throb 0.5s ease-in-out 4;
   }
 
+  /* Throb animation for the Analysis button when flight data loads */
+  @keyframes throb-attention {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+  }
+
+  .pulse-attention {
+    animation: throb-attention 0.4s ease-in-out 3;
+  }
+
+  /* Allow throb to scale beyond the control group boundary */
+  .mapboxgl-ctrl-group:has(.pulse-attention),
+  .leaflet-bar:has(.pulse-attention) {
+    overflow: visible !important;
+  }
+
+  /* Allow labeled map control buttons to expand beyond default fixed width */
+  .mapboxgl-ctrl-group button:has(.mapctl-label) {
+    width: auto !important;
+  }
+
+  /* Hide text labels on map control buttons on mobile, keep icon-only at 36px */
+  @media (max-width: 639px) {
+    .mapctl-label {
+      display: none !important;
+    }
+  }
+
+  /* First-visit tooltip for Analysis button */
+  .analysis-tooltip {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 6px;
+    padding: 6px 12px;
+    background: #1e293b;
+    color: #f1f5f9;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+    white-space: nowrap;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    pointer-events: none;
+    animation: tooltip-fade-in 0.2s ease-out;
+  }
+
+  .analysis-tooltip::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    right: 12px;
+    border: 6px solid transparent;
+    border-bottom-color: #1e293b;
+  }
+
+  @keyframes tooltip-fade-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
   /* Glide legend styles */
   #glide-legend {
     @apply absolute bottom-8 right-2 font-sans;

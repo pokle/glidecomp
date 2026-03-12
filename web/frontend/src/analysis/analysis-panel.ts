@@ -23,6 +23,7 @@ export interface AnalysisPanelOptions {
   onToggle?: () => void;
   onHide?: () => void;
   onShow?: () => void;
+  onLoadSampleFlight?: () => void;
 }
 
 export interface FlightInfo {
@@ -280,8 +281,10 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
     <!-- Track content (Events, Glides, Climbs, Sinks) -->
     <div id="track-panel-content" class="track-list flex-1 overflow-y-auto p-2 scrollbar">
-      <div class="flex h-full items-center justify-center p-6 text-center text-muted-foreground">
-        Load an IGC file to see events
+      <div class="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-muted-foreground">
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="opacity-40"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+        <p>Drop an IGC file on the map, or use <strong>Menu</strong> to load one</p>
+        <button type="button" id="try-sample-flight" class="text-sm text-primary hover:underline cursor-pointer bg-transparent border-0">Try a sample flight</button>
       </div>
     </div>
 
@@ -301,6 +304,11 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   `;
 
   container.appendChild(panel);
+
+  // Wire "Try a sample flight" button
+  panel.querySelector('#try-sample-flight')?.addEventListener('click', () => {
+    options.onLoadSampleFlight?.();
+  });
 
   // Get references
   const trackPanelContent = panel.querySelector('#track-panel-content') as HTMLElement;
