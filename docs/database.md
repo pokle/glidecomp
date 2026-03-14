@@ -20,7 +20,7 @@ bun run wrangler2 d1 execute taskscore-auth --remote --file=web/workers/auth-api
 
 ## Account Deletion
 
-`POST /api/auth/delete-account` deletes the `user` row from D1. CASCADE foreign keys automatically clean up `session` and `account` rows. The frontend also calls `localStorage.clear()`.
+`POST /api/auth/delete-account` deletes the `user` row from D1. CASCADE foreign keys automatically clean up `session` and `account` rows. The frontend also clears `localStorage` and deletes the `taskscore` IndexedDB database (which stores tracks and tasks).
 
 ### Future storage checklist
 

@@ -46,6 +46,7 @@ async function init() {
     const result = await deleteAccount();
     if (result.success) {
       localStorage.clear();
+      indexedDB.deleteDatabase("taskscore");
       window.location.href = "/";
     } else {
       btn.disabled = false;
