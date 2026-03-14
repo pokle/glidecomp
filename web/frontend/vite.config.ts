@@ -29,6 +29,9 @@ export default defineConfig({
   root: 'src',
   envDir: resolve(__dirname, '../..'),
   publicDir: '../public',
+  optimizeDeps: {
+    exclude: ['threebox-plugin'],
+  },
   plugins: [
     tailwindcss(),
     airscoreWorkerCheck(),
