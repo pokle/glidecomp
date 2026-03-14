@@ -79,6 +79,24 @@ app.post("/api/auth/set-username", async (c) => {
   return c.json({ username });
 });
 
+// POST /api/auth/delete-account — delete user and all associated data
+app.post("/api/auth/delete-account", async (c) => {
+  const auth = createAuth(c.env);
+  const session = await auth.api.getSession({
+    headers: c.req.raw.headers,
+  });
+  if (!session) {
+    return c.json({ error: "Not authenticated" }, 401);
+  }
+
+  // Delete user row — CASCADE rules auto-delete session and account rows
+  await c.env.taskscore_auth.prepare('DELETE FROM "user" WHERE id = ?')
+    .bind(session.user.id)
+    .run();
+
+  return c.json({ success: true });
+});
+
 // Better Auth catch-all handler
 app.all("/api/auth/*", async (c) => {
   const auth = createAuth(c.env);

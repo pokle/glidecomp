@@ -31,8 +31,24 @@
         Open Analysis
       </a>
       <button id="signout-btn" class="btn btn-secondary w-full">Sign out</button>
+      <button id="delete-account-btn" class="btn btn-ghost text-destructive w-full">Delete account and all my data</button>
     </div>
   </div>
+
+  <dialog id="delete-account-dialog"
+    class="fixed inset-0 m-auto h-fit rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50"
+    onclick="if (event.target === this) this.close()">
+    <div class="w-80 p-4">
+      <h2 class="text-lg font-semibold text-destructive">Delete Account</h2>
+      <p class="text-sm text-muted-foreground mt-2">
+        This will permanently delete your account and all associated data. This action cannot be undone.
+      </p>
+      <div class="flex justify-end gap-2 mt-4">
+        <button id="delete-cancel-btn" class="btn btn-secondary">Cancel</button>
+        <button id="delete-confirm-btn" class="btn btn-destructive">Delete my account</button>
+      </div>
+    </div>
+  </dialog>
 
   <script type="module" src="/dashboard.ts"></script>
 </body>
