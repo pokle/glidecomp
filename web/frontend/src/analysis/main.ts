@@ -9,6 +9,7 @@
  */
 
 import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistance, igcTaskToXCTask, resolveTurnpointSequence, maxBy, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord } from '@taskscore/engine';
+import { getCurrentUser } from '../auth/client';
 import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
 import { createMapProvider, type MapProvider, type MapProviderType } from './map-provider';
 import { createAnalysisPanel, AnalysisPanel, FlightInfo } from './analysis-panel';
@@ -69,6 +70,16 @@ interface FeatureToggleConfig {
  * Initialize the application
  */
 async function init(): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) {
+    window.location.href = "/login.html";
+    return;
+  }
+  if (!user.username) {
+    window.location.href = "/onboarding.html";
+    return;
+  }
+
   const mapContainer = document.getElementById('map');
   const eventPanelContainer = document.getElementById('event-panel-container');
   const igcFileInput = document.getElementById('igc-file') as HTMLInputElement;

@@ -16,7 +16,8 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "[ -d node_modules ] || bun install && bun run --filter '@taskscore/frontend' dev",
+    "dev": "[ -d node_modules ] || bun install && bun run dev:auth & bun run --filter '@taskscore/frontend' dev",
+    "dev:frontend": "bun run --filter '@taskscore/frontend' dev",
     "build": "bun run --filter '@taskscore/frontend' build",
     "deploy": "bun run --filter '@taskscore/frontend' deploy",
     "dev:auth": "bun run --filter auth-api dev",

@@ -49,10 +49,18 @@ cp .env.example .env
 
 ### Running locally
 
-Start the frontend dev server (http://localhost:3000):
+Start the frontend and auth worker together (http://localhost:3000 + http://localhost:8788):
 
 ```bash
 bun run dev
+```
+
+This starts both the Vite dev server and the auth API worker. The auth worker requires a `.dev.vars` file in `web/workers/auth-api/` — see [docs/auth.md](docs/auth.md) for setup.
+
+To start only the frontend (without auth):
+
+```bash
+bun run dev:frontend
 ```
 
 To use AirScore features, also start the AirScore API worker (http://localhost:8787) in a separate terminal:
@@ -118,6 +126,7 @@ web/
   engine/                - Shared analysis library (IGC parsing, event detection)
     cli/                 - CLI utilities (detect-events, get-xcontest-task)
   workers/
+    auth-api/            - Authentication API (Cloudflare Worker + D1)
     airscore-api/        - AirScore caching proxy (Cloudflare Worker)
   scripts/               - Operational scripts (secrets, test emails)
 docs/                    - Feature and architecture specifications
