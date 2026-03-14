@@ -54,5 +54,8 @@
     "@fontsource/atkinson-hyperlegible-next": "^5.2.7",
     "mapbox-gl": "^3.19.1",
     "threebox-plugin": "^2.2.7"
+  },
+  "patchedDependencies": {
+    "kysely-d1@0.4.0": "patches/kysely-d1@0.4.0.patch"
   }
 }

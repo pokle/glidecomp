@@ -1,0 +1,16 @@
+diff --git a/node_modules/kysely-d1/.bun-tag-406790ff191793d3 b/.bun-tag-406790ff191793d3
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/dist/index.js b/dist/index.js
+index 644f6b9aa33817dc7fe1893a9a84d91433dae064..2187bb0758bf10a7b60c6b2759e33a7e09d7afaf 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -88,8 +88,6 @@ class D1Connection {
+                 : BigInt(results.meta.last_row_id),
+             rows: results?.results || [],
+             numAffectedRows,
+-            // @ts-ignore deprecated in kysely >= 0.23, keep for backward compatibility.
+-            numUpdatedOrDeletedRows: numAffectedRows,
+         };
+     }
+     async beginTransaction() {
