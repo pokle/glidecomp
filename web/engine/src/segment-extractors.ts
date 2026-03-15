@@ -78,11 +78,7 @@ function findEndEvent(
 
 // ── Extractors ────────────────────────────────────────────────────────────
 
-/**
- * Maximum glide ratio to classify a glide as a "sink".
- * Glides with a ratio at or below this threshold are considered poor/sinky.
- */
-const MAX_GLIDE_RATIO_FOR_SINK = 5;
+import { DEFAULT_THRESHOLDS } from './thresholds';
 
 /**
  * Extracts glide segments by pairing glide_start/glide_end events.
@@ -163,7 +159,8 @@ export function extractClimbs(events: FlightEvent[]): ClimbData[] {
  * A low glide ratio means steep descent relative to distance covered.
  * @returns Sinks sorted by altitude lost (steepest first)
  */
-export function extractSinks(events: FlightEvent[]): SinkData[] {
+export function extractSinks(events: FlightEvent[], maxGlideRatioForSink?: number): SinkData[] {
+  const MAX_GLIDE_RATIO_FOR_SINK = maxGlideRatioForSink ?? DEFAULT_THRESHOLDS.glide.maxGlideRatioForSink;
   const sinks: SinkData[] = [];
 
   for (const event of events) {

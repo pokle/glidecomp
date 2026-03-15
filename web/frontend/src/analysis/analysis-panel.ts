@@ -7,6 +7,7 @@
 
 import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, extractGlides, extractClimbs, extractSinks, type FlightEvent, type FlightEventType, type XCTask, type TurnpointType, type Turnpoint, type TurnpointSequenceResult, type GlideData, type ClimbData, type SinkData, type FixIndexDetails, type GlideEventDetails, type WaypointRecord } from '@taskscore/engine';
 import { formatAltitude, formatSpeed, formatDistance, formatClimbRate } from './units-browser';
+import { config } from './config';
 import { createTaskEditor, type TaskEditor } from './task-editor';
 
 /**
@@ -857,12 +858,12 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
   function renderSinks(): void {
     renderSegmentList({
-      items: extractSinks(allEvents),
+      items: extractSinks(allEvents, config.getThresholds().glide.maxGlideRatioForSink),
       itemClass: 'sink-item',
       dataAttr: 'data-sink-id',
       emptyLabel: 'No descents detected',
       countLabel: 'sinks',
-      sortDescription: 'Glides with L/D \u2264 5:1, sorted by altitude lost',
+      sortDescription: `Glides with L/D \u2264 ${config.getThresholds().glide.maxGlideRatioForSink}:1, sorted by altitude lost`,
       renderItem: (sink, i) => {
         const distanceStr = formatDistance(sink.distance).withUnit;
         const speedStr = formatSpeed(sink.averageSpeed).withUnit;
@@ -1158,7 +1159,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       const climbs = extractClimbs(allEvents);
       matchingEvent = findNearestSegmentEvent(fixIndex, climbs);
     } else if (currentTab === 'sinks') {
-      const sinks = extractSinks(allEvents);
+      const sinks = extractSinks(allEvents, config.getThresholds().glide.maxGlideRatioForSink);
       matchingEvent = findNearestSegmentEvent(fixIndex, sinks);
     } else if (currentTab === 'events') {
       // For the events tab, find the nearest event by fixIndex or segment
