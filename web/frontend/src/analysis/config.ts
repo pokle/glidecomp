@@ -3,6 +3,8 @@
  * Currently backed by localStorage, designed for future migration to backend API.
  */
 
+import { resolveThresholds, type DetectionThresholds, type PartialThresholds } from '@taskscore/engine';
+
 export interface MapLocation {
   center: [lng: number, lat: number];
   zoom: number;
@@ -12,6 +14,7 @@ export interface MapLocation {
 
 export interface UserPreferences {
   units: UnitPreferences;
+  thresholds?: PartialThresholds;
   theme?: 'light' | 'dark' | 'system';
   mapLocation?: MapLocation;
   mapStyle?: string;
@@ -144,6 +147,54 @@ class ConfigStore {
    */
   setMapLocation(location: MapLocation): void {
     this.setPreferences({ mapLocation: location });
+  }
+
+  /**
+   * Get resolved thresholds (defaults merged with user overrides)
+   */
+  getThresholds(): DetectionThresholds {
+    return resolveThresholds(this.getPreferences().thresholds);
+  }
+
+  /**
+   * Get partial thresholds (only user overrides, no defaults)
+   */
+  getPartialThresholds(): PartialThresholds | undefined {
+    return this.getPreferences().thresholds;
+  }
+
+  /**
+   * Set thresholds for a specific group
+   */
+  setThresholdGroup<K extends keyof DetectionThresholds>(
+    group: K,
+    values: Partial<DetectionThresholds[K]>
+  ): void {
+    const current = this.getPreferences().thresholds || {};
+    this.setPreferences({
+      thresholds: {
+        ...current,
+        [group]: { ...current[group], ...values },
+      },
+    });
+  }
+
+  /**
+   * Reset a threshold group to defaults (remove user overrides)
+   */
+  resetThresholdGroup(group: keyof DetectionThresholds): void {
+    const current = this.getPreferences().thresholds;
+    if (!current) return;
+    const updated = { ...current };
+    delete updated[group];
+    this.setPreferences({ thresholds: updated });
+  }
+
+  /**
+   * Reset all thresholds to defaults
+   */
+  resetAllThresholds(): void {
+    this.setPreferences({ thresholds: undefined });
   }
 
   /**

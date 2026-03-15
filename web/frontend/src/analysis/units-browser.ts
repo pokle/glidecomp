@@ -15,6 +15,7 @@ import {
   formatAltitudeChange as _formatAltitudeChange,
   formatRadius as _formatRadius,
   type FormattedValue,
+  type DetectionThresholds,
 } from '@taskscore/engine';
 
 export type { FormattedValue, UnitPreferences };
@@ -60,6 +61,24 @@ export function onUnitsChanged(
     callback(newUnits);
   };
 
+  window.addEventListener('taskscore:preferences-changed', handler);
+  return () => window.removeEventListener('taskscore:preferences-changed', handler);
+}
+
+/**
+ * Get resolved detection thresholds (defaults + user overrides)
+ */
+export function getThresholds(): DetectionThresholds {
+  return config.getThresholds();
+}
+
+/**
+ * Subscribe to any preference changes (units or thresholds)
+ */
+export function onPreferencesChanged(
+  callback: () => void
+): () => void {
+  const handler = () => callback();
   window.addEventListener('taskscore:preferences-changed', handler);
   return () => window.removeEventListener('taskscore:preferences-changed', handler);
 }

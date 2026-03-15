@@ -83,6 +83,9 @@ export interface CircleDetectionOptions {
   t1Seconds?: number;          // default 8  (CRUISE -> CLIMB transition delay)
   t2Seconds?: number;          // default 15 (CLIMB -> CRUISE transition delay)
   minFixesPerCircle?: number;  // default 8
+  maxBearingRate?: number;     // default 50 deg/s
+  maxReasonableWindSpeed?: number;  // default 30 m/s
+  minGroundSpeedVariation?: number; // default 1 m/s
 }
 
 // --- Exported helpers ---
@@ -107,7 +110,8 @@ export function normalizeBearingDelta(delta: number): number {
  */
 export function computeBearingRates(
   fixes: IGCFix[],
-  lookbackSeconds: number = 5
+  lookbackSeconds: number = 5,
+  maxBearingRateLimit: number = MAX_BEARING_RATE
 ): number[] {
   const rates: number[] = new Array(fixes.length).fill(0);
 
@@ -143,8 +147,8 @@ export function computeBearingRates(
     let rate = delta / dt;
 
     // Clamp to reject GPS spikes
-    if (rate > MAX_BEARING_RATE) rate = MAX_BEARING_RATE;
-    if (rate < -MAX_BEARING_RATE) rate = -MAX_BEARING_RATE;
+    if (rate > maxBearingRateLimit) rate = maxBearingRateLimit;
+    if (rate < -maxBearingRateLimit) rate = -maxBearingRateLimit;
 
     rates[i] = rate;
   }
@@ -344,7 +348,9 @@ export function fitCircleLeastSquares(
 function extractCircles(
   fixes: IGCFix[],
   circlingSegments: CirclingSegment[],
-  minFixesPerCircle: number = 8
+  minFixesPerCircle: number = 8,
+  maxReasonableWindSpeedOpt: number = MAX_REASONABLE_WIND_SPEED,
+  minGroundSpeedVariationOpt: number = MIN_GROUND_SPEED_VARIATION
 ): CircleSegment[] {
   const circles: CircleSegment[] = [];
 
@@ -383,7 +389,8 @@ function extractCircles(
           const circleEndIndex = i;
           const circle = buildCircle(
             fixes, circleStartIndex, circleEndIndex,
-            cumulative, circleNumber, segIdx, circles
+            cumulative, circleNumber, segIdx, circles,
+            maxReasonableWindSpeedOpt, minGroundSpeedVariationOpt
           );
           if (circle) {
             circles.push(circle);
@@ -410,7 +417,9 @@ function buildCircle(
   cumulativeBearing: number,
   circleNumber: number,
   circlingSegmentIndex: number,
-  previousCircles: CircleSegment[]
+  previousCircles: CircleSegment[],
+  maxReasonableWindSpeedOpt: number = MAX_REASONABLE_WIND_SPEED,
+  minGroundSpeedVariationOpt: number = MIN_GROUND_SPEED_VARIATION
 ): CircleSegment | null {
   const duration = (fixes[endIndex].time.getTime() - fixes[startIndex].time.getTime()) / 1000;
   if (duration <= 0) return null;
@@ -450,7 +459,9 @@ function buildCircle(
   );
 
   // Wind from ground speed (per-circle)
-  const windFromGroundSpeed = estimateWindFromGroundSpeed(fixes, startIndex, endIndex);
+  const windFromGroundSpeed = estimateWindFromGroundSpeed(
+    fixes, startIndex, endIndex, maxReasonableWindSpeedOpt, minGroundSpeedVariationOpt
+  );
 
   // Wind from center drift (between consecutive circles in same segment)
   let windFromCenterDrift: WindEstimate | undefined;
@@ -459,7 +470,8 @@ function buildCircle(
     windFromCenterDrift = estimateWindFromCenterDrift(
       fixes, prevCircle, fittedCircle,
       prevCircle.startIndex, prevCircle.endIndex,
-      startIndex, endIndex
+      startIndex, endIndex,
+      maxReasonableWindSpeedOpt
     );
   }
 
@@ -503,7 +515,9 @@ function findPreviousCircleInSegment(
 function estimateWindFromGroundSpeed(
   fixes: IGCFix[],
   startIndex: number,
-  endIndex: number
+  endIndex: number,
+  maxWindSpeed: number = MAX_REASONABLE_WIND_SPEED,
+  minGSVariation: number = MIN_GROUND_SPEED_VARIATION
 ): WindEstimate | undefined {
   let maxGS = -Infinity;
   let minGS = Infinity;
@@ -529,10 +543,10 @@ function estimateWindFromGroundSpeed(
   if (maxGS === -Infinity || minGS === Infinity) return undefined;
 
   const variation = maxGS - minGS;
-  if (variation < MIN_GROUND_SPEED_VARIATION) return undefined; // Too little variation to be meaningful
+  if (variation < minGSVariation) return undefined; // Too little variation to be meaningful
 
   const speed = variation / 2;
-  if (speed > MAX_REASONABLE_WIND_SPEED) return undefined; // Reject unreasonable wind speeds
+  if (speed > maxWindSpeed) return undefined; // Reject unreasonable wind speeds
 
   // Track bearing at max ground speed point
   const trackBearing = calculateBearing(
@@ -558,7 +572,8 @@ function estimateWindFromCenterDrift(
   prevStartIndex: number,
   prevEndIndex: number,
   curStartIndex: number,
-  curEndIndex: number
+  curEndIndex: number,
+  maxWindSpeed: number = MAX_REASONABLE_WIND_SPEED
 ): WindEstimate | undefined {
   const prevFit = prevCircle.fittedCircle;
 
@@ -576,7 +591,7 @@ function estimateWindFromCenterDrift(
   const driftDist = Math.sqrt(dLat * dLat + dLon * dLon);
   const speed = driftDist / dt;
 
-  if (speed > MAX_REASONABLE_WIND_SPEED) return undefined; // Reject unreasonable
+  if (speed > maxWindSpeed) return undefined; // Reject unreasonable
 
   // Direction wind is blowing TO (atan2 gives angle from north)
   const dirTo = Math.atan2(dLon, dLat) * 180 / Math.PI;
@@ -605,9 +620,12 @@ export function detectCircles(
   const t1Seconds = options?.t1Seconds ?? 8;
   const t2Seconds = options?.t2Seconds ?? 15;
   const minFixesPerCircle = options?.minFixesPerCircle ?? 8;
+  const maxBearingRateOpt = options?.maxBearingRate ?? MAX_BEARING_RATE;
+  const maxWindSpeedOpt = options?.maxReasonableWindSpeed ?? MAX_REASONABLE_WIND_SPEED;
+  const minGSVariationOpt = options?.minGroundSpeedVariation ?? MIN_GROUND_SPEED_VARIATION;
 
   // Step 1: Compute bearing rates
-  const bearingRates = computeBearingRates(fixes, lookbackSeconds);
+  const bearingRates = computeBearingRates(fixes, lookbackSeconds, maxBearingRateOpt);
 
   // Step 2: Detect circling segments
   const circlingSegments = detectCirclingSegments(
@@ -615,7 +633,7 @@ export function detectCircles(
   );
 
   // Step 3 & 4: Extract circles with per-circle metrics
-  const circles = extractCircles(fixes, circlingSegments, minFixesPerCircle);
+  const circles = extractCircles(fixes, circlingSegments, minFixesPerCircle, maxWindSpeedOpt, minGSVariationOpt);
 
   return { circlingSegments, circles, bearingRates };
 }

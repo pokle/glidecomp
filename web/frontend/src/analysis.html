@@ -215,12 +215,12 @@
                 <!-- Settings -->
                 <div role="group" aria-labelledby="settings-heading">
                     <div role="heading" id="settings-heading">Settings</div>
-                    <div role="menuitem" id="menu-configure-units" data-keywords="units configure settings speed altitude distance climb rate vario">
+                    <div role="menuitem" id="menu-configure-settings" data-keywords="units configure settings speed altitude distance climb rate vario thresholds detection thermal glide circle">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
                             <circle cx="12" cy="12" r="3"/>
                         </svg>
-                        <span>Configure units...</span>
+                        <span>Settings...</span>
                     </div>
                 </div>
 
@@ -304,11 +304,11 @@
         </div>
     </dialog>
 
-    <!-- Configure Units Dialog -->
-    <dialog id="units-dialog" class="fixed inset-0 m-auto h-fit rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50" onclick="if (event.target === this) this.close()">
-        <div class="w-80 p-4">
-            <div class="mb-4 flex items-center justify-between">
-                <h2 class="text-lg font-semibold">Configure Units</h2>
+    <!-- Settings Dialog -->
+    <dialog id="settings-dialog" class="fixed inset-0 m-auto max-h-[100dvh] sm:max-h-[80vh] h-fit w-full sm:max-w-lg rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50 overflow-y-auto" onclick="if (event.target === this) this.close()">
+        <div class="p-4 sm:p-6">
+            <div class="mb-4 flex items-center justify-between sticky top-0 bg-card pt-0 pb-2 z-10">
+                <h2 class="text-lg font-semibold">Settings</h2>
                 <button class="btn btn-ghost btn-icon -mr-2" onclick="this.closest('dialog').close()" aria-label="Close">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M18 6 6 18"/>
@@ -316,38 +316,215 @@
                     </svg>
                 </button>
             </div>
-            <form id="units-form" class="space-y-4">
-                <div class="space-y-1.5">
-                    <label for="unit-speed-select" class="text-sm font-medium">Speed</label>
-                    <select id="unit-speed-select" class="input w-full">
-                        <option value="km/h">km/h</option>
-                        <option value="mph">mph</option>
-                        <option value="knots">knots</option>
-                    </select>
-                </div>
-                <div class="space-y-1.5">
-                    <label for="unit-altitude-select" class="text-sm font-medium">Altitude</label>
-                    <select id="unit-altitude-select" class="input w-full">
-                        <option value="m">meters (m)</option>
-                        <option value="ft">feet (ft)</option>
-                    </select>
-                </div>
-                <div class="space-y-1.5">
-                    <label for="unit-distance-select" class="text-sm font-medium">Distance</label>
-                    <select id="unit-distance-select" class="input w-full">
-                        <option value="km">kilometers (km)</option>
-                        <option value="mi">miles (mi)</option>
-                        <option value="nmi">nautical miles (nmi)</option>
-                    </select>
-                </div>
-                <div class="space-y-1.5">
-                    <label for="unit-climbrate-select" class="text-sm font-medium">Climb Rate</label>
-                    <select id="unit-climbrate-select" class="input w-full">
-                        <option value="m/s">m/s</option>
-                        <option value="ft/min">ft/min</option>
-                        <option value="knots">knots</option>
-                    </select>
-                </div>
+            <form id="settings-form" class="space-y-4">
+                <!-- Units Section -->
+                <details open>
+                    <summary class="cursor-pointer text-sm font-semibold py-1">Units</summary>
+                    <div class="mt-2 space-y-3 pl-1">
+                        <div class="space-y-1">
+                            <label for="unit-speed-select" class="text-sm font-medium">Speed</label>
+                            <select id="unit-speed-select" class="input w-full">
+                                <option value="km/h">km/h</option>
+                                <option value="mph">mph</option>
+                                <option value="knots">knots</option>
+                            </select>
+                        </div>
+                        <div class="space-y-1">
+                            <label for="unit-altitude-select" class="text-sm font-medium">Altitude</label>
+                            <select id="unit-altitude-select" class="input w-full">
+                                <option value="m">meters (m)</option>
+                                <option value="ft">feet (ft)</option>
+                            </select>
+                        </div>
+                        <div class="space-y-1">
+                            <label for="unit-distance-select" class="text-sm font-medium">Distance</label>
+                            <select id="unit-distance-select" class="input w-full">
+                                <option value="km">kilometers (km)</option>
+                                <option value="mi">miles (mi)</option>
+                                <option value="nmi">nautical miles (nmi)</option>
+                            </select>
+                        </div>
+                        <div class="space-y-1">
+                            <label for="unit-climbrate-select" class="text-sm font-medium">Climb Rate</label>
+                            <select id="unit-climbrate-select" class="input w-full">
+                                <option value="m/s">m/s</option>
+                                <option value="ft/min">ft/min</option>
+                                <option value="knots">knots</option>
+                            </select>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Thermal Detection -->
+                <details id="thermal-thresholds-group">
+                    <summary class="cursor-pointer text-sm font-semibold py-1 flex items-center justify-between">
+                        <span>Thermal Detection</span>
+                        <button type="button" class="btn btn-ghost btn-xs threshold-reset-btn" data-group="thermal">Reset</button>
+                    </summary>
+                    <div class="mt-2 space-y-3 pl-1">
+                        <div class="space-y-0.5">
+                            <label for="th-thermal-minClimbRate" class="text-sm font-medium">Min climb rate</label>
+                            <input type="text" id="th-thermal-minClimbRate" class="input w-full threshold-input" data-group="thermal" data-key="minClimbRate" data-dimension="climbRate" data-min="0.1" data-max="5">
+                            <p class="text-xs text-muted-foreground">Minimum average climb rate to detect a thermal</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-thermal-minThermalDuration" class="text-sm font-medium">Min thermal duration</label>
+                            <input type="text" id="th-thermal-minThermalDuration" class="input w-full threshold-input" data-group="thermal" data-key="minThermalDuration" data-dimension="time" data-min="5" data-max="300">
+                            <p class="text-xs text-muted-foreground">Minimum duration to register as a thermal</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-thermal-minThermalGap" class="text-sm font-medium">Min thermal gap</label>
+                            <input type="text" id="th-thermal-minThermalGap" class="input w-full threshold-input" data-group="thermal" data-key="minThermalGap" data-dimension="time" data-min="0" data-max="300">
+                            <p class="text-xs text-muted-foreground">Minimum time between consecutive thermals</p>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Glide Detection -->
+                <details id="glide-thresholds-group">
+                    <summary class="cursor-pointer text-sm font-semibold py-1 flex items-center justify-between">
+                        <span>Glide Detection</span>
+                        <button type="button" class="btn btn-ghost btn-xs threshold-reset-btn" data-group="glide">Reset</button>
+                    </summary>
+                    <div class="mt-2 space-y-3 pl-1">
+                        <div class="space-y-0.5">
+                            <label for="th-glide-maxGlideRatioForSink" class="text-sm font-medium">Max glide ratio for sink</label>
+                            <input type="text" id="th-glide-maxGlideRatioForSink" class="input w-full threshold-input" data-group="glide" data-key="maxGlideRatioForSink" data-dimension="ratio" data-min="1" data-max="50">
+                            <p class="text-xs text-muted-foreground">Glides at or below this L/D are classified as sink</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-glide-minGlideDuration" class="text-sm font-medium">Min glide duration</label>
+                            <input type="text" id="th-glide-minGlideDuration" class="input w-full threshold-input" data-group="glide" data-key="minGlideDuration" data-dimension="time" data-min="5" data-max="300">
+                            <p class="text-xs text-muted-foreground">Minimum duration to register as a glide</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-glide-minGlideGapIndices" class="text-sm font-medium">Min glide gap</label>
+                            <input type="text" id="th-glide-minGlideGapIndices" class="input w-full threshold-input" data-group="glide" data-key="minGlideGapIndices" data-dimension="count" data-min="1" data-max="100">
+                            <p class="text-xs text-muted-foreground">Minimum fix gap between thermals for a glide</p>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Vario Extremes -->
+                <details id="vario-thresholds-group">
+                    <summary class="cursor-pointer text-sm font-semibold py-1 flex items-center justify-between">
+                        <span>Vario Extremes</span>
+                        <button type="button" class="btn btn-ghost btn-xs threshold-reset-btn" data-group="vario">Reset</button>
+                    </summary>
+                    <div class="mt-2 space-y-3 pl-1">
+                        <div class="space-y-0.5">
+                            <label for="th-vario-minSignificantClimb" class="text-sm font-medium">Min significant climb</label>
+                            <input type="text" id="th-vario-minSignificantClimb" class="input w-full threshold-input" data-group="vario" data-key="minSignificantClimb" data-dimension="climbRate" data-min="0.1" data-max="5">
+                            <p class="text-xs text-muted-foreground">Minimum rate to report as max climb</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-vario-minSignificantSink" class="text-sm font-medium">Min significant sink</label>
+                            <input type="text" id="th-vario-minSignificantSink" class="input w-full threshold-input" data-group="vario" data-key="minSignificantSink" data-dimension="climbRate" data-min="-10" data-max="-0.1">
+                            <p class="text-xs text-muted-foreground">Maximum (most negative) rate to report as max sink</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-vario-varioWindowSize" class="text-sm font-medium">Vario window size</label>
+                            <input type="text" id="th-vario-varioWindowSize" class="input w-full threshold-input" data-group="vario" data-key="varioWindowSize" data-dimension="count" data-min="2" data-max="50">
+                            <p class="text-xs text-muted-foreground">Number of fixes to average for vario calculation</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-vario-landingDescentThreshold" class="text-sm font-medium">Landing descent threshold</label>
+                            <input type="text" id="th-vario-landingDescentThreshold" class="input w-full threshold-input" data-group="vario" data-key="landingDescentThreshold" data-dimension="climbRate" data-min="-5" data-max="-0.1">
+                            <p class="text-xs text-muted-foreground">Descent rate indicating still on approach</p>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Takeoff / Landing -->
+                <details id="takeoffLanding-thresholds-group">
+                    <summary class="cursor-pointer text-sm font-semibold py-1 flex items-center justify-between">
+                        <span>Takeoff / Landing</span>
+                        <button type="button" class="btn btn-ghost btn-xs threshold-reset-btn" data-group="takeoffLanding">Reset</button>
+                    </summary>
+                    <div class="mt-2 space-y-3 pl-1">
+                        <div class="space-y-0.5">
+                            <label for="th-takeoffLanding-minGroundSpeed" class="text-sm font-medium">Min ground speed</label>
+                            <input type="text" id="th-takeoffLanding-minGroundSpeed" class="input w-full threshold-input" data-group="takeoffLanding" data-key="minGroundSpeed" data-dimension="speed" data-min="0.5" data-max="30">
+                            <p class="text-xs text-muted-foreground">Minimum speed to consider in flight</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-takeoffLanding-minAltitudeGain" class="text-sm font-medium">Min altitude gain</label>
+                            <input type="text" id="th-takeoffLanding-minAltitudeGain" class="input w-full threshold-input" data-group="takeoffLanding" data-key="minAltitudeGain" data-dimension="altitude" data-min="5" data-max="500">
+                            <p class="text-xs text-muted-foreground">Minimum altitude gain above start to confirm takeoff</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-takeoffLanding-minClimbRate" class="text-sm font-medium">Min climb rate</label>
+                            <input type="text" id="th-takeoffLanding-minClimbRate" class="input w-full threshold-input" data-group="takeoffLanding" data-key="minClimbRate" data-dimension="climbRate" data-min="0.1" data-max="5">
+                            <p class="text-xs text-muted-foreground">Minimum sustained climb rate for takeoff verification</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-takeoffLanding-takeoffTimeWindow" class="text-sm font-medium">Takeoff time window</label>
+                            <input type="text" id="th-takeoffLanding-takeoffTimeWindow" class="input w-full threshold-input" data-group="takeoffLanding" data-key="takeoffTimeWindow" data-dimension="time" data-min="3" data-max="60">
+                            <p class="text-xs text-muted-foreground">Time window to verify sustained flight after takeoff</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-takeoffLanding-landingTimeWindow" class="text-sm font-medium">Landing time window</label>
+                            <input type="text" id="th-takeoffLanding-landingTimeWindow" class="input w-full threshold-input" data-group="takeoffLanding" data-key="landingTimeWindow" data-dimension="time" data-min="5" data-max="300">
+                            <p class="text-xs text-muted-foreground">Time window to verify no flight activity for landing</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-takeoffLanding-landingSpeedFactor" class="text-sm font-medium">Landing speed factor</label>
+                            <input type="text" id="th-takeoffLanding-landingSpeedFactor" class="input w-full threshold-input" data-group="takeoffLanding" data-key="landingSpeedFactor" data-dimension="ratio" data-min="0.1" data-max="1">
+                            <p class="text-xs text-muted-foreground">Landing speed = this fraction of takeoff speed threshold</p>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Circle Detection -->
+                <details id="circle-thresholds-group">
+                    <summary class="cursor-pointer text-sm font-semibold py-1 flex items-center justify-between">
+                        <span>Circle Detection</span>
+                        <button type="button" class="btn btn-ghost btn-xs threshold-reset-btn" data-group="circle">Reset</button>
+                    </summary>
+                    <div class="mt-2 space-y-3 pl-1">
+                        <div class="space-y-0.5">
+                            <label for="th-circle-maxBearingRate" class="text-sm font-medium">Max bearing rate</label>
+                            <input type="text" id="th-circle-maxBearingRate" class="input w-full threshold-input" data-group="circle" data-key="maxBearingRate" data-dimension="angle" data-min="10" data-max="360">
+                            <p class="text-xs text-muted-foreground">Maximum plausible bearing rate (GPS spike filter)</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-circle-maxReasonableWindSpeed" class="text-sm font-medium">Max wind speed</label>
+                            <input type="text" id="th-circle-maxReasonableWindSpeed" class="input w-full threshold-input" data-group="circle" data-key="maxReasonableWindSpeed" data-dimension="speed" data-min="5" data-max="100">
+                            <p class="text-xs text-muted-foreground">Reject wind estimates above this speed</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-circle-minGroundSpeedVariation" class="text-sm font-medium">Min ground speed variation</label>
+                            <input type="text" id="th-circle-minGroundSpeedVariation" class="input w-full threshold-input" data-group="circle" data-key="minGroundSpeedVariation" data-dimension="speed" data-min="0.1" data-max="10">
+                            <p class="text-xs text-muted-foreground">Minimum speed variation for wind estimation</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-circle-lookbackSeconds" class="text-sm font-medium">Lookback window</label>
+                            <input type="text" id="th-circle-lookbackSeconds" class="input w-full threshold-input" data-group="circle" data-key="lookbackSeconds" data-dimension="time" data-min="1" data-max="30">
+                            <p class="text-xs text-muted-foreground">Lookback window for bearing rate computation</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-circle-minTurnRate" class="text-sm font-medium">Min turn rate</label>
+                            <input type="text" id="th-circle-minTurnRate" class="input w-full threshold-input" data-group="circle" data-key="minTurnRate" data-dimension="angle" data-min="0.5" data-max="30">
+                            <p class="text-xs text-muted-foreground">Minimum turn rate to consider circling</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-circle-t1Seconds" class="text-sm font-medium">Cruise-to-climb delay</label>
+                            <input type="text" id="th-circle-t1Seconds" class="input w-full threshold-input" data-group="circle" data-key="t1Seconds" data-dimension="time" data-min="1" data-max="60">
+                            <p class="text-xs text-muted-foreground">Time before confirming transition to circling</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-circle-t2Seconds" class="text-sm font-medium">Climb-to-cruise delay</label>
+                            <input type="text" id="th-circle-t2Seconds" class="input w-full threshold-input" data-group="circle" data-key="t2Seconds" data-dimension="time" data-min="1" data-max="60">
+                            <p class="text-xs text-muted-foreground">Time before confirming exit from circling</p>
+                        </div>
+                        <div class="space-y-0.5">
+                            <label for="th-circle-minFixesPerCircle" class="text-sm font-medium">Min fixes per circle</label>
+                            <input type="text" id="th-circle-minFixesPerCircle" class="input w-full threshold-input" data-group="circle" data-key="minFixesPerCircle" data-dimension="count" data-min="2" data-max="100">
+                            <p class="text-xs text-muted-foreground">Minimum GPS fixes to form a complete circle</p>
+                        </div>
+                    </div>
+                </details>
+
                 <div class="flex justify-end pt-2">
                     <button type="submit" class="btn btn-primary">Save</button>
                 </div>

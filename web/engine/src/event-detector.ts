@@ -14,38 +14,7 @@ import { haversineDistance, calculateTrackDistance } from './geo';
 import { XCTask, getSSSIndex, getESSIndex, getGoalIndex } from './xctsk-parser';
 import { resolveTurnpointSequence } from './turnpoint-sequence';
 import { detectCircles } from './circle-detector';
-
-// --- Detection thresholds ---
-
-/** Minimum average climb rate (m/s) to enter/stay in a thermal */
-const MIN_CLIMB_RATE = 0.5;
-
-/** Minimum thermal duration (seconds) to emit a thermal event */
-const MIN_THERMAL_DURATION = 20;
-
-/** Minimum time gap (seconds) between consecutive thermals */
-const MIN_THERMAL_GAP = 20;
-
-/** Minimum glide duration (seconds) to emit a glide event */
-const MIN_GLIDE_DURATION = 30;
-
-/** Minimum index gap between thermals to consider a glide between them */
-const MIN_GLIDE_GAP_INDICES = 10;
-
-/** Landing speed threshold is this factor of takeoff speed threshold */
-const LANDING_SPEED_FACTOR = 0.5;
-
-/** Minimum climb rate (m/s) for a "significant climb" vario extreme */
-const MIN_SIGNIFICANT_CLIMB = 0.5;
-
-/** Maximum sink rate (m/s) for a "significant sink" vario extreme */
-const MIN_SIGNIFICANT_SINK = -1;
-
-/** Window size (fixes) for vario averaging */
-const VARIO_WINDOW_SIZE = 10;
-
-/** Descent rate (m/s) threshold to consider still on approach, not landed */
-const LANDING_DESCENT_THRESHOLD = -0.5;
+import { resolveThresholds, DEFAULT_THRESHOLDS, type DetectionThresholds, type PartialThresholds } from './thresholds';
 
 export type FlightEventType =
   | 'takeoff'
@@ -238,10 +207,10 @@ function buildThermalSegment(fixes: IGCFix[], startIndex: number, endIndex: numb
  * - Duration > 20 seconds
  * - Relatively circular path (not a straight glide)
  */
-function detectThermals(fixes: IGCFix[], windowSize = 10): ThermalSegment[] {
+function detectThermals(fixes: IGCFix[], thresholds: DetectionThresholds, windowSize = 10): ThermalSegment[] {
   const thermals: ThermalSegment[] = [];
-  const minClimbRate = MIN_CLIMB_RATE;
-  const minDuration = MIN_THERMAL_DURATION;
+  const minClimbRate = thresholds.thermal.minClimbRate;
+  const minDuration = thresholds.thermal.minThermalDuration;
 
   let inThermal = false;
   let thermalStart = 0;
@@ -267,7 +236,7 @@ function detectThermals(fixes: IGCFix[], windowSize = 10): ThermalSegment[] {
       // Entering thermal - but only if we're past the last thermal's end
       // and at least minGapDuration seconds have passed
       const potentialStart = i - windowSize;
-      const minGapDuration = MIN_THERMAL_GAP;
+      const minGapDuration = thresholds.thermal.minThermalGap;
       const timeSinceLastThermal = lastThermalEnd >= 0
         ? (fixes[potentialStart].time.getTime() - fixes[lastThermalEnd].time.getTime()) / 1000
         : Infinity;
@@ -320,9 +289,9 @@ function detectThermals(fixes: IGCFix[], windowSize = 10): ThermalSegment[] {
  * Build a GlideSegment from a detected glide's start/end indices.
  * Returns null if the segment is too short (< 30 seconds).
  */
-function buildGlideSegment(fixes: IGCFix[], startIdx: number, endIdx: number): GlideSegment | null {
+function buildGlideSegment(fixes: IGCFix[], startIdx: number, endIdx: number, minGlideDuration: number): GlideSegment | null {
   const duration = (fixes[endIdx].time.getTime() - fixes[startIdx].time.getTime()) / 1000;
-  if (duration <= MIN_GLIDE_DURATION) return null;
+  if (duration <= minGlideDuration) return null;
 
   const totalDist = calculateTrackDistance(fixes, startIdx, endIdx);
   const altLoss = fixes[startIdx].gnssAltitude - fixes[endIdx].gnssAltitude;
@@ -341,8 +310,10 @@ function buildGlideSegment(fixes: IGCFix[], startIdx: number, endIdx: number): G
 /**
  * Detect glide segments between thermals
  */
-function detectGlides(fixes: IGCFix[], thermals: ThermalSegment[]): GlideSegment[] {
+function detectGlides(fixes: IGCFix[], thermals: ThermalSegment[], thresholds: DetectionThresholds): GlideSegment[] {
   const glides: GlideSegment[] = [];
+  const minGlideGapIndices = thresholds.glide.minGlideGapIndices;
+  const minGlideDuration = thresholds.glide.minGlideDuration;
 
   // Sort thermals by start index
   const sortedThermals = [...thermals].sort((a, b) => a.startIndex - b.startIndex);
@@ -351,17 +322,17 @@ function detectGlides(fixes: IGCFix[], thermals: ThermalSegment[]): GlideSegment
   let prevEnd = 0;
 
   for (const thermal of sortedThermals) {
-    if (thermal.startIndex > prevEnd + MIN_GLIDE_GAP_INDICES) {
+    if (thermal.startIndex > prevEnd + minGlideGapIndices) {
       // Glide ends one index before the thermal starts to avoid timestamp overlap
-      const glide = buildGlideSegment(fixes, prevEnd, thermal.startIndex - 1);
+      const glide = buildGlideSegment(fixes, prevEnd, thermal.startIndex - 1, minGlideDuration);
       if (glide) glides.push(glide);
     }
     prevEnd = thermal.endIndex;
   }
 
   // Trailing glide: from last thermal end (or start of flight) to end of track
-  if (fixes.length - 1 > prevEnd + MIN_GLIDE_GAP_INDICES) {
-    const glide = buildGlideSegment(fixes, prevEnd, fixes.length - 1);
+  if (fixes.length - 1 > prevEnd + minGlideGapIndices) {
+    const glide = buildGlideSegment(fixes, prevEnd, fixes.length - 1, minGlideDuration);
     if (glide) glides.push(glide);
   }
 
@@ -485,15 +456,9 @@ interface TakeoffLandingConfig {
   minClimbRate: number;    // m/s sustained climb
   takeoffTimeWindow: number; // seconds
   landingTimeWindow: number; // seconds
+  landingSpeedFactor: number; // ratio
+  landingDescentThreshold: number; // m/s
 }
-
-const DEFAULT_TAKEOFF_LANDING_CONFIG: TakeoffLandingConfig = {
-  minGroundSpeed: 5,
-  minAltitudeGain: 50,
-  minClimbRate: 1.0,
-  takeoffTimeWindow: 10,
-  landingTimeWindow: 30,
-};
 
 /**
  * Find the index of the fix closest to `fixes[refIndex].timestamp + deltaSeconds`.
@@ -627,7 +592,7 @@ function detectLanding(fixes: IGCFix[], config: TakeoffLandingConfig): { index: 
     // Check 1: Any significant ground speed?
     for (let j = windowStartIndex; j < i; j++) {
       const speed = calculateGroundSpeed(fixes[j], fixes[j + 1]);
-      if (speed > config.minGroundSpeed * LANDING_SPEED_FACTOR) {
+      if (speed > config.minGroundSpeed * config.landingSpeedFactor) {
         stillFlying = true;
         break;
       }
@@ -637,7 +602,7 @@ function detectLanding(fixes: IGCFix[], config: TakeoffLandingConfig): { index: 
     if (!stillFlying) {
       const altChange = fixes[i].gnssAltitude - fixes[windowStartIndex].gnssAltitude;
       const timeDiff = (fixes[i].time.getTime() - fixes[windowStartIndex].time.getTime()) / 1000;
-      if (timeDiff > 0 && altChange / timeDiff < LANDING_DESCENT_THRESHOLD) {
+      if (timeDiff > 0 && altChange / timeDiff < config.landingDescentThreshold) {
         stillFlying = true;
       }
     }
@@ -652,11 +617,14 @@ function detectLanding(fixes: IGCFix[], config: TakeoffLandingConfig): { index: 
  * Detect takeoff and landing using multiple criteria.
  * Based on XCSoar's approach - uses ground speed, altitude gain, and climb rate.
  */
-function detectTakeoffLanding(fixes: IGCFix[]): FlightEvent[] {
+function detectTakeoffLanding(fixes: IGCFix[], thresholds: DetectionThresholds): FlightEvent[] {
   const events: FlightEvent[] = [];
   if (fixes.length < 10) return events;
 
-  const config = DEFAULT_TAKEOFF_LANDING_CONFIG;
+  const config: TakeoffLandingConfig = {
+    ...thresholds.takeoffLanding,
+    landingDescentThreshold: thresholds.vario.landingDescentThreshold,
+  };
 
   const takeoff = detectTakeoff(fixes, config);
   if (takeoff) {
@@ -747,9 +715,9 @@ function detectAltitudeExtremes(fixes: IGCFix[]): FlightEvent[] {
 /**
  * Detect max climb and sink rates
  */
-function detectVarioExtremes(fixes: IGCFix[]): FlightEvent[] {
+function detectVarioExtremes(fixes: IGCFix[], thresholds: DetectionThresholds): FlightEvent[] {
   const events: FlightEvent[] = [];
-  const windowSize = VARIO_WINDOW_SIZE;
+  const windowSize = thresholds.vario.varioWindowSize;
 
   if (fixes.length < windowSize * 2) return events;
 
@@ -771,7 +739,7 @@ function detectVarioExtremes(fixes: IGCFix[]): FlightEvent[] {
     }
   }
 
-  if (maxClimb > MIN_SIGNIFICANT_CLIMB) {
+  if (maxClimb > thresholds.vario.minSignificantClimb) {
     events.push({
       id: 'max-climb',
       type: 'max_climb',
@@ -784,7 +752,7 @@ function detectVarioExtremes(fixes: IGCFix[]): FlightEvent[] {
     });
   }
 
-  if (maxSink < MIN_SIGNIFICANT_SINK) {
+  if (maxSink < thresholds.vario.minSignificantSink) {
     events.push({
       id: 'max-sink',
       type: 'max_sink',
@@ -813,13 +781,15 @@ function adjustFixIndex(event: FlightEvent, offset: number): void {
  */
 export function detectFlightEvents(
   fixes: IGCFix[],
-  task?: XCTask
+  task?: XCTask,
+  partialThresholds?: PartialThresholds
 ): FlightEvent[] {
+  const thresholds = resolveThresholds(partialThresholds);
   const allEvents: FlightEvent[] = [];
 
   // IMPORTANT: Detect takeoff and landing FIRST
   // All other events should only be detected after takeoff
-  const takeoffLandingEvents = detectTakeoffLanding(fixes);
+  const takeoffLandingEvents = detectTakeoffLanding(fixes, thresholds);
   allEvents.push(...takeoffLandingEvents);
 
   // Find the takeoff event to get the index where flight begins
@@ -844,7 +814,7 @@ export function detectFlightEvents(
   const indexOffset = takeoffIndex; // To adjust indices back to original array
 
   // Detect thermals (only after takeoff)
-  const thermals = detectThermals(flightFixes);
+  const thermals = detectThermals(flightFixes, thresholds);
 
   for (const thermal of thermals) {
     // Adjust indices to reference original array
@@ -885,7 +855,7 @@ export function detectFlightEvents(
   }
 
   // Detect glides (only after takeoff)
-  const glides = detectGlides(flightFixes, thermals);
+  const glides = detectGlides(flightFixes, thermals, thresholds);
 
   for (const glide of glides) {
     // Adjust indices to reference original array
@@ -936,7 +906,7 @@ export function detectFlightEvents(
     adjustFixIndex(event, indexOffset);
     allEvents.push(event);
   }
-  for (const event of detectVarioExtremes(flightFixes)) {
+  for (const event of detectVarioExtremes(flightFixes, thresholds)) {
     adjustFixIndex(event, indexOffset);
     allEvents.push(event);
   }
@@ -950,7 +920,16 @@ export function detectFlightEvents(
   }
 
   // Detect circles (only after takeoff)
-  const circleResult = detectCircles(flightFixes);
+  const circleResult = detectCircles(flightFixes, {
+    lookbackSeconds: thresholds.circle.lookbackSeconds,
+    minTurnRate: thresholds.circle.minTurnRate,
+    t1Seconds: thresholds.circle.t1Seconds,
+    t2Seconds: thresholds.circle.t2Seconds,
+    minFixesPerCircle: thresholds.circle.minFixesPerCircle,
+    maxBearingRate: thresholds.circle.maxBearingRate,
+    maxReasonableWindSpeed: thresholds.circle.maxReasonableWindSpeed,
+    minGroundSpeedVariation: thresholds.circle.minGroundSpeedVariation,
+  });
   for (const circle of circleResult.circles) {
     const adjustedStartIndex = circle.startIndex + indexOffset;
     const adjustedEndIndex = circle.endIndex + indexOffset;

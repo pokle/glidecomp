@@ -12,3 +12,5 @@ export { resolveTurnpointSequence, detectCylinderCrossings, type TurnpointSequen
 export { detectCircles, computeBearingRates, fitCircleLeastSquares, normalizeBearingDelta, type CircleSegment, type CirclingSegment, type FittedCircle, type WindEstimate, type CircleDetectionResult, type TurnDirection } from './circle-detector';
 export { extractGlides, extractClimbs, extractSinks, type GlideData, type ClimbData, type SinkData, type ClimbEventDetails } from './segment-extractors';
 export { maxBy, minBy } from './array-utils';
+export { DEFAULT_THRESHOLDS, resolveThresholds, type DetectionThresholds, type PartialThresholds, type ThermalThresholds, type GlideThresholds, type VarioThresholds, type TakeoffLandingThresholds, type CircleThresholds } from './thresholds';
+export { parseThresholdInput, formatThresholdForDisplay, type ThresholdDimension, type ParsedThresholdInput } from './threshold-parser';

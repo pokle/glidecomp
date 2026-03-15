@@ -8,7 +8,7 @@
  * - Event detection and display
  */
 
-import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistance, igcTaskToXCTask, resolveTurnpointSequence, maxBy, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord } from '@taskscore/engine';
+import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistance, igcTaskToXCTask, resolveTurnpointSequence, maxBy, parseThresholdInput, formatThresholdForDisplay, DEFAULT_THRESHOLDS, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord, type DetectionThresholds, type PartialThresholds, type ThresholdDimension } from '@taskscore/engine';
 import { getCurrentUser } from '../auth/client';
 import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
 import { createMapProvider, type MapProvider, type MapProviderType } from './map-provider';
@@ -97,11 +97,11 @@ async function init(): Promise<void> {
   const menuImportAirscore = document.getElementById('menu-import-airscore');
   const showSpeedLabel = document.getElementById('show-speed-label');
 
-  // Units dialog
-  const menuConfigureUnits = document.getElementById('menu-configure-units');
+  // Settings dialog
+  const menuConfigureSettings = document.getElementById('menu-configure-settings');
   const menuClearSession = document.getElementById('menu-clear-session');
-  const unitsDialog = document.getElementById('units-dialog') as HTMLDialogElement | null;
-  const unitsForm = document.getElementById('units-form') as HTMLFormElement | null;
+  const settingsDialog = document.getElementById('settings-dialog') as HTMLDialogElement | null;
+  const settingsForm = document.getElementById('settings-form') as HTMLFormElement | null;
   const unitSpeedSelect = document.getElementById('unit-speed-select') as HTMLSelectElement | null;
   const unitAltitudeSelect = document.getElementById('unit-altitude-select') as HTMLSelectElement | null;
   const unitDistanceSelect = document.getElementById('unit-distance-select') as HTMLSelectElement | null;
@@ -379,20 +379,38 @@ async function init(): Promise<void> {
     window.location.search = params.toString();
   });
 
-  // Units dialog handlers
-  const populateUnitsDialog = () => {
+  // Settings dialog handlers
+  const populateSettingsDialog = () => {
+    // Populate unit selects
     const units = config.getUnits();
     if (unitSpeedSelect) unitSpeedSelect.value = units.speed;
     if (unitAltitudeSelect) unitAltitudeSelect.value = units.altitude;
     if (unitDistanceSelect) unitDistanceSelect.value = units.distance;
     if (unitClimbRateSelect) unitClimbRateSelect.value = units.climbRate;
+
+    // Populate threshold inputs
+    const thresholds = config.getThresholds();
+    const inputs = settingsForm?.querySelectorAll<HTMLInputElement>('.threshold-input');
+    inputs?.forEach(input => {
+      const group = input.dataset.group as keyof DetectionThresholds;
+      const key = input.dataset.key as string;
+      const dimension = input.dataset.dimension as ThresholdDimension;
+      if (group && key && dimension) {
+        const valueSI = (thresholds[group] as unknown as Record<string, number>)[key];
+        input.value = formatThresholdForDisplay(valueSI, dimension, units);
+        // Clear any previous error state
+        input.classList.remove('border-destructive');
+        const errorEl = input.parentElement?.querySelector('.threshold-error');
+        if (errorEl) errorEl.remove();
+      }
+    });
   };
 
-  // Open units dialog
-  menuConfigureUnits?.addEventListener('click', () => {
+  // Open settings dialog
+  menuConfigureSettings?.addEventListener('click', () => {
     commandDialog?.close();
-    populateUnitsDialog();
-    unitsDialog?.showModal();
+    populateSettingsDialog();
+    settingsDialog?.showModal();
   });
 
   // Clear current task and track (reset to initial state)
@@ -427,18 +445,116 @@ async function init(): Promise<void> {
     analysisPanel?.setScore(null);
   });
 
-  // Handle units form submission
-  unitsForm?.addEventListener('submit', (e) => {
+  // Handle threshold reset buttons
+  settingsForm?.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const resetBtn = target.closest('.threshold-reset-btn') as HTMLButtonElement | null;
+    if (!resetBtn) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const group = resetBtn.dataset.group as keyof DetectionThresholds;
+    if (!group) return;
+
+    // Reset inputs in this group to defaults
+    const units = config.getUnits();
+    const defaults = DEFAULT_THRESHOLDS[group] as unknown as Record<string, number>;
+    const inputs = settingsForm.querySelectorAll<HTMLInputElement>(`.threshold-input[data-group="${group}"]`);
+    inputs.forEach(input => {
+      const key = input.dataset.key as string;
+      const dimension = input.dataset.dimension as ThresholdDimension;
+      if (key && dimension && defaults[key] !== undefined) {
+        input.value = formatThresholdForDisplay((defaults as Record<string, number>)[key], dimension, units);
+        input.classList.remove('border-destructive');
+        const errorEl = input.parentElement?.querySelector('.threshold-error');
+        if (errorEl) errorEl.remove();
+      }
+    });
+  });
+
+  // Select all on focus for threshold inputs
+  settingsForm?.addEventListener('focus', (e) => {
+    const input = e.target as HTMLInputElement;
+    if (input.classList?.contains('threshold-input')) {
+      input.select();
+    }
+  }, true);
+
+  // Handle settings form submission
+  settingsForm?.addEventListener('submit', (e) => {
     e.preventDefault();
 
+    // Parse and validate all threshold inputs
+    const inputs = settingsForm?.querySelectorAll<HTMLInputElement>('.threshold-input');
+    let hasError = false;
+    const errorState = { firstError: null as HTMLElement | null };
+
+    const thresholdUpdates: PartialThresholds = {};
+
+    inputs?.forEach(input => {
+      const group = input.dataset.group as keyof DetectionThresholds;
+      const key = input.dataset.key as string;
+      const dimension = input.dataset.dimension as ThresholdDimension;
+      const min = parseFloat(input.dataset.min || '-Infinity');
+      const max = parseFloat(input.dataset.max || 'Infinity');
+
+      // Clear previous error
+      input.classList.remove('border-destructive');
+      const prevError = input.parentElement?.querySelector('.threshold-error');
+      if (prevError) prevError.remove();
+
+      if (!group || !key || !dimension) return;
+
+      const parsed = parseThresholdInput(input.value, dimension);
+      if (!parsed) {
+        input.classList.add('border-destructive');
+        const errorEl = document.createElement('p');
+        errorEl.className = 'threshold-error text-xs text-destructive mt-0.5';
+        errorEl.textContent = 'Invalid value';
+        input.parentElement?.appendChild(errorEl);
+        hasError = true;
+        if (!errorState.firstError) errorState.firstError = input;
+        return;
+      }
+
+      if (parsed.valueSI < min || parsed.valueSI > max) {
+        input.classList.add('border-destructive');
+        const errorEl = document.createElement('p');
+        errorEl.className = 'threshold-error text-xs text-destructive mt-0.5';
+        errorEl.textContent = `Must be between ${min} and ${max} (SI units)`;
+        input.parentElement?.appendChild(errorEl);
+        hasError = true;
+        if (!errorState.firstError) errorState.firstError = input;
+        return;
+      }
+
+      // Accumulate the update
+      if (!thresholdUpdates[group]) {
+        thresholdUpdates[group] = {};
+      }
+      (thresholdUpdates[group] as Record<string, number>)[key] = parsed.valueSI;
+    });
+
+    if (hasError) {
+      errorState.firstError?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    // Save units
     const newUnits: Partial<UnitPreferences> = {};
     if (unitSpeedSelect) newUnits.speed = unitSpeedSelect.value as UnitPreferences['speed'];
     if (unitAltitudeSelect) newUnits.altitude = unitAltitudeSelect.value as UnitPreferences['altitude'];
     if (unitDistanceSelect) newUnits.distance = unitDistanceSelect.value as UnitPreferences['distance'];
     if (unitClimbRateSelect) newUnits.climbRate = unitClimbRateSelect.value as UnitPreferences['climbRate'];
 
-    config.setPreferences({ units: newUnits as UnitPreferences });
-    unitsDialog?.close();
+    // Check if thresholds differ from defaults — only store overrides
+    const hasThresholdOverrides = Object.keys(thresholdUpdates).length > 0;
+
+    config.setPreferences({
+      units: newUnits as UnitPreferences,
+      thresholds: hasThresholdOverrides ? thresholdUpdates : undefined,
+    });
+    settingsDialog?.close();
   });
 
   // Subscribe to unit changes for reactive updates
@@ -762,7 +878,7 @@ async function init(): Promise<void> {
 
   function redetectEvents(): void {
     if (state.fixes.length > 0) {
-      state.events = detectFlightEvents(state.fixes, state.task || undefined);
+      state.events = detectFlightEvents(state.fixes, state.task || undefined, config.getPartialThresholds());
       analysisPanel?.setEvents(state.events);
       mapRenderer?.setEvents(state.events);
     }
