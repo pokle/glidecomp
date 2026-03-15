@@ -169,10 +169,14 @@ async function init(): Promise<void> {
     storageMenu = new StorageMenu({
       onTaskSelect: async (taskId) => {
         commandDialog?.close();
+        updateUrlParam('task', null);
+        updateUrlParam('storedTask', taskId);
         await loadStoredTask(taskId);
       },
       onTrackSelect: async (trackId) => {
         commandDialog?.close();
+        updateUrlParam('track', null);
+        updateUrlParam('storedTrack', trackId);
         await loadStoredTrack(trackId);
       },
     });
