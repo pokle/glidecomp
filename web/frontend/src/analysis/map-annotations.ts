@@ -2,14 +2,11 @@
  * Map Annotation Layer
  *
  * Freehand drawing overlay for Mapbox GL maps.
- * Strokes are geo-anchored (persist through pan/zoom/pitch) and
- * stored in IndexedDB. Uses roughjs for Excalidraw-style sketchy rendering.
+ * Strokes are rendered as native Mapbox GeoJSON line layers so they sit
+ * flat on the map surface (including terrain). Stored in IndexedDB.
  */
 
-import rough from 'roughjs';
-import type { RoughCanvas } from 'roughjs/bin/canvas';
-import type { Drawable } from 'roughjs/bin/core';
-import type { Map as MapboxMap } from 'mapbox-gl';
+import type { Map as MapboxMap, GeoJSONSource } from 'mapbox-gl';
 import { storage, type AnnotationStroke } from './storage';
 
 // ---------------------------------------------------------------------------
@@ -34,11 +31,14 @@ export interface MapAnnotationLayer {
 // ---------------------------------------------------------------------------
 
 const STROKE_COLOR = '#e03131';
-const STROKE_WIDTH = 2.5;
-const ROUGHNESS = 1.5;
-const BOWING = 1;
+const STROKE_WIDTH = 3;
 const ERASE_HIT_DISTANCE = 12; // px
 const RDP_TOLERANCE = 2; // px — Ramer-Douglas-Peucker simplification
+
+const SOURCE_STROKES = 'annotation-strokes';
+const SOURCE_LIVE = 'annotation-live';
+const LAYER_STROKES = 'annotation-strokes-layer';
+const LAYER_LIVE = 'annotation-live-layer';
 
 // ---------------------------------------------------------------------------
 // Ramer-Douglas-Peucker line simplification
@@ -86,18 +86,6 @@ function simplifyRDP(points: [number, number][], tolerance: number): [number, nu
 }
 
 // ---------------------------------------------------------------------------
-// Seed derivation (deterministic per stroke ID for stable roughjs rendering)
-// ---------------------------------------------------------------------------
-
-function seedFromId(id: string): number {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = ((hash << 5) - hash + id.charCodeAt(i)) | 0;
-  }
-  return Math.abs(hash);
-}
-
-// ---------------------------------------------------------------------------
 // Point-to-polyline distance (screen space, for eraser hit testing)
 // ---------------------------------------------------------------------------
 
@@ -115,6 +103,38 @@ function distanceToPolyline(px: number, py: number, line: [number, number][]): n
 }
 
 // ---------------------------------------------------------------------------
+// GeoJSON helpers
+// ---------------------------------------------------------------------------
+
+function strokesToGeoJSON(strokes: AnnotationStroke[]): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: strokes.map((s) => ({
+      type: 'Feature' as const,
+      properties: { id: s.id, color: s.color, width: s.width },
+      geometry: {
+        type: 'LineString' as const,
+        coordinates: s.points, // [lng, lat]
+      },
+    })),
+  };
+}
+
+function liveStrokeGeoJSON(points: [number, number][]): GeoJSON.FeatureCollection {
+  if (points.length < 2) {
+    return { type: 'FeatureCollection', features: [] };
+  }
+  return {
+    type: 'FeatureCollection',
+    features: [{
+      type: 'Feature',
+      properties: {},
+      geometry: { type: 'LineString', coordinates: points },
+    }],
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
 
@@ -129,41 +149,98 @@ export function createMapAnnotationLayer(
   let redoStack: AnnotationStroke[] = [];
   let drawing = false;
   let currentScreenPoints: [number, number][] = [];
+  let currentGeoPoints: [number, number][] = [];
+  let sourcesAdded = false;
 
-  // Cache roughjs drawables keyed by stroke id (invalidated when strokes change)
-  let drawableCache = new Map<string, Drawable>();
+  // --- Transparent input overlay (captures pointer events without blocking map visuals) ---
+  const inputOverlay = document.createElement('div');
+  inputOverlay.style.position = 'absolute';
+  inputOverlay.style.top = '0';
+  inputOverlay.style.left = '0';
+  inputOverlay.style.width = '100%';
+  inputOverlay.style.height = '100%';
+  inputOverlay.style.pointerEvents = 'none';
+  inputOverlay.style.zIndex = '10';
+  container.appendChild(inputOverlay);
 
-  // --- Canvas setup ---
-  const canvas = document.createElement('canvas');
-  canvas.style.position = 'absolute';
-  canvas.style.top = '0';
-  canvas.style.left = '0';
-  canvas.style.width = '100%';
-  canvas.style.height = '100%';
-  canvas.style.pointerEvents = 'none';
-  canvas.style.zIndex = '10';
-  container.appendChild(canvas);
+  // --- Mapbox sources & layers ---
+  function ensureSourcesAndLayers() {
+    if (sourcesAdded) return;
 
-  const ctx = canvas.getContext('2d')!;
-  let rc: RoughCanvas;
+    if (!map.getSource(SOURCE_STROKES)) {
+      map.addSource(SOURCE_STROKES, {
+        type: 'geojson',
+        data: strokesToGeoJSON(strokes),
+      });
+    }
+    if (!map.getSource(SOURCE_LIVE)) {
+      map.addSource(SOURCE_LIVE, {
+        type: 'geojson',
+        data: liveStrokeGeoJSON([]),
+      });
+    }
 
-  function syncCanvasSize() {
-    const dpr = window.devicePixelRatio || 1;
-    const rect = container.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    canvas.style.width = `${rect.width}px`;
-    canvas.style.height = `${rect.height}px`;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    rc = rough.canvas(canvas);
+    if (!map.getLayer(LAYER_STROKES)) {
+      map.addLayer({
+        id: LAYER_STROKES,
+        type: 'line',
+        source: SOURCE_STROKES,
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': ['get', 'width'],
+          'line-opacity': 0.85,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYER_LIVE)) {
+      map.addLayer({
+        id: LAYER_LIVE,
+        type: 'line',
+        source: SOURCE_LIVE,
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': STROKE_COLOR,
+          'line-width': STROKE_WIDTH,
+          'line-opacity': 0.6,
+        },
+      });
+    }
+
+    sourcesAdded = true;
   }
-  syncCanvasSize();
 
-  const resizeObserver = new ResizeObserver(() => {
-    syncCanvasSize();
-    renderAll();
-  });
-  resizeObserver.observe(container);
+  function updateStrokesSource() {
+    const src = map.getSource(SOURCE_STROKES) as GeoJSONSource | undefined;
+    if (src) src.setData(strokesToGeoJSON(strokes));
+  }
+
+  function updateLiveSource() {
+    const src = map.getSource(SOURCE_LIVE) as GeoJSONSource | undefined;
+    if (src) src.setData(liveStrokeGeoJSON(currentGeoPoints));
+  }
+
+  // Re-add sources/layers after style changes
+  function onStyleLoad() {
+    sourcesAdded = false;
+    ensureSourcesAndLayers();
+    updateStrokesSource();
+  }
+  map.on('style.load', onStyleLoad);
+
+  // Add sources once map is ready
+  if (map.isStyleLoaded()) {
+    ensureSourcesAndLayers();
+  } else {
+    map.once('style.load', () => ensureSourcesAndLayers());
+  }
 
   // --- Toolbar ---
   const toolbar = document.createElement('div');
@@ -234,68 +311,20 @@ export function createMapAnnotationLayer(
     return [ll.lng, ll.lat];
   }
 
-  // --- Rendering ---
-  function renderAll() {
-    const dpr = window.devicePixelRatio || 1;
-    ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
-
-    // Draw stored strokes with roughjs
-    for (const stroke of strokes) {
-      const screenPts = stroke.points.map(geoToScreen);
-      if (screenPts.length < 2) continue;
-
-      let drawable = drawableCache.get(stroke.id);
-      // We must regenerate every frame because screen positions change on pan/zoom
-      drawable = rc.curve(screenPts, {
-        roughness: ROUGHNESS,
-        strokeWidth: stroke.width,
-        stroke: stroke.color,
-        bowing: BOWING,
-        seed: seedFromId(stroke.id),
-        disableMultiStroke: false,
-      });
-      rc.draw(drawable);
-    }
-
-    // Draw in-progress stroke (smooth, not rough, for responsiveness)
-    if (drawing && currentScreenPoints.length >= 2) {
-      ctx.save();
-      ctx.strokeStyle = STROKE_COLOR;
-      ctx.lineWidth = STROKE_WIDTH;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.globalAlpha = 0.7;
-      ctx.beginPath();
-      ctx.moveTo(currentScreenPoints[0][0], currentScreenPoints[0][1]);
-      for (let i = 1; i < currentScreenPoints.length; i++) {
-        ctx.lineTo(currentScreenPoints[i][0], currentScreenPoints[i][1]);
-      }
-      ctx.stroke();
-      ctx.restore();
-    }
-  }
-
-  // Render on every map frame
-  function onRender() {
-    if (strokes.length > 0 || drawing) {
-      renderAll();
-    }
-  }
-  map.on('render', onRender);
-
   // --- Pointer event handlers ---
   function onPointerDown(e: PointerEvent) {
     if (!enabled) return;
-    if (e.button !== 0) return; // left button only
+    if (e.button !== 0) return;
 
     drawing = true;
     currentScreenPoints = [[e.offsetX, e.offsetY]];
+    currentGeoPoints = [screenToGeo([e.offsetX, e.offsetY])];
 
     if (mode === 'erase') {
       eraseAtPoint(e.offsetX, e.offsetY);
     }
 
-    canvas.setPointerCapture(e.pointerId);
+    inputOverlay.setPointerCapture(e.pointerId);
   }
 
   function onPointerMove(e: PointerEvent) {
@@ -306,22 +335,21 @@ export function createMapAnnotationLayer(
 
     if (mode === 'draw') {
       currentScreenPoints.push([x, y]);
-      // Trigger a re-render for the live preview
-      map.triggerRepaint();
+      currentGeoPoints.push(screenToGeo([x, y]));
+      updateLiveSource();
     } else {
       eraseAtPoint(x, y);
     }
   }
 
-  function onPointerUp(e: PointerEvent) {
+  function onPointerUp(_e: PointerEvent) {
     if (!enabled || !drawing) return;
     drawing = false;
 
     if (mode === 'draw' && currentScreenPoints.length >= 2) {
-      // Simplify in screen space
+      // Simplify in screen space then convert to geo
       const simplified = simplifyRDP(currentScreenPoints, RDP_TOLERANCE);
       if (simplified.length >= 2) {
-        // Convert to geo coordinates
         const geoPoints = simplified.map(screenToGeo);
         const stroke: AnnotationStroke = {
           id: crypto.randomUUID(),
@@ -331,19 +359,20 @@ export function createMapAnnotationLayer(
           width: STROKE_WIDTH,
         };
         strokes.push(stroke);
-        redoStack = []; // clear redo on new stroke
-        drawableCache.clear();
+        redoStack = [];
+        updateStrokesSource();
         storage.storeAnnotation(stroke);
       }
     }
 
     currentScreenPoints = [];
-    map.triggerRepaint();
+    currentGeoPoints = [];
+    updateLiveSource();
   }
 
-  canvas.addEventListener('pointerdown', onPointerDown);
-  canvas.addEventListener('pointermove', onPointerMove);
-  canvas.addEventListener('pointerup', onPointerUp);
+  inputOverlay.addEventListener('pointerdown', onPointerDown);
+  inputOverlay.addEventListener('pointermove', onPointerMove);
+  inputOverlay.addEventListener('pointerup', onPointerUp);
 
   // --- Eraser ---
   function eraseAtPoint(x: number, y: number) {
@@ -362,9 +391,8 @@ export function createMapAnnotationLayer(
           storage.deleteAnnotation(id);
         }
       }
-      drawableCache.clear();
       redoStack = [];
-      map.triggerRepaint();
+      updateStrokesSource();
     }
   }
 
@@ -373,27 +401,24 @@ export function createMapAnnotationLayer(
     if (strokes.length === 0) return;
     const stroke = strokes.pop()!;
     redoStack.push(stroke);
-    drawableCache.clear();
     storage.deleteAnnotation(stroke.id);
-    map.triggerRepaint();
+    updateStrokesSource();
   }
 
   function redo() {
     if (redoStack.length === 0) return;
     const stroke = redoStack.pop()!;
     strokes.push(stroke);
-    drawableCache.clear();
     storage.storeAnnotation(stroke);
-    map.triggerRepaint();
+    updateStrokesSource();
   }
 
   function clearAll() {
     if (strokes.length === 0) return;
     strokes = [];
     redoStack = [];
-    drawableCache.clear();
     storage.clearAnnotations();
-    map.triggerRepaint();
+    updateStrokesSource();
   }
 
   // --- Mode management ---
@@ -405,19 +430,20 @@ export function createMapAnnotationLayer(
 
   function updateCursor() {
     if (!enabled) {
-      canvas.style.cursor = 'default';
+      inputOverlay.style.cursor = 'default';
       return;
     }
-    canvas.style.cursor = mode === 'draw' ? 'crosshair' : 'pointer';
+    inputOverlay.style.cursor = mode === 'draw' ? 'crosshair' : 'pointer';
   }
 
   // --- Enable / Disable ---
   function setEnabled(value: boolean) {
     enabled = value;
-    canvas.style.pointerEvents = value ? 'auto' : 'none';
+    inputOverlay.style.pointerEvents = value ? 'auto' : 'none';
     toolbar.style.display = value ? 'flex' : 'none';
 
     if (value) {
+      ensureSourcesAndLayers();
       disableMapInteractions();
       mode = 'draw';
       updateCursor();
@@ -426,17 +452,17 @@ export function createMapAnnotationLayer(
       enableMapInteractions();
       drawing = false;
       currentScreenPoints = [];
-      canvas.style.cursor = 'default';
+      currentGeoPoints = [];
+      inputOverlay.style.cursor = 'default';
+      updateLiveSource();
     }
-
-    map.triggerRepaint();
   }
 
   // --- Load persisted annotations on init ---
   storage.listAnnotations().then((stored) => {
     if (stored.length > 0) {
       strokes = stored;
-      map.triggerRepaint();
+      updateStrokesSource();
     }
   });
 
@@ -450,13 +476,16 @@ export function createMapAnnotationLayer(
     isEnabled: () => enabled,
     getMode: () => mode,
     destroy() {
-      map.off('render', onRender);
-      resizeObserver.disconnect();
-      canvas.removeEventListener('pointerdown', onPointerDown);
-      canvas.removeEventListener('pointermove', onPointerMove);
-      canvas.removeEventListener('pointerup', onPointerUp);
-      canvas.remove();
+      map.off('style.load', onStyleLoad);
+      inputOverlay.removeEventListener('pointerdown', onPointerDown);
+      inputOverlay.removeEventListener('pointermove', onPointerMove);
+      inputOverlay.removeEventListener('pointerup', onPointerUp);
+      inputOverlay.remove();
       toolbar.remove();
+      if (map.getLayer(LAYER_LIVE)) map.removeLayer(LAYER_LIVE);
+      if (map.getLayer(LAYER_STROKES)) map.removeLayer(LAYER_STROKES);
+      if (map.getSource(SOURCE_LIVE)) map.removeSource(SOURCE_LIVE);
+      if (map.getSource(SOURCE_STROKES)) map.removeSource(SOURCE_STROKES);
       if (enabled) enableMapInteractions();
     },
   };

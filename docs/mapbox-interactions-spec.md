@@ -230,19 +230,20 @@ Activated when 3D track mode is enabled. Provides a cinematic perspective that f
 
 ## Annotation Overlay
 
-Freehand drawing overlay for scrawling on the map. Strokes are geo-anchored (persist through pan/zoom/pitch/bearing) and stored in IndexedDB. Uses **roughjs** for an Excalidraw-style sketchy appearance.
+Freehand drawing overlay for scrawling on the map. Strokes are geo-anchored (persist through pan/zoom/pitch/bearing) and stored in IndexedDB. Rendered as native Mapbox GeoJSON line layers so they sit flat on the map surface (including terrain).
 
-- **Canvas overlay** — HTML `<canvas>` positioned absolutely over the map container, `z-index: 10`
-  - `pointer-events: none` by default; `auto` when annotation mode is active
-  - High-DPI aware via `devicePixelRatio`
-  - Resized via `ResizeObserver`
+- **Rendering** — native Mapbox `line` layers over GeoJSON sources (no canvas overlay)
+  - `annotation-strokes` source/layer: committed strokes with round caps/joins
+  - `annotation-live` source/layer: in-progress stroke preview (lower opacity)
+  - Sources/layers re-added on `style.load` to survive style changes
+  - Transparent `<div>` input overlay (`z-index: 10`) captures pointer events
 
 - **Drawing model**
-  - Draw phase: freehand input captured in screen coordinates
+  - Draw phase: freehand input captured in screen coordinates, converted to geo on each move for live preview
   - Commit phase: screen points simplified via Ramer-Douglas-Peucker (2px tolerance), then converted to `[lng, lat]` via `map.unproject()`
-  - Render phase: on every `map.render` event, all stored geo-strokes projected to screen via `map.project()` and drawn with roughjs `curve()`
+  - Render phase: Mapbox renders GeoJSON line layers natively — strokes follow terrain
 
-- **Rough.js options** — `roughness: 1.5`, `strokeWidth: 2.5`, `stroke: #e03131` (red), `bowing: 1`, per-stroke deterministic `seed` (from UUID hash) for stable rendering across redraws
+- **Line style** — `line-width: 3`, `line-color: #e03131` (red), `line-opacity: 0.85`, round caps and joins
 
 - **Modes**
   - **Draw** (default): crosshair cursor, freehand strokes
