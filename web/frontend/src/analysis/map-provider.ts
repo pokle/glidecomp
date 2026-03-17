@@ -6,6 +6,7 @@
  */
 
 import type { IGCFix, XCTask, FlightEvent } from '@taskscore/engine';
+import type { MapAnnotationLayer } from './map-annotations';
 
 export type MapProviderType = 'mapbox' | 'leaflet';
 
@@ -113,6 +114,9 @@ export interface MapProvider {
 
     /** Throb the menu button to draw attention (e.g. on initial page load) */
     highlightMenuButton?(): void;
+
+    /** Get the annotation layer for direct control (Mapbox only) */
+    getAnnotationLayer?(): MapAnnotationLayer | null;
 }
 
 /**

@@ -285,6 +285,24 @@ async function init(): Promise<void> {
     });
   }
 
+  // Annotation mode toggle
+  const annotateStatusEl = document.getElementById('annotate-status');
+
+  function toggleAnnotation() {
+    const layer = mapRenderer?.getAnnotationLayer?.();
+    if (!layer) return;
+    const newState = !layer.isEnabled();
+    layer.setEnabled(newState);
+    if (annotateStatusEl) {
+      annotateStatusEl.textContent = newState ? '(on) P' : '(off) P';
+    }
+  }
+
+  document.getElementById('menu-annotate')?.addEventListener('click', () => {
+    toggleAnnotation();
+    commandDialog?.close();
+  });
+
   // Text Shadow Tuner (debug tool for label styling)
   document.getElementById('menu-text-shadow-tuner')?.addEventListener('click', () => {
     commandDialog?.close();
@@ -877,6 +895,10 @@ async function init(): Promise<void> {
 
   // Keyboard shortcut for command menu (Cmd/Ctrl + K)
   document.addEventListener('keydown', (e) => {
+    // Skip shortcuts when typing in inputs, textareas, or contenteditable
+    const tag = (e.target as HTMLElement).tagName;
+    const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable;
+
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
       e.preventDefault();
       if (commandDialog?.open) {
@@ -884,12 +906,70 @@ async function init(): Promise<void> {
       } else {
         commandDialog?.showModal();
       }
+      return;
     }
     // Cmd+, (or Ctrl+,) opens settings
     if ((e.metaKey || e.ctrlKey) && e.key === ',') {
       e.preventDefault();
       populateSettingsDialog();
       settingsDialog?.showModal();
+      return;
+    }
+
+    // --- Annotation keyboard shortcuts ---
+    const layer = mapRenderer?.getAnnotationLayer?.();
+
+    // Undo/redo only when annotation mode is active (avoid hijacking browser undo)
+    if (layer?.isEnabled()) {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'z') {
+        e.preventDefault();
+        layer.redo();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault();
+        layer.redo();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+        e.preventDefault();
+        layer.undo();
+        return;
+      }
+      // Ctrl+Shift+Delete = clear all annotations
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'Delete') {
+        e.preventDefault();
+        layer.clearAll();
+        return;
+      }
+    }
+
+    // Don't fire single-key shortcuts when typing in inputs
+    if (isInput) return;
+
+    // 'P' toggles annotation mode (Excalidraw pen shortcut)
+    if (e.key === 'p' || e.key === 'P') {
+      if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        toggleAnnotation();
+        return;
+      }
+    }
+
+    if (layer?.isEnabled()) {
+      // 'E' switches to eraser
+      if ((e.key === 'e' || e.key === 'E') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        layer.setMode('erase');
+        return;
+      }
+      // Escape or 'V' exits annotation mode
+      if (e.key === 'Escape' || e.key === 'v' || e.key === 'V') {
+        e.preventDefault();
+        layer.setEnabled(false);
+        if (annotateStatusEl) annotateStatusEl.textContent = '(off) P';
+        return;
+      }
     }
   });
 

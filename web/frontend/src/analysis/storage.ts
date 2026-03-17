@@ -6,9 +6,23 @@
 import type { XCTask, IGCFile } from '@taskscore/engine';
 
 const DB_NAME = 'taskscore';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const TASKS_STORE = 'tasks';
 const TRACKS_STORE = 'tracks';
+const ANNOTATIONS_STORE = 'annotations';
+
+export interface AnnotationStroke {
+  /** Unique identifier */
+  id: string;
+  /** Geographic coordinates [lng, lat][] */
+  points: [number, number][];
+  /** When the stroke was created */
+  timestamp: number;
+  /** Stroke color */
+  color: string;
+  /** Stroke width at reference zoom */
+  width: number;
+}
 
 export interface StoredTask {
   /** Unique identifier (XContest code) */
@@ -139,6 +153,12 @@ class StorageService {
           tracksStore.createIndex('by-stored', 'storedAt', { unique: false });
           tracksStore.createIndex('by-accessed', 'lastAccessedAt', { unique: false });
           tracksStore.createIndex('by-filename', 'filename', { unique: false });
+        }
+
+        // Annotations store (added in v2)
+        if (!db.objectStoreNames.contains(ANNOTATIONS_STORE)) {
+          const annotationsStore = db.createObjectStore(ANNOTATIONS_STORE, { keyPath: 'id' });
+          annotationsStore.createIndex('by-timestamp', 'timestamp', { unique: false });
         }
       };
     });
@@ -456,6 +476,86 @@ class StorageService {
       this.clearAllTasks(),
       this.clearAllTracks(),
     ]);
+  }
+
+  // === Annotations ===
+
+  /**
+   * Store an annotation stroke.
+   */
+  async storeAnnotation(stroke: AnnotationStroke): Promise<void> {
+    await this.init();
+    if (!this.db) return;
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(ANNOTATIONS_STORE, 'readwrite');
+      const store = tx.objectStore(ANNOTATIONS_STORE);
+      store.put(stroke);
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  /**
+   * List all annotation strokes, ordered by timestamp.
+   */
+  async listAnnotations(): Promise<AnnotationStroke[]> {
+    await this.init();
+    if (!this.db) return [];
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(ANNOTATIONS_STORE, 'readonly');
+      const store = tx.objectStore(ANNOTATIONS_STORE);
+      const index = store.index('by-timestamp');
+      const request = index.openCursor(null, 'next');
+
+      const results: AnnotationStroke[] = [];
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor) {
+          results.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
+   * Delete a single annotation stroke by ID.
+   */
+  async deleteAnnotation(id: string): Promise<void> {
+    await this.init();
+    if (!this.db) return;
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(ANNOTATIONS_STORE, 'readwrite');
+      const store = tx.objectStore(ANNOTATIONS_STORE);
+      store.delete(id);
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  /**
+   * Clear all annotation strokes.
+   */
+  async clearAnnotations(): Promise<void> {
+    await this.init();
+    if (!this.db) return;
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(ANNOTATIONS_STORE, 'readwrite');
+      const store = tx.objectStore(ANNOTATIONS_STORE);
+      const request = store.clear();
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
   }
 
   // === Utilities ===

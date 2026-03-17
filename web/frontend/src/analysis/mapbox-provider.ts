@@ -23,6 +23,7 @@ import {
   calculateAltitudeRange, buildTrackSegments,
 } from './map-provider-shared';
 import { formatAltitude } from './units-browser';
+import { createMapAnnotationLayer, type MapAnnotationLayer } from './map-annotations';
 
 // Set MapBox access token from environment variable
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -136,6 +137,9 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       let trackClickCallback: ((fixIndex: number) => void) | null = null;
       let turnpointClickCallback: ((turnpointIndex: number) => void) | null = null;
       let mapClickCallback: ((lat: number, lon: number) => void) | null = null;
+
+      // Annotation layer (created after map loads)
+      let annotationLayer: MapAnnotationLayer | null = null;
 
       /** Hide glide speed labels when zoomed out and resolve screen-space collisions. */
       function updateGlideLabelVisibility(): void {
@@ -1060,6 +1064,9 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
             mapClickCallback(e.lngLat.lat, e.lngLat.lng);
           }
         });
+
+        // Create annotation overlay
+        annotationLayer = createMapAnnotationLayer(map, container);
 
         resolve(renderer);
       });
@@ -2178,6 +2185,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         },
 
         destroy() {
+          annotationLayer?.destroy();
           for (const marker of eventMarkers) {
             marker.remove();
           }
@@ -2278,6 +2286,10 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           interactionMode = mode;
           isHoveringInteractive = false;
           syncCursor();
+        },
+
+        getAnnotationLayer() {
+          return annotationLayer;
         },
       };
 

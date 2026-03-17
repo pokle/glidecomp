@@ -205,7 +205,9 @@ When enabled via the "Show Track Metrics" command palette option, displays glide
 9. `task-points` — turnpoint dots
 10. `task-labels` — turnpoint name labels
 11. `task-segment-labels` — leg distance labels
-12. `threebox-layer` — 3D custom rendering layer (Threebox)
+12. `annotation-strokes-layer` — committed annotation strokes
+13. `annotation-live-layer` — in-progress annotation stroke preview
+14. `threebox-layer` — 3D custom rendering layer (Threebox)
 
 ## 3D Drone Follow Camera
 
@@ -227,6 +229,48 @@ Activated when 3D track mode is enabled. Provides a cinematic perspective that f
   - Updates glider marker position on the 3D map
   - Re-targets camera with smooth momentum-based animation
   - Camera preset bearing stays aligned with flight direction
+
+## Annotation Overlay
+
+Freehand drawing overlay for scrawling on the map. Strokes are geo-anchored (persist through pan/zoom/pitch/bearing) and stored in IndexedDB. Rendered as native Mapbox GeoJSON line layers so they sit flat on the map surface (including terrain).
+
+- **Rendering** — native Mapbox `line` layers over GeoJSON sources (no canvas overlay)
+  - `annotation-strokes` source/layer: committed strokes with round caps/joins
+  - `annotation-live` source/layer: in-progress stroke preview (lower opacity)
+  - Sources/layers re-added on `style.load` to survive style changes
+  - Transparent `<div>` input overlay (`z-index: 10`) captures pointer events
+
+- **Drawing model**
+  - Draw phase: freehand input captured in screen coordinates, converted to geo on each move for live preview
+  - Commit phase: screen points simplified via Ramer-Douglas-Peucker (2px tolerance), then converted to `[lng, lat]` via `map.unproject()`
+  - Render phase: Mapbox renders GeoJSON line layers natively — strokes follow terrain
+
+- **Line style** — `line-width: 3`, `line-color: #e03131` (red), `line-opacity: 0.85`, round caps and joins
+
+- **Modes**
+  - **Draw** (default): crosshair cursor, freehand strokes
+  - **Erase**: pointer cursor, strokes within 12px of eraser path are removed
+
+- **Toolbar** — floating bar (bottom-left, above scale bar, `z-index: 11`), white semi-transparent background, 8px border-radius
+  - Buttons: Draw (P), Erase (E), Undo, Redo, Clear All (red trash icon)
+  - Active tool highlighted with `#e8e8e8` background
+  - Appears/disappears with annotation mode toggle
+
+- **Map interaction** — when annotation mode is active, `dragPan`, `scrollZoom`, `doubleClickZoom`, `dragRotate`, `touchZoomRotate`, and `keyboard` are disabled; re-enabled on deactivation
+
+- **Keyboard shortcuts** (Excalidraw-compatible)
+  | Action | Shortcut |
+  |--------|----------|
+  | Toggle annotation mode | `P` |
+  | Switch to eraser | `E` |
+  | Exit annotation mode | `Escape` or `V` |
+  | Undo | `Cmd/Ctrl+Z` (annotation mode only) |
+  | Redo | `Cmd/Ctrl+Shift+Z` or `Cmd/Ctrl+Y` (annotation mode only) |
+  | Clear all | `Cmd/Ctrl+Shift+Delete` (annotation mode only) |
+
+- **Persistence** — strokes stored in IndexedDB `annotations` store, independent of tracks/tasks; loaded on map initialization
+
+- **Command palette** — "Annotate Map" item in Display Options group, toggles annotation mode, shows `(on)/(off) P` status
 
 ## Style Reload Behaviour
 
