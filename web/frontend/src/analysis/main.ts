@@ -294,7 +294,7 @@ async function init(): Promise<void> {
     const newState = !layer.isEnabled();
     layer.setEnabled(newState);
     if (annotateStatusEl) {
-      annotateStatusEl.textContent = newState ? '(on) P' : '(off) P';
+      annotateStatusEl.textContent = newState ? '(on) D' : '(off) D';
     }
   }
 
@@ -947,8 +947,8 @@ async function init(): Promise<void> {
     // Don't fire single-key shortcuts when typing in inputs
     if (isInput) return;
 
-    // 'P' toggles annotation mode (Excalidraw pen shortcut)
-    if (e.key === 'p' || e.key === 'P') {
+    // 'D' toggles annotation mode (draw shortcut)
+    if (e.key === 'd' || e.key === 'D') {
       if (!e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
         toggleAnnotation();
@@ -967,7 +967,7 @@ async function init(): Promise<void> {
       if (e.key === 'Escape' || e.key === 'v' || e.key === 'V') {
         e.preventDefault();
         layer.setEnabled(false);
-        if (annotateStatusEl) annotateStatusEl.textContent = '(off) P';
+        if (annotateStatusEl) annotateStatusEl.textContent = '(off) D';
         return;
       }
     }
