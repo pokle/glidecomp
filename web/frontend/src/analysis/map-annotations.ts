@@ -23,6 +23,8 @@ export interface MapAnnotationLayer {
   clearAll(): void;
   isEnabled(): boolean;
   getMode(): AnnotationMode;
+  /** Register a callback fired whenever annotation mode is toggled via the map button. */
+  onToggle(cb: (enabled: boolean) => void): void;
   destroy(): void;
 }
 
@@ -245,7 +247,7 @@ export function createMapAnnotationLayer(
   // --- Toolbar ---
   const toolbar = document.createElement('div');
   toolbar.style.cssText = `
-    position: absolute; bottom: 36px; left: 10px; z-index: 11;
+    position: absolute; bottom: 64px; left: 10px; z-index: 11;
     display: none; align-items: center; gap: 2px;
     background: rgba(255,255,255,0.92); border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.18); padding: 4px 6px;
@@ -253,15 +255,46 @@ export function createMapAnnotationLayer(
     user-select: none;
   `;
   toolbar.innerHTML = `
-    <button data-ann-tool="draw" title="Draw (P)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#9998; Draw</button>
-    <button data-ann-tool="erase" title="Erase (E)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#9003; Erase</button>
+    <button data-ann-tool="draw" title="Draw (D)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#9998; <u>D</u>raw</button>
+    <button data-ann-tool="erase" title="Erase (E)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#9003; <u>E</u>rase</button>
     <span style="width:1px;height:20px;background:#ccc;margin:0 4px;"></span>
     <button data-ann-tool="undo" title="Undo (Ctrl+Z)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#8630;</button>
     <button data-ann-tool="redo" title="Redo (Ctrl+Shift+Z)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#8631;</button>
     <span style="width:1px;height:20px;background:#ccc;margin:0 4px;"></span>
     <button data-ann-tool="clear" title="Clear all" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;color:#e03131;">&#128465;</button>
+    <span style="width:1px;height:20px;background:#ccc;margin:0 4px;"></span>
+    <button data-ann-tool="close" title="Close (Esc)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#10005; <span style="font-size:11px;opacity:0.6;">esc</span></button>
   `;
   container.appendChild(toolbar);
+
+  // --- Toggle button (always visible on map) ---
+  let toggleCallback: ((enabled: boolean) => void) | null = null;
+
+  const toggleBtn = document.createElement('button');
+  toggleBtn.title = 'Toggle annotations (D)';
+  toggleBtn.style.cssText = `
+    position: absolute; bottom: 64px; left: 10px; z-index: 10;
+    cursor: pointer; border: none; background: rgba(255,255,255,0.92);
+    border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+    padding: 6px 8px; font-size: 16px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    user-select: none; color: #333;
+  `;
+  toggleBtn.innerHTML = '&#9998;';
+  container.appendChild(toggleBtn);
+
+  function updateToggleButton() {
+    toggleBtn.style.display = enabled ? 'none' : 'flex';
+    if (enabled) {
+      toolbar.style.cssText = toolbar.style.cssText.replace(/left:\s*\d+px/, 'left: 10px');
+    }
+  }
+  updateToggleButton();
+
+  toggleBtn.addEventListener('click', () => {
+    setEnabled(!enabled);
+    toggleCallback?.(enabled);
+  });
 
   // Toolbar click handling
   toolbar.addEventListener('click', (e) => {
@@ -273,6 +306,7 @@ export function createMapAnnotationLayer(
     else if (tool === 'undo') undo();
     else if (tool === 'redo') redo();
     else if (tool === 'clear') clearAll();
+    else if (tool === 'close') { setEnabled(false); toggleCallback?.(false); }
   });
 
   function updateToolbarHighlight() {
@@ -441,6 +475,7 @@ export function createMapAnnotationLayer(
     enabled = value;
     inputOverlay.style.pointerEvents = value ? 'auto' : 'none';
     toolbar.style.display = value ? 'flex' : 'none';
+    updateToggleButton();
 
     if (value) {
       ensureSourcesAndLayers();
@@ -475,6 +510,7 @@ export function createMapAnnotationLayer(
     clearAll,
     isEnabled: () => enabled,
     getMode: () => mode,
+    onToggle(cb: (enabled: boolean) => void) { toggleCallback = cb; },
     destroy() {
       map.off('style.load', onStyleLoad);
       inputOverlay.removeEventListener('pointerdown', onPointerDown);
@@ -482,6 +518,7 @@ export function createMapAnnotationLayer(
       inputOverlay.removeEventListener('pointerup', onPointerUp);
       inputOverlay.remove();
       toolbar.remove();
+      toggleBtn.remove();
       if (map.getLayer(LAYER_LIVE)) map.removeLayer(LAYER_LIVE);
       if (map.getLayer(LAYER_STROKES)) map.removeLayer(LAYER_STROKES);
       if (map.getSource(SOURCE_LIVE)) map.removeSource(SOURCE_LIVE);
