@@ -32,7 +32,8 @@
     "typecheck:all": "bun run typecheck && bun run typecheck:engine && bun run typecheck:worker && bun run typecheck:auth",
     "test": "bun test",
     "detect-events": "tsx web/engine/cli/detect-events.ts",
-    "get-xcontest-task": "tsx web/engine/cli/get-xcontest-task.ts"
+    "get-xcontest-task": "tsx web/engine/cli/get-xcontest-task.ts",
+    "score-task": "tsx web/engine/cli/score-task.ts"
   },
   "workspaces": [
     "web/engine",
