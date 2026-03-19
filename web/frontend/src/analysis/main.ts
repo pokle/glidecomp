@@ -298,6 +298,13 @@ async function init(): Promise<void> {
     }
   }
 
+  // Sync menu status when annotation is toggled via the map button
+  mapRenderer?.getAnnotationLayer?.()?.onToggle((on) => {
+    if (annotateStatusEl) {
+      annotateStatusEl.textContent = on ? '(on) D' : '(off) D';
+    }
+  });
+
   document.getElementById('menu-annotate')?.addEventListener('click', () => {
     toggleAnnotation();
     commandDialog?.close();
