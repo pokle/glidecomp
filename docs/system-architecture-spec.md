@@ -277,6 +277,6 @@ All planned components would operate within Cloudflare's free tier for typical c
 ### Other Future Considerations
 
 - **Live Tracking** - Integration with live tracking services during competition
-- **Scoring Engine** - Server-side scoring for official results
+- **Scoring Engine** - The CIVL GAP scoring engine (`web/engine/src/gap-scoring.ts`) currently runs client-side and via CLI; future work may add server-side scoring for official results
 - **Multi-Tenant** - Support for multiple competition organizers
 - **XContest Integration** - Import tasks directly from XContest
