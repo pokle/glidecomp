@@ -1,0 +1,97 @@
+{
+  "earthModel": "WGS84",
+  "goal": {
+    "deadline": "08:00:00Z",
+    "type": "CYLINDER"
+  },
+  "sss": {
+    "direction": "EXIT",
+    "timeGates": [
+      "03:30:00Z",
+      "03:45:00Z",
+      "04:00:00Z",
+      "04:15:00Z",
+      "04:30:00Z",
+      "04:45:00Z",
+      "05:00:00Z",
+      "05:15:00Z"
+    ],
+    "type": "RACE"
+  },
+  "taskType": "CLASSIC",
+  "turnpoints": [
+    {
+      "radius": 5000,
+      "type": "SSS",
+      "waypoint": {
+        "altSmoothed": 932,
+        "description": "ELLIOT",
+        "lat": -36.18583297729492,
+        "lon": 147.97666931152344,
+        "name": "ELLIOT"
+      }
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "altSmoothed": 815,
+        "description": "Half",
+        "lat": -36.265472412109375,
+        "lon": 147.87344360351562,
+        "name": "HALFWY"
+      }
+    },
+    {
+      "radius": 3000,
+      "waypoint": {
+        "altSmoothed": 430,
+        "description": "CUDGWE",
+        "lat": -36.223182678222656,
+        "lon": 147.7288055419922,
+        "name": "CUDGWE"
+      }
+    },
+    {
+      "radius": 4000,
+      "waypoint": {
+        "altSmoothed": 263,
+        "description": "TINTAL",
+        "lat": -36.05194854736328,
+        "lon": 147.9269256591797,
+        "name": "TINTAL"
+      }
+    },
+    {
+      "radius": 3000,
+      "waypoint": {
+        "altSmoothed": 375,
+        "description": "KANGCK",
+        "lat": -36.26409912109375,
+        "lon": 147.93846130371094,
+        "name": "KANGCK"
+      }
+    },
+    {
+      "radius": 5000,
+      "waypoint": {
+        "altSmoothed": 324,
+        "description": "CUDG",
+        "lat": -36.192283630371094,
+        "lon": 147.7702178955078,
+        "name": "CUDG"
+      }
+    },
+    {
+      "radius": 400,
+      "type": "ESS",
+      "waypoint": {
+        "altSmoothed": 276,
+        "description": "North",
+        "lat": -36.17775344848633,
+        "lon": 147.92405700683594,
+        "name": "NCORGL"
+      }
+    }
+  ],
+  "version": 1
+}
