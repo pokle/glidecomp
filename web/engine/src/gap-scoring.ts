@@ -16,6 +16,7 @@ import type { IGCFix } from './igc-parser';
 import type { TurnpointSequenceResult } from './turnpoint-sequence';
 import { resolveTurnpointSequence } from './turnpoint-sequence';
 import { getESSIndex } from './xctsk-parser';
+import { calculateOptimizedTaskDistance } from './task-optimizer';
 import { haversineDistance } from './geo';
 
 // ---------------------------------------------------------------------------
@@ -275,29 +276,18 @@ export function calculateWeights(
   // Distance weight (same for PG and HG)
   const dw = 0.9 - 1.665 * gr + 1.713 * gr * gr - 0.587 * gr * gr * gr;
 
-  let lw: number;
-  let aw: number;
+  // Arrival weight: HG only, when enabled
+  const aw = (scoring === 'HG' && useArrival) ? (1 - dw) / 8 : 0;
 
-  if (scoring === 'PG') {
-    // Paragliding: no arrival points, doubled leading weight
-    aw = 0;
-    if (!useLeading) {
-      lw = 0;
-    } else if (gr === 0) {
-      lw = taskDistance > 0 ? (bestDistance / taskDistance) * 0.1 : 0;
-    } else {
-      lw = ((1 - dw) / 8) * 1.4 * 2;
-    }
+  // Leading weight: shared formula, PG doubles the multiplier
+  let lw: number;
+  if (!useLeading) {
+    lw = 0;
+  } else if (gr === 0) {
+    lw = taskDistance > 0 ? (bestDistance / taskDistance) * 0.1 : 0;
   } else {
-    // Hang gliding: arrival points, normal leading weight
-    aw = useArrival ? (1 - dw) / 8 : 0;
-    if (!useLeading) {
-      lw = 0;
-    } else if (gr === 0) {
-      lw = taskDistance > 0 ? (bestDistance / taskDistance) * 0.1 : 0;
-    } else {
-      lw = ((1 - dw) / 8) * 1.4;
-    }
+    const multiplier = scoring === 'PG' ? 1.4 * 2 : 1.4;
+    lw = ((1 - dw) / 8) * multiplier;
   }
 
   const tw = Math.max(0, 1 - dw - lw - aw);
@@ -335,7 +325,7 @@ export function applyMinimumDistance(
   flownDistance: number,
   minimumDistance: number,
 ): number {
-  return Math.max(minimumDistance, Math.max(0, flownDistance));
+  return Math.max(minimumDistance, flownDistance, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -564,9 +554,7 @@ export function scoreTask(
     .filter((t): t is number => t !== null && t > 0);
   const bestTime = validTimes.length > 0 ? Math.min(...validTimes) : null;
 
-  const taskDistance = pilotResults.length > 0
-    ? pilotResults[0].result.taskDistance
-    : 0;
+  const taskDistance = calculateOptimizedTaskDistance(task);
 
   const numFlying = pilots.length;
   const goalRatio = numFlying > 0 ? numInGoal / numFlying : 0;
@@ -601,43 +589,48 @@ export function scoreTask(
     total: totalAvailable,
   };
 
-  // Step 5: Calculate leading coefficients
-  // Find task-wide SSS and ESS times for LC calculation
-  const allSSSTimes = pilotResults
-    .map(pr => pr.result.sssReaching?.time.getTime())
-    .filter((t): t is number => t !== undefined);
-  const allESSTimes = pilotResults
-    .map(pr => pr.result.essReaching?.time.getTime())
-    .filter((t): t is number => t !== undefined);
+  // Step 5: Calculate leading coefficients (skip when disabled — expensive tracklog scan)
+  let leadingCoefficients: number[];
+  let minLC = 0;
 
-  const taskFirstSSSTime = allSSSTimes.length > 0 ? Math.min(...allSSSTimes) : 0;
-  const taskLastESSTime = allESSTimes.length > 0 ? Math.max(...allESSTimes) : taskFirstSSSTime + 3600000;
+  if (fullParams.useLeading) {
+    const allSSSTimes = pilotResults
+      .map(pr => pr.result.sssReaching?.time.getTime())
+      .filter((t): t is number => t !== undefined);
+    const allESSTimes = pilotResults
+      .map(pr => pr.result.essReaching?.time.getTime())
+      .filter((t): t is number => t !== undefined);
 
-  const leadingCoefficients = pilotResults.map(pr => {
-    const sssTime = pr.result.sssReaching?.time.getTime() ?? null;
-    const essTime = pr.result.essReaching?.time.getTime() ?? null;
-    return calculateLeadingCoefficient(
-      pr.pilot.fixes, task,
-      taskFirstSSSTime, taskLastESSTime,
-      sssTime, essTime,
-    );
-  });
+    const taskFirstSSSTime = allSSSTimes.length > 0 ? Math.min(...allSSSTimes) : 0;
+    const taskLastESSTime = allESSTimes.length > 0 ? Math.max(...allESSTimes) : taskFirstSSSTime + 3600000;
 
-  const finiteLCs = leadingCoefficients.filter(lc => isFinite(lc));
-  const minLC = finiteLCs.length > 0 ? Math.min(...finiteLCs) : 0;
+    leadingCoefficients = pilotResults.map(pr => {
+      const sssTime = pr.result.sssReaching?.time.getTime() ?? null;
+      const essTime = pr.result.essReaching?.time.getTime() ?? null;
+      return calculateLeadingCoefficient(
+        pr.pilot.fixes, task,
+        taskFirstSSSTime, taskLastESSTime,
+        sssTime, essTime,
+      );
+    });
 
-  // Step 6: Determine ESS arrival order for HG arrival points
-  const essArrivals = pilotResults
-    .filter(pr => pr.result.essReaching !== null)
-    .sort((a, b) =>
-      a.result.essReaching!.time.getTime() - b.result.essReaching!.time.getTime()
-    );
+    const finiteLCs = leadingCoefficients.filter(lc => isFinite(lc));
+    minLC = finiteLCs.length > 0 ? Math.min(...finiteLCs) : 0;
+  } else {
+    leadingCoefficients = pilotResults.map(() => Infinity);
+  }
 
+  // Step 6: Determine ESS arrival order for HG arrival points (skip when not needed)
   const essPositionMap = new Map<number, number>();
-  essArrivals.forEach((pr, idx) => {
-    const pilotIdx = pilotResults.indexOf(pr);
-    essPositionMap.set(pilotIdx, idx + 1);
-  });
+  if (fullParams.scoring === 'HG' && fullParams.useArrival) {
+    pilotResults
+      .map((pr, idx) => ({ idx, time: pr.result.essReaching?.time.getTime() }))
+      .filter((entry): entry is { idx: number; time: number } => entry.time !== undefined)
+      .sort((a, b) => a.time - b.time)
+      .forEach(({ idx }, position) => {
+        essPositionMap.set(idx, position + 1);
+      });
+  }
 
   // Step 7: Score each pilot
   const pilotScores: PilotScore[] = pilotResults.map((pr, idx) => {
@@ -655,17 +648,14 @@ export function scoreTask(
       availablePoints.time, fullParams.scoring,
     );
 
-    const leadPts = fullParams.useLeading
-      ? calculateLeadingPoints(leadingCoefficients[idx], minLC, availablePoints.leading)
-      : 0;
+    const leadPts = calculateLeadingPoints(
+      leadingCoefficients[idx], minLC, availablePoints.leading,
+    );
 
-    let arrPts = 0;
-    if (fullParams.scoring === 'HG' && fullParams.useArrival) {
-      const position = essPositionMap.get(idx) ?? 0;
-      arrPts = calculateArrivalPoints(
-        position, numReachedESS, availablePoints.arrival,
-      );
-    }
+    const position = essPositionMap.get(idx) ?? 0;
+    const arrPts = position > 0
+      ? calculateArrivalPoints(position, numReachedESS, availablePoints.arrival)
+      : 0;
 
     const total = Math.round(distPts + timePts + leadPts + arrPts);
 
