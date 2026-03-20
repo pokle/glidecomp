@@ -168,7 +168,7 @@ When an event is selected from the panel, the map highlights the event location 
 ├── gap-scoring.ts               # CIVL GAP multi-track task scoring (FAI Section 7F)
 ├── segment-extractors.ts        # Data extraction for glides, climbs, sinks
 ├── event-styles.ts              # Event type colors and visual styles
-├── geo.ts                       # Geographic calculations (Turf.js wrapper)
+├── geo.ts                       # Geographic calculations (WGS84: Andoyer-Lambert distance, Vincenty destination, Turf.js bearing/bbox)
 ├── glide-speed.ts               # Glide segment speed calculations
 ├── units.ts                     # Unit conversion
 ├── sanitize.ts                  # Text sanitization (HTML escaping)
@@ -269,7 +269,7 @@ ext     - Optional extensions
 - **threebox-plugin**: 3D track rendering on MapBox
 - **tailwindcss**: Utility-first CSS framework
 - **@pokle/basecoat**: Lightweight UI component library (fork of basecoat-css, see `basecoat-fork.md`)
-- **@turf/***: Geographic calculations (distance, bearing, etc.)
+- **@turf/***: Geographic utilities (bearing, bounding box). Distance and destination use custom WGS84 implementations (Andoyer-Lambert, Vincenty direct)
 - **vite**: TypeScript bundling and dev server with HMR
 
 ## URL

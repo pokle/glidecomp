@@ -33,5 +33,5 @@ If `node_modules/` is missing or a dependency can't be resolved, run `bun instal
 - Decisions MUST be explainable - return explanations for scoring decisions and support unit testing
 - Use [Basecoat](https://basecoatui.com/) components for UI - check https://basecoatui.com/docs/components before creating custom components
 - Use Tailwind utility classes for styling - avoid custom CSS when Tailwind provides equivalent functionality
-- **Never** implement inline geo math (haversine, bearing, etc.) - always use `web/engine/src/geo.ts` which wraps Turf.js
+- **Never** implement inline geo math (distance, bearing, etc.) - always use `web/engine/src/geo.ts` which provides WGS84 ellipsoid formulas (Andoyer-Lambert distance, Vincenty direct destination) and Turf.js for bearing/bbox
 - **Single source of truth for map visuals/interactions**: [`docs/mapbox-interactions-spec.md`](docs/mapbox-interactions-spec.md) - all map providers must match this spec

@@ -100,7 +100,7 @@ function findOptimalCirclePoint(prev, center, radius, next):
 
 ## Geometry Functions
 
-All geographic calculations use the centralized `geo.ts` module, which implements WGS84 ellipsoid formulas (Andoyer-Lambert for distance, Vincenty direct for destination):
+All geographic calculations use the centralized `geo.ts` module, which implements WGS84 ellipsoid formulas for CIVL-accurate scoring:
 
 ```typescript
 import { andoyerDistance, calculateBearingRadians, destinationPoint } from './geo';
@@ -109,7 +109,7 @@ import { andoyerDistance, calculateBearingRadians, destinationPoint } from './ge
 ### Available Functions
 
 - `andoyerDistance(lat1, lon1, lat2, lon2)` - WGS84 ellipsoid distance in meters (Andoyer-Lambert formula, ~2 ppm vs Vincenty)
-- `calculateBearingRadians(lat1, lon1, lat2, lon2)` - Initial bearing in radians (via Turf.js)
+- `calculateBearingRadians(lat1, lon1, lat2, lon2)` - Initial bearing in radians
 - `destinationPoint(lat, lon, distanceMeters, bearingRadians)` - Destination point on WGS84 ellipsoid (Vincenty direct formula)
 
 **Note**: Never implement inline geo math. Always use the `geo.ts` module.

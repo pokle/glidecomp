@@ -1,5 +1,5 @@
 /**
- * Tests for Geo Math Functions (Turf.js wrappers in geo.ts)
+ * Tests for Geo Math Functions (WGS84 ellipsoid formulas in geo.ts)
  */
 
 import { describe, it, expect } from 'bun:test';
