@@ -2,12 +2,11 @@
  * Task Optimization
  *
  * Calculates the optimized (shortest) path through a competition task by finding
- * the optimal point to tag each turnpoint cylinder. Works with any task source
- * (XCTask from .xctsk files, IGC task declarations, AirScore tasks, etc.).
+ * the optimal point to tag each turnpoint cylinder. Uses iterative convergence
+ * matching the CIVL GAP specification (Section 7F, Annex A).
  *
  * @see /docs/optimized-task-line-spec.md - Full algorithm documentation
- * @see https://github.com/LK8000/LK8000/pull/286 - LK8000 task optimization
- * @see https://github.com/teobouvard/igclib - Python task optimization library
+ * @see /docs/research/task-optimization-comparison.md - Comparison with AirScore/CIVL
  */
 
 import {
@@ -24,23 +23,8 @@ import type { XCTask } from './xctsk-parser';
  * For a circle at position (centerLat, centerLon) with radius r, find the point
  * on its perimeter that minimizes: distance(prevPoint, circlePoint) + distance(circlePoint, nextPoint)
  *
- * This is a constrained optimization problem where we search for the angle θ ∈ [0, 2π]
- * that minimizes the cost function. The cost function is unimodal (has a single minimum),
- * making golden section search an efficient choice.
- *
- * Golden section search has linear convergence and requires O(log(1/ε)) iterations
- * where ε is the tolerance (1e-5). For typical cases, this means ~30 iterations.
- *
- * @param prevLat Latitude of the previous optimized point
- * @param prevLon Longitude of the previous optimized point
- * @param centerLat Latitude of the current turnpoint center
- * @param centerLon Longitude of the current turnpoint center
- * @param radius Radius of the current turnpoint cylinder (in meters)
- * @param nextLat Latitude of the next turnpoint center
- * @param nextLon Longitude of the next turnpoint center
- * @returns The optimal point on the cylinder's perimeter
- *
- * @see https://en.wikipedia.org/wiki/Golden-section_search
+ * Uses golden section search — the cost function is unimodal (single minimum),
+ * so this converges in O(log(1/ε)) iterations (~30 for ε=1e-5).
  */
 function findOptimalCirclePoint(
   prevLat: number,
@@ -51,7 +35,6 @@ function findOptimalCirclePoint(
   nextLat: number,
   nextLon: number
 ): { lat: number; lon: number } {
-  // Cost function: total distance through a point on the circle
   const cost = (angle: number): number => {
     const point = destinationPoint(centerLat, centerLon, radius, angle);
     const d1 = andoyerDistance(prevLat, prevLon, point.lat, point.lon);
@@ -59,7 +42,6 @@ function findOptimalCirclePoint(
     return d1 + d2;
   };
 
-  // Golden section search for minimum
   const phi = (1 + Math.sqrt(5)) / 2;
   const resphi = 2 - phi;
 
@@ -93,102 +75,118 @@ function findOptimalCirclePoint(
 }
 
 /**
- * Calculate the optimized task line that tags the edges of turnpoint cylinders
- * rather than going through their centers.
+ * Run a single forward pass of the optimization, producing one touching
+ * point per turnpoint cylinder.
  *
- * This algorithm finds the shortest achievable distance through a competition task
- * by determining the optimal point to tag each turnpoint cylinder. Each cylinder
- * contributes exactly ONE point to the path.
+ * For intermediate turnpoints, each point is optimized using the previous
+ * optimized point and the next point (either the next already-optimized
+ * point from a previous iteration, or the next turnpoint center on the
+ * first pass).
+ */
+function optimizePass(
+  task: XCTask,
+  previousPath: { lat: number; lon: number }[] | null
+): { lat: number; lon: number }[] {
+  const path: { lat: number; lon: number }[] = [];
+  const n = task.turnpoints.length;
+
+  for (let i = 0; i < n; i++) {
+    const tp = task.turnpoints[i];
+
+    if (i === 0) {
+      // First turnpoint: point toward next optimized point (or center on first pass)
+      const nextPoint = previousPath
+        ? previousPath[1]
+        : { lat: task.turnpoints[1].waypoint.lat, lon: task.turnpoints[1].waypoint.lon };
+      const bearing = calculateBearingRadians(
+        tp.waypoint.lat, tp.waypoint.lon,
+        nextPoint.lat, nextPoint.lon
+      );
+      path.push(destinationPoint(tp.waypoint.lat, tp.waypoint.lon, tp.radius, bearing));
+    } else if (i === n - 1) {
+      // Last turnpoint: entry point nearest to previous optimized point
+      const prevPoint = path[path.length - 1];
+      const bearing = calculateBearingRadians(
+        prevPoint.lat, prevPoint.lon,
+        tp.waypoint.lat, tp.waypoint.lon
+      );
+      path.push(destinationPoint(tp.waypoint.lat, tp.waypoint.lon, tp.radius, bearing + Math.PI));
+    } else {
+      // Intermediate: minimize distance through this cylinder
+      const prevPoint = path[path.length - 1];
+      // Use next optimized point from previous iteration if available,
+      // otherwise fall back to next turnpoint center
+      const nextPoint = previousPath
+        ? previousPath[i + 1]
+        : { lat: task.turnpoints[i + 1].waypoint.lat, lon: task.turnpoints[i + 1].waypoint.lon };
+
+      path.push(findOptimalCirclePoint(
+        prevPoint.lat, prevPoint.lon,
+        tp.waypoint.lat, tp.waypoint.lon,
+        tp.radius,
+        nextPoint.lat, nextPoint.lon
+      ));
+    }
+  }
+
+  return path;
+}
+
+/** Sum path distance for a sequence of points */
+function pathDistance(path: { lat: number; lon: number }[]): number {
+  let total = 0;
+  for (let i = 1; i < path.length; i++) {
+    total += andoyerDistance(path[i - 1].lat, path[i - 1].lon, path[i].lat, path[i].lon);
+  }
+  return total;
+}
+
+/**
+ * Calculate the optimized task line with iterative convergence.
  *
- * Algorithm:
- * - First turnpoint: Point on circle along bearing toward next turnpoint
- * - Intermediate turnpoints: Use golden section search to minimize total distance
- * - Last turnpoint: Point on circle along bearing from previous optimized point (entry side)
+ * Runs multiple forward passes, each time using the previous iteration's
+ * optimized points as targets for the next turnpoint. Converges when the
+ * total path distance changes by less than 1 meter between iterations.
  *
- * The optimization for intermediate turnpoints is greedy (considers only adjacent
- * points) but is computationally efficient and matches the behavior of professional
- * scoring systems like XContest, XCTrack, AirScore, and LK8000.
- *
- * Mathematical formulation:
- * For each turnpoint i, find point pᵢ on circle i such that:
- *   min Σ distance(pᵢ₋₁, pᵢ) + distance(pᵢ, pᵢ₊₁)
+ * This matches the CIVL GAP specification (Annex A) approach of iterating
+ * until no further distance reduction occurs.
  *
  * @param task The competition task with turnpoint cylinders
  * @returns Array of lat/lon coordinates representing the optimized path
- *
- * @example
- * const task = await fetchTaskByCode('BUJE');
- * const optimizedPath = calculateOptimizedTaskLine(task);
- * // Returns: [{lat: 45.123, lon: 13.456}, {lat: 45.234, lon: 13.567}, ...]
  */
 export function calculateOptimizedTaskLine(task: XCTask): { lat: number; lon: number }[] {
   if (task.turnpoints.length === 0) return [];
   if (task.turnpoints.length === 1) {
-    // Single turnpoint - just return its center
     return [{ lat: task.turnpoints[0].waypoint.lat, lon: task.turnpoints[0].waypoint.lon }];
   }
 
   if (task.turnpoints.length === 2) {
-    // Two turnpoints - simple case: find points along line between centers
     const tp1 = task.turnpoints[0];
     const tp2 = task.turnpoints[1];
-
     const bearing = calculateBearingRadians(
-      tp1.waypoint.lat,
-      tp1.waypoint.lon,
-      tp2.waypoint.lat,
-      tp2.waypoint.lon
+      tp1.waypoint.lat, tp1.waypoint.lon,
+      tp2.waypoint.lat, tp2.waypoint.lon
     );
-
     return [
       destinationPoint(tp1.waypoint.lat, tp1.waypoint.lon, tp1.radius, bearing),
       destinationPoint(tp2.waypoint.lat, tp2.waypoint.lon, tp2.radius, bearing + Math.PI)
     ];
   }
 
-  // Three or more turnpoints - optimize each point
-  const path: { lat: number; lon: number }[] = [];
+  // First pass: no previous path to reference
+  let path = optimizePass(task, null);
+  let prevDistance = pathDistance(path);
 
-  for (let i = 0; i < task.turnpoints.length; i++) {
-    const tp = task.turnpoints[i];
+  // Iterate until convergence (< 1m change) or max iterations
+  const maxIterations = task.turnpoints.length * 10;
+  for (let iter = 0; iter < maxIterations; iter++) {
+    const newPath = optimizePass(task, path);
+    const newDistance = pathDistance(newPath);
 
-    if (i === 0) {
-      // First turnpoint: point along line towards next
-      const next = task.turnpoints[i + 1];
-      const bearing = calculateBearingRadians(
-        tp.waypoint.lat,
-        tp.waypoint.lon,
-        next.waypoint.lat,
-        next.waypoint.lon
-      );
-      path.push(destinationPoint(tp.waypoint.lat, tp.waypoint.lon, tp.radius, bearing));
-    } else if (i === task.turnpoints.length - 1) {
-      // Last turnpoint (goal): entry point on cylinder nearest to previous optimized point
-      const prevPoint = path[path.length - 1];
-      const bearing = calculateBearingRadians(
-        prevPoint.lat,
-        prevPoint.lon,
-        tp.waypoint.lat,
-        tp.waypoint.lon
-      );
-      path.push(destinationPoint(tp.waypoint.lat, tp.waypoint.lon, tp.radius, bearing + Math.PI));
-    } else {
-      // Intermediate turnpoint: find optimal point minimizing total distance
-      const prevPoint = path[path.length - 1]; // Use the already optimized previous point
-      const next = task.turnpoints[i + 1];
+    if (prevDistance - newDistance < 1.0) break;
 
-      const optimal = findOptimalCirclePoint(
-        prevPoint.lat,
-        prevPoint.lon,
-        tp.waypoint.lat,
-        tp.waypoint.lon,
-        tp.radius,
-        next.waypoint.lat,
-        next.waypoint.lon
-      );
-
-      path.push(optimal);
-    }
+    path = newPath;
+    prevDistance = newDistance;
   }
 
   return path;

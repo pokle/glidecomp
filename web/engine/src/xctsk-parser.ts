@@ -48,6 +48,14 @@ export interface XCTask {
   };
   sss?: SSSConfig;
   goal?: GoalConfig;
+
+  /**
+   * Cylinder tolerance as a fraction (e.g. 0.005 = 0.5%).
+   * Applied to turnpoint radii when checking cylinder crossings.
+   * CIVL GAP: 0.001 (0.1%) for Cat 1, up to 0.005 (0.5%) for Cat 2.
+   * Default: 0.005 (0.5%) — the Cat 2 maximum.
+   */
+  cylinderTolerance?: number;
 }
 
 /**

@@ -11,9 +11,9 @@ All three systems solve the same geometric problem: find the shortest path from 
 | **Optimization method** | Golden section search per cylinder | Angle bisector projection + iteration | Iterative projection (Annex A) |
 | **Coordinate system** | Geographic (lat/lon) | Planar (transverse Mercator projection) | Planar (UTM projection) |
 | **Distance formula** | Andoyer-Lambert (WGS84 ellipsoid) | Geodesic (WGS84 ellipsoid via geographiclib) | Andoyer-Lambert or FAI sphere |
-| **Iteration strategy** | Single forward pass (greedy) | Forward pass repeated until convergence (≤1m change) | Repeated until no further reduction |
+| **Iteration strategy** | Forward pass repeated until convergence (< 1m change) | Forward pass repeated until convergence (≤1m change) | Repeated until no further reduction |
 | **Earth model** | WGS84 ellipsoid | WGS84 ellipsoid | WGS84 ellipsoid (Cat 1) or FAI sphere |
-| **Cylinder tolerance** | None | 0.5% | 0.1% (Cat 1), 0.5% (Cat 2) |
+| **Cylinder tolerance** | 0.5% default (configurable) | 0.5% | 0.1% (Cat 1), 0.5% (Cat 2) |
 
 ## 1. TaskScore Engine Algorithm
 
@@ -33,20 +33,18 @@ cost(θ) = distance(prev_optimized_point, point_on_circle(θ)) + distance(point_
 
 ### Key Characteristics
 
-- **Single forward pass** — each cylinder is optimized once, considering only the already-optimized previous point and the *center* of the next turnpoint (not the next optimized point)
-- **WGS84 ellipsoid geometry** — uses Andoyer-Lambert distance formula
-- **No iteration** — does not re-optimize earlier points after later points are determined
-- **No coordinate projection** — works directly in geographic coordinates
+- **Iterative convergence** — re-runs the forward pass using previous iteration's optimized points until total distance changes by < 1m
+- **WGS84 ellipsoid geometry** — uses Andoyer-Lambert distance formula and Vincenty direct for destination
+- **No coordinate projection** — works directly in geographic coordinates (no UTM/Mercator)
 
 ### Strengths
 - Simple, fast, easy to understand
 - Golden section search is mathematically guaranteed for unimodal functions
-- Good enough for typical paragliding tasks (< 0.1% error vs iterative methods)
+- Iterative convergence matches CIVL specification
+- WGS84 distance + destination match the FAI distance formula
 
 ### Weaknesses
-- **Greedy/non-iterative** — optimizing point i uses `next_center` not `next_optimized_point`, so later adjustments don't propagate back
-- **No coordinate projection** — works directly in geographic coordinates (no UTM/Mercator projection)
-- **No cylinder tolerance** — doesn't apply the 0.1-0.5% tolerance band
+- **No coordinate projection** — works directly in geographic coordinates rather than UTM (marginal accuracy difference)
 
 ## 2. AirScore Algorithm (Python — FAI-CIVL)
 
@@ -150,20 +148,11 @@ For each control zone circle, given incoming point A and outgoing point B:
 | Core technique | 1D golden section search on angle θ | 2D angle bisector geometry | 2D angle bisector geometry |
 | Search space | Circle perimeter (0 to 2π) | Direct geometric construction | Direct geometric construction |
 | Per-cylinder work | ~30 iterations of cost function | Single geometric operation | Single geometric operation |
-| Re-optimization | None (single pass) | Until convergence | Until convergence |
+| Re-optimization | Until convergence (< 1m) | Until convergence | Until convergence |
 
 **Analysis:** TaskScore's golden section search and AirScore's angle bisector both find the same optimal point for a single cylinder, but they find it differently. The golden section search numerically minimizes the cost function, while the angle bisector geometrically constructs the optimal point directly. For a single cylinder with fixed predecessor and successor, both produce the same result.
 
-The critical difference is **iteration**: AirScore and the CIVL spec re-run the optimization with updated touching points until convergence, allowing adjustments to propagate through the chain. TaskScore makes a single forward pass.
-
-### Impact of Non-Iteration
-
-For a task with turnpoints A → B → C → D:
-
-1. TaskScore optimizes B using (A_optimized, C_center), then C using (B_optimized, D_center)
-2. AirScore optimizes B using (A_optimized, C_center), then C using (B_optimized, D_center), then **re-optimizes B using (A_optimized, C_optimized)**, and repeats
-
-The non-iterative approach in TaskScore means the optimized point on cylinder B doesn't account for where the pilot will actually touch cylinder C. This matters for real competition tasks — for example, `face.xctsk` (Corryong Cup 2026) has cylinder radii up to 7 km, acute turning angles, and closely spaced turnpoints, all of which amplify the error from non-iteration.
+All three systems now use iterative convergence: each re-runs the optimization pass with updated touching points until the total path distance stabilises. On `face.xctsk` (Corryong Cup 2026 — 7 km cylinder, acute angles), iterative convergence shortened the task distance by 209 m compared to a single-pass approach.
 
 ### Distance Formula
 
@@ -188,28 +177,26 @@ TaskScore works directly in geographic coordinates (lat/lon), computing WGS84 el
 
 ### To Better Match CIVL Spec
 
-1. **Add iterative convergence** — Re-run the optimization pass until total distance changes by < 1m. This is the most impactful change for correctness.
+1. ~~**Add iterative convergence**~~ — **Done.** Re-runs the optimization pass until total distance changes by < 1m, matching CIVL GAP Annex A. On `face.xctsk` (7 km cylinder, acute angles), this shortened the task distance by 209 m vs the old single-pass approach.
 
 2. ~~**Use WGS84 ellipsoid distances**~~ — **Done.** Replaced haversine with Andoyer-Lambert (WGS84 ellipsoid) for all distance calculations, and Vincenty direct formula for destination point computation. Removed `@turf/distance` and `@turf/destination` dependencies. Accuracy: ~2 ppm vs Vincenty reference, validated against 33 real IGC tracks.
 
-3. **Add cylinder tolerance** — Apply the 0.5% tolerance when checking if a tracklog point reaches a cylinder (for Cat 2; 0.1% for Cat 1).
+3. ~~**Add cylinder tolerance**~~ — **Done.** `XCTask.cylinderTolerance` field controls the tolerance fraction (default 0.5% for Cat 2). Applied in `detectCylinderCrossings` by expanding the effective radius for crossing detection, while interpolating to the nominal radius for the crossing point.
 
-4. **Consider UTM projection** — For the optimization loop, project to UTM and use Euclidean geometry for the angle bisector calculation. This would match the spec exactly.
+4. **Consider UTM projection** — For the optimization loop, project to UTM and use Euclidean geometry for the angle bisector calculation. This would match the spec exactly, but the accuracy gain over geographic coordinates + Andoyer is marginal.
 
 ### Current Status
 
-TaskScore is intended for scoring HG and PG competitions, so matching AirScore/CIVL results is important. The distance formula is now aligned (WGS84 Andoyer-Lambert). The remaining gap is the optimization method:
+TaskScore is intended for scoring HG and PG competitions. The algorithm now matches the CIVL specification in all key areas:
 
 **Done:**
 - WGS84 ellipsoid distances (Andoyer-Lambert) — matches the FAI distance formula
 - Vincenty direct formula for destination points — consistent with distance calculations
-
-**Still needed for competition-accurate scoring:**
-1. **Iterative convergence** — the single-pass greedy approach can produce measurably different task distances from AirScore on real tasks, especially those with large cylinders (e.g. `face.xctsk` has a 7 km cylinder), acute turning angles, and closely spaced turnpoints
-2. **Cylinder tolerance** — 0.1% (Cat 1) or 0.5% (Cat 2)
+- Iterative convergence — re-runs until < 1m change, matching CIVL GAP Annex A
+- Cylinder tolerance — configurable per-task (default 0.5%, Cat 1 = 0.1%)
 
 **Nice to have:**
-3. UTM projection for the optimization loop (would match the spec exactly, but the accuracy gain over geographic coordinates + Andoyer is marginal)
+- UTM projection for the optimization loop (would match the spec exactly, but geographic coordinates + Andoyer produce equivalent results)
 
 ## References
 

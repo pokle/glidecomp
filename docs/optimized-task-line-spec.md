@@ -194,20 +194,14 @@ Results are not cached as task changes are infrequent.
 
 2. **No turn direction constraints**: Doesn't account for sectors (e.g., "must turn left around turnpoint"). All turnpoints are treated as full cylinders.
 
-3. **Local optimization**: Each point is optimized considering only adjacent points. This is a greedy approach that may not find the global optimum for complex task geometries.
-
 ### Potential Enhancements
-1. **Global optimization**: Implement true global optimization (e.g., simulated annealing, genetic algorithms) to find the absolute shortest path
+1. **Sector support**: Handle sector turnpoints (entry/exit sectors with specific angles)
 
-2. **Sector support**: Handle sector turnpoints (entry/exit sectors with specific angles)
-
-3. **Start cylinder types**: Distinguish between SSS (Start of Speed Section) types:
+2. **Start cylinder types**: Distinguish between SSS (Start of Speed Section) types:
    - Exit start: Pilot starts inside, optimization begins at cylinder edge
    - Enter start: Pilot starts outside, must enter cylinder
 
-4. **FAI triangle detection**: Detect and optimize FAI triangle tasks with their specific constraints
-
-5. **Iterative convergence**: Re-run the optimization pass until total distance changes by < 1m, matching the CIVL specification approach
+3. **FAI triangle detection**: Detect and optimize FAI triangle tasks with their specific constraints
 
 ## Testing
 

@@ -243,11 +243,15 @@ export function detectCylinderCrossings(
 
   const crossings: CylinderCrossing[] = [];
 
+  // CIVL GAP cylinder tolerance: expand radius for crossing detection.
+  // Default 0.5% (Cat 2 maximum) to compensate for distance calculation differences.
+  const tolerance = task.cylinderTolerance ?? 0.005;
+
   for (let tpIdx = 0; tpIdx < task.turnpoints.length; tpIdx++) {
     const tp = task.turnpoints[tpIdx];
     const centerLat = tp.waypoint.lat;
     const centerLon = tp.waypoint.lon;
-    const radius = tp.radius;
+    const radius = tp.radius * (1 + tolerance);
 
     let prevInside = isInsideCylinder(
       fixes[0].latitude, fixes[0].longitude,
@@ -273,8 +277,9 @@ export function detectCylinderCrossings(
           currFix.latitude, currFix.longitude, centerLat, centerLon
         );
 
-        // Linear interpolation factor: where along the segment does distance = radius
-        let t = (prevDist - radius) / (prevDist - currDist);
+        // Interpolate to the nominal radius (without tolerance)
+        const nominalRadius = tp.radius;
+        let t = (prevDist - nominalRadius) / (prevDist - currDist);
         t = Math.max(0, Math.min(1, t));
 
         const crossingLat = prevFix.latitude + t * (currFix.latitude - prevFix.latitude);
