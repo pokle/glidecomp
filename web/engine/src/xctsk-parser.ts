@@ -5,7 +5,7 @@
  * Reference: http://xctrack.org/Competition_Interfaces.html
  */
 
-import { haversineDistance } from './geo';
+import { andoyerDistance } from './geo';
 import { sanitizeText } from './sanitize';
 import type { IGCTask, IGCTaskPoint } from './igc-parser';
 import { findWaypoint, type WaypointRecord } from './waypoints';
@@ -490,7 +490,7 @@ export function calculateNominalTaskDistance(task: XCTask): number {
   for (let i = 1; i < tps.length; i++) {
     const p1 = tps[i - 1].waypoint;
     const p2 = tps[i].waypoint;
-    distance += haversineDistance(p1.lat, p1.lon, p2.lat, p2.lon);
+    distance += andoyerDistance(p1.lat, p1.lon, p2.lat, p2.lon);
   }
 
   return distance;

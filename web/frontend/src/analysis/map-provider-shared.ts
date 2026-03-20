@@ -6,7 +6,7 @@
  */
 
 import {
-  haversineDistance, getCirclePoints, calculateBearing, calculatePointMetrics,
+  andoyerDistance, getCirclePoints, calculateBearing, calculatePointMetrics,
   calculateOptimizedTaskLine, getOptimizedSegmentDistances,
   resolveTurnpointSequence, getSSSIndex,
   type IGCFix, type FlightEvent, type XCTask, type Turnpoint,
@@ -167,7 +167,7 @@ export function calculateAltitudeGradient(fixes: IGCFix[]): [number, string][] {
   const distances: number[] = [0];
   let totalDistance = 0;
   for (let i = 1; i < fixes.length; i++) {
-    const dist = haversineDistance(
+    const dist = andoyerDistance(
       fixes[i - 1].latitude, fixes[i - 1].longitude,
       fixes[i].latitude, fixes[i].longitude
     );
@@ -228,7 +228,7 @@ export function findNearestFixIndex(fixes: IGCFix[], lat: number, lon: number): 
 
   for (let i = 0; i < fixes.length; i++) {
     const fix = fixes[i];
-    const distance = haversineDistance(lat, lon, fix.latitude, fix.longitude);
+    const distance = andoyerDistance(lat, lon, fix.latitude, fix.longitude);
     if (distance < minDistance) {
       minDistance = distance;
       nearestIndex = i;
@@ -243,7 +243,7 @@ export function findNearestFixIndex(fixes: IGCFix[], lat: number, lon: number): 
   const tolerance = Math.max(minDistance * 2, minDistance + 30);
   for (let i = fixes.length - 1; i > nearestIndex; i--) {
     const fix = fixes[i];
-    const distance = haversineDistance(lat, lon, fix.latitude, fix.longitude);
+    const distance = andoyerDistance(lat, lon, fix.latitude, fix.longitude);
     if (distance <= tolerance) {
       return i;
     }

@@ -11,7 +11,7 @@
  */
 
 import {
-  haversineDistance,
+  andoyerDistance,
   calculateBearingRadians,
   destinationPoint
 } from './geo';
@@ -54,8 +54,8 @@ function findOptimalCirclePoint(
   // Cost function: total distance through a point on the circle
   const cost = (angle: number): number => {
     const point = destinationPoint(centerLat, centerLon, radius, angle);
-    const d1 = haversineDistance(prevLat, prevLon, point.lat, point.lon);
-    const d2 = haversineDistance(point.lat, point.lon, nextLat, nextLon);
+    const d1 = andoyerDistance(prevLat, prevLon, point.lat, point.lon);
+    const d2 = andoyerDistance(point.lat, point.lon, nextLat, nextLon);
     return d1 + d2;
   };
 
@@ -216,7 +216,7 @@ export function calculateOptimizedTaskDistance(task: XCTask): number {
 
   let totalDistance = 0;
   for (let i = 1; i < path.length; i++) {
-    totalDistance += haversineDistance(
+    totalDistance += andoyerDistance(
       path[i - 1].lat,
       path[i - 1].lon,
       path[i].lat,
@@ -255,7 +255,7 @@ export function getOptimizedSegmentDistances(task: XCTask): number[] {
   const distances: number[] = [];
   for (let i = 1; i < path.length; i++) {
     distances.push(
-      haversineDistance(
+      andoyerDistance(
         path[i - 1].lat,
         path[i - 1].lon,
         path[i].lat,

@@ -5,7 +5,7 @@
  * Used to enrich IGC task declarations with radius and altitude data.
  */
 
-import { haversineDistance } from './geo';
+import { andoyerDistance } from './geo';
 
 /**
  * A waypoint record from a competition waypoint database.
@@ -134,7 +134,7 @@ export function findWaypointByCoordinates(
   let closestDistance = Infinity;
 
   for (const wp of waypoints) {
-    const distance = haversineDistance(latitude, longitude, wp.latitude, wp.longitude);
+    const distance = andoyerDistance(latitude, longitude, wp.latitude, wp.longitude);
     if (distance <= toleranceMeters && distance < closestDistance) {
       closest = wp;
       closestDistance = distance;

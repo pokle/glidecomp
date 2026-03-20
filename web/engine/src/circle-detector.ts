@@ -16,7 +16,7 @@
  */
 
 import { IGCFix } from './igc-parser';
-import { calculateBearing, haversineDistance } from './geo';
+import { calculateBearing, andoyerDistance } from './geo';
 import { TrackSegment } from './event-detector';
 
 // --- Constants ---
@@ -526,7 +526,7 @@ function estimateWindFromGroundSpeed(
   for (let i = startIndex; i < endIndex; i++) {
     const dt = (fixes[i + 1].time.getTime() - fixes[i].time.getTime()) / 1000;
     if (dt <= 0) continue;
-    const dist = haversineDistance(
+    const dist = andoyerDistance(
       fixes[i].latitude, fixes[i].longitude,
       fixes[i + 1].latitude, fixes[i + 1].longitude
     );

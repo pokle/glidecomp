@@ -10,7 +10,7 @@
  */
 
 import { IGCFix } from './igc-parser';
-import { haversineDistance, calculateTrackDistance } from './geo';
+import { andoyerDistance, calculateTrackDistance } from './geo';
 import { XCTask, getSSSIndex, getESSIndex, getGoalIndex } from './xctsk-parser';
 import { resolveTurnpointSequence } from './turnpoint-sequence';
 import { detectCircles } from './circle-detector';
@@ -163,7 +163,7 @@ function calculateGroundSpeed(fix1: IGCFix, fix2: IGCFix): number {
   const timeDiff = (fix2.time.getTime() - fix1.time.getTime()) / 1000;
   if (timeDiff <= 0) return 0;
 
-  const distance = haversineDistance(
+  const distance = andoyerDistance(
     fix1.latitude,
     fix1.longitude,
     fix2.latitude,

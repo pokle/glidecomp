@@ -8,7 +8,7 @@ import {
   GlideContext,
   GlideContextResolver,
 } from '../src/glide-speed';
-import { haversineDistance } from '../src/geo';
+import { andoyerDistance } from '../src/geo';
 import { createFix, type IGCFix } from './test-helpers';
 
 /**
@@ -16,10 +16,7 @@ import { createFix, type IGCFix } from './test-helpers';
  * The glide goes due east from the start point.
  * Creates fixes at exact distance intervals to ensure precise distance.
  * 
- * Note: Due to the spherical earth model (haversine), there's a small discrepancy
- * between the intended distance and calculated distance. We compensate by slightly
- * overshooting the longitude to ensure the glide reaches the target distance.
- * 
+ *
  * @param distanceMeters - Total distance of the glide
  * @param speedMs - Speed in meters per second
  * @param startLat - Starting latitude
@@ -38,8 +35,7 @@ function createStraightGlide(
   // Calculate longitude change for the distance (going due east)
   // At latitude 47°, 1 degree of longitude ≈ 75km
   const metersPerDegreeLon = 111320 * Math.cos(startLat * Math.PI / 180);
-  // Add 0.15% to compensate for haversine vs simple distance calculation
-  const totalLonChange = (distanceMeters * 1.0015) / metersPerDegreeLon;
+  const totalLonChange = distanceMeters / metersPerDegreeLon;
   
   const numFixes = Math.floor(distanceMeters / fixIntervalMeters) + 1;
 
@@ -63,15 +59,15 @@ function createStraightGlide(
 }
 
 describe('Glide Speed Calculations', () => {
-  describe('haversineDistance', () => {
+  describe('andoyerDistance', () => {
     it('should calculate distance between two points', () => {
       // Approximately 111km between 1 degree of latitude
-      const distance = haversineDistance(47.0, 11.0, 48.0, 11.0);
+      const distance = andoyerDistance(47.0, 11.0, 48.0, 11.0);
       expect(distance).toBeCloseTo(111195, -2); // Within 100m
     });
 
     it('should return 0 for same point', () => {
-      const distance = haversineDistance(47.0, 11.0, 47.0, 11.0);
+      const distance = andoyerDistance(47.0, 11.0, 47.0, 11.0);
       expect(distance).toBe(0);
     });
   });
@@ -204,22 +200,19 @@ describe('Glide Speed Calculations', () => {
       const startLat = 47.0;
       const startLon = 11.0;
       const metersPerDegreeLon = 111320 * Math.cos(startLat * Math.PI / 180);
-      // Add 0.15% compensation for haversine vs simple distance calculation
-      const distanceCompensation = 1.0015;
-      
       const fixes: IGCFix[] = [];
-      
+
       // First segment: 0-500m at 10 m/s (50 seconds)
       for (let t = 0; t <= 50; t += 1) {
         const distance = t * 10; // 10 m/s
-        const lon = startLon + (distance * distanceCompensation) / metersPerDegreeLon;
+        const lon = startLon + distance / metersPerDegreeLon;
         fixes.push(createFix(t, startLat, lon));
       }
-      
+
       // Second segment: 500-1000m at 20 m/s (25 seconds, starting at t=50)
       for (let t = 1; t <= 25; t += 1) {
         const distance = 500 + t * 20; // Starting at 500m, 20 m/s
-        const lon = startLon + (distance * distanceCompensation) / metersPerDegreeLon;
+        const lon = startLon + distance / metersPerDegreeLon;
         fixes.push(createFix(50 + t, startLat, lon));
       }
       
@@ -487,11 +480,9 @@ describe('Glide Speed Calculations', () => {
       const startLat = 47.0;
       const startLon = 11.0;
       const metersPerDegreeLon = 111320 * Math.cos(startLat * Math.PI / 180);
-      const distanceCompensation = 1.0015;
-
       for (let i = 0; i <= 100; i++) {
         const distance = i * 20; // 20m intervals, 2000m total
-        const lon = startLon + (distance * distanceCompensation) / metersPerDegreeLon;
+        const lon = startLon + distance / metersPerDegreeLon;
         const altitude = 1000 - (i * 1); // Descend 1m per fix = 100m over 2000m
         fixes.push(createFix(i * 2, startLat, lon, altitude)); // 10 m/s
       }
@@ -513,7 +504,7 @@ describe('Glide Speed Calculations', () => {
 
       for (let i = 0; i <= 50; i++) {
         const distance = i * 20;
-        const lon = startLon + (distance * 1.0015) / metersPerDegreeLon;
+        const lon = startLon + distance / metersPerDegreeLon;
         const altitude = 1000 + i * 2; // Climbing
         fixes.push(createFix(i * 2, startLat, lon, altitude));
       }

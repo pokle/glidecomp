@@ -17,7 +17,7 @@ import type { TurnpointSequenceResult } from './turnpoint-sequence';
 import { resolveTurnpointSequence } from './turnpoint-sequence';
 import { getESSIndex } from './xctsk-parser';
 import { calculateOptimizedTaskDistance } from './task-optimizer';
-import { haversineDistance } from './geo';
+import { andoyerDistance } from './geo';
 
 // ---------------------------------------------------------------------------
 // Competition parameters
@@ -431,7 +431,7 @@ export function calculateLeadingCoefficient(
     if (t < pilotSSSTime) continue;
 
     const distToESS = Math.max(0,
-      haversineDistance(fix.latitude, fix.longitude, essLat, essLon) - essRadius
+      andoyerDistance(fix.latitude, fix.longitude, essLat, essLon) - essRadius
     );
     minDistSoFar = Math.min(minDistSoFar, distToESS);
     points.push({ time: (t - taskFirstSSSTime) / 1000, dist: minDistSoFar });

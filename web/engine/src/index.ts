@@ -5,7 +5,7 @@ export { detectFlightEvents, filterEventsByBounds, getEventStyle, type FlightEve
 export { parseXCTask, igcTaskToXCTask, calculateNominalTaskDistance, getSSSIndex, getESSIndex, getGoalIndex, getIntermediateTurnpoints, isValidTask, type XCTask, type Turnpoint, type TurnpointType, type Waypoint, type SSSConfig, type GoalConfig, type IGCTaskConversionOptions } from './xctsk-parser';
 export { calculateOptimizedTaskLine, calculateOptimizedTaskDistance, getOptimizedSegmentDistances } from './task-optimizer';
 export { parseWaypointsCSV, findWaypoint, findWaypointByName, findWaypointByCoordinates, type WaypointRecord } from './waypoints';
-export { haversineDistance, calculateBearing, calculateBearingRadians, destinationPoint, getBoundingBox, isInsideCylinder, getCirclePoints } from './geo';
+export { andoyerDistance, calculateBearing, calculateBearingRadians, destinationPoint, getBoundingBox, isInsideCylinder, getCirclePoints } from './geo';
 export { formatUnit, formatSpeed, formatAltitude, formatAltitudeChange, formatDistance, formatClimbRate, formatRadius, getUnitLabel, getCurrentUnit, getSegmentLengthMeters, type FormattedValue, type UnitPreferences, type SpeedUnit, type AltitudeUnit, type DistanceUnit, type ClimbRateUnit } from './units';
 export { calculateGlidePositions, calculateGlideMarkers, calculateTotalGlideDistance, calculatePointMetrics, type ChevronPosition, type GlideMarker, type GlideContext, type GlideContextResolver, type PointMetrics } from './glide-speed';
 export { resolveTurnpointSequence, detectCylinderCrossings, type TurnpointSequenceResult, type CylinderCrossing, type TurnpointReaching, type BestProgress, type LegDistance } from './turnpoint-sequence';

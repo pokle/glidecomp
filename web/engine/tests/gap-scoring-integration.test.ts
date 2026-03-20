@@ -156,8 +156,8 @@ describe('Corryong Cup 2026 Task 1 — integration', () => {
     { name: 'Peter  Burkitt',    rank: 3,  total: 844,  distPts: 485.6, timePts: 358.8, madeGoal: true },
 
     // Mid-pack — goal finishers
-    { name: 'Glen Mcfarlane',    rank: 5,  total: 624,  distPts: 485.6, timePts: 138.3, madeGoal: true },
-    { name: 'Todd Wisewould',    rank: 10, total: 515,  distPts: 485.6, timePts: 29.5,  madeGoal: true },
+    { name: 'Glen Mcfarlane',    rank: 5,  total: 624,  distPts: 485.6, timePts: 138.1, madeGoal: true },
+    { name: 'Todd Wisewould',    rank: 10, total: 515,  distPts: 485.6, timePts: 29.6,  madeGoal: true },
     { name: 'Craig Taylor',      rank: 12, total: 486,  distPts: 485.6, timePts: 0,     madeGoal: true },
 
     // First non-goal pilot
@@ -165,7 +165,7 @@ describe('Corryong Cup 2026 Task 1 — integration', () => {
 
     // Mid-pack — non-goal
     { name: 'Steve Blenkinsop',  rank: 17, total: 309,  distPts: 309.2, timePts: 0, madeGoal: false },
-    { name: 'Neale Halsall',     rank: 22, total: 164,  distPts: 163.8, timePts: 0, madeGoal: false },
+    { name: 'Neale Halsall',     rank: 22, total: 164,  distPts: 163.9, timePts: 0, madeGoal: false },
 
     // Trailing — at minimum distance floor
     { name: 'Rennick Kerr',     rank: 29, total: 33,  distPts: 32.9, timePts: 0, madeGoal: false },

@@ -5,7 +5,7 @@
  */
 
 import type { IGCFix } from './igc-parser';
-import { haversineDistance, calculateBearing, calculateTrackDistance } from './geo';
+import { andoyerDistance, calculateBearing, calculateTrackDistance } from './geo';
 
 
 export interface ChevronPosition {
@@ -56,7 +56,7 @@ export function calculateGlidePositions(
     const prevFix = fixes[i - 1];
     const currFix = fixes[i];
 
-    const segmentDistance = haversineDistance(
+    const segmentDistance = andoyerDistance(
       prevFix.latitude,
       prevFix.longitude,
       currFix.latitude,
@@ -185,7 +185,7 @@ export function calculateGlideMarkers(fixes: IGCFix[], contextResolver?: GlideCo
     const context = contextResolver?.(pos.time);
     const nextTP = context?.nextTurnpoint;
     if (nextTP && pos.altitude > nextTP.altitude) {
-      const distToTP = haversineDistance(pos.lat, pos.lon, nextTP.lat, nextTP.lon);
+      const distToTP = andoyerDistance(pos.lat, pos.lon, nextTP.lat, nextTP.lon);
       const altDiffToTP = pos.altitude - nextTP.altitude;
       requiredGlideRatio = distToTP / altDiffToTP;
       targetName = nextTP.name;
@@ -242,7 +242,7 @@ export function calculatePointMetrics(
   let startIndex = centerIndex;
   let backDist = 0;
   for (let i = centerIndex; i > 0; i--) {
-    const d = haversineDistance(
+    const d = andoyerDistance(
       fixes[i].latitude, fixes[i].longitude,
       fixes[i - 1].latitude, fixes[i - 1].longitude,
     );
@@ -255,7 +255,7 @@ export function calculatePointMetrics(
   let endIndex = centerIndex;
   let fwdDist = 0;
   for (let i = centerIndex; i < fixes.length - 1; i++) {
-    const d = haversineDistance(
+    const d = andoyerDistance(
       fixes[i].latitude, fixes[i].longitude,
       fixes[i + 1].latitude, fixes[i + 1].longitude,
     );
@@ -290,7 +290,7 @@ export function calculatePointMetrics(
   const centerFix = fixes[centerIndex];
   const nextTP = context?.nextTurnpoint;
   if (nextTP && centerFix.gnssAltitude > nextTP.altitude) {
-    const distToTP = haversineDistance(
+    const distToTP = andoyerDistance(
       centerFix.latitude, centerFix.longitude,
       nextTP.lat, nextTP.lon,
     );

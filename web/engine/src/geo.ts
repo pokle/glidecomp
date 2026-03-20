@@ -9,11 +9,14 @@
  * uses (latitude, longitude). These wrapper functions handle the coordinate swap.
  */
 
-import { distance } from '@turf/distance';
 import { bearing } from '@turf/bearing';
 import { destination } from '@turf/destination';
 import { bbox } from '@turf/bbox';
 import { point, lineString } from '@turf/helpers';
+
+// WGS84 ellipsoid constants
+const WGS84_A = 6378137.0; // semi-major axis (meters)
+const WGS84_F = 1 / 298.257223563; // flattening
 
 // Define minimal interface to avoid circular dependency with igc-parser
 interface LatLonPoint {
@@ -22,7 +25,11 @@ interface LatLonPoint {
 }
 
 /**
- * Calculate distance between two coordinates using Haversine formula.
+ * Calculate distance between two coordinates using the Andoyer-Lambert formula.
+ *
+ * Uses the WGS84 ellipsoid for accurate geodesic distance. This is significantly
+ * more accurate than Haversine (spherical), matching Vincenty to within ~2 ppm,
+ * while being non-iterative and fast.
  *
  * @param lat1 - Latitude of first point (degrees)
  * @param lon1 - Longitude of first point (degrees)
@@ -30,19 +37,30 @@ interface LatLonPoint {
  * @param lon2 - Longitude of second point (degrees)
  * @returns Distance in meters
  */
-export function haversineDistance(
+export function andoyerDistance(
   lat1: number,
   lon1: number,
   lat2: number,
   lon2: number
 ): number {
-  // Turf uses [lon, lat] (GeoJSON format)
-  const from = point([lon1, lat1]);
-  const to = point([lon2, lat2]);
-
-  // Distance returns kilometers by default, convert to meters
-  return distance(from, to, { units: 'meters' });
+  const toRad = Math.PI / 180;
+  const phi1 = lat1 * toRad, phi2 = lat2 * toRad;
+  const dLambda = (lon2 - lon1) * toRad;
+  const F = (phi1 + phi2) / 2, G = (phi1 - phi2) / 2;
+  const sinG = Math.sin(G), cosG = Math.cos(G);
+  const sinF = Math.sin(F), cosF = Math.cos(F);
+  const sinHL = Math.sin(dLambda / 2), cosHL = Math.cos(dLambda / 2);
+  const S = sinG * sinG * cosHL * cosHL + cosF * cosF * sinHL * sinHL;
+  const C = cosG * cosG * cosHL * cosHL + sinF * sinF * sinHL * sinHL;
+  if (S === 0 || C === 0) return 0;
+  const omega = Math.atan(Math.sqrt(S / C));
+  const R = Math.sqrt(S * C) / omega;
+  const D = 2 * omega * WGS84_A;
+  const H1 = (3 * R - 1) / (2 * C);
+  const H2 = (3 * R + 1) / (2 * S);
+  return D * (1 + WGS84_F * (H1 * sinF * sinF * cosG * cosG - H2 * cosF * cosF * sinG * sinG));
 }
+
 
 /**
  * Calculate bearing from point 1 to point 2 in degrees.
@@ -165,7 +183,7 @@ export function calculateTrackDistance(
 ): number {
   let total = 0;
   for (let i = startIndex; i < endIndex; i++) {
-    total += haversineDistance(
+    total += andoyerDistance(
       fixes[i].latitude, fixes[i].longitude,
       fixes[i + 1].latitude, fixes[i + 1].longitude
     );
@@ -190,7 +208,7 @@ export function isInsideCylinder(
   centerLon: number,
   radius: number
 ): boolean {
-  const dist = haversineDistance(lat, lon, centerLat, centerLon);
+  const dist = andoyerDistance(lat, lon, centerLat, centerLon);
   return dist <= radius;
 }
 

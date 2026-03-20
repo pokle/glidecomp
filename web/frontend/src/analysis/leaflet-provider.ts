@@ -14,7 +14,7 @@ import {
 import {
   getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters,
   calculateOptimizedTaskLine, getOptimizedSegmentDistances,
-  calculateBearing, haversineDistance, destinationPoint, calculateBearingRadians,
+  calculateBearing, andoyerDistance, destinationPoint, calculateBearingRadians,
   type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult,
 } from '@taskscore/engine';
 import type { MapProvider } from './map-provider';
@@ -620,7 +620,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
         for (let i = 0; i < optimizedPath.length - 1; i++) {
           const p1 = optimizedPath[i];
           const p2 = optimizedPath[i + 1];
-          const legDist = haversineDistance(p1.lat, p1.lon, p2.lat, p2.lon);
+          const legDist = andoyerDistance(p1.lat, p1.lon, p2.lat, p2.lon);
           const bearing = calculateBearing(p1.lat, p1.lon, p2.lat, p2.lon);
           const bearingRad = calculateBearingRadians(p1.lat, p1.lon, p2.lat, p2.lon);
 
