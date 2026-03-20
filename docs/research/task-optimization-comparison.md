@@ -163,7 +163,7 @@ For a task with turnpoints A → B → C → D:
 1. TaskScore optimizes B using (A_optimized, C_center), then C using (B_optimized, D_center)
 2. AirScore optimizes B using (A_optimized, C_center), then C using (B_optimized, D_center), then **re-optimizes B using (A_optimized, C_optimized)**, and repeats
 
-The non-iterative approach in TaskScore means the optimized point on cylinder B doesn't account for where the pilot will actually touch cylinder C. For most paragliding tasks with moderate turning angles, the error is negligible (< 50m on a 100km task). For tasks with acute angles between legs or very large cylinders, the error could be more significant.
+The non-iterative approach in TaskScore means the optimized point on cylinder B doesn't account for where the pilot will actually touch cylinder C. This matters for real competition tasks — for example, `face.xctsk` (Corryong Cup 2026) has cylinder radii up to 7 km, acute turning angles, and closely spaced turnpoints, all of which amplify the error from non-iteration.
 
 ### Distance Formula
 
@@ -196,18 +196,20 @@ TaskScore works directly in geographic coordinates (lat/lon), computing WGS84 el
 
 4. **Consider UTM projection** — For the optimization loop, project to UTM and use Euclidean geometry for the angle bisector calculation. This would match the spec exactly.
 
-### Pragmatic Assessment
+### Current Status
 
-For a client-side analysis tool (not an official scoring system), the current TaskScore implementation is **good**:
-- The golden section search finds the correct optimal point per cylinder
-- The single-pass greedy approach produces results within ~0.1% of the iterative solution for typical tasks
-- WGS84 ellipsoid distances (Andoyer-Lambert) match the FAI distance formula used by CIVL
-- Vincenty direct formula for destination points ensures consistency between distance and projection
+TaskScore is intended for scoring HG and PG competitions, so matching AirScore/CIVL results is important. The distance formula is now aligned (WGS84 Andoyer-Lambert). The remaining gap is the optimization method:
 
-The main scenario where the current algorithm would produce noticeably different results from AirScore is a task with:
-- Very large cylinder radii (> 5km)
-- Acute turning angles between consecutive legs
-- Many closely spaced turnpoints
+**Done:**
+- WGS84 ellipsoid distances (Andoyer-Lambert) — matches the FAI distance formula
+- Vincenty direct formula for destination points — consistent with distance calculations
+
+**Still needed for competition-accurate scoring:**
+1. **Iterative convergence** — the single-pass greedy approach can produce measurably different task distances from AirScore on real tasks, especially those with large cylinders (e.g. `face.xctsk` has a 7 km cylinder), acute turning angles, and closely spaced turnpoints
+2. **Cylinder tolerance** — 0.1% (Cat 1) or 0.5% (Cat 2)
+
+**Nice to have:**
+3. UTM projection for the optimization loop (would match the spec exactly, but the accuracy gain over geographic coordinates + Andoyer is marginal)
 
 ## References
 
