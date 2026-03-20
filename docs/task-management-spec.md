@@ -232,7 +232,7 @@ createTaskForm?.addEventListener('submit', async (e) => {
 **File: `/web/frontend/src/analysis/task-matcher.ts`**
 
 ```typescript
-import { haversineDistance } from './geo';
+import { andoyerDistance } from './geo';
 import type { IGCFile, IGCTask } from './igc-parser';
 import type { XCTask } from './xctsk-parser';
 
@@ -285,7 +285,7 @@ function scoreTaskMatch(stored: StoredTask, igcTask: IGCTask): TaskMatch {
   // Compare start location
   const taskSSS = task.turnpoints.find(tp => tp.type === 'SSS');
   if (taskSSS && igcTask.start) {
-    const dist = haversineDistance(
+    const dist = andoyerDistance(
       taskSSS.waypoint.lat, taskSSS.waypoint.lon,
       igcTask.start.latitude, igcTask.start.longitude
     );
@@ -296,7 +296,7 @@ function scoreTaskMatch(stored: StoredTask, igcTask: IGCTask): TaskMatch {
   const taskTPs = task.turnpoints.filter(tp => !tp.type);
   for (const igcTP of igcTask.turnpoints) {
     for (const taskTP of taskTPs) {
-      const dist = haversineDistance(
+      const dist = andoyerDistance(
         taskTP.waypoint.lat, taskTP.waypoint.lon,
         igcTP.latitude, igcTP.longitude
       );
@@ -310,7 +310,7 @@ function scoreTaskMatch(stored: StoredTask, igcTask: IGCTask): TaskMatch {
   // Compare finish location
   const taskESS = task.turnpoints.find(tp => tp.type === 'ESS');
   if (taskESS && igcTask.finish) {
-    const dist = haversineDistance(
+    const dist = andoyerDistance(
       taskESS.waypoint.lat, taskESS.waypoint.lon,
       igcTask.finish.latitude, igcTask.finish.longitude
     );

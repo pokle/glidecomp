@@ -355,7 +355,7 @@ Only positive lift values contribute. A "center angle" is displayed showing the 
 
 ## 9. Recommended Implementation Approach
 
-Practical upgrade path for TaskScore, leveraging existing `geo.ts` primitives (`calculateBearing`, `haversineDistance`):
+Practical upgrade path for TaskScore, leveraging existing `geo.ts` primitives (`calculateBearing`, `andoyerDistance`):
 
 ### Phase 1: Circling Detection
 

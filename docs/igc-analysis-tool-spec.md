@@ -219,7 +219,7 @@ Supports both v1 (full JSON) and v2 (compact QR code) formats:
 - **Glides**: Segments between thermals with calculated L/D ratio (see `event-detection/glide-detection-spec.md` for detailed algorithm documentation)
 - **Circle detection**: Cumulative heading change to detect individual thermal circles, with wind estimation from circle drift (see `event-detection/circling-flight-and-thermal-analysis-research.md`)
 - **Turnpoint sequencing**: Cylinder crossing detection and CIVL GAP-compliant turnpoint sequence resolution, including SSS direction validation and best-progress scoring
-- **Cylinder crossings**: Haversine distance checks against turnpoint radii
+- **Cylinder crossings**: WGS84 ellipsoid distance checks (Andoyer-Lambert) against turnpoint radii
 - **Vario extremes**: Smoothed vertical speed analysis
 - **GAP scoring**: Multi-track task scoring implementing the CIVL GAP formula (FAI Sporting Code Section 7F). Calculates task validity, weight distribution, distance/time/leading/arrival points. Supports both PG and HG scoring with configurable competition parameters (nominal distance/goal/time, minimum distance, leading/arrival toggles).
 

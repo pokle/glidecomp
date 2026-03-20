@@ -46,7 +46,7 @@ For each accepted glide:
 |-----------|-------------|
 | `startIndex` / `endIndex` | Fix indices defining the segment |
 | `startAltitude` / `endAltitude` | GNSS altitude at boundary fixes |
-| `distance` | Sum of haversine distances between consecutive fixes (path distance, not straight line) |
+| `distance` | Sum of WGS84 ellipsoid distances (Andoyer-Lambert) between consecutive fixes (path distance, not straight line) |
 | `glideRatio` | `distance / altitudeLoss` where `altitudeLoss = startAltitude - endAltitude`. Set to `Infinity` if the pilot gained altitude or stayed level. |
 | `duration` | Time from start to end fix (seconds) |
 
@@ -149,6 +149,6 @@ Since glide boundaries depend entirely on thermal boundaries:
 
 ## Known Limitations
 
-1. **Path distance vs. straight-line distance** — glide distance is the sum of fix-to-fix haversine distances (the path walked), not the straight-line distance. For straight glides these are nearly equal, but for glides with course changes the path distance will be longer.
+1. **Path distance vs. straight-line distance** — glide distance is the sum of fix-to-fix distances (the path walked), not the straight-line distance. For straight glides these are nearly equal, but for glides with course changes the path distance will be longer.
 2. **L/D uses path distance** — the glide ratio uses path distance in the numerator. This slightly overstates L/D compared to the straight-line convention, especially for glides with significant course changes.
 3. **No wind correction** — glide performance is over the ground, not through the air. A glide into headwind will show a worse L/D than the same glide with a tailwind, even though the glider's aerodynamic performance is identical.

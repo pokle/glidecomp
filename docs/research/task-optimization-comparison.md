@@ -9,10 +9,10 @@ All three systems solve the same geometric problem: find the shortest path from 
 | Aspect | TaskScore | AirScore (Python) | FAI/CIVL GAP Spec |
 |---|---|---|---|
 | **Optimization method** | Golden section search per cylinder | Angle bisector projection + iteration | Iterative projection (Annex A) |
-| **Coordinate system** | Spherical (lat/lon via Turf.js) | Planar (transverse Mercator projection) | Planar (UTM projection) |
-| **Distance formula** | Haversine (spherical) | Geodesic (WGS84 ellipsoid via geographiclib) | Andoyer-Lambert or FAI sphere |
+| **Coordinate system** | Geographic (lat/lon) | Planar (transverse Mercator projection) | Planar (UTM projection) |
+| **Distance formula** | Andoyer-Lambert (WGS84 ellipsoid) | Geodesic (WGS84 ellipsoid via geographiclib) | Andoyer-Lambert or FAI sphere |
 | **Iteration strategy** | Single forward pass (greedy) | Forward pass repeated until convergence (≤1m change) | Repeated until no further reduction |
-| **Earth model** | Sphere (Turf.js default) | WGS84 ellipsoid | WGS84 ellipsoid (Cat 1) or FAI sphere |
+| **Earth model** | WGS84 ellipsoid | WGS84 ellipsoid | WGS84 ellipsoid (Cat 1) or FAI sphere |
 | **Cylinder tolerance** | None | 0.5% | 0.1% (Cat 1), 0.5% (Cat 2) |
 
 ## 1. TaskScore Engine Algorithm
@@ -34,7 +34,7 @@ cost(θ) = distance(prev_optimized_point, point_on_circle(θ)) + distance(point_
 ### Key Characteristics
 
 - **Single forward pass** — each cylinder is optimized once, considering only the already-optimized previous point and the *center* of the next turnpoint (not the next optimized point)
-- **Spherical geometry** — uses haversine distance via Turf.js
+- **WGS84 ellipsoid geometry** — uses Andoyer-Lambert distance formula
 - **No iteration** — does not re-optimize earlier points after later points are determined
 - **No coordinate projection** — works directly in geographic coordinates
 
@@ -45,7 +45,7 @@ cost(θ) = distance(prev_optimized_point, point_on_circle(θ)) + distance(point_
 
 ### Weaknesses
 - **Greedy/non-iterative** — optimizing point i uses `next_center` not `next_optimized_point`, so later adjustments don't propagate back
-- **Spherical geometry** — up to 0.3% error vs WGS84 ellipsoid on long legs
+- **No coordinate projection** — works directly in geographic coordinates (no UTM/Mercator projection)
 - **No cylinder tolerance** — doesn't apply the 0.1-0.5% tolerance band
 
 ## 2. AirScore Algorithm (Python — FAI-CIVL)
@@ -169,20 +169,20 @@ The non-iterative approach in TaskScore means the optimized point on cylinder B 
 
 | | TaskScore | AirScore | CIVL Spec |
 |---|---|---|---|
-| Optimization distances | Haversine (spherical) | Euclidean (projected plane) | Euclidean (projected plane) |
-| Final reported distance | Haversine (spherical) | Geodesic (WGS84 ellipsoid) | Andoyer-Lambert (WGS84) |
-| Earth model | Sphere | WGS84 ellipsoid | WGS84 ellipsoid (Cat 1) |
-| Max error vs WGS84 | ~0.3% on long legs | < 0.01% | Reference standard |
+| Optimization distances | Andoyer-Lambert (WGS84 ellipsoid) | Euclidean (projected plane) | Euclidean (projected plane) |
+| Final reported distance | Andoyer-Lambert (WGS84 ellipsoid) | Geodesic (WGS84 ellipsoid) | Andoyer-Lambert (WGS84) |
+| Earth model | WGS84 ellipsoid | WGS84 ellipsoid | WGS84 ellipsoid (Cat 1) |
+| Max error vs WGS84 | ~2 ppm vs Vincenty | < 0.01% | Reference standard |
 
-The haversine formula assumes a perfect sphere, which introduces up to ~0.3% error compared to the WGS84 ellipsoid. For a 150km task, this could mean ~450m discrepancy. However, Turf.js uses a mean earth radius that minimizes average error.
+All three systems now use the WGS84 ellipsoid for distance calculation. TaskScore uses the Andoyer-Lambert formula, which is accurate to ~2 ppm vs Vincenty's iterative solution — well within the tolerance needed for competition scoring. The remaining difference between TaskScore and AirScore/CIVL is in the optimization method (geographic coordinates vs projected plane), not the distance formula.
 
 ### Coordinate System
 
-TaskScore works directly in geographic coordinates (lat/lon), computing distances on the sphere for each golden section iteration. AirScore and the CIVL spec project to a 2D plane first, then work in Euclidean geometry.
+TaskScore works directly in geographic coordinates (lat/lon), computing WGS84 ellipsoid distances (Andoyer-Lambert) for each golden section iteration. AirScore and the CIVL spec project to a 2D plane first, then work in Euclidean geometry.
 
 **Trade-offs:**
 - Planar projection: Fast Euclidean math, but introduces projection distortion (< 0.04% in UTM)
-- Spherical: No projection distortion, but haversine is slower than Euclidean and assumes a sphere
+- Geographic coordinates + Andoyer: No projection distortion, accurate WGS84 distances (~2 ppm vs Vincenty), but slightly more computation per iteration
 
 ## Recommendations
 
@@ -190,7 +190,7 @@ TaskScore works directly in geographic coordinates (lat/lon), computing distance
 
 1. **Add iterative convergence** — Re-run the optimization pass until total distance changes by < 1m. This is the most impactful change for correctness.
 
-2. **Use WGS84 ellipsoid distances** — Replace haversine with Vincenty/Karney geodesic for final distance reporting. Turf.js supports this via `@turf/distance` with `{units: 'meters'}` (which already uses a reasonable approximation).
+2. ~~**Use WGS84 ellipsoid distances**~~ — **Done.** Replaced haversine with Andoyer-Lambert (WGS84 ellipsoid) for all distance calculations, and Vincenty direct formula for destination point computation. Removed `@turf/distance` and `@turf/destination` dependencies. Accuracy: ~2 ppm vs Vincenty reference, validated against 33 real IGC tracks.
 
 3. **Add cylinder tolerance** — Apply the 0.5% tolerance when checking if a tracklog point reaches a cylinder (for Cat 2; 0.1% for Cat 1).
 
@@ -198,10 +198,11 @@ TaskScore works directly in geographic coordinates (lat/lon), computing distance
 
 ### Pragmatic Assessment
 
-For a client-side analysis tool (not an official scoring system), the current TaskScore implementation is **adequate**:
+For a client-side analysis tool (not an official scoring system), the current TaskScore implementation is **good**:
 - The golden section search finds the correct optimal point per cylinder
 - The single-pass greedy approach produces results within ~0.1% of the iterative solution for typical tasks
-- Haversine distance is accurate enough for pilot-facing distance display
+- WGS84 ellipsoid distances (Andoyer-Lambert) match the FAI distance formula used by CIVL
+- Vincenty direct formula for destination points ensures consistency between distance and projection
 
 The main scenario where the current algorithm would produce noticeably different results from AirScore is a task with:
 - Very large cylinder radii (> 5km)

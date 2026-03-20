@@ -100,19 +100,19 @@ function findOptimalCirclePoint(prev, center, radius, next):
 
 ## Geometry Functions
 
-All geographic calculations use **Turf.js** via the centralized `geo.ts` module:
+All geographic calculations use the centralized `geo.ts` module, which implements WGS84 ellipsoid formulas (Andoyer-Lambert for distance, Vincenty direct for destination):
 
 ```typescript
-import { haversineDistance, calculateBearingRadians, destinationPoint } from './geo';
+import { andoyerDistance, calculateBearingRadians, destinationPoint } from './geo';
 ```
 
 ### Available Functions
 
-- `haversineDistance(lat1, lon1, lat2, lon2)` - Great circle distance in meters
-- `calculateBearingRadians(lat1, lon1, lat2, lon2)` - Initial bearing in radians
-- `destinationPoint(lat, lon, distanceMeters, bearingRadians)` - Destination point calculation
+- `andoyerDistance(lat1, lon1, lat2, lon2)` - WGS84 ellipsoid distance in meters (Andoyer-Lambert formula, ~2 ppm vs Vincenty)
+- `calculateBearingRadians(lat1, lon1, lat2, lon2)` - Initial bearing in radians (via Turf.js)
+- `destinationPoint(lat, lon, distanceMeters, bearingRadians)` - Destination point on WGS84 ellipsoid (Vincenty direct formula)
 
-**Note**: Never implement inline geo math. Always use the `geo.ts` module which wraps Turf.js.
+**Note**: Never implement inline geo math. Always use the `geo.ts` module.
 
 ## Visual Representation
 
@@ -196,8 +196,6 @@ Results are not cached as task changes are infrequent.
 
 3. **Local optimization**: Each point is optimized considering only adjacent points. This is a greedy approach that may not find the global optimum for complex task geometries.
 
-4. **Great circle approximation**: Uses spherical geometry (haversine) rather than WGS84 ellipsoid. Error is < 0.5% for distances typical in paragliding tasks.
-
 ### Potential Enhancements
 1. **Global optimization**: Implement true global optimization (e.g., simulated annealing, genetic algorithms) to find the absolute shortest path
 
@@ -209,7 +207,7 @@ Results are not cached as task changes are infrequent.
 
 4. **FAI triangle detection**: Detect and optimize FAI triangle tasks with their specific constraints
 
-5. **Ellipsoid geometry**: Use Vincenty's formulae for higher precision on very long tasks
+5. **Iterative convergence**: Re-run the optimization pass until total distance changes by < 1m, matching the CIVL specification approach
 
 ## Testing
 
@@ -242,9 +240,15 @@ The implementation should be tested with:
 - **LK8000 Task Optimization**: https://github.com/LK8000/LK8000/pull/286
 - **Touring n Circles**: https://www.matec-conferences.org/articles/matecconf/pdf/2018/91/matecconf_eitce2018_03027.pdf
 - **Golden Section Search**: https://en.wikipedia.org/wiki/Golden-section_search
-- **Haversine Formula**: https://en.wikipedia.org/wiki/Haversine_formula
+- **Andoyer-Lambert Formula**: WGS84 ellipsoid distance approximation (~2 ppm accuracy vs Vincenty)
 
 ## Change Log
+
+### 2026-03-20: WGS84 Ellipsoid Geometry
+- Replaced haversine (spherical) with Andoyer-Lambert distance formula (WGS84 ellipsoid)
+- Replaced Turf.js destination with Vincenty direct formula (WGS84 ellipsoid)
+- Removed `@turf/distance` and `@turf/destination` dependencies
+- Accuracy: ~2 ppm vs Vincenty reference, matching FAI/CIVL distance formula
 
 ### 2026-01-20: Simplified to MapBox Only
 - Removed Google Maps and MapLibre providers
