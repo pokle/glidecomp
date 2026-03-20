@@ -4,7 +4,8 @@
 
 - [ ] Analyse a tracklog against a task
   - Visualise task on the map
-  - Calculate task score, and explain the scores on the map
+  - [x] Calculate task score (CIVL GAP scoring engine — `web/engine/src/gap-scoring.ts`, CLI via `bun run score-task`)
+  - [ ] Explain the scores on the map
 - [ ] Submit tracklogs
   - IGC files via drag-and-drop (implemented)
   - (Future) email with IGC file attachment, and text containing pilot's thoughts

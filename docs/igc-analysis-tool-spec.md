@@ -165,6 +165,7 @@ When an event is selected from the panel, the map highlights the event location 
 ├── circle-detector.ts           # Circling flight detection and wind estimation
 ├── turnpoint-sequence.ts        # Turnpoint sequencing and best-progress scoring
 ├── task-optimizer.ts            # Optimized task line calculation (golden section search)
+├── gap-scoring.ts               # CIVL GAP multi-track task scoring (FAI Section 7F)
 ├── segment-extractors.ts        # Data extraction for glides, climbs, sinks
 ├── event-styles.ts              # Event type colors and visual styles
 ├── geo.ts                       # Geographic calculations (Turf.js wrapper)
@@ -173,6 +174,11 @@ When an event is selected from the panel, the map highlights the event location 
 ├── sanitize.ts                  # Text sanitization (HTML escaping)
 ├── waypoints.ts                 # Waypoint handling
 └── index.ts                     # Library exports
+
+/web/engine/cli/
+├── detect-events.ts             # Detect flight events from an IGC file
+├── get-xcontest-task.ts         # Download a task from XContest by code
+└── score-task.ts                # Score multiple pilots against a task (CIVL GAP)
 
 /web/frontend/src/
 ├── analysis.html                # Main HTML page with Tailwind/Basecoat layout
@@ -215,6 +221,7 @@ Supports both v1 (full JSON) and v2 (compact QR code) formats:
 - **Turnpoint sequencing**: Cylinder crossing detection and CIVL GAP-compliant turnpoint sequence resolution, including SSS direction validation and best-progress scoring
 - **Cylinder crossings**: Haversine distance checks against turnpoint radii
 - **Vario extremes**: Smoothed vertical speed analysis
+- **GAP scoring**: Multi-track task scoring implementing the CIVL GAP formula (FAI Sporting Code Section 7F). Calculates task validity, weight distribution, distance/time/leading/arrival points. Supports both PG and HG scoring with configurable competition parameters (nominal distance/goal/time, minimum distance, leading/arrival toggles).
 
 ## Data Formats
 
