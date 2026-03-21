@@ -12,14 +12,14 @@ Scorers (Admins):
     - admin
     - committee 
   - scoring parameters
-    - nominal-distance <m>    [Nominal distance in meters]
-    - nominal-time <s>        [Nominal time in seconds (default: 5400)]
-    - nominal-goal <ratio>    [Nominal goal ratio 0-1 (default: 0.2)]
-    - nominal-launch <ratio>  [Nominal launch ratio 0-1 (default: 0.96)]
-    - min-distance <m>        [Minimum distance in meters (default: 5000)]
-    - scoring <PG|HG>         [Sport type (default: HG)]
-    - no-leading              [Disable leading (departure) points]
-    - no-arrival              [Disable arrival points]
+    - `--nominal-distance <m>` — Nominal distance in meters (default: 70% of task distance)
+    - `--nominal-time <s>` — Nominal time in seconds (default: 5400)
+    - `--nominal-goal <ratio>` — Nominal goal ratio 0-1 (default: 0.2)
+    - `--nominal-launch <ratio>` — Nominal launch ratio 0-1 (default: 0.96)
+    - `--min-distance <m>` — Minimum distance in meters (default: 5000)
+    - `--scoring <PG|HG>` — Sport type (default: HG)
+    - `--no-leading` — Disable leading (departure) points
+    - `--no-arrival` — Disable arrival points
 - Create or edit a registered list of pilots for a competition
   - pilot class
     - open
