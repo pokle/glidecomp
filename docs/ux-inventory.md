@@ -7,7 +7,6 @@ Complete inventory of all UX elements, jobs to be done, commands, buttons, and f
 | Page | Path | Purpose |
 |------|------|---------|
 | Home | `/` | Welcome/landing with links to Sign In, GitHub, YouTube, About |
-| Login | `/login` | Google OAuth sign-in |
 | Onboarding | `/onboarding` | Username setup (3-20 chars, alphanumeric + hyphens) |
 | Dashboard | `/dashboard` | File management — two tabs: Tracks & Tasks |
 | Analysis | `/analysis` | Main app — map + right sidebar panel |

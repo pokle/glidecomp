@@ -1,4 +1,4 @@
-import { getCurrentUser, signOut, deleteAccount } from "./auth/client";
+import { getCurrentUser, signInWithGoogle, signOut, deleteAccount } from "./auth/client";
 import { storage, type StoredTask, type StoredTrack } from "./analysis/storage";
 import { parseIGC, parseXCTask, sanitizeText } from "@glidecomp/engine";
 
@@ -78,7 +78,7 @@ async function init() {
   const user = await getCurrentUser();
 
   if (!user) {
-    window.location.href = "/login.html";
+    signInWithGoogle();
     return;
   }
 

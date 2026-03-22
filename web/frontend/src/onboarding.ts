@@ -5,7 +5,7 @@ async function init() {
 
   // Guard: not authenticated
   if (!user) {
-    window.location.href = "/login.html";
+    window.location.href = "/u/me/";
     return;
   }
 

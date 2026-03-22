@@ -7,7 +7,7 @@ Google OAuth authentication for GlideComp using Better Auth, Hono, and Cloudflar
 ```
 Browser                    Cloudflare
 ┌─────────────┐           ┌──────────────────────┐
-│ /login.html │──────────▶│ auth-api Worker       │
+│ /u/{user}/  │──────────▶│ auth-api Worker       │
 │ /onboarding │  /api/auth│ (Hono + Better Auth)  │
 │ /u/{user}/  │◀──────────│        ↕              │
 │ /analysis   │           │   D1 (taskscore-auth) │
@@ -21,14 +21,14 @@ Browser                    Cloudflare
 ## OAuth Flow
 
 ```
-1. User clicks "Sign in with Google" on /login.html
+1. User clicks "Log in to GlideComp with Google" on index or dashboard
 2. Better Auth client calls signIn.social({ provider: "google" })
 3. Browser redirects to Google consent screen
 4. Google redirects back to /api/auth/callback/google
 5. Better Auth creates/updates user + session in D1, sets session cookie
-6. Browser redirects to /login.html (callbackURL)
-7. login.ts detects session:
-   - Has username? → redirect to /u/{username}/
+6. Browser redirects to /u/me/ (callbackURL) which loads dashboard.html
+7. dashboard.ts detects session:
+   - Has username? → show dashboard
    - No username?  → redirect to /onboarding.html
 8. User picks a username on onboarding page
 9. POST /api/auth/set-username → redirect to /u/{username}/
@@ -55,9 +55,8 @@ Browser                    Cloudflare
 
 | Page | File | Purpose |
 |------|------|---------|
-| Sign in | `login.html` + `login.ts` | Google sign-in button, redirects if already authenticated |
 | Onboarding | `onboarding.html` + `onboarding.ts` | Username picker for new users |
-| Dashboard | `dashboard.html` + `dashboard.ts` | Welcome page at `/u/{username}/`, links to analysis |
+| Dashboard | `dashboard.html` + `dashboard.ts` | Welcome page at `/u/{username}/`, shows Google sign-in if not authenticated |
 
 ### API Endpoints
 

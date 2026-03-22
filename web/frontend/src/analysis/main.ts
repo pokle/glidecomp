@@ -72,7 +72,7 @@ interface FeatureToggleConfig {
 async function init(): Promise<void> {
   const user = await getCurrentUser();
   if (!user) {
-    window.location.href = "/login.html";
+    window.location.href = "/u/me/";
     return;
   }
   if (!user.username) {
