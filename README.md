@@ -1,5 +1,7 @@
 # GlideComp
 
+> Formerly known as **TaskScore**. The Cloudflare D1 database is still named `taskscore-auth` because D1 databases cannot be renamed.
+
 Helps you analyse hanggliding / paragliding competition tasks.
 
 For pilots and scorers, it provides:
@@ -35,7 +37,7 @@ In the last example, it's useful to know the distance to the next waypoint in th
 ### Prerequisites
 
 - [Bun](https://bun.sh/) (also requires Node.js 20+)
-- A [MapBox](https://www.mapbox.com/) access token (for the map)
+- A [MapBox](https://www.mapbox.com/) access token (for the map). If your token has URL restrictions, ensure `glidecomp.com` and `localhost:3000` are in the allowed URLs list.
 
 ### Setup
 
