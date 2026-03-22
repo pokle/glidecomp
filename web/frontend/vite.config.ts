@@ -55,6 +55,7 @@ export default defineConfig({
         onboarding: resolve(__dirname, 'src/onboarding.html'),
         dashboard: resolve(__dirname, 'src/dashboard.html'),
         about: resolve(__dirname, 'src/about.html'),
+        legal: resolve(__dirname, 'src/legal.html'),
       },
     },
   },
