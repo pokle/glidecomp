@@ -1,4 +1,4 @@
-# GlideComp
+# <img src="web/frontend/public/icon.svg" alt="GlideComp logo" width="32" height="32" /> GlideComp
 
 > Formerly known as **TaskScore**. The Cloudflare D1 database is still named `taskscore-auth` because D1 databases cannot be renamed.
 
