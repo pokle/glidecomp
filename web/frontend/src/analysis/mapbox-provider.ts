@@ -736,6 +736,9 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       map.addControl(new mapboxgl.FullscreenControl());
       map.addControl(new mapboxgl.ScaleControl({ maxWidth: 200 }));
 
+      // Always show compass overlay
+      createCompass();
+
       // Custom menu button control (top-left, added first so it's topmost)
       let menuButtonCallback: (() => void) | null = null;
       let menuButtonContainer: HTMLElement | null = null;
@@ -1695,7 +1698,6 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           } else {
             // Clean up drone follow state
             removeAltitudeScrubber();
-            removeCompass();
             clearGliderMarker();
             cameraPresetControl?.remove();
           }
@@ -1808,12 +1810,10 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
             render3DTrack(fixes);
             cameraPresetControl?.create();
             cameraPresetControl?.updateActive(activeCameraPreset);
-            // Recreate drone follow scrubber/marker/compass for the new track
+            // Recreate drone follow scrubber/marker for the new track
             removeAltitudeScrubber();
-            removeCompass();
             clearGliderMarker();
             scrubberElement = createAltitudeScrubber(fixes);
-            createCompass();
             currentFixIndex = 0;
             updateGliderMarker(0);
             const cam = computeDroneCamera(0, true);
