@@ -8,10 +8,10 @@
  * - Event detection and display
  */
 
-import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistance, igcTaskToXCTask, resolveTurnpointSequence, maxBy, parseThresholdInput, formatThresholdForDisplay, DEFAULT_THRESHOLDS, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord, type DetectionThresholds, type PartialThresholds, type ThresholdDimension } from '@glidecomp/engine';
+import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistance, igcTaskToXCTask, resolveTurnpointSequence, scoreTask, maxBy, parseThresholdInput, formatThresholdForDisplay, DEFAULT_THRESHOLDS, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord, type DetectionThresholds, type PartialThresholds, type ThresholdDimension, type PilotFlight, type TaskScoreResult } from '@glidecomp/engine';
 import { getCurrentUser } from '../auth/client';
 import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
-import { createMapProvider, type MapProvider, type MapProviderType } from './map-provider';
+import { createMapProvider, type MapProvider, type MapProviderType, type LoadedTrack } from './map-provider';
 import { createAnalysisPanel, AnalysisPanel, FlightInfo } from './analysis-panel';
 import { loadCorryongWaypoints } from './waypoint-loader';
 import { config, type UnitPreferences } from './config';
@@ -34,6 +34,12 @@ interface AppState {
   task: XCTask | null;
   fixes: IGCFix[];
   events: FlightEvent[];
+  /** All loaded tracks (for multi-track mode) */
+  tracks: LoadedTrack[];
+  /** Currently selected track index, or 'all' for multi-track view */
+  selectedTrack: number | 'all';
+  /** Competition score result (computed when 'all' is selected with a task) */
+  compScore: TaskScoreResult | null;
 }
 
 const state: AppState = {
@@ -41,6 +47,9 @@ const state: AppState = {
   task: null,
   fixes: [],
   events: [],
+  tracks: [],
+  selectedTrack: 0,
+  compScore: null,
 };
 
 let mapRenderer: MapProvider | null = null;
@@ -451,12 +460,17 @@ async function init(): Promise<void> {
     state.task = null;
     state.fixes = [];
     state.events = [];
+    state.tracks = [];
+    state.selectedTrack = 0;
+    state.compScore = null;
 
     // Clear map
     if (mapRenderer) {
       mapRenderer.clearTrack();
       mapRenderer.clearTask();
       mapRenderer.clearEvents();
+      mapRenderer.clearMultiTrack?.();
+      mapRenderer.removeTrackSelector?.();
     }
 
     // Reset speed overlay state (must call setSpeedOverlay to clear provider flag)
@@ -467,11 +481,13 @@ async function init(): Promise<void> {
     updateUrlParam('speed', null);
 
     // Clear analysis panel
+    analysisPanel?.setMultiTrackMode(false);
     analysisPanel?.setEvents([]);
     analysisPanel?.setAltitudes([]);
     analysisPanel?.setFlightInfo({});
     analysisPanel?.setTask(null);
     analysisPanel?.setScore(null);
+    analysisPanel?.setCompetitionScore(null);
   });
 
   // Handle threshold reset buttons
@@ -711,6 +727,25 @@ async function init(): Promise<void> {
     analysisPanel.setWaypointDatabase(waypointDatabase);
   }
 
+  // Wire GAP parameters changed callback
+  analysisPanel.onGAPParametersChanged = () => {
+    if (state.selectedTrack === 'all' && state.tracks.length > 1) {
+      computeCompetitionScore();
+      analysisPanel?.setCompetitionScore(state.compScore);
+      // Re-render tracks with updated scores
+      const pilotScores = state.compScore?.pilotScores ?? [];
+      mapRenderer?.setMultiTrack?.(state.tracks, pilotScores);
+    }
+  };
+
+  // Wire multi-track click handler
+  mapRenderer.onMultiTrackClick?.((trackIndex: number, fixIndex: number) => {
+    const track = state.tracks[trackIndex];
+    if (!track) return;
+    // Show HUD with pilot name for the clicked track
+    mapRenderer?.showTrackPointHUDWithName?.(fixIndex, track.pilotName);
+  });
+
   // Wire map click handler for task editor "click on map" mode
   mapRenderer.onMapClick?.((lat: number, lon: number) => {
     analysisPanel?.addTurnpoint(lat, lon);
@@ -797,16 +832,23 @@ async function init(): Promise<void> {
     igcFileInput?.click();
   });
 
-  // File input handler
+  // File input handler (supports multiple file selection)
   igcFileInput?.addEventListener('change', async (e) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (file) {
+    const files = (e.target as HTMLInputElement).files;
+    if (!files || files.length === 0) return;
+
+    const igcFiles: File[] = [];
+    for (const file of files) {
       const name = file.name.toLowerCase();
       if (name.endsWith('.xctsk')) {
         await loadXCTaskFile(file);
-      } else {
-        await loadIGCFile(file);
+      } else if (name.endsWith('.igc')) {
+        igcFiles.push(file);
       }
+    }
+
+    if (igcFiles.length > 0) {
+      await loadMultipleIGCFiles(igcFiles);
     }
   });
 
@@ -832,15 +874,21 @@ async function init(): Promise<void> {
     if (!files?.length) return;
 
     let recognized = false;
+    const igcFiles: File[] = [];
+
     for (const file of files) {
       const name = file.name.toLowerCase();
       if (name.endsWith('.igc')) {
         recognized = true;
-        await loadIGCFile(file);
+        igcFiles.push(file);
       } else if (name.endsWith('.xctsk')) {
         recognized = true;
         await loadXCTaskFile(file);
       }
+    }
+
+    if (igcFiles.length > 0) {
+      await loadMultipleIGCFiles(igcFiles);
     }
 
     if (!recognized) {
@@ -997,11 +1045,41 @@ async function init(): Promise<void> {
     mapRenderer?.setTask(task);
     analysisPanel?.setTask(task);
     redetectEvents();
+
+    // Re-compute competition score if in all-tracks mode
+    if (state.selectedTrack === 'all' && state.tracks.length > 1) {
+      // Re-detect events for all tracks with the new task
+      for (const track of state.tracks) {
+        track.events = detectFlightEvents(track.fixes, task, config.getPartialThresholds());
+      }
+      computeCompetitionScore();
+      analysisPanel?.setCompetitionScore(state.compScore);
+      const pilotScores = state.compScore?.pilotScores ?? [];
+      mapRenderer?.setMultiTrack?.(state.tracks, pilotScores);
+    }
   }
 
   function applyTrack(igcFile: IGCFile): void {
     state.igcFile = igcFile;
     state.fixes = igcFile.fixes;
+
+    // Also update multi-track state for single-track legacy flow
+    const events = detectFlightEvents(igcFile.fixes, state.task || undefined, config.getPartialThresholds());
+    state.tracks = [{
+      pilotName: igcFile.header.pilot || 'Unknown',
+      date: igcFile.header.date || null,
+      filename: '',
+      fixes: igcFile.fixes,
+      events,
+    }];
+    state.selectedTrack = 0;
+    state.compScore = null;
+
+    // Clear any multi-track rendering
+    mapRenderer?.clearMultiTrack?.();
+    mapRenderer?.removeTrackSelector?.();
+    analysisPanel?.setMultiTrackMode(false);
+
     mapRenderer?.setTrack(igcFile.fixes);
     redetectEvents();
     analysisPanel?.setAltitudes(igcFile.fixes.map(f => f.gnssAltitude), igcFile.fixes.map(f => f.time));
@@ -1067,6 +1145,187 @@ async function init(): Promise<void> {
       }
     }
 
+  }
+
+  /**
+   * Load multiple IGC files at once (replaces the full track set)
+   */
+  async function loadMultipleIGCFiles(files: File[]): Promise<void> {
+    const tracks: LoadedTrack[] = [];
+
+    for (const file of files) {
+      try {
+        const content = await file.text();
+        const igcFile = parseIGC(content);
+
+        // Auto-detect task from first file that has one
+        if (igcFile.task && igcFile.task.start && !state.task) {
+          const xcTask = igcTaskToXCTask(igcFile.task, { waypoints: waypointDatabase });
+          applyTask(xcTask);
+        }
+
+        const events = detectFlightEvents(igcFile.fixes, state.task || undefined, config.getPartialThresholds());
+
+        tracks.push({
+          pilotName: igcFile.header.pilot || file.name.replace(/\.igc$/i, ''),
+          date: igcFile.header.date || null,
+          filename: file.name,
+          fixes: igcFile.fixes,
+          events,
+        });
+
+        // Store in browser storage
+        try {
+          await storage.storeTrack(file.name, content, igcFile);
+          await storageMenu?.refresh();
+        } catch (err) {
+          console.warn('Failed to store track:', err);
+        }
+      } catch (err) {
+        console.error(`Failed to parse ${file.name}:`, err);
+        showStatus(`Failed to parse ${file.name}: ${err}`, 'error');
+      }
+    }
+
+    if (tracks.length === 0) return;
+
+    // Replace the full track set
+    state.tracks = tracks;
+
+    if (tracks.length === 1) {
+      // Single track: use existing single-track flow
+      state.selectedTrack = 0;
+      selectSingleTrack(0);
+    } else {
+      // Multiple tracks: default to 'all' view
+      state.selectedTrack = 'all';
+      selectAllTracks();
+    }
+
+    // Show track selector if >1 tracks
+    updateTrackSelector();
+  }
+
+  /**
+   * Select a single track for detailed analysis
+   */
+  function selectSingleTrack(index: number): void {
+    const track = state.tracks[index];
+    if (!track) return;
+
+    state.selectedTrack = index;
+
+    // Set up single-track state
+    state.fixes = track.fixes;
+    state.events = track.events;
+
+    // Clear multi-track rendering
+    mapRenderer?.clearMultiTrack?.();
+
+    // Render single track
+    mapRenderer?.setTrack(track.fixes);
+    mapRenderer?.setEvents(track.events);
+
+    // Update analysis panel for single-track mode
+    analysisPanel?.setMultiTrackMode(false);
+    analysisPanel?.setEvents(track.events);
+    analysisPanel?.setAltitudes(track.fixes.map(f => f.gnssAltitude), track.fixes.map(f => f.time));
+
+    // Update flight info
+    const info: FlightInfo = {};
+    info.pilot = track.pilotName;
+    if (track.date) info.date = track.date.toLocaleDateString();
+    if (track.fixes.length > 0) {
+      const duration = track.fixes[track.fixes.length - 1].time.getTime() - track.fixes[0].time.getTime();
+      const hours = Math.floor(duration / 3600000);
+      const mins = Math.floor((duration % 3600000) / 60000);
+      info.duration = `${hours}h ${mins}m`;
+      info.maxAlt = formatAltitude(maxBy(track.fixes, f => f.gnssAltitude)).withUnit;
+    }
+    if (state.task) {
+      info.task = formatDistance(calculateOptimizedTaskDistance(state.task)).withUnit;
+    }
+    analysisPanel?.setFlightInfo(info);
+
+    // Update single-track score
+    if (state.task && track.fixes.length > 0) {
+      analysisPanel?.setScore(resolveTurnpointSequence(state.task, track.fixes));
+    } else {
+      analysisPanel?.setScore(null);
+    }
+
+    updateTrackSelector();
+  }
+
+  /**
+   * Select all tracks for competition view
+   */
+  function selectAllTracks(): void {
+    state.selectedTrack = 'all';
+
+    // Compute competition score
+    computeCompetitionScore();
+
+    const pilotScores = state.compScore?.pilotScores ?? [];
+
+    // Render all tracks on map with rank colors
+    mapRenderer?.setMultiTrack?.(state.tracks, pilotScores);
+
+    // Switch analysis panel to multi-track mode
+    analysisPanel?.setMultiTrackMode(true);
+    analysisPanel?.setCompetitionScore(state.compScore);
+
+    // Update flight info for all tracks
+    const info: FlightInfo = {};
+    info.pilot = `${state.tracks.length} pilots`;
+    if (state.task) {
+      info.task = formatDistance(calculateOptimizedTaskDistance(state.task)).withUnit;
+    }
+    analysisPanel?.setFlightInfo(info);
+
+    updateTrackSelector();
+  }
+
+  /**
+   * Compute competition scores for all loaded tracks
+   */
+  function computeCompetitionScore(): void {
+    if (!state.task || state.tracks.length === 0) {
+      state.compScore = null;
+      return;
+    }
+
+    const pilots: PilotFlight[] = state.tracks.map(track => ({
+      pilotName: track.pilotName,
+      trackFile: track.filename,
+      fixes: track.fixes,
+    }));
+
+    const gapParams = config.getGAPParameters();
+    state.compScore = scoreTask(state.task, pilots, gapParams);
+  }
+
+  /**
+   * Update the track selector dropdown on the map
+   */
+  function updateTrackSelector(): void {
+    if (state.tracks.length <= 1) {
+      mapRenderer?.removeTrackSelector?.();
+      return;
+    }
+
+    mapRenderer?.setTrackSelector?.(
+      state.tracks,
+      state.compScore?.pilotScores ?? [],
+      state.selectedTrack,
+      (selection) => {
+        if (selection === 'all') {
+          selectAllTracks();
+        } else {
+          selectSingleTrack(selection);
+        }
+      },
+    );
   }
 
   /**

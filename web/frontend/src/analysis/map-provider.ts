@@ -5,8 +5,17 @@
  * Supports MapBox GL JS and Leaflet 2.0 providers.
  */
 
-import type { IGCFix, XCTask, FlightEvent } from '@glidecomp/engine';
+import type { IGCFix, XCTask, FlightEvent, PilotScore } from '@glidecomp/engine';
 import type { MapAnnotationLayer } from './map-annotations';
+
+/** A loaded track with metadata for multi-track display */
+export interface LoadedTrack {
+    pilotName: string;
+    date: Date | null;
+    filename: string;
+    fixes: IGCFix[];
+    events: FlightEvent[];
+}
 
 export type MapProviderType = 'mapbox' | 'leaflet';
 
@@ -117,6 +126,29 @@ export interface MapProvider {
 
     /** Get the annotation layer for direct control (Mapbox only) */
     getAnnotationLayer?(): MapAnnotationLayer | null;
+
+    // ── Multi-track support ──
+
+    /** Render multiple tracks on the map, colored by rank (orange=leader, grey=last) */
+    setMultiTrack?(tracks: LoadedTrack[], pilotScores: PilotScore[]): void;
+
+    /** Clear all multi-track rendering */
+    clearMultiTrack?(): void;
+
+    /** Register callback for when user clicks on a track in multi-track mode.
+     *  Returns the track index and fix index. */
+    onMultiTrackClick?(callback: (trackIndex: number, fixIndex: number) => void): void;
+
+    /** Create/update the track selector dropdown on the map.
+     *  Returns a dispose function. */
+    setTrackSelector?(tracks: LoadedTrack[], pilotScores: PilotScore[], selectedIndex: number | 'all',
+        onSelect: (index: number | 'all') => void): void;
+
+    /** Remove the track selector from the map */
+    removeTrackSelector?(): void;
+
+    /** Show pilot name in HUD */
+    showTrackPointHUDWithName?(fixIndex: number, pilotName: string): void;
 }
 
 /**

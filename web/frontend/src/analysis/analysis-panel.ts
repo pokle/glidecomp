@@ -5,7 +5,7 @@
  * Provides a unified interface for flight analysis data.
  */
 
-import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, extractGlides, extractClimbs, extractSinks, type FlightEvent, type FlightEventType, type XCTask, type TurnpointType, type Turnpoint, type TurnpointSequenceResult, type GlideData, type ClimbData, type SinkData, type FixIndexDetails, type GlideEventDetails, type WaypointRecord } from '@glidecomp/engine';
+import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, extractGlides, extractClimbs, extractSinks, scoreTask, DEFAULT_GAP_PARAMETERS, type FlightEvent, type FlightEventType, type XCTask, type TurnpointType, type Turnpoint, type TurnpointSequenceResult, type GlideData, type ClimbData, type SinkData, type FixIndexDetails, type GlideEventDetails, type WaypointRecord, type TaskScoreResult, type GAPParameters, type PilotFlight } from '@glidecomp/engine';
 import { formatAltitude, formatSpeed, formatDistance, formatClimbRate } from './units-browser';
 import { config } from './config';
 import { createTaskEditor, type TaskEditor } from './task-editor';
@@ -13,7 +13,7 @@ import { createTaskEditor, type TaskEditor } from './task-editor';
 /**
  * Unified panel tabs
  */
-export type PanelTabType = 'task' | 'score' | 'events' | 'glides' | 'climbs' | 'sinks';
+export type PanelTabType = 'task' | 'score' | 'events' | 'glides' | 'climbs' | 'sinks' | 'comp-score' | 'gap-config';
 
 export interface AnalysisPanelOptions {
   container: HTMLElement;
@@ -55,6 +55,14 @@ export interface AnalysisPanel {
   selectByFixIndex(fixIndex: number, options?: { skipPan?: boolean }): void;
   selectTurnpoint(turnpointIndex: number): void;
   destroy(): void;
+  /** Set multi-track mode: shows only comp-score tab when 'all' selected */
+  setMultiTrackMode(enabled: boolean): void;
+  /** Set competition score result for multi-track scoring */
+  setCompetitionScore(result: TaskScoreResult | null): void;
+  /** Get the current GAP parameters from config */
+  getGAPParameters(): GAPParameters;
+  /** Callback when GAP parameters change */
+  onGAPParametersChanged?: (params: GAPParameters) => void;
 }
 
 /**
@@ -256,13 +264,18 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
     <!-- Unified tab row -->
     <div class="tabs w-full border-b border-border">
-      <nav role="tablist" class="w-full">
+      <nav role="tablist" class="w-full" id="tab-row-single">
         <button type="button" role="tab" id="tab-task" aria-selected="false">Task</button>
         <button type="button" role="tab" id="tab-score" aria-selected="false">Score</button>
         <button type="button" role="tab" id="tab-events" aria-selected="true">Events</button>
         <button type="button" role="tab" id="tab-glides" aria-selected="false">Glides</button>
         <button type="button" role="tab" id="tab-climbs" aria-selected="false">Climbs</button>
         <button type="button" role="tab" id="tab-sinks" aria-selected="false">Sinks</button>
+        <button type="button" role="tab" id="tab-gap-config-single" aria-selected="false" style="font-size:0.7em">Config</button>
+      </nav>
+      <nav role="tablist" class="w-full hidden" id="tab-row-multi">
+        <button type="button" role="tab" id="tab-comp-score" aria-selected="true">Competition Score</button>
+        <button type="button" role="tab" id="tab-gap-config" aria-selected="false">Scoring Config</button>
       </nav>
     </div>
 
@@ -302,6 +315,17 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         Load a task and track to see scoring
       </div>
     </div>
+
+    <!-- Competition Score content (multi-track) -->
+    <div id="comp-score-panel-content" class="hidden flex-1 overflow-y-auto p-2 scrollbar">
+      <div class="flex h-full items-center justify-center p-6 text-center text-muted-foreground">
+        Load multiple tracks and a task to see competition scores
+      </div>
+    </div>
+
+    <!-- GAP Config content -->
+    <div id="gap-config-panel-content" class="hidden flex-1 overflow-y-auto p-3 scrollbar">
+    </div>
   `;
 
   container.appendChild(panel);
@@ -323,6 +347,10 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   const listContainer = trackPanelContent;
   const eventCountEl = panel.querySelector('.event-count') as HTMLElement;
   const taskListContainer = panel.querySelector('#task-panel-content') as HTMLElement;
+  const compScorePanelContent = panel.querySelector('#comp-score-panel-content') as HTMLElement;
+  const gapConfigPanelContent = panel.querySelector('#gap-config-panel-content') as HTMLElement;
+  const tabRowSingle = panel.querySelector('#tab-row-single') as HTMLElement;
+  const tabRowMulti = panel.querySelector('#tab-row-multi') as HTMLElement;
 
   const tabTask = panel.querySelector('#tab-task') as HTMLButtonElement;
   const tabScore = panel.querySelector('#tab-score') as HTMLButtonElement;
@@ -330,7 +358,10 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   const tabGlides = panel.querySelector('#tab-glides') as HTMLButtonElement;
   const tabClimbs = panel.querySelector('#tab-climbs') as HTMLButtonElement;
   const tabSinks = panel.querySelector('#tab-sinks') as HTMLButtonElement;
-  const allTabs = [tabTask, tabScore, tabEvents, tabGlides, tabClimbs, tabSinks];
+  const tabCompScore = panel.querySelector('#tab-comp-score') as HTMLButtonElement;
+  const tabGapConfig = panel.querySelector('#tab-gap-config') as HTMLButtonElement;
+  const tabGapConfigSingle = panel.querySelector('#tab-gap-config-single') as HTMLButtonElement;
+  const allTabs = [tabTask, tabScore, tabEvents, tabGlides, tabClimbs, tabSinks, tabCompScore, tabGapConfig, tabGapConfigSingle];
 
   const flightInfoEl = panel.querySelector('.flight-info-content') as HTMLElement;
 
@@ -339,8 +370,11 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   let filteredEvents: FlightEvent[] = [];
   let currentTask: XCTask | null = null;
   let isPanelHidden = true;
+  let isMultiTrackMode = false;
+  let currentCompScore: TaskScoreResult | null = null;
+  let gapParamsChangedCallback: ((params: GAPParameters) => void) | undefined;
   const TAB_STORAGE_KEY = 'glidecomp-active-tab';
-  const validTabs: PanelTabType[] = ['task', 'score', 'events', 'glides', 'climbs', 'sinks'];
+  const validTabs: PanelTabType[] = ['task', 'score', 'events', 'glides', 'climbs', 'sinks', 'comp-score', 'gap-config'];
   const savedTab = localStorage.getItem(TAB_STORAGE_KEY) as PanelTabType | null;
   let currentTab: PanelTabType = savedTab && validTabs.includes(savedTab) ? savedTab : 'events';
   let selectedSegment: { startIndex: number; endIndex: number } | null = null;
@@ -546,25 +580,33 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       glides: tabGlides,
       climbs: tabClimbs,
       sinks: tabSinks,
+      'comp-score': tabCompScore,
+      'gap-config': isMultiTrackMode ? tabGapConfig : tabGapConfigSingle,
     };
     tabMap[tab]?.setAttribute('aria-selected', 'true');
 
+    // Hide all content panels first
+    trackPanelContent.classList.add('hidden');
+    taskPanelContent.classList.add('hidden');
+    scorePanelContent.classList.add('hidden');
+    compScorePanelContent.classList.add('hidden');
+    gapConfigPanelContent.classList.add('hidden');
+    sparklineContainer.classList.add('hidden');
+
     // Show appropriate content panel
     if (tab === 'task') {
-      trackPanelContent.classList.add('hidden');
-      scorePanelContent.classList.add('hidden');
-      sparklineContainer.classList.add('hidden');
       taskPanelContent.classList.remove('hidden');
       renderTask();
     } else if (tab === 'score') {
-      trackPanelContent.classList.add('hidden');
-      taskPanelContent.classList.add('hidden');
-      sparklineContainer.classList.add('hidden');
       scorePanelContent.classList.remove('hidden');
       renderScore();
+    } else if (tab === 'comp-score') {
+      compScorePanelContent.classList.remove('hidden');
+      renderCompetitionScore();
+    } else if (tab === 'gap-config') {
+      gapConfigPanelContent.classList.remove('hidden');
+      renderGAPConfig();
     } else {
-      taskPanelContent.classList.add('hidden');
-      scorePanelContent.classList.add('hidden');
       trackPanelContent.classList.remove('hidden');
       // Show sparkline if we have data
       if (sparklineDataUri) {
@@ -584,6 +626,9 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   tabGlides?.addEventListener('click', () => switchTabInternal('glides'));
   tabClimbs?.addEventListener('click', () => switchTabInternal('climbs'));
   tabSinks?.addEventListener('click', () => switchTabInternal('sinks'));
+  tabCompScore?.addEventListener('click', () => switchTabInternal('comp-score'));
+  tabGapConfig?.addEventListener('click', () => switchTabInternal('gap-config'));
+  tabGapConfigSingle?.addEventListener('click', () => switchTabInternal('gap-config'));
 
   // Restore saved tab
   if (currentTab !== 'events') {
@@ -1278,6 +1323,193 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     }
   }
 
+  /**
+   * Render the competition score table (multi-track mode)
+   */
+  function renderCompetitionScore(): void {
+    if (!currentCompScore) {
+      eventCountEl.textContent = 'No competition score';
+      compScorePanelContent.innerHTML = `
+        <div class="flex h-full items-center justify-center p-6 text-center text-muted-foreground">
+          Load multiple tracks and a task to see competition scores
+        </div>
+      `;
+      return;
+    }
+
+    const result = currentCompScore;
+    const params = result.parameters;
+    const stats = result.stats;
+
+    eventCountEl.textContent = `${result.pilotScores.length} pilots \u00b7 ${stats.numInGoal} in goal`;
+
+    let html = '<div class="space-y-3">';
+
+    // Task validity summary
+    html += `
+      <div class="rounded-lg border border-border bg-muted/30 p-3">
+        <div class="text-xs text-muted-foreground mb-1">Task Validity</div>
+        <div class="flex gap-3 text-sm">
+          <span>Launch: ${(result.taskValidity.launch * 100).toFixed(1)}%</span>
+          <span>Dist: ${(result.taskValidity.distance * 100).toFixed(1)}%</span>
+          <span>Time: ${(result.taskValidity.time * 100).toFixed(1)}%</span>
+          <span class="font-medium">Task: ${(result.taskValidity.task * 100).toFixed(1)}%</span>
+        </div>
+      </div>
+    `;
+
+    // Available points
+    html += `
+      <div class="rounded-lg border border-border bg-muted/30 p-3">
+        <div class="text-xs text-muted-foreground mb-1">Available Points (${result.availablePoints.total.toFixed(0)})</div>
+        <div class="flex gap-3 text-sm flex-wrap">
+          <span>Distance: ${result.availablePoints.distance.toFixed(0)}</span>
+          <span>Time: ${result.availablePoints.time.toFixed(0)}</span>
+          <span>Leading: ${result.availablePoints.leading.toFixed(0)}</span>
+          ${params.scoring === 'HG' ? `<span>Arrival: ${result.availablePoints.arrival.toFixed(0)}</span>` : ''}
+        </div>
+      </div>
+    `;
+
+    // Stats
+    html += `
+      <div class="rounded-lg border border-border bg-muted/30 p-3">
+        <div class="text-xs text-muted-foreground mb-1">Stats</div>
+        <div class="flex gap-3 text-sm flex-wrap">
+          <span>Pilots: ${stats.numFlying}</span>
+          <span>In goal: ${stats.numInGoal}</span>
+          <span>ESS: ${stats.numReachedESS}</span>
+          <span>Best dist: ${formatDistance(stats.bestDistance).withUnit}</span>
+          ${stats.bestTime ? `<span>Best time: ${formatHMS(stats.bestTime)}</span>` : ''}
+        </div>
+      </div>
+    `;
+
+    // Ranked scores table
+    html += `<div class="rounded-lg border border-border overflow-hidden">`;
+    html += `<table class="w-full text-sm">`;
+    html += `<thead class="bg-muted/50"><tr>
+      <th class="px-2 py-1.5 text-left font-medium">#</th>
+      <th class="px-2 py-1.5 text-left font-medium">Pilot</th>
+      <th class="px-2 py-1.5 text-right font-medium">Dist</th>
+      <th class="px-2 py-1.5 text-right font-medium">Time</th>
+      <th class="px-2 py-1.5 text-right font-medium">Lead</th>
+      ${params.scoring === 'HG' ? `<th class="px-2 py-1.5 text-right font-medium">Arr</th>` : ''}
+      <th class="px-2 py-1.5 text-right font-medium">Total</th>
+    </tr></thead>`;
+    html += `<tbody>`;
+
+    for (const ps of result.pilotScores) {
+      const goalIcon = ps.madeGoal ? '<span class="text-green-600 ml-1" title="Goal">&#10003;</span>' : '';
+      const timeStr = ps.speedSectionTime ? formatHMS(ps.speedSectionTime) : '-';
+      html += `<tr class="border-t border-border hover:bg-muted/30">
+        <td class="px-2 py-1.5 font-medium">${ps.rank}</td>
+        <td class="px-2 py-1.5 truncate max-w-[120px]" title="${ps.pilotName}">${ps.pilotName}${goalIcon}</td>
+        <td class="px-2 py-1.5 text-right tabular-nums">${ps.distancePoints.toFixed(1)}</td>
+        <td class="px-2 py-1.5 text-right tabular-nums">${ps.timePoints.toFixed(1)}</td>
+        <td class="px-2 py-1.5 text-right tabular-nums">${ps.leadingPoints.toFixed(1)}</td>
+        ${params.scoring === 'HG' ? `<td class="px-2 py-1.5 text-right tabular-nums">${ps.arrivalPoints.toFixed(1)}</td>` : ''}
+        <td class="px-2 py-1.5 text-right font-medium tabular-nums">${ps.totalScore}</td>
+      </tr>`;
+    }
+
+    html += `</tbody></table></div>`;
+    html += '</div>';
+    compScorePanelContent.innerHTML = html;
+  }
+
+  /**
+   * Render the GAP scoring configuration form
+   */
+  function renderGAPConfig(): void {
+    const params = config.getGAPParameters();
+    eventCountEl.textContent = 'Scoring Configuration';
+
+    gapConfigPanelContent.innerHTML = `
+      <div class="space-y-4">
+        <div class="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
+          <div class="text-xs text-muted-foreground font-medium">Scoring Type</div>
+          <div class="flex gap-3">
+            <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+              <input type="radio" name="gap-scoring" value="PG" ${params.scoring === 'PG' ? 'checked' : ''} class="accent-primary">
+              Paragliding
+            </label>
+            <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+              <input type="radio" name="gap-scoring" value="HG" ${params.scoring === 'HG' ? 'checked' : ''} class="accent-primary">
+              Hang Gliding
+            </label>
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
+          <div class="text-xs text-muted-foreground font-medium">Nominal Parameters</div>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="text-sm">
+              <span class="text-muted-foreground">Distance (m)</span>
+              <input type="number" id="gap-nominal-distance" value="${params.nominalDistance}" min="0" step="1000" class="input mt-0.5 w-full text-sm">
+            </label>
+            <label class="text-sm">
+              <span class="text-muted-foreground">Time (s)</span>
+              <input type="number" id="gap-nominal-time" value="${params.nominalTime}" min="0" step="300" class="input mt-0.5 w-full text-sm">
+            </label>
+            <label class="text-sm">
+              <span class="text-muted-foreground">Launch ratio</span>
+              <input type="number" id="gap-nominal-launch" value="${params.nominalLaunch}" min="0" max="1" step="0.01" class="input mt-0.5 w-full text-sm">
+            </label>
+            <label class="text-sm">
+              <span class="text-muted-foreground">Goal ratio</span>
+              <input type="number" id="gap-nominal-goal" value="${params.nominalGoal}" min="0" max="1" step="0.01" class="input mt-0.5 w-full text-sm">
+            </label>
+            <label class="text-sm">
+              <span class="text-muted-foreground">Min distance (m)</span>
+              <input type="number" id="gap-minimum-distance" value="${params.minimumDistance}" min="0" step="500" class="input mt-0.5 w-full text-sm">
+            </label>
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
+          <div class="text-xs text-muted-foreground font-medium">Point Categories</div>
+          <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+            <input type="checkbox" id="gap-use-leading" ${params.useLeading ? 'checked' : ''} class="accent-primary">
+            Leading (departure) points
+          </label>
+          <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+            <input type="checkbox" id="gap-use-arrival" ${params.useArrival ? 'checked' : ''} class="accent-primary">
+            Arrival points (HG only)
+          </label>
+        </div>
+
+        <div class="flex gap-2">
+          <button type="button" id="gap-save-btn" class="btn btn-sm btn-primary flex-1">Save</button>
+          <button type="button" id="gap-reset-btn" class="btn btn-sm btn-outline">Reset to defaults</button>
+        </div>
+      </div>
+    `;
+
+    // Wire up save/reset
+    gapConfigPanelContent.querySelector('#gap-save-btn')?.addEventListener('click', () => {
+      const scoring = (gapConfigPanelContent.querySelector('input[name="gap-scoring"]:checked') as HTMLInputElement)?.value as 'PG' | 'HG' || 'PG';
+      const newParams: Partial<GAPParameters> = {
+        scoring,
+        nominalDistance: parseFloat((gapConfigPanelContent.querySelector('#gap-nominal-distance') as HTMLInputElement).value) || DEFAULT_GAP_PARAMETERS.nominalDistance,
+        nominalTime: parseFloat((gapConfigPanelContent.querySelector('#gap-nominal-time') as HTMLInputElement).value) || DEFAULT_GAP_PARAMETERS.nominalTime,
+        nominalLaunch: parseFloat((gapConfigPanelContent.querySelector('#gap-nominal-launch') as HTMLInputElement).value) || DEFAULT_GAP_PARAMETERS.nominalLaunch,
+        nominalGoal: parseFloat((gapConfigPanelContent.querySelector('#gap-nominal-goal') as HTMLInputElement).value) || DEFAULT_GAP_PARAMETERS.nominalGoal,
+        minimumDistance: parseFloat((gapConfigPanelContent.querySelector('#gap-minimum-distance') as HTMLInputElement).value) || DEFAULT_GAP_PARAMETERS.minimumDistance,
+        useLeading: (gapConfigPanelContent.querySelector('#gap-use-leading') as HTMLInputElement).checked,
+        useArrival: (gapConfigPanelContent.querySelector('#gap-use-arrival') as HTMLInputElement).checked,
+      };
+      config.setGAPParameters(newParams);
+      gapParamsChangedCallback?.(config.getGAPParameters());
+    });
+
+    gapConfigPanelContent.querySelector('#gap-reset-btn')?.addEventListener('click', () => {
+      config.resetGAPParameters();
+      renderGAPConfig();
+      gapParamsChangedCallback?.(config.getGAPParameters());
+    });
+  }
+
   return {
     setEvents(events: FlightEvent[]) {
       allEvents = events;
@@ -1411,6 +1643,38 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
     destroy() {
       panel.remove();
+    },
+
+    setMultiTrackMode(enabled: boolean) {
+      isMultiTrackMode = enabled;
+      if (enabled) {
+        tabRowSingle.classList.add('hidden');
+        tabRowMulti.classList.remove('hidden');
+        // Switch to comp-score tab
+        switchTabInternal('comp-score');
+      } else {
+        tabRowMulti.classList.add('hidden');
+        tabRowSingle.classList.remove('hidden');
+        // Switch back to events tab
+        if (currentTab === 'comp-score' || currentTab === 'gap-config') {
+          switchTabInternal('events');
+        }
+      }
+    },
+
+    setCompetitionScore(result: TaskScoreResult | null) {
+      currentCompScore = result;
+      if (currentTab === 'comp-score') {
+        renderCompetitionScore();
+      }
+    },
+
+    getGAPParameters() {
+      return config.getGAPParameters();
+    },
+
+    set onGAPParametersChanged(cb: ((params: GAPParameters) => void) | undefined) {
+      gapParamsChangedCallback = cb;
     },
   };
 }

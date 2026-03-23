@@ -8,8 +8,8 @@
 
 import mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
-import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult } from '@glidecomp/engine';
-import type { MapProvider } from './map-provider';
+import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult, type PilotScore } from '@glidecomp/engine';
+import type { MapProvider, LoadedTrack } from './map-provider';
 import { config } from './config';
 import {
   MAP_FONT_FAMILY, GLIDE_LABEL_TEXT_SHADOW, GLIDE_LABEL_SPARSE_MIN_ZOOM, GLIDE_LABEL_SPEED_MIN_ZOOM,
@@ -117,6 +117,15 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
       // Speed overlay state (separate from activeMarkers so it persists across event selections)
       let isSpeedOverlayActive = false;
+
+      // Multi-track state
+      let multiTrackData: LoadedTrack[] = [];
+      let multiTrackScores: PilotScore[] = [];
+      let multiTrackClickCallback: ((trackIndex: number, fixIndex: number) => void) | null = null;
+      let trackSelectorElement: HTMLElement | null = null;
+      let isMultiTrackMode = false;
+      // 3D multi-track state
+      let multiTrack3DObjects: unknown[] = [];
       let speedOverlayMarkers: mapboxgl.Marker[] = [];
 
       // HUD crosshair marker (separate from activeMarkers so segment markers aren't cleared)
@@ -446,6 +455,15 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           });
         }
 
+        // Multi-track source (used when multiple tracks are loaded in 'all' view)
+        if (!map.getSource('multi-track')) {
+          map.addSource('multi-track', {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+            tolerance: 0.1,
+          });
+        }
+
         // Other sources with default simplification
         const sourcesToAdd = ['task-line', 'task-points', 'task-cylinders', 'task-segment-labels', 'highlight-segment', 'speed-fastest-segment'];
         for (const sourceId of sourcesToAdd) {
@@ -594,6 +612,40 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
               12, ['interpolate', ['linear'], ['get', 'normalizedAlt'], 0, 3 * width_mul, 1, 9 * width_mul],
             ],
             'line-opacity': 0.95,
+          },
+        });
+
+        // 5a-multi. Multi-track outline layer
+        map.addLayer({
+          id: 'multi-track-outline',
+          type: 'line',
+          source: 'multi-track',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round',
+            'visibility': 'none',
+          },
+          paint: {
+            'line-color': '#000000',
+            'line-width': ['interpolate', ['linear'], ['zoom'], 3, 4, 8, 6, 12, 5],
+            'line-opacity': 0.4,
+          },
+        });
+
+        // 5a-multi. Multi-track colored line layer
+        map.addLayer({
+          id: 'multi-track-line',
+          type: 'line',
+          source: 'multi-track',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round',
+            'visibility': 'none',
+          },
+          paint: {
+            'line-color': ['get', 'color'],
+            'line-width': ['interpolate', ['linear'], ['zoom'], 3, 2, 8, 4, 12, 4],
+            'line-opacity': 0.9,
           },
         });
 
@@ -1057,6 +1109,46 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         });
 
         map.on('mouseleave', 'task-points', () => {
+          isHoveringInteractive = false;
+          syncCursor();
+        });
+
+        // Multi-track click handler
+        map.on('click', 'multi-track-line', (e) => {
+          if (interactionMode !== 'view') return;
+          if (!multiTrackClickCallback || !isMultiTrackMode) return;
+          if (!e.features || e.features.length === 0) return;
+
+          const feature = e.features[0];
+          const trackIndex = feature.properties?.trackIndex;
+          if (trackIndex === undefined) return;
+
+          const track = multiTrackData[trackIndex];
+          if (!track) return;
+
+          const { lng, lat } = e.lngLat;
+          // Find nearest fix in this track
+          let bestIdx = 0;
+          let bestDist = Infinity;
+          for (let i = 0; i < track.fixes.length; i++) {
+            const dx = track.fixes[i].longitude - lng;
+            const dy = track.fixes[i].latitude - lat;
+            const d = dx * dx + dy * dy;
+            if (d < bestDist) {
+              bestDist = d;
+              bestIdx = i;
+            }
+          }
+          multiTrackClickCallback(trackIndex, bestIdx);
+        });
+
+        map.on('mouseenter', 'multi-track-line', () => {
+          if (interactionMode !== 'view' || !isMultiTrackMode) return;
+          isHoveringInteractive = true;
+          syncCursor();
+        });
+        map.on('mouseleave', 'multi-track-line', () => {
+          if (!isMultiTrackMode) return;
           isHoveringInteractive = false;
           syncCursor();
         });
@@ -1580,6 +1672,247 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         // Reset HUD position back to default
         if (hudElement) {
           hudElement.style.bottom = '32px';
+        }
+      }
+
+      // ── Multi-track helpers ──
+
+      /** Get a color for a ranked pilot: bright orange for #1, grey for last */
+      function getRankColor(rank: number, totalPilots: number): string {
+        if (totalPilots <= 1) return '#ff8c00';
+        const t = (rank - 1) / (totalPilots - 1); // 0 = leader, 1 = last
+        // Interpolate from orange (#ff8c00) to grey (#888888)
+        const r = Math.round(255 * (1 - t) + 136 * t);
+        const g = Math.round(140 * (1 - t) + 136 * t);
+        const b = Math.round(0 * (1 - t) + 136 * t);
+        return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+      }
+
+      function removeTrackSelectorElement(): void {
+        if (trackSelectorElement) {
+          trackSelectorElement.remove();
+          trackSelectorElement = null;
+        }
+      }
+
+      function clearMulti3DTracks(): void {
+        if (tb) {
+          for (const obj of multiTrack3DObjects) {
+            tb.remove(obj);
+          }
+        }
+        multiTrack3DObjects = [];
+      }
+
+      function renderMulti3DTracks(tracks: LoadedTrack[], pilotScores: PilotScore[]): void {
+        if (!tb) return;
+        clearMulti3DTracks();
+
+        for (let ti = 0; ti < tracks.length; ti++) {
+          const track = tracks[ti];
+          const score = pilotScores.find(ps => ps.pilotName === track.pilotName);
+          const rank = score?.rank ?? ti + 1;
+          const totalPilots = pilotScores.length || tracks.length;
+          const color = getRankColor(rank, totalPilots);
+
+          for (let i = 1; i < track.fixes.length; i++) {
+            const prev = track.fixes[i - 1];
+            const curr = track.fixes[i];
+            const lineSegment = tb.line({
+              geometry: [
+                [prev.longitude, prev.latitude, prev.gnssAltitude * TERRAIN_EXAGGERATION],
+                [curr.longitude, curr.latitude, curr.gnssAltitude * TERRAIN_EXAGGERATION],
+              ],
+              color,
+              width: 3,
+              opacity: 0.85,
+            });
+            const lsMat = (lineSegment as { material?: { depthTest: boolean } }).material;
+            if (lsMat) lsMat.depthTest = false;
+            tb.add(lineSegment);
+            multiTrack3DObjects.push(lineSegment);
+          }
+        }
+        map.triggerRepaint();
+      }
+
+      /** Create a multi-track scrubber that aligns tracks by SSS crossing time */
+      function createMultiTrackScrubber(tracks: LoadedTrack[], pilotScores: PilotScore[]): void {
+        removeAltitudeScrubber();
+
+        const Y_AXIS_WIDTH = 40;
+        const X_AXIS_HEIGHT = 16;
+
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'position:absolute;bottom:0;left:0;right:0;height:15%;z-index:10;background:rgba(0,0,0,0.65);cursor:crosshair;touch-action:none;';
+
+        const chartArea = document.createElement('div');
+        chartArea.style.cssText = `position:absolute;top:0;left:${Y_AXIS_WIDTH}px;right:0;bottom:${X_AXIS_HEIGHT}px;`;
+
+        // Find SSS crossing times for alignment (fallback to first fix)
+        const trackAlignments = tracks.map((track, ti) => {
+          const score = pilotScores.find(ps => ps.pilotName === track.pilotName);
+          // Try to find SSS reaching from the turnpoint result
+          let sssTime: number | null = null;
+          if (score?.turnpointResult?.sssReaching) {
+            sssTime = score.turnpointResult.sssReaching.time.getTime();
+          }
+          const startTime = sssTime ?? track.fixes[0]?.time.getTime() ?? 0;
+          const endTime = track.fixes[track.fixes.length - 1]?.time.getTime() ?? 0;
+          return { track, startTime, endTime, duration: endTime - startTime, trackIndex: ti };
+        });
+
+        // Max duration for x-axis
+        const maxDuration = Math.max(...trackAlignments.map(a => a.duration), 1);
+
+        // Create SVG with all track profiles
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', '100%');
+        svg.setAttribute('height', '100%');
+        svg.setAttribute('preserveAspectRatio', 'none');
+        svg.setAttribute('viewBox', `0 0 1000 100`);
+        svg.style.cssText = 'display:block;width:100%;height:100%;';
+
+        // Find global alt range
+        let globalMinAlt = Infinity, globalMaxAlt = -Infinity;
+        for (const track of tracks) {
+          for (const fix of track.fixes) {
+            if (fix.gnssAltitude < globalMinAlt) globalMinAlt = fix.gnssAltitude;
+            if (fix.gnssAltitude > globalMaxAlt) globalMaxAlt = fix.gnssAltitude;
+          }
+        }
+        const altRange = globalMaxAlt - globalMinAlt || 1;
+
+        // Draw each track as a squiggly line
+        for (let ti = 0; ti < trackAlignments.length; ti++) {
+          const alignment = trackAlignments[ti];
+          const { track } = alignment;
+          const score = pilotScores.find(ps => ps.pilotName === track.pilotName);
+          const rank = score?.rank ?? ti + 1;
+          const color = getRankColor(rank, pilotScores.length || tracks.length);
+
+          let pathD = '';
+          for (let i = 0; i < track.fixes.length; i++) {
+            const fix = track.fixes[i];
+            const elapsed = fix.time.getTime() - alignment.startTime;
+            const x = (elapsed / maxDuration) * 1000;
+            const y = 100 - ((fix.gnssAltitude - globalMinAlt) / altRange) * 90;
+            pathD += (i === 0 ? 'M ' : 'L ') + `${x.toFixed(1)} ${y.toFixed(1)} `;
+          }
+
+          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('d', pathD);
+          path.setAttribute('fill', 'none');
+          path.setAttribute('stroke', color);
+          path.setAttribute('stroke-width', '1.5');
+          path.setAttribute('vector-effect', 'non-scaling-stroke');
+          path.setAttribute('opacity', '0.85');
+          svg.appendChild(path);
+        }
+
+        chartArea.appendChild(svg);
+
+        // Position indicator
+        const indicator = document.createElement('div');
+        indicator.style.cssText = 'position:absolute;top:0;bottom:0;width:2px;background:#ff8c00;pointer-events:none;left:0;';
+        chartArea.appendChild(indicator);
+
+        wrapper.appendChild(chartArea);
+
+        // Top-3 pilot labels container (positioned above scrubber)
+        const labelsContainer = document.createElement('div');
+        labelsContainer.id = 'multi-scrubber-labels';
+        labelsContainer.style.cssText = 'position:absolute;top:-80px;left:0;right:0;height:80px;pointer-events:none;z-index:11;';
+        wrapper.appendChild(labelsContainer);
+
+        // Scrub interaction
+        let scrubbing = false;
+
+        function scrubToX(clientX: number): void {
+          const rect = chartArea.getBoundingClientRect();
+          const fraction = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+          indicator.style.left = `${fraction * 100}%`;
+
+          // Update top-3 markers on the map
+          updateMultiTrackMarkers(fraction, trackAlignments, pilotScores, labelsContainer);
+        }
+
+        chartArea.addEventListener('pointerdown', (e) => {
+          scrubbing = true;
+          chartArea.setPointerCapture(e.pointerId);
+          scrubToX(e.clientX);
+        });
+        chartArea.addEventListener('pointermove', (e) => {
+          if (scrubbing) scrubToX(e.clientX);
+        });
+        chartArea.addEventListener('pointerup', () => { scrubbing = false; });
+
+        container.appendChild(wrapper);
+        scrubberElement = wrapper;
+
+        // Shift HUD up to avoid overlap
+        if (hudElement) {
+          hudElement.style.bottom = 'calc(15% + 40px)';
+        }
+      }
+
+      /** Update the top-3 ranked pilot 3D markers at the current scrub position */
+      function updateMultiTrackMarkers(
+        fraction: number,
+        trackAlignments: Array<{ track: LoadedTrack; startTime: number; duration: number; trackIndex: number }>,
+        pilotScores: PilotScore[],
+        labelsContainer: HTMLElement,
+      ): void {
+        // Clear existing 3D labels
+        labelsContainer.innerHTML = '';
+
+        // Get top 3 ranked pilots
+        const top3 = pilotScores.slice(0, 3);
+        const maxDuration = Math.max(...trackAlignments.map(a => a.duration), 1);
+        const currentElapsed = fraction * maxDuration;
+
+        for (const ps of top3) {
+          const alignment = trackAlignments.find(a => a.track.pilotName === ps.pilotName);
+          if (!alignment) continue;
+
+          const targetTime = alignment.startTime + currentElapsed;
+          // Find the closest fix
+          let bestIdx = 0;
+          let bestDiff = Infinity;
+          for (let i = 0; i < alignment.track.fixes.length; i++) {
+            const diff = Math.abs(alignment.track.fixes[i].time.getTime() - targetTime);
+            if (diff < bestDiff) {
+              bestDiff = diff;
+              bestIdx = i;
+            }
+          }
+
+          const fix = alignment.track.fixes[bestIdx];
+          if (!fix) continue;
+
+          // Project to screen coordinates and show label
+          const point = map.project([fix.longitude, fix.latitude]);
+          const label = document.createElement('div');
+          label.style.cssText = `position:absolute;left:${point.x}px;top:0;transform:translateX(-50%);text-align:center;font-size:11px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.8);white-space:nowrap;`;
+          label.textContent = `${ps.rank}. ${ps.pilotName}`;
+          labelsContainer.appendChild(label);
+
+          // If in 3D mode, also add a marker
+          if (tb) {
+            const color = getRankColor(ps.rank, pilotScores.length);
+            const marker = tb.line({
+              geometry: [
+                [fix.longitude, fix.latitude, fix.gnssAltitude * TERRAIN_EXAGGERATION],
+                [fix.longitude, fix.latitude, fix.gnssAltitude * TERRAIN_EXAGGERATION + 50],
+              ],
+              color,
+              width: 8,
+              opacity: 1,
+            });
+            tb.add(marker);
+            // These are temporary; we'll clear on next scrub
+            multiTrack3DObjects.push(marker);
+          }
         }
       }
 
@@ -2341,6 +2674,165 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
         getAnnotationLayer() {
           return annotationLayer;
+        },
+
+        // ── Multi-track methods ──
+
+        setMultiTrack(tracks: LoadedTrack[], pilotScores: PilotScore[]) {
+          multiTrackData = tracks;
+          multiTrackScores = pilotScores;
+          isMultiTrackMode = true;
+
+          // Hide single-track layers
+          if (map.getLayer('track-line')) map.setLayoutProperty('track-line', 'visibility', 'none');
+          if (map.getLayer('track-line-outline')) map.setLayoutProperty('track-line-outline', 'visibility', 'none');
+
+          // Build GeoJSON features for all tracks, colored by rank
+          const features: GeoJSON.Feature[] = [];
+          const allBounds = { minLat: 90, maxLat: -90, minLon: 180, maxLon: -180 };
+
+          for (let ti = 0; ti < tracks.length; ti++) {
+            const track = tracks[ti];
+            const score = pilotScores.find(ps => ps.pilotName === track.pilotName);
+            const rank = score?.rank ?? ti + 1;
+            const totalPilots = pilotScores.length || tracks.length;
+            const color = getRankColor(rank, totalPilots);
+
+            // Build one LineString per track
+            const coordinates: [number, number][] = [];
+            for (const fix of track.fixes) {
+              coordinates.push([fix.longitude, fix.latitude]);
+              if (fix.latitude < allBounds.minLat) allBounds.minLat = fix.latitude;
+              if (fix.latitude > allBounds.maxLat) allBounds.maxLat = fix.latitude;
+              if (fix.longitude < allBounds.minLon) allBounds.minLon = fix.longitude;
+              if (fix.longitude > allBounds.maxLon) allBounds.maxLon = fix.longitude;
+            }
+
+            if (coordinates.length > 1) {
+              features.push({
+                type: 'Feature',
+                properties: { color, trackIndex: ti, pilotName: track.pilotName, rank },
+                geometry: { type: 'LineString', coordinates },
+              });
+            }
+          }
+
+          updateGeoJSONSource(map, 'multi-track', features);
+
+          // Show multi-track layers
+          if (map.getLayer('multi-track-line')) map.setLayoutProperty('multi-track-line', 'visibility', 'visible');
+          if (map.getLayer('multi-track-outline')) map.setLayoutProperty('multi-track-outline', 'visibility', 'visible');
+
+          // Fit bounds to all tracks
+          if (features.length > 0) {
+            map.fitBounds(
+              [[allBounds.minLon, allBounds.minLat], [allBounds.maxLon, allBounds.maxLat]],
+              { padding: 50, duration: 1000 },
+            );
+          }
+
+          // In 3D mode, render all tracks
+          if (is3DMode && tb) {
+            clearMulti3DTracks();
+            renderMulti3DTracks(tracks, pilotScores);
+            removeAltitudeScrubber();
+            createMultiTrackScrubber(tracks, pilotScores);
+          }
+        },
+
+        clearMultiTrack() {
+          isMultiTrackMode = false;
+          multiTrackData = [];
+          multiTrackScores = [];
+          updateGeoJSONSource(map, 'multi-track', []);
+          if (map.getLayer('multi-track-line')) map.setLayoutProperty('multi-track-line', 'visibility', 'none');
+          if (map.getLayer('multi-track-outline')) map.setLayoutProperty('multi-track-outline', 'visibility', 'none');
+          // Restore single-track layers
+          if (map.getLayer('track-line')) map.setLayoutProperty('track-line', 'visibility', 'visible');
+          if (map.getLayer('track-line-outline')) map.setLayoutProperty('track-line-outline', 'visibility', 'visible');
+          clearMulti3DTracks();
+          removeTrackSelectorElement();
+        },
+
+        onMultiTrackClick(callback: (trackIndex: number, fixIndex: number) => void) {
+          multiTrackClickCallback = callback;
+        },
+
+        setTrackSelector(tracks: LoadedTrack[], pilotScores: PilotScore[], selectedIndex: number | 'all',
+            onSelect: (index: number | 'all') => void) {
+          removeTrackSelectorElement();
+
+          if (tracks.length <= 1) return;
+
+          const wrapper = document.createElement('div');
+          wrapper.style.cssText = 'position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:5;';
+
+          const select = document.createElement('select');
+          select.style.cssText = 'padding:4px 8px;border-radius:6px;border:1px solid rgba(0,0,0,0.2);background:#fff;font-size:13px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.2);min-width:180px;';
+
+          // Check if dates differ
+          const dates = new Set(tracks.map(t => t.date?.toLocaleDateString() || ''));
+          const showDate = dates.size > 1;
+
+          // 'All tracks' option
+          const allOpt = document.createElement('option');
+          allOpt.value = 'all';
+          allOpt.textContent = `All tracks (${tracks.length})`;
+          if (selectedIndex === 'all') allOpt.selected = true;
+          select.appendChild(allOpt);
+
+          // Individual tracks
+          for (let i = 0; i < tracks.length; i++) {
+            const opt = document.createElement('option');
+            opt.value = String(i);
+            let label = tracks[i].pilotName || tracks[i].filename;
+            if (showDate && tracks[i].date) {
+              label += ` (${tracks[i].date!.toLocaleDateString()})`;
+            }
+            opt.textContent = label;
+            if (selectedIndex === i) opt.selected = true;
+            select.appendChild(opt);
+          }
+
+          select.addEventListener('change', () => {
+            const val = select.value;
+            onSelect(val === 'all' ? 'all' : parseInt(val, 10));
+          });
+
+          wrapper.appendChild(select);
+          container.appendChild(wrapper);
+          trackSelectorElement = wrapper;
+        },
+
+        removeTrackSelector() {
+          removeTrackSelectorElement();
+        },
+
+        showTrackPointHUDWithName(fixIndex: number, pilotName: string) {
+          // For multi-track mode, use the track's fixes directly from multiTrackData
+          const track = multiTrackData.find(t => t.pilotName === pilotName);
+          const fixes = track?.fixes ?? currentFixes;
+          const events = track?.events ?? currentEvents;
+
+          const data = buildTrackPointHUDData(fixes, events, fixIndex, getNextTurnpointContext);
+          if (!data) return;
+          clearHudCrosshair();
+          showGlideLegend(false);
+          const crosshairEl = document.createElement('div');
+          crosshairEl.innerHTML = CROSSHAIR_MAP_SVG;
+          crosshairEl.style.pointerEvents = 'none';
+          hudCrosshairMarker = new mapboxgl.Marker({ element: crosshairEl })
+            .setLngLat([data.fix.longitude, data.fix.latitude])
+            .addTo(map);
+          if (!hudElement) {
+            hudElement = createTrackPointHUD(container);
+          }
+          // Add pilot name to HUD
+          const summaryEl = hudElement.querySelector('.hud-summary');
+          if (summaryEl) {
+            summaryEl.innerHTML = `${CROSSHAIR_MAP_SVG}<span style="font-weight:600;color:#ff8c00">${pilotName}</span>`;
+          }
+          updateTrackPointHUD(hudElement, data);
         },
       };
 
