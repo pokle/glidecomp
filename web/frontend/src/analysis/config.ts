@@ -20,6 +20,9 @@ export interface UserPreferences {
   mapStyle?: string;
   mapProvider?: 'mapbox' | 'leaflet';
   gapParameters?: Partial<GAPParameters>;
+  /** Nominal distance as percentage of task distance (default 70). Stored separately
+   *  from gapParameters.nominalDistance because it's resolved at scoring time. */
+  nominalDistancePct?: number;
 }
 
 export interface UnitPreferences {
@@ -199,7 +202,9 @@ class ConfigStore {
   }
 
   /**
-   * Get GAP scoring parameters (defaults merged with user overrides)
+   * Get GAP scoring parameters (defaults merged with user overrides).
+   * Note: nominalDistance here is the raw default/override — callers should
+   * use getNominalDistancePct() and compute actual meters from task distance.
    */
   getGAPParameters(): GAPParameters {
     return { ...DEFAULT_GAP_PARAMETERS, ...this.getPreferences().gapParameters };
@@ -214,10 +219,24 @@ class ConfigStore {
   }
 
   /**
+   * Get nominal distance as a percentage of task distance (default 70)
+   */
+  getNominalDistancePct(): number {
+    return this.getPreferences().nominalDistancePct ?? 70;
+  }
+
+  /**
+   * Set nominal distance percentage
+   */
+  setNominalDistancePct(pct: number): void {
+    this.setPreferences({ nominalDistancePct: pct });
+  }
+
+  /**
    * Reset GAP parameters to defaults
    */
   resetGAPParameters(): void {
-    this.setPreferences({ gapParameters: undefined });
+    this.setPreferences({ gapParameters: undefined, nominalDistancePct: undefined });
   }
 
   /**

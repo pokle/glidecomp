@@ -458,11 +458,7 @@ async function init(): Promise<void> {
   function populateCompetitionSettings(): void {
     if (!competitionSettingsContent) return;
     const params = config.getGAPParameters();
-    // Show effective nominal distance (auto-calculated from task if not overridden)
-    const userOverrides = config.getPreferences().gapParameters;
-    if (!userOverrides?.nominalDistance && state.task) {
-      params.nominalDistance = Math.round(calculateOptimizedTaskDistance(state.task) * 0.7);
-    }
+    const nominalPct = config.getNominalDistancePct();
     competitionSettingsContent.innerHTML = `
       <form id="competition-settings-form" class="space-y-4">
         <div class="space-y-3">
@@ -483,8 +479,8 @@ async function init(): Promise<void> {
           <label class="text-sm font-medium">Nominal Parameters</label>
           <div class="grid grid-cols-2 gap-3">
             <div class="space-y-1">
-              <label for="gap-nominal-distance" class="text-sm text-muted-foreground">Distance (m)</label>
-              <input type="number" id="gap-nominal-distance" value="${params.nominalDistance}" min="0" step="1000" class="input w-full">
+              <label for="gap-nominal-distance-pct" class="text-sm text-muted-foreground">Distance (% of task)</label>
+              <input type="number" id="gap-nominal-distance-pct" value="${nominalPct}" min="1" max="100" step="5" class="input w-full">
             </div>
             <div class="space-y-1">
               <label for="gap-nominal-time" class="text-sm text-muted-foreground">Time (s)</label>
@@ -527,10 +523,10 @@ async function init(): Promise<void> {
     const form = competitionSettingsContent.querySelector('#competition-settings-form') as HTMLFormElement;
     form?.addEventListener('submit', (e) => {
       e.preventDefault();
-      const scoring = (form.querySelector('input[name="gap-scoring"]:checked') as HTMLInputElement)?.value as 'PG' | 'HG' || 'PG';
+      const scoring = (form.querySelector('input[name="gap-scoring"]:checked') as HTMLInputElement)?.value as 'PG' | 'HG' || 'HG';
+      config.setNominalDistancePct(parseFloat((form.querySelector('#gap-nominal-distance-pct') as HTMLInputElement).value) || 70);
       config.setGAPParameters({
         scoring,
-        nominalDistance: parseFloat((form.querySelector('#gap-nominal-distance') as HTMLInputElement).value) || 70000,
         nominalTime: parseFloat((form.querySelector('#gap-nominal-time') as HTMLInputElement).value) || 5400,
         nominalLaunch: parseFloat((form.querySelector('#gap-nominal-launch') as HTMLInputElement).value) || 0.96,
         nominalGoal: parseFloat((form.querySelector('#gap-nominal-goal') as HTMLInputElement).value) || 0.2,
@@ -1514,12 +1510,9 @@ async function init(): Promise<void> {
 
     const gapParams = config.getGAPParameters();
 
-    // Auto-set nominal distance to 70% of task distance if the user hasn't
-    // explicitly overridden it (matches CLI behaviour in score-task.ts)
-    const userOverrides = config.getPreferences().gapParameters;
-    if (!userOverrides?.nominalDistance) {
-      gapParams.nominalDistance = calculateOptimizedTaskDistance(state.task) * 0.7;
-    }
+    // Compute nominal distance from percentage of task distance
+    const nominalPct = config.getNominalDistancePct();
+    gapParams.nominalDistance = calculateOptimizedTaskDistance(state.task) * (nominalPct / 100);
 
     state.compScore = scoreTask(state.task, pilots, gapParams);
   }
