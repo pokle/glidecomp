@@ -43,16 +43,16 @@ export interface GAPParameters {
   useArrival: boolean;
 }
 
-/** Default parameters — reasonable for a typical PG competition. */
+/** Default parameters — reasonable for a typical HG competition. */
 export const DEFAULT_GAP_PARAMETERS: GAPParameters = {
   nominalLaunch: 0.96,
   nominalDistance: 70000,
   nominalGoal: 0.2,
   nominalTime: 5400,
   minimumDistance: 5000,
-  scoring: 'PG',
-  useLeading: true,
-  useArrival: true,
+  scoring: 'HG',
+  useLeading: false,
+  useArrival: false,
 };
 
 // ---------------------------------------------------------------------------

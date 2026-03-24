@@ -464,12 +464,12 @@ async function init(): Promise<void> {
           <label class="text-sm font-medium">Scoring Type</label>
           <div class="flex gap-4">
             <label class="flex items-center gap-1.5 text-sm cursor-pointer">
-              <input type="radio" name="gap-scoring" value="PG" ${params.scoring === 'PG' ? 'checked' : ''} class="accent-primary">
-              Paragliding
-            </label>
-            <label class="flex items-center gap-1.5 text-sm cursor-pointer">
               <input type="radio" name="gap-scoring" value="HG" ${params.scoring === 'HG' ? 'checked' : ''} class="accent-primary">
               Hang Gliding
+            </label>
+            <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+              <input type="radio" name="gap-scoring" value="PG" ${params.scoring === 'PG' ? 'checked' : ''} class="accent-primary">
+              Paragliding
             </label>
           </div>
         </div>

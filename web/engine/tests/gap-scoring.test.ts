@@ -459,16 +459,18 @@ describe('scoreTask', () => {
     expect(result.pilotScores[1].rank).toBe(1); // tied
   });
 
-  it('uses PG scoring by default (no arrival points)', () => {
+  it('uses HG scoring by default (no leading/arrival points)', () => {
     const fixes = createTrackThroughCylinders(standardWaypoints);
     const pilots: PilotFlight[] = [
       { pilotName: 'Alice', trackFile: 'alice.igc', fixes },
     ];
 
     const result = scoreTask(standardTask, pilots, { nominalDistance: 10000, nominalTime: 600 });
-    expect(result.parameters.scoring).toBe('PG');
+    expect(result.parameters.scoring).toBe('HG');
     expect(result.weights.arrival).toBe(0);
+    expect(result.weights.leading).toBe(0);
     expect(result.pilotScores[0].arrivalPoints).toBe(0);
+    expect(result.pilotScores[0].leadingPoints).toBe(0);
   });
 
   it('applies minimum distance floor for short flights', () => {
