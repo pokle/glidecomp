@@ -804,10 +804,10 @@ async function init(): Promise<void> {
         firstSampleBtn.click();
       }
     },
-    onPilotSelectionChanged: (selected: Set<string>) => {
+    onPilotSelectionChanged: (selected: Set<string> | null) => {
       if (state.selectedTrack !== 'all' || state.tracks.length <= 1) return;
       const pilotScores = state.compScore?.pilotScores ?? [];
-      if (selected.size === 0) {
+      if (selected === null) {
         // All selected — show all tracks
         mapRenderer?.setMultiTrack?.(state.tracks, pilotScores);
       } else {

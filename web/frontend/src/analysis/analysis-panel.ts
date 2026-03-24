@@ -27,7 +27,7 @@ export interface AnalysisPanelOptions {
   onLoadSampleFlight?: () => void;
   /** Called when pilot selection changes in the competition score tab.
    *  Receives the set of selected pilot names (empty = show all). */
-  onPilotSelectionChanged?: (selectedPilots: Set<string>) => void;
+  onPilotSelectionChanged?: (selectedPilots: Set<string> | null) => void;
 }
 
 export interface FlightInfo {
@@ -376,8 +376,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   let isMultiTrackMode = false;
   let currentCompScore: TaskScoreResult | null = null;
   let gapParamsChangedCallback: ((params: GAPParameters) => void) | undefined;
-  /** Selected pilot names in competition score tab (empty = all selected) */
-  let selectedPilots: Set<string> = new Set();
+  /** Selected pilot names in competition score tab (null = all selected) */
+  let selectedPilots: Set<string> | null = null;
   const TAB_STORAGE_KEY = 'glidecomp-active-tab';
   const validTabs: PanelTabType[] = ['task', 'score', 'events', 'glides', 'climbs', 'sinks', 'comp-score', 'gap-config'];
   const savedTab = localStorage.getItem(TAB_STORAGE_KEY) as PanelTabType | null;
@@ -1391,7 +1391,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     `;
 
     // Ranked scores table
-    const allSelected = selectedPilots.size === 0;
+    const allSelected = selectedPilots === null;
     html += `<div class="rounded-lg border border-border overflow-hidden">`;
     html += `<table class="w-full text-sm">`;
     html += `<thead class="bg-muted/50"><tr>
@@ -1407,7 +1407,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     html += `<tbody>`;
 
     for (const ps of result.pilotScores) {
-      const isChecked = allSelected || selectedPilots.has(ps.pilotName);
+      const isChecked = allSelected || selectedPilots!.has(ps.pilotName);
       const goalIcon = ps.madeGoal ? '<span class="text-green-600 ml-1" title="Goal">&#10003;</span>' : '';
       html += `<tr class="border-t border-border hover:bg-muted/30${!isChecked ? ' opacity-40' : ''}">
         <td class="px-2 py-1.5"><input type="checkbox" class="comp-pilot-cb accent-primary" data-pilot="${ps.pilotName}" ${isChecked ? 'checked' : ''}></td>
@@ -1429,17 +1429,9 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     const selectAllCb = compScorePanelContent.querySelector('#comp-select-all') as HTMLInputElement;
     selectAllCb?.addEventListener('change', () => {
       if (selectAllCb.checked) {
-        selectedPilots.clear();
+        selectedPilots = null; // all selected
       } else {
-        // Deselect all — select none
-        selectedPilots.clear();
-        for (const ps of result.pilotScores) {
-          selectedPilots.add(ps.pilotName); // will re-render unchecked via "not in set" logic
-        }
-        // Actually: if set is non-empty, only those in the set are shown.
-        // Unchecking "all" should show none, but that's not useful.
-        // Instead, uncheck-all = select all (toggle back).
-        selectedPilots.clear();
+        selectedPilots = new Set(); // none selected
       }
       renderCompetitionScore();
       options.onPilotSelectionChanged?.(selectedPilots);
@@ -1450,18 +1442,16 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         const input = cb as HTMLInputElement;
         const pilot = input.dataset.pilot!;
 
-        if (allSelected) {
+        if (selectedPilots === null) {
           // Transitioning from "all selected" to individual selection:
           // populate the set with everyone, then toggle this one off
-          for (const ps of result.pilotScores) {
-            selectedPilots.add(ps.pilotName);
-          }
+          selectedPilots = new Set(result.pilotScores.map(ps => ps.pilotName));
           selectedPilots.delete(pilot);
         } else if (input.checked) {
           selectedPilots.add(pilot);
-          // If all are now checked, clear the set (= all selected)
+          // If all are now checked, go back to null (= all selected)
           if (selectedPilots.size === result.pilotScores.length) {
-            selectedPilots.clear();
+            selectedPilots = null;
           }
         } else {
           selectedPilots.delete(pilot);
@@ -1702,7 +1692,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
     setMultiTrackMode(enabled: boolean) {
       isMultiTrackMode = enabled;
-      selectedPilots.clear();
+      selectedPilots = null;
       if (enabled) {
         tabRowSingle.classList.add('hidden');
         tabRowMulti.classList.remove('hidden');
