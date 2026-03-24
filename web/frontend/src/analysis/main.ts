@@ -514,7 +514,7 @@ async function init(): Promise<void> {
 
         <div class="flex gap-2 pt-2">
           <button type="submit" class="btn btn-primary flex-1">Save</button>
-          <button type="button" id="gap-reset-btn" class="btn btn-outline">Reset to defaults</button>
+          <button type="button" id="gap-reset-btn" class="btn btn-secondary">Reset to defaults</button>
         </div>
       </form>
     `;
