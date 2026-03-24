@@ -35,15 +35,16 @@ function usage(): never {
   process.stderr.write(
     'Usage: score-task <task.xctsk> <igc-file-or-folder>...\n\n' +
     'Options:\n' +
-    '  --nominal-distance <m>    Nominal distance in meters\n' +
-    '  --nominal-time <s>        Nominal time in seconds (default: 5400)\n' +
-    '  --nominal-goal <ratio>    Nominal goal ratio 0-1 (default: 0.2)\n' +
-    '  --nominal-launch <ratio>  Nominal launch ratio 0-1 (default: 0.96)\n' +
-    '  --min-distance <m>        Minimum distance in meters (default: 5000)\n' +
-    '  --scoring <PG|HG>         Sport type (default: PG)\n' +
-    '  --no-leading              Disable leading (departure) points\n' +
-    '  --no-arrival              Disable arrival points\n' +
-    '  --json                    Output as JSON\n'
+    '  --nominal-distance-pct <%> Nominal distance as % of task distance (default: 70)\n' +
+    '  --nominal-distance <m>     Nominal distance in meters (overrides percentage)\n' +
+    '  --nominal-time <s>         Nominal time in seconds (default: 5400)\n' +
+    '  --nominal-goal <ratio>     Nominal goal ratio 0-1 (default: 0.2)\n' +
+    '  --nominal-launch <ratio>   Nominal launch ratio 0-1 (default: 0.96)\n' +
+    '  --min-distance <m>         Minimum distance in meters (default: 5000)\n' +
+    '  --scoring <PG|HG>          Sport type (default: HG)\n' +
+    '  --no-leading               Disable leading (departure) points\n' +
+    '  --no-arrival               Disable arrival points\n' +
+    '  --json                     Output as JSON\n'
   );
   process.exit(1);
 }
@@ -54,11 +55,15 @@ if (args.length < 2) usage();
 // Parse options
 const params: Partial<GAPParameters> = {};
 let jsonOutput = false;
+let nominalDistancePct: number | undefined;
 const positional: string[] = [];
 
 for (let i = 0; i < args.length; i++) {
   const arg = args[i];
   switch (arg) {
+    case '--nominal-distance-pct':
+      nominalDistancePct = Number(args[++i]);
+      break;
     case '--nominal-distance':
       params.nominalDistance = Number(args[++i]);
       break;
@@ -171,9 +176,10 @@ const taskContent = readFileSync(taskPath, 'utf-8');
 const task = parseXCTask(taskContent);
 const taskDistance = calculateOptimizedTaskDistance(task);
 
-// Auto-set nominal distance to 70% of task distance if not specified
+// Resolve nominal distance: explicit meters > percentage > default 70%
 if (params.nominalDistance === undefined) {
-  params.nominalDistance = taskDistance * 0.7;
+  const pct = nominalDistancePct ?? 70;
+  params.nominalDistance = taskDistance * (pct / 100);
 }
 
 // Parse all IGC files
