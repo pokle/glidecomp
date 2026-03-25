@@ -1388,7 +1388,9 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       <th class="px-2 py-1.5 text-left font-medium">#</th>
       <th class="px-2 py-1.5 text-left font-medium">Pilot</th>
       <th class="px-2 py-1.5 text-right font-medium">Dist</th>
-      <th class="px-2 py-1.5 text-right font-medium">Time</th>
+      <th class="px-2 py-1.5 text-right font-medium" title="Speed Section Time">SS Time</th>
+      <th class="px-2 py-1.5 text-right font-medium">Dist Pts</th>
+      <th class="px-2 py-1.5 text-right font-medium">Time Pts</th>
       <th class="px-2 py-1.5 text-right font-medium">Lead</th>
       ${params.scoring === 'HG' ? `<th class="px-2 py-1.5 text-right font-medium">Arr</th>` : ''}
       <th class="px-2 py-1.5 text-right font-medium">Total</th>
@@ -1402,6 +1404,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         <td class="px-2 py-1.5"><input type="checkbox" class="comp-pilot-cb accent-primary" data-pilot="${ps.pilotName}" ${isChecked ? 'checked' : ''}></td>
         <td class="px-2 py-1.5 font-medium">${ps.rank}</td>
         <td class="px-2 py-1.5 truncate max-w-[120px]" title="${ps.pilotName}">${ps.pilotName}${goalIcon}</td>
+        <td class="px-2 py-1.5 text-right tabular-nums">${formatDistance(ps.flownDistance).withUnit}</td>
+        <td class="px-2 py-1.5 text-right tabular-nums">${ps.madeGoal && ps.speedSectionTime !== null ? formatHMS(ps.speedSectionTime) : ps.reachedESS ? 'ESS' : 'LO'}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${ps.distancePoints.toFixed(1)}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${ps.timePoints.toFixed(1)}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${ps.leadingPoints.toFixed(1)}</td>
