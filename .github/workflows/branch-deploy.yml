@@ -36,6 +36,7 @@ jobs:
     permissions:
       contents: read
       deployments: write
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -84,9 +85,31 @@ jobs:
           command: deploy
 
       - name: Output Preview URL
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Sanitize branch name for URL (Cloudflare replaces special chars with hyphens)
           BRANCH_SLUG=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$//')
+          PREVIEW_URL="https://${BRANCH_SLUG}.glidecomp.pages.dev"
+
           echo "## Preview Deployment" >> $GITHUB_STEP_SUMMARY
           echo "Branch: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "Preview URL: https://${BRANCH_SLUG}.glidecomp.pages.dev" >> $GITHUB_STEP_SUMMARY
+          echo "Preview URL: ${PREVIEW_URL}" >> $GITHUB_STEP_SUMMARY
+
+          # Post preview URL as a PR comment (if a PR exists for this branch)
+          PR_NUMBER=$(gh pr view "${{ github.ref_name }}" --repo "${{ github.repository }}" --json number --jq '.number' 2>/dev/null || true)
+          if [ -n "$PR_NUMBER" ]; then
+            COMMENT_MARKER="<!-- branch-deploy-preview -->"
+            COMMENT_BODY="${COMMENT_MARKER}
+          **Preview Deployment**
+          ${PREVIEW_URL}
+          _Commit: ${{ github.sha }}_"
+
+            # Delete previous preview comment if it exists, then post a new one
+            EXISTING_COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" --jq ".[] | select(.body | startswith(\"${COMMENT_MARKER}\")) | .id" 2>/dev/null | head -1 || true)
+            if [ -n "$EXISTING_COMMENT_ID" ]; then
+              gh api -X DELETE "repos/${{ github.repository }}/issues/comments/${EXISTING_COMMENT_ID}" 2>/dev/null || true
+            fi
+
+            gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body "$COMMENT_BODY"
+          fi
