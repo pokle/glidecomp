@@ -26,12 +26,16 @@
         "@turf/bearing": "^7.3.4",
         "@turf/helpers": "^7.3.4",
       },
+      "devDependencies": {
+        "@glidecomp/samples": "workspace:*",
+      },
     },
     "web/frontend": {
       "name": "@glidecomp/frontend",
       "version": "0.1.0",
       "dependencies": {
         "@glidecomp/engine": "workspace:*",
+        "@glidecomp/samples": "workspace:*",
         "better-auth": "^1.2.8",
         "leaflet": "2.0.0-alpha.1",
         "mapbox-gl": "^3.20.0",
@@ -46,6 +50,10 @@
         "vite": "^7.3.1",
         "wrangler": "^4.73.0",
       },
+    },
+    "web/samples": {
+      "name": "@glidecomp/samples",
+      "version": "0.1.0",
     },
     "web/workers/airscore-api": {
       "name": "airscore-api",
@@ -174,6 +182,8 @@
     "@glidecomp/engine": ["@glidecomp/engine@workspace:web/engine"],
 
     "@glidecomp/frontend": ["@glidecomp/frontend@workspace:web/frontend"],
+
+    "@glidecomp/samples": ["@glidecomp/samples@workspace:web/samples"],
 
     "@img/colour": ["@img/colour@1.1.0", "", {}, "sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ=="],
 

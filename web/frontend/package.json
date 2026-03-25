@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@glidecomp/engine": "workspace:*",
+    "@glidecomp/samples": "workspace:*",
     "better-auth": "^1.2.8",
     "leaflet": "2.0.0-alpha.1",
     "mapbox-gl": "^3.20.0",

@@ -13,5 +13,8 @@
     "@turf/bbox": "^7.3.4",
     "@turf/bearing": "^7.3.4",
     "@turf/helpers": "^7.3.4"
+  },
+  "devDependencies": {
+    "@glidecomp/samples": "workspace:*"
   }
 }

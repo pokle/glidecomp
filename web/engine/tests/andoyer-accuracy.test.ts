@@ -11,6 +11,7 @@ import { readFileSync, readdirSync } from 'fs';
 import { resolve, extname, basename } from 'path';
 import { andoyerDistance } from '../src/geo';
 import { parseIGC, type IGCFix } from '../src/igc-parser';
+import { resolveCompDir } from '@glidecomp/samples/node';
 
 // ── Vincenty reference implementation (iterative WGS84 geodesic) ────────────
 
@@ -106,7 +107,7 @@ describe('andoyerDistance vs Vincenty reference', () => {
   });
 
   describe('accumulated track distance on IGC fixtures (<1m error per track)', () => {
-    const fixtureDir = resolve(__dirname, 'fixtures/corryong-cup-2026-t1');
+    const fixtureDir = resolveCompDir('corryong-cup-2026-t1');
     const igcFiles = loadIGCFiles(fixtureDir);
 
     for (const file of igcFiles) {

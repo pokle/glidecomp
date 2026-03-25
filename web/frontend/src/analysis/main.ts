@@ -9,6 +9,7 @@
  */
 
 import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistance, igcTaskToXCTask, resolveTurnpointSequence, scoreTask, maxBy, parseThresholdInput, formatThresholdForDisplay, DEFAULT_THRESHOLDS, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord, type DetectionThresholds, type PartialThresholds, type ThresholdDimension, type PilotFlight, type TaskScoreResult } from '@glidecomp/engine';
+import { SAMPLE_COMPS } from '@glidecomp/samples';
 import { getCurrentUser } from '../auth/client';
 import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
 import { createMapProvider, type MapProvider, type MapProviderType, type LoadedTrack } from './map-provider';
@@ -1352,7 +1353,7 @@ async function init(): Promise<void> {
   /**
    * Load multiple IGC files at once (replaces the full track set)
    */
-  async function loadMultipleIGCFiles(files: File[]): Promise<void> {
+  async function loadMultipleIGCFiles(files: File[], skipStorage = false): Promise<void> {
     const tracks: LoadedTrack[] = [];
 
     for (const file of files) {
@@ -1376,12 +1377,14 @@ async function init(): Promise<void> {
           events,
         });
 
-        // Store in browser storage
-        try {
-          await storage.storeTrack(file.name, content, igcFile);
-          await storageMenu?.refresh();
-        } catch (err) {
-          console.warn('Failed to store track:', err);
+        // Store in browser storage (skip for sample data)
+        if (!skipStorage) {
+          try {
+            await storage.storeTrack(file.name, content, igcFile);
+            await storageMenu?.refresh();
+          } catch (err) {
+            console.warn('Failed to store track:', err);
+          }
         }
       } catch (err) {
         console.error(`Failed to parse ${file.name}:`, err);
@@ -1809,8 +1812,25 @@ async function init(): Promise<void> {
     document.getElementById(id)?.addEventListener('click', () => loadSampleFile(filename));
   });
 
-  // Load from query params if present (e.g., ?task=buje&track=sample.igc)
-  await loadFromQueryParams(loadTask, loadLocalTask, loadIGCFile, loadStoredTrack, loadStoredTask);
+  // Sample competition buttons
+  document.getElementById('sample-comp-corryong')?.addEventListener('click', () => {
+    const params = new URLSearchParams(window.location.search);
+    params.set('sampleComp', 'corryong-cup-2026-t1');
+    params.delete('task');
+    params.delete('track');
+    params.delete('storedTask');
+    params.delete('storedTrack');
+    window.location.search = params.toString();
+  });
+
+  // Load sample competition if specified (exclusive — skips individual track/task params)
+  const sampleCompId = params.get('sampleComp');
+  if (sampleCompId) {
+    await loadSampleComp(sampleCompId);
+  } else {
+    // Load from query params if present (e.g., ?task=buje&track=sample.igc)
+    await loadFromQueryParams(loadTask, loadLocalTask, loadIGCFile, loadStoredTrack, loadStoredTask);
+  }
 
   // Handle files received via Web Share Target (mobile share button)
   if (params.get('shared') === '1') {
@@ -1824,8 +1844,80 @@ async function init(): Promise<void> {
   }
 
   // If no task or track was loaded, open the command menu to guide users
-  if (!params.get('task') && !params.get('track') && !params.get('storedTrack') && !params.get('storedTask') && params.get('shared') !== '1' && !state.igcFile && !state.task) {
+  if (!params.get('task') && !params.get('track') && !params.get('storedTrack') && !params.get('storedTask') && !params.get('sampleComp') && params.get('shared') !== '1' && !state.igcFile && !state.task) {
     commandDialog?.showModal();
+  }
+
+  /**
+   * Load a complete sample competition: task + all IGC tracks.
+   */
+  async function loadSampleComp(compId: string): Promise<void> {
+    const comp = SAMPLE_COMPS[compId];
+    if (!comp) {
+      showStatus(`Unknown sample competition: ${compId}`, 'error');
+      return;
+    }
+
+    const baseUrl = `/data/comps/${compId}`;
+    showStatus(`Loading ${comp.name}...`, 'info');
+
+    // 1. Load the task
+    try {
+      const taskResponse = await fetch(`${baseUrl}/${comp.taskFile}`);
+      if (!taskResponse.ok) throw new Error(`HTTP ${taskResponse.status}`);
+      const rawJson = await taskResponse.text();
+      const task = parseXCTask(rawJson);
+      applyTask(task);
+    } catch (err) {
+      showStatus(`Failed to load task for ${comp.name}: ${err}`, 'error');
+      return;
+    }
+
+    // 2. Apply GAP parameters from the competition manifest
+    config.setGAPParameters({
+      scoring: comp.gapParams.scoring,
+      nominalGoal: comp.gapParams.nominalGoal,
+      nominalTime: comp.gapParams.nominalTime,
+      minimumDistance: comp.gapParams.minimumDistance,
+      useLeading: comp.gapParams.useLeading,
+      useArrival: comp.gapParams.useArrival,
+    });
+    // Compute nominal distance percentage from the absolute value and task distance
+    const taskDist = calculateOptimizedTaskDistance(state.task!);
+    if (taskDist > 0) {
+      config.setNominalDistancePct(Math.round((comp.gapParams.nominalDistance / taskDist) * 100));
+    }
+
+    // 3. Fetch all IGC files concurrently with progress
+    let loaded = 0;
+    const fetchResults = await Promise.allSettled(
+      comp.igcFiles.map(async (filename) => {
+        const response = await fetch(`${baseUrl}/${filename}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status} for ${filename}`);
+        const content = await response.text();
+        loaded++;
+        showStatus(`Loading ${comp.name}: ${loaded}/${comp.igcFiles.length} tracks`, 'info');
+        return new File([content], filename, { type: 'text/plain' });
+      })
+    );
+
+    const files: File[] = [];
+    for (const result of fetchResults) {
+      if (result.status === 'fulfilled') {
+        files.push(result.value);
+      } else {
+        console.warn('Failed to load track:', result.reason);
+      }
+    }
+
+    if (files.length === 0) {
+      showStatus('No tracks loaded', 'error');
+      return;
+    }
+
+    // 4. Load all tracks (skip IndexedDB storage for sample data)
+    await loadMultipleIGCFiles(files, true);
+    showStatus(`Loaded ${comp.name}: ${files.length} tracks`, 'success');
   }
 
   /**

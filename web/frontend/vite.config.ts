@@ -1,5 +1,6 @@
 import { defineConfig, searchForWorkspaceRoot, type Plugin, type Connect } from 'vite';
 import { resolve } from 'path';
+import { readFileSync, existsSync, cpSync } from 'fs';
 import tailwindcss from '@tailwindcss/vite';
 
 function airscoreWorkerCheck(): Plugin {
@@ -25,6 +26,46 @@ function airscoreWorkerCheck(): Plugin {
   };
 }
 
+const SAMPLES_COMPS_DIR = resolve(__dirname, '..', 'samples', 'comps');
+
+/** Serve sample comp files from /data/comps/ in dev */
+function sampleCompFiles(): Plugin {
+  return {
+    name: 'sample-comp-files',
+    configureServer(server) {
+      server.middlewares.use((req: Connect.IncomingMessage, res, next) => {
+        const match = req.url?.match(/^\/data\/comps\/([a-z0-9-]+)\/([a-zA-Z0-9_\-\.]+)$/);
+        if (!match) return next();
+
+        const [, compId, filename] = match;
+        const filePath = resolve(SAMPLES_COMPS_DIR, compId, filename);
+
+        if (!existsSync(filePath)) {
+          (res as any).statusCode = 404;
+          (res as any).end('Not found');
+          return;
+        }
+
+        const content = readFileSync(filePath);
+        const ext = filename.split('.').pop()?.toLowerCase();
+        (res as any).setHeader('Content-Type', ext === 'xctsk' ? 'application/json' : 'text/plain');
+        (res as any).end(content);
+      });
+    },
+  };
+}
+
+/** Copy sample comp files to dist/data/comps/ for production */
+function copySampleComps(): Plugin {
+  return {
+    name: 'copy-sample-comps',
+    closeBundle() {
+      const dest = resolve(__dirname, 'dist', 'data', 'comps');
+      cpSync(SAMPLES_COMPS_DIR, dest, { recursive: true });
+    },
+  };
+}
+
 export default defineConfig({
   root: 'src',
   envDir: resolve(__dirname, '../..'),
@@ -32,6 +73,8 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     airscoreWorkerCheck(),
+    sampleCompFiles(),
+    copySampleComps(),
     {
       // Rewrite /u/* to /dashboard.html in dev (mirrors Cloudflare Pages _redirects)
       name: 'rewrite-u-routes',

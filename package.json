@@ -38,6 +38,7 @@
   "workspaces": [
     "web/engine",
     "web/frontend",
+    "web/samples",
     "web/workers/*"
   ],
   "devDependencies": {
