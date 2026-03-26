@@ -460,10 +460,12 @@ async function init(): Promise<void> {
     if (!competitionSettingsContent) return;
     const params = config.getGAPParameters();
     const nominalPct = config.getNominalDistancePct();
+    const helpLink = (hash: string, text: string, heading = false) =>
+      `<a href="/scoring.html#${hash}" target="_blank" rel="noopener noreferrer" class="text-sm ${heading ? 'font-medium' : 'text-muted-foreground'} hover:text-foreground inline-flex items-center gap-0.5">${text} <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>`;
     competitionSettingsContent.innerHTML = `
       <form id="competition-settings-form" class="space-y-4">
         <div class="space-y-3">
-          <label class="text-sm font-medium">Scoring Type</label>
+          ${helpLink('what-is-gap', 'Scoring Type', true)}
           <div class="flex gap-4">
             <label class="flex items-center gap-1.5 text-sm cursor-pointer">
               <input type="radio" name="gap-scoring" value="HG" ${params.scoring === 'HG' ? 'checked' : ''} class="accent-primary">
@@ -477,7 +479,7 @@ async function init(): Promise<void> {
         </div>
 
         <div class="space-y-3">
-          <label class="text-sm font-medium">Nominal Parameters</label>
+          ${helpLink('task-validity', 'Nominal Parameters', true)}
           <div class="grid grid-cols-2 gap-3">
             <div class="space-y-1">
               <label for="gap-nominal-distance-pct" class="text-sm text-muted-foreground">Distance (% of task)</label>
@@ -496,7 +498,7 @@ async function init(): Promise<void> {
               <input type="number" id="gap-nominal-goal" value="${Math.round(params.nominalGoal * 100)}" min="0" max="100" step="1" class="input w-full">
             </div>
             <div class="space-y-1">
-              <label for="gap-minimum-distance" class="text-sm text-muted-foreground">Min distance (m)</label>
+              ${helpLink('distance-points', 'Min distance (m)')}
               <input type="number" id="gap-minimum-distance" value="${params.minimumDistance}" min="0" step="1" class="input w-full">
             </div>
           </div>
@@ -506,11 +508,11 @@ async function init(): Promise<void> {
           <label class="text-sm font-medium">Point Categories</label>
           <label class="flex items-center gap-1.5 text-sm cursor-pointer">
             <input type="checkbox" id="gap-use-leading" ${params.useLeading ? 'checked' : ''} class="accent-primary">
-            Leading (departure) points
+            <a href="/scoring.html#leading-points" target="_blank" rel="noopener noreferrer" class="hover:text-foreground">Leading (departure) points</a>
           </label>
           <label class="flex items-center gap-1.5 text-sm cursor-pointer">
             <input type="checkbox" id="gap-use-arrival" ${params.useArrival ? 'checked' : ''} class="accent-primary">
-            Arrival points (HG only)
+            <a href="/scoring.html#arrival-points" target="_blank" rel="noopener noreferrer" class="hover:text-foreground">Arrival points (HG only)</a>
           </label>
         </div>
 
