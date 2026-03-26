@@ -45,6 +45,7 @@ It should ensure all requests are from authenticated callers.
   - Also lists all recently created non-test competitions (created within the last 24 months)
 - `/comp/{comp_id}`: Competition page for existing competition.
 - `/comp/{comp_id}/task/{task_id}`: Task page for existing tasks.
+- `/scores`: public scores page. Query params: comp_id
 
 # Focus related design decisions
 
@@ -53,6 +54,9 @@ It should ensure all requests are from authenticated callers.
 
 # Security design 
 - Ensure that all user entered fields are sanitised before storing them.
+- Ensure only admins of a comp can modify it and any associated child data (task, igc, xctsk, …)
+- Ensure only authenticated users can visit all pages except for the score page.
+- The score page is the only public page. 
 - Enforce limits on the size of user supplied data to avoid abuse
   - Limit the size of user entered text fields to 128 chars (approx)
   - Limit the size of IGC files uploaded and stored to 5mb each.
