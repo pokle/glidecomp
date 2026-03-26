@@ -460,10 +460,12 @@ async function init(): Promise<void> {
     if (!competitionSettingsContent) return;
     const params = config.getGAPParameters();
     const nominalPct = config.getNominalDistancePct();
+    const helpLink = (hash: string, text: string, heading = false) =>
+      `<a href="/scoring.html#${hash}" target="_blank" rel="noopener noreferrer" class="text-sm ${heading ? 'font-medium' : 'text-muted-foreground'} hover:text-foreground inline-flex items-center gap-0.5">${text} <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>`;
     competitionSettingsContent.innerHTML = `
       <form id="competition-settings-form" class="space-y-4">
         <div class="space-y-3">
-          <label class="text-sm font-medium">Scoring Type</label>
+          ${helpLink('what-is-gap', 'Scoring Type', true)}
           <div class="flex gap-4">
             <label class="flex items-center gap-1.5 text-sm cursor-pointer">
               <input type="radio" name="gap-scoring" value="HG" ${params.scoring === 'HG' ? 'checked' : ''} class="accent-primary">
@@ -477,27 +479,27 @@ async function init(): Promise<void> {
         </div>
 
         <div class="space-y-3">
-          <label class="text-sm font-medium">Nominal Parameters</label>
+          ${helpLink('task-validity', 'Nominal Parameters', true)}
           <div class="grid grid-cols-2 gap-3">
             <div class="space-y-1">
               <label for="gap-nominal-distance-pct" class="text-sm text-muted-foreground">Distance (% of task)</label>
-              <input type="number" id="gap-nominal-distance-pct" value="${nominalPct}" min="1" max="100" step="5" class="input w-full">
+              <input type="number" id="gap-nominal-distance-pct" value="${nominalPct}" min="1" max="100" step="1" class="input w-full">
             </div>
             <div class="space-y-1">
               <label for="gap-nominal-time" class="text-sm text-muted-foreground">Time (s)</label>
-              <input type="number" id="gap-nominal-time" value="${params.nominalTime}" min="0" step="300" class="input w-full">
+              <input type="number" id="gap-nominal-time" value="${params.nominalTime}" min="0" step="1" class="input w-full">
             </div>
             <div class="space-y-1">
-              <label for="gap-nominal-launch" class="text-sm text-muted-foreground">Launch ratio</label>
-              <input type="number" id="gap-nominal-launch" value="${params.nominalLaunch}" min="0" max="1" step="0.01" class="input w-full">
+              <label for="gap-nominal-launch" class="text-sm text-muted-foreground">Launch (%)</label>
+              <input type="number" id="gap-nominal-launch" value="${Math.round(params.nominalLaunch * 100)}" min="0" max="100" step="1" class="input w-full">
             </div>
             <div class="space-y-1">
-              <label for="gap-nominal-goal" class="text-sm text-muted-foreground">Goal ratio</label>
-              <input type="number" id="gap-nominal-goal" value="${params.nominalGoal}" min="0" max="1" step="0.01" class="input w-full">
+              <label for="gap-nominal-goal" class="text-sm text-muted-foreground">Goal (%)</label>
+              <input type="number" id="gap-nominal-goal" value="${Math.round(params.nominalGoal * 100)}" min="0" max="100" step="1" class="input w-full">
             </div>
             <div class="space-y-1">
-              <label for="gap-minimum-distance" class="text-sm text-muted-foreground">Min distance (m)</label>
-              <input type="number" id="gap-minimum-distance" value="${params.minimumDistance}" min="0" step="500" class="input w-full">
+              ${helpLink('distance-points', 'Min distance (m)')}
+              <input type="number" id="gap-minimum-distance" value="${params.minimumDistance}" min="0" step="1" class="input w-full">
             </div>
           </div>
         </div>
@@ -506,11 +508,11 @@ async function init(): Promise<void> {
           <label class="text-sm font-medium">Point Categories</label>
           <label class="flex items-center gap-1.5 text-sm cursor-pointer">
             <input type="checkbox" id="gap-use-leading" ${params.useLeading ? 'checked' : ''} class="accent-primary">
-            Leading (departure) points
+            <a href="/scoring.html#leading-points" target="_blank" rel="noopener noreferrer" class="hover:text-foreground">Leading (departure) points</a>
           </label>
           <label class="flex items-center gap-1.5 text-sm cursor-pointer">
             <input type="checkbox" id="gap-use-arrival" ${params.useArrival ? 'checked' : ''} class="accent-primary">
-            Arrival points (HG only)
+            <a href="/scoring.html#arrival-points" target="_blank" rel="noopener noreferrer" class="hover:text-foreground">Arrival points (HG only)</a>
           </label>
         </div>
 
@@ -529,13 +531,17 @@ async function init(): Promise<void> {
     form?.addEventListener('submit', (e) => {
       e.preventDefault();
       const scoring = (form.querySelector('input[name="gap-scoring"]:checked') as HTMLInputElement)?.value as 'PG' | 'HG' || 'HG';
-      config.setNominalDistancePct(parseFloat((form.querySelector('#gap-nominal-distance-pct') as HTMLInputElement).value) || 70);
+      const parseNum = (id: string, fallback: number) => {
+        const v = parseFloat((form.querySelector(id) as HTMLInputElement).value);
+        return Number.isNaN(v) ? fallback : v;
+      };
+      config.setNominalDistancePct(parseNum('#gap-nominal-distance-pct', 70));
       config.setGAPParameters({
         scoring,
-        nominalTime: parseFloat((form.querySelector('#gap-nominal-time') as HTMLInputElement).value) || 5400,
-        nominalLaunch: parseFloat((form.querySelector('#gap-nominal-launch') as HTMLInputElement).value) || 0.96,
-        nominalGoal: parseFloat((form.querySelector('#gap-nominal-goal') as HTMLInputElement).value) || 0.2,
-        minimumDistance: parseFloat((form.querySelector('#gap-minimum-distance') as HTMLInputElement).value) || 5000,
+        nominalTime: parseNum('#gap-nominal-time', 5400),
+        nominalLaunch: parseNum('#gap-nominal-launch', 96) / 100,
+        nominalGoal: parseNum('#gap-nominal-goal', 20) / 100,
+        minimumDistance: parseNum('#gap-minimum-distance', 5000),
         useLeading: (form.querySelector('#gap-use-leading') as HTMLInputElement).checked,
         useArrival: (form.querySelector('#gap-use-arrival') as HTMLInputElement).checked,
       });
