@@ -99,6 +99,7 @@ export default defineConfig({
         dashboard: resolve(__dirname, 'src/dashboard.html'),
         about: resolve(__dirname, 'src/about.html'),
         legal: resolve(__dirname, 'src/legal.html'),
+        scoring: resolve(__dirname, 'src/scoring.html'),
       },
     },
   },

@@ -518,6 +518,10 @@ async function init(): Promise<void> {
           <button type="submit" class="btn btn-primary flex-1">Save</button>
           <button type="button" id="gap-reset-btn" class="btn btn-secondary">Reset to defaults</button>
         </div>
+
+        <div class="pt-2 text-xs text-center">
+          <a href="/scoring.html" target="_blank" rel="noopener noreferrer" class="text-muted-foreground hover:text-foreground transition-colors underline">How does GAP scoring work?</a>
+        </div>
       </form>
     `;
 
