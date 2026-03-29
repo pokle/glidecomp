@@ -14,8 +14,8 @@
     "@glidecomp/engine": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260317.1",
+    "@cloudflare/workers-types": "^4.20260329.1",
     "typescript": "^6.0.2",
-    "wrangler": "^4.77.0"
+    "wrangler": "^4.78.0"
   }
 }
