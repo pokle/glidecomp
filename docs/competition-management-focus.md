@@ -1,4 +1,4 @@
-# TaskClaw
+# Competition Management Focus
 
 A Hang Gliding and Paragliding competition scoring assistant to help manage the tedious parts of scoring such a competition.
 
