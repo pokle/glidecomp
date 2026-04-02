@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { parseXCTask, getSSSIndex, getESSIndex, calculateNominalTaskDistance, igcTaskToXCTask, isValidTask } from '../src/xctsk-parser';
+import { parseXCTask, getSSSIndex, getESSIndex, calculateNominalTaskDistance, igcTaskToXCTask, isValidTask, toXctskJSON } from '../src/xctsk-parser';
 import type { IGCTask } from '../src/igc-parser';
 
 describe('XCTSK Parser', () => {
@@ -595,6 +595,170 @@ describe('XCTSK Parser', () => {
 
       expect(task.turnpoints[0].waypoint.name).toBe('TP1');
       expect(task.turnpoints[0].waypoint.name).not.toContain('<');
+    });
+  });
+
+  describe('toXctskJSON', () => {
+    it('should omit TURNPOINT and GOAL types from output', () => {
+      const task = parseXCTask(JSON.stringify({
+        taskType: 'CLASSIC',
+        version: 1,
+        turnpoints: [
+          { type: 'TAKEOFF', radius: 0, waypoint: { name: 'Launch', lat: 47.0, lon: 11.0 } },
+          { type: 'SSS', radius: 400, waypoint: { name: 'Start', lat: 47.1, lon: 11.1 } },
+          { radius: 1000, waypoint: { name: 'TP1', lat: 47.5, lon: 11.5 } },
+          { type: 'ESS', radius: 400, waypoint: { name: 'Goal', lat: 48.0, lon: 12.0 } }
+        ]
+      }));
+
+      const json = toXctskJSON(task);
+      const tps = (json as { turnpoints: Array<Record<string, unknown>> }).turnpoints;
+
+      expect(tps[0].type).toBe('TAKEOFF');
+      expect(tps[1].type).toBe('SSS');
+      expect(tps[2].type).toBeUndefined(); // was TURNPOINT internally
+      expect(tps[3].type).toBe('ESS');
+    });
+
+    it('should strip GOAL type from igcTaskToXCTask output', () => {
+      const igcTask: IGCTask = {
+        numTurnpoints: 1,
+        start: { latitude: 47.0, longitude: 11.0, name: 'Start' },
+        turnpoints: [{ latitude: 47.5, longitude: 11.5, name: 'TP1' }],
+        finish: { latitude: 48.0, longitude: 12.0, name: 'Goal' },
+      };
+
+      const xcTask = igcTaskToXCTask(igcTask);
+      const json = toXctskJSON(xcTask);
+      const tps = (json as { turnpoints: Array<Record<string, unknown>> }).turnpoints;
+
+      // SSS is valid spec type — should be present
+      expect(tps[0].type).toBe('SSS');
+      // TURNPOINT is internal — should be omitted
+      expect(tps[1].type).toBeUndefined();
+      // GOAL is internal — should be omitted
+      expect(tps[2].type).toBeUndefined();
+    });
+
+    it('should default altSmoothed to 0 when missing', () => {
+      const task = parseXCTask(JSON.stringify({
+        taskType: 'CLASSIC',
+        version: 1,
+        turnpoints: [
+          { radius: 400, waypoint: { name: 'TP', lat: 47.0, lon: 11.0 } }
+        ]
+      }));
+
+      const json = toXctskJSON(task);
+      const wp = (json as { turnpoints: Array<{ waypoint: { altSmoothed: number } }> }).turnpoints[0].waypoint;
+
+      expect(wp.altSmoothed).toBe(0);
+    });
+
+    it('should default timeGates to ["00:00:00Z"] when missing', () => {
+      const task = parseXCTask(JSON.stringify({
+        taskType: 'CLASSIC',
+        version: 1,
+        turnpoints: [
+          { type: 'SSS', radius: 400, waypoint: { name: 'Start', lat: 47.0, lon: 11.0 } },
+        ],
+        sss: { type: 'RACE', direction: 'EXIT' }
+      }));
+
+      const json = toXctskJSON(task);
+      const sss = (json as { sss: { timeGates: string[] } }).sss;
+
+      expect(sss.timeGates).toEqual(['00:00:00Z']);
+    });
+
+    it('should include finishAltitude in goal when set', () => {
+      const task = parseXCTask(JSON.stringify({
+        taskType: 'CLASSIC',
+        version: 1,
+        turnpoints: [
+          { radius: 400, waypoint: { name: 'TP', lat: 47.0, lon: 11.0 } }
+        ],
+        goal: { type: 'CYLINDER', finishAltitude: 200 }
+      }));
+
+      const json = toXctskJSON(task);
+      const goal = (json as { goal: { finishAltitude: number } }).goal;
+
+      expect(goal.finishAltitude).toBe(200);
+    });
+
+    it('should omit cylinderTolerance from output', () => {
+      const task = parseXCTask(JSON.stringify({
+        taskType: 'CLASSIC',
+        version: 1,
+        turnpoints: [
+          { radius: 400, waypoint: { name: 'TP', lat: 47.0, lon: 11.0 } }
+        ]
+      }));
+      task.cylinderTolerance = 0.005;
+
+      const json = toXctskJSON(task);
+      expect((json as Record<string, unknown>).cylinderTolerance).toBeUndefined();
+    });
+
+    it('should round-trip xcontest task with minimal diff', () => {
+      const originalJson = `{"earthModel":"WGS84","goal":{"deadline":"08:00:00Z","type":"CYLINDER"},"sss":{"direction":"EXIT","timeGates":["03:00:00Z"],"type":"RACE"},"taskType":"CLASSIC","turnpoints":[{"radius":3000,"type":"SSS","waypoint":{"altSmoothed":932,"description":"ELLIOT","lat":-36.186,"lon":147.977,"name":"ELLIOT"}},{"radius":1000,"type":"ESS","waypoint":{"altSmoothed":289,"description":"KHANCO","lat":-36.216,"lon":148.110,"name":"KHANCO"}}],"version":1}`;
+
+      const task = parseXCTask(originalJson);
+      const exported = toXctskJSON(task);
+
+      const tps = (exported as { turnpoints: Array<Record<string, unknown>> }).turnpoints;
+      expect(tps[0].type).toBe('SSS');
+      expect(tps[1].type).toBe('ESS');
+      expect((exported as Record<string, unknown>).version).toBe(1);
+      expect((exported as { sss: { timeGates: string[] } }).sss.timeGates).toEqual(['03:00:00Z']);
+    });
+  });
+
+  describe('parseXCTask v2 numeric type codes', () => {
+    it('should parse numeric type t=2 as SSS and t=3 as ESS', () => {
+      const taskJson = JSON.stringify({
+        taskType: 'CLASSIC',
+        version: 2,
+        t: [
+          { n: 'Start', lat: 47.0, lon: 11.0, r: 400, t: 2 },
+          { n: 'TP1', lat: 47.5, lon: 11.5, r: 1000 },
+          { n: 'Goal', lat: 48.0, lon: 12.0, r: 400, t: 3 }
+        ],
+      });
+
+      const task = parseXCTask(taskJson);
+
+      expect(task.turnpoints[0].type).toBe('SSS');
+      expect(task.turnpoints[1].type).toBe('TURNPOINT');
+      expect(task.turnpoints[2].type).toBe('ESS');
+    });
+  });
+
+  describe('goal.finishAltitude', () => {
+    it('should parse finishAltitude in v1 format', () => {
+      const taskJson = JSON.stringify({
+        taskType: 'CLASSIC',
+        version: 1,
+        turnpoints: [
+          { radius: 400, waypoint: { name: 'TP', lat: 47.0, lon: 11.0 } }
+        ],
+        goal: { type: 'CYLINDER', deadline: '18:00:00Z', finishAltitude: 150 }
+      });
+
+      const task = parseXCTask(taskJson);
+      expect(task.goal?.finishAltitude).toBe(150);
+    });
+
+    it('should parse finishAltitude (fa) in v2 format', () => {
+      const taskJson = JSON.stringify({
+        taskType: 'CLASSIC',
+        t: [{ n: 'TP', lat: 47.0, lon: 11.0, r: 400 }],
+        g: { t: 2, d: '18:00:00Z', fa: 200 }
+      });
+
+      const task = parseXCTask(taskJson);
+      expect(task.goal?.finishAltitude).toBe(200);
     });
   });
 });

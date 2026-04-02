@@ -6,7 +6,7 @@
  */
 
 import type { XCTask, Turnpoint, TurnpointType, WaypointRecord } from '@glidecomp/engine';
-import { getOptimizedSegmentDistances } from '@glidecomp/engine';
+import { getOptimizedSegmentDistances, toXctskJSON } from '@glidecomp/engine';
 import { formatDistance, formatAltitude } from './units-browser';
 
 // ---------------------------------------------------------------------------
@@ -736,7 +736,7 @@ function deriveTaskFilename(task: XCTask): string {
 }
 
 export function downloadTask(task: XCTask): void {
-  const json = JSON.stringify(task, null, 2);
+  const json = JSON.stringify(toXctskJSON(task), null, 2);
   const blob = new Blob([json], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
