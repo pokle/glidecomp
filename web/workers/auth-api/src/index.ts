@@ -1,3 +1,5 @@
+// Copyright (c) 2026, Tushar Pokle.  All rights reserved.
+
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { createAuth, type AuthEnv } from "./auth";
