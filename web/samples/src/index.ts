@@ -1,3 +1,5 @@
+// Copyright (c) 2026, Tushar Pokle.  All rights reserved.
+
 /** GAP scoring parameters for a sample competition */
 export interface SampleCompGAPParams {
   scoring: 'HG' | 'PG';

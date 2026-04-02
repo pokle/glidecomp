@@ -35,6 +35,7 @@ export interface SSSConfig {
 export interface GoalConfig {
   type: 'CYLINDER' | 'LINE';
   deadline?: string;
+  finishAltitude?: number;
 }
 
 export interface XCTask {
@@ -62,55 +63,63 @@ export interface XCTask {
  * Decode polyline-encoded coordinates (Google Polyline Algorithm)
  * Used in xctsk v2 format for compact representation
  */
+/**
+ * Decode a single polyline-encoded integer from the string at the given index.
+ * Returns [decoded_value, new_index].
+ */
+function decodePolylineValue(encoded: string, index: number): [number, number] {
+  let shift = 0;
+  let value = 0;
+  let byte: number;
+
+  do {
+    byte = encoded.charCodeAt(index++) - 63;
+    value |= (byte & 0x1f) << shift;
+    shift += 5;
+  } while (byte >= 0x20 && index < encoded.length);
+
+  return [(value & 1) ? ~(value >> 1) : (value >> 1), index];
+}
+
+/**
+ * Decode polyline-encoded turnpoint data.
+ * The xctsk v2 spec encodes 4 values per turnpoint: lat, lon, altitude, radius.
+ * Returns [lat, lon, altitude, radius] (coordinates at 1e5 precision).
+ */
 function decodePolyline(encoded: string): number[] {
   const result: number[] = [];
   let index = 0;
   let lat = 0;
   let lon = 0;
   let alt = 0;
+  let radius = 0;
 
   while (index < encoded.length) {
-    // Decode latitude
-    let shift = 0;
-    let value = 0;
-    let byte: number;
+    let delta: number;
 
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      value |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20 && index < encoded.length);
+    [delta, index] = decodePolylineValue(encoded, index);
+    lat += delta;
 
-    lat += (value & 1) ? ~(value >> 1) : (value >> 1);
-
-    // Decode longitude
-    shift = 0;
-    value = 0;
-
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      value |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20 && index < encoded.length);
-
-    lon += (value & 1) ? ~(value >> 1) : (value >> 1);
+    if (index >= encoded.length) {
+      result.push(lat / 1e5, lon / 1e5, alt, radius);
+      break;
+    }
+    [delta, index] = decodePolylineValue(encoded, index);
+    lon += delta;
 
     // Decode altitude (if present)
     if (index < encoded.length) {
-      shift = 0;
-      value = 0;
-
-      do {
-        byte = encoded.charCodeAt(index++) - 63;
-        value |= (byte & 0x1f) << shift;
-        shift += 5;
-      } while (byte >= 0x20 && index < encoded.length);
-
-      alt += (value & 1) ? ~(value >> 1) : (value >> 1);
+      [delta, index] = decodePolylineValue(encoded, index);
+      alt += delta;
     }
 
-    // Coordinates are stored with 5 decimal precision
-    result.push(lat / 1e5, lon / 1e5, alt);
+    // Decode radius (if present — xctsk v2 spec encodes 4 values)
+    if (index < encoded.length) {
+      [delta, index] = decodePolylineValue(encoded, index);
+      radius += delta;
+    }
+
+    result.push(lat / 1e5, lon / 1e5, alt, radius);
   }
 
   return result;
@@ -177,6 +186,7 @@ function parseV1(data: Record<string, unknown>): XCTask {
     task.goal = {
       type: (goal.type as GoalConfig['type']) || 'CYLINDER',
       deadline: goal.deadline as string | undefined,
+      finishAltitude: typeof goal.finishAltitude === 'number' ? goal.finishAltitude : undefined,
     };
   }
 
@@ -202,27 +212,26 @@ function parseV2(data: Record<string, unknown>): XCTask {
         let alt = 0;
 
         if (typeof tpObj.z === 'string') {
-          // Polyline encoded: lat, lon, radius (or lat, lon, alt, radius)
+          // Polyline encoded: lat, lon, altitude, radius (4 values per spec)
           const decoded = decodePolyline(tpObj.z);
           if (decoded.length >= 2) {
             lat = decoded[0];
             lon = decoded[1];
-            if (decoded.length >= 3) {
-              // Third value could be altitude or radius depending on format
-              alt = decoded[2];
-            }
           }
+          if (decoded.length >= 3) alt = decoded[2];
+          if (decoded.length >= 4 && decoded[3] > 0) radius = decoded[3];
         }
 
-        // Handle explicit lat/lon if present
+        // Handle explicit lat/lon/radius if present (override polyline values)
         if (typeof tpObj.lat === 'number') lat = tpObj.lat;
         if (typeof tpObj.lon === 'number') lon = tpObj.lon;
         if (typeof tpObj.r === 'number') radius = tpObj.r;
 
-        // Determine type from short code
+        // Determine type: spec uses numeric 't' field (2=SSS, 3=ESS),
+        // also support string 'y' field for compatibility
         let type: TurnpointType = 'TURNPOINT';
-        if (tpObj.y === 'S') type = 'SSS';
-        else if (tpObj.y === 'E') type = 'ESS';
+        if (tpObj.t === 2 || tpObj.y === 'S') type = 'SSS';
+        else if (tpObj.t === 3 || tpObj.y === 'E') type = 'ESS';
         else if (tpObj.y === 'T') type = 'TAKEOFF';
         else if (tpObj.y === 'G') type = 'GOAL';
 
@@ -271,6 +280,7 @@ function parseV2(data: Record<string, unknown>): XCTask {
     task.goal = {
       type: g.t === 1 ? 'LINE' : 'CYLINDER',
       deadline: g.d as string | undefined,
+      finishAltitude: typeof g.fa === 'number' ? g.fa : undefined,
     };
   }
 
@@ -307,11 +317,17 @@ export function isValidTask(task: XCTask): boolean {
 }
 
 /**
- * Parse xctsk JSON content
+ * Parse xctsk JSON content.
+ * Supports XCTSK: prefix (uncompressed QR code format).
+ * For XCTSKZ: compressed format, use parseXCTaskAsync().
  */
 export function parseXCTask(content: string): XCTask {
-  // Remove XCTSK: prefix if present (QR code format)
   let jsonContent = content.trim();
+  if (jsonContent.startsWith('XCTSKZ:')) {
+    throw new Error('XCTSKZ compressed format requires async parsing — use parseXCTaskAsync()');
+  }
+
+  // Remove XCTSK: prefix if present (QR code format)
   if (jsonContent.startsWith('XCTSK:')) {
     jsonContent = jsonContent.substring(6);
   }
@@ -332,6 +348,115 @@ export function parseXCTask(content: string): XCTask {
     }
     return parseV2(data);
   }
+}
+
+/**
+ * Parse xctsk content asynchronously — supports XCTSKZ: compressed format.
+ * Falls back to synchronous parsing for uncompressed content.
+ *
+ * @param content Raw xctsk string (may be XCTSK: or XCTSKZ: prefixed)
+ * @param decompress Optional decompression function for XCTSKZ format.
+ *   Receives the base64-encoded compressed data (without prefix), returns the JSON string.
+ *   If not provided, uses the Web DecompressionStream API (available in browsers and Bun).
+ */
+export async function parseXCTaskAsync(
+  content: string,
+  decompress?: (base64Data: string) => Promise<string>,
+): Promise<XCTask> {
+  const trimmed = content.trim();
+  if (trimmed.startsWith('XCTSKZ:')) {
+    const base64Data = trimmed.substring(7);
+    let jsonContent: string;
+    if (decompress) {
+      jsonContent = await decompress(base64Data);
+    } else {
+      // Use Web Compression API (globalThis.DecompressionStream)
+      const binary = (globalThis as unknown as { atob: (s: string) => string }).atob(base64Data);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const g = globalThis as any;
+      const ds = new g.DecompressionStream('deflate');
+      const writer = ds.writable.getWriter();
+      writer.write(bytes);
+      writer.close();
+      jsonContent = await new g.Response(ds.readable).text();
+    }
+    return parseXCTask(jsonContent);
+  }
+  return parseXCTask(trimmed);
+}
+
+/** Spec-valid turnpoint types (only these should appear in exported files) */
+const SPEC_TURNPOINT_TYPES = new Set<string>(['TAKEOFF', 'SSS', 'ESS']);
+
+/**
+ * Serialize an XCTask to a spec-compliant v1 JSON object.
+ * Strips internal-only types (TURNPOINT, GOAL) and ensures required fields.
+ */
+export function toXctskJSON(task: XCTask): Record<string, unknown> {
+  const turnpoints = task.turnpoints.map(tp => {
+    const wpObj: Record<string, unknown> = {
+      name: tp.waypoint.name,
+      lat: tp.waypoint.lat,
+      lon: tp.waypoint.lon,
+      altSmoothed: tp.waypoint.altSmoothed ?? 0,
+    };
+    if (tp.waypoint.description !== undefined) {
+      wpObj.description = tp.waypoint.description;
+    }
+
+    const tpObj: Record<string, unknown> = {
+      radius: tp.radius,
+      waypoint: wpObj,
+    };
+    // Only write type if it's a spec-valid value (TAKEOFF, SSS, ESS)
+    if (tp.type && SPEC_TURNPOINT_TYPES.has(tp.type)) {
+      tpObj.type = tp.type;
+    }
+    return tpObj;
+  });
+
+  const result: Record<string, unknown> = {
+    taskType: task.taskType,
+    version: 1,
+  };
+
+  if (task.earthModel) {
+    result.earthModel = task.earthModel;
+  }
+
+  result.turnpoints = turnpoints;
+
+  if (task.takeoff) {
+    result.takeoff = { ...task.takeoff };
+  }
+
+  if (task.sss) {
+    // timeGates must be non-empty per spec (xcontest rejects empty arrays)
+    const timeGates = task.sss.timeGates && task.sss.timeGates.length > 0
+      ? task.sss.timeGates
+      : ['00:00:00Z'];
+    const sss: Record<string, unknown> = {
+      type: task.sss.type,
+      direction: task.sss.direction,
+      timeGates,
+    };
+    result.sss = sss;
+  }
+
+  if (task.goal) {
+    const goal: Record<string, unknown> = {
+      type: task.goal.type,
+    };
+    if (task.goal.deadline !== undefined) goal.deadline = task.goal.deadline;
+    if (task.goal.finishAltitude !== undefined) goal.finishAltitude = task.goal.finishAltitude;
+    result.goal = goal;
+  }
+
+  return result;
 }
 
 /**
