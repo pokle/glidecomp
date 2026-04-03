@@ -20,7 +20,7 @@ import type {
 /**
  * Map AirScore waypoint type to XCTask turnpoint type
  */
-function mapWaypointType(tawType: string): TurnpointType {
+function mapWaypointType(tawType: string): TurnpointType | undefined {
   switch (tawType) {
     case 'speed':
       return 'SSS';
@@ -28,10 +28,8 @@ function mapWaypointType(tawType: string): TurnpointType {
       return 'ESS';
     case 'takeoff':
       return 'TAKEOFF';
-    case 'goal':
-      return 'GOAL';
     default:
-      return 'TURNPOINT';
+      return undefined;
   }
 }
 

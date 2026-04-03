@@ -188,9 +188,7 @@ function formatDuration(seconds: number): string {
 const TURNPOINT_METADATA: Record<string, { label: string; cssClass: string }> = {
   TAKEOFF: { label: 'Takeoff', cssClass: 'text-blue-600' },
   SSS: { label: 'Start (SSS)', cssClass: 'text-green-600' },
-  TURNPOINT: { label: 'Turnpoint', cssClass: 'text-blue-600' },
   ESS: { label: 'ESS', cssClass: 'text-yellow-600' },
-  GOAL: { label: 'Goal', cssClass: 'text-red-600' },
 };
 
 const DEFAULT_TURNPOINT_METADATA = { label: 'Turnpoint', cssClass: 'text-blue-600' };
@@ -950,8 +948,9 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     if (!tp) return `TP${taskIndex + 1}`;
     if (tp.type === 'SSS') return 'SSS';
     if (tp.type === 'ESS') return 'ESS';
-    if (tp.type === 'GOAL') return 'Goal';
     if (tp.type === 'TAKEOFF') return 'Takeoff';
+    // Last turnpoint is implicitly the goal
+    if (taskIndex === currentTask.turnpoints.length - 1) return 'Goal';
     return `TP${taskIndex + 1}`;
   }
 

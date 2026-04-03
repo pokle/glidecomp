@@ -108,10 +108,10 @@ export interface Waypoint {
   altSmoothed?: number;
 }
 
-export type TurnpointType = 'TAKEOFF' | 'SSS' | 'TURNPOINT' | 'ESS' | 'GOAL';
+export type TurnpointType = 'TAKEOFF' | 'SSS' | 'ESS';
 
 export interface Turnpoint {
-  type: TurnpointType;
+  type?: TurnpointType;
   radius: number;
   waypoint: Waypoint;
 }

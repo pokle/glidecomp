@@ -18,10 +18,10 @@ export interface Waypoint {
   altSmoothed?: number;
 }
 
-export type TurnpointType = 'TAKEOFF' | 'SSS' | 'TURNPOINT' | 'ESS' | 'GOAL';
+export type TurnpointType = 'TAKEOFF' | 'SSS' | 'ESS';
 
 export interface Turnpoint {
-  type: TurnpointType;
+  type?: TurnpointType;
   radius: number;
   waypoint: Waypoint;
 }
@@ -139,7 +139,7 @@ function parseV1(data: Record<string, unknown>): XCTask {
 
         if (wp) {
           turnpoints.push({
-            type: (tpObj.type as Turnpoint['type']) || 'TURNPOINT',
+            type: tpObj.type as TurnpointType | undefined,
             radius: (tpObj.radius as number) || 400,
             waypoint: {
               name: sanitizeText((wp.name as string) || 'Unnamed'),
@@ -229,11 +229,10 @@ function parseV2(data: Record<string, unknown>): XCTask {
 
         // Determine type: spec uses numeric 't' field (2=SSS, 3=ESS),
         // also support string 'y' field for compatibility
-        let type: TurnpointType = 'TURNPOINT';
+        let type: TurnpointType | undefined;
         if (tpObj.t === 2 || tpObj.y === 'S') type = 'SSS';
         else if (tpObj.t === 3 || tpObj.y === 'E') type = 'ESS';
         else if (tpObj.y === 'T') type = 'TAKEOFF';
-        else if (tpObj.y === 'G') type = 'GOAL';
 
         turnpoints.push({
           type,
@@ -389,12 +388,9 @@ export async function parseXCTaskAsync(
   return parseXCTask(trimmed);
 }
 
-/** Spec-valid turnpoint types (only these should appear in exported files) */
-const SPEC_TURNPOINT_TYPES = new Set<string>(['TAKEOFF', 'SSS', 'ESS']);
-
 /**
  * Serialize an XCTask to a spec-compliant v1 JSON object.
- * Strips internal-only types (TURNPOINT, GOAL) and ensures required fields.
+ * Ensures required fields are present.
  */
 export function toXctskJSON(task: XCTask): Record<string, unknown> {
   const turnpoints = task.turnpoints.map(tp => {
@@ -412,8 +408,7 @@ export function toXctskJSON(task: XCTask): Record<string, unknown> {
       radius: tp.radius,
       waypoint: wpObj,
     };
-    // Only write type if it's a spec-valid value (TAKEOFF, SSS, ESS)
-    if (tp.type && SPEC_TURNPOINT_TYPES.has(tp.type)) {
+    if (tp.type) {
       tpObj.type = tp.type;
     }
     return tpObj;
@@ -474,18 +469,17 @@ export function getESSIndex(task: XCTask): number {
 }
 
 /**
- * Get all turnpoints that are actual turnpoints (not SSS/ESS/TAKEOFF)
+ * Get all turnpoints that are intermediate (not SSS/ESS/TAKEOFF)
  */
 export function getIntermediateTurnpoints(task: XCTask): Turnpoint[] {
-  return task.turnpoints.filter(tp => tp.type === 'TURNPOINT');
+  return task.turnpoints.filter(tp => !tp.type);
 }
 
 /**
- * Get the goal turnpoint index
+ * Get the goal turnpoint index (last turnpoint per spec)
  */
 export function getGoalIndex(task: XCTask): number {
-  const idx = task.turnpoints.findIndex(tp => tp.type === 'GOAL');
-  return idx >= 0 ? idx : task.turnpoints.length - 1;
+  return task.turnpoints.length - 1;
 }
 
 /**
@@ -539,7 +533,7 @@ export function igcTaskToXCTask(igcTask: IGCTask, options: IGCTaskConversionOpti
    */
   function createTurnpoint(
     point: IGCTaskPoint,
-    type: TurnpointType,
+    type: TurnpointType | undefined,
     fallbackName: string
   ): Turnpoint {
     const name = point.name || fallbackName;
@@ -564,7 +558,6 @@ export function igcTaskToXCTask(igcTask: IGCTask, options: IGCTaskConversionOpti
     // Area type can confirm SSS/ESS assignment
     if (point.areaOZ) {
       if (point.areaOZ.areaType === 'STARTAREA') type = 'SSS';
-      else if (point.areaOZ.areaType === 'FINISHAREA') type = 'GOAL';
     }
 
     return {
@@ -588,12 +581,12 @@ export function igcTaskToXCTask(igcTask: IGCTask, options: IGCTaskConversionOpti
 
   // Add intermediate turnpoints
   for (const tp of igcTask.turnpoints) {
-    turnpoints.push(createTurnpoint(tp, 'TURNPOINT', 'Turnpoint'));
+    turnpoints.push(createTurnpoint(tp, undefined, 'Turnpoint'));
   }
 
-  // Add finish point as GOAL (in IGC tasks, finish IS goal)
+  // Add finish point (last turnpoint is implicitly the goal per spec)
   if (igcTask.finish) {
-    turnpoints.push(createTurnpoint(igcTask.finish, 'GOAL', 'Finish'));
+    turnpoints.push(createTurnpoint(igcTask.finish, undefined, 'Finish'));
   }
 
   return {

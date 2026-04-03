@@ -35,7 +35,7 @@ interface TaskDef {
   lat: number;
   lon: number;
   radius: number;
-  type?: 'TAKEOFF' | 'SSS' | 'TURNPOINT' | 'ESS' | 'GOAL';
+  type?: 'TAKEOFF' | 'SSS' | 'ESS';
 }
 
 function createTask(
@@ -48,7 +48,7 @@ function createTask(
     version: 1,
     earthModel: 'WGS84',
     turnpoints: defs.map(d => ({
-      type: d.type || 'TURNPOINT',
+      type: d.type,
       radius: d.radius,
       waypoint: { name: d.name, lat: d.lat, lon: d.lon },
     })),
@@ -127,12 +127,12 @@ function createTrackThroughCylinders(
   return fixes;
 }
 
-// Standard 4-point task: SSS → TP1 → ESS → GOAL
+// Standard 4-point task: SSS → TP1 → ESS → Goal
 const standardTask = createTask([
   { name: 'SSS', lat: 47.0, lon: 11.0, radius: 1000, type: 'SSS' },
-  { name: 'TP1', lat: 47.0, lon: 11.13, radius: 400, type: 'TURNPOINT' },
+  { name: 'TP1', lat: 47.0, lon: 11.13, radius: 400 },
   { name: 'ESS', lat: 47.0, lon: 11.26, radius: 400, type: 'ESS' },
-  { name: 'GOAL', lat: 47.0, lon: 11.26, radius: 400, type: 'GOAL' },
+  { name: 'GOAL', lat: 47.0, lon: 11.26, radius: 400 },
 ]);
 
 const standardWaypoints = standardTask.turnpoints.map(tp => ({

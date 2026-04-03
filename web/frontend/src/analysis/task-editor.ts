@@ -31,29 +31,26 @@ export interface TaskEditor {
 // Turnpoint type metadata
 // ---------------------------------------------------------------------------
 
-const TYPE_OPTIONS: { value: TurnpointType; label: string }[] = [
+const TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'Turnpoint' },
   { value: 'TAKEOFF', label: 'Takeoff' },
   { value: 'SSS', label: 'Start (SSS)' },
-  { value: 'TURNPOINT', label: 'Turnpoint' },
   { value: 'ESS', label: 'ESS' },
-  { value: 'GOAL', label: 'Goal' },
 ];
 
-const TYPE_COLORS: Record<TurnpointType, string> = {
+const TYPE_COLORS: Record<string, string> = {
   TAKEOFF: 'text-blue-600',
   SSS: 'text-green-600',
-  TURNPOINT: 'text-blue-600',
   ESS: 'text-yellow-600',
-  GOAL: 'text-red-600',
 };
+const DEFAULT_TYPE_COLOR = 'text-blue-600';
 
-const TYPE_LABELS: Record<TurnpointType, string> = {
+const TYPE_LABELS: Record<string, string> = {
   TAKEOFF: 'Takeoff',
   SSS: 'Start (SSS)',
-  TURNPOINT: 'Turnpoint',
   ESS: 'ESS',
-  GOAL: 'Goal',
 };
+const DEFAULT_TYPE_LABEL = 'Turnpoint';
 
 // ---------------------------------------------------------------------------
 // SVG Icons (inline, no external deps)
@@ -120,7 +117,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
     }
   }
 
-  function addWaypoint(lat: number, lon: number, name?: string, radius = 400, altitude?: number, type: TurnpointType = 'TURNPOINT'): void {
+  function addWaypoint(lat: number, lon: number, name?: string, radius = 400, altitude?: number, type?: TurnpointType): void {
     const task = ensureTask();
     wpCounter++;
     const tp: Turnpoint = {
@@ -161,14 +158,10 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
         tp.waypoint.name = value as string;
         break;
       case 'type': {
-        const newType = value as TurnpointType;
-        tp.type = newType;
-        // Side effects
+        const newType = (value as string) || undefined;
+        tp.type = newType as TurnpointType | undefined;
         if (newType === 'SSS' && !currentTask.sss) {
           currentTask.sss = { type: 'RACE', direction: 'EXIT' };
-        }
-        if (newType === 'GOAL' && !currentTask.goal) {
-          currentTask.goal = { type: 'CYLINDER' };
         }
         break;
       }
@@ -300,8 +293,8 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
 
   function renderWaypointCard(tp: Turnpoint, index: number, total: number, segmentDistances: number[]): HTMLElement {
     const isExpanded = expandedIndex === index;
-    const typeLabel = TYPE_LABELS[tp.type] || 'Turnpoint';
-    const typeClass = TYPE_COLORS[tp.type] || 'text-blue-600';
+    const typeLabel = (tp.type && TYPE_LABELS[tp.type]) || DEFAULT_TYPE_LABEL;
+    const typeClass = (tp.type && TYPE_COLORS[tp.type]) || DEFAULT_TYPE_COLOR;
     const radiusStr = formatDistance(tp.radius).withUnit;
     const altStr = tp.waypoint.altSmoothed ? formatAltitude(tp.waypoint.altSmoothed).withUnit : '\u2014';
 
@@ -438,7 +431,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
           <div>
             <label class="text-[10px] text-muted-foreground uppercase tracking-wider">Type</label>
             <select class="te-field-type w-full rounded border border-border bg-background px-2 py-1 text-sm">
-              ${TYPE_OPTIONS.map(o => `<option value="${o.value}" ${o.value === tp.type ? 'selected' : ''}>${o.label}</option>`).join('')}
+              ${TYPE_OPTIONS.map(o => `<option value="${o.value}" ${o.value === (tp.type || '') ? 'selected' : ''}>${o.label}</option>`).join('')}
             </select>
           </div>
           <div>

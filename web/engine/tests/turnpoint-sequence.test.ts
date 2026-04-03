@@ -25,7 +25,7 @@ interface TaskDef {
   lat: number;
   lon: number;
   radius: number;
-  type?: 'TAKEOFF' | 'SSS' | 'TURNPOINT' | 'ESS' | 'GOAL';
+  type?: 'TAKEOFF' | 'SSS' | 'ESS';
 }
 
 function createTask(
@@ -38,7 +38,7 @@ function createTask(
     version: 1,
     earthModel: 'WGS84',
     turnpoints: defs.map(d => ({
-      type: d.type || 'TURNPOINT',
+      type: d.type,
       radius: d.radius,
       waypoint: { name: d.name, lat: d.lat, lon: d.lon },
     })),

@@ -192,14 +192,14 @@ describe('XCTSK Parser', () => {
       expect(xcTask.turnpoints[0].waypoint.lat).toBeCloseTo(-36.186, 3);
       expect(xcTask.turnpoints[0].radius).toBe(400);
 
-      // Check intermediate turnpoints have TURNPOINT type
-      expect(xcTask.turnpoints[1].type).toBe('TURNPOINT');
+      // Intermediate turnpoints have no special type
+      expect(xcTask.turnpoints[1].type).toBeUndefined();
       expect(xcTask.turnpoints[1].waypoint.name).toBe('TURN HALFWY');
-      expect(xcTask.turnpoints[2].type).toBe('TURNPOINT');
+      expect(xcTask.turnpoints[2].type).toBeUndefined();
       expect(xcTask.turnpoints[2].waypoint.name).toBe('TURN CUDGWE');
 
-      // Check finish is GOAL
-      expect(xcTask.turnpoints[3].type).toBe('GOAL');
+      // Finish is last turnpoint (implicitly goal, no type)
+      expect(xcTask.turnpoints[3].type).toBeUndefined();
       expect(xcTask.turnpoints[3].waypoint.name).toBe('FINISH NCORGL');
     });
 
@@ -228,7 +228,7 @@ describe('XCTSK Parser', () => {
       expect(xcTask.turnpoints[0].type).toBe('SSS'); // STARTAREA confirms SSS
       expect(xcTask.turnpoints[1].radius).toBe(500);
       expect(xcTask.turnpoints[2].radius).toBe(100);
-      expect(xcTask.turnpoints[2].type).toBe('GOAL'); // Finish is GOAL (FINISHAREA overrides to SSS in createTurnpoint, but initial type is GOAL)
+      expect(xcTask.turnpoints[2].type).toBeUndefined(); // Finish is last TP (implicitly goal)
     });
 
     it('should use custom radius when provided', () => {
@@ -257,7 +257,7 @@ describe('XCTSK Parser', () => {
 
       expect(xcTask.turnpoints).toHaveLength(2);
       expect(xcTask.turnpoints[0].type).toBe('SSS');
-      expect(xcTask.turnpoints[1].type).toBe('GOAL');
+      expect(xcTask.turnpoints[1].type).toBeUndefined();
     });
 
     it('should handle task with empty names', () => {
@@ -469,7 +469,7 @@ describe('XCTSK Parser', () => {
     it('should return false for NaN coordinates', () => {
       const task = {
         taskType: 'CLASSIC', version: 1,
-        turnpoints: [{ type: 'TURNPOINT' as const, radius: 400, waypoint: { name: 'TP', lat: NaN, lon: 11.0 } }],
+        turnpoints: [{ radius: 400, waypoint: { name: 'TP', lat: NaN, lon: 11.0 } }],
       };
       expect(isValidTask(task)).toBe(false);
     });
@@ -477,7 +477,7 @@ describe('XCTSK Parser', () => {
     it('should return false for out-of-range latitude', () => {
       const task = {
         taskType: 'CLASSIC', version: 1,
-        turnpoints: [{ type: 'TURNPOINT' as const, radius: 400, waypoint: { name: 'TP', lat: 91, lon: 11.0 } }],
+        turnpoints: [{ radius: 400, waypoint: { name: 'TP', lat: 91, lon: 11.0 } }],
       };
       expect(isValidTask(task)).toBe(false);
     });
@@ -485,7 +485,7 @@ describe('XCTSK Parser', () => {
     it('should return false for out-of-range longitude', () => {
       const task = {
         taskType: 'CLASSIC', version: 1,
-        turnpoints: [{ type: 'TURNPOINT' as const, radius: 400, waypoint: { name: 'TP', lat: 47.0, lon: 181 } }],
+        turnpoints: [{ radius: 400, waypoint: { name: 'TP', lat: 47.0, lon: 181 } }],
       };
       expect(isValidTask(task)).toBe(false);
     });
@@ -493,7 +493,7 @@ describe('XCTSK Parser', () => {
     it('should return true for valid task', () => {
       const task = {
         taskType: 'CLASSIC', version: 1,
-        turnpoints: [{ type: 'TURNPOINT' as const, radius: 400, waypoint: { name: 'TP', lat: 47.0, lon: 11.0 } }],
+        turnpoints: [{ radius: 400, waypoint: { name: 'TP', lat: 47.0, lon: 11.0 } }],
       };
       expect(isValidTask(task)).toBe(true);
     });
@@ -599,7 +599,7 @@ describe('XCTSK Parser', () => {
   });
 
   describe('toXctskJSON', () => {
-    it('should omit TURNPOINT and GOAL types from output', () => {
+    it('should only write type for TAKEOFF/SSS/ESS turnpoints', () => {
       const task = parseXCTask(JSON.stringify({
         taskType: 'CLASSIC',
         version: 1,
@@ -616,11 +616,11 @@ describe('XCTSK Parser', () => {
 
       expect(tps[0].type).toBe('TAKEOFF');
       expect(tps[1].type).toBe('SSS');
-      expect(tps[2].type).toBeUndefined(); // was TURNPOINT internally
+      expect(tps[2].type).toBeUndefined(); // intermediate — no type
       expect(tps[3].type).toBe('ESS');
     });
 
-    it('should strip GOAL type from igcTaskToXCTask output', () => {
+    it('should not write type on intermediate or goal turnpoints from IGC', () => {
       const igcTask: IGCTask = {
         numTurnpoints: 1,
         start: { latitude: 47.0, longitude: 11.0, name: 'Start' },
@@ -632,12 +632,9 @@ describe('XCTSK Parser', () => {
       const json = toXctskJSON(xcTask);
       const tps = (json as { turnpoints: Array<Record<string, unknown>> }).turnpoints;
 
-      // SSS is valid spec type — should be present
       expect(tps[0].type).toBe('SSS');
-      // TURNPOINT is internal — should be omitted
-      expect(tps[1].type).toBeUndefined();
-      // GOAL is internal — should be omitted
-      expect(tps[2].type).toBeUndefined();
+      expect(tps[1].type).toBeUndefined(); // intermediate
+      expect(tps[2].type).toBeUndefined(); // goal (last TP, implicit)
     });
 
     it('should default altSmoothed to 0 when missing', () => {
@@ -730,7 +727,7 @@ describe('XCTSK Parser', () => {
       const task = parseXCTask(taskJson);
 
       expect(task.turnpoints[0].type).toBe('SSS');
-      expect(task.turnpoints[1].type).toBe('TURNPOINT');
+      expect(task.turnpoints[1].type).toBeUndefined();
       expect(task.turnpoints[2].type).toBe('ESS');
     });
   });
