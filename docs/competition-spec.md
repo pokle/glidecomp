@@ -220,6 +220,8 @@ No separate download endpoint — the list response includes signed R2 URLs that
 
 `GET /api/comp/:comp_id` should include a `class_coverage_warnings` list in its response — one entry per day that has gaps, e.g. `{ date: "2026-01-15", missing_classes: ["floater"] }`. The comp UI must display these prominently so admins can add tasks or adjust task class assignments.
 
+**Consistent task-class groupings across days:** The set of task-class groupings (i.e. which classes are bundled together into each task) must be the same on every competition day. This is required so that starting order and rankings can be derived from "the previous day's task for the same classes." For example, if day 1 has two tasks with classes `{open-a, open}` and `{floater, kingpost, veteran}`, then every subsequent day must have exactly the same two groupings. Splitting or merging classes across days (e.g. breaking `veteran` into its own task on day 2) is an error. The API should flag this in `class_coverage_warnings` and the UI must display it prominently.
+
 #### Pilots
 
 | Method | Route | Auth | Description |
