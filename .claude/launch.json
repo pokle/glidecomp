@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "/Users/tushar/.bun/bin/bun",
+      "runtimeArgs": ["run", "dev:frontend"],
+      "port": 3000
+    },
+    {
+      "name": "auth-api",
+      "runtimeExecutable": "/Users/tushar/.bun/bin/bun",
+      "runtimeArgs": ["run", "dev:auth"],
+      "port": 8788
+    },
+    {
+      "name": "airscore-api",
+      "runtimeExecutable": "/Users/tushar/.bun/bin/bun",
+      "runtimeArgs": ["run", "--cwd", "web/workers/airscore-api", "dev"],
+      "port": 8787
+    }
+  ]
+}
