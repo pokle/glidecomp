@@ -1,10 +1,10 @@
 
-# Competition Centric user interface
+# Competition Centric User Interface
 
 This is a specification for a competition centric user interface for glidecomp. The existing UX flow at analysis.html is oriented primarily around the map, with information presented on either the map or the sidebar next to the map. This specification is for a map-less user interface. It focuses on setting up competitions, scoring them, and viewing results. The spec also covers the supporting backend cloudflare worker services, databases and object storage required to drive the front end.
 
-Version: 1.0
-Date: 2026-03-26
+Version: 2.0
+Date: 2026-04-03
 
 ## Entity design
 
@@ -54,46 +54,98 @@ When a user's account is deleted, all the entities above MUST be deleted if they
 - The owner of a file is considered the `user.id` or `comp.id` at the start of a path
 - If an owner is deleted, all their files must be deleted.
 
-## Cloudflare worker API design
+## API design
 
-Use a cloudflare worker called competition-api, routed on `glidecomp.com/api/comp/*` (matching the existing pattern: auth-api → `/api/auth/*`, airscore-api → `/api/airscore/*`).
+### Approach: Hono RPC
+
+Use [Hono RPC](https://hono.dev/docs/guides/rpc) to get end-to-end type safety between the Cloudflare Worker and the browser client with zero codegen. The Worker defines routes with Zod validators and exports its `AppType`. The frontend imports this type and uses Hono's `hc<AppType>()` client for fully typed requests and responses.
+
+```ts
+// Worker — define routes, export type
+const app = new Hono()
+  .post('/api/comp', zValidator('json', createCompSchema), async (c) => { ... })
+  .get('/api/comp/:comp_id', async (c) => { ... });
+
+export type AppType = typeof routes;
+
+// Browser — type-safe client, no codegen
+import type { AppType } from '@glidecomp/competition-api';
+import { hc } from 'hono/client';
+
+const api = hc<AppType>('/');
+const res = await api.api.comp.$post({ json: { name: 'Bells 2026', category: 'hg' } });
+```
+
+Benefits over a hand-rolled REST spec:
+- **No separate API contract to maintain** — the TypeScript types _are_ the contract
+- **Compile-time errors** when client and server diverge
+- **No URL string construction** — the client mirrors the route tree
+- **Zod validators** shared between client validation and server validation
+
+### Worker setup
+
+Use a cloudflare worker called `competition-api`, routed on `glidecomp.com/api/comp/*` (matching the existing pattern: auth-api → `/api/auth/*`, airscore-api → `/api/airscore/*`).
 
 Auth verification via service binding to auth-api (Option A in `docs/auth.md`). All endpoints require authentication except where noted. Admin endpoints require the caller to be in the comp's `admin_ids`.
 
-### Competitions
+### Routes
 
-- `POST /api/comp` — Create a competition. Caller becomes first admin.
-- `GET /api/comp` — List competitions. Authenticated: includes caller's admin comps (including test). Public: only non-test comps.
-- `GET /api/comp/:comp_id` — Get competition details. Public for non-test comps. Test comps require admin.
-- `PATCH /api/comp/:comp_id` — Update competition name, category, test flag, gap_params. (Admin only)
-- `DELETE /api/comp/:comp_id` — Delete competition and all child data (tasks, R2 files). (Admin only)
+There are 10 routes grouped into 4 concerns. Admin management is part of the comp PATCH. XCTSK is part of the task resource. Tracks are uploaded individually by pilots.
 
-### Competition admins
+#### Competitions (4 routes)
 
-- `GET /api/comp/:comp_id/admins` — List admins. (Admin only)
-- `POST /api/comp/:comp_id/admins` — Add admin by email. (Admin only)
-- `DELETE /api/comp/:comp_id/admins/:user_id` — Remove admin. Reject if last admin. (Admin only)
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| POST | `/api/comp` | User | Create competition. Caller becomes first admin. |
+| GET | `/api/comp` | Optional | List comps. Authenticated: includes caller's admin comps (incl. test). Public: non-test only. |
+| GET | `/api/comp/:comp_id` | Optional | Get comp details (incl. tasks summary, admin list). Public for non-test. Test requires admin. |
+| PATCH | `/api/comp/:comp_id` | Admin | Update name, category, test flag, gap_params, **and admin_ids**. Reject if update would remove the last admin. |
+| DELETE | `/api/comp/:comp_id` | Admin | Delete comp and all child data (tasks, R2 files). |
 
-### Tasks
+`GET /api/comp/:comp_id` returns the comp with its tasks array and admin list inline, avoiding separate requests.
 
-- `POST /api/comp/:comp_id/task` — Create a task. (Admin only)
-- `GET /api/comp/:comp_id/task/:task_id` — Get task details. Public for non-test comps. Test comps require admin.
-- `PATCH /api/comp/:comp_id/task/:task_id` — Update task name, category. (Admin only)
-- `DELETE /api/comp/:comp_id/task/:task_id` — Delete task and its R2 files. (Admin only)
+Admin management is handled via `PATCH` — the client sends the full `admin_ids` array. The server validates: at least one admin must remain, and new admin emails must resolve to existing user accounts.
 
-### Task files (R2)
+#### Tasks + XCTSK (4 routes)
 
-- `POST /api/comp/:comp_id/task/:task_id/xctsk` — Upload XCTSK file (max 1 per task, max 1MB). (Admin only)
-- `GET /api/comp/:comp_id/task/:task_id/xctsk` — Download XCTSK file. Public for non-test comps.
-- `DELETE /api/comp/:comp_id/task/:task_id/xctsk` — Delete XCTSK file. (Admin only)
-- `POST /api/comp/:comp_id/task/:task_id/igc` — Upload IGC file (max 250 per task, max 5MB each). (Admin only)
-- `GET /api/comp/:comp_id/task/:task_id/igc` — List IGC files. Public for non-test comps.
-- `GET /api/comp/:comp_id/task/:task_id/igc/:filename` — Download IGC file. Public for non-test comps.
-- `DELETE /api/comp/:comp_id/task/:task_id/igc/:filename` — Delete IGC file. (Admin only)
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| POST | `/api/comp/:comp_id/task` | Admin | Create task (name, category). Returns new task with task_id. |
+| GET | `/api/comp/:comp_id/task/:task_id` | Optional | Get task details including xctsk data inline. Public for non-test. |
+| PATCH | `/api/comp/:comp_id/task/:task_id` | Admin | Update task name, category, **and/or xctsk data**. |
+| DELETE | `/api/comp/:comp_id/task/:task_id` | Admin | Delete task and its R2 files (xctsk + all IGCs). |
 
-### Public scores
+The XCTSK object is managed as part of the task resource — no separate upload/download/delete endpoints. The task editor UI sends `PATCH` with the updated `xctsk` field on each change (debounced). The server stores the XCTask JSON in R2 at `/c/{comp_id}/t/{task_id}/task.xctsk` and returns it inline with `GET`.
 
-- `GET /api/comp/:comp_id/scores` — Get scores for a competition. (Public, no auth required)
+**Task editor integration:** The existing task editor (`web/frontend/src/analysis/task-editor.ts`) manages an in-memory XCTask object and fires `onTaskChanged` on every edit. In the comp UI, this callback is wired to a debounced PATCH:
+
+```ts
+// Comp UI wiring (conceptual)
+taskEditor.onTaskChanged = debounce((xctsk: XCTask) => {
+  api.api.comp[':comp_id'].task[':task_id'].$patch({
+    param: { comp_id, task_id },
+    json: { xctsk }
+  });
+}, 500);
+```
+
+#### Tracks (2 routes)
+
+Tracks are uploaded one-by-one, typically by pilots after the competition. Each IGC file is a separate upload.
+
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| POST | `/api/comp/:comp_id/task/:task_id/igc` | User | Upload one IGC file (max 5MB, compressed in browser). Returns filename + metadata. Enforces max 250 per task. |
+| GET | `/api/comp/:comp_id/task/:task_id/igc` | Optional | List IGC files with metadata (pilot name from IGC header, filename, size, upload date). Public for non-test. Each entry includes a time-limited signed R2 URL for direct download. |
+| DELETE | `/api/comp/:comp_id/task/:task_id/igc/:filename` | Admin | Delete a single IGC file. |
+
+No separate download endpoint — the list response includes signed R2 URLs that the browser can fetch directly. This avoids proxying IGC file content through the Worker.
+
+#### Scores (1 route)
+
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| GET | `/api/comp/:comp_id/scores` | Public | Get scores for all tasks in a competition. No auth required. |
 
 ## URL design
 
@@ -109,12 +161,12 @@ Auth verification via service binding to auth-api (Option A in `docs/auth.md`). 
 - It should not display the map. This is about scores.
 - It should focus on a very simple job to be done: Quickly work out the scores for a competition task.
 
-# Security design 
+# Security design
 - Ensure that all user entered fields are sanitised before storing them.
 - Ensure only admins of a comp can modify it and any associated child data (task, igc, xctsk, …)
 - Non-test competitions, their tasks, tracks, and scores are publicly readable (no auth required).
 - Test competitions and all write/modify operations require authentication.
-- Only admins can see test competitions. 
+- Only admins can see test competitions.
 - Enforce limits on the size of user supplied data to avoid abuse
   - Limit the size of user entered text fields to 128 chars (approx)
   - Limit the size of IGC files uploaded and stored to 5mb each.
@@ -129,9 +181,8 @@ Auth verification via service binding to auth-api (Option A in `docs/auth.md`). 
 Main flow to create or view competitions:
 1. Log in using Google Auth if not already logged in.
 2. A competition dashboard lists all past competitions created by user. Clicking on the competition takes you to the competition's page.
-3. Button to create a competition - Give it a name (E.g. "Bells Beach Run 2026"). Initially competitions are can only be administered by the creator. The creator can delegate the competition to more admins by adding (or removing) google auth email addresses. No emails are sent. When a delegate logs in to the competition page, they see the same 
+3. Button to create a competition - Give it a name (E.g. "Bells Beach Run 2026"). Initially competitions are can only be administered by the creator. The creator can delegate the competition to more admins by adding (or removing) google auth email addresses. No emails are sent. When a delegate logs in to the competition page, they see the same
 4. Start by entering the name of the competition task (e.g. Bells Beach Run 2026 #7). This should create a unique shareable URL that can be shared to other pilots - who can add their own tracks if needed. The URL should not be guessable. A 6 letter alpha only code should be enough.
 5. Configure the Competition settings (HG/PG, Nominal distance, time, etc…)
-6. Define the task (UI to define the task, or import xctsk file, or import from xcontest api).
-7. Upload IGC files
-
+6. Define the task using the task editor (reused from analysis UI) — edits are saved automatically via debounced PATCH to the server.
+7. Pilots upload their IGC files individually via the task page.
