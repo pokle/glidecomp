@@ -68,7 +68,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy web/frontend/dist --project-name=glidecomp --branch=${{ github.ref_name }}
+          command: pages deploy --branch=${{ github.ref_name }}
 
       - name: Deploy AirScore API Worker
         uses: cloudflare/wrangler-action@v3

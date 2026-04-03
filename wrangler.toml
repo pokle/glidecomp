@@ -1,0 +1,11 @@
+# Cloudflare Pages project configuration
+# Enables Pages Functions (e.g. service binding proxy to auth-api worker)
+name = "glidecomp"
+pages_build_output_dir = "web/frontend/dist"
+compatibility_date = "2025-03-10"
+compatibility_flags = ["nodejs_compat"]
+
+# Service binding to the auth-api worker — available in Pages Functions as env.AUTH_API
+[[services]]
+binding = "AUTH_API"
+service = "auth-api"

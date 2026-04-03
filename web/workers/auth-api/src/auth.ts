@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { oAuthProxy } from "better-auth/plugins";
 import { Kysely } from "kysely";
 import { D1Dialect } from "kysely-d1";
 
@@ -21,6 +22,12 @@ export function createAuth(env: AuthEnv) {
     baseURL: env.BETTER_AUTH_URL,
     basePath: "/api/auth",
     secret: env.BETTER_AUTH_SECRET,
+    trustedOrigins: ["https://*.glidecomp.pages.dev"],
+    plugins: [
+      oAuthProxy({
+        productionURL: "https://glidecomp.com",
+      }),
+    ],
     socialProviders: {
       google: {
         clientId: env.GOOGLE_CLIENT_ID,
