@@ -147,18 +147,6 @@ No separate download endpoint — the list response includes signed R2 URLs that
 |--------|-------|------|-------------|
 | GET | `/api/comp/:comp_id/scores` | Public | Get scores for all tasks in a competition. No auth required. |
 
-### Route count comparison
-
-| | v1 (REST) | v2 (Hono RPC) | How |
-|---|-----------|---------------|-----|
-| Comp | 5 | 5 | — |
-| Admins | 3 | 0 | Merged into comp PATCH |
-| Tasks | 4 | 4 | — |
-| XCTSK files | 3 | 0 | Merged into task PATCH/GET |
-| IGC files | 4 | 3 | Signed URLs replace download endpoint |
-| Scores | 1 | 1 | — |
-| **Total** | **17** → | **10** | **-41%** |
-
 ## URL design
 
 - `/comp`
