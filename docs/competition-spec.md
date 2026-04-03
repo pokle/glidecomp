@@ -81,28 +81,8 @@ Tables referenced from the auth-api worker:
   - uploaded_at (TEXT NOT NULL) — ISO timestamp
   - file_size (INTEGER NOT NULL) — bytes
   - flight_data (TEXT) — JSON object with preprocessed per-pilot results: turnpoint sequence, distance flown, speed time, leading coefficient, ESS reaching time, whether pilot made goal. Computed at upload time by parsing the IGC against the task's xctsk. NULL if task has no xctsk defined yet.
-
-- **task_score**: Server-computed scores for a task. One row per task. Recalculation overwrites the previous score.
-  - task_score_id (INTEGER PRIMARY KEY AUTOINCREMENT)
-  - task_id (INTEGER NOT NULL REFERENCES task(task_id) ON DELETE CASCADE UNIQUE)
-  - computed_at (TEXT NOT NULL) — ISO timestamp of when scores were computed
-  - score_data (TEXT NOT NULL) — JSON object containing the full scoring output (task validity, quality, weights, etc.)
-
-- **task_score_rank**: Ranked list of pilots with their individual points for a scored task.
-  - task_score_rank_id (INTEGER PRIMARY KEY AUTOINCREMENT)
-  - task_score_id (INTEGER NOT NULL REFERENCES task_score(task_score_id) ON DELETE CASCADE)
-  - comp_pilot_id (INTEGER NOT NULL REFERENCES comp_pilot(comp_pilot_id) ON DELETE CASCADE)
-  - UNIQUE(task_score_id, comp_pilot_id)
-  - rank (INTEGER NOT NULL)
-  - distance_points (REAL NOT NULL DEFAULT 0)
-  - time_points (REAL NOT NULL DEFAULT 0)
-  - leading_points (REAL NOT NULL DEFAULT 0)
-  - arrival_points (REAL NOT NULL DEFAULT 0)
-  - total_points (REAL NOT NULL DEFAULT 0)
-  - penalty_points (REAL NOT NULL DEFAULT 0)
-  - penalty_reason (TEXT)
-  - distance_km (REAL) — distance flown in km
-  - finished (INTEGER NOT NULL DEFAULT 0) — boolean, whether the pilot made goal
+  - penalty_points (REAL NOT NULL DEFAULT 0) — admin-assigned penalty. Only modifiable by comp admins. When a pilot re-uploads a track, the penalty MUST be preserved (not reset).
+  - penalty_reason (TEXT) — admin-assigned explanation for the penalty. Only modifiable by comp admins.
 
 ### Open registration
 
@@ -112,12 +92,12 @@ Competitions operate with open registration by default. When an authenticated us
 2. Look up the user's `pilot` profile (create one from `user.name` if it doesn't exist yet).
 3. Check if a `comp_pilot` entry exists for this pilot + comp.
 4. If not, auto-create a `comp_pilot` with `pilot_class` set to `comp.default_pilot_class`.
-5. Preprocess the IGC and trigger GAP rescoring (see Scoring Pipeline).
+5. Preprocess the IGC and store `flight_data` (see Scoring Pipeline).
 
 ### Cascade deletes
 
 When a user's account is deleted:
-- Their `pilot` record is deleted (CASCADE deletes their `comp_pilot` entries and associated `task_score_rank` rows).
+- Their `pilot` record is deleted (CASCADE deletes their `comp_pilot` entries and associated `task_track` rows).
 - If they are the last remaining admin for a competition (last row in `comp_admin`), the entire competition and all child data (tasks, R2 files) MUST be deleted.
 
 ## File storage design
@@ -211,8 +191,9 @@ Tracks are uploaded one-by-one, typically by pilots after the competition. Uploa
 
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| POST | `/api/comp/:comp_id/task/:task_id/igc` | User | Upload one IGC file (max 5MB, compressed in browser). Auto-registers pilot if needed. Rejected if past comp close_date. If the pilot already has a track for this task, replaces it. Enforces max 250 unique pilots per task. Preprocesses the IGC and auto-triggers GAP rescoring (see Scoring Pipeline below). Returns track metadata. |
+| POST | `/api/comp/:comp_id/task/:task_id/igc` | User | Upload one IGC file (max 5MB, compressed in browser). Auto-registers pilot if needed. Rejected if past comp close_date. If the pilot already has a track for this task, replaces it (preserving any admin-set penalties). Enforces max 250 unique pilots per task. Preprocesses the IGC and stores `flight_data` (see Scoring Pipeline). Returns track metadata. |
 | GET | `/api/comp/:comp_id/task/:task_id/igc` | Optional | List tracks with metadata (pilot name, filename, size, upload date). Public for non-test. Each entry includes a time-limited signed R2 URL for direct download. |
+| PATCH | `/api/comp/:comp_id/task/:task_id/igc/:comp_pilot_id` | Admin | Update penalty_points and penalty_reason on a pilot's track. |
 | DELETE | `/api/comp/:comp_id/task/:task_id/igc/:comp_pilot_id` | Admin | Delete a pilot's track for this task. |
 
 No separate download endpoint — the list response includes signed R2 URLs that the browser can fetch directly.
@@ -221,24 +202,17 @@ No separate download endpoint — the list response includes signed R2 URLs that
 
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| POST | `/api/comp/:comp_id/task/:task_id/score` | Admin | Manually trigger a full rescore for this task. Reprocesses all `task_track.flight_data` and runs GAP. Useful after changing task xctsk, gap_params, pilot classes, or fixing issues. |
-| GET | `/api/comp/:comp_id/task/:task_id/score` | Public | Get scores for a single task. Returns ranked pilot list with individual point breakdowns. No auth required. |
-| GET | `/api/comp/:comp_id/scores` | Public | Get competition-level standings. Returns overall pilot rankings (sum of task points), plus per-task score summaries. No auth required. |
+| POST | `/api/comp/:comp_id/task/:task_id/reprocess` | Admin | Reprocess all `flight_data` for this task. Enqueues one Cloudflare Queue message per `task_track` — each Queue Consumer fetches the IGC from R2, parses it against the current xctsk, and writes updated `flight_data` back to D1. Use after changing task xctsk. |
+| GET | `/api/comp/:comp_id/task/:task_id/score` | Public | Compute and return scores for a single task on-demand. Loads all `flight_data` + `penalty_points` from `task_track` for matching pilots, runs the GAP formula, returns ranked pilot list with individual point breakdowns. No stored results — computed fresh each request. No auth required. |
+| GET | `/api/comp/:comp_id/scores` | Public | Compute and return competition-level standings on-demand. Runs GAP for each task, aggregates total points per pilot, returns overall rankings plus per-task summaries. No auth required. |
 
-**Scoring pipeline:** Scoring is split into two phases to stay within Worker CPU limits:
+**Scoring pipeline:** Scoring is split into two concerns:
 
-1. **Preprocessing (at upload time):** When a pilot uploads an IGC, the Worker parses it against the task's xctsk and stores the results in `task_track.flight_data` — turnpoint sequence, distance flown, speed time, leading coefficient, ESS reaching time, goal status. This is the expensive per-pilot work (IGC parsing, distance calculations, leading coefficient computation). If the task has no xctsk yet, `flight_data` is left NULL and scoring is skipped.
+1. **Preprocessing (per-pilot, expensive):** Parses an IGC file against the task's xctsk and stores the results in `task_track.flight_data` — turnpoint sequence, distance flown, speed time, leading coefficient, ESS reaching time, goal status. This happens:
+   - **At upload time** — the Worker preprocesses the single uploaded IGC inline (one file, fits in a normal Worker request).
+   - **On bulk reprocess** (`POST .../reprocess`) — when the xctsk changes, all flight_data is invalid. The endpoint enqueues one Cloudflare Queue message per task_track. Each Queue Consumer (up to 15 min CPU) fetches one IGC from R2, parses it, and writes `flight_data` back to D1. No coordination needed.
 
-2. **GAP scoring (after preprocessing):** After updating `flight_data`, the Worker loads all `flight_data` for the task's matching pilots and runs the GAP formula — task validity, weights, point allocation, ranking. This phase is pure arithmetic on preprocessed numbers and completes in milliseconds.
-
-Scoring is triggered automatically on:
-- **Track upload** — preprocess the uploaded IGC, then rescore the task
-- **Track deletion** — rescore the task without the deleted track
-
-Scoring is triggered manually via `POST .../score` when:
-- **Task xctsk changes** — all `flight_data` must be recomputed against the new task definition (reprocesses all IGCs from R2)
-- **GAP params change** — only the GAP formula phase needs to re-run (flight_data is still valid)
-- **Pilot class changes** — GAP formula re-run (different set of pilots included)
+2. **GAP scoring (all-pilots, cheap, on-demand):** When scores are requested via `GET`, the Worker loads all `flight_data` and `penalty_points` from D1 for pilots whose class matches the task's `task_class` entries, runs the GAP formula (task validity, weights, point allocation, ranking), and returns the result. This is pure arithmetic on preprocessed numbers and completes in milliseconds. Nothing is stored — scores are always fresh.
 
 **Class-based scoring:** Only pilots whose `comp_pilot.pilot_class` matches one of the task's `task_class` entries are included. Pilots are ranked within their own class.
 
@@ -251,7 +225,7 @@ Scoring is triggered manually via `POST .../score` when:
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
 | GET | `/api/comp/:comp_id/pilot` | Optional | List registered pilots for this comp with their class, team, etc. Public for non-test. |
-| PATCH | `/api/comp/:comp_id/pilot/:comp_pilot_id` | Admin | Update pilot_class, team_name, driver_contact, starting_order, penalty info. |
+| PATCH | `/api/comp/:comp_id/pilot/:comp_pilot_id` | Admin | Update pilot_class, team_name, driver_contact, starting_order. |
 
 Pilot profile (the `pilot` table) is managed via the auth-api worker, not the competition-api:
 
@@ -297,5 +271,5 @@ Main flow to create or view competitions:
 5. Configure the Competition settings (HG/PG, Nominal distance, time, close date, etc…)
 6. Define the task using the task editor (reused from analysis UI) — edits are saved automatically via debounced PATCH to the server.
 7. Pilots upload their IGC files individually via the task page. This auto-registers them for the comp.
-8. Admin assigns pilot classes for any auto-registered pilots.
-9. Admin triggers scoring. Results are computed server-side and stored.
+8. Admin assigns pilot classes for any auto-registered pilots if the default class isn't correct.
+9. Scores are computed on-demand — viewing the task or comp scores page runs the GAP formula live against preprocessed flight data.
