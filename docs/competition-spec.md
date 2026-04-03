@@ -69,7 +69,7 @@ Tables referenced from the auth-api worker:
   - pilot_class (TEXT NOT NULL) — must match a `comp_pilot.pilot_class` value
   - PRIMARY KEY (task_id, pilot_class)
 
-- **task_track**: Links an IGC file to a pilot for a specific task. Enforces one track per pilot per task — re-uploading replaces the previous track.
+- **task_track**: Links an IGC file to a pilot for a specific task. Enforces one track per pilot per task — re-uploading replaces the previous track. Stores preprocessed flight data computed at upload time.
   - task_track_id (INTEGER PRIMARY KEY AUTOINCREMENT)
   - task_id (INTEGER NOT NULL REFERENCES task(task_id) ON DELETE CASCADE)
   - comp_pilot_id (INTEGER NOT NULL REFERENCES comp_pilot(comp_pilot_id) ON DELETE CASCADE)
@@ -77,6 +77,7 @@ Tables referenced from the auth-api worker:
   - igc_filename (TEXT NOT NULL) — filename in R2
   - uploaded_at (TEXT NOT NULL) — ISO timestamp
   - file_size (INTEGER NOT NULL) — bytes
+  - flight_data (TEXT) — JSON object with preprocessed per-pilot results: turnpoint sequence, distance flown, speed time, leading coefficient, ESS reaching time, whether pilot made goal. Computed at upload time by parsing the IGC against the task's xctsk. NULL if task has no xctsk defined yet.
 
 - **task_score**: Server-computed scores for a task. One row per task. Recalculation overwrites the previous score.
   - task_score_id (INTEGER PRIMARY KEY AUTOINCREMENT)
@@ -206,7 +207,7 @@ Tracks are uploaded one-by-one, typically by pilots after the competition. Uploa
 
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| POST | `/api/comp/:comp_id/task/:task_id/igc` | User | Upload one IGC file (max 5MB, compressed in browser). Auto-registers pilot if needed. Rejected if past comp close_date. If the pilot already has a track for this task, replaces it. Enforces max 250 unique pilots per task. Returns track metadata. |
+| POST | `/api/comp/:comp_id/task/:task_id/igc` | User | Upload one IGC file (max 5MB, compressed in browser). Auto-registers pilot if needed. Rejected if past comp close_date. If the pilot already has a track for this task, replaces it. Enforces max 250 unique pilots per task. Preprocesses the IGC and auto-triggers GAP rescoring (see Scoring Pipeline below). Returns track metadata. |
 | GET | `/api/comp/:comp_id/task/:task_id/igc` | Optional | List tracks with metadata (pilot name, filename, size, upload date). Public for non-test. Each entry includes a time-limited signed R2 URL for direct download. |
 | DELETE | `/api/comp/:comp_id/task/:task_id/igc/:comp_pilot_id` | Admin | Delete a pilot's track for this task. |
 
@@ -216,10 +217,25 @@ No separate download endpoint — the list response includes signed R2 URLs that
 
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| POST | `/api/comp/:comp_id/task/:task_id/score` | Admin | Trigger server-side scoring. The Worker runs the GAP engine against IGC files for pilots whose class matches the task's `task_class` entries. Overwrites any existing `task_score` and `task_score_rank` rows. |
+| POST | `/api/comp/:comp_id/task/:task_id/score` | Admin | Manually trigger a full rescore for this task. Reprocesses all `task_track.flight_data` and runs GAP. Useful after changing task xctsk, gap_params, pilot classes, or fixing issues. |
 | GET | `/api/comp/:comp_id/scores` | Public | Get scores for all tasks in a competition. Returns ranked pilot lists per task plus overall competition standings. No auth required. |
 
-**Class-based scoring:** When scoring is triggered for a task, only pilots whose `comp_pilot.pilot_class` matches one of the task's `task_class` entries are included. Pilots are ranked within their own class.
+**Scoring pipeline:** Scoring is split into two phases to stay within Worker CPU limits:
+
+1. **Preprocessing (at upload time):** When a pilot uploads an IGC, the Worker parses it against the task's xctsk and stores the results in `task_track.flight_data` — turnpoint sequence, distance flown, speed time, leading coefficient, ESS reaching time, goal status. This is the expensive per-pilot work (IGC parsing, distance calculations, leading coefficient computation). If the task has no xctsk yet, `flight_data` is left NULL and scoring is skipped.
+
+2. **GAP scoring (after preprocessing):** After updating `flight_data`, the Worker loads all `flight_data` for the task's matching pilots and runs the GAP formula — task validity, weights, point allocation, ranking. This phase is pure arithmetic on preprocessed numbers and completes in milliseconds.
+
+Scoring is triggered automatically on:
+- **Track upload** — preprocess the uploaded IGC, then rescore the task
+- **Track deletion** — rescore the task without the deleted track
+
+Scoring is triggered manually via `POST .../score` when:
+- **Task xctsk changes** — all `flight_data` must be recomputed against the new task definition (reprocesses all IGCs from R2)
+- **GAP params change** — only the GAP formula phase needs to re-run (flight_data is still valid)
+- **Pilot class changes** — GAP formula re-run (different set of pilots included)
+
+**Class-based scoring:** Only pilots whose `comp_pilot.pilot_class` matches one of the task's `task_class` entries are included. Pilots are ranked within their own class.
 
 **Unscored pilot validation:** The API and UI must flag mismatches where registered pilots would not be scored by any task. This happens when:
 - A pilot's `pilot_class` is NULL (auto-registered, not yet assigned)
