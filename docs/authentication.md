@@ -1,6 +1,8 @@
 # Authentication
 
-> **Status:** Future Roadmap - Not yet implemented. GlideComp currently has no authentication; all features are public.
+> **Status:** Implemented. See [auth.md](./auth.md) for the current architecture and setup.
+>
+> The spec below is an early design doc — some details (e.g. email-based login) were not implemented. Google OAuth via Better Auth is the actual implementation.
 
 # Roles
 

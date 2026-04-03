@@ -6,15 +6,18 @@ Google OAuth authentication for GlideComp using Better Auth, Hono, and Cloudflar
 
 ```
 Browser                    Cloudflare
-┌─────────────┐           ┌──────────────────────┐
-│ /u/{user}/  │──────────▶│ auth-api Worker       │
-│ /onboarding │  /api/auth│ (Hono + Better Auth)  │
-│ /u/{user}/  │◀──────────│        ↕              │
-│ /analysis   │           │   D1 (taskscore-auth) │
-└─────────────┘           └──────────────────────┘
+┌─────────────┐           ┌──────────────────────────────────────────┐
+│ /u/{user}/  │──────────▶│ Pages Function (functions/api/auth/)     │
+│ /onboarding │  /api/auth│       │ service binding                  │
+│ /u/{user}/  │◀──────────│       ▼                                  │
+│ /analysis   │           │ auth-api Worker (Hono + Better Auth)     │
+└─────────────┘           │       ↕                                  │
+                          │ D1 (taskscore-auth)                      │
+                          └──────────────────────────────────────────┘
 ```
 
-- **Auth worker** at `glidecomp.com/api/auth/*` (same origin, so cookies work)
+- **Pages Function** at `/api/auth/*` proxies requests to the auth-api worker via a [service binding](https://developers.cloudflare.com/pages/functions/bindings/#service-bindings) (see `functions/api/auth/[[path]].ts` and root `wrangler.toml`)
+- **Auth worker** handles all auth logic (Hono + Better Auth + D1)
 - **Frontend pages** served by Cloudflare Pages (static)
 - **`/u/*`** rewritten to `dashboard.html` via `_redirects` (200 rewrite, URL preserved)
 
@@ -106,6 +109,7 @@ Set in `wrangler.toml` (production) or `.dev.vars` (local dev override):
 2. Set authorized redirect URIs:
    - Production: `https://glidecomp.com/api/auth/callback/google`
    - Development: `http://localhost:3000/api/auth/callback/google`
+   - **No entry needed for preview deployments** — handled by the oAuthProxy plugin (see below)
 
 ### D1 Database
 
@@ -170,6 +174,51 @@ bun run wrangler d1 execute taskscore-auth --local --file=src/db/schema.sql
 | Database | Cloudflare D1 | Serverless SQLite, no external DB needed |
 | DB adapter | Kysely + kysely-d1 | Better Auth's built-in Kysely adapter with D1 dialect |
 | Auth client | `better-auth/client` | Tree-shakeable client SDK for browser |
+
+## Branch Preview Deployments
+
+Auth works on preview deployments (e.g. `https://<hash>.glidecomp.pages.dev`) via two mechanisms:
+
+### 1. Service Binding (routing)
+
+Preview deployments can't use the production worker route (`glidecomp.com/api/auth/*`). Instead, a **Pages Function** at `functions/api/auth/[[path]].ts` proxies all `/api/auth/*` requests to the auth-api worker via a Cloudflare service binding. This works on every deployment — production and preview — because service bindings are internal Cloudflare routing, not domain-based.
+
+The binding is configured in the root `wrangler.toml`:
+
+```toml
+[[services]]
+binding = "AUTH_API"
+service = "auth-api"
+```
+
+### 2. oAuthProxy Plugin (OAuth callbacks)
+
+Google OAuth only has `glidecomp.com` registered as a redirect URI. When signing in from a preview deployment, the [oAuthProxy plugin](https://www.better-auth.com/docs/plugins/oauth-proxy) handles the flow:
+
+1. Preview server initiates OAuth, but the callback goes to **production** (`glidecomp.com`)
+2. Production exchanges the auth code for tokens and fetches user info
+3. Production **encrypts** the profile and redirects back to the preview origin
+4. Preview server decrypts, creates user/session locally, and sets the session cookie
+
+This is configured in `web/workers/auth-api/src/auth.ts`:
+
+```typescript
+plugins: [
+  oAuthProxy({
+    productionURL: "https://glidecomp.com",
+  }),
+],
+trustedOrigins: ["https://*.glidecomp.pages.dev"],
+```
+
+**Requirements:**
+- All environments must share the same `BETTER_AUTH_SECRET` (the encryption key)
+- Preview origins must be in `trustedOrigins` (wildcards supported)
+- On production (`baseURL === productionURL`), the proxy is automatically disabled
+
+### Branch deploys do NOT deploy workers
+
+The `branch-deploy.yml` workflow only deploys Cloudflare Pages — it does **not** deploy the auth-api or airscore-api workers. Workers are only deployed from `master` via `deploy.yml`. This prevents branches from overwriting production workers with untested code.
 
 ## Deployment
 
