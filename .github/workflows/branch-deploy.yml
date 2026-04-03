@@ -62,6 +62,7 @@ jobs:
           VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
 
       - name: Deploy to Cloudflare Pages (Branch Preview)
+        id: deploy
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -72,9 +73,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Sanitize branch name for URL (Cloudflare replaces special chars with hyphens)
-          BRANCH_SLUG=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$//')
-          PREVIEW_URL="https://${BRANCH_SLUG}.glidecomp.pages.dev"
+          PREVIEW_URL="${{ steps.deploy.outputs.deployment-url }}"
 
           echo "## Preview Deployment" >> $GITHUB_STEP_SUMMARY
           echo "Branch: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
