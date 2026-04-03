@@ -56,6 +56,7 @@ Pilots:
   - email it to a comp email address
   - uploaded it to a web page
 - Pilots can edit their own profiles (same information as the registered list of pilots)
+  - **Needs UI**: Pilot profile page at `/profile` for editing name, CIVL ID, sporting body IDs, phone, glider. See `pilot` table in `competition-spec.md`.
 
 Public:
 - View tasks for a competition day
