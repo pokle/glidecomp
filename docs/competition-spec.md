@@ -275,3 +275,87 @@ Main flow to create or view competitions:
 7. Pilots upload their IGC files individually via the task page. This auto-registers them for the comp.
 8. Admin assigns pilot classes for any auto-registered pilots if the default class isn't correct.
 9. Scores are computed on-demand — viewing the task or comp scores page runs the GAP formula live against preprocessed flight data.
+
+# Implementation Plan
+
+Staged iterative plan. Each iteration delivers a working, testable vertical slice that builds on the previous one.
+
+## Iteration 1: Database Schema + Comp CRUD API
+
+- [ ] Create `competition-schema.sql` migration file with all tables (`pilot`, `comp`, `comp_admin`, `comp_pilot`, `task`, `task_class`, `task_track`)
+- [ ] Scaffold `competition-api` worker with Hono, Kysely, D1 binding
+- [ ] Implement Sqids encoding middleware (decode path params, encode response IDs) with alphabet configured via environment variable
+- [ ] Implement auth verification via service binding to `auth-api`
+- [ ] Implement admin authorization middleware
+- [ ] Implement routes: `POST /api/comp`, `GET /api/comp`, `GET /api/comp/:comp_id`, `PATCH /api/comp/:comp_id`, `DELETE /api/comp/:comp_id`
+- [ ] Implement admin management via PATCH (email-based resolution)
+- [ ] Add Zod validators for all inputs, enforcing limits (128 char text, 50 comps per account)
+- [ ] Write tests for Sqids encoding, admin middleware, CRUD operations
+
+## Iteration 2: Comp Dashboard UI (`/comp`)
+
+- [ ] Create `comp.html` page and `comp.ts` entry point
+- [ ] Set up Hono RPC client (`hc<AppType>()`) with exported `AppType` from the worker
+- [ ] Build competition list view (admin comps + recent public comps)
+- [ ] Build "Create Competition" form (name, category HG/PG, pilot classes, GAP params)
+- [ ] Implement navigation from dashboard to `/comp/{comp_id}`
+- [ ] Use Basecoat components for forms, tables, buttons
+
+## Iteration 3: Task CRUD API + Task Management UI
+
+- [ ] Implement API routes: `POST .../task`, `GET .../task/:task_id`, `PATCH .../task/:task_id`, `DELETE .../task/:task_id`
+- [ ] Implement `task_class` management (which pilot classes a task scores)
+- [ ] Build competition detail page (`/comp/{comp_id}`) showing task list
+- [ ] Build task creation form (name, date, pilot classes)
+- [ ] Implement class coverage warnings (missing classes per day, inconsistent groupings across days)
+- [ ] Add Zod validators and 50 tasks-per-comp limit
+
+## Iteration 4: Task Editor Integration
+
+- [ ] Build task detail page (`/comp/{comp_id}/task/{task_id}`)
+- [ ] Embed existing `createTaskEditor()` component
+- [ ] Wire `onTaskChanged` callback to debounced `PATCH` with xctsk payload
+- [ ] Load xctsk from API on page load and populate editor
+
+## Iteration 5: IGC Upload + Track Management
+
+- [ ] Configure R2 bucket binding and file storage under `/c/{comp_id}/t/{task_id}/*.igc`
+- [ ] Implement browser-side IGC compression before upload
+- [ ] Implement API routes: `POST .../igc`, `GET .../igc`, `PATCH .../igc/:comp_pilot_id`, `DELETE .../igc/:comp_pilot_id`
+- [ ] Implement open registration flow (auto-create `pilot` + `comp_pilot` on first upload)
+- [ ] Enforce `close_date`, one-track-per-pilot replacement (preserving penalties), 250 pilots-per-task limit, 5MB file size limit
+- [ ] Generate signed R2 download URLs in list response
+- [ ] Build track list UI on the task page
+- [ ] Implement pilot profile endpoints on auth-api (`GET/PATCH /api/auth/pilot`)
+
+## Iteration 6: Preprocessing Pipeline
+
+- [ ] Implement at-upload preprocessing: parse IGC with engine's `turnpointSequence()` + scoring helpers, write `flight_data` to `task_track`
+- [ ] Import engine code into the worker (turnpoint sequence, distance, speed time, leading coefficient, ESS time, goal status)
+- [ ] Implement `POST .../reprocess` endpoint with Cloudflare Queue integration
+- [ ] Implement Queue consumer: fetch IGC from R2, reprocess, write `flight_data` back to D1
+- [ ] Write tests using sample IGC + xctsk files from `web/samples/`
+
+## Iteration 7: Live Scoring
+
+- [ ] Implement `GET .../task/:task_id/score` — load `flight_data` + penalties, run `scoreTask()`, return ranked results per class
+- [ ] Implement `GET .../comp/:comp_id/scores` — aggregate across all tasks, return overall standings
+- [ ] Build task score view on the task page (ranked pilot list with point breakdowns)
+- [ ] Build competition scores page (`/scores?comp_id=...`) — public, no auth required
+- [ ] Display per-class rankings and penalties (points + reason)
+
+## Iteration 8: Pilot Management + Admin Polish
+
+- [ ] Implement `GET/PATCH /api/comp/:comp_id/pilot` routes
+- [ ] Build pilot list UI on the comp page with class/team editing
+- [ ] Build penalty management UI (admin sets points + reason per track)
+- [ ] Implement starting order: first-day manual assignment, subsequent days auto-computed from previous day scores
+- [ ] Build pilot profile page (name, CIVL ID, sporting body IDs, phone, glider)
+- [ ] Implement `comp.test` flag handling (test comps visible only to admins)
+
+## Iteration 9: R2 Cleanup + Cascade Deletes
+
+- [ ] Implement Cloudflare Queue for R2 cleanup on comp/task deletion
+- [ ] Implement Queue consumer: list and delete all objects under the R2 prefix
+- [ ] Implement user account deletion cascade (via auth-api): delete pilot → comp_pilot → task_track; if last admin → delete entire comp
+- [ ] Write integration tests for cascade scenarios
