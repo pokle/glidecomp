@@ -1,0 +1,26 @@
+name = "competition-api"
+main = "src/index.ts"
+compatibility_date = "2025-03-10"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "taskscore-auth"
+database_id = "aa8b644f-368e-493a-8b49-1af0d756aff4"
+
+[[services]]
+binding = "AUTH_API"
+service = "auth-api"
+
+[vars]
+SQIDS_ALPHABET = "abcdefghijklmnopqrstuvwxyz"
+
+# Secrets (set via `wrangler secret put` or .dev.vars):
+# (none yet — auth is via service binding)
+
+[dev]
+port = 8789
+
+[[routes]]
+pattern = "glidecomp.com/api/comp/*"
+zone_name = "glidecomp.com"

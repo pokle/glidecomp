@@ -282,15 +282,15 @@ Staged iterative plan. Each iteration delivers a working, testable vertical slic
 
 ## Iteration 1: Database Schema + Comp CRUD API
 
-- [ ] Create `competition-schema.sql` migration file with all tables (`pilot`, `comp`, `comp_admin`, `comp_pilot`, `task`, `task_class`, `task_track`)
-- [ ] Scaffold `competition-api` worker with Hono, Kysely, D1 binding
-- [ ] Implement Sqids encoding middleware (decode path params, encode response IDs) with alphabet configured via environment variable
-- [ ] Implement auth verification via service binding to `auth-api`
-- [ ] Implement admin authorization middleware
-- [ ] Implement routes: `POST /api/comp`, `GET /api/comp`, `GET /api/comp/:comp_id`, `PATCH /api/comp/:comp_id`, `DELETE /api/comp/:comp_id`
-- [ ] Implement admin management via PATCH (email-based resolution)
-- [ ] Add Zod validators for all inputs, enforcing limits (128 char text, 50 comps per account)
-- [ ] Write tests for Sqids encoding, admin middleware, CRUD operations
+- [x] Create `competition-schema.sql` migration file with all tables (`pilot`, `comp`, `comp_admin`, `comp_pilot`, `task`, `task_class`, `task_track`)
+- [x] Scaffold `competition-api` worker with Hono, Zod, D1 binding
+- [x] Implement Sqids encoding middleware (decode path params, encode response IDs) with alphabet configured via environment variable
+- [x] Implement auth verification via service binding to `auth-api`
+- [x] Implement admin authorization middleware
+- [x] Implement routes: `POST /api/comp`, `GET /api/comp`, `GET /api/comp/:comp_id`, `PATCH /api/comp/:comp_id`, `DELETE /api/comp/:comp_id`
+- [x] Implement admin management via PATCH (email-based resolution)
+- [x] Add Zod validators for all inputs, enforcing limits (128 char text, 50 comps per account)
+- [x] Write tests for Sqids encoding, admin middleware, CRUD operations
 
 ## Iteration 2: Comp Dashboard UI (`/comp`)
 
