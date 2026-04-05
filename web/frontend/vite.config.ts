@@ -76,12 +76,16 @@ export default defineConfig({
     sampleCompFiles(),
     copySampleComps(),
     {
-      // Rewrite /u/* to /dashboard.html in dev (mirrors Cloudflare Pages _redirects)
-      name: 'rewrite-u-routes',
+      // Rewrite SPA routes in dev (mirrors Cloudflare Pages _redirects)
+      name: 'rewrite-spa-routes',
       configureServer(server) {
         server.middlewares.use((req: Connect.IncomingMessage, _res, next) => {
           if (req.url?.startsWith('/u/')) {
             req.url = '/dashboard.html';
+          } else if (req.url === '/comp' || req.url === '/comp/') {
+            req.url = '/comp.html';
+          } else if (req.url?.match(/^\/comp\/[a-z]+\/?$/) && !req.url?.includes('.')) {
+            req.url = '/comp-detail.html';
           }
           next();
         });
@@ -100,6 +104,8 @@ export default defineConfig({
         about: resolve(__dirname, 'src/about.html'),
         legal: resolve(__dirname, 'src/legal.html'),
         scoring: resolve(__dirname, 'src/scoring.html'),
+        comp: resolve(__dirname, 'src/comp.html'),
+        'comp-detail': resolve(__dirname, 'src/comp-detail.html'),
       },
     },
   },

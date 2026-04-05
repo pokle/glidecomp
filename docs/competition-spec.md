@@ -294,21 +294,24 @@ Staged iterative plan. Each iteration delivers a working, testable vertical slic
 
 ## Iteration 2: Comp Dashboard UI (`/comp`)
 
-- [ ] Create `comp.html` page and `comp.ts` entry point
-- [ ] Set up Hono RPC client (`hc<AppType>()`) with exported `AppType` from the worker
-- [ ] Build competition list view (admin comps + recent public comps)
-- [ ] Build "Create Competition" form (name, category HG/PG, pilot classes, GAP params)
-- [ ] Implement navigation from dashboard to `/comp/{comp_id}`
-- [ ] Use Basecoat components for forms, tables, buttons
+- [x] Re-enable competition-api service binding in wrangler.toml and add Pages Function proxy
+- [x] Create `comp.html` page and `comp.ts` entry point
+- [x] Add `/comp/*` rewrite in Vite config and `_redirects`
+- [x] Set up Hono RPC client (`hc<AppType>()`) with exported `AppType` from the worker
+- [x] Build competition list view (admin comps + recent public comps)
+- [x] Build "Create Competition" form (name, category HG/PG, pilot classes). GAP params use sensible defaults and are editable later via comp detail page.
+- [x] Implement navigation from list to `/comp/{comp_id}` (stub detail page)
+- [x] Use Basecoat components for forms, tables, buttons
 
 ## Iteration 3: Task CRUD API + Task Management UI
 
 - [ ] Implement API routes: `POST .../task`, `GET .../task/:task_id`, `PATCH .../task/:task_id`, `DELETE .../task/:task_id`
 - [ ] Implement `task_class` management (which pilot classes a task scores)
-- [ ] Build competition detail page (`/comp/{comp_id}`) showing task list
+- [ ] Flesh out competition detail page (`/comp/{comp_id}`) with task list, task creation, and comp settings editing
 - [ ] Build task creation form (name, date, pilot classes)
-- [ ] Implement class coverage warnings (missing classes per day, inconsistent groupings across days)
+- [ ] Implement class coverage warnings display (API already computes them in GET /api/comp/:comp_id)
 - [ ] Add Zod validators and 50 tasks-per-comp limit
+- [ ] Write vitest integration tests for task CRUD routes
 
 ## Iteration 4: Task Editor Integration
 

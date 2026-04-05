@@ -36,6 +36,7 @@
         "@glidecomp/engine": "workspace:*",
         "@glidecomp/samples": "workspace:*",
         "better-auth": "^1.5.6",
+        "hono": "^4.12.10",
         "katex": "^0.16.44",
         "leaflet": "2.0.0-alpha.1",
         "mapbox-gl": "^3.21.0",

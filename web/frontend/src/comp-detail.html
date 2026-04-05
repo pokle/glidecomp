@@ -1,0 +1,91 @@
+<!-- Copyright (c) 2026, Tushar Pokle.  All rights reserved. -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GlideComp - Competition</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body class="min-h-screen bg-background text-foreground">
+  <div id="comp-detail-page" class="hidden min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-10">
+      <div class="max-w-3xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+        <a href="/comp" class="inline-flex items-center gap-2 text-lg font-bold tracking-tight text-foreground hover:text-primary transition-colors">
+          <img src="/icon.svg" alt="GlideComp logo" class="w-6 h-6" />
+          GlideComp
+        </a>
+        <div class="flex items-center gap-3">
+          <a href="/comp" class="btn btn-ghost btn-sm text-xs">All Competitions</a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main content -->
+    <main class="flex-1 max-w-3xl mx-auto w-full px-4 sm:px-6 py-8">
+      <div id="comp-loading" class="text-center py-12">
+        <p class="text-sm text-muted-foreground">Loading competition...</p>
+      </div>
+
+      <div id="comp-detail" class="hidden">
+        <div class="flex items-start justify-between mb-6">
+          <div>
+            <h1 id="comp-title" class="text-2xl font-bold tracking-tight"></h1>
+            <div class="flex items-center gap-2 mt-2">
+              <span id="comp-category-badge"></span>
+              <span id="comp-test-badge" class="hidden inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">Test</span>
+              <span id="comp-classes" class="text-sm text-muted-foreground"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tasks section (stub) -->
+        <section class="mb-8">
+          <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">Tasks</h2>
+          <div id="tasks-list" class="space-y-2"></div>
+          <div id="tasks-empty" class="text-center py-8 border border-dashed border-border/50 rounded-lg">
+            <p class="text-sm text-muted-foreground">No tasks yet</p>
+            <p class="text-xs text-muted-foreground/60 mt-1">Task management coming in the next iteration</p>
+          </div>
+        </section>
+
+        <!-- Admin info -->
+        <section>
+          <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">Admins</h2>
+          <div id="admins-list" class="space-y-1"></div>
+        </section>
+      </div>
+
+      <div id="comp-not-found" class="hidden text-center py-12">
+        <p class="text-sm text-muted-foreground">Competition not found</p>
+        <a href="/comp" class="btn btn-secondary btn-sm mt-4">Back to Competitions</a>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-border/30 py-6">
+      <div class="max-w-3xl mx-auto px-4 sm:px-6 flex items-center justify-between text-xs text-muted-foreground/60">
+        <span>GlideComp</span>
+        <a href="/legal.html" class="hover:text-foreground transition-colors">Privacy & Terms</a>
+      </div>
+    </footer>
+
+  </div>
+
+  <script type="module" src="/comp-detail.ts"></script>
+</body>
+
+</html>

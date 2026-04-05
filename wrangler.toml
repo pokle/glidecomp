@@ -10,7 +10,6 @@ compatibility_flags = ["nodejs_compat"]
 binding = "AUTH_API"
 service = "auth-api"
 
-# Service binding to the competition-api worker — add when competition-api is deployed:
-# [[services]]
-# binding = "COMPETITION_API"
-# service = "competition-api"
+[[services]]
+binding = "COMPETITION_API"
+service = "competition-api"
