@@ -96,16 +96,9 @@ async function init() {
     createBtn.classList.add("hidden");
   }
 
-  // Hide admin section if not logged in
-  if (!user) {
-    document.getElementById("admin-section")!.classList.add("hidden");
-  }
-
   // DOM refs
-  const adminCompsEl = document.getElementById("admin-comps")!;
-  const adminEmptyEl = document.getElementById("admin-empty")!;
-  const publicCompsEl = document.getElementById("public-comps")!;
-  const publicEmptyEl = document.getElementById("public-empty")!;
+  const compListEl = document.getElementById("comp-list")!;
+  const compEmptyEl = document.getElementById("comp-empty")!;
   const createDialog = document.getElementById("create-comp-dialog") as HTMLDialogElement;
   const createForm = document.getElementById("create-comp-form") as HTMLFormElement;
   const nameInput = document.getElementById("comp-name") as HTMLInputElement;
@@ -121,23 +114,12 @@ async function init() {
     const data = await res.json();
     const comps = data.comps as unknown as Comp[];
 
-    const adminComps = comps.filter((c) => c.is_admin);
-    const publicComps = comps.filter((c) => !c.is_admin);
-
-    adminCompsEl.innerHTML = "";
-    if (adminComps.length > 0) {
-      adminEmptyEl.classList.add("hidden");
-      adminComps.forEach((c) => adminCompsEl.appendChild(createCompCard(c)));
+    compListEl.innerHTML = "";
+    if (comps.length > 0) {
+      compEmptyEl.classList.add("hidden");
+      comps.forEach((c) => compListEl.appendChild(createCompCard(c)));
     } else {
-      adminEmptyEl.classList.remove("hidden");
-    }
-
-    publicCompsEl.innerHTML = "";
-    if (publicComps.length > 0) {
-      publicEmptyEl.classList.add("hidden");
-      publicComps.forEach((c) => publicCompsEl.appendChild(createCompCard(c)));
-    } else {
-      publicEmptyEl.classList.remove("hidden");
+      compEmptyEl.classList.remove("hidden");
     }
   }
 
