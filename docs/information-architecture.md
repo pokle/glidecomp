@@ -38,10 +38,11 @@ Date: 2026-04-05
 │
 ├── /comp                           Competitions hub (public browsable, auth to participate)
 │   ├── Competition list            Browse & create competitions
-│   ├── /comp/{id}                  Competition detail
-│   │   ├── Overview tab            Tasks list, pilots, standings summary
-│   │   ├── Scores tab              Full competition standings (public)
-│   │   └── Settings tab            Admin-only: GAP params, admins, close date
+│   ├── /comp/{id}                  Competition detail (scrollable sections)
+│   │   ├── Tasks section           Task list, create new
+│   │   ├── Standings section       Competition scores, filter by class/team
+│   │   ├── Pilots section          Registered pilots, class assignments
+│   │   └── Settings section        Admin-only: GAP params, admins, close date
 │   │
 │   └── /comp/{id}/task/{id}        Task detail
 │       ├── Overview section        Task definition, track list, upload
@@ -198,40 +199,48 @@ This keeps the analysis page focused on *flight analysis*, which is its core str
 
 ### `/comp/{id}` — Competition Detail
 
-**Tab navigation within the page:**
+**Single scrollable page with distinct sections:**
 
 ```
 ┌─────────────────────────────────────┐
 │  ← Competitions    Corryong Cup 2026│
-│                                     │
-│  [Overview]  [Scores]  [Settings⚙]  │
+│  HG · 3 classes · 12 pilots        │
 │─────────────────────────────────────│
-│  ...tab content...                  │
+│                                     │
+│  ┌─ Tasks ───────────────────────┐  │
+│  │  Task 1 — Mon 12 Jan         │  │
+│  │  Task 2 — Tue 13 Jan         │  │
+│  │  [+ New Task] (admin)        │  │
+│  └───────────────────────────────┘  │
+│                                     │
+│  ┌─ Standings ───────────────────┐  │
+│  │  Overall competition scores   │  │
+│  │  Filter: [All] [Open] [Sport] │  │
+│  └───────────────────────────────┘  │
+│                                     │
+│  ┌─ Pilots ──────────────────────┐  │
+│  │  Pilot list with classes      │  │
+│  └───────────────────────────────┘  │
+│                                     │
+│  ┌─ Settings (admin only) ───────┐  │
+│  │  Name, category, close date   │  │
+│  │  GAP parameters               │  │
+│  │  Admin management             │  │
+│  │  Pilot class definitions      │  │
+│  │  ⚠ Delete competition        │  │
+│  └───────────────────────────────┘  │
 └─────────────────────────────────────┘
 ```
 
-**Overview tab:**
-- Task list (clickable → `/comp/{id}/task/{tid}`)
-- Pilot count + class breakdown
-- Class coverage warnings (prominently displayed)
-- "New Task" button (admin only)
-
-**Scores tab:**
-- Overall competition standings
-- Filter by class / team
-- Per-task score summaries
-- Public (no auth required via `/scores?comp={id}` deep link)
-
-**Settings tab (admin only):**
-- Competition name, category, close date
-- GAP parameters
-- Admin management (add/remove by email)
-- Pilot class definitions
-- Delete competition (danger zone)
+1. **Header**: Competition name, category badge (HG/PG), pilot classes, pilot count. Class coverage warnings displayed here prominently if any.
+2. **Tasks**: Task list (clickable → `/comp/{id}/task/{tid}`). "New Task" button (admin only).
+3. **Standings**: Overall competition standings. Filter by class or team. Per-task score summaries. Public (also accessible via `/scores?comp={id}` deep link).
+4. **Pilots**: Registered pilots with class, team, driver contact. Admin can edit class assignments.
+5. **Settings** (admin only): Competition name, category, close date, GAP parameters, admin management (add/remove by email), pilot class definitions, delete competition (danger zone).
 
 ### `/comp/{id}/task/{id}` — Task Detail
 
-**Sections (single scrollable page, not tabs):**
+**Single scrollable page with distinct sections:**
 
 1. **Header**: Task name, date, pilot class badges, status badge (task defined / not defined)
 2. **Task Definition** (admin: editable task editor; others: read-only waypoint list + download XCTSK)
@@ -294,7 +303,7 @@ This IA can be implemented incrementally:
 
 1. **Add global nav bar** to all authenticated pages (My Flights, Competitions, User Menu). This alone fixes the biggest confusion.
 2. **Remove competition-related UI from dashboard** (sample comp link, competitions button). Dashboard becomes purely about personal flights.
-3. **Add tabs to competition detail** (Overview, Scores, Settings) instead of the current single-page layout.
+3. **Restructure competition detail** as a single scrollable page with clear sections (Tasks, Standings, Pilots, Settings).
 4. **Move "Comp Score" and "GAP Config"** out of the analysis sidebar into the competition pages.
 5. **Add "View on Map" button** to task detail page as the bridge to analysis.
 6. **Route analysis under `/u/{username}/analysis`** instead of standalone `/analysis.html`.
