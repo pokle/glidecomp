@@ -317,21 +317,21 @@ Staged iterative plan. Each iteration delivers a working, testable vertical slic
 
 ## Iteration 4: Task Editor Integration
 
-- [ ] Build task detail page (`/comp/{comp_id}/task/{task_id}`)
-- [ ] Embed existing `createTaskEditor()` component
-- [ ] Wire `onTaskChanged` callback to debounced `PATCH` with xctsk payload
-- [ ] Load xctsk from API on page load and populate editor
+- [x] Build task detail page (`/comp/{comp_id}/task/{task_id}`)
+- [x] Embed existing `createTaskEditor()` component
+- [x] Wire `onTaskChanged` callback to debounced `PATCH` with xctsk payload
+- [x] Load xctsk from API on page load and populate editor
 
 ## Iteration 5: IGC Upload + Track Management
 
-- [ ] Configure R2 bucket binding and file storage under `/c/{comp_id}/t/{task_id}/*.igc`
-- [ ] Implement browser-side IGC compression before upload
-- [ ] Implement API routes: `POST .../igc`, `GET .../igc`, `PATCH .../igc/:comp_pilot_id`, `DELETE .../igc/:comp_pilot_id`
-- [ ] Implement open registration flow (auto-create `pilot` + `comp_pilot` on first upload)
-- [ ] Enforce `close_date`, one-track-per-pilot replacement (preserving penalties), 250 pilots-per-task limit, 5MB file size limit
-- [ ] Generate signed R2 download URLs in list response
-- [ ] Build track list UI on the task page
-- [ ] Implement pilot profile endpoints on competition-api (`GET/PATCH /api/comp/pilot`)
+- [x] Configure R2 bucket binding and file storage under `/c/{comp_id}/t/{task_id}/*.igc`
+- [x] Implement browser-side IGC compression before upload
+- [x] Implement API routes: `POST .../igc`, `GET .../igc`, `PATCH .../igc/:comp_pilot_id`, `DELETE .../igc/:comp_pilot_id`
+- [x] Implement open registration flow (auto-create `pilot` + `comp_pilot` on first upload)
+- [x] Enforce `close_date`, one-track-per-pilot replacement (preserving penalties), 250 pilots-per-task limit, 5MB file size limit
+- [x] Generate signed R2 download URLs in list response
+- [x] Build track list UI on the task page
+- [x] Implement pilot profile endpoints on competition-api (`GET/PATCH /api/comp/pilot`)
 
 ## Iteration 6: Preprocessing Pipeline
 
