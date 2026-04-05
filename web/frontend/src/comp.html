@@ -1,0 +1,143 @@
+<!-- Copyright (c) 2026, Tushar Pokle.  All rights reserved. -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GlideComp - Competitions</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body class="min-h-screen bg-background text-foreground">
+  <div id="comp-page" class="hidden min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-10">
+      <div class="max-w-3xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+        <a href="/" class="inline-flex items-center gap-2 text-lg font-bold tracking-tight text-foreground hover:text-primary transition-colors">
+          <img src="/icon.svg" alt="GlideComp logo" class="w-6 h-6" />
+          GlideComp
+        </a>
+        <div class="flex items-center gap-3">
+          <span id="user-name" class="text-sm text-muted-foreground hidden sm:inline"></span>
+          <a href="/u/me/" class="btn btn-ghost btn-sm text-xs">Dashboard</a>
+          <button id="signout-btn" class="btn btn-ghost btn-sm text-xs text-muted-foreground">Sign out</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main content -->
+    <main class="flex-1 max-w-3xl mx-auto w-full px-4 sm:px-6 py-8">
+
+      <!-- Page title + create button -->
+      <div class="flex items-center justify-between mb-8">
+        <div>
+          <h1 class="text-2xl font-bold tracking-tight">Competitions</h1>
+          <p class="text-sm text-muted-foreground mt-1">Manage and score your competitions</p>
+        </div>
+        <button id="create-comp-btn" class="btn btn-primary btn-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          New Competition
+        </button>
+      </div>
+
+      <!-- Your competitions -->
+      <section id="admin-section" class="mb-10">
+        <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">Your Competitions</h2>
+        <div id="admin-comps" class="space-y-2"></div>
+        <div id="admin-empty" class="hidden text-center py-8">
+          <p class="text-sm text-muted-foreground">You haven't created any competitions yet</p>
+        </div>
+      </section>
+
+      <!-- Public competitions -->
+      <section id="public-section">
+        <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">Recent Public Competitions</h2>
+        <div id="public-comps" class="space-y-2"></div>
+        <div id="public-empty" class="hidden text-center py-8">
+          <p class="text-sm text-muted-foreground">No public competitions found</p>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-border/30 py-6">
+      <div class="max-w-3xl mx-auto px-4 sm:px-6 flex items-center justify-between text-xs text-muted-foreground/60">
+        <span>GlideComp</span>
+        <a href="/legal.html" class="hover:text-foreground transition-colors">Privacy & Terms</a>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- Create competition dialog -->
+  <dialog id="create-comp-dialog"
+    class="fixed inset-0 m-auto h-fit rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50"
+    onclick="if (event.target === this) this.close()">
+    <form id="create-comp-form" class="w-96 p-6">
+      <h2 class="text-lg font-semibold mb-4">Create Competition</h2>
+
+      <div class="space-y-4">
+        <!-- Name -->
+        <div>
+          <label for="comp-name" class="text-sm font-medium block mb-1">Name</label>
+          <input id="comp-name" type="text" class="input w-full" placeholder="e.g. Corryong Cup 2026" required maxlength="128" autofocus>
+        </div>
+
+        <!-- Category -->
+        <div>
+          <label class="text-sm font-medium block mb-1">Category</label>
+          <div class="flex gap-2">
+            <label class="flex-1">
+              <input type="radio" name="category" value="hg" class="peer hidden" checked>
+              <div class="btn btn-secondary w-full peer-checked:bg-primary peer-checked:text-primary-foreground peer-checked:border-primary transition-colors cursor-pointer text-center">
+                Hang Gliding
+              </div>
+            </label>
+            <label class="flex-1">
+              <input type="radio" name="category" value="pg" class="peer hidden">
+              <div class="btn btn-secondary w-full peer-checked:bg-primary peer-checked:text-primary-foreground peer-checked:border-primary transition-colors cursor-pointer text-center">
+                Paragliding
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Pilot classes -->
+        <div>
+          <label for="pilot-classes" class="text-sm font-medium block mb-1">Pilot Classes</label>
+          <input id="pilot-classes" type="text" class="input w-full" placeholder="open, sport, floater" value="open">
+          <p class="text-xs text-muted-foreground mt-1">Comma-separated class names</p>
+        </div>
+
+        <!-- Test comp toggle -->
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input id="comp-test" type="checkbox" class="accent-primary w-4 h-4">
+          <span class="text-sm">Test competition (only visible to admins)</span>
+        </label>
+      </div>
+
+      <div class="flex justify-end gap-2 mt-6">
+        <button type="button" id="create-cancel-btn" class="btn btn-secondary">Cancel</button>
+        <button type="submit" id="create-submit-btn" class="btn btn-primary">Create</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="/comp.ts"></script>
+</body>
+
+</html>

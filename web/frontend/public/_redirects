@@ -1,1 +1,3 @@
 /u/*  /dashboard.html  200
+/comp/:comp_id/task/*  /comp-detail.html  200
+/comp/:comp_id  /comp-detail.html  200
