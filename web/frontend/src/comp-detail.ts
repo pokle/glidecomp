@@ -391,21 +391,13 @@ async function setupTrackSection(
   const tracks = await loadTracks(compId, taskId);
   renderTrackList(tracks, compId, taskId, isAdmin, isClosed);
 
-  // Show upload area for authenticated users (unless comp is closed)
+  if (isClosed) {
+    document.getElementById("task-closed-badge")!.classList.remove("hidden");
+  }
+
+  // Show upload buttons for authenticated users (unless comp is closed)
   if (isAuthenticated && !isClosed) {
-    const uploadArea = document.getElementById("track-upload-area")!;
-    uploadArea.classList.remove("hidden");
-    setupUpload(compId, taskId, isAdmin);
-  } else if (isClosed) {
-    const uploadArea = document.getElementById("track-upload-area")!;
-    uploadArea.classList.remove("hidden");
-    const label = document.getElementById("track-upload-label")!;
-    label.classList.add("pointer-events-none", "opacity-50");
-    label.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground/40"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      <span class="text-sm text-muted-foreground">Submissions closed</span>
-      <span class="text-xs text-muted-foreground/60">${new Date(closeDate!).toLocaleDateString()}</span>
-    `;
+    setupSelfUpload(compId, taskId, isAdmin, isClosed);
   }
 
   // Admin: upload on behalf of a registered pilot
@@ -603,31 +595,40 @@ function openPenaltyDialog(
   dialog.showModal();
 }
 
-function setupUpload(compId: string, taskId: string, isAdmin: boolean) {
+function setupSelfUpload(
+  compId: string,
+  taskId: string,
+  isAdmin: boolean,
+  isClosed: boolean
+) {
+  const btn = document.getElementById("upload-self-btn")!;
   const input = document.getElementById("track-upload-input") as HTMLInputElement;
-  const label = document.getElementById("track-upload-label")!;
   const statusDiv = document.getElementById("track-upload-status")!;
   const messageEl = document.getElementById("track-upload-message")!;
 
-  function showStatus(msg: string, isError: boolean) {
-    statusDiv.classList.remove("hidden");
-    messageEl.textContent = msg;
-    messageEl.className = `text-sm ${isError ? "text-destructive" : "text-muted-foreground"}`;
-  }
+  btn.classList.remove("hidden");
 
-  async function handleFile(file: File) {
+  btn.addEventListener("click", () => input.click());
+
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+
     if (!file.name.toLowerCase().endsWith(".igc")) {
-      showStatus("Please select an IGC file", true);
+      showUploadStatus(messageEl, statusDiv, "Please select an IGC file", true);
+      input.value = "";
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      showStatus("File too large (max 5MB)", true);
+      showUploadStatus(messageEl, statusDiv, "File too large (max 5MB)", true);
+      input.value = "";
       return;
     }
 
-    showStatus("Compressing and uploading...", false);
-    label.classList.add("pointer-events-none", "opacity-50");
+    btn.setAttribute("disabled", "");
+    btn.textContent = "Uploading...";
+    showUploadStatus(messageEl, statusDiv, "Compressing and uploading...", false);
 
     try {
       const compressed = await compressIgc(file);
@@ -637,58 +638,45 @@ function setupUpload(compId: string, taskId: string, isAdmin: boolean) {
         {
           method: "POST",
           credentials: "include",
-          headers: { "Content-Encoding": "gzip" },
           body: compressed,
         }
       );
 
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        showStatus(err.error || "Upload failed", true);
+        showUploadStatus(messageEl, statusDiv, err.error || "Upload failed", true);
         return;
       }
 
       const data = (await res.json()) as { replaced: boolean };
-      showStatus(
-        data.replaced ? "Track replaced successfully" : "Track uploaded successfully",
+      showUploadStatus(
+        messageEl,
+        statusDiv,
+        data.replaced ? "Track replaced" : "Track uploaded",
         false
       );
 
-      // Reload track list
       const tracks = await loadTracks(compId, taskId);
-      renderTrackList(tracks, compId, taskId, isAdmin, false);
+      renderTrackList(tracks, compId, taskId, isAdmin, isClosed);
     } catch {
-      showStatus("Network error. Please try again.", true);
+      showUploadStatus(messageEl, statusDiv, "Network error", true);
     } finally {
-      label.classList.remove("pointer-events-none", "opacity-50");
+      btn.removeAttribute("disabled");
+      btn.textContent = "Upload for me";
       input.value = "";
     }
-  }
-
-  input.addEventListener("change", () => {
-    if (input.files && input.files[0]) {
-      handleFile(input.files[0]);
-    }
   });
+}
 
-  // Drag and drop
-  label.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    label.classList.add("border-primary/50", "bg-muted/30");
-  });
-
-  label.addEventListener("dragleave", () => {
-    label.classList.remove("border-primary/50", "bg-muted/30");
-  });
-
-  label.addEventListener("drop", (e) => {
-    e.preventDefault();
-    label.classList.remove("border-primary/50", "bg-muted/30");
-    const files = (e as DragEvent).dataTransfer?.files;
-    if (files && files[0]) {
-      handleFile(files[0]);
-    }
-  });
+function showUploadStatus(
+  messageEl: HTMLElement,
+  statusDiv: HTMLElement,
+  msg: string,
+  isError: boolean
+) {
+  statusDiv.classList.remove("hidden");
+  messageEl.textContent = msg;
+  messageEl.className = `text-sm ${isError ? "text-destructive" : "text-muted-foreground"}`;
 }
 
 function setupUploadOnBehalf(
