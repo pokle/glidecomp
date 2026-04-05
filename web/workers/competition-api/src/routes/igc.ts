@@ -219,6 +219,131 @@ export const igcRoutes = new Hono<HonoEnv>()
     }
   )
 
+  // ── POST /api/comp/:comp_id/task/:task_id/igc/:comp_pilot_id ── Admin upload on behalf
+  .post(
+    "/api/comp/:comp_id/task/:task_id/igc/:comp_pilot_id",
+    requireAuth,
+    sqidsMiddleware,
+    requireCompAdmin,
+    async (c) => {
+      const compId = c.var.ids.comp_id!;
+      const taskId = c.var.ids.task_id!;
+      const compPilotId = c.var.ids.comp_pilot_id!;
+      const alphabet = c.env.SQIDS_ALPHABET;
+
+      // Verify task exists and belongs to comp
+      const task = await c.env.DB.prepare(
+        "SELECT task_id FROM task WHERE task_id = ? AND comp_id = ?"
+      )
+        .bind(taskId, compId)
+        .first();
+
+      if (!task) {
+        return c.json({ error: "Task not found" }, 404);
+      }
+
+      // Verify comp_pilot exists and belongs to this comp
+      const cp = await c.env.DB.prepare(
+        "SELECT comp_pilot_id FROM comp_pilot WHERE comp_pilot_id = ? AND comp_id = ?"
+      )
+        .bind(compPilotId, compId)
+        .first();
+
+      if (!cp) {
+        return c.json({ error: "Pilot not found in this competition" }, 404);
+      }
+
+      // Read the request body
+      const body = await c.req.arrayBuffer();
+      if (body.byteLength === 0) {
+        return c.json({ error: "Empty file" }, 400);
+      }
+      if (body.byteLength > MAX_IGC_SIZE) {
+        return c.json({ error: "File too large (max 5MB)" }, 400);
+      }
+
+      // Check for existing track (replacement preserves penalties)
+      const existingTrack = await c.env.DB.prepare(
+        "SELECT task_track_id, igc_filename, penalty_points, penalty_reason FROM task_track WHERE task_id = ? AND comp_pilot_id = ?"
+      )
+        .bind(taskId, compPilotId)
+        .first<{
+          task_track_id: number;
+          igc_filename: string;
+          penalty_points: number;
+          penalty_reason: string | null;
+        }>();
+
+      if (!existingTrack) {
+        // Enforce max pilots per task for new tracks
+        const pilotCount = await c.env.DB.prepare(
+          "SELECT COUNT(*) as cnt FROM task_track WHERE task_id = ?"
+        )
+          .bind(taskId)
+          .first<{ cnt: number }>();
+
+        if (pilotCount && pilotCount.cnt >= MAX_PILOTS_PER_TASK) {
+          return c.json(
+            { error: `Maximum ${MAX_PILOTS_PER_TASK} pilots per task` },
+            400
+          );
+        }
+      }
+
+      const r2Key = `c/${compId}/t/${taskId}/${compPilotId}.igc`;
+      const now = new Date().toISOString();
+
+      await c.env.R2.put(r2Key, body, {
+        httpMetadata: {
+          contentType: "application/octet-stream",
+          contentEncoding: "gzip",
+        },
+      });
+
+      if (existingTrack) {
+        if (existingTrack.igc_filename !== r2Key) {
+          await c.env.R2.delete(existingTrack.igc_filename);
+        }
+
+        await c.env.DB.prepare(
+          `UPDATE task_track
+           SET igc_filename = ?, uploaded_at = ?, file_size = ?, flight_data = NULL
+           WHERE task_track_id = ?`
+        )
+          .bind(r2Key, now, body.byteLength, existingTrack.task_track_id)
+          .run();
+
+        return c.json({
+          task_track_id: encodeId(alphabet, existingTrack.task_track_id),
+          comp_pilot_id: encodeId(alphabet, compPilotId),
+          igc_filename: r2Key,
+          uploaded_at: now,
+          file_size: body.byteLength,
+          replaced: true,
+        });
+      }
+
+      const trackResult = await c.env.DB.prepare(
+        `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+        .bind(taskId, compPilotId, r2Key, now, body.byteLength)
+        .run();
+
+      return c.json(
+        {
+          task_track_id: encodeId(alphabet, trackResult.meta.last_row_id),
+          comp_pilot_id: encodeId(alphabet, compPilotId),
+          igc_filename: r2Key,
+          uploaded_at: now,
+          file_size: body.byteLength,
+          replaced: false,
+        },
+        201
+      );
+    }
+  )
+
   // ── GET /api/comp/:comp_id/task/:task_id/igc ── List tracks
   .get(
     "/api/comp/:comp_id/task/:task_id/igc",

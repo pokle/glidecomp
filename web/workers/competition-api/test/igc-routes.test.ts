@@ -309,6 +309,136 @@ describe("DELETE .../igc/:comp_pilot_id", () => {
   });
 });
 
+// ── POST .../igc/:comp_pilot_id (admin upload on behalf) ─────────────────
+
+describe("POST .../igc/:comp_pilot_id (admin upload on behalf)", () => {
+  test("admin can upload for a registered pilot", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+
+    // First, upload as user-1 to auto-register them
+    await uploadIgc(compId, taskId);
+
+    // Get the comp_pilot_id
+    const cp = await env.DB.prepare("SELECT comp_pilot_id FROM comp_pilot").first<{ comp_pilot_id: number }>();
+    const cpEncoded = encodeId(ALPHABET, cp!.comp_pilot_id);
+
+    // Delete the existing track so we can test a fresh admin upload
+    await env.DB.prepare("DELETE FROM task_track").run();
+
+    // Admin uploads on behalf
+    const res = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc/${cpEncoded}`,
+      fakeIgcPayload(),
+      { user: "user-1" }
+    );
+    expect(res.status).toBe(201);
+    const data = (await res.json()) as Record<string, unknown>;
+    expect(data.replaced).toBe(false);
+    expect(data.comp_pilot_id).toBe(cpEncoded);
+  });
+
+  test("admin upload replaces existing track preserving penalties", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+
+    // Upload as user-1 to auto-register
+    await uploadIgc(compId, taskId);
+
+    // Set penalty
+    const tt = await env.DB.prepare("SELECT task_track_id FROM task_track").first<{ task_track_id: number }>();
+    await env.DB.prepare(
+      "UPDATE task_track SET penalty_points = 30, penalty_reason = 'Late start' WHERE task_track_id = ?"
+    ).bind(tt!.task_track_id).run();
+
+    // Get comp_pilot_id
+    const cp = await env.DB.prepare("SELECT comp_pilot_id FROM comp_pilot").first<{ comp_pilot_id: number }>();
+    const cpEncoded = encodeId(ALPHABET, cp!.comp_pilot_id);
+
+    // Admin re-uploads on behalf
+    const res = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc/${cpEncoded}`,
+      fakeIgcPayload(),
+      { user: "user-1" }
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as Record<string, unknown>;
+    expect(data.replaced).toBe(true);
+
+    // Verify penalty preserved
+    const updated = await env.DB.prepare("SELECT penalty_points, penalty_reason FROM task_track").first();
+    expect(updated!.penalty_points).toBe(30);
+    expect(updated!.penalty_reason).toBe("Late start");
+  });
+
+  test("non-admin cannot upload on behalf", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+
+    // Register user-1 as a pilot
+    await uploadIgc(compId, taskId);
+    const cp = await env.DB.prepare("SELECT comp_pilot_id FROM comp_pilot").first<{ comp_pilot_id: number }>();
+    const cpEncoded = encodeId(ALPHABET, cp!.comp_pilot_id);
+
+    const res = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc/${cpEncoded}`,
+      fakeIgcPayload(),
+      { user: "user-2" }
+    );
+    expect(res.status).toBe(403);
+  });
+
+  test("returns 404 for non-existent comp_pilot", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+    const fakeId = encodeId(ALPHABET, 99999);
+
+    const res = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc/${fakeId}`,
+      fakeIgcPayload(),
+      { user: "user-1" }
+    );
+    expect(res.status).toBe(404);
+  });
+});
+
+// ── GET /api/comp/:comp_id/pilot (pilot list) ───────────────────────────
+
+describe("GET /api/comp/:comp_id/pilot", () => {
+  test("lists registered pilots", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+
+    // Upload to auto-register
+    await uploadIgc(compId, taskId);
+
+    const res = await request("GET", `/api/comp/${compId}/pilot`);
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { pilots: Array<Record<string, unknown>> };
+    expect(data.pilots.length).toBe(1);
+    expect(data.pilots[0].name).toBe("Test Pilot");
+    expect(data.pilots[0].pilot_class).toBe("open");
+  });
+
+  test("returns empty list for comp with no pilots", async () => {
+    const compId = await createComp();
+
+    const res = await request("GET", `/api/comp/${compId}/pilot`);
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { pilots: unknown[] };
+    expect(data.pilots.length).toBe(0);
+  });
+
+  test("hides test comp pilots from non-admin", async () => {
+    const compId = await createComp({ test: true });
+
+    const res = await request("GET", `/api/comp/${compId}/pilot`, {
+      user: "user-2",
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
 // ── Pilot profile routes ─────────────────────────────────────────────────
 
 describe("GET /api/comp/pilot", () => {

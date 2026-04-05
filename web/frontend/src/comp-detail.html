@@ -124,7 +124,10 @@
         <section class="mb-8">
           <div class="flex items-center justify-between mb-3">
             <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider">Tracks</h2>
-            <span id="task-track-count" class="text-xs text-muted-foreground"></span>
+            <div class="flex items-center gap-2">
+              <button id="upload-behalf-btn" class="hidden btn btn-ghost btn-sm text-xs">Upload for pilot</button>
+              <span id="task-track-count" class="text-xs text-muted-foreground"></span>
+            </div>
           </div>
 
           <!-- Upload area (shown to authenticated users) -->
@@ -273,6 +276,57 @@
       <div class="flex justify-end gap-2 mt-6">
         <button type="button" id="settings-cancel-btn" class="btn btn-secondary">Cancel</button>
         <button type="submit" id="settings-submit-btn" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Admin upload-on-behalf dialog -->
+  <dialog id="upload-behalf-dialog"
+    class="fixed inset-0 m-auto h-fit rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50"
+    onclick="if (event.target === this) this.close()">
+    <div class="w-96 p-6">
+      <h2 class="text-lg font-semibold mb-4">Upload for Pilot</h2>
+      <div class="space-y-4">
+        <div>
+          <label for="behalf-pilot-select" class="text-sm font-medium block mb-1">Pilot</label>
+          <select id="behalf-pilot-select" class="input w-full" required></select>
+        </div>
+        <div>
+          <label class="text-sm font-medium block mb-1">IGC File</label>
+          <input id="behalf-file-input" type="file" accept=".igc" class="input w-full">
+        </div>
+      </div>
+      <div id="behalf-upload-status" class="hidden mt-3 text-center">
+        <p id="behalf-upload-message" class="text-sm"></p>
+      </div>
+      <div class="flex justify-end gap-2 mt-6">
+        <button type="button" id="behalf-cancel-btn" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="behalf-upload-btn" class="btn btn-primary">Upload</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Penalty dialog -->
+  <dialog id="penalty-dialog"
+    class="fixed inset-0 m-auto h-fit rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50"
+    onclick="if (event.target === this) this.close()">
+    <form id="penalty-form" class="w-96 p-6">
+      <h2 class="text-lg font-semibold mb-1">Set Penalty</h2>
+      <p id="penalty-pilot-name" class="text-sm text-muted-foreground mb-4"></p>
+      <div class="space-y-4">
+        <div>
+          <label for="penalty-points" class="text-sm font-medium block mb-1">Penalty Points</label>
+          <input id="penalty-points" type="number" step="any" class="input w-full" required>
+          <p class="text-xs text-muted-foreground mt-1">Positive = deduction, negative = bonus. 0 to clear.</p>
+        </div>
+        <div>
+          <label for="penalty-reason" class="text-sm font-medium block mb-1">Reason</label>
+          <input id="penalty-reason" type="text" class="input w-full" maxlength="128" placeholder="e.g. Airspace violation">
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-6">
+        <button type="button" id="penalty-cancel-btn" class="btn btn-secondary">Cancel</button>
+        <button type="submit" id="penalty-submit-btn" class="btn btn-primary">Save</button>
       </div>
     </form>
   </dialog>

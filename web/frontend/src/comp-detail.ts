@@ -407,6 +407,11 @@ async function setupTrackSection(
       <span class="text-xs text-muted-foreground/60">${new Date(closeDate!).toLocaleDateString()}</span>
     `;
   }
+
+  // Admin: upload on behalf of a registered pilot
+  if (isAdmin && !isClosed) {
+    setupUploadOnBehalf(compId, taskId, isAdmin, isClosed);
+  }
 }
 
 async function loadTracks(
@@ -482,6 +487,16 @@ function renderTrackList(
     if (isAdmin && !isClosed) {
       const actionsDiv = div.querySelector(".flex.items-center.gap-1")!;
 
+      // Penalty button
+      const penaltyBtn = document.createElement("button");
+      penaltyBtn.className = "btn btn-ghost btn-sm text-xs";
+      penaltyBtn.title = "Set penalty";
+      penaltyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>`;
+      penaltyBtn.addEventListener("click", () => {
+        openPenaltyDialog(compId, taskId, track, isAdmin, isClosed);
+      });
+      actionsDiv.appendChild(penaltyBtn);
+
       // Delete button
       const deleteBtn = document.createElement("button");
       deleteBtn.className = "btn btn-ghost btn-sm text-xs text-destructive";
@@ -516,6 +531,76 @@ function renderTrackList(
 
     list.appendChild(div);
   }
+}
+
+function openPenaltyDialog(
+  compId: string,
+  taskId: string,
+  track: TrackInfo,
+  isAdmin: boolean,
+  isClosed: boolean
+) {
+  const dialog = document.getElementById("penalty-dialog") as HTMLDialogElement;
+  const form = document.getElementById("penalty-form") as HTMLFormElement;
+  const pilotNameEl = document.getElementById("penalty-pilot-name")!;
+  const pointsInput = document.getElementById("penalty-points") as HTMLInputElement;
+  const reasonInput = document.getElementById("penalty-reason") as HTMLInputElement;
+  const submitBtn = document.getElementById("penalty-submit-btn") as HTMLButtonElement;
+
+  pilotNameEl.textContent = track.pilot_name;
+  pointsInput.value = String(track.penalty_points);
+  reasonInput.value = track.penalty_reason ?? "";
+
+  // Remove old listener by cloning
+  const newForm = form.cloneNode(true) as HTMLFormElement;
+  form.parentNode!.replaceChild(newForm, form);
+
+  (newForm.querySelector("#penalty-cancel-btn") as HTMLButtonElement)
+    .addEventListener("click", () => dialog.close());
+
+  newForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = newForm.querySelector("#penalty-submit-btn") as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = "Saving...";
+
+    try {
+      const res = await api.api.comp[":comp_id"].task[":task_id"].igc[
+        ":comp_pilot_id"
+      ].$patch({
+        param: {
+          comp_id: compId,
+          task_id: taskId,
+          comp_pilot_id: track.comp_pilot_id,
+        },
+        json: {
+          penalty_points: parseFloat(
+            (newForm.querySelector("#penalty-points") as HTMLInputElement).value
+          ),
+          penalty_reason:
+            (newForm.querySelector("#penalty-reason") as HTMLInputElement).value.trim() || null,
+        },
+      });
+
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        alert(err.error || "Failed to set penalty");
+        return;
+      }
+
+      dialog.close();
+      // Reload track list
+      const tracks = await loadTracks(compId, taskId);
+      renderTrackList(tracks, compId, taskId, isAdmin, isClosed);
+    } catch {
+      alert("Network error. Please try again.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Save";
+    }
+  });
+
+  dialog.showModal();
 }
 
 function setupUpload(compId: string, taskId: string, isAdmin: boolean) {
@@ -602,6 +687,131 @@ function setupUpload(compId: string, taskId: string, isAdmin: boolean) {
     const files = (e as DragEvent).dataTransfer?.files;
     if (files && files[0]) {
       handleFile(files[0]);
+    }
+  });
+}
+
+function setupUploadOnBehalf(
+  compId: string,
+  taskId: string,
+  isAdmin: boolean,
+  isClosed: boolean
+) {
+  const btn = document.getElementById("upload-behalf-btn")!;
+  btn.classList.remove("hidden");
+
+  const dialog = document.getElementById("upload-behalf-dialog") as HTMLDialogElement;
+  const pilotSelect = document.getElementById("behalf-pilot-select") as unknown as HTMLSelectElement;
+  const fileInput = document.getElementById("behalf-file-input") as HTMLInputElement;
+  const uploadBtn = document.getElementById("behalf-upload-btn") as HTMLButtonElement;
+  const statusDiv = document.getElementById("behalf-upload-status")!;
+  const messageEl = document.getElementById("behalf-upload-message")!;
+
+  btn.addEventListener("click", async () => {
+    // Fetch registered pilots
+    pilotSelect.innerHTML = '<option value="">Loading...</option>';
+    fileInput.value = "";
+    statusDiv.classList.add("hidden");
+    dialog.showModal();
+
+    try {
+      const res = await api.api.comp[":comp_id"].pilot.$get({
+        param: { comp_id: compId },
+      });
+      if (!res.ok) {
+        pilotSelect.innerHTML = '<option value="">Failed to load pilots</option>';
+        return;
+      }
+      const data = (await res.json()) as {
+        pilots: Array<{ comp_pilot_id: string; name: string; pilot_class: string }>;
+      };
+      pilotSelect.innerHTML = "";
+      if (data.pilots.length === 0) {
+        pilotSelect.innerHTML = '<option value="">No registered pilots</option>';
+        return;
+      }
+      for (const p of data.pilots) {
+        const opt = document.createElement("option");
+        opt.value = p.comp_pilot_id;
+        opt.textContent = `${p.name} (${p.pilot_class})`;
+        pilotSelect.appendChild(opt);
+      }
+    } catch {
+      pilotSelect.innerHTML = '<option value="">Network error</option>';
+    }
+  });
+
+  document.getElementById("behalf-cancel-btn")!.addEventListener("click", () => {
+    dialog.close();
+  });
+
+  uploadBtn.addEventListener("click", async () => {
+    const selectedPilot = pilotSelect.value;
+    if (!selectedPilot) {
+      messageEl.textContent = "Select a pilot";
+      messageEl.className = "text-sm text-destructive";
+      statusDiv.classList.remove("hidden");
+      return;
+    }
+
+    const file = fileInput.files?.[0];
+    if (!file) {
+      messageEl.textContent = "Select an IGC file";
+      messageEl.className = "text-sm text-destructive";
+      statusDiv.classList.remove("hidden");
+      return;
+    }
+
+    if (!file.name.toLowerCase().endsWith(".igc")) {
+      messageEl.textContent = "Please select an IGC file";
+      messageEl.className = "text-sm text-destructive";
+      statusDiv.classList.remove("hidden");
+      return;
+    }
+
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = "Uploading...";
+    messageEl.textContent = "Compressing and uploading...";
+    messageEl.className = "text-sm text-muted-foreground";
+    statusDiv.classList.remove("hidden");
+
+    try {
+      const compressed = await compressIgc(file);
+
+      const res = await fetch(
+        `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(selectedPilot)}`,
+        {
+          method: "POST",
+          credentials: "include",
+          body: compressed,
+        }
+      );
+
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        messageEl.textContent = err.error || "Upload failed";
+        messageEl.className = "text-sm text-destructive";
+        return;
+      }
+
+      const data = (await res.json()) as { replaced: boolean };
+      messageEl.textContent = data.replaced
+        ? "Track replaced successfully"
+        : "Track uploaded successfully";
+      messageEl.className = "text-sm text-muted-foreground";
+
+      // Reload track list
+      const tracks = await loadTracks(compId, taskId);
+      renderTrackList(tracks, compId, taskId, isAdmin, isClosed);
+
+      // Close after a brief delay so user sees success
+      setTimeout(() => dialog.close(), 1000);
+    } catch {
+      messageEl.textContent = "Network error. Please try again.";
+      messageEl.className = "text-sm text-destructive";
+    } finally {
+      uploadBtn.disabled = false;
+      uploadBtn.textContent = "Upload";
     }
   });
 }

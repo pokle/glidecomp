@@ -1,7 +1,9 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import type { Env, AuthUser } from "../env";
-import { requireAuth } from "../middleware/auth";
+import { encodeId } from "../sqids";
+import { sqidsMiddleware } from "../middleware/sqids";
+import { requireAuth, optionalAuth } from "../middleware/auth";
 import { updatePilotSchema } from "../validators";
 
 type Variables = {
@@ -13,6 +15,7 @@ type HonoEnv = { Bindings: Env; Variables: Variables };
 
 export const pilotRoutes = new Hono<HonoEnv>()
   // ── GET /api/comp/pilot ── Get current user's pilot profile
+  // (literal path — must be registered before /api/comp/:comp_id/pilot)
   .get("/api/comp/pilot", requireAuth, async (c) => {
     const user = c.var.user;
 
@@ -24,7 +27,6 @@ export const pilotRoutes = new Hono<HonoEnv>()
       .first<Record<string, unknown>>();
 
     if (!pilot) {
-      // No pilot profile yet — return a default based on user info
       return c.json({
         name: user.name,
         civl_id: null,
@@ -54,7 +56,6 @@ export const pilotRoutes = new Hono<HonoEnv>()
       const user = c.var.user;
       const body = c.req.valid("json");
 
-      // Ensure pilot row exists
       const existing = await c.env.DB.prepare(
         "SELECT pilot_id FROM pilot WHERE user_id = ?"
       )
@@ -62,7 +63,6 @@ export const pilotRoutes = new Hono<HonoEnv>()
         .first<{ pilot_id: number }>();
 
       if (!existing) {
-        // Create pilot profile, then apply updates
         await c.env.DB.prepare(
           "INSERT INTO pilot (user_id, name) VALUES (?, ?)"
         )
@@ -70,7 +70,6 @@ export const pilotRoutes = new Hono<HonoEnv>()
           .run();
       }
 
-      // Build dynamic UPDATE
       const updates: string[] = [];
       const values: unknown[] = [];
 
@@ -108,7 +107,6 @@ export const pilotRoutes = new Hono<HonoEnv>()
           .run();
       }
 
-      // Return updated profile
       const pilot = await c.env.DB.prepare(
         `SELECT name, civl_id, sporting_body_ids, phone, glider
          FROM pilot WHERE user_id = ?`
@@ -124,6 +122,64 @@ export const pilotRoutes = new Hono<HonoEnv>()
           : null,
         phone: pilot!.phone ?? null,
         glider: pilot!.glider ?? null,
+      });
+    }
+  )
+
+  // ── GET /api/comp/:comp_id/pilot ── List registered pilots for a comp
+  .get(
+    "/api/comp/:comp_id/pilot",
+    optionalAuth,
+    sqidsMiddleware,
+    async (c) => {
+      const compId = c.var.ids.comp_id!;
+      const user = c.var.user;
+      const alphabet = c.env.SQIDS_ALPHABET;
+
+      const comp = await c.env.DB.prepare(
+        "SELECT comp_id, test FROM comp WHERE comp_id = ?"
+      )
+        .bind(compId)
+        .first<{ comp_id: number; test: number }>();
+
+      if (!comp) {
+        return c.json({ error: "Not found" }, 404);
+      }
+
+      if (comp.test) {
+        if (!user) {
+          return c.json({ error: "Not found" }, 404);
+        }
+        const isAdmin = await c.env.DB.prepare(
+          "SELECT 1 FROM comp_admin WHERE comp_id = ? AND user_id = ?"
+        )
+          .bind(compId, user.id)
+          .first();
+        if (!isAdmin) {
+          return c.json({ error: "Not found" }, 404);
+        }
+      }
+
+      const pilots = await c.env.DB.prepare(
+        `SELECT comp_pilot_id, registered_pilot_name, pilot_class, team_name
+         FROM comp_pilot WHERE comp_id = ?
+         ORDER BY registered_pilot_name ASC`
+      )
+        .bind(compId)
+        .all<{
+          comp_pilot_id: number;
+          registered_pilot_name: string;
+          pilot_class: string;
+          team_name: string | null;
+        }>();
+
+      return c.json({
+        pilots: pilots.results.map((p) => ({
+          comp_pilot_id: encodeId(alphabet, p.comp_pilot_id),
+          name: p.registered_pilot_name,
+          pilot_class: p.pilot_class,
+          team_name: p.team_name,
+        })),
       });
     }
   );
