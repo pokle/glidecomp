@@ -23,11 +23,13 @@ export function createAuth(env: AuthEnv) {
     basePath: "/api/auth",
     secret: env.BETTER_AUTH_SECRET,
     trustedOrigins: ["https://*.glidecomp.pages.dev"],
-    plugins: [
-      oAuthProxy({
-        productionURL: "https://glidecomp.com",
-      }),
-    ],
+    plugins: env.BETTER_AUTH_URL.includes("localhost")
+      ? []
+      : [
+          oAuthProxy({
+            productionURL: "https://glidecomp.com",
+          }),
+        ],
     socialProviders: {
       google: {
         clientId: env.GOOGLE_CLIENT_ID,

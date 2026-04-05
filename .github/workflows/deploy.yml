@@ -29,7 +29,7 @@ jobs:
         run: bun run typecheck:all
 
       - name: Run tests
-        run: bun run test
+        run: bun run test:all
 
   deploy:
     name: Deploy
@@ -78,10 +78,34 @@ jobs:
           workingDirectory: web/workers/airscore-api
           command: deploy
 
+      - name: Run Auth API Migrations
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: web/workers/auth-api
+          command: d1 migrations apply taskscore-auth --remote
+
       - name: Deploy Auth API Worker
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: web/workers/auth-api
+          command: deploy
+
+      - name: Run Competition API Migrations
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: web/workers/competition-api
+          command: d1 migrations apply taskscore-auth --remote
+
+      - name: Deploy Competition API Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: web/workers/competition-api
           command: deploy

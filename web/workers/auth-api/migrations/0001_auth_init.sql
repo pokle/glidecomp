@@ -1,5 +1,4 @@
--- Better Auth schema for Cloudflare D1
--- Apply with: wrangler d1 execute taskscore-auth --file=web/workers/auth-api/src/db/schema.sql
+-- Initial auth schema (Better Auth)
 
 CREATE TABLE IF NOT EXISTS "user" (
   "id" TEXT PRIMARY KEY NOT NULL,

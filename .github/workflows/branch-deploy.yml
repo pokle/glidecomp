@@ -27,7 +27,7 @@ jobs:
         run: bun run typecheck:all
 
       - name: Run tests
-        run: bun run test
+        run: bun run test:all
 
   deploy:
     name: Deploy Preview
