@@ -21,6 +21,8 @@ export interface TaskEditorOptions {
   onMapClickModeRequest?: (enabled: boolean) => void;
   /** Hide add-methods that require external context (map, waypoint database) */
   hiddenAddMethods?: Array<'search' | 'map'>;
+  /** Display task in read-only mode (no toolbar, no editing, no drag/delete) */
+  readOnly?: boolean;
 }
 
 export interface TaskEditor {
@@ -84,7 +86,7 @@ const ICON_GLOBE = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="1
 // ---------------------------------------------------------------------------
 
 export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
-  const { container, onTaskChanged, onTurnpointClick, onMapClickModeRequest, hiddenAddMethods = [] } = options;
+  const { container, onTaskChanged, onTurnpointClick, onMapClickModeRequest, hiddenAddMethods = [], readOnly = false } = options;
 
   let currentTask: XCTask | null = null;
   let waypointDatabase: WaypointRecord[] = [];
@@ -215,91 +217,93 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
   function render(): void {
     container.innerHTML = '';
 
-    // Zone A: Toolbar
-    const toolbar = document.createElement('div');
-    toolbar.className = 'flex items-center gap-1 border-b border-border px-2 py-1.5';
-    const hideMap = hiddenAddMethods.includes('map');
-    toolbar.innerHTML = `
-      <button type="button" class="te-add-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors" title="Add waypoint">${ICON_PLUS}</button>
-      ${hideMap ? '' : `<button type="button" class="te-map-pin-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors ${mapClickMode ? 'bg-primary text-primary-foreground' : ''}" title="Click map to add waypoint">${ICON_MAP_PIN}</button>`}
-      <div class="flex-1"></div>
-      <button type="button" class="te-upload-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors text-muted-foreground" title="Open .xctsk file">${ICON_UPLOAD} Open\u2026</button>
-      <button type="button" class="te-xcontest-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors text-muted-foreground ${xcontestInputOpen ? 'bg-muted' : ''}" title="Load XContest task">${ICON_GLOBE} XContest</button>
-      <button type="button" class="te-download-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors text-muted-foreground disabled:opacity-30 disabled:pointer-events-none" title="Save as .xctsk file">${ICON_DOWNLOAD} Save</button>
-      <button type="button" class="te-clear-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors text-muted-foreground hover:text-destructive" title="Clear all waypoints">${ICON_TRASH}</button>
-    `;
-    container.appendChild(toolbar);
+    if (!readOnly) {
+      // Zone A: Toolbar
+      const toolbar = document.createElement('div');
+      toolbar.className = 'flex items-center gap-1 border-b border-border px-2 py-1.5';
+      const hideMap = hiddenAddMethods.includes('map');
+      toolbar.innerHTML = `
+        <button type="button" class="te-add-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors" title="Add waypoint">${ICON_PLUS}</button>
+        ${hideMap ? '' : `<button type="button" class="te-map-pin-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors ${mapClickMode ? 'bg-primary text-primary-foreground' : ''}" title="Click map to add waypoint">${ICON_MAP_PIN}</button>`}
+        <div class="flex-1"></div>
+        <button type="button" class="te-upload-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors text-muted-foreground" title="Open .xctsk file">${ICON_UPLOAD} Open\u2026</button>
+        <button type="button" class="te-xcontest-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors text-muted-foreground ${xcontestInputOpen ? 'bg-muted' : ''}" title="Load XContest task">${ICON_GLOBE} XContest</button>
+        <button type="button" class="te-download-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors text-muted-foreground disabled:opacity-30 disabled:pointer-events-none" title="Save as .xctsk file">${ICON_DOWNLOAD} Save</button>
+        <button type="button" class="te-clear-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors text-muted-foreground hover:text-destructive" title="Clear all waypoints">${ICON_TRASH}</button>
+      `;
+      container.appendChild(toolbar);
 
-    // Wire toolbar buttons
-    toolbar.querySelector('.te-add-btn')!.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleAddMenu();
-    });
-    toolbar.querySelector('.te-map-pin-btn')?.addEventListener('click', () => {
-      toggleMapClickMode();
-    });
-    const downloadBtn = toolbar.querySelector('.te-download-btn') as HTMLButtonElement;
-    if (!currentTask || currentTask.turnpoints.length === 0) {
-      downloadBtn.disabled = true;
-    } else {
-      downloadBtn.addEventListener('click', () => {
-        if (currentTask) downloadTask(currentTask);
+      // Wire toolbar buttons
+      toolbar.querySelector('.te-add-btn')!.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleAddMenu();
       });
-    }
-    toolbar.querySelector('.te-upload-btn')!.addEventListener('click', () => {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.xctsk';
-      input.addEventListener('change', async () => {
-        const file = input.files?.[0];
-        if (!file) return;
-        try {
-          const text = await file.text();
-          const task = parseXCTask(text);
-          currentTask = task;
-          expandedIndex = null;
-          render();
-          emitTaskChanged();
-        } catch (err) {
-          console.error('Failed to parse task file:', err);
+      toolbar.querySelector('.te-map-pin-btn')?.addEventListener('click', () => {
+        toggleMapClickMode();
+      });
+      const downloadBtn = toolbar.querySelector('.te-download-btn') as HTMLButtonElement;
+      if (!currentTask || currentTask.turnpoints.length === 0) {
+        downloadBtn.disabled = true;
+      } else {
+        downloadBtn.addEventListener('click', () => {
+          if (currentTask) downloadTask(currentTask);
+        });
+      }
+      toolbar.querySelector('.te-upload-btn')!.addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.xctsk';
+        input.addEventListener('change', async () => {
+          const file = input.files?.[0];
+          if (!file) return;
+          try {
+            const text = await file.text();
+            const task = parseXCTask(text);
+            currentTask = task;
+            expandedIndex = null;
+            render();
+            emitTaskChanged();
+          } catch (err) {
+            console.error('Failed to parse task file:', err);
+          }
+        });
+        input.click();
+      });
+      toolbar.querySelector('.te-xcontest-btn')!.addEventListener('click', () => {
+        xcontestInputOpen = !xcontestInputOpen;
+        if (xcontestInputOpen) {
+          addMenuOpen = false;
+          searchOpen = false;
+          coordsInputOpen = false;
+        }
+        render();
+        if (xcontestInputOpen) {
+          setTimeout(() => container.querySelector<HTMLInputElement>('.te-xcontest-input')?.focus(), 0);
         }
       });
-      input.click();
-    });
-    toolbar.querySelector('.te-xcontest-btn')!.addEventListener('click', () => {
-      xcontestInputOpen = !xcontestInputOpen;
-      if (xcontestInputOpen) {
-        addMenuOpen = false;
-        searchOpen = false;
-        coordsInputOpen = false;
+      toolbar.querySelector('.te-clear-btn')!.addEventListener('click', (e) => {
+        handleClearAll(e.currentTarget as HTMLElement);
+      });
+
+      // Add menu popover (conditionally shown)
+      if (addMenuOpen) {
+        renderAddMenu();
       }
-      render();
-      if (xcontestInputOpen) {
-        setTimeout(() => container.querySelector<HTMLInputElement>('.te-xcontest-input')?.focus(), 0);
+
+      // Search inline (conditionally shown)
+      if (searchOpen) {
+        renderSearchField();
       }
-    });
-    toolbar.querySelector('.te-clear-btn')!.addEventListener('click', (e) => {
-      handleClearAll(e.currentTarget as HTMLElement);
-    });
 
-    // Add menu popover (conditionally shown)
-    if (addMenuOpen) {
-      renderAddMenu();
-    }
+      // Coordinates input (conditionally shown)
+      if (coordsInputOpen) {
+        renderCoordsInput();
+      }
 
-    // Search inline (conditionally shown)
-    if (searchOpen) {
-      renderSearchField();
-    }
-
-    // Coordinates input (conditionally shown)
-    if (coordsInputOpen) {
-      renderCoordsInput();
-    }
-
-    // XContest input (conditionally shown)
-    if (xcontestInputOpen) {
-      renderXContestInput();
+      // XContest input (conditionally shown)
+      if (xcontestInputOpen) {
+        renderXContestInput();
+      }
     }
 
     // Zone B: Waypoint list
@@ -310,15 +314,23 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
     const tps = currentTask?.turnpoints ?? [];
 
     if (tps.length === 0) {
-      list.innerHTML = `
-        <div class="flex flex-col items-center justify-center p-8 text-center text-muted-foreground gap-3">
-          <div class="text-sm">Add waypoints to build a task</div>
-          <button type="button" class="te-empty-add inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border px-4 py-2 text-sm hover:bg-muted transition-colors">
-            ${ICON_PLUS} Add waypoint
-          </button>
-        </div>
-      `;
-      list.querySelector('.te-empty-add')?.addEventListener('click', () => toggleAddMenu());
+      if (readOnly) {
+        list.innerHTML = `
+          <div class="flex flex-col items-center justify-center p-6 text-center text-muted-foreground">
+            <div class="text-sm">No task defined</div>
+          </div>
+        `;
+      } else {
+        list.innerHTML = `
+          <div class="flex flex-col items-center justify-center p-8 text-center text-muted-foreground gap-3">
+            <div class="text-sm">Add waypoints to build a task</div>
+            <button type="button" class="te-empty-add inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border px-4 py-2 text-sm hover:bg-muted transition-colors">
+              ${ICON_PLUS} Add waypoint
+            </button>
+          </div>
+        `;
+        list.querySelector('.te-empty-add')?.addEventListener('click', () => toggleAddMenu());
+      }
     } else {
       const segmentDistances = getOptimizedSegmentDistances(currentTask!);
 
@@ -359,11 +371,9 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
 
     // Collapsed header
     const header = document.createElement('div');
-    header.className = 'flex items-center gap-2 p-2 cursor-pointer';
+    header.className = `flex items-center gap-2 p-2 ${readOnly ? '' : 'cursor-pointer'}`;
     header.innerHTML = `
-      <div class="te-drag-handle flex items-center justify-center w-6 h-11 cursor-grab shrink-0 touch-none" data-drag-handle>
-        ${ICON_GRIP}
-      </div>
+      ${readOnly ? '' : `<div class="te-drag-handle flex items-center justify-center w-6 h-11 cursor-grab shrink-0 touch-none" data-drag-handle>${ICON_GRIP}</div>`}
       <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium ${typeClass}">
         ${index + 1}
       </div>
@@ -379,38 +389,41 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
           <span title="Cumulative">${cumDist}</span>
         </div>
       </div>
-      <button type="button" class="te-delete-btn shrink-0 p-1 rounded hover:bg-destructive/10 hover:text-destructive transition-colors opacity-0 group-hover:opacity-100" title="Delete waypoint">
-        ${ICON_X}
-      </button>
+      ${readOnly ? '' : `<button type="button" class="te-delete-btn shrink-0 p-1 rounded hover:bg-destructive/10 hover:text-destructive transition-colors opacity-0 group-hover:opacity-100" title="Delete waypoint">${ICON_X}</button>`}
     `;
 
-    // Show delete button on hover (CSS class approach)
-    card.classList.add('group');
-    const deleteBtn = header.querySelector('.te-delete-btn') as HTMLElement;
-    // Always visible on touch devices, hover on desktop
-    deleteBtn.classList.remove('opacity-0', 'group-hover:opacity-100');
-    deleteBtn.classList.add('opacity-40', 'hover:opacity-100');
+    if (!readOnly) {
+      // Show delete button on hover (CSS class approach)
+      card.classList.add('group');
+      const deleteBtn = header.querySelector('.te-delete-btn') as HTMLElement;
+      // Always visible on touch devices, hover on desktop
+      deleteBtn.classList.remove('opacity-0', 'group-hover:opacity-100');
+      deleteBtn.classList.add('opacity-40', 'hover:opacity-100');
+    }
 
     card.appendChild(header);
 
-    // Click handler for card body (not drag handle, not delete)
-    header.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
-      if (target.closest('[data-drag-handle]') || target.closest('.te-delete-btn')) return;
-      expandedIndex = isExpanded ? null : index;
-      render();
-      if (!isExpanded) onTurnpointClick?.(index);
-    });
+    if (!readOnly) {
+      // Click handler for card body (not drag handle, not delete)
+      header.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        if (target.closest('[data-drag-handle]') || target.closest('.te-delete-btn')) return;
+        expandedIndex = isExpanded ? null : index;
+        render();
+        if (!isExpanded) onTurnpointClick?.(index);
+      });
 
-    // Delete handler
-    deleteBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      deleteTurnpoint(index);
-    });
+      // Delete handler
+      const deleteBtn = header.querySelector('.te-delete-btn') as HTMLElement;
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteTurnpoint(index);
+      });
+    }
 
-    // Drag handlers on the grip
-    const dragHandle = header.querySelector('[data-drag-handle]') as HTMLElement;
-    dragHandle.addEventListener('pointerdown', (e) => {
+    // Drag handlers on the grip (element absent in read-only mode)
+    const dragHandle = header.querySelector('[data-drag-handle]') as HTMLElement | null;
+    dragHandle?.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       dragIndex = index;
       dragStartY = e.clientY;
@@ -466,8 +479,8 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
       document.addEventListener('pointerup', onUp);
     });
 
-    // Expanded editing section
-    if (isExpanded) {
+    // Expanded editing section (skip in read-only mode)
+    if (isExpanded && !readOnly) {
       const expanded = document.createElement('div');
       expanded.className = 'border-t border-border p-2 space-y-2';
       expanded.innerHTML = `
