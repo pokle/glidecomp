@@ -397,7 +397,7 @@ async function setupTrackSection(
   renderTrackList(tracks, compId, taskId, isAdmin, isClosed);
 
   if (isClosed) {
-    document.getElementById("task-closed-badge")!.classList.remove("hidden");
+    document.getElementById("task-closed-badge")!.style.display = "inline-flex";
   }
 
   // Show upload buttons for authenticated users (unless comp is closed)
