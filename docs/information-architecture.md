@@ -28,45 +28,52 @@ Date: 2026-04-05
 ### Site Map
 
 ```
-/                               Landing page (public, marketing)
+/                                   Landing page (public, marketing)
 │
-├── /fly                        Personal flying hub (auth required)
-│   ├── Tracks list             Upload & manage IGC files
-│   ├── Tasks list              Upload & manage XCTSK files
-│   └── /fly/analysis?...       Flight analysis (map + sidebar)
-│                               Opened from a track/task click
+├── /u/{username}/                  Personal flying hub (auth required)
+│   ├── Tracks list                 Upload & manage IGC files
+│   ├── Tasks list                  Upload & manage XCTSK files
+│   └── /u/{username}/analysis?...  Flight analysis (map + sidebar)
+│                                   Opened from a track/task click
 │
-├── /comp                       Competitions hub (public browsable, auth to participate)
-│   ├── Competition list        Browse & create competitions
-│   ├── /comp/{id}              Competition detail
-│   │   ├── Overview tab        Tasks list, pilots, standings summary
-│   │   ├── Scores tab          Full competition standings (public)
-│   │   └── Settings tab        Admin-only: GAP params, admins, close date
+├── /comp                           Competitions hub (public browsable, auth to participate)
+│   ├── Competition list            Browse & create competitions
+│   ├── /comp/{id}                  Competition detail
+│   │   ├── Overview tab            Tasks list, pilots, standings summary
+│   │   ├── Scores tab              Full competition standings (public)
+│   │   └── Settings tab            Admin-only: GAP params, admins, close date
 │   │
-│   └── /comp/{id}/task/{id}    Task detail
-│       ├── Overview section    Task definition, track list, upload
-│       ├── Scores section      Task scores (public, computed on-demand)
-│       └── Task editor         Admin-only: define/edit waypoints
+│   └── /comp/{id}/task/{id}        Task detail
+│       ├── Overview section        Task definition, track list, upload
+│       ├── Scores section          Task scores (public, computed on-demand)
+│       └── Task editor             Admin-only: define/edit waypoints
 │
-├── /profile                    Pilot profile (auth required)
-│                               Name, CIVL ID, sporting body IDs, phone, glider
+├── /u/{username}/profile           Pilot profile (auth required)
+│                                   Name, CIVL ID, sporting body IDs, phone, glider
 │
-├── /scores?comp={id}           Public scores deep-link (no auth)
+├── /scores?comp={id}               Public scores deep-link (no auth)
 │
-├── /about                      About page (public)
-├── /legal                      Legal page (public)
-└── /scoring                    GAP scoring docs (public)
+├── /about                          About page (public)
+├── /legal                          Legal page (public)
+└── /scoring                        GAP scoring docs (public)
 ```
+
+The username-scoped URLs (`/u/{username}/`) serve multiple purposes:
+- **Shareability**: `/u/pokle/` is a clean, meaningful link to share
+- **Wayfinding**: the URL itself tells the user where they are in the IA
+- **Global uniqueness**: every user has their own namespace
+- `/u/me/` continues to redirect to `/u/{username}/` for convenience
 
 ### Key Changes from Current
 
 | Current | Proposed | Rationale |
 |---------|----------|-----------|
-| `/u/{username}/` (dashboard) | `/fly` | Simpler URL. Username in URL adds no value for a personal page. |
+| `/u/{username}/` (dashboard with mixed concerns) | `/u/{username}/` (personal flights only) | Same URL, but strip out competition entry points. Dashboard becomes purely about personal flights. |
 | "Competitions" button in dashboard header | Top-level nav item always visible | Competitions deserve equal billing, not a button buried in one page's header. |
-| `/analysis.html` as standalone page | `/fly/analysis?...` | Analysis is always opened *in context* of a specific flight or task. Not a page you navigate to cold. |
+| `/analysis.html` as standalone page | `/u/{username}/analysis?...` | Analysis is opened *in context* of a specific flight or task, scoped to the user's namespace. |
 | 8 analysis tabs (flat) | Contextual tab sets (see below) | Personal flight analysis doesn't need Comp Score or GAP Config. Competition view doesn't need personal Glides/Climbs/Sinks detail. |
 | Sample competition at dashboard bottom | Featured on `/comp` list + onboarding | Discovery belongs where users browse competitions. |
+| `/profile` (new) | `/u/{username}/profile` | Pilot profile lives under the user's namespace where it logically belongs. |
 
 ---
 
@@ -80,8 +87,8 @@ Date: 2026-04-05
 └─────────────────────────────────────────────────────────┘
 ```
 
-- **Logo**: Always links to `/` (landing) or `/fly` (if logged in).
-- **My Flights**: Links to `/fly`. Active state when on `/fly/*`.
+- **Logo**: Always links to `/` (landing) or `/u/{username}/` (if logged in).
+- **My Flights**: Links to `/u/{username}/`. Active state when on `/fly/*`.
 - **Competitions**: Links to `/comp`. Active state when on `/comp/*`.
 - **User Menu** (dropdown): Profile, Sign Out. Collapsed to avatar on mobile.
 - **Unauthenticated**: Show "Sign In" instead of User Menu. Both nav items still visible (competitions are publicly browsable).
@@ -104,16 +111,16 @@ Three bottom tabs. Simple, thumb-friendly.
 
 ## Page-by-Page Detail
 
-### `/fly` — My Flights
+### `/u/{username}/` — My Flights
 
-The personal flying hub. Replaces the current dashboard.
+The personal flying hub. Same URL as today, but with a clearer, narrower purpose.
 
 **Layout:**
 - Page title: "My Flights"
 - Two-tab content area: **Tracks** | **Tasks** (same as current)
 - Each tab has: upload zone + file list
-- Clicking a track → opens `/fly/analysis?track={id}`
-- Clicking a task → opens `/fly/analysis?task={id}`
+- Clicking a track → opens `/u/{username}/analysis?track={id}`
+- Clicking a task → opens `/u/{username}/analysis?task={id}`
 
 **What's removed:**
 - "Competitions" button (now in global nav)
@@ -123,13 +130,13 @@ The personal flying hub. Replaces the current dashboard.
 **What's added:**
 - Nothing. This page gets *simpler*.
 
-### `/fly/analysis` — Flight Analysis
+### `/u/{username}/analysis` — Flight Analysis
 
-The map-based analysis tool, opened in context.
+The map-based analysis tool, opened in context under the user's namespace.
 
 **Entry points:**
-- Click a track from `/fly` → `?track={id}`
-- Click a task from `/fly` → `?task={id}`
+- Click a track from `/u/{username}/` → `?track={id}`
+- Click a task from `/u/{username}/` → `?task={id}`
 - Drag-and-drop a file onto the page (still supported for power users)
 - Command menu (Cmd+K) for advanced file operations
 
@@ -203,7 +210,9 @@ This keeps the analysis page focused on *flight analysis*, which is its core str
 
 **"View on Map" action**: A button that opens the analysis view with all tracks loaded. This is how the map integrates with competitions — as an optional deep-dive, not the primary interface.
 
-### `/profile` — Pilot Profile
+### `/u/{username}/profile` — Pilot Profile
+
+Scoped under the user's namespace for consistency.
 
 Simple form page:
 - Display name
@@ -221,8 +230,8 @@ The analysis sidebar adapts based on how it was opened:
 
 | Context | Tabs Shown |
 |---------|-----------|
-| Personal track from `/fly` | Task, Score, Events, Glides, Climbs, Sinks |
-| Personal task from `/fly` | Task (editable) |
+| Personal track from `/u/{username}/` | Task, Score, Events, Glides, Climbs, Sinks |
+| Personal task from `/u/{username}/` | Task (editable) |
 | Competition task ("View on Map") | Task, Score, Events, Comp Score |
 | Drag-and-drop (no context) | All tabs (legacy power-user mode) |
 
@@ -235,13 +244,14 @@ This reduces cognitive load — users only see tabs relevant to their current ta
 | URL | Page | Auth |
 |-----|------|------|
 | `/` | Landing / marketing | Public |
-| `/fly` | Personal flights hub | Required |
-| `/fly/analysis?...` | Flight analysis (map) | Required |
+| `/u/{username}/` | Personal flights hub | Required |
+| `/u/{username}/analysis?...` | Flight analysis (map) | Required |
+| `/u/{username}/profile` | Pilot profile | Required |
+| `/u/me/` | Redirect to `/u/{username}/` | Required |
 | `/comp` | Competitions list | Public (create requires auth) |
 | `/comp/{id}` | Competition detail | Public (non-test) |
 | `/comp/{id}/task/{id}` | Task detail | Public (non-test) |
 | `/scores?comp={id}` | Public scores deep-link | Public |
-| `/profile` | Pilot profile | Required |
 | `/about` | About | Public |
 | `/legal` | Legal | Public |
 | `/scoring` | GAP docs | Public |
@@ -253,12 +263,12 @@ This reduces cognitive load — users only see tabs relevant to their current ta
 This IA can be implemented incrementally:
 
 1. **Add global nav bar** to all authenticated pages (My Flights, Competitions, User Menu). This alone fixes the biggest confusion.
-2. **Rename dashboard route** from `/u/{username}/` to `/fly`. Keep old URL as redirect.
-3. **Remove competition-related UI from dashboard** (sample comp link, competitions button). Dashboard becomes purely about personal flights.
-4. **Add tabs to competition detail** (Overview, Scores, Settings) instead of the current single-page layout.
-5. **Move "Comp Score" and "GAP Config"** out of the analysis sidebar into the competition pages.
-6. **Add "View on Map" button** to task detail page as the bridge to analysis.
-7. **Add `/profile` page** for pilot profile management.
+2. **Remove competition-related UI from dashboard** (sample comp link, competitions button). Dashboard becomes purely about personal flights.
+3. **Add tabs to competition detail** (Overview, Scores, Settings) instead of the current single-page layout.
+4. **Move "Comp Score" and "GAP Config"** out of the analysis sidebar into the competition pages.
+5. **Add "View on Map" button** to task detail page as the bridge to analysis.
+6. **Route analysis under `/u/{username}/analysis`** instead of standalone `/analysis.html`.
+7. **Add `/u/{username}/profile` page** for pilot profile management.
 
 Steps 1-3 can ship together as one release. Steps 4-7 can follow as competition features mature.
 
@@ -266,10 +276,10 @@ Steps 1-3 can ship together as one release. Steps 4-7 can follow as competition 
 
 ## Open Questions
 
-1. **Should `/fly/analysis` be a separate page or a modal/overlay from `/fly`?** A separate page gives more screen real estate for the map. A modal keeps context. Recommend: separate page (current behavior works well).
+1. **Should `/u/{username}/analysis` be a separate page or a modal/overlay from `/u/{username}/`?** A separate page gives more screen real estate for the map. A modal keeps context. Recommend: separate page (current behavior works well).
 
 2. **Should competition scores be a standalone page (`/scores`) or just a tab on the comp detail?** Recommend both — the tab for logged-in users navigating the comp, and `/scores?comp={id}` as a shareable public link that renders the same content.
 
 3. **Should the command menu (Cmd+K) be available globally or only on the analysis page?** It could be useful globally for quick navigation, but its current commands are analysis-specific. Recommend: keep it analysis-only for now, consider global command palette later.
 
-4. **Do we need a `/comp/{id}/task/{id}/analysis` route or is query-param-based `/fly/analysis?compTask={id}` sufficient?** Query params are simpler and avoid duplicating the analysis page. Recommend query params.
+4. **Do we need a `/comp/{id}/task/{id}/analysis` route or is query-param-based `/u/{username}/analysis?compTask={id}` sufficient?** Query params are simpler and avoid duplicating the analysis page. Recommend query params.
