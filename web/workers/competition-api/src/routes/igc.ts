@@ -93,11 +93,17 @@ export const igcRoutes = new Hono<HonoEnv>()
         return c.json({ error: "Competition not found" }, 404);
       }
 
-      if (comp.close_date && new Date() > new Date(comp.close_date)) {
-        return c.json(
-          { error: "Competition is closed for track submissions" },
-          400
-        );
+      if (comp.close_date) {
+        // Treat date-only close_date (e.g. "2026-12-31") as end-of-day UTC
+        const closeDateTime = comp.close_date.includes("T")
+          ? comp.close_date
+          : comp.close_date + "T23:59:59Z";
+        if (new Date() > new Date(closeDateTime)) {
+          return c.json(
+            { error: "Competition is closed for track submissions" },
+            400
+          );
+        }
       }
 
       // Verify task exists and belongs to comp

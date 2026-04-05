@@ -385,7 +385,12 @@ async function setupTrackSection(
   isAdmin: boolean,
   closeDate: string | null
 ) {
-  const isClosed = closeDate != null && new Date() > new Date(closeDate);
+  // Treat close_date as end-of-day local time (a date like "2026-12-31"
+  // parsed by new Date() is midnight UTC, which is already past in UTC+ timezones)
+  const isClosed =
+    closeDate != null &&
+    closeDate !== "" &&
+    new Date() > new Date(closeDate + "T23:59:59");
 
   // Load tracks
   const tracks = await loadTracks(compId, taskId);
