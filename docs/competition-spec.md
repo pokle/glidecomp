@@ -307,13 +307,13 @@ Staged iterative plan. Each iteration delivers a working, testable vertical slic
 
 ## Iteration 3: Task CRUD API + Task Management UI
 
-- [ ] Implement API routes: `POST .../task`, `GET .../task/:task_id`, `PATCH .../task/:task_id`, `DELETE .../task/:task_id`
-- [ ] Implement `task_class` management (which pilot classes a task scores)
-- [ ] Flesh out competition detail page (`/comp/{comp_id}`) with task list, task creation, and comp settings editing
-- [ ] Build task creation form (name, date, pilot classes)
-- [ ] Implement class coverage warnings display (API already computes them in GET /api/comp/:comp_id)
-- [ ] Add Zod validators and 50 tasks-per-comp limit
-- [ ] Write vitest integration tests for task CRUD routes
+- [x] Implement API routes: `POST .../task`, `GET .../task/:task_id`, `PATCH .../task/:task_id`, `DELETE .../task/:task_id`
+- [x] Implement `task_class` management (which pilot classes a task scores)
+- [x] Flesh out competition detail page (`/comp/{comp_id}`) with task list, task creation, and comp settings editing
+- [x] Build task creation form (name, date, pilot classes)
+- [x] Implement class coverage warnings display (API already computes them in GET /api/comp/:comp_id)
+- [x] Add Zod validators and 50 tasks-per-comp limit
+- [x] Write vitest integration tests for task CRUD routes
 
 ## Iteration 4: Task Editor Integration
 

@@ -84,7 +84,7 @@ export default defineConfig({
             req.url = '/dashboard.html';
           } else if (req.url === '/comp' || req.url === '/comp/') {
             req.url = '/comp.html';
-          } else if (req.url?.match(/^\/comp\/[a-z]+\/?$/) && !req.url?.includes('.')) {
+          } else if (req.url?.match(/^\/comp\/[a-z]+(\/|\/task\/[a-z]+\/?)?$/) && !req.url?.includes('.')) {
             req.url = '/comp-detail.html';
           }
           next();

@@ -45,3 +45,23 @@ export const updateCompSchema = z.object({
   gap_params: gapParamsSchema.nullable().optional(),
   admin_emails: z.array(z.string().email().max(MAX_TEXT)).min(1).optional(),
 });
+
+// ── Task validators ──
+
+const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
+
+export const createTaskSchema = z.object({
+  name: z.string().min(1).max(MAX_TEXT),
+  task_date: z.string().regex(isoDateRegex, "Must be ISO date (YYYY-MM-DD)"),
+  pilot_classes: pilotClassesArray,
+});
+
+export const updateTaskSchema = z.object({
+  name: z.string().min(1).max(MAX_TEXT).optional(),
+  task_date: z
+    .string()
+    .regex(isoDateRegex, "Must be ISO date (YYYY-MM-DD)")
+    .optional(),
+  pilot_classes: pilotClassesArray.optional(),
+  xctsk: z.record(z.unknown()).nullable().optional(),
+});
