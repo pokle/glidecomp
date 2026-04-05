@@ -1164,6 +1164,25 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
       dialog.close();
     });
 
+  document
+    .getElementById("comp-delete-btn")!
+    .addEventListener("click", async () => {
+      if (!confirm("Delete this competition and all its tasks and tracks? This cannot be undone.")) return;
+      try {
+        const res = await api.api.comp[":comp_id"].$delete({
+          param: { comp_id: compId },
+        });
+        if (!res.ok) {
+          const err = (await res.json()) as { error?: string };
+          alert(err.error || "Failed to delete competition");
+          return;
+        }
+        window.location.href = "/comp";
+      } catch {
+        alert("Network error. Please try again.");
+      }
+    });
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     submitBtn.disabled = true;

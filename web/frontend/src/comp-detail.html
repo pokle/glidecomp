@@ -96,25 +96,27 @@
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           <a id="task-back-link" href="/comp" class="hover:text-foreground transition-colors"><span id="task-back-comp-name">Competition</span></a>
         </nav>
-        <div class="mb-6">
-          <h1 id="task-title" class="text-2xl font-bold tracking-tight"></h1>
-          <div class="flex items-center gap-2 mt-2">
-            <span id="task-date-badge" class="text-sm text-muted-foreground"></span>
-            <span id="task-xctsk-badge"></span>
+        <div class="flex items-start justify-between mb-6">
+          <div>
+            <h1 id="task-title" class="text-2xl font-bold tracking-tight"></h1>
+            <div class="flex items-center gap-2 mt-2">
+              <span id="task-date-badge" class="text-sm text-muted-foreground"></span>
+              <span id="task-xctsk-badge"></span>
+            </div>
+            <div class="flex flex-wrap gap-1.5 mt-2" id="task-class-badges"></div>
           </div>
-          <div class="flex flex-wrap gap-1.5 mt-2" id="task-class-badges"></div>
-        </div>
-
-        <!-- Task admin actions -->
-        <div id="task-admin-actions" class="hidden mb-6 flex items-center gap-2">
-          <button id="task-edit-btn" class="btn btn-secondary btn-sm text-xs">Edit Task</button>
-          <button id="task-delete-btn" class="btn btn-ghost btn-sm text-xs text-destructive">Delete Task</button>
+          <div id="task-admin-actions" class="hidden flex items-center gap-2">
+            <button id="task-edit-btn" class="btn btn-ghost btn-sm text-xs">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              Settings
+            </button>
+          </div>
         </div>
 
         <!-- Task editor section (admin only) -->
         <section id="task-editor-section" class="hidden mb-8">
           <div class="flex items-center justify-between mb-3">
-            <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider">Task Definition</h2>
+            <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider">Turnpoints</h2>
             <span id="task-save-status" class="text-xs text-muted-foreground/60"></span>
           </div>
           <div id="task-editor-container" class="rounded-lg border border-border/50 p-4"></div>
@@ -195,7 +197,7 @@
     class="fixed inset-0 m-auto h-fit rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50"
     onclick="if (event.target === this) this.close()">
     <form id="edit-task-form" class="w-96 p-6">
-      <h2 class="text-lg font-semibold mb-4">Edit Task</h2>
+      <h2 class="text-lg font-semibold mb-4">Task Settings</h2>
       <div class="space-y-4">
         <div>
           <label for="edit-task-name" class="text-sm font-medium block mb-1">Name</label>
@@ -210,9 +212,12 @@
           <div id="edit-task-classes-checkboxes" class="space-y-2"></div>
         </div>
       </div>
-      <div class="flex justify-end gap-2 mt-6">
-        <button type="button" id="edit-task-cancel-btn" class="btn btn-secondary">Cancel</button>
-        <button type="submit" id="edit-task-submit-btn" class="btn btn-primary">Save</button>
+      <div class="flex items-center justify-between mt-6">
+        <button type="button" id="task-delete-btn" class="btn btn-ghost btn-sm text-xs text-destructive">Delete task</button>
+        <div class="flex gap-2">
+          <button type="button" id="edit-task-cancel-btn" class="btn btn-secondary">Cancel</button>
+          <button type="submit" id="edit-task-submit-btn" class="btn btn-primary">Save</button>
+        </div>
       </div>
     </form>
   </dialog>
@@ -266,9 +271,12 @@
           <p class="text-xs text-muted-foreground mt-1">Comma-separated. At least one required.</p>
         </div>
       </div>
-      <div class="flex justify-end gap-2 mt-6">
-        <button type="button" id="settings-cancel-btn" class="btn btn-secondary">Cancel</button>
-        <button type="submit" id="settings-submit-btn" class="btn btn-primary">Save</button>
+      <div class="flex items-center justify-between mt-6">
+        <button type="button" id="comp-delete-btn" class="btn btn-ghost btn-sm text-xs text-destructive">Delete competition</button>
+        <div class="flex gap-2">
+          <button type="button" id="settings-cancel-btn" class="btn btn-secondary">Cancel</button>
+          <button type="submit" id="settings-submit-btn" class="btn btn-primary">Save</button>
+        </div>
       </div>
     </form>
   </dialog>
