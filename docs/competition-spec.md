@@ -3,6 +3,8 @@
 
 This is a specification for a competition centric user interface for glidecomp. The existing UX flow at analysis.html is oriented primarily around the map, with information presented on either the map or the sidebar next to the map. This specification is for a map-less user interface. It focuses on setting up competitions, scoring them, and viewing results. The spec also covers the supporting backend cloudflare worker services, databases and object storage required to drive the front end.
 
+This spec is based on the requirements in [competition-requirements.md](competition-requirements.md).
+
 Version: 3.0
 Date: 2026-04-03
 
