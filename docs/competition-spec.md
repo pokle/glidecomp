@@ -294,11 +294,13 @@ Staged iterative plan. Each iteration delivers a working, testable vertical slic
 
 ## Iteration 2: Comp Dashboard UI (`/comp`)
 
+- [ ] Re-enable competition-api service binding in wrangler.toml and add Pages Function proxy
 - [ ] Create `comp.html` page and `comp.ts` entry point
+- [ ] Add `/comp/*` rewrite in Vite config and `_redirects`
 - [ ] Set up Hono RPC client (`hc<AppType>()`) with exported `AppType` from the worker
 - [ ] Build competition list view (admin comps + recent public comps)
-- [ ] Build "Create Competition" form (name, category HG/PG, pilot classes, GAP params)
-- [ ] Implement navigation from dashboard to `/comp/{comp_id}`
+- [ ] Build "Create Competition" form (name, category HG/PG, pilot classes). GAP params use sensible defaults and are editable later via comp detail page.
+- [ ] Implement navigation from list to `/comp/{comp_id}` (stub detail page)
 - [ ] Use Basecoat components for forms, tables, buttons
 
 ## Iteration 3: Task CRUD API + Task Management UI
