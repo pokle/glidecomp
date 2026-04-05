@@ -74,26 +74,32 @@ function escapeHtml(str: string): string {
 async function init() {
   const user = await getCurrentUser();
 
-  if (!user) {
-    signInWithGoogle();
-    return;
-  }
-
-  if (!user.username) {
-    window.location.href = "/onboarding.html";
-    return;
-  }
-
-  // Show page
+  // Show page (works for both authed and anonymous users)
   const page = document.getElementById("comp-page")!;
   page.classList.remove("hidden");
 
-  // Header
-  document.getElementById("user-name")!.textContent = user.name;
-  document.getElementById("signout-btn")?.addEventListener("click", async () => {
-    await signOut();
-    window.location.href = "/";
-  });
+  // Header — show user info or sign-in link
+  const userNameEl = document.getElementById("user-name")!;
+  const signoutBtn = document.getElementById("signout-btn")!;
+  const createBtn = document.getElementById("create-comp-btn")!;
+
+  if (user) {
+    userNameEl.textContent = user.name;
+    signoutBtn.addEventListener("click", async () => {
+      await signOut();
+      window.location.href = "/";
+    });
+  } else {
+    userNameEl.textContent = "";
+    signoutBtn.textContent = "Sign in";
+    signoutBtn.addEventListener("click", () => signInWithGoogle());
+    createBtn.classList.add("hidden");
+  }
+
+  // Hide admin section if not logged in
+  if (!user) {
+    document.getElementById("admin-section")!.classList.add("hidden");
+  }
 
   // DOM refs
   const adminCompsEl = document.getElementById("admin-comps")!;
