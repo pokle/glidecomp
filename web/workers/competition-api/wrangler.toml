@@ -7,6 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 binding = "DB"
 database_name = "taskscore-auth"
 database_id = "aa8b644f-368e-493a-8b49-1af0d756aff4"
+migrations_dir = "migrations"
 
 [[services]]
 binding = "AUTH_API"
