@@ -3,7 +3,7 @@ import { describe, expect, test, beforeEach } from "vitest";
 import { request, authRequest, createComp, clearCompData } from "./helpers";
 import { encodeId } from "../src/sqids";
 
-const ALPHABET = "abcdefghijklmnopqrstuvwxyz";
+const ALPHABET = env.SQIDS_ALPHABET;
 
 beforeEach(async () => {
   await clearCompData();
