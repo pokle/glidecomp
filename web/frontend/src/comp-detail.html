@@ -111,6 +111,15 @@
           <button id="task-delete-btn" class="btn btn-ghost btn-sm text-xs text-destructive">Delete Task</button>
         </div>
 
+        <!-- Task editor section (admin only) -->
+        <section id="task-editor-section" class="hidden mb-8">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider">Task Definition</h2>
+            <span id="task-save-status" class="text-xs text-muted-foreground/60"></span>
+          </div>
+          <div id="task-editor-container" class="rounded-lg border border-border/50 p-4"></div>
+        </section>
+
         <!-- Tracks placeholder -->
         <section class="mb-8">
           <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">Tracks</h2>

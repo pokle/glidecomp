@@ -1,5 +1,6 @@
 import { getCurrentUser } from "./auth/client";
 import { api } from "./comp/api";
+import type { XCTask } from "@glidecomp/engine";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -177,6 +178,7 @@ async function initTaskDetail(compId: string, taskId: string) {
     document.getElementById("task-admin-actions")!.classList.remove("hidden");
     setupEditTaskDialog(compId, taskId, task, comp.pilot_classes);
     setupDeleteTask(compId, taskId);
+    setupTaskEditor(compId, taskId, task.xctsk as XCTask | null);
   }
 
   // Show task detail, hide loading
@@ -285,6 +287,67 @@ function setupDeleteTask(compId: string, taskId: string) {
       alert("Network error. Please try again.");
     }
   });
+}
+
+// ── Task editor integration ─────────────────────────────────────────────────
+
+async function setupTaskEditor(
+  compId: string,
+  taskId: string,
+  xctsk: XCTask | null
+) {
+  const section = document.getElementById("task-editor-section")!;
+  const container = document.getElementById("task-editor-container")!;
+  const saveStatus = document.getElementById("task-save-status")!;
+  section.classList.remove("hidden");
+
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let saving = false;
+
+  function setSaveStatus(text: string) {
+    saveStatus.textContent = text;
+  }
+
+  async function saveXctsk(task: XCTask) {
+    if (saving) return;
+    saving = true;
+    setSaveStatus("Saving...");
+
+    try {
+      const res = await api.api.comp[":comp_id"].task[":task_id"].$patch({
+        param: { comp_id: compId, task_id: taskId },
+        json: { xctsk: task as unknown as Record<string, unknown> },
+      });
+
+      if (!res.ok) {
+        setSaveStatus("Save failed");
+      } else {
+        setSaveStatus("Saved");
+        // Update the xctsk badge to reflect task is now defined
+        const badge = document.getElementById("task-xctsk-badge")!;
+        badge.innerHTML = `<span class="inline-flex items-center rounded-md bg-green-500/10 text-green-500 px-1.5 py-0.5 text-xs font-medium">Task defined</span>`;
+      }
+    } catch {
+      setSaveStatus("Save failed");
+    } finally {
+      saving = false;
+    }
+  }
+
+  const { createTaskEditor } = await import("./analysis/task-editor");
+
+  const editor = createTaskEditor({
+    container,
+    onTaskChanged: (task: XCTask) => {
+      setSaveStatus("Unsaved changes");
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => saveXctsk(task), 1000);
+    },
+    hiddenAddMethods: ['search', 'map'],
+  });
+
+  // Load existing xctsk into the editor (null shows empty editor ready for use)
+  editor.setTask(xctsk);
 }
 
 // ── Comp detail view ─────────────────────────────────────────────────────────

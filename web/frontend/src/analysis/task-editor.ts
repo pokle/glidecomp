@@ -6,8 +6,9 @@
  */
 
 import type { XCTask, Turnpoint, TurnpointType, WaypointRecord } from '@glidecomp/engine';
-import { getOptimizedSegmentDistances, toXctskJSON } from '@glidecomp/engine';
+import { getOptimizedSegmentDistances, toXctskJSON, parseXCTask } from '@glidecomp/engine';
 import { formatDistance, formatAltitude } from './units-browser';
+import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -18,6 +19,8 @@ export interface TaskEditorOptions {
   onTaskChanged: (task: XCTask) => void;
   onTurnpointClick?: (turnpointIndex: number) => void;
   onMapClickModeRequest?: (enabled: boolean) => void;
+  /** Hide add-methods that require external context (map, waypoint database) */
+  hiddenAddMethods?: Array<'search' | 'map'>;
 }
 
 export interface TaskEditor {
@@ -68,16 +71,20 @@ const ICON_X = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" v
 
 const ICON_DOWNLOAD = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>`;
 
+const ICON_UPLOAD = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>`;
+
 const ICON_SEARCH = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`;
 
 const ICON_COORDS = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
+
+const ICON_GLOBE = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>`;
 
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
 
 export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
-  const { container, onTaskChanged, onTurnpointClick, onMapClickModeRequest } = options;
+  const { container, onTaskChanged, onTurnpointClick, onMapClickModeRequest, hiddenAddMethods = [] } = options;
 
   let currentTask: XCTask | null = null;
   let waypointDatabase: WaypointRecord[] = [];
@@ -86,6 +93,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
   let addMenuOpen = false;
   let searchOpen = false;
   let coordsInputOpen = false;
+  let xcontestInputOpen = false;
   let wpCounter = 0;
 
   // Drag state
@@ -210,11 +218,14 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
     // Zone A: Toolbar
     const toolbar = document.createElement('div');
     toolbar.className = 'flex items-center gap-1 border-b border-border px-2 py-1.5';
+    const hideMap = hiddenAddMethods.includes('map');
     toolbar.innerHTML = `
       <button type="button" class="te-add-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors" title="Add waypoint">${ICON_PLUS}</button>
-      <button type="button" class="te-map-pin-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors ${mapClickMode ? 'bg-primary text-primary-foreground' : ''}" title="Click map to add waypoint">${ICON_MAP_PIN}</button>
+      ${hideMap ? '' : `<button type="button" class="te-map-pin-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors ${mapClickMode ? 'bg-primary text-primary-foreground' : ''}" title="Click map to add waypoint">${ICON_MAP_PIN}</button>`}
       <div class="flex-1"></div>
-      <button type="button" class="te-download-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors text-muted-foreground disabled:opacity-30 disabled:pointer-events-none" title="Download task (.xctsk)">${ICON_DOWNLOAD}</button>
+      <button type="button" class="te-upload-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors text-muted-foreground" title="Open .xctsk file">${ICON_UPLOAD} Open\u2026</button>
+      <button type="button" class="te-xcontest-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors text-muted-foreground ${xcontestInputOpen ? 'bg-muted' : ''}" title="Load XContest task">${ICON_GLOBE} XContest</button>
+      <button type="button" class="te-download-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors text-muted-foreground disabled:opacity-30 disabled:pointer-events-none" title="Save as .xctsk file">${ICON_DOWNLOAD} Save</button>
       <button type="button" class="te-clear-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors text-muted-foreground hover:text-destructive" title="Clear all waypoints">${ICON_TRASH}</button>
     `;
     container.appendChild(toolbar);
@@ -224,7 +235,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
       e.stopPropagation();
       toggleAddMenu();
     });
-    toolbar.querySelector('.te-map-pin-btn')!.addEventListener('click', () => {
+    toolbar.querySelector('.te-map-pin-btn')?.addEventListener('click', () => {
       toggleMapClickMode();
     });
     const downloadBtn = toolbar.querySelector('.te-download-btn') as HTMLButtonElement;
@@ -235,6 +246,38 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
         if (currentTask) downloadTask(currentTask);
       });
     }
+    toolbar.querySelector('.te-upload-btn')!.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.xctsk';
+      input.addEventListener('change', async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          const task = parseXCTask(text);
+          currentTask = task;
+          expandedIndex = null;
+          render();
+          emitTaskChanged();
+        } catch (err) {
+          console.error('Failed to parse task file:', err);
+        }
+      });
+      input.click();
+    });
+    toolbar.querySelector('.te-xcontest-btn')!.addEventListener('click', () => {
+      xcontestInputOpen = !xcontestInputOpen;
+      if (xcontestInputOpen) {
+        addMenuOpen = false;
+        searchOpen = false;
+        coordsInputOpen = false;
+      }
+      render();
+      if (xcontestInputOpen) {
+        setTimeout(() => container.querySelector<HTMLInputElement>('.te-xcontest-input')?.focus(), 0);
+      }
+    });
     toolbar.querySelector('.te-clear-btn')!.addEventListener('click', (e) => {
       handleClearAll(e.currentTarget as HTMLElement);
     });
@@ -252,6 +295,11 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
     // Coordinates input (conditionally shown)
     if (coordsInputOpen) {
       renderCoordsInput();
+    }
+
+    // XContest input (conditionally shown)
+    if (xcontestInputOpen) {
+      renderXContestInput();
     }
 
     // Zone B: Waypoint list
@@ -472,10 +520,24 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
   // ---------------------------------------------------------------------------
 
   function toggleAddMenu(): void {
+    const visibleMethods = (['search', 'map'] as const).filter(m => !hiddenAddMethods.includes(m));
+    // If coords is the only add method, skip the menu and open coords input directly
+    if (visibleMethods.length === 0) {
+      coordsInputOpen = !coordsInputOpen;
+      addMenuOpen = false;
+      searchOpen = false;
+      xcontestInputOpen = false;
+      render();
+      if (coordsInputOpen) {
+        setTimeout(() => container.querySelector<HTMLInputElement>('.te-coords-input')?.focus(), 0);
+      }
+      return;
+    }
     addMenuOpen = !addMenuOpen;
     if (addMenuOpen) {
       searchOpen = false;
       coordsInputOpen = false;
+      xcontestInputOpen = false;
     }
     render();
   }
@@ -484,11 +546,12 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
     const menu = document.createElement('div');
     menu.className = 'border-b border-border bg-muted/30 p-2 space-y-1';
 
-    const items = [
-      { icon: ICON_SEARCH, label: 'Search database', action: 'search' },
-      { icon: ICON_COORDS, label: 'Paste coordinates', action: 'coords' },
-      { icon: ICON_MAP_PIN, label: 'Click on map', action: 'map' },
+    const allItems = [
+      { icon: ICON_SEARCH, label: 'Search database', action: 'search' as const },
+      { icon: ICON_COORDS, label: 'Paste coordinates', action: 'coords' as const },
+      { icon: ICON_MAP_PIN, label: 'Click on map', action: 'map' as const },
     ];
+    const items = allItems.filter(i => i.action === 'coords' || !hiddenAddMethods.includes(i.action));
 
     for (const item of items) {
       const btn = document.createElement('button');
@@ -638,6 +701,62 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
   }
 
   // ---------------------------------------------------------------------------
+  // XContest task code input
+  // ---------------------------------------------------------------------------
+
+  function renderXContestInput(): void {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'border-b border-border bg-muted/20 p-2';
+    wrapper.innerHTML = `
+      <div class="relative">
+        <input type="text" class="te-xcontest-input w-full rounded border border-border bg-background px-2 py-1.5 text-sm" placeholder="Enter task code (e.g. buje)" autocomplete="off">
+        <button type="button" class="te-xcontest-close absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted text-muted-foreground">${ICON_X}</button>
+      </div>
+      <div class="te-xcontest-status text-[10px] text-muted-foreground mt-1">Paste an XContest task code and press Enter</div>
+    `;
+
+    const insertRef = container.querySelector('.te-list') || container.children[1];
+    container.insertBefore(wrapper, insertRef);
+
+    const input = wrapper.querySelector('.te-xcontest-input') as HTMLInputElement;
+    const closeBtn = wrapper.querySelector('.te-xcontest-close') as HTMLElement;
+    const statusEl = wrapper.querySelector('.te-xcontest-status') as HTMLElement;
+
+    closeBtn.addEventListener('click', () => {
+      xcontestInputOpen = false;
+      render();
+    });
+
+    input.addEventListener('keydown', async (e) => {
+      if (e.key === 'Escape') {
+        xcontestInputOpen = false;
+        render();
+        return;
+      }
+      if (e.key === 'Enter') {
+        const code = input.value.trim();
+        if (!code) return;
+        input.disabled = true;
+        statusEl.textContent = 'Loading...';
+        statusEl.className = 'te-xcontest-status text-[10px] text-muted-foreground mt-1';
+        try {
+          const result = await fetchTaskByCodeWithRaw(code);
+          currentTask = result.task;
+          expandedIndex = null;
+          xcontestInputOpen = false;
+          render();
+          emitTaskChanged();
+        } catch (err) {
+          statusEl.textContent = `${err instanceof Error ? err.message : 'Failed to load task'}`;
+          statusEl.className = 'te-xcontest-status text-[10px] text-destructive mt-1';
+          input.disabled = false;
+          input.focus();
+        }
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Map click mode
   // ---------------------------------------------------------------------------
 
@@ -692,6 +811,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
       mapClickMode = false;
       searchOpen = false;
       coordsInputOpen = false;
+      xcontestInputOpen = false;
       addMenuOpen = false;
       render();
     },
