@@ -169,10 +169,6 @@ async function initTaskDetail(compId: string, taskId: string) {
     classBadges.appendChild(span);
   }
 
-  // Track count
-  document.getElementById("task-track-count")!.textContent =
-    `${task.track_count} track${task.track_count !== 1 ? "s" : ""} uploaded`;
-
   // Admin actions
   if (isAdmin && comp) {
     document.getElementById("task-admin-actions")!.classList.remove("hidden");
@@ -183,6 +179,9 @@ async function initTaskDetail(compId: string, taskId: string) {
     // Non-admin: show read-only task viewer when task is defined
     setupTaskEditor(compId, taskId, task.xctsk as XCTask, true);
   }
+
+  // Tracks section
+  await setupTrackSection(compId, taskId, user != null, isAdmin, comp?.close_date ?? null);
 
   // Show task detail, hide loading
   document.getElementById("comp-loading")!.classList.add("hidden");
@@ -353,6 +352,258 @@ async function setupTaskEditor(
 
   // Load existing xctsk into the editor (null shows empty editor ready for use)
   editor.setTask(xctsk);
+}
+
+// ── Track section ───────────────────────────────────────────────────────────
+
+interface TrackInfo {
+  task_track_id: string;
+  comp_pilot_id: string;
+  pilot_name: string;
+  pilot_class: string;
+  uploaded_at: string;
+  file_size: number;
+  penalty_points: number;
+  penalty_reason: string | null;
+}
+
+async function compressIgc(file: File): Promise<ArrayBuffer> {
+  const stream = file.stream().pipeThrough(new CompressionStream("gzip"));
+  return new Response(stream).arrayBuffer();
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function setupTrackSection(
+  compId: string,
+  taskId: string,
+  isAuthenticated: boolean,
+  isAdmin: boolean,
+  closeDate: string | null
+) {
+  const isClosed = closeDate != null && new Date() > new Date(closeDate);
+
+  // Load tracks
+  const tracks = await loadTracks(compId, taskId);
+  renderTrackList(tracks, compId, taskId, isAdmin, isClosed);
+
+  // Show upload area for authenticated users (unless comp is closed)
+  if (isAuthenticated && !isClosed) {
+    const uploadArea = document.getElementById("track-upload-area")!;
+    uploadArea.classList.remove("hidden");
+    setupUpload(compId, taskId, isAdmin);
+  } else if (isClosed) {
+    const uploadArea = document.getElementById("track-upload-area")!;
+    uploadArea.classList.remove("hidden");
+    const label = document.getElementById("track-upload-label")!;
+    label.classList.add("pointer-events-none", "opacity-50");
+    label.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground/40"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <span class="text-sm text-muted-foreground">Submissions closed</span>
+      <span class="text-xs text-muted-foreground/60">${new Date(closeDate!).toLocaleDateString()}</span>
+    `;
+  }
+}
+
+async function loadTracks(
+  compId: string,
+  taskId: string
+): Promise<TrackInfo[]> {
+  try {
+    const res = await api.api.comp[":comp_id"].task[":task_id"].igc.$get({
+      param: { comp_id: compId, task_id: taskId },
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { tracks: TrackInfo[] };
+    return data.tracks;
+  } catch {
+    return [];
+  }
+}
+
+function renderTrackList(
+  tracks: TrackInfo[],
+  compId: string,
+  taskId: string,
+  isAdmin: boolean,
+  isClosed: boolean
+) {
+  const list = document.getElementById("track-list")!;
+  const empty = document.getElementById("tracks-empty")!;
+  const countEl = document.getElementById("task-track-count")!;
+
+  countEl.textContent = `${tracks.length} track${tracks.length !== 1 ? "s" : ""}`;
+  list.innerHTML = "";
+
+  if (tracks.length === 0) {
+    empty.classList.remove("hidden");
+    return;
+  }
+
+  empty.classList.add("hidden");
+
+  for (const track of tracks) {
+    const div = document.createElement("div");
+    div.className =
+      "flex items-center justify-between rounded-lg border border-border/50 px-4 py-3";
+
+    const uploadDate = new Date(track.uploaded_at).toLocaleDateString(
+      undefined,
+      { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }
+    );
+
+    const penaltyBadge =
+      track.penalty_points !== 0
+        ? `<span class="inline-flex items-center rounded-md bg-red-500/10 text-red-500 px-1.5 py-0.5 text-xs font-medium" title="${escapeHtml(track.penalty_reason ?? "")}">${track.penalty_points > 0 ? "-" : "+"}${Math.abs(track.penalty_points)} pts</span>`
+        : "";
+
+    div.innerHTML = `
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <span class="font-medium text-sm">${escapeHtml(track.pilot_name)}</span>
+          <span class="inline-flex items-center rounded-md bg-primary/10 text-primary px-1.5 py-0.5 text-xs font-medium">${escapeHtml(track.pilot_class)}</span>
+          ${penaltyBadge}
+        </div>
+        <div class="text-xs text-muted-foreground mt-0.5">${uploadDate} &middot; ${formatFileSize(track.file_size)}</div>
+      </div>
+      <div class="flex items-center gap-1 shrink-0">
+        <a href="/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(track.comp_pilot_id)}/download"
+           class="btn btn-ghost btn-sm text-xs" title="Download">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </a>
+      </div>
+    `;
+
+    // Admin actions: penalty + delete (not when closed)
+    if (isAdmin && !isClosed) {
+      const actionsDiv = div.querySelector(".flex.items-center.gap-1")!;
+
+      // Delete button
+      const deleteBtn = document.createElement("button");
+      deleteBtn.className = "btn btn-ghost btn-sm text-xs text-destructive";
+      deleteBtn.title = "Delete track";
+      deleteBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
+      deleteBtn.addEventListener("click", async () => {
+        if (!confirm(`Delete track for ${track.pilot_name}?`)) return;
+        try {
+          const res = await api.api.comp[":comp_id"].task[":task_id"].igc[
+            ":comp_pilot_id"
+          ].$delete({
+            param: {
+              comp_id: compId,
+              task_id: taskId,
+              comp_pilot_id: track.comp_pilot_id,
+            },
+          });
+          if (res.ok) {
+            div.remove();
+            const remaining = list.children.length;
+            countEl.textContent = `${remaining} track${remaining !== 1 ? "s" : ""}`;
+            if (remaining === 0) empty.classList.remove("hidden");
+          } else {
+            alert("Failed to delete track");
+          }
+        } catch {
+          alert("Network error");
+        }
+      });
+      actionsDiv.appendChild(deleteBtn);
+    }
+
+    list.appendChild(div);
+  }
+}
+
+function setupUpload(compId: string, taskId: string, isAdmin: boolean) {
+  const input = document.getElementById("track-upload-input") as HTMLInputElement;
+  const label = document.getElementById("track-upload-label")!;
+  const statusDiv = document.getElementById("track-upload-status")!;
+  const messageEl = document.getElementById("track-upload-message")!;
+
+  function showStatus(msg: string, isError: boolean) {
+    statusDiv.classList.remove("hidden");
+    messageEl.textContent = msg;
+    messageEl.className = `text-sm ${isError ? "text-destructive" : "text-muted-foreground"}`;
+  }
+
+  async function handleFile(file: File) {
+    if (!file.name.toLowerCase().endsWith(".igc")) {
+      showStatus("Please select an IGC file", true);
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showStatus("File too large (max 5MB)", true);
+      return;
+    }
+
+    showStatus("Compressing and uploading...", false);
+    label.classList.add("pointer-events-none", "opacity-50");
+
+    try {
+      const compressed = await compressIgc(file);
+
+      const res = await fetch(
+        `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Encoding": "gzip" },
+          body: compressed,
+        }
+      );
+
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        showStatus(err.error || "Upload failed", true);
+        return;
+      }
+
+      const data = (await res.json()) as { replaced: boolean };
+      showStatus(
+        data.replaced ? "Track replaced successfully" : "Track uploaded successfully",
+        false
+      );
+
+      // Reload track list
+      const tracks = await loadTracks(compId, taskId);
+      renderTrackList(tracks, compId, taskId, isAdmin, false);
+    } catch {
+      showStatus("Network error. Please try again.", true);
+    } finally {
+      label.classList.remove("pointer-events-none", "opacity-50");
+      input.value = "";
+    }
+  }
+
+  input.addEventListener("change", () => {
+    if (input.files && input.files[0]) {
+      handleFile(input.files[0]);
+    }
+  });
+
+  // Drag and drop
+  label.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    label.classList.add("border-primary/50", "bg-muted/30");
+  });
+
+  label.addEventListener("dragleave", () => {
+    label.classList.remove("border-primary/50", "bg-muted/30");
+  });
+
+  label.addEventListener("drop", (e) => {
+    e.preventDefault();
+    label.classList.remove("border-primary/50", "bg-muted/30");
+    const files = (e as DragEvent).dataTransfer?.files;
+    if (files && files[0]) {
+      handleFile(files[0]);
+    }
+  });
 }
 
 // ── Comp detail view ─────────────────────────────────────────────────────────

@@ -120,12 +120,33 @@
           <div id="task-editor-container" class="rounded-lg border border-border/50 p-4"></div>
         </section>
 
-        <!-- Tracks placeholder -->
+        <!-- Tracks section -->
         <section class="mb-8">
-          <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">Tracks</h2>
-          <div class="text-center py-8 border border-dashed border-border/50 rounded-lg">
-            <p id="task-track-count" class="text-sm text-muted-foreground">0 tracks uploaded</p>
-            <p class="text-xs text-muted-foreground/60 mt-1">Track upload coming in a future iteration</p>
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider">Tracks</h2>
+            <span id="task-track-count" class="text-xs text-muted-foreground"></span>
+          </div>
+
+          <!-- Upload area (shown to authenticated users) -->
+          <div id="track-upload-area" class="hidden mb-4">
+            <label
+              id="track-upload-label"
+              class="flex flex-col items-center justify-center gap-2 py-6 border-2 border-dashed border-border/50 rounded-lg cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground/60"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span class="text-sm text-muted-foreground">Click to upload IGC file</span>
+              <span class="text-xs text-muted-foreground/60">or drag and drop (max 5MB)</span>
+              <input id="track-upload-input" type="file" accept=".igc" class="hidden">
+            </label>
+            <div id="track-upload-status" class="hidden mt-2 text-center">
+              <p id="track-upload-message" class="text-sm"></p>
+            </div>
+          </div>
+
+          <!-- Track list -->
+          <div id="track-list" class="space-y-2"></div>
+          <div id="tracks-empty" class="text-center py-6 border border-dashed border-border/50 rounded-lg">
+            <p class="text-sm text-muted-foreground">No tracks uploaded yet</p>
           </div>
         </section>
       </div>
