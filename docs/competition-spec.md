@@ -231,12 +231,12 @@ No separate download endpoint — the list response includes signed R2 URLs that
 | GET | `/api/comp/:comp_id/pilot` | Optional | List registered pilots for this comp with their class, team, etc. Public for non-test. |
 | PATCH | `/api/comp/:comp_id/pilot/:comp_pilot_id` | Admin | Update pilot_class, team_name, driver_contact, starting_order. |
 
-Pilot profile (the `pilot` table) is managed via the auth-api worker, not the competition-api:
+Pilot profile (the `pilot` table) is managed via the competition-api worker:
 
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| GET | `/api/auth/pilot` | User | Get the current user's pilot profile. |
-| PATCH | `/api/auth/pilot` | User | Update own profile (name, civl_id, sporting_body_ids, phone, glider). |
+| GET | `/api/comp/pilot` | User | Get the current user's pilot profile. |
+| PATCH | `/api/comp/pilot` | User | Update own profile (name, civl_id, sporting_body_ids, phone, glider). |
 
 ## URL design
 
@@ -331,7 +331,7 @@ Staged iterative plan. Each iteration delivers a working, testable vertical slic
 - [ ] Enforce `close_date`, one-track-per-pilot replacement (preserving penalties), 250 pilots-per-task limit, 5MB file size limit
 - [ ] Generate signed R2 download URLs in list response
 - [ ] Build track list UI on the task page
-- [ ] Implement pilot profile endpoints on auth-api (`GET/PATCH /api/auth/pilot`)
+- [ ] Implement pilot profile endpoints on competition-api (`GET/PATCH /api/comp/pilot`)
 
 ## Iteration 6: Preprocessing Pipeline
 

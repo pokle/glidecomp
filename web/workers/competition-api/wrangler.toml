@@ -9,6 +9,10 @@ database_name = "taskscore-auth"
 database_id = "aa8b644f-368e-493a-8b49-1af0d756aff4"
 migrations_dir = "migrations"
 
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "glidecomp"
+
 [[services]]
 binding = "AUTH_API"
 service = "auth-api"

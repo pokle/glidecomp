@@ -46,6 +46,32 @@ export const updateCompSchema = z.object({
   admin_emails: z.array(z.string().email().max(MAX_TEXT)).min(1).optional(),
 });
 
+// ── Pilot profile validators ──
+
+export const updatePilotSchema = z.object({
+  name: z.string().min(1).max(MAX_TEXT).optional(),
+  civl_id: z.string().max(MAX_TEXT).nullable().optional(),
+  sporting_body_ids: z.record(z.string().max(MAX_TEXT)).nullable().optional(),
+  phone: z.string().max(MAX_TEXT).nullable().optional(),
+  glider: z.string().max(MAX_TEXT).nullable().optional(),
+});
+
+// ── Track validators ──
+
+export const updatePenaltySchema = z.object({
+  penalty_points: z.number().min(-1000).max(1000),
+  penalty_reason: z.string().max(MAX_TEXT).nullable().optional(),
+});
+
+// ── Comp pilot validators ──
+
+export const updateCompPilotSchema = z.object({
+  pilot_class: pilotClassString.optional(),
+  team_name: z.string().max(MAX_TEXT).nullable().optional(),
+  driver_contact: z.string().max(MAX_TEXT).nullable().optional(),
+  first_start_order: z.number().int().positive().nullable().optional(),
+});
+
 // ── Task validators ──
 
 const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;

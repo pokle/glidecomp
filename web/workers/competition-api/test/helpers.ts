@@ -65,6 +65,26 @@ export async function createTask(
   return data.task_id;
 }
 
+/**
+ * Upload binary data to a path with optional auth.
+ * Used for IGC uploads where Content-Type is not JSON.
+ */
+export async function uploadRequest(
+  path: string,
+  body: ArrayBuffer | Uint8Array,
+  options: { user?: string | null } = {}
+): Promise<Response> {
+  const headers: Record<string, string> = {};
+  if (options.user) {
+    headers["Cookie"] = `test-user=${options.user}`;
+  }
+  return SELF.fetch(`https://test${path}`, {
+    method: "POST",
+    headers,
+    body,
+  });
+}
+
 /** Clear all competition data between tests. */
 export async function clearCompData(): Promise<void> {
   await env.DB.batch([

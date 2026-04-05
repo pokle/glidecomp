@@ -96,36 +96,55 @@
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           <a id="task-back-link" href="/comp" class="hover:text-foreground transition-colors"><span id="task-back-comp-name">Competition</span></a>
         </nav>
-        <div class="mb-6">
-          <h1 id="task-title" class="text-2xl font-bold tracking-tight"></h1>
-          <div class="flex items-center gap-2 mt-2">
-            <span id="task-date-badge" class="text-sm text-muted-foreground"></span>
-            <span id="task-xctsk-badge"></span>
+        <div class="flex items-start justify-between mb-6">
+          <div>
+            <h1 id="task-title" class="text-2xl font-bold tracking-tight"></h1>
+            <div class="flex items-center gap-2 mt-2">
+              <span id="task-date-badge" class="text-sm text-muted-foreground"></span>
+              <span id="task-xctsk-badge"></span>
+            </div>
+            <div class="flex flex-wrap gap-1.5 mt-2" id="task-class-badges"></div>
           </div>
-          <div class="flex flex-wrap gap-1.5 mt-2" id="task-class-badges"></div>
-        </div>
-
-        <!-- Task admin actions -->
-        <div id="task-admin-actions" class="hidden mb-6 flex items-center gap-2">
-          <button id="task-edit-btn" class="btn btn-secondary btn-sm text-xs">Edit Task</button>
-          <button id="task-delete-btn" class="btn btn-ghost btn-sm text-xs text-destructive">Delete Task</button>
+          <div id="task-admin-actions" class="hidden flex items-center gap-2">
+            <button id="task-edit-btn" class="btn btn-ghost btn-sm text-xs">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              Settings
+            </button>
+          </div>
         </div>
 
         <!-- Task editor section (admin only) -->
         <section id="task-editor-section" class="hidden mb-8">
           <div class="flex items-center justify-between mb-3">
-            <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider">Task Definition</h2>
+            <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider">Turnpoints</h2>
             <span id="task-save-status" class="text-xs text-muted-foreground/60"></span>
           </div>
           <div id="task-editor-container" class="rounded-lg border border-border/50 p-4"></div>
         </section>
 
-        <!-- Tracks placeholder -->
+        <!-- Tracks section -->
         <section class="mb-8">
-          <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">Tracks</h2>
-          <div class="text-center py-8 border border-dashed border-border/50 rounded-lg">
-            <p id="task-track-count" class="text-sm text-muted-foreground">0 tracks uploaded</p>
-            <p class="text-xs text-muted-foreground/60 mt-1">Track upload coming in a future iteration</p>
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider">Tracks</h2>
+            <div class="flex items-center gap-2">
+              <button id="upload-behalf-btn" class="hidden btn btn-ghost btn-sm text-xs">Upload for pilot</button>
+              <button id="upload-self-btn" class="hidden btn btn-primary btn-sm text-xs">Upload for me</button>
+              <input id="track-upload-input" type="file" accept=".igc" class="hidden">
+              <span id="task-closed-badge" class="items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground" style="display:none">
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                Closed
+              </span>
+              <span id="task-track-count" class="text-xs text-muted-foreground"></span>
+            </div>
+          </div>
+          <div id="track-upload-status" class="hidden mb-3 text-center">
+            <p id="track-upload-message" class="text-sm"></p>
+          </div>
+
+          <!-- Track list -->
+          <div id="track-list" class="space-y-2"></div>
+          <div id="tracks-empty" class="text-center py-6 border border-dashed border-border/50 rounded-lg">
+            <p class="text-sm text-muted-foreground">No tracks uploaded yet</p>
           </div>
         </section>
       </div>
@@ -178,7 +197,7 @@
     class="fixed inset-0 m-auto h-fit rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50"
     onclick="if (event.target === this) this.close()">
     <form id="edit-task-form" class="w-96 p-6">
-      <h2 class="text-lg font-semibold mb-4">Edit Task</h2>
+      <h2 class="text-lg font-semibold mb-4">Task Settings</h2>
       <div class="space-y-4">
         <div>
           <label for="edit-task-name" class="text-sm font-medium block mb-1">Name</label>
@@ -193,9 +212,12 @@
           <div id="edit-task-classes-checkboxes" class="space-y-2"></div>
         </div>
       </div>
-      <div class="flex justify-end gap-2 mt-6">
-        <button type="button" id="edit-task-cancel-btn" class="btn btn-secondary">Cancel</button>
-        <button type="submit" id="edit-task-submit-btn" class="btn btn-primary">Save</button>
+      <div class="flex items-center justify-between mt-6">
+        <button type="button" id="task-delete-btn" class="btn btn-ghost btn-sm text-xs text-destructive">Delete task</button>
+        <div class="flex gap-2">
+          <button type="button" id="edit-task-cancel-btn" class="btn btn-secondary">Cancel</button>
+          <button type="submit" id="edit-task-submit-btn" class="btn btn-primary">Save</button>
+        </div>
       </div>
     </form>
   </dialog>
@@ -249,9 +271,63 @@
           <p class="text-xs text-muted-foreground mt-1">Comma-separated. At least one required.</p>
         </div>
       </div>
+      <div class="flex items-center justify-between mt-6">
+        <button type="button" id="comp-delete-btn" class="btn btn-ghost btn-sm text-xs text-destructive">Delete competition</button>
+        <div class="flex gap-2">
+          <button type="button" id="settings-cancel-btn" class="btn btn-secondary">Cancel</button>
+          <button type="submit" id="settings-submit-btn" class="btn btn-primary">Save</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Admin upload-on-behalf dialog -->
+  <dialog id="upload-behalf-dialog"
+    class="fixed inset-0 m-auto h-fit rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50"
+    onclick="if (event.target === this) this.close()">
+    <div class="w-96 p-6">
+      <h2 class="text-lg font-semibold mb-4">Upload for Pilot</h2>
+      <div class="space-y-4">
+        <div>
+          <label for="behalf-pilot-select" class="text-sm font-medium block mb-1">Pilot</label>
+          <select id="behalf-pilot-select" class="input w-full" required></select>
+        </div>
+        <div>
+          <label class="text-sm font-medium block mb-1">IGC File</label>
+          <input id="behalf-file-input" type="file" accept=".igc" class="input w-full">
+        </div>
+      </div>
+      <div id="behalf-upload-status" class="hidden mt-3 text-center">
+        <p id="behalf-upload-message" class="text-sm"></p>
+      </div>
       <div class="flex justify-end gap-2 mt-6">
-        <button type="button" id="settings-cancel-btn" class="btn btn-secondary">Cancel</button>
-        <button type="submit" id="settings-submit-btn" class="btn btn-primary">Save</button>
+        <button type="button" id="behalf-cancel-btn" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="behalf-upload-btn" class="btn btn-primary">Upload</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Penalty dialog -->
+  <dialog id="penalty-dialog"
+    class="fixed inset-0 m-auto h-fit rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50"
+    onclick="if (event.target === this) this.close()">
+    <form id="penalty-form" class="w-96 p-6">
+      <h2 class="text-lg font-semibold mb-1">Set Penalty</h2>
+      <p id="penalty-pilot-name" class="text-sm text-muted-foreground mb-4"></p>
+      <div class="space-y-4">
+        <div>
+          <label for="penalty-points" class="text-sm font-medium block mb-1">Penalty Points</label>
+          <input id="penalty-points" type="number" step="any" class="input w-full" required>
+          <p class="text-xs text-muted-foreground mt-1">Positive = deduction, negative = bonus. 0 to clear.</p>
+        </div>
+        <div>
+          <label for="penalty-reason" class="text-sm font-medium block mb-1">Reason</label>
+          <input id="penalty-reason" type="text" class="input w-full" maxlength="128" placeholder="e.g. Airspace violation">
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-6">
+        <button type="button" id="penalty-cancel-btn" class="btn btn-secondary">Cancel</button>
+        <button type="submit" id="penalty-submit-btn" class="btn btn-primary">Save</button>
       </div>
     </form>
   </dialog>

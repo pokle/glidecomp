@@ -33,6 +33,7 @@ export default defineConfig(async () => {
         wrangler: { configPath: "./wrangler.toml" },
         miniflare: {
           bindings: { TEST_MIGRATIONS: migrations },
+          r2Buckets: ["R2"],
           serviceBindings: {
             // Mock AUTH_API: reads a "test-user" cookie to determine which user
             // is authenticated. No cookie or "test-user=none" → unauthenticated.

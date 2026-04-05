@@ -3,6 +3,8 @@ import { cors } from "hono/cors";
 import type { Env, AuthUser } from "./env";
 import { compRoutes } from "./routes/comp";
 import { taskRoutes } from "./routes/task";
+import { igcRoutes } from "./routes/igc";
+import { pilotRoutes } from "./routes/pilot";
 
 type Variables = {
   user: AuthUser;
@@ -22,8 +24,13 @@ app.use(
   })
 );
 
-// Mount routes
-const routes = app.route("/", compRoutes).route("/", taskRoutes);
+// Mount routes — pilotRoutes first so /api/comp/pilot is matched
+// before /api/comp/:comp_id
+const routes = app
+  .route("/", pilotRoutes)
+  .route("/", compRoutes)
+  .route("/", taskRoutes)
+  .route("/", igcRoutes);
 
 export type AppType = typeof routes;
 export default app;
