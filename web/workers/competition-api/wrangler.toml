@@ -13,6 +13,8 @@ binding = "AUTH_API"
 service = "auth-api"
 
 [vars]
+# This is the default SQIDS_ALPHABET if not set elsewhere
+# in cloudflare console, or in web/workers/competition-api/.dev.vars
 SQIDS_ALPHABET = "abcdefghijklmnopqrstuvwxyz"
 
 # Secrets (set via `wrangler secret put` or .dev.vars):
