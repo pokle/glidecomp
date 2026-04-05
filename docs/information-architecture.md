@@ -140,6 +140,36 @@ The map-based analysis tool, opened in context under the user's namespace.
 - Drag-and-drop a file onto the page (still supported for power users)
 - Command menu (Cmd+K) for advanced file operations
 
+**Shareable URL state:** The analysis URL encodes the full view state so any link is a permalink to an exact view of a flight. Parameters are synced bidirectionally — URL updates as the user navigates, and loading a URL restores the exact view.
+
+| Parameter | Example | Purpose |
+|-----------|---------|---------|
+| `track` | `abc123` | Stored track ID to load |
+| `task` | `def456` | Stored task ID to load |
+| `compTask` | `ghi789` | Competition task ID to load |
+| `lat` | `-37.812` | Camera latitude |
+| `lng` | `144.963` | Camera longitude |
+| `zoom` | `14` | Map zoom level |
+| `pitch` | `60` | Camera tilt in degrees (0 = top-down, 60 = 3D perspective) |
+| `bearing` | `220` | Camera compass bearing in degrees |
+| `3d` | `1` | Enable 3D terrain mode |
+| `tab` | `glides` | Active sidebar tab |
+| `event` | `12` | Highlighted event index (scrolls sidebar + highlights on map) |
+| `t` | `10:32:15` | Playback time / cursor position along the track |
+
+Example shareable URL:
+```
+/u/pokle/analysis?track=abc123&lat=-37.812&lng=144.963&zoom=14&pitch=60&bearing=220&3d=1
+```
+
+A recipient clicking this link sees the exact same flight, from the exact same vantage point, looking in the exact same direction. The URL *is* the state.
+
+**Implementation approach:**
+- Use `URLSearchParams` to read/write state, debounced on map move/zoom/rotate events
+- `replaceState` (not `pushState`) for camera movements to avoid polluting browser history
+- `pushState` for discrete navigation actions (switching tracks, tabs, selecting events)
+- A "Copy Link" button in the UI copies the current URL with all view state included
+
 **Sidebar tabs (personal flight context):**
 
 | Tab | Purpose |
