@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Env, AuthUser } from "./env";
 import { compRoutes } from "./routes/comp";
+import { taskRoutes } from "./routes/task";
 
 type Variables = {
   user: AuthUser;
@@ -21,8 +22,8 @@ app.use(
   })
 );
 
-// Mount comp routes
-const routes = app.route("/", compRoutes);
+// Mount routes
+const routes = app.route("/", compRoutes).route("/", taskRoutes);
 
 export type AppType = typeof routes;
 export default app;

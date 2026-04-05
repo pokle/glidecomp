@@ -41,6 +41,14 @@
       </div>
 
       <div id="comp-detail" class="hidden">
+        <nav class="mb-4">
+          <a href="/comp" class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            All Competitions
+          </a>
+        </nav>
+
+        <!-- Comp header -->
         <div class="flex items-start justify-between mb-6">
           <div>
             <h1 id="comp-title" class="text-2xl font-bold tracking-tight"></h1>
@@ -50,15 +58,27 @@
               <span id="comp-classes" class="text-sm text-muted-foreground"></span>
             </div>
           </div>
+          <button id="comp-settings-btn" class="hidden btn btn-ghost btn-sm text-xs">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Settings
+          </button>
         </div>
 
-        <!-- Tasks section (stub) -->
+        <!-- Class coverage warnings -->
+        <div id="class-warnings" class="hidden mb-6"></div>
+
+        <!-- Tasks section -->
         <section class="mb-8">
-          <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">Tasks</h2>
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider">Tasks</h2>
+            <button id="create-task-btn" class="hidden btn btn-primary btn-sm text-xs">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              New Task
+            </button>
+          </div>
           <div id="tasks-list" class="space-y-2"></div>
           <div id="tasks-empty" class="text-center py-8 border border-dashed border-border/50 rounded-lg">
             <p class="text-sm text-muted-foreground">No tasks yet</p>
-            <p class="text-xs text-muted-foreground/60 mt-1">Task management coming in the next iteration</p>
           </div>
         </section>
 
@@ -66,6 +86,38 @@
         <section>
           <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">Admins</h2>
           <div id="admins-list" class="space-y-1"></div>
+        </section>
+      </div>
+
+      <!-- Task detail view -->
+      <div id="task-detail" class="hidden">
+        <nav class="mb-4 flex items-center gap-1.5 text-sm text-muted-foreground">
+          <a href="/comp" class="hover:text-foreground transition-colors">Competitions</a>
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          <a id="task-back-link" href="/comp" class="hover:text-foreground transition-colors"><span id="task-back-comp-name">Competition</span></a>
+        </nav>
+        <div class="mb-6">
+          <h1 id="task-title" class="text-2xl font-bold tracking-tight"></h1>
+          <div class="flex items-center gap-2 mt-2">
+            <span id="task-date-badge" class="text-sm text-muted-foreground"></span>
+            <span id="task-xctsk-badge"></span>
+          </div>
+          <div class="flex flex-wrap gap-1.5 mt-2" id="task-class-badges"></div>
+        </div>
+
+        <!-- Task admin actions -->
+        <div id="task-admin-actions" class="hidden mb-6 flex items-center gap-2">
+          <button id="task-edit-btn" class="btn btn-secondary btn-sm text-xs">Edit Task</button>
+          <button id="task-delete-btn" class="btn btn-ghost btn-sm text-xs text-destructive">Delete Task</button>
+        </div>
+
+        <!-- Tracks placeholder -->
+        <section class="mb-8">
+          <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">Tracks</h2>
+          <div class="text-center py-8 border border-dashed border-border/50 rounded-lg">
+            <p id="task-track-count" class="text-sm text-muted-foreground">0 tracks uploaded</p>
+            <p class="text-xs text-muted-foreground/60 mt-1">Track upload coming in a future iteration</p>
+          </div>
         </section>
       </div>
 
@@ -84,6 +136,116 @@
     </footer>
 
   </div>
+
+  <!-- Create task dialog -->
+  <dialog id="create-task-dialog"
+    class="fixed inset-0 m-auto h-fit rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50"
+    onclick="if (event.target === this) this.close()">
+    <form id="create-task-form" class="w-96 p-6">
+      <h2 class="text-lg font-semibold mb-4">Create Task</h2>
+      <div class="space-y-4">
+        <div>
+          <label for="task-name" class="text-sm font-medium block mb-1">Name</label>
+          <input id="task-name" type="text" class="input w-full" placeholder="e.g. Day 1 - Ridge Run" required maxlength="128" autofocus>
+        </div>
+        <div>
+          <label for="task-date" class="text-sm font-medium block mb-1">Date</label>
+          <input id="task-date" type="date" class="input w-full" required>
+        </div>
+        <div>
+          <label class="text-sm font-medium block mb-2">Pilot Classes</label>
+          <div id="task-classes-checkboxes" class="space-y-2"></div>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-6">
+        <button type="button" id="task-cancel-btn" class="btn btn-secondary">Cancel</button>
+        <button type="submit" id="task-submit-btn" class="btn btn-primary">Create</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Edit task dialog -->
+  <dialog id="edit-task-dialog"
+    class="fixed inset-0 m-auto h-fit rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50"
+    onclick="if (event.target === this) this.close()">
+    <form id="edit-task-form" class="w-96 p-6">
+      <h2 class="text-lg font-semibold mb-4">Edit Task</h2>
+      <div class="space-y-4">
+        <div>
+          <label for="edit-task-name" class="text-sm font-medium block mb-1">Name</label>
+          <input id="edit-task-name" type="text" class="input w-full" required maxlength="128">
+        </div>
+        <div>
+          <label for="edit-task-date" class="text-sm font-medium block mb-1">Date</label>
+          <input id="edit-task-date" type="date" class="input w-full" required>
+        </div>
+        <div>
+          <label class="text-sm font-medium block mb-2">Pilot Classes</label>
+          <div id="edit-task-classes-checkboxes" class="space-y-2"></div>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-6">
+        <button type="button" id="edit-task-cancel-btn" class="btn btn-secondary">Cancel</button>
+        <button type="submit" id="edit-task-submit-btn" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Edit comp settings dialog -->
+  <dialog id="settings-dialog"
+    class="fixed inset-0 m-auto h-fit rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50"
+    onclick="if (event.target === this) this.close()">
+    <form id="settings-form" class="w-96 p-6">
+      <h2 class="text-lg font-semibold mb-4">Competition Settings</h2>
+      <div class="space-y-4">
+        <div>
+          <label for="settings-name" class="text-sm font-medium block mb-1">Name</label>
+          <input id="settings-name" type="text" class="input w-full" required maxlength="128">
+        </div>
+        <div>
+          <label class="text-sm font-medium block mb-1">Category</label>
+          <div class="flex gap-2">
+            <label class="flex-1">
+              <input type="radio" name="settings-category" value="hg" class="peer hidden">
+              <div class="btn btn-secondary w-full peer-checked:bg-primary peer-checked:text-primary-foreground peer-checked:border-primary transition-colors cursor-pointer text-center">HG</div>
+            </label>
+            <label class="flex-1">
+              <input type="radio" name="settings-category" value="pg" class="peer hidden">
+              <div class="btn btn-secondary w-full peer-checked:bg-primary peer-checked:text-primary-foreground peer-checked:border-primary transition-colors cursor-pointer text-center">PG</div>
+            </label>
+          </div>
+        </div>
+        <div>
+          <label for="settings-pilot-classes" class="text-sm font-medium block mb-1">Pilot Classes</label>
+          <input id="settings-pilot-classes" type="text" class="input w-full" placeholder="open, sport, floater">
+          <p class="text-xs text-muted-foreground mt-1">Comma-separated class names</p>
+        </div>
+        <div>
+          <label for="settings-default-class" class="text-sm font-medium block mb-1">Default Pilot Class</label>
+          <select id="settings-default-class" class="input w-full"></select>
+          <p class="text-xs text-muted-foreground mt-1">Assigned to auto-registered pilots</p>
+        </div>
+        <div>
+          <label for="settings-close-date" class="text-sm font-medium block mb-1">Close Date</label>
+          <input id="settings-close-date" type="date" class="input w-full">
+          <p class="text-xs text-muted-foreground mt-1">After this date, track submissions are rejected. Leave empty for open-ended.</p>
+        </div>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input id="settings-test" type="checkbox" class="accent-primary w-4 h-4">
+          <span class="text-sm">Test competition (only visible to admins)</span>
+        </label>
+        <div>
+          <label for="settings-admins" class="text-sm font-medium block mb-1">Admin Emails</label>
+          <input id="settings-admins" type="text" class="input w-full" placeholder="admin1@example.com, admin2@example.com">
+          <p class="text-xs text-muted-foreground mt-1">Comma-separated. At least one required.</p>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-6">
+        <button type="button" id="settings-cancel-btn" class="btn btn-secondary">Cancel</button>
+        <button type="submit" id="settings-submit-btn" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
 
   <script type="module" src="/comp-detail.ts"></script>
 </body>

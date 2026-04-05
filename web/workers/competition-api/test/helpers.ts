@@ -50,6 +50,21 @@ export async function createComp(
   return data.comp_id;
 }
 
+/** Create a task in a comp and return its encoded ID. */
+export async function createTask(
+  compId: string,
+  overrides: Record<string, unknown> = {}
+): Promise<string> {
+  const res = await authRequest("POST", `/api/comp/${compId}/task`, {
+    name: "Test Task",
+    task_date: "2026-01-15",
+    pilot_classes: ["open"],
+    ...overrides,
+  });
+  const data = (await res.json()) as { task_id: string };
+  return data.task_id;
+}
+
 /** Clear all competition data between tests. */
 export async function clearCompData(): Promise<void> {
   await env.DB.batch([
