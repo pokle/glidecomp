@@ -59,7 +59,7 @@ export const updatePilotSchema = z.object({
 // ── Track validators ──
 
 export const updatePenaltySchema = z.object({
-  penalty_points: z.number().min(-1000).max(1000),
+  penalty_points: z.number().min(-10000).max(10000),
   penalty_reason: z.string().max(MAX_TEXT).nullable().optional(),
 });
 
@@ -80,6 +80,7 @@ export const createTaskSchema = z.object({
   name: z.string().min(1).max(MAX_TEXT),
   task_date: z.string().regex(isoDateRegex, "Must be ISO date (YYYY-MM-DD)"),
   pilot_classes: pilotClassesArray,
+  xctsk: z.record(z.unknown()).nullable().optional(),
 });
 
 export const updateTaskSchema = z.object({

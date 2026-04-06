@@ -70,10 +70,16 @@ export const taskRoutes = new Hono<HonoEnv>()
       const now = new Date().toISOString();
 
       const taskResult = await c.env.DB.prepare(
-        `INSERT INTO task (comp_id, name, task_date, creation_date)
-         VALUES (?, ?, ?, ?)`
+        `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk)
+         VALUES (?, ?, ?, ?, ?)`
       )
-        .bind(compId, body.name, body.task_date, now)
+        .bind(
+          compId,
+          body.name,
+          body.task_date,
+          now,
+          body.xctsk ? JSON.stringify(body.xctsk) : null
+        )
         .run();
 
       const taskId = taskResult.meta.last_row_id;
@@ -95,7 +101,8 @@ export const taskRoutes = new Hono<HonoEnv>()
           name: body.name,
           task_date: body.task_date,
           creation_date: now,
-          has_xctsk: false,
+          xctsk: body.xctsk ?? null,
+          has_xctsk: !!body.xctsk,
           pilot_classes: body.pilot_classes,
         },
         201
@@ -327,4 +334,7 @@ export const taskRoutes = new Hono<HonoEnv>()
 
       return c.json({ success: true });
     }
-  );
+  )
+
+;
+

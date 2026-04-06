@@ -10,12 +10,15 @@ export const requireAuth = createMiddleware<{
   Bindings: Env;
   Variables: { user: AuthUser };
 }>(async (c, next) => {
+  const cookie = c.req.header("cookie");
   const res = await c.env.AUTH_API.fetch(
     new Request("https://auth/api/auth/me", {
-      headers: { cookie: c.req.header("cookie") || "" },
+      headers: { cookie: cookie || "" },
     })
   );
-  const { user } = (await res.json()) as { user: AuthUser | null };
+
+  const data = await res.json() as { user: AuthUser | null };
+  const { user } = data;
   if (!user) {
     return c.json({ error: "Not authenticated" }, 401);
   }

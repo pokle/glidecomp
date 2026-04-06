@@ -3,8 +3,8 @@ import { zValidator } from "@hono/zod-validator";
 import type { Env, AuthUser } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
-import { requireAuth, optionalAuth } from "../middleware/auth";
-import { updatePilotSchema } from "../validators";
+import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
+import { updatePilotSchema, updateCompPilotSchema } from "../validators";
 
 type Variables = {
   user: AuthUser;
@@ -123,6 +123,77 @@ export const pilotRoutes = new Hono<HonoEnv>()
         phone: pilot!.phone ?? null,
         glider: pilot!.glider ?? null,
       });
+    }
+  )
+
+  // ── PATCH /api/comp/:comp_id/pilot/:comp_pilot_id ── Admin: update pilot class/details
+  .patch(
+    "/api/comp/:comp_id/pilot/:comp_pilot_id",
+    requireAuth,
+    sqidsMiddleware,
+    requireCompAdmin,
+    zValidator("json", updateCompPilotSchema),
+    async (c) => {
+      const compId = c.var.ids.comp_id!;
+      const compPilotId = c.var.ids.comp_pilot_id!;
+      const body = c.req.valid("json");
+
+      // Verify comp_pilot exists in this comp
+      const existing = await c.env.DB.prepare(
+        "SELECT comp_pilot_id FROM comp_pilot WHERE comp_pilot_id = ? AND comp_id = ?"
+      )
+        .bind(compPilotId, compId)
+        .first<{ comp_pilot_id: number }>();
+
+      if (!existing) {
+        return c.json({ error: "Pilot not found in this competition" }, 404);
+      }
+
+      const updates: string[] = [];
+      const values: unknown[] = [];
+
+      if (body.pilot_class !== undefined) {
+        // Validate the new class is valid for this comp
+        const comp = await c.env.DB.prepare(
+          "SELECT pilot_classes FROM comp WHERE comp_id = ?"
+        )
+          .bind(compId)
+          .first<{ pilot_classes: string }>();
+
+        const compClasses = JSON.parse(comp!.pilot_classes) as string[];
+        if (!compClasses.includes(body.pilot_class)) {
+          return c.json(
+            { error: `Invalid pilot class. Must be one of: ${compClasses.join(", ")}` },
+            400
+          );
+        }
+
+        updates.push("pilot_class = ?");
+        values.push(body.pilot_class);
+      }
+      if (body.team_name !== undefined) {
+        updates.push("team_name = ?");
+        values.push(body.team_name);
+      }
+      if (body.driver_contact !== undefined) {
+        updates.push("driver_contact = ?");
+        values.push(body.driver_contact);
+      }
+      if (body.first_start_order !== undefined) {
+        updates.push("first_start_order = ?");
+        values.push(body.first_start_order);
+      }
+
+      if (updates.length > 0) {
+        values.push(compPilotId);
+        await c.env.DB.prepare(
+          `UPDATE comp_pilot SET ${updates.join(", ")} WHERE comp_pilot_id = ?`
+        )
+          .bind(...values)
+          .run();
+      }
+
+      return c.json({ success: true });
     }
   )
 

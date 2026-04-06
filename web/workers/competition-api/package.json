@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@glidecomp/engine": "workspace:*",
     "@hono/zod-validator": "^0.7.6",
     "hono": "^4.12.10",
     "sqids": "^0.3.0",

@@ -73,9 +73,9 @@ export const igcRoutes = new Hono<HonoEnv>()
     requireAuth,
     sqidsMiddleware,
     async (c) => {
+      const user = c.var.user;
       const compId = c.var.ids.comp_id!;
       const taskId = c.var.ids.task_id!;
-      const user = c.var.user;
       const alphabet = c.env.SQIDS_ALPHABET;
 
       // Verify comp exists and check close_date
@@ -187,7 +187,7 @@ export const igcRoutes = new Hono<HonoEnv>()
 
         await c.env.DB.prepare(
           `UPDATE task_track
-           SET igc_filename = ?, uploaded_at = ?, file_size = ?, flight_data = NULL
+           SET igc_filename = ?, uploaded_at = ?, file_size = ?
            WHERE task_track_id = ?`
         )
           .bind(r2Key, now, body.byteLength, existingTrack.task_track_id)
@@ -211,9 +211,11 @@ export const igcRoutes = new Hono<HonoEnv>()
         .bind(taskId, compPilotId, r2Key, now, body.byteLength)
         .run();
 
+      const newTrackId = trackResult.meta.last_row_id;
+
       return c.json(
         {
-          task_track_id: encodeId(alphabet, trackResult.meta.last_row_id),
+          task_track_id: encodeId(alphabet, newTrackId),
           comp_pilot_id: encodeId(alphabet, compPilotId),
           igc_filename: r2Key,
           uploaded_at: now,
@@ -313,7 +315,7 @@ export const igcRoutes = new Hono<HonoEnv>()
 
         await c.env.DB.prepare(
           `UPDATE task_track
-           SET igc_filename = ?, uploaded_at = ?, file_size = ?, flight_data = NULL
+           SET igc_filename = ?, uploaded_at = ?, file_size = ?
            WHERE task_track_id = ?`
         )
           .bind(r2Key, now, body.byteLength, existingTrack.task_track_id)
@@ -336,9 +338,11 @@ export const igcRoutes = new Hono<HonoEnv>()
         .bind(taskId, compPilotId, r2Key, now, body.byteLength)
         .run();
 
+      const newTrackId = trackResult.meta.last_row_id;
+
       return c.json(
         {
-          task_track_id: encodeId(alphabet, trackResult.meta.last_row_id),
+          task_track_id: encodeId(alphabet, newTrackId),
           comp_pilot_id: encodeId(alphabet, compPilotId),
           igc_filename: r2Key,
           uploaded_at: now,
