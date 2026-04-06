@@ -70,10 +70,16 @@ export const taskRoutes = new Hono<HonoEnv>()
       const now = new Date().toISOString();
 
       const taskResult = await c.env.DB.prepare(
-        `INSERT INTO task (comp_id, name, task_date, creation_date)
-         VALUES (?, ?, ?, ?)`
+        `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk)
+         VALUES (?, ?, ?, ?, ?)`
       )
-        .bind(compId, body.name, body.task_date, now)
+        .bind(
+          compId,
+          body.name,
+          body.task_date,
+          now,
+          body.xctsk ? JSON.stringify(body.xctsk) : null
+        )
         .run();
 
       const taskId = taskResult.meta.last_row_id;
@@ -95,7 +101,8 @@ export const taskRoutes = new Hono<HonoEnv>()
           name: body.name,
           task_date: body.task_date,
           creation_date: now,
-          has_xctsk: false,
+          xctsk: body.xctsk ?? null,
+          has_xctsk: !!body.xctsk,
           pilot_classes: body.pilot_classes,
         },
         201
@@ -327,4 +334,54 @@ export const taskRoutes = new Hono<HonoEnv>()
 
       return c.json({ success: true });
     }
+  )
+
+  // ── POST /api/comp/:comp_id/task/:task_id/reprocess ── Reprocess all tracks
+  .post(
+    "/api/comp/:comp_id/task/:task_id/reprocess",
+    requireAuth,
+    sqidsMiddleware,
+    requireCompAdmin,
+    async (c) => {
+      const compId = c.var.ids.comp_id!;
+      const taskId = c.var.ids.task_id!;
+
+      // Verify task exists and belongs to comp
+      const task = await c.env.DB.prepare(
+        "SELECT task_id FROM task WHERE task_id = ? AND comp_id = ?"
+      )
+        .bind(taskId, compId)
+        .first();
+
+      if (!task) {
+        return c.json({ error: "Task not found" }, 404);
+      }
+
+      // Find all tracks for this task
+      const tracks = await c.env.DB.prepare(
+        "SELECT task_track_id FROM task_track WHERE task_id = ?"
+      )
+        .bind(taskId)
+        .all<{ task_track_id: number }>();
+
+      if (tracks.results.length === 0) {
+        return c.json({ success: true, count: 0 });
+      }
+
+      // Enqueue one message per track
+      const messages = tracks.results.map((t) => ({
+        type: "reprocess_track",
+        taskId,
+        taskTrackId: t.task_track_id,
+      }));
+
+      // Cloudflare Queue sendBatch supports up to 100 messages
+      for (let i = 0; i < messages.length; i += 100) {
+        const batch = messages.slice(i, i + 100).map((m) => ({ body: m }));
+        await c.env.REPROCESS_QUEUE.sendBatch(batch);
+      }
+
+      return c.json({ success: true, count: tracks.results.length });
+    }
   );
+

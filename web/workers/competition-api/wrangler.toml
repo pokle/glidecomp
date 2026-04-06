@@ -28,6 +28,16 @@ SQIDS_ALPHABET = "abcdefghijklmnopqrstuvwxyz"
 [dev]
 port = 8789
 
+[[queues.producers]]
+queue = "reprocess-tracks"
+binding = "REPROCESS_QUEUE"
+
+[[queues.consumers]]
+queue = "reprocess-tracks"
+max_batch_size = 10
+max_batch_timeout = 5
+max_concurrency = 1
+
 [[routes]]
 pattern = "glidecomp.com/api/comp/*"
 zone_name = "glidecomp.com"

@@ -80,6 +80,7 @@ export const createTaskSchema = z.object({
   name: z.string().min(1).max(MAX_TEXT),
   task_date: z.string().regex(isoDateRegex, "Must be ISO date (YYYY-MM-DD)"),
   pilot_classes: pilotClassesArray,
+  xctsk: z.record(z.unknown()).nullable().optional(),
 });
 
 export const updateTaskSchema = z.object({

@@ -5,6 +5,7 @@ import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { updatePenaltySchema } from "../validators";
+import { preprocessTrack } from "../preprocess";
 
 type Variables = {
   user: AuthUser;
@@ -73,9 +74,9 @@ export const igcRoutes = new Hono<HonoEnv>()
     requireAuth,
     sqidsMiddleware,
     async (c) => {
+      const user = c.var.user;
       const compId = c.var.ids.comp_id!;
       const taskId = c.var.ids.task_id!;
-      const user = c.var.user;
       const alphabet = c.env.SQIDS_ALPHABET;
 
       // Verify comp exists and check close_date
@@ -193,6 +194,15 @@ export const igcRoutes = new Hono<HonoEnv>()
           .bind(r2Key, now, body.byteLength, existingTrack.task_track_id)
           .run();
 
+        // Perform preprocessing inline
+        await preprocessTrack(
+          c.env.DB,
+          c.env.R2,
+          taskId,
+          existingTrack.task_track_id,
+          body
+        );
+
         return c.json({
           task_track_id: encodeId(alphabet, existingTrack.task_track_id),
           comp_pilot_id: encodeId(alphabet, compPilotId),
@@ -211,9 +221,14 @@ export const igcRoutes = new Hono<HonoEnv>()
         .bind(taskId, compPilotId, r2Key, now, body.byteLength)
         .run();
 
+      const newTrackId = trackResult.meta.last_row_id;
+
+      // Perform preprocessing inline
+      await preprocessTrack(c.env.DB, c.env.R2, taskId, newTrackId, body);
+
       return c.json(
         {
-          task_track_id: encodeId(alphabet, trackResult.meta.last_row_id),
+          task_track_id: encodeId(alphabet, newTrackId),
           comp_pilot_id: encodeId(alphabet, compPilotId),
           igc_filename: r2Key,
           uploaded_at: now,
@@ -319,6 +334,15 @@ export const igcRoutes = new Hono<HonoEnv>()
           .bind(r2Key, now, body.byteLength, existingTrack.task_track_id)
           .run();
 
+        // Perform preprocessing inline
+        await preprocessTrack(
+          c.env.DB,
+          c.env.R2,
+          taskId,
+          existingTrack.task_track_id,
+          body
+        );
+
         return c.json({
           task_track_id: encodeId(alphabet, existingTrack.task_track_id),
           comp_pilot_id: encodeId(alphabet, compPilotId),
@@ -336,9 +360,14 @@ export const igcRoutes = new Hono<HonoEnv>()
         .bind(taskId, compPilotId, r2Key, now, body.byteLength)
         .run();
 
+      const newTrackId = trackResult.meta.last_row_id;
+
+      // Perform preprocessing inline
+      await preprocessTrack(c.env.DB, c.env.R2, taskId, newTrackId, body);
+
       return c.json(
         {
-          task_track_id: encodeId(alphabet, trackResult.meta.last_row_id),
+          task_track_id: encodeId(alphabet, newTrackId),
           comp_pilot_id: encodeId(alphabet, compPilotId),
           igc_filename: r2Key,
           uploaded_at: now,

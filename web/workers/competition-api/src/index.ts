@@ -5,6 +5,7 @@ import { compRoutes } from "./routes/comp";
 import { taskRoutes } from "./routes/task";
 import { igcRoutes } from "./routes/igc";
 import { pilotRoutes } from "./routes/pilot";
+import { preprocessTrack } from "./preprocess";
 
 type Variables = {
   user: AuthUser;
@@ -24,13 +25,23 @@ app.use(
   })
 );
 
-// Mount routes — pilotRoutes first so /api/comp/pilot is matched
-// before /api/comp/:comp_id
+// Mount routes — igcRoutes first to avoid potential conflicts
 const routes = app
+  .route("/", igcRoutes)
   .route("/", pilotRoutes)
   .route("/", compRoutes)
-  .route("/", taskRoutes)
-  .route("/", igcRoutes);
+  .route("/", taskRoutes);
 
 export type AppType = typeof routes;
-export default app;
+
+export default {
+  fetch: app.fetch,
+  async queue(batch: MessageBatch<any>, env: Env): Promise<void> {
+    for (const message of batch.messages) {
+      const { body } = message;
+      if (body.type === "reprocess_track") {
+        await preprocessTrack(env.DB, env.R2, body.taskId, body.taskTrackId);
+      }
+    }
+  },
+};
