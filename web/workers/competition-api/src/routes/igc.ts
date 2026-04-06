@@ -5,7 +5,6 @@ import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { updatePenaltySchema } from "../validators";
-import { preprocessTrack } from "../preprocess";
 
 type Variables = {
   user: AuthUser;
@@ -188,20 +187,11 @@ export const igcRoutes = new Hono<HonoEnv>()
 
         await c.env.DB.prepare(
           `UPDATE task_track
-           SET igc_filename = ?, uploaded_at = ?, file_size = ?, flight_data = NULL
+           SET igc_filename = ?, uploaded_at = ?, file_size = ?
            WHERE task_track_id = ?`
         )
           .bind(r2Key, now, body.byteLength, existingTrack.task_track_id)
           .run();
-
-        // Perform preprocessing inline
-        await preprocessTrack(
-          c.env.DB,
-          c.env.R2,
-          taskId,
-          existingTrack.task_track_id,
-          body
-        );
 
         return c.json({
           task_track_id: encodeId(alphabet, existingTrack.task_track_id),
@@ -222,9 +212,6 @@ export const igcRoutes = new Hono<HonoEnv>()
         .run();
 
       const newTrackId = trackResult.meta.last_row_id;
-
-      // Perform preprocessing inline
-      await preprocessTrack(c.env.DB, c.env.R2, taskId, newTrackId, body);
 
       return c.json(
         {
@@ -328,20 +315,11 @@ export const igcRoutes = new Hono<HonoEnv>()
 
         await c.env.DB.prepare(
           `UPDATE task_track
-           SET igc_filename = ?, uploaded_at = ?, file_size = ?, flight_data = NULL
+           SET igc_filename = ?, uploaded_at = ?, file_size = ?
            WHERE task_track_id = ?`
         )
           .bind(r2Key, now, body.byteLength, existingTrack.task_track_id)
           .run();
-
-        // Perform preprocessing inline
-        await preprocessTrack(
-          c.env.DB,
-          c.env.R2,
-          taskId,
-          existingTrack.task_track_id,
-          body
-        );
 
         return c.json({
           task_track_id: encodeId(alphabet, existingTrack.task_track_id),
@@ -361,9 +339,6 @@ export const igcRoutes = new Hono<HonoEnv>()
         .run();
 
       const newTrackId = trackResult.meta.last_row_id;
-
-      // Perform preprocessing inline
-      await preprocessTrack(c.env.DB, c.env.R2, taskId, newTrackId, body);
 
       return c.json(
         {

@@ -5,7 +5,7 @@ import { compRoutes } from "./routes/comp";
 import { taskRoutes } from "./routes/task";
 import { igcRoutes } from "./routes/igc";
 import { pilotRoutes } from "./routes/pilot";
-import { preprocessTrack } from "./preprocess";
+import { scoreRoutes } from "./routes/score";
 
 type Variables = {
   user: AuthUser;
@@ -30,18 +30,11 @@ const routes = app
   .route("/", igcRoutes)
   .route("/", pilotRoutes)
   .route("/", compRoutes)
-  .route("/", taskRoutes);
+  .route("/", taskRoutes)
+  .route("/", scoreRoutes);
 
 export type AppType = typeof routes;
 
 export default {
   fetch: app.fetch,
-  async queue(batch: MessageBatch<any>, env: Env): Promise<void> {
-    for (const message of batch.messages) {
-      const { body } = message;
-      if (body.type === "reprocess_track") {
-        await preprocessTrack(env.DB, env.R2, body.taskId, body.taskTrackId);
-      }
-    }
-  },
 };
