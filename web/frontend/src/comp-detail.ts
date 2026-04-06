@@ -65,6 +65,39 @@ interface TaskDetail {
   track_count: number;
 }
 
+// ── Types for scoring ────────────────────────────────────────────────────────
+
+interface PilotScoreEntry {
+  rank: number;
+  comp_pilot_id: string;
+  pilot_name: string;
+  made_goal: boolean;
+  reached_ess: boolean;
+  flown_distance: number;
+  speed_section_time: number | null;
+  distance_points: number;
+  time_points: number;
+  leading_points: number;
+  arrival_points: number;
+  penalty_points: number;
+  total_score: number;
+  penalty_reason?: string | null;
+}
+
+interface ClassScore {
+  pilot_class: string;
+  task_validity: { launch: number; distance: number; time: number; task: number };
+  available_points: { distance: number; time: number; leading: number; arrival: number; total: number };
+  pilots: PilotScoreEntry[];
+}
+
+interface TaskScoreData {
+  task_id: string;
+  comp_id: string;
+  task_date: string;
+  classes: ClassScore[];
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 async function init() {
@@ -198,6 +231,9 @@ async function initTaskDetail(compId: string, taskId: string) {
 
   // Tracks section
   await setupTrackSection(compId, taskId, user != null, isAdmin, comp?.close_date ?? null);
+
+  // Scores section (fire and forget — non-critical)
+  setupScoreSection(compId, taskId).catch(() => {});
 
   // Show task detail, hide loading
   document.getElementById("comp-loading")!.classList.add("hidden");
@@ -392,6 +428,21 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
+}
+
+function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const mm = String(m).padStart(2, "0");
+  const ss = String(s).padStart(2, "0");
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
 async function setupTrackSection(
@@ -823,6 +874,137 @@ function setupUploadOnBehalf(
       uploadBtn.textContent = "Upload";
     }
   });
+}
+
+// ── Scoring section ──────────────────────────────────────────────────────────
+
+function renderScoreClass(cls: ClassScore, showClassName: boolean): HTMLElement {
+  const wrapper = document.createElement("div");
+  wrapper.className = "mb-6";
+
+  if (showClassName) {
+    const h3 = document.createElement("h3");
+    h3.className = "text-sm font-semibold mb-2";
+    h3.textContent = cls.pilot_class;
+    wrapper.appendChild(h3);
+  }
+
+  const hasSpeed = cls.pilots.some((p) => p.speed_section_time !== null);
+  const hasTimePoints = cls.pilots.some((p) => p.time_points !== 0);
+  const hasLeadPoints = cls.pilots.some((p) => p.leading_points !== 0);
+
+  const table = document.createElement("table");
+  table.className = "w-full text-sm border-collapse";
+
+  // thead
+  const thead = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+  headerRow.className = "text-left text-xs text-muted-foreground border-b border-border/50";
+  const headers = ["#", "Pilot", "Goal", "Distance"];
+  if (hasSpeed) headers.push("Speed");
+  headers.push("Dist Pts");
+  if (hasTimePoints) headers.push("Time Pts");
+  if (hasLeadPoints) headers.push("Lead Pts");
+  headers.push("Total");
+
+  for (const h of headers) {
+    const th = document.createElement("th");
+    th.className = "py-1.5 pr-3 font-medium";
+    th.textContent = h;
+    headerRow.appendChild(th);
+  }
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  // tbody
+  const tbody = document.createElement("tbody");
+  for (let i = 0; i < cls.pilots.length; i++) {
+    const p = cls.pilots[i];
+    const tr = document.createElement("tr");
+    tr.className = i % 2 === 1 ? "bg-muted/30" : "";
+
+    const cells: string[] = [
+      String(p.rank),
+      escapeHtml(p.pilot_name),
+      p.made_goal
+        ? `<span class="text-green-500">✓</span>`
+        : `<span class="text-muted-foreground">—</span>`,
+      `${(p.flown_distance / 1000).toFixed(1)} km`,
+    ];
+
+    if (hasSpeed) {
+      cells.push(
+        p.speed_section_time !== null
+          ? formatDuration(p.speed_section_time)
+          : `<span class="text-muted-foreground">—</span>`
+      );
+    }
+
+    cells.push(Math.round(p.distance_points).toString());
+    if (hasTimePoints) cells.push(Math.round(p.time_points).toString());
+    if (hasLeadPoints) cells.push(Math.round(p.leading_points).toString());
+
+    // Total with optional penalty badge
+    let totalHtml = Math.round(p.total_score).toString();
+    if (p.penalty_points > 0) {
+      const reason = p.penalty_reason ? escapeHtml(p.penalty_reason) : "";
+      totalHtml += ` <span class="inline-flex items-center rounded-md bg-red-500/10 text-red-500 px-1.5 py-0.5 text-xs font-medium" title="${reason}">-${p.penalty_points}</span>`;
+    }
+    cells.push(totalHtml);
+
+    for (const cellHtml of cells) {
+      const td = document.createElement("td");
+      td.className = "py-1.5 pr-3";
+      td.innerHTML = cellHtml;
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  wrapper.appendChild(table);
+
+  // Validity summary
+  const v = cls.task_validity;
+  const ap = cls.available_points;
+  const summary = document.createElement("p");
+  summary.className = "text-xs text-muted-foreground mt-2";
+  summary.textContent = `Task validity: ${(v.task * 100).toFixed(0)}% · Available: ${Math.round(ap.total)} pts (dist ${Math.round(ap.distance)}, time ${Math.round(ap.time)}, lead ${Math.round(ap.leading)})`;
+  wrapper.appendChild(summary);
+
+  return wrapper;
+}
+
+async function setupScoreSection(compId: string, taskId: string) {
+  const content = document.getElementById("task-scores-content")!;
+  const scoresLink = document.getElementById("comp-scores-link") as HTMLAnchorElement;
+
+  let data: TaskScoreData;
+  try {
+    const res = await api.api.comp[":comp_id"].task[":task_id"].score.$get({
+      param: { comp_id: compId, task_id: taskId },
+    });
+    if (res.status === 422) {
+      content.innerHTML = `<p class="text-sm text-muted-foreground">No scores yet — task route not defined</p>`;
+      return;
+    }
+    if (!res.ok) {
+      content.innerHTML = `<p class="text-sm text-muted-foreground">Scores not available</p>`;
+      return;
+    }
+    data = (await res.json()) as unknown as TaskScoreData;
+  } catch {
+    content.innerHTML = `<p class="text-sm text-muted-foreground">Scores not available</p>`;
+    return;
+  }
+
+  content.innerHTML = "";
+  const showClassName = data.classes.length > 1;
+  for (const cls of data.classes) {
+    content.appendChild(renderScoreClass(cls, showClassName));
+  }
+
+  scoresLink.href = `/scores?comp_id=${encodeURIComponent(compId)}`;
+  scoresLink.classList.remove("hidden");
 }
 
 // ── Comp detail view ─────────────────────────────────────────────────────────
