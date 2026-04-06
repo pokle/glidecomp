@@ -24,15 +24,19 @@
     <!-- Header -->
     <header class="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-10">
       <div class="max-w-3xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-        <a href="/" class="inline-flex items-center gap-2 text-lg font-bold tracking-tight text-foreground hover:text-primary transition-colors">
+        <a id="nav-logo" href="/" class="inline-flex items-center gap-2 text-lg font-bold tracking-tight text-foreground hover:text-primary transition-colors">
           <img src="/icon.svg" alt="GlideComp logo" class="w-6 h-6" />
           GlideComp
         </a>
-        <div class="flex items-center gap-3">
-          <span id="user-name" class="text-sm text-muted-foreground hidden sm:inline"></span>
-          <a href="/comp" class="btn btn-ghost btn-sm text-xs">Competitions</a>
-          <a href="/analysis.html" class="btn btn-ghost btn-sm text-xs">Analysis</a>
-          <button id="signout-btn" class="btn btn-ghost btn-sm text-xs text-muted-foreground">Sign out</button>
+        <div class="flex items-center gap-1">
+          <a id="nav-my-flights" href="/u/me/" class="text-sm font-medium text-foreground px-2 py-1 transition-colors">My Flights</a>
+          <a href="/comp" class="text-sm text-muted-foreground hover:text-foreground px-2 py-1 transition-colors">Competitions</a>
+          <details id="nav-user-menu" class="relative hidden">
+            <summary id="nav-user-name" class="btn btn-ghost btn-sm text-xs list-none cursor-pointer select-none"></summary>
+            <div class="absolute right-0 top-full mt-1 w-36 rounded-lg border border-border bg-card shadow-lg p-1 z-50">
+              <button id="signout-btn" class="w-full text-left px-3 py-1.5 text-sm hover:bg-muted rounded-md transition-colors text-muted-foreground">Sign out</button>
+            </div>
+          </details>
         </div>
       </div>
     </header>
@@ -42,8 +46,8 @@
 
       <!-- Page title -->
       <div class="mb-8">
-        <h1 class="text-2xl font-bold tracking-tight">Flight Log</h1>
-        <p class="text-sm text-muted-foreground mt-1">Your tracks and competition tasks</p>
+        <h1 class="text-2xl font-bold tracking-tight">My Flights</h1>
+        <p class="text-sm text-muted-foreground mt-1">Upload and manage your IGC tracks and tasks</p>
       </div>
 
       <!-- Tabs -->
@@ -128,26 +132,6 @@
           <p class="text-sm text-muted-foreground">No competition tasks yet</p>
           <p class="text-xs text-muted-foreground/60 mt-1">Upload XCTSK files or load tasks in the analysis page</p>
         </div>
-      </div>
-
-      <!-- Sample Data -->
-      <div class="mt-8 pt-6 border-t border-border/30">
-        <h2 class="text-sm font-medium text-muted-foreground mb-2">Sample Data</h2>
-        <a href="/analysis.html?sampleComp=corryong-cup-2026-t1"
-           class="flex items-center gap-3 rounded-lg border border-border/50 px-4 py-3 hover:bg-muted/50 transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground shrink-0">
-            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
-            <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
-            <path d="M4 22h16"/>
-            <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
-            <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
-            <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
-          </svg>
-          <div>
-            <div class="text-sm font-medium">Corryong Cup 2026 — Task 1</div>
-            <div class="text-xs text-muted-foreground">33 pilots, HG race task with GAP scoring</div>
-          </div>
-        </a>
       </div>
 
     </main>

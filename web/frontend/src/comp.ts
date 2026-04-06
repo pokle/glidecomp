@@ -79,20 +79,20 @@ async function init() {
   page.classList.remove("hidden");
 
   // Header — show user info or sign-in link
-  const userNameEl = document.getElementById("user-name")!;
-  const signoutBtn = document.getElementById("signout-btn")!;
   const createBtn = document.getElementById("create-comp-btn")!;
 
   if (user) {
-    userNameEl.textContent = user.name;
-    signoutBtn.addEventListener("click", async () => {
+    (document.getElementById("nav-logo") as HTMLAnchorElement).href = `/u/${user.username}/`;
+    (document.getElementById("nav-my-flights") as HTMLAnchorElement).href = `/u/${user.username}/`;
+    document.getElementById("nav-user-menu")!.classList.remove("hidden");
+    document.getElementById("nav-user-name")!.textContent = user.name;
+    document.getElementById("signout-btn")!.addEventListener("click", async () => {
       await signOut();
       window.location.href = "/";
     });
   } else {
-    userNameEl.textContent = "";
-    signoutBtn.textContent = "Sign in";
-    signoutBtn.addEventListener("click", () => signInWithGoogle());
+    document.getElementById("signin-btn")!.classList.remove("hidden");
+    document.getElementById("signin-btn")!.addEventListener("click", () => signInWithGoogle());
     createBtn.classList.add("hidden");
   }
 
