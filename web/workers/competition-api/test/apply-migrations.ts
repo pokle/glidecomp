@@ -15,4 +15,8 @@ await env.DB.batch([
     `INSERT OR REPLACE INTO "user" (id, name, email, "createdAt", "updatedAt")
      VALUES (?, ?, ?, ?, ?)`
   ).bind("user-2", "Admin Two", "admin2@test.com", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
+  env.DB.prepare(
+    `INSERT OR REPLACE INTO "user" (id, name, email, "createdAt", "updatedAt")
+     VALUES (?, ?, ?, ?, ?)`
+  ).bind("user-3", "Pilot Three", "pilot3@test.com", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
 ]);

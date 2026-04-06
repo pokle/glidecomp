@@ -5,5 +5,7 @@ declare module "cloudflare:test" {
   // R2Bucket is provided automatically by miniflare when configured via wrangler.toml
   interface ProvidedEnv extends Env {
     TEST_MIGRATIONS: D1Migration[];
+    SAMPLE_TASK_XCTSK: string;
+    SAMPLE_IGC_FILES: string; // JSON: { [filename: string]: string }
   }
 }

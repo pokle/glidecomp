@@ -336,16 +336,43 @@ Staged iterative plan. Each iteration delivers a working, testable vertical slic
 
 ## Iteration 6: Preprocessing Pipeline
 
-- [x] Implement at-upload preprocessing: parse IGC with engine's `turnpointSequence()` + scoring helpers, write `flight_data` to `task_track`
-- [x] Import engine code into the worker (turnpoint sequence, distance, speed time, leading coefficient, ESS time, goal status)
-- [x] Implement `POST .../reprocess` endpoint with Cloudflare Queue integration
-- [x] Implement Queue consumer: fetch IGC from R2, reprocess, write `flight_data` back to D1
+- [x] ~~Implement at-upload preprocessing: parse IGC with engine's `turnpointSequence()` + scoring helpers, write `flight_data` to `task_track`~~ — replaced by score-on-demand architecture (see Iteration 7-simpler)
+- [x] ~~Import engine code into the worker (turnpoint sequence, distance, speed time, leading coefficient, ESS time, goal status)~~ — leading coefficient requires cross-pilot data; all scoring now runs in `scoreTask()` at query time
+- [x] ~~Implement `POST .../reprocess` endpoint with Cloudflare Queue integration~~ — removed (no preprocessing pipeline)
+- [x] ~~Implement Queue consumer: fetch IGC from R2, reprocess, write `flight_data` back to D1~~ — removed
 - [x] Write tests using sample IGC + xctsk files from `web/samples/`
 
-## Iteration 7: Live Scoring
+## ~~Iteration 7: Live Scoring~~ (CANCELLED — superseded by Iteration 7-simpler)
 
-- [ ] Implement `GET .../task/:task_id/score` — load `flight_data` + penalties, run `scoreTask()`, return ranked results per class
-- [ ] Implement `GET .../comp/:comp_id/scores` — aggregate across all tasks, return overall standings
+The preprocessing-based scoring approach here was cancelled. Storing partial scoring data
+(`flight_data`) in D1 cannot include the leading coefficient (it requires cross-pilot aggregates
+unavailable at upload time), and the queue/reprocess complexity was not warranted. See
+Iteration 7-simpler below.
+
+## Iteration 7-simpler: Score on Demand with KV Cache
+
+Replaces the preprocessing pipeline from Iteration 6 and the cancelled Iteration 7.
+Scoring fetches IGC files from R2 at query time and caches results in Workers KV.
+
+**Architecture:**
+- No preprocessing — `preprocess.ts`, the queue, `/reprocess`, and `flight_data` are removed
+- Upload stores IGC in R2 and metadata in D1 only (no parsing at upload time)
+- Scoring fetches all IGC for a task from R2 sequentially, decompresses, parses, calls `scoreTask()` per pilot class
+- Results cached in Workers KV keyed by a SHA-256 fingerprint of the current task state (xctsk + track list + penalties)
+- Cache auto-invalidates: any upload, penalty change, or xctsk update changes the fingerprint — no explicit invalidation needed
+- Memory safe for 250 pilots: sequential R2 fetches keep peak memory ~90MB (within 128MB Worker limit)
+- Requires Workers Paid plan (30s CPU time) for competitions with many pilots
+- Leading coefficient computed correctly inside `scoreTask()` using all pilots' raw fixes
+
+- [x] Remove preprocessing machinery (`preprocess.ts`, queue, `/reprocess`, `flight_data` column)
+- [x] Add `SCORES_CACHE` KV namespace binding (run `bun run wrangler2 kv:namespace create SCORES_CACHE` to get production IDs)
+- [x] Implement cache key computation (`src/scoring.ts` — SHA-256 of task state from D1)
+- [x] Implement `GET /api/comp/:comp_id/task/:task_id/score` with KV cache layer (`src/routes/score.ts`)
+- [x] Implement `GET /api/comp/:comp_id/scores` — aggregate across tasks, return overall standings per class
+- [x] Apply `penalty_points` after `scoreTask()` (engine does not accept penalties); re-rank within class
+- [x] Class-based scoring: call `scoreTask()` separately per `task_class` entry
+- [x] Write scoring tests using real sample IGC + xctsk from `web/samples/` (`test/scoring.test.ts`)
+- [x] Add `X-Cache: HIT/MISS` response header for observability
 - [ ] Build task score view on the task page (ranked pilot list with point breakdowns)
 - [ ] Build competition scores page (`/scores?comp_id=...`) — public, no auth required
 - [ ] Display per-class rankings and penalties (points + reason)

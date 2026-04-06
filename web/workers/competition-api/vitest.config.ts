@@ -1,4 +1,5 @@
 import path from "node:path";
+import { readFileSync, readdirSync } from "node:fs";
 import {
   cloudflareTest,
   readD1Migrations,
@@ -21,7 +22,26 @@ const TEST_USERS: Record<string, object> = {
     image: null,
     username: "admin2",
   },
+  "user-3": {
+    id: "user-3",
+    name: "Pilot Three",
+    email: "pilot3@test.com",
+    image: null,
+    username: "pilot3",
+  },
 };
+
+// Read sample files in Node.js context (full filesystem access, no miniflare sandbox)
+const SAMPLES_DIR = path.resolve(__dirname, "../../samples/comps/corryong-cup-2026-t1");
+const SAMPLE_TASK_XCTSK = readFileSync(path.resolve(SAMPLES_DIR, "task.xctsk"), "utf-8");
+const SAMPLE_IGC_FILES = JSON.stringify(
+  Object.fromEntries(
+    readdirSync(SAMPLES_DIR)
+      .filter((f) => f.toLowerCase().endsWith(".igc"))
+      .sort()
+      .map((f) => [f, readFileSync(path.resolve(SAMPLES_DIR, f), "utf-8")])
+  )
+);
 
 export default defineConfig(async () => {
   const migrationsPath = path.join(__dirname, "test", "migrations");
@@ -32,9 +52,9 @@ export default defineConfig(async () => {
       cloudflareTest({
         wrangler: { configPath: "./wrangler.toml" },
         miniflare: {
-          bindings: { TEST_MIGRATIONS: migrations },
+          bindings: { TEST_MIGRATIONS: migrations, SAMPLE_TASK_XCTSK, SAMPLE_IGC_FILES },
           r2Buckets: ["R2"],
-          queues: { REPROCESS_QUEUE: "reprocess-tracks" },
+          kvNamespaces: ["SCORES_CACHE"],
           // Allow access to the root directory for samples
           unsafeNodeModules: ["node:fs", "node:path"],
           serviceBindings: {

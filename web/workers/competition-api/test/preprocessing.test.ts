@@ -8,38 +8,112 @@ import {
   clearCompData,
 } from "./helpers";
 
-const bissettAmessIgc = "HFDTE050126\nB1200004728234N01152432EA0100001000\nB1200014728234N01152432EA0100001000\n";
-const hermanIgc = "HFDTE050126\nB1200004728234N01152432EA0100001000\nB1200024728234N01152432EA0100001000\n";
-const drabbleIgc = "HFDTE050126\nB1200004728234N01152432EA0100001000\nB1200034728234N01152432EA0100001000\n";
-// @ts-ignore
-import taskXctskRaw from "./samples/task.xctsk?raw";
-
-const taskXctsk = JSON.parse(taskXctskRaw);
-
-/** Helper to compress a string to gzip */
-async function compressToGzip(text: string): Promise<Uint8Array> {
-  if (!text) throw new Error("Sample text is empty");
-  const stream = new Response(text).body!.pipeThrough(new CompressionStream("gzip"));
+/** Compress a string to gzip for upload. */
+async function compressText(text: string): Promise<Uint8Array> {
+  const stream = new Response(text).body!.pipeThrough(
+    new CompressionStream("gzip")
+  );
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
 beforeEach(async () => {
   await clearCompData();
-  // Clean up R2
   const listed = await env.R2.list();
   if (listed.objects.length > 0) {
     await Promise.all(listed.objects.map((o) => env.R2.delete(o.key)));
   }
 });
 
-describe("Preprocessing Pipeline", () => {
-  test("preprocesses IGC on upload when task has xctsk", async () => {
+/** Get a sample IGC file's text content from the injected binding. */
+function getSampleIgc(filename: string): string {
+  const files = JSON.parse(env.SAMPLE_IGC_FILES) as Record<string, string>;
+  const content = files[filename];
+  if (!content) throw new Error(`Sample IGC not found: ${filename}`);
+  return content;
+}
+
+describe("IGC Upload", () => {
+  test("upload succeeds and stores metadata in D1", async () => {
+    const taskXctsk = JSON.parse(env.SAMPLE_TASK_XCTSK);
     const compId = await createComp();
     const taskId = await createTask(compId, { xctsk: taskXctsk });
 
-    // Use a real IGC from samples
-    const payload = await compressToGzip("HFDTE050126\nB1200004728234N01152432EA0100001000\n");
+    const payload = await compressText(getSampleIgc("bissett-amess_206778_050126.igc"));
+    const res = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc`,
+      payload,
+      { user: "user-1" }
+    );
 
+    expect(res.status).toBe(201);
+    const data = (await res.json()) as Record<string, unknown>;
+    expect(data.replaced).toBe(false);
+    expect(typeof data.task_track_id).toBe("string");
+    expect(typeof data.igc_filename).toBe("string");
+    expect(data.file_size).toBeGreaterThan(0);
+
+    // Verify D1 row exists with expected metadata
+    const tt = await env.DB.prepare(
+      "SELECT igc_filename, file_size, uploaded_at FROM task_track"
+    ).first<{ igc_filename: string; file_size: number; uploaded_at: string }>();
+
+    expect(tt).not.toBeNull();
+    expect(tt!.file_size).toBe(payload.byteLength);
+    expect(tt!.igc_filename).toMatch(/^c\/\d+\/t\/\d+\/\d+\.igc$/);
+    expect(tt!.uploaded_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+    // Confirm flight_data column no longer exists (migration applied)
+    const cols = await env.DB.prepare(
+      "PRAGMA table_info(task_track)"
+    ).all<{ name: string }>();
+    const colNames = cols.results.map((c) => c.name);
+    expect(colNames).not.toContain("flight_data");
+  });
+
+  test("re-upload replaces track and preserves penalty", async () => {
+    const taskXctsk = JSON.parse(env.SAMPLE_TASK_XCTSK);
+    const compId = await createComp();
+    const taskId = await createTask(compId, { xctsk: taskXctsk });
+
+    // First upload
+    const res1 = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc`,
+      await compressText(getSampleIgc("bissett-amess_206778_050126.igc")),
+      { user: "user-1" }
+    );
+    expect(res1.status).toBe(201);
+
+    // Set a penalty
+    const trackData = (await res1.json()) as { comp_pilot_id: string };
+    await authRequest(
+      "PATCH",
+      `/api/comp/${compId}/task/${taskId}/igc/${trackData.comp_pilot_id}`,
+      { penalty_points: 50, penalty_reason: "Safety violation" }
+    );
+
+    // Re-upload (different file, same pilot)
+    const res2 = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc`,
+      await compressText(getSampleIgc("herman_202523_050126.igc")),
+      { user: "user-1" }
+    );
+    expect(res2.status).toBe(200);
+    const data2 = (await res2.json()) as Record<string, unknown>;
+    expect(data2.replaced).toBe(true);
+
+    // Penalty preserved
+    const tt = await env.DB.prepare(
+      "SELECT penalty_points, penalty_reason FROM task_track"
+    ).first<{ penalty_points: number; penalty_reason: string }>();
+    expect(tt!.penalty_points).toBe(50);
+    expect(tt!.penalty_reason).toBe("Safety violation");
+  });
+
+  test("upload to task without xctsk succeeds", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId); // no xctsk
+
+    const payload = await compressText(getSampleIgc("bissett-amess_206778_050126.igc"));
     const res = await uploadRequest(
       `/api/comp/${compId}/task/${taskId}/igc`,
       payload,
@@ -47,81 +121,46 @@ describe("Preprocessing Pipeline", () => {
     );
     expect(res.status).toBe(201);
 
-    // Verify flight_data was populated in D1
-    const tt = await env.DB.prepare("SELECT flight_data FROM task_track").first<{ flight_data: string }>();
-    expect(tt!.flight_data).not.toBeNull();
-
-    const flightData = JSON.parse(tt!.flight_data);
-    expect(flightData.flownDistance).toBeGreaterThan(0);
-    // Hardcoded IGC won't make goal
-    expect(flightData.madeGoal).toBe(false);
+    const tt = await env.DB.prepare(
+      "SELECT igc_filename FROM task_track"
+    ).first();
+    expect(tt).not.toBeNull();
   });
 
-  test("re-upload updates flight_data", async () => {
+  test("two different pilots upload to same task", async () => {
+    const taskXctsk = JSON.parse(env.SAMPLE_TASK_XCTSK);
     const compId = await createComp();
     const taskId = await createTask(compId, { xctsk: taskXctsk });
 
-    // Upload first track (made goal)
-    const payload1 = await compressToGzip(bissettAmessIgc);
-    const res1 = await uploadRequest(`/api/comp/${compId}/task/${taskId}/igc`, payload1, { user: "user-1" });
+    const res1 = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc`,
+      await compressText(getSampleIgc("bissett-amess_206778_050126.igc")),
+      { user: "user-1" }
+    );
     expect(res1.status).toBe(201);
 
-    const tt1 = await env.DB.prepare("SELECT flight_data FROM task_track").first<{ flight_data: string }>();
-    expect(tt1).not.toBeNull();
-    expect(tt1!.flight_data).not.toBeNull();
-    const fd1 = JSON.parse(tt1!.flight_data);
-    expect(fd1.madeGoal).toBe(true);
+    const res2 = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc`,
+      await compressText(getSampleIgc("herman_202523_050126.igc")),
+      { user: "user-2" }
+    );
+    expect(res2.status).toBe(201);
 
-    // Upload second track (replacement)
-    const payload2 = await compressToGzip(hermanIgc);
-    const res2 = await uploadRequest(`/api/comp/${compId}/task/${taskId}/igc`, payload2, { user: "user-1" });
-    expect(res2.status).toBe(200);
-
-    const tt2 = await env.DB.prepare("SELECT flight_data FROM task_track").first<{ flight_data: string }>();
-    expect(tt2).not.toBeNull();
-    expect(tt2!.flight_data).not.toBeNull();
-    const fd2 = JSON.parse(tt2!.flight_data);
-    expect(fd2.flownDistance).not.toBe(fd1.flownDistance);
+    const count = await env.DB.prepare(
+      "SELECT COUNT(*) as cnt FROM task_track"
+    ).first<{ cnt: number }>();
+    expect(count!.cnt).toBe(2);
   });
 
-  test("preprocessing handles task without xctsk (flight_data stays NULL)", async () => {
-    const compId = await createComp();
-    const taskId = await createTask(compId); // no xctsk
-
-    const payload = await compressToGzip(bissettAmessIgc);
-    const res = await uploadRequest(`/api/comp/${compId}/task/${taskId}/igc`, payload, { user: "user-1" });
-    expect(res.status).toBe(201);
-
-    const tt = await env.DB.prepare("SELECT flight_data FROM task_track").first<{ flight_data: string }>();
-    expect(tt!.flight_data).toBeNull();
-  });
-
-  test("POST .../reprocess enqueues messages", async () => {
+  test("empty file is rejected", async () => {
     const compId = await createComp();
     const taskId = await createTask(compId);
 
-    // Upload 3 tracks from DIFFERENT users (to have 3 tracks)
-    const r1 = await uploadRequest(`/api/comp/${compId}/task/${taskId}/igc`, await compressToGzip(bissettAmessIgc), { user: "user-1" });
-    expect(r1.status).toBe(201);
-    const r2 = await uploadRequest(`/api/comp/${compId}/task/${taskId}/igc`, await compressToGzip(hermanIgc), { user: "user-2" });
-    expect(r2.status).toBe(201);
-    const r3 = await uploadRequest(`/api/comp/${compId}/task/${taskId}/igc`, await compressToGzip(drabbleIgc), { user: "user-1" });
-    expect(r3.status).toBe(200); // Replacement
-
-    // Update task with xctsk
-    await env.DB.prepare("UPDATE task SET xctsk = ? WHERE task_id = ?")
-      .bind(JSON.stringify(taskXctsk), taskId)
-      .run();
-
-    // Trigger reprocess
-    const res = await authRequest("POST", `/api/comp/${compId}/task/${taskId}/reprocess`);
-    expect(res.status).toBe(200);
-    const data = await res.json() as { count: number };
-    expect(data.count).toBe(2); // user-1 and user-2
-
-    // Verify messages in Queue
-    const messages = await env.REPROCESS_QUEUE.list();
-    expect(messages.messages.length).toBe(2);
-    expect(messages.messages[0].body.type).toBe("reprocess_track");
+    const res = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc`,
+      new Uint8Array(0),
+      { user: "user-1" }
+    );
+    expect(res.status).toBe(400);
   });
 });
