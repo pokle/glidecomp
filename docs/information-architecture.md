@@ -42,12 +42,13 @@ Date: 2026-04-05
 │   │   ├── Tasks section           Task list, create new
 │   │   ├── Standings section       Competition scores, filter by class/team
 │   │   ├── Pilots section          Registered pilots, class assignments
-│   │   └── Settings section        Admin-only: GAP params, admins, close date
+│   │   └── Settings dialog (⚙)    Admin-only pop-up: GAP params, admins, close date
 │   │
 │   └── /comp/{id}/task/{id}        Task detail
-│       ├── Overview section        Task definition, track list, upload
+│       ├── Task definition         Admin: editable editor; others: read-only waypoints
+│       ├── Tracks section          Upload area + track list
 │       ├── Scores section          Task scores (public, computed on-demand)
-│       └── Task editor             Admin-only: define/edit waypoints
+│       └── Settings dialog (⚙)    Admin-only pop-up: name, date, classes, delete
 │
 ├── /u/{username}/profile           Pilot profile (auth required)
 │                                   Name, CIVL ID, sporting body IDs, phone, glider
@@ -204,7 +205,7 @@ This keeps the analysis page focused on *flight analysis*, which is its core str
 ```
 ┌─────────────────────────────────────┐
 │  ← Competitions    Corryong Cup 2026│
-│  HG · 3 classes · 12 pilots        │
+│  HG · 3 classes · 12 pilots  [⚙]   │
 │─────────────────────────────────────│
 │                                     │
 │  ┌─ Tasks ───────────────────────┐  │
@@ -221,31 +222,26 @@ This keeps the analysis page focused on *flight analysis*, which is its core str
 │  ┌─ Pilots ──────────────────────┐  │
 │  │  Pilot list with classes      │  │
 │  └───────────────────────────────┘  │
-│                                     │
-│  ┌─ Settings (admin only) ───────┐  │
-│  │  Name, category, close date   │  │
-│  │  GAP parameters               │  │
-│  │  Admin management             │  │
-│  │  Pilot class definitions      │  │
-│  │  ⚠ Delete competition        │  │
-│  └───────────────────────────────┘  │
 └─────────────────────────────────────┘
 ```
 
-1. **Header**: Competition name, category badge (HG/PG), pilot classes, pilot count. Class coverage warnings displayed here prominently if any.
+1. **Header**: Competition name, category badge (HG/PG), pilot classes, pilot count. Settings gear icon (admin only). Class coverage warnings displayed here prominently if any.
 2. **Tasks**: Task list (clickable → `/comp/{id}/task/{tid}`). "New Task" button (admin only).
 3. **Standings**: Overall competition standings. Filter by class or team. Per-task score summaries. Public (also accessible via `/scores?comp={id}` deep link).
 4. **Pilots**: Registered pilots with class, team, driver contact. Admin can edit class assignments.
-5. **Settings** (admin only): Competition name, category, close date, GAP parameters, admin management (add/remove by email), pilot class definitions, delete competition (danger zone).
+
+**Settings dialog** (admin only, opened via gear icon in header): Competition name, category, close date, GAP parameters, admin management (add/remove by email), pilot class definitions, delete competition (danger zone).
 
 ### `/comp/{id}/task/{id}` — Task Detail
 
 **Single scrollable page with distinct sections:**
 
-1. **Header**: Task name, date, pilot class badges, status badge (task defined / not defined)
+1. **Header**: Task name, date, pilot class badges, status badge (task defined / not defined). Settings gear icon (admin only).
 2. **Task Definition** (admin: editable task editor; others: read-only waypoint list + download XCTSK)
 3. **Tracks**: Upload area + track list with pilot names, status, download links
 4. **Scores**: Ranked pilot list with point breakdowns, penalties. Computed on-demand.
+
+**Settings dialog** (admin only, opened via gear icon in header): Task name, task date, pilot classes for this task, delete task (danger zone).
 
 **"View on Map" action**: A button that opens the analysis view with all tracks loaded. This is how the map integrates with competitions — as an optional deep-dive, not the primary interface.
 
