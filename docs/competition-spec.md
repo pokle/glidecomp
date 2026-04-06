@@ -172,6 +172,7 @@ Admin management is handled via `PATCH` — the client sends the desired admin l
 | GET | `/api/comp/:comp_id/task/:task_id` | Optional | Get task details including xctsk data and track list. Public for non-test. |
 | PATCH | `/api/comp/:comp_id/task/:task_id` | Admin | Update task name, pilot classes (via `task_class`), **and/or xctsk data**. |
 | DELETE | `/api/comp/:comp_id/task/:task_id` | Admin | Delete task. D1 rows cascade-deleted immediately. R2 cleanup enqueued via Queue. |
+| POST | `/api/comp/:comp_id/task/:task_id/reprocess` | Admin | Reprocess all `flight_data` for this task. Enqueues one Cloudflare Queue message per `task_track` — each Queue Consumer fetches the IGC from R2, parses it against the current xctsk, and writes updated `flight_data` back to D1. Use after changing task xctsk. |
 
 The xctsk object is stored in the `task.xctsk` D1 column — no R2 involved. The task editor UI sends `PATCH` with the updated `xctsk` field on each change (debounced). Returned inline with `GET`.
 
@@ -335,11 +336,11 @@ Staged iterative plan. Each iteration delivers a working, testable vertical slic
 
 ## Iteration 6: Preprocessing Pipeline
 
-- [ ] Implement at-upload preprocessing: parse IGC with engine's `turnpointSequence()` + scoring helpers, write `flight_data` to `task_track`
-- [ ] Import engine code into the worker (turnpoint sequence, distance, speed time, leading coefficient, ESS time, goal status)
-- [ ] Implement `POST .../reprocess` endpoint with Cloudflare Queue integration
-- [ ] Implement Queue consumer: fetch IGC from R2, reprocess, write `flight_data` back to D1
-- [ ] Write tests using sample IGC + xctsk files from `web/samples/`
+- [x] Implement at-upload preprocessing: parse IGC with engine's `turnpointSequence()` + scoring helpers, write `flight_data` to `task_track`
+- [x] Import engine code into the worker (turnpoint sequence, distance, speed time, leading coefficient, ESS time, goal status)
+- [x] Implement `POST .../reprocess` endpoint with Cloudflare Queue integration
+- [x] Implement Queue consumer: fetch IGC from R2, reprocess, write `flight_data` back to D1
+- [x] Write tests using sample IGC + xctsk files from `web/samples/`
 
 ## Iteration 7: Live Scoring
 

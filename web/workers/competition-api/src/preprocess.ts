@@ -36,9 +36,9 @@ export async function preprocessTrack(
     }
 
     // 3. Decompress and parse IGC
-    const decompressed = await new Response(data)
-      .body!.pipeThrough(new DecompressionStream("gzip"))
-      .arrayBuffer();
+    const decompressedStream = new Response(data)
+      .body!.pipeThrough(new DecompressionStream("gzip"));
+    const decompressed = await new Response(decompressedStream).arrayBuffer();
     const igcText = new TextDecoder().decode(decompressed);
     const igc = parseIGC(igcText);
 
