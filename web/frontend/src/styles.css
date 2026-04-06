@@ -27,6 +27,19 @@
   dialog {
     touch-action: pan-x pan-y;
   }
+
+  /* iOS Safari auto-zooms the viewport when focusing form fields whose
+     font-size is below 16px, and often does not restore the zoom afterwards —
+     leaving the page subtly scaled in and pushing map controls off-screen.
+     Force 16px on form fields for iOS Safari only (scoped via the iOS-only
+     -webkit-touch-callout feature query) so desktop visuals are unaffected. */
+  @supports (-webkit-touch-callout: none) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
 }
 
 @layer components {
