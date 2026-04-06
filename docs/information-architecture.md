@@ -297,15 +297,15 @@ This reduces cognitive load — users only see tabs relevant to their current ta
 
 This IA can be implemented incrementally:
 
-1. **Add global nav bar** to all authenticated pages (My Flights, Competitions, User Menu). This alone fixes the biggest confusion.
-2. **Remove competition-related UI from dashboard** (sample comp link, competitions button). Dashboard becomes purely about personal flights.
+1. ~~**Add global nav bar** to all authenticated pages (My Flights, Competitions, User Menu). This alone fixes the biggest confusion.~~ ✅ Done (#132)
+2. ~~**Remove competition-related UI from dashboard** (sample comp link, competitions button). Dashboard becomes purely about personal flights.~~ ✅ Done (#132)
 3. **Restructure competition detail** as a single scrollable page with clear sections (Tasks, Standings, Pilots, Settings).
 4. **Move "Comp Score" and "GAP Config"** out of the analysis sidebar into the competition pages.
 5. **Add "View on Map" button** to task detail page as the bridge to analysis.
 6. **Route analysis under `/u/{username}/analysis`** instead of standalone `/analysis.html`.
 7. **Add `/u/{username}/profile` page** for pilot profile management.
 
-Steps 1-3 can ship together as one release. Steps 4-7 can follow as competition features mature.
+Steps 1-2 shipped as Release 1. Steps 3-7 can follow as competition features mature.
 
 ---
 
