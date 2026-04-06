@@ -1,5 +1,4 @@
-/u/*  /dashboard.html  200
-/comp  /comp.html  200
-/comp/  /comp.html  200
-/comp/:comp_id/task/*  /comp-detail.html  200
-/comp/:comp_id  /comp-detail.html  200
+/u/*  /dashboard  200
+/comp/  /comp  301
+/comp/:comp_id/task/*  /comp-detail  200
+/comp/:comp_id  /comp-detail  200

@@ -36,5 +36,9 @@ preview_id = "fc7d966cba2c40fdb52c83c7a88c217e"
 #                bun run wrangler2 kv namespace create glidecomp_scores_cache --preview
 
 [[routes]]
+pattern = "glidecomp.com/api/comp"
+zone_name = "glidecomp.com"
+
+[[routes]]
 pattern = "glidecomp.com/api/comp/*"
 zone_name = "glidecomp.com"
