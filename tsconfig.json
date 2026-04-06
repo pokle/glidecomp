@@ -9,6 +9,9 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "noEmit": true,
+    "paths": {
+      "@glidecomp/engine": ["./web/engine/src/index.ts"]
+    },
     "lib": [
       "ES2022",
       "DOM",

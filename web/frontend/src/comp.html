@@ -24,14 +24,20 @@
     <!-- Header -->
     <header class="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-10">
       <div class="max-w-3xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-        <a href="/" class="inline-flex items-center gap-2 text-lg font-bold tracking-tight text-foreground hover:text-primary transition-colors">
+        <a id="nav-logo" href="/" class="inline-flex items-center gap-2 text-lg font-bold tracking-tight text-foreground hover:text-primary transition-colors">
           <img src="/icon.svg" alt="GlideComp logo" class="w-6 h-6" />
           GlideComp
         </a>
-        <div class="flex items-center gap-3">
-          <span id="user-name" class="text-sm text-muted-foreground hidden sm:inline"></span>
-          <a href="/u/me/" class="btn btn-ghost btn-sm text-xs">Dashboard</a>
-          <button id="signout-btn" class="btn btn-ghost btn-sm text-xs text-muted-foreground">Sign out</button>
+        <div class="flex items-center gap-1">
+          <a id="nav-my-flights" href="/u/me/" class="text-sm text-muted-foreground hover:text-foreground px-2 py-1 transition-colors">My Flights</a>
+          <a href="/comp" class="text-sm font-medium text-foreground px-2 py-1 transition-colors">Competitions</a>
+          <details id="nav-user-menu" class="relative hidden">
+            <summary id="nav-user-name" class="btn btn-ghost btn-sm text-xs list-none cursor-pointer select-none"></summary>
+            <div class="absolute right-0 top-full mt-1 w-36 rounded-lg border border-border bg-card shadow-lg p-1 z-50">
+              <button id="signout-btn" class="w-full text-left px-3 py-1.5 text-sm hover:bg-muted rounded-md transition-colors text-muted-foreground">Sign out</button>
+            </div>
+          </details>
+          <button id="signin-btn" class="hidden btn btn-ghost btn-sm text-xs">Sign in</button>
         </div>
       </div>
     </header>

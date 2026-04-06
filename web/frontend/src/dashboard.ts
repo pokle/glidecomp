@@ -98,7 +98,11 @@ async function init() {
   container.classList.remove("hidden");
 
   // Header
-  document.getElementById("user-name")!.textContent = user.name;
+  (document.getElementById("nav-logo") as HTMLAnchorElement).href = `/u/${user.username}/`;
+  (document.getElementById("nav-my-flights") as HTMLAnchorElement).href = `/u/${user.username}/`;
+  const userMenu = document.getElementById("nav-user-menu")!;
+  userMenu.classList.remove("hidden");
+  document.getElementById("nav-user-name")!.textContent = user.name;
   document.getElementById("signout-btn")?.addEventListener("click", async () => {
     await signOut();
     window.location.href = "/";
