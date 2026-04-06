@@ -3,7 +3,7 @@ export type Env = {
   R2: R2Bucket;
   AUTH_API: Fetcher;
   SQIDS_ALPHABET: string;
-  SCORES_CACHE: KVNamespace;
+  glidecomp_scores_cache: KVNamespace;
 };
 
 export type AuthUser = {

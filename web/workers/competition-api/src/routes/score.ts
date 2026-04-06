@@ -66,7 +66,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
 
       // Check KV cache
       const cacheKey = await computeScoreCacheKey(taskId, c.env.DB);
-      const cached = await c.env.SCORES_CACHE.get(cacheKey, "json") as TaskScoreResponse | null;
+      const cached = await c.env.glidecomp_scores_cache.get(cacheKey, "json") as TaskScoreResponse | null;
 
       if (cached) {
         return c.json(cached, 200, { "X-Cache": "HIT" });
@@ -81,7 +81,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
       );
 
       // Store in KV with 7-day TTL
-      await c.env.SCORES_CACHE.put(cacheKey, JSON.stringify(result), {
+      await c.env.glidecomp_scores_cache.put(cacheKey, JSON.stringify(result), {
         expirationTtl: 604800,
       });
 
@@ -142,7 +142,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
         .slice(0, 16);
       const compCacheKey = `compscore:${compId}:${compHex}`;
 
-      const cachedComp = await c.env.SCORES_CACHE.get(compCacheKey, "json");
+      const cachedComp = await c.env.glidecomp_scores_cache.get(compCacheKey, "json");
       if (cachedComp) {
         return c.json(cachedComp, 200, { "X-Cache": "HIT" });
       }
@@ -157,14 +157,14 @@ export const scoreRoutes = new Hono<HonoEnv>()
 
       for (const task of tasks.results) {
         const cacheKey = taskCacheKeys[tasks.results.indexOf(task)];
-        const cached = await c.env.SCORES_CACHE.get(cacheKey, "json") as TaskScoreResponse | null;
+        const cached = await c.env.glidecomp_scores_cache.get(cacheKey, "json") as TaskScoreResponse | null;
 
         let score: TaskScoreResponse;
         if (cached) {
           score = cached;
         } else {
           score = await computeTaskScore(task.task_id, c.env.DB, c.env.R2, alphabet);
-          await c.env.SCORES_CACHE.put(cacheKey, JSON.stringify(score), {
+          await c.env.glidecomp_scores_cache.put(cacheKey, JSON.stringify(score), {
             expirationTtl: 604800,
           });
         }
@@ -233,7 +233,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
         standings,
       };
 
-      await c.env.SCORES_CACHE.put(compCacheKey, JSON.stringify(result), {
+      await c.env.glidecomp_scores_cache.put(compCacheKey, JSON.stringify(result), {
         expirationTtl: 604800,
       });
 

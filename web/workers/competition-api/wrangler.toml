@@ -29,11 +29,11 @@ SQIDS_ALPHABET = "abcdefghijklmnopqrstuvwxyz"
 port = 8789
 
 [[kv_namespaces]]
-binding = "SCORES_CACHE"
-id = "TO_BE_CREATED"
-preview_id = "TO_BE_CREATED"
-# Run to create: bun run wrangler2 kv:namespace create SCORES_CACHE
-#                bun run wrangler2 kv:namespace create SCORES_CACHE --preview
+binding = "glidecomp_scores_cache"
+id = "dcf6eb84eca04b46880c3b48c51bdd3c"
+preview_id = "fc7d966cba2c40fdb52c83c7a88c217e"
+# Run to create: bun run wrangler2 kv namespace create glidecomp_scores_cache
+#                bun run wrangler2 kv namespace create glidecomp_scores_cache --preview
 
 [[routes]]
 pattern = "glidecomp.com/api/comp/*"
