@@ -967,9 +967,14 @@ function renderScoreClass(cls: ClassScore, showClassName: boolean): HTMLElement 
       if (p.penalty_points > 0) {
         const badge = document.createElement("span");
         badge.className = "inline-flex items-center rounded-md bg-red-500/10 text-red-500 px-1.5 py-0.5 text-xs font-medium";
-        badge.title = p.penalty_reason ?? "";
         badge.textContent = `-${p.penalty_points}`;
         penaltyTd.appendChild(badge);
+        if (p.penalty_reason) {
+          const reason = document.createElement("span");
+          reason.className = "block text-xs text-muted-foreground mt-0.5";
+          reason.textContent = p.penalty_reason;
+          penaltyTd.appendChild(reason);
+        }
       }
       tr.appendChild(penaltyTd);
     }
