@@ -547,7 +547,7 @@ function renderTrackList(
     if (track.igc_pilot_name && track.igc_pilot_name !== track.pilot_name) {
       const slot = div.querySelector(".js-igc-name-slot")!;
       slot.className = "text-xs text-muted-foreground";
-      slot.textContent = `(${track.igc_pilot_name})`;
+      slot.textContent = `(igc: ${track.igc_pilot_name})`;
     }
 
     // Penalty badge — built with DOM so title is safe for any user-supplied text
