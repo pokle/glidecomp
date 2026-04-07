@@ -25,6 +25,7 @@ export interface PilotScoreEntry {
   leading_points: number;
   arrival_points: number;
   penalty_points: number;
+  penalty_reason: string | null;
   total_score: number;
 }
 
@@ -139,7 +140,7 @@ export async function computeTaskScore(
   const tracks = await db
     .prepare(
       `SELECT tt.task_track_id, tt.comp_pilot_id, tt.igc_filename,
-              tt.penalty_points,
+              tt.penalty_points, tt.penalty_reason,
               cp.registered_pilot_name AS pilot_name,
               cp.pilot_class
        FROM task_track tt
@@ -153,6 +154,7 @@ export async function computeTaskScore(
       comp_pilot_id: number;
       igc_filename: string;
       penalty_points: number;
+      penalty_reason: string | null;
       pilot_name: string;
       pilot_class: string;
     }>();
@@ -172,6 +174,7 @@ export async function computeTaskScore(
     comp_pilot_id: number;
     pilot_class: string;
     penalty_points: number;
+    penalty_reason: string | null;
   };
 
   const parsedPilots: ParsedPilot[] = [];
@@ -208,6 +211,7 @@ export async function computeTaskScore(
       comp_pilot_id: track.comp_pilot_id,
       pilot_class: track.pilot_class,
       penalty_points: track.penalty_points,
+      penalty_reason: track.penalty_reason,
     });
   }
 
@@ -243,6 +247,7 @@ export async function computeTaskScore(
         pilotScore: ps,
         comp_pilot_id: pilot.comp_pilot_id,
         penalty_points: pilot.penalty_points,
+        penalty_reason: pilot.penalty_reason,
         finalScore: penalised,
       };
     });
@@ -262,6 +267,7 @@ export async function computeTaskScore(
       leading_points: p.pilotScore.leadingPoints,
       arrival_points: p.pilotScore.arrivalPoints,
       penalty_points: p.penalty_points,
+      penalty_reason: p.penalty_reason,
       total_score: p.finalScore,
     }));
 

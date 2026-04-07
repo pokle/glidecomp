@@ -80,8 +80,8 @@ interface PilotScoreEntry {
   leading_points: number;
   arrival_points: number;
   penalty_points: number;
+  penalty_reason: string | null;
   total_score: number;
-  penalty_reason?: string | null;
 }
 
 interface ClassScore {
