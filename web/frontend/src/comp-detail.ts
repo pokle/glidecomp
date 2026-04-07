@@ -969,13 +969,16 @@ function renderScoreClass(cls: ClassScore, showClassName: boolean): HTMLElement 
         const isBonus = p.penalty_points < 0;
         badge.className = `inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium ${isBonus ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"}`;
         badge.textContent = isBonus ? `+${Math.abs(p.penalty_points)}` : `-${p.penalty_points}`;
-        penaltyTd.appendChild(badge);
+        const inner = document.createElement("span");
+        inner.className = "inline-flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5";
+        inner.appendChild(badge);
         if (p.penalty_reason) {
           const reason = document.createElement("span");
-          reason.className = "block text-xs text-muted-foreground mt-0.5";
+          reason.className = "text-xs text-muted-foreground";
           reason.textContent = p.penalty_reason;
-          penaltyTd.appendChild(reason);
+          inner.appendChild(reason);
         }
+        penaltyTd.appendChild(inner);
       }
       tr.appendChild(penaltyTd);
     }
