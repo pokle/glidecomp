@@ -543,11 +543,20 @@ function renderTrackList(
 
     // Penalty badge — built with DOM so title is safe for any user-supplied text
     if (track.penalty_points !== 0) {
+      const isBonus = track.penalty_points < 0;
       const badge = document.createElement("span");
-      badge.className = "inline-flex items-center rounded-md bg-red-500/10 text-red-500 px-1.5 py-0.5 text-xs font-medium";
-      badge.title = track.penalty_reason ?? "";
-      badge.textContent = `${track.penalty_points > 0 ? "-" : "+"}${Math.abs(track.penalty_points)} pts`;
-      div.querySelector(".flex.items-center.gap-2")!.appendChild(badge);
+      badge.className = `inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium ${isBonus ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"}`;
+      badge.textContent = `${isBonus ? "+" : "-"}${Math.abs(track.penalty_points)} pts`;
+      const inner = document.createElement("span");
+      inner.className = "inline-flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5";
+      inner.appendChild(badge);
+      if (track.penalty_reason) {
+        const reason = document.createElement("span");
+        reason.className = "text-xs text-muted-foreground";
+        reason.textContent = track.penalty_reason;
+        inner.appendChild(reason);
+      }
+      div.querySelector(".flex.items-center.gap-2")!.appendChild(inner);
     }
 
     // Admin actions: penalty + delete (not when closed)
