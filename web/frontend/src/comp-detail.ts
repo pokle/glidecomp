@@ -899,6 +899,7 @@ function renderScoreClass(cls: ClassScore, showClassName: boolean): HTMLElement 
   const hasSpeed = cls.pilots.some((p) => p.speed_section_time !== null);
   const hasTimePoints = cls.pilots.some((p) => p.time_points !== 0);
   const hasLeadPoints = cls.pilots.some((p) => p.leading_points !== 0);
+  const hasPenalties = cls.pilots.some((p) => p.penalty_points > 0);
 
   const table = document.createElement("table");
   table.className = "w-full text-sm border-collapse";
@@ -912,6 +913,7 @@ function renderScoreClass(cls: ClassScore, showClassName: boolean): HTMLElement 
   headers.push("Dist Pts");
   if (hasTimePoints) headers.push("Time Pts");
   if (hasLeadPoints) headers.push("Lead Pts");
+  if (hasPenalties) headers.push("Penalty");
   headers.push("Total");
 
   for (const h of headers) {
@@ -958,17 +960,24 @@ function renderScoreClass(cls: ClassScore, showClassName: boolean): HTMLElement 
       tr.appendChild(td);
     }
 
-    // Total td — built with DOM so title attribute is safe for any penalty reason
+    // Penalty td (conditional column) — DOM so .title is safe for any user text
+    if (hasPenalties) {
+      const penaltyTd = document.createElement("td");
+      penaltyTd.className = "py-1.5 pr-3";
+      if (p.penalty_points > 0) {
+        const badge = document.createElement("span");
+        badge.className = "inline-flex items-center rounded-md bg-red-500/10 text-red-500 px-1.5 py-0.5 text-xs font-medium";
+        badge.title = p.penalty_reason ?? "";
+        badge.textContent = `-${p.penalty_points}`;
+        penaltyTd.appendChild(badge);
+      }
+      tr.appendChild(penaltyTd);
+    }
+
+    // Total td
     const totalTd = document.createElement("td");
     totalTd.className = "py-1.5 pr-3";
     totalTd.textContent = String(Math.round(p.total_score));
-    if (p.penalty_points > 0) {
-      const badge = document.createElement("span");
-      badge.className = "inline-flex items-center rounded-md bg-red-500/10 text-red-500 px-1.5 py-0.5 text-xs font-medium ml-1";
-      badge.title = p.penalty_reason ?? "";
-      badge.textContent = `-${p.penalty_points}`;
-      totalTd.appendChild(badge);
-    }
     tr.appendChild(totalTd);
     tbody.appendChild(tr);
   }
