@@ -85,7 +85,7 @@ export async function computeScoreCacheKey(
     .join("")
     .slice(0, 16);
 
-  return `score:${taskId}:${hex}`;
+  return `score:v2:${taskId}:${hex}`;
 }
 
 // ---------------------------------------------------------------------------
