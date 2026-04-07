@@ -65,6 +65,7 @@
               <span id="comp-test-badge" class="hidden inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">Test</span>
               <span id="comp-classes" class="text-sm text-muted-foreground"></span>
             </div>
+            <a id="comp-scores-link" href="#" class="hidden inline-block mt-3 text-sm font-medium text-primary hover:underline transition-colors">View scores →</a>
           </div>
           <button id="comp-settings-btn" class="hidden btn btn-ghost btn-sm text-xs">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -153,6 +154,19 @@
           <div id="track-list" class="space-y-2"></div>
           <div id="tracks-empty" class="text-center py-6 border border-dashed border-border/50 rounded-lg">
             <p class="text-sm text-muted-foreground">No tracks uploaded yet</p>
+          </div>
+        </section>
+
+        <!-- Scores section -->
+        <section id="task-scores-section" class="mb-8">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider">Scores</h2>
+            <a id="task-scores-link" href="#" class="hidden text-xs text-muted-foreground hover:text-foreground transition-colors">
+              Full competition scores →
+            </a>
+          </div>
+          <div id="task-scores-content">
+            <p class="text-sm text-muted-foreground">Loading scores...</p>
           </div>
         </section>
       </div>

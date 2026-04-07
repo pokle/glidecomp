@@ -2,3 +2,4 @@
 /comp/  /comp  301
 /comp/:comp_id/task/*  /comp-detail  200
 /comp/:comp_id  /comp-detail  200
+/scores  /scores  200

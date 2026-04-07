@@ -5,6 +5,7 @@ import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { updatePenaltySchema } from "../validators";
+import { parseIGC } from "@glidecomp/engine";
 
 type Variables = {
   user: AuthUser;
@@ -170,6 +171,21 @@ export const igcRoutes = new Hono<HonoEnv>()
       const r2Key = `c/${compId}/t/${taskId}/${compPilotId}.igc`;
       const now = new Date().toISOString();
 
+      // Extract pilot name from IGC header (best-effort — null if unparseable)
+      let igcPilotName: string | null = null;
+      try {
+        const decompressedStream = new Response(body).body!.pipeThrough(
+          new DecompressionStream("gzip")
+        );
+        const igcText = new TextDecoder().decode(
+          await new Response(decompressedStream).arrayBuffer()
+        );
+        const igc = parseIGC(igcText);
+        igcPilotName = igc.header.pilot || igc.header.competitionId || null;
+      } catch {
+        // Unparseable IGC — store null, scoring will skip it too
+      }
+
       // Upload to R2 with gzip content-encoding
       await c.env.R2.put(r2Key, body, {
         httpMetadata: {
@@ -187,10 +203,10 @@ export const igcRoutes = new Hono<HonoEnv>()
 
         await c.env.DB.prepare(
           `UPDATE task_track
-           SET igc_filename = ?, uploaded_at = ?, file_size = ?
+           SET igc_filename = ?, uploaded_at = ?, file_size = ?, igc_pilot_name = ?
            WHERE task_track_id = ?`
         )
-          .bind(r2Key, now, body.byteLength, existingTrack.task_track_id)
+          .bind(r2Key, now, body.byteLength, igcPilotName, existingTrack.task_track_id)
           .run();
 
         return c.json({
@@ -205,10 +221,10 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       // Insert new track
       const trackResult = await c.env.DB.prepare(
-        `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size)
-         VALUES (?, ?, ?, ?, ?)`
+        `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name)
+         VALUES (?, ?, ?, ?, ?, ?)`
       )
-        .bind(taskId, compPilotId, r2Key, now, body.byteLength)
+        .bind(taskId, compPilotId, r2Key, now, body.byteLength, igcPilotName)
         .run();
 
       const newTrackId = trackResult.meta.last_row_id;
@@ -301,6 +317,21 @@ export const igcRoutes = new Hono<HonoEnv>()
       const r2Key = `c/${compId}/t/${taskId}/${compPilotId}.igc`;
       const now = new Date().toISOString();
 
+      // Extract pilot name from IGC header (best-effort)
+      let igcPilotName: string | null = null;
+      try {
+        const decompressedStream = new Response(body).body!.pipeThrough(
+          new DecompressionStream("gzip")
+        );
+        const igcText = new TextDecoder().decode(
+          await new Response(decompressedStream).arrayBuffer()
+        );
+        const igc = parseIGC(igcText);
+        igcPilotName = igc.header.pilot || igc.header.competitionId || null;
+      } catch {
+        // Ignore — store null
+      }
+
       await c.env.R2.put(r2Key, body, {
         httpMetadata: {
           contentType: "application/octet-stream",
@@ -315,10 +346,10 @@ export const igcRoutes = new Hono<HonoEnv>()
 
         await c.env.DB.prepare(
           `UPDATE task_track
-           SET igc_filename = ?, uploaded_at = ?, file_size = ?
+           SET igc_filename = ?, uploaded_at = ?, file_size = ?, igc_pilot_name = ?
            WHERE task_track_id = ?`
         )
-          .bind(r2Key, now, body.byteLength, existingTrack.task_track_id)
+          .bind(r2Key, now, body.byteLength, igcPilotName, existingTrack.task_track_id)
           .run();
 
         return c.json({
@@ -332,10 +363,10 @@ export const igcRoutes = new Hono<HonoEnv>()
       }
 
       const trackResult = await c.env.DB.prepare(
-        `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size)
-         VALUES (?, ?, ?, ?, ?)`
+        `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name)
+         VALUES (?, ?, ?, ?, ?, ?)`
       )
-        .bind(taskId, compPilotId, r2Key, now, body.byteLength)
+        .bind(taskId, compPilotId, r2Key, now, body.byteLength, igcPilotName)
         .run();
 
       const newTrackId = trackResult.meta.last_row_id;
@@ -404,6 +435,7 @@ export const igcRoutes = new Hono<HonoEnv>()
       const tracks = await c.env.DB.prepare(
         `SELECT tt.task_track_id, tt.comp_pilot_id, tt.igc_filename,
                 tt.uploaded_at, tt.file_size, tt.penalty_points, tt.penalty_reason,
+                tt.igc_pilot_name,
                 cp.registered_pilot_name as pilot_name,
                 cp.pilot_class
          FROM task_track tt
@@ -420,6 +452,7 @@ export const igcRoutes = new Hono<HonoEnv>()
           file_size: number;
           penalty_points: number;
           penalty_reason: string | null;
+          igc_pilot_name: string | null;
           pilot_name: string;
           pilot_class: string;
         }>();
@@ -429,6 +462,7 @@ export const igcRoutes = new Hono<HonoEnv>()
           task_track_id: encodeId(alphabet, t.task_track_id),
           comp_pilot_id: encodeId(alphabet, t.comp_pilot_id),
           pilot_name: t.pilot_name,
+          igc_pilot_name: t.igc_pilot_name,
           pilot_class: t.pilot_class,
           uploaded_at: t.uploaded_at,
           file_size: t.file_size,

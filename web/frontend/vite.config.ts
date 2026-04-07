@@ -86,6 +86,8 @@ export default defineConfig({
             req.url = '/comp.html';
           } else if (req.url?.match(/^\/comp\/[a-z]+(\/|\/task\/[a-z]+\/?)?$/) && !req.url?.includes('.')) {
             req.url = '/comp-detail.html';
+          } else if (req.url === '/scores' || req.url?.startsWith('/scores?')) {
+            req.url = '/scores.html';
           }
           next();
         });
@@ -106,6 +108,7 @@ export default defineConfig({
         scoring: resolve(__dirname, 'src/scoring.html'),
         comp: resolve(__dirname, 'src/comp.html'),
         'comp-detail': resolve(__dirname, 'src/comp-detail.html'),
+        scores: resolve(__dirname, 'src/scores.html'),
       },
     },
   },

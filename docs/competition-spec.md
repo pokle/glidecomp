@@ -266,6 +266,8 @@ Pilot profile (the `pilot` table) is managed via the competition-api worker:
   - Limit the maximum number of tasks per comp to 50
   - Limit the maximum number of competitions per account to 50
 
+**Frontend XSS note:** The DOM-based `escapeHtml()` trick (`el.textContent = s; return el.innerHTML`) does NOT escape double-quotes. It is safe for element text content but unsafe when interpolated into HTML attribute values (e.g. `title="${escapeHtml(userText)}"`). Use DOM APIs directly for attributes: `element.title = rawString` or `element.setAttribute(...)`. The browser encodes automatically. Avoid building HTML strings for anything involving user-supplied data in attribute position.
+
 # UX Flow (draft)
 
 Main flow to create or view competitions:
@@ -373,15 +375,22 @@ Scoring fetches IGC files from R2 at query time and caches results in Workers KV
 - [x] Class-based scoring: call `scoreTask()` separately per `task_class` entry
 - [x] Write scoring tests using real sample IGC + xctsk from `web/samples/` (`test/scoring.test.ts`)
 - [x] Add `X-Cache: HIT/MISS` response header for observability
-- [ ] Build task score view on the task page (ranked pilot list with point breakdowns)
-- [ ] Build competition scores page (`/scores?comp_id=...`) — public, no auth required
-- [ ] Display per-class rankings and penalties (points + reason)
+- [x] Build task score view on the task page (ranked pilot list with point breakdowns)
+- [x] Build competition scores page (`/scores?comp_id=...`) — public, no auth required
+- [x] Display per-class rankings and penalties (points + reason)
+
+**Implementation notes (scores UI):**
+- Task score section is added to `comp-detail.html/ts` as a non-blocking async section below Tracks. 422 from the API (no xctsk) shows "No scores yet — task route not defined"; other errors degrade silently.
+- The comp overview page shows a prominent "View scores →" link under the comp title/badges row (left-aligned), conditionally shown when `comp.tasks.some(t => t.has_xctsk)`.
+- The `/scores` page is a new standalone entry point (`scores.html` + `scores.ts`), routed via `_redirects` and vite dev rewrites. It uses plain `fetch()` (not the Hono RPC client) since the response shape is simple and avoids bundling the typed client.
+- Element IDs must be unique per page — `comp-detail.html` uses both the comp overview and task detail views in the same HTML file. Use distinct IDs (e.g. `comp-scores-link` vs `task-scores-link`) when both views need the same conceptual element.
+- Score table columns are conditional: Speed column omitted if no pilot reached ESS; Time Pts / Lead Pts columns omitted if all zero. Keeps the table compact for tasks with few finishers.
 
 ## Iteration 8: Pilot Management + Admin Polish
 
 - [ ] Implement `GET/PATCH /api/comp/:comp_id/pilot` routes
 - [ ] Build pilot list UI on the comp page with class/team editing
-- [ ] Build penalty management UI (admin sets points + reason per track)
+- [x] Build penalty management UI (admin sets points + reason per track) — implemented in Iteration 5 track list
 - [ ] Implement starting order: first-day manual assignment, subsequent days auto-computed from previous day scores
 - [ ] Build pilot profile page (name, CIVL ID, sporting body IDs, phone, glider)
 - [ ] Implement `comp.test` flag handling (test comps visible only to admins)
