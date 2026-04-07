@@ -203,8 +203,7 @@ export async function computeTaskScore(
 
     if (igc.fixes.length === 0) continue;
 
-    const pilotName =
-      igc.header.pilot || igc.header.competitionId || track.pilot_name;
+    const pilotName = track.pilot_name;
 
     parsedPilots.push({
       flight: { pilotName, trackFile: track.igc_filename, fixes: igc.fixes },

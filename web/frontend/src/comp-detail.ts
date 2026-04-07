@@ -412,6 +412,7 @@ interface TrackInfo {
   task_track_id: string;
   comp_pilot_id: string;
   pilot_name: string;
+  igc_pilot_name: string | null;
   pilot_class: string;
   uploaded_at: string;
   file_size: number;
@@ -530,6 +531,7 @@ function renderTrackList(
         <div class="flex items-center gap-2">
           <span class="font-medium text-sm">${escapeHtml(track.pilot_name)}</span>
           <span class="inline-flex items-center rounded-md bg-primary/10 text-primary px-1.5 py-0.5 text-xs font-medium">${escapeHtml(track.pilot_class)}</span>
+          <span class="js-igc-name-slot"></span>
         </div>
         <div class="text-xs text-muted-foreground mt-0.5">${uploadDate} &middot; ${formatFileSize(track.file_size)}</div>
       </div>
@@ -540,6 +542,13 @@ function renderTrackList(
         </a>
       </div>
     `;
+
+    // IGC pilot name (when different from registered name)
+    if (track.igc_pilot_name && track.igc_pilot_name !== track.pilot_name) {
+      const slot = div.querySelector(".js-igc-name-slot")!;
+      slot.className = "text-xs text-muted-foreground";
+      slot.textContent = `(${track.igc_pilot_name})`;
+    }
 
     // Penalty badge — built with DOM so title is safe for any user-supplied text
     if (track.penalty_points !== 0) {
