@@ -391,11 +391,21 @@ Scoring fetches IGC files from R2 at query time and caches results in Workers KV
 - [ ] Implement `GET/PATCH /api/comp/:comp_id/pilot` routes
 - [ ] Build pilot list UI on the comp page with class/team editing
 - [x] Build penalty management UI (admin sets points + reason per track) — implemented in Iteration 5 track list
-- [ ] Implement starting order: first-day manual assignment, subsequent days auto-computed from previous day scores
 - [ ] Build pilot profile page (name, CIVL ID, sporting body IDs, phone, glider)
 - [ ] Implement `comp.test` flag handling (test comps visible only to admins)
 
-## Iteration 9: R2 Cleanup + Cascade Deletes
+## Iteration 9: IGC upload to competition improvements
+
+- [ ] Allow competition admins to bulk upload IGC files. Auto register pilots based on IGC pilot name.
+- [ ] Allow competition admins to import an AirScore competition and all its tasks in one go. This can be a cli if the .
+
+## Iteration 10: Starting order
+
+- [ ] Implement import of CIVL rankings to update pilot world rankings
+- [ ] Implement first-day starting order based on CIVL rankings of Top-20 CIVL ranked pilots in competition in reverse order. So rank 234 pilot launches first followed by rank 195 pilot, etc all the way till the highest ranked pilot in the comp (For example rank 53)
+- [ ] subsequent days auto-computed from previous day scores - reverse top 20 from previous day's scores
+
+## Iteration 11: R2 Cleanup + Cascade Deletes
 
 - [ ] Implement Cloudflare Queue for R2 cleanup on comp/task deletion
 - [ ] Implement Queue consumer: list and delete all objects under the R2 prefix
