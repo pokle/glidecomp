@@ -976,7 +976,7 @@ function renderScoreClass(cls: ClassScore, showClassName: boolean): HTMLElement 
 
 async function setupScoreSection(compId: string, taskId: string) {
   const content = document.getElementById("task-scores-content")!;
-  const scoresLink = document.getElementById("comp-scores-link") as HTMLAnchorElement;
+  const scoresLink = document.getElementById("task-scores-link") as HTMLAnchorElement;
 
   let data: TaskScoreData;
   try {
@@ -1060,6 +1060,13 @@ async function initCompDetail(compId: string) {
   // ── Tasks ──────────────────────────────────────────────────────────────
 
   renderTasks(comp.tasks, compId);
+
+  // Show scores link when there's at least one task with a defined route
+  if (comp.tasks.some((t) => t.has_xctsk)) {
+    const scoresLink = document.getElementById("comp-scores-link") as HTMLAnchorElement;
+    scoresLink.href = `/scores?comp_id=${encodeURIComponent(compId)}`;
+    scoresLink.classList.remove("hidden");
+  }
 
   // Show create task button for admins
   if (isAdmin) {
