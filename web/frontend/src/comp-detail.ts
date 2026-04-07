@@ -525,17 +525,11 @@ function renderTrackList(
       { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }
     );
 
-    const penaltyBadge =
-      track.penalty_points !== 0
-        ? `<span class="inline-flex items-center rounded-md bg-red-500/10 text-red-500 px-1.5 py-0.5 text-xs font-medium" title="${escapeHtml(track.penalty_reason ?? "")}">${track.penalty_points > 0 ? "-" : "+"}${Math.abs(track.penalty_points)} pts</span>`
-        : "";
-
     div.innerHTML = `
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
           <span class="font-medium text-sm">${escapeHtml(track.pilot_name)}</span>
           <span class="inline-flex items-center rounded-md bg-primary/10 text-primary px-1.5 py-0.5 text-xs font-medium">${escapeHtml(track.pilot_class)}</span>
-          ${penaltyBadge}
         </div>
         <div class="text-xs text-muted-foreground mt-0.5">${uploadDate} &middot; ${formatFileSize(track.file_size)}</div>
       </div>
@@ -546,6 +540,15 @@ function renderTrackList(
         </a>
       </div>
     `;
+
+    // Penalty badge — built with DOM so title is safe for any user-supplied text
+    if (track.penalty_points !== 0) {
+      const badge = document.createElement("span");
+      badge.className = "inline-flex items-center rounded-md bg-red-500/10 text-red-500 px-1.5 py-0.5 text-xs font-medium";
+      badge.title = track.penalty_reason ?? "";
+      badge.textContent = `${track.penalty_points > 0 ? "-" : "+"}${Math.abs(track.penalty_points)} pts`;
+      div.querySelector(".flex.items-center.gap-2")!.appendChild(badge);
+    }
 
     // Admin actions: penalty + delete (not when closed)
     if (isAdmin && !isClosed) {
@@ -944,20 +947,25 @@ function renderScoreClass(cls: ClassScore, showClassName: boolean): HTMLElement 
     if (hasTimePoints) cells.push(Math.round(p.time_points).toString());
     if (hasLeadPoints) cells.push(Math.round(p.leading_points).toString());
 
-    // Total with optional penalty badge
-    let totalHtml = Math.round(p.total_score).toString();
-    if (p.penalty_points > 0) {
-      const reason = p.penalty_reason ? escapeHtml(p.penalty_reason) : "";
-      totalHtml += ` <span class="inline-flex items-center rounded-md bg-red-500/10 text-red-500 px-1.5 py-0.5 text-xs font-medium" title="${reason}">-${p.penalty_points}</span>`;
-    }
-    cells.push(totalHtml);
-
     for (const cellHtml of cells) {
       const td = document.createElement("td");
       td.className = "py-1.5 pr-3";
       td.innerHTML = cellHtml;
       tr.appendChild(td);
     }
+
+    // Total td — built with DOM so title attribute is safe for any penalty reason
+    const totalTd = document.createElement("td");
+    totalTd.className = "py-1.5 pr-3";
+    totalTd.textContent = String(Math.round(p.total_score));
+    if (p.penalty_points > 0) {
+      const badge = document.createElement("span");
+      badge.className = "inline-flex items-center rounded-md bg-red-500/10 text-red-500 px-1.5 py-0.5 text-xs font-medium ml-1";
+      badge.title = p.penalty_reason ?? "";
+      badge.textContent = `-${p.penalty_points}`;
+      totalTd.appendChild(badge);
+    }
+    tr.appendChild(totalTd);
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);

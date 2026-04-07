@@ -40,12 +40,6 @@ function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
 }
 
-function escapeHtml(str: string): string {
-  const el = document.createElement("span");
-  el.textContent = str;
-  return el.innerHTML;
-}
-
 // ── Render ────────────────────────────────────────────────────────────────────
 
 function renderScoresPage(comp: CompInfo, scores: CompScores) {
@@ -121,7 +115,7 @@ function renderScoresPage(comp: CompInfo, scores: CompScores) {
         td.className = "py-1.5 pr-3";
         const entry = p.tasks.find((t) => t.task_id === task.task_id);
         if (entry) {
-          td.innerHTML = `${Math.round(entry.score)} <span class="text-muted-foreground text-xs">(${escapeHtml(ordinal(entry.rank))})</span>`;
+          td.innerHTML = `${Math.round(entry.score)} <span class="text-muted-foreground text-xs">(${ordinal(entry.rank)})</span>`;
         } else {
           td.innerHTML = `<span class="text-muted-foreground">—</span>`;
         }
