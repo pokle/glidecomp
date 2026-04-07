@@ -65,6 +65,39 @@ interface TaskDetail {
   track_count: number;
 }
 
+// ── Types for scoring ────────────────────────────────────────────────────────
+
+interface PilotScoreEntry {
+  rank: number;
+  comp_pilot_id: string;
+  pilot_name: string;
+  made_goal: boolean;
+  reached_ess: boolean;
+  flown_distance: number;
+  speed_section_time: number | null;
+  distance_points: number;
+  time_points: number;
+  leading_points: number;
+  arrival_points: number;
+  penalty_points: number;
+  penalty_reason: string | null;
+  total_score: number;
+}
+
+interface ClassScore {
+  pilot_class: string;
+  task_validity: { launch: number; distance: number; time: number; task: number };
+  available_points: { distance: number; time: number; leading: number; arrival: number; total: number };
+  pilots: PilotScoreEntry[];
+}
+
+interface TaskScoreData {
+  task_id: string;
+  comp_id: string;
+  task_date: string;
+  classes: ClassScore[];
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 async function init() {
@@ -198,6 +231,9 @@ async function initTaskDetail(compId: string, taskId: string) {
 
   // Tracks section
   await setupTrackSection(compId, taskId, user != null, isAdmin, comp?.close_date ?? null);
+
+  // Scores section (fire and forget — non-critical)
+  setupScoreSection(compId, taskId).catch(() => {});
 
   // Show task detail, hide loading
   document.getElementById("comp-loading")!.classList.add("hidden");
@@ -376,6 +412,7 @@ interface TrackInfo {
   task_track_id: string;
   comp_pilot_id: string;
   pilot_name: string;
+  igc_pilot_name: string | null;
   pilot_class: string;
   uploaded_at: string;
   file_size: number;
@@ -392,6 +429,21 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
+}
+
+function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const mm = String(m).padStart(2, "0");
+  const ss = String(s).padStart(2, "0");
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
 async function setupTrackSection(
@@ -474,17 +526,12 @@ function renderTrackList(
       { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }
     );
 
-    const penaltyBadge =
-      track.penalty_points !== 0
-        ? `<span class="inline-flex items-center rounded-md bg-red-500/10 text-red-500 px-1.5 py-0.5 text-xs font-medium" title="${escapeHtml(track.penalty_reason ?? "")}">${track.penalty_points > 0 ? "-" : "+"}${Math.abs(track.penalty_points)} pts</span>`
-        : "";
-
     div.innerHTML = `
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
           <span class="font-medium text-sm">${escapeHtml(track.pilot_name)}</span>
           <span class="inline-flex items-center rounded-md bg-primary/10 text-primary px-1.5 py-0.5 text-xs font-medium">${escapeHtml(track.pilot_class)}</span>
-          ${penaltyBadge}
+          <span class="js-igc-name-slot"></span>
         </div>
         <div class="text-xs text-muted-foreground mt-0.5">${uploadDate} &middot; ${formatFileSize(track.file_size)}</div>
       </div>
@@ -495,6 +542,31 @@ function renderTrackList(
         </a>
       </div>
     `;
+
+    // IGC pilot name (when different from registered name)
+    if (track.igc_pilot_name && track.igc_pilot_name !== track.pilot_name) {
+      const slot = div.querySelector(".js-igc-name-slot")!;
+      slot.className = "text-xs text-muted-foreground";
+      slot.textContent = `(igc: ${track.igc_pilot_name})`;
+    }
+
+    // Penalty badge — built with DOM so title is safe for any user-supplied text
+    if (track.penalty_points !== 0) {
+      const isBonus = track.penalty_points < 0;
+      const badge = document.createElement("span");
+      badge.className = `inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium ${isBonus ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"}`;
+      badge.textContent = `${isBonus ? "+" : "-"}${Math.abs(track.penalty_points)} pts`;
+      const inner = document.createElement("span");
+      inner.className = "inline-flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5";
+      inner.appendChild(badge);
+      if (track.penalty_reason) {
+        const reason = document.createElement("span");
+        reason.className = "text-xs text-muted-foreground";
+        reason.textContent = track.penalty_reason;
+        inner.appendChild(reason);
+      }
+      div.querySelector(".flex.items-center.gap-2")!.appendChild(inner);
+    }
 
     // Admin actions: penalty + delete (not when closed)
     if (isAdmin && !isClosed) {
@@ -532,6 +604,7 @@ function renderTrackList(
             const remaining = list.children.length;
             countEl.textContent = `${remaining} track${remaining !== 1 ? "s" : ""}`;
             if (remaining === 0) empty.classList.remove("hidden");
+            setupScoreSection(compId, taskId).catch(() => {});
           } else {
             alert("Failed to delete track");
           }
@@ -602,9 +675,10 @@ function openPenaltyDialog(
       }
 
       dialog.close();
-      // Reload track list
+      // Reload track list and refresh scores (penalty changes the cache key)
       const tracks = await loadTracks(compId, taskId);
       renderTrackList(tracks, compId, taskId, isAdmin, isClosed);
+      setupScoreSection(compId, taskId).catch(() => {});
     } catch {
       alert("Network error. Please try again.");
     } finally {
@@ -679,6 +753,7 @@ function setupSelfUpload(
 
       const tracks = await loadTracks(compId, taskId);
       renderTrackList(tracks, compId, taskId, isAdmin, isClosed);
+      setupScoreSection(compId, taskId).catch(() => {});
     } catch {
       showUploadStatus(messageEl, statusDiv, "Network error", true);
     } finally {
@@ -809,9 +884,10 @@ function setupUploadOnBehalf(
         : "Track uploaded successfully";
       messageEl.className = "text-sm text-muted-foreground";
 
-      // Reload track list
+      // Reload track list and refresh scores
       const tracks = await loadTracks(compId, taskId);
       renderTrackList(tracks, compId, taskId, isAdmin, isClosed);
+      setupScoreSection(compId, taskId).catch(() => {});
 
       // Close after a brief delay so user sees success
       setTimeout(() => dialog.close(), 1000);
@@ -823,6 +899,160 @@ function setupUploadOnBehalf(
       uploadBtn.textContent = "Upload";
     }
   });
+}
+
+// ── Scoring section ──────────────────────────────────────────────────────────
+
+function renderScoreClass(cls: ClassScore, showClassName: boolean): HTMLElement {
+  const wrapper = document.createElement("div");
+  wrapper.className = "mb-6";
+
+  if (showClassName) {
+    const h3 = document.createElement("h3");
+    h3.className = "text-sm font-semibold mb-2";
+    h3.textContent = cls.pilot_class;
+    wrapper.appendChild(h3);
+  }
+
+  const hasSpeed = cls.pilots.some((p) => p.speed_section_time !== null);
+  const hasTimePoints = cls.pilots.some((p) => p.time_points !== 0);
+  const hasLeadPoints = cls.pilots.some((p) => p.leading_points !== 0);
+  const hasPenalties = cls.pilots.some((p) => p.penalty_points !== 0);
+
+  const table = document.createElement("table");
+  table.className = "w-full text-sm border-collapse";
+
+  // thead
+  const thead = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+  headerRow.className = "text-left text-xs text-muted-foreground border-b border-border/50";
+  const headers = ["#", "Pilot", "Goal", "Distance"];
+  if (hasSpeed) headers.push("Speed");
+  headers.push("Dist Pts");
+  if (hasTimePoints) headers.push("Time Pts");
+  if (hasLeadPoints) headers.push("Lead Pts");
+  if (hasPenalties) headers.push("Penalty");
+  headers.push("Total");
+
+  for (const h of headers) {
+    const th = document.createElement("th");
+    th.className = "py-1.5 pr-3 font-medium";
+    th.textContent = h;
+    headerRow.appendChild(th);
+  }
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  // tbody
+  const tbody = document.createElement("tbody");
+  for (let i = 0; i < cls.pilots.length; i++) {
+    const p = cls.pilots[i];
+    const tr = document.createElement("tr");
+    tr.className = i % 2 === 1 ? "bg-muted/30" : "";
+
+    const cells: string[] = [
+      String(p.rank),
+      escapeHtml(p.pilot_name),
+      p.made_goal
+        ? `<span class="text-green-500">✓</span>`
+        : `<span class="text-muted-foreground">—</span>`,
+      `${(p.flown_distance / 1000).toFixed(1)} km`,
+    ];
+
+    if (hasSpeed) {
+      cells.push(
+        p.speed_section_time !== null
+          ? formatDuration(p.speed_section_time)
+          : `<span class="text-muted-foreground">—</span>`
+      );
+    }
+
+    cells.push(Math.round(p.distance_points).toString());
+    if (hasTimePoints) cells.push(Math.round(p.time_points).toString());
+    if (hasLeadPoints) cells.push(Math.round(p.leading_points).toString());
+
+    for (const cellHtml of cells) {
+      const td = document.createElement("td");
+      td.className = "py-1.5 pr-3";
+      td.innerHTML = cellHtml;
+      tr.appendChild(td);
+    }
+
+    // Penalty td (conditional column) — DOM so .title is safe for any user text
+    if (hasPenalties) {
+      const penaltyTd = document.createElement("td");
+      penaltyTd.className = "py-1.5 pr-3";
+      if (p.penalty_points !== 0) {
+        const badge = document.createElement("span");
+        const isBonus = p.penalty_points < 0;
+        badge.className = `inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium ${isBonus ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"}`;
+        badge.textContent = isBonus ? `+${Math.abs(p.penalty_points)}` : `-${p.penalty_points}`;
+        const inner = document.createElement("span");
+        inner.className = "inline-flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5";
+        inner.appendChild(badge);
+        if (p.penalty_reason) {
+          const reason = document.createElement("span");
+          reason.className = "text-xs text-muted-foreground";
+          reason.textContent = p.penalty_reason;
+          inner.appendChild(reason);
+        }
+        penaltyTd.appendChild(inner);
+      }
+      tr.appendChild(penaltyTd);
+    }
+
+    // Total td
+    const totalTd = document.createElement("td");
+    totalTd.className = "py-1.5 pr-3";
+    totalTd.textContent = String(Math.round(p.total_score));
+    tr.appendChild(totalTd);
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  wrapper.appendChild(table);
+
+  // Validity summary
+  const v = cls.task_validity;
+  const ap = cls.available_points;
+  const summary = document.createElement("p");
+  summary.className = "text-xs text-muted-foreground mt-2";
+  summary.textContent = `Task validity: ${(v.task * 100).toFixed(0)}% · Available: ${Math.round(ap.total)} pts (dist ${Math.round(ap.distance)}, time ${Math.round(ap.time)}, lead ${Math.round(ap.leading)})`;
+  wrapper.appendChild(summary);
+
+  return wrapper;
+}
+
+async function setupScoreSection(compId: string, taskId: string) {
+  const content = document.getElementById("task-scores-content")!;
+  const scoresLink = document.getElementById("task-scores-link") as HTMLAnchorElement;
+
+  let data: TaskScoreData;
+  try {
+    const res = await api.api.comp[":comp_id"].task[":task_id"].score.$get({
+      param: { comp_id: compId, task_id: taskId },
+    });
+    if (res.status === 422) {
+      content.innerHTML = `<p class="text-sm text-muted-foreground">No scores yet — task route not defined</p>`;
+      return;
+    }
+    if (!res.ok) {
+      content.innerHTML = `<p class="text-sm text-muted-foreground">Scores not available</p>`;
+      return;
+    }
+    data = (await res.json()) as unknown as TaskScoreData;
+  } catch {
+    content.innerHTML = `<p class="text-sm text-muted-foreground">Scores not available</p>`;
+    return;
+  }
+
+  content.innerHTML = "";
+  const showClassName = data.classes.length > 1;
+  for (const cls of data.classes) {
+    content.appendChild(renderScoreClass(cls, showClassName));
+  }
+
+  scoresLink.href = `/scores?comp_id=${encodeURIComponent(compId)}`;
+  scoresLink.classList.remove("hidden");
 }
 
 // ── Comp detail view ─────────────────────────────────────────────────────────
@@ -878,6 +1108,13 @@ async function initCompDetail(compId: string) {
   // ── Tasks ──────────────────────────────────────────────────────────────
 
   renderTasks(comp.tasks, compId);
+
+  // Show scores link when there's at least one task with a defined route
+  if (comp.tasks.some((t) => t.has_xctsk)) {
+    const scoresLink = document.getElementById("comp-scores-link") as HTMLAnchorElement;
+    scoresLink.href = `/scores?comp_id=${encodeURIComponent(compId)}`;
+    scoresLink.classList.remove("hidden");
+  }
 
   // Show create task button for admins
   if (isAdmin) {

@@ -1,0 +1,87 @@
+<!-- Copyright (c) 2026, Tushar Pokle.  All rights reserved. -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GlideComp - Scores</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body class="min-h-screen bg-background text-foreground">
+  <div id="scores-page" class="hidden min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-10">
+      <div class="max-w-3xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+        <a id="nav-logo" href="/" class="inline-flex items-center gap-2 text-lg font-bold tracking-tight text-foreground hover:text-primary transition-colors">
+          <img src="/icon.svg" alt="GlideComp logo" class="w-6 h-6" />
+          GlideComp
+        </a>
+        <div class="flex items-center gap-1">
+          <a id="nav-my-flights" href="/u/me/" class="text-sm text-muted-foreground hover:text-foreground px-2 py-1 transition-colors">My Flights</a>
+          <a href="/comp" class="text-sm font-medium text-foreground px-2 py-1 transition-colors">Competitions</a>
+          <details id="nav-user-menu" class="relative hidden">
+            <summary id="nav-user-name" class="btn btn-ghost btn-sm text-xs list-none cursor-pointer select-none"></summary>
+            <div class="absolute right-0 top-full mt-1 w-36 rounded-lg border border-border bg-card shadow-lg p-1 z-50">
+              <button id="signout-btn" class="w-full text-left px-3 py-1.5 text-sm hover:bg-muted rounded-md transition-colors text-muted-foreground">Sign out</button>
+            </div>
+          </details>
+          <button id="signin-btn" class="hidden btn btn-ghost btn-sm text-xs">Sign in</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main content -->
+    <main class="flex-1 max-w-3xl mx-auto w-full px-4 sm:px-6 py-8">
+      <div id="scores-loading" class="text-center py-12">
+        <p class="text-sm text-muted-foreground">Loading scores...</p>
+      </div>
+
+      <div id="scores-not-found" class="hidden text-center py-12">
+        <p class="text-sm text-muted-foreground">Competition not found</p>
+        <a href="/comp" class="btn btn-secondary btn-sm mt-4">Back to Competitions</a>
+      </div>
+
+      <div id="scores-content" class="hidden">
+        <nav class="mb-4">
+          <a id="scores-back-link" href="/comp" class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            <span id="scores-back-comp-name">Competition</span>
+          </a>
+        </nav>
+
+        <h1 id="scores-comp-title" class="text-2xl font-bold tracking-tight mb-6"></h1>
+
+        <!-- Class tabs (hidden if single class) -->
+        <div id="scores-class-tabs" class="hidden flex gap-1 mb-4"></div>
+
+        <!-- Standings panels injected by JS -->
+        <div id="scores-panels"></div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-border/30 py-6">
+      <div class="max-w-3xl mx-auto px-4 sm:px-6 flex items-center justify-between text-xs text-muted-foreground/60">
+        <span>GlideComp</span>
+        <a href="/legal.html" class="hover:text-foreground transition-colors">Privacy & Terms</a>
+      </div>
+    </footer>
+
+  </div>
+
+  <script type="module" src="/scores.ts"></script>
+</body>
+
+</html>
