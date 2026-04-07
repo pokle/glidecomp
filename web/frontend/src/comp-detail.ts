@@ -586,6 +586,7 @@ function renderTrackList(
             const remaining = list.children.length;
             countEl.textContent = `${remaining} track${remaining !== 1 ? "s" : ""}`;
             if (remaining === 0) empty.classList.remove("hidden");
+            setupScoreSection(compId, taskId).catch(() => {});
           } else {
             alert("Failed to delete track");
           }
@@ -656,9 +657,10 @@ function openPenaltyDialog(
       }
 
       dialog.close();
-      // Reload track list
+      // Reload track list and refresh scores (penalty changes the cache key)
       const tracks = await loadTracks(compId, taskId);
       renderTrackList(tracks, compId, taskId, isAdmin, isClosed);
+      setupScoreSection(compId, taskId).catch(() => {});
     } catch {
       alert("Network error. Please try again.");
     } finally {
@@ -733,6 +735,7 @@ function setupSelfUpload(
 
       const tracks = await loadTracks(compId, taskId);
       renderTrackList(tracks, compId, taskId, isAdmin, isClosed);
+      setupScoreSection(compId, taskId).catch(() => {});
     } catch {
       showUploadStatus(messageEl, statusDiv, "Network error", true);
     } finally {
@@ -863,9 +866,10 @@ function setupUploadOnBehalf(
         : "Track uploaded successfully";
       messageEl.className = "text-sm text-muted-foreground";
 
-      // Reload track list
+      // Reload track list and refresh scores
       const tracks = await loadTracks(compId, taskId);
       renderTrackList(tracks, compId, taskId, isAdmin, isClosed);
+      setupScoreSection(compId, taskId).catch(() => {});
 
       // Close after a brief delay so user sees success
       setTimeout(() => dialog.close(), 1000);
