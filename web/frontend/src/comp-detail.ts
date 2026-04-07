@@ -899,7 +899,7 @@ function renderScoreClass(cls: ClassScore, showClassName: boolean): HTMLElement 
   const hasSpeed = cls.pilots.some((p) => p.speed_section_time !== null);
   const hasTimePoints = cls.pilots.some((p) => p.time_points !== 0);
   const hasLeadPoints = cls.pilots.some((p) => p.leading_points !== 0);
-  const hasPenalties = cls.pilots.some((p) => p.penalty_points > 0);
+  const hasPenalties = cls.pilots.some((p) => p.penalty_points !== 0);
 
   const table = document.createElement("table");
   table.className = "w-full text-sm border-collapse";
@@ -964,10 +964,11 @@ function renderScoreClass(cls: ClassScore, showClassName: boolean): HTMLElement 
     if (hasPenalties) {
       const penaltyTd = document.createElement("td");
       penaltyTd.className = "py-1.5 pr-3";
-      if (p.penalty_points > 0) {
+      if (p.penalty_points !== 0) {
         const badge = document.createElement("span");
-        badge.className = "inline-flex items-center rounded-md bg-red-500/10 text-red-500 px-1.5 py-0.5 text-xs font-medium";
-        badge.textContent = `-${p.penalty_points}`;
+        const isBonus = p.penalty_points < 0;
+        badge.className = `inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium ${isBonus ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"}`;
+        badge.textContent = isBonus ? `+${Math.abs(p.penalty_points)}` : `-${p.penalty_points}`;
         penaltyTd.appendChild(badge);
         if (p.penalty_reason) {
           const reason = document.createElement("span");
