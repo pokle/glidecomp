@@ -13,6 +13,52 @@ type Variables = {
 
 type HonoEnv = { Bindings: Env; Variables: Variables };
 
+const PROFILE_COLUMNS = [
+  "name",
+  "civl_id",
+  "safa_id",
+  "ushpa_id",
+  "bhpa_id",
+  "dhv_id",
+  "ffvl_id",
+  "fai_id",
+  "phone",
+  "glider",
+] as const;
+
+type ProfileRow = {
+  [K in (typeof PROFILE_COLUMNS)[number]]: string | null;
+};
+
+function serializeProfile(row: ProfileRow | null, fallbackName: string) {
+  if (!row) {
+    return {
+      name: fallbackName,
+      civl_id: null,
+      safa_id: null,
+      ushpa_id: null,
+      bhpa_id: null,
+      dhv_id: null,
+      ffvl_id: null,
+      fai_id: null,
+      phone: null,
+      glider: null,
+    };
+  }
+  return {
+    name: row.name,
+    civl_id: row.civl_id ?? null,
+    safa_id: row.safa_id ?? null,
+    ushpa_id: row.ushpa_id ?? null,
+    bhpa_id: row.bhpa_id ?? null,
+    dhv_id: row.dhv_id ?? null,
+    ffvl_id: row.ffvl_id ?? null,
+    fai_id: row.fai_id ?? null,
+    phone: row.phone ?? null,
+    glider: row.glider ?? null,
+  };
+}
+
 export const pilotRoutes = new Hono<HonoEnv>()
   // ── GET /api/comp/pilot ── Get current user's pilot profile
   // (literal path — must be registered before /api/comp/:comp_id/pilot)
@@ -20,31 +66,12 @@ export const pilotRoutes = new Hono<HonoEnv>()
     const user = c.var.user;
 
     const pilot = await c.env.DB.prepare(
-      `SELECT pilot_id, user_id, name, civl_id, sporting_body_ids, phone, glider
-       FROM pilot WHERE user_id = ?`
+      `SELECT ${PROFILE_COLUMNS.join(", ")} FROM pilot WHERE user_id = ?`
     )
       .bind(user.id)
-      .first<Record<string, unknown>>();
+      .first<ProfileRow>();
 
-    if (!pilot) {
-      return c.json({
-        name: user.name,
-        civl_id: null,
-        sporting_body_ids: null,
-        phone: null,
-        glider: null,
-      });
-    }
-
-    return c.json({
-      name: pilot.name,
-      civl_id: pilot.civl_id ?? null,
-      sporting_body_ids: pilot.sporting_body_ids
-        ? JSON.parse(pilot.sporting_body_ids as string)
-        : null,
-      phone: pilot.phone ?? null,
-      glider: pilot.glider ?? null,
-    });
+    return c.json(serializeProfile(pilot, user.name));
   })
 
   // ── PATCH /api/comp/pilot ── Update current user's pilot profile
@@ -73,29 +100,11 @@ export const pilotRoutes = new Hono<HonoEnv>()
       const updates: string[] = [];
       const values: unknown[] = [];
 
-      if (body.name !== undefined) {
-        updates.push("name = ?");
-        values.push(body.name);
-      }
-      if (body.civl_id !== undefined) {
-        updates.push("civl_id = ?");
-        values.push(body.civl_id);
-      }
-      if (body.sporting_body_ids !== undefined) {
-        updates.push("sporting_body_ids = ?");
-        values.push(
-          body.sporting_body_ids
-            ? JSON.stringify(body.sporting_body_ids)
-            : null
-        );
-      }
-      if (body.phone !== undefined) {
-        updates.push("phone = ?");
-        values.push(body.phone);
-      }
-      if (body.glider !== undefined) {
-        updates.push("glider = ?");
-        values.push(body.glider);
+      for (const col of PROFILE_COLUMNS) {
+        if (body[col as keyof typeof body] !== undefined) {
+          updates.push(`${col} = ?`);
+          values.push(body[col as keyof typeof body] ?? null);
+        }
       }
 
       if (updates.length > 0) {
@@ -108,21 +117,12 @@ export const pilotRoutes = new Hono<HonoEnv>()
       }
 
       const pilot = await c.env.DB.prepare(
-        `SELECT name, civl_id, sporting_body_ids, phone, glider
-         FROM pilot WHERE user_id = ?`
+        `SELECT ${PROFILE_COLUMNS.join(", ")} FROM pilot WHERE user_id = ?`
       )
         .bind(user.id)
-        .first<Record<string, unknown>>();
+        .first<ProfileRow>();
 
-      return c.json({
-        name: pilot!.name,
-        civl_id: pilot!.civl_id ?? null,
-        sporting_body_ids: pilot!.sporting_body_ids
-          ? JSON.parse(pilot!.sporting_body_ids as string)
-          : null,
-        phone: pilot!.phone ?? null,
-        glider: pilot!.glider ?? null,
-      });
+      return c.json(serializeProfile(pilot, user.name));
     }
   )
 

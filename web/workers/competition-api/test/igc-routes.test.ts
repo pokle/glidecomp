@@ -490,13 +490,18 @@ describe("PATCH /api/comp/pilot", () => {
     expect(pilot!.name).toBe("Updated Name");
   });
 
-  test("updates sporting_body_ids as JSON", async () => {
+  test("updates multiple sporting body IDs as flat columns", async () => {
     const res = await authRequest("PATCH", "/api/comp/pilot", {
-      sporting_body_ids: { SAFA: "12345", CIVL: "67890" },
+      safa_id: "12345",
+      civl_id: "67890",
+      ushpa_id: "99999",
     });
     expect(res.status).toBe(200);
     const data = (await res.json()) as Record<string, unknown>;
-    expect(data.sporting_body_ids).toEqual({ SAFA: "12345", CIVL: "67890" });
+    expect(data.safa_id).toBe("12345");
+    expect(data.civl_id).toBe("67890");
+    expect(data.ushpa_id).toBe("99999");
+    expect(data.bhpa_id).toBeNull();
   });
 
   test("requires authentication", async () => {

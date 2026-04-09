@@ -88,6 +88,7 @@ export async function uploadRequest(
 /** Clear all competition data between tests. */
 export async function clearCompData(): Promise<void> {
   await env.DB.batch([
+    env.DB.prepare("DELETE FROM audit_log"),
     env.DB.prepare("DELETE FROM task_track"),
     env.DB.prepare("DELETE FROM task_class"),
     env.DB.prepare("DELETE FROM task"),

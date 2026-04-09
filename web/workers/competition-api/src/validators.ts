@@ -48,10 +48,17 @@ export const updateCompSchema = z.object({
 
 // ── Pilot profile validators ──
 
+const idField = z.string().max(MAX_TEXT).nullable().optional();
+
 export const updatePilotSchema = z.object({
   name: z.string().min(1).max(MAX_TEXT).optional(),
-  civl_id: z.string().max(MAX_TEXT).nullable().optional(),
-  sporting_body_ids: z.record(z.string().max(MAX_TEXT)).nullable().optional(),
+  civl_id: idField,
+  safa_id: idField,
+  ushpa_id: idField,
+  bhpa_id: idField,
+  dhv_id: idField,
+  ffvl_id: idField,
+  fai_id: idField,
   phone: z.string().max(MAX_TEXT).nullable().optional(),
   glider: z.string().max(MAX_TEXT).nullable().optional(),
 });
