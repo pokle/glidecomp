@@ -78,11 +78,27 @@ describe("audit log write-through", () => {
     expect(descs.some((d) => d.includes('Deleted task "Task 3"'))).toBe(true);
   });
 
-  test("task xctsk update emits 'Set task route' then 'Updated task route'", async () => {
+  test("task xctsk set + update include details", async () => {
     const compId = await createComp();
     const taskId = await createTask(compId);
-    const xctsk1 = { version: 1, turnpoints: [] };
-    const xctsk2 = { version: 2, turnpoints: [] };
+    const xctsk1 = {
+      taskType: "CLASSIC",
+      version: 1,
+      turnpoints: [
+        { type: "TAKEOFF", radius: 400, waypoint: { name: "Launch", lat: -38.1, lon: 144.5 } },
+        { type: "SSS", radius: 3000, waypoint: { name: "Start", lat: -38.2, lon: 144.6 } },
+        { radius: 1000, waypoint: { name: "TP1", lat: -38.3, lon: 144.7 } },
+        { type: "ESS", radius: 400, waypoint: { name: "Goal", lat: -38.4, lon: 144.8 } },
+      ],
+      sss: { type: "RACE", direction: "EXIT" },
+      goal: { type: "CYLINDER" },
+    };
+    const xctsk2 = {
+      ...xctsk1,
+      turnpoints: xctsk1.turnpoints.map((tp, i) =>
+        i === 2 ? { ...tp, radius: 2000 } : tp
+      ),
+    };
     await authRequest("PATCH", `/api/comp/${compId}/task/${taskId}`, {
       xctsk: xctsk1,
     });
@@ -93,8 +109,10 @@ describe("audit log write-through", () => {
     const taskDescs = entries
       .filter((e) => e.subject_type === "task")
       .map((e) => e.description as string);
-    expect(taskDescs).toContain("Set task route");
-    expect(taskDescs).toContain("Updated task route");
+    // Set entry mentions turnpoint count and goal type
+    expect(taskDescs.some((d) => d.includes("Set task route") && d.includes("4 turnpoints"))).toBe(true);
+    // Update entry mentions the radius change on TP3
+    expect(taskDescs.some((d) => d.includes("Updated task route") && d.includes("radius"))).toBe(true);
   });
 
   test("pilot create + update + delete are audited", async () => {

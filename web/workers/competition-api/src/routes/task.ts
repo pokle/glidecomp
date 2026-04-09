@@ -6,6 +6,7 @@ import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { createTaskSchema, updateTaskSchema } from "../validators";
 import { audit, describeChange } from "../audit";
+import { summarizeXctskChange, describeTaskSummary } from "../xctsk-summary";
 
 type Variables = {
   user: AuthUser;
@@ -319,7 +320,9 @@ export const taskRoutes = new Hono<HonoEnv>()
         const oldHasXctsk = task.xctsk !== null;
         const newHasXctsk = body.xctsk !== null;
         if (!oldHasXctsk && newHasXctsk) {
-          auditChanges.push("Set task route");
+          auditChanges.push(
+            `Set task route: ${describeTaskSummary(body.xctsk)}`
+          );
         } else if (oldHasXctsk && !newHasXctsk) {
           auditChanges.push("Cleared task route");
         } else if (
@@ -327,7 +330,10 @@ export const taskRoutes = new Hono<HonoEnv>()
           newHasXctsk &&
           task.xctsk !== JSON.stringify(body.xctsk)
         ) {
-          auditChanges.push("Updated task route");
+          const summary = summarizeXctskChange(task.xctsk, body.xctsk);
+          auditChanges.push(
+            summary ? `Updated task route: ${summary}` : "Updated task route"
+          );
         }
       }
 
