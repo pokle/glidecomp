@@ -516,7 +516,8 @@ Each stage is a reviewable vertical slice. Do not move on without review.
 - [ ] Module: `web/frontend/src/comp/pilots-section.ts` keeps comp-detail.ts from bloating
 - [ ] Footnote in text and import modals pointing to contact for missing sporting body ID columns
 
-#### 8e — Pilot management UI: editable table view (bulk assign + inline edit)
+#### 8e — Pilot management UI: editable table view (bulk assign + inline edit) — **DEFERRED**
+All workflows covered by 8d (read-only table + Edit-as-text modal + CSV import/export). 8e would be UX polish only — nicer single-pilot edits and in-table bulk assign. Not blocking any capability. Revisit only if admin friction becomes a real complaint.
 - [ ] Editable table component with all 14 columns (name, email, 7 IDs, class, team, driver, glider) — IDs beyond CIVL/SAFA collapse under a "More IDs" expander
 - [ ] Bulk assign toolbar (class / team / driver) with filter + "Select all filtered"
 - [ ] Dirty-state tracking, add-row, delete-row
@@ -559,3 +560,10 @@ Each stage is a reviewable vertical slice. Do not move on without review.
 - [ ] Implement Queue consumer: list and delete all objects under the R2 prefix
 - [ ] Implement user account deletion cascade (via auth-api): delete pilot → comp_pilot → task_track; if last admin → delete entire comp
 - [ ] Write integration tests for cascade scenarios
+
+## Iteration 12: http MCP server
+
+- [ ] Add a http MCP server that first authenticates users via a web browser
+- [ ] MCP command to list all existing competitions
+- [ ] MCP command to list tasks for competitions
+- [ ] MCP command to make changes to the pilot list (E.g. "Add civl ID 1234 to Bart Flyer")
