@@ -7,6 +7,7 @@ import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth"
 import { updatePenaltySchema } from "../validators";
 import { parseIGC } from "@glidecomp/engine";
 import { audit } from "../audit";
+import { linkExistingRegistrations } from "../pilot-linker";
 
 type Variables = {
   user: AuthUser;
@@ -48,6 +49,12 @@ async function ensurePilot(
 /**
  * Ensure a `comp_pilot` row exists for the given pilot + comp.
  * Returns the comp_pilot_id.
+ *
+ * Iteration 8g behaviour: before inserting a fresh row, run the linker
+ * scoped to this comp so that a previously unlinked admin-registered
+ * row for the same person is claimed instead of creating a duplicate.
+ * Returns `{ compPilotId, claimedFromPreReg }` — the boolean is used by
+ * the caller to emit a different audit description.
  */
 async function ensureCompPilot(
   db: D1Database,
@@ -55,14 +62,34 @@ async function ensureCompPilot(
   pilotId: number,
   pilotName: string,
   defaultPilotClass: string
-): Promise<number> {
+): Promise<{ compPilotId: number; claimedFromPreReg: boolean; preRegName: string | null }> {
   const existing = await db
     .prepare(
       "SELECT comp_pilot_id FROM comp_pilot WHERE comp_id = ? AND pilot_id = ?"
     )
     .bind(compId, pilotId)
     .first<{ comp_pilot_id: number }>();
-  if (existing) return existing.comp_pilot_id;
+  if (existing) {
+    return {
+      compPilotId: existing.comp_pilot_id,
+      claimedFromPreReg: false,
+      preRegName: null,
+    };
+  }
+
+  // Try to claim a matching unlinked pre-registration in this comp.
+  const claimed = await linkExistingRegistrations(db, pilotId, { comp_id: compId });
+  if (claimed.length > 0) {
+    // Take the first match — if admins pre-registered the same person
+    // twice in one comp, subsequent ones will stay unlinked and still
+    // show up in admin tools to resolve.
+    const first = claimed[0];
+    return {
+      compPilotId: first.comp_pilot_id,
+      claimedFromPreReg: true,
+      preRegName: first.registered_pilot_name,
+    };
+  }
 
   const res = await db
     .prepare(
@@ -71,7 +98,11 @@ async function ensureCompPilot(
     )
     .bind(compId, pilotId, pilotName, defaultPilotClass)
     .run();
-  return res.meta.last_row_id;
+  return {
+    compPilotId: res.meta.last_row_id,
+    claimedFromPreReg: false,
+    preRegName: null,
+  };
 }
 
 export const igcRoutes = new Hono<HonoEnv>()
@@ -134,15 +165,26 @@ export const igcRoutes = new Hono<HonoEnv>()
         return c.json({ error: "File too large (max 5MB)" }, 400);
       }
 
-      // Open registration: ensure pilot + comp_pilot
+      // Open registration: ensure pilot + comp_pilot. If a previously
+      // unlinked admin pre-registration matches this user, the linker
+      // will claim that row instead of creating a new one.
       const pilotId = await ensurePilot(c.env.DB, user.id, user.name);
-      const compPilotId = await ensureCompPilot(
+      const ensured = await ensureCompPilot(
         c.env.DB,
         compId,
         pilotId,
         user.name,
         comp.default_pilot_class
       );
+      const compPilotId = ensured.compPilotId;
+      if (ensured.claimedFromPreReg && ensured.preRegName) {
+        await audit(c.env.DB, c.var.user, compId, {
+          subject_type: "pilot",
+          subject_id: compPilotId,
+          subject_name: ensured.preRegName,
+          description: `Linked pre-registered pilot "${ensured.preRegName}" to GlideComp account on first upload`,
+        });
+      }
 
       // Enforce max pilots per task
       const pilotCount = await c.env.DB.prepare(

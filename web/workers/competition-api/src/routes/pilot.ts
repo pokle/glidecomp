@@ -11,6 +11,7 @@ import {
   bulkPilotsSchema,
 } from "../validators";
 import { resolvePilotId } from "../pilot-resolver";
+import { linkExistingRegistrations } from "../pilot-linker";
 import { audit, describeChange } from "../audit";
 
 type Variables = {
@@ -306,6 +307,32 @@ export const pilotRoutes = new Hono<HonoEnv>()
         )
           .bind(...values)
           .run();
+      }
+
+      // Signup-linking (Iteration 8g): once the user's identity fields are
+      // up to date, scan every open competition for admin-pre-registered
+      // comp_pilot rows matching them and claim any hits. This is the
+      // mechanism that turns a pre-registration into a real linked
+      // registration as soon as the user fills in (e.g.) their CIVL ID.
+      const pilotIdRow = await c.env.DB.prepare(
+        "SELECT pilot_id FROM pilot WHERE user_id = ?"
+      )
+        .bind(user.id)
+        .first<{ pilot_id: number }>();
+      if (pilotIdRow) {
+        const linked = await linkExistingRegistrations(
+          c.env.DB,
+          pilotIdRow.pilot_id,
+          "open-comps"
+        );
+        for (const link of linked) {
+          await audit(c.env.DB, c.var.user, link.comp_id, {
+            subject_type: "pilot",
+            subject_id: link.comp_pilot_id,
+            subject_name: link.registered_pilot_name,
+            description: `Linked pre-registered pilot "${link.registered_pilot_name}" to GlideComp account (matched by ${link.matched_by})`,
+          });
+        }
       }
 
       const pilot = await c.env.DB.prepare(

@@ -534,10 +534,14 @@ All workflows covered by 8d (read-only table + Edit-as-text modal + CSV import/e
 - [x] Audit description reflects on-behalf uploads (already handled in 8c; `open_igc_upload` toggle itself is audited)
 
 #### 8g — Signup linking
-- [ ] Auth-api hook on user creation / profile update
-- [ ] Run resolver across all open competitions' unlinked `comp_pilot` rows
-- [ ] Set `pilot_id` on matches; write audit entry per affected comp
-- [ ] Integration test: create unlinked registration → signup matching user → verify link
+- [x] `pilot-linker.ts` helper: given a pilot_id, scans unlinked `comp_pilot` rows matching its identity (CIVL → other IDs → email) and claims them
+- [x] Triggered from `PATCH /api/comp/pilot` (all open comps) so adding a CIVL ID retroactively links pre-registrations
+- [x] Triggered from `ensureCompPilot` on IGC upload (single comp scope) so first-time upload claims a matching pre-registration instead of creating a duplicate row
+- [x] Audit entries written per claimed registration with the matching field noted
+- [x] Closed comps (past close_date) are excluded from profile-update linking
+- [x] Partial unique index protects against concurrent claims — linker swallows per-row UNIQUE errors and keeps going
+- [x] Integration tests covering: civl_id match, email match via user join, name-only does NOT link, closed comps excluded, multi-comp single pass, IGC upload claim path, audit entries
+- [x] Decision: no auth-api hook. Linking happens lazily when the user interacts with competition-api (profile update or first upload), which covers 100% of practical cases without coupling the two workers.
 
 #### 8h — Polish
 - [ ] `comp.test` flag handling end-to-end (test comps invisible to non-admins)
@@ -546,7 +550,7 @@ All workflows covered by 8d (read-only table + Edit-as-text modal + CSV import/e
 ## Iteration 9: IGC upload to competition improvements
 
 - [ ] Allow competition admins to bulk upload IGC files. Auto register pilots based on IGC pilot name.
-- [ ] Allow competition admins to import an AirScore competition and all its tasks in one go. This can be a cli if the .
+- [ ] Allow competition admins to import an AirScore competition and all its tasks in one go. This can be a cli if simpler.
 
 ## Iteration 10: Starting order
 
