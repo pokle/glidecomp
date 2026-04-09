@@ -1222,7 +1222,7 @@ function setupActivitySection(compId: string) {
     }
   }
 
-  // Filter tab wiring
+  // Filter tab wiring (Basecoat tabs — toggle aria-selected)
   const filterBtns = document.querySelectorAll<HTMLButtonElement>(
     ".activity-filter-btn"
   );
@@ -1230,11 +1230,10 @@ function setupActivitySection(compId: string) {
     currentFilter = filter;
     nextBefore = null;
     for (const btn of filterBtns) {
-      if (btn.dataset.filter === filter) {
-        btn.classList.add("bg-muted");
-      } else {
-        btn.classList.remove("bg-muted");
-      }
+      btn.setAttribute(
+        "aria-selected",
+        btn.dataset.filter === filter ? "true" : "false"
+      );
     }
     loadPage(true);
   }

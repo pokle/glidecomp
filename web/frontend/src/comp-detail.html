@@ -93,16 +93,14 @@
 
         <!-- Activity (audit log) section -->
         <section class="mb-8">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider">Activity</h2>
-            <div id="activity-filter-tabs" class="flex items-center gap-1 text-xs">
-              <button class="activity-filter-btn btn btn-ghost btn-sm text-xs" data-filter="">All</button>
-              <button class="activity-filter-btn btn btn-ghost btn-sm text-xs" data-filter="task">Tasks</button>
-              <button class="activity-filter-btn btn btn-ghost btn-sm text-xs" data-filter="pilot">Pilots</button>
-              <button class="activity-filter-btn btn btn-ghost btn-sm text-xs" data-filter="track">Tracks</button>
-              <button class="activity-filter-btn btn btn-ghost btn-sm text-xs" data-filter="comp">Settings</button>
-            </div>
-          </div>
+          <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">Activity</h2>
+          <nav role="tablist" aria-orientation="horizontal" class="w-full mb-3" id="activity-filter-tabs">
+            <button type="button" role="tab" class="activity-filter-btn" aria-selected="true" tabindex="0" data-filter="">All</button>
+            <button type="button" role="tab" class="activity-filter-btn" aria-selected="false" tabindex="0" data-filter="task">Tasks</button>
+            <button type="button" role="tab" class="activity-filter-btn" aria-selected="false" tabindex="0" data-filter="pilot">Pilots</button>
+            <button type="button" role="tab" class="activity-filter-btn" aria-selected="false" tabindex="0" data-filter="track">Tracks</button>
+            <button type="button" role="tab" class="activity-filter-btn" aria-selected="false" tabindex="0" data-filter="comp">Settings</button>
+          </nav>
           <div id="activity-list" class="space-y-1"></div>
           <div id="activity-empty" class="hidden text-center py-6 border border-dashed border-border/50 rounded-lg">
             <p class="text-sm text-muted-foreground">No activity yet</p>
