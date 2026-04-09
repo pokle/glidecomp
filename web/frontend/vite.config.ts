@@ -88,6 +88,8 @@ export default defineConfig({
             req.url = '/comp-detail.html';
           } else if (req.url === '/scores' || req.url?.startsWith('/scores?')) {
             req.url = '/scores.html';
+          } else if (req.url === '/profile' || req.url === '/profile/') {
+            req.url = '/profile.html';
           }
           next();
         });
@@ -109,6 +111,7 @@ export default defineConfig({
         comp: resolve(__dirname, 'src/comp.html'),
         'comp-detail': resolve(__dirname, 'src/comp-detail.html'),
         scores: resolve(__dirname, 'src/scores.html'),
+        profile: resolve(__dirname, 'src/profile.html'),
       },
     },
   },

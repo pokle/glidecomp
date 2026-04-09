@@ -544,8 +544,8 @@ All workflows covered by 8d (read-only table + Edit-as-text modal + CSV import/e
 - [x] Decision: no auth-api hook. Linking happens lazily when the user interacts with competition-api (profile update or first upload), which covers 100% of practical cases without coupling the two workers.
 
 #### 8h — Polish
-- [ ] `comp.test` flag handling end-to-end (test comps invisible to non-admins)
-- [ ] Pilot profile page (name, 7 IDs, phone, glider) on its own route
+- [x] `comp.test` flag handling audit: every public GET route (comp list, comp detail, task, track list, track download, score, pilot list, audit) already gates test comps behind admin auth. Fixed a small bug where the comp list's admin branch wasn't SELECTing `open_igc_upload`.
+- [x] Pilot profile page at `/profile`: form with name + 7 sporting body IDs + phone + glider. Reads via `GET /api/comp/pilot`, saves via `PATCH`. Shows a success message noting that matching registrations have been auto-linked (triggered by the linker added in 8g). Profile link added to the user menu dropdown on the comp list and comp detail pages.
 
 ## Iteration 9: IGC upload to competition improvements
 

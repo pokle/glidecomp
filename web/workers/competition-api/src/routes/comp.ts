@@ -134,7 +134,7 @@ export const compRoutes = new Hono<HonoEnv>()
 
     if (user) {
       adminComps = await c.env.DB.prepare(
-        `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params
+        `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params, c.open_igc_upload
          FROM comp c
          JOIN comp_admin ca ON c.comp_id = ca.comp_id
          WHERE ca.user_id = ?
