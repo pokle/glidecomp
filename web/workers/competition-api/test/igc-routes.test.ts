@@ -402,6 +402,231 @@ describe("POST .../igc/:comp_pilot_id (admin upload on behalf)", () => {
   });
 });
 
+// ── 8f: Upload-on-behalf authorisation + attribution ────────────────────────
+
+describe("open_igc_upload flag (8f)", () => {
+  test("defaults to true on comp creation", async () => {
+    const compId = await createComp();
+    const res = await authRequest("GET", `/api/comp/${compId}`);
+    const data = (await res.json()) as { open_igc_upload: boolean };
+    expect(data.open_igc_upload).toBe(true);
+  });
+
+  test("can be toggled via PATCH and audited", async () => {
+    const compId = await createComp();
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      open_igc_upload: false,
+    });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { open_igc_upload: boolean };
+    expect(data.open_igc_upload).toBe(false);
+
+    // Verify audit entry
+    const auditRow = await env.DB.prepare(
+      "SELECT description FROM audit_log WHERE description LIKE ? LIMIT 1"
+    )
+      .bind("%open IGC upload%")
+      .first<{ description: string }>();
+    expect(auditRow).not.toBeNull();
+    expect(auditRow!.description).toContain("Disabled");
+  });
+});
+
+describe("POST .../igc/:comp_pilot_id (upload on behalf, 8f)", () => {
+  test("registered pilot CAN upload on behalf when open_igc_upload=1", async () => {
+    // user-1 is the comp admin; register user-2 as a pilot, then user-3 as
+    // another pilot. user-3 uploads for user-2.
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+
+    // user-2 registers themselves
+    await uploadIgc(compId, taskId, "user-2");
+    // user-3 registers themselves
+    await uploadIgc(compId, taskId, "user-3");
+
+    // Delete user-2's track so we can test a fresh upload on their behalf
+    const cp2 = await env.DB.prepare(
+      "SELECT cp.comp_pilot_id FROM comp_pilot cp JOIN pilot p ON cp.pilot_id = p.pilot_id WHERE p.user_id = ?"
+    )
+      .bind("user-2")
+      .first<{ comp_pilot_id: number }>();
+    await env.DB.prepare("DELETE FROM task_track WHERE comp_pilot_id = ?")
+      .bind(cp2!.comp_pilot_id)
+      .run();
+
+    const cpEncoded = encodeId(ALPHABET, cp2!.comp_pilot_id);
+    const res = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc/${cpEncoded}`,
+      fakeIgcPayload(),
+      { user: "user-3" }
+    );
+    expect(res.status).toBe(201);
+  });
+
+  test("registered pilot CANNOT upload on behalf when open_igc_upload=0", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+
+    // Disable open upload
+    await authRequest("PATCH", `/api/comp/${compId}`, {
+      open_igc_upload: false,
+    });
+
+    // Register user-2 and user-3
+    await uploadIgc(compId, taskId, "user-2");
+    await uploadIgc(compId, taskId, "user-3");
+
+    const cp2 = await env.DB.prepare(
+      "SELECT cp.comp_pilot_id FROM comp_pilot cp JOIN pilot p ON cp.pilot_id = p.pilot_id WHERE p.user_id = ?"
+    )
+      .bind("user-2")
+      .first<{ comp_pilot_id: number }>();
+    await env.DB.prepare("DELETE FROM task_track WHERE comp_pilot_id = ?")
+      .bind(cp2!.comp_pilot_id)
+      .run();
+
+    const cpEncoded = encodeId(ALPHABET, cp2!.comp_pilot_id);
+    const res = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc/${cpEncoded}`,
+      fakeIgcPayload(),
+      { user: "user-3" }
+    );
+    expect(res.status).toBe(403);
+  });
+
+  test("admin can upload on behalf regardless of open_igc_upload setting", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+
+    // Disable open upload — admin should still succeed
+    await authRequest("PATCH", `/api/comp/${compId}`, {
+      open_igc_upload: false,
+    });
+
+    // Register user-2 as a pilot
+    await uploadIgc(compId, taskId, "user-2");
+    const cp = await env.DB.prepare(
+      "SELECT cp.comp_pilot_id FROM comp_pilot cp JOIN pilot p ON cp.pilot_id = p.pilot_id WHERE p.user_id = ?"
+    )
+      .bind("user-2")
+      .first<{ comp_pilot_id: number }>();
+    await env.DB.prepare("DELETE FROM task_track WHERE comp_pilot_id = ?")
+      .bind(cp!.comp_pilot_id)
+      .run();
+
+    const cpEncoded = encodeId(ALPHABET, cp!.comp_pilot_id);
+    const res = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc/${cpEncoded}`,
+      fakeIgcPayload(),
+      { user: "user-1" } // admin
+    );
+    expect(res.status).toBe(201);
+  });
+
+  test("non-registered non-admin user gets 403 even with open_igc_upload=1", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+
+    // user-2 registers as a pilot
+    await uploadIgc(compId, taskId, "user-2");
+    const cp = await env.DB.prepare(
+      "SELECT comp_pilot_id FROM comp_pilot"
+    ).first<{ comp_pilot_id: number }>();
+    const cpEncoded = encodeId(ALPHABET, cp!.comp_pilot_id);
+
+    // user-3 is NOT registered in this comp, open_igc_upload is default (1)
+    const res = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc/${cpEncoded}`,
+      fakeIgcPayload(),
+      { user: "user-3" }
+    );
+    expect(res.status).toBe(403);
+  });
+
+  test("uploaded_by_user_id and uploaded_by_name are populated on insert", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+
+    // user-2 registers themselves — uploaded_by should be user-2
+    await uploadIgc(compId, taskId, "user-2");
+    const row = await env.DB.prepare(
+      "SELECT uploaded_by_user_id, uploaded_by_name FROM task_track"
+    ).first<{ uploaded_by_user_id: string; uploaded_by_name: string }>();
+    expect(row!.uploaded_by_user_id).toBe("user-2");
+    expect(row!.uploaded_by_name).toBe("Admin Two");
+  });
+
+  test("uploaded_by reflects the actual uploader on on-behalf uploads", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+
+    // user-2 auto-registers
+    await uploadIgc(compId, taskId, "user-2");
+    const cp = await env.DB.prepare(
+      "SELECT comp_pilot_id FROM comp_pilot"
+    ).first<{ comp_pilot_id: number }>();
+    // wipe the track so we can test a fresh admin-on-behalf insert
+    await env.DB.prepare("DELETE FROM task_track").run();
+
+    const cpEncoded = encodeId(ALPHABET, cp!.comp_pilot_id);
+    await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc/${cpEncoded}`,
+      fakeIgcPayload(),
+      { user: "user-1" } // admin user-1 uploads for user-2
+    );
+
+    const row = await env.DB.prepare(
+      "SELECT uploaded_by_user_id, uploaded_by_name FROM task_track"
+    ).first<{ uploaded_by_user_id: string; uploaded_by_name: string }>();
+    expect(row!.uploaded_by_user_id).toBe("user-1");
+    expect(row!.uploaded_by_name).toBe("Test Pilot");
+  });
+
+  test("track list returns uploaded_by_name and uploaded_on_behalf flag", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+
+    // user-2 auto-registers (uploaded_by = user-2)
+    await uploadIgc(compId, taskId, "user-2");
+
+    // user-3 registers separately, then user-1 (admin) uploads for user-3
+    await uploadIgc(compId, taskId, "user-3");
+    const cp3 = await env.DB.prepare(
+      "SELECT cp.comp_pilot_id FROM comp_pilot cp JOIN pilot p ON cp.pilot_id = p.pilot_id WHERE p.user_id = ?"
+    )
+      .bind("user-3")
+      .first<{ comp_pilot_id: number }>();
+    await env.DB.prepare(
+      "DELETE FROM task_track WHERE comp_pilot_id = ?"
+    )
+      .bind(cp3!.comp_pilot_id)
+      .run();
+    await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc/${encodeId(ALPHABET, cp3!.comp_pilot_id)}`,
+      fakeIgcPayload(),
+      { user: "user-1" }
+    );
+
+    // List
+    const res = await request("GET", `/api/comp/${compId}/task/${taskId}/igc`);
+    const data = (await res.json()) as {
+      tracks: Array<{
+        pilot_name: string;
+        uploaded_by_name: string | null;
+        uploaded_on_behalf: boolean;
+      }>;
+    };
+
+    const selfUpload = data.tracks.find((t) => t.pilot_name === "Admin Two")!;
+    expect(selfUpload.uploaded_by_name).toBe("Admin Two");
+    expect(selfUpload.uploaded_on_behalf).toBe(false);
+
+    const onBehalf = data.tracks.find((t) => t.pilot_name === "Pilot Three")!;
+    expect(onBehalf.uploaded_by_name).toBe("Test Pilot");
+    expect(onBehalf.uploaded_on_behalf).toBe(true);
+  });
+});
+
 // ── GET /api/comp/:comp_id/pilot (pilot list) ───────────────────────────
 
 describe("GET /api/comp/:comp_id/pilot", () => {
@@ -490,13 +715,18 @@ describe("PATCH /api/comp/pilot", () => {
     expect(pilot!.name).toBe("Updated Name");
   });
 
-  test("updates sporting_body_ids as JSON", async () => {
+  test("updates multiple sporting body IDs as flat columns", async () => {
     const res = await authRequest("PATCH", "/api/comp/pilot", {
-      sporting_body_ids: { SAFA: "12345", CIVL: "67890" },
+      safa_id: "12345",
+      civl_id: "67890",
+      ushpa_id: "99999",
     });
     expect(res.status).toBe(200);
     const data = (await res.json()) as Record<string, unknown>;
-    expect(data.sporting_body_ids).toEqual({ SAFA: "12345", CIVL: "67890" });
+    expect(data.safa_id).toBe("12345");
+    expect(data.civl_id).toBe("67890");
+    expect(data.ushpa_id).toBe("99999");
+    expect(data.bhpa_id).toBeNull();
   });
 
   test("requires authentication", async () => {

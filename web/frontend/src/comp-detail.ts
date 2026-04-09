@@ -1,5 +1,6 @@
 import { getCurrentUser, signInWithGoogle, signOut } from "./auth/client";
 import { api } from "./comp/api";
+import { setupPilotsSection } from "./comp/pilots-section";
 import type { XCTask } from "@glidecomp/engine";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -14,6 +15,7 @@ interface CompDetail {
   pilot_classes: string[];
   default_pilot_class: string;
   gap_params: unknown;
+  open_igc_upload: boolean;
   tasks: TaskSummary[];
   admins: Array<{ email: string; name: string }>;
   pilot_count: number;
@@ -229,8 +231,39 @@ async function initTaskDetail(compId: string, taskId: string) {
     setupTaskEditor(compId, taskId, task.xctsk as XCTask, true);
   }
 
+  // Determine if current user can upload on behalf. Admins always can;
+  // registered pilots can when comp.open_igc_upload is enabled. We look up
+  // registration status by matching the user's email against the linked
+  // email of a comp_pilot row — the pilot list endpoint includes linked_email
+  // when a comp_pilot is linked to a GlideComp account.
+  let canUploadOnBehalf = isAdmin;
+  if (!isAdmin && user && comp?.open_igc_upload) {
+    try {
+      const pilotsRes = await api.api.comp[":comp_id"].pilot.$get({
+        param: { comp_id: compId },
+      });
+      if (pilotsRes.ok) {
+        const pilotsData = (await pilotsRes.json()) as {
+          pilots: Array<{ linked_email?: string | null }>;
+        };
+        canUploadOnBehalf = pilotsData.pilots.some(
+          (p) => p.linked_email === user.email
+        );
+      }
+    } catch {
+      // Non-critical — default to admin-only
+    }
+  }
+
   // Tracks section
-  await setupTrackSection(compId, taskId, user != null, isAdmin, comp?.close_date ?? null);
+  await setupTrackSection(
+    compId,
+    taskId,
+    user != null,
+    isAdmin,
+    comp?.close_date ?? null,
+    canUploadOnBehalf
+  );
 
   // Scores section (fire and forget — non-critical)
   setupScoreSection(compId, taskId).catch(() => {});
@@ -418,6 +451,9 @@ interface TrackInfo {
   file_size: number;
   penalty_points: number;
   penalty_reason: string | null;
+  uploaded_by_name: string | null;
+  /** True when the uploader is someone other than the pilot the track belongs to. */
+  uploaded_on_behalf: boolean;
 }
 
 async function compressIgc(file: File): Promise<ArrayBuffer> {
@@ -451,7 +487,8 @@ async function setupTrackSection(
   taskId: string,
   isAuthenticated: boolean,
   isAdmin: boolean,
-  closeDate: string | null
+  closeDate: string | null,
+  canUploadOnBehalf: boolean
 ) {
   // Treat close_date as end-of-day local time (a date like "2026-12-31"
   // parsed by new Date() is midnight UTC, which is already past in UTC+ timezones)
@@ -473,8 +510,9 @@ async function setupTrackSection(
     setupSelfUpload(compId, taskId, isAdmin, isClosed);
   }
 
-  // Admin: upload on behalf of a registered pilot
-  if (isAdmin && !isClosed) {
+  // Upload on behalf: available to admins, and to registered pilots when
+  // comp.open_igc_upload is enabled.
+  if (canUploadOnBehalf && !isClosed) {
     setupUploadOnBehalf(compId, taskId, isAdmin, isClosed);
   }
 }
@@ -533,7 +571,9 @@ function renderTrackList(
           <span class="inline-flex items-center rounded-md bg-primary/10 text-primary px-1.5 py-0.5 text-xs font-medium">${escapeHtml(track.pilot_class)}</span>
           <span class="js-igc-name-slot"></span>
         </div>
-        <div class="text-xs text-muted-foreground mt-0.5">${uploadDate} &middot; ${formatFileSize(track.file_size)}</div>
+        <div class="text-xs text-muted-foreground mt-0.5">
+          ${uploadDate} &middot; ${formatFileSize(track.file_size)}<span class="js-uploaded-by-slot"></span>
+        </div>
       </div>
       <div class="flex items-center gap-1 shrink-0">
         <a href="/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(track.comp_pilot_id)}/download"
@@ -548,6 +588,17 @@ function renderTrackList(
       const slot = div.querySelector(".js-igc-name-slot")!;
       slot.className = "text-xs text-muted-foreground";
       slot.textContent = `(igc: ${track.igc_pilot_name})`;
+    }
+
+    // "Uploaded by X" attribution when the uploader is someone other than
+    // the pilot the track belongs to (admin-on-behalf, or peer upload).
+    if (track.uploaded_on_behalf && track.uploaded_by_name) {
+      const slot = div.querySelector(".js-uploaded-by-slot")!;
+      const sep = document.createTextNode(" · ");
+      const label = document.createElement("span");
+      label.textContent = `uploaded by ${track.uploaded_by_name}`;
+      slot.appendChild(sep);
+      slot.appendChild(label);
     }
 
     // Penalty badge — built with DOM so title is safe for any user-supplied text
@@ -1121,6 +1172,12 @@ async function initCompDetail(compId: string) {
     document.getElementById("create-task-btn")!.classList.remove("hidden");
   }
 
+  // ── Pilots ─────────────────────────────────────────────────────────────
+  setupPilotsSection(compId, comp.name, comp.pilot_classes, isAdmin);
+
+  // ── Activity (audit log) ───────────────────────────────────────────────
+  setupActivitySection(compId);
+
   // ── Admins ─────────────────────────────────────────────────────────────
 
   const adminsList = document.getElementById("admins-list")!;
@@ -1141,6 +1198,151 @@ async function initCompDetail(compId: string) {
     setupCreateTaskDialog(compId, comp.pilot_classes);
     setupSettingsDialog(compId, comp);
   }
+}
+
+// ── Activity (audit log) section ─────────────────────────────────────────────
+
+interface AuditEntry {
+  audit_id: number;
+  timestamp: string;
+  actor_name: string;
+  subject_type: "comp" | "task" | "pilot" | "track";
+  subject_id: string | null;
+  subject_name: string | null;
+  description: string;
+}
+
+interface AuditResponse {
+  entries: AuditEntry[];
+  has_more: boolean;
+  next_before: number | null;
+}
+
+/**
+ * Wire up the Activity section: initial load, filter tabs, load-more.
+ * Uses plain fetch (not the Hono RPC client) to keep the response shape
+ * simple and avoid bundling typed-client overhead for read-only data.
+ */
+function setupActivitySection(compId: string) {
+  const list = document.getElementById("activity-list")!;
+  const empty = document.getElementById("activity-empty")!;
+  const loadMoreWrap = document.getElementById("activity-load-more-wrap")!;
+  const loadMoreBtn = document.getElementById(
+    "activity-load-more"
+  ) as HTMLButtonElement;
+
+  let currentFilter = "";
+  let nextBefore: number | null = null;
+
+  async function loadPage(reset: boolean) {
+    const params = new URLSearchParams();
+    params.set("limit", "25");
+    if (currentFilter) params.set("subject_type", currentFilter);
+    if (!reset && nextBefore !== null) {
+      params.set("before", String(nextBefore));
+    }
+    try {
+      const res = await fetch(
+        `/api/comp/${encodeURIComponent(compId)}/audit?${params}`,
+        { credentials: "include" }
+      );
+      if (!res.ok) {
+        if (reset) {
+          empty.classList.remove("hidden");
+          empty.querySelector("p")!.textContent = "Could not load activity";
+        }
+        return;
+      }
+      const data = (await res.json()) as AuditResponse;
+      if (reset) {
+        list.innerHTML = "";
+      }
+      for (const entry of data.entries) {
+        list.appendChild(renderAuditEntry(entry));
+      }
+      nextBefore = data.next_before;
+      if (data.has_more) {
+        loadMoreWrap.classList.remove("hidden");
+      } else {
+        loadMoreWrap.classList.add("hidden");
+      }
+      if (reset && data.entries.length === 0) {
+        empty.classList.remove("hidden");
+      } else {
+        empty.classList.add("hidden");
+      }
+    } catch {
+      // Silent — activity is non-critical
+    }
+  }
+
+  // Filter tab wiring (Basecoat tabs — toggle aria-selected + aria-labelledby)
+  const filterBtns = document.querySelectorAll<HTMLButtonElement>(
+    ".activity-filter-btn"
+  );
+  const panel = document.getElementById("activity-panel")!;
+  function setActiveFilter(filter: string) {
+    currentFilter = filter;
+    nextBefore = null;
+    for (const btn of filterBtns) {
+      const active = btn.dataset.filter === filter;
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+      if (active) panel.setAttribute("aria-labelledby", btn.id);
+    }
+    loadPage(true);
+  }
+  for (const btn of filterBtns) {
+    btn.addEventListener("click", () => setActiveFilter(btn.dataset.filter || ""));
+  }
+
+  loadMoreBtn.addEventListener("click", () => loadPage(false));
+
+  // Initial load with "All" filter active
+  setActiveFilter("");
+}
+
+function renderAuditEntry(entry: AuditEntry): HTMLElement {
+  const row = document.createElement("div");
+  row.className =
+    "flex items-start gap-3 text-sm py-1.5 border-b border-border/30 last:border-b-0";
+
+  const time = document.createElement("span");
+  time.className = "text-xs text-muted-foreground/70 whitespace-nowrap pt-0.5 w-24 shrink-0";
+  time.textContent = formatAuditTime(entry.timestamp);
+
+  const main = document.createElement("div");
+  main.className = "flex-1 min-w-0";
+
+  const actor = document.createElement("span");
+  actor.className = "font-medium text-foreground";
+  actor.textContent = entry.actor_name;
+
+  const desc = document.createElement("span");
+  desc.className = "text-muted-foreground ml-2";
+  desc.textContent = entry.description;
+
+  main.appendChild(actor);
+  main.appendChild(desc);
+  row.appendChild(time);
+  row.appendChild(main);
+  return row;
+}
+
+function formatAuditTime(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 30) return `${diffDay}d ago`;
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 // ── Render tasks list ────────────────────────────────────────────────────────
@@ -1361,6 +1563,9 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
   const testCheckbox = document.getElementById(
     "settings-test"
   ) as HTMLInputElement;
+  const openUploadCheckbox = document.getElementById(
+    "settings-open-upload"
+  ) as HTMLInputElement;
   const adminsInput = document.getElementById(
     "settings-admins"
   ) as HTMLInputElement;
@@ -1402,6 +1607,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
         ? comp.close_date.split("T")[0]
         : "";
       testCheckbox.checked = comp.test;
+      openUploadCheckbox.checked = comp.open_igc_upload ?? true;
       adminsInput.value = comp.admins.map((a) => a.email).join(", ");
 
       // Populate default class dropdown
@@ -1454,6 +1660,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
     const defaultPilotClass = defaultClassSelect.value;
     const closeDate = closeDateInput.value || null;
     const test = testCheckbox.checked;
+    const openIgcUpload = openUploadCheckbox.checked;
     const adminEmails = adminsInput.value
       .split(",")
       .map((s) => s.trim().toLowerCase())
@@ -1483,6 +1690,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
           default_pilot_class: defaultPilotClass,
           close_date: closeDate,
           test,
+          open_igc_upload: openIgcUpload,
           admin_emails: adminEmails,
         },
       });

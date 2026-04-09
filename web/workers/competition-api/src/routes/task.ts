@@ -5,6 +5,8 @@ import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { createTaskSchema, updateTaskSchema } from "../validators";
+import { audit, describeChange } from "../audit";
+import { summarizeXctskChange, describeTaskSummary } from "../xctsk-summary";
 
 type Variables = {
   user: AuthUser;
@@ -93,6 +95,13 @@ export const taskRoutes = new Hono<HonoEnv>()
         );
         await c.env.DB.batch(batch);
       }
+
+      await audit(c.env.DB, c.var.user, compId, {
+        subject_type: "task",
+        subject_id: taskId,
+        subject_name: body.name,
+        description: `Created task "${body.name}" (${body.task_date}, classes: ${body.pilot_classes.join(", ")})`,
+      });
 
       return c.json(
         {
@@ -197,16 +206,31 @@ export const taskRoutes = new Hono<HonoEnv>()
       const body = c.req.valid("json");
       const alphabet = c.env.SQIDS_ALPHABET;
 
-      // Verify task exists and belongs to comp
+      // Verify task exists and belongs to comp; capture current state for audit
       const task = await c.env.DB.prepare(
-        "SELECT task_id FROM task WHERE task_id = ? AND comp_id = ?"
+        "SELECT task_id, name, task_date, xctsk FROM task WHERE task_id = ? AND comp_id = ?"
       )
         .bind(taskId, compId)
-        .first();
+        .first<{
+          task_id: number;
+          name: string;
+          task_date: string;
+          xctsk: string | null;
+        }>();
 
       if (!task) {
         return c.json({ error: "Task not found" }, 404);
       }
+
+      // Fetch current pilot classes for audit diff
+      const currentClassesRes = await c.env.DB.prepare(
+        "SELECT pilot_class FROM task_class WHERE task_id = ?"
+      )
+        .bind(taskId)
+        .all<{ pilot_class: string }>();
+      const currentClasses = currentClassesRes.results
+        .map((r) => r.pilot_class)
+        .sort();
 
       // Validate pilot_classes if provided
       if (body.pilot_classes) {
@@ -276,6 +300,53 @@ export const taskRoutes = new Hono<HonoEnv>()
         }
       }
 
+      // Emit audit entries per changed field
+      const auditChanges: string[] = [];
+      if (body.name !== undefined && body.name !== task.name) {
+        auditChanges.push(describeChange("task name", task.name, body.name));
+      }
+      if (body.task_date !== undefined && body.task_date !== task.task_date) {
+        auditChanges.push(describeChange("task date", task.task_date, body.task_date));
+      }
+      if (body.pilot_classes !== undefined) {
+        const newClasses = [...body.pilot_classes].sort();
+        if (JSON.stringify(newClasses) !== JSON.stringify(currentClasses)) {
+          auditChanges.push(
+            `Changed pilot classes from [${currentClasses.join(", ")}] to [${newClasses.join(", ")}]`
+          );
+        }
+      }
+      if (body.xctsk !== undefined) {
+        const oldHasXctsk = task.xctsk !== null;
+        const newHasXctsk = body.xctsk !== null;
+        if (!oldHasXctsk && newHasXctsk) {
+          auditChanges.push(
+            `Set task route: ${describeTaskSummary(body.xctsk)}`
+          );
+        } else if (oldHasXctsk && !newHasXctsk) {
+          auditChanges.push("Cleared task route");
+        } else if (
+          oldHasXctsk &&
+          newHasXctsk &&
+          task.xctsk !== JSON.stringify(body.xctsk)
+        ) {
+          const summary = summarizeXctskChange(task.xctsk, body.xctsk);
+          auditChanges.push(
+            summary ? `Updated task route: ${summary}` : "Updated task route"
+          );
+        }
+      }
+
+      const taskName = body.name ?? task.name;
+      for (const description of auditChanges) {
+        await audit(c.env.DB, c.var.user, compId, {
+          subject_type: "task",
+          subject_id: taskId,
+          subject_name: taskName,
+          description,
+        });
+      }
+
       // Return updated task
       const updated = await c.env.DB.prepare(
         `SELECT task_id, comp_id, name, task_date, creation_date, xctsk
@@ -314,12 +385,12 @@ export const taskRoutes = new Hono<HonoEnv>()
       const compId = c.var.ids.comp_id!;
       const taskId = c.var.ids.task_id!;
 
-      // Verify task exists and belongs to comp
+      // Verify task exists and capture name for audit
       const task = await c.env.DB.prepare(
-        "SELECT task_id FROM task WHERE task_id = ? AND comp_id = ?"
+        "SELECT task_id, name FROM task WHERE task_id = ? AND comp_id = ?"
       )
         .bind(taskId, compId)
-        .first();
+        .first<{ task_id: number; name: string }>();
 
       if (!task) {
         return c.json({ error: "Task not found" }, 404);
@@ -329,6 +400,13 @@ export const taskRoutes = new Hono<HonoEnv>()
       await c.env.DB.prepare("DELETE FROM task WHERE task_id = ?")
         .bind(taskId)
         .run();
+
+      await audit(c.env.DB, c.var.user, compId, {
+        subject_type: "task",
+        subject_id: taskId,
+        subject_name: task.name,
+        description: `Deleted task "${task.name}"`,
+      });
 
       // TODO (Iteration 9): Enqueue R2 cleanup via Cloudflare Queue
 

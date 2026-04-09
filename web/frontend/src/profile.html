@@ -1,0 +1,129 @@
+<!-- Copyright (c) 2026, Tushar Pokle.  All rights reserved. -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GlideComp - Pilot Profile</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body class="min-h-screen bg-background text-foreground">
+  <div id="profile-page" class="hidden min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-10">
+      <div class="max-w-2xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+        <a id="nav-logo" href="/" class="inline-flex items-center gap-2 text-lg font-bold tracking-tight text-foreground hover:text-primary transition-colors">
+          <img src="/icon.svg" alt="GlideComp logo" class="w-6 h-6" />
+          GlideComp
+        </a>
+        <div class="flex items-center gap-1">
+          <a href="/comp" class="text-sm text-muted-foreground hover:text-foreground px-2 py-1 transition-colors">Competitions</a>
+          <a id="nav-my-flights" href="/u/me/" class="text-sm text-muted-foreground hover:text-foreground px-2 py-1 transition-colors">My Flights</a>
+          <details id="nav-user-menu" class="relative hidden">
+            <summary id="nav-user-name" class="btn btn-ghost btn-sm text-xs list-none cursor-pointer select-none"></summary>
+            <div class="absolute right-0 top-full mt-1 w-36 rounded-lg border border-border bg-card shadow-lg p-1 z-50">
+              <button id="signout-btn" class="w-full text-left px-3 py-1.5 text-sm hover:bg-muted rounded-md transition-colors text-muted-foreground">Sign out</button>
+            </div>
+          </details>
+          <button id="signin-btn" class="hidden btn btn-ghost btn-sm text-xs">Sign in</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="flex-1 max-w-2xl mx-auto w-full px-4 sm:px-6 py-8">
+      <div id="profile-loading" class="text-center py-12">
+        <p class="text-sm text-muted-foreground">Loading profile...</p>
+      </div>
+
+      <div id="profile-signed-out" class="hidden text-center py-12">
+        <p class="text-sm text-muted-foreground mb-4">Sign in to view and edit your pilot profile.</p>
+        <button id="profile-signin-btn" class="btn btn-primary">Sign in with Google</button>
+      </div>
+
+      <div id="profile-content" class="hidden">
+        <h1 class="text-2xl font-bold tracking-tight mb-1">Pilot Profile</h1>
+        <p class="text-sm text-muted-foreground mb-6">
+          Fill in any of these IDs and your competition registrations will automatically link to this account.
+        </p>
+
+        <form id="profile-form" class="space-y-5">
+          <div>
+            <label for="profile-name" class="text-sm font-medium block mb-1">Display name</label>
+            <input id="profile-name" type="text" class="input w-full" maxlength="128" required>
+          </div>
+
+          <fieldset class="space-y-3 border border-border/50 rounded-lg p-4">
+            <legend class="text-xs font-medium text-muted-foreground uppercase tracking-wider px-1">Sporting body IDs</legend>
+            <p class="text-xs text-muted-foreground">CIVL is the primary international identifier. Add any others you hold — admins use these to match pre-registrations to your account.</p>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label for="profile-civl" class="text-xs font-medium block mb-1">CIVL</label>
+                <input id="profile-civl" type="text" class="input w-full text-sm" maxlength="128">
+              </div>
+              <div>
+                <label for="profile-safa" class="text-xs font-medium block mb-1">SAFA</label>
+                <input id="profile-safa" type="text" class="input w-full text-sm" maxlength="128">
+              </div>
+              <div>
+                <label for="profile-ushpa" class="text-xs font-medium block mb-1">USHPA</label>
+                <input id="profile-ushpa" type="text" class="input w-full text-sm" maxlength="128">
+              </div>
+              <div>
+                <label for="profile-bhpa" class="text-xs font-medium block mb-1">BHPA</label>
+                <input id="profile-bhpa" type="text" class="input w-full text-sm" maxlength="128">
+              </div>
+              <div>
+                <label for="profile-dhv" class="text-xs font-medium block mb-1">DHV</label>
+                <input id="profile-dhv" type="text" class="input w-full text-sm" maxlength="128">
+              </div>
+              <div>
+                <label for="profile-ffvl" class="text-xs font-medium block mb-1">FFVL</label>
+                <input id="profile-ffvl" type="text" class="input w-full text-sm" maxlength="128">
+              </div>
+              <div>
+                <label for="profile-fai" class="text-xs font-medium block mb-1">FAI</label>
+                <input id="profile-fai" type="text" class="input w-full text-sm" maxlength="128">
+              </div>
+            </div>
+            <p class="text-[11px] text-muted-foreground/70 mt-2">
+              Need a sporting body ID column not listed? <a href="mailto:support@glidecomp.com" class="underline">Contact us</a>.
+            </p>
+          </fieldset>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label for="profile-phone" class="text-sm font-medium block mb-1">Phone</label>
+              <input id="profile-phone" type="tel" class="input w-full" maxlength="128" placeholder="+61 400 000 000">
+            </div>
+            <div>
+              <label for="profile-glider" class="text-sm font-medium block mb-1">Glider</label>
+              <input id="profile-glider" type="text" class="input w-full" maxlength="128" placeholder="e.g. Moyes Litespeed RX 3.5">
+            </div>
+          </div>
+
+          <div id="profile-status" class="hidden rounded-md px-3 py-2 text-sm"></div>
+
+          <div class="flex justify-end gap-2">
+            <button type="submit" id="profile-save-btn" class="btn btn-primary">Save profile</button>
+          </div>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="/profile.ts"></script>
+</body>
+
+</html>

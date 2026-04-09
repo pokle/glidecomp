@@ -88,6 +88,7 @@ export async function uploadRequest(
 /** Clear all competition data between tests. */
 export async function clearCompData(): Promise<void> {
   await env.DB.batch([
+    env.DB.prepare("DELETE FROM audit_log"),
     env.DB.prepare("DELETE FROM task_track"),
     env.DB.prepare("DELETE FROM task_class"),
     env.DB.prepare("DELETE FROM task"),
@@ -95,5 +96,20 @@ export async function clearCompData(): Promise<void> {
     env.DB.prepare("DELETE FROM comp_admin"),
     env.DB.prepare("DELETE FROM comp"),
     env.DB.prepare("DELETE FROM pilot"),
+    // Re-seed test users: the Cloudflare vitest pool uses per-test storage
+    // isolation, which wipes the `user` table between tests. apply-migrations
+    // only seeds at file-load time. INSERT OR REPLACE keeps rows idempotent.
+    env.DB.prepare(
+      `INSERT OR REPLACE INTO "user" (id, name, email, "createdAt", "updatedAt")
+       VALUES (?, ?, ?, ?, ?)`
+    ).bind("user-1", "Test Pilot", "pilot@test.com", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
+    env.DB.prepare(
+      `INSERT OR REPLACE INTO "user" (id, name, email, "createdAt", "updatedAt")
+       VALUES (?, ?, ?, ?, ?)`
+    ).bind("user-2", "Admin Two", "admin2@test.com", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
+    env.DB.prepare(
+      `INSERT OR REPLACE INTO "user" (id, name, email, "createdAt", "updatedAt")
+       VALUES (?, ?, ?, ?, ?)`
+    ).bind("user-3", "Pilot Three", "pilot3@test.com", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
   ]);
 }
