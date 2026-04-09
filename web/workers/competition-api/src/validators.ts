@@ -72,11 +72,53 @@ export const updatePenaltySchema = z.object({
 
 // ── Comp pilot validators ──
 
-export const updateCompPilotSchema = z.object({
-  pilot_class: pilotClassString.optional(),
-  team_name: z.string().max(MAX_TEXT).nullable().optional(),
-  driver_contact: z.string().max(MAX_TEXT).nullable().optional(),
+const optionalText = z.string().max(MAX_TEXT).nullable().optional();
+
+/**
+ * Fields that admins can set per-row for a comp_pilot. The registered_*
+ * fields carry the admin-entered identity; `pilot_class` etc. carry
+ * competition-specific metadata.
+ */
+export const compPilotFieldsSchema = z.object({
+  // Identity (admin-entered; used both for display and for link resolution)
+  registered_pilot_name: z.string().min(1).max(MAX_TEXT),
+  registered_pilot_email: z.string().email().max(MAX_TEXT).nullable().optional(),
+  registered_pilot_civl_id: optionalText,
+  registered_pilot_safa_id: optionalText,
+  registered_pilot_ushpa_id: optionalText,
+  registered_pilot_bhpa_id: optionalText,
+  registered_pilot_dhv_id: optionalText,
+  registered_pilot_ffvl_id: optionalText,
+  registered_pilot_fai_id: optionalText,
+  registered_pilot_glider: optionalText,
+  // Competition-specific
+  pilot_class: pilotClassString,
+  team_name: optionalText,
+  driver_contact: optionalText,
   first_start_order: z.number().int().positive().nullable().optional(),
+});
+
+/** Create a single comp_pilot (admin). */
+export const createCompPilotSchema = compPilotFieldsSchema;
+
+/** Sparse update for a single comp_pilot — every field optional. */
+export const updateCompPilotSchema = compPilotFieldsSchema.partial();
+
+/**
+ * Bulk upsert payload. Each row may include `comp_pilot_id` (encoded sqid)
+ * to identify an existing row for update; omit it for a new row.
+ * Rows not included in the payload are deleted by the server.
+ *
+ * Max 250 rows per request (matches the 250 pilots-per-comp cap).
+ */
+export const bulkPilotsSchema = z.object({
+  pilots: z
+    .array(
+      compPilotFieldsSchema.extend({
+        comp_pilot_id: z.string().max(MAX_TEXT).optional(),
+      })
+    )
+    .max(250),
 });
 
 // ── Task validators ──
