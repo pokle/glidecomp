@@ -526,12 +526,12 @@ All workflows covered by 8d (read-only table + Edit-as-text modal + CSV import/e
 - [ ] `beforeunload` warning when dirty
 
 #### 8f — Upload on behalf
-- [ ] `open_igc_upload` toggle in comp settings UI
-- [ ] IGC upload route accepts `target_comp_pilot_id`; auth: admin OR (registered comp pilot AND open_igc_upload enabled)
-- [ ] `task_track.uploaded_by_*` populated on insert
-- [ ] Track list gains "Uploaded by" column when attribution differs from pilot
-- [ ] "Upload for {name}" button on pilot rows without a track (when authorised)
-- [ ] Audit description reflects on-behalf uploads
+- [x] `open_igc_upload` toggle in comp settings UI (checkbox in settings dialog)
+- [x] IGC upload route accepts on-behalf uploads via existing `POST .../igc/:comp_pilot_id`; auth relaxed from admin-only to admin OR (registered comp pilot AND open_igc_upload enabled)
+- [x] `task_track.uploaded_by_user_id` and `uploaded_by_name` populated on insert and replace (both upload paths)
+- [x] Track list GET returns `uploaded_by_name` and `uploaded_on_behalf` flag; frontend shows "uploaded by X" in the track list metadata line when attribution differs from the pilot
+- [x] "Upload for pilot" button revealed to registered pilots (not just admins) when the comp has open_igc_upload enabled
+- [x] Audit description reflects on-behalf uploads (already handled in 8c; `open_igc_upload` toggle itself is audited)
 
 #### 8g — Signup linking
 - [ ] Auth-api hook on user creation / profile update

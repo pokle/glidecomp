@@ -15,6 +15,7 @@ interface CompDetail {
   pilot_classes: string[];
   default_pilot_class: string;
   gap_params: unknown;
+  open_igc_upload: boolean;
   tasks: TaskSummary[];
   admins: Array<{ email: string; name: string }>;
   pilot_count: number;
@@ -230,8 +231,39 @@ async function initTaskDetail(compId: string, taskId: string) {
     setupTaskEditor(compId, taskId, task.xctsk as XCTask, true);
   }
 
+  // Determine if current user can upload on behalf. Admins always can;
+  // registered pilots can when comp.open_igc_upload is enabled. We look up
+  // registration status by matching the user's email against the linked
+  // email of a comp_pilot row — the pilot list endpoint includes linked_email
+  // when a comp_pilot is linked to a GlideComp account.
+  let canUploadOnBehalf = isAdmin;
+  if (!isAdmin && user && comp?.open_igc_upload) {
+    try {
+      const pilotsRes = await api.api.comp[":comp_id"].pilot.$get({
+        param: { comp_id: compId },
+      });
+      if (pilotsRes.ok) {
+        const pilotsData = (await pilotsRes.json()) as {
+          pilots: Array<{ linked_email?: string | null }>;
+        };
+        canUploadOnBehalf = pilotsData.pilots.some(
+          (p) => p.linked_email === user.email
+        );
+      }
+    } catch {
+      // Non-critical — default to admin-only
+    }
+  }
+
   // Tracks section
-  await setupTrackSection(compId, taskId, user != null, isAdmin, comp?.close_date ?? null);
+  await setupTrackSection(
+    compId,
+    taskId,
+    user != null,
+    isAdmin,
+    comp?.close_date ?? null,
+    canUploadOnBehalf
+  );
 
   // Scores section (fire and forget — non-critical)
   setupScoreSection(compId, taskId).catch(() => {});
@@ -419,6 +451,9 @@ interface TrackInfo {
   file_size: number;
   penalty_points: number;
   penalty_reason: string | null;
+  uploaded_by_name: string | null;
+  /** True when the uploader is someone other than the pilot the track belongs to. */
+  uploaded_on_behalf: boolean;
 }
 
 async function compressIgc(file: File): Promise<ArrayBuffer> {
@@ -452,7 +487,8 @@ async function setupTrackSection(
   taskId: string,
   isAuthenticated: boolean,
   isAdmin: boolean,
-  closeDate: string | null
+  closeDate: string | null,
+  canUploadOnBehalf: boolean
 ) {
   // Treat close_date as end-of-day local time (a date like "2026-12-31"
   // parsed by new Date() is midnight UTC, which is already past in UTC+ timezones)
@@ -474,8 +510,9 @@ async function setupTrackSection(
     setupSelfUpload(compId, taskId, isAdmin, isClosed);
   }
 
-  // Admin: upload on behalf of a registered pilot
-  if (isAdmin && !isClosed) {
+  // Upload on behalf: available to admins, and to registered pilots when
+  // comp.open_igc_upload is enabled.
+  if (canUploadOnBehalf && !isClosed) {
     setupUploadOnBehalf(compId, taskId, isAdmin, isClosed);
   }
 }
@@ -534,7 +571,9 @@ function renderTrackList(
           <span class="inline-flex items-center rounded-md bg-primary/10 text-primary px-1.5 py-0.5 text-xs font-medium">${escapeHtml(track.pilot_class)}</span>
           <span class="js-igc-name-slot"></span>
         </div>
-        <div class="text-xs text-muted-foreground mt-0.5">${uploadDate} &middot; ${formatFileSize(track.file_size)}</div>
+        <div class="text-xs text-muted-foreground mt-0.5">
+          ${uploadDate} &middot; ${formatFileSize(track.file_size)}<span class="js-uploaded-by-slot"></span>
+        </div>
       </div>
       <div class="flex items-center gap-1 shrink-0">
         <a href="/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(track.comp_pilot_id)}/download"
@@ -549,6 +588,17 @@ function renderTrackList(
       const slot = div.querySelector(".js-igc-name-slot")!;
       slot.className = "text-xs text-muted-foreground";
       slot.textContent = `(igc: ${track.igc_pilot_name})`;
+    }
+
+    // "Uploaded by X" attribution when the uploader is someone other than
+    // the pilot the track belongs to (admin-on-behalf, or peer upload).
+    if (track.uploaded_on_behalf && track.uploaded_by_name) {
+      const slot = div.querySelector(".js-uploaded-by-slot")!;
+      const sep = document.createTextNode(" · ");
+      const label = document.createElement("span");
+      label.textContent = `uploaded by ${track.uploaded_by_name}`;
+      slot.appendChild(sep);
+      slot.appendChild(label);
     }
 
     // Penalty badge — built with DOM so title is safe for any user-supplied text
@@ -1513,6 +1563,9 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
   const testCheckbox = document.getElementById(
     "settings-test"
   ) as HTMLInputElement;
+  const openUploadCheckbox = document.getElementById(
+    "settings-open-upload"
+  ) as HTMLInputElement;
   const adminsInput = document.getElementById(
     "settings-admins"
   ) as HTMLInputElement;
@@ -1554,6 +1607,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
         ? comp.close_date.split("T")[0]
         : "";
       testCheckbox.checked = comp.test;
+      openUploadCheckbox.checked = comp.open_igc_upload ?? true;
       adminsInput.value = comp.admins.map((a) => a.email).join(", ");
 
       // Populate default class dropdown
@@ -1606,6 +1660,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
     const defaultPilotClass = defaultClassSelect.value;
     const closeDate = closeDateInput.value || null;
     const test = testCheckbox.checked;
+    const openIgcUpload = openUploadCheckbox.checked;
     const adminEmails = adminsInput.value
       .split(",")
       .map((s) => s.trim().toLowerCase())
@@ -1635,6 +1690,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
           default_pilot_class: defaultPilotClass,
           close_date: closeDate,
           test,
+          open_igc_upload: openIgcUpload,
           admin_emails: adminEmails,
         },
       });

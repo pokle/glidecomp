@@ -43,6 +43,7 @@ export const updateCompSchema = z.object({
   pilot_classes: pilotClassesArray.optional(),
   default_pilot_class: pilotClassString.optional(),
   gap_params: gapParamsSchema.nullable().optional(),
+  open_igc_upload: z.boolean().optional(),
   admin_emails: z.array(z.string().email().max(MAX_TEXT)).min(1).optional(),
 });
 

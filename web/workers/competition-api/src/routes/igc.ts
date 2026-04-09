@@ -210,10 +210,19 @@ export const igcRoutes = new Hono<HonoEnv>()
 
         await c.env.DB.prepare(
           `UPDATE task_track
-           SET igc_filename = ?, uploaded_at = ?, file_size = ?, igc_pilot_name = ?
+           SET igc_filename = ?, uploaded_at = ?, file_size = ?, igc_pilot_name = ?,
+               uploaded_by_user_id = ?, uploaded_by_name = ?
            WHERE task_track_id = ?`
         )
-          .bind(r2Key, now, body.byteLength, igcPilotName, existingTrack.task_track_id)
+          .bind(
+            r2Key,
+            now,
+            body.byteLength,
+            igcPilotName,
+            user.id,
+            user.name,
+            existingTrack.task_track_id
+          )
           .run();
 
         await audit(c.env.DB, c.var.user, compId, {
@@ -235,10 +244,19 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       // Insert new track
       const trackResult = await c.env.DB.prepare(
-        `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name)
-         VALUES (?, ?, ?, ?, ?, ?)`
+        `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name, uploaded_by_user_id, uploaded_by_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
-        .bind(taskId, compPilotId, r2Key, now, body.byteLength, igcPilotName)
+        .bind(
+          taskId,
+          compPilotId,
+          r2Key,
+          now,
+          body.byteLength,
+          igcPilotName,
+          user.id,
+          user.name
+        )
         .run();
 
       const newTrackId = trackResult.meta.last_row_id;
@@ -264,17 +282,73 @@ export const igcRoutes = new Hono<HonoEnv>()
     }
   )
 
-  // ── POST /api/comp/:comp_id/task/:task_id/igc/:comp_pilot_id ── Admin upload on behalf
+  // ── POST /api/comp/:comp_id/task/:task_id/igc/:comp_pilot_id ── Upload on behalf
+  // Authorised if the caller is either (a) a comp admin or (b) a registered
+  // pilot in this comp AND comp.open_igc_upload is enabled.
   .post(
     "/api/comp/:comp_id/task/:task_id/igc/:comp_pilot_id",
     requireAuth,
     sqidsMiddleware,
-    requireCompAdmin,
     async (c) => {
       const compId = c.var.ids.comp_id!;
       const taskId = c.var.ids.task_id!;
       const compPilotId = c.var.ids.comp_pilot_id!;
+      const user = c.var.user;
       const alphabet = c.env.SQIDS_ALPHABET;
+
+      // Look up the comp once — need open_igc_upload to gate authorisation
+      const comp = await c.env.DB.prepare(
+        "SELECT comp_id, close_date, open_igc_upload FROM comp WHERE comp_id = ?"
+      )
+        .bind(compId)
+        .first<{
+          comp_id: number;
+          close_date: string | null;
+          open_igc_upload: number;
+        }>();
+      if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+      // Enforce close_date
+      if (comp.close_date) {
+        const closeDateTime = comp.close_date.includes("T")
+          ? comp.close_date
+          : comp.close_date + "T23:59:59Z";
+        if (new Date() > new Date(closeDateTime)) {
+          return c.json(
+            { error: "Competition is closed for track submissions" },
+            400
+          );
+        }
+      }
+
+      // Authorisation: admin OR registered pilot (when open_igc_upload enabled)
+      const isAdmin = await c.env.DB.prepare(
+        "SELECT 1 FROM comp_admin WHERE comp_id = ? AND user_id = ?"
+      )
+        .bind(compId, user.id)
+        .first();
+      if (!isAdmin) {
+        if (!comp.open_igc_upload) {
+          return c.json(
+            { error: "Only admins can upload on behalf of other pilots in this competition" },
+            403
+          );
+        }
+        // Caller must be a registered pilot in this comp
+        const callerPilot = await c.env.DB.prepare(
+          `SELECT cp.comp_pilot_id FROM comp_pilot cp
+           JOIN pilot p ON cp.pilot_id = p.pilot_id
+           WHERE cp.comp_id = ? AND p.user_id = ?`
+        )
+          .bind(compId, user.id)
+          .first();
+        if (!callerPilot) {
+          return c.json(
+            { error: "Only registered pilots can upload on behalf of others in this competition" },
+            403
+          );
+        }
+      }
 
       // Verify task exists and belongs to comp
       const task = await c.env.DB.prepare(
@@ -369,10 +443,19 @@ export const igcRoutes = new Hono<HonoEnv>()
 
         await c.env.DB.prepare(
           `UPDATE task_track
-           SET igc_filename = ?, uploaded_at = ?, file_size = ?, igc_pilot_name = ?
+           SET igc_filename = ?, uploaded_at = ?, file_size = ?, igc_pilot_name = ?,
+               uploaded_by_user_id = ?, uploaded_by_name = ?
            WHERE task_track_id = ?`
         )
-          .bind(r2Key, now, body.byteLength, igcPilotName, existingTrack.task_track_id)
+          .bind(
+            r2Key,
+            now,
+            body.byteLength,
+            igcPilotName,
+            user.id,
+            user.name,
+            existingTrack.task_track_id
+          )
           .run();
 
         await audit(c.env.DB, c.var.user, compId, {
@@ -393,10 +476,19 @@ export const igcRoutes = new Hono<HonoEnv>()
       }
 
       const trackResult = await c.env.DB.prepare(
-        `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name)
-         VALUES (?, ?, ?, ?, ?, ?)`
+        `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name, uploaded_by_user_id, uploaded_by_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
-        .bind(taskId, compPilotId, r2Key, now, body.byteLength, igcPilotName)
+        .bind(
+          taskId,
+          compPilotId,
+          r2Key,
+          now,
+          body.byteLength,
+          igcPilotName,
+          user.id,
+          user.name
+        )
         .run();
 
       const newTrackId = trackResult.meta.last_row_id;
@@ -472,7 +564,7 @@ export const igcRoutes = new Hono<HonoEnv>()
       const tracks = await c.env.DB.prepare(
         `SELECT tt.task_track_id, tt.comp_pilot_id, tt.igc_filename,
                 tt.uploaded_at, tt.file_size, tt.penalty_points, tt.penalty_reason,
-                tt.igc_pilot_name,
+                tt.igc_pilot_name, tt.uploaded_by_user_id, tt.uploaded_by_name,
                 cp.registered_pilot_name as pilot_name,
                 cp.pilot_class
          FROM task_track tt
@@ -490,6 +582,8 @@ export const igcRoutes = new Hono<HonoEnv>()
           penalty_points: number;
           penalty_reason: string | null;
           igc_pilot_name: string | null;
+          uploaded_by_user_id: string | null;
+          uploaded_by_name: string | null;
           pilot_name: string;
           pilot_class: string;
         }>();
@@ -505,6 +599,15 @@ export const igcRoutes = new Hono<HonoEnv>()
           file_size: t.file_size,
           penalty_points: t.penalty_points,
           penalty_reason: t.penalty_reason,
+          uploaded_by_name: t.uploaded_by_name,
+          /**
+           * True when an IGC was uploaded by someone other than the pilot
+           * it belongs to. Computed server-side so the UI can just show
+           * attribution without comparing names or checking user IDs.
+           */
+          uploaded_on_behalf:
+            t.uploaded_by_name !== null &&
+            t.uploaded_by_name !== t.pilot_name,
         })),
       });
     }
