@@ -556,6 +556,32 @@ function cleanCell(value: unknown): string {
   return String(value).replace(/[\t\n\r]/g, " ");
 }
 
+/**
+ * Recognise a pasted header row so it isn't treated as a pilot named "name"
+ * with CIVL ID "civl_id". A line counts as a header if its cells (lowercased,
+ * trimmed) are all recognised column names — the canonical header or any of
+ * the CSV-import aliases.
+ *
+ * This runs in both validateTsv and parseTsv so the line-to-id side-array
+ * stays aligned: both functions must skip header lines the same way.
+ */
+function isHeaderLine(cells: string[]): boolean {
+  if (cells.length < 2) return false;
+  const known = new Set<string>();
+  for (const col of COLUMNS) {
+    known.add(col.header.toLowerCase());
+    for (const alias of col.aliases ?? []) {
+      known.add(alias.toLowerCase());
+    }
+  }
+  for (const cell of cells) {
+    const normalised = cell.trim().toLowerCase();
+    if (!normalised) continue;
+    if (!known.has(normalised)) return false;
+  }
+  return true;
+}
+
 /** Quick structural validation used while the user is typing in the TSV. */
 function validateTsv(text: string): string[] {
   const errors: string[] = [];
@@ -563,6 +589,7 @@ function validateTsv(text: string): string[] {
   const expected = COLUMNS.length;
   for (let i = 0; i < lines.length; i++) {
     const cols = lines[i].split("\t");
+    if (isHeaderLine(cols)) continue; // pasted header row — not a pilot
     if (cols.length !== expected) {
       errors.push(
         `Line ${i + 1}: expected ${expected} columns (tab-separated), got ${cols.length}`
@@ -594,10 +621,15 @@ function parseTsv(
 
   const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
   const rows: ParsedRow[] = [];
+  // textLineIds was populated with one entry per pilot (no header), so
+  // walk the pilot lines with a separate counter so that a pasted header
+  // anywhere in the buffer doesn't shift id assignments downstream.
+  let pilotIdx = 0;
   for (let i = 0; i < lines.length; i++) {
     const cols = lines[i].split("\t").map((c) => c.trim());
+    if (isHeaderLine(cols)) continue; // skip pasted header row
     rows.push({
-      comp_pilot_id: lineIds[i],
+      comp_pilot_id: lineIds[pilotIdx],
       name: cols[0],
       email: cols[1] || null,
       civl_id: cols[2] || null,
@@ -612,6 +644,7 @@ function parseTsv(
       driver_contact: cols[11] || null,
       glider: cols[12] || null,
     });
+    pilotIdx++;
   }
   return { rows, errors: [] };
 }
