@@ -507,22 +507,22 @@ Each stage is a reviewable vertical slice. Do not move on without review.
 - [x] "Activity" section on the comp detail page with tabbed filters (All / Tasks / Pilots / Tracks / Settings) and "Load more" pagination
 - [x] Tests verifying audit entries are written for every mutating route
 
-#### 8d — Pilot management UI: table view
-- [ ] New "Pilots" section on comp detail page replacing stub
+#### 8d — Pilot management UI: read-only table + text edit + CSV
+- [ ] New "Pilots" section on comp detail page replacing stub — read-only table with 6 visible columns (name, CIVL, SAFA, class, team, driver) and linked/unlinked icons
+- [ ] Admin-only buttons: "Edit as text", "Import CSV", "Export CSV"
+- [ ] Edit-as-text modal: monospace textarea with current pilots serialised as TSV; header row as static text; sort dropdown (name/class/team); validation panel with line-number errors; save posts to the bulk endpoint. Line-to-comp_pilot_id mapping held in JS state so existing rows preserve their id on re-save.
+- [ ] CSV import modal: paste or file upload, auto-detect tab/comma separator, tolerant header parsing (missing columns → null, unknown columns ignored with warning), preview screen with per-row NEW / MATCH / NAME / ERROR badges, checkbox for "remove pilots not in import" (default OFF — additive), import posts via bulk endpoint
+- [ ] CSV export: one-click download of all 14 columns, filename from comp name, round-trip-safe with import
+- [ ] Module: `web/frontend/src/comp/pilots-section.ts` keeps comp-detail.ts from bloating
+- [ ] Footnote in text and import modals pointing to contact for missing sporting body ID columns
+
+#### 8e — Pilot management UI: editable table view (bulk assign + inline edit)
 - [ ] Editable table component with all 14 columns (name, email, 7 IDs, class, team, driver, glider) — IDs beyond CIVL/SAFA collapse under a "More IDs" expander
 - [ ] Bulk assign toolbar (class / team / driver) with filter + "Select all filtered"
 - [ ] Dirty-state tracking, add-row, delete-row
 - [ ] Save flow → bulk endpoint with per-row error display
 - [ ] Linked / unlinked / dirty / new row indicators
 - [ ] `beforeunload` warning when dirty
-
-#### 8e — Pilot management UI: text view + CSV
-- [ ] TSV monospace textarea view with sort dropdown, validation panel, basic class autocomplete
-- [ ] View toggle — serialise/parse TSV round-trip preserves dirty state
-- [ ] CSV import modal (paste or file); tolerant header parsing (missing columns → null, unknown columns ignored with warning)
-- [ ] Import preview with per-row actions (new, match, conflict, error); name-only matches flagged for manual resolution
-- [ ] CSV export — always emits all 14 columns for round-trip safety
-- [ ] Footnote pointing to contact for missing sporting body ID columns
 
 #### 8f — Upload on behalf
 - [ ] `open_igc_upload` toggle in comp settings UI

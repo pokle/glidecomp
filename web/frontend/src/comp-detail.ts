@@ -1,5 +1,6 @@
 import { getCurrentUser, signInWithGoogle, signOut } from "./auth/client";
 import { api } from "./comp/api";
+import { setupPilotsSection } from "./comp/pilots-section";
 import type { XCTask } from "@glidecomp/engine";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -1120,6 +1121,9 @@ async function initCompDetail(compId: string) {
   if (isAdmin) {
     document.getElementById("create-task-btn")!.classList.remove("hidden");
   }
+
+  // ── Pilots ─────────────────────────────────────────────────────────────
+  setupPilotsSection(compId, comp.name, comp.pilot_classes, isAdmin);
 
   // ── Activity (audit log) ───────────────────────────────────────────────
   setupActivitySection(compId);
