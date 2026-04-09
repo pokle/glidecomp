@@ -1222,18 +1222,18 @@ function setupActivitySection(compId: string) {
     }
   }
 
-  // Filter tab wiring (Basecoat tabs — toggle aria-selected)
+  // Filter tab wiring (Basecoat tabs — toggle aria-selected + aria-labelledby)
   const filterBtns = document.querySelectorAll<HTMLButtonElement>(
     ".activity-filter-btn"
   );
+  const panel = document.getElementById("activity-panel")!;
   function setActiveFilter(filter: string) {
     currentFilter = filter;
     nextBefore = null;
     for (const btn of filterBtns) {
-      btn.setAttribute(
-        "aria-selected",
-        btn.dataset.filter === filter ? "true" : "false"
-      );
+      const active = btn.dataset.filter === filter;
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+      if (active) panel.setAttribute("aria-labelledby", btn.id);
     }
     loadPage(true);
   }

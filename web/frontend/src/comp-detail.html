@@ -94,21 +94,23 @@
         <!-- Activity (audit log) section -->
         <section class="mb-8">
           <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">Activity</h2>
-          <div class="tabs w-full mb-3">
-            <nav role="tablist" aria-orientation="horizontal" class="w-full" id="activity-filter-tabs">
-              <button type="button" role="tab" class="activity-filter-btn" aria-selected="true" tabindex="0" data-filter="">All</button>
-              <button type="button" role="tab" class="activity-filter-btn" aria-selected="false" tabindex="0" data-filter="task">Tasks</button>
-              <button type="button" role="tab" class="activity-filter-btn" aria-selected="false" tabindex="0" data-filter="pilot">Pilots</button>
-              <button type="button" role="tab" class="activity-filter-btn" aria-selected="false" tabindex="0" data-filter="track">Tracks</button>
-              <button type="button" role="tab" class="activity-filter-btn" aria-selected="false" tabindex="0" data-filter="comp">Settings</button>
+          <div class="tabs w-full">
+            <nav role="tablist" aria-orientation="horizontal" class="w-full">
+              <button type="button" role="tab" class="activity-filter-btn" id="activity-tab-all" aria-controls="activity-panel" aria-selected="true" tabindex="0" data-filter="">All</button>
+              <button type="button" role="tab" class="activity-filter-btn" id="activity-tab-task" aria-controls="activity-panel" aria-selected="false" tabindex="0" data-filter="task">Tasks</button>
+              <button type="button" role="tab" class="activity-filter-btn" id="activity-tab-pilot" aria-controls="activity-panel" aria-selected="false" tabindex="0" data-filter="pilot">Pilots</button>
+              <button type="button" role="tab" class="activity-filter-btn" id="activity-tab-track" aria-controls="activity-panel" aria-selected="false" tabindex="0" data-filter="track">Tracks</button>
+              <button type="button" role="tab" class="activity-filter-btn" id="activity-tab-comp" aria-controls="activity-panel" aria-selected="false" tabindex="0" data-filter="comp">Settings</button>
             </nav>
-          </div>
-          <div id="activity-list" class="space-y-1"></div>
-          <div id="activity-empty" class="hidden text-center py-6 border border-dashed border-border/50 rounded-lg">
-            <p class="text-sm text-muted-foreground">No activity yet</p>
-          </div>
-          <div id="activity-load-more-wrap" class="hidden mt-3 text-center">
-            <button id="activity-load-more" class="btn btn-ghost btn-sm text-xs">Load more</button>
+            <div id="activity-panel" role="tabpanel" aria-labelledby="activity-tab-all" tabindex="0" class="pt-3">
+              <div id="activity-list" class="space-y-1"></div>
+              <div id="activity-empty" class="hidden text-center py-6 border border-dashed border-border/50 rounded-lg">
+                <p class="text-sm text-muted-foreground">No activity yet</p>
+              </div>
+              <div id="activity-load-more-wrap" class="hidden mt-3 text-center">
+                <button id="activity-load-more" class="btn btn-ghost btn-sm text-xs">Load more</button>
+              </div>
+            </div>
           </div>
         </section>
 
