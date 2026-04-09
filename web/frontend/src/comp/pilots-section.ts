@@ -303,6 +303,32 @@ function openTextDialog(): void {
     }
   };
 
+  const copyHeadersBtn = document.getElementById(
+    "pilots-text-copy-headers"
+  ) as HTMLButtonElement;
+  const copyHeadersLabel = copyHeadersBtn.textContent ?? "Copy headers";
+  copyHeadersBtn.onclick = async () => {
+    const headers = COLUMNS.map((c) => c.header).join("\t");
+    try {
+      await navigator.clipboard.writeText(headers);
+      copyHeadersBtn.textContent = "Copied!";
+    } catch {
+      // Clipboard API may be unavailable (non-HTTPS, permissions denied).
+      // Fall back to selecting the headers in the textarea so the user
+      // can Ctrl+C them.
+      const textarea = document.getElementById(
+        "pilots-text-area"
+      ) as HTMLTextAreaElement;
+      textarea.value = headers + "\n" + textarea.value;
+      textarea.focus();
+      textarea.setSelectionRange(0, headers.length);
+      copyHeadersBtn.textContent = "Select + Ctrl+C";
+    }
+    setTimeout(() => {
+      copyHeadersBtn.textContent = copyHeadersLabel;
+    }, 1500);
+  };
+
   document.getElementById("pilots-text-cancel")!.onclick = () => dialog.close();
   document.getElementById("pilots-text-save")!.onclick = async () => {
     const parsed = parseTsv(textarea.value, textLineIds);
