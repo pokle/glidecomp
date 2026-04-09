@@ -28,10 +28,17 @@ Tables referenced from the auth-api worker:
   - pilot_id (INTEGER PRIMARY KEY AUTOINCREMENT)
   - user_id (TEXT NOT NULL REFERENCES user(id) UNIQUE) — one profile per user
   - name (TEXT NOT NULL) — display name (initialised from user.name)
-  - civl_id (TEXT) — CIVL pilot identifier
-  - sporting_body_ids (TEXT) — JSON object of sporting body memberships, e.g. `{"SAFA": "12345", "CIVL": "67890"}`
+  - civl_id (TEXT) — CIVL pilot identifier (primary international match key)
+  - safa_id (TEXT) — Sports Aviation Federation of Australia
+  - ushpa_id (TEXT) — US Hang Gliding and Paragliding Association
+  - bhpa_id (TEXT) — British Hang Gliding and Paragliding Association
+  - dhv_id (TEXT) — Deutscher Hängegleiter-Verband
+  - ffvl_id (TEXT) — Fédération Française de Vol Libre
+  - fai_id (TEXT) — FAI direct membership (for countries without a national body)
   - phone (TEXT)
   - glider (TEXT) — default glider make/model
+
+  Additional sporting bodies require a schema change. The pilot import UI links to a contact note for requests.
 
 - **comp**: Represents a competition. Has zero or more tasks.
   - comp_id (INTEGER PRIMARY KEY AUTOINCREMENT)
@@ -43,6 +50,7 @@ Tables referenced from the auth-api worker:
   - pilot_classes (TEXT NOT NULL) — JSON array of valid pilot class strings for this comp, e.g. `["open", "sport", "floater"]`. Defines the universe of classes. Must contain at least one entry.
   - default_pilot_class (TEXT NOT NULL) — the class assigned to auto-registered pilots. Must be one of the values in `pilot_classes`.
   - gap_params (TEXT) — JSON object matching the GAPParameters interface
+  - open_igc_upload (INTEGER NOT NULL DEFAULT 1) — boolean. When 1, any registered pilot in the comp can upload an IGC on behalf of any other pilot. Admins can always upload regardless.
 
 - **comp_admin**: Join table for competition administrators. Replaces the previous `admin_ids` column on comp.
   - comp_id (INTEGER NOT NULL REFERENCES comp(comp_id) ON DELETE CASCADE)
@@ -50,16 +58,28 @@ Tables referenced from the auth-api worker:
   - PRIMARY KEY (comp_id, user_id)
   - Enforce a minimum of 1 admin per comp. The last admin cannot be removed.
 
-- **comp_pilot**: Per-competition pilot registration. Contains competition-specific details that can change from comp to comp. Auto-created when a pilot uploads a track (open registration).
+- **comp_pilot**: Per-competition pilot registration. Contains competition-specific details that can change from comp to comp. Auto-created when a pilot uploads a track (open registration), or manually created by an admin when registering pilots from a spreadsheet.
   - comp_pilot_id (INTEGER PRIMARY KEY AUTOINCREMENT)
   - comp_id (INTEGER NOT NULL REFERENCES comp(comp_id) ON DELETE CASCADE)
-  - pilot_id (INTEGER NOT NULL REFERENCES pilot(pilot_id) ON DELETE CASCADE)
-  - UNIQUE(comp_id, pilot_id)
+  - pilot_id (INTEGER REFERENCES pilot(pilot_id) ON DELETE SET NULL) — nullable. NULL means the pilot has been pre-registered by an admin but has not yet matched any GlideComp user account.
+  - partial unique index on (comp_id, pilot_id) WHERE pilot_id IS NOT NULL — one link per pilot per comp, but multiple unlinked registrations allowed
+  - registered_pilot_name (TEXT NOT NULL) — admin-entered or auto-populated display name. Used verbatim when `pilot_id IS NULL`; otherwise falls back to `pilot.name`.
+  - registered_pilot_email (TEXT) — admin-entered email, used as a matching key on signup
+  - registered_pilot_civl_id (TEXT) — admin-entered CIVL ID (primary match key)
+  - registered_pilot_safa_id (TEXT)
+  - registered_pilot_ushpa_id (TEXT)
+  - registered_pilot_bhpa_id (TEXT)
+  - registered_pilot_dhv_id (TEXT)
+  - registered_pilot_ffvl_id (TEXT)
+  - registered_pilot_fai_id (TEXT)
+  - registered_pilot_glider (TEXT) — admin-entered glider
   - pilot_class (TEXT NOT NULL) — e.g. 'open', 'novice', 'sport', 'floater'. Must be one of the comp's `pilot_classes` values. A pilot belongs to exactly one class per competition. Set to `comp.default_pilot_class` when auto-registered.
   - team_name (TEXT)
   - driver_contact (TEXT) — driver name, phone, radio channel
   - civl_ranking (INTEGER) — CIVL world ranking snapshot at time of competition
   - first_start_order (INTEGER) — pilot's starting order for the first competition day only (typically reverse CIVL ranking). For subsequent days, starting order is computed on-demand: reverse the previous day's top N scores for the same pilot classes, where N = the number of pilots with a day-1 `starting_order` set.
+
+  **Linking priority** (used at admin import and user signup): CIVL ID → any of SAFA/USHPA/BHPA/DHV/FFVL/FAI IDs → email → exact name. Name-only matches must be confirmed by an admin; they do not auto-link.
 
 - **task**: Represents a task within a competition. Belongs to a single comp. A task is for a specific date and is scored for one or more pilot classes.
   - task_id (INTEGER PRIMARY KEY AUTOINCREMENT)
@@ -74,7 +94,7 @@ Tables referenced from the auth-api worker:
   - pilot_class (TEXT NOT NULL) — must match a `comp_pilot.pilot_class` value
   - PRIMARY KEY (task_id, pilot_class)
 
-- **task_track**: Links an IGC file to a pilot for a specific task. Enforces one track per pilot per task — re-uploading replaces the previous track. Stores preprocessed flight data computed at upload time.
+- **task_track**: Links an IGC file to a pilot for a specific task. Enforces one track per pilot per task — re-uploading replaces the previous track.
   - task_track_id (INTEGER PRIMARY KEY AUTOINCREMENT)
   - task_id (INTEGER NOT NULL REFERENCES task(task_id) ON DELETE CASCADE)
   - comp_pilot_id (INTEGER NOT NULL REFERENCES comp_pilot(comp_pilot_id) ON DELETE CASCADE)
@@ -82,9 +102,23 @@ Tables referenced from the auth-api worker:
   - igc_filename (TEXT NOT NULL) — filename in R2
   - uploaded_at (TEXT NOT NULL) — ISO timestamp
   - file_size (INTEGER NOT NULL) — bytes
-  - flight_data (TEXT) — JSON object with preprocessed per-pilot results: turnpoint sequence, distance flown, speed time, leading coefficient, ESS reaching time, whether pilot made goal. Computed at upload time by parsing the IGC against the task's xctsk. NULL if task has no xctsk defined yet.
+  - igc_pilot_name (TEXT) — pilot name extracted from IGC header; used for matching bulk uploads
+  - uploaded_by_user_id (TEXT REFERENCES user(id)) — the user who performed the upload. NULL for legacy rows. Distinct from `comp_pilot_id` (the pilot the track belongs to).
+  - uploaded_by_name (TEXT) — denormalized display name of the uploader, survives account deletion
   - penalty_points (REAL NOT NULL DEFAULT 0) — admin-assigned penalty. Only modifiable by comp admins. When a pilot re-uploads a track, the penalty MUST be preserved (not reset).
   - penalty_reason (TEXT) — admin-assigned explanation for the penalty. Only modifiable by comp admins.
+
+- **audit_log**: Publicly-visible append-only log of score-affecting changes. One entry per mutating API call. Accessible via `GET /api/comp/:comp_id/audit` (public for non-test comps) and rendered on the comp detail page for transparency.
+  - audit_id (INTEGER PRIMARY KEY AUTOINCREMENT)
+  - comp_id (INTEGER NOT NULL REFERENCES comp(comp_id) ON DELETE CASCADE) — denormalized for efficient per-comp queries even when the subject is a task/pilot/track
+  - timestamp (TEXT NOT NULL) — ISO timestamp
+  - actor_user_id (TEXT REFERENCES user(id)) — nullable, for system-initiated actions
+  - actor_name (TEXT NOT NULL) — denormalized, survives account deletion
+  - subject_type (TEXT NOT NULL) — one of `comp`, `task`, `pilot`, `track`
+  - subject_id (INTEGER) — numeric id of the subject, nullable for comp-level events
+  - subject_name (TEXT) — denormalized display name
+  - description (TEXT NOT NULL) — human-readable message generated server-side from the request payload. Example: `"Set penalty for Bob Jones to 50 pts: launched outside start cylinder"`. No structured `detail` JSON — stats queries use regex on this column.
+  - INDEX(comp_id, timestamp DESC)
 
 ### Open registration
 
@@ -386,13 +420,127 @@ Scoring fetches IGC files from R2 at query time and caches results in Workers KV
 - Element IDs must be unique per page — `comp-detail.html` uses both the comp overview and task detail views in the same HTML file. Use distinct IDs (e.g. `comp-scores-link` vs `task-scores-link`) when both views need the same conceptual element.
 - Score table columns are conditional: Speed column omitted if no pilot reached ESS; Time Pts / Lead Pts columns omitted if all zero. Keeps the table compact for tasks with few finishers.
 
-## Iteration 8: Pilot Management + Admin Polish
+## Iteration 8: Bulk Pilot Management + Audit Log
 
-- [ ] Implement `GET/PATCH /api/comp/:comp_id/pilot` routes
-- [ ] Build pilot list UI on the comp page with class/team editing
-- [x] Build penalty management UI (admin sets points + reason per track) — implemented in Iteration 5 track list
-- [ ] Build pilot profile page (name, CIVL ID, sporting body IDs, phone, glider)
-- [ ] Implement `comp.test` flag handling (test comps visible only to admins)
+This iteration delivers a bulk-friendly pilot management UI (for comp admins who register many pilots from spreadsheets) plus a publicly-visible audit log for transparency of score-affecting changes.
+
+### Design decisions
+
+**Pilot pre-registration.** Admins may register pilots who have no GlideComp account. `comp_pilot.pilot_id` is nullable, and `registered_*` fields carry admin-entered data until the pilot is linked to a real account. Linking runs through a priority chain: CIVL ID → other sporting body IDs → email → name (exact). Name-only matches do not auto-link — admin resolves them in the import preview.
+
+**Flat ID columns.** `pilot.sporting_body_ids` JSON is dropped in favour of flat columns. The seven supported IDs are: `civl_id`, `safa_id`, `ushpa_id`, `bhpa_id`, `dhv_id`, `ffvl_id`, `fai_id`. Any other sporting body requires a schema change — the import UI links to a contact note. Both `pilot` and `comp_pilot` (via `registered_*` prefix) have the same seven columns.
+
+**Bulk editing UI.** Two interchangeable views on the same in-memory state:
+- **Table view** — inline-editable rows with a bulk-assign toolbar that applies a value to all selected rows after filtering.
+- **Text view** — monospace TSV editor with sort, validation, and basic autocomplete. Pastes directly from Excel/Google Sheets.
+
+A single "Save all" button sends the working state to `POST /api/comp/:comp_id/pilot/bulk`, which diffs against the DB and writes inserts/updates/deletes in one transaction. Max 250 pilot rows per request. Imports are idempotent — re-uploading the same CSV is a no-op.
+
+**Upload on behalf.** `comp.open_igc_upload` (default ON) lets any registered pilot in a comp upload IGC for any other registered pilot. Admins can always upload regardless. `task_track.uploaded_by_user_id` + `uploaded_by_name` capture attribution; the track list shows an "Uploaded by" column.
+
+**Audit log.** Public, transparent record of every score-affecting change. A new `audit_log` table with columns: `audit_id`, `comp_id`, `timestamp`, `actor_user_id`, `actor_name`, `subject_type`, `subject_id`, `subject_name`, `description`. The `description` is a human-readable string generated server-side from the request payload. No `detail` JSON — regex queries suffice for stats. No extra DB reads for old values; include them only when already in scope (e.g. PATCH handlers that fetch before writing). Task xctsk edits fire on-blur per field, producing one audit entry per changed field. Bulk pilot edits > 5 rows produce a single rollup entry.
+
+**Signup linking.** When a user signs up or updates their profile, auth-api scans open competitions for unlinked `comp_pilot` rows matching the new user's fields. Matches get `pilot_id` set. This is the second place linking happens (the first being admin import).
+
+### Schema changes (summary)
+
+```
+pilot:
+  DROP  sporting_body_ids
+  ADD   safa_id, ushpa_id, bhpa_id, dhv_id, ffvl_id, fai_id   (TEXT, nullable)
+        (civl_id already exists)
+
+comp_pilot:
+  ALTER pilot_id → nullable
+  DROP  UNIQUE(comp_id, pilot_id)
+  ADD   partial unique index on (comp_id, pilot_id) WHERE pilot_id IS NOT NULL
+  ADD   registered_pilot_safa_id, registered_pilot_ushpa_id, registered_pilot_bhpa_id,
+        registered_pilot_dhv_id, registered_pilot_ffvl_id, registered_pilot_fai_id   (TEXT, nullable)
+  ADD   registered_pilot_glider   (TEXT, nullable)
+        (registered_pilot_name, registered_pilot_email, registered_pilot_civl_id already exist)
+
+comp:
+  ADD   open_igc_upload   (INTEGER NOT NULL DEFAULT 1)
+
+task_track:
+  ADD   uploaded_by_user_id   (TEXT REFERENCES user(id), nullable)
+  ADD   uploaded_by_name      (TEXT, nullable — denormalized)
+
+audit_log:
+  audit_id       INTEGER PK AUTOINCREMENT
+  comp_id        INTEGER NOT NULL REFERENCES comp ON DELETE CASCADE
+  timestamp      TEXT NOT NULL
+  actor_user_id  TEXT REFERENCES user(id)          (nullable for system actions)
+  actor_name     TEXT NOT NULL                     (denormalized)
+  subject_type   TEXT NOT NULL                     (comp | task | pilot | track)
+  subject_id     INTEGER                           (nullable for comp-level events)
+  subject_name   TEXT                              (denormalized)
+  description    TEXT NOT NULL                     (human-readable, server-generated)
+  INDEX (comp_id, timestamp DESC)
+```
+
+### Stages
+
+Each stage is a reviewable vertical slice. Do not move on without review.
+
+#### 8a — Schema + linking foundation
+- [ ] Migration 0005: all schema changes above
+- [ ] Implement shared `resolvePilotId(db, fields)` helper with priority chain (CIVL → other IDs → email → name exact)
+- [ ] Update pilot profile API (`GET`/`PATCH /api/comp/pilot`) and validators for flat ID columns
+- [ ] Update IGC auto-registration to populate `registered_pilot_*` fields on insert
+- [ ] Tests for the resolver (each priority level, no-match → null, name-only does not match)
+
+#### 8b — Pilot CRUD API
+- [ ] `POST /api/comp/:comp_id/pilot` (single create, runs resolver, returns new row)
+- [ ] `POST /api/comp/:comp_id/pilot/bulk` (array of up to 250 rows; transactional diff-and-write; per-row results with validation errors; idempotent re-submit)
+- [ ] `PATCH /api/comp/:comp_id/pilot/:comp_pilot_id` (sparse update)
+- [ ] `DELETE /api/comp/:comp_id/pilot/:comp_pilot_id`
+- [ ] Update `GET /api/comp/:comp_id/pilot` to return the full pilot record (all 7 IDs, driver, glider, link status)
+- [ ] Zod validators; enforce 250-pilot cap matching existing IGC limit
+- [ ] Integration tests for CRUD, bulk diffing, idempotent re-import, resolver integration
+
+#### 8c — Audit log core
+- [ ] `audit_log` table migration (already in 8a)
+- [ ] Shared `audit(c, {subject_type, subject_id, subject_name, description})` helper — pulls actor from auth middleware
+- [ ] Wire audit calls into: pilot CRUD (8b), IGC upload/replace/delete, penalty PATCH, task create/delete/field edits, xctsk saves, comp setting PATCH
+- [ ] `GET /api/comp/:comp_id/audit` (paginated, newest first; `limit`, `before` cursor, `subject_type` filter; public for non-test comps)
+- [ ] "Activity" section on the comp detail page with tabbed filters (All / Tasks / Pilots / Tracks / Settings) and "Load more" pagination
+- [ ] Tests verifying audit entries are written for every mutating route
+
+#### 8d — Pilot management UI: table view
+- [ ] New "Pilots" section on comp detail page replacing stub
+- [ ] Editable table component with all 14 columns (name, email, 7 IDs, class, team, driver, glider) — IDs beyond CIVL/SAFA collapse under a "More IDs" expander
+- [ ] Bulk assign toolbar (class / team / driver) with filter + "Select all filtered"
+- [ ] Dirty-state tracking, add-row, delete-row
+- [ ] Save flow → bulk endpoint with per-row error display
+- [ ] Linked / unlinked / dirty / new row indicators
+- [ ] `beforeunload` warning when dirty
+
+#### 8e — Pilot management UI: text view + CSV
+- [ ] TSV monospace textarea view with sort dropdown, validation panel, basic class autocomplete
+- [ ] View toggle — serialise/parse TSV round-trip preserves dirty state
+- [ ] CSV import modal (paste or file); tolerant header parsing (missing columns → null, unknown columns ignored with warning)
+- [ ] Import preview with per-row actions (new, match, conflict, error); name-only matches flagged for manual resolution
+- [ ] CSV export — always emits all 14 columns for round-trip safety
+- [ ] Footnote pointing to contact for missing sporting body ID columns
+
+#### 8f — Upload on behalf
+- [ ] `open_igc_upload` toggle in comp settings UI
+- [ ] IGC upload route accepts `target_comp_pilot_id`; auth: admin OR (registered comp pilot AND open_igc_upload enabled)
+- [ ] `task_track.uploaded_by_*` populated on insert
+- [ ] Track list gains "Uploaded by" column when attribution differs from pilot
+- [ ] "Upload for {name}" button on pilot rows without a track (when authorised)
+- [ ] Audit description reflects on-behalf uploads
+
+#### 8g — Signup linking
+- [ ] Auth-api hook on user creation / profile update
+- [ ] Run resolver across all open competitions' unlinked `comp_pilot` rows
+- [ ] Set `pilot_id` on matches; write audit entry per affected comp
+- [ ] Integration test: create unlinked registration → signup matching user → verify link
+
+#### 8h — Polish
+- [ ] `comp.test` flag handling end-to-end (test comps invisible to non-admins)
+- [ ] Pilot profile page (name, 7 IDs, phone, glider) on its own route
 
 ## Iteration 9: IGC upload to competition improvements
 
