@@ -5,6 +5,7 @@ import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { createCompSchema, updateCompSchema } from "../validators";
+import { audit, describeChange } from "../audit";
 
 type Variables = {
   user: AuthUser;
@@ -84,6 +85,13 @@ export const compRoutes = new Hono<HonoEnv>()
       )
         .bind(compId, user.id)
         .run();
+
+      await audit(c.env.DB, c.var.user, compId, {
+        subject_type: "comp",
+        subject_id: compId,
+        subject_name: body.name,
+        description: `Created competition "${body.name}"`,
+      });
 
       return c.json(
         {
@@ -282,17 +290,25 @@ export const compRoutes = new Hono<HonoEnv>()
       const body = c.req.valid("json");
       const alphabet = c.env.SQIDS_ALPHABET;
 
+      // Fetch current state so we can compute audit diffs and validate consistency
+      const current = await c.env.DB.prepare(
+        `SELECT name, category, close_date, test, pilot_classes, default_pilot_class, gap_params
+         FROM comp WHERE comp_id = ?`
+      )
+        .bind(compId)
+        .first<{
+          name: string;
+          category: string;
+          close_date: string | null;
+          test: number;
+          pilot_classes: string;
+          default_pilot_class: string;
+          gap_params: string | null;
+        }>();
+      if (!current) return c.json({ error: "Competition not found" }, 404);
+
       // If updating pilot_classes or default_pilot_class, validate consistency
       if (body.pilot_classes || body.default_pilot_class) {
-        // Get current comp to merge
-        const current = await c.env.DB.prepare(
-          "SELECT pilot_classes, default_pilot_class FROM comp WHERE comp_id = ?"
-        )
-          .bind(compId)
-          .first<{ pilot_classes: string; default_pilot_class: string }>();
-
-        if (!current) return c.json({ error: "Competition not found" }, 404);
-
         const newClasses =
           body.pilot_classes ??
           (JSON.parse(current.pilot_classes) as string[]);
@@ -351,9 +367,69 @@ export const compRoutes = new Hono<HonoEnv>()
           .run();
       }
 
+      // Emit one audit entry per changed field
+      const auditChanges: string[] = [];
+      if (body.name !== undefined && body.name !== current.name) {
+        auditChanges.push(describeChange("name", current.name, body.name));
+      }
+      if (body.category !== undefined && body.category !== current.category) {
+        auditChanges.push(describeChange("category", current.category, body.category));
+      }
+      if (
+        body.close_date !== undefined &&
+        body.close_date !== current.close_date
+      ) {
+        auditChanges.push(
+          describeChange("close date", current.close_date, body.close_date)
+        );
+      }
+      if (body.test !== undefined && (body.test ? 1 : 0) !== current.test) {
+        auditChanges.push(
+          describeChange("test flag", !!current.test, body.test)
+        );
+      }
+      if (body.pilot_classes !== undefined) {
+        const oldClasses = JSON.parse(current.pilot_classes) as string[];
+        if (JSON.stringify(oldClasses) !== JSON.stringify(body.pilot_classes)) {
+          auditChanges.push(
+            `Changed pilot classes from [${oldClasses.join(", ")}] to [${body.pilot_classes.join(", ")}]`
+          );
+        }
+      }
+      if (
+        body.default_pilot_class !== undefined &&
+        body.default_pilot_class !== current.default_pilot_class
+      ) {
+        auditChanges.push(
+          describeChange(
+            "default pilot class",
+            current.default_pilot_class,
+            body.default_pilot_class
+          )
+        );
+      }
+      if (body.gap_params !== undefined) {
+        auditChanges.push("Updated GAP scoring parameters");
+      }
+
+      for (const description of auditChanges) {
+        await audit(c.env.DB, c.var.user, compId, {
+          subject_type: "comp",
+          subject_id: compId,
+          subject_name: body.name ?? current.name,
+          description,
+        });
+      }
+
       // Handle admin management via email resolution
       if (body.admin_emails) {
         await updateAdmins(c.env.DB, compId, body.admin_emails);
+        await audit(c.env.DB, c.var.user, compId, {
+          subject_type: "comp",
+          subject_id: compId,
+          subject_name: body.name ?? current.name,
+          description: `Updated admin list (${body.admin_emails.length} admin${body.admin_emails.length === 1 ? "" : "s"})`,
+        });
       }
 
       // Return updated comp
@@ -395,6 +471,11 @@ export const compRoutes = new Hono<HonoEnv>()
     requireCompAdmin,
     async (c) => {
       const compId = c.var.ids.comp_id!;
+
+      // Note: no audit write here — the audit_log rows cascade-delete with
+      // the comp, so the entry would be wiped immediately. Deletion is
+      // tracked by the comp's absence in listings; if needed later we could
+      // move audit_log to its own retention table.
 
       // D1 cascade deletes handle child rows
       await c.env.DB.prepare("DELETE FROM comp WHERE comp_id = ?")

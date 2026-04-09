@@ -91,6 +91,27 @@
           </div>
         </section>
 
+        <!-- Activity (audit log) section -->
+        <section class="mb-8">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider">Activity</h2>
+            <div id="activity-filter-tabs" class="flex items-center gap-1 text-xs">
+              <button class="activity-filter-btn btn btn-ghost btn-sm text-xs" data-filter="">All</button>
+              <button class="activity-filter-btn btn btn-ghost btn-sm text-xs" data-filter="task">Tasks</button>
+              <button class="activity-filter-btn btn btn-ghost btn-sm text-xs" data-filter="pilot">Pilots</button>
+              <button class="activity-filter-btn btn btn-ghost btn-sm text-xs" data-filter="track">Tracks</button>
+              <button class="activity-filter-btn btn btn-ghost btn-sm text-xs" data-filter="comp">Settings</button>
+            </div>
+          </div>
+          <div id="activity-list" class="space-y-1"></div>
+          <div id="activity-empty" class="hidden text-center py-6 border border-dashed border-border/50 rounded-lg">
+            <p class="text-sm text-muted-foreground">No activity yet</p>
+          </div>
+          <div id="activity-load-more-wrap" class="hidden mt-3 text-center">
+            <button id="activity-load-more" class="btn btn-ghost btn-sm text-xs">Load more</button>
+          </div>
+        </section>
+
         <!-- Admin info -->
         <section>
           <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">Admins</h2>

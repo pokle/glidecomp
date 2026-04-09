@@ -484,28 +484,28 @@ audit_log:
 Each stage is a reviewable vertical slice. Do not move on without review.
 
 #### 8a — Schema + linking foundation
-- [ ] Migration 0005: all schema changes above
-- [ ] Implement shared `resolvePilotId(db, fields)` helper with priority chain (CIVL → other IDs → email → name exact)
-- [ ] Update pilot profile API (`GET`/`PATCH /api/comp/pilot`) and validators for flat ID columns
-- [ ] Update IGC auto-registration to populate `registered_pilot_*` fields on insert
-- [ ] Tests for the resolver (each priority level, no-match → null, name-only does not match)
+- [x] Migration 0005: all schema changes above
+- [x] Implement shared `resolvePilotId(db, fields)` helper with priority chain (CIVL → other IDs → email → name exact)
+- [x] Update pilot profile API (`GET`/`PATCH /api/comp/pilot`) and validators for flat ID columns
+- [x] Update IGC auto-registration to populate `registered_pilot_*` fields on insert
+- [x] Tests for the resolver (each priority level, no-match → null, name-only does not match)
 
 #### 8b — Pilot CRUD API
-- [ ] `POST /api/comp/:comp_id/pilot` (single create, runs resolver, returns new row)
-- [ ] `POST /api/comp/:comp_id/pilot/bulk` (array of up to 250 rows; transactional diff-and-write; per-row results with validation errors; idempotent re-submit)
-- [ ] `PATCH /api/comp/:comp_id/pilot/:comp_pilot_id` (sparse update)
-- [ ] `DELETE /api/comp/:comp_id/pilot/:comp_pilot_id`
-- [ ] Update `GET /api/comp/:comp_id/pilot` to return the full pilot record (all 7 IDs, driver, glider, link status)
-- [ ] Zod validators; enforce 250-pilot cap matching existing IGC limit
-- [ ] Integration tests for CRUD, bulk diffing, idempotent re-import, resolver integration
+- [x] `POST /api/comp/:comp_id/pilot` (single create, runs resolver, returns new row)
+- [x] `POST /api/comp/:comp_id/pilot/bulk` (array of up to 250 rows; transactional diff-and-write; per-row results with validation errors; idempotent re-submit)
+- [x] `PATCH /api/comp/:comp_id/pilot/:comp_pilot_id` (sparse update)
+- [x] `DELETE /api/comp/:comp_id/pilot/:comp_pilot_id`
+- [x] Update `GET /api/comp/:comp_id/pilot` to return the full pilot record (all 7 IDs, driver, glider, link status)
+- [x] Zod validators; enforce 250-pilot cap matching existing IGC limit
+- [x] Integration tests for CRUD, bulk diffing, idempotent re-import, resolver integration
 
 #### 8c — Audit log core
-- [ ] `audit_log` table migration (already in 8a)
-- [ ] Shared `audit(c, {subject_type, subject_id, subject_name, description})` helper — pulls actor from auth middleware
-- [ ] Wire audit calls into: pilot CRUD (8b), IGC upload/replace/delete, penalty PATCH, task create/delete/field edits, xctsk saves, comp setting PATCH
-- [ ] `GET /api/comp/:comp_id/audit` (paginated, newest first; `limit`, `before` cursor, `subject_type` filter; public for non-test comps)
-- [ ] "Activity" section on the comp detail page with tabbed filters (All / Tasks / Pilots / Tracks / Settings) and "Load more" pagination
-- [ ] Tests verifying audit entries are written for every mutating route
+- [x] `audit_log` table migration (already in 8a)
+- [x] Shared `audit(db, user, compId, {subject_type, subject_id, subject_name, description})` helper — takes db+user directly for type safety
+- [x] Wire audit calls into: pilot CRUD (8b), IGC upload/replace/delete, penalty PATCH, task create/delete/field edits, xctsk saves, comp setting PATCH
+- [x] `GET /api/comp/:comp_id/audit` (paginated, newest first; `limit`, `before` cursor, `subject_type` filter; public for non-test comps)
+- [x] "Activity" section on the comp detail page with tabbed filters (All / Tasks / Pilots / Tracks / Settings) and "Load more" pagination
+- [x] Tests verifying audit entries are written for every mutating route
 
 #### 8d — Pilot management UI: table view
 - [ ] New "Pilots" section on comp detail page replacing stub

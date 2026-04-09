@@ -11,6 +11,7 @@ import {
   bulkPilotsSchema,
 } from "../validators";
 import { resolvePilotId } from "../pilot-resolver";
+import { audit, describeChange } from "../audit";
 
 type Variables = {
   user: AuthUser;
@@ -444,7 +445,18 @@ export const pilotRoutes = new Hono<HonoEnv>()
         .bind(...insertValues)
         .run();
 
-      const row = await fetchCompPilot(c.env.DB, res.meta.last_row_id);
+      const newCompPilotId = res.meta.last_row_id;
+
+      await audit(c.env.DB, c.var.user, compId, {
+        subject_type: "pilot",
+        subject_id: newCompPilotId,
+        subject_name: body.registered_pilot_name,
+        description: resolved.pilot_id
+          ? `Registered pilot "${body.registered_pilot_name}" (class: ${body.pilot_class}, linked to existing account)`
+          : `Registered pilot "${body.registered_pilot_name}" (class: ${body.pilot_class})`,
+      });
+
+      const row = await fetchCompPilot(c.env.DB, newCompPilotId);
       return c.json(serializeCompPilot(alphabet, row!), 201);
     }
   )
@@ -630,6 +642,54 @@ export const pilotRoutes = new Hono<HonoEnv>()
         await c.env.DB.batch(statements);
       }
 
+      // Audit: one per change up to 5 total, otherwise a single rollup.
+      const inserts = pilots.filter((p) => !p.comp_pilot_id).length;
+      const updates = pilots.length - inserts;
+      const totalChanges = inserts + updates + toDelete.length;
+      if (totalChanges === 0) {
+        // idempotent replay — nothing to audit
+      } else if (totalChanges <= 5) {
+        for (let i = 0; i < pilots.length; i++) {
+          const row = pilots[i];
+          if (row.comp_pilot_id) {
+            const decoded = decodeId(alphabet, row.comp_pilot_id)!;
+            await audit(c.env.DB, c.var.user, compId, {
+              subject_type: "pilot",
+              subject_id: decoded,
+              subject_name: row.registered_pilot_name,
+              description: `Updated pilot "${row.registered_pilot_name}"`,
+            });
+          } else {
+            await audit(c.env.DB, c.var.user, compId, {
+              subject_type: "pilot",
+              subject_id: null,
+              subject_name: row.registered_pilot_name,
+              description: `Registered pilot "${row.registered_pilot_name}" (class: ${row.pilot_class})`,
+            });
+          }
+        }
+        for (const id of toDelete) {
+          const old = existingById.get(id)!;
+          await audit(c.env.DB, c.var.user, compId, {
+            subject_type: "pilot",
+            subject_id: id,
+            subject_name: old.registered_pilot_name,
+            description: `Removed pilot "${old.registered_pilot_name}"`,
+          });
+        }
+      } else {
+        const parts: string[] = [];
+        if (inserts > 0) parts.push(`${inserts} added`);
+        if (updates > 0) parts.push(`${updates} updated`);
+        if (toDelete.length > 0) parts.push(`${toDelete.length} removed`);
+        await audit(c.env.DB, c.var.user, compId, {
+          subject_type: "pilot",
+          subject_id: null,
+          subject_name: null,
+          description: `Bulk pilot update: ${parts.join(", ")}`,
+        });
+      }
+
       // Return the new state of all pilots in the comp.
       const after = await c.env.DB.prepare(
         `SELECT ${COMP_PILOT_COLUMNS.join(", ")}, u.email AS linked_email
@@ -766,6 +826,46 @@ export const pilotRoutes = new Hono<HonoEnv>()
         .bind(...buildUpdateValues(newPilotId, merged, compPilotId, compId))
         .run();
 
+      // Audit per changed field
+      const auditFields: Array<[keyof typeof merged, string]> = [
+        ["registered_pilot_name", "name"],
+        ["registered_pilot_email", "email"],
+        ["registered_pilot_civl_id", "CIVL ID"],
+        ["registered_pilot_safa_id", "SAFA ID"],
+        ["registered_pilot_ushpa_id", "USHPA ID"],
+        ["registered_pilot_bhpa_id", "BHPA ID"],
+        ["registered_pilot_dhv_id", "DHV ID"],
+        ["registered_pilot_ffvl_id", "FFVL ID"],
+        ["registered_pilot_fai_id", "FAI ID"],
+        ["registered_pilot_glider", "glider"],
+        ["pilot_class", "class"],
+        ["team_name", "team"],
+        ["driver_contact", "driver"],
+      ];
+      const subjectName = merged.registered_pilot_name;
+      for (const [key, label] of auditFields) {
+        if (body[key as keyof typeof body] === undefined) continue;
+        const oldVal = existing[key as keyof CompPilotRow];
+        const newVal = merged[key];
+        if (oldVal === newVal) continue;
+        await audit(c.env.DB, c.var.user, compId, {
+          subject_type: "pilot",
+          subject_id: compPilotId,
+          subject_name: subjectName,
+          description: `${subjectName}: ${describeChange(label, oldVal, newVal)}`,
+        });
+      }
+      if (identityChanged && newPilotId !== existing.pilot_id) {
+        await audit(c.env.DB, c.var.user, compId, {
+          subject_type: "pilot",
+          subject_id: compPilotId,
+          subject_name: subjectName,
+          description: newPilotId
+            ? `Linked "${subjectName}" to existing GlideComp account`
+            : `Unlinked "${subjectName}" from GlideComp account`,
+        });
+      }
+
       const row = await fetchCompPilot(c.env.DB, compPilotId);
       return c.json(serializeCompPilot(alphabet, row!));
     }
@@ -782,10 +882,10 @@ export const pilotRoutes = new Hono<HonoEnv>()
       const compPilotId = c.var.ids.comp_pilot_id!;
 
       const existing = await c.env.DB.prepare(
-        "SELECT comp_pilot_id FROM comp_pilot WHERE comp_pilot_id = ? AND comp_id = ?"
+        "SELECT comp_pilot_id, registered_pilot_name FROM comp_pilot WHERE comp_pilot_id = ? AND comp_id = ?"
       )
         .bind(compPilotId, compId)
-        .first();
+        .first<{ comp_pilot_id: number; registered_pilot_name: string }>();
 
       if (!existing) {
         return c.json({ error: "Pilot not found in this competition" }, 404);
@@ -797,6 +897,13 @@ export const pilotRoutes = new Hono<HonoEnv>()
       )
         .bind(compPilotId)
         .run();
+
+      await audit(c.env.DB, c.var.user, compId, {
+        subject_type: "pilot",
+        subject_id: compPilotId,
+        subject_name: existing.registered_pilot_name,
+        description: `Removed pilot "${existing.registered_pilot_name}"`,
+      });
 
       return c.json({ success: true });
     }

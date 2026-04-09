@@ -6,6 +6,7 @@ import { taskRoutes } from "./routes/task";
 import { igcRoutes } from "./routes/igc";
 import { pilotRoutes } from "./routes/pilot";
 import { scoreRoutes } from "./routes/score";
+import { auditRoutes } from "./routes/audit";
 
 type Variables = {
   user: AuthUser;
@@ -31,7 +32,8 @@ const routes = app
   .route("/", pilotRoutes)
   .route("/", compRoutes)
   .route("/", taskRoutes)
-  .route("/", scoreRoutes);
+  .route("/", scoreRoutes)
+  .route("/", auditRoutes);
 
 export type AppType = typeof routes;
 

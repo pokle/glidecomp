@@ -6,6 +6,7 @@ import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { updatePenaltySchema } from "../validators";
 import { parseIGC } from "@glidecomp/engine";
+import { audit } from "../audit";
 
 type Variables = {
   user: AuthUser;
@@ -16,6 +17,12 @@ type HonoEnv = { Bindings: Env; Variables: Variables };
 
 const MAX_IGC_SIZE = 5 * 1024 * 1024; // 5 MB
 const MAX_PILOTS_PER_TASK = 250;
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 /**
  * Ensure a `pilot` row exists for the given user. Returns the pilot_id.
@@ -209,6 +216,13 @@ export const igcRoutes = new Hono<HonoEnv>()
           .bind(r2Key, now, body.byteLength, igcPilotName, existingTrack.task_track_id)
           .run();
 
+        await audit(c.env.DB, c.var.user, compId, {
+          subject_type: "track",
+          subject_id: existingTrack.task_track_id,
+          subject_name: user.name,
+          description: `Replaced IGC for ${user.name} (${formatBytes(body.byteLength)})`,
+        });
+
         return c.json({
           task_track_id: encodeId(alphabet, existingTrack.task_track_id),
           comp_pilot_id: encodeId(alphabet, compPilotId),
@@ -228,6 +242,13 @@ export const igcRoutes = new Hono<HonoEnv>()
         .run();
 
       const newTrackId = trackResult.meta.last_row_id;
+
+      await audit(c.env.DB, c.var.user, compId, {
+        subject_type: "track",
+        subject_id: newTrackId,
+        subject_name: user.name,
+        description: `Uploaded IGC for ${user.name} (${formatBytes(body.byteLength)})`,
+      });
 
       return c.json(
         {
@@ -268,14 +289,16 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       // Verify comp_pilot exists and belongs to this comp
       const cp = await c.env.DB.prepare(
-        "SELECT comp_pilot_id FROM comp_pilot WHERE comp_pilot_id = ? AND comp_id = ?"
+        "SELECT comp_pilot_id, registered_pilot_name FROM comp_pilot WHERE comp_pilot_id = ? AND comp_id = ?"
       )
         .bind(compPilotId, compId)
-        .first();
+        .first<{ comp_pilot_id: number; registered_pilot_name: string }>();
 
       if (!cp) {
         return c.json({ error: "Pilot not found in this competition" }, 404);
       }
+
+      const targetPilotName = cp.registered_pilot_name;
 
       // Read the request body
       const body = await c.req.arrayBuffer();
@@ -352,6 +375,13 @@ export const igcRoutes = new Hono<HonoEnv>()
           .bind(r2Key, now, body.byteLength, igcPilotName, existingTrack.task_track_id)
           .run();
 
+        await audit(c.env.DB, c.var.user, compId, {
+          subject_type: "track",
+          subject_id: existingTrack.task_track_id,
+          subject_name: targetPilotName,
+          description: `Replaced IGC for ${targetPilotName} on behalf (${formatBytes(body.byteLength)})`,
+        });
+
         return c.json({
           task_track_id: encodeId(alphabet, existingTrack.task_track_id),
           comp_pilot_id: encodeId(alphabet, compPilotId),
@@ -370,6 +400,13 @@ export const igcRoutes = new Hono<HonoEnv>()
         .run();
 
       const newTrackId = trackResult.meta.last_row_id;
+
+      await audit(c.env.DB, c.var.user, compId, {
+        subject_type: "track",
+        subject_id: newTrackId,
+        subject_name: targetPilotName,
+        description: `Uploaded IGC for ${targetPilotName} on behalf (${formatBytes(body.byteLength)})`,
+      });
 
       return c.json(
         {
@@ -555,15 +592,20 @@ export const igcRoutes = new Hono<HonoEnv>()
       const compPilotId = c.var.ids.comp_pilot_id!;
       const body = c.req.valid("json");
 
-      // Verify track exists
+      // Verify track exists and capture pilot name for audit
       const track = await c.env.DB.prepare(
-        `SELECT tt.task_track_id
+        `SELECT tt.task_track_id, tt.penalty_points AS old_points, cp.registered_pilot_name
          FROM task_track tt
          JOIN task t ON tt.task_id = t.task_id
+         JOIN comp_pilot cp ON tt.comp_pilot_id = cp.comp_pilot_id
          WHERE tt.task_id = ? AND tt.comp_pilot_id = ? AND t.comp_id = ?`
       )
         .bind(taskId, compPilotId, compId)
-        .first<{ task_track_id: number }>();
+        .first<{
+          task_track_id: number;
+          old_points: number;
+          registered_pilot_name: string;
+        }>();
 
       if (!track) {
         return c.json({ error: "Track not found" }, 404);
@@ -580,6 +622,19 @@ export const igcRoutes = new Hono<HonoEnv>()
         )
         .run();
 
+      const reasonSuffix = body.penalty_reason ? `: ${body.penalty_reason}` : "";
+      const description =
+        track.old_points === 0
+          ? `Set penalty for ${track.registered_pilot_name} to ${body.penalty_points} pts${reasonSuffix}`
+          : `Changed penalty for ${track.registered_pilot_name} from ${track.old_points} to ${body.penalty_points} pts${reasonSuffix}`;
+
+      await audit(c.env.DB, c.var.user, compId, {
+        subject_type: "track",
+        subject_id: track.task_track_id,
+        subject_name: track.registered_pilot_name,
+        description,
+      });
+
       return c.json({ success: true });
     }
   )
@@ -595,15 +650,20 @@ export const igcRoutes = new Hono<HonoEnv>()
       const taskId = c.var.ids.task_id!;
       const compPilotId = c.var.ids.comp_pilot_id!;
 
-      // Verify track exists and get filename for R2 cleanup
+      // Verify track exists and get filename for R2 cleanup; capture pilot name
       const track = await c.env.DB.prepare(
-        `SELECT tt.task_track_id, tt.igc_filename
+        `SELECT tt.task_track_id, tt.igc_filename, cp.registered_pilot_name
          FROM task_track tt
          JOIN task t ON tt.task_id = t.task_id
+         JOIN comp_pilot cp ON tt.comp_pilot_id = cp.comp_pilot_id
          WHERE tt.task_id = ? AND tt.comp_pilot_id = ? AND t.comp_id = ?`
       )
         .bind(taskId, compPilotId, compId)
-        .first<{ task_track_id: number; igc_filename: string }>();
+        .first<{
+          task_track_id: number;
+          igc_filename: string;
+          registered_pilot_name: string;
+        }>();
 
       if (!track) {
         return c.json({ error: "Track not found" }, 404);
@@ -616,6 +676,13 @@ export const igcRoutes = new Hono<HonoEnv>()
           .run(),
         c.env.R2.delete(track.igc_filename),
       ]);
+
+      await audit(c.env.DB, c.var.user, compId, {
+        subject_type: "track",
+        subject_id: track.task_track_id,
+        subject_name: track.registered_pilot_name,
+        description: `Deleted IGC for ${track.registered_pilot_name}`,
+      });
 
       return c.json({ success: true });
     }

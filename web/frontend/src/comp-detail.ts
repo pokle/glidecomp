@@ -1121,6 +1121,9 @@ async function initCompDetail(compId: string) {
     document.getElementById("create-task-btn")!.classList.remove("hidden");
   }
 
+  // ── Activity (audit log) ───────────────────────────────────────────────
+  setupActivitySection(compId);
+
   // ── Admins ─────────────────────────────────────────────────────────────
 
   const adminsList = document.getElementById("admins-list")!;
@@ -1141,6 +1144,152 @@ async function initCompDetail(compId: string) {
     setupCreateTaskDialog(compId, comp.pilot_classes);
     setupSettingsDialog(compId, comp);
   }
+}
+
+// ── Activity (audit log) section ─────────────────────────────────────────────
+
+interface AuditEntry {
+  audit_id: number;
+  timestamp: string;
+  actor_name: string;
+  subject_type: "comp" | "task" | "pilot" | "track";
+  subject_id: string | null;
+  subject_name: string | null;
+  description: string;
+}
+
+interface AuditResponse {
+  entries: AuditEntry[];
+  has_more: boolean;
+  next_before: number | null;
+}
+
+/**
+ * Wire up the Activity section: initial load, filter tabs, load-more.
+ * Uses plain fetch (not the Hono RPC client) to keep the response shape
+ * simple and avoid bundling typed-client overhead for read-only data.
+ */
+function setupActivitySection(compId: string) {
+  const list = document.getElementById("activity-list")!;
+  const empty = document.getElementById("activity-empty")!;
+  const loadMoreWrap = document.getElementById("activity-load-more-wrap")!;
+  const loadMoreBtn = document.getElementById(
+    "activity-load-more"
+  ) as HTMLButtonElement;
+
+  let currentFilter = "";
+  let nextBefore: number | null = null;
+
+  async function loadPage(reset: boolean) {
+    const params = new URLSearchParams();
+    params.set("limit", "25");
+    if (currentFilter) params.set("subject_type", currentFilter);
+    if (!reset && nextBefore !== null) {
+      params.set("before", String(nextBefore));
+    }
+    try {
+      const res = await fetch(
+        `/api/comp/${encodeURIComponent(compId)}/audit?${params}`,
+        { credentials: "include" }
+      );
+      if (!res.ok) {
+        if (reset) {
+          empty.classList.remove("hidden");
+          empty.querySelector("p")!.textContent = "Could not load activity";
+        }
+        return;
+      }
+      const data = (await res.json()) as AuditResponse;
+      if (reset) {
+        list.innerHTML = "";
+      }
+      for (const entry of data.entries) {
+        list.appendChild(renderAuditEntry(entry));
+      }
+      nextBefore = data.next_before;
+      if (data.has_more) {
+        loadMoreWrap.classList.remove("hidden");
+      } else {
+        loadMoreWrap.classList.add("hidden");
+      }
+      if (reset && data.entries.length === 0) {
+        empty.classList.remove("hidden");
+      } else {
+        empty.classList.add("hidden");
+      }
+    } catch {
+      // Silent — activity is non-critical
+    }
+  }
+
+  // Filter tab wiring
+  const filterBtns = document.querySelectorAll<HTMLButtonElement>(
+    ".activity-filter-btn"
+  );
+  function setActiveFilter(filter: string) {
+    currentFilter = filter;
+    nextBefore = null;
+    for (const btn of filterBtns) {
+      if (btn.dataset.filter === filter) {
+        btn.classList.add("bg-muted");
+      } else {
+        btn.classList.remove("bg-muted");
+      }
+    }
+    loadPage(true);
+  }
+  for (const btn of filterBtns) {
+    btn.addEventListener("click", () => setActiveFilter(btn.dataset.filter || ""));
+  }
+
+  loadMoreBtn.addEventListener("click", () => loadPage(false));
+
+  // Initial load with "All" filter active
+  setActiveFilter("");
+}
+
+function renderAuditEntry(entry: AuditEntry): HTMLElement {
+  const row = document.createElement("div");
+  row.className =
+    "flex items-start gap-3 text-sm py-1.5 border-b border-border/30 last:border-b-0";
+
+  const time = document.createElement("span");
+  time.className = "text-xs text-muted-foreground/70 whitespace-nowrap pt-0.5 w-24 shrink-0";
+  time.textContent = formatAuditTime(entry.timestamp);
+
+  const main = document.createElement("div");
+  main.className = "flex-1 min-w-0";
+
+  const actor = document.createElement("span");
+  actor.className = "font-medium text-foreground";
+  actor.textContent = entry.actor_name;
+
+  const desc = document.createElement("span");
+  desc.className = "text-muted-foreground ml-2";
+  desc.textContent = entry.description;
+
+  main.appendChild(actor);
+  main.appendChild(desc);
+  row.appendChild(time);
+  row.appendChild(main);
+  return row;
+}
+
+function formatAuditTime(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 30) return `${diffDay}d ago`;
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 // ── Render tasks list ────────────────────────────────────────────────────────
