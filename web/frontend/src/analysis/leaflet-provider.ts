@@ -143,7 +143,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
     // Grab the button element for highlighting
     panelToggleBtn = (panelToggleCtrl as unknown as { getContainer(): HTMLElement }).getContainer?.()?.querySelector('a') ?? null;
     if (panelToggleBtn) {
-      panelToggleBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:auto;height:36px;padding:0 10px;white-space:nowrap;';
+      panelToggleBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:auto;height:36px;padding:0 10px;white-space:nowrap;color:#333;';
     }
 
     // Menu button control (top-left, added first so it's topmost)
@@ -159,7 +159,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
     menuCtrl.addTo(map);
     const menuBtn = (menuCtrl as unknown as { getContainer(): HTMLElement }).getContainer?.()?.querySelector('a');
     if (menuBtn) {
-      menuBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:auto;height:36px;padding:0 10px;white-space:nowrap;';
+      menuBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:auto;height:36px;padding:0 10px;white-space:nowrap;color:#333;';
     }
 
     // Zoom control (top-left, below menu button)
