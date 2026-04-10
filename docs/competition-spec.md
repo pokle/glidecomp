@@ -108,7 +108,7 @@ Tables referenced from the auth-api worker:
   - penalty_points (REAL NOT NULL DEFAULT 0) — admin-assigned penalty. Only modifiable by comp admins. When a pilot re-uploads a track, the penalty MUST be preserved (not reset).
   - penalty_reason (TEXT) — admin-assigned explanation for the penalty. Only modifiable by comp admins.
 
-- **audit_log**: Publicly-visible append-only log of score-affecting changes. One entry per mutating API call. Accessible via `GET /api/comp/:comp_id/audit` (public for non-test comps) and rendered on the comp detail page for transparency.
+- **audit_log**: Append-only log of score-affecting changes, visible to any authenticated user. One entry per mutating API call. Accessible via `GET /api/comp/:comp_id/audit` (requires authentication; test comps additionally require admin) and rendered on the comp detail page for transparency. Unauthenticated visitors see a sign-in prompt.
   - audit_id (INTEGER PRIMARY KEY AUTOINCREMENT)
   - comp_id (INTEGER NOT NULL REFERENCES comp(comp_id) ON DELETE CASCADE) — denormalized for efficient per-comp queries even when the subject is a task/pilot/track
   - timestamp (TEXT NOT NULL) — ISO timestamp
@@ -291,6 +291,7 @@ Pilot profile (the `pilot` table) is managed via the competition-api worker:
 - Ensure that all user entered fields are sanitised before storing them.
 - Ensure only admins of a comp can modify it and any associated child data (task, igc, xctsk, …)
 - Non-test competitions, their tasks, tracks, and scores are publicly readable (no auth required).
+- **Audit logs require authentication.** Any logged-in user can view audit logs for non-test comps; test comp audit logs additionally require admin access. Unauthenticated visitors see a sign-in prompt.
 - Test competitions and all write/modify operations require authentication.
 - Only admins can see test competitions.
 - Enforce limits on the size of user supplied data to avoid abuse
@@ -422,7 +423,7 @@ Scoring fetches IGC files from R2 at query time and caches results in Workers KV
 
 ## Iteration 8: Bulk Pilot Management + Audit Log
 
-This iteration delivers a bulk-friendly pilot management UI (for comp admins who register many pilots from spreadsheets) plus a publicly-visible audit log for transparency of score-affecting changes.
+This iteration delivers a bulk-friendly pilot management UI (for comp admins who register many pilots from spreadsheets) plus an audit log for transparency of score-affecting changes (visible to authenticated users).
 
 ### Design decisions
 
@@ -503,7 +504,7 @@ Each stage is a reviewable vertical slice. Do not move on without review.
 - [x] `audit_log` table migration (already in 8a)
 - [x] Shared `audit(db, user, compId, {subject_type, subject_id, subject_name, description})` helper — takes db+user directly for type safety
 - [x] Wire audit calls into: pilot CRUD (8b), IGC upload/replace/delete, penalty PATCH, task create/delete/field edits, xctsk saves, comp setting PATCH
-- [x] `GET /api/comp/:comp_id/audit` (paginated, newest first; `limit`, `before` cursor, `subject_type` filter; public for non-test comps)
+- [x] `GET /api/comp/:comp_id/audit` (paginated, newest first; `limit`, `before` cursor, `subject_type` filter; requires authentication; test comps additionally require admin)
 - [x] "Activity" section on the comp detail page with tabbed filters (All / Tasks / Pilots / Tracks / Settings) and "Load more" pagination
 - [x] Tests verifying audit entries are written for every mutating route
 
@@ -544,7 +545,7 @@ All workflows covered by 8d (read-only table + Edit-as-text modal + CSV import/e
 - [x] Decision: no auth-api hook. Linking happens lazily when the user interacts with competition-api (profile update or first upload), which covers 100% of practical cases without coupling the two workers.
 
 #### 8h — Polish
-- [x] `comp.test` flag handling audit: every public GET route (comp list, comp detail, task, track list, track download, score, pilot list, audit) already gates test comps behind admin auth. Fixed a small bug where the comp list's admin branch wasn't SELECTing `open_igc_upload`.
+- [x] `comp.test` flag handling audit: every public GET route (comp list, comp detail, task, track list, track download, score, pilot list) already gates test comps behind admin auth. The audit endpoint requires authentication for all comps (test comps additionally require admin). Fixed a small bug where the comp list's admin branch wasn't SELECTing `open_igc_upload`.
 - [x] Pilot profile page at `/profile`: form with name + 7 sporting body IDs + phone + glider. Reads via `GET /api/comp/pilot`, saves via `PATCH`. Shows a success message noting that matching registrations have been auto-linked (triggered by the linker added in 8g). Profile link added to the user menu dropdown on the comp list and comp detail pages.
 
 ## Iteration 9: IGC upload to competition improvements

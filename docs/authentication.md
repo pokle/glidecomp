@@ -34,6 +34,7 @@
   - Can access their own resources and public resources. 
   - Cannot impersonate other users.
 - Unauthenticated users: 
-  - Can access public resources.
+  - Can access public resources (competitions, tasks, tracks, scores).
+  - Cannot view audit logs (prompted to sign in).
   - Can login as a user (only)
   - Can not impersonate other users.
