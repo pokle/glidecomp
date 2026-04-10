@@ -3,22 +3,27 @@ import type { AuthUser } from "./auth/client";
 
 type NavActive = "flights" | "competitions" | "profile";
 
-function navLinkClass(isActive: boolean): string {
-  return isActive ? "btn btn-secondary btn-sm text-xs" : "btn btn-ghost btn-sm text-xs";
+function navAttrs(isActive: boolean, extraClasses: string = ""): string {
+  const cls = [
+    isActive ? "btn btn-secondary btn-sm text-xs font-bold" : "btn btn-ghost btn-sm text-xs font-bold",
+    extraClasses,
+  ].filter(Boolean).join(" ");
+  const style = isActive ? ' style="outline: 3px solid #BCC817; outline-offset: 3px;"' : "";
+  return `class="${cls}"${style}`;
 }
 
 function buildNavHTML(active?: NavActive): string {
   return `<header class="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-10">
   <div class="max-w-3xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-    <a id="nav-logo" href="/" class="inline-flex items-center gap-2 text-lg font-bold tracking-tight text-foreground hover:text-primary transition-colors">
+    <a id="nav-logo" href="/" class="inline-flex items-center gap-2 text-lg font-bold tracking-tight text-foreground hover:text-primary transition-colors" style="font-family: 'Alte Haas Grotesk', sans-serif;">
       <img src="/icon.svg" alt="GlideComp logo" class="w-6 h-6" />
       GlideComp
     </a>
     <div class="flex items-center gap-1">
-      <a id="nav-my-flights" href="/u/me/" class="${navLinkClass(active === "flights")}">My Flights</a>
-      <a href="/comp" class="${navLinkClass(active === "competitions")}">Competitions</a>
-      <a href="/profile" id="nav-profile-link" class="${navLinkClass(active === "profile")} hidden">My Profile</a>
-      <button id="signin-btn" class="hidden btn btn-ghost btn-sm text-xs">Sign in</button>
+      <a id="nav-my-flights" href="/u/me/" ${navAttrs(active === "flights")}>My Flights</a>
+      <a href="/comp" ${navAttrs(active === "competitions")}>Competitions</a>
+      <a href="/profile" id="nav-profile-link" ${navAttrs(active === "profile", "hidden")}>My Profile</a>
+      <button id="signin-btn" class="hidden btn btn-ghost btn-sm text-xs font-bold">Sign in</button>
     </div>
   </div>
 </header>`;

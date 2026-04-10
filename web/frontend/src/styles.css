@@ -1,6 +1,20 @@
 /* Roboto - Avacado design system font */
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;600;700&display=swap');
 
+/* Alte Haas Grotesk — hero and logo text */
+@font-face {
+  font-family: 'Alte Haas Grotesk';
+  src: url('/fonts/AlteHaasGroteskRegular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Alte Haas Grotesk';
+  src: url('/fonts/AlteHaasGroteskBold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: swap;
+}
+
 @import "tailwindcss";
 @import "@pokle/basecoat/src/css/basecoat.css";
 
@@ -19,24 +33,24 @@
 :root {
   color-scheme: dark;
 
-  --background: #215e6d;       /* Deep teal — page background              */
-  --foreground: #ffffff;       /* Primary text                              */
-  --card: #181818;             /* Dark surface — cards, containers          */
-  --card-foreground: #ffffff;
-  --popover: #272727;          /* Mid-dark — dropdowns, tooltips            */
-  --popover-foreground: #ffffff;
-  --primary: #6bddac;          /* Avacado Green — CTAs, active states       */
-  --primary-foreground: #181818;
-  --secondary: #1f1f1f;        /* Interactive surface — secondary buttons   */
-  --secondary-foreground: #ffffff;
-  --muted: #272727;            /* Muted background                          */
-  --muted-foreground: #b3b3b3; /* Silver — muted text, inactive nav        */
-  --accent: #2e2e2e;           /* Hover/focus surface                       */
-  --accent-foreground: #ffffff;
+  --background: #152951;       /* Deep navy — page background               */
+  --foreground: #F4EAE4;       /* Warm off-white — body text                */
+  --card: #1c3464;             /* Slightly lighter navy — cards             */
+  --card-foreground: #F4EAE4;
+  --popover: #1c3464;          /* Mid-navy — dropdowns, tooltips            */
+  --popover-foreground: #F4EAE4;
+  --primary: #BCC817;          /* Olive — CTAs, active states, hero text    */
+  --primary-foreground: #152951;
+  --secondary: #1c3464;        /* Interactive surface — secondary buttons   */
+  --secondary-foreground: #F4EAE4;
+  --muted: #1c3464;            /* Muted background                          */
+  --muted-foreground: #a89f9a; /* Dimmed warm — muted text, inactive nav   */
+  --accent: #243d73;           /* Hover/focus surface                       */
+  --accent-foreground: #F4EAE4;
   --destructive: #f3727f;      /* Negative red                              */
-  --border: #4d4d4d;           /* Border gray                               */
-  --input: #1f1f1f;            /* Input background                          */
-  --ring: #6bddac;             /* Focus ring = Avacado Green                */
+  --border: #2d4a7a;           /* Navy border                               */
+  --input: #1c3464;            /* Input background                          */
+  --ring: #BCC817;             /* Focus ring = olive                        */
 
   /* 8px base radius for containers; buttons get full pill below */
   --radius: 0.5rem;
@@ -45,6 +59,12 @@
 @layer base {
   html {
     font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  input:not(:focus),
+  textarea:not(:focus),
+  select:not(:focus) {
+    outline: 1px solid #F4EAE4;
   }
 
   /* Prevent browser zoom gestures on UI elements (header, sidebar, dialogs)
@@ -77,10 +97,10 @@
   .dashboard-topo {
     background-color: var(--color-background);
     background-image:
-      repeating-radial-gradient(circle at 20% 30%, transparent 0, transparent 48px, rgba(107, 221, 172, 0.04) 48px, rgba(107, 221, 172, 0.04) 49px),
-      repeating-radial-gradient(circle at 80% 70%, transparent 0, transparent 38px, rgba(107, 221, 172, 0.03) 38px, rgba(107, 221, 172, 0.03) 39px),
-      repeating-radial-gradient(circle at 55% 15%, transparent 0, transparent 58px, rgba(107, 221, 172, 0.04) 58px, rgba(107, 221, 172, 0.04) 59px),
-      repeating-radial-gradient(circle at 35% 85%, transparent 0, transparent 42px, rgba(107, 221, 172, 0.025) 42px, rgba(107, 221, 172, 0.025) 43px);
+      repeating-radial-gradient(circle at 20% 30%, transparent 0, transparent 48px, rgba(188, 200, 23, 0.06) 48px, rgba(188, 200, 23, 0.06) 49px),
+      repeating-radial-gradient(circle at 80% 70%, transparent 0, transparent 38px, rgba(188, 200, 23, 0.04) 38px, rgba(188, 200, 23, 0.04) 39px),
+      repeating-radial-gradient(circle at 55% 15%, transparent 0, transparent 58px, rgba(188, 200, 23, 0.05) 58px, rgba(188, 200, 23, 0.05) 59px),
+      repeating-radial-gradient(circle at 35% 85%, transparent 0, transparent 42px, rgba(188, 200, 23, 0.035) 42px, rgba(188, 200, 23, 0.035) 43px);
   }
 
   /* Avacado pill buttons — override Basecoat's rounded-md on all btn variants */
@@ -614,8 +634,8 @@
    Scoped to .bg-hills — Safari's background-attachment:fixed on body breaks
    pointer events for position:absolute children (e.g. map controls). */
 .bg-hills {
-    background-color: #ffffff;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900'%3E%3Cpolygon fill='%2336cd6b' points='957 765 539 900 1396 900'/%3E%3Cpolygon fill='%234eaf3d' points='957 765 872.9 900 1396 900'/%3E%3Cpolygon fill='%2338c861' points='-60 900 398 829 816 900'/%3E%3Cpolygon fill='%233fa33d' points='337 900 398 829 816 900'/%3E%3Cpolygon fill='%233bc258' points='1203 794 1552 900 876 900'/%3E%3Cpolygon fill='%23389242' points='1203 794 1552 900 1162 900'/%3E%3Cpolygon fill='%233cb84e' points='641 839 886 900 367 900'/%3E%3Cpolygon fill='%23379d4f' points='587 900 641 839 886 900'/%3E%3Cpolygon fill='%233fb048' points='1710 900 1401 820 1096 900'/%3E%3Cpolygon fill='%23358f58' points='1710 900 1401 820 1365 900'/%3E%3Cpolygon fill='%2344ae46' points='1210 900 971 836 725 900'/%3E%3Cpolygon fill='%23368e64' points='943 900 1210 900 971 836'/%3E%3C/svg%3E");
+    background-color: #152951;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900'%3E%3Cpolygon fill='%23C8D51A' points='957 765 539 900 1396 900'/%3E%3Cpolygon fill='%23A0AE11' points='957 765 872.9 900 1396 900'/%3E%3Cpolygon fill='%23BCCA17' points='-60 900 398 829 816 900'/%3E%3Cpolygon fill='%2396A00E' points='337 900 398 829 816 900'/%3E%3Cpolygon fill='%23C2CF18' points='1203 794 1552 900 876 900'/%3E%3Cpolygon fill='%238C980E' points='1203 794 1552 900 1162 900'/%3E%3Cpolygon fill='%23B4C215' points='641 839 886 900 367 900'/%3E%3Cpolygon fill='%2394A00F' points='587 900 641 839 886 900'/%3E%3Cpolygon fill='%23BAC616' points='1710 900 1401 820 1096 900'/%3E%3Cpolygon fill='%237E8A0A' points='1710 900 1401 820 1365 900'/%3E%3Cpolygon fill='%23C6D319' points='1210 900 971 836 725 900'/%3E%3Cpolygon fill='%23849010' points='943 900 1210 900 971 836'/%3E%3C/svg%3E");
     background-attachment: fixed;
     background-size: cover;
 }
