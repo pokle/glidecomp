@@ -21,28 +21,9 @@
 <body class="min-h-screen bg-background text-foreground">
   <div id="profile-page" class="hidden min-h-screen flex flex-col">
 
-    <!-- Header -->
-    <header class="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-10">
-      <div class="max-w-2xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-        <a id="nav-logo" href="/" class="inline-flex items-center gap-2 text-lg font-bold tracking-tight text-foreground hover:text-primary transition-colors">
-          <img src="/icon.svg" alt="GlideComp logo" class="w-6 h-6" />
-          GlideComp
-        </a>
-        <div class="flex items-center gap-1">
-          <a href="/comp" class="text-sm text-muted-foreground hover:text-foreground px-2 py-1 transition-colors">Competitions</a>
-          <a id="nav-my-flights" href="/u/me/" class="text-sm text-muted-foreground hover:text-foreground px-2 py-1 transition-colors">My Flights</a>
-          <details id="nav-user-menu" class="relative hidden">
-            <summary id="nav-user-name" class="btn btn-ghost btn-sm text-xs list-none cursor-pointer select-none"></summary>
-            <div class="absolute right-0 top-full mt-1 w-36 rounded-lg border border-border bg-card shadow-lg p-1 z-50">
-              <button id="signout-btn" class="w-full text-left px-3 py-1.5 text-sm hover:bg-muted rounded-md transition-colors text-muted-foreground">Sign out</button>
-            </div>
-          </details>
-          <button id="signin-btn" class="hidden btn btn-ghost btn-sm text-xs">Sign in</button>
-        </div>
-      </div>
-    </header>
+    <div id="app-nav"></div>
 
-    <main class="flex-1 max-w-2xl mx-auto w-full px-4 sm:px-6 py-8">
+    <main class="flex-1 max-w-3xl mx-auto w-full px-4 sm:px-6 py-8">
       <div id="profile-loading" class="text-center py-12">
         <p class="text-sm text-muted-foreground">Loading profile...</p>
       </div>
@@ -121,6 +102,7 @@
         </form>
       </div>
     </main>
+    <div id="app-footer"></div>
   </div>
 
   <script type="module" src="/profile.ts"></script>

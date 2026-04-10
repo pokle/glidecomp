@@ -1,4 +1,4 @@
-import { getCurrentUser, signInWithGoogle, signOut } from "./auth/client";
+import { initNav } from "./nav";
 import { api } from "./comp/api";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -72,29 +72,14 @@ function escapeHtml(str: string): string {
 // ── Main init ────────────────────────────────────────────────────────────────
 
 async function init() {
-  const user = await getCurrentUser();
+  const user = await initNav({ active: "competitions" });
 
   // Show page (works for both authed and anonymous users)
   const page = document.getElementById("comp-page")!;
   page.classList.remove("hidden");
 
-  // Header — show user info or sign-in link
   const createBtn = document.getElementById("create-comp-btn")!;
-
-  if (user) {
-    (document.getElementById("nav-logo") as HTMLAnchorElement).href = `/u/${user.username}/`;
-    (document.getElementById("nav-my-flights") as HTMLAnchorElement).href = `/u/${user.username}/`;
-    document.getElementById("nav-user-menu")!.classList.remove("hidden");
-    document.getElementById("nav-user-name")!.textContent = user.name;
-    document.getElementById("signout-btn")!.addEventListener("click", async () => {
-      await signOut();
-      window.location.href = "/";
-    });
-  } else {
-    document.getElementById("signin-btn")!.classList.remove("hidden");
-    document.getElementById("signin-btn")!.addEventListener("click", () => signInWithGoogle());
-    createBtn.classList.add("hidden");
-  }
+  if (!user) createBtn.classList.add("hidden");
 
   // DOM refs
   const compListEl = document.getElementById("comp-list")!;

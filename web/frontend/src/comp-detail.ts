@@ -1,4 +1,5 @@
-import { getCurrentUser, signInWithGoogle, signOut } from "./auth/client";
+import { initNav } from "./nav";
+import type { AuthUser } from "./auth/client";
 import { api } from "./comp/api";
 import { setupPilotsSection } from "./comp/pilots-section";
 import type { XCTask } from "@glidecomp/engine";
@@ -119,33 +120,18 @@ async function init() {
   const page = document.getElementById("comp-detail-page")!;
   page.classList.remove("hidden");
 
-  // Nav wiring
-  const user = await getCurrentUser();
-  if (user) {
-    (document.getElementById("nav-logo") as HTMLAnchorElement).href = `/u/${user.username}/`;
-    (document.getElementById("nav-my-flights") as HTMLAnchorElement).href = `/u/${user.username}/`;
-    document.getElementById("nav-user-menu")!.classList.remove("hidden");
-    document.getElementById("nav-user-name")!.textContent = user.name;
-    document.getElementById("signout-btn")!.addEventListener("click", async () => {
-      await signOut();
-      window.location.href = "/";
-    });
-  } else {
-    document.getElementById("signin-btn")!.classList.remove("hidden");
-    document.getElementById("signin-btn")!.addEventListener("click", () => signInWithGoogle());
-  }
+  const user = await initNav({ active: "competitions" });
 
   if (taskId) {
-    await initTaskDetail(compId, taskId);
+    await initTaskDetail(compId, taskId, user);
   } else {
-    await initCompDetail(compId);
+    await initCompDetail(compId, user);
   }
 }
 
 // ── Task detail view ─────────────────────────────────────────────────────────
 
-async function initTaskDetail(compId: string, taskId: string) {
-  const user = await getCurrentUser();
+async function initTaskDetail(compId: string, taskId: string, user: AuthUser | null) {
 
   let task: TaskDetail;
   let comp: CompDetail | null = null;
@@ -1108,8 +1094,7 @@ async function setupScoreSection(compId: string, taskId: string) {
 
 // ── Comp detail view ─────────────────────────────────────────────────────────
 
-async function initCompDetail(compId: string) {
-  const user = await getCurrentUser();
+async function initCompDetail(compId: string, user: AuthUser | null) {
   let comp: CompDetail;
 
   try {

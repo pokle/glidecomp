@@ -1,4 +1,5 @@
-import { getCurrentUser, signInWithGoogle, signOut, deleteAccount } from "./auth/client";
+import { signInWithGoogle, deleteAccount } from "./auth/client";
+import { initNav } from "./nav";
 import { storage, type StoredTask, type StoredTrack } from "./analysis/storage";
 import { parseIGC, parseXCTask, sanitizeText } from "@glidecomp/engine";
 
@@ -75,7 +76,7 @@ function createTaskCard(task: StoredTask, index: number): HTMLElement {
 // ── Main init ─────────────────────────────────────────────────────────────
 
 async function init() {
-  const user = await getCurrentUser();
+  const user = await initNav({ active: "flights" });
 
   if (!user) {
     signInWithGoogle();
@@ -96,17 +97,6 @@ async function init() {
   // Show dashboard
   const container = document.getElementById("dashboard")!;
   container.classList.remove("hidden");
-
-  // Header
-  (document.getElementById("nav-logo") as HTMLAnchorElement).href = `/u/${user.username}/`;
-  (document.getElementById("nav-my-flights") as HTMLAnchorElement).href = `/u/${user.username}/`;
-  const userMenu = document.getElementById("nav-user-menu")!;
-  userMenu.classList.remove("hidden");
-  document.getElementById("nav-user-name")!.textContent = user.name;
-  document.getElementById("signout-btn")?.addEventListener("click", async () => {
-    await signOut();
-    window.location.href = "/";
-  });
 
   // Initialize storage
   await storage.init();

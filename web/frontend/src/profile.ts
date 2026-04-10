@@ -1,4 +1,5 @@
-import { getCurrentUser, signInWithGoogle, signOut } from "./auth/client";
+import { signInWithGoogle } from "./auth/client";
+import { initNav } from "./nav";
 import { api } from "./comp/api";
 
 interface PilotProfile {
@@ -28,21 +29,10 @@ const PROFILE_FIELDS = [
 ] as const;
 
 async function init() {
-  const user = await getCurrentUser();
+  const user = await initNav({ active: "profile" });
   document.getElementById("profile-page")!.classList.remove("hidden");
 
-  if (user) {
-    (document.getElementById("nav-logo") as HTMLAnchorElement).href = `/u/${user.username}/`;
-    (document.getElementById("nav-my-flights") as HTMLAnchorElement).href = `/u/${user.username}/`;
-    document.getElementById("nav-user-menu")!.classList.remove("hidden");
-    document.getElementById("nav-user-name")!.textContent = user.name;
-    document.getElementById("signout-btn")!.addEventListener("click", async () => {
-      await signOut();
-      window.location.href = "/";
-    });
-  } else {
-    document.getElementById("signin-btn")!.classList.remove("hidden");
-    document.getElementById("signin-btn")!.addEventListener("click", () => signInWithGoogle());
+  if (!user) {
     document.getElementById("profile-loading")!.classList.add("hidden");
     document.getElementById("profile-signed-out")!.classList.remove("hidden");
     document.getElementById("profile-signin-btn")!.addEventListener("click", () => signInWithGoogle());
