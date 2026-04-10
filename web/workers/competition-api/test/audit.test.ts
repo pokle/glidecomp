@@ -8,7 +8,7 @@ import {
   request,
 } from "./helpers";
 
-/** Fetch audit entries for a comp (public endpoint). */
+/** Fetch audit entries for a comp (requires authentication). */
 async function getAudit(
   compId: string,
   query: Record<string, string> = {}
@@ -18,7 +18,7 @@ async function getAudit(
   next_before: number | null;
 }> {
   const qs = new URLSearchParams(query).toString();
-  const res = await request(
+  const res = await authRequest(
     "GET",
     `/api/comp/${compId}/audit${qs ? "?" + qs : ""}`
   );
@@ -251,15 +251,24 @@ describe("GET /api/comp/:comp_id/audit", () => {
     expect(pilotsOnly.entries.every((e) => e.subject_type === "pilot")).toBe(true);
   });
 
-  test("public for non-test comps, hidden for test comps without admin auth", async () => {
-    const publicComp = await createComp({ name: "Public" });
+  test("requires auth; unauthenticated returns 401", async () => {
+    const compId = await createComp({ name: "Public" });
+
+    // Unauthenticated: returns 401
+    const anonRes = await request("GET", `/api/comp/${compId}/audit`);
+    expect(anonRes.status).toBe(401);
+
+    // Authenticated: returns 200
+    const authRes = await authRequest("GET", `/api/comp/${compId}/audit`);
+    expect(authRes.status).toBe(200);
+  });
+
+  test("test comps hidden without admin auth", async () => {
     const testComp = await createComp({ name: "Test Private", test: true });
 
-    // Unauthenticated: public OK, test returns 404
-    const pubRes = await request("GET", `/api/comp/${publicComp}/audit`);
-    expect(pubRes.status).toBe(200);
-    const testRes = await request("GET", `/api/comp/${testComp}/audit`);
-    expect(testRes.status).toBe(404);
+    // Unauthenticated: returns 401
+    const anonRes = await request("GET", `/api/comp/${testComp}/audit`);
+    expect(anonRes.status).toBe(401);
 
     // Admin can see test comp audit
     const testAdminRes = await authRequest(
@@ -271,7 +280,7 @@ describe("GET /api/comp/:comp_id/audit", () => {
 
   test("rejects invalid query params", async () => {
     const compId = await createComp();
-    const res = await request(
+    const res = await authRequest(
       "GET",
       `/api/comp/${compId}/audit?limit=999999`
     );
