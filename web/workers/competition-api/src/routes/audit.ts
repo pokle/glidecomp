@@ -4,10 +4,10 @@ import { zValidator } from "@hono/zod-validator";
 import type { Env, AuthUser } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
-import { optionalAuth } from "../middleware/auth";
+import { requireAuth } from "../middleware/auth";
 
 type Variables = {
-  user: AuthUser | null;
+  user: AuthUser;
   ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
 };
 
@@ -25,7 +25,7 @@ export const auditRoutes = new Hono<HonoEnv>()
   // ── GET /api/comp/:comp_id/audit ── List audit entries
   .get(
     "/api/comp/:comp_id/audit",
-    optionalAuth,
+    requireAuth,
     sqidsMiddleware,
     zValidator("query", auditQuerySchema),
     async (c) => {
@@ -44,7 +44,6 @@ export const auditRoutes = new Hono<HonoEnv>()
       if (!comp) return c.json({ error: "Not found" }, 404);
 
       if (comp.test) {
-        if (!user) return c.json({ error: "Not found" }, 404);
         const isAdmin = await c.env.DB.prepare(
           "SELECT 1 FROM comp_admin WHERE comp_id = ? AND user_id = ?"
         )

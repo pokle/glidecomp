@@ -1,5 +1,5 @@
 import { initNav } from "./nav";
-import type { AuthUser } from "./auth/client";
+import { signInWithGoogle, type AuthUser } from "./auth/client";
 import { api } from "./comp/api";
 import { setupPilotsSection } from "./comp/pilots-section";
 import type { XCTask } from "@glidecomp/engine";
@@ -1161,7 +1161,7 @@ async function initCompDetail(compId: string, user: AuthUser | null) {
   setupPilotsSection(compId, comp.name, comp.pilot_classes, isAdmin);
 
   // ── Activity (audit log) ───────────────────────────────────────────────
-  setupActivitySection(compId);
+  setupActivitySection(compId, user);
 
   // ── Admins ─────────────────────────────────────────────────────────────
 
@@ -1208,13 +1208,28 @@ interface AuditResponse {
  * Uses plain fetch (not the Hono RPC client) to keep the response shape
  * simple and avoid bundling typed-client overhead for read-only data.
  */
-function setupActivitySection(compId: string) {
+function setupActivitySection(compId: string, user: AuthUser | null) {
   const list = document.getElementById("activity-list")!;
   const empty = document.getElementById("activity-empty")!;
   const loadMoreWrap = document.getElementById("activity-load-more-wrap")!;
   const loadMoreBtn = document.getElementById(
     "activity-load-more"
   ) as HTMLButtonElement;
+
+  // If user is not logged in, show a sign-in prompt instead of audit entries
+  if (!user) {
+    const signInPrompt = document.createElement("div");
+    signInPrompt.className = "text-center py-6 border border-dashed border-border/50 rounded-lg";
+    signInPrompt.innerHTML =
+      `<p class="text-sm text-muted-foreground">Sign in to view competition activity</p>`;
+    const signInBtn = document.createElement("button");
+    signInBtn.className = "btn btn-primary btn-sm mt-3";
+    signInBtn.textContent = "Sign in";
+    signInBtn.addEventListener("click", () => signInWithGoogle());
+    signInPrompt.appendChild(signInBtn);
+    list.parentElement!.replaceChildren(signInPrompt);
+    return;
+  }
 
   let currentFilter = "";
   let nextBefore: number | null = null;
