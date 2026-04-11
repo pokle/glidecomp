@@ -5,6 +5,7 @@ import {
   type ThemeColorKey,
   type ThemeFontRole,
   AVOCADO_THEME,
+  BASECOAT_THEME,
   applyTheme,
   saveTheme,
   loadSavedTheme,
@@ -628,21 +629,33 @@ function buildActions(): HTMLElement {
     }
   });
 
-  // Reset
-  const resetBtn = el("button", { className: "btn btn-ghost" }, ["Reset to Default"]);
-  resetBtn.addEventListener("click", () => {
+  // Reset to Avo
+  const resetAvoBtn = el("button", { className: "btn btn-ghost" }, ["Reset to Avo"]);
+  resetAvoBtn.addEventListener("click", () => {
     theme = structuredClone(AVOCADO_THEME);
     resetTheme();
     updatePreview();
     rebuildControls();
-    showToast("Theme reset to Avocado defaults");
+    showToast("Theme reset to Avocado");
+  });
+
+  // Reset to Basecoat
+  const resetBasecoatBtn = el("button", { className: "btn btn-ghost" }, ["Reset to Basecoat"]);
+  resetBasecoatBtn.addEventListener("click", () => {
+    theme = structuredClone(BASECOAT_THEME);
+    saveTheme(theme);
+    applyTheme(theme);
+    updatePreview();
+    rebuildControls();
+    showToast("Theme reset to Basecoat");
   });
 
   row1.appendChild(applyBtn);
   row1.appendChild(exportBtn);
   row1.appendChild(importBtn);
   row1.appendChild(shareBtn);
-  row1.appendChild(resetBtn);
+  row1.appendChild(resetAvoBtn);
+  row1.appendChild(resetBasecoatBtn);
   section.appendChild(row1);
   section.appendChild(importInput);
   return section;

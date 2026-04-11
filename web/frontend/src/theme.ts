@@ -88,6 +88,41 @@ export const AVOCADO_THEME: GlideCompTheme = {
   },
 };
 
+export const BASECOAT_THEME: GlideCompTheme = {
+  name: "Basecoat",
+  author: "Basecoat UI",
+  version: 1,
+  colors: {
+    background: "#0a0a0a",
+    foreground: "#fafafa",
+    card: "#171717",
+    "card-foreground": "#fafafa",
+    popover: "#262626",
+    "popover-foreground": "#fafafa",
+    primary: "#e5e5e5",
+    "primary-foreground": "#171717",
+    secondary: "#262626",
+    "secondary-foreground": "#fafafa",
+    muted: "#262626",
+    "muted-foreground": "#a1a1a1",
+    accent: "#404040",
+    "accent-foreground": "#fafafa",
+    destructive: "#ff6467",
+    border: "#3a3a3a",
+    input: "#454545",
+    ring: "#737373",
+  },
+  radius: "0.625rem",
+  buttonRadius: "8px",
+  fonts: {
+    heading: { family: "Inter", weight: 700, size: 24 },
+    body: { family: "Inter", weight: 400, size: 16 },
+    button: { family: "Inter", weight: 500, size: 14 },
+    caption: { family: "Inter", weight: 400, size: 12 },
+    nav: { family: "Inter", weight: 500, size: 14 },
+  },
+};
+
 const COLOR_KEYS: ThemeColorKey[] = Object.keys(AVOCADO_THEME.colors) as ThemeColorKey[];
 const FONT_ROLES: ThemeFontRole[] = ["heading", "body", "button", "caption", "nav"];
 
