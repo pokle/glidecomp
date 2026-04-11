@@ -1,3 +1,4 @@
+import './theme';
 import { signInWithGoogle } from "./auth/client";
 import { initNav } from "./nav";
 import { api } from "./comp/api";

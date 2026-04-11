@@ -1,3 +1,4 @@
+import './theme';
 import 'katex/dist/katex.min.css';
 import renderMathInElement from 'katex/dist/contrib/auto-render.mjs';
 

@@ -1,4 +1,5 @@
 // Copyright (c) 2026, Tushar Pokle.  All rights reserved.
+import '../theme';
 
 /**
  * IGC Analysis Tool - Main Entry Point
