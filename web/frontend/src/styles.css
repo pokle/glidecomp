@@ -54,11 +54,47 @@
 
   /* 8px base radius for containers; buttons get full pill below */
   --radius: 0.5rem;
+  --button-radius: 9999px;
+
+  /* ── Per-role font variables (overridden by theme editor) ── */
+  --font-heading: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-heading-size: 24px;
+  --font-heading-weight: 700;
+  --font-body: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-body-size: 16px;
+  --font-body-weight: 400;
+  --font-button: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-button-size: 14px;
+  --font-button-weight: 700;
+  --font-button-letter-spacing: 0.014em;
+  --font-button-transform: none;
+  --font-caption: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-caption-size: 12px;
+  --font-caption-weight: 400;
+  --font-nav: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-nav-size: 14px;
+  --font-nav-weight: 600;
 }
 
 @layer base {
   html {
-    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: var(--font-body);
+    font-size: var(--font-body-size);
+    font-weight: var(--font-body-weight);
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-heading);
+    font-weight: var(--font-heading-weight);
+  }
+
+  h1 { font-size: var(--font-heading-size); }
+  h2 { font-size: calc(var(--font-heading-size) - 4px); }
+  h3 { font-size: calc(var(--font-heading-size) - 8px); }
+
+  small, .text-xs, .text-\\[11px\\] {
+    font-family: var(--font-caption);
+    font-weight: var(--font-caption-weight);
   }
 
   input:not(:focus),
@@ -121,8 +157,12 @@
   .btn-lg-secondary,
   .btn-lg-outline,
   .btn-lg-ghost {
-    @apply rounded-full;
-    letter-spacing: 0.014em;
+    border-radius: var(--button-radius);
+    font-family: var(--font-button);
+    font-size: var(--font-button-size);
+    font-weight: var(--font-button-weight);
+    letter-spacing: var(--font-button-letter-spacing);
+    text-transform: var(--font-button-transform);
   }
 
   /* Dashboard tab buttons */

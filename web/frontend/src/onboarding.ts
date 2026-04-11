@@ -1,3 +1,4 @@
+import './theme';
 import { getCurrentUser, setUsername } from "./auth/client";
 import { api } from "./comp/api";
 

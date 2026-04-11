@@ -1,3 +1,4 @@
+import './theme';
 import { signInWithGoogle, deleteAccount } from "./auth/client";
 import { initNav } from "./nav";
 import { storage, type StoredTask, type StoredTrack } from "./analysis/storage";
