@@ -90,6 +90,8 @@ export default defineConfig({
             req.url = '/scores.html';
           } else if (req.url === '/profile' || req.url === '/profile/') {
             req.url = '/profile.html';
+          } else if (req.url === '/theme-editor' || req.url === '/theme-editor/') {
+            req.url = '/theme-editor.html';
           }
           next();
         });
@@ -112,6 +114,7 @@ export default defineConfig({
         'comp-detail': resolve(__dirname, 'src/comp-detail.html'),
         scores: resolve(__dirname, 'src/scores.html'),
         profile: resolve(__dirname, 'src/profile.html'),
+        'theme-editor': resolve(__dirname, 'src/theme-editor.html'),
       },
     },
   },

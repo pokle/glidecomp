@@ -1,3 +1,4 @@
+import './theme';
 import { initNav } from "./nav";
 import type { AuthUser } from "./auth/client";
 import { api } from "./comp/api";

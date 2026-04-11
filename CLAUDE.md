@@ -28,6 +28,9 @@ If `node_modules/` is missing or a dependency can't be resolved, run `bun instal
 
 **Production:** https://glidecomp.com
 
+**Updating bundled data:**
+- **Google Fonts list:** `web/frontend/src/google-fonts.ts` contains a bundled list of all ~1900 Google Fonts for the theme editor. To refresh it: `bash web/scripts/update-google-fonts.sh`
+
 ## Coding Rules
 
 - Decisions MUST be explainable - return explanations for scoring decisions and support unit testing
