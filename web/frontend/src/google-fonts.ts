@@ -1,73 +1,70 @@
 /**
- * Static list of popular Google Fonts (sorted by popularity).
- * Avoids needing a Google Fonts API key.
- * Font CSS is loaded at runtime from fonts.googleapis.com.
+ * Google Fonts loader — fetches the full font directory from Google's
+ * public metadata endpoint at runtime. Falls back to a small built-in
+ * list if the fetch fails.
  */
 export interface GoogleFontEntry {
   family: string;
-  category: "sans-serif" | "serif" | "display" | "handwriting" | "monospace";
-  variants: number[]; // available weights
+  category: string;
 }
 
 export const LOCAL_FONTS: GoogleFontEntry[] = [
-  { family: "Roboto", category: "sans-serif", variants: [400, 600, 700] },
-  { family: "Alte Haas Grotesk", category: "sans-serif", variants: [400, 700] },
-  { family: "Atkinson Hyperlegible Next", category: "sans-serif", variants: [400, 700] },
+  { family: "Roboto", category: "Sans Serif" },
+  { family: "Alte Haas Grotesk", category: "Sans Serif" },
+  { family: "Atkinson Hyperlegible Next", category: "Sans Serif" },
 ];
 
-export const GOOGLE_FONTS: GoogleFontEntry[] = [
-  { family: "Inter", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "Open Sans", category: "sans-serif", variants: [400, 600, 700] },
-  { family: "Lato", category: "sans-serif", variants: [400, 700] },
-  { family: "Montserrat", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "Poppins", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "Nunito", category: "sans-serif", variants: [400, 600, 700] },
-  { family: "Nunito Sans", category: "sans-serif", variants: [400, 600, 700] },
-  { family: "Raleway", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "Ubuntu", category: "sans-serif", variants: [400, 500, 700] },
-  { family: "Quicksand", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "Comfortaa", category: "display", variants: [400, 500, 600, 700] },
-  { family: "Baloo 2", category: "display", variants: [400, 500, 600, 700] },
-  { family: "Space Grotesk", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "DM Sans", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "Cabin", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "Outfit", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "Lexend", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "Rubik", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "Work Sans", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "Karla", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "Josefin Sans", category: "sans-serif", variants: [400, 600, 700] },
-  { family: "Libre Franklin", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "Manrope", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "Sora", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "Plus Jakarta Sans", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "Figtree", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "Playfair Display", category: "serif", variants: [400, 500, 600, 700] },
-  { family: "Merriweather", category: "serif", variants: [400, 700] },
-  { family: "Lora", category: "serif", variants: [400, 500, 600, 700] },
-  { family: "PT Serif", category: "serif", variants: [400, 700] },
-  { family: "Libre Baskerville", category: "serif", variants: [400, 700] },
-  { family: "Source Serif 4", category: "serif", variants: [400, 600, 700] },
-  { family: "Pacifico", category: "handwriting", variants: [400] },
-  { family: "Dancing Script", category: "handwriting", variants: [400, 500, 600, 700] },
-  { family: "Caveat", category: "handwriting", variants: [400, 500, 600, 700] },
-  { family: "Permanent Marker", category: "handwriting", variants: [400] },
-  { family: "Architects Daughter", category: "handwriting", variants: [400] },
-  { family: "Patrick Hand", category: "handwriting", variants: [400] },
-  { family: "Indie Flower", category: "handwriting", variants: [400] },
-  { family: "Shadows Into Light", category: "handwriting", variants: [400] },
-  { family: "Fredoka", category: "sans-serif", variants: [400, 500, 600, 700] },
-  { family: "Bubblegum Sans", category: "display", variants: [400] },
-  { family: "Boogaloo", category: "display", variants: [400] },
-  { family: "Chewy", category: "display", variants: [400] },
-  { family: "Bangers", category: "display", variants: [400] },
-  { family: "Righteous", category: "display", variants: [400] },
-  { family: "Titan One", category: "display", variants: [400] },
-  { family: "Lilita One", category: "display", variants: [400] },
-  { family: "Russo One", category: "sans-serif", variants: [400] },
-  { family: "Fira Code", category: "monospace", variants: [400, 500, 600, 700] },
-  { family: "JetBrains Mono", category: "monospace", variants: [400, 500, 600, 700] },
-  { family: "Source Code Pro", category: "monospace", variants: [400, 500, 600, 700] },
+const FALLBACK_FONTS: GoogleFontEntry[] = [
+  { family: "Inter", category: "Sans Serif" },
+  { family: "Open Sans", category: "Sans Serif" },
+  { family: "Montserrat", category: "Sans Serif" },
+  { family: "Poppins", category: "Sans Serif" },
+  { family: "Nunito", category: "Sans Serif" },
+  { family: "Quicksand", category: "Sans Serif" },
+  { family: "Comfortaa", category: "Display" },
+  { family: "Noto Sans", category: "Sans Serif" },
+  { family: "Noto Serif", category: "Serif" },
+  { family: "Playfair Display", category: "Serif" },
+  { family: "Lora", category: "Serif" },
+  { family: "Caveat", category: "Handwriting" },
+  { family: "Pacifico", category: "Handwriting" },
+  { family: "Fira Code", category: "Monospace" },
 ];
 
-export const ALL_FONTS: GoogleFontEntry[] = [...LOCAL_FONTS, ...GOOGLE_FONTS];
+let cachedFonts: GoogleFontEntry[] | null = null;
+
+/**
+ * Fetches the full Google Fonts directory (~1900 fonts).
+ * Caches the result so subsequent calls are instant.
+ * Falls back to a small built-in list on network failure.
+ */
+export async function fetchGoogleFonts(): Promise<GoogleFontEntry[]> {
+  if (cachedFonts) return cachedFonts;
+
+  try {
+    const res = await fetch("https://fonts.google.com/metadata/fonts");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data: { familyMetadataList?: { family: string; category: string }[] } = await res.json();
+    const list: GoogleFontEntry[] = (data.familyMetadataList ?? []).map(
+      (f: { family: string; category: string }) => ({
+        family: f.family,
+        category: f.category,
+      })
+    );
+    if (list.length > 0) {
+      cachedFonts = list;
+      return list;
+    }
+  } catch {
+    // Network failure — use fallback
+  }
+
+  cachedFonts = FALLBACK_FONTS;
+  return FALLBACK_FONTS;
+}
+
+/** Returns all fonts: local fonts first, then Google Fonts. */
+export async function getAllFonts(): Promise<GoogleFontEntry[]> {
+  const google = await fetchGoogleFonts();
+  return [...LOCAL_FONTS, ...google];
+}

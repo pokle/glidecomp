@@ -15,7 +15,7 @@ import {
   decodeThemeFromHash,
   preloadFont,
 } from "./theme";
-import { ALL_FONTS, LOCAL_FONTS, type GoogleFontEntry } from "./google-fonts";
+import { getAllFonts, LOCAL_FONTS, type GoogleFontEntry } from "./google-fonts";
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -25,6 +25,9 @@ let theme: GlideCompTheme = structuredClone(
 
 // Which color swatch is "active" for the image eyedropper
 let activeColorKey: ThemeColorKey = "primary";
+
+// All available fonts (loaded async from Google Fonts metadata)
+let allFonts: GoogleFontEntry[] = [...LOCAL_FONTS];
 
 // ── Color Groups (friendly labels) ──────────────────────────────────────────
 
@@ -165,7 +168,7 @@ function buildFontPicker(role: ThemeFontRole, onChange: () => void): HTMLElement
   function renderOptions(filter: string): void {
     dropdown.innerHTML = "";
     const q = filter.toLowerCase();
-    const matches = ALL_FONTS.filter(f => f.family.toLowerCase().includes(q)).slice(0, 30);
+    const matches = allFonts.filter(f => f.family.toLowerCase().includes(q)).slice(0, 30);
 
     for (const font of matches) {
       const isLocal = LOCAL_FONTS.some(l => l.family === font.family);
@@ -734,6 +737,9 @@ function injectEditorStyles(): void {
 async function init(): Promise<void> {
   await initNav();
   injectEditorStyles();
+
+  // Load the full Google Fonts directory, then build the UI
+  allFonts = await getAllFonts();
   rebuildControls();
 }
 
