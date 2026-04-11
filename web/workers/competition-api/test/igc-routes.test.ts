@@ -139,6 +139,9 @@ describe("POST .../igc (upload)", () => {
     expect(res.status).toBe(400);
   });
 
+  // Bumped timeout: this test does ~1250 sequential D1 inserts in setup
+  // (250 pilots × ~5 queries each). Under full-parallel test execution
+  // it can exceed the default 5s cap; in isolation it finishes well under.
   test("enforces 250 pilots per task limit", async () => {
     const compId = await createComp();
     const taskId = await createTask(compId);
@@ -180,7 +183,7 @@ describe("POST .../igc (upload)", () => {
     expect(res.status).toBe(400);
     const data = (await res.json()) as { error: string };
     expect(data.error).toContain("250");
-  });
+  }, 30_000);
 });
 
 // ── GET /api/comp/:comp_id/task/:task_id/igc ─────────────────────────────
