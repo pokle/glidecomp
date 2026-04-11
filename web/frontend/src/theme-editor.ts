@@ -5,7 +5,8 @@ import {
   type ThemeColorKey,
   type ThemeFontRole,
   AVOCADO_THEME,
-  BASECOAT_THEME,
+  BASECOAT_DARK_THEME,
+  BASECOAT_LIGHT_THEME,
   applyTheme,
   saveTheme,
   loadSavedTheme,
@@ -639,15 +640,26 @@ function buildActions(): HTMLElement {
     showToast("Theme reset to Avocado");
   });
 
-  // Reset to Basecoat
-  const resetBasecoatBtn = el("button", { className: "btn btn-ghost" }, ["Reset to Basecoat"]);
-  resetBasecoatBtn.addEventListener("click", () => {
-    theme = structuredClone(BASECOAT_THEME);
+  // Reset to Basecoat Dark
+  const resetBasecoatDarkBtn = el("button", { className: "btn btn-ghost" }, ["Reset to Basecoat Dark"]);
+  resetBasecoatDarkBtn.addEventListener("click", () => {
+    theme = structuredClone(BASECOAT_DARK_THEME);
     saveTheme(theme);
     applyTheme(theme);
     updatePreview();
     rebuildControls();
-    showToast("Theme reset to Basecoat");
+    showToast("Theme reset to Basecoat Dark");
+  });
+
+  // Reset to Basecoat Light
+  const resetBasecoatLightBtn = el("button", { className: "btn btn-ghost" }, ["Reset to Basecoat Light"]);
+  resetBasecoatLightBtn.addEventListener("click", () => {
+    theme = structuredClone(BASECOAT_LIGHT_THEME);
+    saveTheme(theme);
+    applyTheme(theme);
+    updatePreview();
+    rebuildControls();
+    showToast("Theme reset to Basecoat Light");
   });
 
   row1.appendChild(applyBtn);
@@ -655,7 +667,8 @@ function buildActions(): HTMLElement {
   row1.appendChild(importBtn);
   row1.appendChild(shareBtn);
   row1.appendChild(resetAvoBtn);
-  row1.appendChild(resetBasecoatBtn);
+  row1.appendChild(resetBasecoatDarkBtn);
+  row1.appendChild(resetBasecoatLightBtn);
   section.appendChild(row1);
   section.appendChild(importInput);
   return section;

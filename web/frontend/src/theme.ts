@@ -88,8 +88,8 @@ export const AVOCADO_THEME: GlideCompTheme = {
   },
 };
 
-export const BASECOAT_THEME: GlideCompTheme = {
-  name: "Basecoat",
+export const BASECOAT_DARK_THEME: GlideCompTheme = {
+  name: "Basecoat Dark",
   author: "Basecoat UI",
   version: 1,
   colors: {
@@ -111,6 +111,41 @@ export const BASECOAT_THEME: GlideCompTheme = {
     border: "#3a3a3a",
     input: "#454545",
     ring: "#737373",
+  },
+  radius: "0.625rem",
+  buttonRadius: "8px",
+  fonts: {
+    heading: { family: "Inter", weight: 700, size: 24 },
+    body: { family: "Inter", weight: 400, size: 16 },
+    button: { family: "Inter", weight: 500, size: 14 },
+    caption: { family: "Inter", weight: 400, size: 12 },
+    nav: { family: "Inter", weight: 500, size: 14 },
+  },
+};
+
+export const BASECOAT_LIGHT_THEME: GlideCompTheme = {
+  name: "Basecoat Light",
+  author: "Basecoat UI",
+  version: 1,
+  colors: {
+    background: "#ffffff",
+    foreground: "#0a0a0a",
+    card: "#ffffff",
+    "card-foreground": "#0a0a0a",
+    popover: "#ffffff",
+    "popover-foreground": "#0a0a0a",
+    primary: "#171717",
+    "primary-foreground": "#fafafa",
+    secondary: "#f5f5f5",
+    "secondary-foreground": "#171717",
+    muted: "#f5f5f5",
+    "muted-foreground": "#737373",
+    accent: "#f5f5f5",
+    "accent-foreground": "#171717",
+    destructive: "#e7000b",
+    border: "#e5e5e5",
+    input: "#e5e5e5",
+    ring: "#a1a1a1",
   },
   radius: "0.625rem",
   buttonRadius: "8px",
