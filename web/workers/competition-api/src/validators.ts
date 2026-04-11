@@ -12,6 +12,31 @@ const pilotClassesArray = z
     message: "Duplicate pilot classes",
   });
 
+// ── Pilot status configuration ──
+//
+// Each comp has a list of statuses admins can assign to pilots per task
+// (e.g. "safely landed", "DNF"). `on_track_upload` is the knob that hooks
+// track uploads: a fresh track can leave the status alone, clear it, or
+// set it. Keys are stable ASCII slugs used in URLs and audit logs; labels
+// are the human-readable display form.
+const statusKeyRegex = /^[a-z0-9_]+$/;
+const pilotStatusEntrySchema = z
+  .object({
+    key: z.string().min(1).max(64).regex(statusKeyRegex, {
+      message: "key must be lowercase ASCII letters, digits, or underscores",
+    }),
+    label: z.string().min(1).max(MAX_TEXT),
+    on_track_upload: z.enum(["none", "clear", "set"]),
+  })
+  .strict();
+
+export const pilotStatusesArray = z
+  .array(pilotStatusEntrySchema)
+  .max(20)
+  .refine((arr) => new Set(arr.map((s) => s.key)).size === arr.length, {
+    message: "Duplicate status keys",
+  });
+
 const gapParamsSchema = z
   .object({
     nominalLaunch: z.number().min(0).max(1),
@@ -45,6 +70,18 @@ export const updateCompSchema = z.object({
   gap_params: gapParamsSchema.nullable().optional(),
   open_igc_upload: z.boolean().optional(),
   admin_emails: z.array(z.string().email().max(MAX_TEXT)).min(1).optional(),
+  pilot_statuses: pilotStatusesArray.optional(),
+});
+
+// ── Pilot status (per-task) validators ──
+
+export const upsertPilotStatusSchema = z.object({
+  status_key: z.string().min(1).max(64).regex(statusKeyRegex),
+  note: z.string().max(MAX_TEXT).nullable().optional(),
+});
+
+export const updatePilotStatusNoteSchema = z.object({
+  note: z.string().max(MAX_TEXT).nullable(),
 });
 
 // ── Pilot profile validators ──

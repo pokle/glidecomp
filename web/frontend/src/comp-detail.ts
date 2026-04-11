@@ -6,6 +6,12 @@ import type { XCTask } from "@glidecomp/engine";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
+interface PilotStatusConfig {
+  key: string;
+  label: string;
+  on_track_upload: "none" | "clear" | "set";
+}
+
 interface CompDetail {
   comp_id: string;
   name: string;
@@ -17,6 +23,7 @@ interface CompDetail {
   default_pilot_class: string;
   gap_params: unknown;
   open_igc_upload: boolean;
+  pilot_statuses: PilotStatusConfig[];
   tasks: TaskSummary[];
   admins: Array<{ email: string; name: string }>;
   pilot_count: number;
@@ -251,6 +258,20 @@ async function initTaskDetail(compId: string, taskId: string, user: AuthUser | n
     canUploadOnBehalf
   );
 
+  // Pilot status (safety roll call) — authenticated users only. Anonymous
+  // viewers don't need to see the status picker; when comp data failed
+  // to load (comp == null) we skip too because we have no status config.
+  if (comp) {
+    setupPilotStatusSection(
+      compId,
+      taskId,
+      comp.pilot_statuses ?? [],
+      user,
+      isAdmin,
+      comp.open_igc_upload
+    ).catch(() => {});
+  }
+
   // Scores section (fire and forget — non-critical)
   setupScoreSection(compId, taskId).catch(() => {});
 
@@ -466,6 +487,317 @@ function formatDuration(seconds: number): string {
   const mm = String(m).padStart(2, "0");
   const ss = String(s).padStart(2, "0");
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+// ── Pilot status (safety roll call) section ────────────────────────────────
+
+interface PilotStatusResponse {
+  statuses: Array<{
+    task_pilot_status_id: string;
+    task_id: string;
+    comp_pilot_id: string;
+    pilot_name: string;
+    status_key: string;
+    status_label: string;
+    note: string | null;
+    set_by_name: string;
+    set_at: string;
+  }>;
+}
+
+/**
+ * Render the pilot status roll-call section. Fetches:
+ *   • the comp's registered pilots (to show everyone)
+ *   • the current statuses for this task
+ * and renders one row per pilot with a single-click-to-save dropdown
+ * and an inline-editable note input.
+ *
+ * The dropdown fires an auto-save on `change` — no submit step. The note
+ * field saves on `blur` or Enter. This matches the "one interaction,
+ * done" UX the user asked for.
+ */
+async function setupPilotStatusSection(
+  compId: string,
+  taskId: string,
+  statusConfig: PilotStatusConfig[],
+  user: AuthUser | null,
+  isAdmin: boolean,
+  openIgcUpload: boolean
+): Promise<void> {
+  const section = document.getElementById("task-status-section")!;
+  const list = document.getElementById("task-status-list")!;
+  const empty = document.getElementById("task-status-empty")!;
+  const hint = document.getElementById("task-status-hint")!;
+
+  if (statusConfig.length === 0) {
+    // No statuses configured — leave the section hidden.
+    return;
+  }
+
+  // Load pilots + existing statuses in parallel
+  const [pilotsRes, statusesRes] = await Promise.all([
+    api.api.comp[":comp_id"].pilot.$get({ param: { comp_id: compId } }),
+    api.api.comp[":comp_id"].task[":task_id"]["pilot-status"].$get({
+      param: { comp_id: compId, task_id: taskId },
+    }),
+  ]);
+
+  if (!pilotsRes.ok) return;
+  const pilotsData = (await pilotsRes.json()) as {
+    pilots: Array<{
+      comp_pilot_id: string;
+      name: string;
+      linked_email: string | null;
+      pilot_class: string;
+    }>;
+  };
+  const statusesData = statusesRes.ok
+    ? ((await statusesRes.json()) as PilotStatusResponse)
+    : { statuses: [] };
+
+  // Build lookup of current status per comp_pilot_id
+  const byPilot = new Map<string, PilotStatusResponse["statuses"][number]>();
+  for (const s of statusesData.statuses) {
+    byPilot.set(s.comp_pilot_id, s);
+  }
+
+  section.classList.remove("hidden");
+
+  if (pilotsData.pilots.length === 0) {
+    empty.classList.remove("hidden");
+    return;
+  }
+  empty.classList.add("hidden");
+
+  // Sort: pilots with a status first (most interesting for safety),
+  // then alphabetical within each bucket.
+  const sorted = pilotsData.pilots.slice().sort((a, b) => {
+    const aHas = byPilot.has(a.comp_pilot_id) ? 0 : 1;
+    const bHas = byPilot.has(b.comp_pilot_id) ? 0 : 1;
+    if (aHas !== bHas) return aHas - bHas;
+    return a.name.localeCompare(b.name);
+  });
+
+  // Quick summary in the hint slot
+  const withStatus = statusesData.statuses.length;
+  hint.textContent =
+    withStatus === 0
+      ? `${pilotsData.pilots.length} pilots`
+      : `${withStatus} of ${pilotsData.pilots.length} marked`;
+
+  list.innerHTML = "";
+  for (const pilot of sorted) {
+    list.appendChild(
+      buildPilotStatusRow(
+        compId,
+        taskId,
+        pilot,
+        byPilot.get(pilot.comp_pilot_id) ?? null,
+        statusConfig,
+        user,
+        isAdmin,
+        openIgcUpload,
+        hint,
+        pilotsData.pilots.length
+      )
+    );
+  }
+}
+
+/**
+ * A single row: pilot name, status dropdown, note input. Permission logic
+ * mirrors the server's `authorizeStatusMutation`: admin / self / buddy
+ * (when open_igc_upload is on). Anyone without permission sees read-only
+ * controls.
+ */
+function buildPilotStatusRow(
+  compId: string,
+  taskId: string,
+  pilot: {
+    comp_pilot_id: string;
+    name: string;
+    linked_email: string | null;
+    pilot_class: string;
+  },
+  current: PilotStatusResponse["statuses"][number] | null,
+  statusConfig: PilotStatusConfig[],
+  user: AuthUser | null,
+  isAdmin: boolean,
+  openIgcUpload: boolean,
+  hintEl: HTMLElement,
+  totalPilots: number
+): HTMLElement {
+  const canEdit = user
+    ? isAdmin ||
+      pilot.linked_email === user.email ||
+      // Buddy marking: rough check — the frontend doesn't know if the
+      // caller is registered in this comp without an extra query. We
+      // optimistically enable the controls when open_igc_upload is on; the
+      // server re-validates and will reject with 403 if the caller isn't
+      // registered, which we surface via the save-state UI.
+      openIgcUpload
+    : false;
+
+  const row = document.createElement("div");
+  row.className =
+    "flex items-center gap-3 rounded-md border border-border/30 px-3 py-2 text-sm";
+
+  // Name + class
+  const nameWrap = document.createElement("div");
+  nameWrap.className = "flex-1 min-w-0";
+  const name = document.createElement("div");
+  name.className = "font-medium truncate";
+  name.textContent = pilot.name;
+  nameWrap.appendChild(name);
+  if (current) {
+    const meta = document.createElement("div");
+    meta.className = "text-xs text-muted-foreground";
+    meta.textContent = `set by ${current.set_by_name}`;
+    nameWrap.appendChild(meta);
+  }
+  row.appendChild(nameWrap);
+
+  // Status dropdown — single interaction, auto-saves on change.
+  const select = document.createElement("select");
+  select.className = "input text-sm w-40";
+  select.disabled = !canEdit;
+
+  const blankOpt = document.createElement("option");
+  blankOpt.value = "";
+  blankOpt.textContent = "— no status —";
+  select.appendChild(blankOpt);
+  for (const s of statusConfig) {
+    const opt = document.createElement("option");
+    opt.value = s.key;
+    opt.textContent = s.label;
+    select.appendChild(opt);
+  }
+  select.value = current?.status_key ?? "";
+
+  // Note input — editable in place; saves on blur or Enter.
+  const noteInput = document.createElement("input");
+  noteInput.type = "text";
+  noteInput.className = "input text-sm w-48";
+  noteInput.placeholder = "Add a note…";
+  noteInput.value = current?.note ?? "";
+  noteInput.maxLength = 128;
+  noteInput.disabled = !canEdit || !select.value;
+
+  const saveStatus = document.createElement("span");
+  saveStatus.className = "text-xs text-muted-foreground w-12 text-right";
+  saveStatus.textContent = "";
+
+  /**
+   * Inline save helper: issues the appropriate PUT/DELETE/PATCH, flashes
+   * "saving…" then "saved", and surfaces errors in the save slot. Keeps
+   * the whole interaction to one click without any modal.
+   */
+  async function saveStatusChange(newKey: string) {
+    saveStatus.textContent = "saving…";
+    try {
+      if (newKey === "") {
+        if (!current) {
+          saveStatus.textContent = "";
+          return;
+        }
+        const res = await api.api.comp[":comp_id"].task[":task_id"][
+          "pilot-status"
+        ][":comp_pilot_id"].$delete({
+          param: {
+            comp_id: compId,
+            task_id: taskId,
+            comp_pilot_id: pilot.comp_pilot_id,
+          },
+        });
+        if (!res.ok) throw new Error(`${res.status}`);
+        current = null;
+        noteInput.value = "";
+        noteInput.disabled = true;
+      } else {
+        const res = await api.api.comp[":comp_id"].task[":task_id"][
+          "pilot-status"
+        ][":comp_pilot_id"].$put({
+          param: {
+            comp_id: compId,
+            task_id: taskId,
+            comp_pilot_id: pilot.comp_pilot_id,
+          },
+          json: { status_key: newKey, note: noteInput.value || null },
+        });
+        if (!res.ok) throw new Error(`${res.status}`);
+        const data = (await res.json()) as PilotStatusResponse["statuses"][number];
+        current = data;
+        noteInput.disabled = false;
+      }
+      saveStatus.textContent = "saved";
+      setTimeout(() => {
+        if (saveStatus.textContent === "saved") saveStatus.textContent = "";
+      }, 1500);
+      refreshHint();
+    } catch (err) {
+      const code = (err as Error).message;
+      saveStatus.textContent = code === "403" ? "denied" : "error";
+      // Revert select to prior value
+      select.value = current?.status_key ?? "";
+    }
+  }
+
+  async function saveNoteChange() {
+    if (!current) return;
+    if ((current.note ?? "") === (noteInput.value || "")) return;
+    saveStatus.textContent = "saving…";
+    try {
+      const res = await api.api.comp[":comp_id"].task[":task_id"][
+        "pilot-status"
+      ][":comp_pilot_id"].$patch({
+        param: {
+          comp_id: compId,
+          task_id: taskId,
+          comp_pilot_id: pilot.comp_pilot_id,
+        },
+        json: { note: noteInput.value || null },
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      const data = (await res.json()) as PilotStatusResponse["statuses"][number];
+      current = data;
+      saveStatus.textContent = "saved";
+      setTimeout(() => {
+        if (saveStatus.textContent === "saved") saveStatus.textContent = "";
+      }, 1500);
+    } catch (err) {
+      const code = (err as Error).message;
+      saveStatus.textContent = code === "403" ? "denied" : "error";
+      noteInput.value = current?.note ?? "";
+    }
+  }
+
+  function refreshHint() {
+    // Re-count from the DOM — simpler than threading state.
+    const selects = Array.from(
+      document.querySelectorAll("#task-status-list select")
+    ) as unknown as HTMLSelectElement[];
+    const marked = selects.filter((s) => s.value !== "").length;
+    hintEl.textContent =
+      marked === 0 ? `${totalPilots} pilots` : `${marked} of ${totalPilots} marked`;
+  }
+
+  select.addEventListener("change", () => {
+    void saveStatusChange(select.value);
+  });
+  noteInput.addEventListener("blur", () => {
+    void saveNoteChange();
+  });
+  noteInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      noteInput.blur();
+    }
+  });
+
+  row.appendChild(select);
+  row.appendChild(noteInput);
+  row.appendChild(saveStatus);
+  return row;
 }
 
 async function setupTrackSection(
@@ -1528,6 +1860,106 @@ function setupCreateTaskDialog(compId: string, pilotClasses: string[]) {
 
 // ── Settings dialog ──────────────────────────────────────────────────────────
 
+/**
+ * Slugify a human label into a stable ASCII key for pilot_statuses.
+ * Matches the validator regex: lowercase letters/digits/underscores.
+ * Used when the admin creates a new status row — we derive the key from
+ * the label automatically so admins don't have to think about it.
+ */
+function slugifyStatusKey(label: string): string {
+  return label
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
+}
+
+/**
+ * Render the editable list of pilot statuses inside the settings dialog.
+ * Each row is a label input + on_track_upload select + remove button.
+ * The DOM is the source of truth for the form state — the submit handler
+ * reads it back via `collectStatusRows`.
+ */
+function renderStatusRows(
+  container: HTMLElement,
+  statuses: PilotStatusConfig[]
+) {
+  container.innerHTML = "";
+  for (const s of statuses) {
+    container.appendChild(buildStatusRow(s));
+  }
+}
+
+function buildStatusRow(
+  s: PilotStatusConfig = { key: "", label: "", on_track_upload: "none" }
+): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "flex items-start gap-2";
+  row.dataset.key = s.key;
+
+  const labelInput = document.createElement("input");
+  labelInput.type = "text";
+  labelInput.className = "input flex-1 text-sm";
+  labelInput.placeholder = "e.g. Safely landed";
+  labelInput.value = s.label;
+  labelInput.maxLength = 128;
+  labelInput.dataset.field = "label";
+
+  const select = document.createElement("select");
+  select.className = "input text-sm w-28";
+  select.dataset.field = "on_track_upload";
+  for (const opt of [
+    { value: "none", text: "Keep" },
+    { value: "clear", text: "Clear" },
+    { value: "set", text: "Set" },
+  ]) {
+    const option = document.createElement("option");
+    option.value = opt.value;
+    option.textContent = opt.text;
+    if (s.on_track_upload === opt.value) option.selected = true;
+    select.appendChild(option);
+  }
+
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "btn btn-ghost btn-sm text-xs text-destructive";
+  removeBtn.textContent = "Remove";
+  removeBtn.addEventListener("click", () => row.remove());
+
+  row.appendChild(labelInput);
+  row.appendChild(select);
+  row.appendChild(removeBtn);
+  return row;
+}
+
+function collectStatusRows(container: HTMLElement): PilotStatusConfig[] {
+  const out: PilotStatusConfig[] = [];
+  for (const row of Array.from(container.children)) {
+    const el = row as HTMLElement;
+    const labelInput = el.querySelector(
+      'input[data-field="label"]'
+    ) as HTMLInputElement | null;
+    const select = el.querySelector(
+      'select[data-field="on_track_upload"]'
+    ) as HTMLSelectElement | null;
+    if (!labelInput || !select) continue;
+    const label = labelInput.value.trim();
+    if (!label) continue;
+    // Preserve existing key when present (so the server sees it as an
+    // update, not a remove+add pair); otherwise derive one from the label.
+    const existingKey = el.dataset.key || "";
+    const key = existingKey || slugifyStatusKey(label);
+    if (!key) continue;
+    out.push({
+      key,
+      label,
+      on_track_upload: select.value as PilotStatusConfig["on_track_upload"],
+    });
+  }
+  return out;
+}
+
 function setupSettingsDialog(compId: string, comp: CompDetail) {
   const dialog = document.getElementById(
     "settings-dialog"
@@ -1557,6 +1989,16 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
   const submitBtn = document.getElementById(
     "settings-submit-btn"
   ) as HTMLButtonElement;
+  const statusesList = document.getElementById(
+    "settings-statuses-list"
+  ) as HTMLElement;
+  const addStatusBtn = document.getElementById(
+    "settings-add-status-btn"
+  ) as HTMLButtonElement;
+
+  addStatusBtn.addEventListener("click", () => {
+    statusesList.appendChild(buildStatusRow());
+  });
 
   // Update default class dropdown when pilot classes change
   function updateDefaultClassOptions() {
@@ -1598,6 +2040,8 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
       // Populate default class dropdown
       updateDefaultClassOptions();
       defaultClassSelect.value = comp.default_pilot_class;
+
+      renderStatusRows(statusesList, comp.pilot_statuses ?? []);
 
       dialog.showModal();
     });
@@ -1665,6 +2109,20 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
       return;
     }
 
+    const pilotStatuses = collectStatusRows(statusesList);
+    // Guard against duplicate keys — can happen if an admin types a new
+    // label that slugifies to the same key as an existing row.
+    const keySeen = new Set<string>();
+    for (const s of pilotStatuses) {
+      if (keySeen.has(s.key)) {
+        alert(`Duplicate status key "${s.key}" — rename one of the rows`);
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Save";
+        return;
+      }
+      keySeen.add(s.key);
+    }
+
     try {
       const res = await api.api.comp[":comp_id"].$patch({
         param: { comp_id: compId },
@@ -1677,6 +2135,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
           test,
           open_igc_upload: openIgcUpload,
           admin_emails: adminEmails,
+          pilot_statuses: pilotStatuses,
         },
       });
 

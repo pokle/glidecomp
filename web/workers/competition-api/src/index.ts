@@ -5,6 +5,7 @@ import { compRoutes } from "./routes/comp";
 import { taskRoutes } from "./routes/task";
 import { igcRoutes } from "./routes/igc";
 import { pilotRoutes } from "./routes/pilot";
+import { pilotStatusRoutes } from "./routes/pilot-status";
 import { scoreRoutes } from "./routes/score";
 import { auditRoutes } from "./routes/audit";
 
@@ -30,6 +31,7 @@ app.use(
 const routes = app
   .route("/", igcRoutes)
   .route("/", pilotRoutes)
+  .route("/", pilotStatusRoutes)
   .route("/", compRoutes)
   .route("/", taskRoutes)
   .route("/", scoreRoutes)

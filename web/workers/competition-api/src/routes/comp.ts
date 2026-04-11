@@ -16,12 +16,40 @@ type HonoEnv = { Bindings: Env; Variables: Variables };
 
 const MAX_COMPS_PER_ACCOUNT = 50;
 
+export interface PilotStatusConfig {
+  key: string;
+  label: string;
+  on_track_upload: "none" | "clear" | "set";
+}
+
+/** Default statuses new comps get: covers the two canonical ones. */
+export const DEFAULT_PILOT_STATUSES: PilotStatusConfig[] = [
+  { key: "safely_landed", label: "Safely landed", on_track_upload: "none" },
+  { key: "dnf", label: "DNF", on_track_upload: "clear" },
+];
+
 // Helper to encode comp row IDs for response
 function encodeComp(alphabet: string, row: Record<string, unknown>) {
   return {
     ...row,
     comp_id: encodeId(alphabet, row.comp_id as number),
   };
+}
+
+/**
+ * Parse the `comp.pilot_statuses` JSON column. Returns an empty array if
+ * the value is null/undefined or malformed — callers never need to guard
+ * against bad data coming from the DB.
+ */
+export function parsePilotStatuses(raw: unknown): PilotStatusConfig[] {
+  if (typeof raw !== "string" || raw.length === 0) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as PilotStatusConfig[];
+  } catch {
+    return [];
+  }
 }
 
 export const compRoutes = new Hono<HonoEnv>()
@@ -62,8 +90,8 @@ export const compRoutes = new Hono<HonoEnv>()
       const now = new Date().toISOString();
 
       const compResult = await c.env.DB.prepare(
-        `INSERT INTO comp (name, creation_date, close_date, category, test, pilot_classes, default_pilot_class, gap_params)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO comp (name, creation_date, close_date, category, test, pilot_classes, default_pilot_class, gap_params, pilot_statuses)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
         .bind(
           body.name,
@@ -73,7 +101,8 @@ export const compRoutes = new Hono<HonoEnv>()
           body.test ? 1 : 0,
           JSON.stringify(pilotClasses),
           defaultClass,
-          body.gap_params ? JSON.stringify(body.gap_params) : null
+          body.gap_params ? JSON.stringify(body.gap_params) : null,
+          JSON.stringify(DEFAULT_PILOT_STATUSES)
         )
         .run();
 
@@ -105,6 +134,7 @@ export const compRoutes = new Hono<HonoEnv>()
           default_pilot_class: defaultClass,
           gap_params: body.gap_params ?? null,
           open_igc_upload: true,
+          pilot_statuses: DEFAULT_PILOT_STATUSES,
         },
         201
       );
@@ -122,7 +152,7 @@ export const compRoutes = new Hono<HonoEnv>()
     const cutoffStr = cutoff.toISOString();
 
     const publicComps = await c.env.DB.prepare(
-      `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, open_igc_upload
+      `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, open_igc_upload, pilot_statuses
        FROM comp
        WHERE test = 0 AND creation_date >= ?
        ORDER BY creation_date DESC`
@@ -156,6 +186,7 @@ export const compRoutes = new Hono<HonoEnv>()
         gap_params: r.gap_params ? JSON.parse(r.gap_params as string) : null,
         test: !!(r.test as number),
         open_igc_upload: !!(r.open_igc_upload as number),
+        pilot_statuses: parsePilotStatuses(r.pilot_statuses),
       })),
       ...publicComps.results
         .filter((r) => !adminIds.has(r.comp_id as number))
@@ -166,6 +197,7 @@ export const compRoutes = new Hono<HonoEnv>()
           gap_params: r.gap_params ? JSON.parse(r.gap_params as string) : null,
           test: !!(r.test as number),
           open_igc_upload: !!(r.open_igc_upload as number),
+          pilot_statuses: parsePilotStatuses(r.pilot_statuses),
         })),
     ];
 
@@ -183,7 +215,7 @@ export const compRoutes = new Hono<HonoEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, open_igc_upload
+        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, open_igc_upload, pilot_statuses
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -267,6 +299,7 @@ export const compRoutes = new Hono<HonoEnv>()
           ? JSON.parse(comp.gap_params as string)
           : null,
         open_igc_upload: !!(comp.open_igc_upload as number),
+        pilot_statuses: parsePilotStatuses(comp.pilot_statuses),
         admins: admins.results,
         tasks: tasks.results.map((t) => ({
           task_id: encodeId(alphabet, t.task_id as number),
@@ -296,7 +329,7 @@ export const compRoutes = new Hono<HonoEnv>()
 
       // Fetch current state so we can compute audit diffs and validate consistency
       const current = await c.env.DB.prepare(
-        `SELECT name, category, close_date, test, pilot_classes, default_pilot_class, gap_params, open_igc_upload
+        `SELECT name, category, close_date, test, pilot_classes, default_pilot_class, gap_params, open_igc_upload, pilot_statuses
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -309,6 +342,7 @@ export const compRoutes = new Hono<HonoEnv>()
           default_pilot_class: string;
           gap_params: string | null;
           open_igc_upload: number;
+          pilot_statuses: string;
         }>();
       if (!current) return c.json({ error: "Competition not found" }, 404);
 
@@ -365,6 +399,10 @@ export const compRoutes = new Hono<HonoEnv>()
       if (body.open_igc_upload !== undefined) {
         updates.push("open_igc_upload = ?");
         values.push(body.open_igc_upload ? 1 : 0);
+      }
+      if (body.pilot_statuses !== undefined) {
+        updates.push("pilot_statuses = ?");
+        values.push(JSON.stringify(body.pilot_statuses));
       }
 
       if (updates.length > 0) {
@@ -430,6 +468,34 @@ export const compRoutes = new Hono<HonoEnv>()
             : "Disabled open IGC upload (admins only)"
         );
       }
+      if (body.pilot_statuses !== undefined) {
+        const oldStatuses = parsePilotStatuses(current.pilot_statuses);
+        const newStatuses = body.pilot_statuses;
+        const oldByKey = new Map(oldStatuses.map((s) => [s.key, s] as const));
+        const newByKey = new Map(newStatuses.map((s) => [s.key, s] as const));
+        for (const [key, s] of newByKey) {
+          const prev = oldByKey.get(key);
+          if (!prev) {
+            auditChanges.push(
+              `Added pilot status "${s.label}" (key=${key}, on track upload: ${s.on_track_upload})`
+            );
+          } else if (
+            prev.label !== s.label ||
+            prev.on_track_upload !== s.on_track_upload
+          ) {
+            auditChanges.push(
+              `Updated pilot status "${s.label}" (key=${key}, on track upload: ${s.on_track_upload})`
+            );
+          }
+        }
+        for (const [key, s] of oldByKey) {
+          if (!newByKey.has(key)) {
+            auditChanges.push(
+              `Removed pilot status "${s.label}" (key=${key})`
+            );
+          }
+        }
+      }
 
       for (const description of auditChanges) {
         await audit(c.env.DB, c.var.user, compId, {
@@ -453,7 +519,7 @@ export const compRoutes = new Hono<HonoEnv>()
 
       // Return updated comp
       const updated = await c.env.DB.prepare(
-        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, open_igc_upload
+        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, open_igc_upload, pilot_statuses
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -478,6 +544,7 @@ export const compRoutes = new Hono<HonoEnv>()
           ? JSON.parse(updated.gap_params as string)
           : null,
         open_igc_upload: !!(updated.open_igc_upload as number),
+        pilot_statuses: parsePilotStatuses(updated.pilot_statuses),
         admins: admins.results,
       });
     }

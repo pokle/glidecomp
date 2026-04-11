@@ -194,6 +194,21 @@
           </div>
         </section>
 
+        <!-- Pilot status (roll call) section -->
+        <section id="task-status-section" class="mb-8 hidden">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider">Pilot Status</h2>
+            <span id="task-status-hint" class="text-xs text-muted-foreground"></span>
+          </div>
+          <p class="text-xs text-muted-foreground mb-2">
+            Change a status to save instantly. Safety roll call — especially useful before tracks are uploaded.
+          </p>
+          <div id="task-status-list" class="space-y-1"></div>
+          <div id="task-status-empty" class="hidden text-center py-6 border border-dashed border-border/50 rounded-lg">
+            <p class="text-sm text-muted-foreground">No pilots registered yet</p>
+          </div>
+        </section>
+
         <!-- Scores section -->
         <section id="task-scores-section" class="mb-8">
           <div class="flex items-center justify-between mb-3">
@@ -329,6 +344,15 @@
           <label for="settings-admins" class="text-sm font-medium block mb-1">Admin Emails</label>
           <input id="settings-admins" type="text" class="input w-full" placeholder="admin1@example.com, admin2@example.com">
           <p class="text-xs text-muted-foreground mt-1">Comma-separated. At least one required.</p>
+        </div>
+        <div>
+          <label class="text-sm font-medium block mb-1">Pilot Statuses</label>
+          <p class="text-xs text-muted-foreground mb-2">
+            Statuses pilots can be marked with per task (e.g. "safely landed", "DNF").
+            The "on track upload" knob decides whether uploading a track clears the status (useful for DNF) or leaves it alone (useful for "safely landed", which is implied by a track).
+          </p>
+          <div id="settings-statuses-list" class="space-y-2"></div>
+          <button type="button" id="settings-add-status-btn" class="btn btn-ghost btn-sm text-xs mt-2">+ Add status</button>
         </div>
       </div>
       <div class="flex items-center justify-between mt-6">
