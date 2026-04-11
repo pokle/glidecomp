@@ -15,7 +15,7 @@ import {
   decodeThemeFromHash,
   preloadFont,
 } from "./theme";
-import { getAllFonts, LOCAL_FONTS, type GoogleFontEntry } from "./google-fonts";
+import { getAllFonts, LOCAL_FONTS } from "./google-fonts";
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -26,8 +26,8 @@ let theme: GlideCompTheme = structuredClone(
 // Which color swatch is "active" for the image eyedropper
 let activeColorKey: ThemeColorKey = "primary";
 
-// All available fonts (loaded async from Google Fonts metadata)
-let allFonts: GoogleFontEntry[] = [...LOCAL_FONTS];
+// All available fonts (local + full Google Fonts directory)
+const allFonts: string[] = getAllFonts();
 
 // ── Color Groups (friendly labels) ──────────────────────────────────────────
 
@@ -165,29 +165,31 @@ function buildFontPicker(role: ThemeFontRole, onChange: () => void): HTMLElement
     className: "absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto z-30 hidden",
   });
 
+  const localSet = new Set<string>(LOCAL_FONTS);
+
   function renderOptions(filter: string): void {
     dropdown.innerHTML = "";
     const q = filter.toLowerCase();
-    const matches = allFonts.filter(f => f.family.toLowerCase().includes(q)).slice(0, 30);
+    const matches = allFonts.filter(f => f.toLowerCase().includes(q)).slice(0, 30);
 
-    for (const font of matches) {
-      const isLocal = LOCAL_FONTS.some(l => l.family === font.family);
+    for (const family of matches) {
+      const isLocal = localSet.has(family);
       const opt = el("div", {
         className: "px-3 py-2 cursor-pointer hover:bg-accent text-sm flex items-center justify-between",
       });
-      const nameSpan = el("span", {}, [font.family]);
-      nameSpan.style.fontFamily = `'${font.family}', sans-serif`;
+      const nameSpan = el("span", {}, [family]);
+      nameSpan.style.fontFamily = `'${family}', sans-serif`;
       opt.appendChild(nameSpan);
       if (isLocal) {
         opt.appendChild(el("span", { className: "text-[10px] text-muted-foreground ml-2" }, ["local"]));
       }
 
-      opt.addEventListener("mouseenter", () => preloadFont(font.family));
+      opt.addEventListener("mouseenter", () => preloadFont(family));
       opt.addEventListener("click", () => {
-        theme.fonts[role].family = font.family;
-        input.value = font.family;
+        theme.fonts[role].family = family;
+        input.value = family;
         dropdown.classList.add("hidden");
-        preloadFont(font.family);
+        preloadFont(family);
         onChange();
         updatePreview();
       });
@@ -737,9 +739,6 @@ function injectEditorStyles(): void {
 async function init(): Promise<void> {
   await initNav();
   injectEditorStyles();
-
-  // Load the full Google Fonts directory, then build the UI
-  allFonts = await getAllFonts();
   rebuildControls();
 }
 
