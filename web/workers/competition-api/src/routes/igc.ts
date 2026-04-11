@@ -8,6 +8,7 @@ import { updatePenaltySchema } from "../validators";
 import { parseIGC } from "@glidecomp/engine";
 import { audit } from "../audit";
 import { linkExistingRegistrations } from "../pilot-linker";
+import { applyStatusOnTrackUpload } from "./pilot-status";
 
 type Variables = {
   user: AuthUser;
@@ -119,13 +120,14 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       // Verify comp exists and check close_date
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, close_date, default_pilot_class FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, close_date, default_pilot_class, pilot_statuses FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
         .first<{
           comp_id: number;
           close_date: string | null;
           default_pilot_class: string;
+          pilot_statuses: string;
         }>();
 
       if (!comp) {
@@ -274,6 +276,16 @@ export const igcRoutes = new Hono<HonoEnv>()
           description: `Replaced IGC for ${user.name} (${formatBytes(body.byteLength)})`,
         });
 
+        await applyStatusOnTrackUpload(
+          c.env.DB,
+          user,
+          compId,
+          taskId,
+          compPilotId,
+          user.name,
+          comp.pilot_statuses
+        );
+
         return c.json({
           task_track_id: encodeId(alphabet, existingTrack.task_track_id),
           comp_pilot_id: encodeId(alphabet, compPilotId),
@@ -310,6 +322,16 @@ export const igcRoutes = new Hono<HonoEnv>()
         description: `Uploaded IGC for ${user.name} (${formatBytes(body.byteLength)})`,
       });
 
+      await applyStatusOnTrackUpload(
+        c.env.DB,
+        user,
+        compId,
+        taskId,
+        compPilotId,
+        user.name,
+        comp.pilot_statuses
+      );
+
       return c.json(
         {
           task_track_id: encodeId(alphabet, newTrackId),
@@ -340,13 +362,14 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       // Look up the comp once — need open_igc_upload to gate authorisation
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, close_date, open_igc_upload FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, close_date, open_igc_upload, pilot_statuses FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
         .first<{
           comp_id: number;
           close_date: string | null;
           open_igc_upload: number;
+          pilot_statuses: string;
         }>();
       if (!comp) return c.json({ error: "Competition not found" }, 404);
 
@@ -507,6 +530,16 @@ export const igcRoutes = new Hono<HonoEnv>()
           description: `Replaced IGC for ${targetPilotName} on behalf (${formatBytes(body.byteLength)})`,
         });
 
+        await applyStatusOnTrackUpload(
+          c.env.DB,
+          user,
+          compId,
+          taskId,
+          compPilotId,
+          targetPilotName,
+          comp.pilot_statuses
+        );
+
         return c.json({
           task_track_id: encodeId(alphabet, existingTrack.task_track_id),
           comp_pilot_id: encodeId(alphabet, compPilotId),
@@ -541,6 +574,16 @@ export const igcRoutes = new Hono<HonoEnv>()
         subject_name: targetPilotName,
         description: `Uploaded IGC for ${targetPilotName} on behalf (${formatBytes(body.byteLength)})`,
       });
+
+      await applyStatusOnTrackUpload(
+        c.env.DB,
+        user,
+        compId,
+        taskId,
+        compPilotId,
+        targetPilotName,
+        comp.pilot_statuses
+      );
 
       return c.json(
         {
