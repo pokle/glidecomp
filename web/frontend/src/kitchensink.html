@@ -1,0 +1,38 @@
+<!-- Copyright (c) 2026, Tushar Pokle.  All rights reserved. -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GlideComp - Kitchen Sink</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body class="min-h-screen bg-background text-foreground">
+  <div class="min-h-screen flex flex-col">
+    <div id="app-nav"></div>
+
+    <main class="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-12">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight mb-1">Kitchen Sink</h1>
+        <p class="text-sm text-muted-foreground">All GlideComp Basecoat UI components in one place, for visual testing.</p>
+      </div>
+
+      <div id="kitchensink-root"></div>
+    </main>
+
+    <div id="app-footer"></div>
+  </div>
+
+  <script type="module" src="/kitchensink.ts"></script>
+</body>
+
+</html>

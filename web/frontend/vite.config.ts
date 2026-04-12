@@ -92,6 +92,8 @@ export default defineConfig({
             req.url = '/profile.html';
           } else if (req.url === '/theme-editor' || req.url === '/theme-editor/') {
             req.url = '/theme-editor.html';
+          } else if (req.url === '/kitchensink' || req.url === '/kitchensink/') {
+            req.url = '/kitchensink.html';
           }
           next();
         });
@@ -115,6 +117,7 @@ export default defineConfig({
         scores: resolve(__dirname, 'src/scores.html'),
         profile: resolve(__dirname, 'src/profile.html'),
         'theme-editor': resolve(__dirname, 'src/theme-editor.html'),
+        kitchensink: resolve(__dirname, 'src/kitchensink.html'),
       },
     },
   },
