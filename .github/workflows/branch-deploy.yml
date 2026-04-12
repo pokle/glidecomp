@@ -29,6 +29,43 @@ jobs:
       - name: Run tests
         run: bun run test:all
 
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: bunx playwright install --with-deps chromium
+
+      - name: Create auth .dev.vars
+        run: |
+          cat > web/workers/auth-api/.dev.vars << 'EOF'
+          GOOGLE_CLIENT_ID=dummy-for-ci
+          GOOGLE_CLIENT_SECRET=dummy-for-ci
+          BETTER_AUTH_SECRET=ci-test-secret
+          BETTER_AUTH_URL=http://localhost:3000
+          EOF
+
+      - name: Run E2E tests
+        run: bun run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
   deploy:
     name: Deploy Preview
     runs-on: ubuntu-latest
@@ -96,3 +133,37 @@ jobs:
 
             gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body "$COMMENT_BODY"
           fi
+
+      - name: Smoke test — verify correct version is deployed
+        run: |
+          DEPLOY_URL="${{ steps.deploy.outputs.deployment-url }}"
+          EXPECTED_SHA="${{ github.sha }}"
+          echo "Checking ${DEPLOY_URL} for commit ${EXPECTED_SHA}"
+
+          # Fetch the deployed page and extract the git SHA from data-git-sha attribute
+          DEPLOYED_SHA=$(curl -s "${DEPLOY_URL}/comp" | grep -oP 'data-git-sha="\K[a-f0-9]+' | head -1)
+          echo "Deployed SHA: ${DEPLOYED_SHA:-<not found>}"
+
+          if [ -z "$DEPLOYED_SHA" ]; then
+            echo "::warning::Could not extract git SHA from deployed page"
+          elif [ "$DEPLOYED_SHA" != "$EXPECTED_SHA" ]; then
+            echo "::error::Deployed SHA ${DEPLOYED_SHA} does not match expected ${EXPECTED_SHA}"
+            exit 1
+          else
+            echo "Good — deployed version matches commit"
+          fi
+
+      - name: Smoke test — verify dev-login is NOT accessible
+        run: |
+          DEPLOY_URL="${{ steps.deploy.outputs.deployment-url }}"
+          echo "Testing against: ${DEPLOY_URL}"
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
+            -X POST "${DEPLOY_URL}/api/auth/dev-login" \
+            -H 'Content-Type: application/json' \
+            -d '{"name":"smoke","email":"smoke@test.local"}')
+          echo "POST /api/auth/dev-login returned HTTP $STATUS"
+          if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
+            echo "::error::CRITICAL: dev-login endpoint is accessible at ${DEPLOY_URL}!"
+            exit 1
+          fi
+          echo "Good — dev-login is blocked"

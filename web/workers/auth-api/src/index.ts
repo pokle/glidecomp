@@ -2,7 +2,7 @@
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createAuth, type AuthEnv } from "./auth";
+import { createAuth, isLocalDev, type AuthEnv } from "./auth";
 
 const app = new Hono<{ Bindings: AuthEnv }>();
 
@@ -116,6 +116,41 @@ app.post("/api/auth/delete-account", async (c) => {
     .run();
 
   return c.json({ success: true });
+});
+
+// POST /api/auth/dev-login — dev/test-only: create session without OAuth
+app.post("/api/auth/dev-login", async (c) => {
+  if (!isLocalDev(c.env)) {
+    return c.notFound();
+  }
+
+  let name: string, email: string;
+  try {
+    ({ name, email } = await c.req.json<{ name: string; email: string }>());
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+  if (!name || !email) {
+    return c.json({ error: "name and email are required" }, 400);
+  }
+
+  const auth = createAuth(c.env);
+  const password = "dev";
+
+  // Sign up (ignore error if user already exists)
+  try {
+    await auth.api.signUpEmail({
+      body: { email, password, name },
+    });
+  } catch {
+    // User already exists — that's fine
+  }
+
+  // Sign in via Better Auth to get a properly signed session cookie
+  return auth.api.signInEmail({
+    body: { email, password },
+    asResponse: true,
+  });
 });
 
 // Better Auth catch-all handler

@@ -36,6 +36,7 @@
     "test": "bun test --cwd . ./web/engine ./web/workers/airscore-api && bun run typecheck:all",
     "test:comp": "bun run --filter competition-api test",
     "test:all": "bun run test && bun run test:comp",
+    "test:e2e": "bunx playwright test",
     "detect-events": "bun web/engine/cli/detect-events.ts",
     "get-xcontest-task": "bun web/engine/cli/get-xcontest-task.ts",
     "score-task": "bun web/engine/cli/score-task.ts"
@@ -48,6 +49,7 @@
   ],
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260404.1",
+    "@playwright/test": "^1.59.1",
     "@types/bun": "^1.3.11",
     "@types/node": "^25.5.2",
     "typescript": "^6.0.2",

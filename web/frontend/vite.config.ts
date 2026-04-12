@@ -1,6 +1,7 @@
 import { defineConfig, searchForWorkspaceRoot, type Plugin, type Connect } from 'vite';
 import { resolve } from 'path';
 import { readFileSync, existsSync, cpSync } from 'fs';
+import { execSync } from 'child_process';
 import tailwindcss from '@tailwindcss/vite';
 
 function airscoreWorkerCheck(): Plugin {
@@ -66,10 +67,18 @@ function copySampleComps(): Plugin {
   };
 }
 
+const GIT_SHA = (() => {
+  try { return execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim(); }
+  catch { return 'unknown'; }
+})();
+
 export default defineConfig({
   root: 'src',
   envDir: resolve(__dirname, '../..'),
   publicDir: '../public',
+  define: {
+    __GIT_SHA__: JSON.stringify(GIT_SHA),
+  },
   plugins: [
     tailwindcss(),
     airscoreWorkerCheck(),

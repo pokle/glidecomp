@@ -1,0 +1,4 @@
+GOOGLE_CLIENT_ID=dummy-for-dev
+GOOGLE_CLIENT_SECRET=dummy-for-dev
+BETTER_AUTH_SECRET=dev-secret-not-for-production
+BETTER_AUTH_URL=http://localhost:3000
