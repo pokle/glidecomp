@@ -147,3 +147,16 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy --branch=${{ github.ref_name }}
+
+      - name: Smoke test — verify dev-login is NOT accessible in production
+        run: |
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
+            -X POST https://glidecomp.com/api/auth/dev-login \
+            -H 'Content-Type: application/json' \
+            -d '{"name":"smoke","email":"smoke@test.local"}')
+          echo "POST /api/auth/dev-login returned HTTP $STATUS"
+          if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
+            echo "::error::CRITICAL: dev-login endpoint is accessible in production!"
+            exit 1
+          fi
+          echo "Good — dev-login is blocked in production"
