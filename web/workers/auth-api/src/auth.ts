@@ -30,6 +30,10 @@ export function createAuth(env: AuthEnv) {
             productionURL: "https://glidecomp.com",
           }),
         ],
+    // Enable email/password auth in dev only (for dev-login endpoint)
+    ...(env.BETTER_AUTH_URL.includes("localhost")
+      ? { emailAndPassword: { enabled: true, minPasswordLength: 1 } }
+      : {}),
     socialProviders: {
       google: {
         clientId: env.GOOGLE_CLIENT_ID,
