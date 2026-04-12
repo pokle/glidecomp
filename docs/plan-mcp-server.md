@@ -302,8 +302,8 @@ export function registerCompetitionTools(server: McpServer) {
 
 ## 8. Key Design Decisions
 
-### Binary file handling (IGC upload)
-MCP tools pass JSON. For IGC upload, the agent sends the file content as a **base64-encoded string**. The MCP worker decodes it, gzip-compresses it, and forwards to the competition-api as the existing endpoint expects.
+### IGC file handling
+IGC files are plain ASCII text, so the `upload_igc` tool accepts the content as a **plain text string parameter** — no base64 encoding needed. The MCP worker gzip-compresses the text before forwarding to the competition-api (which expects a gzip body).
 
 ### ID encoding
 The existing API uses sqid-encoded IDs (e.g. `"abc123"` instead of raw integer `42`). MCP tools accept and return the same encoded string IDs — no translation needed.
