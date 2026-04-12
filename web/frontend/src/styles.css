@@ -210,19 +210,19 @@
   }
 
   .file-card-track {
-    @apply border-l-blue-500/60;
+    border-left-color: color-mix(in srgb, var(--primary) 60%, transparent);
   }
 
   .file-card-track:hover {
-    @apply border-l-blue-500;
+    border-left-color: var(--primary);
   }
 
   .file-card-task {
-    @apply border-l-amber-500/60;
+    border-left-color: color-mix(in srgb, var(--ring) 60%, transparent);
   }
 
   .file-card-task:hover {
-    @apply border-l-amber-500;
+    border-left-color: var(--ring);
   }
 
   /* Delete button on cards */
