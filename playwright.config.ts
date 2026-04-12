@@ -4,6 +4,9 @@ export default defineConfig({
   testDir: "./e2e",
   timeout: 60_000,
   retries: process.env.CI ? 1 : 0,
+  reporter: process.env.CI
+    ? [["html", { open: "never" }], ["list"]]
+    : [["list"]],
   use: {
     baseURL: "http://localhost:3000",
     headless: true,
