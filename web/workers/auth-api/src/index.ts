@@ -2,7 +2,7 @@
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createAuth, type AuthEnv } from "./auth";
+import { createAuth, isLocalDev, type AuthEnv } from "./auth";
 
 const app = new Hono<{ Bindings: AuthEnv }>();
 
@@ -120,7 +120,7 @@ app.post("/api/auth/delete-account", async (c) => {
 
 // POST /api/auth/dev-login — dev/test-only: create session without OAuth
 app.post("/api/auth/dev-login", async (c) => {
-  if (!c.env.BETTER_AUTH_URL.includes("localhost")) {
+  if (!isLocalDev(c.env)) {
     return c.notFound();
   }
 
