@@ -1,7 +1,7 @@
 import "./theme";
 import { initNav } from "./nav";
 
-initNav();
+initNav({ active: "flights" });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -51,7 +51,7 @@ function buildButtons(): HTMLElement {
   const variants: [string, string][] = [
     ["btn btn-primary",     "Primary"],
     ["btn btn-secondary",   "Secondary"],
-    ["btn btn-outline",     "Outline"],
+    ["btn-outline",         "Outline"],
     ["btn btn-ghost",       "Ghost"],
     ["btn btn-destructive", "Destructive"],
   ];
@@ -62,12 +62,19 @@ function buildButtons(): HTMLElement {
     ["btn-sm-ghost",       "Ghost"],
     ["btn-sm-destructive", "Destructive"],
   ];
+  const lgVariants: [string, string][] = [
+    ["btn-lg-primary",     "Primary"],
+    ["btn-lg-secondary",   "Secondary"],
+    ["btn-lg-outline",     "Outline"],
+    ["btn-lg-ghost",       "Ghost"],
+    ["btn-lg-destructive", "Destructive"],
+  ];
 
   return section(
     "Buttons",
     labelledRow("Default", ...variants.map(([cls, lbl]) => btn(cls, lbl))),
     labelledRow("Small (btn-sm-*)", ...smVariants.map(([cls, lbl]) => btn(cls, lbl))),
-    labelledRow("Large", ...variants.map(([cls, lbl]) => btn(cls + " btn-lg", lbl))),
+    labelledRow("Large (btn-lg-*)", ...lgVariants.map(([cls, lbl]) => btn(cls, lbl))),
     labelledRow("Disabled", ...variants.map(([cls, lbl]) => {
       const b = btn(cls, lbl);
       b.disabled = true;
@@ -373,6 +380,32 @@ function buildTypography(): HTMLElement {
   return section("Typography", block);
 }
 
+// ── File Cards ────────────────────────────────────────────────────────────────
+
+function buildFileCards(): HTMLElement {
+  function fileCard(type: "track" | "task", name: string, meta: string, time: string): HTMLElement {
+    const a = document.createElement("a");
+    a.href = "#";
+    a.className = `file-card file-card-${type}`;
+    a.innerHTML = `
+      <div class="flex-1 min-w-0">
+        <div class="font-medium text-sm text-foreground truncate">${name}</div>
+        <div class="text-xs text-muted-foreground truncate">${meta}</div>
+      </div>
+      <span class="text-xs text-muted-foreground/60 shrink-0">${time}</span>`;
+    return a;
+  }
+
+  const list = document.createElement("div");
+  list.className = "space-y-1";
+  list.appendChild(fileCard("track", "Alice Smith — 2026-04-05", "alice_050426.igc", "2h ago"));
+  list.appendChild(fileCard("track", "Bob Jones — 2026-04-05", "bob_050426.igc", "3h ago"));
+  list.appendChild(fileCard("task", "Task 1 — Race to Goal", "task1.xctsk", "1d ago"));
+  list.appendChild(fileCard("task", "Task 2 — Elapsed Time", "task2.xctsk", "2d ago"));
+
+  return section("File Cards (track = primary border, task = ring border)", list);
+}
+
 // ── Render ────────────────────────────────────────────────────────────────────
 
 const root = document.getElementById("kitchensink-root")!;
@@ -388,6 +421,7 @@ for (const s of [
   buildTabs(),
   buildTable(),
   buildDialogTrigger(),
+  buildFileCards(),
   buildTypography(),
 ]) {
   root.appendChild(s);
