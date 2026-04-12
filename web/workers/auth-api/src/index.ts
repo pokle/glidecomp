@@ -124,7 +124,12 @@ app.post("/api/auth/dev-login", async (c) => {
     return c.notFound();
   }
 
-  const { name, email } = await c.req.json<{ name: string; email: string }>();
+  let name: string, email: string;
+  try {
+    ({ name, email } = await c.req.json<{ name: string; email: string }>());
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
   if (!name || !email) {
     return c.json({ error: "name and email are required" }, 400);
   }
