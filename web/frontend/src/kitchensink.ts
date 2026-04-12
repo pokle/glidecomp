@@ -51,7 +51,7 @@ function buildButtons(): HTMLElement {
   const variants: [string, string][] = [
     ["btn btn-primary",     "Primary"],
     ["btn btn-secondary",   "Secondary"],
-    ["btn btn-outline",     "Outline"],
+    ["btn-outline",         "Outline"],
     ["btn btn-ghost",       "Ghost"],
     ["btn btn-destructive", "Destructive"],
   ];
@@ -62,12 +62,19 @@ function buildButtons(): HTMLElement {
     ["btn-sm-ghost",       "Ghost"],
     ["btn-sm-destructive", "Destructive"],
   ];
+  const lgVariants: [string, string][] = [
+    ["btn-lg-primary",     "Primary"],
+    ["btn-lg-secondary",   "Secondary"],
+    ["btn-lg-outline",     "Outline"],
+    ["btn-lg-ghost",       "Ghost"],
+    ["btn-lg-destructive", "Destructive"],
+  ];
 
   return section(
     "Buttons",
     labelledRow("Default", ...variants.map(([cls, lbl]) => btn(cls, lbl))),
     labelledRow("Small (btn-sm-*)", ...smVariants.map(([cls, lbl]) => btn(cls, lbl))),
-    labelledRow("Large", ...variants.map(([cls, lbl]) => btn(cls + " btn-lg", lbl))),
+    labelledRow("Large (btn-lg-*)", ...lgVariants.map(([cls, lbl]) => btn(cls, lbl))),
     labelledRow("Disabled", ...variants.map(([cls, lbl]) => {
       const b = btn(cls, lbl);
       b.disabled = true;
