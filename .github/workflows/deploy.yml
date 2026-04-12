@@ -149,6 +149,25 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy --branch=${{ github.ref_name }}
 
+      - name: Smoke test — verify correct version is deployed
+        run: |
+          DEPLOY_URL="${{ steps.pages-deploy.outputs.deployment-url }}"
+          EXPECTED_SHA="${{ github.sha }}"
+          echo "Checking ${DEPLOY_URL} for commit ${EXPECTED_SHA}"
+
+          # Fetch the deployed page and extract the git SHA from data-git-sha attribute
+          DEPLOYED_SHA=$(curl -s "${DEPLOY_URL}/comp" | grep -oP 'data-git-sha="\K[a-f0-9]+' | head -1)
+          echo "Deployed SHA: ${DEPLOYED_SHA:-<not found>}"
+
+          if [ -z "$DEPLOYED_SHA" ]; then
+            echo "::warning::Could not extract git SHA from deployed page"
+          elif [ "$DEPLOYED_SHA" != "$EXPECTED_SHA" ]; then
+            echo "::error::Deployed SHA ${DEPLOYED_SHA} does not match expected ${EXPECTED_SHA}"
+            exit 1
+          else
+            echo "Good — deployed version matches commit"
+          fi
+
       - name: Smoke test — verify dev-login is NOT accessible
         run: |
           DEPLOY_URL="${{ steps.pages-deploy.outputs.deployment-url }}"
