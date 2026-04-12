@@ -309,11 +309,9 @@ function autoApply(): void {
     return;
   }
 
-  // Otherwise apply saved theme from localStorage
+  // Apply saved theme, or fall back to Basecoat Light
   const saved = loadSavedTheme();
-  if (saved) {
-    applyTheme(saved);
-  }
+  applyTheme(saved ?? BASECOAT_LIGHT_THEME);
 }
 
 autoApply();

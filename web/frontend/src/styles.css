@@ -24,56 +24,54 @@
 /* Leaflet CSS */
 @import "leaflet/dist/leaflet.css";
 
-/* ── Avacado theme ──────────────────────────────────────────────────────────
-   Dark-first. No light mode — the teal-dark cocoon is the only mode.
+/* ── Basecoat Light theme (default) ─────────────────────────────────────────
    Declared outside @layer so these unlayered rules beat Basecoat's unlayered
    :root defaults (unlayered wins over @layer base; later source order wins
    between two unlayered :root blocks).
    ─────────────────────────────────────────────────────────────────────── */
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  --background: #152951;       /* Deep navy — page background               */
-  --foreground: #F4EAE4;       /* Warm off-white — body text                */
-  --card: #1c3464;             /* Slightly lighter navy — cards             */
-  --card-foreground: #F4EAE4;
-  --popover: #1c3464;          /* Mid-navy — dropdowns, tooltips            */
-  --popover-foreground: #F4EAE4;
-  --primary: #BCC817;          /* Olive — CTAs, active states, hero text    */
-  --primary-foreground: #152951;
-  --secondary: #1c3464;        /* Interactive surface — secondary buttons   */
-  --secondary-foreground: #F4EAE4;
-  --muted: #1c3464;            /* Muted background                          */
-  --muted-foreground: #a89f9a; /* Dimmed warm — muted text, inactive nav   */
-  --accent: #243d73;           /* Hover/focus surface                       */
-  --accent-foreground: #F4EAE4;
-  --destructive: #f3727f;      /* Negative red                              */
-  --border: #2d4a7a;           /* Navy border                               */
-  --input: #1c3464;            /* Input background                          */
-  --ring: #BCC817;             /* Focus ring = olive                        */
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
+  --primary: #171717;
+  --primary-foreground: #fafafa;
+  --secondary: #f5f5f5;
+  --secondary-foreground: #171717;
+  --muted: #f5f5f5;
+  --muted-foreground: #737373;
+  --accent: #f5f5f5;
+  --accent-foreground: #171717;
+  --destructive: #e7000b;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
+  --ring: #a1a1a1;
 
-  /* 8px base radius for containers; buttons get full pill below */
-  --radius: 0.5rem;
-  --button-radius: 9999px;
+  --radius: 0.625rem;
+  --button-radius: 8px;
 
   /* ── Per-role font variables (overridden by theme editor) ── */
-  --font-heading: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-heading: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-heading-size: 24px;
   --font-heading-weight: 700;
-  --font-body: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-body-size: 16px;
   --font-body-weight: 400;
-  --font-button: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-button: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-button-size: 14px;
-  --font-button-weight: 700;
-  --font-button-letter-spacing: 0.014em;
+  --font-button-weight: 500;
+  --font-button-letter-spacing: 0em;
   --font-button-transform: none;
-  --font-caption: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-caption: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-caption-size: 12px;
   --font-caption-weight: 400;
-  --font-nav: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-nav: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-nav-size: 14px;
-  --font-nav-weight: 600;
+  --font-nav-weight: 500;
 }
 
 @layer base {
@@ -210,19 +208,19 @@
   }
 
   .file-card-track {
-    @apply border-l-blue-500/60;
+    border-left-color: color-mix(in srgb, var(--primary) 60%, transparent);
   }
 
   .file-card-track:hover {
-    @apply border-l-blue-500;
+    border-left-color: var(--primary);
   }
 
   .file-card-task {
-    @apply border-l-amber-500/60;
+    border-left-color: color-mix(in srgb, var(--ring) 60%, transparent);
   }
 
   .file-card-task:hover {
-    @apply border-l-amber-500;
+    border-left-color: var(--ring);
   }
 
   /* Delete button on cards */
@@ -674,7 +672,7 @@
    Scoped to .bg-hills — Safari's background-attachment:fixed on body breaks
    pointer events for position:absolute children (e.g. map controls). */
 .bg-hills {
-    background-color: #152951;
+    background-color: var(--background);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900'%3E%3Cpolygon fill='%23C8D51A' points='957 765 539 900 1396 900'/%3E%3Cpolygon fill='%23A0AE11' points='957 765 872.9 900 1396 900'/%3E%3Cpolygon fill='%23BCCA17' points='-60 900 398 829 816 900'/%3E%3Cpolygon fill='%2396A00E' points='337 900 398 829 816 900'/%3E%3Cpolygon fill='%23C2CF18' points='1203 794 1552 900 876 900'/%3E%3Cpolygon fill='%238C980E' points='1203 794 1552 900 1162 900'/%3E%3Cpolygon fill='%23B4C215' points='641 839 886 900 367 900'/%3E%3Cpolygon fill='%2394A00F' points='587 900 641 839 886 900'/%3E%3Cpolygon fill='%23BAC616' points='1710 900 1401 820 1096 900'/%3E%3Cpolygon fill='%237E8A0A' points='1710 900 1401 820 1365 900'/%3E%3Cpolygon fill='%23C6D319' points='1210 900 971 836 725 900'/%3E%3Cpolygon fill='%23849010' points='943 900 1210 900 971 836'/%3E%3C/svg%3E");
     background-attachment: fixed;
     background-size: cover;

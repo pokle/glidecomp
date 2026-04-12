@@ -10,7 +10,7 @@ function navAttrs(isActive: boolean, extraClasses: string = ""): string {
     isActive ? "btn btn-secondary btn-sm text-xs font-bold" : "btn btn-ghost btn-sm text-xs font-bold",
     extraClasses,
   ].filter(Boolean).join(" ");
-  const style = isActive ? ' style="outline: 3px solid #BCC817; outline-offset: 3px;"' : "";
+  const style = isActive ? ' style="outline: 3px solid var(--ring); outline-offset: 3px;"' : "";
   return `class="${cls}"${style}`;
 }
 
