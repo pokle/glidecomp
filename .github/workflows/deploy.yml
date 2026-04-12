@@ -142,21 +142,24 @@ jobs:
           command: deploy
 
       - name: Deploy to Cloudflare Pages
+        id: pages-deploy
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy --branch=${{ github.ref_name }}
 
-      - name: Smoke test — verify dev-login is NOT accessible in production
+      - name: Smoke test — verify dev-login is NOT accessible
         run: |
+          DEPLOY_URL="${{ steps.pages-deploy.outputs.deployment-url }}"
+          echo "Testing against: ${DEPLOY_URL}"
           STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
-            -X POST https://glidecomp.com/api/auth/dev-login \
+            -X POST "${DEPLOY_URL}/api/auth/dev-login" \
             -H 'Content-Type: application/json' \
             -d '{"name":"smoke","email":"smoke@test.local"}')
           echo "POST /api/auth/dev-login returned HTTP $STATUS"
           if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
-            echo "::error::CRITICAL: dev-login endpoint is accessible in production!"
+            echo "::error::CRITICAL: dev-login endpoint is accessible at ${DEPLOY_URL}!"
             exit 1
           fi
-          echo "Good — dev-login is blocked in production"
+          echo "Good — dev-login is blocked"
