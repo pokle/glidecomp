@@ -121,7 +121,7 @@ function buildInputs(): HTMLElement {
   }
 
   grid.appendChild(inputGroup("Text input", makeInput("Placeholder text")));
-  grid.appendChild(inputGroup("Select", makeSelect()));
+  grid.appendChild(inputGroup("Select", makeSelect() as unknown as HTMLElement));
   grid.appendChild(inputGroup("Textarea", makeTextarea()));
 
   const disabledInput = makeInput("Disabled input");
