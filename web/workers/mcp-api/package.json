@@ -1,20 +1,19 @@
 {
-  "name": "auth-api",
+  "name": "mcp-api",
   "version": "1.0.0",
   "private": true,
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state && wrangler dev --persist-to ../../.wrangler/state",
+    "dev": "wrangler dev --persist-to ../../.wrangler/state",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@better-auth/api-key": "1.5.6",
-    "better-auth": "^1.5.6",
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "agents": "0.10.1",
     "hono": "^4.12.10",
-    "kysely": "^0.28.15",
-    "kysely-d1": "^0.4.0"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260404.1",

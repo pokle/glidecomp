@@ -2,6 +2,41 @@ import { createMiddleware } from "hono/factory";
 import type { Env, AuthUser } from "../env";
 
 /**
+ * Internal trusted header set by the MCP worker via service binding.
+ * Service bindings are internal-only (not reachable from the internet),
+ * so trusting this header is safe.
+ */
+const INTERNAL_USER_HEADER = "X-Glidecomp-Internal-User";
+
+/**
+ * Try to resolve the user from the internal header (set by mcp-api
+ * via service binding) or from the session cookie (set by the browser).
+ */
+async function resolveUser(
+  env: Env,
+  headers: Headers
+): Promise<AuthUser | null> {
+  // Trust internal header from service bindings (mcp-api worker)
+  const internalUser = headers.get(INTERNAL_USER_HEADER);
+  if (internalUser) {
+    try {
+      return JSON.parse(internalUser) as AuthUser;
+    } catch {
+      return null;
+    }
+  }
+
+  // Fall back to cookie-based session via auth-api
+  const res = await env.AUTH_API.fetch(
+    new Request("https://auth/api/auth/me", {
+      headers: { cookie: headers.get("cookie") || "" },
+    })
+  );
+  const data = (await res.json()) as { user: AuthUser | null };
+  return data.user;
+}
+
+/**
  * Middleware that verifies authentication via service binding to auth-api.
  * Sets c.var.user to the authenticated user.
  * Returns 401 if not authenticated.
@@ -10,15 +45,7 @@ export const requireAuth = createMiddleware<{
   Bindings: Env;
   Variables: { user: AuthUser };
 }>(async (c, next) => {
-  const cookie = c.req.header("cookie");
-  const res = await c.env.AUTH_API.fetch(
-    new Request("https://auth/api/auth/me", {
-      headers: { cookie: cookie || "" },
-    })
-  );
-
-  const data = await res.json() as { user: AuthUser | null };
-  const { user } = data;
+  const user = await resolveUser(c.env, c.req.raw.headers);
   if (!user) {
     return c.json({ error: "Not authenticated" }, 401);
   }
@@ -35,12 +62,7 @@ export const optionalAuth = createMiddleware<{
   Variables: { user: AuthUser | null };
 }>(async (c, next) => {
   try {
-    const res = await c.env.AUTH_API.fetch(
-      new Request("https://auth/api/auth/me", {
-        headers: { cookie: c.req.header("cookie") || "" },
-      })
-    );
-    const { user } = (await res.json()) as { user: AuthUser | null };
+    const user = await resolveUser(c.env, c.req.raw.headers);
     c.set("user", user);
   } catch {
     c.set("user", null);

@@ -1,0 +1,23 @@
+name = "mcp-api"
+main = "src/index.ts"
+compatibility_date = "2025-03-10"
+compatibility_flags = ["nodejs_compat"]
+
+[[services]]
+binding = "COMPETITION_API"
+service = "competition-api"
+
+[[services]]
+binding = "AUTH_API"
+service = "auth-api"
+
+[dev]
+port = 8790
+
+[[routes]]
+pattern = "glidecomp.com/mcp"
+zone_name = "glidecomp.com"
+
+[[routes]]
+pattern = "glidecomp.com/mcp/*"
+zone_name = "glidecomp.com"
