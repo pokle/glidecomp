@@ -22,7 +22,7 @@ import { getAllFonts, LOCAL_FONTS } from "./google-fonts";
 // ── State ────────────────────────────────────────────────────────────────────
 
 let theme: GlideCompTheme = structuredClone(
-  decodeThemeFromHash() ?? loadSavedTheme() ?? AVOCADO_THEME
+  decodeThemeFromHash() ?? loadSavedTheme() ?? BASECOAT_LIGHT_THEME
 );
 
 // Which color swatch is "active" for the image eyedropper
