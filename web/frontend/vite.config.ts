@@ -139,13 +139,21 @@ export default defineConfig({
     },
     proxy: {
       '/api/auth': {
-        target: 'http://localhost:8788',
+        target: process.env.AUTH_API_URL || 'http://localhost:8788',
         changeOrigin: true,
       },
       '/api/comp': {
-        target: 'http://localhost:8789',
+        target: process.env.COMP_API_URL || 'http://localhost:8789',
         changeOrigin: true,
       },
+      // When AIRSCORE_API_URL is set (e.g. in Docker), proxy airscore through
+      // Vite so the browser doesn't need direct access to the worker.
+      ...(process.env.AIRSCORE_API_URL ? {
+        '/api/airscore': {
+          target: process.env.AIRSCORE_API_URL,
+          changeOrigin: true,
+        },
+      } : {}),
     },
   },
 });
