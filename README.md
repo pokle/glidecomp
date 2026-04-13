@@ -69,6 +69,10 @@ bun run typecheck:all    # Type check everything (frontend + engine + workers)
 
 Read https://developer.chrome.com/blog/chrome-devtools-mcp-debug-your-browser-session
 
+### GlideComp MCP server
+
+GlideComp exposes an MCP server at `https://glidecomp.com/mcp` so AI agents can manage competitions, tasks, pilots, tracks, and scores. See [docs/mcp.md](docs/mcp.md) for setup and available tools.
+
 ### Deployment
 
 - Push to `master` → deploys to production
@@ -160,6 +164,8 @@ web/
     cli/                 - CLI utilities (detect-events, get-xcontest-task, score-task)
   workers/
     auth-api/            - Authentication API (Cloudflare Worker + D1)
+    competition-api/     - Competition management API (Cloudflare Worker + D1 + R2)
+    mcp-api/             - MCP server for AI agents (Cloudflare Worker)
     airscore-api/        - AirScore caching proxy (Cloudflare Worker)
   scripts/               - Operational scripts (secrets, test emails)
 docs/                    - Feature and architecture specifications
