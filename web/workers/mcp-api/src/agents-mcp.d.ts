@@ -1,9 +1,20 @@
 /**
  * Minimal type declarations for agents/mcp and @modelcontextprotocol/sdk.
  *
- * The full `agents` and `@modelcontextprotocol/sdk` packages have enormous
- * bundled type definitions that cause TypeScript to OOM during typechecking.
- * We declare only the types we actually use.
+ * WHY THIS FILE EXISTS:
+ * The `agents` package (Cloudflare Agents SDK) bundles its entire type
+ * surface — McpAgent, Durable Objects, OAuth, AI chat, fibers, etc. —
+ * into a single ~3000-line .d.ts file. The `@modelcontextprotocol/sdk`
+ * is similarly large. Together they cause TypeScript to consume 4+ GB
+ * of memory and OOM during `tsc --noEmit`, both locally and in CI.
+ *
+ * We only use two things: `createMcpHandler` from `agents/mcp` and
+ * `McpServer` from `@modelcontextprotocol/sdk/server/mcp.js`. This
+ * file declares just those types, and tsconfig.json `paths` redirects
+ * the imports here instead of into node_modules.
+ *
+ * If you add new imports from either package, add the types here too.
+ * The bundler (wrangler) still resolves the real modules at build time.
  */
 declare module "@modelcontextprotocol/sdk/server/mcp.js" {
   import { ZodType } from "zod";
