@@ -316,9 +316,34 @@ Each tool gets a detailed `description` string explaining what it does, required
 
 ---
 
-## 9. MCP Client Configuration
+## 9. Connecting to the MCP Server
 
-Users will add GlideComp to their MCP client config like:
+### Getting an API key
+
+1. Log in to [glidecomp.com](https://glidecomp.com)
+2. The BetterAuth API key plugin exposes endpoints for key management:
+   - **Create**: `POST /api/auth/api-key/create` (requires session cookie)
+   - **List**: `GET /api/auth/api-key/list`
+   - **Delete**: `POST /api/auth/api-key/delete`
+3. The key (prefixed `glc_`) is shown **once** at creation — save it securely
+
+### Production URL
+
+```
+https://glidecomp.com/mcp
+```
+
+### Local development URL
+
+```
+http://localhost:8790/mcp
+```
+
+(Requires running `bun run dev` in `web/workers/mcp-api/`, plus `auth-api` on port 8788 and `competition-api` on port 8789.)
+
+### Client configuration
+
+**Claude Desktop / Claude Code** (`claude_desktop_config.json` or `.claude/settings.json`):
 
 ```json
 {
@@ -333,4 +358,45 @@ Users will add GlideComp to their MCP client config like:
 }
 ```
 
-No local server process needed — it's a remote MCP server accessed over HTTPS.
+**Local dev** (no API key needed if using dev-login cookies, or use a locally-created key):
+
+```json
+{
+  "mcpServers": {
+    "glidecomp-local": {
+      "url": "http://localhost:8790/mcp",
+      "headers": {
+        "Authorization": "Bearer glc_your_local_key"
+      }
+    }
+  }
+}
+```
+
+**Cursor** (`.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "glidecomp": {
+      "url": "https://glidecomp.com/mcp",
+      "headers": {
+        "Authorization": "Bearer glc_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+No local server process needed — it's a remote MCP server accessed over HTTPS. The Streamable HTTP transport works natively with all major MCP clients.
+
+### Health check
+
+```bash
+curl https://glidecomp.com/mcp/health
+# {"ok":true}
+```
+
+### Verifying your key works
+
+Once connected, ask your agent to run `list_competitions` — if authenticated, you'll see both public competitions and any you admin.
