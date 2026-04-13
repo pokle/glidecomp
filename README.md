@@ -1,15 +1,40 @@
 # <img src="web/frontend/public/icon.svg" alt="GlideComp logo" width="32" height="32" /> GlideComp
 
-Competition track log analysis for hanggliding and paragliding. Load IGC files and tasks, and get instant in-browser analysis.
+**GlideComp** is a web application for analyzing hanggliding and paragliding competition flights.
+
+**What it does:**
+- Pilots (or competition organizers) load IGC track log files and XCTask task files in the browser
+- The app analyzes flights: task completion, scoring explanations, glide performance, thermal/climb analysis
+- Full **CIVL GAP scoring** implementation (FAI Sporting Code Section 7F) — distance, time, leading, and arrival points for both PG and HG
+- Includes 2D (Mapbox) and 3D (Three.js globe) map visualization of flight tracks
+- Competition management features: pilot registration, task setup, scoring, penalties, with a full audit log for transparency
+
+**How it's built:**
+- **Client-side first** — IGC parsing and flight analysis happen entirely in the browser, no server required for core functionality
+- **Frontend**: TypeScript SPA hosted on Cloudflare Pages, using Basecoat UI components and Tailwind CSS
+- **Backend**: Cloudflare Workers API for competition management, with D1 (SQLite) database and R2 storage
+- **Engine**: A dedicated `@glidecomp/engine` package handles geo calculations (WGS84 ellipsoid math, Vincenty formulas) and flight analysis
+
+**Key design principles:**
+- No server-side storage needed for basic use — drag-and-drop files and analyze locally
+- All scoring decisions are explainable and auditable
+- Every mutation affecting competition scores is audit-logged
+
+The app is live at **[glidecomp.com](https://glidecomp.com)**.
+
+### Features
 
 - **Flight event detection** — automatic detection of takeoff, landing, thermals, glides, start/goal crossings, and turnpoint tagging
 - **Thermal analysis** — entry/exit times, altitude gain, average climb rate
 - **Glide analysis** — distance, altitude lost, L/D ratio, plus sink detection for poor glides
-- **Task scoring** — CIVL GAP scoring with distance, time, leading, and arrival points
+- **GAP scoring** — CIVL GAP scoring with distance, time, leading, and arrival points
+- **Competition management** — create competitions, register pilots, upload IGC tracks, manage tasks, apply penalties, with full audit logging
+- **Authentication** — Google OAuth login with user profiles
 - **Task editor** — create and edit tasks with drag-to-reorder turnpoints, waypoint database search, and click-on-map placement
 - **Multiple data sources** — drag & drop IGC/XCTSK files, import from XContest by task code, or import from AirScore by URL
 - **Interactive map** — 2D (Mapbox/Leaflet) and 3D views with track overlay, task cylinders, and map annotations
 - **Altitude sparkline** — clickable time-series chart linked to events and map position
+- **Theme editor** — customizable UI themes with color and font controls, import/export support
 - **Configurable units & detection** — speed, altitude, distance, climb rate units; adjustable thermal/glide detection thresholds
 
 ## Web Development
@@ -29,17 +54,36 @@ cp .env.example .env
 # Edit .env and set VITE_MAPBOX_TOKEN=your_token_here
 ```
 
-### Running locally
+### Running locally (Docker)
 
-Start the frontend and auth worker together (http://localhost:3000 + http://localhost:8788):
+The easiest way to start everything. Only the frontend port is exposed:
+
+```bash
+docker compose up --build
+```
+
+To run multiple worktrees side-by-side, override the port:
+
+```bash
+PORT=3001 docker compose up --build
+```
+
+### Running locally (native)
+
+Start the frontend and all API workers together:
 
 ```bash
 bun run dev
 ```
 
-This starts both the Vite dev server and the auth API worker. The auth worker requires a `.dev.vars` file in `web/workers/auth-api/` — see [docs/auth.md](docs/auth.md) for setup.
+This starts three services:
+- **Frontend** — Vite dev server at http://localhost:3000
+- **Auth API** — authentication worker at http://localhost:8788
+- **Competition API** — competition management worker at http://localhost:8789
 
-To start only the frontend (without auth):
+The auth worker requires a `.dev.vars` file in `web/workers/auth-api/` — see [docs/auth.md](docs/auth.md) for setup.
+
+To start only the frontend (without any workers):
 
 ```bash
 bun run dev:frontend
@@ -60,7 +104,10 @@ VITE_AIRSCORE_URL=https://glidecomp.com/api/airscore bun run dev
 ### Tests and type checking
 
 ```bash
-bun run test             # Run tests
+bun run test             # Run unit tests (engine + airscore worker) and type check
+bun run test:comp        # Run competition API tests
+bun run test:all         # Run all unit tests
+bun run test:e2e         # Run Playwright end-to-end tests
 bun run typecheck        # Type check root project
 bun run typecheck:all    # Type check everything (frontend + engine + workers)
 ```
@@ -77,6 +124,8 @@ Read https://developer.chrome.com/blog/chrome-devtools-mcp-debug-your-browser-se
 ```bash
 bun run deploy           # Manual deploy to Cloudflare Pages
 bun run deploy:worker    # Manual deploy AirScore API Worker
+bun run deploy:comp      # Manual deploy Competition API Worker
+bun run deploy:auth      # Manual deploy Auth API Worker
 bun run deploy:all       # Deploy Pages + all Workers
 ```
 
@@ -160,7 +209,9 @@ web/
     cli/                 - CLI utilities (detect-events, get-xcontest-task, score-task)
   workers/
     auth-api/            - Authentication API (Cloudflare Worker + D1)
+    competition-api/     - Competition management API (Cloudflare Worker + D1 + R2)
     airscore-api/        - AirScore caching proxy (Cloudflare Worker)
   scripts/               - Operational scripts (secrets, test emails)
+e2e/                     - Playwright end-to-end tests
 docs/                    - Feature and architecture specifications
 ```
