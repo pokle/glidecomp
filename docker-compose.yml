@@ -1,0 +1,75 @@
+# Local development environment for GlideComp.
+#
+# Usage:
+#   docker compose up --build
+#
+# The frontend port defaults to 3000. Override it to run multiple
+# worktrees side-by-side:
+#   PORT=3001 docker compose up --build
+#
+# Mapbox token is read from your .env file (VITE_MAPBOX_TOKEN).
+# Worker secrets are read from their .dev.vars files in the volume mount.
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    env_file:
+      - .env
+    environment:
+      AUTH_API_URL: http://auth-api:8788
+      COMP_API_URL: http://comp-api:8789
+      AIRSCORE_API_URL: http://airscore-api:8787
+      VITE_AIRSCORE_URL: /api/airscore
+    command: >
+      sh -c "bun install &&
+             cd web/frontend &&
+             exec bunx --bun vite --host 0.0.0.0 --port 3000"
+
+  auth-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    command: >
+      sh -c "bun install &&
+             cd web/workers/auth-api &&
+             bunx wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state &&
+             exec bunx wrangler dev --persist-to ../../.wrangler/state --ip 0.0.0.0"
+
+  comp-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    command: >
+      sh -c "bun install &&
+             cd web/workers/competition-api &&
+             bunx wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state --config ../auth-api/wrangler.toml &&
+             bunx wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state &&
+             exec bunx wrangler dev --persist-to ../../.wrangler/state --ip 0.0.0.0"
+
+  airscore-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    command: >
+      sh -c "bun install &&
+             cd web/workers/airscore-api &&
+             exec bunx wrangler dev --ip 0.0.0.0"
+
+volumes:
+  node_modules:
