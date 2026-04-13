@@ -11,7 +11,11 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "agents/mcp": ["./src/agents-mcp.d.ts"],
+      "@modelcontextprotocol/sdk/server/mcp.js": ["./src/agents-mcp.d.ts"]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules"]
