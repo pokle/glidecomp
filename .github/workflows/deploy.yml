@@ -141,6 +141,14 @@ jobs:
           workingDirectory: web/workers/competition-api
           command: deploy
 
+      - name: Deploy MCP API Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: web/workers/mcp-api
+          command: deploy
+
       - name: Deploy to Cloudflare Pages
         id: pages-deploy
         uses: cloudflare/wrangler-action@v3
