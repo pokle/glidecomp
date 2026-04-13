@@ -1,5 +1,6 @@
-import { betterAuth } from "better-auth";
+import { betterAuth, type BetterAuthPlugin } from "better-auth";
 import { oAuthProxy } from "better-auth/plugins";
+import { apiKey } from "@better-auth/api-key";
 import { Kysely } from "kysely";
 import { D1Dialect } from "kysely-d1";
 
@@ -31,13 +32,26 @@ export function createAuth(env: AuthEnv) {
     basePath: "/api/auth",
     secret: env.BETTER_AUTH_SECRET,
     trustedOrigins: ["https://glidecomp.com", "https://*.glidecomp.pages.dev"],
-    plugins: isLocalDev(env)
-      ? []
-      : [
-          oAuthProxy({
-            productionURL: "https://glidecomp.com",
-          }),
-        ],
+    plugins: [
+      // Cast needed: @better-auth/api-key resolves a separate copy of
+      // @better-auth/core with structurally identical but nominally distinct types.
+      apiKey({
+        defaultPrefix: "glc_",
+        enableSessionForAPIKeys: true,
+        rateLimit: {
+          enabled: true,
+          timeWindow: 60_000,
+          maxRequests: 60,
+        },
+      }) as unknown as BetterAuthPlugin,
+      ...(isLocalDev(env)
+        ? []
+        : [
+            oAuthProxy({
+              productionURL: "https://glidecomp.com",
+            }),
+          ]),
+    ],
     // Enable email/password auth in dev only (for dev-login endpoint)
     ...(isLocalDev(env)
       ? { emailAndPassword: { enabled: true, minPasswordLength: 1 } }

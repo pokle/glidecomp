@@ -1,0 +1,23 @@
+{
+  "name": "mcp-api",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --persist-to ../../.wrangler/state",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "agents": "0.10.1",
+    "hono": "^4.12.10",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260404.1",
+    "typescript": "^6.0.2",
+    "wrangler": "^4.80.0"
+  }
+}
