@@ -1,31 +1,305 @@
-# Use the latest 2.1 version of CircleCI pipeline process engine.
+# CircleCI configuration for GlideComp.
+#
+# Migrated from .github/workflows/{deploy,branch-deploy}.yml.
+#
+# Required context: `glidecomp-deploy` (configured in the CircleCI project
+# settings) must provide the following environment variables:
+#   - CLOUDFLARE_API_TOKEN       — token for wrangler deploys
+#   - CLOUDFLARE_ACCOUNT_ID      — Cloudflare account ID
+#   - VITE_MAPBOX_TOKEN          — Mapbox token baked into the frontend build
+#   - GITHUB_TOKEN               — (optional) used to post preview URLs to PRs
+#
+# Note: the Claude chatops workflows (.github/workflows/claude*.yml) are
+# triggered by GitHub-specific events (issue_comment, pull_request_review,
+# pull_request_review_comment) that have no CircleCI equivalent, so they
+# remain in GitHub Actions.
+#
 # See: https://circleci.com/docs/reference/configuration-reference
 version: 2.1
 
-# Define a job to be invoked later in a workflow.
-# See: https://circleci.com/docs/guides/orchestrate/jobs-steps/#jobs-overview & https://circleci.com/docs/reference/configuration-reference/#jobs
-jobs:
-  say-hello:
-    # Specify the execution environment. You can specify an image from Docker Hub or use one of our convenience images from CircleCI's Developer Hub.
-    # See: https://circleci.com/docs/guides/execution-managed/executor-intro/ & https://circleci.com/docs/reference/configuration-reference/#executor-job
+# ---------------------------------------------------------------------------
+# Reusable execution environments
+# ---------------------------------------------------------------------------
+executors:
+  bun:
     docker:
-      # Specify the version you desire here
-      # See: https://circleci.com/developer/images/image/cimg/base
-      - image: cimg/base:current
+      # Official Bun image; Debian-slim based, ships with git + curl.
+      # user: root so Playwright's `--with-deps` and apt installs work, and
+      # so the default checkout path ~/project is writable.
+      - image: oven/bun:1
+        user: root
+    resource_class: medium
+    working_directory: ~/project
 
-    # Add steps to the job
-    # See: https://circleci.com/docs/guides/orchestrate/jobs-steps/#steps-overview & https://circleci.com/docs/reference/configuration-reference/#steps
+  playwright:
+    docker:
+      # Playwright image has Chromium, Node and all required system libs.
+      # We install Bun on top of it in the `e2e` job.
+      - image: mcr.microsoft.com/playwright:v1.59.1-noble
+        user: root
+    resource_class: medium
+    working_directory: ~/project
+
+# ---------------------------------------------------------------------------
+# Reusable commands
+# ---------------------------------------------------------------------------
+commands:
+  install_bun_deps:
+    description: "Restore cache and install dependencies with bun"
     steps:
-      # Checkout the code as the first step.
-      - checkout
+      - restore_cache:
+          keys:
+            - v1-bun-deps-{{ checksum "bun.lock" }}
+            - v1-bun-deps-
       - run:
-          name: "Say hello"
-          command: "echo Hello, World!"
+          name: Install dependencies
+          command: bun install --frozen-lockfile
+      - save_cache:
+          key: v1-bun-deps-{{ checksum "bun.lock" }}
+          paths:
+            - node_modules
+            - /root/.bun/install/cache
 
-# Orchestrate jobs using workflows
-# See: https://circleci.com/docs/guides/orchestrate/workflows/ & https://circleci.com/docs/reference/configuration-reference/#workflows
+  install_bun_on_playwright_image:
+    description: "Install the bun runtime on top of the Playwright image"
+    steps:
+      - run:
+          name: Install Bun
+          command: |
+            apt-get update && apt-get install -y --no-install-recommends unzip
+            curl -fsSL https://bun.sh/install | bash
+            echo 'export PATH="/root/.bun/bin:$PATH"' >> "$BASH_ENV"
+
+  validate_mapbox_token:
+    description: "Fail early if VITE_MAPBOX_TOKEN is not in the environment"
+    steps:
+      - run:
+          name: Validate required secrets
+          command: |
+            if [ -z "${VITE_MAPBOX_TOKEN:-}" ]; then
+              echo "Error: VITE_MAPBOX_TOKEN is not set"
+              exit 1
+            fi
+
+  smoke_test_deployment:
+    description: "Smoke test a Cloudflare Pages deployment URL in $DEPLOY_URL"
+    steps:
+      - run:
+          name: Smoke test — verify correct version is deployed
+          command: |
+            EXPECTED_SHA="$CIRCLE_SHA1"
+            echo "Checking ${DEPLOY_URL} for commit ${EXPECTED_SHA}"
+            DEPLOYED_SHA=$(curl -s "${DEPLOY_URL}/comp" | grep -oP 'data-git-sha="\K[a-f0-9]+' | head -1 || true)
+            echo "Deployed SHA: ${DEPLOYED_SHA:-<not found>}"
+            if [ -z "$DEPLOYED_SHA" ]; then
+              echo "Warning: Could not extract git SHA from deployed page"
+            elif [ "$DEPLOYED_SHA" != "$EXPECTED_SHA" ]; then
+              echo "Error: Deployed SHA ${DEPLOYED_SHA} does not match expected ${EXPECTED_SHA}"
+              exit 1
+            else
+              echo "Good — deployed version matches commit"
+            fi
+      - run:
+          name: Smoke test — verify dev-login is NOT accessible
+          command: |
+            echo "Testing against: ${DEPLOY_URL}"
+            STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
+              -X POST "${DEPLOY_URL}/api/auth/dev-login" \
+              -H 'Content-Type: application/json' \
+              -d '{"name":"smoke","email":"smoke@test.local"}')
+            echo "POST /api/auth/dev-login returned HTTP $STATUS"
+            if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
+              echo "CRITICAL: dev-login endpoint is accessible at ${DEPLOY_URL}!"
+              exit 1
+            fi
+            echo "Good — dev-login is blocked"
+
+# ---------------------------------------------------------------------------
+# Jobs
+# ---------------------------------------------------------------------------
+jobs:
+  test:
+    executor: bun
+    steps:
+      - checkout
+      - install_bun_deps
+      - run:
+          name: Type check
+          command: bun run typecheck:all
+      - run:
+          name: Run tests
+          command: bun run test:all
+
+  e2e:
+    executor: playwright
+    steps:
+      - checkout
+      - install_bun_on_playwright_image
+      - install_bun_deps
+      - run:
+          name: Install Playwright browsers
+          command: bunx playwright install chromium
+      - run:
+          name: Create auth .dev.vars
+          command: |
+            cat > web/workers/auth-api/.dev.vars << 'EOF'
+            GOOGLE_CLIENT_ID=dummy-for-ci
+            GOOGLE_CLIENT_SECRET=dummy-for-ci
+            BETTER_AUTH_SECRET=ci-test-secret
+            BETTER_AUTH_URL=http://localhost:3000
+            EOF
+      - run:
+          name: Run E2E tests
+          command: bun run test:e2e
+      - store_artifacts:
+          path: playwright-report
+          destination: playwright-report
+
+  deploy-preview:
+    executor: bun
+    steps:
+      - checkout
+      - install_bun_deps
+      - validate_mapbox_token
+      - run:
+          name: Build
+          command: bun run build
+      - run:
+          name: Deploy to Cloudflare Pages (Branch Preview)
+          command: |
+            set -o pipefail
+            DEPLOY_LOG=$(mktemp)
+            bunx wrangler pages deploy --branch="$CIRCLE_BRANCH" 2>&1 | tee "$DEPLOY_LOG"
+            DEPLOY_URL=$(grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.pages\.dev' "$DEPLOY_LOG" | head -1)
+            if [ -z "$DEPLOY_URL" ]; then
+              DEPLOY_URL=$(grep -oE 'https://[a-z0-9-]+\.pages\.dev' "$DEPLOY_LOG" | head -1)
+            fi
+            if [ -z "$DEPLOY_URL" ]; then
+              echo "Failed to determine deployment URL from wrangler output"
+              exit 1
+            fi
+            echo "Preview deployed to: $DEPLOY_URL"
+            echo "export DEPLOY_URL=$DEPLOY_URL" >> "$BASH_ENV"
+      - run:
+          name: Post preview URL to PR (if one exists)
+          command: |
+            if [ -z "${GITHUB_TOKEN:-}" ]; then
+              echo "GITHUB_TOKEN not configured in CircleCI context; skipping PR comment"
+              exit 0
+            fi
+            REPO="pokle/glidecomp"
+            MARKER="<!-- branch-deploy-preview -->"
+
+            # Find the open PR (if any) for this branch.
+            PR_NUMBER=$(curl -sS -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/${REPO}/pulls?head=pokle:${CIRCLE_BRANCH}&state=open" \
+              | bun -e 'const d=JSON.parse(await Bun.stdin.text()); if(Array.isArray(d)&&d[0])console.log(d[0].number)')
+            if [ -z "$PR_NUMBER" ]; then
+              echo "No open PR found for branch ${CIRCLE_BRANCH}"
+              exit 0
+            fi
+            echo "Posting preview URL to PR #${PR_NUMBER}"
+
+            # Delete previous preview comment if present, so we only ever have one.
+            EXISTING_ID=$(MARKER="$MARKER" curl -sS -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/${REPO}/issues/${PR_NUMBER}/comments" \
+              | MARKER="$MARKER" bun -e 'const c=JSON.parse(await Bun.stdin.text()); const m=Array.isArray(c)?c.find(x=>x&&x.body&&x.body.startsWith(process.env.MARKER)):null; if(m)console.log(m.id)' || true)
+            if [ -n "$EXISTING_ID" ]; then
+              curl -sS -X DELETE -H "Authorization: token $GITHUB_TOKEN" \
+                "https://api.github.com/repos/${REPO}/issues/comments/${EXISTING_ID}" > /dev/null || true
+            fi
+
+            export BODY="${MARKER}
+            **Preview Deployment**
+            ${DEPLOY_URL}
+            _Commit: ${CIRCLE_SHA1}_"
+            PAYLOAD=$(bun -e 'console.log(JSON.stringify({body: process.env.BODY}))')
+            curl -sS -X POST -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Content-Type: application/json" \
+              "https://api.github.com/repos/${REPO}/issues/${PR_NUMBER}/comments" \
+              -d "$PAYLOAD" > /dev/null
+            echo "Posted preview URL to PR #${PR_NUMBER}"
+      - smoke_test_deployment
+
+  deploy-production:
+    executor: bun
+    steps:
+      - checkout
+      - install_bun_deps
+      - validate_mapbox_token
+      - run:
+          name: Build
+          command: bun run build
+
+      # Deploy workers before Pages — Pages service bindings require workers
+      # to exist.
+      - run:
+          name: Deploy AirScore API Worker
+          command: bunx wrangler deploy
+          working_directory: ~/project/web/workers/airscore-api
+
+      - run:
+          name: Run Auth API Migrations
+          command: bunx wrangler d1 migrations apply taskscore-auth --remote
+          working_directory: ~/project/web/workers/auth-api
+      - run:
+          name: Deploy Auth API Worker
+          command: bunx wrangler deploy
+          working_directory: ~/project/web/workers/auth-api
+
+      - run:
+          name: Run Competition API Migrations
+          command: bunx wrangler d1 migrations apply taskscore-auth --remote
+          working_directory: ~/project/web/workers/competition-api
+      - run:
+          name: Deploy Competition API Worker
+          command: bunx wrangler deploy
+          working_directory: ~/project/web/workers/competition-api
+
+      - run:
+          name: Deploy to Cloudflare Pages
+          command: |
+            set -o pipefail
+            DEPLOY_LOG=$(mktemp)
+            bunx wrangler pages deploy --branch="$CIRCLE_BRANCH" 2>&1 | tee "$DEPLOY_LOG"
+            DEPLOY_URL=$(grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.pages\.dev' "$DEPLOY_LOG" | head -1)
+            if [ -z "$DEPLOY_URL" ]; then
+              DEPLOY_URL=$(grep -oE 'https://[a-z0-9-]+\.pages\.dev' "$DEPLOY_LOG" | head -1)
+            fi
+            if [ -z "$DEPLOY_URL" ]; then
+              echo "Failed to determine deployment URL from wrangler output"
+              exit 1
+            fi
+            echo "Deployed to: $DEPLOY_URL"
+            echo "export DEPLOY_URL=$DEPLOY_URL" >> "$BASH_ENV"
+      - smoke_test_deployment
+
+# ---------------------------------------------------------------------------
+# Workflows
+# ---------------------------------------------------------------------------
 workflows:
-  say-hello-workflow: # This is the name of the workflow, feel free to change it to better match your workflow.
-    # Inside the workflow, you define the jobs you want to run.
+  test-and-deploy:
     jobs:
-      - say-hello
+      - test
+
+      - e2e:
+          requires:
+            - test
+
+      # Preview deploy for every non-master branch.
+      - deploy-preview:
+          context: glidecomp-deploy
+          requires:
+            - test
+          filters:
+            branches:
+              ignore: master
+
+      # Production deploy only on master.
+      - deploy-production:
+          context: glidecomp-deploy
+          requires:
+            - test
+          filters:
+            branches:
+              only: master
