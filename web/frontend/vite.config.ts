@@ -99,6 +99,8 @@ export default defineConfig({
             req.url = '/scores.html';
           } else if (req.url === '/profile' || req.url === '/profile/') {
             req.url = '/profile.html';
+          } else if (req.url === '/settings' || req.url === '/settings/') {
+            req.url = '/settings.html';
           } else if (req.url === '/theme-editor' || req.url === '/theme-editor/') {
             req.url = '/theme-editor.html';
           } else if (req.url === '/kitchensink' || req.url === '/kitchensink/') {
@@ -125,6 +127,7 @@ export default defineConfig({
         'comp-detail': resolve(__dirname, 'src/comp-detail.html'),
         scores: resolve(__dirname, 'src/scores.html'),
         profile: resolve(__dirname, 'src/profile.html'),
+        settings: resolve(__dirname, 'src/settings.html'),
         'theme-editor': resolve(__dirname, 'src/theme-editor.html'),
         kitchensink: resolve(__dirname, 'src/kitchensink.html'),
       },
