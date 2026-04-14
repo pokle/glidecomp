@@ -41,8 +41,8 @@ async function init() {
         apiKeysList.innerHTML = '<p class="text-sm text-destructive">Failed to load API keys.</p>';
         return;
       }
-      const keys = (await res.json()) as ApiKey[];
-      renderApiKeys(keys);
+      const { apiKeys } = (await res.json()) as { apiKeys: ApiKey[] };
+      renderApiKeys(apiKeys);
     } catch {
       apiKeysList.innerHTML = '<p class="text-sm text-destructive">Network error loading API keys.</p>';
     }
