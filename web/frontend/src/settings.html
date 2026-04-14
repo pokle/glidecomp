@@ -1,0 +1,121 @@
+<!-- Copyright (c) 2026, Tushar Pokle.  All rights reserved. -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GlideComp - Settings</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body class="min-h-screen bg-background text-foreground">
+  <div id="settings-page" class="hidden min-h-screen flex flex-col">
+
+    <div id="app-nav"></div>
+
+    <main class="flex-1 max-w-3xl mx-auto w-full px-4 sm:px-6 py-8">
+      <div id="settings-loading" class="text-center py-12">
+        <p class="text-sm text-muted-foreground">Loading...</p>
+      </div>
+
+      <div id="settings-signed-out" class="hidden text-center py-12">
+        <p class="text-sm text-muted-foreground mb-4">Sign in to manage your account settings.</p>
+        <button id="settings-signin-btn" class="btn btn-primary">Sign in with Google</button>
+      </div>
+
+      <div id="settings-content" class="hidden">
+        <h1 class="text-2xl font-bold tracking-tight mb-6">Settings</h1>
+
+        <section id="api-keys-section">
+          <h2 class="text-lg font-semibold tracking-tight mb-1">Agent Access</h2>
+          <p class="text-sm text-muted-foreground mb-4">
+            Create API keys to connect AI agents (Claude, Cursor) to your GlideComp data via the
+            <a href="https://github.com/pokle/glidecomp/blob/master/docs/mcp.md" class="underline" target="_blank" rel="noopener">MCP server</a>.
+          </p>
+
+          <div id="api-keys-list" class="mb-4">
+            <!-- Populated by settings.ts -->
+          </div>
+
+          <button id="create-api-key-btn" class="btn btn-primary btn-sm">Create API key</button>
+        </section>
+      </div>
+
+      <!-- Dialog: enter a label for the new key -->
+      <dialog id="create-key-dialog"
+        class="fixed inset-0 m-auto h-fit rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50"
+        onclick="if (event.target === this) this.close()">
+        <form id="create-key-form" class="w-80 p-6">
+          <h2 class="text-lg font-semibold mb-4">New API key</h2>
+          <div class="mb-4">
+            <label for="key-name-input" class="text-sm font-medium block mb-1">Label <span class="text-muted-foreground font-normal">(optional)</span></label>
+            <input id="key-name-input" type="text" class="input w-full" maxlength="64" placeholder="e.g. Claude Desktop">
+          </div>
+          <div class="flex justify-end gap-2">
+            <button type="button" id="create-key-cancel-btn" class="btn btn-secondary">Cancel</button>
+            <button type="submit" id="create-key-submit-btn" class="btn btn-primary">Create</button>
+          </div>
+        </form>
+      </dialog>
+
+      <!-- Dialog: show the newly created key + setup instructions -->
+      <dialog id="api-key-created-dialog"
+        class="fixed inset-0 m-auto h-fit rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50">
+        <div class="w-[560px] max-w-[95vw] p-6 space-y-5">
+          <h2 class="text-lg font-semibold">API key created</h2>
+
+          <div class="rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+            Copy this key now — it will not be shown again.
+          </div>
+
+          <div>
+            <p class="text-sm font-medium mb-1">Your API key</p>
+            <div class="flex items-center gap-2">
+              <code id="api-key-value" class="flex-1 rounded-md bg-muted px-3 py-2 text-sm font-mono break-all"></code>
+              <button id="copy-key-btn" class="btn btn-secondary btn-sm shrink-0">Copy</button>
+            </div>
+          </div>
+
+          <div>
+            <p class="text-sm font-medium mb-1">MCP server URL</p>
+            <div class="flex items-center gap-2">
+              <code class="flex-1 rounded-md bg-muted px-3 py-2 text-sm font-mono">https://glidecomp.com/mcp</code>
+              <button id="copy-url-btn" class="btn btn-secondary btn-sm shrink-0">Copy</button>
+            </div>
+          </div>
+
+          <div>
+            <p class="text-sm font-medium mb-1">Config snippet <span class="text-muted-foreground font-normal text-xs">(Claude Desktop, Claude Code, Cursor)</span></p>
+            <div class="relative">
+              <pre id="api-key-config-snippet" class="rounded-md bg-muted px-3 py-2 text-xs font-mono overflow-x-auto whitespace-pre"></pre>
+              <button id="copy-snippet-btn" class="btn btn-secondary btn-sm absolute top-2 right-2">Copy</button>
+            </div>
+            <p class="text-xs text-muted-foreground mt-1">
+              Add this to your MCP client config. See <a href="https://github.com/pokle/glidecomp/blob/master/docs/mcp.md" class="underline" target="_blank" rel="noopener">docs/mcp.md</a> for full setup instructions.
+            </p>
+          </div>
+
+          <div class="flex justify-end">
+            <button id="api-key-created-close-btn" class="btn btn-primary">Done</button>
+          </div>
+        </div>
+      </dialog>
+
+    </main>
+    <div id="app-footer"></div>
+  </div>
+
+  <script type="module" src="/settings.ts"></script>
+</body>
+
+</html>

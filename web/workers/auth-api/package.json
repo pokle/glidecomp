@@ -5,12 +5,12 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state && wrangler dev --persist-to ../../.wrangler/state",
+    "dev": "CI=true wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state && wrangler dev --persist-to ../../.wrangler/state",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@better-auth/api-key": "1.5.6",
+    "@better-auth/api-key": "^1.6.2",
     "better-auth": "^1.6.2",
     "hono": "^4.12.12",
     "kysely": "^0.28.16",
