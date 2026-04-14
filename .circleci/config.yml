@@ -142,7 +142,7 @@ jobs:
       - run:
           name: Create auth .dev.vars
           command: |
-            cat > web/workers/auth-api/.dev.vars << 'EOF'
+            cat > web/workers/auth-api/.dev.vars \<< 'EOF'
             GOOGLE_CLIENT_ID=dummy-for-ci
             GOOGLE_CLIENT_SECRET=dummy-for-ci
             BETTER_AUTH_SECRET=ci-test-secret
