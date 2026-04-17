@@ -28,7 +28,7 @@ executors:
       # so the default checkout path ~/project is writable.
       - image: oven/bun:1
         user: root
-    resource_class: medium
+    resource_class: large
     working_directory: ~/project
 
   playwright:
@@ -37,7 +37,7 @@ executors:
       # We install Bun on top of it in the `e2e` job.
       - image: mcr.microsoft.com/playwright:v1.59.1-noble
         user: root
-    resource_class: medium
+    resource_class: large
     working_directory: ~/project
 
 # ---------------------------------------------------------------------------
@@ -129,6 +129,7 @@ jobs:
       - run:
           name: Run tests
           command: bun run test:all
+          no_output_timeout: 20m
 
   e2e:
     executor: playwright
@@ -151,6 +152,7 @@ jobs:
       - run:
           name: Run E2E tests
           command: bun run test:e2e
+          no_output_timeout: 20m
       - store_artifacts:
           path: playwright-report
           destination: playwright-report
