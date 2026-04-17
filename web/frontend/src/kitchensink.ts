@@ -197,10 +197,10 @@ function buildChecks(): HTMLElement {
 
 function buildBadges(): HTMLElement {
   const badges: [string, string][] = [
-    ["badge badge-default",     "Default"],
-    ["badge badge-secondary",   "Secondary"],
-    ["badge badge-outline",     "Outline"],
-    ["badge badge-destructive", "Destructive"],
+    ["badge",             "Default"],
+    ["badge-secondary",   "Secondary"],
+    ["badge-outline",     "Outline"],
+    ["badge-destructive", "Destructive"],
   ];
 
   return section(
