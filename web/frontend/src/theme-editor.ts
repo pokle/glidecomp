@@ -498,7 +498,8 @@ function buildPreview(): HTMLElement {
     "This is body text inside a card. The theme controls how everything looks.",
   ]));
   card.appendChild(el("small", { style: "font-family: var(--font-caption); font-size: var(--font-caption-size); font-weight: var(--font-caption-weight); color: var(--muted-foreground);" }, [
-    "Caption text — metadata, timestamps",
+    "Caption text — metadata, timestamps. ",
+    el("a", { href: "/kitchensink", className: "underline" }, ["See all components"]),
   ]));
   container.appendChild(card);
 
