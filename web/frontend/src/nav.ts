@@ -3,7 +3,7 @@ import type { AuthUser } from "./auth/client";
 
 declare const __GIT_SHA__: string;
 
-type NavActive = "flights" | "competitions" | "profile";
+type NavActive = "flights" | "competitions" | "profile" | "settings";
 
 function navAttrs(isActive: boolean, extraClasses: string = ""): string {
   const cls = [
@@ -25,6 +25,7 @@ function buildNavHTML(active?: NavActive): string {
       <a id="nav-my-flights" href="/u/me/" ${navAttrs(active === "flights")}>My Flights</a>
       <a href="/comp" ${navAttrs(active === "competitions")}>Competitions</a>
       <a href="/profile" id="nav-profile-link" ${navAttrs(active === "profile", "hidden")}>My Profile</a>
+      <a href="/settings" id="nav-settings-link" ${navAttrs(active === "settings", "hidden")} aria-label="Account settings"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></a>
       <button id="signin-btn" class="hidden btn btn-ghost btn-sm text-xs font-bold">Sign in</button>
     </div>
   </div>
@@ -69,6 +70,7 @@ export async function initNav(options?: { active?: NavActive }): Promise<AuthUse
     (document.getElementById("nav-logo") as HTMLAnchorElement).href = `/u/${user.username}/`;
     (document.getElementById("nav-my-flights") as HTMLAnchorElement).href = `/u/${user.username}/`;
     document.getElementById("nav-profile-link")!.classList.remove("hidden");
+    document.getElementById("nav-settings-link")!.classList.remove("hidden");
     document.getElementById("signout-btn")!.classList.remove("hidden");
     document.getElementById("signout-btn")!.addEventListener("click", async () => {
       await signOut();

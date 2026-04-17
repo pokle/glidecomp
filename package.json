@@ -26,6 +26,7 @@
     "deploy:auth": "bun run --filter auth-api deploy",
     "dev:comp": "bun run --filter competition-api dev",
     "deploy:comp": "bun run --filter competition-api deploy",
+    "deploy:mcp": "bun run --filter mcp-api deploy",
     "typecheck:comp": "bun run --filter competition-api typecheck",
     "deploy:all": "bun run deploy && bun run deploy:worker && bun run deploy:comp",
     "deployments": "wrangler pages deployment list --project-name=glidecomp --json | jq .",

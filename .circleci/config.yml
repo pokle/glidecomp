@@ -257,6 +257,11 @@ jobs:
           working_directory: ~/project/web/workers/competition-api
 
       - run:
+          name: Deploy MCP API Worker
+          command: bunx wrangler deploy
+          working_directory: ~/project/web/workers/mcp-api
+
+      - run:
           name: Deploy to Cloudflare Pages
           command: |
             set -o pipefail

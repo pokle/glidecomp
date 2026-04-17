@@ -4,4 +4,5 @@
 /comp/:comp_id  /comp-detail  200
 /scores  /scores  200
 /profile  /profile  200
+/settings  /settings  200
 /theme-editor  /theme-editor  200
