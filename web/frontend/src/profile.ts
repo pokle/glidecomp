@@ -125,6 +125,7 @@ async function init() {
       statusEl.classList.add("bg-green-500/10", "text-green-500");
     }
   }
+
 }
 
 function showError(message: string) {

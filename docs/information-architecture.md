@@ -53,6 +53,9 @@ Date: 2026-04-05
 ├── /u/{username}/profile           Pilot profile (auth required)
 │                                   Name, CIVL ID, sporting body IDs, phone, glider
 │
+├── /settings                       Account settings (auth required)
+│                                   API keys for MCP agent access, future account config
+│
 ├── /scores?comp={id}               Public scores deep-link (no auth)
 │
 ├── /about                          About page (public)
@@ -85,15 +88,16 @@ The username-scoped URLs (`/u/{username}/`) serve multiple purposes:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  [Logo] GlideComp        My Flights    Competitions    [User Menu ▾] │
+│  [Logo] GlideComp        My Flights    Competitions    My Profile  [⚙]  [User Menu ▾] │
 └─────────────────────────────────────────────────────────┘
 ```
 
 - **Logo**: Always links to `/` (landing) or `/u/{username}/` (if logged in).
 - **My Flights**: Links to `/u/{username}/`. Active state when on `/fly/*`.
 - **Competitions**: Links to `/comp`. Active state when on `/comp/*`.
-- **User Menu** (dropdown): Profile, Sign Out. Collapsed to avatar on mobile.
-- **Unauthenticated**: Show "Sign In" instead of User Menu. Both nav items still visible (competitions are publicly browsable).
+- **My Profile**: Links to `/profile`. Active state when on `/profile`.
+- **Settings gear** (⚙): Links to `/settings`. Separates account-level config (API keys) from pilot identity. Only visible when logged in.
+- **Unauthenticated**: Show "Sign In" instead of Profile/Settings. Both main nav items still visible (competitions are publicly browsable).
 
 This replaces the current pattern of context-dependent header buttons. Users always know where they can go.
 
@@ -247,7 +251,7 @@ This keeps the analysis page focused on *flight analysis*, which is its core str
 
 ### `/u/{username}/profile` — Pilot Profile
 
-Scoped under the user's namespace for consistency.
+Scoped under the user's namespace for consistency. Purely about pilot identity — no account-level settings here.
 
 Simple form page:
 - Display name
@@ -255,7 +259,13 @@ Simple form page:
 - Sporting body IDs
 - Phone
 - Default glider
-- Account actions (sign out, delete account — moved from dashboard footer)
+
+### `/settings` — Account Settings
+
+Account-level configuration, separate from pilot identity.
+
+- **Agent Access**: API keys for connecting AI agents (Claude, Cursor) via the MCP server. Create, list, and revoke keys.
+- Future: notification preferences, account security, danger zone (delete account).
 
 ---
 
@@ -282,6 +292,7 @@ This reduces cognitive load — users only see tabs relevant to their current ta
 | `/u/{username}/` | Personal flights hub | Required |
 | `/u/{username}/analysis?...` | Flight analysis (map) | Required |
 | `/u/{username}/profile` | Pilot profile | Required |
+| `/settings` | Account settings (API keys) | Required |
 | `/u/me/` | Redirect to `/u/{username}/` | Required |
 | `/comp` | Competitions list | Public (create requires auth) |
 | `/comp/{id}` | Competition detail | Public (non-test) |
