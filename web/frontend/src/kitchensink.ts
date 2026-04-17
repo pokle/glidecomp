@@ -220,11 +220,9 @@ function buildAlerts(): HTMLElement {
   function alert(cls: string, title: string, msg: string): HTMLElement {
     const div = document.createElement("div");
     div.className = `alert ${cls}`;
-    const t = document.createElement("p");
-    t.className = "font-semibold text-sm";
+    const t = document.createElement("h2");
     t.textContent = title;
-    const m = document.createElement("p");
-    m.className = "text-sm";
+    const m = document.createElement("section");
     m.textContent = msg;
     div.appendChild(t);
     div.appendChild(m);
