@@ -122,6 +122,18 @@ jobs:
     executor: bun
     steps:
       - checkout
+      - run:
+          # vitest-pool-workers (used by competition-api) talks to workerd
+          # over a WebSocket via the `ws` package. Bun's `ws` compat is
+          # incomplete ("ws.WebSocket 'upgrade' event is not implemented")
+          # and the connection never completes, so vitest hangs forever.
+          # Install Node so vitest's `#!/usr/bin/env node` shebang runs
+          # under Node instead of bun.
+          name: Install Node.js (required by vitest-pool-workers)
+          command: |
+            apt-get update
+            apt-get install -y --no-install-recommends nodejs
+            node --version
       - install_bun_deps
       - run:
           name: Type check
