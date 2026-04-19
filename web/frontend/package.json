@@ -13,22 +13,22 @@
   },
   "//": "Basecoat fork - see docs/basecoat-fork.md for build/publish instructions",
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260412.1",
+    "@cloudflare/workers-types": "^4.20260418.1",
     "@tailwindcss/vite": "^4.2.2",
     "@pokle/basecoat": "0.3.10-beta3.pokle-selections",
     "tailwindcss": "^4.2.2",
-    "typescript": "^6.0.2",
+    "typescript": "^6.0.3",
     "vite": "^7.3.2",
-    "wrangler": "^4.81.1"
+    "wrangler": "^4.83.0"
   },
   "dependencies": {
     "@glidecomp/engine": "workspace:*",
     "@glidecomp/samples": "workspace:*",
-    "better-auth": "^1.6.2",
-    "hono": "^4.12.12",
+    "better-auth": "^1.6.5",
+    "hono": "^4.12.14",
     "katex": "^0.16.45",
     "leaflet": "2.0.0-alpha.1",
-    "mapbox-gl": "^3.21.0",
+    "mapbox-gl": "^3.22.0",
     "threebox-plugin": "^2.2.7"
   }
 }

@@ -10,15 +10,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@better-auth/api-key": "^1.6.2",
-    "better-auth": "^1.6.2",
-    "hono": "^4.12.12",
+    "@better-auth/api-key": "^1.6.5",
+    "better-auth": "^1.6.5",
+    "hono": "^4.12.14",
     "kysely": "^0.28.16",
     "kysely-d1": "^0.4.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260412.1",
-    "typescript": "^6.0.2",
-    "wrangler": "^4.81.1"
+    "@cloudflare/workers-types": "^4.20260418.1",
+    "typescript": "^6.0.3",
+    "wrangler": "^4.83.0"
   }
 }
