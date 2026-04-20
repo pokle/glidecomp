@@ -9,6 +9,7 @@
 | Date       | Reviewer | Scope                            | Status       |
 |------------|----------|----------------------------------|--------------|
 | 2026-04-20 | Claude   | Full repo (auth, comp, MCP, FE)  | Initial      |
+| 2026-04-20 | Claude   | SEC-01 remediation               | Fixed inline |
 
 ---
 
@@ -40,7 +41,10 @@ Severity scale: **Critical** (exploitable now, user data at risk) → **High** �
 
 ---
 
-#### SEC-01 — Reflective CORS with credentials on auth + competition workers — **High**
+#### SEC-01 — Reflective CORS with credentials on auth + competition workers — **High** — ~~Open~~ **Fixed (2026-04-20, this PR)**
+
+> **Resolution:** both workers now use an explicit allowlist (`glidecomp.com`, `*.glidecomp.pages.dev`, `localhost`) instead of reflecting the caller's `Origin`. Disallowed origins receive an empty `Access-Control-Allow-Origin` so the browser blocks the response. See `web/workers/auth-api/src/index.ts:10-31` and `web/workers/competition-api/src/index.ts:19-40`. Verification (run on deploy): `curl -I -H "Origin: https://evil.example" https://glidecomp.com/api/auth/me` should return no `Access-Control-Allow-Origin` header.
+
 
 **Files**
 - `web/workers/auth-api/src/index.ts:10-18`
