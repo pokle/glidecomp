@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "CI=true wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state && wrangler dev --persist-to ../../.wrangler/state",
     "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@better-auth/api-key": "^1.6.5",
@@ -17,8 +18,10 @@
     "kysely-d1": "^0.4.0"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.14.7",
     "@cloudflare/workers-types": "^4.20260418.1",
     "typescript": "^6.0.3",
+    "vitest": "^4.1.4",
     "wrangler": "^4.83.0"
   }
 }
