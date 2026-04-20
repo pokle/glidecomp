@@ -6,11 +6,25 @@ import { createAuth, isLocalDev, type AuthEnv } from "./auth";
 
 const app = new Hono<{ Bindings: AuthEnv }>();
 
-// CORS for local dev (credentials needed for cookies)
+// CORS — credentials:true means we MUST NOT reflect arbitrary origins, or any
+// site the user visits can read their session. Allowlist is prod + Pages
+// preview deploys + localhost (for bun run dev against a live backend).
+const PAGES_PREVIEW = /^https:\/\/[a-z0-9-]+\.glidecomp\.pages\.dev$/;
+function isAllowedOrigin(origin: string): boolean {
+  if (origin === "https://glidecomp.com") return true;
+  if (PAGES_PREVIEW.test(origin)) return true;
+  try {
+    if (new URL(origin).hostname === "localhost") return true;
+  } catch {
+    /* malformed Origin — reject */
+  }
+  return false;
+}
+
 app.use(
   "/api/auth/*",
   cors({
-    origin: (origin) => origin ?? "",
+    origin: (origin) => (origin && isAllowedOrigin(origin) ? origin : ""),
     credentials: true,
     allowMethods: ["GET", "POST", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
