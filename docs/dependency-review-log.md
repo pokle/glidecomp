@@ -1,5 +1,75 @@
 # Dependency Review Log
 
+## 2026-04-26
+
+### Security Vulnerabilities Fixed
+
+| Package | Severity | Advisory | Description |
+|---------|----------|----------|-------------|
+| postcss (transitive via vite) | MODERATE | [GHSA-qx2v-qp2m-jg93](https://github.com/advisories/GHSA-qx2v-qp2m-jg93) | XSS via unescaped `</style>` in CSS Stringify output. Fixed by overriding postcss to ^8.5.10 (installed 8.5.12). |
+| protocol-buffers-schema (transitive via mapbox-gl) | MODERATE | [GHSA-j452-xhg8-qg39](https://github.com/advisories/GHSA-j452-xhg8-qg39) | Prototype pollution via crafted protobuf schema (CVE-2026-5758). Fixed by overriding to ^3.6.1 (installed 3.6.1). |
+| better-auth | MODERATE | (v1.6.6) | SSRF vulnerabilities: loopback detection hardened to cover full `127.0.0.0/8`, IPv6 forms, and cloud metadata FQDNs. `0.0.0.0` no longer treated as loopback. |
+| hono (transitive via @modelcontextprotocol/sdk) | MODERATE | [GHSA-458j-xx4x-4375](https://github.com/advisories/GHSA-458j-xx4x-4375) | Stale hono 4.12.12 bundled by MCP SDK. Fixed by overriding hono to ^4.12.15. Not exploitable in our codebase (no JSX SSR). |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **hono** | 4.12.14 | 4.12.15 | frontend, auth-api, competition-api, mcp-api | Bug fix: JWT helper now supports single-line PEM keys. No breaking changes. |
+| **better-auth** | 1.6.5 | 1.6.9 | frontend, auth-api | SSRF fix (1.6.6), multi-client-ID support for social providers (1.6.7), OAuth profile fallback when email omitted (1.6.8), edge/browser instrumentation fix (1.6.9). No breaking changes. |
+| **@better-auth/api-key** | 1.6.5 | 1.6.9 | auth-api | Aligned with better-auth 1.6.9. |
+| **wrangler** | 4.83.0 | 4.85.0 | all workspaces | Artifacts binding support, container placement constraints, cross-process service bindings, custom domain `enabled`/`previews_enabled` fields. No breaking changes. |
+| **tailwindcss** | 4.2.2 | 4.2.4 | frontend | Bug fixes: `tracking-*` canonicalization, crash fix for invalid unicode, `@import`/`@plugin` resolution with Vite aliases. |
+| **@tailwindcss/vite** | 4.2.2 | 4.2.4 | frontend | Aligned with tailwindcss 4.2.4. |
+| **vitest** | 4.1.4 | 4.1.5 | competition-api | Bug fixes: soft assertion diff config, JSX/TSX syntax highlight, MessagePort in web-worker postMessage. |
+| **@cloudflare/vitest-pool-workers** | 0.14.7 | 0.14.9 | competition-api | Reduced default log verbosity, workflow binding fix, dependency bumps. |
+| **agents** | 0.11.4 | 0.11.5 | mcp-api | Type-level improvements: `Props` generic added to `AIChatAgent`. No behavior change. |
+| **@cloudflare/workers-types** | 4.20260418.1 | 4.20260426.1 | all workspaces | Weekly type definition update. |
+| **@types/bun** | 1.3.12 | 1.3.13 | root | Type definition update. |
+| **postcss** | 8.5.8 | 8.5.12 | (transitive, override) | Security fix + bug fixes. Forced via `overrides` in root package.json. |
+| **protocol-buffers-schema** | 3.6.0 | 3.6.1 | (transitive, override) | Security fix. Forced via `overrides` in root package.json. |
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| zod | 3.25.76 | 4.3.6 | Major version. Breaking changes to `.pick()`/`.omit()` on refined schemas, `.extend()` with refinements. Requires `@hono/zod-validator` compatibility review and schema migration. Recommend a separate dedicated PR. |
+| vite | 7.3.2 | 8.0.10 | Major version. Replaces esbuild+Rollup with Rolldown. Breaking: `build.rollupOptions` → `build.rolldownOptions`, `optimizeDeps.esbuildOptions` deprecated, changed module resolution. `@cloudflare/vitest-pool-workers` has known issues with Vite 8. Wait for ecosystem stabilization. |
+| @modelcontextprotocol/sdk | 1.12.1 (lockfile: 1.29.0) | 2.0.0-alpha | Alpha release. Breaking changes in tool registration API and error handling. Wait for stable. Note: lockfile resolves to 1.29.0 via `^1.12.1` semver range. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. No newer alpha available. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, not published to npm regularly. |
+| kysely | 0.28.16 | 0.29.0-rc.0 | 0.28.16 is the latest stable. 0.29.0 is RC only. |
+| @turf/bbox, @turf/bearing, @turf/helpers | 7.3.5 | 7.3.5 | Already at latest. |
+| katex | 0.16.45 | 0.16.45 | Already at latest. |
+| sqids | 0.3.0 | 0.3.0 | Already at latest. |
+| @hono/zod-validator | 0.7.6 | 0.7.6 | Already at latest. |
+| @fontsource/atkinson-hyperlegible-next | 5.2.7 | 5.2.7 | Already at latest. |
+| mapbox-gl | 3.22.0 | 3.22.0 | Already at latest. |
+| threebox-plugin | 2.2.7 | 2.2.7 | Already at latest. |
+| typescript | 6.0.3 | 6.0.3 | Already at latest. |
+| @playwright/test | 1.59.1 | 1.59.1 | Already at latest. |
+
+### Code Changes Required
+
+None. All upgrades are drop-in replacements with no API changes affecting our usage.
+
+### Verification
+
+- All 411 engine/worker tests pass
+- All 203 competition-api vitest tests pass
+- All 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, mcp-api)
+- Frontend production build succeeds
+- `bun audit` reports 0 vulnerabilities
+
+### Lessons / Notes for Future Sessions
+
+- `bun audit` reports vulnerabilities against the semver range in package.json, not the resolved lockfile version. Even when your direct dependency is patched, transitive dependencies (e.g., `@modelcontextprotocol/sdk` bundling an older hono) may keep the advisory active. Use `overrides` to force transitive dependency versions.
+- The `postcss` vulnerability (GHSA-qx2v-qp2m-jg93) is fixed in postcss 8.5.10. Vite 7.3.2 uses `postcss: ^8.5.6` which allows the fix, but bun's lockfile may not auto-resolve to the latest patch — an explicit override ensures the fix.
+- `protocol-buffers-schema` is a deep transitive dependency of mapbox-gl (via `resolve-protobuf-schema`). The semver range `^3.3.1` allows 3.6.1, but bun's lockfile had pinned 3.6.0 — an override was needed to bump it.
+- `better-auth` 1.6.6 includes important SSRF hardening. If self-hosting the auth worker or exposing it to untrusted input, this is a critical upgrade.
+- The `agents` package continues to be pinned to an exact version (no `^`) because it's pre-1.0. Type declaration file `web/workers/mcp-api/src/agents-mcp.d.ts` was not affected by the 0.11.4→0.11.5 upgrade.
+- `@cloudflare/vitest-pool-workers` 0.14.8 changed the deprecated `SELF` reference warning. If tests log a new warning about exports, this is the source.
+
 ## 2026-04-12
 
 ### Security Vulnerabilities Fixed
