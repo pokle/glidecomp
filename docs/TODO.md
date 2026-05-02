@@ -22,9 +22,9 @@ See [competition-management-focus.md](competition-management-focus.md)
 - [ ] BUG: The `web/frontend/public/data/tracks/2025-01-05-Tushar-Corryong.igc` IGC file has segments that aren't a glide or a thermal or sink. They're basically unclickable. These sections are near the end. I think there was so much lifty air that I was climbing on glide. Also there are sections that are identified as a thermal but are actually a climbing glide (flying straight).
 - [ ] Improve usability of the glide segment visualisation (Increase font size. 1km Chevrons.)
 - [ ] **Browser Storage Management** (see `browser-storage-spec.md` in this directory):
-  - [ ] Clear individual items from storage (delete a stored task or track)
-  - [ ] Clear all storage (reset to empty state)
-  - [ ] Download stored files back to user's computer (export IGC files)
+  - [x] Clear individual items from storage (delete a stored task or track) — per-row delete button on the dashboard
+  - [ ] Clear all storage (reset to empty state) — only available today via "Delete account"; no standalone UI
+  - [x] Download stored files back to user's computer (export IGC files) — per-row download button on the dashboard
 - [x] Allow users to click on the track to show details on the events panel.
   - Open the Event panel if closed
   - If the point lies within a segment, select the segment (glide, thermal, or sink)
