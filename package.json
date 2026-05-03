@@ -17,6 +17,7 @@
   "type": "module",
   "scripts": {
     "dev": "[ -d node_modules ] || bun install && bun run dev:auth & bun run dev:comp & bun run dev:mcp & bun run --filter '@glidecomp/frontend' dev",
+    "kill-dev": "bash web/scripts/kill-dev.sh",
     "dev:mcp": "bun run --filter mcp-api dev",
     "dev:frontend": "bun run --filter '@glidecomp/frontend' dev",
     "build": "bun run --filter '@glidecomp/frontend' build",
