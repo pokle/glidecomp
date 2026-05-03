@@ -774,10 +774,13 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
             { icon }
           );
 
-          marker.bindPopup(
-            `<strong>${event.description}</strong><br>${event.time.toLocaleTimeString()}`,
-            { offset: [0, -10] }
-          );
+          const popupEl = document.createElement('div');
+          const strong = document.createElement('strong');
+          strong.textContent = event.description;
+          popupEl.appendChild(strong);
+          popupEl.appendChild(document.createElement('br'));
+          popupEl.appendChild(document.createTextNode(event.time.toLocaleTimeString()));
+          marker.bindPopup(popupEl, { offset: [0, -10] });
 
           eventMarkersGroup.addLayer(marker);
         }

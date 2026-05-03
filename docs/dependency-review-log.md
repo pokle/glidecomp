@@ -1,5 +1,60 @@
 # Dependency Review Log
 
+## 2026-05-03
+
+### Security Vulnerabilities Fixed
+
+| Package | Severity | Advisory | Description |
+|---------|----------|----------|-------------|
+| @modelcontextprotocol/sdk | HIGH | CVE-2026-0621 | ReDoS in `UriTemplate.partToRegExp()` — catastrophic backtracking on malicious input causes 100% CPU hang. Fixed in 1.25.2. Upgraded from 1.12.1 to 1.29.0. |
+| @modelcontextprotocol/sdk | HIGH | GHSA (data leak) | Single `McpServer` with `StreamableHTTPServerTransport` reused across clients leaks responses between client boundaries. Fixed in 1.25.4. |
+| postcss (override) | MODERATE | CVE-2026-41305 | XSS via unescaped `</style>` in CSS stringify. Was on exact fix boundary (^8.5.10), bumped to ^8.5.13 for safety. |
+| leaflet (code fix) | MODERATE | CVE-2025-69993 | XSS via `bindPopup()` rendering user-supplied input as raw HTML. Mitigated by switching to DOM API (`textContent`/`createElement`) instead of HTML string interpolation in leaflet-provider.ts. |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **@modelcontextprotocol/sdk** | 1.12.1 | 1.29.0 | mcp-api | Critical security fix (CVE-2026-0621 + data leak). 17 minor versions jumped. API surface used (`McpServer`, `createMcpHandler`) unchanged. |
+| **agents** | 0.11.5 | 0.12.3 | mcp-api | Security hardening: SSRF protection (private IP blocking), HMAC-SHA256 signed email headers, `callbackPath` for MCP OAuth callbacks. |
+| **mapbox-gl** | 3.22.0 | 3.23.0 | root, frontend | Minor release. No breaking changes. |
+| **wrangler** | 4.85.0 | 4.87.0 | root | 4.86.0 dropped Node.js 20.x support (Node 20 EOL 2026-04-30). 4.87.0 adds experimental `generateTypes()` API. |
+| **@cloudflare/workers-types** | 4.20260426.1 | 4.20260503.1 | root | Weekly type definition update. |
+| **@cloudflare/vitest-pool-workers** | ^0.14.9 | ^0.15.2 | competition-api | Now supports vitest ^4.1.0 peer dep. |
+| **postcss** (override) | ^8.5.10 | ^8.5.13 | root (override) | Security fix (see above). |
+| **engines.node** | >=20 | >=22 | root | Required by wrangler 4.86+. |
+
+### Code Changes Required
+
+- **leaflet-provider.ts**: Replaced `bindPopup()` HTML string interpolation with DOM API (`createElement`/`textContent`) to mitigate CVE-2025-69993 XSS via `bindPopup`. The event data is internally generated (not user input), but this is defense-in-depth.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| zod | ^3.25.76 | 4.4.2 | Major version. `@hono/zod-validator` does not support Zod 4 yet (honojs/middleware#1148). Migration requires `.strict()` → `strictObject()`, `error.errors` → `error.issues`, etc. |
+| vite | ^7.3.2 | 8.0.10 | Major version. Replaces esbuild/Rollup with Rolldown. `@cloudflare/vitest-pool-workers` has known issues with Vite 8. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha for `LeafletMap` constructor API. No stable 2.0 release yet. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+
+### Verification
+
+- All 406 engine tests pass
+- All 5 airscore-api tests pass
+- All 203 competition-api vitest tests pass
+- All 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, mcp-api)
+- `bun audit` reports 0 vulnerabilities
+
+### Lessons / Notes for Future Sessions
+
+- **`@modelcontextprotocol/sdk` jumped 17 minor versions** (1.12 → 1.29) with critical security fixes. The narrow API surface used (`McpServer`, `createMcpHandler`) was stable across all versions. The custom type declarations in `agents-mcp.d.ts` shield from the full type surface — no changes needed.
+- **wrangler 4.86.0 silently dropped Node.js 20 support.** Updated `engines.node` to `>=22` to surface this early in CI/deployment.
+- **Leaflet XSS (CVE-2025-69993):** Even with alpha/pre-release packages, always use DOM API (`textContent`, `createElement`) instead of string interpolation for `bindPopup`/`bindTooltip`. The upstream fix may not come for 2.0-alpha.
+- **`agents` package continues to be pinned** (no caret) since it's pre-1.0 with potential breaking changes on minor bumps. The 0.11.5 → 0.12.3 upgrade changed `partyserver` from ^0.4.1 to ^0.5.5 internally but `createMcpHandler` API is unchanged.
+- **Zod 4 migration remains blocked** by `@hono/zod-validator`. Monitor honojs/middleware#1148.
+- **threebox-plugin is dormant** (3+ years since last release). If future mapbox-gl upgrades break it, consider forking.
+- **`bun update` only bumps root package.json** version specifiers, not workspace sub-packages. Sub-packages resolve via the lockfile.
+
 ## 2026-04-26
 
 ### Security Vulnerabilities Fixed
