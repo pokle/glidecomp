@@ -223,10 +223,13 @@
     border-left-color: var(--ring);
   }
 
-  /* Action buttons on cards (delete, download) */
+  /* Action buttons on cards (delete, download).
+     Default state (touch / no-hover devices): visible at muted opacity,
+     so users can discover and tap them without a hover event.
+     Hover-capable devices: hidden until parent card hover, for cleaner cards at rest. */
   .delete-btn,
   .download-btn {
-    @apply p-1 rounded text-muted-foreground/0 transition-all duration-150 cursor-pointer;
+    @apply p-1 rounded text-muted-foreground/40 transition-all duration-150 cursor-pointer;
     background: none;
     border: none;
   }
@@ -239,9 +242,16 @@
     @apply hover:text-foreground hover:bg-accent;
   }
 
-  .file-card:hover .delete-btn,
-  .file-card:hover .download-btn {
-    @apply text-muted-foreground/40;
+  @media (hover: hover) {
+    .delete-btn,
+    .download-btn {
+      @apply text-muted-foreground/0;
+    }
+
+    .file-card:hover .delete-btn,
+    .file-card:hover .download-btn {
+      @apply text-muted-foreground/40;
+    }
   }
 
   /* Card enter animation */
