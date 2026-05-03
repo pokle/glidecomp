@@ -16,7 +16,7 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "[ -d node_modules ] || bun install && bun run dev:auth & bun run dev:comp & bun run dev:mcp & bun run --filter '@glidecomp/frontend' dev",
+    "dev": "[ -d node_modules ] || bun install; concurrently --kill-others-on-fail -n auth,comp,mcp,fe -c blue,green,magenta,cyan 'bun run dev:auth' 'bun run dev:comp' 'bun run dev:mcp' \"bun run --filter '@glidecomp/frontend' dev\"",
     "kill-dev": "bash web/scripts/kill-dev.sh",
     "dev:mcp": "bun run --filter mcp-api dev",
     "dev:frontend": "bun run --filter '@glidecomp/frontend' dev",
@@ -56,6 +56,7 @@
     "@playwright/test": "^1.59.1",
     "@types/bun": "^1.3.13",
     "@types/node": "^25.6.0",
+    "concurrently": "^9.2.1",
     "typescript": "^6.0.3",
     "wrangler": "^4.85.0"
   },
