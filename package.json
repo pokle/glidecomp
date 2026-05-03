@@ -16,9 +16,10 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "[ -d node_modules ] || bun install; concurrently --kill-others-on-fail -n auth,comp,mcp,fe -c blue,green,magenta,cyan 'bun run dev:auth' 'bun run dev:comp' 'bun run dev:mcp' \"bun run --filter '@glidecomp/frontend' dev\"",
+    "dev": "[ -d node_modules ] || bun install; concurrently --kill-others-on-fail -n auth,comp,mcp,airscore,fe -c blue,green,magenta,yellow,cyan 'bun run dev:auth' 'bun run dev:comp' 'bun run dev:mcp' 'bun run dev:airscore' \"bun run --filter '@glidecomp/frontend' dev\"",
     "kill-dev": "bash web/scripts/kill-dev.sh",
     "dev:mcp": "bun run --filter mcp-api dev",
+    "dev:airscore": "bun run --filter airscore-api dev",
     "dev:frontend": "bun run --filter '@glidecomp/frontend' dev",
     "build": "bun run --filter '@glidecomp/frontend' build",
     "deploy": "bun run --filter '@glidecomp/frontend' deploy",
