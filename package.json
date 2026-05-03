@@ -16,7 +16,8 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "[ -d node_modules ] || bun install; concurrently --kill-others-on-fail -n auth,comp,mcp,airscore,fe -c blue,green,magenta,yellow,cyan 'bun run dev:auth' 'bun run dev:comp' 'bun run dev:mcp' 'bun run dev:airscore' \"bun run --filter '@glidecomp/frontend' dev\"",
+    "dev": "[ -d node_modules ] || bun install; concurrently --kill-others-on-fail -n workers,fe -c blue,cyan 'bun run dev:workers' 'bun run dev:frontend'",
+    "dev:workers": "[ -d node_modules ] || bun install; concurrently --kill-others-on-fail -n auth,comp,mcp,airscore -c blue,green,magenta,yellow 'bun run dev:auth' 'bun run dev:comp' 'bun run dev:mcp' 'bun run dev:airscore'",
     "kill-dev": "bash web/scripts/kill-dev.sh",
     "dev:mcp": "bun run --filter mcp-api dev",
     "dev:airscore": "bun run --filter airscore-api dev",
