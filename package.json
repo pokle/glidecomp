@@ -51,25 +51,25 @@
     "web/workers/*"
   ],
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260426.1",
+    "@cloudflare/workers-types": "^4.20260503.1",
     "@playwright/test": "^1.59.1",
     "@types/bun": "^1.3.13",
     "@types/node": "^25.6.0",
     "typescript": "^6.0.3",
-    "wrangler": "^4.85.0"
+    "wrangler": "^4.87.0"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "dependencies": {
     "@fontsource/atkinson-hyperlegible-next": "^5.2.7",
-    "mapbox-gl": "^3.22.0",
+    "mapbox-gl": "^3.23.0",
     "threebox-plugin": "^2.2.7"
   },
   "overrides": {
     "defu": "^6.1.7",
     "hono": "^4.12.15",
-    "postcss": "^8.5.10",
+    "postcss": "^8.5.13",
     "protocol-buffers-schema": "^3.6.1"
   },
   "patchedDependencies": {
