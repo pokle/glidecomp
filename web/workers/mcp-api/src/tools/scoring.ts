@@ -1,12 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { Env, AuthUser } from "../env";
+import type { Env } from "../env";
 import { compApi, jsonResult, errorResult } from "../util";
 
 export function registerScoringTools(
   server: McpServer,
   env: Env,
-  user: AuthUser | null
+  apiKey: string | null
 ) {
   server.registerTool(
     "get_task_scores",
@@ -22,7 +22,7 @@ export function registerScoringTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "GET",
           `/api/comp/${comp_id}/task/${task_id}/score`
         );
@@ -46,7 +46,7 @@ export function registerScoringTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "GET",
           `/api/comp/${comp_id}/scores`
         );

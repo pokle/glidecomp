@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { Env, AuthUser } from "../env";
+import type { Env } from "../env";
 import { compApi, jsonResult, errorResult } from "../util";
 
 const pilotFieldsSchema = {
@@ -23,7 +23,7 @@ const pilotFieldsSchema = {
 export function registerPilotTools(
   server: McpServer,
   env: Env,
-  user: AuthUser | null
+  apiKey: string | null
 ) {
   server.registerTool(
     "get_pilot_profile",
@@ -34,7 +34,7 @@ export function registerPilotTools(
     },
     async () => {
       try {
-        const data = await compApi(env, user, "GET", "/api/comp/pilot");
+        const data = await compApi(env, apiKey, "GET", "/api/comp/pilot");
         return jsonResult(data);
       } catch (e) {
         return errorResult((e as Error).message);
@@ -62,7 +62,7 @@ export function registerPilotTools(
     },
     async (args) => {
       try {
-        const data = await compApi(env, user, "PATCH", "/api/comp/pilot", args);
+        const data = await compApi(env, apiKey, "PATCH", "/api/comp/pilot", args);
         return jsonResult(data);
       } catch (e) {
         return errorResult((e as Error).message);
@@ -83,7 +83,7 @@ export function registerPilotTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "GET",
           `/api/comp/${comp_id}/pilot`
         );
@@ -108,7 +108,7 @@ export function registerPilotTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "POST",
           `/api/comp/${comp_id}/pilot`,
           body
@@ -144,7 +144,7 @@ export function registerPilotTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "POST",
           `/api/comp/${comp_id}/pilot/bulk`,
           { pilots }
@@ -184,7 +184,7 @@ export function registerPilotTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "PATCH",
           `/api/comp/${comp_id}/pilot/${comp_pilot_id}`,
           body
@@ -210,7 +210,7 @@ export function registerPilotTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "DELETE",
           `/api/comp/${comp_id}/pilot/${comp_pilot_id}`
         );

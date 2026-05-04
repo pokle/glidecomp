@@ -10,7 +10,7 @@
 |------------|----------|----------------------------------|--------------|
 | 2026-04-20 | Claude   | Full repo (auth, comp, MCP, FE)  | Initial      |
 | 2026-04-20 | Claude   | SEC-01 remediation               | Fixed inline |
-| 2026-05-04 | Claude   | Re-review + new findings (SEC-10..14) | Findings only — no code changes this PR |
+| 2026-05-04 | Claude   | Re-review + new findings (SEC-10..14) | SEC-10 fixed inline (this PR) |
 
 ---
 
@@ -236,7 +236,9 @@ When re-running this review, start by diffing current `HEAD` against commit refe
 
 ---
 
-#### SEC-10 — Authentication bypass via trusted `X-Glidecomp-Internal-User` header on publicly-reachable competition-api — **Critical** — Open
+#### SEC-10 — Authentication bypass via trusted `X-Glidecomp-Internal-User` header on publicly-reachable competition-api — **Critical** — ~~Open~~ **Fixed (2026-05-04, this PR)**
+
+> **Resolution:** the comp-api auth middleware no longer reads any "trust me, I am user X" header. It only resolves identity via auth-api by forwarding inbound credentials — `cookie` for browsers, `x-api-key` for MCP/programmatic callers. The MCP worker stops forging a user header and instead passes the caller's API key through as `x-api-key`; auth-api's `enableSessionForAPIKeys` resolves it to the same `{ user }` shape. `INTERNAL_USER_HEADER` and the trust check are deleted (`web/workers/competition-api/src/middleware/auth.ts` and `web/workers/mcp-api/src/util.ts`). Regression tests cover the bypass attempt and the cookie-still-works sanity check (`web/workers/competition-api/test/auth-bypass.test.ts`).
 
 **Files**
 - `web/workers/competition-api/src/middleware/auth.ts:8-37` — defines and trusts the header
@@ -353,11 +355,9 @@ Not exploitable across origins (the share target only fires for files the user e
 
 ---
 
-#### SEC-14 — Service-binding trust comment misleads readers — **Info** — Open
+#### SEC-14 — Service-binding trust comment misleads readers — **Info** — ~~Open~~ **Fixed (2026-05-04, this PR)**
 
-**File:** `web/workers/mcp-api/src/util.ts:30-34`
-
-The author note "Service bindings are internal-only (not reachable from the internet), so this is safe" is true *of the MCP worker* but is the assumption that lets SEC-10 land in the comp-api. After fixing SEC-10, replace this comment so a future reader doesn't repeat the mistake — explicitly call out that service-binding-vs-public is a property of the **callee**, not the **call style**. Cross-link to the SEC-10 fix.
+The misleading comment was deleted as part of the SEC-10 fix when `web/workers/mcp-api/src/util.ts` was rewritten to forward the inbound API key instead of forging a user identity header. The new comment explicitly calls out "Do NOT forge identity headers here — that's what SEC-10 was about."
 
 ---
 
@@ -386,7 +386,8 @@ New gaps from this round:
 
 ### Where to start the next review
 
-1. Re-evaluate SEC-10, SEC-11, SEC-12 first — those are the open exploitable items.
+1. Re-evaluate SEC-11 (gzip-bomb) and SEC-12 (unbounded xctsk) first — those are the open exploitable items now that SEC-10 is fixed.
 2. `git log` since `560ccbd` to spot any new mutating endpoints; for each, verify (a) authn middleware, (b) authz middleware, (c) audit() call, (d) Zod validator with bounded fields.
 3. `bun audit` and a fresh diff of `docs/dependency-review-log.md`.
 4. Re-run the whole prior-findings table; update Status column.
+5. Confirm the SEC-10 fix held: send `X-Glidecomp-Internal-User` to a deployed comp-api endpoint and check it gets 401 (regression test only covers the in-process miniflare path).

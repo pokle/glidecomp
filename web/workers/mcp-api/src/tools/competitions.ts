@@ -1,12 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { Env, AuthUser } from "../env";
+import type { Env } from "../env";
 import { compApi, jsonResult, errorResult } from "../util";
 
 export function registerCompetitionTools(
   server: McpServer,
   env: Env,
-  user: AuthUser | null
+  apiKey: string | null
 ) {
   server.registerTool(
     "list_competitions",
@@ -17,7 +17,7 @@ export function registerCompetitionTools(
     },
     async () => {
       try {
-        const data = await compApi(env, user, "GET", "/api/comp");
+        const data = await compApi(env, apiKey, "GET", "/api/comp");
         return jsonResult(data);
       } catch (e) {
         return errorResult((e as Error).message);
@@ -38,7 +38,7 @@ export function registerCompetitionTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "GET",
           `/api/comp/${comp_id}`
         );
@@ -87,7 +87,7 @@ export function registerCompetitionTools(
     },
     async (args) => {
       try {
-        const data = await compApi(env, user, "POST", "/api/comp", args);
+        const data = await compApi(env, apiKey, "POST", "/api/comp", args);
         return jsonResult(data);
       } catch (e) {
         return errorResult((e as Error).message);
@@ -152,7 +152,7 @@ export function registerCompetitionTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "PATCH",
           `/api/comp/${comp_id}`,
           body
@@ -177,7 +177,7 @@ export function registerCompetitionTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "DELETE",
           `/api/comp/${comp_id}`
         );

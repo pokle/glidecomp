@@ -1,12 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { Env, AuthUser } from "../env";
+import type { Env } from "../env";
 import { compApi, compApiRaw, jsonResult, errorResult } from "../util";
 
 export function registerTrackTools(
   server: McpServer,
   env: Env,
-  user: AuthUser | null
+  apiKey: string | null
 ) {
   server.registerTool(
     "list_tracks",
@@ -22,7 +22,7 @@ export function registerTrackTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "GET",
           `/api/comp/${comp_id}/task/${task_id}/igc`
         );
@@ -58,7 +58,7 @@ export function registerTrackTools(
 
         const res = await compApiRaw(
           env,
-          user,
+          apiKey,
           "POST",
           `/api/comp/${comp_id}/task/${task_id}/igc`,
           gzipped,
@@ -105,7 +105,7 @@ export function registerTrackTools(
 
         const res = await compApiRaw(
           env,
-          user,
+          apiKey,
           "POST",
           `/api/comp/${comp_id}/task/${task_id}/igc/${comp_pilot_id}`,
           gzipped,
@@ -142,7 +142,7 @@ export function registerTrackTools(
       try {
         const res = await compApiRaw(
           env,
-          user,
+          apiKey,
           "GET",
           `/api/comp/${comp_id}/task/${task_id}/igc/${comp_pilot_id}/download`
         );
@@ -196,7 +196,7 @@ export function registerTrackTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "PATCH",
           `/api/comp/${comp_id}/task/${task_id}/igc/${comp_pilot_id}`,
           body
@@ -223,7 +223,7 @@ export function registerTrackTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "DELETE",
           `/api/comp/${comp_id}/task/${task_id}/igc/${comp_pilot_id}`
         );
