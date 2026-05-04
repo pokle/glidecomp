@@ -10,7 +10,7 @@
 |------------|----------|----------------------------------|--------------|
 | 2026-04-20 | Claude   | Full repo (auth, comp, MCP, FE)  | Initial      |
 | 2026-04-20 | Claude   | SEC-01 remediation               | Fixed inline |
-| 2026-05-04 | Claude   | Re-review + new findings (SEC-10..14) | SEC-10 fixed inline (this PR) |
+| 2026-05-04 | Claude   | Re-review + new findings (SEC-10..14) | SEC-10, SEC-11, SEC-14 fixed inline (this PR) |
 
 ---
 
@@ -291,7 +291,9 @@ Option (2) is the smallest diff that closes the bypass. Add a regression test th
 
 ---
 
-#### SEC-11 — IGC upload accepts gzip-compressed body without decompressed-size cap (zip-bomb) — **High** — Open
+#### SEC-11 — IGC upload accepts gzip-compressed body without decompressed-size cap (zip-bomb) — **High** — ~~Open~~ **Fixed (2026-05-04, this PR)**
+
+> **Resolution:** new helper `validateAndDecompressIgc()` in `web/workers/competition-api/src/igc-validation.ts` enforces three independent caps in cheapest-to-check order: (1) compressed size cap of 1 MiB (down from 5 MiB), (2) gzip magic check (`0x1f 0x8b`), (3) streaming decompressed cap of 2 MiB enforced by a counting `TransformStream` that errors the pipeline the moment the cap is exceeded — never buffers more than the cap. Both upload routes (`web/workers/competition-api/src/routes/igc.ts` self-upload and on-behalf) call the helper before touching R2, so non-gzip blobs and bombs are rejected with 400 instead of being stored. Six new helper tests in `web/workers/competition-api/test/igc-validation.test.ts` cover empty / oversize-compressed / non-gzip / corrupt-gzip / decompressed-too-large / boundary-at-cap. The bomb test confirms the size protection works end-to-end (compressed body < 1 MiB but decompressed would be > 2 MiB → rejected with the typed `decompressed_too_large` error).
 
 **Files**
 - `web/workers/competition-api/src/routes/igc.ts:160-238` (self-upload path)
@@ -386,7 +388,7 @@ New gaps from this round:
 
 ### Where to start the next review
 
-1. Re-evaluate SEC-11 (gzip-bomb) and SEC-12 (unbounded xctsk) first — those are the open exploitable items now that SEC-10 is fixed.
+1. Re-evaluate SEC-12 (unbounded xctsk) first — the only Medium+ open exploitable item remaining now that SEC-10 and SEC-11 are fixed.
 2. `git log` since `560ccbd` to spot any new mutating endpoints; for each, verify (a) authn middleware, (b) authz middleware, (c) audit() call, (d) Zod validator with bounded fields.
 3. `bun audit` and a fresh diff of `docs/dependency-review-log.md`.
 4. Re-run the whole prior-findings table; update Status column.
