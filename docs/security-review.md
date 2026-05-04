@@ -10,7 +10,7 @@
 |------------|----------|----------------------------------|--------------|
 | 2026-04-20 | Claude   | Full repo (auth, comp, MCP, FE)  | Initial      |
 | 2026-04-20 | Claude   | SEC-01 remediation               | Fixed inline |
-| 2026-05-04 | Claude   | Re-review + new findings (SEC-10..14) | SEC-10, SEC-11, SEC-14 fixed inline (this PR) |
+| 2026-05-04 | Claude   | Re-review + new findings (SEC-10..14) | SEC-10, SEC-11, SEC-12, SEC-14 fixed inline (this PR) |
 
 ---
 
@@ -324,7 +324,9 @@ Combined with SEC-10, this is currently exploitable without authentication if an
 
 ---
 
-#### SEC-12 — `xctsk` task body has no shape, depth, or size cap — **Medium** — Open
+#### SEC-12 — `xctsk` task body has no shape, depth, or size cap — **Medium** — ~~Open~~ **Fixed (2026-05-04, this PR)**
+
+> **Resolution:** the `xctsk` field on create-task and update-task is now validated by a strict Zod schema (`xctskSchema` in `web/workers/competition-api/src/validators.ts`) that mirrors the engine's `XCTask` interface. Limits chosen to be 16–100× generous against the largest real-world sample (verified: all 7 samples in `web/frontend/public/data/tasks/` and `web/samples/comps/` validate): max 50 turnpoints, max 100 timeGates, name/description ≤ 64 chars, lat/lon range-checked, radius 1–50000 m, taskType ≤ 32 chars. `.strict()` rejects unknown keys (so spec extensions don't silently bloat D1 with attacker-controlled junk). Backstop: a top-level refine asserts `JSON.stringify(value).length ≤ 32 KB` — structurally unreachable through current per-field limits but catches future spec extensions that bypass them. Nine new tests in `web/workers/competition-api/test/xctsk-validation.test.ts` cover happy path, the all-maxed-fields sanity case, and every rejection path (oversize array, oversize string, out-of-range coord/radius, invalid enum, deep-nesting via unknown key).
 
 **File:** `web/workers/competition-api/src/validators.ts:170, 180` — `xctsk: z.record(z.unknown()).nullable().optional()`
 
@@ -388,7 +390,7 @@ New gaps from this round:
 
 ### Where to start the next review
 
-1. Re-evaluate SEC-12 (unbounded xctsk) first — the only Medium+ open exploitable item remaining now that SEC-10 and SEC-11 are fixed.
+1. No remaining Critical / High / Medium-exploitable items. Open work is SEC-02 (security headers `_headers` file), SEC-03 (admin emails on public endpoint), SEC-05 (innerHTML pattern), SEC-06 (no global JSON body cap), SEC-08 (rate-limit headers), SEC-13 (share-target filename sanitisation) — all Medium or below.
 2. `git log` since `560ccbd` to spot any new mutating endpoints; for each, verify (a) authn middleware, (b) authz middleware, (c) audit() call, (d) Zod validator with bounded fields.
 3. `bun audit` and a fresh diff of `docs/dependency-review-log.md`.
 4. Re-run the whole prior-findings table; update Status column.

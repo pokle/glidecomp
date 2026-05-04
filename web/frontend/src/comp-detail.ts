@@ -412,7 +412,7 @@ async function setupTaskEditor(
     try {
       const res = await api.api.comp[":comp_id"].task[":task_id"].$patch({
         param: { comp_id: compId, task_id: taskId },
-        json: { xctsk: task as unknown as Record<string, unknown> },
+        json: { xctsk: task },
       });
 
       if (!res.ok) {
