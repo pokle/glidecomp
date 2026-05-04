@@ -20,6 +20,20 @@ function relativeTime(timestamp: number): string {
   return `${Math.floor(months / 12)}y ago`;
 }
 
+// ── File download ─────────────────────────────────────────────────────────
+
+function downloadFile(filename: string, content: string, mimeType: string): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ── Card rendering ────────────────────────────────────────────────────────
 
 function createTrackCard(track: StoredTrack, index: number): HTMLElement {
@@ -39,6 +53,11 @@ function createTrackCard(track: StoredTrack, index: number): HTMLElement {
     </div>
     <div class="flex items-center gap-2 shrink-0">
       <span class="text-xs text-muted-foreground/60">${relativeTime(track.lastAccessedAt)}</span>
+      <button class="download-btn" data-track-id="${track.id}" title="Download IGC" aria-label="Download IGC">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+      </button>
       <button class="delete-btn" data-track-id="${track.id}" title="Remove track" aria-label="Remove track">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -64,6 +83,11 @@ function createTaskCard(task: StoredTask, index: number): HTMLElement {
     </div>
     <div class="flex items-center gap-2 shrink-0">
       <span class="text-xs text-muted-foreground/60">${relativeTime(task.lastAccessedAt)}</span>
+      <button class="download-btn" data-task-id="${task.id}" title="Download XCTSK" aria-label="Download XCTSK">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+      </button>
       <button class="delete-btn" data-task-id="${task.id}" title="Remove task" aria-label="Remove task">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -237,10 +261,22 @@ async function init() {
     }
   });
 
-  // ── Delete item handlers (event delegation) ───────────────────────────
+  // ── Item action handlers (event delegation) ──────────────────────────
 
   tracksList.addEventListener("click", async (e) => {
-    const deleteBtn = (e.target as HTMLElement).closest(".delete-btn") as HTMLElement | null;
+    const target = e.target as HTMLElement;
+    const downloadBtn = target.closest(".download-btn") as HTMLElement | null;
+    if (downloadBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const trackId = downloadBtn.dataset.trackId;
+      if (trackId) {
+        const stored = await storage.getTrack(trackId);
+        if (stored) downloadFile(stored.filename, stored.content, "application/octet-stream");
+      }
+      return;
+    }
+    const deleteBtn = target.closest(".delete-btn") as HTMLElement | null;
     if (deleteBtn) {
       e.preventDefault();
       e.stopPropagation();
@@ -253,7 +289,19 @@ async function init() {
   });
 
   tasksList.addEventListener("click", async (e) => {
-    const deleteBtn = (e.target as HTMLElement).closest(".delete-btn") as HTMLElement | null;
+    const target = e.target as HTMLElement;
+    const downloadBtn = target.closest(".download-btn") as HTMLElement | null;
+    if (downloadBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const taskId = downloadBtn.dataset.taskId;
+      if (taskId) {
+        const stored = await storage.getTask(taskId);
+        if (stored) downloadFile(`${stored.id}.xctsk`, stored.rawJson, "application/xctsk+json");
+      }
+      return;
+    }
+    const deleteBtn = target.closest(".delete-btn") as HTMLElement | null;
     if (deleteBtn) {
       e.preventDefault();
       e.stopPropagation();

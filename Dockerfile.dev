@@ -1,5 +1,10 @@
 FROM node:22-slim
 
+# procps provides `ps`, which `concurrently` uses to tear down child
+# processes when one of them fails.
+RUN apt-get update && apt-get install -y --no-install-recommends procps \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install bun
 RUN npm install -g bun
 
