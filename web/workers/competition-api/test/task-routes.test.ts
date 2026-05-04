@@ -249,7 +249,13 @@ describe("PATCH /api/comp/:comp_id/task/:task_id", () => {
     const xctsk = {
       taskType: "CLASSIC",
       version: 1,
-      turnpoints: [{ name: "Start", lat: -37.0, lon: 144.0 }],
+      turnpoints: [
+        {
+          type: "SSS",
+          radius: 1000,
+          waypoint: { name: "Start", lat: -37.0, lon: 144.0 },
+        },
+      ],
     };
 
     const res = await authRequest(

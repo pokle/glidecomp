@@ -1,64 +1,42 @@
-import type { Env, AuthUser } from "./env";
+import type { Env } from "./env";
 
 /**
- * Forward a request to the competition-api via service binding.
- * The user is passed as a cookie-authenticated session by proxying
- * through the auth-api — but since the mcp-api already resolved
- * the user from the API key, we forge a synthetic cookie header
- * that the competition-api's auth middleware will accept.
+ * Forward a request to competition-api via service binding.
  *
- * Actually, the competition-api auth middleware calls auth-api's
- * /api/auth/me to verify the cookie. Since we don't have a real
- * session cookie, we instead set a special header that the
- * competition-api can use. However, the simpler approach is to
- * create a real session... but that's complex.
+ * Auth model: pass through whichever credential the MCP client sent.
+ * In practice that's the Better Auth API key (`Bearer glc_…` from the
+ * MCP client), which we forward as `x-api-key` so competition-api's
+ * auth middleware can resolve it via auth-api the same way it resolves
+ * a browser cookie. Anonymous callers send no `apiKey` and only see
+ * public endpoints.
  *
- * Simplest approach: we extend the auth-api /api/auth/me endpoint
- * to also accept an X-Api-Key header and resolve the user from it.
- * But that changes the existing auth flow.
- *
- * Even simpler: the MCP worker calls competition-api endpoints
- * directly via service binding, passing a synthetic internal header
- * with the resolved user JSON. The competition-api auth middleware
- * already calls auth-api via service binding — we'll add a shortcut:
- * if an X-MCP-User header is present (only possible via service
- * binding, not from the internet), trust it.
- *
- * Actually the cleanest approach: we have the MCP worker pass the
- * API key in the Authorization header, and modify the competition-api
- * auth middleware to also try verifying via API key if no cookie session.
- *
- * Let's go with the simplest: pass a trusted internal header.
- * Service bindings are internal-only (not reachable from the internet),
- * so this is safe.
+ * Do NOT forge identity headers here — that's what SEC-10 was about.
  */
 
-const INTERNAL_USER_HEADER = "X-Glidecomp-Internal-User";
+function buildHeaders(
+  apiKey: string | null,
+  hasBody: boolean
+): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (apiKey) headers["x-api-key"] = apiKey;
+  if (hasBody) headers["Content-Type"] = "application/json";
+  return headers;
+}
 
 /**
- * Make a request to the competition-api, authenticating as the given user.
+ * Make a request to competition-api as the caller identified by `apiKey`.
  */
 export async function compApi(
   env: Env,
-  user: AuthUser | null,
+  apiKey: string | null,
   method: string,
   path: string,
   body?: unknown
 ): Promise<unknown> {
-  const headers: Record<string, string> = {};
-
-  if (user) {
-    headers[INTERNAL_USER_HEADER] = JSON.stringify(user);
-  }
-
-  if (body !== undefined) {
-    headers["Content-Type"] = "application/json";
-  }
-
   const res = await env.COMPETITION_API.fetch(
     new Request(`https://comp${path}`, {
       method,
-      headers,
+      headers: buildHeaders(apiKey, body !== undefined),
       body: body !== undefined ? JSON.stringify(body) : undefined,
     })
   );
@@ -74,21 +52,20 @@ export async function compApi(
 }
 
 /**
- * Make a raw request to the competition-api (for binary responses like IGC downloads).
+ * Make a raw request to competition-api (for binary responses like IGC downloads).
  */
 export async function compApiRaw(
   env: Env,
-  user: AuthUser | null,
+  apiKey: string | null,
   method: string,
   path: string,
   body?: BodyInit,
   extraHeaders?: Record<string, string>
 ): Promise<Response> {
-  const headers: Record<string, string> = { ...extraHeaders };
-
-  if (user) {
-    headers[INTERNAL_USER_HEADER] = JSON.stringify(user);
-  }
+  const headers: Record<string, string> = {
+    ...extraHeaders,
+    ...buildHeaders(apiKey, false),
+  };
 
   return env.COMPETITION_API.fetch(
     new Request(`https://comp${path}`, {

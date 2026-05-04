@@ -1,12 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { Env, AuthUser } from "../env";
+import type { Env } from "../env";
 import { compApi, jsonResult, errorResult } from "../util";
 
 export function registerAuditTools(
   server: McpServer,
   env: Env,
-  user: AuthUser | null
+  apiKey: string | null
 ) {
   server.registerTool(
     "get_audit_log",
@@ -41,7 +41,7 @@ export function registerAuditTools(
         if (query.subject_type) params.set("subject_type", query.subject_type);
         const qs = params.toString();
         const path = `/api/comp/${comp_id}/audit${qs ? `?${qs}` : ""}`;
-        const data = await compApi(env, user, "GET", path);
+        const data = await compApi(env, apiKey, "GET", path);
         return jsonResult(data);
       } catch (e) {
         return errorResult((e as Error).message);

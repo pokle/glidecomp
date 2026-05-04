@@ -1,12 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { Env, AuthUser } from "../env";
+import type { Env } from "../env";
 import { compApi, jsonResult, errorResult } from "../util";
 
 export function registerTaskTools(
   server: McpServer,
   env: Env,
-  user: AuthUser | null
+  apiKey: string | null
 ) {
   server.registerTool(
     "get_task",
@@ -22,7 +22,7 @@ export function registerTaskTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "GET",
           `/api/comp/${comp_id}/task/${task_id}`
         );
@@ -61,7 +61,7 @@ export function registerTaskTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "POST",
           `/api/comp/${comp_id}/task`,
           body
@@ -98,7 +98,7 @@ export function registerTaskTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "PATCH",
           `/api/comp/${comp_id}/task/${task_id}`,
           body
@@ -124,7 +124,7 @@ export function registerTaskTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "DELETE",
           `/api/comp/${comp_id}/task/${task_id}`
         );

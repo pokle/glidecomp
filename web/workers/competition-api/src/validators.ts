@@ -163,11 +163,95 @@ export const bulkPilotsSchema = z.object({
 
 const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
+// ── XCTask (xctsk) — strict schema, SEC-12 ──
+//
+// Mirrors the engine's XCTask interface (web/engine/src/xctsk-parser.ts).
+// Real-world samples in web/frontend/public/data/tasks/ are 1.1–2.0 KB;
+// the limits here are 16–100× generous so any plausible task fits while
+// pathological / DoS payloads are rejected. Unknown keys are stripped
+// (Zod default) so spec extensions don't crash but also don't bloat D1.
+//
+// Last-line defence: a refine on the top-level checks the stringified
+// JSON length against MAX_XCTSK_BYTES, catching anything that slips
+// through individual field limits (e.g. 50 turnpoints × 64-char names
+// would fit; 50 turnpoints × 64-char names + 100 timeGates is still
+// well under 32 KB, but the refine guarantees it).
+const MAX_XCTSK_BYTES = 32 * 1024;
+const MAX_XCTSK_TURNPOINTS = 50;
+const MAX_XCTSK_TIMEGATES = 100;
+const XCTSK_NAME = z.string().min(1).max(64);
+const XCTSK_DESCRIPTION = z.string().max(64).optional();
+// XCTrack uses HH:MM:SSZ for gate / deadline times.
+const XCTSK_TIME = z.string().min(1).max(16);
+
+const xctskWaypointSchema = z
+  .object({
+    name: XCTSK_NAME,
+    description: XCTSK_DESCRIPTION,
+    lat: z.number().min(-90).max(90),
+    lon: z.number().min(-180).max(180),
+    altSmoothed: z.number().min(-1000).max(30000).optional(),
+  })
+  .strict();
+
+const xctskTurnpointSchema = z
+  .object({
+    type: z.enum(["TAKEOFF", "SSS", "ESS"]).optional(),
+    radius: z.number().int().min(1).max(50000),
+    waypoint: xctskWaypointSchema,
+  })
+  .strict();
+
+const xctskSSSSchema = z
+  .object({
+    type: z.enum(["RACE", "ELAPSED-TIME"]),
+    direction: z.enum(["ENTER", "EXIT"]),
+    timeGates: z.array(XCTSK_TIME).max(MAX_XCTSK_TIMEGATES).optional(),
+  })
+  .strict();
+
+const xctskGoalSchema = z
+  .object({
+    type: z.enum(["CYLINDER", "LINE"]),
+    deadline: XCTSK_TIME.optional(),
+    finishAltitude: z.number().min(-1000).max(30000).optional(),
+  })
+  .strict();
+
+const xctskTakeoffSchema = z
+  .object({
+    timeOpen: XCTSK_TIME.optional(),
+    timeClose: XCTSK_TIME.optional(),
+  })
+  .strict();
+
+export const xctskSchema = z
+  .object({
+    taskType: z.string().min(1).max(32),
+    version: z.number().int().min(0).max(99).optional(),
+    earthModel: z.enum(["WGS84", "FAI_SPHERE"]).optional(),
+    turnpoints: z
+      .array(xctskTurnpointSchema)
+      .min(1)
+      .max(MAX_XCTSK_TURNPOINTS),
+    takeoff: xctskTakeoffSchema.optional(),
+    sss: xctskSSSSchema.optional(),
+    goal: xctskGoalSchema.optional(),
+    cylinderTolerance: z.number().min(0).max(0.1).optional(),
+  })
+  .strict()
+  .refine(
+    (v) => JSON.stringify(v).length <= MAX_XCTSK_BYTES,
+    {
+      message: `xctsk JSON too large (max ${MAX_XCTSK_BYTES} bytes)`,
+    }
+  );
+
 export const createTaskSchema = z.object({
   name: z.string().min(1).max(MAX_TEXT),
   task_date: z.string().regex(isoDateRegex, "Must be ISO date (YYYY-MM-DD)"),
   pilot_classes: pilotClassesArray,
-  xctsk: z.record(z.unknown()).nullable().optional(),
+  xctsk: xctskSchema.nullable().optional(),
 });
 
 export const updateTaskSchema = z.object({
@@ -177,5 +261,5 @@ export const updateTaskSchema = z.object({
     .regex(isoDateRegex, "Must be ISO date (YYYY-MM-DD)")
     .optional(),
   pilot_classes: pilotClassesArray.optional(),
-  xctsk: z.record(z.unknown()).nullable().optional(),
+  xctsk: xctskSchema.nullable().optional(),
 });
