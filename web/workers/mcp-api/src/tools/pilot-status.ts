@@ -1,12 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { Env, AuthUser } from "../env";
+import type { Env } from "../env";
 import { compApi, jsonResult, errorResult } from "../util";
 
 export function registerPilotStatusTools(
   server: McpServer,
   env: Env,
-  user: AuthUser | null
+  apiKey: string | null
 ) {
   server.registerTool(
     "list_pilot_statuses",
@@ -22,7 +22,7 @@ export function registerPilotStatusTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "GET",
           `/api/comp/${comp_id}/task/${task_id}/pilot-status`
         );
@@ -54,7 +54,7 @@ export function registerPilotStatusTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "PUT",
           `/api/comp/${comp_id}/task/${task_id}/pilot-status/${comp_pilot_id}`,
           body
@@ -82,7 +82,7 @@ export function registerPilotStatusTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "PATCH",
           `/api/comp/${comp_id}/task/${task_id}/pilot-status/${comp_pilot_id}`,
           body
@@ -109,7 +109,7 @@ export function registerPilotStatusTools(
       try {
         const data = await compApi(
           env,
-          user,
+          apiKey,
           "DELETE",
           `/api/comp/${comp_id}/task/${task_id}/pilot-status/${comp_pilot_id}`
         );

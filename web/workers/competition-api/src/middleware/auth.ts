@@ -2,35 +2,30 @@ import { createMiddleware } from "hono/factory";
 import type { Env, AuthUser } from "../env";
 
 /**
- * Internal trusted header set by the MCP worker via service binding.
- * Service bindings are internal-only (not reachable from the internet),
- * so trusting this header is safe.
- */
-const INTERNAL_USER_HEADER = "X-Glidecomp-Internal-User";
-
-/**
- * Try to resolve the user from the internal header (set by mcp-api
- * via service binding) or from the session cookie (set by the browser).
+ * Resolve the caller via auth-api. Forward whichever inbound credential
+ * the client sent: a Better Auth session cookie (browser), or an API key
+ * via `x-api-key` / `Authorization: Bearer` (mcp-api and direct API
+ * clients). Better Auth's apiKey plugin with `enableSessionForAPIKeys`
+ * resolves either to the same { user } shape, so callers don't need to
+ * care which they used.
+ *
+ * Forwarding only inbound auth headers — never trusting an attacker-
+ * controlled "I am user X" header — is what closes SEC-10.
  */
 async function resolveUser(
   env: Env,
   headers: Headers
 ): Promise<AuthUser | null> {
-  // Trust internal header from service bindings (mcp-api worker)
-  const internalUser = headers.get(INTERNAL_USER_HEADER);
-  if (internalUser) {
-    try {
-      return JSON.parse(internalUser) as AuthUser;
-    } catch {
-      return null;
-    }
-  }
+  const forward = new Headers();
+  const cookie = headers.get("cookie");
+  if (cookie) forward.set("cookie", cookie);
+  const apiKey = headers.get("x-api-key");
+  if (apiKey) forward.set("x-api-key", apiKey);
 
-  // Fall back to cookie-based session via auth-api
+  if (![...forward.keys()].length) return null;
+
   const res = await env.AUTH_API.fetch(
-    new Request("https://auth/api/auth/me", {
-      headers: { cookie: headers.get("cookie") || "" },
-    })
+    new Request("https://auth/api/auth/me", { headers: forward })
   );
   const data = (await res.json()) as { user: AuthUser | null };
   return data.user;

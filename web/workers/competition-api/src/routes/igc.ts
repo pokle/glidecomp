@@ -9,6 +9,10 @@ import { parseIGC } from "@glidecomp/engine";
 import { audit } from "../audit";
 import { linkExistingRegistrations } from "../pilot-linker";
 import { applyStatusOnTrackUpload } from "./pilot-status";
+import {
+  validateAndDecompressIgc,
+  IgcValidationException,
+} from "../igc-validation";
 
 type Variables = {
   user: AuthUser;
@@ -17,7 +21,6 @@ type Variables = {
 
 type HonoEnv = { Bindings: Env; Variables: Variables };
 
-const MAX_IGC_SIZE = 5 * 1024 * 1024; // 5 MB
 const MAX_PILOTS_PER_TASK = 250;
 
 function formatBytes(bytes: number): string {
@@ -158,13 +161,18 @@ export const igcRoutes = new Hono<HonoEnv>()
         return c.json({ error: "Task not found" }, 404);
       }
 
-      // Read the request body as gzip-compressed IGC data
+      // Read and validate the gzip-compressed IGC body. SEC-11: caps
+      // both compressed and decompressed size and rejects non-gzip blobs
+      // before touching R2.
       const body = await c.req.arrayBuffer();
-      if (body.byteLength === 0) {
-        return c.json({ error: "Empty file" }, 400);
-      }
-      if (body.byteLength > MAX_IGC_SIZE) {
-        return c.json({ error: "File too large (max 5MB)" }, 400);
+      let igcText: string;
+      try {
+        igcText = await validateAndDecompressIgc(body);
+      } catch (err) {
+        if (err instanceof IgcValidationException) {
+          return c.json({ error: err.detail.message }, 400);
+        }
+        throw err;
       }
 
       // Open registration: ensure pilot + comp_pilot. If a previously
@@ -225,12 +233,6 @@ export const igcRoutes = new Hono<HonoEnv>()
       // Extract pilot name from IGC header (best-effort — null if unparseable)
       let igcPilotName: string | null = null;
       try {
-        const decompressedStream = new Response(body).body!.pipeThrough(
-          new DecompressionStream("gzip")
-        );
-        const igcText = new TextDecoder().decode(
-          await new Response(decompressedStream).arrayBuffer()
-        );
         const igc = parseIGC(igcText);
         igcPilotName = igc.header.pilot || igc.header.competitionId || null;
       } catch {
@@ -439,13 +441,17 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       const targetPilotName = cp.registered_pilot_name;
 
-      // Read the request body
+      // Read and validate the gzip-compressed IGC body. SEC-11 mitigation
+      // — same constraints as the self-upload route.
       const body = await c.req.arrayBuffer();
-      if (body.byteLength === 0) {
-        return c.json({ error: "Empty file" }, 400);
-      }
-      if (body.byteLength > MAX_IGC_SIZE) {
-        return c.json({ error: "File too large (max 5MB)" }, 400);
+      let igcText: string;
+      try {
+        igcText = await validateAndDecompressIgc(body);
+      } catch (err) {
+        if (err instanceof IgcValidationException) {
+          return c.json({ error: err.detail.message }, 400);
+        }
+        throw err;
       }
 
       // Check for existing track (replacement preserves penalties)
@@ -482,12 +488,6 @@ export const igcRoutes = new Hono<HonoEnv>()
       // Extract pilot name from IGC header (best-effort)
       let igcPilotName: string | null = null;
       try {
-        const decompressedStream = new Response(body).body!.pipeThrough(
-          new DecompressionStream("gzip")
-        );
-        const igcText = new TextDecoder().decode(
-          await new Response(decompressedStream).arrayBuffer()
-        );
         const igc = parseIGC(igcText);
         igcPilotName = igc.header.pilot || igc.header.competitionId || null;
       } catch {

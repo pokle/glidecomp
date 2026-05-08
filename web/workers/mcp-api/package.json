@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "wrangler dev --persist-to ../../.wrangler/state",
     "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
@@ -16,8 +17,10 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.14.9",
     "@cloudflare/workers-types": "^4.20260426.1",
     "typescript": "^6.0.3",
+    "vitest": "^4.1.5",
     "wrangler": "^4.85.0"
   }
 }
