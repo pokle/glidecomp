@@ -2,6 +2,69 @@
 
 This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
 
+## 2026-05-09
+
+### Security Vulnerabilities Fixed
+
+| Package | Severity | Advisory | Description |
+|---------|----------|----------|-------------|
+| hono | MODERATE | [GHSA-qp7p-654g-cw7p](https://github.com/advisories/GHSA-qp7p-654g-cw7p) | CSS Declaration Injection via Style Object Values in JSX SSR. Fixed in 4.12.18. Not exploitable here (no JSX SSR), defense-in-depth. |
+| hono | LOW | [GHSA-hm8q-7f3q-5f36](https://github.com/advisories/GHSA-hm8q-7f3q-5f36) | Improper validation of NumericDate claims (exp, nbf, iat) in JWT verify(). Fixed in 4.12.18. |
+| hono | MODERATE | [GHSA-p77w-8qqv-26rm](https://github.com/advisories/GHSA-p77w-8qqv-26rm) | Cache Middleware ignores `Vary: Authorization`/`Vary: Cookie` → cross-user cache leakage. Fixed in 4.12.18. Not exploitable here (we don't use hono cache middleware). |
+| hono | MODERATE | [GHSA-9vqf-7f2p-gf9v](https://github.com/advisories/GHSA-9vqf-7f2p-gf9v) | `bodyLimit()` bypass for chunked / unknown-length requests. Fixed in 4.12.16. |
+| hono | MODERATE | [GHSA-69xw-7hcm-h432](https://github.com/advisories/GHSA-69xw-7hcm-h432) | hono/jsx unvalidated tag names allow HTML injection. Fixed in 4.12.16. |
+| fast-uri (transitive via @modelcontextprotocol/sdk) | HIGH | [GHSA-v39h-62p7-jpjc](https://github.com/advisories/GHSA-v39h-62p7-jpjc) | Host confusion via percent-encoded authority delimiters. Fixed by overriding to ^3.1.2. |
+| fast-uri (transitive via @modelcontextprotocol/sdk) | HIGH | [GHSA-q3j6-qgpj-74h6](https://github.com/advisories/GHSA-q3j6-qgpj-74h6) | Path traversal via percent-encoded dot segments. Fixed by overriding to ^3.1.2. |
+| ip-address (transitive via @modelcontextprotocol/sdk) | MODERATE | [GHSA-v2v4-37r5-5v8g](https://github.com/advisories/GHSA-v2v4-37r5-5v8g) | XSS in `Address6` HTML-emitting methods. Fixed by overriding to ^10.2.0. Not exploitable here (we don't render `Address6` HTML output). |
+| kysely | MODERATE | (0.28.17) | Hardened JSON path `.key(...)` and `.at(...)` against SQL injection / exfiltration. |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **hono** (override + workspaces) | 4.12.15 | 4.12.18 | root override, frontend, auth-api, competition-api, mcp-api | Bundles 5 security fixes (see above). No breaking changes; deps: 0 — drop-in. |
+| **fast-uri** (override) | (transitive 3.1.x) | ^3.1.2 | root override | Forced via `overrides` to clear two HIGH advisories on transitive deps of `@modelcontextprotocol/sdk`. |
+| **ip-address** (override) | (transitive ≤10.1.0) | ^10.2.0 | root override | Forced via `overrides` to clear MODERATE XSS advisory. |
+| **kysely** | 0.28.16 | 0.28.17 | auth-api | Security hardening for JSON path operators. |
+| **tailwindcss** | 4.2.4 | 4.3.0 | frontend | New utilities (`@container-size`, `scrollbar-*`, `tab-*`, `zoom-*`), stacked/compound `@variant`, no breaking changes. |
+| **@tailwindcss/vite** | 4.2.4 | 4.3.0 | frontend | Aligned with tailwindcss 4.3.0; relative import resolution fixes. |
+| **vite** | 7.3.2 | 7.3.3 | frontend | Patch release. |
+| **@cloudflare/workers-types** | 4.20260503.1 | 4.20260509.1 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | Weekly type definition update. |
+| **@types/node** | 25.6.0 | 25.6.2 | root | Type definition update. |
+
+### Code Changes Required
+
+None. All upgrades are drop-in. Hono surface (`Hono`, validators, `setCookie`/`getCookie`) unchanged. Tailwind 4.3.0 only adds utilities.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| wrangler | 4.87.0 | 4.90.0 | **Skipped this round.** 4.89.0 changed `wrangler dev` to run with `TZ=UTC` instead of inheriting host TZ — a behavioral change that could surprise local dev sessions and tests that depend on host-local time. No security requirement; revisit deliberately. |
+| zod | 3.25.76 | 4.4.3 | Major version. Still blocked by `@hono/zod-validator` (honojs/middleware#1148). |
+| vite | 7.3.3 | 8.0.11 | Major version. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. |
+| @hono/zod-validator | 0.7.6 | 0.8.0 | 0.8.0 requires zod 4. Stay on 0.7.6 until zod 4 migration. |
+| @cloudflare/vitest-pool-workers | 0.15.2 / 0.14.9 | 0.16.3 | Skipped — needs review of its peer ranges (vitest 4.x compat). Defer to a focused PR. |
+| @modelcontextprotocol/sdk | 1.29.0 (resolved via ^1.12.1) | 1.29.0 | Already at latest 1.x. v2.0.0 is alpha. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+| agents | 0.12.3 | 0.12.3 | Already at latest; pinned exact (pre-1.0). |
+
+### Verification
+
+- `bun run typecheck:all` — all 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, mcp-api).
+- `bun run test:all` — 411 root/engine tests + 226 competition-api + 21 mcp-api all pass.
+- `bun run test:e2e` — 1 chromium spec passes (full webServer flow exercises wrangler dev + frontend dev).
+- `bun audit` — 0 vulnerabilities.
+
+### Lessons / Notes for Future Sessions
+
+- **Transitive vulns in `@modelcontextprotocol/sdk` are recurring.** `fast-uri` and `ip-address` are deep transitives; the upstream MCP SDK doesn't move fast enough to ship patched versions, so plan on adding overrides for any new advisories there until the SDK reaches 2.x or restructures its deps. Document each override with the advisory it resolves so a future cleanup can drop it once the upstream catches up.
+- **Hono security cadence is high.** Five Hono advisories landed between 4.12.15 and 4.12.18 in roughly a week. Most are not exploitable in this codebase (no JSX SSR, no cache middleware), but the override should be bumped each cycle anyway since `bun audit` reports against the override range.
+- **Wrangler 4.89.0 introduces `TZ=UTC` for local dev.** Worth a deliberate bump in a focused PR that runs the e2e suite *and* spot-checks anything time-sensitive (audit log timestamps, scheduled tasks, expiry checks). Don't roll it in with routine bumps — the lessons from the May Node-22 outage still apply: `wrangler dev` is the silent-failure surface.
+- **Use `bun pm view <pkg> dist-tags` to confirm the latest stable** before deciding whether `bun outdated` "Latest" is accurate — it disambiguates `next`/`alpha` channels.
+- **Keep override list minimal but loud.** When `bun audit` reports a transitive vuln, prefer override + comment in this log over silent suppression. Future sessions should be able to read this entry and know which overrides are still load-bearing vs. removable.
+
 ## 2026-05-03
 
 ### Security Vulnerabilities Fixed
