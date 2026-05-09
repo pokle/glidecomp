@@ -44,11 +44,35 @@
 - All 203 competition-api vitest tests pass
 - All 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, mcp-api)
 - `bun audit` reports 0 vulnerabilities
+- **e2e was NOT verified locally on this PR — that gap is what let the CI break ship.** See "Post-merge CI repair" below.
+
+### Post-merge CI repair (2026-05-09)
+
+The original PR for this upgrade left CI red on `deps/upgrade-dependencies-2026-05` for ~5 days. Symptom: every E2E job failed within ~50 ms with only:
+
+```
+[WebServer] $ bun run --filter auth-api dev
+[WebServer] error: script "dev:auth" exited with code 1
+```
+
+No stderr, no wrangler banner — `bun run --filter`'s prefixed-output buffer swallowed the inner stderr because the child died before the buffer flushed.
+
+**Root cause:** wrangler 4.86+ rejects Node < 22, but neither `branch-deploy.yml` nor `deploy.yml` set up Node — they only ran `oven-sh/setup-bun@v2`, leaving the Ubuntu 24.04 runner's default Node 20.20.2 on PATH. `bunx wrangler` resolves through `bin/wrangler.js`'s `#!/usr/bin/env node` shebang, so it ran under Node 20 and bailed instantly with `Wrangler requires at least Node.js v22.0.0`.
+
+`engines.node` in package.json was bumped to `>=22` in this PR, but that field is advisory only — bun doesn't enforce it, and CI didn't pin a Node version, so the new floor went undetected.
+
+**Fixes (commits `2e17c49` + `be80b7b` on this branch):**
+
+1. **Add `actions/setup-node@v4` with `node-version: 22`** to every job in `branch-deploy.yml` and `deploy.yml` that runs bun — this is the actual fix.
+2. **Pin `wrangler` to exact `4.87.0`** in root + every workspace package.json (was `^4.85.0` / `^4.87.0`, all floating up to 4.90.0). Not strictly required after the Node fix, but matches what the upgrade commit message claimed.
+3. **Add a `Probe auth-api startup` step** to `deploy.yml` that runs `bunx wrangler --version` and `wrangler d1 migrations apply` directly from `web/workers/auth-api`, bypassing `bun run --filter`. Plus a `Dump wrangler logs on failure` step. These exist as a safety net so the next silent-exit regression surfaces real stderr instead of being swallowed.
 
 ### Lessons / Notes for Future Sessions
 
+- **When bumping wrangler past 4.86, also bump CI's Node version, not just `engines.node`.** Pre-flight checklist for any wrangler upgrade: (1) check the new wrangler's required Node minimum on its release page, (2) grep `.github/workflows/*.yml` for `setup-node` — if absent or below the new minimum, add/raise it in the *same PR*, (3) run `bun run test:e2e` locally before pushing — e2e is the only thing that exercises `wrangler dev` startup, and silent CI failures look identical to misconfigured webServer.
+- **`bun run --filter` swallows stderr from a fast-failing child.** When debugging `error: script "X" exited with code 1` with no other output, run the inner command directly (e.g. `cd web/workers/auth-api && bun run dev`) — the real error is usually staring at you. The `Probe auth-api startup` step in deploy.yml now does this in CI too.
 - **`@modelcontextprotocol/sdk` jumped 17 minor versions** (1.12 → 1.29) with critical security fixes. The narrow API surface used (`McpServer`, `createMcpHandler`) was stable across all versions. The custom type declarations in `agents-mcp.d.ts` shield from the full type surface — no changes needed.
-- **wrangler 4.86.0 silently dropped Node.js 20 support.** Updated `engines.node` to `>=22` to surface this early in CI/deployment.
+- **wrangler 4.86.0 silently dropped Node.js 20 support.** Updated `engines.node` to `>=22` to surface this early in CI/deployment. (See above — `engines.node` alone wasn't enough; CI also needs `setup-node`.)
 - **Leaflet XSS (CVE-2025-69993):** Even with alpha/pre-release packages, always use DOM API (`textContent`, `createElement`) instead of string interpolation for `bindPopup`/`bindTooltip`. The upstream fix may not come for 2.0-alpha.
 - **`agents` package continues to be pinned** (no caret) since it's pre-1.0 with potential breaking changes on minor bumps. The 0.11.5 → 0.12.3 upgrade changed `partyserver` from ^0.4.1 to ^0.5.5 internally but `createMcpHandler` API is unchanged.
 - **Zod 4 migration remains blocked** by `@hono/zod-validator`. Monitor honojs/middleware#1148.
