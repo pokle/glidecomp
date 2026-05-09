@@ -57,8 +57,28 @@ jobs:
           BETTER_AUTH_URL=http://localhost:3000
           EOF
 
+      # Probe wrangler & d1 migrations directly (no `bun run --filter`)
+      # so any crash surfaces real stderr instead of being swallowed by
+      # bun's prefixed-output buffer.
+      - name: Probe auth-api startup
+        run: |
+          cd web/workers/auth-api
+          bunx wrangler --version
+          CI=true bunx wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state
+
       - name: Run E2E tests
         run: bun run test:e2e
+
+      - name: Dump wrangler logs on failure
+        if: failure()
+        run: |
+          echo "=== ~/.config/.wrangler/logs ==="
+          ls -la ~/.config/.wrangler/logs/ 2>/dev/null || echo "(no logs dir)"
+          for f in ~/.config/.wrangler/logs/*.log; do
+            [ -f "$f" ] || continue
+            echo "--- $f ---"
+            cat "$f"
+          done
 
       - name: Upload Playwright report
         if: always()
