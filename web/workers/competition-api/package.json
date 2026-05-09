@@ -5,7 +5,9 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "CI=true wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state --config ../auth-api/wrangler.toml && CI=true wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state && wrangler dev --persist-to ../../.wrangler/state",
+    "migrate": "CI=true wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state --config ../auth-api/wrangler.toml && CI=true wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state",
+    "dev:server": "wrangler dev --persist-to ../../.wrangler/state",
+    "dev": "bun run migrate && bun run dev:server",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
