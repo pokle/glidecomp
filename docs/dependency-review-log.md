@@ -1,5 +1,7 @@
 # Dependency Review Log
 
+This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
+
 ## 2026-05-03
 
 ### Security Vulnerabilities Fixed
