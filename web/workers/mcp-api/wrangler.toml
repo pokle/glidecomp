@@ -13,6 +13,7 @@ service = "auth-api"
 
 [dev]
 port = 8790
+inspector_port = 9232
 
 [[routes]]
 pattern = "glidecomp.com/mcp"

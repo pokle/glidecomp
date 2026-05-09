@@ -27,6 +27,7 @@ SQIDS_ALPHABET = "abcdefghijklmnopqrstuvwxyz"
 
 [dev]
 port = 8789
+inspector_port = 9231
 
 [[kv_namespaces]]
 binding = "glidecomp_scores_cache"
