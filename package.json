@@ -17,7 +17,8 @@
   "type": "module",
   "scripts": {
     "dev": "[ -d node_modules ] || bun install; concurrently --kill-others-on-fail -n workers,fe -c blue,cyan 'bun run dev:workers' 'bun run dev:frontend'",
-    "dev:workers": "[ -d node_modules ] || bun install; bun run --filter auth-api migrate && bun run --filter competition-api migrate && concurrently --kill-others-on-fail -n auth,comp,mcp,airscore -c blue,green,magenta,yellow 'bun run --filter auth-api dev:server' 'bun run --filter competition-api dev:server' 'bun run dev:mcp' 'bun run dev:airscore'",
+    "dev:workers": "[ -d node_modules ] || bun install; bun run db:migrate && concurrently --kill-others-on-fail -n auth,comp,mcp,airscore -c blue,green,magenta,yellow 'bun run dev:auth' 'bun run dev:comp' 'bun run dev:mcp' 'bun run dev:airscore'",
+    "db:migrate": "CI=true wrangler --config web/workers/auth-api/wrangler.toml d1 migrations apply taskscore-auth --local --persist-to web/.wrangler/state",
     "kill-dev": "bash web/scripts/kill-dev.sh",
     "dev:mcp": "bun run --filter mcp-api dev",
     "dev:airscore": "bun run --filter airscore-api dev",
