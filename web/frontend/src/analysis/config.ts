@@ -1,9 +1,13 @@
 /**
  * Configuration storage abstraction.
- * Currently backed by localStorage, designed for future migration to backend API.
+ *
+ * localStorage is the synchronous read cache; cloud sync (when signed in)
+ * is layered on top via auth/preferences-sync, which observes mutations
+ * through schedulePush() and reconciles on startup via clearCache().
  */
 
 import { resolveThresholds, DEFAULT_GAP_PARAMETERS, type DetectionThresholds, type PartialThresholds, type GAPParameters } from '@glidecomp/engine';
+import { preferencesSync } from '../auth/preferences-sync';
 
 export interface MapLocation {
   center: [lng: number, lat: number];
@@ -98,6 +102,8 @@ class ConfigStore {
         detail: merged,
       })
     );
+
+    preferencesSync.schedulePush('prefs');
   }
 
   /**
