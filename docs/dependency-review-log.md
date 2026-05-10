@@ -2,6 +2,58 @@
 
 This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
 
+## 2026-05-10
+
+### Security Vulnerabilities Fixed
+
+None. `bun audit` reports 0 vulnerabilities.
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **wrangler** | 4.87.0 | 4.90.0 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | Pinned exact. 4.88.0 raises Node minimum to 22 (already met). 4.89.0 sets `TZ=UTC` for `wrangler dev` (matches production). 4.90.0 deprecates broken `delivery_delay` in queue bindings. |
+| **kysely** | 0.28.17 | 0.29.0 | auth-api | Now stable (was RC). Minimum TypeScript raised to 5.4 (we're on 6.0.3). `withTables` deprecated (not used). New: `ReadonlyKysely<DB>`, query cancellation, `SafeNullComparisonPlugin`. JSON path injection fix. |
+| **better-auth** | 1.6.9 | 1.6.10 | frontend, auth-api | Bug fixes: session revalidation after impersonation, email casing in OTP/verification, duplicate Set-Cookie on redirects. |
+| **@better-auth/api-key** | 1.6.9 | 1.6.10 | auth-api | Aligned with better-auth 1.6.10. |
+| **@cloudflare/vitest-pool-workers** | 0.15.2 / 0.14.9 | 0.16.3 | competition-api, mcp-api | New `reset()` and `abortAllDurableObjects()` helpers, `.wasm?module` import support. Peer dep requires wrangler ≥4.90.0. |
+| **mapbox-gl** | 3.23.0 | 3.23.1 | root, frontend | Patch release. |
+| **@cloudflare/workers-types** | 4.20260509.1 | 4.20260510.1 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | Weekly type definition update. |
+
+### Code Changes Required
+
+None. All upgrades are drop-in.
+
+- **kysely 0.29.0:** No deprecated API usage found (`withTables` not used). TypeScript 6.0.3 exceeds the new 5.4 minimum. `kysely-d1` peer dep is `"kysely": "*"` so compatible.
+- **wrangler 4.89.0 TZ=UTC:** All worker code uses `new Date().toISOString()` (always UTC regardless of TZ). No timezone-sensitive formatting in workers. The change aligns local dev with production behavior.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| zod | 3.25.76 | 4.4.3 | Major version. Still blocked by `@hono/zod-validator` (honojs/middleware#1148). |
+| vite | 7.3.3 | 8.0.11 | Major version. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. |
+| @hono/zod-validator | 0.7.6 | 0.8.0 | 0.8.0 requires zod 4. Stay on 0.7.6 until zod 4 migration. |
+| @modelcontextprotocol/sdk | 1.29.0 (resolved via ^1.12.1) | 2.0.0-alpha | Alpha release. Wait for stable. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+| agents | 0.12.3 | 0.12.3 | Already at latest; pinned exact (pre-1.0). |
+
+### Verification
+
+- `bun run typecheck:all` — all 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, mcp-api).
+- `bun run test:all` — 411 root/engine tests + 226 competition-api + 21 mcp-api all pass.
+- `bun run test:e2e` — 1 chromium spec passes (full webServer flow exercises wrangler 4.90.0 dev startup with TZ=UTC).
+- `bun audit` — 0 vulnerabilities.
+
+### Lessons / Notes for Future Sessions
+
+- **Wrangler 4.89.0 TZ=UTC is safe for this codebase.** All worker code uses `.toISOString()` which is always UTC regardless of the `TZ` environment variable. The change was deferred from the 2026-05-09 run for deliberate review, and confirmed safe this round. No need to re-defer on future wrangler bumps unless new timezone-sensitive code is added.
+- **`@cloudflare/vitest-pool-workers` 0.16.3 requires wrangler ≥4.90.0 as a peer dep.** Future runs should upgrade wrangler and vitest-pool-workers together when the peer dep floor is raised.
+- **e2e tests require `.dev.vars` for auth-api.** The file is `.gitignore`d and must be created manually in fresh environments. CI creates it in the workflow (see `branch-deploy.yml` step "Create auth .dev.vars"). If e2e fails with `404 Not Found` on `/api/auth/dev-login`, the missing `.dev.vars` (specifically `BETTER_AUTH_URL=http://localhost:3000`) is the first thing to check.
+- **kysely 0.29.0 is now stable** (graduated from RC). The `withTables` deprecation is the main API surface risk — future code should use `$pickTables`/`$omitTables` instead. Monitor for any `kysely-d1` compatibility issues.
+- **Transitive vuln overrides** (`defu`, `fast-uri`, `ip-address`, `postcss`, `protocol-buffers-schema`, `hono`) remain in root `package.json`. Revisit each cycle to see if upstream packages have caught up, and drop overrides when they're no longer needed.
+
 ## 2026-05-09
 
 ### Security Vulnerabilities Fixed
