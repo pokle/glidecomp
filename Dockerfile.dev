@@ -9,5 +9,3 @@ RUN apt-get update && apt-get install -y --no-install-recommends procps \
 RUN npm install -g bun
 
 WORKDIR /app
-
-ENTRYPOINT ["./docker-entrypoint.sh"]
