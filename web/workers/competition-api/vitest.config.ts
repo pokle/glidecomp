@@ -44,9 +44,7 @@ const SAMPLE_IGC_FILES = JSON.stringify(
 );
 
 export default defineConfig(async () => {
-  const authMigrations = await readD1Migrations(path.join(__dirname, "../auth-api/migrations"));
-  const compMigrations = await readD1Migrations(path.join(__dirname, "migrations"));
-  const migrations = [...authMigrations, ...compMigrations];
+  const migrations = await readD1Migrations(path.join(__dirname, "../../db/migrations"));
 
   return {
     plugins: [

@@ -7,6 +7,7 @@ GlideComp uses Cloudflare D1 (SQLite) for auth storage.
 - **Database name:** `taskscore-auth`
 - **Database ID:** `aa8b644f-368e-493a-8b49-1af0d756aff4`
 - **Schema file:** `web/workers/auth-api/src/db/schema.sql`
+- **Migrations:** `web/db/migrations/` — shared by `auth-api` and `competition-api` (both wrangler.tomls point at this directory). Apply locally with `bun run db:migrate`.
 
 ## Running Wrangler
 
