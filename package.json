@@ -44,7 +44,7 @@
     "test:comp": "bun run --filter competition-api test",
     "test:mcp": "bun run --filter mcp-api test",
     "test:all": "bun run test && bun run test:comp && bun run test:mcp",
-    "test:e2e": "bunx playwright test",
+    "test:e2e": "bun run db:migrate && bunx playwright test",
     "detect-events": "bun web/engine/cli/detect-events.ts",
     "get-xcontest-task": "bun web/engine/cli/get-xcontest-task.ts",
     "score-task": "bun web/engine/cli/score-task.ts"
