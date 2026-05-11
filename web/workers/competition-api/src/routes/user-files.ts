@@ -41,6 +41,26 @@ const SHA256_HEX_REGEX = /^[0-9a-f]{64}$/;
 const TASK_CODE_REGEX = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const STROKE_ID_REGEX = /^[A-Za-z0-9_-]{1,64}$/;
 const USERNAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9-]{1,18}[a-zA-Z0-9]$/;
+const MAX_FILENAME_LEN = 255;
+
+/**
+ * Strip a string to ASCII printable bytes so it can safely sit in an HTTP
+ * header value. WHATWG fetch's Headers rejects bytes outside 0x20–0x7E plus
+ * tab; an IGC with a non-ASCII pilot name would otherwise throw a
+ * TypeError when constructing the Response. Used for the fallback
+ * `filename=` and the bespoke `X-Filename`/`X-Display-Name` headers — the
+ * full Unicode value rides along in the RFC 5987 `filename*` parameter.
+ */
+function asciiHeaderSafe(s: string): string {
+  // Drop anything outside printable ASCII and the troublesome quote/backslash.
+  return s.replace(/[^\x20-\x7E]/g, "").replace(/["\\]/g, "");
+}
+
+function contentDispositionFor(filename: string): string {
+  const fallback = asciiHeaderSafe(filename) || "track.igc";
+  const encoded = encodeURIComponent(filename);
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+}
 
 const createTaskSchema = z.object({
   task_code: z.string().min(1).max(64).regex(TASK_CODE_REGEX, {
@@ -237,7 +257,11 @@ export const userFilesRoutes = new Hono<HonoEnv>()
 
     const trackId = await sha256Hex(igcText);
     const r2Key = trackR2Key(user.id, trackId);
-    const filename = c.req.header("x-filename") || `${trackId.slice(0, 8)}.igc`;
+    // Bound the filename so it can't blow up D1 rows or download headers.
+    const rawFilename = c.req.header("x-filename") ?? "";
+    const filename = (rawFilename.length > MAX_FILENAME_LEN
+      ? rawFilename.slice(0, MAX_FILENAME_LEN)
+      : rawFilename) || `${trackId.slice(0, 8)}.igc`;
 
     // Look up any existing row for this user+track — used both for idempotency
     // and to know whether file_size should count against the quota.
@@ -393,8 +417,8 @@ export const userFilesRoutes = new Hono<HonoEnv>()
     return new Response(obj.body, {
       headers: {
         "Content-Type": "application/octet-stream",
-        "Content-Disposition": `attachment; filename="${row.filename}"`,
-        "X-Filename": row.filename,
+        "Content-Disposition": contentDispositionFor(row.filename),
+        "X-Filename": asciiHeaderSafe(row.filename),
         ...(obj.httpMetadata?.contentEncoding
           ? { "Content-Encoding": obj.httpMetadata.contentEncoding }
           : {}),
@@ -691,9 +715,9 @@ export const userFilesRoutes = new Hono<HonoEnv>()
     return new Response(obj.body, {
       headers: {
         "Content-Type": "application/octet-stream",
-        "Content-Disposition": `attachment; filename="${row.filename}"`,
-        "X-Display-Name": row.display_name,
-        "X-Filename": row.filename,
+        "Content-Disposition": contentDispositionFor(row.filename),
+        "X-Display-Name": asciiHeaderSafe(row.display_name),
+        "X-Filename": asciiHeaderSafe(row.filename),
         ...(obj.httpMetadata?.contentEncoding
           ? { "Content-Encoding": obj.httpMetadata.contentEncoding }
           : {}),
