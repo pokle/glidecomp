@@ -18,6 +18,7 @@ import { resolveTurnpointSequence } from './turnpoint-sequence';
 import { getESSIndex } from './xctsk-parser';
 import { calculateOptimizedTaskDistance } from './task-optimizer';
 import { andoyerDistance } from './geo';
+import { maxBy, minBy } from './array-utils';
 
 // ---------------------------------------------------------------------------
 // Competition parameters
@@ -540,7 +541,7 @@ export function scoreTask(
   const scoredDistances = pilotResults.map(pr =>
     applyMinimumDistance(pr.result.flownDistance, fullParams.minimumDistance)
   );
-  const bestDistance = scoredDistances.length > 0 ? Math.max(...scoredDistances) : 0;
+  const bestDistance = scoredDistances.length > 0 ? maxBy(scoredDistances, d => d) : 0;
 
   const goalPilots = pilotResults.filter(pr => pr.result.madeGoal);
   const essPilots = pilotResults.filter(pr => pr.result.essReaching !== null);
@@ -552,7 +553,7 @@ export function scoreTask(
   const validTimes = timeCandidates
     .map(pr => pr.result.speedSectionTime)
     .filter((t): t is number => t !== null && t > 0);
-  const bestTime = validTimes.length > 0 ? Math.min(...validTimes) : null;
+  const bestTime = validTimes.length > 0 ? minBy(validTimes, t => t) : null;
 
   const taskDistance = calculateOptimizedTaskDistance(task);
 
@@ -601,8 +602,8 @@ export function scoreTask(
       .map(pr => pr.result.essReaching?.time.getTime())
       .filter((t): t is number => t !== undefined);
 
-    const taskFirstSSSTime = allSSSTimes.length > 0 ? Math.min(...allSSSTimes) : 0;
-    const taskLastESSTime = allESSTimes.length > 0 ? Math.max(...allESSTimes) : taskFirstSSSTime + 3600000;
+    const taskFirstSSSTime = allSSSTimes.length > 0 ? minBy(allSSSTimes, t => t) : 0;
+    const taskLastESSTime = allESSTimes.length > 0 ? maxBy(allESSTimes, t => t) : taskFirstSSSTime + 3600000;
 
     leadingCoefficients = pilotResults.map(pr => {
       const sssTime = pr.result.sssReaching?.time.getTime() ?? null;
@@ -615,7 +616,7 @@ export function scoreTask(
     });
 
     const finiteLCs = leadingCoefficients.filter(lc => isFinite(lc));
-    minLC = finiteLCs.length > 0 ? Math.min(...finiteLCs) : 0;
+    minLC = finiteLCs.length > 0 ? minBy(finiteLCs, lc => lc) : 0;
   } else {
     leadingCoefficients = pilotResults.map(() => Infinity);
   }
