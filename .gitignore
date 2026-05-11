@@ -24,6 +24,7 @@ web/frontend/public/js/
 
 # Claude Code
 .claude/worktrees/
+.claude/agent-memory/
 
 # OS
 .DS_Store
