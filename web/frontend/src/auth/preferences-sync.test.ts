@@ -458,6 +458,107 @@ describe("pagehide flush", () => {
   });
 });
 
+// ── cross-tab storage events ────────────────────────────────────────────────
+
+describe("cross-tab storage event", () => {
+  // jsdom's StorageEvent constructor rejects our polyfilled Storage (it's
+  // not a real jsdom Storage instance). Build the event manually so we can
+  // attach our shim as storageArea.
+  function fireStorage(
+    key: string | null,
+    newValue: string | null,
+    area: Storage = localStorage
+  ): void {
+    const ev = new Event("storage") as StorageEvent;
+    Object.defineProperty(ev, "key", { value: key, configurable: true });
+    Object.defineProperty(ev, "newValue", { value: newValue, configurable: true });
+    Object.defineProperty(ev, "storageArea", { value: area, configurable: true });
+    window.dispatchEvent(ev);
+  }
+
+  test("prefs storage event fires preferences-changed and refreshes cache", async () => {
+    const events: unknown[] = [];
+    window.addEventListener("glidecomp:preferences-changed", (e) =>
+      events.push((e as CustomEvent).detail)
+    );
+    // Simulate another tab writing prefs directly into our localStorage
+    localStorage.setItem(STORAGE_KEY_PREFS, JSON.stringify(SAMPLE_PREFS));
+    fireStorage(STORAGE_KEY_PREFS, JSON.stringify(SAMPLE_PREFS));
+
+    await flushMicrotasks();
+
+    expect(events.length).toBe(1);
+    // The detail should be a merged UserPreferences with our units
+    expect((events[0] as { units: unknown }).units).toEqual(SAMPLE_PREFS.units);
+  });
+
+  test("theme storage event applies the new theme via CSS variables", async () => {
+    localStorage.setItem(STORAGE_KEY_THEME, JSON.stringify(SAMPLE_THEME));
+    fireStorage(STORAGE_KEY_THEME, JSON.stringify(SAMPLE_THEME));
+
+    await flushMicrotasks();
+
+    expect(
+      document.documentElement.style.getPropertyValue("--background")
+    ).toBe("#000");
+  });
+
+  test("theme storage event with newValue=null re-applies default theme", async () => {
+    // Pre-state: a non-default theme is currently applied
+    localStorage.setItem(STORAGE_KEY_THEME, JSON.stringify(SAMPLE_THEME));
+    fireStorage(STORAGE_KEY_THEME, JSON.stringify(SAMPLE_THEME));
+    await flushMicrotasks();
+
+    // Other tab clears the theme (resetTheme)
+    localStorage.removeItem(STORAGE_KEY_THEME);
+    fireStorage(STORAGE_KEY_THEME, null);
+    await flushMicrotasks();
+
+    // BASECOAT_LIGHT_THEME has background #ffffff
+    expect(
+      document.documentElement.style.getPropertyValue("--background")
+    ).toBe("#ffffff");
+  });
+
+  test("storage event for unrelated key is ignored", async () => {
+    const events: unknown[] = [];
+    window.addEventListener("glidecomp:preferences-changed", (e) =>
+      events.push((e as CustomEvent).detail)
+    );
+    fireStorage("some-other-key", "irrelevant");
+
+    await flushMicrotasks();
+
+    expect(events.length).toBe(0);
+  });
+
+  test("storage event from sessionStorage is ignored", async () => {
+    const events: unknown[] = [];
+    window.addEventListener("glidecomp:preferences-changed", (e) =>
+      events.push((e as CustomEvent).detail)
+    );
+    localStorage.setItem(STORAGE_KEY_PREFS, JSON.stringify(SAMPLE_PREFS));
+    fireStorage(STORAGE_KEY_PREFS, JSON.stringify(SAMPLE_PREFS), sessionStorage);
+
+    await flushMicrotasks();
+
+    expect(events.length).toBe(0);
+  });
+
+  test("storage event does NOT trigger a cloud PUT (source tab handles that)", async () => {
+    await primeSignedIn();
+    localStorage.setItem(STORAGE_KEY_PREFS, JSON.stringify(SAMPLE_PREFS));
+    fireStorage(STORAGE_KEY_PREFS, JSON.stringify(SAMPLE_PREFS));
+
+    await flushMicrotasks();
+    // Some additional time in case any scheduled push slipped through
+    vi.useFakeTimers();
+    await vi.advanceTimersByTimeAsync(3000);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
 // ── helpers ─────────────────────────────────────────────────────────────────
 
 /**
@@ -473,10 +574,13 @@ async function primeSignedIn(): Promise<void> {
   fetchMock.mockReset();
 }
 
-/** Drain the microtask queue so fire-and-forget promises settle. */
+/**
+ * Drain pending microtasks. Multiple awaits cover deep promise chains,
+ * including the first resolution of a dynamic import (which can take a
+ * handful of microtasks). Pure Promise-based — works under fake timers.
+ */
 async function flushMicrotasks(): Promise<void> {
-  // Two awaits cover most chains: one to settle a promise, one for its .then
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let i = 0; i < 20; i++) {
+    await Promise.resolve();
+  }
 }

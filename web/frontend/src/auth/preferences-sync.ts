@@ -53,13 +53,26 @@ export class PreferencesSync {
   private prefsTimer: ReturnType<typeof setTimeout> | null = null;
   private themeTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly pagehideHandler = () => this.flushPending();
+  private readonly storageHandler = (e: StorageEvent) => {
+    void this.onStorage(e);
+  };
 
-  constructor() {
-    // Flush pending pushes when the page is unloading so edits made within
-    // the debounce window aren't lost. keepalive: true (in put()) tells the
-    // browser to commit to delivering the request even after teardown.
-    if (typeof window !== "undefined") {
+  /**
+   * @param quiet  When true, skip attaching window listeners. Used for the
+   *   module-level singleton in test mode so it doesn't double-handle events
+   *   alongside test-instantiated copies. Production passes false.
+   */
+  constructor(quiet: boolean = false) {
+    if (typeof window !== "undefined" && !quiet) {
+      // Flush pending pushes when the page is unloading so edits made within
+      // the debounce window aren't lost. keepalive: true (in put()) tells the
+      // browser to commit to delivering the request even after teardown.
       window.addEventListener("pagehide", this.pagehideHandler);
+      // Cross-tab sync: the browser fires `storage` on *other* tabs of the
+      // same origin when localStorage changes. We use it to propagate edits
+      // across same-device tabs without needing cloud round-trips. The source
+      // tab never sees its own writes here (per spec).
+      window.addEventListener("storage", this.storageHandler);
     }
   }
 
@@ -71,6 +84,7 @@ export class PreferencesSync {
   dispose(): void {
     if (typeof window !== "undefined") {
       window.removeEventListener("pagehide", this.pagehideHandler);
+      window.removeEventListener("storage", this.storageHandler);
     }
     if (this.prefsTimer !== null) {
       clearTimeout(this.prefsTimer);
@@ -81,6 +95,38 @@ export class PreferencesSync {
       this.themeTimer = null;
     }
     this.user = null;
+  }
+
+  /**
+   * Another tab on the same origin wrote to localStorage. Refresh our
+   * in-memory state and fire the same change event a direct mutation would
+   * fire, so reactive UI updates. We deliberately do NOT trigger a cloud
+   * PUT — the writing tab already scheduled one.
+   */
+  private async onStorage(e: StorageEvent): Promise<void> {
+    // sessionStorage events also fire on this listener; ignore them.
+    if (e.storageArea !== localStorage) return;
+
+    if (e.key === STORAGE_KEY_PREFS) {
+      const { config } = await import("../analysis/config");
+      config.clearCache();
+      window.dispatchEvent(
+        new CustomEvent("glidecomp:preferences-changed", {
+          detail: config.getPreferences(),
+        })
+      );
+    } else if (e.key === STORAGE_KEY_THEME) {
+      try {
+        const themeMod = await import("../theme");
+        // newValue is null when the other tab removed the key (resetTheme).
+        // loadSavedTheme returns null in that case; fall back to the same
+        // default theme.ts's autoApply uses.
+        const next = themeMod.loadSavedTheme() ?? themeMod.BASECOAT_LIGHT_THEME;
+        themeMod.applyTheme(next);
+      } catch {
+        /* malformed cloud/local theme — leave current theme applied */
+      }
+    }
   }
 
   /**
@@ -292,7 +338,12 @@ function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-export const preferencesSync = new PreferencesSync();
+// In test mode the singleton stays inert (no listeners, no bootstrap) so it
+// doesn't shadow test-instantiated copies. Tests construct fresh
+// `new PreferencesSync()` for the cases that need active listeners.
+export const preferencesSync = new PreferencesSync(
+  import.meta.env.MODE === "test"
+);
 
 // ── auto-bootstrap on import ─────────────────────────────────────────────────
 // Mirrors theme.ts's autoApply pattern. Any page that imports this module
