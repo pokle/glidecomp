@@ -20,7 +20,7 @@ import { createAnalysisPanel, AnalysisPanel, FlightInfo } from './analysis-panel
 import { loadCorryongWaypoints } from './waypoint-loader';
 import { config, type UnitPreferences } from './config';
 import { formatAltitude, formatDistance, onUnitsChanged } from './units-browser';
-import { storage } from './storage';
+import { storage, AuthRequiredError, QuotaExceededError } from './storage';
 import { StorageMenu } from './storage-menu';
 import { fetchAirScoreTask, fetchAirScoreTrack } from './airscore-client';
 import { downloadTask } from './task-editor';
@@ -1291,6 +1291,29 @@ async function init(): Promise<void> {
     }
   }
 
+  /**
+   * Persistence helpers — swallow AuthRequiredError (anonymous users keep using
+   * the page in-memory) and surface QuotaExceededError as a status toast so
+   * the user knows why their upload didn't persist.
+   */
+  function handlePersistError(err: unknown, kind: 'track' | 'task'): void {
+    if (err instanceof AuthRequiredError) return; // anonymous — no toast
+    if (err instanceof QuotaExceededError) {
+      showStatus(err.message, 'error');
+      return;
+    }
+    console.warn(`Failed to store ${kind}:`, err);
+  }
+
+  /** Wire the annotation layer to a (possibly null) track. */
+  function setAnnotationTrack(
+    trackId: string | null,
+    options?: { readonly?: boolean }
+  ): void {
+    const layer = mapRenderer?.getAnnotationLayer?.();
+    void layer?.setTrack(trackId, options);
+  }
+
   function applyTrack(igcFile: IGCFile): void {
     state.igcFile = igcFile;
     state.fixes = igcFile.fixes;
@@ -1364,16 +1387,21 @@ async function init(): Promise<void> {
 
     applyTrack(igcFile);
 
-    // Store for future use
-    if (shouldStore) {
+    // Store for future use. Anonymous users skip this (AuthRequiredError is
+    // swallowed). Quota errors surface as a status toast.
+    if (shouldStore && storage.isAvailable()) {
       try {
         const id = await storage.storeTrack(filename, content, igcFile);
         await storageMenu?.refresh();
         updateUrlParam('storedTrack', id);
         updateUrlParam('track', null);
+        setAnnotationTrack(id);
       } catch (err) {
-        console.warn('Failed to store track:', err);
+        handlePersistError(err, 'track');
       }
+    } else {
+      // No persistence — clear any prior annotation track and run in-memory.
+      setAnnotationTrack(null);
     }
 
   }
@@ -1405,13 +1433,13 @@ async function init(): Promise<void> {
           events,
         });
 
-        // Store in browser storage (skip for sample data)
-        if (!skipStorage) {
+        // Store in browser storage (skip for sample data or anonymous users)
+        if (!skipStorage && storage.isAvailable()) {
           try {
             await storage.storeTrack(file.name, content, igcFile);
             await storageMenu?.refresh();
           } catch (err) {
-            console.warn('Failed to store track:', err);
+            handlePersistError(err, 'track');
           }
         }
       } catch (err) {
@@ -1559,6 +1587,9 @@ async function init(): Promise<void> {
       await loadIGCContent(stored.content, stored.filename, false);
       updateUrlParam('storedTrack', id);
       updateUrlParam('track', null);
+      // Wire annotation layer to the loaded track. Public-link mode is set
+      // by loadFromQueryParams before this runs (or by an explicit caller).
+      setAnnotationTrack(id, { readonly: storage.isPublicMode() });
     } catch (err) {
       console.error('Failed to load stored track:', err);
       showStatus(`Failed to load stored track: ${err}`, 'error');
@@ -1572,8 +1603,8 @@ async function init(): Promise<void> {
 
 
     try {
-      // Check storage first
-      const stored = await storage.getTask(code);
+      // Check storage first (signed in only — anonymous users always fetch fresh)
+      const stored = storage.isAvailable() ? await storage.getTask(code) : null;
       let task: XCTask;
 
       if (stored) {
@@ -1584,12 +1615,14 @@ async function init(): Promise<void> {
         const result = await fetchTaskByCodeWithRaw(code);
         task = result.task;
 
-        // Store for future use
-        try {
-          await storage.storeTask(code, task, result.rawJson);
-          await storageMenu?.refresh();
-        } catch (err) {
-          console.warn('Failed to store task:', err);
+        // Store for future use (signed-in users only)
+        if (storage.isAvailable()) {
+          try {
+            await storage.storeTask(code, task, result.rawJson);
+            await storageMenu?.refresh();
+          } catch (err) {
+            handlePersistError(err, 'task');
+          }
         }
       }
 
@@ -2001,6 +2034,27 @@ async function loadFromQueryParams(
   const trackFile = params.get('track');
   const storedTrackId = params.get('storedTrack');
   const storedTaskCode = params.get('storedTask');
+  const publicUser = params.get('u');
+
+  // Public-by-link: ?u={username}&track={track_id} (sha256 hex) or
+  // ?u={username}&task={task_code}. We re-interpret the existing `track` /
+  // `task` params under that namespace. If the value doesn't match the
+  // public-id shape, fall through to the legacy meaning (sample filename /
+  // XContest code).
+  const PUBLIC_USERNAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9-]{1,18}[a-zA-Z0-9]$/;
+  const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+  const TASK_CODE_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+  const publicTrackId = trackFile && SHA256_HEX_RE.test(trackFile) ? trackFile : null;
+  const publicTaskCode = taskCode && TASK_CODE_RE.test(taskCode.toLowerCase())
+    ? taskCode.toLowerCase()
+    : null;
+
+  if (publicUser && PUBLIC_USERNAME_RE.test(publicUser) && (publicTrackId || publicTaskCode)) {
+    storage.setPublicNamespace(publicUser);
+    if (publicTaskCode) await loadStoredTask(publicTaskCode);
+    if (publicTrackId) await loadStoredTrack(publicTrackId);
+    return;
+  }
 
   // Load stored task from IndexedDB (e.g. from dashboard link)
   if (storedTaskCode) {

@@ -8,6 +8,7 @@ import { pilotRoutes } from "./routes/pilot";
 import { pilotStatusRoutes } from "./routes/pilot-status";
 import { scoreRoutes } from "./routes/score";
 import { auditRoutes } from "./routes/audit";
+import { userFilesRoutes } from "./routes/user-files";
 
 type Variables = {
   user: AuthUser;
@@ -31,15 +32,20 @@ function isAllowedOrigin(origin: string): boolean {
   return false;
 }
 
-app.use(
-  "/api/comp/*",
-  cors({
-    origin: (origin) => (origin && isAllowedOrigin(origin) ? origin : ""),
-    credentials: true,
-    allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization"],
-  })
-);
+const corsConfig = cors({
+  origin: (origin) => (origin && isAllowedOrigin(origin) ? origin : ""),
+  credentials: true,
+  allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowHeaders: ["Content-Type", "Authorization", "x-filename"],
+  // Custom response headers we want the browser to surface to JS. These are
+  // used by the user-files download endpoints so the frontend can recover the
+  // original filename and display name without an extra metadata round-trip.
+  exposeHeaders: ["X-Filename", "X-Display-Name"],
+});
+
+app.use("/api/comp/*", corsConfig);
+app.use("/api/user/*", corsConfig);
+app.use("/api/u/*", corsConfig);
 
 // Mount routes — igcRoutes first to avoid potential conflicts
 const routes = app
@@ -49,7 +55,8 @@ const routes = app
   .route("/", compRoutes)
   .route("/", taskRoutes)
   .route("/", scoreRoutes)
-  .route("/", auditRoutes);
+  .route("/", auditRoutes)
+  .route("/", userFilesRoutes);
 
 export type AppType = typeof routes;
 

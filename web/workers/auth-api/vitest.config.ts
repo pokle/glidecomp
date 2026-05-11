@@ -26,6 +26,7 @@ export default defineConfig(async () => {
             GOOGLE_CLIENT_ID: "test-client-id",
             GOOGLE_CLIENT_SECRET: "test-client-secret",
           },
+          r2Buckets: ["R2"],
         },
       }),
     ],

@@ -349,12 +349,19 @@ export const preferencesSync = new PreferencesSync(
 // Mirrors theme.ts's autoApply pattern. Any page that imports this module
 // (directly or transitively via theme.ts/config.ts) gets hydration.
 //
+// After preferences hydrate, we also run the one-time IndexedDB → R2/D1
+// migration for tracks and tasks. Both are signed-in-only.
+//
 // Skipped under vitest (MODE === 'test') so tests get a quiet module — they
 // instantiate PreferencesSync directly with mocked fetch.
 async function bootstrap(): Promise<void> {
   const { getCurrentUser } = await import("./client");
   const user = await getCurrentUser();
   await preferencesSync.hydrate(user);
+  if (user) {
+    const { runUserFilesMigration } = await import("./user-files-migration");
+    void runUserFilesMigration();
+  }
 }
 if (import.meta.env.MODE !== "test") {
   void bootstrap();

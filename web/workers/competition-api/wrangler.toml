@@ -43,3 +43,15 @@ zone_name = "glidecomp.com"
 [[routes]]
 pattern = "glidecomp.com/api/comp/*"
 zone_name = "glidecomp.com"
+
+[[routes]]
+pattern = "glidecomp.com/api/user"
+zone_name = "glidecomp.com"
+
+[[routes]]
+pattern = "glidecomp.com/api/user/*"
+zone_name = "glidecomp.com"
+
+[[routes]]
+pattern = "glidecomp.com/api/u/*"
+zone_name = "glidecomp.com"
