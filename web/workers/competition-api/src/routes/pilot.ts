@@ -110,6 +110,27 @@ function serializeCompPilot(
   };
 }
 
+/**
+ * Public serialiser for the read-only pilot list. SEC-15: the admin-only
+ * fields are PII (admin-entered email, Better Auth account email, and the
+ * emergency-contact phone in `driver_contact`). National-body IDs and
+ * glider model are left in — they are intentionally public on every comp
+ * results page and the public table column-renders `civl_id` / `safa_id`.
+ *
+ * Returns the same key set as `serializeCompPilot` so the frontend type
+ * stays valid; redacted fields are emitted as `null`.
+ */
+function serializeCompPilotPublic(
+  alphabet: string,
+  row: CompPilotRow & { linked_email?: string | null }
+) {
+  const full = serializeCompPilot(alphabet, row);
+  full.email = null;
+  full.linked_email = null;
+  full.driver_contact = null;
+  return full;
+}
+
 // Fields that both INSERT and UPDATE touch. Kept in lockstep with
 // buildInsertValues / buildUpdateValues and the SQL templates below.
 const COMP_PILOT_WRITE_COLUMNS = [
@@ -365,18 +386,21 @@ export const pilotRoutes = new Hono<HonoEnv>()
         return c.json({ error: "Not found" }, 404);
       }
 
-      if (comp.test) {
-        if (!user) {
-          return c.json({ error: "Not found" }, 404);
-        }
-        const isAdmin = await c.env.DB.prepare(
-          "SELECT 1 FROM comp_admin WHERE comp_id = ? AND user_id = ?"
-        )
-          .bind(compId, user.id)
-          .first();
-        if (!isAdmin) {
-          return c.json({ error: "Not found" }, 404);
-        }
+      // SEC-15: PII (admin-entered email, linked Better Auth email,
+      // driver_contact phone) must only be returned to a comp admin.
+      // Test comps already require admin to see anything; for non-test
+      // comps we keep public visibility of names/IDs/classes but redact
+      // the PII fields via `serializeCompPilotPublic`.
+      const isAdmin = user
+        ? !!(await c.env.DB.prepare(
+            "SELECT 1 FROM comp_admin WHERE comp_id = ? AND user_id = ?"
+          )
+            .bind(compId, user.id)
+            .first())
+        : false;
+
+      if (comp.test && !isAdmin) {
+        return c.json({ error: "Not found" }, 404);
       }
 
       const pilots = await c.env.DB.prepare(
@@ -390,8 +414,9 @@ export const pilotRoutes = new Hono<HonoEnv>()
         .bind(compId)
         .all<CompPilotRow & { linked_email: string | null }>();
 
+      const serialize = isAdmin ? serializeCompPilot : serializeCompPilotPublic;
       return c.json({
-        pilots: pilots.results.map((p) => serializeCompPilot(alphabet, p)),
+        pilots: pilots.results.map((p) => serialize(alphabet, p)),
       });
     }
   )
