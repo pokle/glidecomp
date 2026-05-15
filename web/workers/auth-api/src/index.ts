@@ -3,6 +3,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { createAuth, isLocalDev, type AuthEnv } from "./auth";
+import { mountPreferencesRoutes } from "./routes/preferences";
 
 const app = new Hono<{ Bindings: AuthEnv }>();
 
@@ -26,7 +27,7 @@ app.use(
   cors({
     origin: (origin) => (origin && isAllowedOrigin(origin) ? origin : ""),
     credentials: true,
-    allowMethods: ["GET", "POST", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
   })
 );
@@ -171,6 +172,10 @@ app.post("/api/auth/dev-login", async (c) => {
 // via the catch-all handler below. The MCP worker verifies API keys by calling
 // GET /api/auth/me with the x-api-key header — enableSessionForAPIKeys makes
 // this return the user associated with the key.
+
+// Per-user preferences storage (registered before the better-auth catch-all
+// so /api/auth/preferences resolves here, not to better-auth's handler).
+mountPreferencesRoutes(app);
 
 // Better Auth catch-all handler
 app.all("/api/auth/*", async (c) => {
