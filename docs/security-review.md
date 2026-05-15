@@ -11,6 +11,7 @@
 | 2026-04-20 | Claude   | Full repo (auth, comp, MCP, FE)  | Initial      |
 | 2026-04-20 | Claude   | SEC-01 remediation               | Fixed inline |
 | 2026-05-04 | Claude   | Re-review + new findings (SEC-10..14) | SEC-10, SEC-11, SEC-12, SEC-14 fixed inline (this PR) |
+| 2026-05-11 | Claude   | Re-review + new finding SEC-15        | SEC-15 fixed inline (this PR) |
 
 ---
 
@@ -395,3 +396,152 @@ New gaps from this round:
 3. `bun audit` and a fresh diff of `docs/dependency-review-log.md`.
 4. Re-run the whole prior-findings table; update Status column.
 5. Confirm the SEC-10 fix held: send `X-Glidecomp-Internal-User` to a deployed comp-api endpoint and check it gets 401 (regression test only covers the in-process miniflare path).
+
+---
+
+## 2026-05-11 — Re-review
+
+### Methodology
+
+- Read `docs/security-review.md` end-to-end first, including the prior round's "Scope gaps" and "Where to start" pointers. Carried those into this round's scope.
+- Diffed `master` vs the prior review's landing commit `cb9cc7c` (`git log cb9cc7c..HEAD`). Six commits landed: `3174b47` and `890d3de` (dep upgrades — 9 advisories fixed), `36e17d8` (this `/security-review-repo` command itself), `6464783` and `c3f9263` (D1 migration consolidation + dev-server fixes), `1f45c6e` (delete a no-op `docker-entrypoint.sh`). No new mutating endpoints were added; the only worker-source changes are the SEC-10/11/12 fixes already documented and a leaflet popup `innerHTML→createElement` cleanup (`web/frontend/src/analysis/leaflet-provider.ts:774-783`).
+- Ran `bun audit` at HEAD — **0 vulnerabilities**.
+- Re-walked every prior `SEC-NN` finding line-by-line against current code (not just commit log).
+- Closed prior scope gap "Per-tool MCP auth audit" by enumerating every `compApi(env, apiKey, …)` / `compApiRaw(env, apiKey, …)` callsite under `web/workers/mcp-api/src/tools/*.ts`. Every tool threads the inbound API key unconditionally — no tool short-circuits to admin or to a hard-coded user.
+- Closed prior scope gap "wrangler.toml binding cross-environment audit (KV/R2/D1)" by reading every `wrangler.toml`. All bindings point to single canonical production IDs; auth-api and competition-api share the **same** D1 (`taskscore-auth`, id `aa8b644f-368e-493a-8b49-1af0d756aff4`) which is intentional (Better Auth's user table is the same table comp-admin foreign-keys into). No cross-env confusion.
+- Closed prior scope gap "sw.js full walk" — SEC-13 still Open with the same root cause; no new issues in the rest of the service worker (no caching, no message handlers, just `/share-target`).
+- Did **not** re-run dynamic CSRF PoC, parser fuzzing, or live cookie-attribute checks — still in scope-gaps below.
+
+### Executive summary
+
+`bun audit` is clean. The SEC-10 / SEC-11 / SEC-12 fixes from the previous round hold: the comp-api auth middleware still resolves identity only via auth-api (no `X-Glidecomp-Internal-User` read), the IGC upload still goes through `validateAndDecompressIgc` with both caps, and `xctsk` is still constrained by the strict Zod schema. **However**, walking the read-side endpoints surfaced a new **High** finding: `GET /api/comp/:comp_id/pilot` is publicly readable (it uses `optionalAuth`) and was returning the full pilot row to anonymous callers — including admin-entered `email`, the linked Better Auth account email (`linked_email`), and `driver_contact` (emergency-contact phone). **Fixed inline in this PR** by gating those three PII fields on `comp_admin` membership, plus four new regression tests covering anonymous, authenticated-non-admin, comp-admin, and a `linked_email`-leak path. Public callers still see names, classes, teams, glider, and national-body IDs — the fields that already appear on every comp's public results page.
+
+### Status of prior findings
+
+| ID      | Title                                                                  | Status @ 2026-05-11 | Notes                                                                |
+|---------|------------------------------------------------------------------------|---------------------|----------------------------------------------------------------------|
+| SEC-01  | Reflective CORS w/ credentials                                         | **Fixed**           | Re-verified `web/workers/auth-api/src/index.ts:12-32` and `web/workers/competition-api/src/index.ts:22-42` — allowlist unchanged, empty origin returned for disallowed callers. |
+| SEC-02  | No security response headers (`_headers`)                              | **Open**            | `find web/frontend/public -name _headers` still empty.               |
+| SEC-03  | Admin emails returned on public comp detail                            | **Open**            | `web/workers/competition-api/src/routes/comp.ts:243-250, 303` unchanged. |
+| SEC-04  | IGC upload size/shape                                                  | **Open (sub-issue)** | Subsumed by SEC-11's helper for size + gzip-magic. The remaining gap is the recommended manufacturer-record (`A…`) check — `validateAndDecompressIgc` does not verify the decompressed first byte, so up to 2 MiB of non-IGC text can still be stored in R2 per registered pilot per task. Auth-gated and bounded; tracking as Low. |
+| SEC-05  | `innerHTML` is the default render primitive                            | **Open**            | 116 `innerHTML =` sites under `web/frontend/src/` — same count as prior round. One new site converted to DOM construction (`web/frontend/src/analysis/leaflet-provider.ts:774-783`, popup event description). All other interpolations of user data go through `sanitizeText()` (HTML-encodes per `web/engine/src/sanitize.ts:7-15`) or `escapeHtml()`. |
+| SEC-06  | No JSON body-size cap                                                  | **Open**            | No `bodyLimit` middleware registered. Hono 4.12.18 (now in tree) fixes the chunked-body bypass — adopting `bodyLimit({ maxSize: 256 * 1024 })` is now safe whenever it's prioritised. |
+| SEC-07  | Dev-only endpoints gated by `BETTER_AUTH_URL` hostname                 | **Verified safe**   | Unchanged. Re-flag for verification on every deploy.                 |
+| SEC-08  | Rate-limit headers not surfaced                                        | **Open**            | Unchanged.                                                           |
+| SEC-09  | `Math.random()` non-security use                                       | **Closed (Info)**   | No new uses; staying closed.                                         |
+| SEC-10  | Authentication bypass via trusted `X-Glidecomp-Internal-User` header   | **Fixed**           | `web/workers/competition-api/src/middleware/auth.ts:15-32` unchanged from the fix; `web/workers/mcp-api/src/util.ts:16-52` forwards `x-api-key` only. Regression test `web/workers/competition-api/test/auth-bypass.test.ts` still passes. |
+| SEC-11  | IGC gzip-bomb decompression                                            | **Fixed**           | `web/workers/competition-api/src/igc-validation.ts:43-110` unchanged; route still calls `validateAndDecompressIgc` (`routes/igc.ts:170`, `:449`). All `igc-validation.test.ts` tests pass. |
+| SEC-12  | `xctsk` body has no shape, depth, or size cap                          | **Fixed**           | `xctskSchema` in `web/workers/competition-api/src/validators.ts:228-248` unchanged. Tests in `xctsk-validation.test.ts` pass. |
+| SEC-13  | Service worker stores share-target uploads under unsanitised filenames | **Open**            | `web/frontend/public/sw.js:54-62` unchanged.                         |
+| SEC-14  | Service-binding trust comment misleads readers                         | **Closed**          | Resolved with SEC-10 fix; comment in `util.ts:13` now warns against forging identity headers. |
+
+### New findings
+
+---
+
+#### SEC-15 — Unauthenticated PII (email + linked Better Auth email + driver_contact) returned by public pilot list — **High** — ~~Open~~ **Fixed (2026-05-11, this PR)**
+
+> **Resolution:** `GET /api/comp/:comp_id/pilot` is still publicly readable for non-test comps (names, classes, teams, glider, and national-body IDs are intentionally public), but the PII fields — admin-entered `email`, Better-Auth-linked `linked_email`, and `driver_contact` (emergency-contact phone) — are now redacted to `null` for any caller who is not a `comp_admin` of that comp. The new helper `serializeCompPilotPublic` in `web/workers/competition-api/src/routes/pilot.ts` wraps `serializeCompPilot` and zeros out the three sensitive fields; the GET handler resolves `isAdmin` once via the existing `comp_admin` join and dispatches between the two serialisers. Four new regression tests in `web/workers/competition-api/test/pilot-crud.test.ts` cover: anonymous caller (redacted, including a seeded `linked_email` path that exercises the worst-case JOIN-leak), authenticated-non-admin caller (redacted), comp-admin caller (full data — regression sanity), and admin GET keeping all PII fields populated. All 229 competition-api tests pass.
+
+**Files**
+- `web/workers/competition-api/src/routes/pilot.ts:348-401` — GET handler (pre-fix used `serializeCompPilot` for everyone)
+- `web/workers/competition-api/src/routes/pilot.ts:88-111` — pre-existing `serializeCompPilot` returns full PII
+- `web/frontend/src/comp/pilots-section.ts:118-133, 178-189` — frontend renders public table + a tooltip that revealed `linked_email` even for anonymous viewers
+
+**Evidence (pre-fix)**
+
+The route declared `optionalAuth`, then test-comp-gated only on the `comp.test` flag:
+
+```ts
+// ── GET /api/comp/:comp_id/pilot ── List registered pilots for a comp
+.get(
+  "/api/comp/:comp_id/pilot",
+  optionalAuth,
+  sqidsMiddleware,
+  async (c) => {
+    ...
+    if (comp.test) { /* admin-only */ }
+    // FALL THROUGH: anonymous callers receive every field
+    const pilots = await c.env.DB.prepare(
+      `SELECT ${COMP_PILOT_COLUMNS.join(", ")}, u.email AS linked_email …`)
+      .bind(compId).all<…>();
+    return c.json({
+      pilots: pilots.results.map((p) => serializeCompPilot(alphabet, p)),
+    });
+  }
+)
+```
+
+`serializeCompPilot` returned `email`, `linked_email`, and `driver_contact` verbatim. The frontend's `nameCell()` set `icon.title = \`Linked to ${linked_email}\`` for the link badge, surfacing the Better Auth account email to anonymous viewers on hover; the public table also column-rendered `driver_contact`. The CSV export (admin-only by UI) and the edit-as-text dialog round-trip every field, which is why the field was on the wire to start with.
+
+**Impact**
+
+- Unauthenticated read of personal email addresses for every registered pilot in every non-test comp. Trivial to enumerate (sqids are short; comp IDs are not secrets).
+- Unauthenticated read of `linked_email` — the Better Auth account email — for pilots who have linked their accounts. This binds platform identity to comp identity in a way the pilot didn't consent to.
+- Unauthenticated read of `driver_contact`, which carries phone numbers / WhatsApp handles of emergency contacts (free-form `MAX_TEXT=128` string).
+- Phishing risk: a pilot directory by-name with emails is exactly what a targeted phishing campaign against a competition would want.
+- Not flagged by `bun audit` (it's a logic flaw, not a CVE).
+
+**Severity rationale**
+
+Higher than SEC-03 (admin emails on public comp detail, Medium) because the population is much larger (every registered pilot, not just admins) and the data is broader (phone numbers and a second-channel email join). Not Critical because authentication itself is intact — names and rankings are public by design and the leak doesn't grant any write surface — but PII leakage of an entire user base unauthenticated is High in any threat model.
+
+**Fix**
+
+```ts
+// pilot.ts: gate PII on comp_admin membership; keep public visibility of
+// names/IDs/classes for transparency.
+const isAdmin = user
+  ? !!(await c.env.DB.prepare(
+      "SELECT 1 FROM comp_admin WHERE comp_id = ? AND user_id = ?"
+    ).bind(compId, user.id).first())
+  : false;
+if (comp.test && !isAdmin) return c.json({ error: "Not found" }, 404);
+…
+const serialize = isAdmin ? serializeCompPilot : serializeCompPilotPublic;
+return c.json({ pilots: pilots.results.map((p) => serialize(alphabet, p)) });
+```
+
+`serializeCompPilotPublic` calls `serializeCompPilot` and then nulls out `email`, `linked_email`, and `driver_contact`. Keeping the key set identical means the frontend `CompPilot` interface (`web/frontend/src/comp/pilots-section.ts:23-41`) needs no changes; `linked_email`-dependent tooltip falls back to its existing null-handling branch.
+
+**Regression tests** (new, in `pilot-crud.test.ts`):
+1. **Anonymous caller** sees `email = linked_email = driver_contact = null` but `name`, `civl_id`, `linked` populated. Seeds a `pilot` row with `user-3` so the `LEFT JOIN "user"` populates `linked_email` server-side and we can verify the public path zeroes it.
+2. **Admin caller** sees `email` and `driver_contact` populated (regression sanity — fix must not break admin flows).
+3. **Authenticated-non-admin caller** (`user-2`) sees the same redacted view as anonymous — admin status is not granted by being signed in, only by `comp_admin` row.
+4. *(Implicit)* The existing "returns full records" test for the admin caller still passes.
+
+---
+
+### Re-checked but no change
+
+- **Parameterised SQL.** Spot-checked every prepare-and-bind site touched in this round (`pilot.ts`, `comp.ts`, `audit.ts`). No string concatenation into SQL.
+- **`audit()` call coverage.** Every mutating route in `web/workers/competition-api/src/routes/*.ts` calls `audit()` per CLAUDE.md; descriptions use `describeChange()` or include subject names. No new mutating routes since prior round, so no new audit gaps.
+- **MCP per-tool auth propagation.** Every tool under `web/workers/mcp-api/src/tools/*.ts` forwards `apiKey` via `compApi(env, apiKey, …)` or `compApiRaw(env, apiKey, …)`. None forge identity, none short-circuit to admin.
+- **wrangler.toml bindings.** All four workers point at single canonical production resource IDs. Auth-api and competition-api intentionally share D1 (`taskscore-auth`); MCP worker uses service bindings to both. No preview-vs-prod confusion.
+- **Audit log response.** `web/workers/competition-api/src/routes/audit.ts:96-112` still returns `actor_name` (not `actor_user_id`) — no user-ID leak from the public audit endpoint, despite the row in D1 storing it.
+- **Sqids decoding.** `decodeId` rejects malformed input and `sqidsMiddleware` 404s on null. No new routes bypass the middleware.
+- **Better Auth secrets.** All referenced as env, none hard-coded.
+
+### Scope gaps still not done
+
+Carried forward from prior rounds:
+
+1. Dynamic CSRF PoC against the now-allowlisted CORS (low-effort follow-up).
+2. Cookie attribute verification on a live deploy.
+3. IGC / XCTask parser fuzzing.
+4. Cloudflare zone settings snapshot (HSTS, TLS min, WAF, bot management).
+5. Verify SEC-10 fix on a deployed comp-api endpoint (not just miniflare regression test).
+6. Confirm the comp-api worker doesn't accept the legacy `Cookie: test-user=…` header in production. The cookie is forwarded to `auth-api`; `grep` shows no `test-user` reference in `auth-api/src` but worth verifying that no test-middleware gets shipped.
+
+New gap from this round:
+
+7. **Other `optionalAuth` endpoints.** SEC-15 surfaced because the pilot list joins user emails. Audit every other `optionalAuth` route (`comp.ts:145`, `:210`; `task.ts:125`; `igc.ts:605`, `:704`; `audit.ts:28`; `pilot-status.ts:121`; `score.ts:24`, `:95`) for similar joins to the `user` table or PII columns. Spot-checks this round were clean (audit returns only `actor_name`, scores have no email columns), but a systematic pass would close the class.
+
+### Where to start the next review
+
+1. Commit reviewed up to: HEAD = `1f45c6e` (parent of this review's PR). Diff against that next round.
+2. Run the **scope gap #7** systematic pass: for every `optionalAuth` route under `web/workers/competition-api/src/routes/`, list the SELECT columns and confirm no PII is returned to unauthenticated callers. Same class of bug as SEC-15.
+3. Re-run the prior-findings table; SEC-02, SEC-03, SEC-05, SEC-06, SEC-08, SEC-13 are all Open and small-diff candidates if the round has spare scope budget — none are urgent.
+4. `bun audit` + fresh diff of `docs/dependency-review-log.md`.
+5. Walk any new mutating endpoints (authn / authz / `audit()` / Zod) — none added this round.
+6. Confirm the SEC-15 fix is live: `curl -s https://glidecomp.com/api/comp/<some-public-comp>/pilot | jq '.pilots[0] | {email, linked_email, driver_contact}'` should be all-null.
