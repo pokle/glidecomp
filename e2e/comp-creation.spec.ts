@@ -71,8 +71,11 @@ test("dev login, onboarding, create competition and task", async ({ page }) => {
   await page.check("#comp-test");
   await page.click("#create-submit-btn");
 
-  // Should navigate to the competition detail page
+  // Should navigate to the competition detail page. Wait for /api/comp/:id
+  // (and the parallel auth+preferences calls) to settle so comp-detail.ts has
+  // had a chance to populate the title before we assert.
   await page.waitForURL("**/comp/*");
+  await page.waitForLoadState("networkidle");
   await expect(page.locator("#comp-title")).toHaveText("E2E Test Competition");
 
   // Step 6: Create a task
