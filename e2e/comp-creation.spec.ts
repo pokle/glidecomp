@@ -56,6 +56,12 @@ test("dev login, onboarding, create competition and task", async ({ page }) => {
   // The "New Competition" button should be visible for authenticated users
   await expect(page.locator("#create-comp-btn")).toBeVisible();
 
+  // comp.ts attaches the dialog-opening click handler only after loadComps()
+  // resolves — wait for the network to settle so the listener is in place
+  // before we click. Without this, fast CI sends the click before init()
+  // finishes and the dialog never opens.
+  await page.waitForLoadState("networkidle");
+
   // Step 5: Create a competition
   await page.click("#create-comp-btn");
   await page.waitForSelector("dialog#create-comp-dialog[open]");
