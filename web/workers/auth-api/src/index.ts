@@ -32,6 +32,16 @@ app.use(
   })
 );
 
+// Surface unhandled exceptions as a JSON body instead of Hono's bare
+// "Internal Server Error" — mirrors competition-api so any 500 in CI
+// traces or wrangler tail points at the real cause. Stack is logged
+// server-side; only the message goes to the client.
+app.onError((err, c) => {
+  console.error("[auth-api] unhandled error", err);
+  const message = err instanceof Error ? err.message : String(err);
+  return c.json({ error: message }, 500);
+});
+
 // GET /api/auth/me — return current user or null
 app.get("/api/auth/me", async (c) => {
   const auth = createAuth(c.env);
