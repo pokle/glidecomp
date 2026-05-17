@@ -64,6 +64,11 @@ async function signInAndOnboard(
   await page.fill("#username", user.username);
   await page.click("#onboarding-submit");
   await page.waitForURL(`**/u/${user.username}/*`);
+  // dashboard.ts attaches the file-input change listeners only after storage
+  // init + the first refreshLists() runs; that's also when #tracks-empty stops
+  // being `hidden`. Sync on it so setInputFiles isn't called before the page
+  // is listening — without this, fast CI loses the change event.
+  await expect(page.locator("#tracks-empty")).toBeVisible();
 }
 
 test("upload IGC file via the My Flights dashboard", async ({ page, request }) => {
