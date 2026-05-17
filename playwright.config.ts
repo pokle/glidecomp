@@ -4,6 +4,11 @@ export default defineConfig({
   testDir: "./e2e",
   timeout: 60_000,
   retries: process.env.CI ? 1 : 0,
+  // Force sequential runs in CI. With 2 workers, the comp-creation +
+  // user-files tests overlap on the shared local D1 and intermittently
+  // race a 500 out of GET /api/comp/:id. Locally we keep the default
+  // (parallel) for speed; CI prioritises determinism.
+  workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI
     ? [["html", { open: "never" }], ["list"]]
     : [["list"]],
@@ -13,6 +18,12 @@ export default defineConfig({
     launchOptions: {
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     },
+    // Keep a full per-step + network trace for any failed test. Lets us see
+    // whether GHA flakes are races in our code or just slow infrastructure.
+    // Traces land in test-results/ — branch-deploy.yml and deploy.yml upload
+    // that path alongside playwright-report/ so they're downloadable from
+    // the Actions UI. Open one locally with `bunx playwright show-trace`.
+    trace: "retain-on-failure",
   },
   projects: [
     {

@@ -1,7 +1,7 @@
 import './theme';
 import { signInWithGoogle, deleteAccount } from "./auth/client";
 import { initNav } from "./nav";
-import { storage, type StoredTask, type StoredTrack } from "./analysis/storage";
+import { storage, QuotaExceededError, type StoredTask, type StoredTrack } from "./analysis/storage";
 import { parseIGC, parseXCTask, sanitizeText } from "@glidecomp/engine";
 
 // ── Relative time formatting ──────────────────────────────────────────────
@@ -214,6 +214,14 @@ async function init() {
           addedTasks = true;
         }
       } catch (err) {
+        // Quota errors should surface to the user — they aren't parse errors.
+        // The dashboard isn't an in-place editor (no status toast widget), so
+        // alert() is fine for now: it stops the user dead, which matches the
+        // severity ("delete something to upload more").
+        if (err instanceof QuotaExceededError) {
+          alert(err.message);
+          break;
+        }
         console.error(`Failed to parse ${file.name}:`, err);
       }
     }

@@ -3,7 +3,17 @@
  *
  * Freehand drawing overlay for Mapbox GL maps.
  * Strokes are rendered as native Mapbox GeoJSON line layers so they sit
- * flat on the map surface (including terrain). Stored in IndexedDB.
+ * flat on the map surface (including terrain).
+ *
+ * Persistence is scoped to a (user, track) pair on the server. Call
+ * `setTrack(trackId, { readonly })` whenever the active track changes:
+ *   - readonly=false (default): own-track view; strokes save to the user's
+ *     account via /api/user/tracks/:track_id/annotations.
+ *   - readonly=true: viewing someone else's public-link track; strokes from
+ *     the owner are fetched read-only via /api/u/:username/track/:track_id
+ *     /annotations and the drawing toolbar is hidden.
+ *   - trackId=null: no track is active (anonymous user, or unsaved file);
+ *     drawing still works in-memory but nothing is persisted.
  */
 
 import type { Map as MapboxMap, GeoJSONSource } from 'mapbox-gl';
@@ -15,6 +25,11 @@ import { storage, type AnnotationStroke } from './storage';
 
 export type AnnotationMode = 'draw' | 'erase';
 
+export interface SetTrackOptions {
+  /** True when viewing someone else's public-link track. Hides the toolbar. */
+  readonly?: boolean;
+}
+
 export interface MapAnnotationLayer {
   setEnabled(enabled: boolean): void;
   setMode(mode: AnnotationMode): void;
@@ -25,6 +40,12 @@ export interface MapAnnotationLayer {
   getMode(): AnnotationMode;
   /** Register a callback fired whenever annotation mode is toggled via the map button. */
   onToggle(cb: (enabled: boolean) => void): void;
+  /**
+   * Switch the layer to a different track. Clears any in-memory strokes and
+   * (for non-readonly own tracks with a valid trackId) loads server-side
+   * strokes for the new track. Pass `trackId=null` to clear the layer.
+   */
+  setTrack(trackId: string | null, options?: SetTrackOptions): Promise<void>;
   destroy(): void;
 }
 
@@ -153,6 +174,10 @@ export function createMapAnnotationLayer(
   let currentScreenPoints: [number, number][] = [];
   let currentGeoPoints: [number, number][] = [];
   let sourcesAdded = false;
+  /** Persistence target — null means in-memory only (no track loaded, or anonymous). */
+  let currentTrackId: string | null = null;
+  /** When true the toolbar/draw UI is hidden — viewing someone else's track. */
+  let readonly = false;
 
   // --- Transparent input overlay (captures pointer events without blocking map visuals) ---
   const inputOverlay = document.createElement('div');
@@ -284,7 +309,7 @@ export function createMapAnnotationLayer(
   container.appendChild(toggleBtn);
 
   function updateToggleButton() {
-    toggleBtn.style.display = enabled ? 'none' : 'flex';
+    toggleBtn.style.display = enabled || readonly ? 'none' : 'flex';
     if (enabled) {
       toolbar.style.cssText = toolbar.style.cssText.replace(/left:\s*\d+px/, 'left: 10px');
     }
@@ -292,7 +317,8 @@ export function createMapAnnotationLayer(
   updateToggleButton();
 
   toggleBtn.addEventListener('click', () => {
-    setEnabled(!enabled);
+    if (readonly) return;
+    applyEnabled(!enabled);
     toggleCallback?.(enabled);
   });
 
@@ -306,7 +332,7 @@ export function createMapAnnotationLayer(
     else if (tool === 'undo') undo();
     else if (tool === 'redo') redo();
     else if (tool === 'clear') clearAll();
-    else if (tool === 'close') { setEnabled(false); toggleCallback?.(false); }
+    else if (tool === 'close') { applyEnabled(false); toggleCallback?.(false); }
   });
 
   function updateToolbarHighlight() {
@@ -395,7 +421,11 @@ export function createMapAnnotationLayer(
         strokes.push(stroke);
         redoStack = [];
         updateStrokesSource();
-        storage.storeAnnotation(stroke);
+        if (currentTrackId && !readonly) {
+          void storage
+            .storeAnnotation(currentTrackId, stroke)
+            .catch((err) => console.warn('Failed to save annotation:', err));
+        }
       }
     }
 
@@ -422,7 +452,11 @@ export function createMapAnnotationLayer(
         const idx = strokes.findIndex((s) => s.id === id);
         if (idx !== -1) {
           strokes.splice(idx, 1);
-          storage.deleteAnnotation(id);
+          if (currentTrackId && !readonly) {
+            void storage
+              .deleteAnnotation(currentTrackId, id)
+              .catch((err) => console.warn('Failed to delete annotation:', err));
+          }
         }
       }
       redoStack = [];
@@ -435,7 +469,11 @@ export function createMapAnnotationLayer(
     if (strokes.length === 0) return;
     const stroke = strokes.pop()!;
     redoStack.push(stroke);
-    storage.deleteAnnotation(stroke.id);
+    if (currentTrackId && !readonly) {
+      void storage
+        .deleteAnnotation(currentTrackId, stroke.id)
+        .catch((err) => console.warn('Failed to delete annotation:', err));
+    }
     updateStrokesSource();
   }
 
@@ -443,7 +481,11 @@ export function createMapAnnotationLayer(
     if (redoStack.length === 0) return;
     const stroke = redoStack.pop()!;
     strokes.push(stroke);
-    storage.storeAnnotation(stroke);
+    if (currentTrackId && !readonly) {
+      void storage
+        .storeAnnotation(currentTrackId, stroke)
+        .catch((err) => console.warn('Failed to save annotation:', err));
+    }
     updateStrokesSource();
   }
 
@@ -451,7 +493,11 @@ export function createMapAnnotationLayer(
     if (strokes.length === 0) return;
     strokes = [];
     redoStack = [];
-    storage.clearAnnotations();
+    if (currentTrackId && !readonly) {
+      void storage
+        .clearAnnotations(currentTrackId)
+        .catch((err) => console.warn('Failed to clear annotations:', err));
+    }
     updateStrokesSource();
   }
 
@@ -471,7 +517,7 @@ export function createMapAnnotationLayer(
   }
 
   // --- Enable / Disable ---
-  function setEnabled(value: boolean) {
+  function applyEnabled(value: boolean) {
     enabled = value;
     inputOverlay.style.pointerEvents = value ? 'auto' : 'none';
     toolbar.style.display = value ? 'flex' : 'none';
@@ -493,17 +539,43 @@ export function createMapAnnotationLayer(
     }
   }
 
-  // --- Load persisted annotations on init ---
-  storage.listAnnotations().then((stored) => {
-    if (stored.length > 0) {
-      strokes = stored;
-      updateStrokesSource();
+  /**
+   * Switch the layer to a different track. Drops in-memory strokes, then
+   * (when applicable) re-fetches strokes for the new track. In readonly mode
+   * the toggle button + toolbar are hidden so non-owners can't draw.
+   */
+  async function setTrack(
+    trackId: string | null,
+    options?: SetTrackOptions
+  ): Promise<void> {
+    currentTrackId = trackId;
+    readonly = options?.readonly ?? false;
+    strokes = [];
+    redoStack = [];
+    updateStrokesSource();
+
+    // Toggle button is hidden in readonly mode. The toolbar is always hidden
+    // when not enabled; toggling enabled below also resets the toolbar.
+    toggleBtn.style.display = readonly || enabled ? 'none' : 'flex';
+
+    if (!trackId) return;
+    try {
+      const stored = await storage.listAnnotations(trackId);
+      if (stored.length > 0) {
+        strokes = stored;
+        updateStrokesSource();
+      }
+    } catch (err) {
+      console.warn('Failed to load annotations:', err);
     }
-  });
+  }
 
   // --- Public API ---
   return {
-    setEnabled,
+    setEnabled(value: boolean) {
+      if (readonly) return; // ignore enable requests on read-only tracks
+      applyEnabled(value);
+    },
     setMode,
     undo,
     redo,
@@ -511,6 +583,7 @@ export function createMapAnnotationLayer(
     isEnabled: () => enabled,
     getMode: () => mode,
     onToggle(cb: (enabled: boolean) => void) { toggleCallback = cb; },
+    setTrack,
     destroy() {
       map.off('style.load', onStyleLoad);
       inputOverlay.removeEventListener('pointerdown', onPointerDown);

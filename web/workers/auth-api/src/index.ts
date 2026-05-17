@@ -32,6 +32,16 @@ app.use(
   })
 );
 
+// Surface unhandled exceptions as a JSON body instead of Hono's bare
+// "Internal Server Error" — mirrors competition-api so any 500 in CI
+// traces or wrangler tail points at the real cause. Stack is logged
+// server-side; only the message goes to the client.
+app.onError((err, c) => {
+  console.error("[auth-api] unhandled error", err);
+  const message = err instanceof Error ? err.message : String(err);
+  return c.json({ error: message }, 500);
+});
+
 // GET /api/auth/me — return current user or null
 app.get("/api/auth/me", async (c) => {
   const auth = createAuth(c.env);
@@ -125,7 +135,22 @@ app.post("/api/auth/delete-account", async (c) => {
     }
   }
 
-  // Delete user row — CASCADE rules auto-delete session and account rows
+  // Delete every R2 object under this user's prefix BEFORE removing the user
+  // row. D1 CASCADE wipes the metadata in user_track / user_task /
+  // user_annotation, but R2 lives in a separate system and would otherwise
+  // be orphaned.
+  const prefix = `u/${session.user.id}/`;
+  let cursor: string | undefined;
+  do {
+    const listed = await c.env.R2.list({ prefix, cursor, limit: 1000 });
+    if (listed.objects.length > 0) {
+      await c.env.R2.delete(listed.objects.map((o) => o.key));
+    }
+    cursor = listed.truncated ? listed.cursor : undefined;
+  } while (cursor);
+
+  // Delete user row — CASCADE rules auto-delete session, account,
+  // user_preferences, user_track, user_task, user_annotation, etc.
   await c.env.glidecomp_auth.prepare('DELETE FROM "user" WHERE id = ?')
     .bind(session.user.id)
     .run();
