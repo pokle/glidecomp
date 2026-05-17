@@ -2,6 +2,65 @@
 
 This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
 
+## 2026-05-17
+
+### Security Vulnerabilities Fixed
+
+| Package | Severity | Advisory | Description |
+|---------|----------|----------|-------------|
+| kysely (transitive via better-auth, kysely-d1, @better-auth/api-key) | HIGH | [GHSA-pv5w-4p9q-p3v2](https://github.com/advisories/GHSA-pv5w-4p9q-p3v2) | JSON-path traversal injection via unsanitized path-leg metacharacters in `JSONPathBuilder.key()` / `.at()`. Fixed in 0.28.17. Direct dep in auth-api was already at 0.28.17, but transitive deps from better-auth and kysely-d1 resolved to older versions. Fixed by adding `"kysely": "^0.28.17"` override. |
+| better-auth | MODERATE | (v1.6.11) | Constant-time secret comparison in OAuth/MCP plugins. OAuth 2.1 compliance: removed "none" algorithm, disabled plain PKCE. Invitation takeover fix: `requireEmailVerificationOnInvitation` enabled by default. SSRF protection for OIDC endpoints. Rate-limit responses changed from 401 to 429 for API keys. |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **hono** (override + workspaces) | 4.12.18 | 4.12.19 | root override, frontend, auth-api, competition-api, mcp-api | Bug fixes: serveStatic options optional, first cookie returned on duplicates, stream abort handling. New `bytes()` request method. No breaking changes. |
+| **better-auth** | 1.6.9 | 1.6.11 | frontend, auth-api | Security hardening (see above). ~20 bug fixes in 1.6.10. No breaking API changes for our usage. |
+| **@better-auth/api-key** | 1.6.9 | 1.6.11 | auth-api | Aligned with better-auth 1.6.11. |
+| **agents** | 0.12.3 | 0.12.4 | mcp-api | Bug fixes: WebSocket race on stream resume, duplicate initial state frames, client state drift, tool output shape preservation. Pinned exact (pre-1.0). |
+| **katex** | 0.16.45 | 0.16.47 | frontend | 0.16.46 preserves math font in styling commands. 0.16.47 corrects `[` big delimiter size. |
+| **vitest** | 4.1.5 | 4.1.6 | frontend, auth-api, competition-api, mcp-api | Bug fixes: screenshot resolve path, concurrent/sequential conflict fix. Performance: diff objects stringified once. |
+| **@playwright/test** | 1.59.1 | 1.60.0 | root | Removed deprecated APIs (ariaRef, exposeBinding handle option, videosPath/videoSize — none used by us). New: `tracing.startHar()`/`stopHar()`, `locator.drop()`, `test.abort()`. Browser bumps: Chromium 148, Firefox 150, WebKit 26.4. |
+| **@cloudflare/workers-types** | 4.20260509.1 | 4.20260517.1 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | Weekly type definition update. |
+| **@types/bun** | 1.3.13 | 1.3.14 | root | Type definition update. |
+| **@types/node** | 25.6.2 | 25.8.0 | root | Type definition update. |
+| **kysely** (override) | — | ^0.28.17 | root override | Forced via `overrides` to clear HIGH advisory on transitive deps from better-auth and kysely-d1. |
+
+### Code Changes Required
+
+None. All upgrades are drop-in.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| wrangler | 4.87.0 | 4.92.0 | **Skipped again.** 4.89.0's `TZ=UTC` change for `wrangler dev` is still present. Worth a focused PR with time-sensitive test review. No security requirement. |
+| zod | 3.25.76 | 4.4.3 | Major version. Still blocked by `@hono/zod-validator` (honojs/middleware#1148). |
+| vite | 7.3.3 | 8.0.13 | Major version. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. |
+| @hono/zod-validator | 0.7.6 | 0.8.0 | 0.8.0 requires zod 4. Stay on 0.7.6 until zod 4 migration. |
+| @cloudflare/vitest-pool-workers | 0.15.2 / 0.14.9 | 0.16.6 | Skipped — needs review of vitest/vite peer ranges. Defer to focused PR. |
+| kysely | 0.28.17 | 0.29.2 | 0.29.0 is a new minor with breaking changes (removed deprecated APIs, TypeScript >=5.4 required). Needs dedicated review. |
+| jsdom | 25.0.1 | 29.1.1 | Major version jump (4 majors). Needs dedicated review. |
+| @modelcontextprotocol/sdk | 1.29.0 (resolved via ^1.12.1) | 1.29.0 | Already at latest 1.x. v2.0.0 is alpha. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | — | Custom fork, pinned. |
+
+### Verification
+
+- `bun run typecheck:all` — all 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, mcp-api).
+- `bun run test:all` — 411 engine tests + 229 competition-api + 21 mcp-api all pass.
+- `bun run test:e2e` — 1 chromium spec passes (Playwright 1.60.0, Chromium 148).
+- `bun audit` — 0 vulnerabilities.
+
+### Lessons / Notes for Future Sessions
+
+- **`bun run test:e2e` requires `.dev.vars` for auth-api.** The e2e test calls `/api/auth/dev-login`, which only works when `BETTER_AUTH_URL` has `hostname === "localhost"`. This is set via `web/workers/auth-api/.dev.vars` (copy from `.dev.vars.example`). Without it, `wrangler dev` uses `wrangler.toml`'s `BETTER_AUTH_URL=https://glidecomp.com` and the endpoint returns 404. CI presumably has this configured; fresh local/remote environments need to create the file first.
+- **Kysely transitive vuln pattern.** The direct dep in auth-api was at the fixed version (0.28.17), but transitive deps from better-auth and kysely-d1 pulled in older versions via the lockfile. An override was needed. This is the same pattern as the fast-uri/ip-address overrides for @modelcontextprotocol/sdk.
+- **better-auth 1.6.11 enables `requireEmailVerificationOnInvitation` by default.** This is a behavioral change for invitation flows — if the project adds invitation support in the future, this default will require email verification before accepting invitations.
+- **Playwright 1.60.0 removed deprecated APIs.** We weren't using any of them (ariaRef, exposeBinding handle option, videosPath/videoSize), but future upgrades may remove more. Check the "Breaking changes" section in each Playwright release before upgrading.
+- **wrangler TZ=UTC is now 3 versions behind** (introduced in 4.89.0, current latest is 4.92.0). It's increasingly overdue for evaluation. Recommend a focused PR that: (1) bumps wrangler, (2) audits any time-sensitive code paths (audit log timestamps, scheduled tasks, expiry checks), (3) runs e2e to verify `wrangler dev` still works correctly with UTC.
+
 ## 2026-05-09
 
 ### Security Vulnerabilities Fixed
