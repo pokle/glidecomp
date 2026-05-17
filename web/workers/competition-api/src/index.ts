@@ -47,6 +47,17 @@ app.use("/api/comp/*", corsConfig);
 app.use("/api/user/*", corsConfig);
 app.use("/api/u/*", corsConfig);
 
+// Surface uncaught handler errors as JSON instead of Hono's bare
+// "Internal Server Error" body. Logs the stack server-side (visible in
+// wrangler tail / vitest console) and returns the message to the client so
+// e2e traces and the dev console can identify the cause without ssh access
+// to the worker. The stack itself is kept server-side.
+app.onError((err, c) => {
+  console.error("[competition-api] unhandled error", err);
+  const message = err instanceof Error ? err.message : String(err);
+  return c.json({ error: message }, 500);
+});
+
 // Mount routes — igcRoutes first to avoid potential conflicts
 const routes = app
   .route("/", igcRoutes)
