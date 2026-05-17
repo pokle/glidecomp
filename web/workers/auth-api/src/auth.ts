@@ -14,6 +14,7 @@ export function isLocalDev(env: { BETTER_AUTH_URL: string }): boolean {
 
 export type AuthEnv = {
   glidecomp_auth: D1Database;
+  R2: R2Bucket;
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   BETTER_AUTH_SECRET: string;

@@ -1,4 +1,8 @@
-# Browser Storage Specification
+# Browser Storage Specification (SUPERSEDED)
+
+> **This spec is historical.** Tracks and tasks are no longer stored in IndexedDB — see migration `0008_user_files.sql` and `web/workers/competition-api/src/routes/user-files.ts`. Authenticated users now upload to R2 (tracks) and D1 (tasks) via `/api/user/...`. Map annotations are scoped to a (user, track) pair in D1 so they're visible to anyone viewing the track via `/analysis.html?u={username}&track={track_id}`. Anonymous users still get in-memory analysis but nothing persists. The legacy IndexedDB stores are dropped by a one-time client-side migration in `web/frontend/src/auth/user-files-migration.ts`.
+>
+> The rest of this document is preserved for context.
 
 ## Overview
 

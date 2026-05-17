@@ -1,603 +1,579 @@
 /**
- * Browser storage service for tasks and tracks.
- * Backed by IndexedDB for capacity and performance.
+ * User-file storage backed by the competition-api worker.
+ *
+ * Tracks and tasks moved from browser IndexedDB to R2 (tracks) and D1 (tasks)
+ * via /api/user/* (own) and /api/u/:username/* (public-by-link reads).
+ * Annotations are per-track and also server-backed.
+ *
+ * The legacy IndexedDB stores (`tracks`, `tasks`, `annotations`) are dropped
+ * by `cleanupLegacyIndexedDb()`, called once after one-time migration runs
+ * (see auth/user-files-migration.ts).
+ *
+ * Unauthenticated callers get a no-op surface: `list*` returns `[]`, `get*`
+ * returns `null`, and `store*` throws `AuthRequiredError` so the analysis page
+ * can fall back to in-memory loading without persisting anything.
  */
 
 import type { XCTask, IGCFile } from '@glidecomp/engine';
+import { parseXCTask } from '@glidecomp/engine';
 
-const DB_NAME = 'glidecomp';
-const DB_VERSION = 2;
-const TASKS_STORE = 'tasks';
-const TRACKS_STORE = 'tracks';
-const ANNOTATIONS_STORE = 'annotations';
-
-export interface AnnotationStroke {
-  /** Unique identifier */
-  id: string;
-  /** Geographic coordinates [lng, lat][] */
-  points: [number, number][];
-  /** When the stroke was created */
-  timestamp: number;
-  /** Stroke color */
-  color: string;
-  /** Stroke width at reference zoom */
-  width: number;
+export class AuthRequiredError extends Error {
+  constructor() {
+    super('Sign in required to store files');
+    this.name = 'AuthRequiredError';
+  }
 }
 
+/** Error thrown when an upload hits a per-user quota. */
+export class QuotaExceededError extends Error {
+  constructor(
+    message: string,
+    public readonly kind: 'tracks' | 'tasks' | 'bytes',
+    public readonly limit: number
+  ) {
+    super(message);
+    this.name = 'QuotaExceededError';
+  }
+}
+
+// ── Public types ────────────────────────────────────────────────────────────
+
 export interface StoredTask {
-  /** Unique identifier (XContest code) */
+  /** Lowercased task code (XContest code, or filename slug for local files). */
   id: string;
-  /** Display name for command menu */
+  /** Display name for command menu / dashboard cards. */
   name: string;
-  /** The parsed XCTask object */
+  /** The parsed XCTask object. */
   task: XCTask;
-  /** Original JSON source */
+  /** Original JSON source. */
   rawJson: string;
-  /** When the task was stored */
+  /** ISO timestamp. */
   storedAt: number;
-  /** When the task was last accessed */
+  /** ISO timestamp. */
   lastAccessedAt: number;
 }
 
 export interface StoredTrack {
-  /** Unique identifier (SHA-256 hash of content) */
+  /** SHA-256 hex of file content. */
   id: string;
-  /** Display name for command menu */
+  /** Display name for command menu / dashboard cards. */
   name: string;
-  /** Original filename */
+  /** Original filename. */
   filename: string;
-  /** Raw IGC file content */
+  /** Raw IGC text (decompressed on read). */
   content: string;
-  /** Brief summary for search keywords */
   summary: {
     pilot?: string;
     glider?: string;
     date?: string;
   };
-  /** When the track was stored */
   storedAt: number;
-  /** When the track was last accessed */
   lastAccessedAt: number;
+  /**
+   * Number of bytes in R2 (gzipped). Useful for quota UI; clients can fall
+   * back to `content.length` if absent (e.g. for not-yet-uploaded items).
+   */
+  fileSize?: number;
 }
 
-/**
- * Compute SHA-256 hash of content
- */
-async function hashContent(content: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(content);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+export interface AnnotationStroke {
+  /** UUID generated client-side. */
+  id: string;
+  /** Geographic coordinates [lng, lat][] (clamped to valid ranges server-side). */
+  points: [number, number][];
+  timestamp: number;
+  color: string;
+  width: number;
 }
 
-/**
- * Derive a display name for a task
- */
-function deriveTaskName(code: string, task: XCTask): string {
-  // Try to find SSS turnpoint name
-  const sss = task.turnpoints.find(tp => tp.type === 'SSS');
-  if (sss?.waypoint.name && sss.waypoint.name !== 'SSS' && sss.waypoint.name.length > 2) {
-    return `${sss.waypoint.name} (${code})`;
-  }
-  // Use first non-takeoff turnpoint
-  const firstTp = task.turnpoints.find(tp => tp.type !== 'TAKEOFF');
-  if (firstTp?.waypoint.name && firstTp.waypoint.name.length > 2) {
-    return `${firstTp.waypoint.name} (${code})`;
-  }
-  return code.toUpperCase();
+// ── Internal types ──────────────────────────────────────────────────────────
+
+interface ApiTrack {
+  track_id: string;
+  filename: string;
+  display_name: string;
+  pilot: string | null;
+  glider: string | null;
+  flight_date: string | null;
+  file_size: number;
+  stored_at: string;
+  last_accessed_at: string;
 }
 
-/**
- * Derive a display name for a track
- */
-function deriveTrackName(filename: string, igcFile: IGCFile): string {
-  const pilot = igcFile.header.pilot;
-  const date = igcFile.header.date;
+interface ApiTask {
+  task_code: string;
+  display_name: string;
+  xctsk?: unknown;
+  stored_at: string;
+  last_accessed_at: string;
+}
 
-  if (pilot) {
-    if (date) {
-      const dateStr = date.toISOString().split('T')[0];
-      return `${pilot} - ${dateStr}`;
-    }
-    return pilot;
+interface ApiAnnotation {
+  stroke_id: string;
+  color: string;
+  width: number;
+  points: [number, number][];
+  timestamp: number;
+}
+
+function parseIso(s: string): number {
+  const t = Date.parse(s);
+  return isNaN(t) ? 0 : t;
+}
+
+function apiTrackToStored(t: ApiTrack, content = ''): StoredTrack {
+  return {
+    id: t.track_id,
+    name: t.display_name,
+    filename: t.filename,
+    content,
+    summary: {
+      pilot: t.pilot ?? undefined,
+      glider: t.glider ?? undefined,
+      date: t.flight_date ?? undefined,
+    },
+    storedAt: parseIso(t.stored_at),
+    lastAccessedAt: parseIso(t.last_accessed_at),
+    fileSize: t.file_size,
+  };
+}
+
+function apiTaskToStored(t: ApiTask): StoredTask {
+  const xctsk = t.xctsk as Record<string, unknown> | undefined;
+  // The API always returns xctsk for GET-by-code; list endpoints omit it.
+  const rawJson = xctsk ? JSON.stringify(xctsk) : '';
+  let task: XCTask;
+  try {
+    task = xctsk ? parseXCTask(rawJson) : ({ turnpoints: [] } as unknown as XCTask);
+  } catch {
+    task = { turnpoints: [] } as unknown as XCTask;
   }
-  return filename.replace(/\.igc$/i, '');
+  return {
+    id: t.task_code,
+    name: t.display_name,
+    task,
+    rawJson,
+    storedAt: parseIso(t.stored_at),
+    lastAccessedAt: parseIso(t.last_accessed_at),
+  };
+}
+
+async function gzipString(text: string): Promise<Blob> {
+  const stream = new Blob([text]).stream().pipeThrough(
+    new CompressionStream('gzip')
+  );
+  return new Response(stream).blob();
+}
+
+async function gunzipResponse(res: Response): Promise<string> {
+  // The /api/user endpoints return gzipped bodies with Content-Encoding: gzip;
+  // most browsers auto-decompress when fetch sees that header. But some
+  // dev-server proxies strip it, so we decompress defensively if the header
+  // is still present after fetch resolves.
+  const ce = res.headers.get('Content-Encoding');
+  if (ce && ce.toLowerCase().includes('gzip')) {
+    const stream = res.body!.pipeThrough(new DecompressionStream('gzip'));
+    return new Response(stream).text();
+  }
+  return res.text();
+}
+
+async function readError(res: Response): Promise<string> {
+  try {
+    const data = (await res.json()) as { error?: string };
+    return data.error || `HTTP ${res.status}`;
+  } catch {
+    return `HTTP ${res.status}`;
+  }
+}
+
+interface QuotaErrorBody {
+  error: string;
+  quota?: { kind: 'tracks' | 'tasks' | 'bytes'; limit: number };
+}
+
+async function throwHttpError(res: Response): Promise<never> {
+  let body: QuotaErrorBody = { error: `HTTP ${res.status}` };
+  try {
+    body = (await res.json()) as QuotaErrorBody;
+  } catch {
+    /* non-JSON body */
+  }
+  if (body.quota) {
+    throw new QuotaExceededError(body.error, body.quota.kind, body.quota.limit);
+  }
+  throw new Error(body.error || `HTTP ${res.status}`);
+}
+
+// ── IndexedDB (annotations bootstrap + legacy cleanup) ──────────────────────
+
+const LEGACY_DB_NAME = 'glidecomp';
+const LEGACY_DB_VERSION = 3;
+const LEGACY_TASKS_STORE = 'tasks';
+const LEGACY_TRACKS_STORE = 'tracks';
+const LEGACY_ANNOTATIONS_STORE = 'annotations';
+
+/**
+ * Open the IndexedDB at v3 and drop the legacy stores if they still exist.
+ * Resolves immediately on browsers without IndexedDB (storage just stays
+ * server-only). Idempotent.
+ */
+async function cleanupLegacyIndexedDb(): Promise<void> {
+  if (typeof indexedDB === 'undefined') return;
+  await new Promise<void>((resolve) => {
+    const req = indexedDB.open(LEGACY_DB_NAME, LEGACY_DB_VERSION);
+    req.onerror = () => resolve();
+    req.onblocked = () => resolve();
+    req.onsuccess = () => {
+      req.result.close();
+      resolve();
+    };
+    req.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      for (const name of [
+        LEGACY_TASKS_STORE,
+        LEGACY_TRACKS_STORE,
+        LEGACY_ANNOTATIONS_STORE,
+      ]) {
+        if (db.objectStoreNames.contains(name)) {
+          db.deleteObjectStore(name);
+        }
+      }
+    };
+  });
+}
+
+// ── Storage service ─────────────────────────────────────────────────────────
+
+interface Session {
+  signedIn: boolean;
+  username: string | null;
 }
 
 class StorageService {
-  private db: IDBDatabase | null = null;
+  /** When non-null, list/get operate against /api/u/:username/ instead of /api/user/. */
+  private publicUsername: string | null = null;
+  private session: Session | null = null;
+  private trackContentCache = new Map<string, string>();
   private initPromise: Promise<void> | null = null;
 
   /**
-   * Initialize the database connection.
+   * Initialise — resolves the current session and triggers legacy IndexedDB
+   * cleanup. Idempotent and safe to call multiple times.
    */
   async init(): Promise<void> {
-    if (this.db) return;
+    if (this.session !== null) return;
     if (this.initPromise) return this.initPromise;
-
-    this.initPromise = new Promise((resolve, reject) => {
-      if (!window.indexedDB) {
-        console.warn('IndexedDB not available - storage disabled');
-        resolve();
-        return;
+    this.initPromise = (async () => {
+      try {
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
+        if (res.ok) {
+          const data = (await res.json()) as {
+            user: { username: string | null } | null;
+          };
+          this.session = {
+            signedIn: !!data.user,
+            username: data.user?.username ?? null,
+          };
+        } else {
+          this.session = { signedIn: false, username: null };
+        }
+      } catch {
+        this.session = { signedIn: false, username: null };
       }
-
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-      request.onerror = () => {
-        console.error('Failed to open IndexedDB:', request.error);
-        resolve(); // Resolve anyway - storage will be disabled
-      };
-
-      request.onblocked = () => {
-        console.warn('IndexedDB open blocked - another connection is still open');
-        resolve(); // Don't hang forever - proceed without storage
-      };
-
-      request.onsuccess = () => {
-        this.db = request.result;
-        resolve();
-      };
-
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-
-        // Tasks store
-        if (!db.objectStoreNames.contains(TASKS_STORE)) {
-          const tasksStore = db.createObjectStore(TASKS_STORE, { keyPath: 'id' });
-          tasksStore.createIndex('by-name', 'name', { unique: false });
-          tasksStore.createIndex('by-stored', 'storedAt', { unique: false });
-          tasksStore.createIndex('by-accessed', 'lastAccessedAt', { unique: false });
-        }
-
-        // Tracks store
-        if (!db.objectStoreNames.contains(TRACKS_STORE)) {
-          const tracksStore = db.createObjectStore(TRACKS_STORE, { keyPath: 'id' });
-          tracksStore.createIndex('by-name', 'name', { unique: false });
-          tracksStore.createIndex('by-stored', 'storedAt', { unique: false });
-          tracksStore.createIndex('by-accessed', 'lastAccessedAt', { unique: false });
-          tracksStore.createIndex('by-filename', 'filename', { unique: false });
-        }
-
-        // Annotations store (added in v2)
-        if (!db.objectStoreNames.contains(ANNOTATIONS_STORE)) {
-          const annotationsStore = db.createObjectStore(ANNOTATIONS_STORE, { keyPath: 'id' });
-          annotationsStore.createIndex('by-timestamp', 'timestamp', { unique: false });
-        }
-      };
-    });
-
+      await cleanupLegacyIndexedDb();
+    })();
     return this.initPromise;
   }
 
-  /**
-   * Close the database connection (must be called before deleteDatabase).
-   */
+  /** Compatibility shim — there's no longer a DB handle to close. */
   close(): void {
-    if (this.db) {
-      this.db.close();
-      this.db = null;
-      this.initPromise = null;
-    }
+    // No-op. Kept so callers (e.g. dashboard.ts delete-account flow) compile.
   }
 
   /**
-   * Check if storage is available
+   * Browser-storage availability is now "is the user signed in" — anonymous
+   * users get in-memory analysis only.
    */
   isAvailable(): boolean {
-    return this.db !== null;
+    return this.session?.signedIn ?? false;
   }
 
-  // === Tasks ===
-
   /**
-   * Store a task (upsert - updates if exists).
+   * Switch to public-link mode: subsequent get/list calls resolve against
+   * `/api/u/:username/`. Pass `null` to switch back to the caller's own files.
    */
-  async storeTask(code: string, task: XCTask, rawJson: string): Promise<void> {
+  setPublicNamespace(username: string | null): void {
+    this.publicUsername = username;
+    // Public-mode reads belong to a different owner — bust the per-id cache
+    // to avoid mixing content between namespaces.
+    this.trackContentCache.clear();
+  }
+
+  /** True when the caller is viewing someone else's files. */
+  isPublicMode(): boolean {
+    return this.publicUsername !== null;
+  }
+
+  // ── Tasks ─────────────────────────────────────────────────────────────────
+
+  async storeTask(code: string, _task: XCTask, rawJson: string): Promise<void> {
     await this.init();
-    if (!this.db) return;
+    if (!this.session?.signedIn) throw new AuthRequiredError();
+    if (this.publicUsername) throw new Error('Cannot upload in public-link mode');
 
-    const now = Date.now();
-    const stored: StoredTask = {
-      id: code.toLowerCase(),
-      name: deriveTaskName(code, task),
-      task,
-      rawJson,
-      storedAt: now,
-      lastAccessedAt: now,
-    };
-
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(TASKS_STORE, 'readwrite');
-      const store = tx.objectStore(TASKS_STORE);
-
-      // Check if task exists to preserve storedAt
-      const getReq = store.get(stored.id);
-      getReq.onsuccess = () => {
-        const existing = getReq.result as StoredTask | undefined;
-        if (existing) {
-          stored.storedAt = existing.storedAt;
-        }
-        const putReq = store.put(stored);
-        putReq.onerror = () => reject(putReq.error);
-      };
-
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
+    let xctsk: unknown;
+    try {
+      xctsk = JSON.parse(rawJson);
+    } catch {
+      throw new Error('Invalid task JSON');
+    }
+    const res = await fetch('/api/user/tasks', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task_code: code.toLowerCase(), xctsk }),
     });
+    if (!res.ok) await throwHttpError(res);
   }
 
-  /**
-   * Get a stored task by code.
-   */
   async getTask(code: string): Promise<StoredTask | null> {
     await this.init();
-    if (!this.db) return null;
-
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(TASKS_STORE, 'readonly');
-      const store = tx.objectStore(TASKS_STORE);
-      const request = store.get(code.toLowerCase());
-
-      request.onsuccess = () => resolve(request.result || null);
-      request.onerror = () => reject(request.error);
-    });
+    if (!this.session?.signedIn && !this.publicUsername) return null;
+    const url = this.publicUsername
+      ? `/api/u/${encodeURIComponent(this.publicUsername)}/task/${encodeURIComponent(code.toLowerCase())}`
+      : `/api/user/tasks/${encodeURIComponent(code.toLowerCase())}`;
+    const res = await fetch(url, { credentials: 'include' });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(await readError(res));
+    const body = (await res.json()) as ApiTask;
+    return apiTaskToStored(body);
   }
 
-  /**
-   * List all stored tasks, ordered by most recently accessed.
-   */
   async listTasks(): Promise<StoredTask[]> {
     await this.init();
-    if (!this.db) return [];
-
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(TASKS_STORE, 'readonly');
-      const store = tx.objectStore(TASKS_STORE);
-      const index = store.index('by-accessed');
-      const request = index.openCursor(null, 'prev'); // Descending order
-
-      const results: StoredTask[] = [];
-      request.onsuccess = () => {
-        const cursor = request.result;
-        if (cursor) {
-          results.push(cursor.value);
-          cursor.continue();
-        } else {
-          resolve(results);
-        }
-      };
-      request.onerror = () => reject(request.error);
-    });
+    if (!this.session?.signedIn || this.publicUsername) return [];
+    const res = await fetch('/api/user/tasks', { credentials: 'include' });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { tasks: ApiTask[] };
+    return body.tasks.map(apiTaskToStored);
   }
 
-  /**
-   * Update last accessed timestamp for a task.
-   */
-  async touchTask(code: string): Promise<void> {
-    await this.init();
-    if (!this.db) return;
-
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(TASKS_STORE, 'readwrite');
-      const store = tx.objectStore(TASKS_STORE);
-      const request = store.get(code.toLowerCase());
-
-      request.onsuccess = () => {
-        const task = request.result as StoredTask | undefined;
-        if (task) {
-          task.lastAccessedAt = Date.now();
-          store.put(task);
-        }
-      };
-
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
+  async touchTask(_code: string): Promise<void> {
+    // No-op: GET bumps last_accessed_at on the server. Kept for API compat.
   }
 
-  // === Tracks ===
-
-  /**
-   * Store a track (upsert by content hash).
-   * Returns the track ID.
-   */
-  async storeTrack(filename: string, content: string, igcFile: IGCFile): Promise<string> {
-    await this.init();
-    const id = await hashContent(content);
-    if (!this.db) return id;
-
-    const now = Date.now();
-    const stored: StoredTrack = {
-      id,
-      name: deriveTrackName(filename, igcFile),
-      filename,
-      content,
-      summary: {
-        pilot: igcFile.header.pilot,
-        glider: igcFile.header.gliderType,
-        date: igcFile.header.date?.toISOString().split('T')[0],
-      },
-      storedAt: now,
-      lastAccessedAt: now,
-    };
-
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(TRACKS_STORE, 'readwrite');
-      const store = tx.objectStore(TRACKS_STORE);
-
-      // Check if track exists to preserve storedAt
-      const getReq = store.get(id);
-      getReq.onsuccess = () => {
-        const existing = getReq.result as StoredTrack | undefined;
-        if (existing) {
-          stored.storedAt = existing.storedAt;
-        }
-        const putReq = store.put(stored);
-        putReq.onerror = () => reject(putReq.error);
-      };
-
-      tx.oncomplete = () => resolve(id);
-      tx.onerror = () => reject(tx.error);
-    });
-  }
-
-  /**
-   * Get a stored track by ID.
-   */
-  async getTrack(id: string): Promise<StoredTrack | null> {
-    await this.init();
-    if (!this.db) return null;
-
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(TRACKS_STORE, 'readonly');
-      const store = tx.objectStore(TRACKS_STORE);
-      const request = store.get(id);
-
-      request.onsuccess = () => resolve(request.result || null);
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  /**
-   * List all stored tracks, ordered by most recently accessed.
-   */
-  async listTracks(): Promise<StoredTrack[]> {
-    await this.init();
-    if (!this.db) return [];
-
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(TRACKS_STORE, 'readonly');
-      const store = tx.objectStore(TRACKS_STORE);
-      const index = store.index('by-accessed');
-      const request = index.openCursor(null, 'prev'); // Descending order
-
-      const results: StoredTrack[] = [];
-      request.onsuccess = () => {
-        const cursor = request.result;
-        if (cursor) {
-          results.push(cursor.value);
-          cursor.continue();
-        } else {
-          resolve(results);
-        }
-      };
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  /**
-   * Update last accessed timestamp for a track.
-   */
-  async touchTrack(id: string): Promise<void> {
-    await this.init();
-    if (!this.db) return;
-
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(TRACKS_STORE, 'readwrite');
-      const store = tx.objectStore(TRACKS_STORE);
-      const request = store.get(id);
-
-      request.onsuccess = () => {
-        const track = request.result as StoredTrack | undefined;
-        if (track) {
-          track.lastAccessedAt = Date.now();
-          store.put(track);
-        }
-      };
-
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  }
-
-  // === Delete Operations ===
-
-  /**
-   * Delete a single task by code.
-   */
   async deleteTask(code: string): Promise<void> {
     await this.init();
-    if (!this.db) return;
+    if (!this.session?.signedIn) return;
+    if (this.publicUsername) throw new Error('Cannot delete in public-link mode');
+    const res = await fetch(
+      `/api/user/tasks/${encodeURIComponent(code.toLowerCase())}`,
+      { method: 'DELETE', credentials: 'include' }
+    );
+    if (!res.ok) throw new Error(await readError(res));
+  }
 
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(TASKS_STORE, 'readwrite');
-      const store = tx.objectStore(TASKS_STORE);
-      store.delete(code.toLowerCase());
+  // ── Tracks ────────────────────────────────────────────────────────────────
 
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
+  async storeTrack(
+    filename: string,
+    content: string,
+    _igcFile: IGCFile
+  ): Promise<string> {
+    await this.init();
+    if (!this.session?.signedIn) throw new AuthRequiredError();
+    if (this.publicUsername) throw new Error('Cannot upload in public-link mode');
+
+    const gz = await gzipString(content);
+    const res = await fetch('/api/user/tracks', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'Content-Encoding': 'gzip',
+        'x-filename': filename,
+      },
+      body: gz,
     });
+    if (!res.ok) await throwHttpError(res);
+    const body = (await res.json()) as ApiTrack;
+    // Seed the cache so the very next getTrack() doesn't re-fetch.
+    this.trackContentCache.set(body.track_id, content);
+    return body.track_id;
+  }
+
+  async getTrack(id: string): Promise<StoredTrack | null> {
+    await this.init();
+    if (!this.session?.signedIn && !this.publicUsername) return null;
+
+    // List endpoint already gave us metadata; per-track GET gives content.
+    const url = this.publicUsername
+      ? `/api/u/${encodeURIComponent(this.publicUsername)}/track/${encodeURIComponent(id)}`
+      : `/api/user/tracks/${encodeURIComponent(id)}`;
+    const res = await fetch(url, { credentials: 'include' });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(await readError(res));
+
+    const content =
+      this.trackContentCache.get(id) ?? (await gunzipResponse(res));
+    this.trackContentCache.set(id, content);
+
+    // The download endpoint echoes display name + filename in custom headers
+    // so callers don't need a second metadata round-trip. (CORS expose-headers
+    // is set in the worker.) Fallbacks keep us safe if the proxy strips them.
+    const displayName = res.headers.get('X-Display-Name') ?? '';
+    const filename = res.headers.get('X-Filename') ?? `${id.slice(0, 8)}.igc`;
+    return {
+      id,
+      name: displayName || filename.replace(/\.igc$/i, ''),
+      filename,
+      content,
+      summary: {},
+      storedAt: 0,
+      lastAccessedAt: Date.now(),
+    };
   }
 
   /**
-   * Delete a single track by ID.
+   * Variant used by the dashboard download flow when the caller already has
+   * the metadata row (from listTracks) and just needs raw content.
    */
+  async getTrackContent(id: string): Promise<string | null> {
+    await this.init();
+    if (!this.session?.signedIn && !this.publicUsername) return null;
+    if (this.trackContentCache.has(id)) {
+      return this.trackContentCache.get(id) ?? null;
+    }
+    const url = this.publicUsername
+      ? `/api/u/${encodeURIComponent(this.publicUsername)}/track/${encodeURIComponent(id)}`
+      : `/api/user/tracks/${encodeURIComponent(id)}`;
+    const res = await fetch(url, { credentials: 'include' });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(await readError(res));
+    const content = await gunzipResponse(res);
+    this.trackContentCache.set(id, content);
+    return content;
+  }
+
+  async listTracks(): Promise<StoredTrack[]> {
+    await this.init();
+    if (!this.session?.signedIn || this.publicUsername) return [];
+    const res = await fetch('/api/user/tracks', { credentials: 'include' });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { tracks: ApiTrack[] };
+    return body.tracks.map((t) => apiTrackToStored(t));
+  }
+
+  async touchTrack(_id: string): Promise<void> {
+    // No-op: GET bumps last_accessed_at on the server.
+  }
+
   async deleteTrack(id: string): Promise<void> {
     await this.init();
-    if (!this.db) return;
-
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(TRACKS_STORE, 'readwrite');
-      const store = tx.objectStore(TRACKS_STORE);
-      store.delete(id);
-
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
+    if (!this.session?.signedIn) return;
+    if (this.publicUsername) throw new Error('Cannot delete in public-link mode');
+    const res = await fetch(`/api/user/tracks/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      credentials: 'include',
     });
+    if (!res.ok) throw new Error(await readError(res));
+    this.trackContentCache.delete(id);
   }
 
-  // === Clear Operations ===
+  // ── Annotations ───────────────────────────────────────────────────────────
+  //
+  // Annotations are scoped to a (user, track). The track owner can write;
+  // anyone viewing can read. In public-link mode list*/store* operate against
+  // /api/u/:username/ (read-only) and write methods are no-ops.
 
-  /**
-   * Clear all stored tasks.
-   */
+  async listAnnotations(trackId: string): Promise<AnnotationStroke[]> {
+    await this.init();
+    if (!trackId) return [];
+    if (!this.session?.signedIn && !this.publicUsername) return [];
+    const url = this.publicUsername
+      ? `/api/u/${encodeURIComponent(this.publicUsername)}/track/${encodeURIComponent(trackId)}/annotations`
+      : `/api/user/tracks/${encodeURIComponent(trackId)}/annotations`;
+    const res = await fetch(url, { credentials: 'include' });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { annotations: ApiAnnotation[] };
+    return body.annotations.map((a) => ({
+      id: a.stroke_id,
+      points: a.points,
+      timestamp: a.timestamp,
+      color: a.color,
+      width: a.width,
+    }));
+  }
+
+  async storeAnnotation(
+    trackId: string,
+    stroke: AnnotationStroke
+  ): Promise<void> {
+    await this.init();
+    if (!trackId || !this.session?.signedIn || this.publicUsername) return;
+    const res = await fetch(
+      `/api/user/tracks/${encodeURIComponent(trackId)}/annotations/${encodeURIComponent(stroke.id)}`,
+      {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          color: stroke.color,
+          width: stroke.width,
+          points: stroke.points,
+          timestamp: stroke.timestamp,
+        }),
+      }
+    );
+    if (!res.ok) throw new Error(await readError(res));
+  }
+
+  async deleteAnnotation(trackId: string, strokeId: string): Promise<void> {
+    await this.init();
+    if (!trackId || !this.session?.signedIn || this.publicUsername) return;
+    const res = await fetch(
+      `/api/user/tracks/${encodeURIComponent(trackId)}/annotations/${encodeURIComponent(strokeId)}`,
+      { method: 'DELETE', credentials: 'include' }
+    );
+    if (!res.ok && res.status !== 404)
+      throw new Error(await readError(res));
+  }
+
+  async clearAnnotations(trackId: string): Promise<void> {
+    await this.init();
+    if (!trackId || !this.session?.signedIn || this.publicUsername) return;
+    const res = await fetch(
+      `/api/user/tracks/${encodeURIComponent(trackId)}/annotations`,
+      { method: 'DELETE', credentials: 'include' }
+    );
+    if (!res.ok) throw new Error(await readError(res));
+  }
+
+  // ── Bulk clears (kept for API compat — current callers only fire these
+  //    from the delete-account flow, which now does the work server-side). ──
+
   async clearAllTasks(): Promise<void> {
-    await this.init();
-    if (!this.db) return;
-
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(TASKS_STORE, 'readwrite');
-      const store = tx.objectStore(TASKS_STORE);
-      const request = store.clear();
-
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
+    // Server-side, account deletion cascades via the user FK. UI delete flows
+    // call deleteTask per row.
   }
 
-  /**
-   * Clear all stored tracks.
-   */
   async clearAllTracks(): Promise<void> {
-    await this.init();
-    if (!this.db) return;
-
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(TRACKS_STORE, 'readwrite');
-      const store = tx.objectStore(TRACKS_STORE);
-      const request = store.clear();
-
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
+    // See clearAllTasks().
   }
 
-  /**
-   * Clear all stored tasks and tracks.
-   */
   async clearAll(): Promise<void> {
-    await Promise.all([
-      this.clearAllTasks(),
-      this.clearAllTracks(),
-    ]);
+    // See clearAllTasks().
   }
 
-  // === Annotations ===
+  // ── Stats ─────────────────────────────────────────────────────────────────
 
-  /**
-   * Store an annotation stroke.
-   */
-  async storeAnnotation(stroke: AnnotationStroke): Promise<void> {
-    await this.init();
-    if (!this.db) return;
-
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(ANNOTATIONS_STORE, 'readwrite');
-      const store = tx.objectStore(ANNOTATIONS_STORE);
-      store.put(stroke);
-
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  }
-
-  /**
-   * List all annotation strokes, ordered by timestamp.
-   */
-  async listAnnotations(): Promise<AnnotationStroke[]> {
-    await this.init();
-    if (!this.db) return [];
-
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(ANNOTATIONS_STORE, 'readonly');
-      const store = tx.objectStore(ANNOTATIONS_STORE);
-      const index = store.index('by-timestamp');
-      const request = index.openCursor(null, 'next');
-
-      const results: AnnotationStroke[] = [];
-      request.onsuccess = () => {
-        const cursor = request.result;
-        if (cursor) {
-          results.push(cursor.value);
-          cursor.continue();
-        } else {
-          resolve(results);
-        }
-      };
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  /**
-   * Delete a single annotation stroke by ID.
-   */
-  async deleteAnnotation(id: string): Promise<void> {
-    await this.init();
-    if (!this.db) return;
-
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(ANNOTATIONS_STORE, 'readwrite');
-      const store = tx.objectStore(ANNOTATIONS_STORE);
-      store.delete(id);
-
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  }
-
-  /**
-   * Clear all annotation strokes.
-   */
-  async clearAnnotations(): Promise<void> {
-    await this.init();
-    if (!this.db) return;
-
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(ANNOTATIONS_STORE, 'readwrite');
-      const store = tx.objectStore(ANNOTATIONS_STORE);
-      const request = store.clear();
-
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  // === Utilities ===
-
-  /**
-   * Get storage statistics.
-   */
   async getStats(): Promise<{ taskCount: number; trackCount: number }> {
-    await this.init();
-    if (!this.db) return { taskCount: 0, trackCount: 0 };
-
-    const taskCount = await this.getCount(TASKS_STORE);
-    const trackCount = await this.getCount(TRACKS_STORE);
-
-    return { taskCount, trackCount };
-  }
-
-  private getCount(storeName: string): Promise<number> {
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(storeName, 'readonly');
-      const store = tx.objectStore(storeName);
-      const request = store.count();
-
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
+    const [tasks, tracks] = await Promise.all([
+      this.listTasks(),
+      this.listTracks(),
+    ]);
+    return { taskCount: tasks.length, trackCount: tracks.length };
   }
 }
 
