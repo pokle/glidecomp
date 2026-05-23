@@ -12,6 +12,7 @@
 | 2026-04-20 | Claude   | SEC-01 remediation               | Fixed inline |
 | 2026-05-04 | Claude   | Re-review + new findings (SEC-10..14) | SEC-10, SEC-11, SEC-12, SEC-14 fixed inline (this PR) |
 | 2026-05-11 | Claude   | Re-review + new finding SEC-15        | SEC-15 fixed inline (this PR) |
+| 2026-05-18 | Claude   | Re-review (user-files + preferences) + new finding SEC-16 | SEC-16 fixed inline (this PR) |
 
 ---
 
@@ -545,3 +546,162 @@ New gap from this round:
 4. `bun audit` + fresh diff of `docs/dependency-review-log.md`.
 5. Walk any new mutating endpoints (authn / authz / `audit()` / Zod) — none added this round.
 6. Confirm the SEC-15 fix is live: `curl -s https://glidecomp.com/api/comp/<some-public-comp>/pilot | jq '.pilots[0] | {email, linked_email, driver_contact}'` should be all-null.
+
+---
+
+## 2026-05-18 — Re-review
+
+### Methodology
+
+- Read `docs/security-review.md` end-to-end first, carrying the prior round's "Scope gaps" and "Where to start" pointers into this round's scope.
+- Diffed `master` vs the prior review's landing commit `f9fbcf9` (`git log f9fbcf9..HEAD`). Three commits landed since: `3689fac` (sync user preferences to cloud storage — adds `routes/preferences.ts` on auth-api plus a sync layer in the frontend), `cb35e70` (gitignore-only), and `03760b4` (move user-uploaded files from browser IndexedDB to R2/D1 — adds `routes/user-files.ts` on competition-api, R2 binding on auth-api for cascading delete, and frontend `analysis/storage.ts` rewrite). Diff stat: 4582 insertions across 49 files, with `routes/user-files.ts` (+778 LOC) and `routes/preferences.ts` (+141 LOC) the new mutating surface.
+- Audited every new mutating endpoint (eight on `/api/user/*`, three on `/api/u/:username/*` public-by-link reads, two on `/api/auth/preferences`) for (a) authn middleware, (b) authz scoping, (c) Zod / regex validation with bounded fields, (d) parameterised SQL, (e) `audit()` requirement. None of the new endpoints touch competition state, so per CLAUDE.md the `audit()` requirement doesn't apply (the per-user delete trail is intentionally not exposed).
+- Closed the prior round's only remaining systematic scope gap (#7) by walking every `optionalAuth` route under `web/workers/competition-api/src/routes/` — `comp.ts:145, 210`, `task.ts:125`, `igc.ts:605, 704`, `audit.ts:28`, `score.ts:24, 95`, `pilot-status.ts:121`, `pilot.ts:386`, `user-files.ts:694, 729, 751` — listing the SELECT columns each returns. SEC-15 was the only finding; the audit endpoint emits `actor_name` not `actor_user_id`, scores emit only `pilot_name` + `comp_pilot_id`, igc list emits `uploaded_by_name` but not `uploaded_by_user_id`, and the user-files public reads return file bytes only (no email/phone columns selected). Documented under "Re-checked but no change" so the next round doesn't have to re-walk.
+- Ran `bun audit` at HEAD — flagged 1 high: `kysely >=0.26.0 <0.28.17` (JSON-path traversal injection via `JSONPathBuilder.key()` / `.at()`, [GHSA-pv5w-4p9q-p3v2](https://github.com/advisories/GHSA-pv5w-4p9q-p3v2)). See SEC-16.
+- Re-walked every prior `SEC-NN` finding line-by-line against current code.
+- Did **not** re-run dynamic CSRF PoC, live cookie-attribute checks, IGC/XCTask parser fuzzing, or a Cloudflare zone-settings snapshot — still in scope-gaps below.
+
+### Executive summary
+
+`bun audit` flagged a single **High** transitive dependency: `kysely@0.28.16` is pulled in by `better-auth`'s internal dependency tree (our direct `kysely` is already at the fixed `0.28.17`). The vulnerable code path — `JSONPathBuilder.key()` / `.at()` with user-controlled path legs — is **not reachable** from our code (better-auth's kysely-adapter uses table CRUD, not JSON-path operators), so the practical risk is Low; but the advisory is High and the noisy `bun audit` line risks masking a real finding in future rounds. **Fixed inline in this PR** via a `package.json` `overrides` bump to `"kysely": "^0.28.17"`. `bun audit` is now clean, all 251 competition-api / 21 mcp-api / engine tests still pass. No new findings against the user-files or preferences surface — both endpoints enforce authn (`requireAuth` resolving via the SEC-10 service-binding pattern), bounded validation (Zod + regex for filenames/codes/sha256), parameterised SQL, and the existing IGC size caps (`validateAndDecompressIgc`) on the new `/api/user/tracks` upload. The frontend renderers for the new endpoints route every interpolated user-controlled string through `sanitizeText()` and use sha256-hex / `[a-z0-9_-]+` task codes for attribute interpolation, both of which are HTML-safe.
+
+### Status of prior findings
+
+| ID      | Title                                                                  | Status @ 2026-05-18 | Notes                                                                |
+|---------|------------------------------------------------------------------------|---------------------|----------------------------------------------------------------------|
+| SEC-01  | Reflective CORS w/ credentials                                         | **Fixed**           | Re-verified `web/workers/auth-api/src/index.ts:12-32` and `web/workers/competition-api/src/index.ts:23-44`. Allowlist unchanged. The new `/api/user/*` and `/api/u/*` route mounts (`competition-api/src/index.ts:46-48`) share `corsConfig` so the allowlist applies to the new surface too. |
+| SEC-02  | No security response headers (`_headers`)                              | **Open**            | `find web/frontend/public -name _headers` still empty.               |
+| SEC-03  | Admin emails returned on public comp detail                            | **Open**            | `web/workers/competition-api/src/routes/comp.ts:244-250, 303` unchanged. |
+| SEC-04  | IGC upload size/shape                                                  | **Open (sub-issue)** | Subsumed by SEC-11 helper. Manufacturer-record (`A…`) check still not enforced; up to 2 MiB of non-IGC text can sit in R2 per registered pilot per task, and now also per-user under `u/{user_id}/track/{sha256}.igc.gz`. Auth-gated, bounded; staying Low. |
+| SEC-05  | `innerHTML` is the default render primitive                            | **Open**            | The new `web/frontend/src/dashboard.ts:49-67, 79-97` adds two new `innerHTML =` template-literal sites for the user files dashboard. Both interpolate `track.id` / `task.id` (validated to sha256-hex / `[a-z0-9_-]+` server-side) into attribute positions, and route all human-text fields (`track.name`, `track.filename`, `task.name`, `task.id` for display) through `sanitizeText()`. No new XSS, but the inventory of `innerHTML` template-literal sites is growing. |
+| SEC-06  | No JSON body-size cap                                                  | **Open**            | Still no `bodyLimit` middleware. New `/api/user/tracks` calls `c.req.arrayBuffer()` before delegating to `validateAndDecompressIgc` (`web/workers/competition-api/src/routes/user-files.ts:247-250`); a 100 MB attacker body therefore allocates 100 MB transient memory before the helper's 1 MiB compressed cap rejects it. Cloudflare Workers cap memory at 128 MB, so concurrent abusive uploads could trip OOM on a single worker isolate. Low severity in isolation; bundles cleanly with SEC-06's eventual `bodyLimit` fix. |
+| SEC-07  | Dev-only endpoints gated by `BETTER_AUTH_URL` hostname                 | **Verified safe**   | Unchanged — `BETTER_AUTH_URL = "https://glidecomp.com"` in `web/workers/auth-api/wrangler.toml:17`. |
+| SEC-08  | Rate-limit headers not surfaced                                        | **Open**            | Unchanged.                                                           |
+| SEC-09  | `Math.random()` non-security use                                       | **Closed (Info)**   | No new uses; staying closed.                                         |
+| SEC-10  | Authentication bypass via trusted `X-Glidecomp-Internal-User` header   | **Fixed**           | `web/workers/competition-api/src/middleware/auth.ts:15-32` unchanged: forwards only inbound `cookie` / `x-api-key` to auth-api. The new user-files routes use the same `requireAuth` / `optionalAuth` middleware, so no SEC-10-class header trust was reintroduced. |
+| SEC-11  | IGC gzip-bomb decompression                                            | **Fixed**           | `web/workers/competition-api/src/igc-validation.ts:43-110` unchanged. The new `/api/user/tracks` route reuses the helper (`routes/user-files.ts:250`), so the same 1 MiB compressed + 2 MiB streaming-decompressed caps apply to per-user uploads. |
+| SEC-12  | `xctsk` body has no shape, depth, or size cap                          | **Fixed**           | `xctskSchema` in `web/workers/competition-api/src/validators.ts:228-248` unchanged. The new `/api/user/tasks` route reuses the same schema (`routes/user-files.ts:65-70`), so per-user task uploads inherit the cap. |
+| SEC-13  | Service worker stores share-target uploads under unsanitised filenames | **Open**            | `web/frontend/public/sw.js:54-62` unchanged.                         |
+| SEC-14  | Service-binding trust comment misleads readers                         | **Closed**          | Resolved with SEC-10 fix.                                            |
+| SEC-15  | Unauthenticated PII on public pilot list                               | **Fixed**           | `web/workers/competition-api/src/routes/pilot.ts:114-130, 386-419` unchanged. `serializeCompPilotPublic` still zeros `email`, `linked_email`, `driver_contact` for non-admins; admin path still returns full PII. The optionalAuth audit (scope gap #7) confirmed this was the only PII leak in the class. |
+
+### New findings
+
+---
+
+#### SEC-16 — Transitive `kysely@0.28.16` carries CVE GHSA-pv5w-4p9q-p3v2 (JSON-path traversal) — **High (advisory) / Low (reachability)** — ~~Open~~ **Fixed (2026-05-18, this PR)**
+
+> **Resolution:** added `"kysely": "^0.28.17"` to the `overrides` block in the root `package.json` so every transitive resolution snaps to the fixed version. After `bun install`, the lockfile contains a single `kysely@0.28.17` entry (the previous tree had both `auth-api/kysely@0.28.17` and `better-auth/kysely@0.28.16`). `bun audit` reports zero vulnerabilities. All 251 competition-api + 21 mcp-api + engine tests still pass.
+
+**Files**
+- `package.json` (overrides block) — fix applied here
+- `bun.lock` lines around the two `kysely@*` entries before the fix (post-fix: single entry)
+- `web/workers/auth-api/src/auth.ts:4-5, 24-25` — only direct kysely consumer in our code; uses `new Kysely({ dialect: new D1Dialect(...) })` and hands the instance to better-auth; never calls `JSONPathBuilder.key()` / `.at()`.
+
+**Advisory**
+- [GHSA-pv5w-4p9q-p3v2](https://github.com/advisories/GHSA-pv5w-4p9q-p3v2) — Kysely: JSON-path traversal injection via unsanitized path-leg metacharacters in `JSONPathBuilder.key()` / `.at()`. CVSS 7.5 (network, low complexity, no privileges, confidentiality impact: High). Vulnerable: `>=0.26.0 <0.28.17`. Fix: `0.28.17`.
+
+**Evidence (pre-fix)**
+
+```
+$ bun audit
+kysely  >=0.26.0 <0.28.17
+  workspace:auth-api › kysely
+  workspace:@glidecomp/frontend › better-auth
+  workspace:auth-api › kysely-d1
+  workspace:auth-api › @better-auth/api-key
+  high: Kysely: JSON-path traversal injection via unsanitized path-leg metacharacters in `JSONPathBuilder.key()` / `.at()`
+1 vulnerabilities (1 high)
+```
+
+The lockfile contained two pinned versions:
+
+```
+"kysely": ["kysely@0.28.17", ...                  // direct dep (safe)
+"better-auth/kysely": ["kysely@0.28.16", ...      // transitive (vulnerable)
+```
+
+`better-auth` resolved its own copy at `0.28.16` because its peerDependency range was `^0.28.14`. Our direct `kysely@^0.28.17` did not deduplicate it.
+
+**Reachability analysis**
+
+The vulnerability is in `JSONPathBuilder.key()` / `.at()` — Kysely's JSON-path query builders. These are used when an application writes queries like `db.selectFrom('user').select(eb => eb.ref('profile', '->').key(userInput).as('city'))`. The attack requires an attacker-controlled path leg flowing into `.key()` / `.at()`.
+
+- Our direct use of Kysely in `web/workers/auth-api/src/auth.ts:24-25` is `new Kysely({ dialect: new D1Dialect({ database: env.glidecomp_auth }) })`. The instance is handed to better-auth; we don't issue any queries with it.
+- `better-auth` 1.6.9's kysely-adapter (`node_modules/.bun/@better-auth+kysely-adapter@1.6.9+*/node_modules/@better-auth/kysely-adapter/dist/`) — `grep -rn "JSONPath\|jsonPath\|\.key\|\.at("` returns zero matches. The adapter performs table CRUD only (insert/update/delete/select against the Better Auth schema). User-controlled JSON-column paths never enter the pipeline.
+
+So the practical exposure is Low: nothing in our application code or our dependency graph calls the vulnerable APIs with user-controlled input. The advisory severity is **High** per the public CVSS, but a real-world exploit against this codebase would require a future change in better-auth to start using JSON-path operators.
+
+**Severity rationale**
+
+Documenting as **High (advisory) / Low (reachability)** to keep `bun audit` clean (which is the main signal we use for dependency hygiene) without overclaiming risk. Closing it inline via overrides costs nothing.
+
+**Fix**
+
+```diff
+ "overrides": {
+   "defu": "^6.1.7",
+   "fast-uri": "^3.1.2",
+   "hono": "^4.12.18",
+   "ip-address": "^10.2.0",
++  "kysely": "^0.28.17",
+   "postcss": "^8.5.13",
+   "protocol-buffers-schema": "^3.6.1"
+ },
+```
+
+The override snaps every transitive `kysely` resolution to `^0.28.17`. Post-`bun install` the lockfile has a single `kysely@0.28.17` entry. `bun audit` reports zero vulnerabilities.
+
+**Regression test**
+
+The existing auth-api test suite (`bun run --filter auth-api test`) exercises Better Auth sign-up / sign-in / API key issuance flows end-to-end against a miniflare-backed D1; these all run through the same Kysely instance and pass on the upgraded version. No new test was added — `bun audit` itself is the regression detector and is already part of `/security-review-repo`'s checklist (step 8).
+
+---
+
+### Re-checked but no change
+
+- **SEC-15 class — PII on `optionalAuth` routes.** Walked every `optionalAuth` site and confirmed the SELECT columns are PII-free for unauthenticated callers:
+  - `comp.ts:145` (GET `/api/comp`) — `comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, open_igc_upload, pilot_statuses` ∪ admin's own comps (no email/phone/user-id fields).
+  - `comp.ts:210` (GET `/api/comp/:comp_id`) — same fields plus `admins: { email, name }` from `comp_admin JOIN "user"`. SEC-03 still tracks the admin-email portion; nothing else newly leaks.
+  - `task.ts:125` (GET `/api/comp/:comp_id/task/:task_id`) — `task_id, comp_id, name, task_date, creation_date, xctsk, pilot_classes, track_count`. No user join.
+  - `igc.ts:605` (GET task-track list) — selects `uploaded_by_user_id` but never echoes it; response carries `uploaded_by_name` and the boolean `uploaded_on_behalf` only.
+  - `igc.ts:704` (download IGC) — streams bytes plus `Content-Disposition` filename; no user-table join.
+  - `audit.ts:28` (audit log) — `actor_name, subject_type, subject_id, subject_name, description`; explicitly drops `actor_user_id`. Unchanged from prior round.
+  - `score.ts:24, 95` — `pilot_name, comp_pilot_id, total_score, rank`. No PII.
+  - `pilot-status.ts:121` — `pilot_name, set_by_name, status_key, note`. No PII.
+  - `pilot.ts:386` — `serializeCompPilotPublic` zeros the three PII fields for non-admins (SEC-15 fix).
+  - `user-files.ts:694, 729, 751` — public-by-link reads of own-uploaded data; the only user-table join is `resolveUserIdByUsername` which returns `id` server-side and never includes it in the response (404 vs success is the only signal).
+- **Authn / authz on the new mutating surface.** Every `/api/user/*` route uses `requireAuth`; ownership is enforced by `WHERE user_id = ?` in every read/update/delete. Annotation routes additionally verify track ownership with a separate `SELECT 1 FROM user_track WHERE user_id = ? AND track_id = ?` before any annotation read/write (`user-files.ts:594-598, 626-631`). No path-traversal: R2 keys are computed from `user.id` (server-side, never client input) and a sha256 of the IGC content, formatted as `u/{user_id}/track/{sha256}.igc.gz`.
+- **Input validation on the new surface.** Hand-walked: `task_code` matches `/^[a-z0-9][a-z0-9_-]{0,63}$/`, `stroke_id` matches `/^[A-Za-z0-9_-]{1,64}$/`, `track_id` matches `/^[0-9a-f]{64}$/`, `username` matches `/^[a-zA-Z0-9][a-zA-Z0-9-]{1,18}[a-zA-Z0-9]$/`, filename header capped at 255 chars then ASCII-sanitised before going into `Content-Disposition`. Annotation Zod schema bounds points to ≤2000 [lon,lat] tuples and clamps lon/lat to valid ranges; the serialised JSON is then capped at 64 KB before insert. Task uploads go through `xctskSchema` (the SEC-12 schema). IGC uploads go through `validateAndDecompressIgc` (the SEC-11 helper).
+- **Parameterised SQL.** All new prepare+bind sites in `user-files.ts` and `preferences.ts` use `.bind(...)` exclusively; no string concatenation into SQL. The preferences route's `CASE WHEN ? = 1 THEN excluded.X ELSE X END` pattern (`preferences.ts:120-127`) is also fully parameterised — the `?` placeholders take bound integers.
+- **Header injection on Content-Disposition.** `asciiHeaderSafe` (`user-files.ts:54-57`) strips everything outside `\x20-\x7E` (printable ASCII), so CR/LF/control chars cannot reach the header value. The `filename*=UTF-8''<encoded>` part uses `encodeURIComponent` for the Unicode value. Tested mentally with a filename of `"; X-Injected: bad\r\n"` — survives only as `bad` after stripping.
+- **Cascading delete.** `auth-api`'s `/api/auth/delete-account` (`auth-api/src/index.ts:138-150`) now also wipes every R2 object under `u/{user_id}/` *before* dropping the user row, in batches of 1000 with the truncation cursor. D1 cascades take care of the metadata. The R2 binding was added to `auth-api/wrangler.toml:12-14` for this. Listed-and-bulk-deleted via `R2.list({ prefix }).then(R2.delete(keys[]))`; both APIs accept the same scoped prefix, so a compromised auth-api couldn't escalate to deleting outside `u/{user_id}/`.
+- **`audit()` coverage on new endpoints.** Per CLAUDE.md, `audit()` is required for mutations that "affect a competition's scores". The new `/api/user/*` and `/api/auth/preferences` endpoints are per-user state, not competition state, so the requirement doesn't fire. No regression: every existing mutating route under `routes/comp.ts`, `task.ts`, `igc.ts`, `pilot.ts`, `pilot-status.ts` still calls `audit()`.
+- **MCP per-tool auth propagation.** Re-verified that every tool under `web/workers/mcp-api/src/tools/*.ts` forwards `apiKey` via `compApi(env, apiKey, …)` / `compApiRaw(env, apiKey, …)`. None forge identity. (Same conclusion as 2026-05-11 round; carried forward.)
+- **wrangler.toml bindings.** `competition-api`'s `[[routes]]` now also binds `/api/user/*` and `/api/u/*` (lines 47-57) — both go through the same `requireAuth` / `optionalAuth` resolver, no SEC-10-class internal-header trust. `auth-api` gained a `[[r2_buckets]] binding = "R2"` for cascading delete; the binding shares the `glidecomp` bucket with competition-api by design. No preview-vs-prod cross-wiring.
+- **Better Auth secrets.** Still referenced as env, none hard-coded.
+
+### Scope gaps still not done
+
+Carried forward from prior rounds:
+
+1. Dynamic CSRF PoC against the now-allowlisted CORS.
+2. Cookie attribute verification on a live deploy.
+3. IGC / XCTask parser fuzzing.
+4. Cloudflare zone settings snapshot (HSTS, TLS min, WAF, bot management).
+5. Verify SEC-10 fix on a deployed comp-api endpoint (not just miniflare regression test).
+6. Confirm the comp-api worker doesn't accept the legacy `Cookie: test-user=…` header in production.
+
+New gap from this round:
+
+7. **Idempotency / TOCTOU on `/api/user/tracks` and `/api/user/tasks` quota checks.** The quota check (`SELECT COUNT(*)`) and the INSERT are non-atomic — two concurrent uploads from the same user can both pass the count check at 499 and end up with 501 stored rows. Severity Low: quotas are advisory and the overshoot is bounded by request concurrency. Worth a follow-up to use `INSERT … RETURNING` + post-insert count, or a SAVEPOINT, if quota correctness ever becomes a billing/security concern. Also: rapid duplicate uploads of the same `(user_id, track_id)` race the existence check and hit a PRIMARY KEY violation on the second INSERT, surfacing as a 500 (via the catch-all in `competition-api/src/index.ts:55-59`); migrating both code paths to `INSERT … ON CONFLICT DO UPDATE` would make them safe under concurrency. Filing as scope-gap rather than SEC-NN because there's no security exposure — it's a UX bug class.
+
+### Where to start the next review
+
+1. Commit reviewed up to: HEAD = `03760b4` (parent of this review's PR). Diff against that next round.
+2. `bun audit` should be clean after this PR — if a new vuln pops up, walk the dependency tree first to determine reachability before triaging severity.
+3. Re-run the prior-findings table; SEC-02, SEC-03, SEC-05, SEC-06, SEC-08, SEC-13 are still Open. Of these, SEC-02 (`_headers` file) and SEC-06 (`bodyLimit` middleware) are the highest-leverage small-diff wins.
+4. Walk any new mutating endpoints (authn / authz / `audit()` / Zod) — focus on whether the per-user model is being extended (e.g. shared task books, public profile pages with PII) since that's the trajectory of recent changes.
+5. Re-verify R2-object cleanup on account delete still walks the entire `u/{user_id}/` prefix and doesn't miss new prefixes (e.g. if future features add `u/{user_id}/avatar/...`, the delete-account handler is the source of truth and must be updated).
+6. Spot-check the dashboard's two new `innerHTML =` template literals (`web/frontend/src/dashboard.ts:49, 79`) for any interpolated fields that bypass `sanitizeText()`. Both currently look clean.
+7. **New for this round:** confirm the kysely override held — `grep "kysely@" bun.lock` should return a single 0.28.17 entry. If better-auth bumps its kysely peer range above 0.28.x in a future release, drop the override.
