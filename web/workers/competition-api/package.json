@@ -13,15 +13,15 @@
   "dependencies": {
     "@glidecomp/engine": "workspace:*",
     "@hono/zod-validator": "^0.7.6",
-    "hono": "^4.12.18",
+    "hono": "^4.12.22",
     "sqids": "^0.3.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.15.2",
-    "@cloudflare/workers-types": "^4.20260509.1",
+    "@cloudflare/vitest-pool-workers": "^0.16.9",
+    "@cloudflare/workers-types": "^4.20260524.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.5",
-    "wrangler": "4.87.0"
+    "vitest": "^4.1.7",
+    "wrangler": "4.94.0"
   }
 }

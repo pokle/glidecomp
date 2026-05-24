@@ -2,6 +2,74 @@
 
 This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
 
+## 2026-05-24
+
+### Security Vulnerabilities Fixed
+
+| Package | Severity | Advisory | Description |
+|---------|----------|----------|-------------|
+| hono | MODERATE | [GHSA-2gcr-mfcq-wcc3](https://github.com/advisories/GHSA-2gcr-mfcq-wcc3) | `app.mount()` prefix stripping: undecoded paths caused incorrect prefix removal for percent-encoded characters, giving sub-applications wrong routing paths. Fixed in 4.12.21. |
+| hono | MODERATE | [GHSA-xrhx-7g5j-rcj5](https://github.com/advisories/GHSA-xrhx-7g5j-rcj5) | IP restriction IPv6 bypass: non-canonical IPv6 formats bypassed deny rules via string comparison in `hono/ip-restriction`. Fixed in 4.12.21. |
+| hono | MODERATE | [GHSA-3hrh-pfw6-9m5x](https://github.com/advisories/GHSA-3hrh-pfw6-9m5x) | Cookie header injection: missing validation on `sameSite` and `priority` parameters allowed injecting extra Set-Cookie attributes. Fixed in 4.12.21. |
+| hono | MODERATE | [GHSA-f577-qrjj-4474](https://github.com/advisories/GHSA-f577-qrjj-4474) | JWT scheme validation bypass: Authorization header accepted any two-part scheme, not just Bearer tokens. Fixed in 4.12.21. |
+| better-auth | HIGH | (v1.6.11) | Invitation takeover — `requireEmailVerificationOnInvitation` now enabled by default. SSRF via unvalidated OIDC endpoints. Device authorization hijack. Magic link race condition. OAuth signing weakness (`"none"` algorithm removed, plain PKCE disabled). |
+| qs (transitive via @modelcontextprotocol/sdk) | MODERATE | [GHSA-q8mj-m7cp-5q26](https://github.com/advisories/GHSA-q8mj-m7cp-5q26) | `qs.stringify` crashes with TypeError on null/undefined entries in comma-format arrays when `encodeValuesOnly` is set. Fixed by overriding to ^6.15.2. |
+| ws (transitive via jsdom, vitest-pool-workers, wrangler) | MODERATE | [GHSA-58qx-3vcg-4xpx](https://github.com/advisories/GHSA-58qx-3vcg-4xpx) | Uninitialized memory disclosure in ws >= 8.0.0 < 8.20.1. Fixed by overriding to ^8.20.1. |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **hono** (override + workspaces) | 4.12.18 | 4.12.22 | root override, frontend, auth-api, competition-api, mcp-api | 4 security fixes in 4.12.21 (see above). Bug fixes: cookie handling, route base paths, compress middleware, MIME types. No breaking changes. |
+| **better-auth** | 1.6.9 | 1.6.11 | frontend, auth-api | Security-critical: invitation takeover, SSRF, magic link race, OAuth signing fixes. Bug fixes: email casing, duplicate Set-Cookie headers, session cleanup on user deletion. |
+| **@better-auth/api-key** | 1.6.9 | 1.6.11 | auth-api | Aligned with better-auth 1.6.11. Rate-limited responses now return 429 instead of 401. |
+| **wrangler** | 4.87.0 | 4.94.0 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | TZ=UTC for local dev (4.89.0, aligns with production Workers). Stale refresh token fix (4.92.0). OAuth/auth stability fixes (4.93.1, 4.94.0). D1 SQL export improvements. Auto-cleanup of stale `.wrangler/tmp/` dirs. No breaking changes beyond Node 22 requirement (already met). |
+| **agents** | 0.12.3 | 0.13.2 | mcp-api | No breaking changes. New: chat SDK state adapter, managed fiber jobs, experimental Postgres-backed sessions. `createMcpHandler` API unchanged. Pinned exact (pre-1.0). |
+| **mapbox-gl** | 3.23.0 | 3.24.0 | root, frontend | Performance: reduced per-frame matrix allocations, parallel shader compilation, faster vector icon loading. Bug fixes: memory leak on map destroy, icon scale-factor double-application, fill-extrusion+terrain rendering. Client-side fontstack compositing now default (3.23.0). No breaking changes. |
+| **@cloudflare/vitest-pool-workers** | 0.15.2 / 0.14.9 | 0.16.9 | auth-api, competition-api, mcp-api | Aligned with wrangler 4.94.0 / miniflare 4.20260521.0. Same peer deps (vitest ^4.1.0). |
+| **vitest** | 4.1.5 | 4.1.7 | frontend, auth-api, competition-api, mcp-api | Patch release. Bug fixes. |
+| **@playwright/test** | 1.59.1 | 1.60.0 | root | Minor release. |
+| **katex** | 0.16.45 | 0.16.47 | frontend | Patch release. |
+| **@cloudflare/workers-types** | 4.20260509.1 | 4.20260524.1 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | Weekly type definition update. |
+| **@types/bun** | 1.3.13 | 1.3.14 | root | Type definition update. |
+| **@types/node** | 25.6.2 | 25.9.1 | root | Type definition update. |
+| **qs** (override) | (transitive) | ^6.15.2 | root override | Forced via `overrides` to clear MODERATE advisory on transitive dep of `@modelcontextprotocol/sdk`. |
+| **ws** (override) | (transitive) | ^8.20.1 | root override | Forced via `overrides` to clear MODERATE advisory on transitive deps of jsdom, vitest-pool-workers, wrangler. |
+
+### Code Changes Required
+
+None. All upgrades are drop-in replacements with no API changes affecting our usage.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| zod | 3.25.76 | 4.4.3 | Major version. Still blocked by `@hono/zod-validator` (honojs/middleware#1148). |
+| vite | 7.3.3 | 8.0.14 | Major version. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. |
+| @hono/zod-validator | 0.7.6 | 0.8.0 | 0.8.0 requires zod 4. Stay on 0.7.6 until zod 4 migration. |
+| kysely | 0.28.17 | 0.29.2 | 0.29.x is now stable but `better-auth@1.6.11` depends on `kysely: ^0.28.17` — cannot bump to 0.29.x without breaking better-auth's dependency range. Defer until better-auth updates its kysely dep. |
+| jsdom | 25.0.1 | 29.1.1 | Major version jump. Defer to a focused PR. |
+| @modelcontextprotocol/sdk | 1.29.0 (resolved via ^1.12.1) | 2.0.0-alpha | Alpha release. Wait for stable. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+| katex | 0.16.47 | 0.17.0 | Major version. Stay within ^0.16.x semver range. |
+
+### Verification
+
+- `bun run typecheck:all` — all 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, mcp-api).
+- `bun run test:all` — 411 root/engine tests + 251 competition-api + 21 mcp-api all pass.
+- `bun run test:e2e` — 6 chromium specs pass (comp-creation + 5 user-files-upload tests).
+- `bun audit` — 0 vulnerabilities.
+
+### Lessons / Notes for Future Sessions
+
+- **Wrangler 4.89.0 TZ=UTC is beneficial, not risky.** The previous session (2026-05-09) skipped wrangler because 4.89.0 introduced `TZ=UTC` for local dev. In practice this aligns local dev with production Workers behavior. The codebase already uses `Date.UTC()` for date construction and locale-aware formatting for display. No tests or behavior were affected by this change.
+- **`@cloudflare/vitest-pool-workers` version is tightly coupled to wrangler.** 0.16.9 bundles `wrangler: 4.94.0` and `miniflare: 4.20260521.0` as direct dependencies. When upgrading wrangler, also upgrade vitest-pool-workers to keep them aligned.
+- **Kysely 0.29.x is now stable** (not RC), but `better-auth@1.6.11` still depends on `kysely: ^0.28.17`. Upgrading kysely to 0.29.x would break better-auth's dependency range. Monitor better-auth's next releases for a kysely dep bump.
+- **better-auth 1.6.11 changes defaults** that could affect existing deployments: `requireEmailVerificationOnInvitation` now defaults to `true`, plain PKCE disabled by default, `"none"` signing algorithm removed. These don't affect our current usage but should be noted if enabling 2FA or OAuth provider features.
+- **`qs` and `ws` are new recurring transitive vuln sources.** `qs` comes through `@modelcontextprotocol/sdk`, `ws` comes through jsdom, vitest-pool-workers, and wrangler. Both will likely need override updates in future sessions until upstream packages ship patched versions.
+- **E2e tests require `.dev.vars`** with `BETTER_AUTH_URL=http://localhost:3000` to work locally. CI creates this file in the workflow. Without it, `isLocalDev()` returns false and the dev-login endpoint returns 404.
+
 ## 2026-05-09
 
 ### Security Vulnerabilities Fixed
