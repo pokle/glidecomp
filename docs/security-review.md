@@ -13,6 +13,7 @@
 | 2026-05-04 | Claude   | Re-review + new findings (SEC-10..14) | SEC-10, SEC-11, SEC-12, SEC-14 fixed inline (this PR) |
 | 2026-05-11 | Claude   | Re-review + new finding SEC-15        | SEC-15 fixed inline (this PR) |
 | 2026-05-18 | Claude   | Re-review (user-files + preferences) + new finding SEC-16 | SEC-16 fixed inline (this PR) |
+| 2026-05-25 | Claude   | Re-review (no new app code) + new finding SEC-17; closed SEC-02 | SEC-17 + SEC-02 fixed inline (this PR) |
 
 ---
 
@@ -705,3 +706,124 @@ New gap from this round:
 5. Re-verify R2-object cleanup on account delete still walks the entire `u/{user_id}/` prefix and doesn't miss new prefixes (e.g. if future features add `u/{user_id}/avatar/...`, the delete-account handler is the source of truth and must be updated).
 6. Spot-check the dashboard's two new `innerHTML =` template literals (`web/frontend/src/dashboard.ts:49, 79`) for any interpolated fields that bypass `sanitizeText()`. Both currently look clean.
 7. **New for this round:** confirm the kysely override held — `grep "kysely@" bun.lock` should return a single 0.28.17 entry. If better-auth bumps its kysely peer range above 0.28.x in a future release, drop the override.
+
+---
+
+## 2026-05-25 — Re-review
+
+### Methodology
+
+- Read `docs/security-review.md` end-to-end first, carrying the prior round's "Scope gaps" and "Where to start" pointers into this round's scope.
+- Diffed `master` vs the prior review's landing commit `03760b4` (`git log 03760b4..HEAD`). **The only commit since is `067c7ed` — the prior review's own PR** (SEC-16 kysely override + the 2026-05-18 doc section). Diff touches just `docs/security-review.md`, `package.json` (the kysely override line), and `bun.lock`. **No new application code landed since the last round** — every `*.ts` under `web/`, every `wrangler.toml`, `functions/`, `sw.js`, and `_redirects` is byte-identical to the 2026-05-18 review. There are therefore no new mutating endpoints, routes, or bindings to audit this round.
+- Re-walked every prior `SEC-NN` finding against current code. Because the application source is unchanged, each prior round's line-by-line verification still holds verbatim; this round spot-checked the fix sites to confirm nothing was reverted (`grep` for the SEC-10 trust header → only test/comment references; `validateAndDecompressIgc` caps + gzip-magic present; `xctskSchema` still used instead of `z.record(z.unknown())`; `serializeCompPilotPublic` still zeros the three PII fields; CORS allowlist unchanged on both public workers).
+- Ran `bun audit` at HEAD — flagged **2 new moderate** transitive advisories that were not present last round (`qs` via the MCP SDK's express dependency, `ws` via dev/test tooling). See SEC-17. Both fixed inline via `package.json` `overrides`; `bun audit` is now clean again.
+- Used the otherwise-quiet round to close the longest-standing Open finding, **SEC-02** (no security response headers), by adding `web/frontend/public/_headers`. See the SEC-02 status row for the staged-rollout rationale.
+- Ran `bun run typecheck:all` (clean), `bun run test:all` (green: 251 competition-api + 21 mcp-api + engine/airscore/root suites), and `bun audit` (clean).
+- Did **not** re-run dynamic CSRF PoC, live cookie-attribute checks, IGC/XCTask parser fuzzing, or a Cloudflare zone-settings snapshot — still in scope-gaps below. The new `_headers` CSP has **not** been verified against the live Pages deploy (it ships Report-Only precisely so it can't break the site before that verification).
+
+### Executive summary
+
+No new application code landed since 2026-05-18 — the only commit is the prior review's own PR — so there was no fresh attack surface to audit, and re-verification confirmed the SEC-01 / SEC-10 / SEC-11 / SEC-12 / SEC-15 / SEC-16 fixes all hold byte-for-byte. The one new item is **SEC-17**: `bun audit` surfaced two new **moderate** transitive advisories — `qs` (`>=6.11.1 <=6.15.1`, DoS in `qs.stringify`) pulled in via `@modelcontextprotocol/sdk → express`, and `ws` (`>=8.0.0 <8.20.1`, uninitialized-memory disclosure) pulled in via dev/test tooling (`jsdom`, `miniflare`, `wrangler`). Neither is reachable in production (the express HTTP transport is unused on Workers — our `qs` in `mcp-api/src/tools/audit.ts:42` is a local `URLSearchParams` variable, not the library; `ws` never ships to the Workers runtime or the static frontend). **Both fixed inline** via `overrides` bumps to `qs@^6.15.2` / `ws@^8.20.1`; `bun audit` is clean again and all suites pass. With the round otherwise quiet, I also **closed SEC-02** by adding the `web/frontend/public/_headers` file — enforcing `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy`, plus a `Content-Security-Policy-Report-Only` (staged, not enforced, to avoid breaking the live map/fonts before a live-deploy CSP-report pass). No Critical or High findings this round.
+
+### Status of prior findings
+
+| ID      | Title                                                                  | Status @ 2026-05-25 | Notes                                                                |
+|---------|------------------------------------------------------------------------|---------------------|----------------------------------------------------------------------|
+| SEC-01  | Reflective CORS w/ credentials                                         | **Fixed**           | Re-verified `web/workers/auth-api/src/index.ts:13-33` and `web/workers/competition-api/src/index.ts:23-44`. Allowlist (`glidecomp.com` + `*.glidecomp.pages.dev` + `localhost`) unchanged; empty origin returned for disallowed callers. |
+| SEC-02  | No security response headers (`_headers`)                              | ~~Open~~ **Fixed (2026-05-25, this PR)** | Added `web/frontend/public/_headers`. `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: geolocation=(), microphone=(), camera=()` are **enforced**. CSP ships as `Content-Security-Policy-Report-Only` (default-src 'self' with allowances for the OSM/OpenTopoMap/ArcGIS tile hosts, Mapbox api/events, Google Fonts, and `blob:` worker/img for Mapbox GL) — Report-Only so it cannot break the live site before a CSP-report pass on the Pages deploy. Flipping to enforce is the new scope-gap #8. |
+| SEC-03  | Admin emails returned on public comp detail                            | **Open**            | `web/workers/competition-api/src/routes/comp.ts:243-250, 303` unchanged — public response still includes `u.email`. |
+| SEC-04  | IGC upload size/shape                                                  | **Open (sub-issue)** | Subsumed by SEC-11 helper. Manufacturer-record (`A…`) check on the decompressed first byte still not enforced; up to 2 MiB of non-IGC text can sit in R2 per registered pilot per task / per user. Auth-gated, bounded; staying Low. |
+| SEC-05  | `innerHTML` is the default render primitive                            | **Open**            | 116 `innerHTML =` sites under `web/frontend/src/` — identical count to the 2026-05-18 round (frontend source unchanged). All interpolations of user data still route through `sanitizeText()` / `escapeHtml()`. |
+| SEC-06  | No JSON body-size cap                                                  | **Open**            | Still no `bodyLimit` middleware (`grep -rn bodyLimit web/workers/*/src/` → none). Hono 4.12.18 is in tree, so `bodyLimit({ maxSize: 256*1024 })` with a per-route override for IGC remains the documented fix. Deferred (not closed this round) because a wrong cap would break IGC/user-track uploads and a security-review PR shouldn't risk that without local upload testing. |
+| SEC-07  | Dev-only endpoints gated by `BETTER_AUTH_URL` hostname                 | **Verified safe**   | Unchanged — `BETTER_AUTH_URL = "https://glidecomp.com"` in `web/workers/auth-api/wrangler.toml`. `isLocalDev` matches `localhost` only. Re-flag for verification on every deploy. |
+| SEC-08  | Rate-limit headers not surfaced                                        | **Open**            | Unchanged (`grep -rn "Retry-After\|X-RateLimit" web/workers/auth-api/src/` → none). |
+| SEC-09  | `Math.random()` non-security use                                       | **Closed (Info)**   | No new uses; staying closed.                                         |
+| SEC-10  | Authentication bypass via trusted `X-Glidecomp-Internal-User` header   | **Fixed**           | `web/workers/competition-api/src/middleware/auth.ts:15-32` unchanged: forwards only inbound `cookie` / `x-api-key` to auth-api. `grep -rn "X-Glidecomp-Internal-User\|INTERNAL_USER_HEADER" web/workers/` returns only test/comment references in `competition-api/test/auth-bypass.test.ts` and `mcp-api/test/`; no `src` trust path. |
+| SEC-11  | IGC gzip-bomb decompression                                            | **Fixed**           | `web/workers/competition-api/src/igc-validation.ts:22-79` unchanged (1 MiB compressed + gzip-magic + 2 MiB streaming-decompressed caps). Three callsites (`routes/igc.ts:170, :449`, `routes/user-files.ts:250`). The negative-path tests still pass (the `TypeError: Decompression failed.` log lines during `test:comp` are the corrupt-gzip rejection assertions firing). |
+| SEC-12  | `xctsk` body has no shape, depth, or size cap                          | **Fixed**           | `xctskSchema` in `web/workers/competition-api/src/validators.ts:228` unchanged; used by `createTaskSchema`/`updateTaskSchema` (`:254, :264`) and the user-task route. |
+| SEC-13  | Service worker stores share-target uploads under unsanitised filenames | **Open**            | `web/frontend/public/sw.js:58, 61` unchanged.                        |
+| SEC-14  | Service-binding trust comment misleads readers                         | **Closed**          | Resolved with SEC-10 fix.                                            |
+| SEC-15  | Unauthenticated PII on public pilot list                               | **Fixed**           | `web/workers/competition-api/src/routes/pilot.ts:123-130` (`serializeCompPilotPublic` zeros `linked_email` + `driver_contact`) and the `:386` GET handler unchanged. |
+| SEC-16  | Transitive `kysely@0.28.16` JSON-path traversal                        | **Fixed**           | Override held: `grep "kysely@" bun.lock` → single `kysely@0.28.17` entry. `bun audit` clean for kysely. |
+
+### New findings
+
+---
+
+#### SEC-17 — Two new moderate transitive advisories: `qs` (DoS) via MCP SDK→express, `ws` (memory disclosure) via dev/test tooling — **Moderate (advisory) / negligible (reachability)** — ~~Open~~ **Fixed (2026-05-25, this PR)**
+
+> **Resolution:** added `"qs": "^6.15.2"` and `"ws": "^8.20.1"` to the `overrides` block in the root `package.json`. After `bun install` the lockfile has a single `qs@6.15.2` and a single `ws@8.21.0` entry (down from the vulnerable `qs@6.15.1` and `ws@8.18.0`). `bun audit` reports zero vulnerabilities. `bun run typecheck:all`, the 251 competition-api tests, the 21 mcp-api tests, and the engine/airscore/root suites all still pass — confirming the `ws` bump didn't break the miniflare-backed test runners (vitest-pool-workers pins `ws@8.18.0` internally; the override forces it to `8.21.0`, an API-compatible minor bump within `8.x`).
+
+**Files**
+- `package.json` (overrides block) — fix applied here.
+- `bun.lock` — pre-fix had `qs@6.15.1` and `ws@8.18.0`; post-fix a single `qs@6.15.2` and `ws@8.21.0`.
+- `web/workers/mcp-api/src/tools/audit.ts:42` — the only `qs` token in our source is `const qs = params.toString()` (a `URLSearchParams`, **not** the `qs` library).
+
+**Advisories**
+- [GHSA-q8mj-m7cp-5q26](https://github.com/advisories/GHSA-q8mj-m7cp-5q26) — `qs`: remotely-triggerable DoS — `qs.stringify` crashes with a `TypeError` on `null`/`undefined` entries in comma-format arrays when `encodeValuesOnly` is set. Vulnerable: `>=6.11.1 <=6.15.1`. Fix: `6.15.2`. Severity: Moderate.
+- [GHSA-58qx-3vcg-4xpx](https://github.com/advisories/GHSA-58qx-3vcg-4xpx) — `ws`: uninitialized-memory disclosure in WebSocket frame handling. Vulnerable: `>=8.0.0 <8.20.1`. Fix: `8.20.1`. Severity: Moderate.
+
+**Evidence (pre-fix)**
+```
+$ bun audit
+qs  >=6.11.1 <=6.15.1
+  workspace:mcp-api › @modelcontextprotocol/sdk
+  moderate: qs has a remotely triggerable DoS …
+ws  >=8.0.0 <8.20.1
+  workspace:@glidecomp/frontend › jsdom
+  workspace:auth-api › @cloudflare/vitest-pool-workers
+  workspace:@glidecomp/frontend › wrangler
+  moderate: ws: Uninitialized memory disclosure …
+2 vulnerabilities (2 moderate)
+```
+
+**Reachability analysis**
+- **`qs`** is pulled in transitively by `@modelcontextprotocol/sdk → express → {body-parser, express} → qs`. The express-based HTTP/SSE transport from the MCP SDK is **not used** on Cloudflare Workers — `mcp-api` serves MCP over the Workers-native `agents` + Hono stack (`web/workers/mcp-api/src/index.ts`), and `grep` for `express`/transport imports in `mcp-api/src` returns nothing but the local `qs` variable in `audit.ts`. The vulnerable API is `qs.stringify(..., { arrayFormat: 'comma', encodeValuesOnly: true })` on outbound serialization with null entries — a code path nothing in our tree exercises. Production reachability: none.
+- **`ws`** appears only via dev/test/build tooling: `jsdom` (frontend unit tests), `miniflare` (the worker test runtime behind `@cloudflare/vitest-pool-workers`), and `wrangler` (local dev / deploy). None of these ship to the Cloudflare Workers runtime or into the static Pages bundle, and the disclosure requires an attacker-facing `ws` server. Production reachability: none.
+
+**Severity rationale**
+Documenting as **Moderate (advisory) / negligible (reachability)** — same posture as SEC-16. The point of fixing inline is to keep `bun audit` clean so a noisy line never masks a genuinely-reachable finding in a future round; the override costs nothing and the test suite confirms no breakage.
+
+**Regression test**
+`bun audit` itself (step 8 of `/security-review-repo`) is the regression detector, plus the full worker test suites that run through the upgraded `ws` on miniflare. No bespoke test added — there is no in-app code path to assert against.
+
+---
+
+### Re-checked but no change
+
+Because the application source is byte-identical to the 2026-05-18 round, the prior round's detailed walks still hold. Spot-confirmed this round:
+
+- **Authn / authz.** `requireAuth` resolves identity only by forwarding inbound `cookie` / `x-api-key` to auth-api (`middleware/auth.ts`); no header-trust backdoor. `requireCompAdmin` gates on a `comp_admin` row. No new mutating routes.
+- **Worker route surfaces.** `[[routes]]` across all four workers unchanged: airscore (`/api/airscore/*`), comp (`/api/comp`, `/api/comp/*`, `/api/user`, `/api/user/*`, `/api/u/*`), mcp (`/mcp`, `/mcp/*`), auth (`/api/auth/*`). No new public surface.
+- **CORS.** Allowlist (`glidecomp.com`, `*.glidecomp.pages.dev`, `localhost`) on both auth-api and competition-api; disallowed origins get an empty `Access-Control-Allow-Origin`. Unchanged.
+- **Parameterised SQL.** All spot-checked sites bind parameters; no string concatenation into SQL.
+- **`audit()` coverage.** No new mutating routes, so no new audit gaps; existing comp/task/igc/pilot/pilot-status routes still call `audit()`.
+- **MCP per-tool auth propagation.** Every tool forwards `apiKey` via `compApi`/`compApiRaw`; none forge identity. Unchanged.
+- **wrangler.toml bindings.** Single canonical production resource IDs; auth-api + competition-api intentionally share D1; auth-api shares the `glidecomp` R2 bucket for cascading delete. No preview-vs-prod cross-wiring.
+- **`optionalAuth` PII (SEC-15 class).** No new `optionalAuth` routes added; the prior systematic walk (comp/task/igc/audit/score/pilot-status/pilot/user-files) still applies. `serializeCompPilotPublic` still redacts the three PII fields for non-admins.
+- **Secrets.** `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID/SECRET` referenced as env only; no hard-coded keys in source or any `wrangler.toml`. API-key prefix still `glc_`.
+
+### Scope gaps still not done
+
+Carried forward from prior rounds:
+
+1. Dynamic CSRF PoC against the allowlisted CORS.
+2. Cookie attribute verification on a live deploy.
+3. IGC / XCTask parser fuzzing.
+4. Cloudflare zone settings snapshot (HSTS, TLS min, WAF, bot management).
+5. Verify SEC-10 fix on a deployed comp-api endpoint (not just the miniflare regression test).
+6. Confirm the comp-api worker doesn't accept a legacy `Cookie: test-user=…` header in production.
+7. TOCTOU / idempotency on `/api/user/tracks` + `/api/user/tasks` quota checks (UX bug class, no security exposure — from the 2026-05-18 round).
+
+New gap from this round:
+
+8. **Flip the CSP from Report-Only to enforced.** SEC-02 shipped the framing/sniffing/referrer/permissions headers enforced but the CSP as `Content-Security-Policy-Report-Only` to avoid breaking the live map/fonts. Next step requires a live Pages deploy: wire a `report-uri`/`report-to` collector (or read the browser console on a preview deploy), confirm zero violations across the analysis map (Leaflet OSM/OpenTopoMap/ArcGIS + Mapbox GL), the theme editor's Google-Fonts loader, and the share-target flow, then rename the header to `Content-Security-Policy`. Tighten `style-src 'unsafe-inline'` if the inline-style usage can be moved to classes/nonces.
+
+### Where to start the next review
+
+1. Commit reviewed up to: HEAD = `067c7ed` (parent of this review's PR). Diff against that next round.
+2. `bun audit` should be clean after this PR — if a new advisory pops up, walk the dependency tree for reachability before triaging severity (the `qs`/`ws` pattern this round: both flagged Moderate but neither reachable in production).
+3. **Verify the new `_headers` file on a live/preview Pages deploy** (scope-gap #8): confirm the four enforced headers are present (`curl -I https://glidecomp.com/`) and that the Report-Only CSP fires zero violations before flipping it to enforced.
+4. Re-run the prior-findings table; SEC-03 (admin emails), SEC-05 (innerHTML), SEC-06 (bodyLimit), SEC-08 (rate-limit headers), SEC-13 (sw.js filename), SEC-04 (manufacturer-record check) remain Open — all Medium or below. SEC-06 (`bodyLimit`) is the next-highest-leverage small-diff win but needs local upload testing.
+5. Walk any new mutating endpoints (authn / authz / `audit()` / Zod) — none existed this round; recent trajectory is the per-user files/preferences surface, so watch for shared/public-profile features that could re-introduce a SEC-15-class PII leak.
+6. Confirm the `qs` / `ws` overrides held — `grep -E "qs@|ws@" bun.lock` should show single `qs@6.15.2` and `ws@8.2x` entries. Drop an override if its upstream dependency starts requiring a newer major.
