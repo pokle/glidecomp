@@ -494,8 +494,8 @@ function evaluateTakeoffCriteria(
 ): number {
   let criteriaMetCount = 0;
 
-  // Criteria 1: Instant ground speed check
-  if (index < fixes.length - 1) {
+  // Criteria 1: Instant ground speed check (needs a previous fix to compare to)
+  if (index >= 1) {
     const speed = calculateGroundSpeed(fixes[index - 1], fixes[index]);
     if (speed > config.minGroundSpeed) criteriaMetCount++;
   }
@@ -801,13 +801,11 @@ export function detectFlightEvents(
     return allEvents;
   }
 
-  // Find the index of the takeoff fix in the original array
-  const takeoffIndex = fixes.findIndex(f => f.time.getTime() === takeoffEvent.time.getTime());
-
-  if (takeoffIndex === -1) {
-    // Shouldn't happen, but safety check
-    return allEvents;
-  }
+  // Read the takeoff fix index from the event itself. Looking it up by
+  // timestamp is unsafe — cheap GPS loggers stall and emit consecutive
+  // fixes with identical timestamps, so findIndex can land on a fix
+  // earlier than the real takeoff and leak pre-takeoff data downstream.
+  const takeoffIndex = (takeoffEvent.details as FixIndexDetails).fixIndex;
 
   // Create a slice of fixes from takeoff onwards for analysis
   const flightFixes = fixes.slice(takeoffIndex);
