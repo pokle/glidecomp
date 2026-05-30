@@ -19,6 +19,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
@@ -39,6 +44,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
@@ -57,15 +67,40 @@ jobs:
           BETTER_AUTH_URL=http://localhost:3000
           EOF
 
+      # Probe wrangler & d1 migrations directly (no `bun run --filter`)
+      # so any crash surfaces real stderr instead of being swallowed by
+      # bun's prefixed-output buffer.
+      - name: Probe auth-api startup
+        run: |
+          cd web/workers/auth-api
+          bunx wrangler --version
+          CI=true bunx wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state
+
       - name: Run E2E tests
         run: bun run test:e2e
+
+      - name: Dump wrangler logs on failure
+        if: failure()
+        run: |
+          echo "=== ~/.config/.wrangler/logs ==="
+          ls -la ~/.config/.wrangler/logs/ 2>/dev/null || echo "(no logs dir)"
+          for f in ~/.config/.wrangler/logs/*.log; do
+            [ -f "$f" ] || continue
+            echo "--- $f ---"
+            cat "$f"
+          done
 
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: playwright-report/
+          # test-results/ holds the per-failure trace.zip files referenced by
+          # playwright.config.ts's `trace: "retain-on-failure"`. They're
+          # separate from the HTML report, so include both paths.
+          path: |
+            playwright-report/
+            test-results/
           retention-days: 7
 
   deploy:
@@ -79,6 +114,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -109,7 +149,7 @@ jobs:
           workingDirectory: web/workers/airscore-api
           command: deploy
 
-      - name: Run Auth API Migrations
+      - name: Apply D1 Migrations
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -124,14 +164,6 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: web/workers/auth-api
           command: deploy
-
-      - name: Run Competition API Migrations
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: web/workers/competition-api
-          command: d1 migrations apply taskscore-auth --remote
 
       - name: Deploy Competition API Worker
         uses: cloudflare/wrangler-action@v3

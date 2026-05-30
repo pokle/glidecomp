@@ -18,6 +18,7 @@ CACHE_TTL_TRACK = "86400"
 # For local development, use a local KV store
 [dev]
 port = 8787
+inspector_port = 9229
 
 # Production route (uncomment and configure when deploying)
 [[routes]]

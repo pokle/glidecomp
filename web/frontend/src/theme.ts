@@ -3,6 +3,8 @@
  * Import this module from every page entry point to apply saved themes on load.
  */
 
+import { preferencesSync } from "./auth/preferences-sync";
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface ThemeFont {
@@ -173,6 +175,7 @@ const STORAGE_KEY = "glidecomp:theme";
 
 export function saveTheme(theme: GlideCompTheme): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(theme));
+  preferencesSync.schedulePush("theme");
 }
 
 export function loadSavedTheme(): GlideCompTheme | null {
@@ -188,6 +191,7 @@ export function loadSavedTheme(): GlideCompTheme | null {
 export function resetTheme(): void {
   localStorage.removeItem(STORAGE_KEY);
   applyTheme(AVOCADO_THEME);
+  preferencesSync.schedulePush("theme");
 }
 
 // ── Apply ────────────────────────────────────────────────────────────────────

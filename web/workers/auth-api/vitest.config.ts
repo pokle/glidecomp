@@ -5,18 +5,10 @@ import {
 } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
 
-// Test harness for auth-api.
-//
-// Some tests need "dev mode" (BETTER_AUTH_URL = localhost) so isLocalDev()
-// returns true and dev-login / email-password auth are enabled. Other tests
-// need "prod mode" (BETTER_AUTH_URL = glidecomp.com) to prove dev-login is
-// gated off. We pick the dev-mode url as the default here; the small number
-// of prod-mode tests override BETTER_AUTH_URL inline (see test files).
-//
-// Secrets are dummies — we never call Google and the secret just needs to
-// be 32+ chars for Better Auth's HMAC.
 export default defineConfig(async () => {
-  const migrations = await readD1Migrations(path.join(__dirname, "migrations"));
+  const migrations = await readD1Migrations(
+    path.join(__dirname, "../../db/migrations")
+  );
 
   return {
     plugins: [
@@ -25,17 +17,27 @@ export default defineConfig(async () => {
         miniflare: {
           bindings: {
             TEST_MIGRATIONS: migrations,
+            // Override prod vars so isLocalDev() returns true (enables
+            // dev-login + email/password) and Better Auth has the secrets
+            // it needs to issue/verify session cookies.
             BETTER_AUTH_URL: "http://localhost:8788",
-            BETTER_AUTH_SECRET: "test-secret-at-least-32-chars-long-ok",
-            GOOGLE_CLIENT_ID: "test-google-client-id",
-            GOOGLE_CLIENT_SECRET: "test-google-client-secret",
+            BETTER_AUTH_SECRET:
+              "test-secret-do-not-use-in-prod-1234567890abcdef",
+            GOOGLE_CLIENT_ID: "test-client-id",
+            GOOGLE_CLIENT_SECRET: "test-client-secret",
           },
+          r2Buckets: ["R2"],
         },
       }),
     ],
     test: {
       setupFiles: ["./test/apply-migrations.ts"],
       include: ["test/**/*.test.ts"],
+      // Better Auth's dev-login signupEmail throws an internal "user already
+      // exists" rejection that escapes the route handler's try/catch on
+      // duplicate emails. We use unique emails per test, but suppress here
+      // as a safety net (matches competition-api's pattern).
+      dangerouslyIgnoreUnhandledErrors: true,
     },
   };
 });

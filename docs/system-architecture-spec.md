@@ -154,11 +154,21 @@ RESTful API for frontend operations and admin functions.
 
 Object storage for IGC track log files and email archives.
 
-**Structure:**
+**Structure (live):**
 ```
-/igc/{sha256}.igc          # Content-addressed IGC storage
+c/{compId}/t/{taskId}/{compPilotId}.igc   # Competition tracks (gzipped)
+u/{userId}/track/{sha256}.igc.gz          # User-owned tracks (gzipped)
+```
+
+**Structure (future, email submission):**
+```
+/igc/{sha256}.igc          # Content-addressed IGC storage (email pipeline)
 /emails/{timestamp}-{from}.eml
 ```
+
+Per-user tracks are namespaced under `u/{userId}/` so the auth-api delete-account flow can purge a user's entire R2 footprint with a prefixed list+delete. Cross-user dedup was rejected to keep cascade-delete trivial (storage is cheap). Within a user's namespace tracks are still content-addressed by SHA-256, so re-uploading the same file from another device is idempotent.
+
+User-owned XCTSK tasks live in D1 (`user_task.xctsk_json`), not R2 — they're tiny (≤32 KB) and benefit from row-level transactions during account deletion.
 
 **Access:**
 - Public read access for viewing/downloading flight logs

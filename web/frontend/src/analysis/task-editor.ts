@@ -389,17 +389,8 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
           <span title="Cumulative">${cumDist}</span>
         </div>
       </div>
-      ${readOnly ? '' : `<button type="button" class="te-delete-btn shrink-0 p-1 rounded hover:bg-destructive/10 hover:text-destructive transition-colors opacity-0 group-hover:opacity-100" title="Delete waypoint">${ICON_X}</button>`}
+      ${readOnly ? '' : `<button type="button" class="te-delete-btn shrink-0 p-1 rounded hover:bg-destructive/10 hover:text-destructive transition-colors opacity-40 hover:opacity-100" title="Delete waypoint">${ICON_X}</button>`}
     `;
-
-    if (!readOnly) {
-      // Show delete button on hover (CSS class approach)
-      card.classList.add('group');
-      const deleteBtn = header.querySelector('.te-delete-btn') as HTMLElement;
-      // Always visible on touch devices, hover on desktop
-      deleteBtn.classList.remove('opacity-0', 'group-hover:opacity-100');
-      deleteBtn.classList.add('opacity-40', 'hover:opacity-100');
-    }
 
     card.appendChild(header);
 

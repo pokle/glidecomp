@@ -4,6 +4,7 @@ import { applyD1Migrations, env } from "cloudflare:test";
 // applyD1Migrations is idempotent, safe to call multiple times.
 await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
 
+
 // Seed test users (referenced by competition tests via FK).
 // REPLACE so re-runs are safe.
 await env.DB.batch([

@@ -1,5 +1,219 @@
 # Dependency Review Log
 
+This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
+
+## 2026-05-09
+
+### Security Vulnerabilities Fixed
+
+| Package | Severity | Advisory | Description |
+|---------|----------|----------|-------------|
+| hono | MODERATE | [GHSA-qp7p-654g-cw7p](https://github.com/advisories/GHSA-qp7p-654g-cw7p) | CSS Declaration Injection via Style Object Values in JSX SSR. Fixed in 4.12.18. Not exploitable here (no JSX SSR), defense-in-depth. |
+| hono | LOW | [GHSA-hm8q-7f3q-5f36](https://github.com/advisories/GHSA-hm8q-7f3q-5f36) | Improper validation of NumericDate claims (exp, nbf, iat) in JWT verify(). Fixed in 4.12.18. |
+| hono | MODERATE | [GHSA-p77w-8qqv-26rm](https://github.com/advisories/GHSA-p77w-8qqv-26rm) | Cache Middleware ignores `Vary: Authorization`/`Vary: Cookie` → cross-user cache leakage. Fixed in 4.12.18. Not exploitable here (we don't use hono cache middleware). |
+| hono | MODERATE | [GHSA-9vqf-7f2p-gf9v](https://github.com/advisories/GHSA-9vqf-7f2p-gf9v) | `bodyLimit()` bypass for chunked / unknown-length requests. Fixed in 4.12.16. |
+| hono | MODERATE | [GHSA-69xw-7hcm-h432](https://github.com/advisories/GHSA-69xw-7hcm-h432) | hono/jsx unvalidated tag names allow HTML injection. Fixed in 4.12.16. |
+| fast-uri (transitive via @modelcontextprotocol/sdk) | HIGH | [GHSA-v39h-62p7-jpjc](https://github.com/advisories/GHSA-v39h-62p7-jpjc) | Host confusion via percent-encoded authority delimiters. Fixed by overriding to ^3.1.2. |
+| fast-uri (transitive via @modelcontextprotocol/sdk) | HIGH | [GHSA-q3j6-qgpj-74h6](https://github.com/advisories/GHSA-q3j6-qgpj-74h6) | Path traversal via percent-encoded dot segments. Fixed by overriding to ^3.1.2. |
+| ip-address (transitive via @modelcontextprotocol/sdk) | MODERATE | [GHSA-v2v4-37r5-5v8g](https://github.com/advisories/GHSA-v2v4-37r5-5v8g) | XSS in `Address6` HTML-emitting methods. Fixed by overriding to ^10.2.0. Not exploitable here (we don't render `Address6` HTML output). |
+| kysely | MODERATE | (0.28.17) | Hardened JSON path `.key(...)` and `.at(...)` against SQL injection / exfiltration. |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **hono** (override + workspaces) | 4.12.15 | 4.12.18 | root override, frontend, auth-api, competition-api, mcp-api | Bundles 5 security fixes (see above). No breaking changes; deps: 0 — drop-in. |
+| **fast-uri** (override) | (transitive 3.1.x) | ^3.1.2 | root override | Forced via `overrides` to clear two HIGH advisories on transitive deps of `@modelcontextprotocol/sdk`. |
+| **ip-address** (override) | (transitive ≤10.1.0) | ^10.2.0 | root override | Forced via `overrides` to clear MODERATE XSS advisory. |
+| **kysely** | 0.28.16 | 0.28.17 | auth-api | Security hardening for JSON path operators. |
+| **tailwindcss** | 4.2.4 | 4.3.0 | frontend | New utilities (`@container-size`, `scrollbar-*`, `tab-*`, `zoom-*`), stacked/compound `@variant`, no breaking changes. |
+| **@tailwindcss/vite** | 4.2.4 | 4.3.0 | frontend | Aligned with tailwindcss 4.3.0; relative import resolution fixes. |
+| **vite** | 7.3.2 | 7.3.3 | frontend | Patch release. |
+| **@cloudflare/workers-types** | 4.20260503.1 | 4.20260509.1 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | Weekly type definition update. |
+| **@types/node** | 25.6.0 | 25.6.2 | root | Type definition update. |
+
+### Code Changes Required
+
+None. All upgrades are drop-in. Hono surface (`Hono`, validators, `setCookie`/`getCookie`) unchanged. Tailwind 4.3.0 only adds utilities.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| wrangler | 4.87.0 | 4.90.0 | **Skipped this round.** 4.89.0 changed `wrangler dev` to run with `TZ=UTC` instead of inheriting host TZ — a behavioral change that could surprise local dev sessions and tests that depend on host-local time. No security requirement; revisit deliberately. |
+| zod | 3.25.76 | 4.4.3 | Major version. Still blocked by `@hono/zod-validator` (honojs/middleware#1148). |
+| vite | 7.3.3 | 8.0.11 | Major version. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. |
+| @hono/zod-validator | 0.7.6 | 0.8.0 | 0.8.0 requires zod 4. Stay on 0.7.6 until zod 4 migration. |
+| @cloudflare/vitest-pool-workers | 0.15.2 / 0.14.9 | 0.16.3 | Skipped — needs review of its peer ranges (vitest 4.x compat). Defer to a focused PR. |
+| @modelcontextprotocol/sdk | 1.29.0 (resolved via ^1.12.1) | 1.29.0 | Already at latest 1.x. v2.0.0 is alpha. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+| agents | 0.12.3 | 0.12.3 | Already at latest; pinned exact (pre-1.0). |
+
+### Verification
+
+- `bun run typecheck:all` — all 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, mcp-api).
+- `bun run test:all` — 411 root/engine tests + 226 competition-api + 21 mcp-api all pass.
+- `bun run test:e2e` — 1 chromium spec passes (full webServer flow exercises wrangler dev + frontend dev).
+- `bun audit` — 0 vulnerabilities.
+
+### Lessons / Notes for Future Sessions
+
+- **Transitive vulns in `@modelcontextprotocol/sdk` are recurring.** `fast-uri` and `ip-address` are deep transitives; the upstream MCP SDK doesn't move fast enough to ship patched versions, so plan on adding overrides for any new advisories there until the SDK reaches 2.x or restructures its deps. Document each override with the advisory it resolves so a future cleanup can drop it once the upstream catches up.
+- **Hono security cadence is high.** Five Hono advisories landed between 4.12.15 and 4.12.18 in roughly a week. Most are not exploitable in this codebase (no JSX SSR, no cache middleware), but the override should be bumped each cycle anyway since `bun audit` reports against the override range.
+- **Wrangler 4.89.0 introduces `TZ=UTC` for local dev.** Worth a deliberate bump in a focused PR that runs the e2e suite *and* spot-checks anything time-sensitive (audit log timestamps, scheduled tasks, expiry checks). Don't roll it in with routine bumps — the lessons from the May Node-22 outage still apply: `wrangler dev` is the silent-failure surface.
+- **Use `bun pm view <pkg> dist-tags` to confirm the latest stable** before deciding whether `bun outdated` "Latest" is accurate — it disambiguates `next`/`alpha` channels.
+- **Keep override list minimal but loud.** When `bun audit` reports a transitive vuln, prefer override + comment in this log over silent suppression. Future sessions should be able to read this entry and know which overrides are still load-bearing vs. removable.
+
+## 2026-05-03
+
+### Security Vulnerabilities Fixed
+
+| Package | Severity | Advisory | Description |
+|---------|----------|----------|-------------|
+| @modelcontextprotocol/sdk | HIGH | CVE-2026-0621 | ReDoS in `UriTemplate.partToRegExp()` — catastrophic backtracking on malicious input causes 100% CPU hang. Fixed in 1.25.2. Upgraded from 1.12.1 to 1.29.0. |
+| @modelcontextprotocol/sdk | HIGH | GHSA (data leak) | Single `McpServer` with `StreamableHTTPServerTransport` reused across clients leaks responses between client boundaries. Fixed in 1.25.4. |
+| postcss (override) | MODERATE | CVE-2026-41305 | XSS via unescaped `</style>` in CSS stringify. Was on exact fix boundary (^8.5.10), bumped to ^8.5.13 for safety. |
+| leaflet (code fix) | MODERATE | CVE-2025-69993 | XSS via `bindPopup()` rendering user-supplied input as raw HTML. Mitigated by switching to DOM API (`textContent`/`createElement`) instead of HTML string interpolation in leaflet-provider.ts. |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **@modelcontextprotocol/sdk** | 1.12.1 | 1.29.0 | mcp-api | Critical security fix (CVE-2026-0621 + data leak). 17 minor versions jumped. API surface used (`McpServer`, `createMcpHandler`) unchanged. |
+| **agents** | 0.11.5 | 0.12.3 | mcp-api | Security hardening: SSRF protection (private IP blocking), HMAC-SHA256 signed email headers, `callbackPath` for MCP OAuth callbacks. |
+| **mapbox-gl** | 3.22.0 | 3.23.0 | root, frontend | Minor release. No breaking changes. |
+| **wrangler** | 4.85.0 | 4.87.0 | root | 4.86.0 dropped Node.js 20.x support (Node 20 EOL 2026-04-30). 4.87.0 adds experimental `generateTypes()` API. |
+| **@cloudflare/workers-types** | 4.20260426.1 | 4.20260503.1 | root | Weekly type definition update. |
+| **@cloudflare/vitest-pool-workers** | ^0.14.9 | ^0.15.2 | competition-api | Now supports vitest ^4.1.0 peer dep. |
+| **postcss** (override) | ^8.5.10 | ^8.5.13 | root (override) | Security fix (see above). |
+| **engines.node** | >=20 | >=22 | root | Required by wrangler 4.86+. |
+
+### Code Changes Required
+
+- **leaflet-provider.ts**: Replaced `bindPopup()` HTML string interpolation with DOM API (`createElement`/`textContent`) to mitigate CVE-2025-69993 XSS via `bindPopup`. The event data is internally generated (not user input), but this is defense-in-depth.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| zod | ^3.25.76 | 4.4.2 | Major version. `@hono/zod-validator` does not support Zod 4 yet (honojs/middleware#1148). Migration requires `.strict()` → `strictObject()`, `error.errors` → `error.issues`, etc. |
+| vite | ^7.3.2 | 8.0.10 | Major version. Replaces esbuild/Rollup with Rolldown. `@cloudflare/vitest-pool-workers` has known issues with Vite 8. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha for `LeafletMap` constructor API. No stable 2.0 release yet. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+
+### Verification
+
+- All 406 engine tests pass
+- All 5 airscore-api tests pass
+- All 203 competition-api vitest tests pass
+- All 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, mcp-api)
+- `bun audit` reports 0 vulnerabilities
+- **e2e was NOT verified locally on this PR — that gap is what let the CI break ship.** See "Post-merge CI repair" below.
+
+### Post-merge CI repair (2026-05-09)
+
+The original PR for this upgrade left CI red on `deps/upgrade-dependencies-2026-05` for ~5 days. Symptom: every E2E job failed within ~50 ms with only:
+
+```
+[WebServer] $ bun run --filter auth-api dev
+[WebServer] error: script "dev:auth" exited with code 1
+```
+
+No stderr, no wrangler banner — `bun run --filter`'s prefixed-output buffer swallowed the inner stderr because the child died before the buffer flushed.
+
+**Root cause:** wrangler 4.86+ rejects Node < 22, but neither `branch-deploy.yml` nor `deploy.yml` set up Node — they only ran `oven-sh/setup-bun@v2`, leaving the Ubuntu 24.04 runner's default Node 20.20.2 on PATH. `bunx wrangler` resolves through `bin/wrangler.js`'s `#!/usr/bin/env node` shebang, so it ran under Node 20 and bailed instantly with `Wrangler requires at least Node.js v22.0.0`.
+
+`engines.node` in package.json was bumped to `>=22` in this PR, but that field is advisory only — bun doesn't enforce it, and CI didn't pin a Node version, so the new floor went undetected.
+
+**Fixes (commits `2e17c49` + `be80b7b` on this branch):**
+
+1. **Add `actions/setup-node@v4` with `node-version: 22`** to every job in `branch-deploy.yml` and `deploy.yml` that runs bun — this is the actual fix.
+2. **Pin `wrangler` to exact `4.87.0`** in root + every workspace package.json (was `^4.85.0` / `^4.87.0`, all floating up to 4.90.0). Not strictly required after the Node fix, but matches what the upgrade commit message claimed.
+3. **Add a `Probe auth-api startup` step** to `deploy.yml` that runs `bunx wrangler --version` and `wrangler d1 migrations apply` directly from `web/workers/auth-api`, bypassing `bun run --filter`. Plus a `Dump wrangler logs on failure` step. These exist as a safety net so the next silent-exit regression surfaces real stderr instead of being swallowed.
+
+### Lessons / Notes for Future Sessions
+
+- **When bumping wrangler past 4.86, also bump CI's Node version, not just `engines.node`.** Pre-flight checklist for any wrangler upgrade: (1) check the new wrangler's required Node minimum on its release page, (2) grep `.github/workflows/*.yml` for `setup-node` — if absent or below the new minimum, add/raise it in the *same PR*, (3) run `bun run test:e2e` locally before pushing — e2e is the only thing that exercises `wrangler dev` startup, and silent CI failures look identical to misconfigured webServer.
+- **`bun run --filter` swallows stderr from a fast-failing child.** When debugging `error: script "X" exited with code 1` with no other output, run the inner command directly (e.g. `cd web/workers/auth-api && bun run dev`) — the real error is usually staring at you. The `Probe auth-api startup` step in deploy.yml now does this in CI too.
+- **`@modelcontextprotocol/sdk` jumped 17 minor versions** (1.12 → 1.29) with critical security fixes. The narrow API surface used (`McpServer`, `createMcpHandler`) was stable across all versions. The custom type declarations in `agents-mcp.d.ts` shield from the full type surface — no changes needed.
+- **wrangler 4.86.0 silently dropped Node.js 20 support.** Updated `engines.node` to `>=22` to surface this early in CI/deployment. (See above — `engines.node` alone wasn't enough; CI also needs `setup-node`.)
+- **Leaflet XSS (CVE-2025-69993):** Even with alpha/pre-release packages, always use DOM API (`textContent`, `createElement`) instead of string interpolation for `bindPopup`/`bindTooltip`. The upstream fix may not come for 2.0-alpha.
+- **`agents` package continues to be pinned** (no caret) since it's pre-1.0 with potential breaking changes on minor bumps. The 0.11.5 → 0.12.3 upgrade changed `partyserver` from ^0.4.1 to ^0.5.5 internally but `createMcpHandler` API is unchanged.
+- **Zod 4 migration remains blocked** by `@hono/zod-validator`. Monitor honojs/middleware#1148.
+- **threebox-plugin is dormant** (3+ years since last release). If future mapbox-gl upgrades break it, consider forking.
+- **`bun update` only bumps root package.json** version specifiers, not workspace sub-packages. Sub-packages resolve via the lockfile.
+
+## 2026-04-26
+
+### Security Vulnerabilities Fixed
+
+| Package | Severity | Advisory | Description |
+|---------|----------|----------|-------------|
+| postcss (transitive via vite) | MODERATE | [GHSA-qx2v-qp2m-jg93](https://github.com/advisories/GHSA-qx2v-qp2m-jg93) | XSS via unescaped `</style>` in CSS Stringify output. Fixed by overriding postcss to ^8.5.10 (installed 8.5.12). |
+| protocol-buffers-schema (transitive via mapbox-gl) | MODERATE | [GHSA-j452-xhg8-qg39](https://github.com/advisories/GHSA-j452-xhg8-qg39) | Prototype pollution via crafted protobuf schema (CVE-2026-5758). Fixed by overriding to ^3.6.1 (installed 3.6.1). |
+| better-auth | MODERATE | (v1.6.6) | SSRF vulnerabilities: loopback detection hardened to cover full `127.0.0.0/8`, IPv6 forms, and cloud metadata FQDNs. `0.0.0.0` no longer treated as loopback. |
+| hono (transitive via @modelcontextprotocol/sdk) | MODERATE | [GHSA-458j-xx4x-4375](https://github.com/advisories/GHSA-458j-xx4x-4375) | Stale hono 4.12.12 bundled by MCP SDK. Fixed by overriding hono to ^4.12.15. Not exploitable in our codebase (no JSX SSR). |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **hono** | 4.12.14 | 4.12.15 | frontend, auth-api, competition-api, mcp-api | Bug fix: JWT helper now supports single-line PEM keys. No breaking changes. |
+| **better-auth** | 1.6.5 | 1.6.9 | frontend, auth-api | SSRF fix (1.6.6), multi-client-ID support for social providers (1.6.7), OAuth profile fallback when email omitted (1.6.8), edge/browser instrumentation fix (1.6.9). No breaking changes. |
+| **@better-auth/api-key** | 1.6.5 | 1.6.9 | auth-api | Aligned with better-auth 1.6.9. |
+| **wrangler** | 4.83.0 | 4.85.0 | all workspaces | Artifacts binding support, container placement constraints, cross-process service bindings, custom domain `enabled`/`previews_enabled` fields. No breaking changes. |
+| **tailwindcss** | 4.2.2 | 4.2.4 | frontend | Bug fixes: `tracking-*` canonicalization, crash fix for invalid unicode, `@import`/`@plugin` resolution with Vite aliases. |
+| **@tailwindcss/vite** | 4.2.2 | 4.2.4 | frontend | Aligned with tailwindcss 4.2.4. |
+| **vitest** | 4.1.4 | 4.1.5 | competition-api | Bug fixes: soft assertion diff config, JSX/TSX syntax highlight, MessagePort in web-worker postMessage. |
+| **@cloudflare/vitest-pool-workers** | 0.14.7 | 0.14.9 | competition-api | Reduced default log verbosity, workflow binding fix, dependency bumps. |
+| **agents** | 0.11.4 | 0.11.5 | mcp-api | Type-level improvements: `Props` generic added to `AIChatAgent`. No behavior change. |
+| **@cloudflare/workers-types** | 4.20260418.1 | 4.20260426.1 | all workspaces | Weekly type definition update. |
+| **@types/bun** | 1.3.12 | 1.3.13 | root | Type definition update. |
+| **postcss** | 8.5.8 | 8.5.12 | (transitive, override) | Security fix + bug fixes. Forced via `overrides` in root package.json. |
+| **protocol-buffers-schema** | 3.6.0 | 3.6.1 | (transitive, override) | Security fix. Forced via `overrides` in root package.json. |
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| zod | 3.25.76 | 4.3.6 | Major version. Breaking changes to `.pick()`/`.omit()` on refined schemas, `.extend()` with refinements. Requires `@hono/zod-validator` compatibility review and schema migration. Recommend a separate dedicated PR. |
+| vite | 7.3.2 | 8.0.10 | Major version. Replaces esbuild+Rollup with Rolldown. Breaking: `build.rollupOptions` → `build.rolldownOptions`, `optimizeDeps.esbuildOptions` deprecated, changed module resolution. `@cloudflare/vitest-pool-workers` has known issues with Vite 8. Wait for ecosystem stabilization. |
+| @modelcontextprotocol/sdk | 1.12.1 (lockfile: 1.29.0) | 2.0.0-alpha | Alpha release. Breaking changes in tool registration API and error handling. Wait for stable. Note: lockfile resolves to 1.29.0 via `^1.12.1` semver range. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. No newer alpha available. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, not published to npm regularly. |
+| kysely | 0.28.16 | 0.29.0-rc.0 | 0.28.16 is the latest stable. 0.29.0 is RC only. |
+| @turf/bbox, @turf/bearing, @turf/helpers | 7.3.5 | 7.3.5 | Already at latest. |
+| katex | 0.16.45 | 0.16.45 | Already at latest. |
+| sqids | 0.3.0 | 0.3.0 | Already at latest. |
+| @hono/zod-validator | 0.7.6 | 0.7.6 | Already at latest. |
+| @fontsource/atkinson-hyperlegible-next | 5.2.7 | 5.2.7 | Already at latest. |
+| mapbox-gl | 3.22.0 | 3.22.0 | Already at latest. |
+| threebox-plugin | 2.2.7 | 2.2.7 | Already at latest. |
+| typescript | 6.0.3 | 6.0.3 | Already at latest. |
+| @playwright/test | 1.59.1 | 1.59.1 | Already at latest. |
+
+### Code Changes Required
+
+None. All upgrades are drop-in replacements with no API changes affecting our usage.
+
+### Verification
+
+- All 411 engine/worker tests pass
+- All 203 competition-api vitest tests pass
+- All 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, mcp-api)
+- Frontend production build succeeds
+- `bun audit` reports 0 vulnerabilities
+
+### Lessons / Notes for Future Sessions
+
+- `bun audit` reports vulnerabilities against the semver range in package.json, not the resolved lockfile version. Even when your direct dependency is patched, transitive dependencies (e.g., `@modelcontextprotocol/sdk` bundling an older hono) may keep the advisory active. Use `overrides` to force transitive dependency versions.
+- The `postcss` vulnerability (GHSA-qx2v-qp2m-jg93) is fixed in postcss 8.5.10. Vite 7.3.2 uses `postcss: ^8.5.6` which allows the fix, but bun's lockfile may not auto-resolve to the latest patch — an explicit override ensures the fix.
+- `protocol-buffers-schema` is a deep transitive dependency of mapbox-gl (via `resolve-protobuf-schema`). The semver range `^3.3.1` allows 3.6.1, but bun's lockfile had pinned 3.6.0 — an override was needed to bump it.
+- `better-auth` 1.6.6 includes important SSRF hardening. If self-hosting the auth worker or exposing it to untrusted input, this is a critical upgrade.
+- The `agents` package continues to be pinned to an exact version (no `^`) because it's pre-1.0. Type declaration file `web/workers/mcp-api/src/agents-mcp.d.ts` was not affected by the 0.11.4→0.11.5 upgrade.
+- `@cloudflare/vitest-pool-workers` 0.14.8 changed the deprecated `SELF` reference warning. If tests log a new warning about exports, this is the source.
+
 ## 2026-04-12
 
 ### Security Vulnerabilities Fixed

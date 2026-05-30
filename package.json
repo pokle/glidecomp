@@ -16,8 +16,12 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "[ -d node_modules ] || bun install && bun run dev:auth & bun run dev:comp & bun run dev:mcp & bun run --filter '@glidecomp/frontend' dev",
+    "dev": "[ -d node_modules ] || bun install; concurrently --kill-others-on-fail -n workers,fe -c blue,cyan 'bun run dev:workers' 'bun run dev:frontend'",
+    "dev:workers": "[ -d node_modules ] || bun install; bun run db:migrate && concurrently --kill-others-on-fail -n auth,comp,mcp,airscore -c blue,green,magenta,yellow 'bun run dev:auth' 'bun run dev:comp' 'bun run dev:mcp' 'bun run dev:airscore'",
+    "db:migrate": "CI=true wrangler --config web/workers/auth-api/wrangler.toml d1 migrations apply taskscore-auth --local --persist-to web/.wrangler/state",
+    "kill-dev": "bash web/scripts/kill-dev.sh",
     "dev:mcp": "bun run --filter mcp-api dev",
+    "dev:airscore": "bun run --filter airscore-api dev",
     "dev:frontend": "bun run --filter '@glidecomp/frontend' dev",
     "build": "bun run --filter '@glidecomp/frontend' build",
     "deploy": "bun run --filter '@glidecomp/frontend' deploy",
@@ -39,8 +43,9 @@
     "test": "bun test --cwd . ./web/engine ./web/workers/airscore-api && bun run typecheck:all",
     "test:comp": "bun run --filter competition-api test",
     "test:auth": "bun run --filter auth-api test",
-    "test:all": "bun run test && bun run test:auth && bun run test:comp",
-    "test:e2e": "bunx playwright test",
+    "test:mcp": "bun run --filter mcp-api test",
+    "test:all": "bun run test && bun run test:auth && bun run test:comp && bun run test:mcp",
+    "test:e2e": "bun run db:migrate && bunx playwright test",
     "detect-events": "bun web/engine/cli/detect-events.ts",
     "get-xcontest-task": "bun web/engine/cli/get-xcontest-task.ts",
     "score-task": "bun web/engine/cli/score-task.ts"
@@ -52,23 +57,32 @@
     "web/workers/*"
   ],
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260418.1",
+    "@cloudflare/workers-types": "^4.20260509.1",
     "@playwright/test": "^1.59.1",
-    "@types/bun": "^1.3.12",
-    "@types/node": "^25.6.0",
+    "@types/bun": "^1.3.13",
+    "@types/node": "^25.6.2",
+    "concurrently": "^9.2.1",
     "typescript": "^6.0.3",
-    "wrangler": "^4.83.0"
+    "wrangler": "4.87.0"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "dependencies": {
     "@fontsource/atkinson-hyperlegible-next": "^5.2.7",
-    "mapbox-gl": "^3.22.0",
+    "mapbox-gl": "^3.23.0",
     "threebox-plugin": "^2.2.7"
   },
   "overrides": {
-    "defu": "^6.1.7"
+    "defu": "^6.1.7",
+    "fast-uri": "^3.1.2",
+    "hono": "^4.12.18",
+    "ip-address": "^10.2.0",
+    "kysely": "^0.28.17",
+    "postcss": "^8.5.13",
+    "protocol-buffers-schema": "^3.6.1",
+    "qs": "^6.15.2",
+    "ws": "^8.20.1"
   },
   "patchedDependencies": {
     "kysely-d1@0.4.0": "patches/kysely-d1@0.4.0.patch"

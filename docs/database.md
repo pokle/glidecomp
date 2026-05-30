@@ -7,6 +7,7 @@ GlideComp uses Cloudflare D1 (SQLite) for auth storage.
 - **Database name:** `taskscore-auth`
 - **Database ID:** `aa8b644f-368e-493a-8b49-1af0d756aff4`
 - **Schema file:** `web/workers/auth-api/src/db/schema.sql`
+- **Migrations:** `web/db/migrations/` — shared by `auth-api` and `competition-api` (both wrangler.tomls point at this directory). Apply locally with `bun run db:migrate`.
 
 ## Running Wrangler
 
@@ -20,15 +21,15 @@ bun run wrangler2 d1 execute taskscore-auth --remote --file=web/workers/auth-api
 
 ## Account Deletion
 
-`POST /api/auth/delete-account` deletes the `user` row from D1. CASCADE foreign keys automatically clean up `session` and `account` rows. The frontend also clears `localStorage` and deletes the `glidecomp` IndexedDB database (which stores tracks and tasks).
+`POST /api/auth/delete-account` deletes the `user` row from D1. CASCADE foreign keys automatically clean up `session`, `account`, `user_preferences`, `user_track`, `user_task`, and `user_annotation` rows. Before deleting the user row, the handler lists+deletes every R2 object under `u/{userId}/` so per-user track payloads don't outlive the account. The frontend also clears `localStorage` and deletes any leftover `glidecomp` IndexedDB database.
 
 ### Future storage checklist
 
 When adding new user data storage, update the delete-account endpoint in `web/workers/auth-api/src/index.ts` to clean up:
 
-- **R2 buckets:** Delete all objects under the user's prefix (e.g. `tracks/{userId}/`, `tasks/{userId}/`)
-- **New D1 tables:** Add `ON DELETE CASCADE` FK constraints to `userId`, or delete manually before the user row
-- **External services:** Revoke tokens or delete data before the user row is removed
+- **R2 buckets:** Delete all objects under the user's prefix. `u/{userId}/...` is wired up (covers user IGC tracks); add new prefixes here if you introduce more user-owned blobs.
+- **New D1 tables:** Add `ON DELETE CASCADE` FK constraints to `userId`, or delete manually before the user row.
+- **External services:** Revoke tokens or delete data before the user row is removed.
 
 ## CI Deployment (GitHub Actions)
 

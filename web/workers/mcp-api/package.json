@@ -7,17 +7,20 @@
   "scripts": {
     "dev": "wrangler dev --persist-to ../../.wrangler/state",
     "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "agents": "0.11.4",
-    "hono": "^4.12.14",
+    "agents": "0.12.3",
+    "hono": "^4.12.18",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260418.1",
+    "@cloudflare/vitest-pool-workers": "^0.14.9",
+    "@cloudflare/workers-types": "^4.20260509.1",
     "typescript": "^6.0.3",
-    "wrangler": "^4.83.0"
+    "vitest": "^4.1.5",
+    "wrangler": "4.87.0"
   }
 }

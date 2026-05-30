@@ -9,26 +9,29 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "vite build && wrangler pages deploy dist --project-name=glidecomp",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "//": "Basecoat fork - see docs/basecoat-fork.md for build/publish instructions",
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260418.1",
-    "@tailwindcss/vite": "^4.2.2",
+    "@cloudflare/workers-types": "^4.20260509.1",
+    "@tailwindcss/vite": "^4.3.0",
     "@pokle/basecoat": "0.3.10-beta3.pokle-selections",
-    "tailwindcss": "^4.2.2",
+    "jsdom": "^25.0.1",
+    "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3",
-    "vite": "^7.3.2",
-    "wrangler": "^4.83.0"
+    "vite": "^7.3.3",
+    "vitest": "^4.1.5",
+    "wrangler": "4.87.0"
   },
   "dependencies": {
     "@glidecomp/engine": "workspace:*",
     "@glidecomp/samples": "workspace:*",
-    "better-auth": "^1.6.5",
-    "hono": "^4.12.14",
+    "better-auth": "^1.6.9",
+    "hono": "^4.12.18",
     "katex": "^0.16.45",
     "leaflet": "2.0.0-alpha.1",
-    "mapbox-gl": "^3.22.0",
+    "mapbox-gl": "^3.23.0",
     "threebox-plugin": "^2.2.7"
   }
 }

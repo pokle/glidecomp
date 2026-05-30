@@ -17,6 +17,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
@@ -36,6 +41,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -63,7 +73,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: playwright-report/
+          # test-results/ holds the per-failure trace.zip files referenced by
+          # playwright.config.ts's `trace: "retain-on-failure"`. They're
+          # separate from the HTML report, so include both paths.
+          path: |
+            playwright-report/
+            test-results/
           retention-days: 7
 
   deploy:
@@ -77,6 +92,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

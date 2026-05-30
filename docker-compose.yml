@@ -23,53 +23,34 @@ services:
     env_file:
       - .env
     environment:
-      AUTH_API_URL: http://auth-api:8788
-      COMP_API_URL: http://comp-api:8789
-      AIRSCORE_API_URL: http://airscore-api:8787
+      AUTH_API_URL: http://workers:8788
+      COMP_API_URL: http://workers:8789
+      AIRSCORE_API_URL: http://workers:8787
       VITE_AIRSCORE_URL: /api/airscore
     command: >
       sh -c "bun install &&
              cd web/frontend &&
              exec bunx --bun vite --host 0.0.0.0 --port 3000"
 
-  auth-api:
+  # All four Cloudflare workers run in a single container so they share the
+  # same localhost — wrangler's dev registry (used to wire up service bindings
+  # like competition-api → auth-api) is localhost-only and won't span
+  # containers. Each wrangler dev runs in its own working directory so it
+  # picks up its own wrangler.toml and ignores the Pages config at the repo
+  # root.
+  workers:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    ports:
+      - "8787:8787"  # airscore-api
+      - "8788:8788"  # auth-api
+      - "8789:8789"  # competition-api
+      - "8790:8790"  # mcp-api
     volumes:
       - .:/app
       - node_modules:/app/node_modules
-    command: >
-      sh -c "bun install &&
-             cd web/workers/auth-api &&
-             bunx wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state &&
-             exec bunx wrangler dev --persist-to ../../.wrangler/state --ip 0.0.0.0"
-
-  comp-api:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    volumes:
-      - .:/app
-      - node_modules:/app/node_modules
-    command: >
-      sh -c "bun install &&
-             cd web/workers/competition-api &&
-             bunx wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state --config ../auth-api/wrangler.toml &&
-             bunx wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state &&
-             exec bunx wrangler dev --persist-to ../../.wrangler/state --ip 0.0.0.0"
-
-  airscore-api:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    volumes:
-      - .:/app
-      - node_modules:/app/node_modules
-    command: >
-      sh -c "bun install &&
-             cd web/workers/airscore-api &&
-             exec bunx wrangler dev --ip 0.0.0.0"
+    command: ["sh", "web/scripts/docker-dev-workers.sh"]
 
 volumes:
   node_modules:

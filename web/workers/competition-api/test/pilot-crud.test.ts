@@ -278,6 +278,93 @@ describe("GET /api/comp/:comp_id/pilot", () => {
     expect(p.team_name).toBe("Alpha");
     expect(p.linked).toBe(false);
   });
+
+  // SEC-15 regression: the pilot list endpoint is publicly readable for
+  // non-test comps, but PII (admin-entered email, Better Auth linked email,
+  // driver_contact phone) must never be returned to non-admin callers.
+  test("redacts PII (email, linked_email, driver_contact) for anonymous callers", async () => {
+    // Seed an existing user-3 / pilot-3 row so registration resolves a
+    // `linked_email` — exercising the worst-case PII leak path.
+    await env.DB.prepare(
+      "INSERT INTO pilot (user_id, name, civl_id) VALUES (?, ?, ?)"
+    )
+      .bind("user-3", "Carol Wu", "C-PII")
+      .run();
+
+    const compId = await createComp();
+    await authRequest(
+      "POST",
+      `/api/comp/${compId}/pilot`,
+      basicPilot({
+        registered_pilot_name: "Carol Wu",
+        registered_pilot_civl_id: "C-PII",
+        registered_pilot_email: "carol@example.com",
+        driver_contact: "Driver +61400000000",
+      })
+    );
+
+    const res = await request("GET", `/api/comp/${compId}/pilot`); // anonymous
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      pilots: Array<Record<string, unknown>>;
+    };
+    expect(data.pilots).toHaveLength(1);
+    const p = data.pilots[0];
+
+    // PII fields must be redacted to null
+    expect(p.email).toBeNull();
+    expect(p.linked_email).toBeNull();
+    expect(p.driver_contact).toBeNull();
+
+    // Non-PII fields stay visible for transparency
+    expect(p.name).toBe("Carol Wu");
+    expect(p.civl_id).toBe("C-PII");
+    expect(p.linked).toBe(true); // link status itself is fine
+  });
+
+  test("returns PII to comp admins (regression sanity)", async () => {
+    const compId = await createComp();
+    await authRequest(
+      "POST",
+      `/api/comp/${compId}/pilot`,
+      basicPilot({
+        registered_pilot_email: "alice@example.com",
+        driver_contact: "Bob +61400000000",
+      })
+    );
+
+    const res = await authRequest("GET", `/api/comp/${compId}/pilot`);
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      pilots: Array<Record<string, unknown>>;
+    };
+    expect(data.pilots[0].email).toBe("alice@example.com");
+    expect(data.pilots[0].driver_contact).toBe("Bob +61400000000");
+  });
+
+  test("redacts PII for an authenticated non-admin caller", async () => {
+    // user-1 creates the comp (admin), user-2 reads — user-2 must NOT see PII.
+    const compId = await createComp();
+    await authRequest(
+      "POST",
+      `/api/comp/${compId}/pilot`,
+      basicPilot({
+        registered_pilot_email: "alice@example.com",
+        driver_contact: "Bob +61400000000",
+      })
+    );
+
+    const res = await request("GET", `/api/comp/${compId}/pilot`, {
+      user: "user-2",
+    });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      pilots: Array<Record<string, unknown>>;
+    };
+    expect(data.pilots[0].email).toBeNull();
+    expect(data.pilots[0].driver_contact).toBeNull();
+    expect(data.pilots[0].linked_email).toBeNull();
+  });
 });
 
 describe("POST /api/comp/:comp_id/pilot/bulk", () => {
