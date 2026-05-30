@@ -2,6 +2,61 @@
 
 This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
 
+## 2026-05-30
+
+### Security Vulnerabilities Fixed
+
+| Package | Severity | Advisory | Description |
+|---------|----------|----------|-------------|
+| better-auth | HIGH | (v1.6.12) | Session cookie vulnerability allowing token replay to bypass 2FA when caching was enabled. Also fixes missing username validation on admin `createUser`, OAuth state/proxy issues, and cookie parsing. |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **hono** (override + workspaces) | 4.12.22 | 4.12.23 | root override, frontend, auth-api, competition-api, mcp-api | Patch: backslash normalization fix in serve-static, publicly exports Context class, `contentTypeFilter` option for compression middleware, IPv6 address formatting fix. No breaking changes. |
+| **better-auth** | 1.6.11 | 1.6.12 | frontend, auth-api | Security: session cookie 2FA bypass fix (see above). Bug fixes: Drizzle adapter OR clauses, MySQL insert-return handling, cookie parsing. |
+| **@better-auth/api-key** | 1.6.11 | 1.6.12 | auth-api | Aligned with better-auth 1.6.12. |
+| **wrangler** | 4.94.0 | 4.95.0 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | Bumps workerd to 1.20260526.1. Adds validation rejecting `remote: false` on always-remote bindings. Renames Workflow binding `schedule` to `schedules` (not used in our codebase). No breaking changes. |
+| **concurrently** | 9.2.1 | 10.0.0 | root | Major version. ESM-only (bun handles this). Prefix colors default to "automatic". Removed deprecated `--name-separator` and `killOthers` API option (not used). Patches `shellquote` vulnerability. Requires Node >= 22 (already met). |
+| **agents** | 0.13.2 | 0.13.3 | mcp-api | Patch: improves session auto-compaction estimates, custom token counters, fixes chat recovery for pre-stream interruptions, validates workflow instance IDs, fixes facet deadlock during sub-agent hydration. Pinned exact (pre-1.0). |
+| **@cloudflare/vitest-pool-workers** | 0.16.9 | 0.16.10 | auth-api, competition-api, mcp-api | Dependency-only: bumps wrangler to 4.95.0 and miniflare to 4.20260526.0. |
+| **@cloudflare/workers-types** | 4.20260524.1 | 4.20260530.1 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | Weekly type definition update. |
+
+### Code Changes Required
+
+None. All upgrades are drop-in replacements with no API changes affecting our usage.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| zod | 3.25.76 | 4.4.3 | Major version. Still blocked by `@hono/zod-validator` (honojs/middleware#1148). |
+| vite | 7.3.3 | 8.0.14 | Major version. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. |
+| @hono/zod-validator | 0.7.6 | 0.8.0 | 0.8.0 requires zod 4. Stay on 0.7.6 until zod 4 migration. |
+| kysely | 0.28.17 | 0.29.2 | `better-auth@1.6.12` still depends on `kysely: ^0.28.17` — cannot bump to 0.29.x without breaking better-auth's dependency range. |
+| jsdom | 25.0.1 | 29.1.1 | Major version jump. Defer to a focused PR. |
+| @modelcontextprotocol/sdk | 1.29.0 (resolved via ^1.12.1) | 2.0.0-alpha | Alpha release. Wait for stable. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+| katex | 0.16.47 | 0.17.0 | Major version. Stay within ^0.16.x semver range. |
+
+### Verification
+
+- `bun run typecheck:all` — all 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, mcp-api).
+- `bun run test:all` — 412 root/engine tests + 52 auth-api + 251 competition-api + 21 mcp-api all pass.
+- `bun run test:e2e` — 6 chromium specs pass (comp-creation + 5 user-files-upload tests).
+- `bun audit` — 0 vulnerabilities.
+
+### Lessons / Notes for Future Sessions
+
+- **`concurrently` 10.0.0 is safe for this project.** The major-version breaking changes (ESM-only, Node >= 22 requirement, removed `--name-separator` flag, removed `killOthers` API option, prefix colors default change) do not affect us. We use only `--kill-others-on-fail`, `-n`, and `-c` flags, all of which are unchanged. Node >= 22 was already required by wrangler 4.86+.
+- **better-auth 1.6.12 fixes a session cookie 2FA bypass.** If caching is enabled and 2FA is active, tokens could be replayed. We don't currently use 2FA, but this is a defense-in-depth fix worth having.
+- **E2e tests are occasionally flaky in ephemeral containers.** The `comp-creation` test can time out waiting for `#tasks-list` visibility (a navigation/render race), and `user-files-upload` tests can fail with 401 on dev-login (a timing issue with user creation). Both pass on retry and on clean state. Not caused by dependency changes.
+- **`.dev.vars` is still required for e2e.** Must contain `BETTER_AUTH_URL=http://localhost:3000`. CI creates it automatically; local/ephemeral environments need manual creation.
+- **Kysely 0.29.x still blocked by better-auth.** `better-auth@1.6.12` still depends on `kysely: ^0.28.17`. Monitor future better-auth releases.
+- **`@cloudflare/vitest-pool-workers` stays tightly coupled to wrangler.** 0.16.10 bundles wrangler 4.95.0 and miniflare 4.20260526.0. Always upgrade together.
+
 ## 2026-05-24
 
 ### Security Vulnerabilities Fixed
