@@ -12,15 +12,15 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "agents": "0.13.2",
-    "hono": "^4.12.22",
+    "agents": "0.13.3",
+    "hono": "^4.12.23",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.16.9",
-    "@cloudflare/workers-types": "^4.20260524.1",
+    "@cloudflare/vitest-pool-workers": "^0.16.10",
+    "@cloudflare/workers-types": "^4.20260531.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.7",
-    "wrangler": "4.94.0"
+    "wrangler": "4.95.0"
   }
 }

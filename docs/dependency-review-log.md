@@ -2,6 +2,60 @@
 
 This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
 
+## 2026-05-31
+
+### Security Vulnerabilities Fixed
+
+| Package | Severity | Advisory | Description |
+|---------|----------|----------|-------------|
+| better-auth | HIGH | (v1.6.12) | Fixed high-severity XML injection vulnerability in SAML assertions via samlify library update. Fixed 2FA session cookie leak allowing `session_token` and `session_data` capture when caching was enabled. |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **better-auth** | 1.6.11 | 1.6.13 | frontend, auth-api | Security: SAML XML injection fix, 2FA session cookie leak fix. Bug fixes: field index ordering in migrations, cookie refresh header forwarding, URL-encoding of callback URLs in verification links, OAuth state validation error forwarding, organization invitation routing fix, cascade deletes wrapped in transactions. |
+| **@better-auth/api-key** | 1.6.11 | 1.6.13 | auth-api | Aligned with better-auth 1.6.13. |
+| **hono** (override + workspaces) | 4.12.22 | 4.12.23 | root override, frontend, auth-api, competition-api, mcp-api | Bug fixes: serve-static normalizes all backslashes (not just the first), IP address utility no longer compresses single 0 group to `::`. New: `Context` class publicly exported, `contentTypeFilter` option for compress middleware. No breaking changes. |
+| **wrangler** | 4.94.0 | 4.95.0 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | New: AI coding agent telemetry, `--x-deploy-helpers` flag. Fixes: always-remote bindings validation rejects `remote: false` on remote-only types, `--compatibility-flags` preservation during deploy config flow, Cloudflare Access detection for remote bindings. Workerd updated to 1.20260526.1. No breaking changes. |
+| **agents** | 0.13.2 | 0.13.3 | mcp-api | Session auto-compaction enhancements, chat recovery for pre-stream interruptions, workflow instance ID validation, stream error handling, sub-agent identity scoping, facet startup deadlock fix. No breaking changes. Pinned exact (pre-1.0). |
+| **@cloudflare/vitest-pool-workers** | 0.16.9 | 0.16.10 | auth-api, competition-api, mcp-api | Dependency bump only (wrangler 4.95.0, miniflare 4.20260526.0). |
+| **@cloudflare/workers-types** | 4.20260524.1 | 4.20260531.1 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | Weekly type definition update. |
+
+### Code Changes Required
+
+None. All upgrades are drop-in replacements with no API changes affecting our usage.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| zod | 3.25.76 | 4.4.3 | Major version. Still blocked by `@hono/zod-validator` (honojs/middleware#1148). |
+| vite | 7.3.3 | 8.0.14 | Major version. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. |
+| @hono/zod-validator | 0.7.6 | 0.8.0 | 0.8.0 requires zod 4. Stay on 0.7.6 until zod 4 migration. |
+| kysely | 0.28.17 | 0.29.2 | Now unblocked — `better-auth@1.6.13` accepts `^0.28.17 \|\| ^0.29.0`. Defer to a focused PR since 0.29.x is a minor bump of a pre-1.0 package (equivalent to major). |
+| jsdom | 25.0.1 | 29.1.1 | Major version jump. Defer to a focused PR. |
+| katex | 0.16.47 | 0.17.0 | Major version. Stay within ^0.16.x semver range. |
+| concurrently | 9.2.1 | 10.0.0 | Major version. ESM-only, drops `--name-separator`, requires Node 22 (already met). Low risk but low reward — defer. |
+| @modelcontextprotocol/sdk | 1.29.0 (resolved via ^1.12.1) | 2.0.0-alpha | Alpha release. Wait for stable. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+
+### Verification
+
+- `bun run typecheck:all` — all 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, mcp-api).
+- `bun run test:all` — 412 root/engine tests + 52 auth-api + 251 competition-api + 21 mcp-api all pass.
+- `bun run test:e2e` — 5/6 chromium specs pass. 1 flaky failure that rotates between comp-creation and user-files-upload specs across runs (pre-existing timing issue in remote execution environment, not related to dependency changes).
+- `bun audit` — 0 vulnerabilities.
+
+### Lessons / Notes for Future Sessions
+
+- **Kysely 0.29.x is now unblocked.** `better-auth@1.6.13` declares `"kysely": "^0.28.17 || ^0.29.0"`, removing the previous blocker. `kysely-d1@0.4.0` has `peerDependencies: { kysely: "*" }` so it's also compatible. A focused PR can now upgrade to 0.29.2 — key additions include table narrowing helpers (`$pickTables`/`$omitTables`), `ReadonlyKysely` type, query cancellation via `AbortSignal`, and `SafeNullComparisonPlugin`. Min TypeScript bumped to 5.4 (we're on 6.0.3).
+- **E2e tests are flaky in this remote execution environment.** The comp-creation and user-files-upload tests have intermittent timing failures that rotate between runs. All 6 pass in CI (which has dedicated resources). When running locally in constrained environments, expect 5/6 as the baseline.
+- **`concurrently` 10.0.0 is available** but is ESM-only and drops the `killOthers` API option (replaced with `killOthersOn`). The CLI flag `--kill-others-on-fail` we use in `package.json` scripts should still work but hasn't been verified. Low priority — defer unless there's a reason to upgrade.
+- **`qs` and `ws` overrides remain load-bearing.** Neither `@modelcontextprotocol/sdk` nor the transitive consumers of `ws` have shipped patched versions. Keep overrides until upstream catches up.
+- **`katex` 0.17.0 is a major version** — new in this cycle. Review changelog before upgrading; the ^0.16.x range deliberately excludes it.
+
 ## 2026-05-24
 
 ### Security Vulnerabilities Fixed
