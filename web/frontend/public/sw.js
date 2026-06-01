@@ -51,14 +51,20 @@ async function handleShareTarget(request) {
   }
 
   // Store each shared file as a cached response keyed by filename.
+  // SEC-13: file.name comes from another app on the device via the Web Share
+  // Target API. Strip CR/LF and other control chars before putting it in a
+  // response header (would otherwise break header parsing), and URL-encode
+  // the cache key so names with `?`, `#`, `..`, etc. round-trip safely.
   for (const file of files) {
+    const rawName = typeof file.name === 'string' ? file.name : 'shared-file';
+    const safeName = rawName.replace(/[\x00-\x1f\x7f]/g, '') || 'shared-file';
     const response = new Response(file, {
       headers: {
         'Content-Type': file.type || 'application/octet-stream',
-        'X-File-Name': file.name,
+        'X-File-Name': safeName,
       },
     });
-    await cache.put(`/shared-file/${file.name}`, response);
+    await cache.put(`/shared-file/${encodeURIComponent(safeName)}`, response);
   }
 
   return Response.redirect('/analysis.html?shared=1', 303);

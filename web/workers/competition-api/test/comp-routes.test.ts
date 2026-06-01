@@ -195,9 +195,39 @@ describe("GET /api/comp/:comp_id", () => {
     expect(
       (data.admins as Array<{ email: string }>)[0].email
     ).toBe("pilot@test.com");
+    expect(data.current_user_is_admin).toBe(true);
     expect(Array.isArray(data.tasks)).toBe(true);
     expect(data.pilot_count).toBe(0);
     expect(Array.isArray(data.class_coverage_warnings)).toBe(true);
+  });
+
+  test("SEC-03: hides admin emails from anonymous callers", async () => {
+    const compId = await createComp({ name: "Public" });
+
+    const res = await request("GET", `/api/comp/${compId}`);
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      admins: Array<{ name: string; email?: string }>;
+      current_user_is_admin: boolean;
+    };
+    expect(data.admins.length).toBe(1);
+    expect(data.admins[0].name).toBe("Test Pilot");
+    expect(data.admins[0].email).toBeUndefined();
+    expect(data.current_user_is_admin).toBe(false);
+  });
+
+  test("SEC-03: hides admin emails from authenticated non-admin caller", async () => {
+    const compId = await createComp({ name: "Public" });
+
+    // user-2 is signed in but not an admin of this comp
+    const res = await request("GET", `/api/comp/${compId}`, { user: "user-2" });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      admins: Array<{ name: string; email?: string }>;
+      current_user_is_admin: boolean;
+    };
+    expect(data.admins[0].email).toBeUndefined();
+    expect(data.current_user_is_admin).toBe(false);
   });
 
   test("returns 404 for non-existent comp", async () => {

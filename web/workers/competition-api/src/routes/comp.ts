@@ -225,22 +225,23 @@ export const compRoutes = new Hono<HonoEnv>()
         return c.json({ error: "Competition not found" }, 404);
       }
 
+      // Resolve admin status once: gates the SEC-03 PII redaction below and
+      // (for test comps) the 404 visibility check.
+      const isAdmin = user
+        ? !!(await c.env.DB.prepare(
+            "SELECT 1 FROM comp_admin WHERE comp_id = ? AND user_id = ?"
+          )
+            .bind(compId, user.id)
+            .first())
+        : false;
+
       // Test comps require admin access
-      if (comp.test) {
-        if (!user) {
-          return c.json({ error: "Competition not found" }, 404);
-        }
-        const isAdmin = await c.env.DB.prepare(
-          "SELECT 1 FROM comp_admin WHERE comp_id = ? AND user_id = ?"
-        )
-          .bind(compId, user.id)
-          .first();
-        if (!isAdmin) {
-          return c.json({ error: "Competition not found" }, 404);
-        }
+      if (comp.test && !isAdmin) {
+        return c.json({ error: "Competition not found" }, 404);
       }
 
-      // Get admin list (emails)
+      // SEC-03: admin emails are PII. Only return them to callers who are
+      // themselves admins of this comp; everyone else sees names only.
       const admins = await c.env.DB.prepare(
         `SELECT u.email, u.name FROM comp_admin ca
          JOIN "user" u ON ca.user_id = u.id
@@ -248,6 +249,9 @@ export const compRoutes = new Hono<HonoEnv>()
       )
         .bind(compId)
         .all<{ email: string; name: string }>();
+      const adminsForResponse = isAdmin
+        ? admins.results
+        : admins.results.map((a) => ({ name: a.name }));
 
       // Get tasks summary
       const tasks = await c.env.DB.prepare(
@@ -300,7 +304,10 @@ export const compRoutes = new Hono<HonoEnv>()
           : null,
         open_igc_upload: !!(comp.open_igc_upload as number),
         pilot_statuses: parsePilotStatuses(comp.pilot_statuses),
-        admins: admins.results,
+        admins: adminsForResponse,
+        // Frontend uses this instead of probing admins[].email so we can keep
+        // emails server-side for non-admins (SEC-03).
+        current_user_is_admin: isAdmin,
         tasks: tasks.results.map((t) => ({
           task_id: encodeId(alphabet, t.task_id as number),
           name: t.name,
