@@ -1995,7 +1995,18 @@ async function init(): Promise<void> {
         const response = await cache.match(request);
         if (!response) continue;
 
-        const filename = response.headers.get('X-File-Name') || new URL(request.url).pathname.split('/').pop() || 'shared-file';
+        // Primary source is X-File-Name (set by sw.js). Fallback to the
+        // pathname-derived name, decoding the URL-component encoding the
+        // service worker applies for SEC-13.
+        let filename = response.headers.get('X-File-Name');
+        if (!filename) {
+          const tail = new URL(request.url).pathname.split('/').pop() || 'shared-file';
+          try {
+            filename = decodeURIComponent(tail);
+          } catch {
+            filename = tail;
+          }
+        }
         const blob = await response.blob();
         const file = new File([blob], filename, { type: blob.type });
 
