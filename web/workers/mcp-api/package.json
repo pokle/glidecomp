@@ -17,10 +17,10 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.16.10",
-    "@cloudflare/workers-types": "^4.20260531.1",
+    "@cloudflare/vitest-pool-workers": "^0.16.13",
+    "@cloudflare/workers-types": "^4.20260607.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.7",
-    "wrangler": "4.95.0"
+    "vitest": "^4.1.8",
+    "wrangler": "4.98.0"
   }
 }
