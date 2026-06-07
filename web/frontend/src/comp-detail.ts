@@ -26,10 +26,7 @@ interface CompDetail {
   open_igc_upload: boolean;
   pilot_statuses: PilotStatusConfig[];
   tasks: TaskSummary[];
-  // `email` is only populated when the caller is themselves a comp_admin
-  // (SEC-03). Non-admin / anonymous callers see names only.
-  admins: Array<{ name: string; email?: string }>;
-  current_user_is_admin: boolean;
+  admins: Array<{ email: string; name: string }>;
   pilot_count: number;
   class_coverage_warnings: Array<{
     date: string;
@@ -178,7 +175,10 @@ async function initTaskDetail(compId: string, taskId: string, user: AuthUser | n
 
   document.title = `GlideComp - ${task.name}`;
 
-  const isAdmin = user != null && comp != null && comp.current_user_is_admin;
+  const isAdmin =
+    user != null &&
+    comp != null &&
+    comp.admins.some((a) => a.email === user.email);
 
   // Back link
   const backLink = document.getElementById("task-back-link") as HTMLAnchorElement;
@@ -1449,7 +1449,9 @@ async function initCompDetail(compId: string, user: AuthUser | null) {
   document.title = `GlideComp - ${comp.name}`;
 
   // Check if current user is admin
-  const isAdmin = user != null && comp.current_user_is_admin;
+  const isAdmin =
+    user != null &&
+    comp.admins.some((a) => a.email === user.email);
 
   // ── Populate header ────────────────────────────────────────────────────
 
@@ -1500,9 +1502,7 @@ async function initCompDetail(compId: string, user: AuthUser | null) {
   for (const admin of comp.admins) {
     const div = document.createElement("div");
     div.className = "text-sm text-muted-foreground";
-    div.textContent = admin.email
-      ? `${admin.name} (${admin.email})`
-      : admin.name;
+    div.textContent = `${admin.name} (${admin.email})`;
     adminsList.appendChild(div);
   }
 
@@ -2036,9 +2036,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
         : "";
       testCheckbox.checked = comp.test;
       openUploadCheckbox.checked = comp.open_igc_upload ?? true;
-      // This branch only fires inside the `isAdmin` guard above, so
-      // `admins[].email` is always populated by the server (SEC-03).
-      adminsInput.value = comp.admins.map((a) => a.email ?? "").join(", ");
+      adminsInput.value = comp.admins.map((a) => a.email).join(", ");
 
       // Populate default class dropdown
       updateDefaultClassOptions();
