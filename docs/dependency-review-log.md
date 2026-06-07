@@ -2,6 +2,62 @@
 
 This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
 
+## 2026-06-07
+
+### Security Vulnerabilities Fixed
+
+| Package | Severity | Advisory | Description |
+|---------|----------|----------|-------------|
+| better-auth | MODERATE | (v1.6.14) | OAuth redirect URI validation hardened — rejects dangerous URL schemes and fragments per RFC 6749. Cookie preference fix: `__Secure-` cookie is now preferred when both secure and non-secure cookies are present, preventing potential session confusion. |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **wrangler** | 4.95.0 | 4.98.0 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | New: `web_search`→`websearch` bindings, `migrations_pattern` field for D1, generic `[path]` positional arg for deploy/upload. Fixes: source map upload, `.env` line breaks, D1 logger level. No breaking changes affecting our usage. |
+| **better-auth** | 1.6.13 | 1.6.14 | frontend, auth-api | Security: OAuth redirect URI validation, cookie preference fix. Bug fixes: invitation flow for emailed org invitations, nullable fields accept explicit `null`. |
+| **@better-auth/api-key** | 1.6.13 | 1.6.14 | auth-api | Aligned with better-auth 1.6.14. |
+| **vite** | 7.3.3 | 7.3.5 | frontend | Patch release. |
+| **vitest** | 4.1.7 | 4.1.8 | frontend, auth-api, competition-api, mcp-api | Patch release. Bug fixes. |
+| **@cloudflare/vitest-pool-workers** | 0.16.10 | 0.16.13 | auth-api, competition-api, mcp-api | Dependency bump (wrangler 4.98.0, miniflare 4.20260603.0). |
+| **@cloudflare/workers-types** | 4.20260531.1 | 4.20260607.1 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | Weekly type definition update. |
+| **@types/node** | 25.9.1 | 25.9.2 | root | Type definition update. |
+
+### Code Changes Required
+
+None. All upgrades are drop-in replacements with no API changes affecting our usage.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| agents | 0.13.3 | 0.14.5 | 0.14.x requires zod ^4.0.0 as a peer dependency. Blocked by our zod 3 usage. |
+| zod | 3.25.76 | 4.4.3 | Major version. Still blocked by `@hono/zod-validator` (honojs/middleware#1148). |
+| vite | 7.3.5 | 8.0.16 | Major version. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. |
+| @hono/zod-validator | 0.7.6 | 0.8.0 | 0.8.0 requires zod 4. Stay on 0.7.6 until zod 4 migration. |
+| kysely | 0.28.17 | 0.29.2 | Unblocked by better-auth, but pre-1.0 minor bump (equivalent to major). Defer to a focused PR. |
+| jsdom | 25.0.1 | 29.1.1 | Major version jump. Defer to a focused PR. |
+| katex | 0.16.47 | 0.17.0 | Major version. Stay within ^0.16.x semver range. |
+| concurrently | 9.2.1 | 10.0.3 | Major version. ESM-only, drops `--name-separator`. Low priority — defer. |
+| @modelcontextprotocol/sdk | 1.29.0 (resolved via ^1.12.1) | 2.0.0-alpha | Alpha release. Wait for stable. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+
+### Verification
+
+- `bun run typecheck:all` — all 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, mcp-api).
+- `bun run test:all` — 412 root/engine tests + 52 auth-api + 251 competition-api + 21 mcp-api all pass.
+- `bun run test:e2e` — 5/6 chromium specs pass. 1 flaky failure in "delete an uploaded task" (pre-existing timing issue in remote execution environment, not related to dependency changes).
+- `bun audit` — 0 vulnerabilities.
+
+### Lessons / Notes for Future Sessions
+
+- **`agents` 0.14.x now requires zod 4.** The `createMcpHandler` API is unchanged, but the zod peer dep makes the upgrade impossible until the zod 4 migration. This creates a new coupling: the zod 4 migration now unblocks both `@hono/zod-validator` 0.8 AND `agents` 0.14.x.
+- **`@cloudflare/vitest-pool-workers` 0.16.13 bundles wrangler 4.98.0.** Continue keeping these aligned — upgrade together.
+- **`qs` and `ws` overrides remain load-bearing.** Neither `@modelcontextprotocol/sdk` nor the transitive consumers of `ws` have shipped patched versions. Keep overrides until upstream catches up.
+- **Wrangler 4.98.0 renames `web_search` binding to `websearch`.** We don't use this binding, so no impact. Note for future: if adopting Cloudflare's managed web search for agents, use `websearch` (not `web_search`).
+- **E2e tests still require `.dev.vars`** with `BETTER_AUTH_URL=http://localhost:3000`. Without it, `isLocalDev()` returns false and the dev-login endpoint returns 404. CI creates this file in the workflow.
+
 ## 2026-05-31
 
 ### Security Vulnerabilities Fixed
