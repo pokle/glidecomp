@@ -7,13 +7,18 @@
  * with `arrayBuffer()`. A small gzip-bomb (~5 KB compressed → many GB
  * decompressed) could trip the worker's memory limit.
  *
- * This helper enforces three independent caps in the order they're
- * cheapest to check:
+ * This helper enforces four independent checks in the order they're
+ * cheapest to run:
  *   1. Compressed-size cap (rejects giant blobs before allocating).
  *   2. Gzip magic (rejects non-gzip bodies before starting the
  *      DecompressionStream).
  *   3. Decompressed-size cap, enforced *while* streaming — never
  *      buffers more than the cap, even for highly compressible input.
+ *   4. SEC-04: IGC content shape — manufacturer record (`A…`) plus the
+ *      `HFDTE` date header. Same pattern as
+ *      `airscore-api/src/handlers/track.ts:isValidIgcContent`. Blocks
+ *      authenticated callers from stashing up to 2 MiB of arbitrary
+ *      gzipped text per registered pilot per task / per user in R2.
  *
  * Errors are typed so the route can return a clean 400 with a
  * specific message instead of a generic 500.
@@ -27,7 +32,8 @@ export type IgcValidationError =
   | { kind: "compressed_too_large"; message: string }
   | { kind: "not_gzip"; message: string }
   | { kind: "decompressed_too_large"; message: string }
-  | { kind: "decompression_failed"; message: string };
+  | { kind: "decompression_failed"; message: string }
+  | { kind: "not_igc_content"; message: string };
 
 export class IgcValidationException extends Error {
   constructor(public readonly detail: IgcValidationError) {
@@ -99,7 +105,17 @@ export async function validateAndDecompressIgc(
   ]);
 
   if (consumeResult.status === "fulfilled") {
-    return new TextDecoder().decode(consumeResult.value);
+    const text = new TextDecoder().decode(consumeResult.value);
+    // SEC-04: every real IGC starts with `A` (manufacturer record) and
+    // carries the `HFDTE` date header. Reject anything that doesn't so
+    // attackers can't use the upload as a free 2 MiB blob store in R2.
+    if (text[0] !== "A" || !text.includes("HFDTE")) {
+      throw new IgcValidationException({
+        kind: "not_igc_content",
+        message: "File does not look like an IGC track log",
+      });
+    }
+    return text;
   }
   const err = consumeResult.reason;
   if (err instanceof IgcValidationException) throw err;

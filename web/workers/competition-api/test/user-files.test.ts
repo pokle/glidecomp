@@ -3,25 +3,35 @@ import { beforeEach, describe, expect, test } from "vitest";
 import { request, clearCompData } from "./helpers";
 
 /**
- * Minimal gzipped bytes for an IGC body. The competition-api uses
- * validateAndDecompressIgc which only requires gzip magic + a valid gzip
- * stream — content can be empty.
+ * SEC-04: validateAndDecompressIgc requires the decompressed body to start
+ * with `A` (manufacturer record) and contain `HFDTE` (date header). Every
+ * test upload below is wrapped with this minimal valid prefix so the helper
+ * accepts it. The prefix is short and constant, so test-specific suffixes
+ * (`"same bytes"`, `"user-1 file"`, etc.) still produce unique track-IDs.
+ */
+const IGC_PREFIX = "AXCT001Test\r\nHFDTE010126\r\n";
+
+/**
+ * Minimal valid gzipped IGC body for the few tests that only need to push
+ * any acceptable upload through (e.g. the auth check).
  */
 function gzipEmpty(): Uint8Array {
-  // gzip of empty payload generated once and inlined to avoid pulling node:zlib
-  // into the worker test fixture.
+  // Precomputed gzip of `IGC_PREFIX`. Inlined to avoid an async helper here.
   return new Uint8Array([
-    0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x03, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x73, 0x8c,
+    0x70, 0x0e, 0x31, 0x30, 0x30, 0x0c, 0x49, 0x2d, 0x2e, 0xe1, 0xe5, 0xf2,
+    0x70, 0x73, 0x09, 0x71, 0x35, 0x30, 0x34, 0x30, 0x34, 0x32, 0xe3, 0xe5,
+    0x02, 0x00, 0x19, 0xac, 0x90, 0xbb, 0x1a, 0x00, 0x00, 0x00,
   ]);
 }
 
 /**
- * Gzip a text payload via DecompressionStream's inverse. The Workers runtime
- * exposes CompressionStream so we don't need a polyfill.
+ * Gzip a text payload via CompressionStream. The Workers runtime exposes
+ * CompressionStream so we don't need a polyfill. Returns a body that always
+ * passes the SEC-04 IGC-shape check — see `IGC_PREFIX` above.
  */
 async function gzipText(text: string): Promise<Uint8Array> {
-  const stream = new Blob([text]).stream().pipeThrough(
+  const stream = new Blob([IGC_PREFIX + text]).stream().pipeThrough(
     new CompressionStream("gzip")
   );
   return new Uint8Array(await new Response(stream).arrayBuffer());
@@ -217,7 +227,7 @@ describe("GET /api/user/tracks/:track_id", () => {
   });
 
   test("returns the original gzip body and exposes filename header", async () => {
-    const original = "AXCT real track\nB001";
+    const original = "B0010001";
     const body = await gzipText(original);
     const upload = await uploadTrack(body, "user-1", "flight.igc");
     const { track_id } = (await upload.json()) as { track_id: string };
@@ -229,7 +239,9 @@ describe("GET /api/user/tracks/:track_id", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("X-Filename")).toBe("flight.igc");
     const text = await readBodyText(res);
-    expect(text).toBe(original);
+    // gzipText prepends the SEC-04 IGC prefix; the route round-trips it
+    // verbatim, so the decoded body is prefix + suffix.
+    expect(text).toBe(IGC_PREFIX + original);
   });
 
   test("non-owner cannot fetch", async () => {
@@ -417,7 +429,7 @@ describe("public /api/u/:username/...", () => {
     );
     expect(res.status).toBe(200);
     const text = await readBodyText(res);
-    expect(text).toBe("public flight");
+    expect(text).toBe(IGC_PREFIX + "public flight");
   });
 
   test("unknown username → 404", async () => {

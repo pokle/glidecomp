@@ -15,6 +15,7 @@
 | 2026-05-18 | Claude   | Re-review (user-files + preferences) + new finding SEC-16 | SEC-16 fixed inline (this PR) |
 | 2026-05-25 | Claude   | Re-review (no new app code) + new finding SEC-17; closed SEC-02 | SEC-17 + SEC-02 fixed inline (this PR) |
 | 2026-06-01 | Claude   | Re-review (deps + engine bug-fix + auth-api tests); closed SEC-13; SEC-03 reclassified Accepted (by design) | SEC-13 fixed inline (this PR); SEC-03 accepted |
+| 2026-06-08 | Claude   | Re-review (only deps landed); closed SEC-04 inline | SEC-04 fixed inline (this PR) |
 
 ---
 
@@ -917,3 +918,89 @@ No new scope gaps added this round.
 6. Fill in the `test.todo(...)` placeholders in `web/workers/auth-api/test/routes.test.ts` (tiers 2-4 — username format validation, API-key round-trip, rate-limit 429 with `Retry-After`). The rate-limit one would close SEC-08 if paired with a `Retry-After` header in the response.
 7. Address scope-gap #8 (CSP enforce) on the next preview deploy.
 8. Do NOT re-open SEC-03. It is accepted by design — comp organisers' emails are intentionally visible to all pilots and to the public.
+
+---
+
+## 2026-06-08 — Re-review
+
+### Methodology
+
+- Read `docs/security-review.md` end-to-end first, carrying the prior round's "Scope gaps" and "Where to start" pointers into this round's scope.
+- Diffed `master` vs the prior review's landing commit `e433ee5` (`git log e433ee5..HEAD`). **One commit since** — `c39d6c3` (weekly dep upgrade 2026-06-07: wrangler 4.95.0→4.98.0, vitest 4.1.7→4.1.8, vite 7.3.3→7.3.5, better-auth 1.6.13→1.6.14, @cloudflare/vitest-pool-workers 0.16.10→0.16.13, @cloudflare/workers-types 4.20260531→4.20260607, @types/node 25.9.1→25.9.2). **No application source code changes** since the 2026-06-01 round (`git diff e433ee5..HEAD -- 'web/workers/**/src/**/*.ts' 'web/frontend/src/**/*.ts' 'functions/**' 'web/engine/src/**/*.ts' 'web/frontend/public/sw.js' 'web/frontend/public/_headers' 'web/frontend/public/_redirects' 'web/workers/**/wrangler.toml'` returns empty). No new `[[routes]]` blocks, no new bindings, no new mutating endpoints.
+- Re-walked every prior `SEC-NN` finding line-by-line against current code. Because the application source is byte-identical to the 2026-06-01 round, each prior round's verification still holds; this round spot-checked the fix sites to confirm nothing was reverted (`grep -rn "X-Glidecomp-Internal-User\|INTERNAL_USER_HEADER" web/workers/` → only test/comment references; `validateAndDecompressIgc` caps and gzip-magic present; `xctskSchema` still in use; `serializeCompPilotPublic` still zeros the three PII fields; CORS allowlist unchanged on both public workers; `_headers` file intact with the four enforced headers + the Report-Only CSP).
+- Ran `bun audit` at HEAD — **0 vulnerabilities**. Overrides held: `grep -E "kysely@|qs@|ws@" bun.lock` → single `kysely@0.28.17`, `qs@6.15.2`, `ws@8.21.0`.
+- Used the otherwise-quiet round to close **SEC-04** (manufacturer-record check on the decompressed first byte — Low, open as a sub-issue since 2026-05-04 when SEC-11 subsumed the size/shape cap but explicitly left the content shape for a later round) inline. The fix moves the content check into `validateAndDecompressIgc` so both upload routes (`routes/igc.ts` self-upload + on-behalf, `routes/user-files.ts` per-user track) inherit it without any route-level change.
+- Ran `bun run typecheck:all` (clean), `bun run test:all` (green: 412 engine/airscore/root + 52 auth-api + 254 competition-api + 21 mcp-api — the competition-api count is +1 from prior round, accounting for the SEC-04 negative-path tests minus one consolidation), and `bun audit` (clean).
+- Did **not** re-run dynamic CSRF PoC, live cookie-attribute checks, IGC/XCTask parser fuzzing, a Cloudflare zone-settings snapshot, or a CSP-Report-Only live-deploy walkthrough — still in scope-gaps below.
+
+### Executive summary
+
+No new application source code landed since the 2026-06-01 round — the only commit is the weekly dep upgrade (covered by `bun audit` — clean at HEAD) — so there was no fresh attack surface to audit, and re-verification confirmed the SEC-01 / SEC-10 / SEC-11 / SEC-12 / SEC-13 / SEC-15 / SEC-16 / SEC-17 fixes all hold byte-for-byte. With the round otherwise quiet, this PR closes **SEC-04** inline: `validateAndDecompressIgc` now also verifies that the decompressed body starts with `A` (manufacturer record) and contains `HFDTE` (date header) — the same `isValidIgcContent` shape check the airscore proxy worker has had since the 2026-03-04 audit. Both upload routes (`routes/igc.ts` self-upload, on-behalf-of admin upload, and `routes/user-files.ts` per-user track) inherit the fix via the shared helper, blocking authenticated callers from stashing up to 2 MiB of arbitrary gzipped text per registered pilot per task and per user in R2. Three new typed-error tests (non-IGC plain text, A-record-but-no-HFDTE, HFDTE-but-no-A) lock the behaviour; the existing decompressed-size boundary test was retargeted to valid IGC content of cap-length so it still asserts the size boundary without colliding with the new content check. Three test files that produce minimal upload bodies (`igc-routes.test.ts`, `pilot-status.test.ts`, `signup-linking.test.ts`) had their precomputed gzip blob refreshed to wrap `"AXCT001Test\r\nHFDTE010126\r\n"` instead of an empty body, and the `gzipText` helper in `user-files.test.ts` was retrofitted to prepend the same IGC prefix to every upload — these are mechanical fixture refreshes, not coverage changes. No Critical or High findings this round; **SEC-05** (innerHTML pattern), **SEC-06** (`bodyLimit` middleware), **SEC-08** (rate-limit headers), and scope-gap #8 (flip CSP from Report-Only to enforce) remain Open and small-diff candidates for future rounds.
+
+### Status of prior findings
+
+| ID      | Title                                                                  | Status @ 2026-06-08 | Notes                                                                |
+|---------|------------------------------------------------------------------------|---------------------|----------------------------------------------------------------------|
+| SEC-01  | Reflective CORS w/ credentials                                         | **Fixed**           | Re-verified `web/workers/auth-api/src/index.ts:13-33` and `web/workers/competition-api/src/index.ts:23-44`. Allowlist (`glidecomp.com` + `*.glidecomp.pages.dev` + `localhost`) unchanged. `cors.test.ts` regression test still passes. |
+| SEC-02  | No security response headers (`_headers`)                              | **Fixed (2026-05-25)** | `web/frontend/public/_headers` unchanged; still ships with the CSP as `Content-Security-Policy-Report-Only`. Flip-to-enforce remains scope-gap #8. |
+| SEC-03  | Admin emails returned on public comp detail                            | **Accepted (by design, 2026-06-01)** | Unchanged. Comp organisers' emails intentionally visible. Not to be re-opened without a product-design change. |
+| SEC-04  | IGC upload size/shape — manufacturer-record check                      | ~~Open~~ **Fixed (2026-06-08, this PR)** | `web/workers/competition-api/src/igc-validation.ts:101-110` now adds a `not_igc_content` typed error: after the streaming decompression succeeds, the helper rejects payloads whose decoded text doesn't start with `A` or doesn't contain `HFDTE` — the same `isValidIgcContent` shape the airscore worker has had at `web/workers/airscore-api/src/handlers/track.ts:14-16`. Both upload paths (`web/workers/competition-api/src/routes/igc.ts:170` self-upload, `routes/igc.ts:449` on-behalf, `routes/user-files.ts:250` per-user track) inherit the fix without per-route changes; the existing `IgcValidationException` catch in each route maps it to a 400 with the same `err.detail.message` plumbing. Three new tests in `web/workers/competition-api/test/igc-validation.test.ts` (lines 116-138) cover the three rejection paths (non-IGC plain text, A-record-but-no-HFDTE, HFDTE-but-no-A); the existing decompressed-size boundary test (line 94) was retargeted to a 2 MiB valid IGC payload (prefix + `'x'` padding to cap) so it still asserts the size boundary independently of the new content check. Fixture refresh — `fakeIgcPayload()` in three other test files (`igc-routes.test.ts:16`, `pilot-status.test.ts:13`, `signup-linking.test.ts:15`) was updated to a precomputed gzip of `"AXCT001Test\r\nHFDTE010126\r\n"`, and `gzipText()` in `user-files.test.ts:24-32` now prepends the same `IGC_PREFIX` constant to every upload (and two round-trip assertions were updated to assert against `IGC_PREFIX + suffix`). All 254 competition-api tests pass. |
+| SEC-05  | `innerHTML` is the default render primitive                            | **Open**            | `grep -rn "innerHTML =" web/frontend/src \| wc -l` → 116 sites (identical to prior rounds — no frontend source changes). All interpolations of user data still route through `sanitizeText()` / `escapeHtml()`. |
+| SEC-06  | No JSON body-size cap                                                  | **Open**            | Still no `bodyLimit` middleware (`grep -rn bodyLimit web/workers/*/src/` → none). Hono is at `4.12.23` (override), so `bodyLimit({ maxSize: 256*1024 })` with a per-route override for IGC remains the documented fix. Deferred (not closed this round) because a wrong cap would break IGC/user-track uploads and a security-review PR shouldn't risk that without local upload testing. |
+| SEC-07  | Dev-only endpoints gated by `BETTER_AUTH_URL` hostname                 | **Verified safe**   | Unchanged. `BETTER_AUTH_URL = "https://glidecomp.com"` in `web/workers/auth-api/wrangler.toml`. `is-local-dev.test.ts` regression test still passes. |
+| SEC-08  | Rate-limit headers not surfaced                                        | **Open**            | Unchanged (`grep -rn "Retry-After\|X-RateLimit" web/workers/auth-api/src/` → none). The `test.todo("rate limit: 61st request inside 60s window returns 429")` placeholder in `web/workers/auth-api/test/routes.test.ts:78` is still in place. |
+| SEC-09  | `Math.random()` non-security use                                       | **Closed (Info)**   | No new uses; staying closed.                                         |
+| SEC-10  | Authentication bypass via trusted `X-Glidecomp-Internal-User` header   | **Fixed**           | `web/workers/competition-api/src/middleware/auth.ts:15-32` byte-identical to the fix. `grep -rn "X-Glidecomp-Internal-User\|INTERNAL_USER_HEADER" web/workers/` returns only test/comment references in `competition-api/test/auth-bypass.test.ts`, `mcp-api/test/util.test.ts`, and `mcp-api/vitest.config.ts`. The `auth-bypass.test.ts` regression test still passes. |
+| SEC-11  | IGC gzip-bomb decompression                                            | **Fixed**           | `web/workers/competition-api/src/igc-validation.ts:22-110` — the same 1 MiB compressed + gzip-magic + 2 MiB streaming-decompressed caps; with the SEC-04 fix landing in this PR the helper now also enforces the IGC content shape after decompression. Three callsites unchanged (`routes/igc.ts:170, :449`, `routes/user-files.ts:250`). The `decompressed_too_large` and `TypeError: Decompression failed.` log lines during `test:comp` are the SEC-11 negative-path assertions firing as expected (6 errors, same baseline as prior round). |
+| SEC-12  | `xctsk` body has no shape, depth, or size cap                          | **Fixed**           | `xctskSchema` in `web/workers/competition-api/src/validators.ts:228` unchanged; used by `createTaskSchema` / `updateTaskSchema` and the user-task route. |
+| SEC-13  | Service worker stores share-target uploads under unsanitised filenames | **Fixed (2026-06-01)** | `web/frontend/public/sw.js:53-68` unchanged from the fix; control chars stripped from `X-File-Name`, cache key `encodeURIComponent`-encoded. Consumer in `web/frontend/src/analysis/main.ts:1998-2008` unchanged. |
+| SEC-14  | Service-binding trust comment misleads readers                         | **Closed**          | Resolved with SEC-10 fix.                                            |
+| SEC-15  | Unauthenticated PII on public pilot list                               | **Fixed**           | `web/workers/competition-api/src/routes/pilot.ts:123-130, 386-419` unchanged. `serializeCompPilotPublic` still redacts the three PII fields for non-admins; admin path still returns full PII. |
+| SEC-16  | Transitive `kysely@0.28.16` JSON-path traversal                        | **Fixed**           | Override held: `grep "kysely@" bun.lock` → single `kysely@0.28.17` entry. `bun audit` clean for kysely. |
+| SEC-17  | `qs` (DoS) via MCP SDK→express; `ws` (memory disclosure) via dev tooling | **Fixed**         | Overrides held: `grep -E "qs@\|ws@" bun.lock` → single `qs@6.15.2` and `ws@8.21.0`. `bun audit` clean. |
+
+### New findings
+
+No new `SEC-NN` findings this round.
+
+`bun audit` is clean; the diff since 2026-06-01 contains no application source changes (only the weekly dep upgrade). The dep upgrade was reviewed for new advisories — none. The `better-auth 1.6.13→1.6.14` patch bump was checked against the kysely-adapter for new JSON-path usage (still none — kysely-adapter does table CRUD only), so the SEC-16 reachability analysis remains valid.
+
+### Re-checked but no change
+
+Because every `*.ts` under `web/workers/*/src/` and `web/frontend/src/` is byte-identical to the 2026-06-01 round (with the exception of the SEC-04 fix landed in this PR, which touches `igc-validation.ts` only), the prior round's detailed walks still hold. Spot-confirmed this round:
+
+- **Authn / authz.** `requireAuth` resolves identity only by forwarding inbound `cookie` / `x-api-key` to auth-api (`middleware/auth.ts:15-32`); no header-trust backdoor. `requireCompAdmin` gates on a `comp_admin` row (`middleware/auth.ts:72-95`). No new mutating routes added.
+- **Worker route surfaces.** `[[routes]]` across all four workers unchanged from the 2026-06-01 walk: airscore (`/api/airscore/*`), comp (`/api/comp`, `/api/comp/*`, `/api/user`, `/api/user/*`, `/api/u/*`), mcp (`/mcp`, `/mcp/*`), auth (`/api/auth/*`). No new public surface.
+- **CORS.** Allowlist (`glidecomp.com`, `*.glidecomp.pages.dev`, `localhost`) on both auth-api and competition-api; disallowed origins get an empty `Access-Control-Allow-Origin`. The `cors.test.ts` regression suite on auth-api still passes.
+- **Parameterised SQL.** All spot-checked sites bind parameters; no string concatenation into SQL.
+- **`audit()` coverage.** No new mutating routes, so no new audit gaps; existing comp/task/igc/pilot/pilot-status routes still call `audit()` with `describeChange()`-style descriptions.
+- **MCP per-tool auth propagation.** Every tool under `web/workers/mcp-api/src/tools/*.ts` forwards `apiKey` via `compApi` / `compApiRaw`; none forge identity. Unchanged.
+- **wrangler.toml bindings.** Single canonical production resource IDs; auth-api + competition-api intentionally share D1 (`taskscore-auth`); auth-api shares the `glidecomp` R2 bucket for cascading delete. No preview-vs-prod cross-wiring.
+- **`optionalAuth` PII (SEC-15 class).** No new `optionalAuth` routes added — current set is `comp.ts:145, 210`, `task.ts:125`, `igc.ts:605, 704`, `audit.ts:28`, `score.ts:24, 95`, `pilot-status.ts:121`, `pilot.ts:372`, `user-files.ts:694, 729, 751`. The 2026-05-18 systematic walk of SELECT columns still applies (PII-free except for `comp.ts:210` admin emails, which are accepted-by-design per SEC-03).
+- **Secrets.** `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID/SECRET` referenced as env only; no hard-coded keys in source or any `wrangler.toml`. API-key prefix still `glc_`.
+- **Cascading delete on account delete.** `auth-api/src/index.ts:138-150` still walks every R2 object under `u/{user_id}/` before dropping the user row. Unchanged. If a future feature adds a new prefix under `u/{user_id}/` (e.g. avatars), this is the source of truth and must be updated.
+
+### Scope gaps still not done
+
+Carried forward from prior rounds:
+
+1. Dynamic CSRF PoC against the allowlisted CORS.
+2. Cookie attribute verification on a live deploy.
+3. IGC / XCTask parser fuzzing.
+4. Cloudflare zone settings snapshot (HSTS, TLS min, WAF, bot management).
+5. Verify SEC-10 fix on a deployed comp-api endpoint (not just the miniflare regression test).
+6. Confirm the comp-api worker doesn't accept a legacy `Cookie: test-user=…` header in production.
+7. TOCTOU / idempotency on `/api/user/tracks` + `/api/user/tasks` quota checks (UX bug class, no security exposure — from the 2026-05-18 round).
+8. **Flip the CSP from Report-Only to enforced** (from the 2026-05-25 round). Requires a live Pages-deploy CSP-report pass across the analysis map, the theme editor's Google-Fonts loader, and the share-target flow.
+
+No new scope gaps added this round.
+
+### Where to start the next review
+
+1. Commit reviewed up to: HEAD = `c39d6c3` (parent of this review's PR). Diff against that next round.
+2. `bun audit` should be clean after this PR — if a new advisory pops up, walk the dependency tree for reachability before triaging severity (the `qs`/`ws` pattern from 2026-05-25: both flagged Moderate but neither reachable in production).
+3. Re-run the prior-findings table; remaining Open items are **SEC-05** (innerHTML pattern), **SEC-06** (`bodyLimit` middleware), **SEC-08** (rate-limit headers). All Low/Medium. SEC-06 is still the next-highest-leverage small-diff win but needs local upload testing before landing. SEC-08 is paired with the `test.todo` in `web/workers/auth-api/test/routes.test.ts:78` — filling it in is the natural pairing.
+4. Walk any new mutating endpoints (authn / authz / `audit()` / Zod) — none existed this round. Recent trajectory is the per-user files/preferences surface from 2026-05-18 plus the SEC-02 hardening from 2026-05-25, so watch for shared/public-profile features or any new field on a public-readable endpoint that could re-introduce a SEC-15-class PII leak (the pilot list — not the admin list, which is by-design public per the SEC-03 reclassification).
+5. Confirm the SEC-04 fix held: send a gzipped non-IGC body to `POST /api/user/tracks` (auth-required) on a deployed env and expect `400 {"error":"File does not look like an IGC track log"}`. Same against `POST /api/comp/.../task/.../igc`.
+6. Address scope-gap #8 (CSP enforce) on the next preview deploy.
+7. Do NOT re-open SEC-03. It is accepted by design — comp organisers' emails are intentionally visible to all pilots and to the public.
