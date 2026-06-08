@@ -93,10 +93,40 @@ describe("validateAndDecompressIgc — gzip-bomb defence (the SEC-11 case)", () 
 
   test("a payload exactly at the decompressed cap is accepted", async () => {
     // Boundary check — `> cap` should fail, `<= cap` should pass.
-    const at = new Uint8Array(MAX_DECOMPRESSED_BYTES);
-    const body = await gzipBytes(at);
+    // SEC-04: pad valid IGC content (A-record + HFDTE) out to the cap so
+    // the content shape check passes; the assertion here is purely the
+    // size boundary.
+    const prefix = "AXCT001Sample\r\nHFDTE010126\r\nL";
+    const padded = prefix + "x".repeat(MAX_DECOMPRESSED_BYTES - prefix.length);
+    const body = await gzip(padded);
     const text = await validateAndDecompressIgc(body);
     expect(text.length).toBe(MAX_DECOMPRESSED_BYTES);
+  });
+});
+
+describe("validateAndDecompressIgc — IGC content shape (SEC-04)", () => {
+  test("rejects a gzipped body whose decompressed content isn't IGC", async () => {
+    // Valid gzip of plain text that lacks both 'A' first-byte and 'HFDTE'.
+    const body = await gzip("hello world, not an IGC file");
+    await expect(validateAndDecompressIgc(body)).rejects.toMatchObject({
+      detail: { kind: "not_igc_content" },
+    });
+  });
+
+  test("rejects content that starts with 'A' but lacks the HFDTE header", async () => {
+    // A-record present but no date header — still not a real IGC.
+    const body = await gzip("AXCT001Sample\r\nL no date header here\r\n");
+    await expect(validateAndDecompressIgc(body)).rejects.toMatchObject({
+      detail: { kind: "not_igc_content" },
+    });
+  });
+
+  test("rejects content with HFDTE but missing the manufacturer record", async () => {
+    // HFDTE present but doesn't start with 'A'.
+    const body = await gzip("HFDTE010126\r\nL some line\r\n");
+    await expect(validateAndDecompressIgc(body)).rejects.toMatchObject({
+      detail: { kind: "not_igc_content" },
+    });
   });
 });
 
