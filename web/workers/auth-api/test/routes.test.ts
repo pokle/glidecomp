@@ -7,7 +7,7 @@
 // test files don't yet cover.
 
 import { describe, expect, test } from "vitest";
-import { request } from "./helpers";
+import { loginAs, request } from "./helpers";
 
 // ── GET /api/auth/me ─────────────────────────────────────────────────────────
 
@@ -71,10 +71,79 @@ describe("POST /api/auth/dev-login — body validation", () => {
 
 // ── Better Auth apiKey plugin (Tier 4 — integration) ────────────────────────
 
+// Better Auth's CSRF guard requires a trusted Origin on its POST endpoints;
+// the test config's baseURL origin is trusted by default.
+const ORIGIN = { Origin: "http://localhost:8788" };
+
+/** Create an API key for the session and return { id, key }. */
+async function createApiKey(cookie: string): Promise<{ id: string; key: string }> {
+  const res = await request("POST", "/api/auth/api-key/create", {
+    cookie,
+    body: { name: "test-key" },
+    headers: ORIGIN,
+  });
+  expect(res.status).toBe(200);
+  return (await res.json()) as { id: string; key: string };
+}
+
 describe("API key plugin", () => {
-  test.todo("round-trip: create → /me with x-api-key resolves to the owner");
-  test.todo("revoked key returns 401 on the next /me call");
-  test.todo(
-    "rate limit: 61st request inside 60s window returns 429 (SEC-08)"
+  test("round-trip: create → /me with x-api-key resolves to the owner", async () => {
+    const email = "apikey-roundtrip@test.com";
+    const cookie = await loginAs(email);
+    const { key } = await createApiKey(cookie);
+    expect(key.startsWith("glc_")).toBe(true);
+
+    const res = await request("GET", "/api/auth/me", {
+      headers: { "x-api-key": key },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { user: { email: string } | null };
+    expect(body.user?.email).toBe(email);
+  });
+
+  test("revoked key no longer resolves a user (and does not 500)", async () => {
+    const cookie = await loginAs("apikey-revoke@test.com");
+    const { id, key } = await createApiKey(cookie);
+
+    const del = await request("POST", "/api/auth/api-key/delete", {
+      cookie,
+      body: { keyId: id },
+      headers: ORIGIN,
+    });
+    expect(del.status).toBe(200);
+
+    const res = await request("GET", "/api/auth/me", {
+      headers: { "x-api-key": key },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { user: unknown };
+    expect(body).toEqual({ user: null });
+  });
+
+  test(
+    "rate limit: 61st request inside 60s window returns 429 with Retry-After (SEC-08)",
+    async () => {
+      const cookie = await loginAs("apikey-ratelimit@test.com");
+      const { key } = await createApiKey(cookie);
+
+      // The plugin window is 60 requests / 60s (auth.ts). Requests 1-60 pass.
+      for (let i = 0; i < 60; i++) {
+        const res = await request("GET", "/api/auth/me", {
+          headers: { "x-api-key": key },
+        });
+        expect(res.status).toBe(200);
+      }
+
+      const res = await request("GET", "/api/auth/me", {
+        headers: { "x-api-key": key },
+      });
+      expect(res.status).toBe(429);
+      const retryAfter = Number(res.headers.get("Retry-After"));
+      expect(retryAfter).toBeGreaterThan(0);
+      expect(retryAfter).toBeLessThanOrEqual(60);
+      const body = (await res.json()) as { user: unknown };
+      expect(body.user).toBeNull();
+    },
+    60_000
   );
 });

@@ -2,6 +2,7 @@
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { APIError } from "better-auth/api";
 import { createAuth, isLocalDev, type AuthEnv } from "./auth";
 import { mountPreferencesRoutes } from "./routes/preferences";
 
@@ -32,6 +33,19 @@ app.use(
   })
 );
 
+// Every 429 leaving this worker must carry Retry-After so API clients can
+// back off deterministically instead of blind-retrying (SEC-08). The apiKey
+// plugin's window is 60s, so that's the conservative fallback when a handler
+// didn't set a more precise value.
+app.use("/api/auth/*", async (c, next) => {
+  await next();
+  if (c.res.status === 429 && !c.res.headers.has("Retry-After")) {
+    const res = new Response(c.res.body, c.res);
+    res.headers.set("Retry-After", "60");
+    c.res = res;
+  }
+});
+
 // Surface unhandled exceptions as a JSON body instead of Hono's bare
 // "Internal Server Error" — mirrors competition-api so any 500 in CI
 // traces or wrangler tail points at the real cause. Stack is logged
@@ -45,9 +59,32 @@ app.onError((err, c) => {
 // GET /api/auth/me — return current user or null
 app.get("/api/auth/me", async (c) => {
   const auth = createAuth(c.env);
-  const session = await auth.api.getSession({
-    headers: c.req.raw.headers,
-  });
+  let session;
+  try {
+    session = await auth.api.getSession({
+      headers: c.req.raw.headers,
+    });
+  } catch (err) {
+    // The apiKey plugin's enableSessionForAPIKeys hook throws (rather than
+    // resolving a null session) when an x-api-key credential is rate-limited,
+    // invalid, expired, or revoked.
+    if (err instanceof APIError) {
+      if (err.statusCode === 429) {
+        // The plugin reports tryAgainIn in milliseconds; the Retry-After
+        // middleware above fills in the 60s window default if this is absent.
+        const tryAgainIn = (
+          err.body as { details?: { tryAgainIn?: number } } | undefined
+        )?.details?.tryAgainIn;
+        if (typeof tryAgainIn === "number" && tryAgainIn > 0) {
+          c.header("Retry-After", String(Math.ceil(tryAgainIn / 1000)));
+        }
+        return c.json({ user: null, error: "Rate limit exceeded" }, 429);
+      }
+      // A bad API key resolves to "no session", mirroring a garbage cookie.
+      return c.json({ user: null });
+    }
+    throw err;
+  }
   if (!session) {
     return c.json({ user: null });
   }

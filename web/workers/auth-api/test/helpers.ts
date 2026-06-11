@@ -33,9 +33,14 @@ export async function loginAs(
 export async function request(
   method: string,
   path: string,
-  options: { body?: unknown; cookie?: string; raw?: string } = {}
+  options: {
+    body?: unknown;
+    cookie?: string;
+    raw?: string;
+    headers?: Record<string, string>;
+  } = {}
 ): Promise<Response> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...options.headers };
   if (options.body !== undefined || options.raw !== undefined) {
     headers["Content-Type"] = "application/json";
   }
