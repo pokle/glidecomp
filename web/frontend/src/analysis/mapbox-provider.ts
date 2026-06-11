@@ -2167,7 +2167,10 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
           updateGeoJSONSource(map, 'track', features);
 
-          // Fit map to track bounds
+          // Fit map to track bounds. Re-measure first: if the map initialized
+          // during iOS layout churn its cached size can be stale, which would
+          // misplace the camera until a manual refresh.
+          map.resize();
           const bounds = getBoundingBox(fixes);
           const padding = 50;
 
@@ -2289,8 +2292,9 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
 
           updateGeoJSONSource(map, 'task-cylinders', cylinderFeatures);
 
-          // If no track is loaded, fit to task bounds
+          // If no track is loaded, fit to task bounds (re-measure first — see setTrack)
           if (currentFixes.length === 0) {
+            map.resize();
             const bounds = new mapboxgl.LngLatBounds();
             for (const tp of task.turnpoints) {
               bounds.extend([tp.waypoint.lon, tp.waypoint.lat]);
@@ -2713,8 +2717,9 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           if (map.getLayer('multi-track-line')) map.setLayoutProperty('multi-track-line', 'visibility', 'visible');
           if (map.getLayer('multi-track-outline')) map.setLayoutProperty('multi-track-outline', 'visibility', 'visible');
 
-          // Fit bounds to all tracks
+          // Fit bounds to all tracks (re-measure first — see setTrack)
           if (features.length > 0) {
+            map.resize();
             map.fitBounds(
               [[allBounds.minLon, allBounds.minLat], [allBounds.maxLon, allBounds.maxLat]],
               { padding: 50, duration: 1000 },

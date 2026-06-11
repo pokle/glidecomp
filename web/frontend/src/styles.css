@@ -487,12 +487,13 @@
     z-index: 0;
   }
 
-  /* Ensure mapboxgl canvas fills the container */
-  #map .mapboxgl-canvas-container,
-  #map .mapboxgl-canvas {
-    width: 100% !important;
-    height: 100% !important;
-  }
+  /* NOTE: Do not force CSS width/height on .mapboxgl-canvas. Mapbox GL keeps
+     the canvas's inline CSS size in sync with the drawing-buffer size it
+     measured; overriding it with 100% !important stretches a stale-sized
+     buffer over the container, turning a recoverable mis-measurement (iOS
+     layout churn at init) into a map that renders offset until reload.
+     Size resyncs are handled via map.resize()/invalidateSize() in
+     analysis/main.ts and the map providers. */
 
   /* Throb animation for event markers */
   @keyframes throb {
