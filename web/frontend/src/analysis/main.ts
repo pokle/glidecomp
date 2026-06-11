@@ -162,6 +162,35 @@ async function init(): Promise<void> {
     return;
   }
 
+  // ── iOS Safari map-size resync ──
+  // On iOS the map can initialize while the layout is still in flux (URL bar
+  // collapsing right after navigation, return from the OAuth redirect, bfcache
+  // restore, software keyboard dismissal). The map then renders mis-sized or
+  // offset until something forces it to re-measure — users see the map pinned
+  // to the bottom of the page until they manually refresh. Resync the map
+  // whenever the page or the visual viewport (re)appears or changes.
+  const resyncMapSize = () => {
+    // Undo any leftover document scroll from the software keyboard
+    window.scrollTo(0, 0);
+    mapRenderer?.invalidateSize();
+  };
+  window.addEventListener('pageshow', (e: PageTransitionEvent) => {
+    // Restored from back/forward cache — layout state may be stale
+    if (e.persisted) resyncMapSize();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) resyncMapSize();
+  });
+  if (window.visualViewport) {
+    // The iOS URL-bar collapse is multi-step; debounce to resync once settled
+    let vvResizeTimer: ReturnType<typeof setTimeout> | undefined;
+    window.visualViewport.addEventListener('resize', () => {
+      clearTimeout(vvResizeTimer);
+      vvResizeTimer = setTimeout(resyncMapSize, 150);
+    });
+  }
+  window.addEventListener('orientationchange', () => setTimeout(resyncMapSize, 300));
+
   // Update provider label in command menu to show the target provider
   // Hide the switch option entirely if no Mapbox token is available
   if (mapProviderLabel) {

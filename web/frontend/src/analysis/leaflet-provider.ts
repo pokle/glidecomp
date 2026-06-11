@@ -575,11 +575,15 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
           }));
         }
 
-        // Fit bounds
+        // Fit bounds. Re-measure first (stale size from iOS layout churn would
+        // misplace the panes) and fit without animation: iOS Safari can fail to
+        // fire transitionend when a pan animation is interrupted during page
+        // settling, leaving the map pane offset until a manual refresh.
         const bbox = getBoundingBox(fixes);
+        map.invalidateSize({ animate: false });
         map.fitBounds(
           [[bbox.minLat, bbox.minLon], [bbox.maxLat, bbox.maxLon]],
-          { padding: [50, 50], animate: true, duration: 1 }
+          { padding: [50, 50], animate: false }
         );
       },
 
@@ -726,7 +730,7 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
           );
         }
 
-        // Fit to task bounds if no track loaded
+        // Fit to task bounds if no track loaded (re-measure first — see setTrack)
         if (currentFixes.length === 0) {
           const bounds = new LatLngBounds(
             [task.turnpoints[0].waypoint.lat, task.turnpoints[0].waypoint.lon],
@@ -735,7 +739,8 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
           for (const tp of task.turnpoints) {
             bounds.extend([tp.waypoint.lat, tp.waypoint.lon]);
           }
-          map.fitBounds(bounds, { padding: [50, 50] });
+          map.invalidateSize({ animate: false });
+          map.fitBounds(bounds, { padding: [50, 50], animate: false });
         }
       },
 
