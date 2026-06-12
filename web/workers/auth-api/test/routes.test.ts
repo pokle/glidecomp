@@ -29,6 +29,19 @@ describe("GET /api/auth/me", () => {
   });
 });
 
+// ── Body limit (SEC-06) ──────────────────────────────────────────────────────
+
+describe("body limit", () => {
+  test("oversize body is rejected with 413 before any handler runs", async () => {
+    const res = await request("POST", "/api/auth/dev-login", {
+      raw: JSON.stringify({ email: "a@b.c", name: "x".repeat(256 * 1024) }),
+    });
+    expect(res.status).toBe(413);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("Request body too large");
+  });
+});
+
 // ── POST /api/auth/set-username (auth gate only; format tests are Tier 2) ───
 
 describe("POST /api/auth/set-username — auth gate", () => {
