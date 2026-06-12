@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { bodyLimit } from "hono/body-limit";
-import { MAX_COMPRESSED_BYTES } from "./igc-validation";
+import { MAX_BODY_BYTES } from "./igc-validation";
 import type { Env, AuthUser } from "./env";
 import { compRoutes } from "./routes/comp";
 import { taskRoutes } from "./routes/task";
@@ -56,7 +56,6 @@ app.use("/api/u/*", corsConfig);
 // stays the user-facing error at the 1 MiB boundary; the largest JSON body
 // any validator admits (bulk pilots: 250 entries of bounded text) is
 // comfortably below it.
-export const MAX_BODY_BYTES = MAX_COMPRESSED_BYTES + 1024;
 app.use(
   "*",
   bodyLimit({

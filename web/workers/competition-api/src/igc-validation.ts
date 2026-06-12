@@ -27,6 +27,13 @@
 export const MAX_COMPRESSED_BYTES = 1 * 1024 * 1024; // 1 MiB compressed
 export const MAX_DECOMPRESSED_BYTES = 2 * 1024 * 1024; // 2 MiB decompressed
 
+// Worker-wide request-body cap (SEC-06), registered as bodyLimit middleware
+// in index.ts. Defined here, just above the compressed cap, so the two can't
+// drift apart and the typed errors below stay the user-facing boundary
+// errors. (Not exported from index.ts: workerd requires every named export
+// of the entry module to be a handler.)
+export const MAX_BODY_BYTES = MAX_COMPRESSED_BYTES + 1024;
+
 export type IgcValidationError =
   | { kind: "empty"; message: string }
   | { kind: "compressed_too_large"; message: string }

@@ -38,8 +38,9 @@ app.use(
 // while streaming, before any handler buffers them (the preferences route's
 // own 64 KiB check runs only after c.req.text() has buffered the whole
 // body). Better Auth payloads (sign-in, set-username, API-key ops) and the
-// preferences blob are all far below this cap.
-export const MAX_BODY_BYTES = 128 * 1024;
+// preferences blob are all far below this cap. (Not exported: workerd
+// requires every named export of the entry module to be a handler.)
+const MAX_BODY_BYTES = 128 * 1024;
 app.use(
   "*",
   bodyLimit({

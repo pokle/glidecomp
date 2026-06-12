@@ -5,8 +5,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, test } from "vitest";
 import { request, uploadRequest, createComp, createTask, clearCompData } from "./helpers";
-import { MAX_BODY_BYTES } from "../src/index";
-import { MAX_COMPRESSED_BYTES } from "../src/igc-validation";
+import { MAX_BODY_BYTES, MAX_COMPRESSED_BYTES } from "../src/igc-validation";
 
 const IGC_PREFIX = "AXCT001Test\r\nHFDTE010126\r\n";
 
