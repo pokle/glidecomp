@@ -4,11 +4,17 @@
 
 ## Verdict
 
-Do not start again. Do not delete code. The project is ~85% of a complete
-product, deployed at glidecomp.com with CI/CD and a well-tested engine. The
-problem is not the codebase — it is that "launch" was never defined, so
-infinitely-available work (security reviews, dependency upgrades, UX audits)
-expanded to fill the time. This document is the bounding box.
+Do not start again. Do not delete code. Five months in (since 2026-01-09,
+467 commits), the project is ~85% of a complete product, deployed at
+glidecomp.com with CI/CD and a well-tested engine. One restart already
+happened — the native macOS direction (Feb 2026, tagged `macos/final`) —
+and the lesson is that changing the vehicle doesn't produce a launch.
+
+The problem is not the codebase, and not maintenance (deps/security run as
+automated agents at near-zero cost). It is that "launch" was never defined,
+so the project can look healthy and tended indefinitely without ever being
+announced — commit velocity decayed from 196 (Jan) to 8 (Jun) while the
+audience stayed at zero. This document is the bounding box.
 
 ## The wedge (one pitch, chosen from three)
 
@@ -50,9 +56,9 @@ point, explained.*
 
 ## Constraint rules (standing, post-launch too)
 
-1. **Maintenance budget:** dependency upgrades + security review capped at one
-   half-day per month, batched. (In the 9 weeks to date this consumed ~30% of
-   all commits.)
+1. **Tending is not progress:** automated maintenance (deps, security
+   reviews) stays automated and doesn't count as working on the project.
+   The only measure of progress until 2026-07-01 is launch-checklist items.
 2. **Launch-blocker test:** before starting any task ask "does v1 fail without
    this?" If no, it goes to the parked list.
 3. **Feedback before features:** after 2026-07-01, no new feature work until
