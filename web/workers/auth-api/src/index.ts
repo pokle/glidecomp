@@ -2,6 +2,7 @@
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { bodyLimit } from "hono/body-limit";
 import { APIError } from "better-auth/api";
 import { createAuth, isLocalDev, type AuthEnv } from "./auth";
 import { mountPreferencesRoutes } from "./routes/preferences";
@@ -30,6 +31,20 @@ app.use(
     credentials: true,
     allowMethods: ["GET", "POST", "PUT", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+// Cap request-body size at the HTTP layer so oversize bodies are rejected
+// while streaming, before any handler buffers them (the preferences route's
+// own 64 KiB check runs only after c.req.text() has buffered the whole
+// body). Better Auth payloads (sign-in, set-username, API-key ops) and the
+// preferences blob are all far below this cap.
+export const MAX_BODY_BYTES = 128 * 1024;
+app.use(
+  "*",
+  bodyLimit({
+    maxSize: MAX_BODY_BYTES,
+    onError: (c) => c.json({ error: "Request body too large" }, 413),
   })
 );
 

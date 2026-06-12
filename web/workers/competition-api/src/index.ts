@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { bodyLimit } from "hono/body-limit";
+import { MAX_COMPRESSED_BYTES } from "./igc-validation";
 import type { Env, AuthUser } from "./env";
 import { compRoutes } from "./routes/comp";
 import { taskRoutes } from "./routes/task";
@@ -46,6 +48,22 @@ const corsConfig = cors({
 app.use("/api/comp/*", corsConfig);
 app.use("/api/user/*", corsConfig);
 app.use("/api/u/*", corsConfig);
+
+// Cap request-body size at the HTTP layer so oversize bodies are rejected
+// while streaming, before any handler buffers them (c.req.arrayBuffer() /
+// c.req.json() would otherwise allocate up to the 100 MB Workers ceiling).
+// The cap sits just above the IGC compressed cap so validateAndDecompressIgc
+// stays the user-facing error at the 1 MiB boundary; the largest JSON body
+// any validator admits (bulk pilots: 250 entries of bounded text) is
+// comfortably below it.
+export const MAX_BODY_BYTES = MAX_COMPRESSED_BYTES + 1024;
+app.use(
+  "*",
+  bodyLimit({
+    maxSize: MAX_BODY_BYTES,
+    onError: (c) => c.json({ error: "Request body too large" }, 413),
+  })
+);
 
 // Surface uncaught handler errors as JSON instead of Hono's bare
 // "Internal Server Error" body. Logs the stack server-side (visible in

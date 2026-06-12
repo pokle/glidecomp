@@ -17,6 +17,7 @@
 | 2026-06-01 | Claude   | Re-review (deps + engine bug-fix + auth-api tests); closed SEC-13; SEC-03 reclassified Accepted (by design) | SEC-13 fixed inline (this PR); SEC-03 accepted |
 | 2026-06-08 | Claude   | Re-review (only deps landed); closed SEC-04 inline | SEC-04 fixed inline (this PR) |
 | 2026-06-11 | Claude   | Re-review (iOS map fix only); new finding SEC-18 (deps); closed SEC-08 inline | SEC-18 + SEC-08 fixed inline (this PR) |
+| 2026-06-12 | Claude   | Re-review (no new app code beyond prior review's own PR); closed SEC-06 inline | SEC-06 fixed inline (this PR) |
 
 ---
 
@@ -1114,5 +1115,94 @@ No new scope gaps added this round.
 4. Walk any new mutating endpoints (authn / authz / `audit()` / Zod) — none existed this round. Watch for shared/public-profile features or any new field on a public-readable endpoint that could re-introduce a SEC-15-class PII leak.
 5. Confirm the SEC-08 fix held on a live deploy: exhaust an API key's 60-req window against `GET https://glidecomp.com/api/auth/me` and check the 61st response is `429` with a `Retry-After` header (not a 500).
 6. Confirm the `shell-quote` override held — `grep "shell-quote@" bun.lock` should show a single `1.8.4`+ entry. Drop the override if `concurrently` bumps its own pin.
+7. Address scope-gap #8 (CSP enforce) on the next preview deploy.
+8. Do NOT re-open SEC-03. It is accepted by design.
+
+---
+
+## 2026-06-12 — Re-review
+
+### Methodology
+
+- Read `docs/security-review.md` end-to-end first, carrying the prior round's "Scope gaps" and "Where to start" pointers into this round's scope.
+- Diffed `master` vs the prior review's reference commit `fe39af4` (`git log fe39af4..HEAD`). **One commit since** — `9b3d25a`, the prior review's own PR (#176): the SEC-18 `shell-quote` override and the SEC-08 fix in `web/workers/auth-api/src/index.ts` plus its tests. No other application code landed. No new `[[routes]]` blocks, no new bindings, no new mutating endpoints.
+- Re-reviewed the SEC-08 fix code with fresh eyes since it is the only new application code since the reference commit (it was authored inside the prior review's PR, so this is its first independent re-check). The `APIError` catch on `/api/auth/me` correctly distinguishes 429 (→ JSON 429 + `Retry-After` from `tryAgainIn`) from other API-key errors (→ `{ user: null }`, mirroring a garbage cookie) and re-throws non-`APIError` exceptions; the worker-wide after-middleware only adds `Retry-After` to 429s that lack one and copies the response correctly before mutating headers. No new concerns.
+- Re-walked every prior `SEC-NN` finding against current code. Fix-site spot-checks all intact: `grep -rn "X-Glidecomp-Internal-User|INTERNAL_USER_HEADER" web/workers/` → only test/comment references (SEC-10); `validateAndDecompressIgc` caps + gzip-magic + `not_igc_content` shape check present (SEC-11/SEC-04); `xctskSchema` in use on both task routes and the user-task route (SEC-12); `serializeCompPilotPublic` still zeros the three PII fields (SEC-15); CORS allowlist unchanged on both public workers (SEC-01); `_headers` intact with four enforced headers + Report-Only CSP (SEC-02); `sw.js` filename sanitisation intact (SEC-13); `innerHTML =` count still 116 (SEC-05).
+- Ran `bun audit` at HEAD — **0 vulnerabilities**. All four overrides held (`grep -E '"(kysely|qs|ws|shell-quote)@' bun.lock` → single `kysely@0.28.17`, `qs@6.15.2`, `ws@8.21.0`, `shell-quote@1.8.4`).
+- Used the otherwise-quiet round to close **SEC-06** (no JSON body-size cap at the HTTP layer — Low/Medium, open since 2026-04-20 and repeatedly deferred for fear of breaking uploads). The deferral reason is now addressed with route-level regression tests in miniflare that prove large-but-legitimate IGC uploads still pass. Details in the SEC-06 status row.
+- Ran `bun run typecheck:all` (clean), `bun run test:all` (green: 412 engine/airscore/root + 56 auth-api + 258 competition-api + 21 mcp-api — competition-api is +4 and auth-api +1 from the new SEC-06 regression tests), and `bun audit` (clean).
+- Did **not** re-run dynamic CSRF PoC, live cookie-attribute checks, IGC/XCTask parser fuzzing, a Cloudflare zone-settings snapshot, or a CSP-Report-Only live-deploy walkthrough — still in scope-gaps below.
+
+### Executive summary
+
+No new application code landed since the 2026-06-11 round other than that round's own PR (the SEC-08 fix, re-reviewed this round with fresh eyes — clean), so there was no fresh attack surface to audit. `bun audit` is clean and all four dependency overrides held. Re-verification confirmed every prior fix holds byte-for-byte. With the round otherwise quiet, this PR closes **SEC-06** inline: both public workers now register Hono's `bodyLimit` middleware worker-wide, so oversize request bodies are rejected with a JSON 413 while streaming — before any handler can buffer them via `c.req.arrayBuffer()` / `c.req.text()` (which previously allowed a single request to allocate up to the 100 MB Workers ceiling, the residual risk noted in the 2026-05-18 round against `/api/user/tracks`, and to reach the preferences route's own 64 KiB check only after full buffering). The competition-api cap is `MAX_COMPRESSED_BYTES + 1 KiB` (~1 MiB) so the SEC-11 helper's typed 400 remains the user-facing error at the IGC boundary and the largest legitimate JSON body (bulk pilot import, 250 bounded entries) fits comfortably; the auth-api cap is 128 KiB (Better Auth payloads and the 64 KiB preferences blob are far below it). Five new regression tests cover: oversize JSON → 413, oversize IGC upload → 413, a ~600 KB-compressed legitimate IGC upload still succeeding (pinning the cap above real-world uploads), the cap-ordering invariant, and an oversize auth-api body → 413. No new `SEC-NN` findings; the only remaining Open item is **SEC-05** (innerHTML render pattern, deferred-by-design).
+
+### Status of prior findings
+
+| ID      | Title                                                                  | Status @ 2026-06-12 | Notes                                                                |
+|---------|------------------------------------------------------------------------|---------------------|----------------------------------------------------------------------|
+| SEC-01  | Reflective CORS w/ credentials                                         | **Fixed**           | Re-verified `web/workers/auth-api/src/index.ts:15-25` and `web/workers/competition-api/src/index.ts:25-35`. Allowlist unchanged; `cors.test.ts` regression suite still passes. |
+| SEC-02  | No security response headers (`_headers`)                              | **Fixed (2026-05-25)** | `web/frontend/public/_headers` unchanged; CSP still Report-Only. Flip-to-enforce remains scope-gap #8. |
+| SEC-03  | Admin emails returned on public comp detail                            | **Accepted (by design, 2026-06-01)** | Unchanged. Not to be re-opened without a product-design change. |
+| SEC-04  | IGC upload size/shape — manufacturer-record check                      | **Fixed (2026-06-08)** | `igc-validation.ts` `not_igc_content` check unchanged; all three upload callsites inherit it. |
+| SEC-05  | `innerHTML` is the default render primitive                            | **Open**            | 116 `innerHTML =` sites under `web/frontend/src/` (identical to prior rounds — no frontend changes). All interpolations of user data still route through `sanitizeText()` / `escapeHtml()`. |
+| SEC-06  | No JSON body-size cap                                                  | ~~Open~~ **Fixed (2026-06-12, this PR)** | Worker-wide `bodyLimit` registered on both public workers. **competition-api** (`web/workers/competition-api/src/index.ts:51-66`): cap `MAX_BODY_BYTES = MAX_COMPRESSED_BYTES + 1024` (~1 MiB + 1 KiB), imported from the SEC-11 helper so the two caps can't drift apart — sitting just above the IGC compressed cap keeps `validateAndDecompressIgc`'s typed 400 as the user-facing error at the 1 MiB boundary while `bodyLimit` guards the gross-abuse case (a 100 MB body is now refused at the `Content-Length` check or aborted mid-stream, never buffered). A single worker-wide cap was chosen over the originally-proposed 256 KiB-with-per-route-override because the bulk pilot validator legitimately admits ~250 × ~2.5 KiB ≈ 600 KiB JSON, which a 256 KiB global cap would have broken. **auth-api** (`web/workers/auth-api/src/index.ts:37-49`): cap 128 KiB — this also closes the residual buffering gap on `/api/auth/preferences`, whose own 64 KiB check ran only after `c.req.text()` had buffered the whole body. Both register before route dispatch, so the 413 fires before auth (cheapest rejection first) and returns the same JSON error shape as the rest of the worker. Regression tests: `web/workers/competition-api/test/body-limit.test.ts` (4 tests — cap-ordering invariant, oversize JSON → 413 unauthenticated, oversize IGC upload → 413, and a ~600 KB-compressed random-content IGC upload → 201 proving real track uploads survive the cap) and `web/workers/auth-api/test/routes.test.ts` (oversize dev-login body → 413). All suites green. |
+| SEC-07  | Dev-only endpoints gated by `BETTER_AUTH_URL` hostname                 | **Verified safe**   | Unchanged. `BETTER_AUTH_URL = "https://glidecomp.com"` in `web/workers/auth-api/wrangler.toml`; `is-local-dev.test.ts` still passes. |
+| SEC-08  | Rate-limit headers not surfaced                                        | **Fixed (2026-06-11)** | Re-reviewed the fix code with fresh eyes this round (it was the only new app code since the reference commit) — the `APIError` 429/other split, `tryAgainIn` → `Retry-After` conversion, and the worker-wide 429 after-middleware are all correct; the 61-request regression test in `routes.test.ts` still passes. The new bodyLimit middleware registers before the Retry-After middleware and does not interact with it. |
+| SEC-09  | `Math.random()` non-security use                                       | **Closed (Info)**   | No new uses; staying closed.                                         |
+| SEC-10  | Authentication bypass via trusted `X-Glidecomp-Internal-User` header   | **Fixed**           | `middleware/auth.ts` byte-identical to the fix; grep returns only test/comment references. `auth-bypass.test.ts` still passes. |
+| SEC-11  | IGC gzip-bomb decompression                                            | **Fixed**           | `igc-validation.ts` unchanged (1 MiB compressed + gzip-magic + 2 MiB streaming-decompressed caps + content-shape check). Now additionally backstopped by the SEC-06 route-level cap, which rejects oversize bodies before the helper's compressed-size check ever allocates them. |
+| SEC-12  | `xctsk` body has no shape, depth, or size cap                          | **Fixed**           | `xctskSchema` in `validators.ts:228` unchanged.                      |
+| SEC-13  | Service worker stores share-target uploads under unsanitised filenames | **Fixed (2026-06-01)** | `web/frontend/public/sw.js:53-68` unchanged from the fix.            |
+| SEC-14  | Service-binding trust comment misleads readers                         | **Closed**          | Resolved with SEC-10 fix.                                            |
+| SEC-15  | Unauthenticated PII on public pilot list                               | **Fixed**           | `routes/pilot.ts` unchanged. `serializeCompPilotPublic` still redacts the three PII fields for non-admins. |
+| SEC-16  | Transitive `kysely@0.28.16` JSON-path traversal                        | **Fixed**           | Override held: single `kysely@0.28.17` in `bun.lock`. `bun audit` clean. |
+| SEC-17  | `qs` (DoS) via MCP SDK→express; `ws` (memory disclosure) via dev tooling | **Fixed**         | Overrides held: single `qs@6.15.2` and `ws@8.21.0` in `bun.lock`. `bun audit` clean. |
+| SEC-18  | Transitive `shell-quote@1.8.3` newline-escaping bypass                 | **Fixed (2026-06-11)** | Override held: single `shell-quote@1.8.4` in `bun.lock`. `bun audit` clean. |
+
+### New findings
+
+No new `SEC-NN` findings this round.
+
+`bun audit` is clean; the diff since 2026-06-11 contains no application changes other than the prior review's own PR, which was re-reviewed this round (see Methodology) and found clean. No new mutating routes, no new bindings, no new public surfaces.
+
+### Re-checked but no change
+
+Because the only commit since the reference is the prior review's own PR, the prior rounds' detailed walks still hold. Spot-confirmed this round:
+
+- **Authn / authz.** `requireAuth` resolves identity only by forwarding inbound `cookie` / `x-api-key` to auth-api; no header-trust backdoor. No new mutating routes.
+- **Worker route surfaces.** `[[routes]]` across all four workers unchanged: airscore (`/api/airscore/*`), comp (`/api/comp`, `/api/comp/*`, `/api/user`, `/api/user/*`, `/api/u/*`), mcp (`/mcp`, `/mcp/*`), auth (`/api/auth/*`). No new public surface.
+- **CORS.** Allowlist (`glidecomp.com`, `*.glidecomp.pages.dev`, `localhost`) on both public workers; disallowed origins get an empty `Access-Control-Allow-Origin`. The new bodyLimit middleware runs after CORS, so preflights (no body) are unaffected.
+- **Parameterised SQL.** No new SQL sites this round; spot-checked sites all bind parameters.
+- **`audit()` coverage.** No new mutating routes, so no new audit gaps.
+- **MCP per-tool auth propagation.** Every tool forwards `apiKey` via `compApi` / `compApiRaw`; none forge identity. Unchanged.
+- **wrangler.toml bindings.** Unchanged; single canonical production resource IDs.
+- **`optionalAuth` PII (SEC-15 class).** No new `optionalAuth` routes; the 2026-05-18 systematic walk still applies.
+- **Secrets.** `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID/SECRET` referenced as env only; no hard-coded keys in source or any `wrangler.toml`. API-key prefix still `glc_`.
+- **Cascading delete on account delete.** `auth-api/src/index.ts` still walks every R2 object under `u/{user_id}/` before dropping the user row. Unchanged in behaviour (line numbers shifted slightly by the bodyLimit insertion).
+
+### Scope gaps still not done
+
+Carried forward from prior rounds:
+
+1. Dynamic CSRF PoC against the allowlisted CORS.
+2. Cookie attribute verification on a live deploy.
+3. IGC / XCTask parser fuzzing.
+4. Cloudflare zone settings snapshot (HSTS, TLS min, WAF, bot management).
+5. Verify SEC-10 fix on a deployed comp-api endpoint (not just the miniflare regression test).
+6. Confirm the comp-api worker doesn't accept a legacy `Cookie: test-user=…` header in production.
+7. TOCTOU / idempotency on `/api/user/tracks` + `/api/user/tasks` quota checks (UX bug class, no security exposure — from the 2026-05-18 round).
+8. **Flip the CSP from Report-Only to enforced** (from the 2026-05-25 round). Requires a live Pages-deploy CSP-report pass across the analysis map, the theme editor's Google-Fonts loader, and the share-target flow.
+
+No new scope gaps added this round.
+
+### Where to start the next review
+
+1. Commit reviewed up to: HEAD = `9b3d25a` (parent of this review's PR). Diff against that next round.
+2. `bun audit` should be clean after this PR — if a new advisory pops up, walk the dependency tree for reachability before triaging severity (the `shell-quote` / `qs` / `ws` / `kysely` cases are the template).
+3. Re-run the prior-findings table; the only remaining Open item is **SEC-05** (innerHTML pattern) — deferred-by-design, not urgent. A lint rule forbidding `innerHTML =` with interpolated template literals remains the documented incremental step if a round has spare scope budget.
+4. Walk any new mutating endpoints (authn / authz / `audit()` / Zod) — none existed this round. Watch for shared/public-profile features or any new field on a public-readable endpoint that could re-introduce a SEC-15-class PII leak.
+5. Confirm the SEC-06 fix held on a live deploy: `curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Length: 104857600" https://glidecomp.com/api/comp` should return 413 (not 401/400); a normal IGC upload through the UI should still succeed.
+6. Confirm the SEC-08 fix held on a live deploy: exhaust an API key's 60-req window against `GET https://glidecomp.com/api/auth/me` and check the 61st response is `429` with a `Retry-After` header (not a 500).
 7. Address scope-gap #8 (CSP enforce) on the next preview deploy.
 8. Do NOT re-open SEC-03. It is accepted by design.
