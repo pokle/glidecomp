@@ -1,5 +1,6 @@
 import './theme';
 import { initNav } from "./nav";
+import { toast } from "./feedback";
 import { api } from "./comp/api";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -96,7 +97,11 @@ async function init() {
 
   async function loadComps() {
     const res = await api.api.comp.$get();
-    if (!res.ok) return;
+    if (!res.ok) {
+      compListEl.innerHTML =
+        '<p class="text-sm text-destructive text-center py-8">Failed to load competitions. Please reload the page.</p>';
+      return;
+    }
     const data = await res.json();
     const comps = data.comps as unknown as Comp[];
 
@@ -150,7 +155,7 @@ async function init() {
 
       if (!res.ok) {
         const err = await res.json();
-        alert((err as { error?: string }).error || "Failed to create competition");
+        toast.error((err as { error?: string }).error || "Failed to create competition");
         return;
       }
 
@@ -159,7 +164,7 @@ async function init() {
       // Navigate to the new competition
       window.location.href = `/comp/${(data as { comp_id: string }).comp_id}`;
     } catch {
-      alert("Network error. Please try again.");
+      toast.error("Network error. Please try again.");
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = "Create";

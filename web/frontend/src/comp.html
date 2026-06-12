@@ -42,7 +42,14 @@
 
       <!-- Competition list -->
       <section>
-        <div id="comp-list" class="space-y-2"></div>
+        <div id="comp-list" class="space-y-2">
+          <div class="animate-pulse space-y-2" role="status" aria-label="Loading competitions">
+            <div class="h-16 rounded-lg bg-muted"></div>
+            <div class="h-16 rounded-lg bg-muted"></div>
+            <div class="h-16 rounded-lg bg-muted"></div>
+            <span class="sr-only">Loading competitions…</span>
+          </div>
+        </div>
         <div id="comp-empty" class="hidden text-center py-8">
           <p class="text-sm text-muted-foreground">No competitions found</p>
         </div>

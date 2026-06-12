@@ -1,6 +1,7 @@
 import './theme';
 import { signInWithGoogle } from "./auth/client";
 import { initNav } from "./nav";
+import { toast, confirmDialog } from "./feedback";
 
 interface ApiKey {
   id: string;
@@ -34,7 +35,12 @@ async function init() {
   const createdDialog = document.getElementById("api-key-created-dialog") as HTMLDialogElement;
 
   async function loadApiKeys() {
-    apiKeysList.innerHTML = '<p class="text-sm text-muted-foreground">Loading...</p>';
+    apiKeysList.innerHTML = `
+      <div class="animate-pulse space-y-2" role="status" aria-label="Loading API keys">
+        <div class="h-8 rounded-md bg-muted"></div>
+        <div class="h-8 rounded-md bg-muted"></div>
+        <span class="sr-only">Loading API keys…</span>
+      </div>`;
     try {
       const res = await fetch("/api/auth/api-key/list", { credentials: "include" });
       if (!res.ok) {
@@ -85,14 +91,25 @@ async function init() {
     apiKeysList.querySelectorAll<HTMLButtonElement>(".revoke-key-btn").forEach((btn) => {
       btn.addEventListener("click", async () => {
         const keyId = btn.dataset.keyId!;
+        const confirmed = await confirmDialog({
+          title: "Revoke this API key?",
+          message: "Agents using this key will lose access immediately.",
+          confirmLabel: "Revoke",
+          destructive: true,
+        });
+        if (!confirmed) return;
         btn.disabled = true;
         btn.textContent = "Revoking...";
-        await deleteApiKey(keyId);
+        const ok = await deleteApiKey(keyId);
+        if (!ok) {
+          btn.disabled = false;
+          btn.textContent = "Revoke";
+        }
       });
     });
   }
 
-  async function deleteApiKey(keyId: string) {
+  async function deleteApiKey(keyId: string): Promise<boolean> {
     try {
       const res = await fetch("/api/auth/api-key/delete", {
         method: "POST",
@@ -101,14 +118,15 @@ async function init() {
         body: JSON.stringify({ keyId }),
       });
       if (!res.ok) {
-        alert("Failed to revoke key. Please try again.");
-        return;
+        toast.error("Failed to revoke key. Please try again.");
+        return false;
       }
     } catch {
-      alert("Network error. Please try again.");
-      return;
+      toast.error("Network error. Please try again.");
+      return false;
     }
     await loadApiKeys();
+    return true;
   }
 
   function showCreatedDialog(plainKey: string) {
@@ -181,14 +199,14 @@ async function init() {
         body: JSON.stringify({ name }),
       });
       if (!res.ok) {
-        alert("Failed to create API key. Please try again.");
+        toast.error("Failed to create API key. Please try again.");
         return;
       }
       const data = (await res.json()) as { key: string };
       createKeyDialog.close();
       showCreatedDialog(data.key);
     } catch {
-      alert("Network error. Please try again.");
+      toast.error("Network error. Please try again.");
     } finally {
       createKeySubmitBtn.disabled = false;
       createKeySubmitBtn.textContent = "Create";

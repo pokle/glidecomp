@@ -73,6 +73,17 @@
         </button>
       </div>
 
+      <!-- Storage usage meter (populated by dashboard.ts) -->
+      <div id="storage-usage" class="hidden mb-6 max-w-md" role="status">
+        <div class="flex items-center justify-between text-xs text-muted-foreground mb-1">
+          <span>Storage</span>
+          <span id="storage-usage-text"></span>
+        </div>
+        <div class="h-1.5 rounded-full bg-muted overflow-hidden">
+          <div id="storage-usage-bar" class="h-full rounded-full bg-primary transition-all"></div>
+        </div>
+      </div>
+
       <!-- Tracks panel -->
       <div id="panel-tracks" role="tabpanel">
         <!-- Upload zone -->

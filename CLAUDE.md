@@ -6,25 +6,20 @@ GlideComp is a web application for analyzing hanggliding/paragliding competition
 
 ## Architecture
 
-Client-side application hosted on Cloudflare Pages. Currently **storage-free** — users load IGC track files and XCTask task files directly in the browser, with optional browser local storage for persistence.
+Cloudflare monorepo, free-tier focused:
 
-```
-Frontend (Cloudflare Pages) ← user loads IGC + task files via drag-and-drop or file picker
-```
-
-**Design Principles:**
-- Client-side processing - IGC parsing and analysis happens entirely in the browser
-- No server-side storage - all data lives in the user's browser (localStorage/IndexedDB)
-- Free tier focused - designed for Cloudflare free limits
-
-**Future Roadmap:**
-- Email-based IGC submission (Email Worker → R2 storage + D1 database)
-- Server-side API Worker for competition/task management
-- Pilot accounts and competition organization
+- `web/engine` — pure TypeScript analysis library (IGC/XCTask parsing, event detection, GAP scoring). No DOM dependencies; all track analysis runs client-side in the browser.
+- `web/frontend` — Vite multi-page app on Cloudflare Pages.
+- `web/workers/*` — Workers (auth-api, competition-api, mcp-api, airscore-api) backed by D1 + R2, handling accounts, user file storage, and competition management. Reached via Pages Functions proxies in `functions/api/`.
 
 ## Build & Development
 
 If `node_modules/` is missing or a dependency can't be resolved, run `bun install` before proceeding. Build commands are in `package.json` scripts. Key ones: `bun run dev`, `bun run test`, `bun run typecheck:all`.
+
+**E2E tests (`bun run test:e2e`) on a fresh clone:**
+- Playwright browsers must be installed first: `bunx playwright install chromium` (CI uses `--with-deps`).
+- The auth worker needs `web/workers/auth-api/.dev.vars` (gitignored). Without it `BETTER_AUTH_URL` defaults to production, `isLocalDev()` is false, and `/api/auth/dev-login` 404s — every test fails at sign-in. The `test:e2e` script copies `.dev.vars.example` into place if the file is missing.
+- If dev servers are already running from a previous session, `bun run kill-dev` clears them.
 
 **Production:** https://glidecomp.com
 

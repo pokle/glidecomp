@@ -1,6 +1,7 @@
 import './theme';
 import { signInWithGoogle, deleteAccount } from "./auth/client";
 import { initNav } from "./nav";
+import { toast, alertDialog } from "./feedback";
 import { storage, QuotaExceededError, type StoredTask, type StoredTrack } from "./analysis/storage";
 import { parseIGC, parseXCTask, sanitizeText } from "@glidecomp/engine";
 
@@ -143,11 +144,51 @@ async function init() {
 
   // ── Render lists ──────────────────────────────────────────────────────
 
+  // Mirrors the server-side limits in
+  // web/workers/competition-api/src/routes/user-files.ts (MAX_USER_*).
+  const MAX_USER_TRACKS = 500;
+  const MAX_USER_TASKS = 200;
+  const MAX_USER_BYTES = 200 * 1024 * 1024;
+
+  function updateStorageUsage(tracks: StoredTrack[], tasks: StoredTask[]) {
+    const usageEl = document.getElementById("storage-usage")!;
+    const textEl = document.getElementById("storage-usage-text")!;
+    const barEl = document.getElementById("storage-usage-bar")!;
+
+    if (tracks.length === 0 && tasks.length === 0) {
+      usageEl.classList.add("hidden");
+      return;
+    }
+
+    const usedBytes = tracks.reduce((sum, t) => sum + (t.fileSize ?? t.content?.length ?? 0), 0);
+    const usedMB = usedBytes / (1024 * 1024);
+    const limitMB = MAX_USER_BYTES / (1024 * 1024);
+    // The byte quota is the one users hit in practice; counts only matter
+    // near their (high) limits, so mention them only when relevant.
+    const fraction = Math.max(
+      usedBytes / MAX_USER_BYTES,
+      tracks.length / MAX_USER_TRACKS,
+      tasks.length / MAX_USER_TASKS
+    );
+
+    const parts = [`${usedMB < 10 ? usedMB.toFixed(1) : Math.round(usedMB)} of ${limitMB} MB`];
+    if (tracks.length / MAX_USER_TRACKS >= 0.8) parts.push(`${tracks.length} of ${MAX_USER_TRACKS} tracks`);
+    if (tasks.length / MAX_USER_TASKS >= 0.8) parts.push(`${tasks.length} of ${MAX_USER_TASKS} tasks`);
+    textEl.textContent = parts.join(" · ");
+
+    barEl.setAttribute("style", `width: ${Math.min(100, Math.max(1, fraction * 100)).toFixed(1)}%`);
+    barEl.classList.toggle("bg-destructive", fraction >= 0.9);
+    barEl.classList.toggle("bg-primary", fraction < 0.9);
+    usageEl.classList.remove("hidden");
+  }
+
   async function refreshLists() {
     const [tracks, tasks] = await Promise.all([
       storage.listTracks(),
       storage.listTasks(),
     ]);
+
+    updateStorageUsage(tracks, tasks);
 
     // Tracks
     tracksList.innerHTML = "";
@@ -214,15 +255,14 @@ async function init() {
           addedTasks = true;
         }
       } catch (err) {
-        // Quota errors should surface to the user — they aren't parse errors.
-        // The dashboard isn't an in-place editor (no status toast widget), so
-        // alert() is fine for now: it stops the user dead, which matches the
-        // severity ("delete something to upload more").
+        // Quota errors aren't parse errors — a modal stops the user dead,
+        // which matches the severity ("delete something to upload more").
         if (err instanceof QuotaExceededError) {
-          alert(err.message);
+          await alertDialog({ title: "Storage quota exceeded", message: err.message });
           break;
         }
         console.error(`Failed to parse ${file.name}:`, err);
+        toast.error(`Could not read ${file.name} — is it a valid ${name.endsWith(".xctsk") ? "XCTask" : "IGC"} file?`);
       }
     }
 
@@ -347,7 +387,7 @@ async function init() {
     } else {
       btn.disabled = false;
       btn.textContent = "Delete my account";
-      alert(result.error || "Failed to delete account. Please try again.");
+      toast.error(result.error || "Failed to delete account. Please try again.");
     }
   });
 }
