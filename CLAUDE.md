@@ -26,6 +26,11 @@ Frontend (Cloudflare Pages) ← user loads IGC + task files via drag-and-drop or
 
 If `node_modules/` is missing or a dependency can't be resolved, run `bun install` before proceeding. Build commands are in `package.json` scripts. Key ones: `bun run dev`, `bun run test`, `bun run typecheck:all`.
 
+**E2E tests (`bun run test:e2e`) on a fresh clone:**
+- Playwright browsers must be installed first: `bunx playwright install chromium` (CI uses `--with-deps`).
+- The auth worker needs `web/workers/auth-api/.dev.vars` (gitignored). Without it `BETTER_AUTH_URL` defaults to production, `isLocalDev()` is false, and `/api/auth/dev-login` 404s — every test fails at sign-in. The `test:e2e` script copies `.dev.vars.example` into place if the file is missing.
+- If dev servers are already running from a previous session, `bun run kill-dev` clears them.
+
 **Production:** https://glidecomp.com
 
 **Updating bundled data:**
