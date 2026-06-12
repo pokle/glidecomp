@@ -25,8 +25,15 @@
 
     <!-- Main content -->
     <main class="flex-1 max-w-3xl mx-auto w-full px-4 sm:px-6 py-8">
-      <div id="scores-loading" class="text-center py-12">
-        <p class="text-sm text-muted-foreground">Loading scores...</p>
+      <div id="scores-loading" class="py-8 animate-pulse space-y-4" role="status" aria-label="Loading scores">
+        <div class="h-8 w-2/3 rounded-md bg-muted"></div>
+        <div class="space-y-2">
+          <div class="h-8 rounded-md bg-muted"></div>
+          <div class="h-8 rounded-md bg-muted"></div>
+          <div class="h-8 rounded-md bg-muted"></div>
+          <div class="h-8 rounded-md bg-muted"></div>
+        </div>
+        <span class="sr-only">Loading scores…</span>
       </div>
 
       <div id="scores-not-found" class="hidden text-center py-12">

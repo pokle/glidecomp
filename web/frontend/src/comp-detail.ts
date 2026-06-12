@@ -1,5 +1,6 @@
 import './theme';
 import { initNav } from "./nav";
+import { toast, confirmDialog } from "./feedback";
 import type { AuthUser } from "./auth/client";
 import { api } from "./comp/api";
 import { setupPilotsSection } from "./comp/pilots-section";
@@ -329,7 +330,7 @@ function setupEditTaskDialog(
     ).map((cb) => cb.value);
 
     if (selectedClasses.length === 0) {
-      alert("Select at least one pilot class");
+      toast.warning("Select at least one pilot class");
       submitBtn.disabled = false;
       submitBtn.textContent = "Save";
       return;
@@ -347,14 +348,14 @@ function setupEditTaskDialog(
 
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        alert(err.error || "Failed to update task");
+        toast.error(err.error || "Failed to update task");
         return;
       }
 
       dialog.close();
       window.location.reload();
     } catch {
-      alert("Network error. Please try again.");
+      toast.error("Network error. Please try again.");
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = "Save";
@@ -364,7 +365,13 @@ function setupEditTaskDialog(
 
 function setupDeleteTask(compId: string, taskId: string) {
   document.getElementById("task-delete-btn")!.addEventListener("click", async () => {
-    if (!confirm("Delete this task? This cannot be undone.")) return;
+    const confirmed = await confirmDialog({
+      title: "Delete this task?",
+      message: "This cannot be undone.",
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (!confirmed) return;
 
     try {
       const res = await api.api.comp[":comp_id"].task[":task_id"].$delete({
@@ -373,13 +380,13 @@ function setupDeleteTask(compId: string, taskId: string) {
 
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        alert(err.error || "Failed to delete task");
+        toast.error(err.error || "Failed to delete task");
         return;
       }
 
       window.location.href = `/comp/${compId}`;
     } catch {
-      alert("Network error. Please try again.");
+      toast.error("Network error. Please try again.");
     }
   });
 }
@@ -958,7 +965,12 @@ function renderTrackList(
       deleteBtn.title = "Delete track";
       deleteBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
       deleteBtn.addEventListener("click", async () => {
-        if (!confirm(`Delete track for ${track.pilot_name}?`)) return;
+        const confirmed = await confirmDialog({
+          title: `Delete track for ${track.pilot_name}?`,
+          confirmLabel: "Delete",
+          destructive: true,
+        });
+        if (!confirmed) return;
         try {
           const res = await api.api.comp[":comp_id"].task[":task_id"].igc[
             ":comp_pilot_id"
@@ -976,10 +988,10 @@ function renderTrackList(
             if (remaining === 0) empty.classList.remove("hidden");
             setupScoreSection(compId, taskId).catch(() => {});
           } else {
-            alert("Failed to delete track");
+            toast.error("Failed to delete track");
           }
         } catch {
-          alert("Network error");
+          toast.error("Network error");
         }
       });
       actionsDiv.appendChild(deleteBtn);
@@ -1040,7 +1052,7 @@ function openPenaltyDialog(
 
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        alert(err.error || "Failed to set penalty");
+        toast.error(err.error || "Failed to set penalty");
         return;
       }
 
@@ -1050,7 +1062,7 @@ function openPenaltyDialog(
       renderTrackList(tracks, compId, taskId, isAdmin, isClosed);
       setupScoreSection(compId, taskId).catch(() => {});
     } catch {
-      alert("Network error. Please try again.");
+      toast.error("Network error. Please try again.");
     } finally {
       btn.disabled = false;
       btn.textContent = "Save";
@@ -1829,7 +1841,7 @@ function setupCreateTaskDialog(compId: string, pilotClasses: string[]) {
     ).map((cb) => cb.value);
 
     if (selectedClasses.length === 0) {
-      alert("Select at least one pilot class");
+      toast.warning("Select at least one pilot class");
       submitBtn.disabled = false;
       submitBtn.textContent = "Create";
       return;
@@ -1843,7 +1855,7 @@ function setupCreateTaskDialog(compId: string, pilotClasses: string[]) {
 
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        alert(err.error || "Failed to create task");
+        toast.error(err.error || "Failed to create task");
         return;
       }
 
@@ -1851,7 +1863,7 @@ function setupCreateTaskDialog(compId: string, pilotClasses: string[]) {
       // Reload to show the new task
       window.location.reload();
     } catch {
-      alert("Network error. Please try again.");
+      toast.error("Network error. Please try again.");
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = "Create";
@@ -2056,19 +2068,25 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
   document
     .getElementById("comp-delete-btn")!
     .addEventListener("click", async () => {
-      if (!confirm("Delete this competition and all its tasks and tracks? This cannot be undone.")) return;
+      const confirmed = await confirmDialog({
+        title: "Delete this competition?",
+        message: "All its tasks and tracks will be deleted. This cannot be undone.",
+        confirmLabel: "Delete",
+        destructive: true,
+      });
+      if (!confirmed) return;
       try {
         const res = await api.api.comp[":comp_id"].$delete({
           param: { comp_id: compId },
         });
         if (!res.ok) {
           const err = (await res.json()) as { error?: string };
-          alert(err.error || "Failed to delete competition");
+          toast.error(err.error || "Failed to delete competition");
           return;
         }
         window.location.href = "/comp";
       } catch {
-        alert("Network error. Please try again.");
+        toast.error("Network error. Please try again.");
       }
     });
 
@@ -2097,14 +2115,14 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
       .filter(Boolean);
 
     if (pilotClasses.length === 0) {
-      alert("At least one pilot class is required");
+      toast.warning("At least one pilot class is required");
       submitBtn.disabled = false;
       submitBtn.textContent = "Save";
       return;
     }
 
     if (adminEmails.length === 0) {
-      alert("At least one admin email is required");
+      toast.warning("At least one admin email is required");
       submitBtn.disabled = false;
       submitBtn.textContent = "Save";
       return;
@@ -2116,7 +2134,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
     const keySeen = new Set<string>();
     for (const s of pilotStatuses) {
       if (keySeen.has(s.key)) {
-        alert(`Duplicate status key "${s.key}" — rename one of the rows`);
+        toast.warning(`Duplicate status key "${s.key}" — rename one of the rows`);
         submitBtn.disabled = false;
         submitBtn.textContent = "Save";
         return;
@@ -2142,7 +2160,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
 
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        alert(err.error || "Failed to update competition");
+        toast.error(err.error || "Failed to update competition");
         return;
       }
 
@@ -2150,7 +2168,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
       // Reload to reflect changes
       window.location.reload();
     } catch {
-      alert("Network error. Please try again.");
+      toast.error("Network error. Please try again.");
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = "Save";

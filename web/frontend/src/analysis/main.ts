@@ -1387,14 +1387,23 @@ async function init(): Promise<void> {
   }
 
   /**
+   * Let the browser paint a pending status message before a long synchronous
+   * parse/analysis blocks the main thread.
+   */
+  function nextPaint(): Promise<void> {
+    return new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+  }
+
+  /**
    * Load and parse an IGC file
    */
   async function loadIGCFile(file: File): Promise<void> {
-
-
     try {
+      showStatus(`Analyzing ${file.name}...`, 'info');
+      await nextPaint();
       const content = await file.text();
       await loadIGCContent(content, file.name, true);
+      showStatus(`Loaded ${file.name}`, 'success');
     } catch (err) {
       console.error('Failed to parse IGC file:', err);
       showStatus(`Failed to parse IGC file: ${err}`, 'error');
@@ -1441,8 +1450,15 @@ async function init(): Promise<void> {
   async function loadMultipleIGCFiles(files: File[], skipStorage = false): Promise<void> {
     const tracks: LoadedTrack[] = [];
 
-    for (const file of files) {
+    for (const [index, file] of files.entries()) {
       try {
+        showStatus(
+          files.length > 1
+            ? `Analyzing ${file.name} (${index + 1}/${files.length})...`
+            : `Analyzing ${file.name}...`,
+          'info'
+        );
+        await nextPaint();
         const content = await file.text();
         const igcFile = parseIGC(content);
 
@@ -1491,6 +1507,7 @@ async function init(): Promise<void> {
       state.selectedTrack = 'all';
       selectAllTracks();
     }
+    showStatus(`Loaded ${tracks.length} track${tracks.length !== 1 ? 's' : ''}`, 'success');
   }
 
   /**
@@ -1603,17 +1620,19 @@ async function init(): Promise<void> {
    * Load a stored track by ID
    */
   async function loadStoredTrack(id: string): Promise<void> {
-
-
     try {
+      showStatus('Loading track...', 'info');
       const stored = await storage.getTrack(id);
       if (!stored) {
         showStatus('Track not found in storage', 'error');
         return;
       }
 
+      showStatus(`Analyzing ${stored.filename}...`, 'info');
+      await nextPaint();
       await storage.touchTrack(id);
       await loadIGCContent(stored.content, stored.filename, false);
+      showStatus(`Loaded ${stored.filename}`, 'success');
       updateUrlParam('storedTrack', id);
       updateUrlParam('track', null);
       // Wire annotation layer to the loaded track. Public-link mode is set

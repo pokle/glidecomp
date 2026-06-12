@@ -1,5 +1,6 @@
 import "./theme";
 import { initNav } from "./nav";
+import { confirmDialog } from "./feedback";
 
 initNav({ active: "flights" });
 
@@ -331,8 +332,14 @@ function buildDialogTrigger(): HTMLElement {
   status.className = "text-sm text-muted-foreground";
   status.textContent = "(no action yet)";
 
-  triggerBtn.addEventListener("click", () => {
-    if (confirm("Are you sure you want to delete this item? This cannot be undone.")) {
+  triggerBtn.addEventListener("click", async () => {
+    const confirmed = await confirmDialog({
+      title: "Delete this item?",
+      message: "This cannot be undone.",
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (confirmed) {
       status.textContent = "Confirmed delete";
       status.className = "text-sm text-destructive";
     } else {
