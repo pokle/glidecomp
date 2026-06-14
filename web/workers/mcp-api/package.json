@@ -13,14 +13,14 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "agents": "0.13.3",
-    "hono": "^4.12.23",
+    "hono": "^4.12.25",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.16.13",
-    "@cloudflare/workers-types": "^4.20260607.1",
+    "@cloudflare/vitest-pool-workers": "^0.16.15",
+    "@cloudflare/workers-types": "^4.20260613.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8",
-    "wrangler": "4.98.0"
+    "wrangler": "4.100.0"
   }
 }
