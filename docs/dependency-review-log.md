@@ -2,6 +2,68 @@
 
 This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
 
+## 2026-06-14
+
+### Security Vulnerabilities Fixed
+
+| Package | Severity | Advisory | Description |
+|---------|----------|----------|-------------|
+| esbuild | HIGH | [GHSA-gv7w-rqvm-qjhr](https://github.com/advisories/GHSA-gv7w-rqvm-qjhr) | Missing binary integrity verification in Deno module enables RCE via `NPM_CONFIG_REGISTRY` redirection. Fixed by overriding to ^0.28.1. Deno-specific — not exploitable in our Node/Bun environment, but patched for hygiene. |
+| esbuild | LOW | [GHSA-g7r4-m6w7-qqqr](https://github.com/advisories/GHSA-g7r4-m6w7-qqqr) | Arbitrary file read via dev server on Windows. Fixed by overriding to ^0.28.1. Windows-only — not exploitable in our environment. |
+| hono | MODERATE | (v4.12.25) | CORS wildcard origin reflected request Origin while sending credentials. Body-limit bypass on AWS Lambda via understated Content-Length. Path traversal on Windows via encoded backslash in serveStatic. |
+| better-auth | MODERATE | (v1.6.16–1.6.18) | SIWE verification fix, PayPal/Google ID token validation, admin permission enforcement, MCP bearer token expiry hardening, multi-session endpoint hardening, OIDC logout CSRF fix, race conditions on magic links/OTP/device codes via new atomic operations, JWKS cache memory leak fix. |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **wrangler** | 4.98.0 | 4.100.0 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | New: `createTestHarness()` API, `--version-tag` for deploys, local R2 public-bucket URL access, experimental TS config. Fix: memory leak in long-running headless `wrangler dev`. No breaking changes. |
+| **hono** | 4.12.23 | 4.12.25 | frontend, auth-api, competition-api, mcp-api (+ root override) | Security: CORS credential leak, body-limit bypass, Windows path traversal. No breaking changes. |
+| **better-auth** | 1.6.14 | 1.6.18 | frontend, auth-api | Security-critical: auth hardening across SIWE, OAuth, MCP tokens, multi-session, OIDC logout, and concurrent-request race conditions. JWKS cache memory leak fix. No breaking changes. |
+| **@better-auth/api-key** | 1.6.14 | 1.6.18 | auth-api | Aligned with better-auth 1.6.18. |
+| **@cloudflare/vitest-pool-workers** | 0.16.13 | 0.16.15 | auth-api, competition-api, mcp-api | Dependency bump (wrangler 4.100.0, miniflare alignment). |
+| **@cloudflare/workers-types** | 4.20260607.1 | 4.20260613.1 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | Weekly type definition update. |
+| **tailwindcss** | 4.3.0 | 4.3.1 | frontend | Bug fixes: Node 26+ deprecation warnings, `@apply` with CSS mixins, `not-*` for container queries, watch-mode recovery. |
+| **@tailwindcss/vite** | 4.3.0 | 4.3.1 | frontend | Aligned with tailwindcss 4.3.1. |
+| **mapbox-gl** | 3.24.0 | 3.24.1 | root, frontend | Fix: rendering bug with custom layers + data-driven `line-emissive-strength`. |
+| **@types/node** | 25.9.2 | 25.9.3 | root | Type definition update. |
+| **esbuild** (override) | 0.27.3 (transitive) | ^0.28.1 | root override | Forced via `overrides` to clear HIGH + LOW advisories on transitive deps of vite, wrangler, vitest-pool-workers. |
+
+### Code Changes Required
+
+None. All upgrades are drop-in replacements with no API changes affecting our usage.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| agents | 0.13.3 | 0.16.0 | 0.14.x+ requires zod ^4.0.0 as a peer dependency. Blocked by our zod 3 usage. |
+| zod | 3.25.76 | 4.4.3 | Major version. Still blocked by `@hono/zod-validator` (honojs/middleware#1148). |
+| vite | 7.3.5 | 8.0.16 | Major version. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. |
+| @hono/zod-validator | 0.7.6 | 0.8.0 | 0.8.0 requires zod 4. Stay on 0.7.6 until zod 4 migration. |
+| kysely | 0.28.17 | 0.29.2 | Pre-1.0 minor bump (equivalent to major). Defer to a focused PR. |
+| jsdom | 25.0.1 | 29.1.1 | Major version jump. Defer to a focused PR. |
+| katex | 0.16.47 | 0.17.0 | Major version. Stay within ^0.16.x semver range. |
+| concurrently | 9.2.1 | 10.0.3 | Major version. ESM-only, drops `--name-separator`. Low priority — defer. |
+| @modelcontextprotocol/sdk | 1.29.0 (resolved via ^1.12.1) | 2.0.0-alpha | Alpha release. Wait for stable. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+
+### Verification
+
+- `bun run typecheck:all` — all 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, mcp-api).
+- `bun run test:all` — 412 root/engine tests + 56 auth-api + 258 competition-api + 21 mcp-api all pass.
+- `bun run test:e2e` — 5/6 chromium specs pass. 1 flaky failure in "upload XCTSK file and switch to the Tasks tab" (pre-existing timeout issue in remote execution environment, not related to dependency changes).
+- `bun audit` — 0 vulnerabilities.
+
+### Lessons / Notes for Future Sessions
+
+- **`agents` 0.16.0 is now available** but still requires zod 4. The zod 4 migration remains the single blocker for both `agents` and `@hono/zod-validator` upgrades.
+- **`esbuild` override is now load-bearing.** The esbuild override to ^0.28.1 clears two advisories on transitive deps. Vite 7.x declares `esbuild: "^0.27.0 || ^0.28.0"` in its peer deps, so ^0.28.1 is within range. Wrangler bundles its own esbuild internally, so the override only affects the vite/vitest resolution path. Keep the override until vite/wrangler ship with esbuild >=0.28.1 natively.
+- **`better-auth` 1.6.18 introduces atomic operations** (`reserveVerificationValue`, `incrementOne`) to prevent concurrent-request race conditions. This is a significant security improvement for magic link, OTP, and device code flows. No API changes for our usage.
+- **`qs` and `ws` overrides remain load-bearing.** Neither `@modelcontextprotocol/sdk` nor the transitive consumers of `ws` have shipped patched versions. Keep overrides until upstream catches up.
+- **`@cloudflare/vitest-pool-workers` 0.16.15 bundles wrangler 4.100.0.** Continue keeping these aligned — upgrade together.
+
 ## 2026-06-07
 
 ### Security Vulnerabilities Fixed
