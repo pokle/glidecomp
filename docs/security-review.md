@@ -18,6 +18,7 @@
 | 2026-06-08 | Claude   | Re-review (only deps landed); closed SEC-04 inline | SEC-04 fixed inline (this PR) |
 | 2026-06-11 | Claude   | Re-review (iOS map fix only); new finding SEC-18 (deps); closed SEC-08 inline | SEC-18 + SEC-08 fixed inline (this PR) |
 | 2026-06-12 | Claude   | Re-review (no new app code beyond prior review's own PR); closed SEC-06 inline | SEC-06 fixed inline (this PR) |
+| 2026-06-19 | Claude   | Re-review (UX toasts/dialogs frontend + dep upgrade); new finding SEC-19 (deps) | SEC-19 fixed inline (this PR) |
 
 ---
 
@@ -1207,3 +1208,140 @@ No new scope gaps added this round.
 6. Confirm the SEC-08 fix held on a live deploy: exhaust an API key's 60-req window against `GET https://glidecomp.com/api/auth/me` and check the 61st response is `429` with a `Retry-After` header (not a 500).
 7. Address scope-gap #8 (CSP enforce) on the next preview deploy.
 8. Do NOT re-open SEC-03. It is accepted by design.
+
+---
+
+## 2026-06-19 — Re-review
+
+### Methodology
+
+- Read `docs/security-review.md` end-to-end first, carrying the prior round's "Scope gaps" and "Where to start" pointers into this round's scope.
+- Diffed `master` vs the prior review's reference commit `9b3d25a` (`git log 9b3d25a..HEAD`). Four commits landed since: `fc80c32` (the prior review's own PR #177 — SEC-06 `bodyLimit` on both public workers, already documented), `f4a916c` (#178 — UX: Basecoat toasts/modal dialogs replacing native `alert()`/`confirm()`, loading skeletons, a storage-usage meter on the dashboard, plus two new docs), `8b12e30` (#179 — a project-reboot planning doc, no code), and `24712c1` (#180 — weekly dep upgrade 2026-06-14: wrangler 4.98.0→4.100.0, @cloudflare/workers-types →4.20260613, @types/node →25.9.3, hono override →4.12.25, mapbox-gl 3.24.0, esbuild override 0.28.1, plus assorted transitive bumps).
+- The only **new application source** is the UX commit `f4a916c`. Audited it for DOM-sink / XSS regressions: `git diff 9b3d25a..HEAD -- 'web/workers/**/src/**/*.ts' 'functions/**' 'web/engine/src/**/*.ts' 'web/workers/**/wrangler.toml'` shows the worker-side change is **only** the already-reviewed SEC-06 `bodyLimit` (`auth-api/src/index.ts`, `competition-api/src/index.ts`, `igc-validation.ts`). **No new mutating endpoints, no new `[[routes]]` blocks, no new bindings, no new `optionalAuth` reads.**
+- Re-walked every prior `SEC-NN` finding against current code. Fix-site spot-checks all intact: `grep -rn "X-Glidecomp-Internal-User|INTERNAL_USER_HEADER" web/workers/` → only test/comment references (SEC-10); `validateAndDecompressIgc` caps + gzip-magic + `not_igc_content` shape check present (SEC-11/SEC-04); `xctskSchema` in use (SEC-12); `serializeCompPilotPublic` zeros the three PII fields (SEC-15); CORS allowlist unchanged on both public workers (SEC-01); `_headers` intact with four enforced headers + Report-Only CSP (SEC-02); `sw.js` filename sanitisation intact (SEC-13); `bodyLimit` registered on both public workers (SEC-06); the SEC-08 `Retry-After` middleware + `/api/auth/me` `APIError` split intact.
+- Ran `bun audit` at HEAD — flagged **6 advisories (3 high, 2 moderate, 1 low)** that were not present last round, all in dev/test/build tooling. See SEC-19. **All fixed inline** via `package.json` `overrides`; `bun audit` is clean again.
+- Ran `bun run typecheck:all` (clean) and `bun run test:all` (green: engine/airscore/root + 56 auth-api + 258 competition-api + 21 mcp-api — same counts as the prior round; no new app code added test surface), and `bun audit` (clean).
+- Did **not** re-run dynamic CSRF PoC, live cookie-attribute checks, IGC/XCTask parser fuzzing, a Cloudflare zone-settings snapshot, or a CSP-Report-Only violation walkthrough — still in scope-gaps below.
+
+### Executive summary
+
+The only new application code since 2026-06-12 is the frontend UX commit (`f4a916c`): it migrates the native `alert()` / `confirm()` calls across the comp, comp-detail, dashboard, settings, kitchensink, and analysis pages to a shared Basecoat toast / modal-dialog helper (`web/frontend/src/feedback.ts`), adds loading skeletons (static markup) and a dashboard storage-usage meter. I reviewed `feedback.ts` and every migrated call site for XSS: **clean** — `feedback.ts` routes every interpolated string (`toast` description, dialog title / message / button labels) through an `escapeHtml()` helper before it reaches Basecoat's `innerHTML`-based toast renderer or the dialog template literal, so the user-controlled values now flowing into these widgets (`track.pilot_name`, the duplicate status-key name, server error strings) are all HTML-encoded; the storage-meter writes via `textContent` and a numeric `width` style; the new loading skeletons are static markup with no interpolation. No new XSS, no new network surface, no new mutating endpoints. The worst new item is **SEC-19**: `bun audit` surfaced six new transitive advisories — `form-data` (High, CRLF injection, via `jsdom`), `vite` (High `server.fs.deny` bypass + Moderate `launch-editor` NTLMv2, via a transitive `vite@7.3.2` under `@rolldown/plugin-babel`→`agents` and dev tooling), `undici` (High TLS-validation bypass + Moderate cache disclosure, via `@cloudflare/vitest-pool-workers` and `wrangler`), and `@babel/core` (Low, arbitrary file read via sourceMappingURL, via `agents`). **Every one is in dev / test / build tooling** — none ships to the Cloudflare Workers runtime or the static Pages bundle, so production reachability is negligible — but three are High advisories and a noisy `bun audit` would mask a future genuinely-reachable finding, so **all six were fixed inline** via `overrides` bumps (`form-data@^4.0.6`, `undici@^7.28.0`, `vite@^7.3.5`, `@babel/core@^7.29.1`). `bun audit` is clean again and the full suite passes. No Critical or High findings against application code; the only remaining Open item is **SEC-05** (innerHTML render pattern, deferred-by-design).
+
+### Status of prior findings
+
+| ID      | Title                                                                  | Status @ 2026-06-19 | Notes                                                                |
+|---------|------------------------------------------------------------------------|---------------------|----------------------------------------------------------------------|
+| SEC-01  | Reflective CORS w/ credentials                                         | **Fixed**           | Re-verified `web/workers/auth-api/src/index.ts:15-25` and `web/workers/competition-api/src/index.ts:25-35`. Allowlist unchanged; `cors.test.ts` regression suite still passes. |
+| SEC-02  | No security response headers (`_headers`)                              | **Fixed (2026-05-25)** | `web/frontend/public/_headers` unchanged; CSP still Report-Only. Flip-to-enforce remains scope-gap #8. |
+| SEC-03  | Admin emails returned on public comp detail                            | **Accepted (by design, 2026-06-01)** | Unchanged. Not to be re-opened without a product-design change. |
+| SEC-04  | IGC upload size/shape — manufacturer-record check                      | **Fixed (2026-06-08)** | `igc-validation.ts` `not_igc_content` check unchanged; all three upload callsites inherit it. |
+| SEC-05  | `innerHTML` is the default render primitive                            | **Open**            | `grep -rn "innerHTML =" web/frontend/src \| wc -l` → 118 sites (+2 from the prior round's 116: the two new dialog templates in `web/frontend/src/feedback.ts:70, 108`). **Both** interpolate only `escapeHtml()`-encoded values, so they don't widen the XSS surface — but they do continue the per-author-discipline pattern this finding tracks. Still deferred-by-design; a lint rule forbidding `innerHTML =` with non-constant template interpolation remains the documented incremental step. |
+| SEC-06  | No JSON body-size cap                                                  | **Fixed (2026-06-12)** | `bodyLimit` middleware on both public workers unchanged (`competition-api/src/index.ts:52-66`, `auth-api/src/index.ts:37-49`). `body-limit.test.ts` regression suite still passes. |
+| SEC-07  | Dev-only endpoints gated by `BETTER_AUTH_URL` hostname                 | **Verified safe**   | Unchanged. `BETTER_AUTH_URL = "https://glidecomp.com"` in `web/workers/auth-api/wrangler.toml`; `is-local-dev.test.ts` still passes. Re-flag for verification on every deploy. |
+| SEC-08  | Rate-limit headers not surfaced                                        | **Fixed (2026-06-11)** | `/api/auth/me` `APIError` 429/other split + worker-wide `Retry-After` after-middleware unchanged; the 61-request regression test in `routes.test.ts` still passes. |
+| SEC-09  | `Math.random()` non-security use                                       | **Closed (Info)**   | No new uses; staying closed.                                         |
+| SEC-10  | Authentication bypass via trusted `X-Glidecomp-Internal-User` header   | **Fixed**           | `middleware/auth.ts` byte-identical to the fix; grep returns only test/comment references. `auth-bypass.test.ts` still passes. |
+| SEC-11  | IGC gzip-bomb decompression                                            | **Fixed**           | `igc-validation.ts` unchanged (1 MiB compressed + gzip-magic + 2 MiB streaming-decompressed caps + content-shape check), now backstopped by the SEC-06 route-level cap. |
+| SEC-12  | `xctsk` body has no shape, depth, or size cap                          | **Fixed**           | `xctskSchema` in `validators.ts:228` unchanged.                      |
+| SEC-13  | Service worker stores share-target uploads under unsanitised filenames | **Fixed (2026-06-01)** | `web/frontend/public/sw.js:53-68` unchanged from the fix.            |
+| SEC-14  | Service-binding trust comment misleads readers                         | **Closed**          | Resolved with SEC-10 fix.                                            |
+| SEC-15  | Unauthenticated PII on public pilot list                               | **Fixed**           | `routes/pilot.ts` unchanged. `serializeCompPilotPublic` still redacts the three PII fields for non-admins. |
+| SEC-16  | Transitive `kysely@0.28.16` JSON-path traversal                        | **Fixed**           | Override held: single `kysely@0.28.17` in `bun.lock`. `bun audit` clean. |
+| SEC-17  | `qs` (DoS) via MCP SDK→express; `ws` (memory disclosure) via dev tooling | **Fixed**         | Overrides held: single `qs@6.15.2` and `ws@8.21.0` in `bun.lock`. `bun audit` clean. |
+| SEC-18  | Transitive `shell-quote@1.8.3` newline-escaping bypass                 | **Fixed (2026-06-11)** | Override held: single `shell-quote@1.8.4` in `bun.lock`. `bun audit` clean. |
+
+### New findings
+
+---
+
+#### SEC-19 — Six new transitive dev/test/build advisories: `form-data` (High), `vite` (High+Mod), `undici` (High+Mod), `@babel/core` (Low) — **High (advisory) / negligible (reachability)** — ~~Open~~ **Fixed (2026-06-19, this PR)**
+
+> **Resolution:** added four entries to the `overrides` block in the root `package.json` — `"form-data": "^4.0.6"`, `"undici": "^7.28.0"`, `"vite": "^7.3.5"`, and `"@babel/core": "^7.29.1"`. After `bun install` the lockfile resolves a single fixed version of each (`form-data@4.0.6`, `undici@7.28.0`, `vite@7.3.5` — the vulnerable transitive `vite@7.3.2` under `@rolldown/plugin-babel` is gone, which also resolves the bundled `launch-editor` advisory — and `@babel/core@7.29.7`). `bun audit` reports **zero** vulnerabilities. `bun run typecheck:all` is clean and the full `bun run test:all` suite (engine/airscore/root + 56 auth-api + 258 competition-api + 21 mcp-api) passes — confirming the `vite`/`undici` bumps don't break the miniflare-backed test runners or the frontend unit tests. Note: `@babel/core` is an *auto-installed peer* dependency of `@rolldown/plugin-babel`; bun did not re-resolve it from the override alone (it stayed pinned at the locked `7.29.0`), so a one-time `bun update @babel/core` was used to force the resolution to `7.29.7` — the override then holds it there on subsequent installs, and no stray root dependency entry was left behind.
+
+**Files**
+- `package.json` (overrides block) — fix applied here.
+- `bun.lock` — pre-fix had `form-data@4.0.5`, `undici@7.24.8`, a transitive `vite@7.3.2`, and `@babel/core@7.29.0`; post-fix a single `form-data@4.0.6`, `undici@7.28.0`, `vite@7.3.5`, `@babel/core@7.29.7`.
+
+**Advisories**
+- [GHSA-hmw2-7cc7-3qxx](https://github.com/advisories/GHSA-hmw2-7cc7-3qxx) — `form-data`: CRLF injection via unescaped multipart field names / filenames. Vulnerable `>=4.0.0 <4.0.6`; fix `4.0.6`. Severity: **High**.
+- [GHSA-fx2h-pf6j-xcff](https://github.com/advisories/GHSA-fx2h-pf6j-xcff) — `vite`: `server.fs.deny` bypass on Windows alternate paths. Vulnerable `>=7.0.0 <=7.3.4`; fix `>7.3.4`. Severity: **High**.
+- [GHSA-v6wh-96g9-6wx3](https://github.com/advisories/GHSA-v6wh-96g9-6wx3) — `launch-editor` (bundled under vite's dev-server tooling): NTLMv2 hash disclosure via UNC path handling on Windows. Severity: **Moderate**.
+- [GHSA-vmh5-mc38-953g](https://github.com/advisories/GHSA-vmh5-mc38-953g) — `undici`: TLS certificate-validation bypass via dropped `requestTls` in the SOCKS5 `ProxyAgent`. Vulnerable `>=7.23.0 <7.28.0`; fix `7.28.0`. Severity: **High**.
+- [GHSA-pr7r-676h-xcf6](https://github.com/advisories/GHSA-pr7r-676h-xcf6) — `undici`: cross-user information disclosure via shared-cache whitespace bypass. Severity: **Moderate**.
+- [GHSA-4x5r-pxfx-6jf8](https://github.com/advisories/GHSA-4x5r-pxfx-6jf8) — `@babel/core`: arbitrary file read via `sourceMappingURL` comment. Vulnerable `<=7.29.0`; fix `>7.29.0`. Severity: **Low**.
+
+**Evidence (pre-fix)**
+```
+$ bun audit
+@babel/core  <=7.29.0
+  workspace:mcp-api › agents
+  low: @babel/core: Arbitrary File Read via sourceMappingURL Comment
+form-data  >=4.0.0 <4.0.6
+  workspace:@glidecomp/frontend › jsdom
+  high: form-data: CRLF injection …
+vite  >=7.0.0 <=7.3.4
+  workspace:@glidecomp/frontend › vite
+  workspace:mcp-api › agents
+  workspace:@glidecomp/frontend › vitest
+  moderate: launch-editor: NTLMv2 hash disclosure …
+  high: vite: `server.fs.deny` bypass on Windows alternate paths
+undici  >=7.23.0 <7.28.0
+  workspace:auth-api › @cloudflare/vitest-pool-workers
+  workspace:@glidecomp/frontend › wrangler
+  high: undici vulnerable to TLS certificate validation bypass …
+  moderate: undici vulnerable to cross-user information disclosure …
+6 vulnerabilities (3 high, 2 moderate, 1 low)
+```
+
+**Reachability analysis**
+- **`form-data`** enters only via `jsdom` → the frontend **unit-test** DOM. `jsdom` is a devDependency; nothing in `web/frontend/src/` imports it, and it never ships to the static Pages bundle. The CRLF-injection requires building a multipart body with attacker-controlled field names — a path nothing in our code exercises. Production reachability: none.
+- **`vite`** — the **direct** frontend `vite` is already `7.3.5` (outside the vulnerable range). The vulnerable instance was a transitive `vite@7.3.2` pulled in by `@rolldown/plugin-babel` (a dependency of `agents`, the MCP SDK helper). Vite is a dev-server / build tool; the `server.fs.deny` bypass is a local-dev, Windows-only file-read issue, and the bundled `launch-editor` NTLMv2 issue is also dev-server-only. None of this is present in the deployed Worker (which runs the bundled output, not vite) or the static Pages bundle. Production reachability: none.
+- **`undici`** appears only via `@cloudflare/vitest-pool-workers` (the miniflare test runtime) and `wrangler` (local dev / deploy CLI). Both are dev/test tooling; the Cloudflare Workers runtime supplies its own `fetch`/HTTP stack and does not bundle `undici`. The SOCKS5 `ProxyAgent` TLS issue requires explicitly configuring a SOCKS5 proxy agent, which nothing here does. Production reachability: none.
+- **`@babel/core`** enters via `agents` → `@rolldown/plugin-babel` / `@babel/plugin-proposal-decorators`, used at **build time** for decorator transforms. The arbitrary-file-read requires running babel over attacker-controlled source with a malicious `sourceMappingURL`; our build only ever transforms our own first-party source. Production reachability: none (Workers don't run babel). Low severity.
+
+**Severity rationale**
+Documenting as **High (advisory) / negligible (reachability)** — same posture as SEC-16 / SEC-17 / SEC-18. None of the six is reachable in production (every one is dev / test / build-only), so none meets this routine's bar for an inline-mandatory **Critical** fix. They were nonetheless fixed inline (small, obvious `overrides` diff) to keep `bun audit` clean — which is the signal the next round relies on to spot a genuinely-reachable advisory.
+
+**Regression test**
+`bun audit` (step 8 of `/security-review-repo`) is the regression detector, backed by the full worker + frontend test suites that run through the upgraded `vite` / `undici` / `jsdom`. No bespoke test added — there is no in-app code path to assert against.
+
+---
+
+### Re-checked but no change
+
+- **New UX code (`f4a916c`) — XSS / DOM sinks.** `web/frontend/src/feedback.ts` `escapeHtml()`-encodes every interpolation before it reaches Basecoat's toast renderer (`innerHTML`-based, per the in-file comment) and the two dialog template literals; the migrated call sites in `comp-detail.ts`, `comp.ts`, `dashboard.ts`, `settings.ts`, and `kitchensink.ts` pass user-controlled values (`track.pilot_name`, duplicate status-key names, server error strings) only through `toast.*` / `confirmDialog` / `alertDialog`, all of which escape. The dashboard storage meter writes counts via `textContent` and a clamped numeric `width` style; the new loading skeletons in the page HTML are static markup with no interpolation. No new sink.
+- **Authn / authz.** `requireAuth` resolves identity only by forwarding inbound `cookie` / `x-api-key` to auth-api (`middleware/auth.ts`); no header-trust backdoor. No new mutating routes.
+- **Worker route surfaces.** `[[routes]]` across all four workers unchanged: airscore (`/api/airscore/*`), comp (`/api/comp`, `/api/comp/*`, `/api/user`, `/api/user/*`, `/api/u/*`), mcp (`/mcp`, `/mcp/*`), auth (`/api/auth/*`). No new public surface.
+- **CORS.** Allowlist (`glidecomp.com`, `*.glidecomp.pages.dev`, `localhost`) on both public workers; disallowed origins get an empty `Access-Control-Allow-Origin`. Unchanged.
+- **Parameterised SQL.** No new SQL sites this round; spot-checked sites all bind parameters.
+- **`audit()` coverage.** No new mutating routes, so no new audit gaps; existing comp/task/igc/pilot/pilot-status routes still call `audit()` with `describeChange()`-style descriptions.
+- **MCP per-tool auth propagation.** Every tool forwards `apiKey` via `compApi` / `compApiRaw`; none forge identity. Unchanged.
+- **wrangler.toml bindings.** Single canonical production resource IDs; auth-api + competition-api intentionally share D1; auth-api shares the `glidecomp` R2 bucket for cascading delete. No preview-vs-prod cross-wiring. The dep upgrade added no bindings.
+- **`optionalAuth` PII (SEC-15 class).** No new `optionalAuth` routes; the 2026-05-18 systematic walk still applies.
+- **Secrets.** `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID/SECRET` referenced as env only; no hard-coded keys in source or any `wrangler.toml`. API-key prefix still `glc_`.
+- **Cascading delete on account delete.** `auth-api/src/index.ts` still walks every R2 object under `u/{user_id}/` before dropping the user row. Unchanged in behaviour.
+
+### Scope gaps still not done
+
+Carried forward from prior rounds:
+
+1. Dynamic CSRF PoC against the allowlisted CORS.
+2. Cookie attribute verification on a live deploy.
+3. IGC / XCTask parser fuzzing.
+4. Cloudflare zone settings snapshot (HSTS, TLS min, WAF, bot management).
+5. Verify SEC-10 fix on a deployed comp-api endpoint (not just the miniflare regression test).
+6. Confirm the comp-api worker doesn't accept a legacy `Cookie: test-user=…` header in production.
+7. TOCTOU / idempotency on `/api/user/tracks` + `/api/user/tasks` quota checks (UX bug class, no security exposure — from the 2026-05-18 round).
+8. **Flip the CSP from Report-Only to enforced** (from the 2026-05-25 round). Requires a live Pages-deploy CSP-report pass across the analysis map, the theme editor's Google-Fonts loader, and the share-target flow. Note: the new Basecoat toast renderer interpolates into `innerHTML`, and the dialogs / loading skeletons use Tailwind classes (no inline `style=` beyond the numeric storage-bar width) — confirm none of this trips the eventual enforced CSP.
+
+No new scope gaps added this round.
+
+### Where to start the next review
+
+1. Commit reviewed up to: HEAD = `24712c1` (parent of this review's PR). Diff against that next round.
+2. `bun audit` should be clean after this PR — if a new advisory pops up, walk the dependency tree for reachability before triaging severity (this round's `form-data`/`vite`/`undici`/`@babel/core` and the earlier `shell-quote`/`qs`/`ws`/`kysely` cases are the template — most "High" advisories in this tree are dev/test/build-only).
+3. Re-run the prior-findings table; the only remaining Open item is **SEC-05** (innerHTML pattern, now 118 sites after the two `feedback.ts` dialog templates) — deferred-by-design, not urgent. A lint rule forbidding `innerHTML =` with interpolated template literals remains the documented incremental step if a round has spare scope budget.
+4. Walk any new mutating endpoints (authn / authz / `audit()` / Zod) — none existed this round. The recent trajectory is frontend UX polish (toasts/dialogs); watch for any feature that posts user feedback / content to a new backend endpoint, or a shared/public-profile feature that could re-introduce a SEC-15-class PII leak.
+5. Confirm the SEC-19 overrides held — `grep -E '"(form-data|undici|vite|@babel/core)@[0-9]' bun.lock` should show single fixed versions (`form-data@4.0.6`+, `undici@7.28.0`+, `vite@7.3.5`+, `@babel/core@7.29.7`+). The `@babel/core` one is an auto-installed peer — if a future `bun install` from a clean lock reverts it to a `<=7.29.0`, re-run `bun update @babel/core` (the override range alone doesn't force the peer to re-resolve).
+6. Address scope-gap #8 (CSP enforce) on the next preview deploy — now also verifying the Basecoat toast/dialog additions don't violate it.
+7. Do NOT re-open SEC-03. It is accepted by design — comp organisers' emails are intentionally visible to all pilots and to the public.
