@@ -20,6 +20,7 @@
 | 2026-06-12 | Claude   | Re-review (no new app code beyond prior review's own PR); closed SEC-06 inline | SEC-06 fixed inline (this PR) |
 | 2026-06-20 | Claude   | Re-review (previously-unreviewed UX commit #178 + deps); new finding SEC-19 (dirty `bun audit`, 11 advisories) | SEC-19 fixed inline (this PR) |
 | 2026-06-21 | Claude   | Re-review (no new app code); closed scope-gap #3 (parser fuzzing) → new finding SEC-20 (parser robustness) | SEC-20 fixed inline (this PR) |
+| 2026-06-21 (II) | Claude | Re-review (no new app code); extended fuzzing to scope-gap #3's leftover paths (XCTSKZ deflate + v2 polyline) → new finding SEC-21 (deflate-path TypeError + unhandled rejection) | SEC-21 fixed inline (this PR) |
 
 ---
 
@@ -1450,4 +1451,129 @@ Carried forward from prior rounds:
 3. Re-run the prior-findings table; the only remaining Open application item is **SEC-05** (innerHTML pattern) — deferred-by-design. A lint rule forbidding `innerHTML =` with interpolated template literals remains the documented incremental step; `feedback.ts`'s centralised `escapeHtml()` is the migration model. Note `sanitizeText` is now total/crash-proof (SEC-20), which marginally hardens this boundary.
 4. Walk any new mutating endpoints (authn / authz / `audit()` / Zod). The #179 reboot plan targets a v1 launch by 2026-07-01, so expect a burst of new surface soon; watch for shared/public-profile features or new fields on public-readable endpoints that could re-introduce a SEC-15-class PII leak.
 5. The parser fuzzer (`web/engine/tests/parser-robustness.test.ts`) runs as part of `bun run test:all` — if a future parser change makes `parseIGC` throw or `parseXCTask` throw a `TypeError`, it will fail there. Extend it to `parseXCTaskAsync` / the v2 polyline decoder if those paths grow (scope-gap #3 note).
+6. Do NOT re-open SEC-03. It is accepted by design — comp organisers' emails are intentionally visible to all pilots and to the public.
+
+---
+
+## 2026-06-21 (II) — Re-review
+
+> Second review pass on the same calendar day as the prior round. The prior 2026-06-21 round (#183) closed the main parser-fuzzing scope gap and fixed SEC-20; this pass picks up the **leftover** of that gap — the two parser paths the prior round explicitly deferred ("Possible future extension: fuzz `parseXCTaskAsync`'s `XCTSKZ:` deflate path and the v2 polyline decoder … both looked robust on inspection but were not part of this round's randomized corpus") — and finds that one of them was *not* in fact robust.
+
+### Methodology
+
+- Read `docs/security-review.md` end-to-end first, carrying the prior round's "Scope gaps" and "Where to start" pointers into this round's scope.
+- Diffed `master` against the prior round's recorded "reviewed up to" commit `d564842` (per scope-gap #9, base taken from the doc's recorded commit, **not** the parent of the prior review's own PR). `git log d564842..HEAD` shows a single commit: `63413b2` — the prior 2026-06-21 review's own PR (#183, the SEC-20 fix + appended doc section). `git diff --stat d564842..HEAD` touches only `docs/security-review.md`, `web/engine/src/sanitize.ts`, `web/engine/src/xctsk-parser.ts`, and the two engine test files — i.e. exactly the SEC-20 fix. **No new `[[routes]]`, no new bindings, no new mutating endpoints, no new worker/frontend source** beyond that already-documented PR (`git diff --stat d564842..HEAD -- 'web/workers/**/wrangler.toml' 'functions/**'` empty). `git merge-base --is-ancestor d564842 HEAD` → true; no sibling PR merged out-of-order in the window.
+- Re-walked every prior `SEC-NN` finding against current code. Fix-site spot-checks all intact: `grep -rn "X-Glidecomp-Internal-User|INTERNAL_USER_HEADER" web/workers/**/src/**/*.ts` → no `src` trust path (SEC-10); `validateAndDecompressIgc` + `MAX_COMPRESSED_BYTES` (1 MiB) / `MAX_BODY_BYTES` / `not_igc_content` shape check present (SEC-11/04); `bodyLimit` registered on both public workers (`grep -c bodyLimit …/index.ts` → 2 each) (SEC-06); `serializeCompPilotPublic` at `routes/pilot.ts:123,417` (SEC-15); CORS allowlist unchanged; `innerHTML =` count still 119 (SEC-05); no `test-user` reference in either public worker's `src` (scope-gap #6 spot-check clean).
+- Ran `bun install` (node_modules absent on the fresh clone) and `bun audit` at HEAD — **0 vulnerabilities**. All eight overrides held (`grep -E '"(kysely|qs|ws|shell-quote|@babel/core|form-data|undici|vite)@' bun.lock` → single `kysely@0.28.17`, `qs@6.15.2`, `ws@8.21.0`, `shell-quote@1.8.4`, `@babel/core@7.29.7`, `form-data@4.0.6`, `undici@7.28.0`, `vite@7.3.5`).
+- **Executed scope-gap #3's deferred extension.** Extended the `web/engine/tests/parser-robustness.test.ts` fuzzer to the two paths the prior round left untested: (a) `parseXCTaskAsync`'s `XCTSKZ:` base64+deflate decode, and (b) the v2 polyline decoder (`decodePolyline` / `decodePolylineValue`) reached via a `t[].z` field. The polyline decoder is robust (0 throws across 3000 random `z` strings — it is length-bounded and `charCodeAt` past the end yields `NaN`, which the bitwise ops absorb, with no infinite loop). The deflate path was **not** robust → **SEC-21**, **fixed inline** in this PR.
+- Ran `bun run typecheck:all` (clean), `bun run test:all` (green: 422 engine/airscore/root [+3 from the new deflate/polyline fuzz groups] + 56 auth-api [+6 todo] + 258 competition-api + 21 mcp-api), and `bun audit` (clean).
+- Did **not** re-run dynamic CSRF PoC, live cookie-attribute checks, a Cloudflare zone-settings snapshot, or a CSP-Report-Only live-deploy walkthrough — still in scope-gaps below.
+
+### Executive summary
+
+No new application code landed since the prior 2026-06-21 round — the only commit is that round's own PR (#183) — so there was no fresh attack surface, and re-verification confirmed every prior fix holds (`bun audit` clean, all eight overrides intact). With the round otherwise quiet, this pass executed the **leftover of the parser-fuzzing scope gap** the prior round deferred, and the fuzzer found a real robustness defect, filed as **SEC-21** (Low): `parseXCTaskAsync`'s default `XCTSKZ:` deflate path — which decodes attacker-controlled base64 and inflates it via `DecompressionStream('deflate')` — crashed on corrupt/truncated input in two ways: (1) it surfaced the runtime's raw `TypeError` (`Z_BUF_ERROR`) instead of a clean catchable `Error`, breaking the same "parsers only throw clean errors" contract SEC-20 established for `parseXCTask`; and (2) the manual stream **writer was never awaited**, so a failed inflate leaked an **unhandled promise rejection** (confirmed by a `process.on('unhandledRejection')` probe — 2/2 probe tests failed on escaping rejections). Practical exposure is **Low**: `parseXCTaskAsync` has no in-repo caller yet (it is a public engine API for XCTrack's compressed-QR `XCTSKZ:` format; in-repo flows use the sync `parseXCTask`, which rejects `XCTSKZ:` outright), and any future caller would wrap it in try/catch — but an unhandled rejection can terminate a Node/Worker process and a crashing untrusted-input parser is exactly the latent foot-gun SEC-20 set out to remove. **Fixed inline** by piping the bytes through a `Response` body (no dangling writer to leak) inside a `try/catch` that re-throws a single clean `Error('Invalid XCTSKZ: could not decompress task data')`. The fuzzer now pins both leftover paths (deflate: clean-error-only + zero unhandled rejections across 1500 corrupt inputs; polyline: never-throws across 3000 random `z` fields), fully closing scope-gap #3. No Critical/High/Medium findings; the only remaining Open application item is **SEC-05** (innerHTML render pattern, deferred-by-design).
+
+### Status of prior findings
+
+| ID      | Title                                                                  | Status @ 2026-06-21 (II) | Notes                                                                |
+|---------|------------------------------------------------------------------------|---------------------|----------------------------------------------------------------------|
+| SEC-01  | Reflective CORS w/ credentials                                         | **Fixed**           | Allowlist unchanged on both public workers; `cors.test.ts` passes.   |
+| SEC-02  | No security response headers (`_headers`)                              | **Fixed (2026-05-25)** | `web/frontend/public/_headers` unchanged; CSP still Report-Only. Flip-to-enforce remains scope-gap #8. |
+| SEC-03  | Admin emails returned on public comp detail                            | **Accepted (by design, 2026-06-01)** | Unchanged. Not to be re-opened without a product-design change. |
+| SEC-04  | IGC upload size/shape — manufacturer-record check                      | **Fixed (2026-06-08)** | `igc-validation.ts` `not_igc_content` check unchanged; all three upload callsites inherit it. |
+| SEC-05  | `innerHTML` is the default render primitive                            | **Open**            | `grep -rn "innerHTML =" web/frontend/src \| wc -l` → 119 (unchanged — no frontend source changes this round). All user-data interpolations still route through `sanitizeText()` / `escapeHtml()`. |
+| SEC-06  | No JSON body-size cap                                                  | **Fixed (2026-06-12)** | Worker-wide `bodyLimit` still registered on both public workers (2 each: import + registration). `body-limit.test.ts` passes. |
+| SEC-07  | Dev-only endpoints gated by `BETTER_AUTH_URL` hostname                 | **Verified safe**   | Unchanged. `BETTER_AUTH_URL = "https://glidecomp.com"`; `is-local-dev.test.ts` passes. |
+| SEC-08  | Rate-limit headers not surfaced                                        | **Fixed (2026-06-11)** | `/api/auth/me` `APIError` 429 split + worker-wide `Retry-After` unchanged; 61-request regression test passes. |
+| SEC-09  | `Math.random()` non-security use                                       | **Closed (Info)**   | No new uses; staying closed.                                         |
+| SEC-10  | Authentication bypass via trusted `X-Glidecomp-Internal-User` header   | **Fixed**           | `middleware/auth.ts` forwards only inbound `cookie` / `x-api-key`. Grep returns only test/comment references. `auth-bypass.test.ts` passes. |
+| SEC-11  | IGC gzip-bomb decompression                                            | **Fixed**           | `validateAndDecompressIgc` present (1 MiB compressed + gzip-magic + 2 MiB streaming-decompressed caps + content-shape check); referenced by all three upload routes. |
+| SEC-12  | `xctsk` body has no shape, depth, or size cap                          | **Fixed**           | `xctskSchema` in `validators.ts` unchanged; used by both task routes and the user-task route. Also bounds the two server-side `parseXCTask` callers (object-shaped, string `name`). |
+| SEC-13  | Service worker stores share-target uploads under unsanitised filenames | **Fixed (2026-06-01)** | `web/frontend/public/sw.js` unchanged from the fix.                 |
+| SEC-14  | Service-binding trust comment misleads readers                         | **Closed**          | Resolved with SEC-10 fix.                                            |
+| SEC-15  | Unauthenticated PII on public pilot list                               | **Fixed**           | `serializeCompPilotPublic` still present at `routes/pilot.ts:123,417`, still zeroing the three PII fields for non-admins. No new `optionalAuth` routes. |
+| SEC-16  | Transitive `kysely@0.28.16` JSON-path traversal                        | **Fixed**           | Override held: single `kysely@0.28.17` in `bun.lock`. `bun audit` clean. |
+| SEC-17  | `qs` (DoS) via MCP SDK→express; `ws` (memory disclosure) via dev tooling | **Fixed**         | Overrides held: single `qs@6.15.2` and `ws@8.21.0`. `bun audit` clean. |
+| SEC-18  | Transitive `shell-quote@1.8.3` newline-escaping bypass                 | **Fixed (2026-06-11)** | Override held: single `shell-quote@1.8.4`. `bun audit` clean. |
+| SEC-19  | Dirty `bun audit` — 11 transitive advisories (dev/test/build tooling)  | **Fixed (2026-06-20)** | Four overrides held: single `@babel/core@7.29.7`, `form-data@4.0.6`, `undici@7.28.0`, `vite@7.3.5`. `bun audit` clean. |
+| SEC-20  | `parseXCTask` throws `TypeError` on untrusted input                    | **Fixed (2026-06-21)** | `sanitizeText` non-string coercion + `parseXCTask` non-object guard unchanged; `parser-robustness.test.ts` passes. SEC-21 is the async-path sibling of this same robustness class. |
+
+### New findings
+
+---
+
+#### SEC-21 — `parseXCTaskAsync` `XCTSKZ:` deflate path throws a raw `TypeError` and leaks an unhandled promise rejection on corrupt input — **Low** — ~~Open~~ **Fixed (2026-06-21, this PR)**
+
+> **Resolution:** `web/engine/src/xctsk-parser.ts` — the default-decompression branch of `parseXCTaskAsync` was rewritten to (a) pipe the decoded bytes through a `Response` body (`new Response(bytes).body.pipeThrough(new DecompressionStream('deflate'))`) instead of a manually-driven `WritableStream` writer, so there is no un-awaited `writer.write()` / `writer.close()` promise left to escape as an unhandled rejection; and (b) wrap the whole base64-decode-and-inflate in a `try/catch` that re-throws a single clean, catchable `Error('Invalid XCTSKZ: could not decompress task data')`. `parseXCTaskAsync` now honours the same contract `parseXCTask` got in SEC-20: corrupt/untrusted input yields only clean `Error`/`SyntaxError`, never a raw `TypeError`, and never an escaping unhandled rejection. New regression coverage in `web/engine/tests/parser-robustness.test.ts` (two new `parseXCTaskAsync` groups + one polyline group) pins it.
+
+**Files**
+- `web/engine/src/xctsk-parser.ts:378-403` — `parseXCTaskAsync` default `DecompressionStream('deflate')` branch. Pre-fix: `const writer = ds.writable.getWriter(); writer.write(bytes); writer.close();` — neither promise awaited — then `await new Response(ds.readable).text()` with no surrounding try/catch.
+- `web/engine/src/xctsk-parser.ts:89-126` (`decodePolyline`) / `:70-82` (`decodePolylineValue`) — the v2 polyline decoder, the other scope-gap #3 leftover path. **No defect** (length-bounded loop, `NaN`-absorbing bitwise ops) — added to the fuzzer as a regression guard only.
+
+**Evidence (pre-fix, found by the extended fuzzer)**
+
+```
+parseXCTaskAsync('XCTSKZ:aGVsbG8gd29ybGQ=')  // valid base64, not a deflate stream
+    -> TypeError (Z_BUF_ERROR)   + unhandled rejection from the dangling writer
+parseXCTaskAsync('XCTSKZ:eJw=')              // zlib header, truncated body
+    -> TypeError (Z_BUF_ERROR)   + unhandled rejection
+parseXCTaskAsync('XCTSKZ:')                  // empty payload
+    -> TypeError                 + unhandled rejection
+```
+
+A `process.on('unhandledRejection', …)` probe over 1500 random `XCTSKZ:`-prefixed corrupt strings tripped the handler (the two probe tests failed purely on escaping rejections, even though every `await` was wrapped in try/catch — the rejection came from the *writable* side, which the caller never holds a handle to). Invalid-base64-alphabet input (e.g. `XCTSKZ:!!!`) already threw a catchable `DOMException` from `atob`; the fix folds that into the same clean-`Error` path for a uniform contract.
+
+**Impact**
+- **Low / latent.** `parseXCTaskAsync` currently has **no in-repo caller** — it is a public `web/engine` API for XCTrack's compressed-QR `XCTSKZ:` format, exported via `web/engine/src/index.ts`. Every in-repo `.xctsk` flow (`task-editor.ts`, `dashboard.ts`, `analysis/main.ts`, `xctsk-fetch.ts`, `storage.ts`) uses the **sync** `parseXCTask`, which rejects an `XCTSKZ:` prefix outright with a clean `Error`, so today nothing reaches the buggy branch. There is no XSS, data leak, auth bypass, or cross-user effect.
+- The reason it is still worth fixing: an **unhandled promise rejection** is not a benign throw — under Node's default `--unhandled-rejections=throw` it terminates the process, and in a Cloudflare Worker it can fault the request context. A parser that consumes untrusted input (a pasted/scanned XCTSKZ task) should never be able to crash its host out-of-band, regardless of whether the caller wrapped the visible `await`. This is the exact async sibling of SEC-20 — the same "untrusted-input parser must only fail cleanly" principle, extended to the path SEC-20's round deferred.
+
+**Severity rationale**
+**Low** — a robustness / latent-uncaught-exception defect, not an exploitable vulnerability, and with no current caller. Filed as a SEC-NN (rather than a scope-gap note) because it is a concrete code fix with a regression test, exactly as SEC-20 was the prior round. It is the direct output of finishing scope-gap #3's deferred extension.
+
+**Regression test**
+`web/engine/tests/parser-robustness.test.ts` — two new `parseXCTaskAsync` groups + one polyline group:
+- `parseXCTaskAsync` rejects a fixed set of corrupt `XCTSKZ:` inputs (empty / invalid-base64 / valid-base64-non-deflate / truncated-deflate / long-garbage) with `instanceof Error && !(instanceof TypeError)`.
+- `parseXCTaskAsync` leaks **zero** unhandled rejections across 1500 random corrupt `XCTSKZ:` payloads (asserted via a `process.on('unhandledRejection')` counter).
+- `parseXCTask` v2 polyline decoder never throws across 3000 random `z` fields.
+All 422 engine/airscore/root tests pass.
+
+---
+
+### Re-checked but no change
+
+Because every `*.ts` under `web/workers/*/src/`, `web/frontend/src/`, and `web/engine/src/` (other than the SEC-21 fix file) is byte-identical to the prior 2026-06-21 round, that round's detailed walks still hold. Spot-confirmed this round:
+
+- **Authn / authz.** `requireAuth` resolves identity only by forwarding inbound `cookie` / `x-api-key` to auth-api; no header-trust backdoor. No new mutating routes.
+- **Worker route surfaces.** `[[routes]]` unchanged across all four workers (`git diff --stat d564842..HEAD -- '*wrangler.toml'` empty). No new public surface.
+- **CORS.** Allowlist (`glidecomp.com`, `*.glidecomp.pages.dev`, `localhost`) on both public workers; disallowed origins get an empty `Access-Control-Allow-Origin`. Unchanged.
+- **Parameterised SQL.** No new SQL sites this round; spot-checked sites all bind parameters.
+- **`audit()` coverage.** No new mutating routes, so no new audit gaps.
+- **MCP per-tool auth propagation.** Every tool forwards `apiKey` via `compApi` / `compApiRaw`; none forge identity. Unchanged.
+- **wrangler.toml bindings.** Unchanged; single canonical production resource IDs.
+- **`optionalAuth` PII (SEC-15 class).** No new `optionalAuth` routes; the 2026-05-18 systematic walk still applies.
+- **Secrets.** `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID/SECRET` referenced as env only; no hard-coded keys in source or any `wrangler.toml`. API-key prefix still `glc_`.
+- **Legacy `test-user` cookie (scope-gap #6).** `grep -rn "test-user" web/workers/auth-api/src web/workers/competition-api/src` → no hits.
+- **`sanitizeText` non-string coercion (SEC-20).** Re-confirmed present at `web/engine/src/sanitize.ts:11-14`; the shared XSS boundary still cannot crash on a non-string.
+
+### Scope gaps still not done
+
+Carried forward from prior rounds:
+
+1. Dynamic CSRF PoC against the allowlisted CORS.
+2. Cookie attribute verification on a live deploy.
+3. ~~IGC / XCTask parser fuzzing~~ — **fully closed**. The main gap closed 2026-06-21 (SEC-20); this round closed the two deferred leftover paths — `parseXCTaskAsync`'s `XCTSKZ:` deflate decode (SEC-21, was buggy) and the v2 polyline decoder (robust). The fuzzer (`web/engine/tests/parser-robustness.test.ts`) now covers `parseIGC`, `parseXCTask`, `parseXCTaskAsync`, and the polyline decoder as permanent regression guards. *(Nothing parser-shaped remains un-fuzzed; re-open only if a new parser/format is added.)*
+4. Cloudflare zone settings snapshot (HSTS, TLS min, WAF, bot management).
+5. Verify SEC-10 fix on a deployed comp-api endpoint (not just the miniflare regression test).
+6. Confirm the comp-api worker doesn't accept a legacy `Cookie: test-user=…` header in production (static check clean again this round; live-deploy confirmation still pending).
+7. TOCTOU / idempotency on `/api/user/tracks` + `/api/user/tasks` quota checks (UX bug class, no security exposure — from the 2026-05-18 round).
+8. **Flip the CSP from Report-Only to enforced** (from the 2026-05-25 round). Requires a live Pages-deploy CSP-report pass across the analysis map, the theme editor's Google-Fonts loader, and the share-target flow.
+9. **Review-base selection must not rely on `master`'s linear log** (from the 2026-06-20 round) — applied this round: base taken from the doc's recorded `d564842`, the single commit since (`63413b2`) confirmed to be the prior review's own PR via `git merge-base --is-ancestor`.
+
+### Where to start the next review
+
+1. Commit reviewed up to: HEAD = `63413b2` (the base this round reviewed). This PR was subsequently rebased onto `a653970` (#185, "Upgrade dependencies (2026-06-21)"), which merged into `master` while this PR was open; deps were re-installed and `bun audit` re-run **clean** on that upgraded set (mapbox-gl 3.24→3.25 among others; all eight overrides still held, full `test:all` still green). Next round, diff from `a653970` and per scope-gap #9 derive the base from this recorded commit (not the parent of this review's own PR) and `git merge-base --is-ancestor` any sibling PRs merged in the window.
+2. `bun audit` should be clean after this PR. If a new advisory pops up, walk the dependency tree for reachability before triaging severity (the SEC-16/17/18/19 cases are the template — all dev/test/build-only, fixed via in-major `overrides`). Confirm the eight overrides still resolve to single fixed versions.
+3. Re-run the prior-findings table; the only remaining Open application item is **SEC-05** (innerHTML pattern) — deferred-by-design. A lint rule forbidding `innerHTML =` with interpolated template literals remains the documented incremental step; `feedback.ts`'s centralised `escapeHtml()` is the migration model.
+4. Walk any new mutating endpoints (authn / authz / `audit()` / Zod). The #179 reboot plan targets a v1 launch by 2026-07-01 (now ~10 days out), so expect a burst of new surface imminently; watch for shared/public-profile features or new fields on public-readable endpoints that could re-introduce a SEC-15-class PII leak.
+5. The parser fuzzer now covers all four parser entry points (`parseIGC`, `parseXCTask`, `parseXCTaskAsync`, polyline decoder) and runs under `bun run test:all`. Scope-gap #3 is fully closed — extend the fuzzer only if a new parser/format lands.
 6. Do NOT re-open SEC-03. It is accepted by design — comp organisers' emails are intentionally visible to all pilots and to the public.
