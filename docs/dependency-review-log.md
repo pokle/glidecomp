@@ -2,6 +2,72 @@
 
 This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
 
+## 2026-06-21
+
+### Security Vulnerabilities Fixed
+
+| Package | Severity | Advisory | Description |
+|---------|----------|----------|-------------|
+| ws (transitive via wrangler) | HIGH | [GHSA-96hv-2xvq-fx4p](https://github.com/advisories/GHSA-96hv-2xvq-fx4p) | Remote memory-exhaustion DoS in ws >= 8.0.0 < 8.21.0. Fixed by bumping wrangler to 4.103.0 (bundles ws 8.21.0) and updating ws override to ^8.21.0. |
+| mapbox-gl | MODERATE | (v3.25.0) | Object prototype pollution from untrusted styles or tiles. Fixed by upgrading to 3.25.0. |
+| better-auth | MODERATE | (v1.6.19) | Race conditions allowing duplicate account deletions, token replays, and password resets to bypass rate limits. Fixed by upgrading to 1.6.20. |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **wrangler** | 4.100.0 | 4.103.0 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | Security: ws dep bumped fixing HIGH DoS advisory. New: `--autoconfig` replaces `--experimental-autoconfig`, `Uint8Array` step output fix for local Workflows, source-map crash fix. Removed: `unstable_getWorkerNameFromProject` (moved to `@cloudflare/workers-utils`), experimental autoconfig exports (moved to `@cloudflare/autoconfig`). No impact on our usage. |
+| **mapbox-gl** | 3.24.1 | 3.25.0 | root, frontend | **Breaking ESM change:** default export replaced with named exports. Updated `import mapboxgl from` → `import * as mapboxgl from` and moved `mapboxgl.accessToken` to `Map` constructor `accessToken` option. Security: prototype pollution fix. New: `setLanguage`/`getLanguage`/`setWorldview`/`getWorldview`, layer-level `minzoom`/`maxzoom`/`filter` methods. Performance: symbol rendering, protobuf decoding, lazy model loading. |
+| **better-auth** | 1.6.18 | 1.6.20 | frontend, auth-api | Security (1.6.19): race condition patches. New: device-code pre-binding, experimental `oauthPopup` plugin. Fixes (1.6.20): account-linking log routing, `APIError` TypeScript inference, refresh cookie `Max-Age` cap. |
+| **@better-auth/api-key** | 1.6.18 | 1.6.20 | auth-api | Aligned with better-auth 1.6.20. |
+| **hono** | 4.12.25 | 4.12.26 | frontend, auth-api, competition-api, mcp-api (+ root override) | Maintenance: Lambda-edge Content-Length fix, OIDC trusted publishing on npm, build script refactoring. No security fixes. |
+| **@cloudflare/vitest-pool-workers** | 0.16.15 | 0.16.18 | auth-api, competition-api, mcp-api | Dependency bump (wrangler 4.103.0, miniflare 4.20260617.1). 0.16.17 bumps undici to 7.28.0 and esbuild to 0.28.1. |
+| **vitest** | 4.1.8 | 4.1.9 | frontend, auth-api, competition-api, mcp-api | Stability patch: fixes `importOriginal` with optimizer/query imports, browser mode orchestrator readiness race, `vi.mock()` hoisting issues, worker crash hangs. |
+| **@cloudflare/workers-types** | 4.20260613.1 | 4.20260621.1 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | Weekly type definition update. |
+| **@playwright/test** | 1.60.0 | 1.61.0 | root | New: virtual WebAuthn authenticator, `page.localStorage`/`page.sessionStorage` APIs, `expect.soft.poll()`, Ubuntu 26.04 support. Browser updates: Chromium 149, Firefox 151, WebKit 26.5. |
+| **@types/node** | 25.9.3 | 25.9.4 | root | Type definition update. |
+| **ws** (override) | ^8.20.1 | ^8.21.0 | root override | Forced via `overrides` to clear HIGH DoS advisory (GHSA-96hv-2xvq-fx4p). |
+| **concurrently** | 9.2.1 | 9.2.3 | root (via lockfile) | Resolved to 9.2.3 within existing ^9.2.1 range. |
+
+### Code Changes Required
+
+- **mapbox-provider.ts**: Changed `import mapboxgl from 'mapbox-gl'` to `import * as mapboxgl from 'mapbox-gl'` (ESM named exports in 3.25.0). Moved `mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN` to `accessToken` option in `new mapboxgl.Map()` constructor (static `accessToken` property removed).
+- **threebox-plugin.d.ts**: Changed `import type mapboxgl from 'mapbox-gl'` to `import type * as mapboxgl from 'mapbox-gl'` (type import alignment).
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| agents | 0.13.3 | 0.16.2 | 0.14.x+ requires zod ^4.0.0 as a peer dependency. Blocked by our zod 3 usage. |
+| zod | 3.25.76 | 4.4.3 | Major version. Still blocked by `@hono/zod-validator` (honojs/middleware#1148). |
+| vite | 7.3.5 | 8.0.16 | Major version. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. |
+| @hono/zod-validator | 0.7.6 | 0.8.0 | 0.8.0 requires zod 4. Stay on 0.7.6 until zod 4 migration. |
+| kysely | 0.28.17 | 0.29.2 | Pre-1.0 minor bump (equivalent to major). Defer to a focused PR. |
+| jsdom | 25.0.1 | 29.1.1 | Major version jump. Defer to a focused PR. |
+| katex | 0.16.47 | 0.17.0 | Major version. Stay within ^0.16.x semver range. |
+| concurrently | 9.2.3 | 10.0.3 | Major version. ESM-only, drops `--name-separator`. Low priority — defer. |
+| @modelcontextprotocol/sdk | 1.29.0 (resolved via ^1.12.1) | 2.0.0-alpha | Alpha release. Wait for stable. |
+| @types/node | 25.9.4 | 26.0.0 | Major version jump. Stay on 25.x for now. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+
+### Verification
+
+- `bun run typecheck:all` — all 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, mcp-api).
+- `bun run test:all` — 419 root/engine tests + 56 auth-api + 258 competition-api + 21 mcp-api all pass.
+- `bun run test:e2e` — 6/6 chromium specs pass.
+- `bun audit` — 0 vulnerabilities.
+
+### Lessons / Notes for Future Sessions
+
+- **mapbox-gl 3.25.0 drops the default ESM export.** All `import mapboxgl from 'mapbox-gl'` must become `import * as mapboxgl from 'mapbox-gl'`, and the static `mapboxgl.accessToken` setter is replaced by the `accessToken` option in the `Map` constructor. Named imports (`import { Map } from 'mapbox-gl'`) now work directly. The `map-annotations.ts` file already used named imports and needed no changes.
+- **ws override bumped to ^8.21.0.** The previous ^8.20.1 override was insufficient — wrangler 4.102.0 surfaced GHSA-96hv-2xvq-fx4p (HIGH DoS). Keep the override until all transitive consumers (jsdom, vitest-pool-workers, wrangler) ship with ws >= 8.21.0 natively.
+- **`qs` override remains load-bearing.** `@modelcontextprotocol/sdk` still hasn't shipped a patched `qs` version.
+- **`esbuild` override remains load-bearing.** Vite 7.x still declares `esbuild: "^0.27.0 || ^0.28.0"` in its peer deps. Keep the ^0.28.1 override until vite ships with esbuild >= 0.28.1 natively.
+- **`@cloudflare/vitest-pool-workers` 0.16.18 bundles wrangler 4.103.0.** Continue keeping these aligned — upgrade together.
+- **`agents` 0.16.2 is now available** but still requires zod 4. The zod 4 migration remains the single blocker for `agents`, `@hono/zod-validator`, and several other upgrades.
+- **`@types/node` 26.0.0 is now available** as a major version. Staying on 25.x for safety — evaluate in a focused PR if Node 26 types diverge significantly from our runtime.
+
 ## 2026-06-14
 
 ### Security Vulnerabilities Fixed

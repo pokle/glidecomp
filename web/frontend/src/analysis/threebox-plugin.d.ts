@@ -3,7 +3,7 @@
  */
 
 declare module 'threebox-plugin' {
-  import type mapboxgl from 'mapbox-gl';
+  import type * as mapboxgl from 'mapbox-gl';
 
   export interface ThreeboxOptions {
     defaultLights?: boolean;
