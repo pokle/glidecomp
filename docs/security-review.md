@@ -19,6 +19,7 @@
 | 2026-06-11 | Claude   | Re-review (iOS map fix only); new finding SEC-18 (deps); closed SEC-08 inline | SEC-18 + SEC-08 fixed inline (this PR) |
 | 2026-06-12 | Claude   | Re-review (no new app code beyond prior review's own PR); closed SEC-06 inline | SEC-06 fixed inline (this PR) |
 | 2026-06-20 | Claude   | Re-review (previously-unreviewed UX commit #178 + deps); new finding SEC-19 (dirty `bun audit`, 11 advisories) | SEC-19 fixed inline (this PR) |
+| 2026-06-21 | Claude   | Re-review (no new app code); closed scope-gap #3 (parser fuzzing) → new finding SEC-20 (parser robustness) | SEC-20 fixed inline (this PR) |
 
 ---
 
@@ -1325,4 +1326,128 @@ New process gap from this round:
 3. Confirm the four new overrides held — `grep -E '"(@babel/core|form-data|undici|vite)@' bun.lock` should show a single fixed version of each (`7.29.7`, `4.0.6`, `7.28.0`, `7.3.5`). Drop an override (or bump it) if its upstream starts requiring a newer major — in particular, revisit `vite`/`undici` once `@cloudflare/vitest-pool-workers` gains Vite 8 / undici 8 support ([workers-sdk#11064](https://github.com/cloudflare/workers-sdk/issues/11064)).
 4. Re-run the prior-findings table; the only remaining Open application item is **SEC-05** (innerHTML pattern) — deferred-by-design. A lint rule forbidding `innerHTML =` with interpolated template literals remains the documented incremental step; `feedback.ts`'s centralised `escapeHtml()` is a good model to migrate other sites toward.
 5. Walk any new mutating endpoints (authn / authz / `audit()` / Zod) — none existed this round. The #179 reboot plan targets a v1 launch by 2026-07-01, so expect a burst of new surface soon; watch for shared/public-profile features or new fields on public-readable endpoints that could re-introduce a SEC-15-class PII leak.
+6. Do NOT re-open SEC-03. It is accepted by design — comp organisers' emails are intentionally visible to all pilots and to the public.
+
+---
+
+## 2026-06-21 — Re-review
+
+### Methodology
+
+- Read `docs/security-review.md` end-to-end first, carrying the prior round's "Scope gaps" and "Where to start" pointers into this round's scope.
+- Diffed `master` against the prior round's recorded "reviewed up to" commit `24712c1` (per scope-gap #9 from the 2026-06-20 round, the base is taken from the doc's recorded commit, **not** the parent of the prior review's own PR, so an out-of-order squash merge can't be skipped). `git log 24712c1..HEAD` shows a single commit: `d564842` — the 2026-06-20 review's own PR (#182, the SEC-19 dependency overrides + the appended doc section). `git diff --stat 24712c1..HEAD` touches only `bun.lock`, `package.json`, and `docs/security-review.md`. **No new application source code, no new `[[routes]]` blocks, no new bindings, no new mutating endpoints** (`git diff --stat 24712c1..HEAD -- 'web/workers/**/src/**/*.ts' 'web/frontend/src/**/*.ts' 'functions/**' 'web/engine/src/**/*.ts' 'web/workers/**/wrangler.toml' 'web/frontend/public/**'` returns empty).
+- Re-walked every prior `SEC-NN` finding against current code. Fix-site spot-checks all intact: `grep -rn "X-Glidecomp-Internal-User|INTERNAL_USER_HEADER" web/workers --include=*.ts` (excluding tests/comments) → no `src` trust path (SEC-10); `validateAndDecompressIgc` + `MAX_COMPRESSED_BYTES`/`MAX_BODY_BYTES` + `not_igc_content` shape check present (SEC-11/SEC-04); `bodyLimit` registered on both public workers (SEC-06); `serializeCompPilotPublic` present at `routes/pilot.ts:123,417` (SEC-15); CORS allowlist unchanged; `innerHTML =` count still 119 (SEC-05); no `test-user` reference in either public worker's `src` (scope-gap #6 spot-check still clean).
+- Ran `bun install` (node_modules was absent on the fresh clone) and `bun audit` at HEAD — **0 vulnerabilities**. All eight overrides held (`grep -E '"(kysely|qs|ws|shell-quote|@babel/core|form-data|undici|vite)@' bun.lock` → single `kysely@0.28.17`, `qs@6.15.2`, `ws@8.21.0`, `shell-quote@1.8.4`, `@babel/core@7.29.7`, `form-data@4.0.6`, `undici@7.28.0`, `vite@7.3.5`).
+- Used the otherwise-quiet round to **close the longest-standing scope gap — "IGC / XCTask parser fuzzing" (open since 2026-04-20)**. Wrote a seeded randomized fuzzer (`web/engine/tests/parser-robustness.test.ts`) that throws ~15k random byte-strings / record-soups / JSON payloads at both parsers. `parseIGC` is fully robust (0 throws across 9k+ inputs, as designed — length checks + `parseInt`→NaN). `parseXCTask` surfaced a robustness defect → **SEC-20** (two `TypeError` crash classes on untrusted input), **fixed inline** in this PR.
+- Ran `bun run typecheck:all` (clean), `bun run test:all` (green: 419 engine/airscore/root [+7 from the new fuzz/robustness tests] + 56 auth-api [+6 todo] + 258 competition-api + 21 mcp-api), and `bun audit` (clean).
+- Did **not** re-run dynamic CSRF PoC, live cookie-attribute checks, a Cloudflare zone-settings snapshot, or a CSP-Report-Only live-deploy walkthrough — still in scope-gaps below.
+
+### Executive summary
+
+No new application code landed since 2026-06-20 — the only commit is that round's own PR (#182), already documented — so there was no fresh attack surface, and re-verification confirmed every prior fix (SEC-01/04/06/08/10/11/12/13/15 and the SEC-16/17/18/19 dependency overrides) holds. `bun audit` is clean and all eight overrides held. With the round quiet, this PR finally **closes the parser-fuzzing scope gap (open since the very first 2026-04-20 round)** and the fuzzer found a real robustness defect, filed as **SEC-20** (Low): `parseXCTask` threw uncatchable-by-intent `TypeError`s on two untrusted-input classes — (1) valid-JSON primitives (`null` / `123` / `"x"` / `true`) tripped `TypeError: null is not an Object` via the `'turnpoints' in data` check, and (2) a non-string `waypoint.name`/`description`/`n` (legal in attacker-controlled JSON) tripped `TypeError: input.replace is not a function` inside `sanitizeText` — the shared XSS-escaping boundary for **all three** untrusted parsers (IGC, XCTask, AirScore). Every production caller already wraps `parseXCTask` in a generic `try/catch` and the server-side callers (`scoring.ts`, `routes/user-files.ts`) are gated by the SEC-12 `xctskSchema` (object-shaped, string-typed names), so practical exposure is **Low** — but a crashing XSS-escaping boundary is exactly the kind of latent fragility a future caller could trip. **Fixed inline** by (a) making `sanitizeText` coerce non-strings instead of throwing (`null`/`undefined`→`''`, primitives stringified, result still HTML-safe), and (b) guarding `parseXCTask` to reject non-object JSON with a clean catchable `Error` instead of a `TypeError`. Three new robustness/fuzz test groups (15k+ randomized inputs) lock the contract: `parseIGC` never throws; `parseXCTask` never throws a `TypeError`. No Critical/High/Medium findings this round; the only remaining Open application item is **SEC-05** (innerHTML render pattern, deferred-by-design).
+
+### Status of prior findings
+
+| ID      | Title                                                                  | Status @ 2026-06-21 | Notes                                                                |
+|---------|------------------------------------------------------------------------|---------------------|----------------------------------------------------------------------|
+| SEC-01  | Reflective CORS w/ credentials                                         | **Fixed**           | Allowlist unchanged on both public workers (`web/workers/auth-api/src/index.ts`, `web/workers/competition-api/src/index.ts`). `cors.test.ts` regression suite passes. |
+| SEC-02  | No security response headers (`_headers`)                              | **Fixed (2026-05-25)** | `web/frontend/public/_headers` unchanged; CSP still Report-Only. Flip-to-enforce remains scope-gap #8. |
+| SEC-03  | Admin emails returned on public comp detail                            | **Accepted (by design, 2026-06-01)** | Unchanged. Not to be re-opened without a product-design change. |
+| SEC-04  | IGC upload size/shape — manufacturer-record check                      | **Fixed (2026-06-08)** | `igc-validation.ts` `not_igc_content` check unchanged; all three upload callsites inherit it. |
+| SEC-05  | `innerHTML` is the default render primitive                            | **Open**            | `grep -rn "innerHTML =" web/frontend/src \| wc -l` → 119 (unchanged — no frontend source changes this round). All interpolations of user data still route through `sanitizeText()` / `escapeHtml()` — and `sanitizeText` is now crash-proof against non-string input (SEC-20), strengthening this boundary. |
+| SEC-06  | No JSON body-size cap                                                  | **Fixed (2026-06-12)** | Worker-wide `bodyLimit` still registered on both public workers (`grep -c bodyLimit …/index.ts` → 2 each: import + registration). `body-limit.test.ts` passes. |
+| SEC-07  | Dev-only endpoints gated by `BETTER_AUTH_URL` hostname                 | **Verified safe**   | Unchanged. `BETTER_AUTH_URL = "https://glidecomp.com"` in `web/workers/auth-api/wrangler.toml`; `is-local-dev.test.ts` passes. |
+| SEC-08  | Rate-limit headers not surfaced                                        | **Fixed (2026-06-11)** | `/api/auth/me` `APIError` 429/other split + worker-wide `Retry-After` after-middleware unchanged; the 61-request regression test passes. |
+| SEC-09  | `Math.random()` non-security use                                       | **Closed (Info)**   | No new uses; staying closed.                                         |
+| SEC-10  | Authentication bypass via trusted `X-Glidecomp-Internal-User` header   | **Fixed**           | `middleware/auth.ts` forwards only inbound `cookie` / `x-api-key`. Grep returns only test/comment references. `auth-bypass.test.ts` passes. |
+| SEC-11  | IGC gzip-bomb decompression                                            | **Fixed**           | `validateAndDecompressIgc` present (1 MiB compressed + gzip-magic + 2 MiB streaming-decompressed caps + content-shape check); referenced by all three upload routes; backstopped by the SEC-06 route-level cap. |
+| SEC-12  | `xctsk` body has no shape, depth, or size cap                          | **Fixed**           | `xctskSchema` in `validators.ts` unchanged; used by both task routes and the user-task route. This is also what bounds SEC-20's server-side reachability (object-shaped, string-typed `name`), so the two server-side `parseXCTask` callers can't hit the SEC-20 crash classes. |
+| SEC-13  | Service worker stores share-target uploads under unsanitised filenames | **Fixed (2026-06-01)** | `web/frontend/public/sw.js` unchanged from the fix.                 |
+| SEC-14  | Service-binding trust comment misleads readers                         | **Closed**          | Resolved with SEC-10 fix.                                            |
+| SEC-15  | Unauthenticated PII on public pilot list                               | **Fixed**           | `serializeCompPilotPublic` still present in `routes/pilot.ts:123,417`, still zeroing the three PII fields for non-admins. No new `optionalAuth` routes. |
+| SEC-16  | Transitive `kysely@0.28.16` JSON-path traversal                        | **Fixed**           | Override held: single `kysely@0.28.17` in `bun.lock`. `bun audit` clean. |
+| SEC-17  | `qs` (DoS) via MCP SDK→express; `ws` (memory disclosure) via dev tooling | **Fixed**         | Overrides held: single `qs@6.15.2` and `ws@8.21.0` in `bun.lock`. `bun audit` clean. |
+| SEC-18  | Transitive `shell-quote@1.8.3` newline-escaping bypass                 | **Fixed (2026-06-11)** | Override held: single `shell-quote@1.8.4` in `bun.lock`. `bun audit` clean. |
+| SEC-19  | Dirty `bun audit` — 11 transitive advisories (dev/test/build tooling)  | **Fixed (2026-06-20)** | Four overrides held: single `@babel/core@7.29.7`, `form-data@4.0.6`, `undici@7.28.0`, `vite@7.3.5` in `bun.lock`. `bun audit` clean. |
+
+### New findings
+
+---
+
+#### SEC-20 — `parseXCTask` throws uncaught `TypeError` on untrusted input (valid-JSON primitives; non-string waypoint names crash the shared `sanitizeText` XSS boundary) — **Low** — ~~Open~~ **Fixed (2026-06-21, this PR)**
+
+> **Resolution:** two small defensive fixes close the whole class. (1) `web/engine/src/sanitize.ts` — `sanitizeText` now coerces non-string input instead of calling `.replace` on it: `null`/`undefined` → `''`, other non-strings → `String(input)` before escaping, so the result is always an HTML-safe string and the function can never crash its caller. (2) `web/engine/src/xctsk-parser.ts:334-346` — after `JSON.parse`, `parseXCTask` now rejects non-object / `null` parses with a clean, catchable `Error('Invalid XCTSK: expected a JSON object')` instead of letting the `'turnpoints' in data` check throw `TypeError: null is not an Object`. Arrays remain tolerated (they degrade to an empty task, unchanged behaviour). New regression coverage in `web/engine/tests/parser-robustness.test.ts` (6 groups, ~15k seeded-random inputs) pins the contract — `parseIGC` never throws on any input; `parseXCTask` only ever throws clean `Error`/`SyntaxError`, never a `TypeError` — plus non-string-coercion cases added to `web/engine/tests/sanitize.test.ts`. All 419 engine/airscore/root tests pass.
+
+**Files**
+- `web/engine/src/sanitize.ts:7-22` — the shared XSS-escaping boundary; pre-fix assumed `typeof input === 'string'` and called `.replace` directly.
+- `web/engine/src/xctsk-parser.ts:323-350` — `parseXCTask`; pre-fix did `'turnpoints' in data` immediately after `JSON.parse` with no object guard.
+- `web/engine/src/xctsk-parser.ts:131-194` (`parseV1`) / `:199-249` (`parseV2`) — pass `wp.name` / `wp.description` / `tpObj.n` (typed `as string`, but actually attacker-controlled JSON of any type) straight into `sanitizeText`.
+
+**Evidence (pre-fix, found by the new fuzzer)**
+
+```
+parseXCTask('null')   -> TypeError: null is not an Object. (evaluating '"turnpoints" in data')
+parseXCTask('123')    -> TypeError: 123 is not an Object.  (evaluating '"turnpoints" in data')
+parseXCTask('"hello"')-> TypeError: "hello" is not an Object.
+parseXCTask('true')   -> TypeError: true is not an Object.
+parseXCTask('{"turnpoints":[{"waypoint":{"name":42,...}}]}')
+                      -> TypeError: input.replace is not a function.   (inside sanitizeText)
+parseXCTask('{"t":[{"n":99,...}]}')   // v2 compact
+                      -> TypeError: input.replace is not a function.
+```
+
+`parseIGC`, by contrast, threw **0 times across 9000+ random inputs** — it is defensive by construction (every record parser length-checks first and uses `parseInt`, which yields `NaN` rather than throwing). No `parseIGC` fix needed; the fuzzer now pins that as a regression guard.
+
+**Impact**
+- All production `parseXCTask` callers already wrap it in a generic `try/catch` (`web/frontend/src/analysis/task-editor.ts:261`, `dashboard.ts:251`, `analysis/main.ts:1381/1895/1978`, `xctsk-fetch.ts`, `storage.ts`), so a malformed uploaded/pasted `.xctsk` surfaces as the intended "invalid task" error UX rather than an unhandled exception. The two server-side callers (`web/workers/competition-api/src/scoring.ts:128`, `routes/user-files.ts:469`) only ever see input that already passed the SEC-12 `xctskSchema` (object-shaped, `name` constrained to a `string`), so neither crash class is reachable there.
+- Net practical exposure is **Low**: client-side only, self-inflicted (the uploader's own session), caught by callers, and the server paths are schema-gated. There is no XSS, data leak, auth bypass, or cross-user effect.
+- The reason it is still worth fixing: `sanitizeText` is the **single shared XSS-escaping boundary** for IGC, XCTask, *and* AirScore-API text. A boundary whose contract is "escape this string safely" should never throw when handed a non-string — a future caller that doesn't wrap it (or that relies on its return value in a non-try/catch path) would turn a hostile JSON field into an uncaught crash. Making it total (never-throwing, always-safe-string) removes that latent foot-gun for every present and future caller.
+
+**Severity rationale**
+**Low** — a robustness / latent-uncaught-exception defect, not an exploitable vulnerability. Filed as a SEC-NN (rather than just a scope-gap note) because it is a concrete code fix with a regression test, in keeping with how prior quiet rounds closed SEC-13 (Low) and SEC-04 (Low sub-issue). It is the direct output of finally executing the 2026-04-20 "parser fuzzing" scope gap.
+
+**Regression test**
+`web/engine/tests/parser-robustness.test.ts` — a seeded (`mulberry32`) deterministic fuzzer:
+- `parseIGC` never throws: a fixed hostile-input set + 5000 random byte-strings + 2000 random multi-line B/H/C/E record soups.
+- `parseXCTask` throws only clean errors: explicit primitive cases assert `instanceof Error && !(instanceof TypeError)`; non-string `name`/`description`/`n` cases assert `.not.toThrow()`; 8000 random JSON payloads (half `XCTSK:`-prefixed) assert **zero** `TypeError`s.
+- `web/engine/tests/sanitize.test.ts` gains a non-string-coercion group (null/undefined → `''`, number → its digits, hostile-`toString` object still HTML-safe).
+
+---
+
+### Re-checked but no change
+
+Because every `*.ts` under `web/workers/*/src/`, `web/frontend/src/`, and `web/engine/src/` (other than the two SEC-20 fix files) is byte-identical to the 2026-06-20 round, the prior rounds' detailed walks still hold. Spot-confirmed this round:
+
+- **Authn / authz.** `requireAuth` resolves identity only by forwarding inbound `cookie` / `x-api-key` to auth-api (`middleware/auth.ts`); no header-trust backdoor. `requireCompAdmin` gates on a `comp_admin` row. No new mutating routes.
+- **Worker route surfaces.** `[[routes]]` unchanged across all four workers: airscore (`/api/airscore/*`), comp (`/api/comp`, `/api/comp/*`, `/api/user`, `/api/user/*`, `/api/u/*`), mcp (`/mcp`, `/mcp/*`), auth (`/api/auth/*`). No new public surface (`git diff --stat 24712c1..HEAD -- '*wrangler.toml'` empty).
+- **CORS.** Allowlist (`glidecomp.com`, `*.glidecomp.pages.dev`, `localhost`) on both public workers; disallowed origins get an empty `Access-Control-Allow-Origin`. Unchanged.
+- **Parameterised SQL.** No new SQL sites this round; spot-checked sites all bind parameters.
+- **`audit()` coverage.** No new mutating routes, so no new audit gaps.
+- **MCP per-tool auth propagation.** Every tool forwards `apiKey` via `compApi` / `compApiRaw`; none forge identity. Unchanged.
+- **wrangler.toml bindings.** Unchanged; single canonical production resource IDs; auth-api + competition-api intentionally share D1; auth-api shares the `glidecomp` R2 bucket for cascading delete.
+- **`optionalAuth` PII (SEC-15 class).** No new `optionalAuth` routes; the 2026-05-18 systematic walk still applies (PII-free except the by-design SEC-03 admin emails).
+- **Secrets.** `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID/SECRET` referenced as env only; no hard-coded keys in source or any `wrangler.toml`. API-key prefix still `glc_`.
+- **Legacy `test-user` cookie (scope-gap #6).** `grep -rn "test-user" web/workers/auth-api/src web/workers/competition-api/src` → no hits. No test-only cookie backdoor shipped.
+
+### Scope gaps still not done
+
+Carried forward from prior rounds:
+
+1. Dynamic CSRF PoC against the allowlisted CORS.
+2. Cookie attribute verification on a live deploy.
+3. ~~IGC / XCTask parser fuzzing~~ — **done this round** (`web/engine/tests/parser-robustness.test.ts`; SEC-20). The fuzzer is now a permanent regression guard; future rounds need only re-run it, not re-derive it. *(Possible future extension: fuzz `parseXCTaskAsync`'s `XCTSKZ:` deflate path and the v2 polyline decoder against truncated/garbage base64 — both looked robust on inspection but were not part of this round's randomized corpus.)*
+4. Cloudflare zone settings snapshot (HSTS, TLS min, WAF, bot management).
+5. Verify SEC-10 fix on a deployed comp-api endpoint (not just the miniflare regression test).
+6. Confirm the comp-api worker doesn't accept a legacy `Cookie: test-user=…` header in production (static check clean again this round; live-deploy confirmation still pending).
+7. TOCTOU / idempotency on `/api/user/tracks` + `/api/user/tasks` quota checks (UX bug class, no security exposure — from the 2026-05-18 round).
+8. **Flip the CSP from Report-Only to enforced** (from the 2026-05-25 round). Requires a live Pages-deploy CSP-report pass across the analysis map, the theme editor's Google-Fonts loader, and the share-target flow.
+9. **Review-base selection must not rely on `master`'s linear log** (from the 2026-06-20 round) — applied this round: base taken from the doc's recorded `24712c1`, and the single commit since (`d564842`) confirmed to be the prior review's own PR.
+
+### Where to start the next review
+
+1. Commit reviewed up to: HEAD = `d564842` (parent of this review's PR). Diff against that next round, and per scope-gap #9 derive the base from this recorded commit (not the parent of this review's own PR) and `git merge-base --is-ancestor` any sibling PRs merged in the window.
+2. `bun audit` should be clean after this PR. If a new advisory pops up, walk the dependency tree for reachability before triaging severity (the SEC-16/17/18/19 cases are the template — all dev/test/build-only, fixed via in-major `overrides`). Confirm the eight overrides still resolve to single fixed versions.
+3. Re-run the prior-findings table; the only remaining Open application item is **SEC-05** (innerHTML pattern) — deferred-by-design. A lint rule forbidding `innerHTML =` with interpolated template literals remains the documented incremental step; `feedback.ts`'s centralised `escapeHtml()` is the migration model. Note `sanitizeText` is now total/crash-proof (SEC-20), which marginally hardens this boundary.
+4. Walk any new mutating endpoints (authn / authz / `audit()` / Zod). The #179 reboot plan targets a v1 launch by 2026-07-01, so expect a burst of new surface soon; watch for shared/public-profile features or new fields on public-readable endpoints that could re-introduce a SEC-15-class PII leak.
+5. The parser fuzzer (`web/engine/tests/parser-robustness.test.ts`) runs as part of `bun run test:all` — if a future parser change makes `parseIGC` throw or `parseXCTask` throw a `TypeError`, it will fail there. Extend it to `parseXCTaskAsync` / the v2 polyline decoder if those paths grow (scope-gap #3 note).
 6. Do NOT re-open SEC-03. It is accepted by design — comp organisers' emails are intentionally visible to all pilots and to the public.

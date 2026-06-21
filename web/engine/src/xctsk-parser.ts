@@ -331,7 +331,19 @@ export function parseXCTask(content: string): XCTask {
     jsonContent = jsonContent.substring(6);
   }
 
-  const data = JSON.parse(jsonContent) as Record<string, unknown>;
+  const parsed: unknown = JSON.parse(jsonContent);
+
+  // JSON.parse happily returns primitives (`null`, numbers, strings, booleans)
+  // for valid-but-wrong input. Reject them with a clean, catchable Error instead
+  // of letting the `in` checks below throw a confusing
+  // `TypeError: null is not an Object`. Arrays are objects and are tolerated by
+  // the parsers below (they degrade to an empty task), so only non-object /
+  // null inputs are rejected here.
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new Error('Invalid XCTSK: expected a JSON object');
+  }
+
+  const data = parsed as Record<string, unknown>;
 
   // Determine format based on structure, not just version number
   // v1 format uses 'turnpoints' array, v2 uses 't' array
