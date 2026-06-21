@@ -381,19 +381,29 @@ export async function parseXCTaskAsync(
     if (decompress) {
       jsonContent = await decompress(base64Data);
     } else {
-      // Use Web Compression API (globalThis.DecompressionStream)
-      const binary = (globalThis as unknown as { atob: (s: string) => string }).atob(base64Data);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
+      // Use Web Compression API (globalThis.DecompressionStream).
+      //
+      // Defensive: the base64 + deflate payload is attacker-controlled (a pasted
+      // / scanned XCTSKZ task). Invalid base64 (`atob`) and corrupt or truncated
+      // deflate streams must surface as a clean, catchable Error — not as a raw
+      // runtime `TypeError` (`Z_BUF_ERROR`) or, worse, an unhandled promise
+      // rejection from a dangling writer. Pipe through a Response body (no manual
+      // writer, so nothing to leave un-awaited) and wrap the whole decode so any
+      // failure becomes a single descriptive Error mirroring `parseXCTask`'s
+      // contract.
+      try {
+        const binary = (globalThis as unknown as { atob: (s: string) => string }).atob(base64Data);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const g = globalThis as any;
+        const inflated = new g.Response(bytes).body.pipeThrough(new g.DecompressionStream('deflate'));
+        jsonContent = await new g.Response(inflated).text();
+      } catch {
+        throw new Error('Invalid XCTSKZ: could not decompress task data');
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const g = globalThis as any;
-      const ds = new g.DecompressionStream('deflate');
-      const writer = ds.writable.getWriter();
-      writer.write(bytes);
-      writer.close();
-      jsonContent = await new g.Response(ds.readable).text();
     }
     return parseXCTask(jsonContent);
   }
