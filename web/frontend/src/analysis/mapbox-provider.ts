@@ -6,7 +6,7 @@
  * Supports 3D track rendering via Threebox.
  */
 
-import mapboxgl from 'mapbox-gl';
+import * as mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
 import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult, type PilotScore } from '@glidecomp/engine';
 import type { MapProvider, LoadedTrack } from './map-provider';
@@ -25,8 +25,7 @@ import {
 import { formatAltitude } from './units-browser';
 import { createMapAnnotationLayer, type MapAnnotationLayer } from './map-annotations';
 
-// Set MapBox access token from environment variable
-mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
+const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 // Terrain exaggeration factor — applied to both the Mapbox terrain and
 // Threebox 3D track altitudes so the track stays above the terrain surface.
@@ -68,6 +67,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       const savedLocation = config.getMapLocation();
       const map = new mapboxgl.Map({
         container,
+        accessToken: MAPBOX_ACCESS_TOKEN,
         style: initialStyle.style,
         center: savedLocation?.center,
         zoom: savedLocation?.zoom ?? 2,
