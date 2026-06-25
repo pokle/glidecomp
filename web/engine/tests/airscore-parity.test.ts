@@ -136,13 +136,23 @@ describe('AirScore parity — Corryong Cup 2026 T1', () => {
     expect(durandKm(takeoff)).toBeCloseTo(78.85, 1);
     expect(durandKm(start)).toBeCloseTo(73.85, 1);
 
-    // In take-off mode, flown distances track AirScore's published km closely.
+    // In take-off mode, flown distances track AirScore's published km very
+    // closely — best-progress measures to each cylinder's optimal tag point,
+    // so non-goal pilots match to within a fraction of a km.
     const byName = new Map(takeoff.pilotScores.map((p) => [p.pilotName, p]));
-    for (const surname of ['reinauer', 'carrigan', 'drabble']) {
-      const ours = byName.get(surname)!.flownDistance / 1000;
-      const ref = refBySurname.get(surname)!.distKm;
-      expect(Math.abs(ours - ref)).toBeLessThan(1.0);
+    let sum = 0;
+    let count = 0;
+    for (const p of takeoff.pilotScores) {
+      const ref = refBySurname.get(p.pilotName);
+      if (!ref || ref.distKm >= 78.5 || p.flownDistance === baseParams.minimumDistance) continue;
+      sum += Math.abs(p.flownDistance / 1000 - ref.distKm);
+      count++;
     }
+    expect(count).toBeGreaterThan(10);
+    expect(sum / count).toBeLessThan(0.15); // mean within ~150 m of AirScore
+    // A previously-divergent pilot now lands within a few hundred metres.
+    const horton = byName.get('horton')!.flownDistance / 1000;
+    expect(Math.abs(horton - refBySurname.get('horton')!.distKm)).toBeLessThan(0.5);
   });
 
   it('weighted leadout rewards early course-leaders over the faster late starter', () => {

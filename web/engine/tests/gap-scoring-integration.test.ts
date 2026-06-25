@@ -174,11 +174,11 @@ describe('Corryong Cup 2026 Task 1 — integration', () => {
     { name: 'Rich Reinauer',     rank: 13, total: 480,  distPts: 479.7, timePts: 0, madeGoal: false },
 
     // Mid-pack — non-goal
-    { name: 'Steve Blenkinsop',  rank: 17, total: 363,  distPts: 363.4, timePts: 0, madeGoal: false },
-    { name: 'Neale Halsall',     rank: 21, total: 239,  distPts: 238.7, timePts: 0, madeGoal: false },
+    { name: 'Steve Blenkinsop',  rank: 17, total: 359,  distPts: 358.8, timePts: 0, madeGoal: false },
+    { name: 'Neale Halsall',     rank: 22, total: 237,  distPts: 237.4, timePts: 0, madeGoal: false },
 
     // Trailing — at minimum distance floor (tied at rank 30)
-    { name: 'Ivo van der Leeden', rank: 30, total: 41, distPts: 41.4, timePts: 0, madeGoal: false },
+    { name: 'Ivo van der Leeden', rank: 30, total: 42, distPts: 41.8, timePts: 0, madeGoal: false },
   ];
 
   for (const snap of snapshots) {
