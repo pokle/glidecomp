@@ -93,6 +93,21 @@ describe('AirScore parity — Corryong Cup 2026 T1', () => {
     expect(Math.abs(durand.timePoints - refBySurname.get('durand')!.timePts)).toBeLessThan(1.5);
   });
 
+  it('time points track AirScore for the leading goal finishers (gap2020+ 5/6)', () => {
+    const r = scoreTask(task, pilots, { ...baseParams, useLeading: false });
+    const byName = new Map(r.pilotScores.map((p) => [p.pilotName, p]));
+    // The 5/6 speed formula puts the top goal pilots within a handful of
+    // points of AirScore (vs ~30+ off under the old 2/3 + sqrt-bug form).
+    // A residual remains for slower pilots because this task uses interval
+    // start gates and our speed-section time differs there — a separate,
+    // out-of-scope pipeline detail.
+    for (const surname of ['holtkamp', 'burkitt', 'opsanger']) {
+      const ours = byName.get(surname)!;
+      const ref = refBySurname.get(surname)!;
+      expect(Math.abs(ours.timePoints - ref.timePts)).toBeLessThan(20);
+    }
+  });
+
   it('weighted leadout rewards early course-leaders over the faster late starter', () => {
     const r = scoreTask(task, pilots, { ...baseParams, useLeading: true, leadingFormula: 'weighted' });
     const byName = new Map(r.pilotScores.map((p) => [p.pilotName, p]));

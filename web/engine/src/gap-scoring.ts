@@ -43,11 +43,12 @@ export interface GAPParameters {
   /** Whether to compute arrival points (default true for HG, ignored for PG) */
   useArrival: boolean;
   /**
-   * Leading coefficient variant (matches AirScore's `lc_formula`):
-   * - 'weighted' — GAP2020+ / current FAI S7F: weighted-area envelope,
-   *   linear distance, normalized by SS distance (the modern default).
-   * - 'classic'  — GAP2016/2018 & PWC≤2017: squared distance, time from
-   *   each pilot's own start, normalized by SS distance squared.
+   * GAP formula generation (matches AirScore's formula presets). Selects
+   * both the leading-coefficient variant and the speed-points exponent:
+   * - 'weighted' — GAP2020+ / current FAI S7F: weighted-area leading
+   *   envelope; speed exponent 5/6 (the modern default).
+   * - 'classic'  — GAP2016/2018 & PWC≤2017: squared-distance leading,
+   *   time from each pilot's own start; speed exponent 2/3.
    */
   leadingFormula: LeadingFormula;
 }
@@ -346,25 +347,33 @@ export function applyMinimumDistance(
 // ---------------------------------------------------------------------------
 
 /**
- * Calculate the speed fraction for a pilot.
- * The cube-root formula creates a curve that rewards
- * being close to the fastest time.
+ * Calculate the speed fraction for a pilot, matching AirScore's
+ * `pilot_speed` (gap2020+ / current FAI S7F):
  *
- * Times are in seconds but the GAP formula operates in hours.
+ *   SF = max(0, 1 − ((Tp − Tmin) / √Tmin)^e)    with times in hours
+ *
+ * where e = 5/6 for the modern formula (`weighted`) and 2/3 for the
+ * older one (`classic`, AirScore gap.py — the same exponent it uses for
+ * the leading factor). Tp/Tmin are speed-section times.
  */
 export function calculateSpeedFraction(
   pilotTimeSeconds: number,
   bestTimeSeconds: number,
+  exponent: number = 5 / 6,
 ): number {
   if (bestTimeSeconds <= 0 || pilotTimeSeconds <= 0) return 0;
+  if (pilotTimeSeconds <= bestTimeSeconds) return 1;
   // Convert to hours for the GAP formula
   const pilotTime = pilotTimeSeconds / 3600;
   const bestTime = bestTimeSeconds / 3600;
-  const timeDiff = pilotTime - bestTime;
-  if (timeDiff <= 0) return 1;
   const sqrtBest = Math.sqrt(bestTime);
   if (sqrtBest <= 0) return 0;
-  return Math.max(0, 1 - Math.cbrt((timeDiff * timeDiff) / sqrtBest));
+  return Math.max(0, 1 - Math.pow((pilotTime - bestTime) / sqrtBest, exponent));
+}
+
+/** Speed-fraction exponent for a GAP formula generation. */
+function speedExponent(formula: LeadingFormula): number {
+  return formula === 'classic' ? 2 / 3 : 5 / 6;
 }
 
 /**
@@ -379,6 +388,7 @@ export function calculateTimePoints(
   reachedESS: boolean,
   availableTimePoints: number,
   scoring: 'PG' | 'HG',
+  formula: LeadingFormula = 'weighted',
 ): number {
   if (bestTime === null || pilotTime === null) return 0;
 
@@ -387,7 +397,7 @@ export function calculateTimePoints(
   // HG: must reach ESS
   if (scoring === 'HG' && !reachedESS) return 0;
 
-  const sf = calculateSpeedFraction(pilotTime, bestTime);
+  const sf = calculateSpeedFraction(pilotTime, bestTime, speedExponent(formula));
   return sf * availableTimePoints;
 }
 
@@ -742,6 +752,7 @@ export function scoreTask(
       result.speedSectionTime, bestTime,
       result.madeGoal, result.essReaching !== null,
       availablePoints.time, fullParams.scoring,
+      fullParams.leadingFormula,
     );
 
     const leadPts = calculateLeadingPoints(
