@@ -144,7 +144,7 @@
         </div>
 
         <div class="ml-2">
-          <h3 class="text-base font-semibold mb-1">Distance Difficulty <span class="text-sm font-normal text-muted-foreground">(hang gliding only)</span></h3>
+          <h3 id="distance-difficulty" class="text-base font-semibold mb-1 scroll-mt-20">Distance Difficulty <span class="text-sm font-normal text-muted-foreground">(hang gliding only)</span></h3>
           <p class="text-muted-foreground">In hang gliding, distance points are split into two halves (per the FAI rules, S7F &sect;11.1.1):</p>
           <p class="bg-muted/50 rounded px-3 py-2 inline-block">\( \text{Distance Points} = \left( \tfrac{1}{2}\,\text{Linear} + \tfrac{1}{2}\,\text{Difficulty} \right) \times \text{Available Distance Points} \)</p>
           <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2 mt-2">
@@ -156,7 +156,7 @@
         </div>
 
         <div class="ml-2">
-          <h3 class="text-base font-semibold mb-1">Where distance is measured from</h3>
+          <h3 id="distance-origin" class="text-base font-semibold mb-1 scroll-mt-20">Where distance is measured from</h3>
           <p class="text-muted-foreground">When a task defines a separate <strong>take-off</strong> turnpoint before the start (SSS), competitions differ on whether the take-off&rarr;start leg counts toward scored distance. GlideComp offers two settings (chosen per competition):</p>
           <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2 mt-2">
             <li><strong>Take-off</strong> (default) &mdash; distance is measured from the take-off point, through the start cylinder, to goal. The take-off is treated as a fixed launch point. This follows the <strong>FAI CIVL GAP</strong> and <strong>PWCA</strong> rules and matches most scoring software (including AirScore).</li>
@@ -192,7 +192,7 @@
 
         <div class="ml-2 space-y-4">
           <div>
-            <h3 class="text-base font-semibold mb-1">The Leading Coefficient</h3>
+            <h3 id="leading-coefficient" class="text-base font-semibold mb-1 scroll-mt-20">The Leading Coefficient</h3>
             <p class="text-muted-foreground">Each pilot gets a <strong>leading coefficient (LC)</strong> &mdash; a number that represents how much time they spent close to ESS while ahead of the pack. Technically, it's the area under a curve of "remaining distance to ESS" (measured along the course, from the start gate opening) plotted over time. A "ratchet" mechanism means your distance only counts when it's decreasing (flying toward ESS) &mdash; flying away doesn't reset your progress. This matches the CIVL GAP / AirScore leading coefficient; competitions can pick the modern <em>weighted</em> variant (GAP2020+) or the older <em>classic</em> variant in settings.</p>
             <p class="text-muted-foreground">A <strong>lower</strong> LC means you spent more time at the front. The pilot with the lowest LC gets the maximum leading points.</p>
           </div>

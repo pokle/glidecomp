@@ -1338,28 +1338,54 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     // Settings gear link
     html += `<div class="flex justify-end gap-3"><a href="/scoring.html" target="_blank" rel="noopener noreferrer" class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>How GAP works</a><button type="button" class="comp-settings-btn flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-0 p-0"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Scoring Config</button></div>`;
 
-    // Task validity summary
+    // Helpers for linking to the scoring docs and formatting fractions.
+    const docLink = (anchor: string, text: string) =>
+      `<a href="/scoring.html#${anchor}" target="_blank" rel="noopener noreferrer" class="underline decoration-dotted hover:text-foreground">${text}</a>`;
+    const pct1 = (n: number) => `${(n * 100).toFixed(1)}%`;
+    const wPct = (n: number) => `${Math.round(n * 100)}%`;
+
+    // Scoring configuration in effect (so scores are reproducible)
+    const leadCfg = params.useLeading ? `on (${params.leadingFormula})` : 'off';
     html += `
       <div class="rounded-lg border border-border bg-muted/30 p-3">
-        <div class="text-xs text-muted-foreground mb-1">Task Validity</div>
-        <div class="flex gap-3 text-sm">
-          <span>Launch: ${(result.taskValidity.launch * 100).toFixed(1)}%</span>
-          <span>Dist: ${(result.taskValidity.distance * 100).toFixed(1)}%</span>
-          <span>Time: ${(result.taskValidity.time * 100).toFixed(1)}%</span>
-          <span class="font-medium">Task: ${(result.taskValidity.task * 100).toFixed(1)}%</span>
+        <div class="text-xs text-muted-foreground mb-1">${docLink('what-is-gap', 'Scoring configuration')}</div>
+        <div class="flex gap-x-3 gap-y-1 text-sm flex-wrap">
+          <span>Sport: ${params.scoring}</span>
+          <span title="Nominal distance">Nom dist: ${formatDistance(params.nominalDistance).withUnit}</span>
+          <span title="Nominal task time">Nom time: ${Math.round(params.nominalTime / 60)} min</span>
+          <span title="Nominal goal ratio">Nom goal: ${pct1(params.nominalGoal)}</span>
+          <span title="Nominal launch ratio">Nom launch: ${pct1(params.nominalLaunch)}</span>
+          <span>Min dist: ${formatDistance(params.minimumDistance).withUnit}</span>
+          <span>${docLink('leading-points', 'Leading')}: ${leadCfg}</span>
+          ${params.scoring === 'HG' ? `<span>${docLink('arrival-points', 'Arrival')}: ${params.useArrival ? 'on' : 'off'}</span>` : ''}
+          <span title="Where scored distance begins (take-off vs start cylinder)">${docLink('distance-origin', 'Dist origin')}: ${params.distanceOrigin}</span>
+          ${params.scoring === 'HG' ? `<span>${docLink('distance-difficulty', 'Difficulty')}: ${params.useDistanceDifficulty ? 'on' : 'off'}</span>` : ''}
         </div>
       </div>
     `;
 
-    // Available points
+    // Task validity (with the inputs that drive each component as tooltips)
     html += `
       <div class="rounded-lg border border-border bg-muted/30 p-3">
-        <div class="text-xs text-muted-foreground mb-1">Available Points (${result.availablePoints.total.toFixed(0)})</div>
+        <div class="text-xs text-muted-foreground mb-1">${docLink('task-validity', 'Task Validity')}</div>
         <div class="flex gap-3 text-sm flex-wrap">
-          <span>Distance: ${result.availablePoints.distance.toFixed(0)}</span>
-          <span>Time: ${result.availablePoints.time.toFixed(0)}</span>
-          <span>Leading: ${result.availablePoints.leading.toFixed(0)}</span>
-          ${params.scoring === 'HG' ? `<span>Arrival: ${result.availablePoints.arrival.toFixed(0)}</span>` : ''}
+          <span title="Pilots flying ${stats.numFlying} of ${stats.numPresent} present; nominal launch ${pct1(params.nominalLaunch)}">Launch: ${pct1(result.taskValidity.launch)}</span>
+          <span title="Best distance ${formatDistance(stats.bestDistance).withUnit} vs nominal ${formatDistance(params.nominalDistance).withUnit}">Dist: ${pct1(result.taskValidity.distance)}</span>
+          <span title="Best time ${stats.bestTime ? formatHMS(stats.bestTime) : '—'} vs nominal ${Math.round(params.nominalTime / 60)} min">Time: ${pct1(result.taskValidity.time)}</span>
+          <span class="font-medium" title="Launch × Distance × Time">Task: ${pct1(result.taskValidity.task)}</span>
+        </div>
+      </div>
+    `;
+
+    // Available points + the weight fraction that produced each
+    html += `
+      <div class="rounded-lg border border-border bg-muted/30 p-3">
+        <div class="text-xs text-muted-foreground mb-1">${docLink('scoring-components', `Available Points (${result.availablePoints.total.toFixed(0)})`)}</div>
+        <div class="flex gap-3 text-sm flex-wrap">
+          <span title="Distance weight ${wPct(result.weights.distance)}">Distance: ${result.availablePoints.distance.toFixed(0)} <span class="text-muted-foreground">(${wPct(result.weights.distance)})</span></span>
+          <span title="Time weight ${wPct(result.weights.time)}">Time: ${result.availablePoints.time.toFixed(0)} <span class="text-muted-foreground">(${wPct(result.weights.time)})</span></span>
+          <span title="Leading weight ${wPct(result.weights.leading)}">Leading: ${result.availablePoints.leading.toFixed(0)} <span class="text-muted-foreground">(${wPct(result.weights.leading)})</span></span>
+          ${params.scoring === 'HG' ? `<span title="Arrival weight ${wPct(result.weights.arrival)}">Arrival: ${result.availablePoints.arrival.toFixed(0)} <span class="text-muted-foreground">(${wPct(result.weights.arrival)})</span></span>` : ''}
         </div>
       </div>
     `;
@@ -1369,9 +1395,11 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       <div class="rounded-lg border border-border bg-muted/30 p-3">
         <div class="text-xs text-muted-foreground mb-1">Stats</div>
         <div class="flex gap-3 text-sm flex-wrap">
-          <span>Pilots: ${stats.numFlying}</span>
+          <span title="Pilots with a tracklog${stats.numPresent !== stats.numFlying ? ` (of ${stats.numPresent} present)` : ''}">Pilots: ${stats.numFlying}${stats.numPresent !== stats.numFlying ? ` / ${stats.numPresent}` : ''}</span>
           <span>In goal: ${stats.numInGoal}</span>
           <span>ESS: ${stats.numReachedESS}</span>
+          <span title="Pilots in goal ÷ pilots flying (drives the point weights)">Goal ratio: ${pct1(stats.goalRatio)}</span>
+          <span title="Optimized task distance">Task dist: ${formatDistance(stats.taskDistance).withUnit}</span>
           <span>Best dist: ${formatDistance(stats.bestDistance).withUnit}</span>
           ${stats.bestTime ? `<span>Best time: ${formatHMS(stats.bestTime)}</span>` : ''}
         </div>
@@ -1388,28 +1416,78 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       <th class="px-2 py-1.5 text-left font-medium sticky left-[52px] z-10 bg-muted/50 after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border">Pilot</th>
       <th class="px-2 py-1.5 text-right font-medium">Dist</th>
       <th class="px-2 py-1.5 text-right font-medium" title="Speed Section Time">SS Time</th>
-      <th class="px-2 py-1.5 text-right font-medium">Dist Pts</th>
-      <th class="px-2 py-1.5 text-right font-medium">Time Pts</th>
-      <th class="px-2 py-1.5 text-right font-medium">Lead</th>
-      ${params.scoring === 'HG' ? `<th class="px-2 py-1.5 text-right font-medium">Arr</th>` : ''}
-      <th class="px-2 py-1.5 text-right font-medium">Total</th>
+      <th class="px-2 py-1.5 text-right font-medium">${docLink('distance-points', 'Dist Pts')}</th>
+      <th class="px-2 py-1.5 text-right font-medium">${docLink('time-points', 'Time Pts')}</th>
+      <th class="px-2 py-1.5 text-right font-medium">${docLink('leading-points', 'Lead')}</th>
+      ${params.useLeading ? `<th class="px-2 py-1.5 text-right font-medium" title="Leading coefficient — lower means more time spent out front">${docLink('leading-coefficient', 'LC')}</th>` : ''}
+      ${params.scoring === 'HG' ? `<th class="px-2 py-1.5 text-right font-medium">${docLink('arrival-points', 'Arr')}</th>` : ''}
+      <th class="px-2 py-1.5 text-right font-medium">${docLink('total-score', 'Total')}</th>
     </tr></thead>`;
     html += `<tbody>`;
+
+    const colCount = 9 + (params.useLeading ? 1 : 0) + (params.scoring === 'HG' ? 1 : 0);
+
+    // Expandable per-pilot breakdown (legs, sequence, points split, raw crossings).
+    const renderDetail = (ps: (typeof result.pilotScores)[number]): string => {
+      const tr = ps.turnpointResult;
+      const floored = tr.flownDistance < params.minimumDistance;
+      const legsDone = tr.legs.filter(l => l.completed).length;
+
+      const parts: string[] = [
+        `<span>${docLink('distance-points', 'Distance')} ${ps.distancePoints.toFixed(1)}${ps.distanceDifficultyPoints > 0 ? ` <span class="text-muted-foreground">(${ps.distanceLinearPoints.toFixed(1)} linear + ${ps.distanceDifficultyPoints.toFixed(1)} difficulty)</span>` : ''}</span>`,
+        `<span>${docLink('time-points', 'Time')} ${ps.timePoints.toFixed(1)}</span>`,
+      ];
+      if (params.useLeading) {
+        parts.push(`<span>${docLink('leading-points', 'Leading')} ${ps.leadingPoints.toFixed(1)} <span class="text-muted-foreground">(LC ${isFinite(ps.leadingCoefficient) ? ps.leadingCoefficient.toFixed(3) : '—'})</span></span>`);
+      }
+      if (params.scoring === 'HG') {
+        parts.push(`<span>${docLink('arrival-points', 'Arrival')} ${ps.arrivalPoints.toFixed(1)}</span>`);
+      }
+      parts.push(`<span>${docLink('total-score', 'Total')} <span class="font-medium">${ps.totalScore}</span></span>`);
+
+      const status = ps.madeGoal ? 'Made goal' : ps.reachedESS ? 'Reached ESS (no goal)' : 'Landed out';
+      const statusBits: string[] = [`<span>${status}</span>`, `<span>Legs ${legsDone}/${tr.legs.length}</span>`];
+      if (floored) statusBits.push(`<span title="Flew ${formatDistance(tr.flownDistance).withUnit}, raised to the ${formatDistance(params.minimumDistance).withUnit} minimum">Min-distance floored</span>`);
+      if (!ps.madeGoal && tr.bestProgress) statusBits.push(`<span>${formatDistance(tr.bestProgress.distanceToGoal).withUnit} from goal</span>`);
+
+      const seq = tr.sequence.map(r => {
+        const name = currentTask?.turnpoints[r.taskIndex]?.waypoint.name || '';
+        const reason = r.candidateCount > 1 ? ` <span class="text-muted-foreground">(chosen from ${r.candidateCount})</span>` : '';
+        return `<span class="mr-3 whitespace-nowrap"><span class="text-muted-foreground">${formatTime(r.time)}</span> <span class="font-medium">${getTurnpointLabel(r.taskIndex)}</span>${name ? ` <span class="text-muted-foreground">${name}</span>` : ''}${reason}</span>`;
+      }).join('');
+
+      return `
+        <div class="space-y-2 text-xs">
+          <div class="flex flex-wrap gap-x-4 gap-y-1">${parts.join('')}</div>
+          <div class="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">${statusBits.join('')}</div>
+          ${seq ? `<div class="leading-6"><span class="text-muted-foreground">Sequence: </span>${seq}</div>` : ''}
+          <div class="text-muted-foreground">${tr.crossings.length} raw cylinder crossing${tr.crossings.length === 1 ? '' : 's'} detected</div>
+        </div>`;
+    };
 
     for (const ps of result.pilotScores) {
       const isChecked = allSelected || selectedPilots!.has(ps.pilotName);
       const goalIcon = ps.madeGoal ? '<span class="text-green-600 ml-1" title="Goal">&#10003;</span>' : '';
+      const floored = ps.turnpointResult.flownDistance < params.minimumDistance;
+      const distMark = floored ? '<span class="text-amber-500" title="Raised to minimum distance">*</span>' : '';
+      const distPtsCell = ps.distanceDifficultyPoints > 0
+        ? `<span class="cursor-help underline decoration-dotted" title="${ps.distanceLinearPoints.toFixed(1)} linear + ${ps.distanceDifficultyPoints.toFixed(1)} difficulty">${ps.distancePoints.toFixed(1)}</span>`
+        : ps.distancePoints.toFixed(1);
       html += `<tr class="border-t border-border hover:bg-muted/30${!isChecked ? ' opacity-40' : ''}">
         <td class="px-2 py-1.5 sticky left-0 z-10 bg-background"><input type="checkbox" class="comp-pilot-cb accent-primary" data-pilot="${ps.pilotName}" ${isChecked ? 'checked' : ''}></td>
         <td class="px-2 py-1.5 font-medium sticky left-[28px] z-10 bg-background">${ps.rank}</td>
-        <td class="px-2 py-1.5 truncate max-w-[120px] sticky left-[52px] z-10 bg-background after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border" title="${ps.pilotName}">${ps.pilotName}${goalIcon}</td>
-        <td class="px-2 py-1.5 text-right tabular-nums">${formatDistance(ps.flownDistance).withUnit}</td>
+        <td class="comp-detail-toggle px-2 py-1.5 truncate max-w-[120px] sticky left-[52px] z-10 bg-background cursor-pointer select-none after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border" data-pilot="${ps.pilotName}" title="Show scoring breakdown for ${ps.pilotName}"><span class="comp-caret inline-block text-muted-foreground transition-transform">&#9656;</span> ${ps.pilotName}${goalIcon}</td>
+        <td class="px-2 py-1.5 text-right tabular-nums">${formatDistance(ps.flownDistance).withUnit}${distMark}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${ps.madeGoal && ps.speedSectionTime !== null ? formatHMS(ps.speedSectionTime) : ps.reachedESS ? 'ESS' : 'LO'}</td>
-        <td class="px-2 py-1.5 text-right tabular-nums">${ps.distancePoints.toFixed(1)}</td>
+        <td class="px-2 py-1.5 text-right tabular-nums">${distPtsCell}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${ps.timePoints.toFixed(1)}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${ps.leadingPoints.toFixed(1)}</td>
+        ${params.useLeading ? `<td class="px-2 py-1.5 text-right tabular-nums text-muted-foreground">${isFinite(ps.leadingCoefficient) ? ps.leadingCoefficient.toFixed(3) : '—'}</td>` : ''}
         ${params.scoring === 'HG' ? `<td class="px-2 py-1.5 text-right tabular-nums">${ps.arrivalPoints.toFixed(1)}</td>` : ''}
         <td class="px-2 py-1.5 text-right font-medium tabular-nums">${ps.totalScore}</td>
+      </tr>
+      <tr class="comp-detail-row hidden bg-muted/20" data-detail-for="${ps.pilotName}">
+        <td colspan="${colCount}" class="px-3 py-2 border-t border-border/40">${renderDetail(ps)}</td>
       </tr>`;
     }
 
@@ -1457,6 +1535,20 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     // Wire gear icon
     compScorePanelContent.querySelector('.comp-settings-btn')?.addEventListener('click', () => {
       options.onOpenCompetitionSettings?.();
+    });
+
+    // Wire per-pilot detail toggles
+    compScorePanelContent.querySelectorAll('.comp-detail-toggle').forEach(cell => {
+      cell.addEventListener('click', () => {
+        const pilot = (cell as HTMLElement).dataset.pilot ?? '';
+        const detail = compScorePanelContent.querySelector(
+          `.comp-detail-row[data-detail-for="${CSS.escape(pilot)}"]`
+        );
+        if (!detail) return;
+        const nowHidden = detail.classList.toggle('hidden');
+        const caret = cell.querySelector('.comp-caret') as HTMLElement | null;
+        if (caret) caret.style.transform = nowHidden ? '' : 'rotate(90deg)';
+      });
     });
   }
 
