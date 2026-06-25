@@ -347,6 +347,46 @@
             <span class="block text-xs text-muted-foreground mt-0.5">Admins can always upload regardless of this setting.</span>
           </span>
         </label>
+        <div class="border-t border-border pt-4">
+          <label class="text-sm font-medium block mb-1">GAP Scoring Parameters</label>
+          <p class="text-xs text-muted-foreground mb-3">
+            Competition-wide scoring constants. The scoring class (HG/PG) follows the Category above.
+            <a href="/scoring.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">How does GAP scoring work?</a>
+          </p>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label for="settings-nominal-distance" class="text-xs text-muted-foreground block mb-1">Nominal distance (km)</label>
+              <input id="settings-nominal-distance" type="number" min="0" step="1" class="input w-full" placeholder="auto">
+              <p class="text-xs text-muted-foreground mt-1">Blank = auto (70% of task)</p>
+            </div>
+            <div>
+              <label for="settings-nominal-time" class="text-xs text-muted-foreground block mb-1">Nominal time (min)</label>
+              <input id="settings-nominal-time" type="number" min="0" step="1" class="input w-full">
+            </div>
+            <div>
+              <label for="settings-nominal-goal" class="text-xs text-muted-foreground block mb-1">Nominal goal (%)</label>
+              <input id="settings-nominal-goal" type="number" min="0" max="100" step="1" class="input w-full">
+            </div>
+            <div>
+              <label for="settings-nominal-launch" class="text-xs text-muted-foreground block mb-1">Nominal launch (%)</label>
+              <input id="settings-nominal-launch" type="number" min="0" max="100" step="1" class="input w-full">
+            </div>
+            <div>
+              <label for="settings-minimum-distance" class="text-xs text-muted-foreground block mb-1">Minimum distance (km)</label>
+              <input id="settings-minimum-distance" type="number" min="0" step="0.1" class="input w-full">
+            </div>
+          </div>
+          <div class="mt-3 space-y-2">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input id="settings-use-leading" type="checkbox" class="accent-primary w-4 h-4">
+              <span class="text-sm">Leading (departure) points</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input id="settings-use-arrival" type="checkbox" class="accent-primary w-4 h-4">
+              <span class="text-sm">Arrival points <span class="text-muted-foreground">(HG only)</span></span>
+            </label>
+          </div>
+        </div>
         <div>
           <label for="settings-admins" class="text-sm font-medium block mb-1">Admin Emails</label>
           <input id="settings-admins" type="text" class="input w-full" placeholder="admin1@example.com, admin2@example.com">

@@ -6,6 +6,7 @@ import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { createCompSchema, updateCompSchema } from "../validators";
 import { audit, describeChange } from "../audit";
+import { DEFAULT_GAP_PARAMETERS, type GAPParameters } from "@glidecomp/engine";
 
 type Variables = {
   user: AuthUser;
@@ -20,6 +21,67 @@ export interface PilotStatusConfig {
   key: string;
   label: string;
   on_track_upload: "none" | "clear" | "set";
+}
+
+/**
+ * Describe GAP scoring parameter changes as human-readable audit lines.
+ *
+ * Friendly units are used (km, min, %) rather than the stored
+ * meters/seconds/fractions. A missing/null nominalDistance means the
+ * scorer auto-computes it per task, so it reads as "auto (per task)".
+ * When the whole object is reset to null, a single line is returned.
+ */
+type GapParamInput = Partial<Omit<GAPParameters, "nominalDistance">> & {
+  nominalDistance?: number | null;
+};
+
+function describeGapParamChanges(
+  oldGap: GapParamInput | null,
+  newGap: GapParamInput | null
+): string[] {
+  if (newGap === null) {
+    return oldGap === null ? [] : ["Reset GAP scoring parameters to defaults"];
+  }
+  // Merge over engine defaults so an unset old value reads as its default.
+  const o = { ...DEFAULT_GAP_PARAMETERS, ...(oldGap ?? {}) };
+  const n = { ...DEFAULT_GAP_PARAMETERS, ...newGap };
+  const oDist = oldGap?.nominalDistance ?? null;
+  const nDist = newGap.nominalDistance ?? null;
+  const km = (m: number | null) =>
+    m == null ? "auto (per task)" : `${Math.round((m / 1000) * 10) / 10} km`;
+  const min = (s: number) => `${Math.round(s / 60)} min`;
+  const pct = (f: number) => `${Math.round(f * 100)}%`;
+
+  const out: string[] = [];
+  if (o.scoring !== n.scoring) {
+    out.push(describeChange("scoring class", o.scoring, n.scoring));
+  }
+  if (oDist !== nDist) {
+    out.push(`Changed nominal distance from ${km(oDist)} to ${km(nDist)}`);
+  }
+  if (o.nominalTime !== n.nominalTime) {
+    out.push(`Changed nominal time from ${min(o.nominalTime)} to ${min(n.nominalTime)}`);
+  }
+  if (o.nominalGoal !== n.nominalGoal) {
+    out.push(`Changed nominal goal from ${pct(o.nominalGoal)} to ${pct(n.nominalGoal)}`);
+  }
+  if (o.nominalLaunch !== n.nominalLaunch) {
+    out.push(`Changed nominal launch from ${pct(o.nominalLaunch)} to ${pct(n.nominalLaunch)}`);
+  }
+  if (o.minimumDistance !== n.minimumDistance) {
+    out.push(`Changed minimum distance from ${km(o.minimumDistance)} to ${km(n.minimumDistance)}`);
+  }
+  if (o.useLeading !== n.useLeading) {
+    out.push(
+      n.useLeading
+        ? "Enabled leading (departure) points"
+        : "Disabled leading (departure) points"
+    );
+  }
+  if (o.useArrival !== n.useArrival) {
+    out.push(n.useArrival ? "Enabled arrival points" : "Disabled arrival points");
+  }
+  return out;
 }
 
 /** Default statuses new comps get: covers the two canonical ones. */
@@ -456,7 +518,15 @@ export const compRoutes = new Hono<HonoEnv>()
         );
       }
       if (body.gap_params !== undefined) {
-        auditChanges.push("Updated GAP scoring parameters");
+        const oldGap = current.gap_params
+          ? (JSON.parse(current.gap_params) as GAPParameters)
+          : null;
+        for (const line of describeGapParamChanges(
+          oldGap,
+          body.gap_params ?? null
+        )) {
+          auditChanges.push(line);
+        }
       }
       if (
         body.open_igc_upload !== undefined &&
