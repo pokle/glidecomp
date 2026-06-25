@@ -234,12 +234,14 @@ const result = scoreTask(task, pilots, params);
 // ---------------------------------------------------------------------------
 
 if (jsonOutput) {
-  // JSON output — omit the full turnpointResult and fixes for brevity
+  // JSON output — keep the turnpoint sequence/leg breakdown for transparency,
+  // but drop the bulky raw cylinder-crossing array.
   const output = {
     ...result,
     pilotScores: result.pilotScores.map(ps => {
-      const { turnpointResult: _, ...rest } = ps;
-      return rest;
+      const { turnpointResult, ...rest } = ps;
+      const { crossings: _crossings, ...sequenceResult } = turnpointResult;
+      return { ...rest, turnpointResult: sequenceResult };
     }),
   };
   console.log(JSON.stringify(output, null, 2));
@@ -250,8 +252,21 @@ if (jsonOutput) {
   const w = result.weights;
   const s = result.stats;
 
+  const p = result.parameters;
+
   console.log('');
   console.log('=== Task Scoring Results (CIVL GAP) ===');
+  console.log('');
+  console.log('Scoring config:');
+  console.log(`  Sport:          ${p.scoring}`);
+  console.log(`  Distance origin:${p.distanceOrigin === 'takeoff' ? ' take-off' : ' start cylinder'}`);
+  console.log(`  Leading:        ${p.useLeading ? `on (${p.leadingFormula})` : 'off'}`);
+  if (p.scoring === 'HG') {
+    console.log(`  Arrival:        ${p.useArrival ? 'on' : 'off'}`);
+    console.log(`  Difficulty:     ${p.useDistanceDifficulty ? 'on' : 'off'}`);
+  }
+  console.log(`  Nominal:        dist ${formatDist(p.nominalDistance)} / time ${Math.round(p.nominalTime / 60)} min / goal ${(p.nominalGoal * 100).toFixed(0)}% / launch ${(p.nominalLaunch * 100).toFixed(0)}%`);
+  console.log(`  Min distance:   ${formatDist(p.minimumDistance)}`);
   console.log('');
   console.log(`Task distance:    ${formatDist(s.taskDistance)}`);
   console.log(`Pilots:           ${s.numFlying} flying / ${s.numPresent} present`);
@@ -269,20 +284,23 @@ if (jsonOutput) {
   console.log(`Weights:          dist: ${(w.distance * 100).toFixed(1)}%, time: ${(w.time * 100).toFixed(1)}%, lead: ${(w.leading * 100).toFixed(1)}%, arr: ${(w.arrival * 100).toFixed(1)}%`);
   console.log('');
 
-  // Header
+  // Header. "Diff Pts" is the difficulty half of distance points (HG only,
+  // when enabled); "LC" is the leading coefficient (shown when leading is on).
+  const showDiff = p.scoring === 'HG' && p.useDistanceDifficulty;
+  const showLC = p.useLeading;
+
   const header = [
     padLeft('#', 4),
     padRight('Pilot', 25),
     padLeft('Dist', 10),
     padLeft('SS Time', 10),
     padLeft('Dist Pts', 9),
-    padLeft('Time Pts', 9),
-    padLeft('Lead Pts', 9),
-    padLeft('Total', 7),
   ];
-  if (result.parameters.scoring === 'HG') {
-    header.splice(7, 0, padLeft('Arr Pts', 9));
-  }
+  if (showDiff) header.push(padLeft('Diff Pts', 9));
+  header.push(padLeft('Time Pts', 9), padLeft('Lead Pts', 9));
+  if (showLC) header.push(padLeft('LC', 9));
+  if (p.scoring === 'HG') header.push(padLeft('Arr Pts', 9));
+  header.push(padLeft('Total', 7));
   console.log(header.join('  '));
   console.log('-'.repeat(header.join('  ').length));
 
@@ -293,14 +311,16 @@ if (jsonOutput) {
       padLeft(formatDist(ps.flownDistance), 10),
       padLeft(ps.madeGoal ? formatTime(ps.speedSectionTime) : (ps.reachedESS ? 'ESS' : 'LO'), 10),
       padLeft(ps.distancePoints.toFixed(1), 9),
-      padLeft(ps.timePoints.toFixed(1), 9),
-      padLeft(ps.leadingPoints.toFixed(1), 9),
-      padLeft(String(ps.totalScore), 7),
     ];
-    if (result.parameters.scoring === 'HG') {
-      row.splice(7, 0, padLeft(ps.arrivalPoints.toFixed(1), 9));
-    }
+    if (showDiff) row.push(padLeft(ps.distanceDifficultyPoints.toFixed(1), 9));
+    row.push(padLeft(ps.timePoints.toFixed(1), 9), padLeft(ps.leadingPoints.toFixed(1), 9));
+    if (showLC) row.push(padLeft(isFinite(ps.leadingCoefficient) ? ps.leadingCoefficient.toFixed(3) : '—', 9));
+    if (p.scoring === 'HG') row.push(padLeft(ps.arrivalPoints.toFixed(1), 9));
+    row.push(padLeft(String(ps.totalScore), 7));
     console.log(row.join('  '));
   }
+  console.log('');
+  if (showDiff) console.log('Diff Pts = difficulty half of distance points (linear half = Dist Pts − Diff Pts).');
+  if (showLC) console.log('LC = leading coefficient (lower means more time spent out front).');
   console.log('');
 }
