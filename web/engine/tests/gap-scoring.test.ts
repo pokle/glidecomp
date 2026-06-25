@@ -325,6 +325,75 @@ describe('calculateLeadingPoints', () => {
   it('returns 0 for infinite LC', () => {
     expect(calculateLeadingPoints(Infinity, 100, 200)).toBe(0);
   });
+
+  it('uses ((LCp-LCmin)/sqrt(LCmin))^(2/3) — divides by minLC, not sqrt(minLC)', () => {
+    // AirScore pilot_leadout: LF = 1 - ((10-8)/sqrt(8))^(2/3)
+    //   = 1 - cbrt(4/8) = 1 - cbrt(0.5) ≈ 0.2063 → 206.3 of 1000.
+    // The previous (buggy) /sqrt(minLC) form gave a negative LF → 0 here.
+    expect(calculateLeadingPoints(10, 8, 1000)).toBeCloseTo(206.3, 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Leading Coefficient (AirScore classic/weighted parity)
+// ---------------------------------------------------------------------------
+
+describe('calculateLeadingCoefficient', () => {
+  // Leader flies the speed section quickly; laggard starts together but
+  // crawls, so reaches ESS much later — it must have the worse (higher) LC.
+  function leaderAndLaggard() {
+    const leader = createTrackThroughCylinders(standardWaypoints, { fixIntervalMinutes: 1 });
+    const laggard = createTrackThroughCylinders(standardWaypoints, { fixIntervalMinutes: 3 });
+    const lSeq = resolveTurnpointSequence(standardTask, leader);
+    const gSeq = resolveTurnpointSequence(standardTask, laggard);
+    const firstSSS = Math.min(
+      lSeq.sssReaching!.time.getTime(), gSeq.sssReaching!.time.getTime());
+    const lastESS = Math.max(
+      lSeq.essReaching!.time.getTime(), gSeq.essReaching!.time.getTime());
+    return { leader, laggard, lSeq, gSeq, firstSSS, lastESS };
+  }
+
+  for (const formula of ['weighted', 'classic'] as const) {
+    it(`${formula}: leader has a lower (better) finite LC than laggard`, () => {
+      const { leader, laggard, lSeq, gSeq, firstSSS, lastESS } = leaderAndLaggard();
+      const lcLeader = calculateLeadingCoefficient(
+        leader, standardTask, lSeq.sequence, firstSSS, lastESS,
+        lSeq.sssReaching!.time.getTime(), lSeq.essReaching!.time.getTime(), formula);
+      const lcLaggard = calculateLeadingCoefficient(
+        laggard, standardTask, gSeq.sequence, firstSSS, lastESS,
+        gSeq.sssReaching!.time.getTime(), gSeq.essReaching!.time.getTime(), formula);
+      expect(Number.isFinite(lcLeader)).toBe(true);
+      expect(lcLeader).toBeGreaterThan(0);
+      expect(lcLeader).toBeLessThan(lcLaggard);
+    });
+  }
+
+  it('a pilot who never started gets Infinity', () => {
+    const leader = createTrackThroughCylinders(standardWaypoints, { fixIntervalMinutes: 1 });
+    const seq = resolveTurnpointSequence(standardTask, leader);
+    const t0 = seq.sssReaching!.time.getTime();
+    expect(calculateLeadingCoefficient(
+      leader, standardTask, seq.sequence, t0, t0 + 600000, null, null, 'weighted',
+    )).toBe(Infinity);
+  });
+
+  it('a land-out pilot gets a finite LC worse than an ESS pilot (tail term)', () => {
+    const finisher = createTrackThroughCylinders(standardWaypoints, { fixIntervalMinutes: 1 });
+    // Land out: only fly the first two cylinders, then stop short of ESS.
+    const lander = createTrackThroughCylinders(standardWaypoints.slice(0, 2), { fixIntervalMinutes: 1 });
+    const fSeq = resolveTurnpointSequence(standardTask, finisher);
+    const dSeq = resolveTurnpointSequence(standardTask, lander);
+    const firstSSS = fSeq.sssReaching!.time.getTime();
+    const lastESS = fSeq.essReaching!.time.getTime();
+    const lcFinish = calculateLeadingCoefficient(
+      finisher, standardTask, fSeq.sequence, firstSSS, lastESS,
+      firstSSS, lastESS, 'weighted');
+    const lcLand = calculateLeadingCoefficient(
+      lander, standardTask, dSeq.sequence, firstSSS, lastESS,
+      dSeq.sssReaching!.time.getTime(), null, 'weighted');
+    expect(Number.isFinite(lcLand)).toBe(true);
+    expect(lcLand).toBeGreaterThan(lcFinish);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -531,6 +600,30 @@ describe('scoreTask', () => {
     expect(result.pilotScores[0].leadingPoints).toBe(0);
     // Time weight should absorb the leading weight
     expect(result.weights.time).toBeGreaterThan(0);
+  });
+
+  it('awards full leading points to the leader when useLeading=true', () => {
+    const leader = createTrackThroughCylinders(standardWaypoints, { fixIntervalMinutes: 1 });
+    const laggard = createTrackThroughCylinders(standardWaypoints, { fixIntervalMinutes: 3 });
+    const pilots: PilotFlight[] = [
+      { pilotName: 'Leader', trackFile: 'leader.igc', fixes: leader },
+      { pilotName: 'Laggard', trackFile: 'laggard.igc', fixes: laggard },
+    ];
+
+    const result = scoreTask(standardTask, pilots, {
+      nominalDistance: 20000,
+      nominalTime: 1800,
+      useLeading: true,
+    });
+
+    const L = result.pilotScores.find(p => p.pilotName === 'Leader')!;
+    const G = result.pilotScores.find(p => p.pilotName === 'Laggard')!;
+    expect(result.availablePoints.leading).toBeGreaterThan(0);
+    expect(L.leadingCoefficient).toBeLessThan(G.leadingCoefficient);
+    // Best LC ⇒ full available leading points (LeadingFactor = 1).
+    expect(L.leadingPoints).toBeCloseTo(result.availablePoints.leading, 1);
+    expect(G.leadingPoints).toBeLessThan(L.leadingPoints);
+    expect(G.leadingPoints).toBeGreaterThanOrEqual(0);
   });
 
   it('disables arrival points when useArrival=false for HG', () => {

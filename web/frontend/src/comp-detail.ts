@@ -2029,6 +2029,9 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
   const useArrivalCheckbox = document.getElementById(
     "settings-use-arrival"
   ) as HTMLInputElement;
+  const leadingFormulaSelect = document.getElementById(
+    "settings-leading-formula"
+  ) as unknown as HTMLSelectElement;
 
   addStatusBtn.addEventListener("click", () => {
     statusesList.appendChild(buildStatusRow());
@@ -2091,6 +2094,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
       minimumDistanceInput.value = String(gp.minimumDistance / 1000);
       useLeadingCheckbox.checked = gp.useLeading;
       useArrivalCheckbox.checked = gp.useArrival;
+      leadingFormulaSelect.value = gp.leadingFormula ?? "weighted";
 
       dialog.showModal();
     });
@@ -2183,6 +2187,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
       minimumDistance: parseField(minimumDistanceInput, 5) * 1000,
       useLeading: useLeadingCheckbox.checked,
       useArrival: useArrivalCheckbox.checked,
+      leadingFormula: leadingFormulaSelect.value as "classic" | "weighted",
     };
 
     const pilotStatuses = collectStatusRows(statusesList);
