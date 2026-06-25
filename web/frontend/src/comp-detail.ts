@@ -2032,6 +2032,9 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
   const leadingFormulaSelect = document.getElementById(
     "settings-leading-formula"
   ) as unknown as HTMLSelectElement;
+  const distanceOriginSelect = document.getElementById(
+    "settings-distance-origin"
+  ) as unknown as HTMLSelectElement;
 
   addStatusBtn.addEventListener("click", () => {
     statusesList.appendChild(buildStatusRow());
@@ -2095,6 +2098,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
       useLeadingCheckbox.checked = gp.useLeading;
       useArrivalCheckbox.checked = gp.useArrival;
       leadingFormulaSelect.value = gp.leadingFormula ?? "weighted";
+      distanceOriginSelect.value = gp.distanceOrigin ?? "takeoff";
 
       dialog.showModal();
     });
@@ -2188,6 +2192,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
       useLeading: useLeadingCheckbox.checked,
       useArrival: useArrivalCheckbox.checked,
       leadingFormula: leadingFormulaSelect.value as "classic" | "weighted",
+      distanceOrigin: distanceOriginSelect.value as "takeoff" | "start",
     };
 
     const pilotStatuses = collectStatusRows(statusesList);

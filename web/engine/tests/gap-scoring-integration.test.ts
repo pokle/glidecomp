@@ -4,13 +4,13 @@
  *
  * Reference: https://xc.highcloud.net/task_result.html?comPk=466&tasPk=2027
  *
- * Note: our task distance (73.9 km) differs from AirScore's (78.85 km) because
- * the committed task.xctsk was trimmed to the speed section — it omits the
- * takeoff cylinder (AirScore scores the takeoff→SSS leg) — and because of
- * takeoff/start-cylinder optimization differences. Distance scores here are
- * therefore our internally-consistent values, not AirScore's. Time points DO
- * follow AirScore's gap2020+ formula (5/6 exponent); see airscore-parity.test.ts.
- * This test guards against regressions in the full pipeline:
+ * The committed task.xctsk is the full task including the takeoff cylinder,
+ * so with the default 'takeoff' distance origin our optimized task distance
+ * (78.85 km) matches AirScore's. Flown distances and time points follow the
+ * CIVL GAP / AirScore formulas; non-goal distance *points* can still differ
+ * slightly because AirScore adds a distance-difficulty term we don't yet
+ * apply (see airscore-parity.test.ts). The snapshot values below are our
+ * own output — this test guards against regressions in the full pipeline:
  * IGC parsing → turnpoint sequence → GAP scoring.
  */
 
@@ -125,20 +125,16 @@ describe('Corryong Cup 2026 Task 1 — integration', () => {
 
   it('ranks all pilots in the correct order', () => {
     const rankedNames = result.pilotScores.map(p => p.pilotName);
-    // First 20 are in strict order
-    expect(rankedNames.slice(0, 20)).toEqual(expectedRankOrder.slice(0, 20));
+    // Ranks 1–28 are in strict order
+    expect(rankedNames.slice(0, 28)).toEqual(expectedRankOrder);
 
-    // Hooke and Halsall are tied at rank 21
-    const tied21 = new Set(rankedNames.slice(20, 22));
-    expect(tied21).toEqual(new Set(['Neil Hooke', 'Neale Halsall']));
+    // Rank 29
+    expect(rankedNames[28]).toBe('Rennick Kerr');
 
-    // Remaining ranked pilots (23-28)
-    expect(rankedNames.slice(22, 28)).toEqual(expectedRankOrder.slice(22));
-
-    // Last 4 are tied at rank 29
-    const tiedPilots = new Set(rankedNames.slice(28));
-    expect(tiedPilots).toEqual(new Set([
-      'Rennick Kerr', 'Stuart McElroy', 'Daniel Rhodes', 'Ivo van der Leeden',
+    // Last 3 are tied at rank 30 (minimum distance floor)
+    const tied30 = new Set(rankedNames.slice(29));
+    expect(tied30).toEqual(new Set([
+      'Stuart McElroy', 'Daniel Rhodes', 'Ivo van der Leeden',
     ]));
   });
 
@@ -174,15 +170,14 @@ describe('Corryong Cup 2026 Task 1 — integration', () => {
     { name: 'Craig Taylor',      rank: 12, total: 486,  distPts: 485.6, timePts: 0,     madeGoal: true },
 
     // First non-goal pilot
-    { name: 'Rich Reinauer',     rank: 13, total: 473,  distPts: 473.1, timePts: 0, madeGoal: false },
+    { name: 'Rich Reinauer',     rank: 13, total: 474,  distPts: 473.9, timePts: 0, madeGoal: false },
 
     // Mid-pack — non-goal
-    { name: 'Steve Blenkinsop',  rank: 17, total: 308,  distPts: 308.5, timePts: 0, madeGoal: false },
-    { name: 'Neale Halsall',     rank: 21, total: 164,  distPts: 163.5, timePts: 0, madeGoal: false },
+    { name: 'Steve Blenkinsop',  rank: 17, total: 320,  distPts: 319.7, timePts: 0, madeGoal: false },
+    { name: 'Neale Halsall',     rank: 22, total: 184,  distPts: 183.9, timePts: 0, madeGoal: false },
 
-    // Trailing — at minimum distance floor
-    { name: 'Rennick Kerr',     rank: 29, total: 33,  distPts: 32.9, timePts: 0, madeGoal: false },
-    { name: 'Ivo van der Leeden', rank: 29, total: 33, distPts: 32.9, timePts: 0, madeGoal: false },
+    // Trailing — at minimum distance floor (tied at rank 30)
+    { name: 'Ivo van der Leeden', rank: 30, total: 31, distPts: 30.8, timePts: 0, madeGoal: false },
   ];
 
   for (const snap of snapshots) {
@@ -212,8 +207,9 @@ describe('Corryong Cup 2026 Task 1 — integration', () => {
     const minDistPilots = result.pilotScores.filter(p =>
       p.flownDistance === COMP_PARAMS.minimumDistance
     );
-    // Kerr (1.6km actual), McElroy (0), Ivo (0), Rhodes (negative)
-    expect(minDistPilots.length).toBe(4);
+    // McElroy (0), Rhodes (negative), Ivo (0). With the take-off origin
+    // Kerr's flown distance (~6.5 km) now clears the 5 km floor.
+    expect(minDistPilots.length).toBe(3);
     for (const p of minDistPilots) {
       expect(p.flownDistance).toBe(5000);
       expect(p.distancePoints).toBeGreaterThan(0);

@@ -86,6 +86,11 @@ function describeGapParamChanges(
   if (oFormula !== nFormula) {
     out.push(describeChange("leading coefficient formula", oFormula, nFormula));
   }
+  const oOrigin = o.distanceOrigin ?? "takeoff";
+  const nOrigin = n.distanceOrigin ?? "takeoff";
+  if (oOrigin !== nOrigin) {
+    out.push(describeChange("distance origin", oOrigin, nOrigin));
+  }
   return out;
 }
 

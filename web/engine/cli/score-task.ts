@@ -42,6 +42,8 @@ function usage(): never {
     '  --nominal-launch <ratio>   Nominal launch ratio 0-1 (default: 0.96)\n' +
     '  --min-distance <m>         Minimum distance in meters (default: 5000)\n' +
     '  --scoring <PG|HG>          Sport type (default: HG)\n' +
+    '  --distance-origin <where>  takeoff | start — where scored distance begins\n' +
+    '                             (default: takeoff; "start" excludes the take-off→SSS leg)\n' +
     '  --leading                  Enable leading (departure) points (default: off)\n' +
     '  --no-leading               Disable leading (departure) points\n' +
     '  --arrival                  Enable arrival points, HG only (default: off)\n' +
@@ -83,6 +85,9 @@ for (let i = 0; i < args.length; i++) {
       break;
     case '--scoring':
       params.scoring = args[++i] as 'PG' | 'HG';
+      break;
+    case '--distance-origin':
+      params.distanceOrigin = args[++i] as 'takeoff' | 'start';
       break;
     case '--leading':
       params.useLeading = true;

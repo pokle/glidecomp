@@ -142,6 +142,16 @@
           <h3 class="text-base font-semibold mb-1">Minimum Distance</h3>
           <p class="text-muted-foreground">There is a <strong>minimum scored distance</strong> (typically 5 km). If you launched but only flew 1 km before landing, you're still scored as if you flew 5 km. Pilots sometimes call these "bomb-out points" &mdash; the system is designed to encourage you to at least launch and give it a go rather than sitting out a task entirely.</p>
         </div>
+
+        <div class="ml-2">
+          <h3 class="text-base font-semibold mb-1">Where distance is measured from</h3>
+          <p class="text-muted-foreground">When a task defines a separate <strong>take-off</strong> turnpoint before the start (SSS), competitions differ on whether the take-off&rarr;start leg counts toward scored distance. GlideComp offers two settings (chosen per competition):</p>
+          <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2 mt-2">
+            <li><strong>Take-off</strong> (default) &mdash; distance is measured from the take-off point, through the start cylinder, to goal. The take-off is treated as a fixed launch point. This follows the <strong>FAI CIVL GAP</strong> and <strong>PWCA</strong> rules and matches most scoring software (including AirScore).</li>
+            <li><strong>Start cylinder</strong> &mdash; distance is measured from the edge of the start cylinder onward, so the take-off&rarr;start leg is <em>not</em> scored. This follows the wording of some national hang-gliding rules (e.g. Australia's HGFA/SAFA) and the "Move Origin" option in the Davis/SeeYou scoring toolchain.</li>
+          </ul>
+          <p class="text-muted-foreground mt-2">The two only differ for tasks that include a take-off turnpoint; tasks that begin at the SSS score the same either way. The speed section (SSS&rarr;ESS), and therefore time and leading points, is unaffected by this setting.</p>
+        </div>
       </div>
     </section>
 
@@ -280,7 +290,7 @@
         </div>
 
         <p class="text-muted-foreground">GlideComp defaults to having leading and arrival points <strong>disabled</strong>. These must be explicitly enabled in the competition parameters.</p>
-        <p class="text-muted-foreground">The task distance calculation may differ slightly from other scoring tools (such as <a href="https://airscore.org" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">AirScore</a>) due to differences in route optimization algorithms. This affects the absolute point values but not the relative ranking between pilots.</p>
+        <p class="text-muted-foreground">Distance, time and leading points are computed to match the CIVL GAP / AirScore formulas. Distance-point values for pilots who don't reach goal can still differ slightly from other tools such as <a href="https://airscore.org" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">AirScore</a>, which add a "distance difficulty" component that GlideComp does not yet apply; this affects absolute values more than relative ranking.</p>
         <p class="text-muted-foreground">The scoring engine source code is open and available on <a href="https://github.com/pokle/glidecomp" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">GitHub</a>.</p>
       </div>
     </section>

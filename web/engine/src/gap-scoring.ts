@@ -51,10 +51,26 @@ export interface GAPParameters {
    *   time from each pilot's own start; speed exponent 2/3.
    */
   leadingFormula: LeadingFormula;
+  /**
+   * Where scored task distance begins, for tasks that define a take-off
+   * turnpoint before the SSS:
+   * - 'takeoff' — measure from the take-off point through the SSS to goal,
+   *   per FAI CIVL GAP / PWCA (the take-off→SSS leg counts). The default.
+   * - 'start'   — measure from the start (SSS) cylinder edge, excluding the
+   *   take-off→SSS leg (the HGFA/SAFA rule wording; "Move Origin" in the
+   *   Davis/SeeYou hang-gliding toolchain).
+   *
+   * Only affects tasks whose first turnpoint is a TAKEOFF; tasks that
+   * begin at the SSS score identically either way.
+   */
+  distanceOrigin: DistanceOrigin;
 }
 
 /** Leading coefficient variant — see {@link GAPParameters.leadingFormula}. */
 export type LeadingFormula = 'classic' | 'weighted';
+
+/** Where scored task distance begins — see {@link GAPParameters.distanceOrigin}. */
+export type DistanceOrigin = 'takeoff' | 'start';
 
 /** Default parameters — reasonable for a typical HG competition. */
 export const DEFAULT_GAP_PARAMETERS: GAPParameters = {
@@ -67,7 +83,23 @@ export const DEFAULT_GAP_PARAMETERS: GAPParameters = {
   useLeading: false,
   useArrival: false,
   leadingFormula: 'weighted',
+  distanceOrigin: 'takeoff',
 };
+
+/**
+ * Return the task to use for distance scoring under the given origin.
+ *
+ * For 'start', any take-off / pre-SSS turnpoints are dropped so the
+ * optimized distance begins at the SSS cylinder edge. For 'takeoff', the
+ * task is returned unchanged (the optimizer treats a leading TAKEOFF
+ * turnpoint as a fixed launch point — see task-optimizer.ts).
+ */
+export function taskForDistanceOrigin(task: XCTask, origin: DistanceOrigin): XCTask {
+  if (origin !== 'start') return task;
+  const sssIdx = getSSSIndex(task);
+  if (sssIdx <= 0) return task; // already starts at (or before) the SSS
+  return { ...task, turnpoints: task.turnpoints.slice(sssIdx) };
+}
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -634,10 +666,14 @@ export function scoreTask(
   const fullParams: GAPParameters = { ...DEFAULT_GAP_PARAMETERS, ...params };
   const actualNumPresent = numPresent ?? pilots.length;
 
+  // Apply the distance-origin convention (take-off vs start cylinder) once,
+  // up front; everything downstream scores against this task.
+  const scoringTask = taskForDistanceOrigin(task, fullParams.distanceOrigin);
+
   // Step 1: Resolve turnpoint sequences for all pilots
   const pilotResults = pilots.map(pilot => ({
     pilot,
-    result: resolveTurnpointSequence(task, pilot.fixes),
+    result: resolveTurnpointSequence(scoringTask, pilot.fixes),
   }));
 
   // Step 2: Gather aggregate statistics
@@ -659,7 +695,7 @@ export function scoreTask(
     .filter((t): t is number => t !== null && t > 0);
   const bestTime = validTimes.length > 0 ? minBy(validTimes, t => t) : null;
 
-  const taskDistance = calculateOptimizedTaskDistance(task);
+  const taskDistance = calculateOptimizedTaskDistance(scoringTask);
 
   const numFlying = pilots.length;
   const goalRatio = numFlying > 0 ? numInGoal / numFlying : 0;
@@ -713,7 +749,7 @@ export function scoreTask(
       const sssTime = pr.result.sssReaching?.time.getTime() ?? null;
       const essTime = pr.result.essReaching?.time.getTime() ?? null;
       return calculateLeadingCoefficient(
-        pr.pilot.fixes, task, pr.result.sequence,
+        pr.pilot.fixes, scoringTask, pr.result.sequence,
         taskFirstSSSTime, taskLastESSTime,
         sssTime, essTime,
         fullParams.leadingFormula,

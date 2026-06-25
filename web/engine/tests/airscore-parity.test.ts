@@ -108,6 +108,25 @@ describe('AirScore parity — Corryong Cup 2026 T1', () => {
     }
   });
 
+  it('distance origin: take-off matches AirScore; start excludes the launch leg', () => {
+    const takeoff = scoreTask(task, pilots, { ...baseParams, useLeading: false, distanceOrigin: 'takeoff' });
+    const start = scoreTask(task, pilots, { ...baseParams, useLeading: false, distanceOrigin: 'start' });
+    const durandKm = (r: ReturnType<typeof scoreTask>) =>
+      r.pilotScores.find((p) => p.pilotName === 'durand')!.flownDistance / 1000;
+    // A goal pilot flies the whole task: take-off origin ≈ 78.85 km (matching
+    // AirScore's task distance), start origin ≈ 73.85 km (speed section only).
+    expect(durandKm(takeoff)).toBeCloseTo(78.85, 1);
+    expect(durandKm(start)).toBeCloseTo(73.85, 1);
+
+    // In take-off mode, flown distances track AirScore's published km closely.
+    const byName = new Map(takeoff.pilotScores.map((p) => [p.pilotName, p]));
+    for (const surname of ['reinauer', 'carrigan', 'drabble']) {
+      const ours = byName.get(surname)!.flownDistance / 1000;
+      const ref = refBySurname.get(surname)!.distKm;
+      expect(Math.abs(ours - ref)).toBeLessThan(1.0);
+    }
+  });
+
   it('weighted leadout rewards early course-leaders over the faster late starter', () => {
     const r = scoreTask(task, pilots, { ...baseParams, useLeading: true, leadingFormula: 'weighted' });
     const byName = new Map(r.pilotScores.map((p) => [p.pilotName, p]));

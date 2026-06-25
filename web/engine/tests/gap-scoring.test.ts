@@ -13,11 +13,13 @@ import {
   calculateArrivalPoints,
   applyMinimumDistance,
   scoreTask,
+  taskForDistanceOrigin,
   DEFAULT_GAP_PARAMETERS,
   type GAPParameters,
   type PilotFlight,
 } from '../src/gap-scoring';
 import { resolveTurnpointSequence } from '../src/turnpoint-sequence';
+import { calculateOptimizedTaskDistance } from '../src/task-optimizer';
 import { calculateBearingRadians, destinationPoint } from '../src/geo';
 import type { XCTask, SSSConfig, GoalConfig } from '../src/xctsk-parser';
 import { createFix as createFixSeconds, BASE_TIME, type IGCFix } from './test-helpers';
@@ -309,6 +311,45 @@ describe('calculateTimePoints', () => {
 // ---------------------------------------------------------------------------
 // Leading Points
 // ---------------------------------------------------------------------------
+
+describe('distance origin (take-off vs start)', () => {
+  // Take-off and SSS share a location; the SSS is a 5 km exit cylinder.
+  const task = createTask([
+    { name: 'TO', lat: 47.0, lon: 11.0, radius: 3000, type: 'TAKEOFF' },
+    { name: 'SSS', lat: 47.0, lon: 11.0, radius: 5000, type: 'SSS' },
+    { name: 'ESS', lat: 47.0, lon: 11.26, radius: 400, type: 'ESS' },
+  ]);
+
+  it("'start' drops the take-off turnpoint, beginning at the SSS", () => {
+    const s = taskForDistanceOrigin(task, 'start');
+    expect(s.turnpoints.length).toBe(2);
+    expect(s.turnpoints[0].type).toBe('SSS');
+  });
+
+  it("'takeoff' keeps the task unchanged", () => {
+    const t = taskForDistanceOrigin(task, 'takeoff');
+    expect(t.turnpoints.length).toBe(3);
+    expect(t.turnpoints[0].type).toBe('TAKEOFF');
+  });
+
+  it('take-off is a fixed point: the launch leg equals the start radius', () => {
+    const dTakeoff = calculateOptimizedTaskDistance(taskForDistanceOrigin(task, 'takeoff'));
+    const dStart = calculateOptimizedTaskDistance(taskForDistanceOrigin(task, 'start'));
+    // take-off (centre) → SSS edge toward ESS = the 5 km start radius
+    expect(dTakeoff - dStart).toBeGreaterThan(4900);
+    expect(dTakeoff - dStart).toBeLessThan(5100);
+  });
+
+  it('no take-off turnpoint ⇒ both origins are identical', () => {
+    const plain = createTask([
+      { name: 'SSS', lat: 47.0, lon: 11.0, radius: 5000, type: 'SSS' },
+      { name: 'ESS', lat: 47.0, lon: 11.26, radius: 400, type: 'ESS' },
+    ]);
+    expect(taskForDistanceOrigin(plain, 'start')).toBe(
+      taskForDistanceOrigin(plain, 'takeoff'),
+    );
+  });
+});
 
 describe('calculateLeadingPoints', () => {
   it('pilot with min LC gets full points', () => {

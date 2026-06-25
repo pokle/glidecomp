@@ -378,6 +378,7 @@ describe("PATCH /api/comp/:comp_id", () => {
         scoring: "HG",
         useLeading: true,
         useArrival: true,
+        distanceOrigin: "start",
       },
     });
     expect(res.status).toBe(200);
@@ -389,6 +390,7 @@ describe("PATCH /api/comp/:comp_id", () => {
     expect(descriptions).toContain("Enabled leading (departure) points");
     expect(descriptions).toContain("Enabled arrival points");
     expect(descriptions).toContain("Changed nominal time from 90 min to 100 min");
+    expect(descriptions).toContain('Changed distance origin from "takeoff" to "start"');
     // No generic catch-all line
     expect(descriptions).not.toContain("Updated GAP scoring parameters");
   });
