@@ -17,7 +17,7 @@ import type { XCTask } from './xctsk-parser';
 import type { IGCFix } from './igc-parser';
 import { isInsideCylinder, andoyerDistance } from './geo';
 import { getSSSIndex, getESSIndex, getGoalIndex } from './xctsk-parser';
-import { calculateOptimizedTaskDistance, getOptimizedSegmentDistances } from './task-optimizer';
+import { calculateOptimizedTaskLine } from './task-optimizer';
 
 // ---------------------------------------------------------------------------
 // Raw crossing detection
@@ -429,6 +429,7 @@ function computeBestProgress(
   lastReachingTime: number,
   remainingTPs: Array<{ lat: number; lon: number; radius: number }>,
   remainingLegDistances: number[],
+  nextTagPoint: { lat: number; lon: number } | null,
 ): BestProgress | null {
   // Sum of optimized leg distances between remaining TPs (TP[1]→TP[2]→...→Goal)
   let interTPDistance = 0;
@@ -443,11 +444,15 @@ function computeBestProgress(
     const fix = fixes[i];
     if (fix.time.getTime() <= lastReachingTime) continue;
 
-    // Distance from pilot to the nearest point on the next un-reached TP cylinder
-    const distToNextTP = Math.max(
-      0,
-      andoyerDistance(fix.latitude, fix.longitude, nextTP.lat, nextTP.lon) - nextTP.radius
-    );
+    // Distance to the next un-reached turnpoint. For an intermediate
+    // turnpoint we measure to its optimal tag point, so the remaining route
+    // stays continuous with the onward optimized legs (avoids the small
+    // over-credit of measuring to the nearest edge then jumping to the
+    // optimal tag). The goal cylinder has no onward leg, so the pilot only
+    // needs to reach it — use the nearest edge there.
+    const distToNextTP = nextTagPoint
+      ? andoyerDistance(fix.latitude, fix.longitude, nextTagPoint.lat, nextTagPoint.lon)
+      : Math.max(0, andoyerDistance(fix.latitude, fix.longitude, nextTP.lat, nextTP.lon) - nextTP.radius);
     // Total remaining = distance to next TP + optimized path from there to goal
     const distToGoal = distToNextTP + interTPDistance;
 
@@ -489,8 +494,19 @@ export function resolveTurnpointSequence(
   fixes: IGCFix[]
 ): TurnpointSequenceResult {
   const allCrossings = detectCylinderCrossings(task, fixes);
-  const segmentDistances = getOptimizedSegmentDistances(task);
-  const taskDistance = calculateOptimizedTaskDistance(task);
+  // Optimized task line (one tag point per turnpoint), computed once. The
+  // tag points feed best-progress so a pilot's remaining distance to goal
+  // is measured to each cylinder's optimal tag — consistent with the leg
+  // distances — rather than its nearest edge.
+  const optimizedLine = calculateOptimizedTaskLine(task);
+  const segmentDistances: number[] = [];
+  for (let i = 1; i < optimizedLine.length; i++) {
+    segmentDistances.push(andoyerDistance(
+      optimizedLine[i - 1].lat, optimizedLine[i - 1].lon,
+      optimizedLine[i].lat, optimizedLine[i].lon,
+    ));
+  }
+  const taskDistance = segmentDistances.reduce((sum, d) => sum + d, 0);
   const sssIdx = getSSSIndex(task);
   const essIdx = getESSIndex(task);
   const goalIdx = getGoalIndex(task);
@@ -560,8 +576,10 @@ export function resolveTurnpointSequence(
       const lastReaching = candidateSequence[tpsReached - 1];
       const { remainingTPs, remainingLegDistances } =
         buildRemainingPath(task, lastReaching.taskIndex, segmentDistances);
+      const nextIdx = lastReaching.taskIndex + 1;
+      const nextTag = nextIdx < goalIdx ? optimizedLine[nextIdx] : null;
       const progress = computeBestProgress(
-        fixes, lastReaching.time.getTime(), remainingTPs, remainingLegDistances
+        fixes, lastReaching.time.getTime(), remainingTPs, remainingLegDistances, nextTag
       );
       candidateFlownDist = progress
         ? taskDistance - progress.distanceToGoal
@@ -615,8 +633,10 @@ export function resolveTurnpointSequence(
     const lastReaching = sequence[sequence.length - 1];
     const { remainingTPs, remainingLegDistances } =
       buildRemainingPath(task, lastReaching.taskIndex, segmentDistances);
+    const nextIdx = lastReaching.taskIndex + 1;
+    const nextTag = nextIdx < goalIdx ? optimizedLine[nextIdx] : null;
     bestProgress = computeBestProgress(
-      fixes, lastReaching.time.getTime(), remainingTPs, remainingLegDistances
+      fixes, lastReaching.time.getTime(), remainingTPs, remainingLegDistances, nextTag
     );
     flownDistance = bestProgress
       ? taskDistance - bestProgress.distanceToGoal
