@@ -53,6 +53,10 @@ const gapParamsSchema = z
     // Leading coefficient variant (AirScore lc_formula). Optional; the
     // scorer defaults to 'weighted' (modern CIVL GAP) when omitted.
     leadingFormula: z.enum(["classic", "weighted"]).optional(),
+    // Where scored distance begins. Optional; defaults to 'takeoff'
+    // (FAI CIVL GAP / PWCA) when omitted. 'start' excludes the
+    // take-off→SSS leg (HGFA wording / "Move Origin").
+    distanceOrigin: z.enum(["takeoff", "start"]).optional(),
   })
   .strict();
 

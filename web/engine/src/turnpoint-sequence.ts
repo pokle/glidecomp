@@ -190,7 +190,12 @@ export interface TurnpointSequenceResult {
 
   // --- Distance scoring ---
 
-  /** Total optimized task distance in meters (SSS to goal via cylinder edges) */
+  /**
+   * Total optimized task distance in meters (from the first turnpoint to
+   * goal via cylinder edges). When the first turnpoint is a TAKEOFF, the
+   * launch→SSS leg is included; pass a task trimmed to the SSS to exclude
+   * it (see taskForDistanceOrigin in gap-scoring).
+   */
   taskDistance: number;
 
   /**

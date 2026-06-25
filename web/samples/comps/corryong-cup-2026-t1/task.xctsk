@@ -21,6 +21,17 @@
   "taskType": "CLASSIC",
   "turnpoints": [
     {
+      "radius": 3000,
+      "type": "TAKEOFF",
+      "waypoint": {
+        "altSmoothed": 932,
+        "description": "ELLIOT",
+        "lat": -36.18583297729492,
+        "lon": 147.97666931152344,
+        "name": "ELLIOT"
+      }
+    },
+    {
       "radius": 5000,
       "type": "SSS",
       "waypoint": {

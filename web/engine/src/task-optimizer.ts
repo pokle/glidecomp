@@ -15,7 +15,19 @@ import {
   destinationPoint
 } from './geo';
 
-import type { XCTask } from './xctsk-parser';
+import type { XCTask, Turnpoint } from './xctsk-parser';
+
+/**
+ * Effective radius of the first turnpoint for optimization.
+ *
+ * A TAKEOFF turnpoint is the launch point: per FAI CIVL GAP / PWCA it is a
+ * fixed point (its centre), not a radius-optimized cylinder, so the
+ * take-off→SSS leg is measured from the centre. Every other first
+ * turnpoint (e.g. an SSS) is radius-optimized to its edge as usual.
+ */
+function firstTurnpointRadius(tp: Turnpoint): number {
+  return tp.type === 'TAKEOFF' ? 0 : tp.radius;
+}
 
 /**
  * Find the optimal point on a circle that minimizes total path distance.
@@ -102,7 +114,7 @@ function optimizePass(
         tp.waypoint.lat, tp.waypoint.lon,
         nextPoint.lat, nextPoint.lon
       );
-      path.push(destinationPoint(tp.waypoint.lat, tp.waypoint.lon, tp.radius, bearing));
+      path.push(destinationPoint(tp.waypoint.lat, tp.waypoint.lon, firstTurnpointRadius(tp), bearing));
     } else if (i === n - 1) {
       // Last turnpoint: entry point nearest to previous optimized point
       const prevPoint = path[path.length - 1];
@@ -168,7 +180,7 @@ export function calculateOptimizedTaskLine(task: XCTask): { lat: number; lon: nu
       tp2.waypoint.lat, tp2.waypoint.lon
     );
     return [
-      destinationPoint(tp1.waypoint.lat, tp1.waypoint.lon, tp1.radius, bearing),
+      destinationPoint(tp1.waypoint.lat, tp1.waypoint.lon, firstTurnpointRadius(tp1), bearing),
       destinationPoint(tp2.waypoint.lat, tp2.waypoint.lon, tp2.radius, bearing + Math.PI)
     ];
   }
