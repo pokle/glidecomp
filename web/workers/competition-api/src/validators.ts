@@ -40,7 +40,10 @@ export const pilotStatusesArray = z
 const gapParamsSchema = z
   .object({
     nominalLaunch: z.number().min(0).max(1),
-    nominalDistance: z.number().positive(),
+    // Optional: when omitted the scorer auto-computes it per task
+    // (70% of the optimized task distance), preserving the historical
+    // default. Set it to pin a fixed comp-wide nominal distance.
+    nominalDistance: z.number().positive().nullable().optional(),
     nominalGoal: z.number().min(0).max(1),
     nominalTime: z.number().positive(),
     minimumDistance: z.number().positive(),

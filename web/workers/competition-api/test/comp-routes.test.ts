@@ -343,6 +343,55 @@ describe("PATCH /api/comp/:comp_id", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  test("updates GAP parameters, allowing omitted nominalDistance", async () => {
+    const compId = await createComp({ category: "pg" });
+
+    const gapParams = {
+      nominalLaunch: 1.0,
+      // nominalDistance omitted → scorer auto-computes per task
+      nominalGoal: 0.25,
+      nominalTime: 5400,
+      minimumDistance: 4000,
+      scoring: "PG",
+      useLeading: true,
+      useArrival: false,
+    };
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      gap_params: gapParams,
+    });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { gap_params: Record<string, unknown> };
+    expect(data.gap_params).toEqual(gapParams);
+    expect(data.gap_params.nominalDistance).toBeUndefined();
+  });
+
+  test("writes specific audit lines for GAP parameter changes", async () => {
+    const compId = await createComp({ category: "hg" });
+
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      gap_params: {
+        nominalLaunch: 0.96,
+        nominalGoal: 0.2,
+        nominalTime: 6000,
+        minimumDistance: 5000,
+        scoring: "HG",
+        useLeading: true,
+        useArrival: true,
+      },
+    });
+    expect(res.status).toBe(200);
+
+    const rows = await env.DB.prepare(
+      "SELECT description FROM audit_log WHERE subject_type = 'comp' ORDER BY audit_id"
+    ).all();
+    const descriptions = rows.results.map((r) => r.description as string);
+    expect(descriptions).toContain("Enabled leading (departure) points");
+    expect(descriptions).toContain("Enabled arrival points");
+    expect(descriptions).toContain("Changed nominal time from 90 min to 100 min");
+    // No generic catch-all line
+    expect(descriptions).not.toContain("Updated GAP scoring parameters");
+  });
 });
 
 // ── DELETE /api/comp/:comp_id ───────────────────────────────────────────────

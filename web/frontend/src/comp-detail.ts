@@ -4,7 +4,7 @@ import { toast, confirmDialog } from "./feedback";
 import type { AuthUser } from "./auth/client";
 import { api } from "./comp/api";
 import { setupPilotsSection } from "./comp/pilots-section";
-import type { XCTask } from "@glidecomp/engine";
+import { DEFAULT_GAP_PARAMETERS, type XCTask, type GAPParameters } from "@glidecomp/engine";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,7 +23,7 @@ interface CompDetail {
   test: boolean;
   pilot_classes: string[];
   default_pilot_class: string;
-  gap_params: unknown;
+  gap_params: GAPParameters | null;
   open_igc_upload: boolean;
   pilot_statuses: PilotStatusConfig[];
   tasks: TaskSummary[];
@@ -2008,6 +2008,27 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
   const addStatusBtn = document.getElementById(
     "settings-add-status-btn"
   ) as HTMLButtonElement;
+  const nominalDistanceInput = document.getElementById(
+    "settings-nominal-distance"
+  ) as HTMLInputElement;
+  const nominalTimeInput = document.getElementById(
+    "settings-nominal-time"
+  ) as HTMLInputElement;
+  const nominalGoalInput = document.getElementById(
+    "settings-nominal-goal"
+  ) as HTMLInputElement;
+  const nominalLaunchInput = document.getElementById(
+    "settings-nominal-launch"
+  ) as HTMLInputElement;
+  const minimumDistanceInput = document.getElementById(
+    "settings-minimum-distance"
+  ) as HTMLInputElement;
+  const useLeadingCheckbox = document.getElementById(
+    "settings-use-leading"
+  ) as HTMLInputElement;
+  const useArrivalCheckbox = document.getElementById(
+    "settings-use-arrival"
+  ) as HTMLInputElement;
 
   addStatusBtn.addEventListener("click", () => {
     statusesList.appendChild(buildStatusRow());
@@ -2055,6 +2076,21 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
       defaultClassSelect.value = comp.default_pilot_class;
 
       renderStatusRows(statusesList, comp.pilot_statuses ?? []);
+
+      // GAP scoring parameters — fall back to engine defaults when unset.
+      // nominalDistance stays blank when unset so the scorer auto-computes
+      // it per task (70% of task distance), matching historical behavior.
+      const gp = comp.gap_params ?? DEFAULT_GAP_PARAMETERS;
+      nominalDistanceInput.value =
+        gp.nominalDistance != null
+          ? String(Math.round(gp.nominalDistance / 1000))
+          : "";
+      nominalTimeInput.value = String(Math.round(gp.nominalTime / 60));
+      nominalGoalInput.value = String(Math.round(gp.nominalGoal * 100));
+      nominalLaunchInput.value = String(Math.round(gp.nominalLaunch * 100));
+      minimumDistanceInput.value = String(gp.minimumDistance / 1000);
+      useLeadingCheckbox.checked = gp.useLeading;
+      useArrivalCheckbox.checked = gp.useArrival;
 
       dialog.showModal();
     });
@@ -2128,6 +2164,27 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
       return;
     }
 
+    // Build GAP scoring parameters. Scoring class follows the comp
+    // category. nominalDistance is omitted when blank so the scorer
+    // auto-computes it per task.
+    const parseField = (input: HTMLInputElement, fallback: number) => {
+      const v = parseFloat(input.value);
+      return Number.isNaN(v) ? fallback : v;
+    };
+    const nominalDistanceKm = parseFloat(nominalDistanceInput.value);
+    const gapParams = {
+      scoring: (category === "pg" ? "PG" : "HG") as "PG" | "HG",
+      nominalDistance: Number.isNaN(nominalDistanceKm)
+        ? null
+        : nominalDistanceKm * 1000,
+      nominalTime: parseField(nominalTimeInput, 90) * 60,
+      nominalGoal: parseField(nominalGoalInput, 20) / 100,
+      nominalLaunch: parseField(nominalLaunchInput, 96) / 100,
+      minimumDistance: parseField(minimumDistanceInput, 5) * 1000,
+      useLeading: useLeadingCheckbox.checked,
+      useArrival: useArrivalCheckbox.checked,
+    };
+
     const pilotStatuses = collectStatusRows(statusesList);
     // Guard against duplicate keys — can happen if an admin types a new
     // label that slugifies to the same key as an existing row.
@@ -2155,6 +2212,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
           open_igc_upload: openIgcUpload,
           admin_emails: adminEmails,
           pilot_statuses: pilotStatuses,
+          gap_params: gapParams,
         },
       });
 
