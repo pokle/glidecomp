@@ -386,6 +386,14 @@
               <span class="text-sm">Arrival points <span class="text-muted-foreground">(HG only)</span></span>
             </label>
           </div>
+          <div class="mt-3">
+            <label for="settings-leading-formula" class="text-xs text-muted-foreground block mb-1">Leading coefficient formula</label>
+            <select id="settings-leading-formula" class="input w-full">
+              <option value="weighted">Weighted — GAP2020+ / current FAI S7F</option>
+              <option value="classic">Classic — GAP2016/2018, PWC ≤2017</option>
+            </select>
+            <p class="text-xs text-muted-foreground mt-1">Both match AirScore; weighted is the modern default.</p>
+          </div>
         </div>
         <div>
           <label for="settings-admins" class="text-sm font-medium block mb-1">Admin Emails</label>

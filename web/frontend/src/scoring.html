@@ -171,13 +171,13 @@
         <div class="ml-2 space-y-4">
           <div>
             <h3 class="text-base font-semibold mb-1">The Leading Coefficient</h3>
-            <p class="text-muted-foreground">Each pilot gets a <strong>leading coefficient (LC)</strong> &mdash; a number that represents how much time they spent close to ESS while ahead of the pack. Technically, it's the area under a curve of "remaining distance to ESS" plotted over time. A "ratchet" mechanism means your distance only counts when it's decreasing (flying toward ESS) &mdash; flying away doesn't reset your progress.</p>
+            <p class="text-muted-foreground">Each pilot gets a <strong>leading coefficient (LC)</strong> &mdash; a number that represents how much time they spent close to ESS while ahead of the pack. Technically, it's the area under a curve of "remaining distance to ESS" (measured along the course, from the start gate opening) plotted over time. A "ratchet" mechanism means your distance only counts when it's decreasing (flying toward ESS) &mdash; flying away doesn't reset your progress. This matches the CIVL GAP / AirScore leading coefficient; competitions can pick the modern <em>weighted</em> variant (GAP2020+) or the older <em>classic</em> variant in settings.</p>
             <p class="text-muted-foreground">A <strong>lower</strong> LC means you spent more time at the front. The pilot with the lowest LC gets the maximum leading points.</p>
           </div>
           <div>
             <h3 class="text-base font-semibold mb-1">How Points Are Awarded</h3>
-            <p class="text-muted-foreground">Leading points use the same cube-root formula as time points, but applied to LC values instead of times:</p>
-            <p class="bg-muted/50 rounded px-3 py-2 inline-block">\( \text{LF} = \max\!\left(0,\; 1 - \sqrt[3]{\dfrac{(\text{LC} - \text{LC}_{\min})^2}{\sqrt{\text{LC}_{\min}}}} \right) \)</p>
+            <p class="text-muted-foreground">Leading points use a similar shape to time points, applied to LC values instead of times:</p>
+            <p class="bg-muted/50 rounded px-3 py-2 inline-block">\( \text{LF} = \max\!\left(0,\; 1 - \left(\dfrac{\text{LC} - \text{LC}_{\min}}{\sqrt{\text{LC}_{\min}}}\right)^{2/3} \right) \)</p>
             <p class="text-muted-foreground">The pilot with the best (lowest) LC gets full leading points. Others get proportionally less based on how their LC compares.</p>
           </div>
         </div>

@@ -1,0 +1,313 @@
+{
+  "source": "https://xc.highcloud.net/get_task_result.php?comPk=466&tasPk=2027",
+  "comp": "Corryong Cup 2026 Open - Task 1 (T1)",
+  "note": "AirScore published results. departure=off so no leading points were awarded; used to validate distance/time pipeline and as a leadout sanity reference.",
+  "formula": "gap-2021",
+  "departure": "off",
+  "arrival": "off",
+  "task_dist_km": 78.86,
+  "ss_dist_km": 107.29,
+  "weights": {
+    "distance": 0.4928,
+    "time": 0.5072
+  },
+  "pilots": [
+    {
+      "surname": "durand",
+      "name": "Jon Durand",
+      "start": "15:30:00",
+      "distKm": 78.85,
+      "timePts": 507.2,
+      "distPts": 492.8,
+      "total": 1000
+    },
+    {
+      "surname": "holtkamp",
+      "name": "Rohan Holtkamp",
+      "start": "14:45:00",
+      "distKm": 78.85,
+      "timePts": 414.1,
+      "distPts": 492.8,
+      "total": 907
+    },
+    {
+      "surname": "burkitt",
+      "name": "Peter  Burkitt",
+      "start": "14:45:00",
+      "distKm": 78.85,
+      "timePts": 396.6,
+      "distPts": 492.8,
+      "total": 889
+    },
+    {
+      "surname": "opsanger",
+      "name": "Olav Opsanger",
+      "start": "15:30:00",
+      "distKm": 78.85,
+      "timePts": 390.9,
+      "distPts": 492.8,
+      "total": 884
+    },
+    {
+      "surname": "mcfarlane",
+      "name": "Glen Mcfarlane",
+      "start": "15:00:00",
+      "distKm": 78.85,
+      "timePts": 182.5,
+      "distPts": 492.8,
+      "total": 675
+    },
+    {
+      "surname": "bissett-amess",
+      "name": "Paul Bissett-Amess",
+      "start": "14:45:00",
+      "distKm": 78.85,
+      "timePts": 127.7,
+      "distPts": 492.8,
+      "total": 621
+    },
+    {
+      "surname": "crosby",
+      "name": "Steven Crosby",
+      "start": "15:00:00",
+      "distKm": 78.85,
+      "timePts": 114.3,
+      "distPts": 492.8,
+      "total": 607
+    },
+    {
+      "surname": "hare",
+      "name": "Vic Hare",
+      "start": "15:30:00",
+      "distKm": 78.85,
+      "timePts": 110.8,
+      "distPts": 492.8,
+      "total": 604
+    },
+    {
+      "surname": "duncan",
+      "name": "Rory Duncan",
+      "start": "15:00:00",
+      "distKm": 78.85,
+      "timePts": 92.6,
+      "distPts": 492.8,
+      "total": 585
+    },
+    {
+      "surname": "wisewould",
+      "name": "Todd Wisewould",
+      "start": "15:00:00",
+      "distKm": 78.85,
+      "timePts": 59.1,
+      "distPts": 492.8,
+      "total": 552
+    },
+    {
+      "surname": "rigg",
+      "name": "Gordon Rigg",
+      "start": "15:30:00",
+      "distKm": 78.85,
+      "timePts": 48.5,
+      "distPts": 492.8,
+      "total": 541
+    },
+    {
+      "surname": "taylor",
+      "name": "Craig Taylor",
+      "start": "15:30:00",
+      "distKm": 78.85,
+      "timePts": 0,
+      "distPts": 492.8,
+      "total": 493
+    },
+    {
+      "surname": "reinauer",
+      "name": "Rich Reinauer",
+      "start": null,
+      "distKm": 76.96,
+      "timePts": 0,
+      "distPts": 486.9,
+      "total": 487
+    },
+    {
+      "surname": "carrigan",
+      "name": "Enda Carrigan",
+      "start": null,
+      "distKm": 68.01,
+      "timePts": 0,
+      "distPts": 458.9,
+      "total": 459
+    },
+    {
+      "surname": "horton",
+      "name": "Troy Horton",
+      "start": null,
+      "distKm": 58.2,
+      "timePts": 0,
+      "distPts": 331.2,
+      "total": 331
+    },
+    {
+      "surname": "butler",
+      "name": "Mitch Butler",
+      "start": null,
+      "distKm": 54.3,
+      "timePts": 0,
+      "distPts": 311.6,
+      "total": 312
+    },
+    {
+      "surname": "blenkinsop",
+      "name": "Steve Blenkinsop",
+      "start": null,
+      "distKm": 50.75,
+      "timePts": 0,
+      "distPts": 300.5,
+      "total": 300
+    },
+    {
+      "surname": "drabble",
+      "name": "David Drabble",
+      "start": null,
+      "distKm": 46.48,
+      "timePts": 0,
+      "distPts": 279.7,
+      "total": 280
+    },
+    {
+      "surname": "harriott",
+      "name": "John Harriott",
+      "start": null,
+      "distKm": 43.87,
+      "timePts": 0,
+      "distPts": 271.5,
+      "total": 272
+    },
+    {
+      "surname": "vesk",
+      "name": "Nils Vesk",
+      "start": null,
+      "distKm": 30.19,
+      "timePts": 0,
+      "distPts": 198.9,
+      "total": 199
+    },
+    {
+      "surname": "hooke",
+      "name": "Neil Hooke",
+      "start": null,
+      "distKm": 29.61,
+      "timePts": 0,
+      "distPts": 197.1,
+      "total": 197
+    },
+    {
+      "surname": "halsall",
+      "name": "Neale Halsall",
+      "start": null,
+      "distKm": 29.46,
+      "timePts": 0,
+      "distPts": 196.6,
+      "total": 197
+    },
+    {
+      "surname": "rowntree",
+      "name": "Harrison Rowntree",
+      "start": null,
+      "distKm": 26.34,
+      "timePts": 0,
+      "distPts": 186.9,
+      "total": 187
+    },
+    {
+      "surname": "gunn",
+      "name": "Ward Gunn",
+      "start": null,
+      "distKm": 24.77,
+      "timePts": 0,
+      "distPts": 181.9,
+      "total": 182
+    },
+    {
+      "surname": "brown",
+      "name": "Trent Brown",
+      "start": null,
+      "distKm": 19.9,
+      "timePts": 0,
+      "distPts": 166.7,
+      "total": 167
+    },
+    {
+      "surname": "sutton",
+      "name": "Andrew Sutton",
+      "start": null,
+      "distKm": 17.23,
+      "timePts": 0,
+      "distPts": 136,
+      "total": 136
+    },
+    {
+      "surname": "tefaili",
+      "name": "Hossain Tefaili",
+      "start": null,
+      "distKm": 15.88,
+      "timePts": 0,
+      "distPts": 131.8,
+      "total": 132
+    },
+    {
+      "surname": "herman",
+      "name": "Gary Herman",
+      "start": null,
+      "distKm": 15.46,
+      "timePts": 0,
+      "distPts": 130.4,
+      "total": 130
+    },
+    {
+      "surname": "lamb",
+      "name": "Mick Lamb",
+      "start": null,
+      "distKm": 12.8,
+      "timePts": 0,
+      "distPts": 107.2,
+      "total": 107
+    },
+    {
+      "surname": "kerr",
+      "name": "Rennick Kerr",
+      "start": null,
+      "distKm": 6.36,
+      "timePts": 0,
+      "distPts": 79.6,
+      "total": 80
+    },
+    {
+      "surname": "rhodes",
+      "name": "Daniel Rhodes",
+      "start": null,
+      "distKm": 4.08,
+      "timePts": 0,
+      "distPts": 67.9,
+      "total": 68
+    },
+    {
+      "surname": "leeden",
+      "name": "Ivo van der Leeden",
+      "start": null,
+      "distKm": null,
+      "timePts": 0,
+      "distPts": 67.9,
+      "total": 68
+    },
+    {
+      "surname": "mcelroy",
+      "name": "Stuart McElroy",
+      "start": null,
+      "distKm": 0.89,
+      "timePts": 0,
+      "distPts": 67.9,
+      "total": 68
+    }
+  ]
+}

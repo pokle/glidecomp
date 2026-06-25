@@ -50,6 +50,9 @@ const gapParamsSchema = z
     scoring: z.enum(["PG", "HG"]),
     useLeading: z.boolean(),
     useArrival: z.boolean(),
+    // Leading coefficient variant (AirScore lc_formula). Optional; the
+    // scorer defaults to 'weighted' (modern CIVL GAP) when omitted.
+    leadingFormula: z.enum(["classic", "weighted"]).optional(),
   })
   .strict();
 

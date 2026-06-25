@@ -4,10 +4,14 @@
  *
  * Reference: https://xc.highcloud.net/task_result.html?comPk=466&tasPk=2027
  *
- * Note: Our task distance (73.9 km) differs from Airscore's (78.85 km) due to
- * different optimized-path algorithms. Scores here are our internally-consistent
- * values, not Airscore's. The test guards against regressions in the full
- * pipeline: IGC parsing → turnpoint sequence → GAP scoring.
+ * Note: our task distance (73.9 km) differs from AirScore's (78.85 km) because
+ * the committed task.xctsk was trimmed to the speed section — it omits the
+ * takeoff cylinder (AirScore scores the takeoff→SSS leg) — and because of
+ * takeoff/start-cylinder optimization differences. Distance scores here are
+ * therefore our internally-consistent values, not AirScore's. Time points DO
+ * follow AirScore's gap2020+ formula (5/6 exponent); see airscore-parity.test.ts.
+ * This test guards against regressions in the full pipeline:
+ * IGC parsing → turnpoint sequence → GAP scoring.
  */
 
 import { describe, it, expect } from 'bun:test';
@@ -161,12 +165,12 @@ describe('Corryong Cup 2026 Task 1 — integration', () => {
   }> = [
     // Leading — goal finishers
     { name: 'Jon Durand',        rank: 1,  total: 1000, distPts: 485.6, timePts: 514.4, madeGoal: true },
-    { name: 'Rohan Holtkamp',    rank: 2,  total: 872,  distPts: 485.6, timePts: 386.9, madeGoal: true },
-    { name: 'Peter  Burkitt',    rank: 3,  total: 844,  distPts: 485.6, timePts: 358.9, madeGoal: true },
+    { name: 'Rohan Holtkamp',    rank: 2,  total: 919,  distPts: 485.6, timePts: 433.2, madeGoal: true },
+    { name: 'Peter  Burkitt',    rank: 3,  total: 896,  distPts: 485.6, timePts: 410.2, madeGoal: true },
 
     // Mid-pack — goal finishers
-    { name: 'Glen Mcfarlane',    rank: 5,  total: 624,  distPts: 485.6, timePts: 138.5, madeGoal: true },
-    { name: 'Todd Wisewould',    rank: 10, total: 515,  distPts: 485.6, timePts: 29.6,  madeGoal: true },
+    { name: 'Glen Mcfarlane',    rank: 5,  total: 686,  distPts: 485.6, timePts: 200.4, madeGoal: true },
+    { name: 'Todd Wisewould',    rank: 10, total: 568,  distPts: 485.6, timePts: 82.9,  madeGoal: true },
     { name: 'Craig Taylor',      rank: 12, total: 486,  distPts: 485.6, timePts: 0,     madeGoal: true },
 
     // First non-goal pilot

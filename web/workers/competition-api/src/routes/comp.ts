@@ -81,6 +81,11 @@ function describeGapParamChanges(
   if (o.useArrival !== n.useArrival) {
     out.push(n.useArrival ? "Enabled arrival points" : "Disabled arrival points");
   }
+  const oFormula = o.leadingFormula ?? "weighted";
+  const nFormula = n.leadingFormula ?? "weighted";
+  if (oFormula !== nFormula) {
+    out.push(describeChange("leading coefficient formula", oFormula, nFormula));
+  }
   return out;
 }
 

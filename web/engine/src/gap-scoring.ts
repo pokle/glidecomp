@@ -13,10 +13,10 @@
 
 import type { XCTask } from './xctsk-parser';
 import type { IGCFix } from './igc-parser';
-import type { TurnpointSequenceResult } from './turnpoint-sequence';
+import type { TurnpointSequenceResult, TurnpointReaching } from './turnpoint-sequence';
 import { resolveTurnpointSequence } from './turnpoint-sequence';
-import { getESSIndex } from './xctsk-parser';
-import { calculateOptimizedTaskDistance } from './task-optimizer';
+import { getESSIndex, getSSSIndex } from './xctsk-parser';
+import { calculateOptimizedTaskDistance, getOptimizedSegmentDistances } from './task-optimizer';
 import { andoyerDistance } from './geo';
 import { maxBy, minBy } from './array-utils';
 
@@ -42,7 +42,19 @@ export interface GAPParameters {
   useLeading: boolean;
   /** Whether to compute arrival points (default true for HG, ignored for PG) */
   useArrival: boolean;
+  /**
+   * GAP formula generation (matches AirScore's formula presets). Selects
+   * both the leading-coefficient variant and the speed-points exponent:
+   * - 'weighted' — GAP2020+ / current FAI S7F: weighted-area leading
+   *   envelope; speed exponent 5/6 (the modern default).
+   * - 'classic'  — GAP2016/2018 & PWC≤2017: squared-distance leading,
+   *   time from each pilot's own start; speed exponent 2/3.
+   */
+  leadingFormula: LeadingFormula;
 }
+
+/** Leading coefficient variant — see {@link GAPParameters.leadingFormula}. */
+export type LeadingFormula = 'classic' | 'weighted';
 
 /** Default parameters — reasonable for a typical HG competition. */
 export const DEFAULT_GAP_PARAMETERS: GAPParameters = {
@@ -54,6 +66,7 @@ export const DEFAULT_GAP_PARAMETERS: GAPParameters = {
   scoring: 'HG',
   useLeading: false,
   useArrival: false,
+  leadingFormula: 'weighted',
 };
 
 // ---------------------------------------------------------------------------
@@ -334,25 +347,33 @@ export function applyMinimumDistance(
 // ---------------------------------------------------------------------------
 
 /**
- * Calculate the speed fraction for a pilot.
- * The cube-root formula creates a curve that rewards
- * being close to the fastest time.
+ * Calculate the speed fraction for a pilot, matching AirScore's
+ * `pilot_speed` (gap2020+ / current FAI S7F):
  *
- * Times are in seconds but the GAP formula operates in hours.
+ *   SF = max(0, 1 − ((Tp − Tmin) / √Tmin)^e)    with times in hours
+ *
+ * where e = 5/6 for the modern formula (`weighted`) and 2/3 for the
+ * older one (`classic`, AirScore gap.py — the same exponent it uses for
+ * the leading factor). Tp/Tmin are speed-section times.
  */
 export function calculateSpeedFraction(
   pilotTimeSeconds: number,
   bestTimeSeconds: number,
+  exponent: number = 5 / 6,
 ): number {
   if (bestTimeSeconds <= 0 || pilotTimeSeconds <= 0) return 0;
+  if (pilotTimeSeconds <= bestTimeSeconds) return 1;
   // Convert to hours for the GAP formula
   const pilotTime = pilotTimeSeconds / 3600;
   const bestTime = bestTimeSeconds / 3600;
-  const timeDiff = pilotTime - bestTime;
-  if (timeDiff <= 0) return 1;
   const sqrtBest = Math.sqrt(bestTime);
   if (sqrtBest <= 0) return 0;
-  return Math.max(0, 1 - Math.cbrt((timeDiff * timeDiff) / sqrtBest));
+  return Math.max(0, 1 - Math.pow((pilotTime - bestTime) / sqrtBest, exponent));
+}
+
+/** Speed-fraction exponent for a GAP formula generation. */
+function speedExponent(formula: LeadingFormula): number {
+  return formula === 'classic' ? 2 / 3 : 5 / 6;
 }
 
 /**
@@ -367,6 +388,7 @@ export function calculateTimePoints(
   reachedESS: boolean,
   availableTimePoints: number,
   scoring: 'PG' | 'HG',
+  formula: LeadingFormula = 'weighted',
 ): number {
   if (bestTime === null || pilotTime === null) return 0;
 
@@ -375,7 +397,7 @@ export function calculateTimePoints(
   // HG: must reach ESS
   if (scoring === 'HG' && !reachedESS) return 0;
 
-  const sf = calculateSpeedFraction(pilotTime, bestTime);
+  const sf = calculateSpeedFraction(pilotTime, bestTime, speedExponent(formula));
   return sf * availableTimePoints;
 }
 
@@ -383,81 +405,160 @@ export function calculateTimePoints(
 // Leading Coefficient
 // ---------------------------------------------------------------------------
 
+// Leading-area weighting envelope (AirScore weightedarea.py). At p≈1
+// (just left SSS) and p≈0 (at ESS) the weight is ~0; it peaks in the
+// middle, so leading is rewarded most for being out front mid-course.
+function weightRising(p: number): number {
+  return Math.pow(1 - Math.pow(10, 9 * p - 9), 5);
+}
+function weightFalling(p: number): number {
+  return Math.pow(1 - Math.pow(10, -3 * p), 2);
+}
+function leadWeight(p: number): number {
+  return weightRising(p) * weightFalling(p);
+}
+
+/** Per-fix-interval contribution to the raw leading-coefficient sum. */
+function lcContribution(
+  formula: LeadingFormula,
+  prevBestKm: number,
+  curBestKm: number,
+  timeSec: number,
+  ssKm: number,
+): number {
+  // Only progress toward ESS (a decrease in best distance) contributes.
+  if (prevBestKm <= curBestKm) return 0;
+  if (formula === 'classic') {
+    // classic: task_time * (best[i-1]² − best[i]²)
+    return timeSec * (prevBestKm * prevBestKm - curBestKm * curBestKm);
+  }
+  // weighted: weight(p) * progress * task_time, with p = best[i] / ssKm
+  const w = leadWeight(curBestKm / ssKm);
+  if (w === 0) return 0;
+  return w * (prevBestKm - curBestKm) * timeSec;
+}
+
 /**
- * Calculate the leading coefficient (LC) for a single pilot.
+ * Calculate the leading coefficient (LC) for a single pilot, matching
+ * AirScore's `classic` and `weighted` formulas (CIVL GAP / FAI S7F).
  *
- * LC is the area under the distance-to-ESS vs time curve.
- * The curve uses a "ratchet" — distance never increases even if the
- * pilot flies away from ESS. Lower LC = more leading = more points.
+ * The curve is distance-to-ESS measured **along the optimized course**
+ * (distance to the next un-reached turnpoint's cylinder edge plus the
+ * optimized legs from there to ESS), sampled per fix, with a ratchet:
+ * the best distance never increases even if the pilot flies away from ESS.
+ * Lower LC = more leading = more points. The raw per-interval sum is then
+ * normalized and given a late-start (classic) and/or land-out tail term,
+ * exactly as AirScore's `tot_lc_calculation`.
  *
- * @param fixes - Pilot's tracklog fixes
+ * @param fixes - Pilot's tracklog fixes (time-ordered)
  * @param task - The competition task
+ * @param sequence - The pilot's resolved turnpoint reachings (for progress)
  * @param taskFirstSSSTime - Time the first pilot crossed SSS (ms since epoch)
- * @param taskLastESSTime - Time the last pilot reached ESS (ms since epoch), or task deadline
- * @returns Leading coefficient (area value)
+ * @param taskLastESSTime - Time the last pilot reached ESS (ms since epoch)
+ * @param pilotSSSTime - The pilot's own start time (ms), or null if no start
+ * @param pilotESSTime - The pilot's ESS time (ms), or null if not reached
+ * @param formula - 'weighted' (modern default) or 'classic'
+ * @returns Normalized leading coefficient (lower is better), or Infinity
  */
 export function calculateLeadingCoefficient(
   fixes: IGCFix[],
   task: XCTask,
+  sequence: TurnpointReaching[],
   taskFirstSSSTime: number,
   taskLastESSTime: number,
   pilotSSSTime: number | null,
   pilotESSTime: number | null,
+  formula: LeadingFormula = 'weighted',
 ): number {
   const essIdx = getESSIndex(task);
-  if (essIdx < 0 || fixes.length === 0) return Infinity;
+  const sssIdx = Math.max(0, getSSSIndex(task));
+  // Pilots who never started get the worst possible LC.
+  if (essIdx <= sssIdx || fixes.length === 0 || pilotSSSTime === null) {
+    return Infinity;
+  }
 
-  const essTP = task.turnpoints[essIdx];
-  const essLat = essTP.waypoint.lat;
-  const essLon = essTP.waypoint.lon;
-  const essRadius = essTP.radius;
+  // Optimized along-course distance from each turnpoint to ESS (meters).
+  const segs = getOptimizedSegmentDistances(task);
+  const cumToESS: number[] = new Array(essIdx + 1).fill(0);
+  for (let j = essIdx - 1; j >= 0; j--) {
+    cumToESS[j] = cumToESS[j + 1] + segs[j];
+  }
+  const ssKm = cumToESS[sssIdx] / 1000; // speed-section length (km)
+  if (ssKm <= 0) return Infinity;
 
-  // If pilot never started, return Infinity (worst LC)
-  if (pilotSSSTime === null) return Infinity;
+  // Reaching time per task index, so we know which turnpoint the pilot is
+  // flying toward at each fix (the next un-reached one before ESS).
+  const reachTime: Array<number | undefined> = [];
+  for (const r of sequence) reachTime[r.taskIndex] = r.time.getTime();
 
-  // Calculate distance to ESS edge at each fix
-  // Using ratchet: distance only decreases
-  let minDistSoFar = Infinity;
-  const points: Array<{ time: number; dist: number }> = [];
+  // Time origin: the pilot's own start for classic, the first pilot's
+  // start for weighted (per the GAP2020+ spec wording).
+  const startRefSec = (formula === 'classic' ? pilotSSSTime : taskFirstSSSTime) / 1000;
+  const endTime = pilotESSTime ?? Infinity;
+
+  let prevBestKm = ssKm; // best_dist_to_ess ratchet, starts at full SS length
+  let summing = 0;
+  let nextReq = Math.min(sssIdx + 1, essIdx);
+  let prevDistKm: number | null = null;
 
   for (const fix of fixes) {
-    const t = fix.time.getTime();
-    // Only consider fixes from the task window
-    if (t < taskFirstSSSTime) continue;
-    // Stop at pilot's ESS time or task end
-    if (pilotESSTime !== null && t > pilotESSTime) break;
-    if (t > taskLastESSTime) break;
+    const tms = fix.time.getTime();
+    if (tms < pilotSSSTime) continue;
+    if (tms > endTime) break;
 
-    // Only count fixes after pilot's own SSS time
-    if (t < pilotSSSTime) continue;
-
-    const distToESS = Math.max(0,
-      andoyerDistance(fix.latitude, fix.longitude, essLat, essLon) - essRadius
+    // Advance to the next un-reached required turnpoint (capped at ESS).
+    while (
+      nextReq < essIdx &&
+      reachTime[nextReq] !== undefined &&
+      (reachTime[nextReq] as number) <= tms
+    ) {
+      nextReq++;
+    }
+    const tp = task.turnpoints[nextReq];
+    const edge = Math.max(
+      0,
+      andoyerDistance(fix.latitude, fix.longitude, tp.waypoint.lat, tp.waypoint.lon) - tp.radius,
     );
-    minDistSoFar = Math.min(minDistSoFar, distToESS);
-    points.push({ time: (t - taskFirstSSSTime) / 1000, dist: minDistSoFar });
+    const distKm = (edge + cumToESS[nextReq]) / 1000;
+
+    if (prevDistKm !== null) {
+      // AirScore appends this fix's distance to the ratchet window, then
+      // weights the interval by this ("next") fix's time.
+      const curBestKm = Math.min(prevDistKm, ssKm, prevBestKm);
+      const timeSec = tms / 1000 - startRefSec;
+      summing += lcContribution(formula, prevBestKm, curBestKm, timeSec, ssKm);
+      prevBestKm = curBestKm;
+    }
+    prevDistKm = distKm;
   }
 
-  if (points.length < 2) return Infinity;
+  if (prevDistKm === null) return Infinity; // no fixes in the leading window
+  // Fold the final fix's distance into the ratchet (used by the tail term).
+  const bestDistKm = Math.min(prevDistKm, ssKm, prevBestKm);
 
-  // If pilot landed before taskLastESSTime, extend the curve
-  // with a flat line at their last distance until taskLastESSTime
-  const lastPoint = points[points.length - 1];
-  const endTime = (taskLastESSTime - taskFirstSSSTime) / 1000;
-  if (pilotESSTime === null && lastPoint.time < endTime) {
-    points.push({ time: endTime, dist: lastPoint.dist });
+  // tot_lc_calculation: late-start rectangle (classic only) + land-out
+  // tail (no ESS) + normalization.
+  if (formula === 'classic') {
+    let total = summing;
+    if (pilotSSSTime > taskFirstSSSTime) {
+      // Full-distance rectangle for the time before this pilot started.
+      total += ssKm * ssKm * (pilotSSSTime - taskFirstSSSTime) / 1000;
+    }
+    if (pilotESSTime === null) {
+      const lastFix = fixes[fixes.length - 1].time.getTime();
+      const maxTime = Math.max(taskLastESSTime, lastFix);
+      total += bestDistKm * bestDistKm * (maxTime - pilotSSSTime) / 1000;
+    }
+    return total / (1800 * ssKm * ssKm);
   }
 
-  // Trapezoidal area calculation
-  // Use hours × km for the GAP formula units (consistent with speed fraction)
-  let area = 0;
-  for (let i = 1; i < points.length; i++) {
-    const dtHours = (points[i].time - points[i - 1].time) / 3600; // hours
-    const avgDistKm = (points[i].dist + points[i - 1].dist) / 2 / 1000; // km
-    area += dtHours * avgDistKm;
+  // weighted
+  let total = summing;
+  if (pilotESSTime === null) {
+    const missingTimeSec = (taskLastESSTime - taskFirstSSSTime) / 1000;
+    total += weightFalling(bestDistKm / ssKm) * missingTimeSec * bestDistKm;
   }
-
-  return area;
+  return total / (1800 * ssKm);
 }
 
 // ---------------------------------------------------------------------------
@@ -466,7 +567,11 @@ export function calculateLeadingCoefficient(
 
 /**
  * Calculate leading points for a single pilot.
- * Uses the same cube-root formula as time points, applied to LC values.
+ *
+ * LeadingFactor = max(0, 1 − ((LCp − LCmin) / √LCmin)^(2/3)), and
+ * LeadingPoints = LeadingFactor × available — exactly AirScore's
+ * `pilot_leadout` (gap.py / pwc.py). The pilot with the best (minimum)
+ * LC scores full points; others fall off with the 2/3-power curve.
  */
 export function calculateLeadingPoints(
   pilotLC: number,
@@ -476,9 +581,8 @@ export function calculateLeadingPoints(
   if (!isFinite(pilotLC) || !isFinite(minLC) || minLC <= 0) return 0;
   const lcDiff = pilotLC - minLC;
   if (lcDiff <= 0) return availableLeadingPoints;
-  const sqrtMin = Math.sqrt(minLC);
-  if (sqrtMin <= 0) return 0;
-  const factor = Math.max(0, 1 - Math.cbrt((lcDiff * lcDiff) / sqrtMin));
+  // ((LCp − LCmin) / √LCmin)^(2/3) === cbrt((LCp − LCmin)² / LCmin)
+  const factor = Math.max(0, 1 - Math.cbrt((lcDiff * lcDiff) / minLC));
   return factor * availableLeadingPoints;
 }
 
@@ -609,9 +713,10 @@ export function scoreTask(
       const sssTime = pr.result.sssReaching?.time.getTime() ?? null;
       const essTime = pr.result.essReaching?.time.getTime() ?? null;
       return calculateLeadingCoefficient(
-        pr.pilot.fixes, task,
+        pr.pilot.fixes, task, pr.result.sequence,
         taskFirstSSSTime, taskLastESSTime,
         sssTime, essTime,
+        fullParams.leadingFormula,
       );
     });
 
@@ -647,6 +752,7 @@ export function scoreTask(
       result.speedSectionTime, bestTime,
       result.madeGoal, result.essReaching !== null,
       availablePoints.time, fullParams.scoring,
+      fullParams.leadingFormula,
     );
 
     const leadPts = calculateLeadingPoints(
