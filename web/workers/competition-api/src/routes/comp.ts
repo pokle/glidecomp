@@ -91,6 +91,15 @@ function describeGapParamChanges(
   if (oOrigin !== nOrigin) {
     out.push(describeChange("distance origin", oOrigin, nOrigin));
   }
+  const oDiff = o.useDistanceDifficulty ?? true;
+  const nDiff = n.useDistanceDifficulty ?? true;
+  if (oDiff !== nDiff) {
+    out.push(
+      nDiff
+        ? "Enabled HG distance difficulty"
+        : "Disabled HG distance difficulty (pure linear distance points)",
+    );
+  }
   return out;
 }
 

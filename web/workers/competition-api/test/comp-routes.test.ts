@@ -379,6 +379,7 @@ describe("PATCH /api/comp/:comp_id", () => {
         useLeading: true,
         useArrival: true,
         distanceOrigin: "start",
+        useDistanceDifficulty: false,
       },
     });
     expect(res.status).toBe(200);
@@ -389,6 +390,7 @@ describe("PATCH /api/comp/:comp_id", () => {
     const descriptions = rows.results.map((r) => r.description as string);
     expect(descriptions).toContain("Enabled leading (departure) points");
     expect(descriptions).toContain("Enabled arrival points");
+    expect(descriptions).toContain("Disabled HG distance difficulty (pure linear distance points)");
     expect(descriptions).toContain("Changed nominal time from 90 min to 100 min");
     expect(descriptions).toContain('Changed distance origin from "takeoff" to "start"');
     // No generic catch-all line

@@ -48,6 +48,7 @@ function usage(): never {
     '  --no-leading               Disable leading (departure) points\n' +
     '  --arrival                  Enable arrival points, HG only (default: off)\n' +
     '  --no-arrival               Disable arrival points\n' +
+    '  --no-difficulty            Disable HG distance difficulty (pure linear; default: on)\n' +
     '  --json                     Output as JSON\n'
   );
   process.exit(1);
@@ -88,6 +89,12 @@ for (let i = 0; i < args.length; i++) {
       break;
     case '--distance-origin':
       params.distanceOrigin = args[++i] as 'takeoff' | 'start';
+      break;
+    case '--difficulty':
+      params.useDistanceDifficulty = true;
+      break;
+    case '--no-difficulty':
+      params.useDistanceDifficulty = false;
       break;
     case '--leading':
       params.useLeading = true;

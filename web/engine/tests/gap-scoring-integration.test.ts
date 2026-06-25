@@ -6,12 +6,13 @@
  *
  * The committed task.xctsk is the full task including the takeoff cylinder,
  * so with the default 'takeoff' distance origin our optimized task distance
- * (78.85 km) matches AirScore's. Flown distances and time points follow the
- * CIVL GAP / AirScore formulas; non-goal distance *points* can still differ
- * slightly because AirScore adds a distance-difficulty term we don't yet
- * apply (see airscore-parity.test.ts). The snapshot values below are our
- * own output — this test guards against regressions in the full pipeline:
- * IGC parsing → turnpoint sequence → GAP scoring.
+ * (78.85 km) matches AirScore's. Distance (incl. the HG difficulty half,
+ * FAI S7F §11.1.1), time and leading points all follow the CIVL GAP
+ * formulas. Exact distance *points* for non-goal pilots can still differ
+ * from AirScore because per-pilot flown distances aren't bit-identical
+ * (optimizer detail), not because of the formula. The snapshot values below
+ * are our own output — this test guards against regressions in the full
+ * pipeline: IGC parsing → turnpoint sequence → GAP scoring.
  */
 
 import { describe, it, expect } from 'bun:test';
@@ -169,15 +170,15 @@ describe('Corryong Cup 2026 Task 1 — integration', () => {
     { name: 'Todd Wisewould',    rank: 10, total: 568,  distPts: 485.6, timePts: 82.9,  madeGoal: true },
     { name: 'Craig Taylor',      rank: 12, total: 486,  distPts: 485.6, timePts: 0,     madeGoal: true },
 
-    // First non-goal pilot
-    { name: 'Rich Reinauer',     rank: 13, total: 474,  distPts: 473.9, timePts: 0, madeGoal: false },
+    // First non-goal pilot (distance points now include the HG difficulty half)
+    { name: 'Rich Reinauer',     rank: 13, total: 480,  distPts: 479.7, timePts: 0, madeGoal: false },
 
     // Mid-pack — non-goal
-    { name: 'Steve Blenkinsop',  rank: 17, total: 320,  distPts: 319.7, timePts: 0, madeGoal: false },
-    { name: 'Neale Halsall',     rank: 22, total: 184,  distPts: 183.9, timePts: 0, madeGoal: false },
+    { name: 'Steve Blenkinsop',  rank: 17, total: 363,  distPts: 363.4, timePts: 0, madeGoal: false },
+    { name: 'Neale Halsall',     rank: 21, total: 239,  distPts: 238.7, timePts: 0, madeGoal: false },
 
     // Trailing — at minimum distance floor (tied at rank 30)
-    { name: 'Ivo van der Leeden', rank: 30, total: 31, distPts: 30.8, timePts: 0, madeGoal: false },
+    { name: 'Ivo van der Leeden', rank: 30, total: 41, distPts: 41.4, timePts: 0, madeGoal: false },
   ];
 
   for (const snap of snapshots) {
