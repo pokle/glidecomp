@@ -6,6 +6,8 @@ import {
   calculateTaskValidity,
   calculateWeights,
   calculateDistancePoints,
+  calculateDistanceDifficulty,
+  calculateDistancePointsHG,
   calculateSpeedFraction,
   calculateTimePoints,
   calculateLeadingCoefficient,
@@ -348,6 +350,78 @@ describe('distance origin (take-off vs start)', () => {
     expect(taskForDistanceOrigin(plain, 'start')).toBe(
       taskForDistanceOrigin(plain, 'takeoff'),
     );
+  });
+});
+
+describe('distance difficulty (HG, FAI S7F §11.1.1)', () => {
+  // Field: one pilot in goal (40 km), a cluster of landed-out pilots at
+  // ~10 km, and a lone pilot who pushed on to 25 km.
+  const dists = [40000, 10000, 10200, 9800, 10100, 25000, 8000];
+  const goal = [true, false, false, false, false, false, false];
+  const MIN = 5000;
+  const AVAIL = 300;
+  const curve = calculateDistanceDifficulty(dists, goal, MIN);
+
+  it('difficulty score is monotonic non-decreasing and capped at 0.5', () => {
+    for (let i = 1; i < curve.diffScore.length; i++) {
+      expect(curve.diffScore[i]).toBeGreaterThanOrEqual(curve.diffScore[i - 1] - 1e-9);
+      expect(curve.diffScore[i]).toBeLessThanOrEqual(0.5 + 1e-9);
+    }
+  });
+
+  it('goal pilots get the full available distance points', () => {
+    const s = calculateDistancePointsHG(40000, 40000, AVAIL, curve, true);
+    expect(s.total).toBeCloseTo(AVAIL, 5);
+    expect(s.linear).toBeCloseTo(AVAIL / 2, 5);
+    expect(s.difficulty).toBeCloseTo(AVAIL / 2, 5);
+  });
+
+  it('rewards pushing past a cluster (difficulty is non-linear)', () => {
+    // The lone pilot at 25 km is well past the 10 km cluster, so the
+    // difficulty half lifts them above a pure-linear share.
+    const lone = calculateDistancePointsHG(25000, 40000, AVAIL, curve, false);
+    const linearOnly = (25000 / 40000) * AVAIL;
+    expect(lone.difficulty).toBeGreaterThan(0);
+    expect(lone.total).toBeGreaterThan(linearOnly);
+    expect(lone.difficulty).toBeLessThanOrEqual(AVAIL / 2 + 1e-9);
+  });
+
+  it('a sub-minimum pilot is scored at the minimum-distance slot', () => {
+    const below = calculateDistancePointsHG(0, 40000, AVAIL, curve, false);
+    const atMin = calculateDistancePointsHG(MIN, 40000, AVAIL, curve, false);
+    expect(below.total).toBeGreaterThan(0);
+    expect(below.total).toBeLessThan(atMin.total + 1e-6);
+  });
+
+  it('scoreTask: PG is pure linear (no difficulty), goal pilots aside', () => {
+    const fixes = createTrackThroughCylinders(standardWaypoints);
+    const short = [
+      createFix(0, 47.0 - 0.05, 11.0), createFix(5, 47.0 - 0.04, 11.0), createFix(10, 47.0 - 0.02, 11.0),
+    ];
+    const pilots: PilotFlight[] = [
+      { pilotName: 'Goal', trackFile: 'g.igc', fixes },
+      { pilotName: 'Short', trackFile: 's.igc', fixes: short },
+    ];
+    const pg = scoreTask(standardTask, pilots, { scoring: 'PG', nominalDistance: 10000, nominalTime: 600 });
+    for (const p of pg.pilotScores) {
+      expect(p.distanceDifficultyPoints).toBe(0);
+      expect(p.distanceLinearPoints).toBeCloseTo(p.distancePoints, 5);
+    }
+  });
+
+  it('scoreTask: HG difficulty can be disabled via useDistanceDifficulty', () => {
+    const fixes = createTrackThroughCylinders(standardWaypoints);
+    const short = [
+      createFix(0, 47.0 - 0.05, 11.0), createFix(5, 47.0 - 0.04, 11.0), createFix(10, 47.0 - 0.02, 11.0),
+    ];
+    const pilots: PilotFlight[] = [
+      { pilotName: 'Goal', trackFile: 'g.igc', fixes },
+      { pilotName: 'Short', trackFile: 's.igc', fixes: short },
+    ];
+    const off = scoreTask(standardTask, pilots, {
+      scoring: 'HG', nominalDistance: 10000, nominalTime: 600, useDistanceDifficulty: false,
+    });
+    for (const p of off.pilotScores) expect(p.distanceDifficultyPoints).toBe(0);
   });
 });
 

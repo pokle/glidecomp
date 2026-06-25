@@ -21,6 +21,8 @@ export interface PilotScoreEntry {
   flown_distance: number;
   speed_section_time: number | null;
   distance_points: number;
+  distance_linear_points: number;
+  distance_difficulty_points: number;
   time_points: number;
   leading_points: number;
   arrival_points: number;
@@ -262,6 +264,8 @@ export async function computeTaskScore(
       flown_distance: p.pilotScore.flownDistance,
       speed_section_time: p.pilotScore.speedSectionTime,
       distance_points: p.pilotScore.distancePoints,
+      distance_linear_points: p.pilotScore.distanceLinearPoints,
+      distance_difficulty_points: p.pilotScore.distanceDifficultyPoints,
       time_points: p.pilotScore.timePoints,
       leading_points: p.pilotScore.leadingPoints,
       arrival_points: p.pilotScore.arrivalPoints,

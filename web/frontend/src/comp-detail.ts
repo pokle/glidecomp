@@ -88,6 +88,8 @@ interface PilotScoreEntry {
   flown_distance: number;
   speed_section_time: number | null;
   distance_points: number;
+  distance_linear_points: number;
+  distance_difficulty_points: number;
   time_points: number;
   leading_points: number;
   arrival_points: number;
@@ -1349,7 +1351,13 @@ function renderScoreClass(cls: ClassScore, showClassName: boolean): HTMLElement 
       );
     }
 
-    cells.push(Math.round(p.distance_points).toString());
+    // Show the linear/difficulty split as a tooltip when HG difficulty applies.
+    const diffPts = p.distance_difficulty_points ?? 0;
+    cells.push(
+      diffPts > 0
+        ? `<span class="cursor-help underline decoration-dotted" title="${Math.round(p.distance_linear_points)} linear + ${Math.round(diffPts)} difficulty">${Math.round(p.distance_points)}</span>`
+        : Math.round(p.distance_points).toString()
+    );
     if (hasTimePoints) cells.push(Math.round(p.time_points).toString());
     if (hasLeadPoints) cells.push(Math.round(p.leading_points).toString());
 
@@ -2035,6 +2043,9 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
   const distanceOriginSelect = document.getElementById(
     "settings-distance-origin"
   ) as unknown as HTMLSelectElement;
+  const useDifficultyCheckbox = document.getElementById(
+    "settings-use-difficulty"
+  ) as HTMLInputElement;
 
   addStatusBtn.addEventListener("click", () => {
     statusesList.appendChild(buildStatusRow());
@@ -2099,6 +2110,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
       useArrivalCheckbox.checked = gp.useArrival;
       leadingFormulaSelect.value = gp.leadingFormula ?? "weighted";
       distanceOriginSelect.value = gp.distanceOrigin ?? "takeoff";
+      useDifficultyCheckbox.checked = gp.useDistanceDifficulty ?? true;
 
       dialog.showModal();
     });
@@ -2193,6 +2205,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
       useArrival: useArrivalCheckbox.checked,
       leadingFormula: leadingFormulaSelect.value as "classic" | "weighted",
       distanceOrigin: distanceOriginSelect.value as "takeoff" | "start",
+      useDistanceDifficulty: useDifficultyCheckbox.checked,
     };
 
     const pilotStatuses = collectStatusRows(statusesList);

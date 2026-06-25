@@ -64,6 +64,15 @@ export interface GAPParameters {
    * begin at the SSS score identically either way.
    */
   distanceOrigin: DistanceOrigin;
+  /**
+   * Hang-gliding "distance difficulty" (FAI S7F §11.1.1). When true (the
+   * default), HG distance points are half linear + half difficulty, where
+   * the difficulty half rewards flying past clusters of landed-out pilots.
+   * When false, HG uses a pure linear distance fraction. Has no effect on
+   * paragliding — the FAI spec excludes difficulty for PG, so PG is always
+   * pure linear.
+   */
+  useDistanceDifficulty: boolean;
 }
 
 /** Leading coefficient variant — see {@link GAPParameters.leadingFormula}. */
@@ -84,6 +93,7 @@ export const DEFAULT_GAP_PARAMETERS: GAPParameters = {
   useArrival: false,
   leadingFormula: 'weighted',
   distanceOrigin: 'takeoff',
+  useDistanceDifficulty: true,
 };
 
 /**
@@ -145,8 +155,12 @@ export interface PilotScore {
   madeGoal: boolean;
   /** Whether the pilot reached End of Speed Section */
   reachedESS: boolean;
-  /** Distance component score */
+  /** Distance component score (linear + difficulty halves) */
   distancePoints: number;
+  /** Linear half of the distance score (the full score when difficulty is off / PG) */
+  distanceLinearPoints: number;
+  /** Difficulty half of the distance score (0 for PG or when difficulty is off) */
+  distanceDifficultyPoints: number;
   /** Time/speed component score */
   timePoints: number;
   /** Leading coefficient component score */
@@ -360,6 +374,140 @@ export function calculateDistancePoints(
 ): number {
   if (bestDistance <= 0) return 0;
   return (pilotDistance / bestDistance) * availableDistancePoints;
+}
+
+/**
+ * Distance-difficulty curve for a hang-gliding task (FAI S7F §11.1.1).
+ * Holds the cumulative "difficulty score" per 100 m slot (0 … 0.5) so each
+ * pilot's difficulty fraction can be looked up with sub-slot interpolation.
+ */
+export interface DistanceDifficulty {
+  /** Cumulative difficulty score per 100 m slot (0 … 0.5). */
+  readonly diffScore: number[];
+  /** Difficulty fraction (0 … 0.5) for a scored distance in metres. */
+  fractionFor(distanceMeters: number): number;
+}
+
+/**
+ * Build the distance-difficulty curve from the field (FAI S7F §11.1.1).
+ *
+ * Only landed-out pilots shape the curve; goal pilots are excluded.
+ * Distances are bucketed into 100 m slots, with sub-minimum distances
+ * lumped at the minimum-distance slot. For each slot the "difficulty" is
+ * the number of pilots who landed within a look-ahead window past it; the
+ * relative difficulty is each slot's share of twice the total, and the
+ * difficulty score is the running cumulative — flat at/below minimum
+ * distance and capped at 0.5 at the best landed-out distance. The result
+ * is that flying past a cluster of landed pilots is worth more points.
+ *
+ * @param scoredDistances - per-pilot distance in metres, floored to minimum
+ * @param madeGoal - per-pilot goal flag (same order as scoredDistances)
+ * @param minimumDistance - minimum scored distance in metres
+ */
+export function calculateDistanceDifficulty(
+  scoredDistances: number[],
+  madeGoal: boolean[],
+  minimumDistance: number,
+): DistanceDifficulty {
+  const minSlot = Math.trunc(minimumDistance / 100); // metres → 100 m slots
+
+  // Landed-out distances only. If everyone made goal, seed a single dummy
+  // pilot at minimum distance so the min-distance score still computes.
+  const loDist: number[] = [];
+  for (let i = 0; i < scoredDistances.length; i++) {
+    if (!madeGoal[i]) loDist.push(scoredDistances[i]);
+  }
+  if (loDist.length === 0) loDist.push(minimumDistance);
+  const pilotsLo = loDist.length;
+
+  // Histogram of landed-out pilots per slot (sub-minimum lumped at minSlot).
+  const spread = new Map<number, number>();
+  let bestSlot = 0;
+  let bestKm = 0;
+  for (const d of loDist) {
+    const s = Math.max(Math.trunc(d / 100), minSlot);
+    spread.set(s, (spread.get(s) ?? 0) + 1);
+    if (s > bestSlot) bestSlot = s;
+    if (d / 1000 > bestKm) bestKm = d / 1000;
+  }
+  if (bestKm === 0) return { diffScore: [], fractionFor: () => 0 };
+
+  const bestSlotR = Math.trunc((bestSlot + 10) / 10) * 10; // round up to next 10
+  // Best distance flown (incl. goal pilots) sizes the look-ahead window.
+  const bestFlownKm = Math.max(...scoredDistances, minimumDistance) / 1000;
+  const lookAhead = Math.max(30, Math.round((30 * bestFlownKm) / pilotsLo));
+
+  // Difficulty[i] = pilots who landed within [i, i+lookAhead).
+  const difficulty: number[] = new Array(bestSlotR).fill(0);
+  for (let i = 0; i < bestSlotR; i++) {
+    let sum = 0;
+    const top = Math.min(i + lookAhead, bestSlotR);
+    for (let x = i; x < top; x++) sum += spread.get(x) ?? 0;
+    difficulty[i] = sum;
+  }
+  const sumDiff = difficulty.reduce((a, b) => a + b, 0);
+  const rel = (i: number) => (sumDiff > 0 ? (0.5 * difficulty[i]) / sumDiff : 0);
+
+  // Cumulative difficulty score: seed = sum of relative difficulties at or
+  // below the minimum-distance slot (flat there), then accumulate up to the
+  // best landed-out slot, capped at 0.5 beyond it.
+  let cum = 0;
+  for (let i = 0; i <= Math.min(minSlot, bestSlotR - 1); i++) cum += rel(i);
+  const seed = cum;
+  const diffScore: number[] = new Array(bestSlotR).fill(0.5);
+  for (let i = 0; i < bestSlotR; i++) {
+    if (i <= minSlot) {
+      diffScore[i] = seed;
+    } else if (i >= bestSlot) {
+      diffScore[i] = 0.5;
+    } else {
+      cum += rel(i);
+      diffScore[i] = cum;
+    }
+  }
+
+  return {
+    diffScore,
+    fractionFor(distanceMeters: number): number {
+      const slot = Math.trunc(distanceMeters / 100);
+      if (slot >= diffScore.length - 1) return 0.5;
+      const base = diffScore[slot];
+      const next = diffScore[slot + 1];
+      // Interpolate within the slot only when the next slot is strictly
+      // higher (matches the FAI/AirScore step-then-interpolate behaviour).
+      if (next > base) return base + (next - base) * (distanceMeters / 100 - slot);
+      return base;
+    },
+  };
+}
+
+/** Distance-score breakdown: linear half + difficulty half. */
+export interface DistanceScore {
+  total: number;
+  linear: number;
+  difficulty: number;
+}
+
+/**
+ * Distance points for a hang-gliding pilot with the difficulty split
+ * (FAI S7F §11.1.1): half linear (distance / 2·best) + half difficulty.
+ * Goal pilots get the full available distance points (0.5 + 0.5).
+ */
+export function calculateDistancePointsHG(
+  pilotDistance: number,
+  bestDistance: number,
+  availableDistancePoints: number,
+  difficulty: DistanceDifficulty,
+  madeGoal: boolean,
+): DistanceScore {
+  if (bestDistance <= 0) return { total: 0, linear: 0, difficulty: 0 };
+  if (madeGoal) {
+    const half = availableDistancePoints * 0.5;
+    return { total: availableDistancePoints, linear: half, difficulty: half };
+  }
+  const linear = ((0.5 * pilotDistance) / bestDistance) * availableDistancePoints;
+  const diff = difficulty.fractionFor(pilotDistance) * availableDistancePoints;
+  return { total: linear + diff, linear, difficulty: diff };
 }
 
 /**
@@ -683,6 +831,17 @@ export function scoreTask(
   );
   const bestDistance = scoredDistances.length > 0 ? maxBy(scoredDistances, d => d) : 0;
 
+  // HG distance difficulty (FAI S7F §11.1.1) — built once from the whole
+  // field. Never applies to paragliding (the spec excludes PG).
+  const useDifficulty = fullParams.scoring === 'HG' && fullParams.useDistanceDifficulty;
+  const difficulty = useDifficulty
+    ? calculateDistanceDifficulty(
+        scoredDistances,
+        pilotResults.map(pr => pr.result.madeGoal),
+        fullParams.minimumDistance,
+      )
+    : null;
+
   const goalPilots = pilotResults.filter(pr => pr.result.madeGoal);
   const essPilots = pilotResults.filter(pr => pr.result.essReaching !== null);
   const numInGoal = goalPilots.length;
@@ -780,9 +939,18 @@ export function scoreTask(
     const { pilot } = pr;
     const pilotScoredDistance = scoredDistances[idx];
 
-    const distPts = calculateDistancePoints(
-      pilotScoredDistance, bestDistance, availablePoints.distance,
-    );
+    const distScore: DistanceScore = difficulty
+      ? calculateDistancePointsHG(
+          pilotScoredDistance, bestDistance, availablePoints.distance,
+          difficulty, result.madeGoal,
+        )
+      : (() => {
+          const linear = calculateDistancePoints(
+            pilotScoredDistance, bestDistance, availablePoints.distance,
+          );
+          return { total: linear, linear, difficulty: 0 };
+        })();
+    const distPts = distScore.total;
 
     const timePts = calculateTimePoints(
       result.speedSectionTime, bestTime,
@@ -810,6 +978,8 @@ export function scoreTask(
       madeGoal: result.madeGoal,
       reachedESS: result.essReaching !== null,
       distancePoints: Math.round(distPts * 10) / 10,
+      distanceLinearPoints: Math.round(distScore.linear * 10) / 10,
+      distanceDifficultyPoints: Math.round(distScore.difficulty * 10) / 10,
       timePoints: Math.round(timePts * 10) / 10,
       leadingPoints: Math.round(leadPts * 10) / 10,
       arrivalPoints: Math.round(arrPts * 10) / 10,

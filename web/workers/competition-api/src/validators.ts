@@ -57,6 +57,9 @@ const gapParamsSchema = z
     // (FAI CIVL GAP / PWCA) when omitted. 'start' excludes the
     // take-off→SSS leg (HGFA wording / "Move Origin").
     distanceOrigin: z.enum(["takeoff", "start"]).optional(),
+    // HG distance difficulty (FAI S7F §11.1.1). Optional; defaults to true.
+    // No effect on paragliding.
+    useDistanceDifficulty: z.boolean().optional(),
   })
   .strict();
 

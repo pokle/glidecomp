@@ -134,13 +134,25 @@
     <section id="distance-points" class="mb-14">
       <h2 class="text-2xl font-bold mb-4">Distance Points</h2>
       <div class="space-y-4 text-sm leading-relaxed">
-        <p class="text-muted-foreground">Every pilot who launches receives distance points, making this the "bread and butter" of your score. The formula is straightforward:</p>
+        <p class="text-muted-foreground">Every pilot who launches receives distance points, making this the "bread and butter" of your score. For <strong>paragliding</strong>, the formula is a straight proportion of how far you flew:</p>
         <p class="bg-muted/50 rounded px-3 py-2 inline-block">\( \text{Distance Points} = \dfrac{\text{Your Distance}}{\text{Best Distance}} \times \text{Available Distance Points} \)</p>
-        <p class="text-muted-foreground">The pilot who flew the farthest gets the full distance points. Everyone else gets a proportional share based on how far they flew.</p>
+        <p class="text-muted-foreground">The pilot who flew the farthest gets the full distance points. Everyone else gets a proportional share based on how far they flew. For <strong>hang gliding</strong>, half of the points use this proportion and the other half use a "difficulty" measure (see below).</p>
 
         <div class="ml-2">
           <h3 class="text-base font-semibold mb-1">Minimum Distance</h3>
           <p class="text-muted-foreground">There is a <strong>minimum scored distance</strong> (typically 5 km). If you launched but only flew 1 km before landing, you're still scored as if you flew 5 km. Pilots sometimes call these "bomb-out points" &mdash; the system is designed to encourage you to at least launch and give it a go rather than sitting out a task entirely.</p>
+        </div>
+
+        <div class="ml-2">
+          <h3 class="text-base font-semibold mb-1">Distance Difficulty <span class="text-sm font-normal text-muted-foreground">(hang gliding only)</span></h3>
+          <p class="text-muted-foreground">In hang gliding, distance points are split into two halves (per the FAI rules, S7F &sect;11.1.1):</p>
+          <p class="bg-muted/50 rounded px-3 py-2 inline-block">\( \text{Distance Points} = \left( \tfrac{1}{2}\,\text{Linear} + \tfrac{1}{2}\,\text{Difficulty} \right) \times \text{Available Distance Points} \)</p>
+          <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2 mt-2">
+            <li><strong>The linear half</strong> is the same proportion-of-best-distance as above.</li>
+            <li><strong>The difficulty half</strong> looks at where other pilots landed. Each stretch of the course is "harder" when few pilots managed to fly past it. Pushing on past a cluster of landed gliders is therefore worth extra points, while flying just a little further into a spot where everyone already landed is worth less.</li>
+          </ul>
+          <p class="text-muted-foreground mt-2">Why? Two reasons from the rulebook: for safety and retrieve, pilots shouldn't be tempted to fly just past a group that landed; and a pilot who lands somewhere often hit trouble just before, so the final glide into a landing field is "easy" distance. Pilots who reach goal always get the full distance points. Your results page shows the linear and difficulty halves separately so you can see how each contributed.</p>
+          <p class="text-muted-foreground mt-2">Difficulty does <strong>not</strong> apply to paragliding, and a competition can switch it off (scoring hang gliding on the linear formula instead) in its settings.</p>
         </div>
 
         <div class="ml-2">
@@ -290,7 +302,7 @@
         </div>
 
         <p class="text-muted-foreground">GlideComp defaults to having leading and arrival points <strong>disabled</strong>. These must be explicitly enabled in the competition parameters.</p>
-        <p class="text-muted-foreground">Distance, time and leading points are computed to match the CIVL GAP / AirScore formulas. Distance-point values for pilots who don't reach goal can still differ slightly from other tools such as <a href="https://airscore.org" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">AirScore</a>, which add a "distance difficulty" component that GlideComp does not yet apply; this affects absolute values more than relative ranking.</p>
+        <p class="text-muted-foreground">Distance (including the hang-gliding difficulty calculation), time and leading points are all computed to match the CIVL GAP formulas. Exact point values for pilots who don't reach goal can still differ slightly from other tools such as <a href="https://airscore.org" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">AirScore</a> because the optimized per-pilot flown distance isn't bit-identical between implementations; this affects absolute values more than relative ranking.</p>
         <p class="text-muted-foreground">The scoring engine source code is open and available on <a href="https://github.com/pokle/glidecomp" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">GitHub</a>.</p>
       </div>
     </section>

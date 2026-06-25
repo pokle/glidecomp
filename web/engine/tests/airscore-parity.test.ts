@@ -93,6 +93,24 @@ describe('AirScore parity — Corryong Cup 2026 T1', () => {
     expect(Math.abs(durand.timePoints - refBySurname.get('durand')!.timePts)).toBeLessThan(1.5);
   });
 
+  it('HG distance difficulty (FAI S7F): goal pilots split 50/50, landed-out pilots get a difficulty share', () => {
+    const r = scoreTask(task, pilots, { ...baseParams, useLeading: false });
+    const byName = new Map(r.pilotScores.map((p) => [p.pilotName, p]));
+    // Goal pilot: half linear + half difficulty, summing to the total.
+    const durand = byName.get('durand')!;
+    expect(durand.distanceLinearPoints).toBeCloseTo(durand.distancePoints / 2, 1);
+    expect(durand.distanceDifficultyPoints).toBeCloseTo(durand.distancePoints / 2, 1);
+    // A landed-out pilot gets a non-zero difficulty half, bounded by half-available.
+    const carrigan = byName.get('carrigan')!;
+    expect(carrigan.madeGoal).toBe(false);
+    expect(carrigan.distanceDifficultyPoints).toBeGreaterThan(0);
+    expect(carrigan.distanceDifficultyPoints).toBeLessThanOrEqual(r.availablePoints.distance / 2 + 0.1);
+    // Difficulty disabled ⇒ pure linear (smaller, no difficulty half).
+    const linear = scoreTask(task, pilots, { ...baseParams, useLeading: false, useDistanceDifficulty: false });
+    const carrLinear = linear.pilotScores.find((p) => p.pilotName === 'carrigan')!;
+    expect(carrLinear.distanceDifficultyPoints).toBe(0);
+  });
+
   it('time points track AirScore for the leading goal finishers (gap2020+ 5/6)', () => {
     const r = scoreTask(task, pilots, { ...baseParams, useLeading: false });
     const byName = new Map(r.pilotScores.map((p) => [p.pilotName, p]));
