@@ -59,9 +59,12 @@ export class FlightScene {
   private vScale = 3;
   private highlight = -1;
   private disposed = false;
+  /** True when hosted by the Mapbox (mercator) backend — flips ground labels. */
+  private geo: boolean;
 
-  constructor(tracks: LoadedTracks) {
+  constructor(tracks: LoadedTracks, geo = false) {
     this.tracks = tracks;
+    this.geo = geo;
     this.buildTrails();
     this.buildMarkers();
     this.buildTaskGeometry();
@@ -193,6 +196,15 @@ export class FlightScene {
       wall.frustumCulled = false;
       this.cylinderWalls.push(wall);
       this.group.add(wall);
+
+      // Turnpoint name, laid flat on the ground at the centre. Fixed orientation
+      // (North = up) so it reads upright when the camera faces north.
+      if (tp.name) {
+        const label = makeGroundLabel(tp.name, Math.min(tp.radius * 1.5, this.extentXZ * 0.11), this.geo);
+        label.position.set(tp.x, 0, tp.z);
+        label.renderOrder = 5;
+        this.group.add(label);
+      }
     }
     this.applyWallScale();
   }
@@ -288,6 +300,67 @@ export class FlightScene {
     (this.markers.material as THREE.Material).dispose();
     this.markers.dispose();
   }
+}
+
+/**
+ * A turnpoint name as a canvas texture on a ground-flat plane, oriented so the
+ * letters' top points North (+Z) and reading runs West→East (+X) — i.e. upright
+ * when the camera faces north, upside-down from the south.
+ *
+ * The plane is laid flat with its textured face pointing DOWN (rotation.x =
+ * +π/2), so from above we view the back face; the canvas is drawn mirrored to
+ * cancel that, leaving the text correct. (A face-up plane can't show both correct
+ * reading and a North-pointing top — that pairing is a reflection, not a
+ * rotation.)
+ */
+function makeGroundLabel(text: string, worldWidth: number, geo: boolean): THREE.Mesh {
+  const fontPx = 64;
+  const pad = 28;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d')!;
+  ctx.font = `bold ${fontPx}px system-ui, sans-serif`;
+  const w = Math.ceil(ctx.measureText(text).width + pad * 2);
+  const h = 128;
+  canvas.width = w;
+  canvas.height = h;
+  // Pre-flip the canvas to cancel each backend's orientation: the abstract camera
+  // shows the plane's back face (needs a horizontal flip); the mercator backend
+  // flips it vertically (needs a vertical flip). Either way the text ends up
+  // North-up and reading West→East.
+  if (geo) {
+    ctx.translate(0, h);
+    ctx.scale(1, -1);
+  } else {
+    ctx.translate(w, 0);
+    ctx.scale(-1, 1);
+  }
+  ctx.font = `bold ${fontPx}px system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = 'rgba(8,12,22,0.9)';
+  ctx.strokeText(text, w / 2, h / 2);
+  ctx.fillStyle = '#f1f5f9';
+  ctx.fillText(text, w / 2, h / 2);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  const geom = new THREE.PlaneGeometry(worldWidth, worldWidth * (h / w));
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(geom, mat);
+  // The mercator backend mirrors the scene's chirality vs the abstract camera, so
+  // flip which face points up to keep the text correct (North up) in both.
+  mesh.rotation.x = geo ? -Math.PI / 2 : Math.PI / 2;
+  mesh.frustumCulled = false;
+  return mesh;
 }
 
 // --- shaders ---------------------------------------------------------------
