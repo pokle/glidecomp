@@ -56,6 +56,7 @@ export class ReplayViewer {
   private vScale = 3;
   private colorMode: ColorMode = 'pilot';
   private tailSeconds = 600; // 10 min comet tail by default
+  private trailWidth = 3; // CSS px
   private mapStyle = DEFAULT_MAP_STYLE.url;
   private visibility!: boolean[];
   private follow = -1;
@@ -125,6 +126,7 @@ export class ReplayViewer {
     this.scene.setVScale(this.vScale);
     this.scene.setColorMode(this.colorMode);
     this.scene.setTailSeconds(this.tailSeconds);
+    this.scene.setWidth(this.trailWidth);
     this.visibility.forEach((v, i) => this.scene.setVisible(i, v));
     this.scene.setTime(this.time);
   }
@@ -266,6 +268,10 @@ export class ReplayViewer {
   setTailSeconds(s: number): void {
     this.tailSeconds = s;
     this.scene.setTailSeconds(s);
+  }
+  setTrailWidth(px: number): void {
+    this.trailWidth = px;
+    this.scene.setWidth(px);
   }
   setPilotVisible(idx: number, visible: boolean): void {
     this.visibility[idx] = visible;

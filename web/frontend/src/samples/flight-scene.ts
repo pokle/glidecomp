@@ -58,6 +58,7 @@ export class FlightScene {
   private dummy = new THREE.Object3D();
   private vScale = 3;
   private highlight = -1;
+  private width = 3; // trail width in CSS px
   private disposed = false;
 
   constructor(tracks: LoadedTracks) {
@@ -95,31 +96,51 @@ export class FlightScene {
       colors.push(new THREE.Vector3(c[0], c[1], c[2]));
     }
 
+    // One uniforms object shared by the line and the points pass so both stay in
+    // sync from a single update.
+    const uniforms = {
+      uTime: { value: 0 },
+      uTailSeconds: { value: 1e9 },
+      uColors: { value: colors },
+      uVisible: { value: new Float32Array(nPilots).fill(1) },
+      uColorMode: { value: 0 },
+      uHighlight: { value: -1 },
+      uVScale: { value: this.vScale },
+      uAltMin: { value: manifest.altMin },
+      uAltMax: { value: manifest.altMax },
+      uVarioMax: { value: VARIO_MAX },
+      uWidth: { value: this.width * pixelRatio() },
+    };
+
+    // depthTest off so trails are never hidden by terrain (and never z-fight it).
+    const common = { transparent: true, depthWrite: false, depthTest: false, blending: THREE.NormalBlending } as const;
+
     this.trailMat = new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0 },
-        uTailSeconds: { value: 1e9 },
-        uColors: { value: colors },
-        uVisible: { value: new Float32Array(nPilots).fill(1) },
-        uColorMode: { value: 0 },
-        uHighlight: { value: -1 },
-        uVScale: { value: this.vScale },
-        uAltMin: { value: manifest.altMin },
-        uAltMax: { value: manifest.altMax },
-        uVarioMax: { value: VARIO_MAX },
-      },
+      uniforms,
       vertexShader: trailVertexShader(nPilots),
       fragmentShader: TRAIL_FRAGMENT_SHADER,
-      transparent: true,
-      depthWrite: false,
-      // depthTest off so trails are never hidden by terrain (and never z-fight it).
-      depthTest: false,
-      blending: THREE.NormalBlending,
+      ...common,
     });
-
     const lines = new THREE.LineSegments(geom, this.trailMat);
     lines.frustumCulled = false;
     this.group.add(lines);
+
+    // Round points carry the adjustable width (gl.LINES width is capped at 1px on
+    // most platforms). Same attributes, no index (one point per fix), shared uniforms.
+    const pgeom = new THREE.BufferGeometry();
+    pgeom.setAttribute('position', geom.getAttribute('position'));
+    pgeom.setAttribute('aTime', geom.getAttribute('aTime'));
+    pgeom.setAttribute('aPilot', geom.getAttribute('aPilot'));
+    pgeom.setAttribute('aVario', geom.getAttribute('aVario'));
+    const pointMat = new THREE.ShaderMaterial({
+      uniforms,
+      vertexShader: trailVertexShader(nPilots),
+      fragmentShader: TRAIL_POINT_FRAGMENT_SHADER,
+      ...common,
+    });
+    const points = new THREE.Points(pgeom, pointMat);
+    points.frustumCulled = false;
+    this.group.add(points);
 
     let minX = Infinity,
       maxX = -Infinity,
@@ -266,6 +287,12 @@ export class FlightScene {
     this.trailMat.uniforms.uColorMode.value = mode === 'altitude' ? 1 : mode === 'vario' ? 2 : 0;
   }
 
+  /** Trail width in CSS px (drives the round-points pass). */
+  setWidth(px: number): void {
+    this.width = px;
+    this.trailMat.uniforms.uWidth.value = px * pixelRatio();
+  }
+
   setTailSeconds(s: number): void {
     this.trailMat.uniforms.uTailSeconds.value = s;
   }
@@ -363,6 +390,7 @@ function trailVertexShader(nPilots: number): string {
     uniform float uAltMin;
     uniform float uAltMax;
     uniform float uVarioMax;
+    uniform float uWidth;       // point size (px); ignored by LineSegments
     varying float vAge;
     varying vec3  vColor;
     varying float vDim;
@@ -407,6 +435,7 @@ function trailVertexShader(nPilots: number): string {
       p.y *= uVScale;                          // exaggerate altitude
       vec4 mv = modelViewMatrix * vec4(p, 1.0);
       gl_Position = projectionMatrix * mv;
+      gl_PointSize = uWidth;                   // used by the Points pass; ignored by lines
       if (aTime > uTime) gl_Position.w = -1.0; // cheap discard of the future
     }
   `;
@@ -425,3 +454,26 @@ const TRAIL_FRAGMENT_SHADER = /* glsl */ `
     gl_FragColor = vec4(vColor, (0.18 + 0.82 * f) * vDim);
   }
 `;
+
+// Same fade as the line, but clipped to a round dot so wide points read as a
+// smooth thick trail rather than squares.
+const TRAIL_POINT_FRAGMENT_SHADER = /* glsl */ `
+  uniform float uTailSeconds;
+  varying float vAge;
+  varying vec3  vColor;
+  varying float vDim;
+
+  void main() {
+    if (vAge < 0.0) discard;
+    vec2 d = gl_PointCoord - vec2(0.5);
+    if (dot(d, d) > 0.25) discard;            // round
+    float f = 1.0 - vAge / uTailSeconds;
+    if (f <= 0.0) discard;
+    gl_FragColor = vec4(vColor, (0.18 + 0.82 * f) * vDim);
+  }
+`;
+
+/** Renderer pixel ratio (clamped to 2, matching the backends) for sizing points. */
+function pixelRatio(): number {
+  return Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, 2);
+}

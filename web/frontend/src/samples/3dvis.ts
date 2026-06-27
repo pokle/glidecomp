@@ -169,6 +169,13 @@ async function main(): Promise<void> {
     }
   });
 
+  const width = $<HTMLInputElement>('width');
+  width.addEventListener('input', () => {
+    const v = Number(width.value);
+    viewer.setTrailWidth(v);
+    $('widthVal').textContent = `${v} px`;
+  });
+
   $('resetView').addEventListener('click', () => {
     viewer.resetCamera();
     clearFollow();
