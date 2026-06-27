@@ -24,7 +24,9 @@ import { resolve, join, basename } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { parseIGC } from '../src/igc-parser';
-import { parseXCTask } from '../src/xctsk-parser';
+import { parseXCTask, type XCTask } from '../src/xctsk-parser';
+import { calculateOptimizedTaskDistance } from '../src/task-optimizer';
+import { scoreTask, DEFAULT_GAP_PARAMETERS, type PilotFlight } from '../src/gap-scoring';
 import { packTracks, type PilotTrackInput } from '../src/track-packer';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
@@ -39,6 +41,26 @@ function pilotIdFromFilename(file: string): string {
   const parts = stem.split('_');
   const numeric = parts.find((p) => /^\d{3,}$/.test(p));
   return numeric ?? stem;
+}
+
+/** Run CIVL GAP scoring and copy each pilot's rank + total onto the pack input. */
+function applyScores(task: XCTask, pilots: PilotTrackInput[], flights: PilotFlight[]): number {
+  const params = { ...DEFAULT_GAP_PARAMETERS };
+  if (params.nominalDistance === undefined) {
+    params.nominalDistance = calculateOptimizedTaskDistance(task) * 0.7;
+  }
+  const result = scoreTask(task, flights, params);
+  const byName = new Map(result.pilotScores.map((ps) => [ps.pilotName, ps]));
+  let n = 0;
+  for (const p of pilots) {
+    const ps = byName.get(p.name);
+    if (ps) {
+      p.rank = ps.rank;
+      p.score = ps.totalScore;
+      n++;
+    }
+  }
+  return n;
 }
 
 function main(): void {
@@ -61,6 +83,7 @@ function main(): void {
   }
 
   const pilots: PilotTrackInput[] = [];
+  const flights: PilotFlight[] = [];
   let skipped = 0;
   for (const file of igcFiles) {
     const igc = parseIGC(readFileSync(join(compDir, file), 'utf-8'));
@@ -69,6 +92,7 @@ function main(): void {
       console.warn(`  skip ${file}: no fixes`);
       continue;
     }
+    const name = (igc.header.pilot || basename(file, '.igc')).replace(/\s+/g, ' ').trim();
     const fixes = igc.fixes
       .map((f) => ({
         lat: f.latitude,
@@ -79,11 +103,19 @@ function main(): void {
       }))
       .sort((a, b) => a.t - b.t);
 
-    pilots.push({
-      id: pilotIdFromFilename(file),
-      name: igc.header.pilot || basename(file, '.igc'),
-      fixes,
-    });
+    pilots.push({ id: pilotIdFromFilename(file), name, fixes });
+    flights.push({ pilotName: name, fixes: igc.fixes });
+  }
+
+  // Score with CIVL GAP to order the pilot legend by result. Best-effort: if
+  // scoring throws (odd data / no task), the legend just falls back to name order.
+  let ranked = 0;
+  if (task) {
+    try {
+      ranked = applyScores(task, pilots, flights);
+    } catch (err) {
+      console.warn(`  scoring skipped: ${(err as Error).message}`);
+    }
   }
 
   const { manifest, data } = packTracks({ pilots, task });
@@ -96,7 +128,7 @@ function main(): void {
 
   const durationMin = ((manifest.t1 - manifest.t0) / 60).toFixed(1);
   console.log(`\n3D replay asset written to ${outDir}`);
-  console.log(`  pilots:    ${manifest.pilots.length} (${skipped} skipped, no fixes)`);
+  console.log(`  pilots:    ${manifest.pilots.length} (${skipped} skipped, no fixes; ${ranked} ranked)`);
   console.log(`  vertices:  ${manifest.vertexCount.toLocaleString()}`);
   console.log(`  task span: ${durationMin} min  (alt ${manifest.altMin.toFixed(0)}–${manifest.altMax.toFixed(0)} m AGL-rel)`);
   console.log(`  turnpoints:${manifest.task ? ' ' + manifest.task.turnpoints.length : ' none'}`);

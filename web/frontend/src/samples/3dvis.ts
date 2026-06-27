@@ -17,14 +17,45 @@ const DATA_BASE = '/samples/3dvis';
 const $ = <T = HTMLElement>(id: string): T =>
   document.getElementById(id) as unknown as T;
 
-function pad(n: number): string {
-  return n.toString().padStart(2, '0');
+/**
+ * Format absolute UTC seconds as a local HH:MM:SS in the browser's timezone.
+ * (The IGC fixes are UTC; the comp's own timezone isn't stored, so we use the
+ * viewer's zone — correct when watching a comp in your own region.)
+ */
+function clockLocal(utcSeconds: number): string {
+  return new Date(utcSeconds * 1000).toLocaleTimeString(undefined, {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 }
 
-/** Format absolute UTC seconds as HH:MM:SS. */
-function clockUTC(utcSeconds: number): string {
-  const d = new Date(utcSeconds * 1000);
-  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+/**
+ * Short timezone label (e.g. "AEDT", "GMT+11") for the browser's zone, computed
+ * at `refDate` so the DST offset matches the comp date — not today's.
+ */
+function localZoneLabel(refDate: Date): string {
+  try {
+    const parts = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(
+      refDate,
+    );
+    return parts.find((p) => p.type === 'timeZoneName')?.value ?? 'local';
+  } catch {
+    return 'local';
+  }
+}
+
+/** Wire a collapse button to toggle a panel body and flip its chevron. */
+function makeCollapsible(btnId: string, bodyId: string): void {
+  const btn = document.getElementById(btnId);
+  const body = document.getElementById(bodyId);
+  if (!btn || !body) return;
+  btn.addEventListener('click', () => {
+    const collapsed = body.classList.toggle('hidden');
+    btn.textContent = collapsed ? '▸' : '▾';
+    btn.setAttribute('title', collapsed ? 'Expand panel' : 'Collapse panel');
+  });
 }
 
 /** Round n down to a "nice" 1/2/5×10^k value for the scale bar. */
@@ -78,9 +109,10 @@ async function main(): Promise<void> {
   const duration = manifest.t1 - manifest.t0;
   const scrubber = $<HTMLInputElement>('scrubber');
   let scrubbing = false;
+  $('clockZone').textContent = localZoneLabel(new Date(manifest.t0 * 1000));
 
   function onTime(t: number): void {
-    $('clock').textContent = clockUTC(manifest.t0 + t);
+    $('clock').textContent = clockLocal(manifest.t0 + t);
     if (!scrubbing) scrubber.value = String(Math.round((t / duration) * 1000));
   }
   scrubber.addEventListener('pointerdown', () => {
@@ -94,6 +126,10 @@ async function main(): Promise<void> {
     viewer.setTime((Number(scrubber.value) / 1000) * duration);
   });
   onTime(0);
+
+  // --- collapsible panels ---
+  makeCollapsible('viewCollapse', 'viewBody');
+  makeCollapsible('pilotsCollapse', 'pilotsBody');
 
   // --- playback controls ---
   $('playPause').addEventListener('click', () => viewer.togglePlay());
@@ -188,21 +224,38 @@ async function main(): Promise<void> {
   bdAbstract.addEventListener('click', () => switchBackdrop('abstract'));
   bdTerrain.addEventListener('click', () => switchBackdrop('terrain'));
 
-  // --- pilot legend ---
+  // --- pilot legend (ordered by GAP result) ---
   let followIdx = -1;
-  const rows: HTMLLIElement[] = [];
+  const rows: HTMLLIElement[] = new Array(manifest.pilots.length);
   const legend = $('legend');
-  manifest.pilots.forEach((p, i) => {
+  // rank ascending; pilots without a rank fall to the bottom, name-sorted
+  const order = manifest.pilots
+    .map((_, i) => i)
+    .sort((a, b) => {
+      const ra = manifest.pilots[a].rank;
+      const rb = manifest.pilots[b].rank;
+      if (ra != null && rb != null) return ra - rb;
+      if (ra != null) return -1;
+      if (rb != null) return 1;
+      return manifest.pilots[a].name.localeCompare(manifest.pilots[b].name);
+    });
+
+  for (const i of order) {
+    const p = manifest.pilots[i];
     const c = manifest.colors[i] ?? [0.8, 0.8, 0.8];
     const rgb = `rgb(${(c[0] * 255) | 0}, ${(c[1] * 255) | 0}, ${(c[2] * 255) | 0})`;
+    const rankLabel = p.rank != null ? `${p.rank}. ` : '';
+    const scoreLabel = p.score != null ? String(Math.round(p.score)) : '';
     const li = document.createElement('li');
     li.className =
       'flex items-center gap-2 px-3 py-1 hover:bg-slate-700/40 cursor-pointer select-none';
+    li.dataset.search = `${rankLabel}${p.name}`.toLowerCase();
     li.innerHTML = `
       <button class="swatch shrink-0 w-3 h-3 rounded-sm" style="background:${rgb}" title="Toggle visibility"></button>
-      <span class="name flex-1 truncate" title="Click to follow">${escapeHtml(p.name)}</span>`;
+      <span class="name flex-1 truncate" title="Click to follow">${escapeHtml(rankLabel + p.name)}</span>
+      <span class="shrink-0 text-[10px] text-slate-500 tabular-nums">${scoreLabel}</span>`;
     legend.appendChild(li);
-    rows.push(li);
+    rows[i] = li;
 
     let visible = true;
     const swatch = li.querySelector<HTMLButtonElement>('.swatch')!;
@@ -221,6 +274,16 @@ async function main(): Promise<void> {
       li.classList.toggle('opacity-40', !visible);
     });
     nameEl.addEventListener('click', () => setFollow(i));
+  }
+
+  // --- pilot search filter ---
+  const pilotSearch = $<HTMLInputElement>('pilotSearch');
+  pilotSearch.addEventListener('input', () => {
+    const q = pilotSearch.value.trim().toLowerCase();
+    for (const li of rows) {
+      const match = !q || (li.dataset.search ?? '').includes(q);
+      li.classList.toggle('hidden', !match);
+    }
   });
 
   function setFollow(i: number): void {

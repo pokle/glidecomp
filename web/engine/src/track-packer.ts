@@ -45,6 +45,10 @@ export interface PilotTrackInput {
   /** Human-readable pilot name. */
   name: string;
   fixes: TrackFix[];
+  /** GAP total score, if computed (drives legend ordering). */
+  score?: number;
+  /** 1-based finishing rank, if computed. */
+  rank?: number;
 }
 
 export interface PackInput {
@@ -63,6 +67,10 @@ export interface TrackPilotMeta {
   vertexOffset: number;
   /** Number of vertices (fixes) for this pilot. */
   vertexCount: number;
+  /** GAP total score, if computed. */
+  score?: number;
+  /** 1-based finishing rank, if computed. */
+  rank?: number;
 }
 
 /** A task turnpoint projected into the viewer's ENU frame. */
@@ -218,6 +226,8 @@ export function packTracks(input: PackInput): PackedTracks {
       colorIdx: pilotIdx,
       vertexOffset,
       vertexCount: p.fixes.length,
+      score: p.score,
+      rank: p.rank,
     });
   });
 
