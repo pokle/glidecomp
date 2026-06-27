@@ -8,6 +8,7 @@
  */
 
 import { ReplayViewer, type ColorMode, type HoverInfo } from './replay-viewer';
+import { MAP_STYLES, DEFAULT_MAP_STYLE } from './map-styles';
 import type { TrackManifest } from '@glidecomp/engine';
 
 const DATA_BASE = '/samples/3dvis';
@@ -152,6 +153,15 @@ async function main(): Promise<void> {
     bdTerrain.classList.add('opacity-40', 'cursor-not-allowed');
     bdTerrain.title = 'Set VITE_MAPBOX_TOKEN to enable the terrain backdrop';
   }
+  // map style picker (terrain only)
+  const mapStyleRow = $('mapStyleRow');
+  const mapStyleSel = $<HTMLSelectElement>('mapStyle');
+  mapStyleSel.innerHTML = MAP_STYLES.map(
+    (s) => `<option value="${s.url}">${s.name}</option>`,
+  ).join('');
+  mapStyleSel.value = DEFAULT_MAP_STYLE.url;
+  mapStyleSel.addEventListener('change', () => viewer.setMapStyle(mapStyleSel.value));
+
   async function switchBackdrop(mode: 'abstract' | 'terrain'): Promise<void> {
     if (mode === viewer.currentBackdrop) return;
     bdAbstract.disabled = bdTerrain.disabled = true;
@@ -160,6 +170,7 @@ async function main(): Promise<void> {
     try {
       await viewer.setBackdrop(mode);
       paintBackdrop(mode);
+      mapStyleRow.classList.toggle('hidden', mode !== 'terrain');
       $('stats').textContent = prevStats;
     } catch (err) {
       console.error(err);

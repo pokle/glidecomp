@@ -35,6 +35,8 @@ export interface Backend {
   getBearingDeg(): number;
   /** Keep vertical exaggeration in sync (terrain also drives map terrain). */
   setVScale(v: number): void;
+  /** Change the basemap style (terrain only; no-op elsewhere). */
+  setMapStyle?(url: string): void;
   resize(): void;
   dispose(): void;
 }

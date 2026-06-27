@@ -28,17 +28,16 @@ import type { TrackManifest } from '@glidecomp/engine';
 import type { Backend, ScreenPoint } from './backend';
 import type { FlightScene, MarkerSample } from './flight-scene';
 
-const STYLE = 'mapbox://styles/mapbox/satellite-streets-v12';
-
 export class TerrainBackend implements Backend {
   private map!: mapboxgl.Map;
-  private renderer3!: THREE.WebGLRenderer;
+  private renderer3?: THREE.WebGLRenderer;
   private camera3 = new THREE.Camera();
   private scene3 = new THREE.Scene();
 
   private originMerc!: mapboxgl.MercatorCoordinate;
   private s = 1;
   private vScale = 3;
+  private firstLoad = true;
   private readonly combined = new THREE.Matrix4();
 
   constructor(
@@ -46,6 +45,7 @@ export class TerrainBackend implements Backend {
     private flight: FlightScene,
     private manifest: TrackManifest,
     private token: string,
+    private style: string,
   ) {}
 
   mount(): Promise<void> {
@@ -58,7 +58,7 @@ export class TerrainBackend implements Backend {
         this.map = new mapboxgl.Map({
           container: this.container,
           accessToken: this.token,
-          style: STYLE,
+          style: this.style,
           center: [lon0, lat0],
           zoom: 9.5,
           pitch: 60,
@@ -67,35 +67,20 @@ export class TerrainBackend implements Backend {
           antialias: true,
         });
 
+        // Fires on initial load AND after every setStyle(); re-add terrain + the
+        // custom layer each time (setStyle removes all sources/layers).
         this.map.on('style.load', () => {
-          if (!this.map.getSource('mapbox-dem')) {
-            this.map.addSource('mapbox-dem', {
-              type: 'raster-dem',
-              url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-              tileSize: 512,
-              maxzoom: 14,
-            });
+          this.addTerrainAndLayers();
+          if (this.firstLoad) {
+            this.firstLoad = false;
+            this.resetCamera();
+            // Dev-only handle so headless tests can force a synchronous render
+            // (the preview tab suspends rAF, so Mapbox never auto-paints).
+            if (import.meta.env.DEV) {
+              (window as unknown as { __terrainMap?: mapboxgl.Map }).__terrainMap = this.map;
+            }
+            resolve();
           }
-          this.map.setTerrain({ source: 'mapbox-dem', exaggeration: this.vScale });
-          if (!this.map.getLayer('sky')) {
-            this.map.addLayer({
-              id: 'sky',
-              type: 'sky',
-              paint: {
-                'sky-type': 'atmosphere',
-                'sky-atmosphere-sun': [0, 90],
-                'sky-atmosphere-sun-intensity': 15,
-              },
-            });
-          }
-          this.map.addLayer(this.customLayer());
-          this.resetCamera();
-          // Dev-only handle so headless tests can force a synchronous render
-          // (the preview tab suspends rAF, so Mapbox never auto-paints).
-          if (import.meta.env.DEV) {
-            (window as unknown as { __terrainMap?: mapboxgl.Map }).__terrainMap = this.map;
-          }
-          resolve();
         });
         this.map.on('error', (e) => console.warn('[terrain] map error', e?.error ?? e));
       } catch (err) {
@@ -104,22 +89,60 @@ export class TerrainBackend implements Backend {
     });
   }
 
+  /** (Re)add DEM terrain, sky, and the custom 3D track layer for the current style. */
+  private addTerrainAndLayers(): void {
+    if (!this.map.getSource('mapbox-dem')) {
+      this.map.addSource('mapbox-dem', {
+        type: 'raster-dem',
+        url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+        tileSize: 512,
+        maxzoom: 14,
+      });
+    }
+    this.map.setTerrain({ source: 'mapbox-dem', exaggeration: this.vScale });
+    if (!this.map.getLayer('sky')) {
+      this.map.addLayer({
+        id: 'sky',
+        type: 'sky',
+        paint: {
+          'sky-type': 'atmosphere',
+          'sky-atmosphere-sun': [0, 90],
+          'sky-atmosphere-sun-intensity': 15,
+        },
+      });
+    }
+    if (!this.map.getLayer('tracks-3d')) this.map.addLayer(this.customLayer());
+  }
+
+  setMapStyle(url: string): void {
+    if (url === this.style || !this.map) return;
+    this.style = url;
+    // setStyle wipes sources/layers; the style.load handler re-adds them. The
+    // shared GL context (and renderer3) survive, so the camera/scene persist.
+    this.map.setStyle(url);
+  }
+
   private customLayer(): mapboxgl.CustomLayerInterface {
     return {
       id: 'tracks-3d',
       type: 'custom',
       renderingMode: '3d',
       onAdd: (_map, gl) => {
-        this.renderer3 = new THREE.WebGLRenderer({
-          canvas: this.map.getCanvas(),
-          context: gl,
-          antialias: true,
-        });
-        this.renderer3.autoClear = false;
+        // Reuse the renderer across style switches (context persists); creating
+        // it once avoids leaking a GL renderer per setStyle.
+        if (!this.renderer3) {
+          this.renderer3 = new THREE.WebGLRenderer({
+            canvas: this.map.getCanvas(),
+            context: gl,
+            antialias: true,
+          });
+          this.renderer3.autoClear = false;
+        }
         this.scene3.add(this.flight.group);
         this.scene3.add(this.flight.markers);
       },
       render: (_gl, matrix) => {
+        if (!this.renderer3) return;
         const model = this.modelMatrix();
         this.combined.fromArray(matrix).multiply(model);
         this.camera3.projectionMatrix.copy(this.combined);

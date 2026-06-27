@@ -15,6 +15,7 @@
 import { loadTracks, type LoadedTracks } from './track-data';
 import { FlightScene, type ColorMode, type MarkerSample } from './flight-scene';
 import { AbstractBackend } from './abstract-backend';
+import { DEFAULT_MAP_STYLE } from './map-styles';
 import type { Backend } from './backend';
 
 export type { ColorMode } from './flight-scene';
@@ -55,6 +56,7 @@ export class ReplayViewer {
   private vScale = 3;
   private colorMode: ColorMode = 'pilot';
   private tailSeconds = 1e9;
+  private mapStyle = DEFAULT_MAP_STYLE.url;
   private visibility!: boolean[];
   private follow = -1;
 
@@ -106,7 +108,7 @@ export class ReplayViewer {
       if (mode === 'terrain') {
         if (!this.mapboxToken) throw new Error('Mapbox token not configured (VITE_MAPBOX_TOKEN)');
         const { TerrainBackend } = await import('./terrain-backend');
-        this.backend = new TerrainBackend(this.container, this.scene, this.tracks.manifest, this.mapboxToken);
+        this.backend = new TerrainBackend(this.container, this.scene, this.tracks.manifest, this.mapboxToken, this.mapStyle);
       } else {
         this.backend = new AbstractBackend(this.container, this.scene);
       }
@@ -252,6 +254,14 @@ export class ReplayViewer {
   setColorMode(mode: ColorMode): void {
     this.colorMode = mode;
     this.scene.setColorMode(mode);
+  }
+  /** Basemap style for the terrain backdrop; remembered across backdrop switches. */
+  setMapStyle(url: string): void {
+    this.mapStyle = url;
+    this.backend.setMapStyle?.(url);
+  }
+  get currentMapStyle(): string {
+    return this.mapStyle;
   }
   setTailSeconds(s: number): void {
     this.tailSeconds = s;
