@@ -151,7 +151,7 @@ async function main(): Promise<void> {
   if (!import.meta.env.VITE_MAPBOX_TOKEN) {
     bdTerrain.disabled = true;
     bdTerrain.classList.add('opacity-40', 'cursor-not-allowed');
-    bdTerrain.title = 'Set VITE_MAPBOX_TOKEN to enable the terrain backdrop';
+    bdTerrain.title = 'Set VITE_MAPBOX_TOKEN to enable the map backdrop';
   }
   // map style picker (terrain only)
   const mapStyleRow = $('mapStyleRow');
@@ -166,7 +166,7 @@ async function main(): Promise<void> {
     if (mode === viewer.currentBackdrop) return;
     bdAbstract.disabled = bdTerrain.disabled = true;
     const prevStats = $('stats').textContent;
-    if (mode === 'terrain') $('stats').textContent = 'Loading terrain…';
+    if (mode === 'terrain') $('stats').textContent = 'Loading map…';
     try {
       await viewer.setBackdrop(mode);
       paintBackdrop(mode);
@@ -174,7 +174,7 @@ async function main(): Promise<void> {
       $('stats').textContent = prevStats;
     } catch (err) {
       console.error(err);
-      $('stats').textContent = `Terrain unavailable: ${(err as Error).message}`;
+      $('stats').textContent = `Map unavailable: ${(err as Error).message}`;
       paintBackdrop(viewer.currentBackdrop);
     } finally {
       bdAbstract.disabled = false;
