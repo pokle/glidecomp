@@ -26,8 +26,10 @@
 
 <body class="text-slate-100 font-sans antialiased">
   <div id="app" class="fixed inset-0">
-    <!-- 3D canvas mounts here -->
-    <div id="viewer" class="absolute inset-0"></div>
+    <!-- 3D canvas / map mounts here. h-full w-full (not just inset-0) because
+         Mapbox adds .mapboxgl-map { position: relative }, which would otherwise
+         override `absolute` and collapse the inset-0 height to 0. -->
+    <div id="viewer" class="absolute inset-0 h-full w-full"></div>
 
     <!-- hover tooltip -->
     <div id="tooltip"
