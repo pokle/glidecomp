@@ -18,6 +18,8 @@ export class AbstractBackend implements Backend {
   private controls!: OrbitControls;
   private resizeObs!: ResizeObserver;
   private follow = -1;
+  private vScale = 3;
+  private v = new THREE.Vector3(); // scratch for projection / bearing
 
   constructor(
     private container: HTMLElement,
@@ -68,7 +70,7 @@ export class AbstractBackend implements Backend {
   resetCamera(): void {
     this.follow = -1;
     const d = this.flight.extentXZ * 1.15;
-    const midY = (this.flight.altRange / 2) * this.vScale();
+    const midY = (this.flight.altRange / 2) * this.vScale;
     this.controls.target.set(this.flight.center.x, midY, this.flight.center.z);
     // Camera on the south side (+Z, since North = -Z) looking north, so East is
     // on the right by default.
@@ -80,25 +82,21 @@ export class AbstractBackend implements Backend {
     this.controls.update();
   }
 
-  private currentVScale = 3;
-  private vScale(): number {
-    return this.currentVScale;
-  }
   setVScale(v: number): void {
-    this.currentVScale = v;
+    this.vScale = v;
   }
 
   followTo(sample: MarkerSample | null): void {
     if (!sample || !sample.active) return;
-    const target = new THREE.Vector3(sample.x, sample.y, sample.z);
-    const delta = target.clone().sub(this.controls.target);
-    this.controls.target.add(delta);
-    this.camera.position.add(delta);
+    // delta = sample - target; shift both target and camera by it to track.
+    this.v.set(sample.x, sample.y, sample.z).sub(this.controls.target);
+    this.controls.target.add(this.v);
+    this.camera.position.add(this.v);
     this.follow = sample.pilot;
   }
 
   projectToScreen(x: number, y: number, z: number): ScreenPoint {
-    const v = new THREE.Vector3(x, y, z).project(this.camera);
+    const v = this.v.set(x, y, z).project(this.camera);
     const w = this.renderer.domElement.clientWidth;
     const h = this.renderer.domElement.clientHeight;
     return { x: (v.x * 0.5 + 0.5) * w, y: (-v.y * 0.5 + 0.5) * h, visible: v.z < 1 };
@@ -111,10 +109,9 @@ export class AbstractBackend implements Backend {
   }
 
   getBearingDeg(): number {
-    const fwd = new THREE.Vector3();
-    this.camera.getWorldDirection(fwd);
+    this.camera.getWorldDirection(this.v);
     // Heading clockwise from north; North = -Z, so the north component is -fwd.z.
-    return (Math.atan2(fwd.x, -fwd.z) * 180) / Math.PI;
+    return (Math.atan2(this.v.x, -this.v.z) * 180) / Math.PI;
   }
 
   resize(): void {

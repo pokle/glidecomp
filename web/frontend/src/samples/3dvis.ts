@@ -190,14 +190,16 @@ async function main(): Promise<void> {
   // --- backdrop (abstract / terrain) ---
   const bdAbstract = $<HTMLButtonElement>('bdAbstract');
   const bdTerrain = $<HTMLButtonElement>('bdTerrain');
-  const ON = ['bg-lime-500', 'text-slate-900'];
-  const OFF = ['bg-slate-800', 'text-slate-300', 'hover:bg-slate-700'];
+  const setActive = (btn: HTMLButtonElement, on: boolean): void => {
+    btn.classList.toggle('bg-lime-500', on);
+    btn.classList.toggle('text-slate-900', on);
+    btn.classList.toggle('bg-slate-800', !on);
+    btn.classList.toggle('text-slate-300', !on);
+    btn.classList.toggle('hover:bg-slate-700', !on);
+  };
   function paintBackdrop(active: 'abstract' | 'terrain'): void {
-    const a = active === 'abstract';
-    bdAbstract.classList.remove(...(a ? OFF : ON));
-    bdAbstract.classList.add(...(a ? ON : OFF));
-    bdTerrain.classList.remove(...(a ? ON : OFF));
-    bdTerrain.classList.add(...(a ? OFF : ON));
+    setActive(bdAbstract, active === 'abstract');
+    setActive(bdTerrain, active === 'terrain');
   }
   if (!import.meta.env.VITE_MAPBOX_TOKEN) {
     bdTerrain.disabled = true;

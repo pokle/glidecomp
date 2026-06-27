@@ -199,6 +199,11 @@ export function packTracks(input: PackInput): PackedTracks {
   const lon0 = sumLon / pilots.length;
   const { mPerDegLat, mPerDegLon } = metresPerDegree(lat0);
 
+  // Project lat/lon → local ENU metres. One place for the convention:
+  // East → +X, North → -Z (right-handed, so a north-facing camera shows East right).
+  const projX = (lon: number): number => (lon - lon0) * mPerDegLon;
+  const projZ = (lat: number): number => (lat0 - lat) * mPerDegLat;
+
   // --- Pack vertices ---
   const vertexCount = pilots.reduce((n, p) => n + p.fixes.length, 0);
   const data = new Float32Array(vertexCount * FLOATS_PER_VERTEX);
@@ -211,15 +216,13 @@ export function packTracks(input: PackInput): PackedTracks {
   pilots.forEach((p, pilotIdx) => {
     const vertexOffset = vi;
     for (const f of p.fixes) {
-      const x = (f.lon - lon0) * mPerDegLon; // East  → +X
-      const z = (lat0 - f.lat) * mPerDegLat; // North → -Z (right-handed ENU)
       const y = f.alt - alt0; // Up → +Y
       if (y < altMin) altMin = y;
       if (y > altMax) altMax = y;
       const o = vi * FLOATS_PER_VERTEX;
-      data[o + 0] = x;
+      data[o + 0] = projX(f.lon);
       data[o + 1] = y;
-      data[o + 2] = z;
+      data[o + 2] = projZ(f.lat);
       data[o + 3] = f.t - t0; // tRel seconds
       vi++;
     }
@@ -241,8 +244,8 @@ export function packTracks(input: PackInput): PackedTracks {
       name: tp.waypoint.name,
       type: tp.type,
       radius: tp.radius,
-      x: (tp.waypoint.lon - lon0) * mPerDegLon,
-      z: (lat0 - tp.waypoint.lat) * mPerDegLat, // North → -Z (right-handed ENU)
+      x: projX(tp.waypoint.lon),
+      z: projZ(tp.waypoint.lat),
       lat: tp.waypoint.lat,
       lon: tp.waypoint.lon,
     }));

@@ -78,7 +78,7 @@ export class ReplayViewer {
 
     this.scene = new FlightScene(this.tracks);
     this.applySceneState();
-    this.backend = new AbstractBackend(this.container, this.scene);
+    this.backend = await this.makeBackend('abstract');
     this.backend.setVScale(this.vScale);
     await this.backend.mount();
 
@@ -105,20 +105,23 @@ export class ReplayViewer {
 
       this.scene = new FlightScene(this.tracks);
       this.applySceneState();
-
-      if (mode === 'terrain') {
-        if (!this.mapboxToken) throw new Error('Mapbox token not configured (VITE_MAPBOX_TOKEN)');
-        const { TerrainBackend } = await import('./terrain-backend');
-        this.backend = new TerrainBackend(this.container, this.scene, this.tracks.manifest, this.mapboxToken, this.mapStyle);
-      } else {
-        this.backend = new AbstractBackend(this.container, this.scene);
-      }
+      this.backend = await this.makeBackend(mode);
       this.backend.setVScale(this.vScale);
       await this.backend.mount();
       this.backdrop = mode;
     } finally {
       this.switching = false;
     }
+  }
+
+  /** Build a backend for the given backdrop (terrain is lazy-loaded). */
+  private async makeBackend(mode: Backdrop): Promise<Backend> {
+    if (mode === 'terrain') {
+      if (!this.mapboxToken) throw new Error('Mapbox token not configured (VITE_MAPBOX_TOKEN)');
+      const { TerrainBackend } = await import('./terrain-backend');
+      return new TerrainBackend(this.container, this.scene, this.tracks.manifest, this.mapboxToken, this.mapStyle);
+    }
+    return new AbstractBackend(this.container, this.scene);
   }
 
   /** Re-push every scene-level setting onto a freshly built FlightScene. */
@@ -170,6 +173,8 @@ export class ReplayViewer {
 
   private updatePicking(samples: MarkerSample[]): void {
     let hover = -1;
+    let hoverX = 0;
+    let hoverY = 0;
     if (this.pointer.inside) {
       let bestD = 20;
       for (const s of samples) {
@@ -180,6 +185,8 @@ export class ReplayViewer {
         if (d < bestD) {
           bestD = d;
           hover = s.pilot;
+          hoverX = p.x;
+          hoverY = p.y;
         }
       }
     }
@@ -191,7 +198,8 @@ export class ReplayViewer {
 
     if (eff >= 0 && samples[eff]?.active) {
       const s = samples[eff];
-      const p = this.backend.projectToScreen(s.x, s.y, s.z);
+      // reuse the projection from the picking loop when the hovered pilot won
+      const p = eff === hover ? { x: hoverX, y: hoverY } : this.backend.projectToScreen(s.x, s.y, s.z);
       this.cb.onHover?.({
         pilotIdx: eff,
         name: s.name,

@@ -56,6 +56,8 @@ export class FlightScene {
   private tracks: LoadedTracks;
   private trailMat!: THREE.ShaderMaterial;
   private dummy = new THREE.Object3D();
+  private dir = new THREE.Vector3(); // scratch, reused per marker per frame
+  private samplesOut: MarkerSample[] = []; // reused each frame (one per pilot)
   private vScale = 3;
   private highlight = -1;
   private width = 3; // trail width in CSS px
@@ -118,7 +120,7 @@ export class FlightScene {
     this.trailMat = new THREE.ShaderMaterial({
       uniforms,
       vertexShader: trailVertexShader(nPilots),
-      fragmentShader: TRAIL_FRAGMENT_SHADER,
+      fragmentShader: trailFragmentShader(false),
       ...common,
     });
     const lines = new THREE.LineSegments(geom, this.trailMat);
@@ -128,14 +130,13 @@ export class FlightScene {
     // Round points carry the adjustable width (gl.LINES width is capped at 1px on
     // most platforms). Same attributes, no index (one point per fix), shared uniforms.
     const pgeom = new THREE.BufferGeometry();
-    pgeom.setAttribute('position', geom.getAttribute('position'));
-    pgeom.setAttribute('aTime', geom.getAttribute('aTime'));
-    pgeom.setAttribute('aPilot', geom.getAttribute('aPilot'));
-    pgeom.setAttribute('aVario', geom.getAttribute('aVario'));
+    for (const name of ['position', 'aTime', 'aPilot', 'aVario']) {
+      pgeom.setAttribute(name, geom.getAttribute(name));
+    }
     const pointMat = new THREE.ShaderMaterial({
       uniforms,
       vertexShader: trailVertexShader(nPilots),
-      fragmentShader: TRAIL_POINT_FRAGMENT_SHADER,
+      fragmentShader: trailFragmentShader(true),
       ...common,
     });
     const points = new THREE.Points(pgeom, pointMat);
@@ -171,6 +172,17 @@ export class FlightScene {
       const c = this.tracks.manifest.colors[i] ?? [0.8, 0.8, 0.8];
       col.setRGB(c[0], c[1], c[2]);
       this.markers.setColorAt(i, col);
+      // Reused per-frame sample objects; names never change so set them once.
+      this.samplesOut.push({
+        pilot: i,
+        active: false,
+        x: 0,
+        y: 0,
+        z: 0,
+        altMsl: 0,
+        climb: 0,
+        name: this.tracks.manifest.pilots[i].name,
+      });
     }
     if (this.markers.instanceColor) this.markers.instanceColor.needsUpdate = true;
   }
@@ -247,32 +259,37 @@ export class FlightScene {
    * project / follow.
    */
   updateMarkers(t: number): MarkerSample[] {
-    const out: MarkerSample[] = [];
     const n = this.nPilots;
     for (let i = 0; i < n; i++) {
       const s = samplePilot(this.tracks, i, t, this.alt0);
-      const name = this.tracks.manifest.pilots[i].name;
+      const out = this.samplesOut[i];
       if (!s.active) {
+        out.active = false;
+        out.x = out.y = out.z = 0;
         this.dummy.scale.set(0, 0, 0);
         this.dummy.position.set(0, -1e9, 0);
         this.dummy.updateMatrix();
         this.markers.setMatrixAt(i, this.dummy.matrix);
-        out.push({ pilot: i, active: false, x: 0, y: 0, z: 0, altMsl: 0, climb: 0, name });
         continue;
       }
       const wy = s.y * this.vScale;
       this.dummy.position.set(s.x, wy, s.z);
-      const dir = new THREE.Vector3(Math.sin(s.heading), 0, Math.cos(s.heading));
-      if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1);
-      this.dummy.quaternion.setFromUnitVectors(UP, dir);
+      this.dir.set(Math.sin(s.heading), 0, Math.cos(s.heading));
+      if (this.dir.lengthSq() < 1e-6) this.dir.set(0, 0, 1);
+      this.dummy.quaternion.setFromUnitVectors(UP, this.dir);
       const sc = i === this.highlight ? 1.7 : 1;
       this.dummy.scale.set(sc, sc, sc);
       this.dummy.updateMatrix();
       this.markers.setMatrixAt(i, this.dummy.matrix);
-      out.push({ pilot: i, active: true, x: s.x, y: wy, z: s.z, altMsl: s.altMsl, climb: s.climb, name });
+      out.active = true;
+      out.x = s.x;
+      out.y = wy;
+      out.z = s.z;
+      out.altMsl = s.altMsl;
+      out.climb = s.climb;
     }
     this.markers.instanceMatrix.needsUpdate = true;
-    return out;
+    return this.samplesOut;
   }
 
   // --- controls ------------------------------------------------------------
@@ -441,37 +458,27 @@ function trailVertexShader(nPilots: number): string {
   `;
 }
 
-const TRAIL_FRAGMENT_SHADER = /* glsl */ `
-  uniform float uTailSeconds;
-  varying float vAge;
-  varying vec3  vColor;
-  varying float vDim;
+/**
+ * Trail fragment shader. `round` adds a circular clip (via gl_PointCoord) so the
+ * wide Points pass reads as a smooth thick trail rather than squares; the line
+ * pass passes false.
+ */
+function trailFragmentShader(round: boolean): string {
+  return /* glsl */ `
+    uniform float uTailSeconds;
+    varying float vAge;
+    varying vec3  vColor;
+    varying float vDim;
 
-  void main() {
-    if (vAge < 0.0) discard;                  // future
-    float f = 1.0 - vAge / uTailSeconds;      // 1 at the head -> 0 at the tail cutoff
-    if (f <= 0.0) discard;                     // older than the trail length (Full = never)
-    gl_FragColor = vec4(vColor, (0.18 + 0.82 * f) * vDim);
-  }
-`;
-
-// Same fade as the line, but clipped to a round dot so wide points read as a
-// smooth thick trail rather than squares.
-const TRAIL_POINT_FRAGMENT_SHADER = /* glsl */ `
-  uniform float uTailSeconds;
-  varying float vAge;
-  varying vec3  vColor;
-  varying float vDim;
-
-  void main() {
-    if (vAge < 0.0) discard;
-    vec2 d = gl_PointCoord - vec2(0.5);
-    if (dot(d, d) > 0.25) discard;            // round
-    float f = 1.0 - vAge / uTailSeconds;
-    if (f <= 0.0) discard;
-    gl_FragColor = vec4(vColor, (0.18 + 0.82 * f) * vDim);
-  }
-`;
+    void main() {
+      if (vAge < 0.0) discard;                  // future
+      ${round ? 'vec2 d = gl_PointCoord - vec2(0.5); if (dot(d, d) > 0.25) discard;' : ''}
+      float f = 1.0 - vAge / uTailSeconds;      // 1 at the head -> 0 at the tail cutoff
+      if (f <= 0.0) discard;                     // older than the trail length (Full = never)
+      gl_FragColor = vec4(vColor, (0.18 + 0.82 * f) * vDim);
+    }
+  `;
+}
 
 /** Renderer pixel ratio (clamped to 2, matching the backends) for sizing points. */
 function pixelRatio(): number {

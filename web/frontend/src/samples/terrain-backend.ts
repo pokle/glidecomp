@@ -39,6 +39,7 @@ export class TerrainBackend implements Backend {
   private vScale = 3;
   private firstLoad = true;
   private readonly combined = new THREE.Matrix4();
+  private readonly model = new THREE.Matrix4(); // local→mercator; rebuilt only on vScale change
 
   constructor(
     private container: HTMLElement,
@@ -52,6 +53,7 @@ export class TerrainBackend implements Backend {
     const { lat0, lon0 } = this.manifest.origin;
     this.originMerc = mapboxgl.MercatorCoordinate.fromLngLat([lon0, lat0], 0);
     this.s = this.originMerc.meterInMercatorCoordinateUnits();
+    this.rebuildModel();
 
     return new Promise((resolve, reject) => {
       try {
@@ -143,8 +145,7 @@ export class TerrainBackend implements Backend {
       },
       render: (_gl, matrix) => {
         if (!this.renderer3) return;
-        const model = this.modelMatrix();
-        this.combined.fromArray(matrix).multiply(model);
+        this.combined.fromArray(matrix).multiply(this.model);
         this.camera3.projectionMatrix.copy(this.combined);
         this.renderer3.resetState();
         this.renderer3.render(this.scene3, this.camera3);
@@ -152,14 +153,16 @@ export class TerrainBackend implements Backend {
     };
   }
 
-  private modelMatrix(): THREE.Matrix4 {
+  /** Recompute the cached local→mercator matrix (only origin/scale/vScale change it). */
+  private rebuildModel(): void {
+    if (!this.originMerc) return;
     const o = this.originMerc;
     const s = this.s;
     // row-major. Local frame is X=East, Y=Up, Z=South (North = -Z), so local +Z
     // maps to mercator +Y (south). This makes the model matrix a reflection
-    // (det < 0) — positions stay correct, only chirality flips (handled for the
-    // text labels via the FlightScene `geo` flag).
-    return new THREE.Matrix4().set(
+    // (det < 0) — positions stay correct, only chirality flips (the mercator
+    // flip cancels it, so the labels look the same in both backends).
+    this.model.set(
       s, 0, 0, o.x,
       0, 0, s, o.y,
       0, s, 0, this.manifest.origin.alt0 * this.vScale * s,
@@ -227,6 +230,7 @@ export class TerrainBackend implements Backend {
 
   setVScale(v: number): void {
     this.vScale = v;
+    this.rebuildModel();
     if (this.map?.getTerrain()) {
       this.map.setTerrain({ source: 'mapbox-dem', exaggeration: v });
     }
