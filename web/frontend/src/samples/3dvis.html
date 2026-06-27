@@ -46,10 +46,9 @@
 
     <!-- top-right: view controls -->
     <div class="absolute right-3 top-3 z-20 w-56 rounded-lg panel px-4 py-3 shadow-xl">
-      <div class="flex items-center justify-between">
+      <div id="viewHeader" class="flex items-center justify-between cursor-pointer select-none" title="Collapse panel">
         <span class="text-[11px] uppercase tracking-wide text-slate-400">View</span>
-        <button id="viewCollapse" class="text-slate-400 hover:text-slate-200 text-sm leading-none w-5 h-5 grid place-items-center"
-          title="Collapse panel" aria-label="Collapse panel">▾</button>
+        <span id="viewChevron" class="text-slate-400 hover:text-slate-200 text-3xl leading-none">▼</span>
       </div>
       <div id="viewBody" class="space-y-3 mt-3">
       <div>
@@ -108,9 +107,8 @@
     <!-- left: pilot legend -->
     <div class="absolute left-3 top-32 z-20 w-52 rounded-lg panel shadow-xl flex flex-col"
       style="max-height: calc(100vh - 18rem);">
-      <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-700/60">
-        <button id="pilotsCollapse" class="text-slate-400 hover:text-slate-200 text-sm leading-none w-5 h-5 grid place-items-center"
-          title="Collapse panel" aria-label="Collapse panel">▾</button>
+      <div id="pilotsHeader" class="flex items-center gap-2 px-3 py-2 border-b border-slate-700/60 cursor-pointer select-none" title="Collapse panel">
+        <span id="pilotsChevron" class="text-slate-400 hover:text-slate-200 text-3xl leading-none">▼</span>
         <span class="text-[11px] uppercase tracking-wide text-slate-400 flex-1">Pilots</span>
         <button id="toggleAll" class="text-[11px] text-slate-400 hover:text-slate-200">hide all</button>
       </div>

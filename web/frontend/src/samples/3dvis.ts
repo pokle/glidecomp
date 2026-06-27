@@ -46,15 +46,16 @@ function localZoneLabel(refDate: Date): string {
   }
 }
 
-/** Wire a collapse button to toggle a panel body and flip its chevron. */
-function makeCollapsible(btnId: string, bodyId: string): void {
-  const btn = document.getElementById(btnId);
+/** Clicking anywhere on a panel header toggles its body and flips the chevron. */
+function makeCollapsible(headerId: string, bodyId: string, chevronId: string): void {
+  const header = document.getElementById(headerId);
   const body = document.getElementById(bodyId);
-  if (!btn || !body) return;
-  btn.addEventListener('click', () => {
+  const chevron = document.getElementById(chevronId);
+  if (!header || !body || !chevron) return;
+  header.addEventListener('click', () => {
     const collapsed = body.classList.toggle('hidden');
-    btn.textContent = collapsed ? '▸' : '▾';
-    btn.setAttribute('title', collapsed ? 'Expand panel' : 'Collapse panel');
+    chevron.textContent = collapsed ? '▶' : '▼';
+    header.setAttribute('title', collapsed ? 'Expand panel' : 'Collapse panel');
   });
 }
 
@@ -128,8 +129,8 @@ async function main(): Promise<void> {
   onTime(0);
 
   // --- collapsible panels ---
-  makeCollapsible('viewCollapse', 'viewBody');
-  makeCollapsible('pilotsCollapse', 'pilotsBody');
+  makeCollapsible('viewHeader', 'viewBody', 'viewChevron');
+  makeCollapsible('pilotsHeader', 'pilotsBody', 'pilotsChevron');
 
   // --- playback controls ---
   $('playPause').addEventListener('click', () => viewer.togglePlay());
@@ -304,7 +305,8 @@ async function main(): Promise<void> {
   $('unfollow').addEventListener('click', clearFollow);
 
   let allHidden = false;
-  $('toggleAll').addEventListener('click', () => {
+  $('toggleAll').addEventListener('click', (e) => {
+    e.stopPropagation(); // don't collapse the panel
     allHidden = !allHidden;
     manifest.pilots.forEach((_, i) => viewer.setPilotVisible(i, !allHidden));
     rows.forEach((r) => r.classList.toggle('opacity-40', allHidden));
