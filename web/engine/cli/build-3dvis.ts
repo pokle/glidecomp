@@ -23,6 +23,7 @@ import { readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
 import { resolve, join, basename } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import { find as findTimezone } from 'geo-tz';
 import { parseIGC } from '../src/igc-parser';
 import { parseXCTask, type XCTask } from '../src/xctsk-parser';
 import { calculateOptimizedTaskDistance } from '../src/task-optimizer';
@@ -120,6 +121,15 @@ function main(): void {
 
   const { manifest, data } = packTracks({ pilots, task });
 
+  // Resolve the comp's IANA timezone from the origin (offline, via geo-tz) so the
+  // viewer can show the comp's local time regardless of who's watching. The
+  // browser then applies the correct DST offset per fix date via Intl.
+  try {
+    manifest.timezone = findTimezone(manifest.origin.lat0, manifest.origin.lon0)[0];
+  } catch (err) {
+    console.warn(`  timezone lookup skipped: ${(err as Error).message}`);
+  }
+
   mkdirSync(outDir, { recursive: true });
   const raw = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
   const gz = gzipSync(raw, { level: 9 });
@@ -132,6 +142,7 @@ function main(): void {
   console.log(`  vertices:  ${manifest.vertexCount.toLocaleString()}`);
   console.log(`  task span: ${durationMin} min  (alt ${manifest.altMin.toFixed(0)}–${manifest.altMax.toFixed(0)} m AGL-rel)`);
   console.log(`  turnpoints:${manifest.task ? ' ' + manifest.task.turnpoints.length : ' none'}`);
+  console.log(`  timezone:  ${manifest.timezone ?? 'unresolved'}`);
   console.log(`  tracks.bin: ${(raw.length / 1e6).toFixed(2)} MB raw → ${(gz.length / 1e6).toFixed(2)} MB gzipped`);
 }
 

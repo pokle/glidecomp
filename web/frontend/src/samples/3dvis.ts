@@ -18,28 +18,30 @@ const $ = <T = HTMLElement>(id: string): T =>
   document.getElementById(id) as unknown as T;
 
 /**
- * Format absolute UTC seconds as a local HH:MM:SS in the browser's timezone.
- * (The IGC fixes are UTC; the comp's own timezone isn't stored, so we use the
- * viewer's zone — correct when watching a comp in your own region.)
+ * Format absolute UTC seconds as HH:MM:SS in `timeZone` (the comp's IANA zone
+ * from the manifest); falls back to the browser's zone when undefined. Intl
+ * applies the correct DST offset for each fix's date.
  */
-function clockLocal(utcSeconds: number): string {
+function clockLocal(utcSeconds: number, timeZone?: string): string {
   return new Date(utcSeconds * 1000).toLocaleTimeString(undefined, {
     hour12: false,
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
+    timeZone,
   });
 }
 
 /**
- * Short timezone label (e.g. "AEDT", "GMT+11") for the browser's zone, computed
- * at `refDate` so the DST offset matches the comp date — not today's.
+ * Short timezone label (e.g. "AEDT", "GMT+11") for `timeZone` (or the browser's
+ * zone), computed at `refDate` so the DST offset matches the comp date.
  */
-function localZoneLabel(refDate: Date): string {
+function zoneLabel(refDate: Date, timeZone?: string): string {
   try {
-    const parts = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(
-      refDate,
-    );
+    const parts = new Intl.DateTimeFormat(undefined, {
+      timeZoneName: 'short',
+      timeZone,
+    }).formatToParts(refDate);
     return parts.find((p) => p.type === 'timeZoneName')?.value ?? 'local';
   } catch {
     return 'local';
@@ -110,10 +112,11 @@ async function main(): Promise<void> {
   const duration = manifest.t1 - manifest.t0;
   const scrubber = $<HTMLInputElement>('scrubber');
   let scrubbing = false;
-  $('clockZone').textContent = localZoneLabel(new Date(manifest.t0 * 1000));
+  const tz = manifest.timezone; // comp IANA zone, or undefined → browser zone
+  $('clockZone').textContent = zoneLabel(new Date(manifest.t0 * 1000), tz);
 
   function onTime(t: number): void {
-    $('clock').textContent = clockLocal(manifest.t0 + t);
+    $('clock').textContent = clockLocal(manifest.t0 + t, tz);
     if (!scrubbing) scrubber.value = String(Math.round((t / duration) * 1000));
   }
   scrubber.addEventListener('pointerdown', () => {

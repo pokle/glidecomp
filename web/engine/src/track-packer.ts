@@ -105,6 +105,8 @@ export interface TrackManifest {
   /** Min/max altitude (metres, relative to alt0 → equals Y in the scene). */
   altMin: number;
   altMax: number;
+  /** IANA timezone at the task location (e.g. "Australia/Melbourne"), if resolved. */
+  timezone?: string;
   /** Categorical RGB palette, components in 0..1. */
   colors: [number, number, number][];
   pilots: TrackPilotMeta[];
