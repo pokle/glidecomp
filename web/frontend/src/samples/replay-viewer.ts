@@ -102,7 +102,7 @@ export class ReplayViewer {
       this.backend.dispose();
       this.scene.dispose();
 
-      this.scene = new FlightScene(this.tracks, mode === 'terrain');
+      this.scene = new FlightScene(this.tracks);
       this.applySceneState();
 
       if (mode === 'terrain') {

@@ -59,12 +59,9 @@ export class FlightScene {
   private vScale = 3;
   private highlight = -1;
   private disposed = false;
-  /** True when hosted by the Mapbox (mercator) backend — flips ground labels. */
-  private geo: boolean;
 
-  constructor(tracks: LoadedTracks, geo = false) {
+  constructor(tracks: LoadedTracks) {
     this.tracks = tracks;
-    this.geo = geo;
     this.buildTrails();
     this.buildMarkers();
     this.buildTaskGeometry();
@@ -200,7 +197,7 @@ export class FlightScene {
       // Turnpoint name, laid flat on the ground at the centre. Fixed orientation
       // (North = up) so it reads upright when the camera faces north.
       if (tp.name) {
-        const label = makeGroundLabel(tp.name, Math.min(tp.radius * 1.5, this.extentXZ * 0.11), this.geo);
+        const label = makeGroundLabel(tp.name, Math.min(tp.radius * 1.5, this.extentXZ * 0.11));
         label.position.set(tp.x, 0, tp.z);
         label.renderOrder = 5;
         this.group.add(label);
@@ -304,16 +301,15 @@ export class FlightScene {
 
 /**
  * A turnpoint name as a canvas texture on a ground-flat plane, oriented so the
- * letters' top points North (+Z) and reading runs West→East (+X) — i.e. upright
+ * letters' top points North (-Z) and reading runs West→East (+X) — i.e. upright
  * when the camera faces north, upside-down from the south.
  *
- * The plane is laid flat with its textured face pointing DOWN (rotation.x =
- * +π/2), so from above we view the back face; the canvas is drawn mirrored to
- * cancel that, leaving the text correct. (A face-up plane can't show both correct
- * reading and a North-pointing top — that pairing is a reflection, not a
- * rotation.)
+ * With the right-handed ENU frame (North = -Z), `rotation.x = -π/2` lays the plane
+ * flat with its textured face UP and text drawn normally. Both backends render
+ * the same chirality (the mercator model-matrix reflection and Mapbox's own
+ * north-up mercator flip cancel out), so no per-backend canvas flip is needed.
  */
-function makeGroundLabel(text: string, worldWidth: number, geo: boolean): THREE.Mesh {
+function makeGroundLabel(text: string, worldWidth: number): THREE.Mesh {
   const fontPx = 64;
   const pad = 28;
   const canvas = document.createElement('canvas');
@@ -323,17 +319,6 @@ function makeGroundLabel(text: string, worldWidth: number, geo: boolean): THREE.
   const h = 128;
   canvas.width = w;
   canvas.height = h;
-  // Pre-flip the canvas to cancel each backend's orientation: the abstract camera
-  // shows the plane's back face (needs a horizontal flip); the mercator backend
-  // flips it vertically (needs a vertical flip). Either way the text ends up
-  // North-up and reading West→East.
-  if (geo) {
-    ctx.translate(0, h);
-    ctx.scale(1, -1);
-  } else {
-    ctx.translate(w, 0);
-    ctx.scale(-1, 1);
-  }
   ctx.font = `bold ${fontPx}px system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -356,9 +341,8 @@ function makeGroundLabel(text: string, worldWidth: number, geo: boolean): THREE.
     side: THREE.DoubleSide,
   });
   const mesh = new THREE.Mesh(geom, mat);
-  // The mercator backend mirrors the scene's chirality vs the abstract camera, so
-  // flip which face points up to keep the text correct (North up) in both.
-  mesh.rotation.x = geo ? -Math.PI / 2 : Math.PI / 2;
+  // Lay flat, textured face up (North = -Z → local +Y maps to North under -π/2).
+  mesh.rotation.x = -Math.PI / 2;
   mesh.frustumCulled = false;
   return mesh;
 }

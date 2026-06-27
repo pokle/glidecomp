@@ -7,11 +7,11 @@
  * terrain backdrop.
  *
  * Coordinate bridge: the FlightScene works in local ENU metres (X=East, Y=Up,
- * Z=North). The custom layer's render gives us Mapbox's mercator view-projection
- * matrix; we left-multiply a model matrix that maps local metres → mercator:
+ * Z=South — North = -Z). The custom layer's render gives us Mapbox's mercator
+ * view-projection matrix; we left-multiply a model matrix that maps local → mercator:
  *
  *   mercator.x = originMerc.x + xE * s
- *   mercator.y = originMerc.y - zN * s        (north decreases mercator Y)
+ *   mercator.y = originMerc.y + zS * s        (local +Z is south; mercator Y is south)
  *   mercator.z = alt0*vScale*s + yUp * s      (yUp already ×vScale in the scene)
  *
  * where s = metres→mercator at the origin. Because the scene already applies the
@@ -155,10 +155,13 @@ export class TerrainBackend implements Backend {
   private modelMatrix(): THREE.Matrix4 {
     const o = this.originMerc;
     const s = this.s;
-    // row-major; see the file header for the derivation.
+    // row-major. Local frame is X=East, Y=Up, Z=South (North = -Z), so local +Z
+    // maps to mercator +Y (south). This makes the model matrix a reflection
+    // (det < 0) — positions stay correct, only chirality flips (handled for the
+    // text labels via the FlightScene `geo` flag).
     return new THREE.Matrix4().set(
       s, 0, 0, o.x,
-      0, 0, -s, o.y,
+      0, 0, s, o.y,
       0, s, 0, this.manifest.origin.alt0 * this.vScale * s,
       0, 0, 0, 1,
     );
@@ -171,9 +174,10 @@ export class TerrainBackend implements Backend {
   resetCamera(): void {
     const { minX, maxX, minZ, maxZ } = this.flight.bbox;
     const { lat0, lon0, mPerDegLat, mPerDegLon } = this.toGeoParams();
+    // lat = lat0 - z/mPerDegLat (North = -Z): minZ is the northern edge, maxZ the southern.
     const bounds = new mapboxgl.LngLatBounds(
-      [lon0 + minX / mPerDegLon, lat0 + minZ / mPerDegLat],
-      [lon0 + maxX / mPerDegLon, lat0 + maxZ / mPerDegLat],
+      [lon0 + minX / mPerDegLon, lat0 - maxZ / mPerDegLat],
+      [lon0 + maxX / mPerDegLon, lat0 - minZ / mPerDegLat],
     );
     this.map.fitBounds(bounds, { padding: 80, bearing: 0, duration: 0 });
     this.map.easeTo({ pitch: 60, duration: 500 });
@@ -192,7 +196,7 @@ export class TerrainBackend implements Backend {
     if (!sample || !sample.active) return;
     const { lat0, lon0, mPerDegLat, mPerDegLon } = this.toGeoParams();
     this.map.easeTo({
-      center: [lon0 + sample.x / mPerDegLon, lat0 + sample.z / mPerDegLat],
+      center: [lon0 + sample.x / mPerDegLon, lat0 - sample.z / mPerDegLat],
       duration: 300,
     });
   }

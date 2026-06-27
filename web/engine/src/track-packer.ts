@@ -15,8 +15,9 @@
  *   - `data`      — one interleaved Float32Array, `FLOATS_PER_VERTEX` per fix,
  *                   pilots concatenated in `manifest.pilots[]` order.
  *
- * Coordinate convention (right-handed, Three.js Y-up):
- *   X = East, Y = Up, Z = North.
+ * Coordinate convention (right-handed, Three.js Y-up) — geographically correct
+ * ENU so a plain camera facing north shows East on the right:
+ *   X = East, Y = Up, Z = South  (North = -Z).
  * Latitude/longitude/altitude are projected onto an equirectangular tangent
  * plane at the origin — accurate to well under a metre over a ~100 km task area.
  */
@@ -211,7 +212,7 @@ export function packTracks(input: PackInput): PackedTracks {
     const vertexOffset = vi;
     for (const f of p.fixes) {
       const x = (f.lon - lon0) * mPerDegLon; // East  → +X
-      const z = (f.lat - lat0) * mPerDegLat; // North → +Z
+      const z = (lat0 - f.lat) * mPerDegLat; // North → -Z (right-handed ENU)
       const y = f.alt - alt0; // Up → +Y
       if (y < altMin) altMin = y;
       if (y > altMax) altMax = y;
@@ -241,7 +242,7 @@ export function packTracks(input: PackInput): PackedTracks {
       type: tp.type,
       radius: tp.radius,
       x: (tp.waypoint.lon - lon0) * mPerDegLon,
-      z: (tp.waypoint.lat - lat0) * mPerDegLat,
+      z: (lat0 - tp.waypoint.lat) * mPerDegLat, // North → -Z (right-handed ENU)
       lat: tp.waypoint.lat,
       lon: tp.waypoint.lon,
     }));

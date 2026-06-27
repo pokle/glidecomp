@@ -70,10 +70,12 @@ export class AbstractBackend implements Backend {
     const d = this.flight.extentXZ * 1.15;
     const midY = (this.flight.altRange / 2) * this.vScale();
     this.controls.target.set(this.flight.center.x, midY, this.flight.center.z);
+    // Camera on the south side (+Z, since North = -Z) looking north, so East is
+    // on the right by default.
     this.camera.position.set(
       this.flight.center.x + d * 0.55,
       midY + d * 0.6,
-      this.flight.center.z - d * 0.75,
+      this.flight.center.z + d * 0.75,
     );
     this.controls.update();
   }
@@ -111,7 +113,8 @@ export class AbstractBackend implements Backend {
   getBearingDeg(): number {
     const fwd = new THREE.Vector3();
     this.camera.getWorldDirection(fwd);
-    return (Math.atan2(fwd.x, fwd.z) * 180) / Math.PI;
+    // Heading clockwise from north; North = -Z, so the north component is -fwd.z.
+    return (Math.atan2(fwd.x, -fwd.z) * 180) / Math.PI;
   }
 
   resize(): void {
