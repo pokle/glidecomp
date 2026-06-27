@@ -40,17 +40,21 @@ async function main(): Promise<void> {
   const container = $('viewer');
 
   let manifest: TrackManifest;
-  const viewer = new ReplayViewer(container, {
-    onTime: (t) => onTime(t),
-    onPlayState: (p) => {
-      $('playPause').textContent = p ? '❚❚' : '▶';
+  const viewer = new ReplayViewer(
+    container,
+    {
+      onTime: (t) => onTime(t),
+      onPlayState: (p) => {
+        $('playPause').textContent = p ? '❚❚' : '▶';
+      },
+      onHover: (info) => showTooltip(info),
+      onScale: (mpp) => updateScaleBar(mpp),
+      onCompass: (deg) => {
+        $('compassRot').setAttribute('transform', `rotate(${-deg} 20 20)`);
+      },
     },
-    onHover: (info) => showTooltip(info),
-    onScale: (mpp) => updateScaleBar(mpp),
-    onCompass: (deg) => {
-      $('compassRot').setAttribute('transform', `rotate(${-deg} 20 20)`);
-    },
-  });
+    import.meta.env.VITE_MAPBOX_TOKEN,
+  );
 
   try {
     const tracks = await viewer.load(`${DATA_BASE}/manifest.json`, `${DATA_BASE}/tracks.bin.gz`);
@@ -130,6 +134,44 @@ async function main(): Promise<void> {
     if (document.fullscreenElement) document.exitFullscreen();
     else app.requestFullscreen?.();
   });
+
+  // --- backdrop (abstract / terrain) ---
+  const bdAbstract = $<HTMLButtonElement>('bdAbstract');
+  const bdTerrain = $<HTMLButtonElement>('bdTerrain');
+  const ON = ['bg-lime-500', 'text-slate-900'];
+  const OFF = ['bg-slate-800', 'text-slate-300', 'hover:bg-slate-700'];
+  function paintBackdrop(active: 'abstract' | 'terrain'): void {
+    const a = active === 'abstract';
+    bdAbstract.classList.remove(...(a ? OFF : ON));
+    bdAbstract.classList.add(...(a ? ON : OFF));
+    bdTerrain.classList.remove(...(a ? ON : OFF));
+    bdTerrain.classList.add(...(a ? OFF : ON));
+  }
+  if (!import.meta.env.VITE_MAPBOX_TOKEN) {
+    bdTerrain.disabled = true;
+    bdTerrain.classList.add('opacity-40', 'cursor-not-allowed');
+    bdTerrain.title = 'Set VITE_MAPBOX_TOKEN to enable the terrain backdrop';
+  }
+  async function switchBackdrop(mode: 'abstract' | 'terrain'): Promise<void> {
+    if (mode === viewer.currentBackdrop) return;
+    bdAbstract.disabled = bdTerrain.disabled = true;
+    const prevStats = $('stats').textContent;
+    if (mode === 'terrain') $('stats').textContent = 'Loading terrain…';
+    try {
+      await viewer.setBackdrop(mode);
+      paintBackdrop(mode);
+      $('stats').textContent = prevStats;
+    } catch (err) {
+      console.error(err);
+      $('stats').textContent = `Terrain unavailable: ${(err as Error).message}`;
+      paintBackdrop(viewer.currentBackdrop);
+    } finally {
+      bdAbstract.disabled = false;
+      bdTerrain.disabled = !import.meta.env.VITE_MAPBOX_TOKEN;
+    }
+  }
+  bdAbstract.addEventListener('click', () => switchBackdrop('abstract'));
+  bdTerrain.addEventListener('click', () => switchBackdrop('terrain'));
 
   // --- pilot legend ---
   let followIdx = -1;
