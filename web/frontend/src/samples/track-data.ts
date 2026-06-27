@@ -22,6 +22,8 @@ export interface LoadedTracks {
   pilotIndex: Float32Array;
   /** LINES index buffer: consecutive pairs within each pilot, seams skipped. */
   index: Uint32Array;
+  /** Per-vertex smoothed climb rate, m/s (for the vertical-speed colour mode). */
+  vario: Float32Array;
 }
 
 /** Result of sampling one pilot's interpolated position at a given time. */
@@ -64,18 +66,27 @@ export async function loadTracks(manifestUrl: string, binUrl: string): Promise<L
   let segCount = 0;
   for (const p of manifest.pilots) segCount += Math.max(0, p.vertexCount - 1);
   const index = new Uint32Array(segCount * 2);
+  const vario = new Float32Array(N);
   let k = 0;
+  const HW = 3; // ±3-fix window (~6s) — smooths 1–2s-cadence noise
   for (let pi = 0; pi < manifest.pilots.length; pi++) {
     const p = manifest.pilots[pi];
-    const end = p.vertexOffset + p.vertexCount;
-    for (let v = p.vertexOffset; v < end; v++) pilotIndex[v] = pi;
-    for (let v = p.vertexOffset; v < end - 1; v++) {
+    const start = p.vertexOffset;
+    const end = start + p.vertexCount;
+    for (let v = start; v < end; v++) {
+      pilotIndex[v] = pi;
+      const a = Math.max(start, v - HW);
+      const b = Math.min(end - 1, v + HW);
+      const dt = time[b] - time[a];
+      vario[v] = dt > 0 ? (pos[b * 3 + 1] - pos[a * 3 + 1]) / dt : 0;
+    }
+    for (let v = start; v < end - 1; v++) {
       index[k++] = v;
       index[k++] = v + 1;
     }
   }
 
-  return { manifest, pos, time, pilotIndex, index };
+  return { manifest, pos, time, pilotIndex, index, vario };
 }
 
 async function fetchGzipped(url: string): Promise<ArrayBuffer> {

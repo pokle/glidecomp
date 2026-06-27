@@ -9,6 +9,7 @@
 
 import { ReplayViewer, type ColorMode, type HoverInfo } from './replay-viewer';
 import { MAP_STYLES, DEFAULT_MAP_STYLE } from './map-styles';
+import { VARIO_MAX } from './flight-scene';
 import type { TrackManifest } from '@glidecomp/engine';
 
 const DATA_BASE = '/samples/3dvis';
@@ -102,8 +103,11 @@ async function main(): Promise<void> {
 
   // --- view controls ---
   $<HTMLSelectElement>('colorMode').addEventListener('change', (e) => {
-    viewer.setColorMode((e.target as HTMLSelectElement).value as ColorMode);
+    const mode = (e.target as HTMLSelectElement).value as ColorMode;
+    viewer.setColorMode(mode);
+    updateLegend(mode);
   });
+  updateLegend('pilot');
 
   const vscale = $<HTMLInputElement>('vscale');
   vscale.addEventListener('input', () => {
@@ -112,16 +116,16 @@ async function main(): Promise<void> {
     $('vscaleVal').textContent = `${v.toFixed(1)}×`;
   });
 
+  // Trail = how many of the most-recent minutes are drawn (1–30 min, or Full).
   const tail = $<HTMLInputElement>('tail');
   tail.addEventListener('input', () => {
     const v = Number(tail.value);
-    if (v >= 100) {
+    if (v >= 31) {
       viewer.setTailSeconds(1e9);
       $('tailVal').textContent = 'Full';
     } else {
-      const secs = Math.max(15, Math.pow(v / 100, 2) * duration);
-      viewer.setTailSeconds(secs);
-      $('tailVal').textContent = secs >= 90 ? `${Math.round(secs / 60)} min` : `${Math.round(secs)} s`;
+      viewer.setTailSeconds(v * 60);
+      $('tailVal').textContent = `${v} min`;
     }
   });
 
@@ -243,6 +247,31 @@ async function main(): Promise<void> {
     rows.forEach((r) => r.classList.toggle('opacity-40', allHidden));
     $('toggleAll').textContent = allHidden ? 'show all' : 'hide all';
   });
+
+  // --- colour scale legend (altitude / vertical speed) ---
+  const ALT_GRADIENT =
+    'linear-gradient(to right, rgb(33,102,217), rgb(26,191,204), rgb(77,204,77), rgb(242,204,51), rgb(235,64,51))';
+  const VARIO_GRADIENT = 'linear-gradient(to right, rgb(51,115,242), rgb(217,217,224), rgb(242,64,51))';
+  function updateLegend(mode: ColorMode): void {
+    const box = $('colorLegend');
+    if (mode === 'pilot') {
+      box.classList.add('hidden');
+      return;
+    }
+    box.classList.remove('hidden');
+    if (mode === 'altitude') {
+      const alt0 = manifest.origin.alt0;
+      $('legendBar').style.background = ALT_GRADIENT;
+      $('legendLo').textContent = `${Math.round(alt0 + manifest.altMin)} m`;
+      $('legendMid').textContent = '';
+      $('legendHi').textContent = `${Math.round(alt0 + manifest.altMax)} m`;
+    } else {
+      $('legendBar').style.background = VARIO_GRADIENT;
+      $('legendLo').textContent = `−${VARIO_MAX} m/s`;
+      $('legendMid').textContent = '0';
+      $('legendHi').textContent = `+${VARIO_MAX} m/s`;
+    }
+  }
 
   // --- tooltip ---
   function showTooltip(info: HoverInfo | null): void {

@@ -55,7 +55,7 @@ export class ReplayViewer {
   private speed = 16;
   private vScale = 3;
   private colorMode: ColorMode = 'pilot';
-  private tailSeconds = 1e9;
+  private tailSeconds = 600; // 10 min comet tail by default
   private mapStyle = DEFAULT_MAP_STYLE.url;
   private visibility!: boolean[];
   private follow = -1;

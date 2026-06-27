@@ -21,10 +21,13 @@
 import * as THREE from 'three';
 import { samplePilot, type LoadedTracks } from './track-data';
 
-export type ColorMode = 'pilot' | 'altitude';
+export type ColorMode = 'pilot' | 'altitude' | 'vario';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const WALL_HEIGHT = 1400; // metres, task-cylinder walls (pre vertical exaggeration)
+
+/** Vertical-speed colour mode saturates at ±this many m/s. */
+export const VARIO_MAX = 4;
 
 /** One pilot's interpolated marker state in local ENU metres (y already exaggerated). */
 export interface MarkerSample {
@@ -82,6 +85,7 @@ export class FlightScene {
     geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geom.setAttribute('aTime', new THREE.BufferAttribute(time, 1));
     geom.setAttribute('aPilot', new THREE.BufferAttribute(pilotIndex, 1));
+    geom.setAttribute('aVario', new THREE.BufferAttribute(this.tracks.vario, 1));
     geom.setIndex(new THREE.BufferAttribute(index, 1));
 
     const nPilots = manifest.pilots.length;
@@ -102,6 +106,7 @@ export class FlightScene {
         uVScale: { value: this.vScale },
         uAltMin: { value: manifest.altMin },
         uAltMax: { value: manifest.altMax },
+        uVarioMax: { value: VARIO_MAX },
       },
       vertexShader: trailVertexShader(nPilots),
       fragmentShader: TRAIL_FRAGMENT_SHADER,
@@ -249,7 +254,7 @@ export class FlightScene {
   }
 
   setColorMode(mode: ColorMode): void {
-    this.trailMat.uniforms.uColorMode.value = mode === 'altitude' ? 1 : 0;
+    this.trailMat.uniforms.uColorMode.value = mode === 'altitude' ? 1 : mode === 'vario' ? 2 : 0;
   }
 
   setTailSeconds(s: number): void {
@@ -291,14 +296,16 @@ function trailVertexShader(nPilots: number): string {
   return /* glsl */ `
     attribute float aTime;
     attribute float aPilot;
+    attribute float aVario;
     uniform float uTime;
     uniform vec3  uColors[${nPilots}];
     uniform float uVisible[${nPilots}];
-    uniform int   uColorMode;   // 0 = pilot, 1 = altitude
+    uniform int   uColorMode;   // 0 = pilot, 1 = altitude, 2 = vertical speed
     uniform int   uHighlight;   // -1 = none
     uniform float uVScale;      // vertical exaggeration
     uniform float uAltMin;
     uniform float uAltMax;
+    uniform float uVarioMax;
     varying float vAge;
     varying vec3  vColor;
     varying float vDim;
@@ -315,6 +322,14 @@ function trailVertexShader(nPilots: number): string {
       return mix(c3, c4, (t - 0.75) / 0.25);
     }
 
+    // diverging: blue (sink) -> pale (level) -> red (climb)
+    vec3 varioRamp(float t) {
+      vec3 sink = vec3(0.20, 0.45, 0.95);
+      vec3 zero = vec3(0.85, 0.85, 0.88);
+      vec3 climb = vec3(0.95, 0.25, 0.20);
+      return t < 0.5 ? mix(sink, zero, t / 0.5) : mix(zero, climb, (t - 0.5) / 0.5);
+    }
+
     void main() {
       int pid = int(aPilot + 0.5);
       vAge = uTime - aTime;
@@ -323,6 +338,9 @@ function trailVertexShader(nPilots: number): string {
       if (uColorMode == 1) {
         float a = clamp((position.y - uAltMin) / max(1.0, uAltMax - uAltMin), 0.0, 1.0);
         vColor = altRamp(a);
+      } else if (uColorMode == 2) {
+        float a = clamp(aVario / uVarioMax * 0.5 + 0.5, 0.0, 1.0);
+        vColor = varioRamp(a);
       }
       if (uVisible[pid] < 0.5) {
         gl_Position = vec4(0.0, 0.0, 0.0, -1.0);
@@ -344,9 +362,9 @@ const TRAIL_FRAGMENT_SHADER = /* glsl */ `
   varying float vDim;
 
   void main() {
-    if (vAge < 0.0) discard;                 // future
-    float a = exp(-vAge / uTailSeconds);     // comet-tail fade
-    a = clamp(a, 0.10, 1.0);                  // keep a faint full trail
-    gl_FragColor = vec4(vColor, a * vDim);
+    if (vAge < 0.0) discard;                  // future
+    float f = 1.0 - vAge / uTailSeconds;      // 1 at the head -> 0 at the tail cutoff
+    if (f <= 0.0) discard;                     // older than the trail length (Full = never)
+    gl_FragColor = vec4(vColor, (0.18 + 0.82 * f) * vDim);
   }
 `;

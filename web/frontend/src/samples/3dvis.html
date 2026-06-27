@@ -66,7 +66,15 @@
           class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400">
           <option value="pilot">Pilot</option>
           <option value="altitude">Altitude</option>
+          <option value="vario">Vertical speed</option>
         </select>
+        <!-- colour scale legend (shown for altitude / vertical speed) -->
+        <div id="colorLegend" class="hidden mt-1.5">
+          <div id="legendBar" class="h-1.5 rounded-sm"></div>
+          <div class="flex justify-between text-[10px] text-slate-400 mt-0.5 leading-none">
+            <span id="legendLo"></span><span id="legendMid" class="text-slate-500"></span><span id="legendHi"></span>
+          </div>
+        </div>
       </div>
       <div>
         <label class="flex justify-between text-[11px] uppercase tracking-wide text-slate-400 mb-1">
@@ -76,9 +84,9 @@
       </div>
       <div>
         <label class="flex justify-between text-[11px] uppercase tracking-wide text-slate-400 mb-1">
-          <span>Trail</span><span id="tailVal" class="text-slate-300 normal-case">Full</span>
+          <span>Trail</span><span id="tailVal" class="text-slate-300 normal-case">10 min</span>
         </label>
-        <input id="tail" type="range" min="0" max="100" step="1" value="100" class="w-full">
+        <input id="tail" type="range" min="1" max="31" step="1" value="10" class="w-full">
       </div>
       <div class="flex gap-2 pt-0.5">
         <button id="resetView"
