@@ -105,6 +105,8 @@ export default defineConfig({
             req.url = '/theme-editor.html';
           } else if (req.url === '/kitchensink' || req.url === '/kitchensink/') {
             req.url = '/kitchensink.html';
+          } else if (req.url === '/samples/3dvis' || req.url === '/samples/3dvis/') {
+            req.url = '/samples/3dvis.html';
           }
           next();
         });
@@ -130,6 +132,7 @@ export default defineConfig({
         settings: resolve(__dirname, 'src/settings.html'),
         'theme-editor': resolve(__dirname, 'src/theme-editor.html'),
         kitchensink: resolve(__dirname, 'src/kitchensink.html'),
+        'samples/3dvis': resolve(__dirname, 'src/samples/3dvis.html'),
       },
     },
   },

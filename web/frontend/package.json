@@ -27,11 +27,13 @@
   "dependencies": {
     "@glidecomp/engine": "workspace:*",
     "@glidecomp/samples": "workspace:*",
+    "@types/three": "^0.185.0",
     "better-auth": "^1.6.20",
     "hono": "^4.12.26",
     "katex": "^0.16.47",
     "leaflet": "2.0.0-alpha.1",
     "mapbox-gl": "^3.25.0",
+    "three": "^0.185.0",
     "threebox-plugin": "^2.2.7"
   }
 }
