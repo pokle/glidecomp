@@ -150,6 +150,25 @@ export function buildPalette(n: number): [number, number, number][] {
   return colors;
 }
 
+/**
+ * Deterministic RGB triple (0..1) for a pilot name, so each pilot keeps the same
+ * colour across builds regardless of roster order. The name is hashed (FNV-1a)
+ * and the bits drive hue plus the same saturation/lightness bands as
+ * `buildPalette`, so colours look consistent with the categorical palette.
+ */
+export function colorForName(name: string): [number, number, number] {
+  let h = 0x811c9dc5; // FNV-1a 32-bit offset basis
+  for (let i = 0; i < name.length; i++) {
+    h ^= name.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  h >>>= 0;
+  const hue = (h % 360) / 360;
+  const s = 0.62 + 0.18 * ((h >>> 9) & 1); // 0.62 / 0.80
+  const l = 0.55 - 0.08 * ((h >>> 10) % 3); // 0.55 / 0.47 / 0.39
+  return hslToRgb(hue, s, l);
+}
+
 function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   if (s === 0) return [l, l, l];
   const hue2rgb = (p: number, q: number, t: number): number => {
@@ -208,7 +227,9 @@ export function packTracks(input: PackInput): PackedTracks {
   const vertexCount = pilots.reduce((n, p) => n + p.fixes.length, 0);
   const data = new Float32Array(vertexCount * FLOATS_PER_VERTEX);
   const pilotsMeta: TrackPilotMeta[] = [];
-  const palette = buildPalette(pilots.length);
+  // Per-pilot colour derived from the name hash, so a pilot keeps the same
+  // colour across builds even if the roster order changes.
+  const palette = pilots.map((p) => colorForName(p.name));
 
   let altMin = Infinity;
   let altMax = -Infinity;

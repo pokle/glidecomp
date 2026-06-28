@@ -25,7 +25,17 @@ export interface Backend {
   render(): void;
   /** Frame the whole task. */
   resetCamera(): void;
-  /** Re-centre on a pilot (null = stop following). */
+  /** Spin the view so north is up, keeping zoom/pitch and any active follow. */
+  faceNorth(): void;
+  /** Orient straight down (north up), keeping any active follow. */
+  topView(): void;
+  /** Orient to a horizontal side/profile view, keeping any active follow. */
+  sideView(): void;
+  /**
+   * Track a followed pilot. Passing the same pilot keeps it pinned at whatever
+   * screen position it had when the follow began (or wherever the user has since
+   * panned/orbited it). null stops following.
+   */
   followTo(sample: MarkerSample | null): void;
   /** Project a local ENU point (y already exaggerated) to container px. */
   projectToScreen(x: number, y: number, z: number): ScreenPoint;
