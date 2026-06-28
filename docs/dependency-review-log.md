@@ -2,6 +2,69 @@
 
 This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
 
+## 2026-06-28
+
+### Security Vulnerabilities Fixed
+
+| Package | Severity | Advisory | Description |
+|---------|----------|----------|-------------|
+| hono | MODERATE | [GHSA-hvrm-45r6-mjfj](https://github.com/advisories/GHSA-hvrm-45r6-mjfj) | JSX context isolation: during SSR, `useContext()`/`useRequestContext()` stored context process-wide instead of per-request, leaking data across concurrent requests after an `await`. Fixed in 4.12.27. Not exploitable here (no JSX SSR), defense-in-depth. |
+| hono | MODERATE | [GHSA-w62v-xxxg-mg59](https://github.com/advisories/GHSA-w62v-xxxg-mg59) | XSS via JSX escaping bypass: `cx()` in `hono/css` marked composed class names as already-escaped without actually escaping input, allowing untrusted class names to inject markup during SSR. Fixed in 4.12.27. Not exploitable here (no JSX SSR). |
+| hono | MODERATE | [GHSA-xgm2-5f3f-mvvc](https://github.com/advisories/GHSA-xgm2-5f3f-mvvc) | AWS Lambda API Gateway v1 / VPC Lattice adapter de-duplicated repeated header values by substring instead of exact match, potentially compromising IP-based security logic. Fixed in 4.12.27. Not exploitable here (Cloudflare Workers, not AWS Lambda). |
+| better-auth | MODERATE | (v1.6.21–1.6.22) | Rate limiting now executes before plugin request handlers. Admin permission changes/bans take immediate effect with session cookie caching. OAuth proxy rejects profile callbacks with mismatched state. PayPal sign-in validates user info against verified ID token subject. SIWE sign-in rejects emails already associated with other accounts. 2FA verification locks out after 5 incorrect TOTP/backup codes. SAML single logout rejects non-http(s) URL schemes. SAML SSO rejects responses with mismatched audience/recipient/destination. SSO provider deletion removes linked accounts. Fixed `X-Forwarded-For` spoofing in multi-hop proxies (api-key package). Unproven credentials revoked during magic link/email OTP sign-in. Server-side OAuth requests refuse redirect responses. |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **wrangler** | 4.103.0 | 4.105.0 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | 4.104.0: `getEnv()` for test harness, ARM64 container fix. 4.105.0: Google Artifact Registry support, D1 migration SQL escaping fix for special characters. workerd bumped to 1.20260625.1. No breaking changes. |
+| **hono** | 4.12.26 | 4.12.27 | frontend, auth-api, competition-api, mcp-api (+ root override) | Security: 3 fixes (JSX context isolation, cx() XSS, Lambda header dedup). See above. No breaking changes. |
+| **better-auth** | 1.6.20 | 1.6.22 | frontend, auth-api | Security-heavy release: rate limiting ordering, admin ban enforcement, OAuth state validation, 2FA lockout, SAML hardening, credential revocation on magic link sign-in, OAuth redirect blocking. Bug fixes: ZodError with Zod v4 resolved, Google hosted-domain validation, Kysely adapter `update` returns `null` when no row matches. No breaking changes. |
+| **@better-auth/api-key** | 1.6.20 | 1.6.22 | auth-api | Aligned with better-auth 1.6.22. Fixed `X-Forwarded-For` spoofing in multi-hop proxies. |
+| **vite** | 7.3.5 | 7.3.6 | frontend | Now allows esbuild 0.28 as a dependency (was excluded). No other changes. |
+| **@cloudflare/vitest-pool-workers** | 0.16.18 | 0.16.20 | auth-api, competition-api, mcp-api | 0.16.19: wrangler 4.104.0 alignment. 0.16.20: wrangler 4.105.0 alignment, new `evictDurableObject`/`evictAllDurableObjects` test helpers. |
+| **@cloudflare/workers-types** | 4.20260621.1 | 4.20260628.1 | root, frontend, auth-api, competition-api, mcp-api, airscore-api | Weekly type definition update. |
+| **@playwright/test** | 1.61.0 | 1.61.1 | root | Bug fixes: custom matchers no longer override built-in defaults, Node 22.15 ESM loader regression fixed, pnpm workspace symlink resolution fixed. |
+
+### Code Changes Required
+
+None. All upgrades are drop-in replacements with no API changes affecting our usage.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| agents | 0.13.3 | 0.17.1 | 0.14.x+ requires zod ^4.0.0 as a peer dependency. Blocked by our zod 3 usage. |
+| zod | 3.25.76 | 4.4.3 | Major version. Still blocked by `@hono/zod-validator` (honojs/middleware#1148). |
+| vite | 7.3.6 | 8.1.0 | Major version. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. |
+| @hono/zod-validator | 0.7.6 | 0.8.0 | 0.8.0 requires zod 4. Stay on 0.7.6 until zod 4 migration. |
+| kysely | 0.28.17 | 0.29.2 | Pre-1.0 minor bump (equivalent to major). Defer to a focused PR. |
+| jsdom | 25.0.1 | 29.1.1 | Major version jump. Defer to a focused PR. |
+| katex | 0.16.47 | 0.17.0 | Major version. Stay within ^0.16.x semver range. |
+| concurrently | 9.2.3 | 10.0.3 | Major version. ESM-only, drops `--name-separator`. Low priority — defer. |
+| @modelcontextprotocol/sdk | 1.29.0 (resolved via ^1.12.1) | 2.0.0-alpha | Alpha release. Wait for stable. |
+| @types/node | 25.9.4 | 26.0.1 | Major version jump. Stay on 25.x for now. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+
+### Verification
+
+- `bun run typecheck:all` — all 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, mcp-api).
+- `bun run test:all` — 444 root/engine tests + 56 auth-api + 260 competition-api + 21 mcp-api all pass.
+- `bun run test:e2e` — 5/6 chromium specs pass. 1 flaky failure in comp-creation (pre-existing timeout issue in remote execution environment, not related to dependency changes).
+- `bun audit` — 0 vulnerabilities.
+
+### Lessons / Notes for Future Sessions
+
+- **Vite 7.3.6 now allows esbuild 0.28.** The `esbuild` override is still load-bearing since without it, bun could resolve vite's esbuild dep to 0.27.x (which has the security advisories). But the override is now within the official vite peer range, not forced.
+- **`agents` 0.17.1 is now available** but still requires zod 4. The zod 4 migration remains the single blocker for `agents`, `@hono/zod-validator`, and several other upgrades.
+- **`@cloudflare/vitest-pool-workers` 0.16.20 bundles wrangler 4.105.0.** Continue keeping these aligned — upgrade together.
+- **`qs` override remains load-bearing.** `@modelcontextprotocol/sdk` still hasn't shipped a patched `qs` version.
+- **`ws` override remains load-bearing.** Transitive consumers still haven't shipped with ws >= 8.21.0 natively.
+- **`esbuild` override remains load-bearing.** Even though vite 7.3.6 accepts `^0.28.0`, bun could still resolve to 0.27.x without the override. Keep until vite drops 0.27.x support entirely.
+- **better-auth 1.6.22 is a significant security release.** Hardens rate limiting, 2FA, SAML, OAuth state validation, and credential handling. No breaking API changes.
+- **Playwright headless shell download can fail** in this remote execution environment due to network issues. The main chromium browser downloads fine but the headless shell (needed for `headless: true`) may require manual curl fallback.
+
 ## 2026-06-21
 
 ### Security Vulnerabilities Fixed

@@ -56,12 +56,16 @@ export const optionalAuth = createMiddleware<{
   Bindings: Env;
   Variables: { user: AuthUser | null };
 }>(async (c, next) => {
-  try {
-    const user = await resolveUser(c.env, c.req.raw.headers);
-    c.set("user", user);
-  } catch {
-    c.set("user", null);
+  let user: AuthUser | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      user = await resolveUser(c.env, c.req.raw.headers);
+      break;
+    } catch {
+      if (attempt === 0) continue;
+    }
   }
+  c.set("user", user);
   await next();
 });
 

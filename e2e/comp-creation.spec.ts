@@ -85,9 +85,23 @@ test("dev login, onboarding, create competition and task", async ({ page }) => {
   await page.fill("#task-name", "Day 1 - Ridge Run");
   await page.fill("#task-date", "2026-04-15");
   // Pilot class checkboxes default to all checked (just "open")
-  await page.click("#task-submit-btn");
+  // Click submit and wait for both the POST response and the subsequent
+  // page reload. The form handler calls window.location.reload() after a
+  // successful POST — we need to capture that reload navigation so the
+  // assertions below run against the fresh page, not the pre-reload DOM.
+  await Promise.all([
+    page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/comp/") &&
+        r.url().includes("/task") &&
+        r.request().method() === "POST"
+    ),
+    page.click("#task-submit-btn"),
+  ]);
 
-  // Page reloads after task creation — wait for tasks list to render
-  await page.waitForSelector("#tasks-list");
+  // The reload is now in-flight. Wait for it to settle — initNav() and
+  // initCompDetail() both make fetch calls that must complete before
+  // renderTasks() populates #tasks-list.
+  await page.waitForLoadState("networkidle");
   await expect(page.locator("#tasks-list")).toContainText("Day 1 - Ridge Run");
 });
