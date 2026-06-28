@@ -180,6 +180,11 @@ async function main(): Promise<void> {
     viewer.resetCamera();
     clearFollow();
   });
+  // Orientation presets keep any active follow — just change the view angle.
+  $('topView').addEventListener('click', () => viewer.topView());
+  $('sideView').addEventListener('click', () => viewer.sideView());
+  // Clicking the compass spins the view back to north-up.
+  $('compassBtn').addEventListener('click', () => viewer.faceNorth());
 
   $('fullscreen').addEventListener('click', () => {
     const app = $('app');

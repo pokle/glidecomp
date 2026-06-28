@@ -17,9 +17,24 @@ export class AbstractBackend implements Backend {
   private camera!: THREE.PerspectiveCamera;
   private controls!: OrbitControls;
   private resizeObs!: ResizeObserver;
-  private follow = -1;
+  private onPointerDown!: (e: PointerEvent) => void;
   private vScale = 3;
   private v = new THREE.Vector3(); // scratch for projection / bearing
+
+  // follow state: track the pilot's frame-to-frame movement rather than snapping
+  // the camera onto it, so the user can pan/orbit/zoom while following.
+  private followPilot = -1;
+  private followPos: THREE.Vector3 | null = null;
+  private followDelta = new THREE.Vector3();
+
+  // orientation tween (compass / top / side); advanced in render().
+  private viewAnim: {
+    fromTheta: number; toTheta: number;
+    fromPhi: number; toPhi: number;
+    radius: number; t: number; dur: number;
+  } | null = null;
+  private animLast = 0;
+  private sph = new THREE.Spherical(); // scratch for the tween
 
   constructor(
     private container: HTMLElement,
@@ -43,6 +58,30 @@ export class AbstractBackend implements Backend {
     this.controls.dampingFactor = 0.08;
     this.controls.enablePan = true;
     this.controls.maxPolarAngle = Math.PI * 0.495;
+    // Match the Mapbox backdrop's mouse mapping: drag pans, Ctrl+drag orbits.
+    // We make PAN the default action for both buttons and rely on OrbitControls'
+    // built-in modifier handling, which swaps PAN→ROTATE while Ctrl/⌘/Shift is
+    // held. So a plain drag pans and Ctrl+drag orbits, with no custom logic.
+    // (Forcing LEFT=ROTATE on Ctrl ourselves does NOT work — OrbitControls then
+    // swaps that ROTATE back to PAN because the modifier is down.) RIGHT also
+    // defaults to PAN, which matters on macOS where a Ctrl+click is delivered as
+    // a right-click (button 2) — it still swaps to ROTATE and orbits.
+    this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+    this.controls.mouseButtons.RIGHT = THREE.MOUSE.PAN;
+    // Mapbox's Shift+drag box-zoom has no equivalent here. Left as-is, Shift+drag
+    // would orbit (OrbitControls treats Shift like Ctrl), so swallow it. The
+    // listener is on the canvas's parent in the CAPTURE phase, so it runs before
+    // the event descends to the canvas where OrbitControls is listening — a
+    // capture listener on the canvas itself would not, since at the target all
+    // listeners fire in registration order and OrbitControls registered first.
+    this.onPointerDown = (e: PointerEvent): void => {
+      if (e.shiftKey) e.stopPropagation();
+    };
+    this.container.addEventListener('pointerdown', this.onPointerDown, true);
+    // Match Mapbox touch gestures: one finger pans, two fingers orbit (and
+    // pinch-zoom). OrbitControls defaults to the opposite (ONE rotates).
+    this.controls.touches.ONE = THREE.TOUCH.PAN;
+    this.controls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE;
 
     this.scene.add(this.flight.group);
     this.scene.add(this.flight.markers);
@@ -63,12 +102,55 @@ export class AbstractBackend implements Backend {
   }
 
   render(): void {
+    if (this.viewAnim) this.advanceViewAnim();
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
 
+  /** Ease the camera around the current target to a new azimuth/polar (radius kept). */
+  private advanceViewAnim(): void {
+    const a = this.viewAnim!;
+    const now = performance.now();
+    a.t = Math.min(a.dur, a.t + (now - this.animLast) / 1000);
+    this.animLast = now;
+    const k = a.t / a.dur;
+    const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; // easeInOutCubic
+    this.sph.set(a.radius, a.fromPhi + (a.toPhi - a.fromPhi) * e, a.fromTheta + (a.toTheta - a.fromTheta) * e);
+    this.camera.position.copy(this.controls.target).add(this.v.setFromSpherical(this.sph));
+    if (a.t >= a.dur) this.viewAnim = null;
+  }
+
+  /**
+   * Start an orientation tween to azimuth `theta` (radians) and polar `phi`
+   * (null = keep current), around the current target and at the current radius.
+   * The follow state is untouched, so re-orienting mid-follow keeps tracking.
+   */
+  private orientTo(theta: number, phi: number | null): void {
+    const sph = this.sph.setFromVector3(this.v.subVectors(this.camera.position, this.controls.target));
+    const minP = this.controls.minPolarAngle + 0.001;
+    const maxP = this.controls.maxPolarAngle - 0.001;
+    const toPhi = phi == null ? sph.phi : Math.max(minP, Math.min(maxP, phi));
+    // walk the shortest way round the azimuth circle
+    let d = (theta - sph.theta) % (Math.PI * 2);
+    if (d > Math.PI) d -= Math.PI * 2;
+    if (d < -Math.PI) d += Math.PI * 2;
+    this.viewAnim = {
+      fromTheta: sph.theta, toTheta: sph.theta + d,
+      fromPhi: sph.phi, toPhi,
+      radius: sph.radius, t: 0, dur: 0.5,
+    };
+    this.animLast = performance.now();
+  }
+
+  // Azimuth θ=0 puts the camera due south of the target looking north, i.e. north up.
+  faceNorth(): void { this.orientTo(0, null); }
+  topView(): void { this.orientTo(0, 0.02); }
+  sideView(): void { this.orientTo(0, this.controls.maxPolarAngle); }
+
   resetCamera(): void {
-    this.follow = -1;
+    this.followPilot = -1;
+    this.followPos = null;
+    this.viewAnim = null;
     const d = this.flight.extentXZ * 1.15;
     const midY = (this.flight.altRange / 2) * this.vScale;
     this.controls.target.set(this.flight.center.x, midY, this.flight.center.z);
@@ -87,12 +169,30 @@ export class AbstractBackend implements Backend {
   }
 
   followTo(sample: MarkerSample | null): void {
-    if (!sample || !sample.active) return;
-    // delta = sample - target; shift both target and camera by it to track.
-    this.v.set(sample.x, sample.y, sample.z).sub(this.controls.target);
-    this.controls.target.add(this.v);
-    this.camera.position.add(this.v);
-    this.follow = sample.pilot;
+    if (!sample) {
+      // explicit stop
+      this.followPilot = -1;
+      this.followPos = null;
+      return;
+    }
+    if (!sample.active) {
+      // pilot not airborne now → drop the anchor so we re-anchor (no jump) when it resumes
+      this.followPos = null;
+      return;
+    }
+    if (sample.pilot !== this.followPilot || !this.followPos) {
+      // (Re)anchor on the pilot's current spot WITHOUT moving the camera, so it
+      // stays exactly where it is on screen when the follow begins.
+      this.followPilot = sample.pilot;
+      this.followPos = new THREE.Vector3(sample.x, sample.y, sample.z);
+      return;
+    }
+    // Shift target + camera by the pilot's movement since last frame. The
+    // camera↔target offset is left untouched, so the user's pan/orbit/zoom stick.
+    this.followDelta.set(sample.x, sample.y, sample.z).sub(this.followPos);
+    this.controls.target.add(this.followDelta);
+    this.camera.position.add(this.followDelta);
+    this.followPos.set(sample.x, sample.y, sample.z);
   }
 
   projectToScreen(x: number, y: number, z: number): ScreenPoint {
@@ -125,6 +225,7 @@ export class AbstractBackend implements Backend {
 
   dispose(): void {
     this.resizeObs?.disconnect();
+    this.container.removeEventListener('pointerdown', this.onPointerDown, true);
     // Detach shared scene objects so FlightScene.dispose() (owned by the
     // orchestrator) can free them without double-disposal here.
     this.scene.remove(this.flight.group);

@@ -101,8 +101,14 @@
       </div>
       <div class="flex gap-2 pt-0.5">
         <button id="resetView"
-          class="flex-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-xs transition-colors">Reset
-          view</button>
+          class="flex-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-xs transition-colors"
+          title="Frame the whole task">Reset</button>
+        <button id="topView"
+          class="flex-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-xs transition-colors"
+          title="Look straight down (north up)">Top</button>
+        <button id="sideView"
+          class="flex-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-xs transition-colors"
+          title="Side / profile view">Side</button>
         <button id="fullscreen"
           class="rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-xs transition-colors"
           title="Toggle fullscreen">⛶</button>
@@ -135,7 +141,7 @@
         <div id="scaleBar" class="h-1.5 bg-slate-200 rounded-sm" style="width: 80px;"></div>
         <div id="scaleLabel" class="mt-1 text-[10px] text-slate-300 text-center">—</div>
       </div>
-      <div class="rounded-full panel w-12 h-12 relative grid place-items-center" title="Compass">
+      <button id="compassBtn" class="rounded-full panel w-12 h-12 relative grid place-items-center cursor-pointer hover:bg-slate-700/40 transition-colors" title="Click to face north">
         <svg id="compass" viewBox="0 0 40 40" class="w-9 h-9">
           <g id="compassRot">
             <polygon points="20,5 16,22 24,22" fill="#f87171"></polygon>
@@ -143,7 +149,7 @@
           </g>
           <text x="20" y="11" text-anchor="middle" font-size="7" fill="#e2e8f0" font-weight="700">N</text>
         </svg>
-      </div>
+      </button>
     </div>
 
     <!-- bottom: timeline -->

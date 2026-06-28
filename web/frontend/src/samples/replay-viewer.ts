@@ -296,6 +296,16 @@ export class ReplayViewer {
     this.follow = -1;
     this.backend.resetCamera();
   }
+  /** Orientation presets — keep any active follow, just change the view angle. */
+  faceNorth(): void {
+    this.backend.faceNorth();
+  }
+  topView(): void {
+    this.backend.topView();
+  }
+  sideView(): void {
+    this.backend.sideView();
+  }
 
   dispose(): void {
     cancelAnimationFrame(this.raf);

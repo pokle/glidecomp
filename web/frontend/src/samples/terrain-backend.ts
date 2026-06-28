@@ -38,6 +38,9 @@ export class TerrainBackend implements Backend {
   private s = 1;
   private vScale = 3;
   private firstLoad = true;
+  // follow: shift the map by the pilot's movement so the user can still drag/rotate/zoom.
+  private followPilot = -1;
+  private followLngLat: [number, number] | null = null;
   private readonly combined = new THREE.Matrix4();
   private readonly model = new THREE.Matrix4(); // local→mercator; rebuilt only on vScale change
 
@@ -175,6 +178,8 @@ export class TerrainBackend implements Backend {
   }
 
   resetCamera(): void {
+    this.followPilot = -1;
+    this.followLngLat = null;
     const { minX, maxX, minZ, maxZ } = this.flight.bbox;
     const { lat0, lon0, mPerDegLat, mPerDegLon } = this.toGeoParams();
     // lat = lat0 - z/mPerDegLat (North = -Z): minZ is the northern edge, maxZ the southern.
@@ -195,13 +200,34 @@ export class TerrainBackend implements Backend {
     };
   }
 
+  faceNorth(): void { this.map.easeTo({ bearing: 0, duration: 500 }); }
+  topView(): void { this.map.easeTo({ pitch: 0, bearing: 0, duration: 500 }); }
+  sideView(): void { this.map.easeTo({ pitch: 85, duration: 500 }); }
+
   followTo(sample: MarkerSample | null): void {
-    if (!sample || !sample.active) return;
+    if (!sample) {
+      this.followPilot = -1;
+      this.followLngLat = null;
+      return;
+    }
+    if (!sample.active) {
+      this.followLngLat = null; // re-anchor (no jump) when the pilot resumes
+      return;
+    }
     const { lat0, lon0, mPerDegLat, mPerDegLon } = this.toGeoParams();
-    this.map.easeTo({
-      center: [lon0 + sample.x / mPerDegLon, lat0 - sample.z / mPerDegLat],
-      duration: 300,
-    });
+    const lng = lon0 + sample.x / mPerDegLon;
+    const lat = lat0 - sample.z / mPerDegLat;
+    if (sample.pilot !== this.followPilot || !this.followLngLat) {
+      // anchor without moving the map: the pilot stays where it is on screen
+      this.followPilot = sample.pilot;
+      this.followLngLat = [lng, lat];
+      return;
+    }
+    // pan the map by the pilot's movement since last frame; reading the live
+    // centre first means any user drag/rotate/zoom is preserved.
+    const c = this.map.getCenter();
+    this.map.setCenter([c.lng + (lng - this.followLngLat[0]), c.lat + (lat - this.followLngLat[1])]);
+    this.followLngLat = [lng, lat];
   }
 
   projectToScreen(x: number, y: number, z: number): ScreenPoint {
