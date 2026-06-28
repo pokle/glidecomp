@@ -112,6 +112,13 @@ transparently gunzip.)
 - **Scoring ranks** are computed at build time via the engine's `scoreTask()` and
   baked into the manifest; the legend sorts by rank ("1. Jon Durand … 1000").
   Matches the published AirScore order at the top.
+- **Pilot colours hash the name** (`colorForName` in `track-packer.ts`), not the
+  roster index, so a pilot keeps the same colour across rebuilds even if the
+  field changes. FNV-1a → hue, reusing `buildPalette`'s saturation/lightness
+  bands so it stays visually consistent. Trade-off: hashing can occasionally put
+  two pilots on near-identical hues (the golden-angle palette guaranteed maximal
+  separation) — name-stability was judged worth it. Re-run `bun run build-3dvis`
+  to regenerate the manifest after touching the colour logic.
 
 ---
 
@@ -238,6 +245,66 @@ live rAF. The abstract Three view does screenshot fine in the preview harness.
 
 Also: suspended rAF in a hidden tab means a backgrounded-then-resumed tab gets a
 huge first `dt` → clamp `dt` in the playback loop (`Math.min(dt, 0.1)`).
+
+### 5.11 Matching OrbitControls mouse/touch to Mapbox — don't fight the built-in swap
+
+We want both backdrops to feel identical: **drag pans, Ctrl/⌘+drag orbits**
+(Mapbox's default), and Shift+drag (Mapbox box-zoom) does nothing here. Three
+non-obvious facts made this a multi-attempt fix:
+
+- **OrbitControls already swaps PAN↔ROTATE while a modifier is held.** When the
+  resolved mouse action is `ROTATE` *and* `ctrlKey/metaKey/shiftKey` is down, it
+  deliberately switches to PAN (and `PAN`+modifier → ROTATE). So forcing
+  `mouseButtons.LEFT = ROTATE` on Ctrl is *wrong* — OrbitControls swaps it right
+  back to PAN and you never orbit. **Fix:** set both `LEFT` and `RIGHT` to `PAN`
+  and let the built-in swap produce the orbit. No per-event remapping.
+- **macOS delivers Ctrl+click as a right-click** (`button === 2`). That's why
+  `RIGHT` must also be `PAN` — otherwise Ctrl+drag on a Mac lands on the RIGHT
+  slot and the swap never runs. (This burned a whole "it doesn't orbit at all"
+  round; the user was on a Mac.)
+- **Swallowing Shift+drag needs a capture listener on the canvas's _parent_.**
+  A capture listener on the canvas itself does **not** beat OrbitControls: when
+  the canvas is the event target, all its listeners fire in registration order
+  (capture flag ignored), and OrbitControls registered first. Listen on the
+  parent in the capture phase and `stopPropagation()` before the event ever
+  descends to the canvas.
+- Touch: `touches.ONE = PAN`, `touches.TWO = DOLLY_ROTATE` to mirror Mapbox
+  (one finger pans, two fingers orbit + pinch-zoom).
+
+Verify with Playwright `browser_run_code_unsafe` driving real `page.mouse` +
+`page.keyboard` with modifiers; assert on `controls.getAzimuthalAngle()` /
+`getPolarAngle()` (expose `controls` on `window` under `import.meta.env.DEV`).
+Comparing the compass transform *string* is too noisy — parse the bearing number.
+
+### 5.12 Free-look follow — track the pilot's delta, don't snap onto it
+
+The first follow implementation set `controls.target = pilot` every frame, which
+fights the user: any pan is overwritten next frame. The wanted behaviour is
+"keep the pilot wherever it is on screen when the follow starts (or after I
+pan/orbit)". Implementation: on the first follow frame **anchor** the pilot's
+position without moving the camera; each later frame shift **both** `target` and
+`camera.position` by the pilot's movement since the last frame
+(`sample.pos − lastPos`). The camera↔target offset is never touched, so
+pan/orbit/zoom all persist and the pilot stays pinned. Re-anchor (don't apply a
+delta) when the followed pilot changes or goes inactive, to avoid a jump. Same
+idea on terrain: `map.setCenter(center + pilotDelta)` reading the live centre
+first so user drag survives. (Verified: pure follow pins the pilot to the exact
+pixel; only transient OrbitControls damping causes a few px of settle after an
+orbit/pan.)
+
+### 5.13 Orientation presets (compass / top / side) — drive OrbitControls via Spherical
+
+Compass-click = north-up, plus Top/Side buttons. There's no `setAzimuthalAngle`
+on OrbitControls, so tween in `render()`: read the current camera→target offset
+into a `THREE.Spherical`, lerp `theta`/`phi` (ease-in-out cubic) keeping
+`radius`, then `camera.position = target + offset.setFromSpherical(s)`. **θ = 0
+is north-up** (camera due south of target, looking north) — matches
+`getBearingDeg`'s `atan2(dir.x, −dir.z)`. Top = `phi ≈ 0.02`, Side =
+`phi = maxPolarAngle`. This coexists with damping (`controls.update()` recomputes
+its spherical from the position we set, with zero user input) and with follow
+(the tween sets position relative to the follow-shifted target). These presets
+deliberately **keep** the active follow; only Reset clears it. Terrain uses
+`map.easeTo({ bearing/pitch })`.
 
 ---
 
