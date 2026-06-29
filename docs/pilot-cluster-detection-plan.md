@@ -334,5 +334,19 @@ None of these block Phase 0; they're calibrated against the sample during it.
   `packTracks`); keep the per-frame overlay allocation-free.
 - Decisions explainable: episodes carry `timeline`, `members`, `nearTurnpoint`,
   and time bounds so the UI can always answer "who, when, where, why."
+
+---
+
+## 11. Known follow-ups
+
+- **Revisit `nearTurnpoint` labels (Phase 3).** Some episode labels read wrong —
+  e.g. an early-course gaggle near CUDGWE/TINTAL is tagged "near NCORGL". The
+  detector picks the turnpoint nearest the episode centroid at its *midpoint*,
+  which can land on a geometrically-close-but-wrong TP (and a long episode's
+  midpoint may not represent where the gaggle actually was). Worth: sanity-check
+  the turnpoint x/z projection feeding `DetectOptions.turnpoints`; consider using
+  the *task leg* the gaggle is on (progress along the optimised line) rather than
+  nearest-TP-to-centroid; or label by the nearest TP at each snapshot and take
+  the mode. Cosmetic only — does not affect detection.
 </content>
 </invoke>
