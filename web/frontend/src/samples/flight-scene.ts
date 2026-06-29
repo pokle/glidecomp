@@ -25,6 +25,7 @@ export type ColorMode = 'pilot' | 'altitude' | 'vario';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const WALL_HEIGHT = 1400; // metres, task-cylinder walls (pre vertical exaggeration)
+const TASK_LINE_COLOR = 0x6366f1; // indigo — matches the 2D analysis optimised line
 
 /** Vertical-speed colour mode saturates at ±this many m/s. */
 export const VARIO_MAX = 4;
@@ -192,6 +193,7 @@ export class FlightScene {
   private buildTaskGeometry(): void {
     const task = this.tracks.manifest.task;
     if (!task) return;
+    this.buildOptimizedPath(task.optimizedPath);
     for (const tp of task.turnpoints) {
       const isStart = tp.type === 'SSS' || tp.type === 'TAKEOFF';
       const isEnd = tp.type === 'ESS';
@@ -237,6 +239,75 @@ export class FlightScene {
       }
     }
     this.applyWallScale();
+  }
+
+  /**
+   * The optimised (shortest) task line tagging each cylinder edge, drawn flat on
+   * the ground as a dashed indigo polyline with course-direction arrowheads —
+   * the same `#6366f1` dashed line + arrows the 2D analysis map shows.
+   * Pre-projected to ENU at build time (see track-packer).
+   */
+  private buildOptimizedPath(path?: { x: number; z: number }[]): void {
+    if (!path || path.length < 2) return;
+    const pts = path.map((p) => new THREE.Vector3(p.x, 0, p.z));
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineDashedMaterial({
+        color: TASK_LINE_COLOR,
+        transparent: true,
+        opacity: 0.85,
+        depthTest: false,
+        dashSize: this.extentXZ * 0.012,
+        gapSize: this.extentXZ * 0.012,
+      }),
+    );
+    line.computeLineDistances(); // required for the dash pattern
+    line.frustumCulled = false;
+    line.renderOrder = 4;
+    this.group.add(line);
+    this.buildPathArrows(pts);
+  }
+
+  /**
+   * Flat indigo arrowheads laid on the ground at each leg's midpoint, pointing
+   * along the course so the direction of travel is unambiguous (mirrors the
+   * arrow icons the 2D analysis line carries). depthTest off so they read over
+   * the terrain in the map backend, like the dashed line and cylinder rings.
+   */
+  private buildPathArrows(pts: THREE.Vector3[]): void {
+    const size = Math.min(this.extentXZ * 0.02, 700); // metres (pre-exaggeration)
+    // A flat triangle in the XZ plane pointing toward +X (East); we then rotate
+    // it about Y so its tip faces the leg direction.
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(
+        [size, 0, 0, -size * 0.6, 0, size * 0.6, -size * 0.6, 0, -size * 0.6],
+        3,
+      ),
+    );
+    const mat = new THREE.MeshBasicMaterial({
+      color: TASK_LINE_COLOR,
+      transparent: true,
+      opacity: 0.95,
+      side: THREE.DoubleSide,
+      depthTest: false,
+      depthWrite: false,
+    });
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      if (Math.hypot(dx, dz) < size * 1.5) continue; // skip legs too short to fit an arrow
+      const arrow = new THREE.Mesh(geom, mat);
+      // heading clockwise from +X in the XZ plane: rotate about Y by -atan2(dz, dx)
+      arrow.rotation.y = -Math.atan2(dz, dx);
+      arrow.position.set((a.x + b.x) / 2, 0, (a.z + b.z) / 2);
+      arrow.frustumCulled = false;
+      arrow.renderOrder = 5;
+      this.group.add(arrow);
+    }
   }
 
   /** Scale cylinder walls on their own Y so vertical exaggeration matches the trails. */

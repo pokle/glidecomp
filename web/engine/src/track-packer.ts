@@ -23,6 +23,7 @@
  */
 
 import type { XCTask } from './xctsk-parser';
+import { calculateOptimizedTaskLine } from './task-optimizer';
 
 /** Floats stored per vertex in `tracks.bin`: [x, y, z, tRel]. */
 export const FLOATS_PER_VERTEX = 4;
@@ -112,7 +113,15 @@ export interface TrackManifest {
   colors: [number, number, number][];
   pilots: TrackPilotMeta[];
   /** Optional task geometry in ENU metres. */
-  task?: { turnpoints: TrackTaskPoint[] };
+  task?: {
+    turnpoints: TrackTaskPoint[];
+    /**
+     * The optimised (shortest) task path tagging each cylinder edge, in ENU
+     * metres (x = East, z = North). Matches `calculateOptimizedTaskLine`, the
+     * same line the 2D analysis view draws. Absent for 0/1-turnpoint tasks.
+     */
+    optimizedPath?: { x: number; z: number }[];
+  };
 }
 
 export interface PackedTracks {
@@ -270,7 +279,13 @@ export function packTracks(input: PackInput): PackedTracks {
       lat: tp.waypoint.lat,
       lon: tp.waypoint.lon,
     }));
-    task = { turnpoints };
+    // Project the optimised shortest path (lat/lon tagging cylinder edges) into
+    // the same ENU frame so the viewer can draw it without re-running the
+    // optimiser (and without the original lat/lon task) at runtime.
+    const opt = calculateOptimizedTaskLine(input.task);
+    const optimizedPath =
+      opt.length >= 2 ? opt.map((p) => ({ x: projX(p.lon), z: projZ(p.lat) })) : undefined;
+    task = { turnpoints, optimizedPath };
   }
 
   const manifest: TrackManifest = {
