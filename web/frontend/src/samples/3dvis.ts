@@ -10,9 +10,24 @@
 import { ReplayViewer, type ColorMode, type HoverInfo } from './replay-viewer';
 import { MAP_STYLES, DEFAULT_MAP_STYLE } from './map-styles';
 import { VARIO_MAX } from './flight-scene';
+import { GaggleUI } from './gaggle-ui';
+import type { GaggleResult } from './gaggles';
 import type { TrackManifest } from '@glidecomp/engine';
 
-const DATA_BASE = '/samples/3dvis';
+/**
+ * The replay data now comes from the competition-api Worker as a single packed
+ * bundle. By default we show the seeded public sample competition (resolved by
+ * name server-side, so no environment-specific id is needed); `?comp=&task=`
+ * points the same viewer at any competition task the user may view.
+ */
+function bundleUrl(): string {
+  const q = new URLSearchParams(location.search);
+  const comp = q.get('comp');
+  const task = q.get('task');
+  return comp && task
+    ? `/api/comp/${encodeURIComponent(comp)}/task/${encodeURIComponent(task)}/3dvis`
+    : '/api/comp/sample-3dvis';
+}
 
 const $ = <T = HTMLElement>(id: string): T =>
   document.getElementById(id) as unknown as T;
@@ -61,6 +76,44 @@ function makeCollapsible(headerId: string, bodyId: string, chevronId: string): v
   });
 }
 
+/**
+ * Mobile (< md): the floating View / Pilots / Gaggles panels are docked as
+ * bottom sheets (CSS), shown one at a time. The #mobileBar tab strip toggles
+ * them — opening one closes the others and expands its body (in case it was
+ * collapsed on desktop). Above md the bar is hidden and panels float as normal.
+ */
+function setupMobilePanels(): void {
+  const bar = document.getElementById('mobileBar');
+  if (!bar) return;
+  // panel id → [body id, chevron id] so we can force-expand on open
+  const panels: Record<string, [string, string]> = {
+    viewPanel: ['viewBody', 'viewChevron'],
+    pilotPanel: ['pilotsBody', 'pilotsChevron'],
+    gagglePanelWrap: ['gagglesBody', 'gagglesChevron'],
+  };
+  const tabs = Array.from(bar.querySelectorAll<HTMLButtonElement>('.mob-tab'));
+  const setActive = (id: string | null): void =>
+    tabs.forEach((t) => t.classList.toggle('active', t.dataset.panel === id));
+
+  for (const tab of tabs) {
+    tab.addEventListener('click', () => {
+      const id = tab.dataset.panel!;
+      const el = document.getElementById(id);
+      if (!el) return;
+      const willOpen = !el.classList.contains('open');
+      for (const pid of Object.keys(panels)) document.getElementById(pid)?.classList.remove('open');
+      if (willOpen) {
+        const [bodyId, chevId] = panels[id];
+        document.getElementById(bodyId)?.classList.remove('hidden');
+        const chev = document.getElementById(chevId);
+        if (chev) chev.textContent = '▼';
+        el.classList.add('open');
+      }
+      setActive(willOpen ? id : null);
+    });
+  }
+}
+
 /** Round n down to a "nice" 1/2/5×10^k value for the scale bar. */
 function niceNumber(n: number): number {
   const exp = Math.floor(Math.log10(n));
@@ -93,7 +146,7 @@ async function main(): Promise<void> {
   );
 
   try {
-    const tracks = await viewer.load(`${DATA_BASE}/manifest.json`, `${DATA_BASE}/tracks.bin.gz`);
+    const tracks = await viewer.loadBundle(bundleUrl());
     manifest = tracks.manifest;
   } catch (err) {
     overlayText.textContent = `Could not load tracks: ${(err as Error).message}`;
@@ -103,10 +156,17 @@ async function main(): Promise<void> {
 
   overlay.classList.add('hidden');
 
+  // Dev-only debug handle so the gaggle overlay can be inspected/driven from the
+  // console or automation (which gaggles are active at the current frame, etc.).
+  if (import.meta.env.DEV) (window as unknown as { __viewer: unknown }).__viewer = viewer;
+
   // --- stats line ---
   const durMin = ((manifest.t1 - manifest.t0) / 60).toFixed(0);
-  $('stats').textContent =
-    `${manifest.pilots.length} pilots · ${(manifest.vertexCount / 1000).toFixed(0)}k fixes · ${durMin} min · drag to orbit`;
+  function updateStats(): void {
+    $('stats').textContent =
+      `${manifest.pilots.length} pilots · ${(manifest.vertexCount / 1000).toFixed(0)}k fixes · ${durMin} min · ${viewer.gaggleCount} gaggles · drag to orbit`;
+  }
+  updateStats();
 
   // --- scrubber + clock ---
   const duration = manifest.t1 - manifest.t0;
@@ -115,9 +175,11 @@ async function main(): Promise<void> {
   const tz = manifest.timezone; // comp IANA zone, or undefined → browser zone
   $('clockZone').textContent = zoneLabel(new Date(manifest.t0 * 1000), tz);
 
+  let gaggleUI: GaggleUI | undefined;
   function onTime(t: number): void {
     $('clock').textContent = clockLocal(manifest.t0 + t, tz);
     if (!scrubbing) scrubber.value = String(Math.round((t / duration) * 1000));
+    gaggleUI?.setTime(t);
   }
   scrubber.addEventListener('pointerdown', () => {
     scrubbing = true;
@@ -134,6 +196,10 @@ async function main(): Promise<void> {
   // --- collapsible panels ---
   makeCollapsible('viewHeader', 'viewBody', 'viewChevron');
   makeCollapsible('pilotsHeader', 'pilotsBody', 'pilotsChevron');
+  makeCollapsible('gagglesHeader', 'gagglesBody', 'gagglesChevron');
+
+  // --- mobile: open one control panel at a time as a bottom sheet ---
+  setupMobilePanels();
 
   // --- playback controls ---
   $('playPause').addEventListener('click', () => viewer.togglePlay());
@@ -329,6 +395,82 @@ async function main(): Promise<void> {
     rows.forEach((r) => r.classList.toggle('opacity-40', allHidden));
     $('toggleAll').textContent = allHidden ? 'show all' : 'hide all';
   });
+
+  // --- gaggle ribbon + panel ---
+  function showGaggleFollow(id: number): void {
+    const ep = viewer.gaggleResult?.episodes.find((e) => e.id === id);
+    followIdx = -1;
+    rows.forEach((r) => r.classList.remove('bg-slate-700/60'));
+    $('followName').textContent = ep ? `${ep.peakSize}-pilot gaggle` : 'gaggle';
+    $('followBar').classList.remove('hidden');
+  }
+  function buildGaggleUI(result: GaggleResult): GaggleUI {
+    return new GaggleUI({
+      ribbon: $('gaggleRibbon'),
+      list: $('gaggleList'),
+      tooltip: $('tooltip'),
+      result,
+      manifest,
+      duration,
+      fmtTime: (tRel) => clockLocal(manifest.t0 + tRel, tz),
+      onSeek: (t) => {
+        viewer.setPlaying(false);
+        viewer.setTime(t);
+      },
+      onFollow: (id) => {
+        viewer.setFollowGaggle(id);
+        showGaggleFollow(id);
+      },
+      onHighlight: (id) => viewer.setGaggleHighlight(id),
+    });
+  }
+  if (viewer.gaggleResult) gaggleUI = buildGaggleUI(viewer.gaggleResult);
+  gaggleUI?.setTime(0);
+
+  // show/hide the in-scene overlay
+  let gaggleShown = true;
+  $('gaggleToggle').addEventListener('click', (e) => {
+    e.stopPropagation();
+    gaggleShown = !gaggleShown;
+    viewer.setGaggleVisible(gaggleShown);
+    $('gaggleToggle').textContent = gaggleShown ? 'hide' : 'show';
+  });
+
+  // "active now" filter for the panel list
+  let activeOnly = false;
+  $('gaggleActiveOnly').addEventListener('click', (e) => {
+    e.stopPropagation();
+    activeOnly = !activeOnly;
+    gaggleUI?.setActiveOnly(activeOnly);
+    const btn = $('gaggleActiveOnly');
+    btn.classList.toggle('text-lime-400', activeOnly);
+    btn.classList.toggle('text-slate-400', !activeOnly);
+    gaggleUI?.setTime(viewer.currentTime);
+  });
+
+  // dev-only threshold sliders — re-run detection live
+  if (import.meta.env.DEV) {
+    $('gaggleDev').classList.remove('hidden');
+    const ggR = $<HTMLInputElement>('ggRadius');
+    const ggB = $<HTMLInputElement>('ggBand');
+    const ggM = $<HTMLInputElement>('ggMin');
+    const recompute = (): void => {
+      const result = viewer.recomputeGaggles({
+        horizontalRadius: Number(ggR.value),
+        verticalBand: Number(ggB.value),
+        minPilots: Number(ggM.value),
+      });
+      $('ggRadiusVal').textContent = `${ggR.value} m`;
+      $('ggBandVal').textContent = `${ggB.value} m`;
+      $('ggMinVal').textContent = ggM.value;
+      gaggleUI?.destroy();
+      gaggleUI = buildGaggleUI(result);
+      gaggleUI.setActiveOnly(activeOnly);
+      gaggleUI.setTime(viewer.currentTime);
+      updateStats();
+    };
+    for (const el of [ggR, ggB, ggM]) el.addEventListener('change', recompute);
+  }
 
   // --- colour scale legend (altitude / vertical speed) ---
   const ALT_GRADIENT =

@@ -3,34 +3,45 @@
 A WebGL replay of a whole competition task: every pilot's IGC track rendered as
 time-animated 3D trajectories, scrubbable, in either an abstract free-orbit view
 or draped over a Mapbox satellite/terrain map. Lives at **`/samples/3dvis`**
-(static, no auth).
+(standalone page, no auth; track data comes from the competition-api Worker —
+see §8).
 
 This doc captures the architecture, the non-obvious decisions, and the gotchas
-that cost real time — so the next person (or the Worker port) doesn't re-learn
-them. It assumes the engineering brief (`flight-replay-3d-brief.md`, the original
-spec) as background.
+that cost real time. It assumes the original engineering brief (the spec the
+viewer was built from) as background.
 
 ---
 
 ## 1. What was built
 
-- A static page `/samples/3dvis` showing all ~32 pilots of Corryong Cup 2026
-  Task 1 with synchronized playback, pilot identity, altitude/vario colouring,
-  task geometry, and a selectable backdrop (abstract vs Mapbox terrain).
-- A **build-time asset pipeline**: IGC files → one gzipped `Float32` binary +
-  a small JSON manifest, committed under `web/frontend/public/samples/3dvis/`.
-- The packing logic is **pure and fs/DOM-free**, so the same code can run in a
-  Cloudflare Worker later (swap zlib for `CompressionStream`, disk for R2).
+- A page `/samples/3dvis` showing all ~32 pilots of Corryong Cup 2026 Task 1
+  with synchronized playback, pilot identity, altitude/vario colouring, task
+  geometry, gaggle detection, and a selectable backdrop (abstract vs Mapbox
+  terrain).
+- The packing logic is **pure and fs/DOM-free** (`packTracksFromIgc` in the
+  engine), so the *same* code runs in two places:
+  - **Runtime, Worker-served (primary):** `GET /api/comp/:comp_id/task/:task_id/3dvis`
+    (and `GET /api/comp/sample-3dvis` for the public sample) reads each pilot's
+    IGC from R2, packs, and returns one binary **bundle** — `[uint32 manifestLen]
+    [manifest JSON][gzipped Float32 data]` — cached in KV. This is what the page
+    loads (`viewer.loadBundle`).
+  - **Build-time mirror (offline):** the `build-3dvis` CLI writes the same
+    manifest + `tracks.bin.gz` to `web/frontend/public/samples/3dvis/` for
+    offline inspection/regression. No longer on the page's hot path.
+- The sample is a **real competition in the database** (comp + task + pilots +
+  IGC in R2), so every user can view it; see *Sample competition* below.
 
 ### Run / regenerate
 
 ```bash
-bun run dev:frontend          # http://localhost:3000/samples/3dvis
-bun run build-3dvis           # regenerate the asset from web/samples/comps/corryong-cup-2026-t1
+bun run dev                   # workers + frontend; http://localhost:3000/samples/3dvis
+bun run seed:sample           # load the sample comp into local D1 + R2 (idempotent)
+bun run seed:sample --remote  # …or into production D1 + R2
+bun run build-3dvis           # offline: regenerate the static asset mirror
 ```
 
-`build-3dvis [<comp-dir> <out-dir>]` defaults to the Corryong sample comp and the
-frontend public dir.
+The page calls `/api/comp/sample-3dvis` by default; `?comp=<id>&task=<id>` points
+the same viewer at any competition task the user may view.
 
 ---
 
@@ -39,9 +50,14 @@ frontend public dir.
 Three stages, kept cleanly separated (per the brief):
 
 ```
-IGC + task.xctsk ──▶ [build-3dvis CLI] ──▶ tracks.bin.gz + manifest.json
-                       packTracks() (pure)        (committed to public/)
-                                                        │
+IGC + task.xctsk ──▶ packTracksFromIgc() (pure) ──▶ manifest + Float32 data
+                       │                                      │
+        ┌──────────────┴───────────────┐                     │
+        ▼                               ▼                     │
+ [build-3dvis CLI]            [competition-api Worker]        │
+ tracks.bin.gz + manifest      GET …/3dvis → bundle (KV-cached)│
+ (offline mirror)              R2 IGC → pack → one response    │
+                                                        ┌──────┘
                                                         ▼
                                    [FlightScene]  shared Three objects
                               (merged LineSegments + Points + markers + cylinders)
@@ -58,14 +74,21 @@ IGC + task.xctsk ──▶ [build-3dvis CLI] ──▶ tracks.bin.gz + manifest.
 
 ### Files
 
-Engine (build-time, no DOM):
+Engine (pure, no DOM — runs in both the Worker and the CLI):
 - `web/engine/src/track-packer.ts` — pure `packTracks()`: project, time-align,
   pack the binary + manifest, palette, task geometry. Exported from `index.ts`.
-- `web/engine/cli/build-3dvis.ts` — reads IGC + task, runs GAP scoring for ranks,
-  resolves the timezone (geo-tz), gzips, writes the asset.
+- `web/engine/src/track-pack-pipeline.ts` — `packTracksFromIgc()`: parse IGC →
+  GAP score → `packTracks`. Shared by the Worker and the CLI.
+- `web/engine/cli/build-3dvis.ts` — offline mirror: reads IGC + task, resolves
+  the timezone (geo-tz), gzips, writes the static asset.
+
+Worker (`web/workers/competition-api/src/`):
+- `visualization.ts` (`buildTask3dvisBundle`) + `routes/visualization.ts` — the
+  runtime path the page actually loads (see §8).
 
 Frontend (`web/frontend/src/samples/`):
-- `track-data.ts` — fetch + `DecompressionStream("gzip")` → typed arrays;
+- `track-data.ts` — `loadTracksBundle` (one Worker fetch) / `loadTracks`
+  (two-file mirror) + `DecompressionStream("gzip")` → typed arrays;
   per-vertex `aPilot`/`aVario`; `samplePilot()` binary-search + lerp.
 - `flight-scene.ts` — the backend-agnostic Three content + custom shaders.
 - `backend.ts` — the `Backend` interface.
@@ -348,9 +371,41 @@ SSS edge; it's intentional and rule-correct.
   option) — currently smoothed in `track-data.ts`.
 - **Task geometry depth** — turnpoint rings sit at `alt0`, not draped on the DEM;
   could query terrain elevation per turnpoint.
-- **Worker preprocessing on upload** — lift `packTracks()` into a Worker writing
-  to R2 (the packer is already pure for this).
+- ~~**Worker preprocessing**~~ — *done*: the packer runs in the competition-api
+  Worker at request time (KV-cached), serving a single bundle; see *Sample
+  competition* below.
 - **Follow-cam smoothing**, colour-by leader-gap, airspace volumes.
+
+---
+
+## 8. Sample competition (Worker-served data)
+
+The replay is fed by a **real competition in the database** rather than a static
+file, so any user can view it and the same path serves any comp task.
+
+- **Source:** `web/samples/comps/corryong-cup-2026-t1/` (33 IGC + `task.xctsk`).
+- **Seed:** `bun run seed:sample` (`--remote` for production). Idempotent — the
+  comp is found by name (`SAMPLE_COMP_NAME`, shared in
+  `web/workers/competition-api/src/sample.ts`); reruns wipe that comp's tasks /
+  pilots / tracks (D1) and IGC objects (R2) and rebuild under the **same
+  comp_id**, so a messed-with sample is fixed back up. It's a public comp
+  (`test = 0`), single class `open`, scored together for legend order.
+- **Endpoint:** `web/workers/competition-api/src/visualization.ts`
+  (`buildTask3dvisBundle`) + `routes/visualization.ts`. Mirrors `scoring.ts`:
+  fetch `task_track` rows → R2 `get` → gunzip → `packTracksFromIgc` → gzip data
+  → frame the bundle → cache in KV (`3dvis:v1:<taskId>:<hash>`, invalidated by
+  the same task-state hash as scores).
+- **Timezone:** `geo-tz` is node-only, so the seed resolves it and stashes it as
+  `_timezone` inside the stored task xctsk JSON; the Worker reads it back and
+  puts it on the manifest (`parseXCTask` ignores the extra key). Without it the
+  viewer falls back to the browser zone.
+- **Frontend:** `loadTracksBundle` in `track-data.ts` (one fetch, split manifest
+  from gzipped data) → `ReplayViewer.loadBundle`. `3dvis.ts` builds the URL.
+- **Entry points:** the homepage links to the sample (`/samples/3dvis`, no
+  params → `sample-3dvis`). Every competition **task page** (`comp-detail.ts`)
+  and the **score page** (`scores.ts`) link to `/samples/3dvis?comp=<id>&task=<id>`
+  for their real tasks — the in-app path needs no `sample-3dvis` (the page knows
+  the ids). The task-page link appears once the task has scoreable tracks.
 
 ---
 

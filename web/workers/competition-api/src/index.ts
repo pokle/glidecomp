@@ -11,6 +11,7 @@ import { pilotStatusRoutes } from "./routes/pilot-status";
 import { scoreRoutes } from "./routes/score";
 import { auditRoutes } from "./routes/audit";
 import { userFilesRoutes } from "./routes/user-files";
+import { visualizationRoutes } from "./routes/visualization";
 
 type Variables = {
   user: AuthUser;
@@ -78,6 +79,7 @@ app.onError((err, c) => {
 // Mount routes — igcRoutes first to avoid potential conflicts
 const routes = app
   .route("/", igcRoutes)
+  .route("/", visualizationRoutes)
   .route("/", pilotRoutes)
   .route("/", pilotStatusRoutes)
   .route("/", compRoutes)

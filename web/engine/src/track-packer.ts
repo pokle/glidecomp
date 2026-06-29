@@ -57,6 +57,14 @@ export interface PackInput {
   pilots: PilotTrackInput[];
   /** Optional task geometry, projected into the same ENU frame for context. */
   task?: XCTask;
+  /**
+   * IANA timezone for the comp location (e.g. "Australia/Melbourne"), if the
+   * caller can resolve it. Stored on the manifest so the viewer shows the
+   * comp's local time regardless of who's watching. Resolving from lat/lon
+   * needs a node-only library (geo-tz), so a Worker passes it through from
+   * stored comp data instead.
+   */
+  timezone?: string;
 }
 
 /** Per-pilot metadata: where this pilot's vertices live in the buffer. */
@@ -298,6 +306,7 @@ export function packTracks(input: PackInput): PackedTracks {
     floatsPerVertex: FLOATS_PER_VERTEX,
     altMin,
     altMax,
+    timezone: input.timezone,
     colors: palette,
     pilots: pilotsMeta,
     task,

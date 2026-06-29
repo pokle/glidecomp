@@ -12,7 +12,8 @@
  * resources bound to one context) and rebuilds them, re-applying all view state.
  */
 
-import { loadTracks, type LoadedTracks } from './track-data';
+import { loadTracks, loadTracksBundle, type LoadedTracks } from './track-data';
+import { detectGaggles, gagglesAt, type GaggleParams, type GaggleResult } from './gaggles';
 import { FlightScene, type ColorMode, type MarkerSample } from './flight-scene';
 import { AbstractBackend } from './abstract-backend';
 import { DEFAULT_MAP_STYLE } from './map-styles';
@@ -40,6 +41,7 @@ export interface ViewerCallbacks {
 
 export class ReplayViewer {
   private tracks!: LoadedTracks;
+  private gaggles?: GaggleResult;
   private scene!: FlightScene;
   private backend!: Backend;
   private backdrop: Backdrop = 'abstract';
@@ -60,6 +62,10 @@ export class ReplayViewer {
   private mapStyle = DEFAULT_MAP_STYLE.url;
   private visibility!: boolean[];
   private follow = -1;
+  /** Gaggle id being followed by its live centroid (-1 = none). */
+  private followGaggleId = -1;
+  private gaggleVisible = true;
+  private gaggleHighlight = -1;
 
   // picking
   private pointer = { x: 0, y: 0, inside: false };
@@ -71,12 +77,23 @@ export class ReplayViewer {
     private mapboxToken: string = '',
   ) {}
 
+  /** Load from a two-file static asset (manifest JSON + gzipped binary). */
   async load(manifestUrl: string, binUrl: string): Promise<LoadedTracks> {
-    this.tracks = await loadTracks(manifestUrl, binUrl);
+    return this.init(await loadTracks(manifestUrl, binUrl));
+  }
+
+  /** Load from a single Worker bundle (manifest + gzipped data in one fetch). */
+  async loadBundle(url: string): Promise<LoadedTracks> {
+    return this.init(await loadTracksBundle(url));
+  }
+
+  private async init(tracks: LoadedTracks): Promise<LoadedTracks> {
+    this.tracks = tracks;
     this.duration = this.tracks.manifest.t1 - this.tracks.manifest.t0;
     this.visibility = new Array(this.tracks.manifest.pilots.length).fill(true);
+    this.gaggles = detectGaggles(this.tracks);
 
-    this.scene = new FlightScene(this.tracks);
+    this.scene = new FlightScene(this.tracks, this.gaggles);
     this.applySceneState();
     this.backend = await this.makeBackend('abstract');
     this.backend.setVScale(this.vScale);
@@ -103,7 +120,7 @@ export class ReplayViewer {
       this.backend.dispose();
       this.scene.dispose();
 
-      this.scene = new FlightScene(this.tracks);
+      this.scene = new FlightScene(this.tracks, this.gaggles);
       this.applySceneState();
       this.backend = await this.makeBackend(mode);
       this.backend.setVScale(this.vScale);
@@ -131,6 +148,8 @@ export class ReplayViewer {
     this.scene.setTailSeconds(this.tailSeconds);
     this.scene.setWidth(this.trailWidth);
     this.visibility.forEach((v, i) => this.scene.setVisible(i, v));
+    this.scene.setGaggleVisible(this.gaggleVisible);
+    this.scene.setGaggleHighlight(this.gaggleHighlight);
     this.scene.setTime(this.time);
   }
 
@@ -163,7 +182,8 @@ export class ReplayViewer {
     this.scene.setTime(this.time);
     const samples = this.scene.updateMarkers(this.time);
 
-    if (this.follow >= 0) this.backend.followTo(samples[this.follow]);
+    if (this.followGaggleId >= 0) this.backend.followTo(this.gaggleCentroid(samples));
+    else if (this.follow >= 0) this.backend.followTo(samples[this.follow]);
     this.backend.render();
 
     this.updatePicking(samples);
@@ -236,6 +256,14 @@ export class ReplayViewer {
   get currentTime(): number {
     return this.time;
   }
+  /** Number of gaggle episodes detected across the task. */
+  get gaggleCount(): number {
+    return this.gaggles?.episodes.length ?? 0;
+  }
+  /** The full gaggle detection result (episodes + params), if any. */
+  get gaggleResult(): GaggleResult | undefined {
+    return this.gaggles;
+  }
   get totalDuration(): number {
     return this.duration;
   }
@@ -290,10 +318,63 @@ export class ReplayViewer {
   }
   setFollow(idx: number): void {
     this.follow = idx;
+    this.followGaggleId = -1;
     if (idx < 0) this.backend.followTo(null);
   }
+
+  /** Follow a gaggle by its live centroid (-1 = stop). Overrides pilot follow. */
+  setFollowGaggle(id: number): void {
+    this.followGaggleId = id;
+    this.follow = -1;
+    if (id < 0) this.backend.followTo(null);
+  }
+
+  /** Show/hide the in-scene gaggle blobs. */
+  setGaggleVisible(visible: boolean): void {
+    this.gaggleVisible = visible;
+    this.scene.setGaggleVisible(visible);
+  }
+
+  /** Emphasise one gaggle (others dimmed); -1 clears. */
+  setGaggleHighlight(id: number): void {
+    this.gaggleHighlight = id;
+    this.scene.setGaggleHighlight(id);
+  }
+
+  /** Re-run detection with new params (dev tuning) and rebuild the blob layer. */
+  recomputeGaggles(params: Partial<GaggleParams>): GaggleResult {
+    const base = this.gaggles?.params ?? undefined;
+    this.gaggles = detectGaggles(this.tracks, { ...(base as GaggleParams), ...params });
+    this.scene.setGaggles(this.gaggles);
+    this.applySceneState();
+    return this.gaggles;
+  }
+
+  /** Synthetic marker sample at the followed gaggle's live centroid, or null. */
+  private gaggleCentroid(samples: MarkerSample[]): MarkerSample | null {
+    if (!this.gaggles) return null;
+    const active = gagglesAt(this.gaggles, this.time);
+    const g = active.find((a) => a.id === this.followGaggleId);
+    if (!g) return null;
+    let x = 0;
+    let y = 0;
+    let z = 0;
+    let n = 0;
+    for (const m of g.members) {
+      const s = samples[m];
+      if (!s?.active) continue;
+      x += s.x;
+      y += s.y;
+      z += s.z;
+      n++;
+    }
+    if (n === 0) return null;
+    return { pilot: -1, active: true, x: x / n, y: y / n, z: z / n, altMsl: 0, climb: 0, name: '' };
+  }
+
   resetCamera(): void {
     this.follow = -1;
+    this.followGaggleId = -1;
     this.backend.resetCamera();
   }
   /** Orientation presets — keep any active follow, just change the view angle. */

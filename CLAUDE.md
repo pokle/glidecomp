@@ -25,6 +25,7 @@ If `node_modules/` is missing or a dependency can't be resolved, run `bun instal
 
 **Updating bundled data:**
 - **Google Fonts list:** `web/frontend/src/google-fonts.ts` contains a bundled list of all ~1900 Google Fonts for the theme editor. To refresh it: `bash web/scripts/update-google-fonts.sh`
+- **Sample competition:** `bun run seed:sample` (idempotent; `--remote` for prod) loads the public Corryong Cup sample comp into D1 + R2 from `web/samples/comps/corryong-cup-2026-t1`. The 3D replay at `/samples/3dvis` loads packed tracks from the competition-api Worker (`GET /api/comp/sample-3dvis`, or `/api/comp/:comp_id/task/:task_id/3dvis` for any comp task) — packing is `packTracksFromIgc` in the engine, shared with the offline `bun run build-3dvis` mirror. See `docs/3d-flight-replay-notes.md`.
 
 ## Coding Rules
 

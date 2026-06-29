@@ -43,6 +43,7 @@
     "test:all": "bun run test && bun run test:auth && bun run test:comp",
     "test:e2e": "[ -f web/workers/auth-api/.dev.vars ] || cp web/workers/auth-api/.dev.vars.example web/workers/auth-api/.dev.vars; bun run db:migrate && bunx playwright test",
     "build-3dvis": "bun web/engine/cli/build-3dvis.ts",
+    "seed:sample": "bun web/scripts/seed-sample-comp.ts",
     "detect-events": "bun web/engine/cli/detect-events.ts",
     "get-xcontest-task": "bun web/engine/cli/get-xcontest-task.ts",
     "score-task": "bun web/engine/cli/score-task.ts"

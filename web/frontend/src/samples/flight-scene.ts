@@ -20,6 +20,8 @@
 
 import * as THREE from 'three';
 import { samplePilot, type LoadedTracks } from './track-data';
+import { type GaggleResult } from './gaggles';
+import { GaggleLayer } from './gaggle-layer';
 
 export type ColorMode = 'pilot' | 'altitude' | 'vario';
 
@@ -64,11 +66,18 @@ export class FlightScene {
   private width = 3; // trail width in CSS px
   private disposed = false;
 
-  constructor(tracks: LoadedTracks) {
+  // gaggle overlay (Phase 2): translucent hull blobs + count labels, recomputed
+  // each frame from live member samples (see GaggleLayer).
+  private gaggles?: GaggleResult;
+  private gaggleLayer?: GaggleLayer;
+
+  constructor(tracks: LoadedTracks, gaggles?: GaggleResult) {
     this.tracks = tracks;
+    this.gaggles = gaggles;
     this.buildTrails();
     this.buildMarkers();
     this.buildTaskGeometry();
+    this.buildGaggleLayer();
   }
 
   get alt0(): number {
@@ -318,6 +327,34 @@ export class FlightScene {
     }
   }
 
+  /** Build the gaggle blob layer (hull + label pool) and host it in the group. */
+  private buildGaggleLayer(): void {
+    if (!this.gaggles) return;
+    this.gaggleLayer = new GaggleLayer(this.gaggles, this.nPilots, this.extentXZ);
+    this.group.add(this.gaggleLayer.group);
+  }
+
+  /** Replace the gaggle data and rebuild the blob layer (dev recompute). */
+  setGaggles(gaggles: GaggleResult): void {
+    this.gaggles = gaggles;
+    if (this.gaggleLayer) {
+      this.group.remove(this.gaggleLayer.group);
+      this.gaggleLayer.dispose();
+      this.gaggleLayer = undefined;
+    }
+    this.buildGaggleLayer();
+  }
+
+  /** Show/hide the gaggle blob overlay. */
+  setGaggleVisible(visible: boolean): void {
+    this.gaggleLayer?.setVisible(visible);
+  }
+
+  /** Emphasise one gaggle (others dimmed); -1 clears. */
+  setGaggleHighlight(id: number): void {
+    this.gaggleLayer?.setHighlight(id);
+  }
+
   // --- per-frame -----------------------------------------------------------
 
   setTime(t: number): void {
@@ -360,6 +397,7 @@ export class FlightScene {
       out.climb = s.climb;
     }
     this.markers.instanceMatrix.needsUpdate = true;
+    this.gaggleLayer?.update(t, this.samplesOut);
     return this.samplesOut;
   }
 
@@ -407,6 +445,7 @@ export class FlightScene {
       if (Array.isArray(m)) m.forEach((mm) => mm.dispose());
       else m?.dispose();
     };
+    this.gaggleLayer?.dispose();
     this.group.traverse(free);
     this.markers.geometry.dispose();
     (this.markers.material as THREE.Material).dispose();
