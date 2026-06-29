@@ -1700,28 +1700,29 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         if (!tb) return;
         clearMulti3DTracks();
 
+        // Render each track as a SINGLE polyline. Threebox's line() builds one
+        // THREE.Line2 (with its own instanced geometry + shader material) per
+        // call regardless of point count, so creating one line PER SEGMENT
+        // explodes into hundreds of thousands of objects for a full competition
+        // (33 tracks × ~10k fixes ≈ 287k objects) — that exhausts memory and
+        // freezes the browser. The rank colour is constant across each track, so
+        // a single multi-point line is visually identical and ~4 orders of
+        // magnitude cheaper (one object per track instead of one per fix).
         for (let ti = 0; ti < tracks.length; ti++) {
           const track = tracks[ti];
+          if (track.fixes.length < 2) continue;
           // Color by position in the visible set, not original rank
           const color = getRankColor(ti + 1, tracks.length);
 
-          for (let i = 1; i < track.fixes.length; i++) {
-            const prev = track.fixes[i - 1];
-            const curr = track.fixes[i];
-            const lineSegment = tb.line({
-              geometry: [
-                [prev.longitude, prev.latitude, prev.gnssAltitude * TERRAIN_EXAGGERATION],
-                [curr.longitude, curr.latitude, curr.gnssAltitude * TERRAIN_EXAGGERATION],
-              ],
-              color,
-              width: 3,
-              opacity: 0.85,
-            });
-            const lsMat = (lineSegment as { material?: { depthTest: boolean } }).material;
-            if (lsMat) lsMat.depthTest = false;
-            tb.add(lineSegment);
-            multiTrack3DObjects.push(lineSegment);
-          }
+          const geometry: [number, number, number][] = track.fixes.map(
+            (fix) => [fix.longitude, fix.latitude, fix.gnssAltitude * TERRAIN_EXAGGERATION],
+          );
+
+          const trackLine = tb.line({ geometry, color, width: 3, opacity: 0.85 });
+          const lsMat = (trackLine as { material?: { depthTest: boolean } }).material;
+          if (lsMat) lsMat.depthTest = false;
+          tb.add(trackLine);
+          multiTrack3DObjects.push(trackLine);
         }
         map.triggerRepaint();
       }

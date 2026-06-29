@@ -10,7 +10,7 @@ Cloudflare monorepo, free-tier focused:
 
 - `web/engine` — pure TypeScript analysis library (IGC/XCTask parsing, event detection, GAP scoring). No DOM dependencies; all track analysis runs client-side in the browser.
 - `web/frontend` — Vite multi-page app on Cloudflare Pages.
-- `web/workers/*` — Workers (auth-api, competition-api, mcp-api, airscore-api) backed by D1 + R2, handling accounts, user file storage, and competition management. Reached via Pages Functions proxies in `functions/api/`.
+- `web/workers/*` — Workers (auth-api, competition-api, airscore-api) backed by D1 + R2, handling accounts, user file storage, and competition management. Reached via Pages Functions proxies in `functions/api/`.
 
 ## Build & Development
 

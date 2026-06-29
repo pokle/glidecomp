@@ -19,14 +19,14 @@ Do not re-derive what's already known. The point of the log is that each round b
 
 Before reading code, write down (in your head or as TaskCreate items) what you intend to cover:
 
-- Every worker under `web/workers/*/src/` (auth-api, competition-api, airscore-api, mcp-api).
+- Every worker under `web/workers/*/src/` (auth-api, competition-api, airscore-api).
 - Pages Functions under `functions/api/`.
 - Frontend SPA under `web/frontend/src/` — focus on data flow from untrusted files (IGC, XCTask, share-target uploads) into the DOM, and on any `innerHTML`-style sinks.
 - Engine package under `web/engine/src/` — parsers (`igc-parser.ts`, `xctsk-parser.ts`) and any `eval`/`Function`-style constructs.
 - Infrastructure: every `wrangler.toml` (especially `[[routes]]` blocks and binding IDs), `Dockerfile.dev`, `docker-compose.yml`, `web/frontend/public/_redirects`, `web/frontend/public/_headers` (if present), `web/frontend/public/sw.js`.
 - `package.json` + `bun.lock` via `bun audit`.
 
-Carry forward the prior round's scope gaps — if the last round flagged "MCP per-tool auth audit" or "wrangler.toml binding cross-environment audit", do them this round unless you have a reason not to.
+Carry forward the prior round's scope gaps — if the last round flagged "wrangler.toml binding cross-environment audit" or a similar deferred item, do it this round unless you have a reason not to.
 
 ## 3. Diff against the previous review
 
