@@ -4,7 +4,7 @@ import type { Env, AuthUser } from "../env";
 /**
  * Resolve the caller via auth-api. Forward whichever inbound credential
  * the client sent: a Better Auth session cookie (browser), or an API key
- * via `x-api-key` / `Authorization: Bearer` (mcp-api and direct API
+ * via `x-api-key` / `Authorization: Bearer` (programmatic / direct API
  * clients). Better Auth's apiKey plugin with `enableSessionForAPIKeys`
  * resolves either to the same { user } shape, so callers don't need to
  * care which they used.

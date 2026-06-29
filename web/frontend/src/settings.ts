@@ -133,20 +133,6 @@ async function init() {
     const keyEl = document.getElementById("api-key-value")!;
     keyEl.textContent = plainKey;
 
-    const snippet = JSON.stringify(
-      {
-        mcpServers: {
-          glidecomp: {
-            url: "https://glidecomp.com/mcp",
-            headers: { Authorization: `Bearer ${plainKey}` },
-          },
-        },
-      },
-      null,
-      2
-    );
-    document.getElementById("api-key-config-snippet")!.textContent = snippet;
-
     createdDialog.showModal();
   }
 
@@ -162,13 +148,6 @@ async function init() {
   document.getElementById("copy-key-btn")!.addEventListener("click", (e) => {
     const key = document.getElementById("api-key-value")!.textContent ?? "";
     copyWithFeedback(e.currentTarget as HTMLButtonElement, key);
-  });
-  document.getElementById("copy-url-btn")!.addEventListener("click", (e) => {
-    copyWithFeedback(e.currentTarget as HTMLButtonElement, "https://glidecomp.com/mcp");
-  });
-  document.getElementById("copy-snippet-btn")!.addEventListener("click", (e) => {
-    const snippet = document.getElementById("api-key-config-snippet")!.textContent ?? "";
-    copyWithFeedback(e.currentTarget as HTMLButtonElement, snippet);
   });
 
   document.getElementById("api-key-created-close-btn")!.addEventListener("click", () => {
