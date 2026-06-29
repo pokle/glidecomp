@@ -163,8 +163,8 @@ The frontend client (`web/frontend/src/analysis/airscore-client.ts`) automatical
 
 1. Create KV namespaces:
    ```bash
-   wrangler kv:namespace create AIRSCORE_CACHE
-   wrangler kv:namespace create AIRSCORE_CACHE --preview
+   bunx wrangler kv namespace create AIRSCORE_CACHE
+   bunx wrangler kv namespace create AIRSCORE_CACHE --preview
    ```
 
 2. Update `wrangler.toml` with namespace IDs

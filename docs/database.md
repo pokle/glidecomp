@@ -28,6 +28,15 @@ bunx wrangler d1 execute taskscore-auth \
 
 **Important:** Always pass `--remote` to execute against the production database. Without it, wrangler operates on the local dev database only.
 
+**Reading rows on `--remote` — use `--command`, not `--file`.** On `--remote`,
+`wrangler d1 execute --file` returns only an execution *summary* (`Rows read`,
+`Total queries executed`, …) instead of the SELECT result set, and prints
+progress lines (`├ Checking if file needs uploading`, spinner frames) to stdout
+before the JSON. `--command "<sql>"` returns the actual rows as clean JSON in
+both local and remote modes. Reserve `--file` for schema/DDL or large batched
+writes whose rows you don't read back. (This is why
+`web/scripts/seed-sample-comp.ts` reads via `--command` and writes via `--file`.)
+
 ## Sample competition
 
 `bun run seed:sample` loads the public sample competition (Corryong Cup 2026,

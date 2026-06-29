@@ -54,18 +54,40 @@ function wrangler(args: string[]): string {
   return res.stdout;
 }
 
-/** Run SQL (one or more statements) and return the parsed JSON result array. */
-function d1(sql: string): Array<{ results: Record<string, unknown>[] }> {
-  const tmp = join(mkdtempSync(join(tmpdir(), 'seed-')), 'q.sql');
-  writeFileSync(tmp, sql);
-  const out = wrangler(['d1', 'execute', DB_NAME, ...CONFIG, ...TARGET, '--json', '--file', tmp]);
-  // With --json wrangler prints only the JSON result to stdout.
-  return JSON.parse(out);
+/**
+ * Extract wrangler's JSON payload from stdout. On `--remote`, wrangler decorates
+ * stdout with progress lines ("├ Checking if file needs uploading", spinner
+ * frames, "🌀 Uploading …") before the JSON array, so the whole string isn't
+ * valid JSON — slice from the first `[`. (Warnings/banners go to stderr, which
+ * `wrangler()` discards, so they never reach here.)
+ */
+function parseWranglerJson(out: string): Array<{ results: Record<string, unknown>[] }> {
+  const start = out.indexOf('[');
+  if (start === -1) throw new Error(`Unexpected wrangler output (no JSON found):\n${out}`);
+  return JSON.parse(out.slice(start));
 }
 
-/** Convenience: run a single statement, return its rows. */
+/**
+ * Run write SQL (one or more statements) via --file, so large/batched bodies
+ * (the xctsk blob, 32-row pilot/track inserts) aren't capped by the shell
+ * argument length. The result is intentionally not read back: on `--remote` the
+ * --file path returns only an execution summary (not result rows), which is
+ * exactly why reads must use --command instead.
+ */
+function exec(sql: string): void {
+  const tmp = join(mkdtempSync(join(tmpdir(), 'seed-')), 'q.sql');
+  writeFileSync(tmp, sql);
+  wrangler(['d1', 'execute', DB_NAME, ...CONFIG, ...TARGET, '--json', '--file', tmp]);
+}
+
+/**
+ * Run a single read query and return its rows. Uses --command (not --file)
+ * because `--remote --file` returns an execution summary rather than the result
+ * set; --command returns the actual rows in both local and remote modes.
+ */
 function rows(sql: string): Record<string, unknown>[] {
-  return d1(sql)[0]?.results ?? [];
+  const out = wrangler(['d1', 'execute', DB_NAME, ...CONFIG, ...TARGET, '--json', '--command', sql]);
+  return parseWranglerJson(out)[0]?.results ?? [];
 }
 
 function r2Put(key: string, file: string): void {
@@ -174,7 +196,7 @@ function main(): void {
        JOIN task t ON tt.task_id = t.task_id WHERE t.comp_id = ${compId};`,
     );
     for (const r of oldKeys) r2Delete(String(r.k));
-    d1(
+    exec(
       [
         `DELETE FROM task_track WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
         `DELETE FROM task_pilot_status WHERE comp_id = ${compId};`,
@@ -187,7 +209,7 @@ function main(): void {
       ].join('\n'),
     );
   } else {
-    d1(
+    exec(
       `INSERT INTO comp (name, creation_date, category, test, pilot_classes, default_pilot_class)
        VALUES (${q(SAMPLE_COMP_NAME)}, ${q(today)}, 'hg', 0, '["open"]', 'open');`,
     );
@@ -196,17 +218,17 @@ function main(): void {
   }
 
   // 2) Task + its scored class.
-  d1(
+  exec(
     `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk)
      VALUES (${compId}, 'Task 1', ${q(taskDate)}, ${q(today)}, ${q(xctsk)});`,
   );
   const taskId = Number(
     rows(`SELECT task_id FROM task WHERE comp_id = ${compId} ORDER BY task_id LIMIT 1;`)[0].task_id,
   );
-  d1(`INSERT INTO task_class (task_id, pilot_class) VALUES (${taskId}, 'open');`);
+  exec(`INSERT INTO task_class (task_id, pilot_class) VALUES (${taskId}, 'open');`);
 
   // 3) comp_pilot rows (one per pilot), then read back their ids by name.
-  d1(
+  exec(
     pilots
       .map(
         (p) =>
@@ -240,7 +262,7 @@ function main(): void {
     );
     if (++n % 10 === 0) console.log(`  uploaded ${n}/${pilots.length} tracks…`);
   }
-  d1(trackInserts.join('\n'));
+  exec(trackInserts.join('\n'));
 
   console.log(`\nDone. comp_id=${compId} task_id=${taskId} (${n} tracks)`);
   console.log(`  Sample 3dvis: GET /api/comp/sample-3dvis`);

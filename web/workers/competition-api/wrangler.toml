@@ -33,8 +33,8 @@ inspector_port = 9231
 binding = "glidecomp_scores_cache"
 id = "dcf6eb84eca04b46880c3b48c51bdd3c"
 preview_id = "fc7d966cba2c40fdb52c83c7a88c217e"
-# Run to create: bun run wrangler2 kv namespace create glidecomp_scores_cache
-#                bun run wrangler2 kv namespace create glidecomp_scores_cache --preview
+# Run to create: bunx wrangler kv namespace create glidecomp_scores_cache
+#                bunx wrangler kv namespace create glidecomp_scores_cache --preview
 
 [[routes]]
 pattern = "glidecomp.com/api/comp"
