@@ -76,6 +76,44 @@ function makeCollapsible(headerId: string, bodyId: string, chevronId: string): v
   });
 }
 
+/**
+ * Mobile (< md): the floating View / Pilots / Gaggles panels are docked as
+ * bottom sheets (CSS), shown one at a time. The #mobileBar tab strip toggles
+ * them — opening one closes the others and expands its body (in case it was
+ * collapsed on desktop). Above md the bar is hidden and panels float as normal.
+ */
+function setupMobilePanels(): void {
+  const bar = document.getElementById('mobileBar');
+  if (!bar) return;
+  // panel id → [body id, chevron id] so we can force-expand on open
+  const panels: Record<string, [string, string]> = {
+    viewPanel: ['viewBody', 'viewChevron'],
+    pilotPanel: ['pilotsBody', 'pilotsChevron'],
+    gagglePanelWrap: ['gagglesBody', 'gagglesChevron'],
+  };
+  const tabs = Array.from(bar.querySelectorAll<HTMLButtonElement>('.mob-tab'));
+  const setActive = (id: string | null): void =>
+    tabs.forEach((t) => t.classList.toggle('active', t.dataset.panel === id));
+
+  for (const tab of tabs) {
+    tab.addEventListener('click', () => {
+      const id = tab.dataset.panel!;
+      const el = document.getElementById(id);
+      if (!el) return;
+      const willOpen = !el.classList.contains('open');
+      for (const pid of Object.keys(panels)) document.getElementById(pid)?.classList.remove('open');
+      if (willOpen) {
+        const [bodyId, chevId] = panels[id];
+        document.getElementById(bodyId)?.classList.remove('hidden');
+        const chev = document.getElementById(chevId);
+        if (chev) chev.textContent = '▼';
+        el.classList.add('open');
+      }
+      setActive(willOpen ? id : null);
+    });
+  }
+}
+
 /** Round n down to a "nice" 1/2/5×10^k value for the scale bar. */
 function niceNumber(n: number): number {
   const exp = Math.floor(Math.log10(n));
@@ -159,6 +197,9 @@ async function main(): Promise<void> {
   makeCollapsible('viewHeader', 'viewBody', 'viewChevron');
   makeCollapsible('pilotsHeader', 'pilotsBody', 'pilotsChevron');
   makeCollapsible('gagglesHeader', 'gagglesBody', 'gagglesChevron');
+
+  // --- mobile: open one control panel at a time as a bottom sheet ---
+  setupMobilePanels();
 
   // --- playback controls ---
   $('playPause').addEventListener('click', () => viewer.togglePlay());
