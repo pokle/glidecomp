@@ -54,7 +54,7 @@ Date: 2026-04-05
 │                                   Name, CIVL ID, sporting body IDs, phone, glider
 │
 ├── /settings                       Account settings (auth required)
-│                                   API keys for MCP agent access, future account config
+│                                   API keys for programmatic access, future account config
 │
 ├── /scores?comp={id}               Public scores deep-link (no auth)
 │
@@ -264,7 +264,7 @@ Simple form page:
 
 Account-level configuration, separate from pilot identity.
 
-- **Agent Access**: API keys for connecting AI agents (Claude, Cursor) via the MCP server. Create, list, and revoke keys.
+- **API Access**: API keys for programmatic access to the GlideComp API. Create, list, and revoke keys.
 - Future: notification preferences, account security, danger zone (delete account).
 
 ---

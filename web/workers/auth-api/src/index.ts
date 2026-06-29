@@ -247,9 +247,9 @@ app.post("/api/auth/dev-login", async (c) => {
 });
 
 // API key create/list/delete are handled by the @better-auth/api-key plugin
-// via the catch-all handler below. The MCP worker verifies API keys by calling
-// GET /api/auth/me with the x-api-key header — enableSessionForAPIKeys makes
-// this return the user associated with the key.
+// via the catch-all handler below. Programmatic clients verify API keys by
+// calling GET /api/auth/me with the x-api-key header — enableSessionForAPIKeys
+// makes this return the user associated with the key.
 
 // Per-user preferences storage (registered before the better-auth catch-all
 // so /api/auth/preferences resolves here, not to better-auth's handler).

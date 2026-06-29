@@ -565,9 +565,13 @@ All workflows covered by 8d (read-only table + Edit-as-text modal + CSV import/e
 - [ ] Implement user account deletion cascade (via auth-api): delete pilot → comp_pilot → task_track; if last admin → delete entire comp
 - [ ] Write integration tests for cascade scenarios
 
-## Iteration 12: http MCP server
+## Iteration 12: Web MCP server
 
-- [ ] Add a http MCP server that first authenticates users via a web browser
+The earlier http MCP server (a standalone Cloudflare Worker with server-side
+API-key auth) was an experiment that has been removed. Revisit later as a Web
+MCP server that reuses the browser session.
+
+- [ ] Add a Web MCP server that authenticates users via the browser session
 - [ ] MCP command to list all existing competitions
 - [ ] MCP command to list tasks for competitions
 - [ ] MCP command to make changes to the pilot list (E.g. "Add civl ID 1234 to Bart Flyer")

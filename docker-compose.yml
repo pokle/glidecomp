@@ -32,7 +32,7 @@ services:
              cd web/frontend &&
              exec bunx --bun vite --host 0.0.0.0 --port 3000"
 
-  # All four Cloudflare workers run in a single container so they share the
+  # All Cloudflare workers run in a single container so they share the
   # same localhost — wrangler's dev registry (used to wire up service bindings
   # like competition-api → auth-api) is localhost-only and won't span
   # containers. Each wrangler dev runs in its own working directory so it
@@ -46,7 +46,6 @@ services:
       - "8787:8787"  # airscore-api
       - "8788:8788"  # auth-api
       - "8789:8789"  # competition-api
-      - "8790:8790"  # mcp-api
     volumes:
       - .:/app
       - node_modules:/app/node_modules

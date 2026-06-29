@@ -35,8 +35,6 @@
     "**/node_modules",
     "web/workers/competition-api/test",
     "web/workers/auth-api/src",
-    "web/workers/auth-api/test",
-    "web/workers/mcp-api/src",
-    "web/workers/mcp-api/test"
+    "web/workers/auth-api/test"
   ]
 }
