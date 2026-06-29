@@ -47,6 +47,8 @@ export class GaggleLayer {
   private pad: number;
   private labelWidth: number;
   private scratch: Pt[] = [];
+  /** When ≥0, this gaggle is emphasised and the others are dimmed. */
+  private highlight = -1;
 
   constructor(
     private gaggles: GaggleResult,
@@ -167,7 +169,9 @@ export class GaggleLayer {
       if (this.scratch.length < 2) continue; // need ≥2 to draw an envelope
       cy /= this.scratch.length;
 
-      const alpha = clamp(Math.min(t - ep.tStart, ep.tEnd - t) / fade, 0, 1);
+      let alpha = clamp(Math.min(t - ep.tStart, ep.tEnd - t) / fade, 0, 1);
+      // Emphasise the highlighted gaggle, dim the rest.
+      if (this.highlight >= 0 && ep.id !== this.highlight) alpha *= 0.22;
       if (this.drawBlob(this.blobs[bi], this.scratch, cy, ep.id, members.length, alpha)) bi++;
     }
     for (; bi < this.blobs.length; bi++) this.hide(this.blobs[bi]);
@@ -259,6 +263,16 @@ export class GaggleLayer {
     ctx.fillText(String(count), s / 2, s / 2);
     blob.labelTex.needsUpdate = true;
     blob.labelCount = count;
+  }
+
+  /** Emphasise gaggle `id` (others dimmed); -1 clears. */
+  setHighlight(id: number): void {
+    this.highlight = id;
+  }
+
+  /** Show/hide the whole gaggle overlay. */
+  setVisible(visible: boolean): void {
+    this.group.visible = visible;
   }
 
   private hide(blob: Blob): void {

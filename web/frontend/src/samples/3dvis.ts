@@ -10,6 +10,8 @@
 import { ReplayViewer, type ColorMode, type HoverInfo } from './replay-viewer';
 import { MAP_STYLES, DEFAULT_MAP_STYLE } from './map-styles';
 import { VARIO_MAX } from './flight-scene';
+import { GaggleUI } from './gaggle-ui';
+import type { GaggleResult } from './gaggles';
 import type { TrackManifest } from '@glidecomp/engine';
 
 const DATA_BASE = '/samples/3dvis';
@@ -109,8 +111,11 @@ async function main(): Promise<void> {
 
   // --- stats line ---
   const durMin = ((manifest.t1 - manifest.t0) / 60).toFixed(0);
-  $('stats').textContent =
-    `${manifest.pilots.length} pilots · ${(manifest.vertexCount / 1000).toFixed(0)}k fixes · ${durMin} min · ${viewer.gaggleCount} gaggles · drag to orbit`;
+  function updateStats(): void {
+    $('stats').textContent =
+      `${manifest.pilots.length} pilots · ${(manifest.vertexCount / 1000).toFixed(0)}k fixes · ${durMin} min · ${viewer.gaggleCount} gaggles · drag to orbit`;
+  }
+  updateStats();
 
   // --- scrubber + clock ---
   const duration = manifest.t1 - manifest.t0;
@@ -119,9 +124,11 @@ async function main(): Promise<void> {
   const tz = manifest.timezone; // comp IANA zone, or undefined → browser zone
   $('clockZone').textContent = zoneLabel(new Date(manifest.t0 * 1000), tz);
 
+  let gaggleUI: GaggleUI | undefined;
   function onTime(t: number): void {
     $('clock').textContent = clockLocal(manifest.t0 + t, tz);
     if (!scrubbing) scrubber.value = String(Math.round((t / duration) * 1000));
+    gaggleUI?.setTime(t);
   }
   scrubber.addEventListener('pointerdown', () => {
     scrubbing = true;
@@ -138,6 +145,7 @@ async function main(): Promise<void> {
   // --- collapsible panels ---
   makeCollapsible('viewHeader', 'viewBody', 'viewChevron');
   makeCollapsible('pilotsHeader', 'pilotsBody', 'pilotsChevron');
+  makeCollapsible('gagglesHeader', 'gagglesBody', 'gagglesChevron');
 
   // --- playback controls ---
   $('playPause').addEventListener('click', () => viewer.togglePlay());
@@ -333,6 +341,82 @@ async function main(): Promise<void> {
     rows.forEach((r) => r.classList.toggle('opacity-40', allHidden));
     $('toggleAll').textContent = allHidden ? 'show all' : 'hide all';
   });
+
+  // --- gaggle ribbon + panel ---
+  function showGaggleFollow(id: number): void {
+    const ep = viewer.gaggleResult?.episodes.find((e) => e.id === id);
+    followIdx = -1;
+    rows.forEach((r) => r.classList.remove('bg-slate-700/60'));
+    $('followName').textContent = ep ? `${ep.peakSize}-pilot gaggle` : 'gaggle';
+    $('followBar').classList.remove('hidden');
+  }
+  function buildGaggleUI(result: GaggleResult): GaggleUI {
+    return new GaggleUI({
+      ribbon: $('gaggleRibbon'),
+      list: $('gaggleList'),
+      tooltip: $('tooltip'),
+      result,
+      manifest,
+      duration,
+      fmtTime: (tRel) => clockLocal(manifest.t0 + tRel, tz),
+      onSeek: (t) => {
+        viewer.setPlaying(false);
+        viewer.setTime(t);
+      },
+      onFollow: (id) => {
+        viewer.setFollowGaggle(id);
+        showGaggleFollow(id);
+      },
+      onHighlight: (id) => viewer.setGaggleHighlight(id),
+    });
+  }
+  if (viewer.gaggleResult) gaggleUI = buildGaggleUI(viewer.gaggleResult);
+  gaggleUI?.setTime(0);
+
+  // show/hide the in-scene overlay
+  let gaggleShown = true;
+  $('gaggleToggle').addEventListener('click', (e) => {
+    e.stopPropagation();
+    gaggleShown = !gaggleShown;
+    viewer.setGaggleVisible(gaggleShown);
+    $('gaggleToggle').textContent = gaggleShown ? 'hide' : 'show';
+  });
+
+  // "active now" filter for the panel list
+  let activeOnly = false;
+  $('gaggleActiveOnly').addEventListener('click', (e) => {
+    e.stopPropagation();
+    activeOnly = !activeOnly;
+    gaggleUI?.setActiveOnly(activeOnly);
+    const btn = $('gaggleActiveOnly');
+    btn.classList.toggle('text-lime-400', activeOnly);
+    btn.classList.toggle('text-slate-400', !activeOnly);
+    gaggleUI?.setTime(viewer.currentTime);
+  });
+
+  // dev-only threshold sliders — re-run detection live
+  if (import.meta.env.DEV) {
+    $('gaggleDev').classList.remove('hidden');
+    const ggR = $<HTMLInputElement>('ggRadius');
+    const ggB = $<HTMLInputElement>('ggBand');
+    const ggM = $<HTMLInputElement>('ggMin');
+    const recompute = (): void => {
+      const result = viewer.recomputeGaggles({
+        horizontalRadius: Number(ggR.value),
+        verticalBand: Number(ggB.value),
+        minPilots: Number(ggM.value),
+      });
+      $('ggRadiusVal').textContent = `${ggR.value} m`;
+      $('ggBandVal').textContent = `${ggB.value} m`;
+      $('ggMinVal').textContent = ggM.value;
+      gaggleUI?.destroy();
+      gaggleUI = buildGaggleUI(result);
+      gaggleUI.setActiveOnly(activeOnly);
+      gaggleUI.setTime(viewer.currentTime);
+      updateStats();
+    };
+    for (const el of [ggR, ggB, ggM]) el.addEventListener('change', recompute);
+  }
 
   // --- colour scale legend (altitude / vertical speed) ---
   const ALT_GRADIENT =

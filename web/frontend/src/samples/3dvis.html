@@ -152,8 +152,47 @@
       </button>
     </div>
 
+    <!-- right: gaggle panel -->
+    <div id="gagglePanelWrap" class="absolute right-3 bottom-28 z-20 w-60 rounded-lg panel shadow-xl flex flex-col"
+      style="max-height: 42vh;">
+      <div id="gagglesHeader" class="flex items-center gap-2 px-3 py-2 border-b border-slate-700/60 cursor-pointer select-none" title="Collapse panel">
+        <span id="gagglesChevron" class="text-slate-400 hover:text-slate-200 text-xl leading-none">▼</span>
+        <span class="text-[11px] uppercase tracking-wide text-slate-400 flex-1">Gaggles</span>
+        <button id="gaggleActiveOnly" class="text-[11px] text-slate-400 hover:text-slate-200" title="Show only gaggles active at the current time">active now</button>
+        <button id="gaggleToggle" class="text-[11px] text-lime-400 hover:underline" title="Show/hide the gaggle overlay">hide</button>
+      </div>
+      <div id="gagglesBody" class="flex-1 min-h-0 flex flex-col">
+        <ul id="gaggleList" class="flex-1 min-h-0 overflow-y-auto py-1 text-xs"></ul>
+        <!-- dev-only threshold sliders (unhidden in DEV) -->
+        <div id="gaggleDev" class="hidden px-3 py-2 border-t border-slate-700/60 space-y-2">
+          <div>
+            <label class="flex justify-between text-[10px] uppercase tracking-wide text-slate-400">
+              <span>Radius</span><span id="ggRadiusVal" class="text-slate-300 normal-case">400 m</span>
+            </label>
+            <input id="ggRadius" type="range" min="100" max="1000" step="50" value="400" class="w-full">
+          </div>
+          <div>
+            <label class="flex justify-between text-[10px] uppercase tracking-wide text-slate-400">
+              <span>Vert band</span><span id="ggBandVal" class="text-slate-300 normal-case">300 m</span>
+            </label>
+            <input id="ggBand" type="range" min="100" max="800" step="50" value="300" class="w-full">
+          </div>
+          <div>
+            <label class="flex justify-between text-[10px] uppercase tracking-wide text-slate-400">
+              <span>Min pilots</span><span id="ggMinVal" class="text-slate-300 normal-case">2</span>
+            </label>
+            <input id="ggMin" type="range" min="2" max="6" step="1" value="2" class="w-full">
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- bottom: timeline -->
     <div class="absolute inset-x-3 bottom-3 z-20 rounded-lg panel px-4 py-3 shadow-xl">
+      <!-- gaggle ribbon, inset to line up with the scrubber track -->
+      <div class="mb-2" style="margin-left: 144px; margin-right: 76px;">
+        <div id="gaggleRibbon" class="relative"></div>
+      </div>
       <div class="flex items-center gap-3">
         <button id="playPause"
           class="shrink-0 rounded-full bg-lime-500 hover:bg-lime-400 text-slate-900 w-10 h-10 grid place-items-center font-bold transition-colors"

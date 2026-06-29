@@ -334,6 +334,27 @@ export class FlightScene {
     this.group.add(this.gaggleLayer.group);
   }
 
+  /** Replace the gaggle data and rebuild the blob layer (dev recompute). */
+  setGaggles(gaggles: GaggleResult): void {
+    this.gaggles = gaggles;
+    if (this.gaggleLayer) {
+      this.group.remove(this.gaggleLayer.group);
+      this.gaggleLayer.dispose();
+      this.gaggleLayer = undefined;
+    }
+    this.buildGaggleLayer();
+  }
+
+  /** Show/hide the gaggle blob overlay. */
+  setGaggleVisible(visible: boolean): void {
+    this.gaggleLayer?.setVisible(visible);
+  }
+
+  /** Emphasise one gaggle (others dimmed); -1 clears. */
+  setGaggleHighlight(id: number): void {
+    this.gaggleLayer?.setHighlight(id);
+  }
+
   // --- per-frame -----------------------------------------------------------
 
   setTime(t: number): void {
