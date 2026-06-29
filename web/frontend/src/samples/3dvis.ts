@@ -14,7 +14,20 @@ import { GaggleUI } from './gaggle-ui';
 import type { GaggleResult } from './gaggles';
 import type { TrackManifest } from '@glidecomp/engine';
 
-const DATA_BASE = '/samples/3dvis';
+/**
+ * The replay data now comes from the competition-api Worker as a single packed
+ * bundle. By default we show the seeded public sample competition (resolved by
+ * name server-side, so no environment-specific id is needed); `?comp=&task=`
+ * points the same viewer at any competition task the user may view.
+ */
+function bundleUrl(): string {
+  const q = new URLSearchParams(location.search);
+  const comp = q.get('comp');
+  const task = q.get('task');
+  return comp && task
+    ? `/api/comp/${encodeURIComponent(comp)}/task/${encodeURIComponent(task)}/3dvis`
+    : '/api/comp/sample-3dvis';
+}
 
 const $ = <T = HTMLElement>(id: string): T =>
   document.getElementById(id) as unknown as T;
@@ -95,7 +108,7 @@ async function main(): Promise<void> {
   );
 
   try {
-    const tracks = await viewer.load(`${DATA_BASE}/manifest.json`, `${DATA_BASE}/tracks.bin.gz`);
+    const tracks = await viewer.loadBundle(bundleUrl());
     manifest = tracks.manifest;
   } catch (err) {
     overlayText.textContent = `Could not load tracks: ${(err as Error).message}`;

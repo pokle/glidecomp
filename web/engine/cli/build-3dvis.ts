@@ -25,10 +25,7 @@ import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { find as findTimezone } from 'geo-tz';
 import { parseIGC } from '../src/igc-parser';
-import { parseXCTask, type XCTask } from '../src/xctsk-parser';
-import { calculateOptimizedTaskDistance } from '../src/task-optimizer';
-import { scoreTask, DEFAULT_GAP_PARAMETERS, type PilotFlight } from '../src/gap-scoring';
-import { packTracks, type PilotTrackInput } from '../src/track-packer';
+import { packTracksFromIgc, type PilotIgc } from '../src/track-pack-pipeline';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
 
@@ -44,26 +41,6 @@ function pilotIdFromFilename(file: string): string {
   return numeric ?? stem;
 }
 
-/** Run CIVL GAP scoring and copy each pilot's rank + total onto the pack input. */
-function applyScores(task: XCTask, pilots: PilotTrackInput[], flights: PilotFlight[]): number {
-  const params = { ...DEFAULT_GAP_PARAMETERS };
-  if (params.nominalDistance === undefined) {
-    params.nominalDistance = calculateOptimizedTaskDistance(task) * 0.7;
-  }
-  const result = scoreTask(task, flights, params);
-  const byName = new Map(result.pilotScores.map((ps) => [ps.pilotName, ps]));
-  let n = 0;
-  for (const p of pilots) {
-    const ps = byName.get(p.name);
-    if (ps) {
-      p.rank = ps.rank;
-      p.score = ps.totalScore;
-      n++;
-    }
-  }
-  return n;
-}
-
 function main(): void {
   const entries = readdirSync(compDir);
   const igcFiles = entries.filter((f) => f.toLowerCase().endsWith('.igc')).sort();
@@ -72,63 +49,30 @@ function main(): void {
     process.exit(1);
   }
 
-  // Task is optional context for the viewer.
-  let task;
   const taskFile = entries.find((f) => f.toLowerCase().endsWith('.xctsk'));
-  if (taskFile) {
-    try {
-      task = parseXCTask(readFileSync(join(compDir, taskFile), 'utf-8'));
-    } catch (err) {
-      console.warn(`Could not parse task ${taskFile}: ${(err as Error).message}`);
-    }
-  }
+  const taskXctsk = taskFile ? readFileSync(join(compDir, taskFile), 'utf-8') : undefined;
 
-  const pilots: PilotTrackInput[] = [];
-  const flights: PilotFlight[] = [];
-  let skipped = 0;
-  for (const file of igcFiles) {
-    const igc = parseIGC(readFileSync(join(compDir, file), 'utf-8'));
-    if (igc.fixes.length === 0) {
-      skipped++;
-      console.warn(`  skip ${file}: no fixes`);
-      continue;
+  // Resolve the comp's IANA timezone from the first fix (offline, via geo-tz) so
+  // the viewer can show the comp's local time regardless of who's watching.
+  let timezone: string | undefined;
+  const pilots: PilotIgc[] = igcFiles.map((file) => {
+    const text = readFileSync(join(compDir, file), 'utf-8');
+    const igc = parseIGC(text);
+    if (timezone === undefined && igc.fixes.length > 0) {
+      try {
+        timezone = findTimezone(igc.fixes[0].latitude, igc.fixes[0].longitude)[0];
+      } catch {
+        /* leave unresolved */
+      }
     }
     const name = (igc.header.pilot || basename(file, '.igc')).replace(/\s+/g, ' ').trim();
-    const fixes = igc.fixes
-      .map((f) => ({
-        lat: f.latitude,
-        lon: f.longitude,
-        // Prefer GNSS altitude; fall back to pressure when GNSS is absent.
-        alt: f.gnssAltitude || f.pressureAltitude,
-        t: Math.round(f.time.getTime() / 1000),
-      }))
-      .sort((a, b) => a.t - b.t);
+    return { id: pilotIdFromFilename(file), name, igc: text };
+  });
 
-    pilots.push({ id: pilotIdFromFilename(file), name, fixes });
-    flights.push({ pilotName: name, fixes: igc.fixes });
-  }
-
-  // Score with CIVL GAP to order the pilot legend by result. Best-effort: if
-  // scoring throws (odd data / no task), the legend just falls back to name order.
-  let ranked = 0;
-  if (task) {
-    try {
-      ranked = applyScores(task, pilots, flights);
-    } catch (err) {
-      console.warn(`  scoring skipped: ${(err as Error).message}`);
-    }
-  }
-
-  const { manifest, data } = packTracks({ pilots, task });
-
-  // Resolve the comp's IANA timezone from the origin (offline, via geo-tz) so the
-  // viewer can show the comp's local time regardless of who's watching. The
-  // browser then applies the correct DST offset per fix date via Intl.
-  try {
-    manifest.timezone = findTimezone(manifest.origin.lat0, manifest.origin.lon0)[0];
-  } catch (err) {
-    console.warn(`  timezone lookup skipped: ${(err as Error).message}`);
-  }
+  // The shared pipeline parses, scores (GAP), and packs — identical to the Worker.
+  const { manifest, data } = packTracksFromIgc({ pilots, taskXctsk, timezone });
+  const ranked = manifest.pilots.filter((p) => p.rank != null).length;
+  const skipped = pilots.length - manifest.pilots.length;
 
   mkdirSync(outDir, { recursive: true });
   const raw = Buffer.from(data.buffer, data.byteOffset, data.byteLength);

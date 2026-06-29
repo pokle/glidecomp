@@ -12,7 +12,7 @@
  * resources bound to one context) and rebuilds them, re-applying all view state.
  */
 
-import { loadTracks, type LoadedTracks } from './track-data';
+import { loadTracks, loadTracksBundle, type LoadedTracks } from './track-data';
 import { detectGaggles, gagglesAt, type GaggleParams, type GaggleResult } from './gaggles';
 import { FlightScene, type ColorMode, type MarkerSample } from './flight-scene';
 import { AbstractBackend } from './abstract-backend';
@@ -77,8 +77,18 @@ export class ReplayViewer {
     private mapboxToken: string = '',
   ) {}
 
+  /** Load from a two-file static asset (manifest JSON + gzipped binary). */
   async load(manifestUrl: string, binUrl: string): Promise<LoadedTracks> {
-    this.tracks = await loadTracks(manifestUrl, binUrl);
+    return this.init(await loadTracks(manifestUrl, binUrl));
+  }
+
+  /** Load from a single Worker bundle (manifest + gzipped data in one fetch). */
+  async loadBundle(url: string): Promise<LoadedTracks> {
+    return this.init(await loadTracksBundle(url));
+  }
+
+  private async init(tracks: LoadedTracks): Promise<LoadedTracks> {
+    this.tracks = tracks;
     this.duration = this.tracks.manifest.t1 - this.tracks.manifest.t0;
     this.visibility = new Array(this.tracks.manifest.pilots.length).fill(true);
     this.gaggles = detectGaggles(this.tracks);

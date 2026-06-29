@@ -41,14 +41,40 @@ export interface Sample {
   altMsl: number;
 }
 
+/**
+ * Two-file load (static sample asset): a JSON manifest URL + a gzipped binary
+ * URL. Retained for the offline-built asset; the live path uses
+ * `loadTracksBundle`.
+ */
 export async function loadTracks(manifestUrl: string, binUrl: string): Promise<LoadedTracks> {
   const [manifest, buf] = await Promise.all([
     fetch(manifestUrl).then((r) => r.json() as Promise<TrackManifest>),
     fetchGzipped(binUrl),
   ]);
+  return assembleTracks(manifest, new Float32Array(buf));
+}
 
+/**
+ * Single-bundle load (Worker path): one fetch returns
+ * `[uint32 manifestLen][manifest JSON][gzipped Float32 data]`. The frontend
+ * reads the length, parses the manifest, and gunzips the rest.
+ */
+export async function loadTracksBundle(url: string): Promise<LoadedTracks> {
+  const res = await fetch(url, { credentials: 'include' });
+  if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
+  const buf = await res.arrayBuffer();
+  if (buf.byteLength < 4) throw new Error('3dvis bundle truncated');
+  const manifestLen = new DataView(buf).getUint32(0, true);
+  const manifest = JSON.parse(
+    new TextDecoder().decode(new Uint8Array(buf, 4, manifestLen)),
+  ) as TrackManifest;
+  const data = new Float32Array(await gunzip(buf.slice(4 + manifestLen)));
+  return assembleTracks(manifest, data);
+}
+
+/** De-interleave the packed `[x,y,z,tRel]` floats into the viewer's buffers. */
+function assembleTracks(manifest: TrackManifest, data: Float32Array): LoadedTracks {
   const fpv = manifest.floatsPerVertex;
-  const data = new Float32Array(buf);
   const N = data.length / fpv;
 
   const pos = new Float32Array(N * 3);
@@ -87,6 +113,12 @@ export async function loadTracks(manifestUrl: string, binUrl: string): Promise<L
   }
 
   return { manifest, pos, time, pilotIndex, index, vario };
+}
+
+/** Gunzip an ArrayBuffer via the platform DecompressionStream. */
+async function gunzip(buf: ArrayBuffer): Promise<ArrayBuffer> {
+  const stream = new Response(buf).body!.pipeThrough(new DecompressionStream('gzip'));
+  return new Response(stream).arrayBuffer();
 }
 
 async function fetchGzipped(url: string): Promise<ArrayBuffer> {
