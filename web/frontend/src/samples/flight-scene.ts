@@ -20,7 +20,8 @@
 
 import * as THREE from 'three';
 import { samplePilot, type LoadedTracks } from './track-data';
-import { gagglesAt, gaggleColor, type GaggleResult } from './gaggles';
+import { type GaggleResult } from './gaggles';
+import { GaggleLayer } from './gaggle-layer';
 
 export type ColorMode = 'pilot' | 'altitude' | 'vario';
 
@@ -64,11 +65,10 @@ export class FlightScene {
   private width = 3; // trail width in CSS px
   private disposed = false;
 
-  // gaggle overlay (Phase 0): a pool of reusable ground rings, one per active
-  // gaggle, repositioned/scaled each frame from live member samples.
+  // gaggle overlay (Phase 2): translucent hull blobs + count labels, recomputed
+  // each frame from live member samples (see GaggleLayer).
   private gaggles?: GaggleResult;
-  private gaggleRings: THREE.LineLoop[] = [];
-  private gaggleGroup = new THREE.Group();
+  private gaggleLayer?: GaggleLayer;
 
   constructor(tracks: LoadedTracks, gaggles?: GaggleResult) {
     this.tracks = tracks;
@@ -76,7 +76,7 @@ export class FlightScene {
     this.buildTrails();
     this.buildMarkers();
     this.buildTaskGeometry();
-    this.buildGaggleRings();
+    this.buildGaggleLayer();
   }
 
   get alt0(): number {
@@ -256,80 +256,11 @@ export class FlightScene {
     }
   }
 
-  /**
-   * Build a pool of unit-circle LineLoops (radius 1, in the XZ plane) — one per
-   * possible simultaneous gaggle — reused each frame by `updateGaggles`. Sized to
-   * the most gaggles that can coexist (field / minPilots), so we never allocate
-   * in the render loop.
-   */
-  private buildGaggleRings(): void {
-    this.group.add(this.gaggleGroup);
+  /** Build the gaggle blob layer (hull + label pool) and host it in the group. */
+  private buildGaggleLayer(): void {
     if (!this.gaggles) return;
-    const minPilots = Math.max(2, this.gaggles.params.minPilots);
-    const pool = Math.max(4, Math.ceil(this.nPilots / minPilots));
-    const segs = 64;
-    const pts: THREE.Vector3[] = [];
-    for (let i = 0; i < segs; i++) {
-      const a = (i / segs) * Math.PI * 2;
-      pts.push(new THREE.Vector3(Math.cos(a), 0, Math.sin(a)));
-    }
-    const geom = new THREE.BufferGeometry().setFromPoints(pts);
-    for (let i = 0; i < pool; i++) {
-      const ring = new THREE.LineLoop(
-        geom,
-        new THREE.LineBasicMaterial({ transparent: true, opacity: 0.9, depthTest: false }),
-      );
-      ring.frustumCulled = false;
-      ring.visible = false;
-      ring.renderOrder = 6;
-      this.gaggleRings.push(ring);
-      this.gaggleGroup.add(ring);
-    }
-  }
-
-  /**
-   * Position/scale one ring per gaggle active at time `t`, enclosing its current
-   * members at their mean (exaggerated) altitude. Uses `this.samplesOut`, so it
-   * must run after `updateMarkers` has refreshed them.
-   */
-  private updateGaggles(t: number): void {
-    if (!this.gaggles || this.gaggleRings.length === 0) return;
-    const active = gagglesAt(this.gaggles, t);
-    let ri = 0;
-    for (const g of active) {
-      if (ri >= this.gaggleRings.length) break;
-      let cx = 0;
-      let cy = 0;
-      let cz = 0;
-      let n = 0;
-      for (const m of g.members) {
-        const s = this.samplesOut[m];
-        if (!s || !s.active) continue;
-        cx += s.x;
-        cy += s.y; // already × vScale
-        cz += s.z;
-        n++;
-      }
-      if (n < 2) continue; // need ≥2 visible members to draw an envelope
-      cx /= n;
-      cy /= n;
-      cz /= n;
-      let maxD = 0;
-      for (const m of g.members) {
-        const s = this.samplesOut[m];
-        if (!s || !s.active) continue;
-        const d = Math.hypot(s.x - cx, s.z - cz);
-        if (d > maxD) maxD = d;
-      }
-      const radius = Math.max(maxD + this.extentXZ * 0.012, this.extentXZ * 0.02);
-      const ring = this.gaggleRings[ri++];
-      ring.position.set(cx, cy, cz);
-      ring.scale.set(radius, 1, radius);
-      const [r, gr, b] = gaggleColor(g.id);
-      (ring.material as THREE.LineBasicMaterial).color.setRGB(r, gr, b);
-      ring.visible = true;
-    }
-    for (; ri < this.gaggleRings.length; ri++) this.gaggleRings[ri].visible = false;
+    this.gaggleLayer = new GaggleLayer(this.gaggles, this.nPilots, this.extentXZ);
+    this.group.add(this.gaggleLayer.group);
   }
 
   // --- per-frame -----------------------------------------------------------
@@ -374,7 +305,7 @@ export class FlightScene {
       out.climb = s.climb;
     }
     this.markers.instanceMatrix.needsUpdate = true;
-    this.updateGaggles(t);
+    this.gaggleLayer?.update(t, this.samplesOut);
     return this.samplesOut;
   }
 
@@ -422,6 +353,7 @@ export class FlightScene {
       if (Array.isArray(m)) m.forEach((mm) => mm.dispose());
       else m?.dispose();
     };
+    this.gaggleLayer?.dispose();
     this.group.traverse(free);
     this.markers.geometry.dispose();
     (this.markers.material as THREE.Material).dispose();
