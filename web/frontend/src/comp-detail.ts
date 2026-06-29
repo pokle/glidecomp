@@ -1443,6 +1443,16 @@ async function setupScoreSection(compId: string, taskId: string) {
 
   scoresLink.href = `/scores?comp_id=${encodeURIComponent(compId)}`;
   scoresLink.classList.remove("hidden");
+
+  // Reveal the 3D replay link once the task has tracks to show (the bundle
+  // endpoint needs an xctsk + at least one track, both implied by a scored pilot).
+  if (data.classes.some((cls) => cls.pilots.length > 0)) {
+    const replayLink = document.getElementById("task-3dvis-link") as HTMLAnchorElement | null;
+    if (replayLink) {
+      replayLink.href = `/samples/3dvis?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}`;
+      replayLink.classList.remove("hidden");
+    }
+  }
 }
 
 // ── Comp detail view ─────────────────────────────────────────────────────────

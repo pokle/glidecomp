@@ -3,12 +3,12 @@
 A WebGL replay of a whole competition task: every pilot's IGC track rendered as
 time-animated 3D trajectories, scrubbable, in either an abstract free-orbit view
 or draped over a Mapbox satellite/terrain map. Lives at **`/samples/3dvis`**
-(static, no auth).
+(standalone page, no auth; track data comes from the competition-api Worker —
+see §8).
 
 This doc captures the architecture, the non-obvious decisions, and the gotchas
-that cost real time — so the next person (or the Worker port) doesn't re-learn
-them. It assumes the engineering brief (`flight-replay-3d-brief.md`, the original
-spec) as background.
+that cost real time. It assumes the original engineering brief (the spec the
+viewer was built from) as background.
 
 ---
 
@@ -74,14 +74,21 @@ IGC + task.xctsk ──▶ packTracksFromIgc() (pure) ──▶ manifest + Float
 
 ### Files
 
-Engine (build-time, no DOM):
+Engine (pure, no DOM — runs in both the Worker and the CLI):
 - `web/engine/src/track-packer.ts` — pure `packTracks()`: project, time-align,
   pack the binary + manifest, palette, task geometry. Exported from `index.ts`.
-- `web/engine/cli/build-3dvis.ts` — reads IGC + task, runs GAP scoring for ranks,
-  resolves the timezone (geo-tz), gzips, writes the asset.
+- `web/engine/src/track-pack-pipeline.ts` — `packTracksFromIgc()`: parse IGC →
+  GAP score → `packTracks`. Shared by the Worker and the CLI.
+- `web/engine/cli/build-3dvis.ts` — offline mirror: reads IGC + task, resolves
+  the timezone (geo-tz), gzips, writes the static asset.
+
+Worker (`web/workers/competition-api/src/`):
+- `visualization.ts` (`buildTask3dvisBundle`) + `routes/visualization.ts` — the
+  runtime path the page actually loads (see §8).
 
 Frontend (`web/frontend/src/samples/`):
-- `track-data.ts` — fetch + `DecompressionStream("gzip")` → typed arrays;
+- `track-data.ts` — `loadTracksBundle` (one Worker fetch) / `loadTracks`
+  (two-file mirror) + `DecompressionStream("gzip")` → typed arrays;
   per-vertex `aPilot`/`aVario`; `samplePilot()` binary-search + lerp.
 - `flight-scene.ts` — the backend-agnostic Three content + custom shaders.
 - `backend.ts` — the `Backend` interface.
@@ -394,6 +401,11 @@ file, so any user can view it and the same path serves any comp task.
   viewer falls back to the browser zone.
 - **Frontend:** `loadTracksBundle` in `track-data.ts` (one fetch, split manifest
   from gzipped data) → `ReplayViewer.loadBundle`. `3dvis.ts` builds the URL.
+- **Entry points:** the homepage links to the sample (`/samples/3dvis`, no
+  params → `sample-3dvis`). Every competition **task page** (`comp-detail.ts`)
+  and the **score page** (`scores.ts`) link to `/samples/3dvis?comp=<id>&task=<id>`
+  for their real tasks — the in-app path needs no `sample-3dvis` (the page knows
+  the ids). The task-page link appears once the task has scoreable tracks.
 
 ---
 
