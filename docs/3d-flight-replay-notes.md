@@ -306,6 +306,24 @@ its spherical from the position we set, with zero user input) and with follow
 deliberately **keep** the active follow; only Reset clears it. Terrain uses
 `map.easeTo({ bearing/pitch })`.
 
+### 5.14 Optimised task line — pre-project at build time, not runtime
+
+The viewer draws the same optimised (shortest) task line as the 2D analysis map.
+`calculateOptimizedTaskLine(task)` returns **lat/lon** tagging each cylinder
+edge, but the runtime has no lat/lon task (only the ENU manifest), so we run the
+optimiser in `packTracks()` and store the result pre-projected into ENU as
+`manifest.task.optimizedPath: {x,z}[]` (same `projX/projZ` as the turnpoints).
+`FlightScene.buildOptimizedPath()` then draws it as a flat `#6366f1` dashed
+`LineDashedMaterial` (call `computeLineDistances()` or the dash pattern is
+inert), with flat indigo arrowheads at each leg midpoint rotated by
+`rotation.y = −atan2(dz, dx)` to show course direction (legs shorter than the
+arrow are skipped). It lives in the shared `FlightScene.group`, so both backends
+get it for free; `depthTest: false` keeps it over the terrain like the rings.
+**The line starts at the takeoff centre, not an edge**, when turnpoint 0 is a
+`TAKEOFF` — FAI treats a takeoff as a fixed point (`firstTurnpointRadius` → 0),
+and this matches the 2D analysis map exactly. Don't "fix" it to start at the
+SSS edge; it's intentional and rule-correct.
+
 ---
 
 ## 6. Performance notes
