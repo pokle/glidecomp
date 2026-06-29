@@ -37,6 +37,15 @@ export interface GaggleParams {
   trackMinShared: number;
   /** How long a gaggle can vanish before its episode closes, seconds. */
   bridgeSeconds: number;
+  /**
+   * Hysteresis multiplier (≥ 1) that makes a formed cluster sticky. Forming a
+   * link needs the tight gates (`horizontalRadius` / `verticalBand`); but two
+   * pilots already clustered together in the previous frame stay linked until
+   * they drift past the *loosened* gates (radius/band × this factor). This damps
+   * boundary flapping — pilots hovering near the link distance no longer pop in
+   * and out of the gaggle frame-to-frame. 1 = no stickiness (memoryless).
+   */
+  stickyFactor: number;
 }
 
 export const DEFAULT_GAGGLE_PARAMS: GaggleParams = {
@@ -51,6 +60,9 @@ export const DEFAULT_GAGGLE_PARAMS: GaggleParams = {
   minDurationSeconds: 60,
   trackMinShared: 2,
   bridgeSeconds: 20,
+  // Once clustered, hold together until ~1.6× the link distance — a gaggle
+  // shouldn't dissolve just because a member drifts a little past the edge.
+  stickyFactor: 1.6,
 };
 
 /** One pilot's state at a grid time, in ENU metres (un-exaggerated). */
@@ -126,8 +138,17 @@ export interface GaggleResult {
  * because they mean different, independently-explainable things — "within X m
  * laterally and Y m vertically." A thermal is a tall column, so `verticalBand`
  * is deliberately generous.
+ *
+ * `prevClusters` (the previous frame's returned clusters) enables hysteresis:
+ * two pilots that were in the same cluster last frame stay linked out to the
+ * loosened gates (× `params.stickyFactor`), so a formed gaggle is sticky and
+ * doesn't flap apart when a member hovers near the link distance.
  */
-export function clusterFrame(states: PilotState[], params: GaggleParams): number[][] {
+export function clusterFrame(
+  states: PilotState[],
+  params: GaggleParams,
+  prevClusters?: number[][],
+): number[][] {
   const n = states.length;
   const parent = new Array<number>(n);
   for (let i = 0; i < n; i++) parent[i] = i;
@@ -138,17 +159,38 @@ export function clusterFrame(states: PilotState[], params: GaggleParams): number
     }
     return i;
   };
-  const h2 = params.horizontalRadius * params.horizontalRadius;
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      if (Math.abs(states[i].y - states[j].y) > params.verticalBand) continue;
-      const dx = states[i].x - states[j].x;
-      const dz = states[i].z - states[j].z;
-      if (dx * dx + dz * dz <= h2) {
-        parent[find(i)] = find(j);
-      }
+
+  const sticky = params.stickyFactor > 1 && !!prevClusters?.length;
+  // pilot id → previous-frame cluster index, for the hysteresis retain test
+  const prevGroup = sticky ? new Map<number, number>() : null;
+  if (prevGroup) {
+    for (let g = 0; g < prevClusters!.length; g++) {
+      for (const p of prevClusters![g]) prevGroup.set(p, g);
     }
   }
+
+  const tightH2 = params.horizontalRadius * params.horizontalRadius;
+  const looseH2 = tightH2 * params.stickyFactor * params.stickyFactor;
+  const tightV = params.verticalBand;
+  const looseV = params.verticalBand * params.stickyFactor;
+
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const dy = Math.abs(states[i].y - states[j].y);
+      const dx = states[i].x - states[j].x;
+      const dz = states[i].z - states[j].z;
+      const d2 = dx * dx + dz * dz;
+      let linked = dy <= tightV && d2 <= tightH2;
+      if (!linked && prevGroup) {
+        // Retain a previously-clustered pair out to the loosened gates.
+        const gi = prevGroup.get(states[i].pilot);
+        const gj = prevGroup.get(states[j].pilot);
+        if (gi !== undefined && gi === gj && dy <= looseV && d2 <= looseH2) linked = true;
+      }
+      if (linked) parent[find(i)] = find(j);
+    }
+  }
+
   const groups = new Map<number, number[]>();
   for (let i = 0; i < n; i++) {
     const r = find(i);
@@ -225,6 +267,8 @@ export function detectGaggles(
   };
 
   const sorted = frames.slice().sort((a, b) => a.t - b.t);
+  // Previous frame's clusters, fed back in for the hysteresis retain test.
+  let prevClusters: number[][] = [];
   for (const frame of sorted) {
     const t = frame.t;
 
@@ -238,7 +282,8 @@ export function detectGaggles(
       });
     }
 
-    const clusters = clusterFrame(states, params);
+    const clusters = clusterFrame(states, params, prevClusters);
+    prevClusters = clusters;
     const posByPilot = new Map<number, PilotState>();
     for (const s of states) posByPilot.set(s.pilot, s);
     const centroidOf = (members: number[]): { x: number; z: number } => {

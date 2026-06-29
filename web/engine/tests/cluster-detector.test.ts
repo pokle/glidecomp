@@ -18,6 +18,7 @@ const P: GaggleParams = {
   minDurationSeconds: 30,
   trackMinShared: 2,
   bridgeSeconds: 20,
+  stickyFactor: 1.6,
 };
 
 const st = (pilot: number, x: number, y: number, z: number): PilotState => ({ pilot, x, y, z });
@@ -57,6 +58,38 @@ describe('clusterFrame', () => {
   it('returns members sorted ascending regardless of input order', () => {
     const clusters = clusterFrame([st(5, 0, 1000, 0), st(2, 100, 1000, 0), st(9, 50, 1000, 0)], P);
     expect(clusters).toEqual([[2, 5, 9]]);
+  });
+});
+
+describe('clusterFrame — hysteresis (stickiness)', () => {
+  it('retains a previously-clustered pair that drifts into the loose band', () => {
+    // 500 m apart: beyond the tight 400 m link, within the loose 400×1.6 = 640 m
+    const states = [st(0, 0, 1000, 0), st(1, 500, 1000, 0)];
+    expect(clusterFrame(states, P)).toEqual([]); // no history → memoryless
+    expect(clusterFrame(states, P, [[0, 1]])).toEqual([[0, 1]]); // sticky → held
+  });
+
+  it('breaks a pair once it drifts past the loose band', () => {
+    const states = [st(0, 0, 1000, 0), st(1, 700, 1000, 0)]; // 700 > 640
+    expect(clusterFrame(states, P, [[0, 1]])).toEqual([]);
+  });
+
+  it('applies the same hysteresis to the vertical gate', () => {
+    // 400 m vertical gap: beyond tight 300, within loose 300×1.6 = 480
+    const states = [st(0, 0, 1000, 0), st(1, 0, 1400, 0)];
+    expect(clusterFrame(states, P)).toEqual([]);
+    expect(clusterFrame(states, P, [[0, 1]])).toEqual([[0, 1]]);
+  });
+
+  it('does not retain pilots that were not clustered together before', () => {
+    const states = [st(0, 0, 1000, 0), st(1, 500, 1000, 0)];
+    // prior history put them in *separate* clusters → no sticky link
+    expect(clusterFrame(states, P, [[0], [1]])).toEqual([]);
+  });
+
+  it('is memoryless when stickyFactor is 1', () => {
+    const states = [st(0, 0, 1000, 0), st(1, 500, 1000, 0)];
+    expect(clusterFrame(states, { ...P, stickyFactor: 1 }, [[0, 1]])).toEqual([]);
   });
 });
 
@@ -139,6 +172,21 @@ describe('detectGaggles — tracking', () => {
     // ...and the original's live membership has narrowed to {0,1} by the end.
     const original = episodes.find((e) => e.members.length === 4)!;
     expect(original.timeline.at(-1)!.members).toEqual([0, 1]);
+  });
+
+  it('stickiness keeps an oscillating pair as one continuous gaggle (anti-flap)', () => {
+    // The pair bounces between 100 m (tight) and 500 m (loose band) each frame.
+    const dists = [100, 500, 100, 500, 100];
+    const frames = dists.map((d, k) =>
+      frame(k * 10, [st(0, 0, 1000, 0), st(1, d, 1000, 0)]),
+    );
+    // Sticky: the 500 m frames are retained, so every frame is in the gaggle.
+    const sticky = detectGaggles(frames, P);
+    expect(sticky.episodes).toHaveLength(1);
+    expect(sticky.episodes[0].timeline.map((s) => s.t)).toEqual([0, 10, 20, 30, 40]);
+    // Memoryless: the 500 m frames drop out (bridged, but no snapshot) — flapping.
+    const flappy = detectGaggles(frames, { ...P, stickyFactor: 1 });
+    expect(flappy.episodes[0].timeline.map((s) => s.t)).toEqual([0, 20, 40]);
   });
 
   it('is deterministic — same input yields identical episodes', () => {
