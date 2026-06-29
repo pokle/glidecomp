@@ -13,6 +13,7 @@
  */
 
 import { loadTracks, type LoadedTracks } from './track-data';
+import { detectGaggles, type GaggleResult } from './gaggles';
 import { FlightScene, type ColorMode, type MarkerSample } from './flight-scene';
 import { AbstractBackend } from './abstract-backend';
 import { DEFAULT_MAP_STYLE } from './map-styles';
@@ -40,6 +41,7 @@ export interface ViewerCallbacks {
 
 export class ReplayViewer {
   private tracks!: LoadedTracks;
+  private gaggles?: GaggleResult;
   private scene!: FlightScene;
   private backend!: Backend;
   private backdrop: Backdrop = 'abstract';
@@ -75,8 +77,9 @@ export class ReplayViewer {
     this.tracks = await loadTracks(manifestUrl, binUrl);
     this.duration = this.tracks.manifest.t1 - this.tracks.manifest.t0;
     this.visibility = new Array(this.tracks.manifest.pilots.length).fill(true);
+    this.gaggles = detectGaggles(this.tracks);
 
-    this.scene = new FlightScene(this.tracks);
+    this.scene = new FlightScene(this.tracks, this.gaggles);
     this.applySceneState();
     this.backend = await this.makeBackend('abstract');
     this.backend.setVScale(this.vScale);
@@ -103,7 +106,7 @@ export class ReplayViewer {
       this.backend.dispose();
       this.scene.dispose();
 
-      this.scene = new FlightScene(this.tracks);
+      this.scene = new FlightScene(this.tracks, this.gaggles);
       this.applySceneState();
       this.backend = await this.makeBackend(mode);
       this.backend.setVScale(this.vScale);
@@ -235,6 +238,10 @@ export class ReplayViewer {
   }
   get currentTime(): number {
     return this.time;
+  }
+  /** Number of gaggle episodes detected across the task (Phase 0 spike). */
+  get gaggleCount(): number {
+    return this.gaggles?.episodes.length ?? 0;
   }
   get totalDuration(): number {
     return this.duration;

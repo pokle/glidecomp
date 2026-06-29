@@ -106,7 +106,7 @@ async function main(): Promise<void> {
   // --- stats line ---
   const durMin = ((manifest.t1 - manifest.t0) / 60).toFixed(0);
   $('stats').textContent =
-    `${manifest.pilots.length} pilots · ${(manifest.vertexCount / 1000).toFixed(0)}k fixes · ${durMin} min · drag to orbit`;
+    `${manifest.pilots.length} pilots · ${(manifest.vertexCount / 1000).toFixed(0)}k fixes · ${durMin} min · ${viewer.gaggleCount} gaggles · drag to orbit`;
 
   // --- scrubber + clock ---
   const duration = manifest.t1 - manifest.t0;
