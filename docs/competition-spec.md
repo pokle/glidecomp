@@ -401,7 +401,7 @@ Scoring fetches IGC files from R2 at query time and caches results in Workers KV
 - Leading coefficient computed correctly inside `scoreTask()` using all pilots' raw fixes
 
 - [x] Remove preprocessing machinery (`preprocess.ts`, queue, `/reprocess`, `flight_data` column)
-- [x] Add `SCORES_CACHE` KV namespace binding (run `bun run wrangler2 kv:namespace create SCORES_CACHE` to get production IDs)
+- [x] Add `SCORES_CACHE` KV namespace binding (run `bunx wrangler kv namespace create SCORES_CACHE` to get production IDs)
 - [x] Implement cache key computation (`src/scoring.ts` — SHA-256 of task state from D1)
 - [x] Implement `GET /api/comp/:comp_id/task/:task_id/score` with KV cache layer (`src/routes/score.ts`)
 - [x] Implement `GET /api/comp/:comp_id/scores` — aggregate across tasks, return overall standings per class

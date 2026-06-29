@@ -4,8 +4,8 @@ The KV store for the airscore-api:
 
 ```
 cd web/workers/airscore-api
-wrangler kv namespace create AIRSCORE_CACHE
-wrangler kv namespace create AIRSCORE_CACHE --preview
+bunx wrangler kv namespace create AIRSCORE_CACHE
+bunx wrangler kv namespace create AIRSCORE_CACHE --preview
 # Then update wrangler.toml with the returned IDs
 ```
 
