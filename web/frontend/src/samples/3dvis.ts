@@ -103,6 +103,10 @@ async function main(): Promise<void> {
 
   overlay.classList.add('hidden');
 
+  // Dev-only debug handle so the gaggle overlay can be inspected/driven from the
+  // console or automation (which gaggles are active at the current frame, etc.).
+  if (import.meta.env.DEV) (window as unknown as { __viewer: unknown }).__viewer = viewer;
+
   // --- stats line ---
   const durMin = ((manifest.t1 - manifest.t0) / 60).toFixed(0);
   $('stats').textContent =

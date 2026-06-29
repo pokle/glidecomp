@@ -38,7 +38,10 @@ export const DEFAULT_GAGGLE_PARAMS: GaggleParams = {
   stepSeconds: 10,
   horizontalRadius: 400,
   verticalBand: 300,
-  minPilots: 3,
+  // A pair flying together is already an interesting gaggle to watch — the
+  // start gaggle is filtered out separately (see startExclusion), so this can
+  // be 2 without flooding the pre-start loiter with tiny clusters.
+  minPilots: 2,
   minDurationSeconds: 60,
   trackMinShared: 2,
   bridgeSeconds: 20,
@@ -111,6 +114,21 @@ function clusterFrame(states: PilotState[], p: GaggleParams): number[][] {
   return out;
 }
 
+/** The start-of-speed-section cylinder in ENU metres, if the task has one. */
+function findStartCylinder(
+  manifest: LoadedTracks['manifest'],
+): { x: number; z: number; r2: number } | null {
+  const tps = manifest.task?.turnpoints;
+  if (!tps?.length) return null;
+  // Prefer the explicit speed-section start; fall back to anything that looks
+  // like a start turnpoint by type.
+  const tp =
+    tps.find((t) => t.type === 'SSS') ??
+    tps.find((t) => /SSS|START/i.test(t.type ?? ''));
+  if (!tp) return null;
+  return { x: tp.x, z: tp.z, r2: tp.radius * tp.radius };
+}
+
 function overlapCount(a: number[], b: number[]): number {
   // both sorted ascending
   let i = 0;
@@ -151,6 +169,16 @@ export function detectGaggles(
   const duration = manifest.t1 - manifest.t0;
   const nPilots = manifest.pilots.length;
 
+  // Start of the speed section: pilots loiter inside this cylinder waiting for
+  // the gate, then leave together. That pre-start gaggle isn't what we want to
+  // surface — the interesting gaggles form once pilots are on course. So a
+  // pilot only becomes eligible for clustering once they have left the start
+  // cylinder (been inside it, then crossed out). If the task has no identifiable
+  // start cylinder, everyone is eligible for the whole flight.
+  const start = findStartCylinder(manifest);
+  // Per-pilot latch: has this pilot ever been seen inside the start cylinder?
+  const wasInsideStart = new Array<boolean>(nPilots).fill(false);
+
   const open: OpenEpisode[] = [];
   const done: GaggleEpisode[] = [];
   let nextId = 0;
@@ -170,7 +198,19 @@ export function detectGaggles(
     states.length = 0;
     for (let i = 0; i < nPilots; i++) {
       const s = samplePilot(tracks, i, t, alt0);
-      if (s.active) states.push({ pilot: i, x: s.x, y: s.y, z: s.z });
+      if (!s.active) continue;
+      if (start) {
+        const dx = s.x - start.x;
+        const dz = s.z - start.z;
+        const inside = dx * dx + dz * dz <= start.r2;
+        if (inside) {
+          wasInsideStart[i] = true;
+          continue; // still in the start cylinder — not yet racing
+        }
+        // Outside, but only count them once they've actually made their start.
+        if (!wasInsideStart[i]) continue;
+      }
+      states.push({ pilot: i, x: s.x, y: s.y, z: s.z });
     }
     const clusters = clusterFrame(states, params);
 
