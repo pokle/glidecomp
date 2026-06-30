@@ -41,6 +41,16 @@
       }
       .mobile-sheet.open { transform: translateY(0); }
       .mob-tab.active { background: #84cc16; color: #0f172a; }
+
+      /* The timeline scrubber is the primary touch target — give it a much
+         taller hit area and a bigger thumb so fingers don't miss it. The
+         input's height defines the vertical tap tolerance; the track stays
+         centred within it. */
+      #scrubber { height: 2.75rem; }
+      #scrubber::-webkit-slider-runnable-track { height: 8px; }
+      #scrubber::-webkit-slider-thumb { width: 28px; height: 28px; margin-top: -10px; }
+      #scrubber::-moz-range-track { height: 8px; }
+      #scrubber::-moz-range-thumb { width: 28px; height: 28px; }
     }
 </style>
   <script type="module" src="/samples/3dvis.ts"></script>

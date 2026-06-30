@@ -278,20 +278,42 @@ export class FlightScene {
   }
 
   /**
-   * Flat indigo arrowheads laid on the ground at each leg's midpoint, pointing
+   * Flat indigo chevrons laid on the ground at each leg's midpoint, pointing
    * along the course so the direction of travel is unambiguous (mirrors the
-   * arrow icons the 2D analysis line carries). depthTest off so they read over
-   * the terrain in the map backend, like the dashed line and cylinder rings.
+   * arrow icons the 2D analysis line carries). A chevron (open ">" stroke)
+   * rather than a filled triangle, so it isn't mistaken for the triangular
+   * shadow a pilot cone casts. depthTest off so it reads over the terrain in
+   * the map backend, like the dashed line and cylinder rings.
    */
   private buildPathArrows(pts: THREE.Vector3[]): void {
     const size = Math.min(this.extentXZ * 0.02, 700); // metres (pre-exaggeration)
-    // A flat triangle in the XZ plane pointing toward +X (East); we then rotate
-    // it about Y so its tip faces the leg direction.
+    // A flat ">" chevron in the XZ plane pointing toward +X (East); we then
+    // rotate it about Y so its tip faces the leg direction. Built as two thick
+    // arms (an outer V minus an inner V offset back by the stroke width) so the
+    // back is concave — the hallmark of a chevron vs. a solid triangle.
+    const s = size; //   tip-forward extent
+    const zs = size * 0.6; // arm half-span (lateral, on Z)
+    const xb = -size * 0.15; // arm-back X (just behind the origin)
+    const d = size * 0.55; // stroke width along X
+    const O: [number, number] = [s, 0]; //          outer tip
+    const UA: [number, number] = [xb, zs]; //        outer upper arm-back
+    const LA: [number, number] = [xb, -zs]; //       outer lower arm-back
+    const I: [number, number] = [s - d, 0]; //       inner tip (the notch)
+    const UI: [number, number] = [xb - d, zs]; //    inner upper arm-back
+    const LI: [number, number] = [xb - d, -zs]; //   inner lower arm-back
+    const v = (p: [number, number]): number[] => [p[0], 0, p[1]];
     const geom = new THREE.BufferGeometry();
     geom.setAttribute(
       'position',
       new THREE.Float32BufferAttribute(
-        [size, 0, 0, -size * 0.6, 0, size * 0.6, -size * 0.6, 0, -size * 0.6],
+        [
+          // upper arm quad (UA, O, I, UI)
+          ...v(UA), ...v(O), ...v(I),
+          ...v(UA), ...v(I), ...v(UI),
+          // lower arm quad (O, LA, LI, I)
+          ...v(O), ...v(LA), ...v(LI),
+          ...v(O), ...v(LI), ...v(I),
+        ],
         3,
       ),
     );
@@ -303,12 +325,13 @@ export class FlightScene {
       depthTest: false,
       depthWrite: false,
     });
+    const minLeg = size * 2; // chevron spans ~1.7·size end-to-end; skip legs too short to fit it
     for (let i = 0; i < pts.length - 1; i++) {
       const a = pts[i];
       const b = pts[i + 1];
       const dx = b.x - a.x;
       const dz = b.z - a.z;
-      if (Math.hypot(dx, dz) < size * 1.5) continue; // skip legs too short to fit an arrow
+      if (Math.hypot(dx, dz) < minLeg) continue; // skip legs too short to fit a chevron
       const arrow = new THREE.Mesh(geom, mat);
       // heading clockwise from +X in the XZ plane: rotate about Y by -atan2(dz, dx)
       arrow.rotation.y = -Math.atan2(dz, dx);

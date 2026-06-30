@@ -63,53 +63,70 @@ function zoneLabel(refDate: Date, timeZone?: string): string {
   }
 }
 
-/** Clicking anywhere on a panel header toggles its body and flips the chevron. */
-function makeCollapsible(headerId: string, bodyId: string, chevronId: string): void {
-  const header = document.getElementById(headerId);
-  const body = document.getElementById(bodyId);
-  const chevron = document.getElementById(chevronId);
-  if (!header || !body || !chevron) return;
-  header.addEventListener('click', () => {
-    const collapsed = body.classList.toggle('hidden');
-    chevron.textContent = collapsed ? '▶' : '▼';
-    header.setAttribute('title', collapsed ? 'Expand panel' : 'Collapse panel');
-  });
-}
+/** panel wrapper id → header / body / chevron element ids. */
+const PANELS: Record<string, { header: string; body: string; chevron: string }> = {
+  viewPanel: { header: 'viewHeader', body: 'viewBody', chevron: 'viewChevron' },
+  pilotPanel: { header: 'pilotsHeader', body: 'pilotsBody', chevron: 'pilotsChevron' },
+  gagglePanelWrap: { header: 'gagglesHeader', body: 'gagglesBody', chevron: 'gagglesChevron' },
+};
+
+const isMobile = (): boolean => window.matchMedia('(max-width: 767px)').matches;
 
 /**
- * Mobile (< md): the floating View / Pilots / Gaggles panels are docked as
- * bottom sheets (CSS), shown one at a time. The #mobileBar tab strip toggles
- * them — opening one closes the others and expands its body (in case it was
- * collapsed on desktop). Above md the bar is hidden and panels float as normal.
+ * Wire the View / Pilots / Gaggles panel chrome for both layouts.
+ *
+ * Desktop: each panel floats in a corner; clicking its header collapses the
+ * body and flips the chevron (a real minimise).
+ *
+ * Mobile (< md): the panels dock as bottom sheets (CSS), shown one at a time.
+ * The #mobileBar tab strip opens a sheet (closing any other). On mobile the
+ * header click is NOT a body-collapse — that would leave a stray title bar
+ * floating over the map — so it closes the whole sheet, exactly like tapping
+ * the tab again. The chevron glyph therefore behaves the same as the tab.
  */
-function setupMobilePanels(): void {
+function setupPanels(): void {
   const bar = document.getElementById('mobileBar');
-  if (!bar) return;
-  // panel id → [body id, chevron id] so we can force-expand on open
-  const panels: Record<string, [string, string]> = {
-    viewPanel: ['viewBody', 'viewChevron'],
-    pilotPanel: ['pilotsBody', 'pilotsChevron'],
-    gagglePanelWrap: ['gagglesBody', 'gagglesChevron'],
-  };
-  const tabs = Array.from(bar.querySelectorAll<HTMLButtonElement>('.mob-tab'));
-  const setActive = (id: string | null): void =>
+  const tabs = bar ? Array.from(bar.querySelectorAll<HTMLButtonElement>('.mob-tab')) : [];
+  const setActiveTab = (id: string | null): void =>
     tabs.forEach((t) => t.classList.toggle('active', t.dataset.panel === id));
+
+  const closeSheets = (): void => {
+    for (const pid of Object.keys(PANELS)) document.getElementById(pid)?.classList.remove('open');
+    setActiveTab(null);
+  };
+  const openSheet = (id: string): void => {
+    closeSheets();
+    const { body, chevron } = PANELS[id];
+    document.getElementById(body)?.classList.remove('hidden'); // expand (may be collapsed from desktop)
+    const chev = document.getElementById(chevron);
+    if (chev) chev.textContent = '▼';
+    document.getElementById(id)?.classList.add('open');
+    setActiveTab(id);
+  };
 
   for (const tab of tabs) {
     tab.addEventListener('click', () => {
       const id = tab.dataset.panel!;
       const el = document.getElementById(id);
       if (!el) return;
-      const willOpen = !el.classList.contains('open');
-      for (const pid of Object.keys(panels)) document.getElementById(pid)?.classList.remove('open');
-      if (willOpen) {
-        const [bodyId, chevId] = panels[id];
-        document.getElementById(bodyId)?.classList.remove('hidden');
-        const chev = document.getElementById(chevId);
-        if (chev) chev.textContent = '▼';
-        el.classList.add('open');
+      if (el.classList.contains('open')) closeSheets();
+      else openSheet(id);
+    });
+  }
+
+  for (const [id, { header, body, chevron }] of Object.entries(PANELS)) {
+    const h = document.getElementById(header);
+    const b = document.getElementById(body);
+    const chev = document.getElementById(chevron);
+    if (!h || !b || !chev) continue;
+    h.addEventListener('click', () => {
+      if (isMobile()) {
+        closeSheets(); // header acts like the tab — close the sheet, don't half-collapse it
+        return;
       }
-      setActive(willOpen ? id : null);
+      const collapsed = b.classList.toggle('hidden');
+      chev.textContent = collapsed ? '▶' : '▼';
+      h.setAttribute('title', collapsed ? 'Expand panel' : 'Collapse panel');
     });
   }
 }
@@ -193,13 +210,8 @@ async function main(): Promise<void> {
   });
   onTime(0);
 
-  // --- collapsible panels ---
-  makeCollapsible('viewHeader', 'viewBody', 'viewChevron');
-  makeCollapsible('pilotsHeader', 'pilotsBody', 'pilotsChevron');
-  makeCollapsible('gagglesHeader', 'gagglesBody', 'gagglesChevron');
-
-  // --- mobile: open one control panel at a time as a bottom sheet ---
-  setupMobilePanels();
+  // --- panel chrome (desktop collapse / mobile bottom sheets) ---
+  setupPanels();
 
   // --- playback controls ---
   $('playPause').addEventListener('click', () => viewer.togglePlay());
