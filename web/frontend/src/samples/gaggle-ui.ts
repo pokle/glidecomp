@@ -46,6 +46,13 @@ export class GaggleUI {
   private rows = new Map<number, HTMLElement>();
   private activeOnly = false;
   private lastActiveKey = '';
+  /** The one gaggle row the user has tapped/clicked (-1 = none). */
+  private selectedId = -1;
+
+  // A single, unmistakable "selected" treatment for the tapped row. Kept
+  // distinct from the ribbon's active-now ring so the list reads as a
+  // single-select, never a multi-select.
+  private static readonly SELECTED = ['bg-lime-500/20', 'ring-1', 'ring-inset', 'ring-lime-500/50'];
 
   constructor(deps: GaggleUIDeps) {
     this.d = deps;
@@ -139,13 +146,25 @@ export class GaggleUI {
     return ids;
   }
 
-  /** Highlight ribbon bars + panel rows whose episode is live at `t`. */
+  /**
+   * Ring the ribbon bars whose episode is live at `t`. The panel rows are
+   * deliberately NOT marked here — only the explicitly selected row is
+   * highlighted (see applySelection), so the list always reads as a single
+   * selection rather than "every gaggle active right now".
+   */
   private markActive(t: number): void {
     const ids = this.activeIds(t);
     for (const [id, bar] of this.bars) {
       bar.style.boxShadow = ids.has(id) ? '0 0 0 1px rgba(248,250,252,0.9)' : 'none';
     }
-    for (const [id, row] of this.rows) row.classList.toggle('bg-slate-700/40', ids.has(id));
+  }
+
+  /** Paint the selected-row treatment on exactly the selected episode's row. */
+  private applySelection(): void {
+    for (const [id, row] of this.rows) {
+      const on = id === this.selectedId;
+      for (const c of GaggleUI.SELECTED) row.classList.toggle(c, on);
+    }
   }
 
   private refreshList(t?: number): void {
@@ -188,13 +207,16 @@ export class GaggleUI {
       li.addEventListener('pointerenter', () => this.d.onHighlight(ep.id));
       li.addEventListener('pointerleave', () => this.d.onHighlight(-1));
       li.addEventListener('click', () => {
-        this.d.onSeek(ep.tStart);
+        this.selectedId = ep.id; // single-select: this row only
+        this.applySelection();
+        this.d.onSeek(ep.tStart); // jump the timeline to the gaggle's start
         this.d.onFollow(ep.id);
         this.d.onHighlight(ep.id);
       });
       list.appendChild(li);
       this.rows.set(ep.id, li);
     }
+    this.applySelection(); // keep the selection painted across list rebuilds
   }
 
   // --- helpers -------------------------------------------------------------
