@@ -63,72 +63,37 @@ function zoneLabel(refDate: Date, timeZone?: string): string {
   }
 }
 
-/** panel wrapper id → header / body / chevron element ids. */
-const PANELS: Record<string, { header: string; body: string; chevron: string }> = {
-  viewPanel: { header: 'viewHeader', body: 'viewBody', chevron: 'viewChevron' },
-  pilotPanel: { header: 'pilotsHeader', body: 'pilotsBody', chevron: 'pilotsChevron' },
-  gagglePanelWrap: { header: 'gagglesHeader', body: 'gagglesBody', chevron: 'gagglesChevron' },
-};
-
-const isMobile = (): boolean => window.matchMedia('(max-width: 767px)').matches;
-
 /**
- * Wire the View / Pilots / Gaggles panel chrome for both layouts.
- *
- * Desktop: each panel floats in a corner; clicking its header collapses the
- * body and flips the chevron (a real minimise).
- *
- * Mobile (< md): the panels dock as bottom sheets (CSS), shown one at a time.
- * The #mobileBar tab strip opens a sheet (closing any other). On mobile the
- * header click is NOT a body-collapse — that would leave a stray title bar
- * floating over the map — so it closes the whole sheet, exactly like tapping
- * the tab again. The chevron glyph therefore behaves the same as the tab.
+ * Wire the single hamburger menu: click the toggle to slide the one
+ * scrolling panel (View / Pilots / Gaggles sections) in from the right.
+ * Closes on an outside click, Escape, or the panel's own close button —
+ * same behaviour on desktop and mobile, no separate layouts to keep in sync.
  */
-function setupPanels(): void {
-  const bar = document.getElementById('mobileBar');
-  const tabs = bar ? Array.from(bar.querySelectorAll<HTMLButtonElement>('.mob-tab')) : [];
-  const setActiveTab = (id: string | null): void =>
-    tabs.forEach((t) => t.classList.toggle('active', t.dataset.panel === id));
+function setupMenu(): void {
+  const toggle = $<HTMLButtonElement>('menuToggle');
+  const panel = $('menuPanel');
 
-  const closeSheets = (): void => {
-    for (const pid of Object.keys(PANELS)) document.getElementById(pid)?.classList.remove('open');
-    setActiveTab(null);
+  const isOpen = (): boolean => !panel.classList.contains('translate-x-full');
+  const open = (): void => {
+    panel.classList.remove('translate-x-full');
+    toggle.setAttribute('aria-expanded', 'true');
   };
-  const openSheet = (id: string): void => {
-    closeSheets();
-    const { body, chevron } = PANELS[id];
-    document.getElementById(body)?.classList.remove('hidden'); // expand (may be collapsed from desktop)
-    const chev = document.getElementById(chevron);
-    if (chev) chev.textContent = '▼';
-    document.getElementById(id)?.classList.add('open');
-    setActiveTab(id);
+  const close = (): void => {
+    panel.classList.add('translate-x-full');
+    toggle.setAttribute('aria-expanded', 'false');
   };
 
-  for (const tab of tabs) {
-    tab.addEventListener('click', () => {
-      const id = tab.dataset.panel!;
-      const el = document.getElementById(id);
-      if (!el) return;
-      if (el.classList.contains('open')) closeSheets();
-      else openSheet(id);
-    });
-  }
-
-  for (const [id, { header, body, chevron }] of Object.entries(PANELS)) {
-    const h = document.getElementById(header);
-    const b = document.getElementById(body);
-    const chev = document.getElementById(chevron);
-    if (!h || !b || !chev) continue;
-    h.addEventListener('click', () => {
-      if (isMobile()) {
-        closeSheets(); // header acts like the tab — close the sheet, don't half-collapse it
-        return;
-      }
-      const collapsed = b.classList.toggle('hidden');
-      chev.textContent = collapsed ? '▶' : '▼';
-      h.setAttribute('title', collapsed ? 'Expand panel' : 'Collapse panel');
-    });
-  }
+  toggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    isOpen() ? close() : open();
+  });
+  $('menuClose').addEventListener('click', close);
+  document.addEventListener('click', (e) => {
+    if (isOpen() && !panel.contains(e.target as Node) && !toggle.contains(e.target as Node)) close();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') close();
+  });
 }
 
 /** Round n down to a "nice" 1/2/5×10^k value for the scale bar. */
@@ -210,8 +175,8 @@ async function main(): Promise<void> {
   });
   onTime(0);
 
-  // --- panel chrome (desktop collapse / mobile bottom sheets) ---
-  setupPanels();
+  // --- panel chrome (single hamburger menu) ---
+  setupMenu();
 
   // --- playback controls ---
   $('playPause').addEventListener('click', () => viewer.togglePlay());
@@ -400,8 +365,7 @@ async function main(): Promise<void> {
   $('unfollow').addEventListener('click', clearFollow);
 
   let allHidden = false;
-  $('toggleAll').addEventListener('click', (e) => {
-    e.stopPropagation(); // don't collapse the panel
+  $('toggleAll').addEventListener('click', () => {
     allHidden = !allHidden;
     manifest.pilots.forEach((_, i) => viewer.setPilotVisible(i, !allHidden));
     rows.forEach((r) => r.classList.toggle('opacity-40', allHidden));
@@ -441,8 +405,7 @@ async function main(): Promise<void> {
 
   // show/hide the in-scene overlay
   let gaggleShown = true;
-  $('gaggleToggle').addEventListener('click', (e) => {
-    e.stopPropagation();
+  $('gaggleToggle').addEventListener('click', () => {
     gaggleShown = !gaggleShown;
     viewer.setGaggleVisible(gaggleShown);
     $('gaggleToggle').textContent = gaggleShown ? 'hide' : 'show';
@@ -450,8 +413,7 @@ async function main(): Promise<void> {
 
   // "active now" filter for the panel list
   let activeOnly = false;
-  $('gaggleActiveOnly').addEventListener('click', (e) => {
-    e.stopPropagation();
+  $('gaggleActiveOnly').addEventListener('click', () => {
     activeOnly = !activeOnly;
     gaggleUI?.setActiveOnly(activeOnly);
     const btn = $('gaggleActiveOnly');

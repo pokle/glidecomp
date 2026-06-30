@@ -21,38 +21,18 @@
     #scrubber::-webkit-slider-thumb { margin-top: -5px; }
     .panel { background: rgba(15, 23, 42, 0.82); backdrop-filter: blur(8px); border: 1px solid rgba(148, 163, 184, 0.18); }
 
-    /* Mobile (< md): the floating control panels dock as bottom sheets, opened
-       one at a time from the #mobileBar tab strip. Desktop keeps its Tailwind
-       corner layout untouched (these rules only apply under 768px). */
+    /* The timeline scrubber is the primary touch target on phones — give it a
+       much taller hit area and a bigger thumb so fingers don't miss it. The
+       input's height defines the vertical tap tolerance; the track stays
+       centred within it. */
     @media (max-width: 767px) {
-      .mobile-sheet {
-        position: fixed !important;
-        left: 0.5rem !important;
-        right: 0.5rem !important;
-        top: auto !important;
-        bottom: 7.5rem !important;
-        width: auto !important;
-        max-width: none !important;
-        max-height: 58vh !important;
-        overflow-y: auto;
-        transform: translateY(135%);
-        transition: transform 0.25s ease;
-        z-index: 45;
-      }
-      .mobile-sheet.open { transform: translateY(0); }
-      .mob-tab.active { background: #84cc16; color: #0f172a; }
-
-      /* The timeline scrubber is the primary touch target — give it a much
-         taller hit area and a bigger thumb so fingers don't miss it. The
-         input's height defines the vertical tap tolerance; the track stays
-         centred within it. */
       #scrubber { height: 2.75rem; }
       #scrubber::-webkit-slider-runnable-track { height: 8px; }
       #scrubber::-webkit-slider-thumb { width: 28px; height: 28px; margin-top: -10px; }
       #scrubber::-moz-range-track { height: 8px; }
       #scrubber::-moz-range-thumb { width: 28px; height: 28px; }
     }
-</style>
+  </style>
   <script type="module" src="/samples/3dvis.ts"></script>
 </head>
 
@@ -76,94 +56,138 @@
       <p id="stats" class="mt-1 text-[11px] text-slate-500 hidden sm:block">Loading tracks…</p>
     </div>
 
-    <!-- top-right: view controls -->
-    <div id="viewPanel" class="mobile-sheet absolute right-3 top-3 z-20 w-56 rounded-lg panel px-4 py-3 shadow-xl">
-      <div id="viewHeader" class="flex items-center justify-between cursor-pointer select-none" title="Collapse panel">
-        <span class="text-[11px] uppercase tracking-wide text-slate-400">View</span>
-        <span id="viewChevron" class="text-slate-400 hover:text-slate-200 text-xl leading-none">▼</span>
-      </div>
-      <div id="viewBody" class="space-y-3 mt-3">
-      <div>
-        <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">Backdrop</label>
-        <div class="grid grid-cols-2 gap-1">
-          <button id="bdAbstract"
-            class="bd-btn rounded-md border border-slate-600 px-2 py-1 text-xs transition-colors bg-lime-500 text-slate-900">Abstract</button>
-          <button id="bdTerrain"
-            class="bd-btn rounded-md border border-slate-600 px-2 py-1 text-xs transition-colors bg-slate-800 text-slate-300 hover:bg-slate-700">Map</button>
-        </div>
-      </div>
-      <div id="mapStyleRow" class="hidden">
-        <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">Map style</label>
-        <select id="mapStyle"
-          class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400"></select>
-      </div>
-      <div>
-        <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">Colour by</label>
-        <select id="colorMode"
-          class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400">
-          <option value="pilot">Pilot</option>
-          <option value="altitude">Altitude</option>
-          <option value="vario">Vertical speed</option>
-        </select>
-        <!-- colour scale legend (shown for altitude / vertical speed) -->
-        <div id="colorLegend" class="hidden mt-1.5">
-          <div id="legendBar" class="h-1.5 rounded-sm"></div>
-          <div class="flex justify-between text-[10px] text-slate-400 mt-0.5 leading-none">
-            <span id="legendLo"></span><span id="legendMid" class="text-slate-500"></span><span id="legendHi"></span>
-          </div>
-        </div>
-      </div>
-      <div>
-        <label class="flex justify-between text-[11px] uppercase tracking-wide text-slate-400 mb-1">
-          <span>Vertical ×</span><span id="vscaleVal" class="text-slate-300 normal-case">3.0×</span>
-        </label>
-        <input id="vscale" type="range" min="1" max="6" step="0.5" value="3" class="w-full">
-      </div>
-      <div>
-        <label class="flex justify-between text-[11px] uppercase tracking-wide text-slate-400 mb-1">
-          <span>Trail</span><span id="tailVal" class="text-slate-300 normal-case">10 min</span>
-        </label>
-        <input id="tail" type="range" min="1" max="31" step="1" value="10" class="w-full">
-      </div>
-      <div>
-        <label class="flex justify-between text-[11px] uppercase tracking-wide text-slate-400 mb-1">
-          <span>Width</span><span id="widthVal" class="text-slate-300 normal-case">3 px</span>
-        </label>
-        <input id="width" type="range" min="1" max="10" step="1" value="3" class="w-full">
-      </div>
-      <div class="flex gap-2 pt-0.5">
-        <button id="resetView"
-          class="flex-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-xs transition-colors"
-          title="Frame the whole task">Reset</button>
-        <button id="topView"
-          class="flex-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-xs transition-colors"
-          title="Look straight down (north up)">Top</button>
-        <button id="sideView"
-          class="flex-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-xs transition-colors"
-          title="Side / profile view">Side</button>
-        <button id="fullscreen"
-          class="rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-xs transition-colors"
-          title="Toggle fullscreen">⛶</button>
-      </div>
-      </div>
-    </div>
+    <!-- hamburger menu toggle: opens the single scrolling control panel -->
+    <button id="menuToggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuPanel"
+      class="absolute right-3 top-3 z-30 grid h-11 w-11 place-items-center rounded-full panel shadow-xl text-xl leading-none text-slate-200 hover:text-white hover:bg-slate-700/50 transition-colors"
+      title="Menu">☰</button>
 
-    <!-- left: pilot legend -->
-    <div id="pilotPanel" class="mobile-sheet absolute left-3 top-32 z-20 w-52 rounded-lg panel shadow-xl flex flex-col"
-      style="max-height: calc(100vh - 18rem);">
-      <div id="pilotsHeader" class="flex items-center gap-2 px-3 py-2 border-b border-slate-700/60 cursor-pointer select-none" title="Collapse panel">
-        <span id="pilotsChevron" class="text-slate-400 hover:text-slate-200 text-xl leading-none">▼</span>
-        <span class="text-[11px] uppercase tracking-wide text-slate-400 flex-1">Pilots</span>
-        <button id="toggleAll" class="text-[11px] text-slate-400 hover:text-slate-200">hide all</button>
+    <!-- single scrolling control panel: View / Pilots / Gaggles, all in one
+         place — replaces what used to be three separate floating panels plus
+         a mobile-only tab strip. -->
+    <div id="menuPanel"
+      class="absolute right-0 top-0 z-30 flex h-full w-80 max-w-[90vw] translate-x-full flex-col panel shadow-2xl border-l border-slate-700/60 transition-transform duration-300 ease-out">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-slate-700/60 shrink-0">
+        <span class="text-sm font-semibold">Menu</span>
+        <button id="menuClose" type="button" class="text-slate-400 hover:text-slate-200 text-xl leading-none" aria-label="Close menu" title="Close">×</button>
       </div>
-      <div id="pilotsBody" class="flex-1 min-h-0 flex flex-col">
-      <input id="pilotSearch" type="search" placeholder="Search pilots…" autocomplete="off"
-        class="mx-2 mt-2 mb-1 rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-lime-400">
-      <ul id="legend" class="flex-1 min-h-0 overflow-y-auto py-1 text-xs"></ul>
-      <div id="followBar" class="hidden px-3 py-2 border-t border-slate-700/60 text-[11px]">
-        Following <span id="followName" class="text-slate-200 font-medium"></span>
-        <button id="unfollow" class="ml-1 text-lime-400 hover:underline">stop</button>
-      </div>
+
+      <div class="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-5">
+
+        <!-- View -->
+        <section>
+          <h2 class="text-[11px] uppercase tracking-wide text-slate-400 mb-2">View</h2>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">Backdrop</label>
+              <div class="grid grid-cols-2 gap-1">
+                <button id="bdAbstract"
+                  class="bd-btn rounded-md border border-slate-600 px-2 py-1 text-xs transition-colors bg-lime-500 text-slate-900">Abstract</button>
+                <button id="bdTerrain"
+                  class="bd-btn rounded-md border border-slate-600 px-2 py-1 text-xs transition-colors bg-slate-800 text-slate-300 hover:bg-slate-700">Map</button>
+              </div>
+            </div>
+            <div id="mapStyleRow" class="hidden">
+              <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">Map style</label>
+              <select id="mapStyle"
+                class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400"></select>
+            </div>
+            <div>
+              <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">Colour by</label>
+              <select id="colorMode"
+                class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400">
+                <option value="pilot">Pilot</option>
+                <option value="altitude">Altitude</option>
+                <option value="vario">Vertical speed</option>
+              </select>
+              <!-- colour scale legend (shown for altitude / vertical speed) -->
+              <div id="colorLegend" class="hidden mt-1.5">
+                <div id="legendBar" class="h-1.5 rounded-sm"></div>
+                <div class="flex justify-between text-[10px] text-slate-400 mt-0.5 leading-none">
+                  <span id="legendLo"></span><span id="legendMid" class="text-slate-500"></span><span id="legendHi"></span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label class="flex justify-between text-[11px] uppercase tracking-wide text-slate-400 mb-1">
+                <span>Vertical ×</span><span id="vscaleVal" class="text-slate-300 normal-case">3.0×</span>
+              </label>
+              <input id="vscale" type="range" min="1" max="6" step="0.5" value="3" class="w-full">
+            </div>
+            <div>
+              <label class="flex justify-between text-[11px] uppercase tracking-wide text-slate-400 mb-1">
+                <span>Trail</span><span id="tailVal" class="text-slate-300 normal-case">10 min</span>
+              </label>
+              <input id="tail" type="range" min="1" max="31" step="1" value="10" class="w-full">
+            </div>
+            <div>
+              <label class="flex justify-between text-[11px] uppercase tracking-wide text-slate-400 mb-1">
+                <span>Width</span><span id="widthVal" class="text-slate-300 normal-case">3 px</span>
+              </label>
+              <input id="width" type="range" min="1" max="10" step="1" value="3" class="w-full">
+            </div>
+            <div class="flex gap-2 pt-0.5">
+              <button id="resetView"
+                class="flex-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-xs transition-colors"
+                title="Frame the whole task">Reset</button>
+              <button id="topView"
+                class="flex-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-xs transition-colors"
+                title="Look straight down (north up)">Top</button>
+              <button id="sideView"
+                class="flex-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-xs transition-colors"
+                title="Side / profile view">Side</button>
+              <button id="fullscreen"
+                class="rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2 py-1 text-xs transition-colors"
+                title="Toggle fullscreen">⛶</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Pilots -->
+        <section class="pt-4 border-t border-slate-700/60">
+          <div class="flex items-center gap-2 mb-2">
+            <h2 class="text-[11px] uppercase tracking-wide text-slate-400 flex-1">Pilots</h2>
+            <button id="toggleAll" class="text-[11px] text-slate-400 hover:text-slate-200">hide all</button>
+          </div>
+          <input id="pilotSearch" type="search" placeholder="Search pilots…" autocomplete="off"
+            class="w-full mb-2 rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-lime-400">
+          <ul id="legend" class="max-h-72 overflow-y-auto text-xs rounded-md border border-slate-700/60 divide-y divide-slate-800/60"></ul>
+          <div id="followBar" class="hidden mt-2 px-3 py-2 rounded-md bg-slate-800/60 text-[11px]">
+            Following <span id="followName" class="text-slate-200 font-medium"></span>
+            <button id="unfollow" class="ml-1 text-lime-400 hover:underline">stop</button>
+          </div>
+        </section>
+
+        <!-- Gaggles -->
+        <section class="pt-4 border-t border-slate-700/60">
+          <div class="flex items-center gap-2 mb-2">
+            <h2 class="text-[11px] uppercase tracking-wide text-slate-400 flex-1">Gaggles</h2>
+            <button id="gaggleActiveOnly" class="text-[11px] text-slate-400 hover:text-slate-200" title="Show only gaggles active at the current time">active now</button>
+            <button id="gaggleToggle" class="text-[11px] text-lime-400 hover:underline" title="Show/hide the gaggle overlay">hide</button>
+          </div>
+          <ul id="gaggleList" class="max-h-56 overflow-y-auto text-xs rounded-md border border-slate-700/60 divide-y divide-slate-800/60"></ul>
+          <!-- dev-only threshold sliders (unhidden in DEV) -->
+          <div id="gaggleDev" class="hidden mt-3 space-y-2">
+            <div>
+              <label class="flex justify-between text-[10px] uppercase tracking-wide text-slate-400">
+                <span>Radius</span><span id="ggRadiusVal" class="text-slate-300 normal-case">400 m</span>
+              </label>
+              <input id="ggRadius" type="range" min="100" max="1000" step="50" value="400" class="w-full">
+            </div>
+            <div>
+              <label class="flex justify-between text-[10px] uppercase tracking-wide text-slate-400">
+                <span>Vert band</span><span id="ggBandVal" class="text-slate-300 normal-case">300 m</span>
+              </label>
+              <input id="ggBand" type="range" min="100" max="800" step="50" value="300" class="w-full">
+            </div>
+            <div>
+              <label class="flex justify-between text-[10px] uppercase tracking-wide text-slate-400">
+                <span>Min pilots</span><span id="ggMinVal" class="text-slate-300 normal-case">2</span>
+              </label>
+              <input id="ggMin" type="range" min="2" max="6" step="1" value="2" class="w-full">
+            </div>
+          </div>
+        </section>
+
       </div>
     </div>
 
@@ -184,49 +208,7 @@
       </button>
     </div>
 
-    <!-- right: gaggle panel -->
-    <div id="gagglePanelWrap" class="mobile-sheet absolute right-3 bottom-28 z-20 w-60 rounded-lg panel shadow-xl flex flex-col"
-      style="max-height: 42vh;">
-      <div id="gagglesHeader" class="flex items-center gap-2 px-3 py-2 border-b border-slate-700/60 cursor-pointer select-none" title="Collapse panel">
-        <span id="gagglesChevron" class="text-slate-400 hover:text-slate-200 text-xl leading-none">▼</span>
-        <span class="text-[11px] uppercase tracking-wide text-slate-400 flex-1">Gaggles</span>
-        <button id="gaggleActiveOnly" class="text-[11px] text-slate-400 hover:text-slate-200" title="Show only gaggles active at the current time">active now</button>
-        <button id="gaggleToggle" class="text-[11px] text-lime-400 hover:underline" title="Show/hide the gaggle overlay">hide</button>
-      </div>
-      <div id="gagglesBody" class="flex-1 min-h-0 flex flex-col">
-        <ul id="gaggleList" class="flex-1 min-h-0 overflow-y-auto py-1 text-xs"></ul>
-        <!-- dev-only threshold sliders (unhidden in DEV) -->
-        <div id="gaggleDev" class="hidden px-3 py-2 border-t border-slate-700/60 space-y-2">
-          <div>
-            <label class="flex justify-between text-[10px] uppercase tracking-wide text-slate-400">
-              <span>Radius</span><span id="ggRadiusVal" class="text-slate-300 normal-case">400 m</span>
-            </label>
-            <input id="ggRadius" type="range" min="100" max="1000" step="50" value="400" class="w-full">
-          </div>
-          <div>
-            <label class="flex justify-between text-[10px] uppercase tracking-wide text-slate-400">
-              <span>Vert band</span><span id="ggBandVal" class="text-slate-300 normal-case">300 m</span>
-            </label>
-            <input id="ggBand" type="range" min="100" max="800" step="50" value="300" class="w-full">
-          </div>
-          <div>
-            <label class="flex justify-between text-[10px] uppercase tracking-wide text-slate-400">
-              <span>Min pilots</span><span id="ggMinVal" class="text-slate-300 normal-case">2</span>
-            </label>
-            <input id="ggMin" type="range" min="2" max="6" step="1" value="2" class="w-full">
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- mobile: panel switcher (tap to open a control panel as a bottom sheet) -->
-    <div id="mobileBar" class="md:hidden absolute left-2 right-2 bottom-[5rem] z-40 grid grid-cols-3 gap-1 rounded-lg panel p-1 text-xs">
-      <button data-panel="viewPanel" class="mob-tab rounded-md px-2 py-2">View</button>
-      <button data-panel="pilotPanel" class="mob-tab rounded-md px-2 py-2">Pilots</button>
-      <button data-panel="gagglePanelWrap" class="mob-tab rounded-md px-2 py-2">Gaggles</button>
-    </div>
-
-    <!-- bottom: timeline -->
+    <!-- bottom: timeline (the primary playback transport — always visible, not tucked into the menu) -->
     <div class="absolute inset-x-3 bottom-3 z-20 rounded-lg panel px-4 py-3 shadow-xl">
       <!-- gaggle ribbon, inset to line up with the scrubber track (desktop only) -->
       <div class="mb-2 hidden md:block" style="margin-left: 144px; margin-right: 76px;">
