@@ -63,72 +63,40 @@ function zoneLabel(refDate: Date, timeZone?: string): string {
   }
 }
 
-/** panel wrapper id → header / body / chevron element ids. */
-const PANELS: Record<string, { header: string; body: string; chevron: string }> = {
-  viewPanel: { header: 'viewHeader', body: 'viewBody', chevron: 'viewChevron' },
-  pilotPanel: { header: 'pilotsHeader', body: 'pilotsBody', chevron: 'pilotsChevron' },
-  gagglePanelWrap: { header: 'gagglesHeader', body: 'gagglesBody', chevron: 'gagglesChevron' },
-};
-
-const isMobile = (): boolean => window.matchMedia('(max-width: 767px)').matches;
-
 /**
- * Wire the View / Pilots / Gaggles panel chrome for both layouts.
+ * Wire the single control drawer (airloom-style).
  *
- * Desktop: each panel floats in a corner; clicking its header collapses the
- * body and flips the chevron (a real minimise).
- *
- * Mobile (< md): the panels dock as bottom sheets (CSS), shown one at a time.
- * The #mobileBar tab strip opens a sheet (closing any other). On mobile the
- * header click is NOT a body-collapse — that would leave a stray title bar
- * floating over the map — so it closes the whole sheet, exactly like tapping
- * the tab again. The chevron glyph therefore behaves the same as the tab.
+ * One hamburger button (#menuToggle) slides the one #menuPanel in from the
+ * right; it holds every control section (View / Pilots / Gaggles) stacked in a
+ * single scrolling column. The drawer closes on the ✕ button, on Escape, or on
+ * a click anywhere outside it. The same layout serves desktop and mobile — the
+ * panel just caps at 90vw on narrow screens (see the HTML class).
  */
 function setupPanels(): void {
-  const bar = document.getElementById('mobileBar');
-  const tabs = bar ? Array.from(bar.querySelectorAll<HTMLButtonElement>('.mob-tab')) : [];
-  const setActiveTab = (id: string | null): void =>
-    tabs.forEach((t) => t.classList.toggle('active', t.dataset.panel === id));
+  const panel = document.getElementById('menuPanel');
+  const toggle = document.getElementById('menuToggle');
+  if (!panel || !toggle) return;
 
-  const closeSheets = (): void => {
-    for (const pid of Object.keys(PANELS)) document.getElementById(pid)?.classList.remove('open');
-    setActiveTab(null);
-  };
-  const openSheet = (id: string): void => {
-    closeSheets();
-    const { body, chevron } = PANELS[id];
-    document.getElementById(body)?.classList.remove('hidden'); // expand (may be collapsed from desktop)
-    const chev = document.getElementById(chevron);
-    if (chev) chev.textContent = '▼';
-    document.getElementById(id)?.classList.add('open');
-    setActiveTab(id);
+  const setOpen = (open: boolean): void => {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', String(open));
   };
 
-  for (const tab of tabs) {
-    tab.addEventListener('click', () => {
-      const id = tab.dataset.panel!;
-      const el = document.getElementById(id);
-      if (!el) return;
-      if (el.classList.contains('open')) closeSheets();
-      else openSheet(id);
-    });
-  }
+  toggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setOpen(!panel.classList.contains('open'));
+  });
+  document.getElementById('menuClose')?.addEventListener('click', () => setOpen(false));
 
-  for (const [id, { header, body, chevron }] of Object.entries(PANELS)) {
-    const h = document.getElementById(header);
-    const b = document.getElementById(body);
-    const chev = document.getElementById(chevron);
-    if (!h || !b || !chev) continue;
-    h.addEventListener('click', () => {
-      if (isMobile()) {
-        closeSheets(); // header acts like the tab — close the sheet, don't half-collapse it
-        return;
-      }
-      const collapsed = b.classList.toggle('hidden');
-      chev.textContent = collapsed ? '▶' : '▼';
-      h.setAttribute('title', collapsed ? 'Expand panel' : 'Collapse panel');
-    });
-  }
+  // Close when clicking the map (anywhere outside the drawer and its button).
+  document.addEventListener('click', (e) => {
+    if (!panel.classList.contains('open')) return;
+    const target = e.target as Node;
+    if (!panel.contains(target) && !toggle.contains(target)) setOpen(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') setOpen(false);
+  });
 }
 
 /** Round n down to a "nice" 1/2/5×10^k value for the scale bar. */
