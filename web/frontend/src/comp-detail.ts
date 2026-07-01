@@ -52,6 +52,22 @@ function escapeHtml(str: string): string {
   return el.innerHTML;
 }
 
+/**
+ * The comp/task GET right after this same session's create/update write can
+ * transiently 500 (e.g. D1 lock contention under the write that just
+ * happened) even though the write itself succeeded. Retry once before
+ * treating it as a real failure — a 404 is left alone since that's a
+ * genuine "not found", not a transient error.
+ */
+async function fetchWithRetry<T extends { ok: boolean; status: number }>(
+  fetcher: () => Promise<T>
+): Promise<T> {
+  const res = await fetcher();
+  if (res.ok || res.status === 404) return res;
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  return fetcher();
+}
+
 function categoryLabel(cat: string): string {
   return cat === "hg" ? "HG" : "PG";
 }
@@ -149,9 +165,11 @@ async function initTaskDetail(compId: string, taskId: string, user: AuthUser | n
 
   try {
     // Fetch task first — this is the primary data we need
-    const taskRes = await api.api.comp[":comp_id"].task[":task_id"].$get({
-      param: { comp_id: compId, task_id: taskId },
-    });
+    const taskRes = await fetchWithRetry(() =>
+      api.api.comp[":comp_id"].task[":task_id"].$get({
+        param: { comp_id: compId, task_id: taskId },
+      })
+    );
 
     if (!taskRes.ok) {
       showNotFound();
@@ -1377,9 +1395,11 @@ async function initCompDetail(compId: string, user: AuthUser | null) {
   let comp: CompDetail;
 
   try {
-    const res = await api.api.comp[":comp_id"].$get({
-      param: { comp_id: compId },
-    });
+    const res = await fetchWithRetry(() =>
+      api.api.comp[":comp_id"].$get({
+        param: { comp_id: compId },
+      })
+    );
 
     if (!res.ok) {
       showNotFound();

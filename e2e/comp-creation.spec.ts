@@ -57,10 +57,15 @@ test("dev login, onboarding, create competition and task", async ({ page }) => {
   await expect(page.locator("#create-comp-btn")).toBeVisible();
 
   // comp.ts attaches the dialog-opening click handler only after loadComps()
-  // resolves — wait for the network to settle so the listener is in place
-  // before we click. Without this, fast CI sends the click before init()
-  // finishes and the dialog never opens.
-  await page.waitForLoadState("networkidle");
+  // resolves. Wait for the loading skeleton to be gone (replaced by cards or
+  // the empty state) — that's the actual signal the listener is attached.
+  // networkidle is the wrong tool here: it can resolve during a brief gap
+  // between unrelated requests before loadComps() has even started, or hang
+  // indefinitely on an unrelated in-flight request left over from the
+  // previous page.
+  await expect(
+    page.locator('[aria-label="Loading competitions"]')
+  ).toBeHidden();
 
   // Step 5: Create a competition
   await page.click("#create-comp-btn");
@@ -71,11 +76,12 @@ test("dev login, onboarding, create competition and task", async ({ page }) => {
   await page.check("#comp-test");
   await page.click("#create-submit-btn");
 
-  // Should navigate to the competition detail page. Wait for /api/comp/:id
-  // (and the parallel auth+preferences calls) to settle so comp-detail.ts has
-  // had a chance to populate the title before we assert.
+  // Should navigate to the competition detail page. toHaveText already
+  // polls until comp-detail.ts's fetch resolves and populates the title —
+  // no need to wait on networkidle first, which was both redundant (the
+  // assertion already retries) and a source of hangs when a leftover
+  // in-flight request from the previous page never settles.
   await page.waitForURL("**/comp/*");
-  await page.waitForLoadState("networkidle");
   await expect(page.locator("#comp-title")).toHaveText("E2E Test Competition");
 
   // Step 6: Create a task
@@ -99,9 +105,8 @@ test("dev login, onboarding, create competition and task", async ({ page }) => {
     page.click("#task-submit-btn"),
   ]);
 
-  // The reload is now in-flight. Wait for it to settle — initNav() and
-  // initCompDetail() both make fetch calls that must complete before
-  // renderTasks() populates #tasks-list.
-  await page.waitForLoadState("networkidle");
+  // The reload is now in-flight. toContainText polls until initCompDetail()
+  // has fetched and rendered the task list — see the toHaveText assertion
+  // above for why we don't wait on networkidle here either.
   await expect(page.locator("#tasks-list")).toContainText("Day 1 - Ridge Run");
 });
