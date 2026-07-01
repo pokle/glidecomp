@@ -52,8 +52,21 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   },
 };
 
+/** Session-only scoring config seeded from a competition's GAP parameters. */
+interface CompScoringSeed {
+  gapParameters: Partial<GAPParameters>;
+  nominalDistancePct: number;
+}
+
 class ConfigStore {
   private cache: UserPreferences | null = null;
+
+  /** Active when a competition task is loaded: a what-if scoring layer that
+   * the GAP getters/setters read and write instead of saved preferences.
+   * Never persisted or cloud-synced, so comp links are deterministic (always
+   * start from the comp's official configuration) and can't clobber the
+   * viewer's own saved GAP settings. Holds the seed for reset. */
+  private compScoring: (CompScoringSeed & { seed: CompScoringSeed }) | null = null;
 
   /**
    * Get all user preferences
@@ -208,11 +221,39 @@ class ConfigStore {
   }
 
   /**
-   * Get GAP scoring parameters (defaults merged with user overrides).
+   * Enter competition scoring mode: a session-only what-if layer seeded from
+   * a competition's GAP parameters. While active, the GAP getters/setters
+   * read and write this layer (saved preferences are untouched) and
+   * resetGAPParameters() restores the seed.
+   */
+  enterCompScoringMode(seed: CompScoringSeed): void {
+    this.compScoring = {
+      gapParameters: { ...seed.gapParameters },
+      nominalDistancePct: seed.nominalDistancePct,
+      seed: {
+        gapParameters: { ...seed.gapParameters },
+        nominalDistancePct: seed.nominalDistancePct,
+      },
+    };
+  }
+
+  /**
+   * Whether a session-only competition scoring config is active
+   */
+  isCompScoringMode(): boolean {
+    return this.compScoring !== null;
+  }
+
+  /**
+   * Get GAP scoring parameters (defaults merged with the session comp config,
+   * or with user overrides outside competition mode).
    * Note: nominalDistance here is the raw default/override — callers should
    * use getNominalDistancePct() and compute actual meters from task distance.
    */
   getGAPParameters(): GAPParameters {
+    if (this.compScoring) {
+      return { ...DEFAULT_GAP_PARAMETERS, ...this.compScoring.gapParameters };
+    }
     return { ...DEFAULT_GAP_PARAMETERS, ...this.getPreferences().gapParameters };
   }
 
@@ -220,6 +261,10 @@ class ConfigStore {
    * Set GAP scoring parameters (partial update supported)
    */
   setGAPParameters(params: Partial<GAPParameters>): void {
+    if (this.compScoring) {
+      this.compScoring.gapParameters = { ...this.compScoring.gapParameters, ...params };
+      return;
+    }
     const current = this.getPreferences().gapParameters || {};
     this.setPreferences({ gapParameters: { ...current, ...params } });
   }
@@ -228,6 +273,7 @@ class ConfigStore {
    * Get nominal distance as a percentage of task distance (default 70)
    */
   getNominalDistancePct(): number {
+    if (this.compScoring) return this.compScoring.nominalDistancePct;
     return this.getPreferences().nominalDistancePct ?? 70;
   }
 
@@ -235,13 +281,23 @@ class ConfigStore {
    * Set nominal distance percentage
    */
   setNominalDistancePct(pct: number): void {
+    if (this.compScoring) {
+      this.compScoring.nominalDistancePct = pct;
+      return;
+    }
     this.setPreferences({ nominalDistancePct: pct });
   }
 
   /**
-   * Reset GAP parameters to defaults
+   * Reset GAP parameters — to the comp-seeded values in competition mode,
+   * otherwise to the stock defaults (removing user overrides)
    */
   resetGAPParameters(): void {
+    if (this.compScoring) {
+      this.compScoring.gapParameters = { ...this.compScoring.seed.gapParameters };
+      this.compScoring.nominalDistancePct = this.compScoring.seed.nominalDistancePct;
+      return;
+    }
     this.setPreferences({ gapParameters: undefined, nominalDistancePct: undefined });
   }
 

@@ -494,10 +494,21 @@ async function init(): Promise<void> {
     if (!competitionSettingsContent) return;
     const params = config.getGAPParameters();
     const nominalPct = config.getNominalDistancePct();
+    const isCompMode = config.isCompScoringMode();
+    const whatIfNotice = isCompMode
+      ? `<div class="rounded-md border border-border/50 bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+           What-if analysis only — seeded from the competition's scoring settings.
+           Changes affect just this page's score table, never the official scores,
+           and last until you leave the page.
+         </div>`
+      : `<div class="rounded-md border border-border/50 bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+           What-if analysis only — these settings affect just this page's score table.
+         </div>`;
     const helpLink = (hash: string, text: string, heading = false) =>
       `<a href="/scoring-gap.html#${hash}" target="_blank" rel="noopener noreferrer" class="text-sm ${heading ? 'font-medium' : 'text-muted-foreground'} hover:text-foreground inline-flex items-center gap-0.5">${text} <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>`;
     competitionSettingsContent.innerHTML = `
       <form id="competition-settings-form" class="space-y-4">
+        ${whatIfNotice}
         <div class="space-y-3">
           ${helpLink('what-is-gap', 'Scoring Type', true)}
           <div class="flex gap-4">
@@ -552,7 +563,7 @@ async function init(): Promise<void> {
 
         <div class="flex gap-2 pt-2">
           <button type="submit" class="btn btn-primary flex-1">Save</button>
-          <button type="button" id="gap-reset-btn" class="btn btn-secondary">Reset to defaults</button>
+          <button type="button" id="gap-reset-btn" class="btn btn-secondary">${isCompMode ? 'Reset to comp settings' : 'Reset to defaults'}</button>
         </div>
 
         <div class="pt-2 text-xs text-center">
@@ -1690,25 +1701,29 @@ async function init(): Promise<void> {
         }
       }
 
-      // Apply the comp's GAP parameters so client-side scores match the
-      // competition's configuration (mirrors loadSampleComp).
+      // Seed a session-only what-if scoring config from the comp's GAP
+      // parameters so the score table starts from the competition's official
+      // configuration — deterministic on every visit, and never touching the
+      // viewer's saved preferences. A comp with no stored gap_params seeds
+      // the stock defaults, matching the server-side scorer.
+      let compGap: Partial<GAPParameters> = {};
       if (compRes.ok) {
         const comp = (await compRes.json()) as { gap_params: Partial<GAPParameters> | null };
-        if (comp.gap_params) {
-          const { nominalDistance, ...gapParams } = comp.gap_params;
-          config.setGAPParameters(gapParams);
-          if (state.task) {
-            const taskDist = calculateOptimizedTaskDistance(state.task);
-            if (taskDist > 0) {
-              // The comp stores nominal distance in meters; the analysis page
-              // works in % of task distance. Unset means the server's 70%
-              // default applies.
-              const nominal = nominalDistance ?? taskDist * 0.7;
-              config.setNominalDistancePct(Math.round((nominal / taskDist) * 100));
-            }
-          }
+        compGap = comp.gap_params ?? {};
+      }
+      const { nominalDistance, ...gapParameters } = compGap;
+      let nominalDistancePct = 70;
+      if (state.task) {
+        const taskDist = calculateOptimizedTaskDistance(state.task);
+        if (taskDist > 0) {
+          // The comp stores nominal distance in meters; the analysis page
+          // works in % of task distance. Unset means the server's 70%
+          // default applies.
+          const nominal = nominalDistance ?? taskDist * 0.7;
+          nominalDistancePct = Math.round((nominal / taskDist) * 100);
         }
       }
+      config.enterCompScoringMode({ gapParameters, nominalDistancePct });
 
       if (trackList.length === 0) {
         showStatus('No tracks uploaded for this task yet', 'warning');
@@ -2109,20 +2124,23 @@ async function init(): Promise<void> {
       return;
     }
 
-    // 2. Apply GAP parameters from the competition manifest
-    config.setGAPParameters({
-      scoring: comp.gapParams.scoring,
-      nominalGoal: comp.gapParams.nominalGoal,
-      nominalTime: comp.gapParams.nominalTime,
-      minimumDistance: comp.gapParams.minimumDistance,
-      useLeading: comp.gapParams.useLeading,
-      useArrival: comp.gapParams.useArrival,
-    });
-    // Compute nominal distance percentage from the absolute value and task distance
+    // 2. Seed a session-only what-if scoring config from the competition
+    // manifest (nominal distance converted from meters to % of task distance)
+    // — edits on this page never touch the viewer's saved preferences.
     const taskDist = calculateOptimizedTaskDistance(state.task!);
-    if (taskDist > 0) {
-      config.setNominalDistancePct(Math.round((comp.gapParams.nominalDistance / taskDist) * 100));
-    }
+    config.enterCompScoringMode({
+      gapParameters: {
+        scoring: comp.gapParams.scoring,
+        nominalGoal: comp.gapParams.nominalGoal,
+        nominalTime: comp.gapParams.nominalTime,
+        minimumDistance: comp.gapParams.minimumDistance,
+        useLeading: comp.gapParams.useLeading,
+        useArrival: comp.gapParams.useArrival,
+      },
+      nominalDistancePct: taskDist > 0
+        ? Math.round((comp.gapParams.nominalDistance / taskDist) * 100)
+        : 70,
+    });
 
     // 3. Fetch all IGC files concurrently with progress
     let loaded = 0;
