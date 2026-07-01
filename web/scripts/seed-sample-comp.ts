@@ -157,6 +157,14 @@ interface CompManifest {
   slug: string;
   classes: string[];
   tasks: Array<{ pilot_class: string; name: string; date: string; dir: string }>;
+  /**
+   * Optional overrides. The Corryong sample omits these and inherits the
+   * historical defaults (the fixed SAMPLE_COMP_NAME, 'hg', GAP scoring). The
+   * synthetic Big Chip comp sets them to seed a second, open-distance comp.
+   */
+  comp_name?: string;
+  category?: string;
+  scoring_format?: 'gap' | 'open_distance';
 }
 
 /** Best-effort timezone from a lat/lon via the engine workspace's geo-tz. */
@@ -238,8 +246,14 @@ function loadManifest(): CompManifest {
 function main(): void {
   const where = REMOTE ? 'REMOTE (production)' : `local (${PERSIST})`;
   const manifest = loadManifest();
-  console.log(`Seeding "${SAMPLE_COMP_NAME}" (${SLUG}) into ${where}…`);
+  // The comp's D1 name, category and scoring format come from the manifest when
+  // present (Big Chip), else fall back to the historical Corryong defaults.
+  const compName = manifest.comp_name ?? SAMPLE_COMP_NAME;
+  const category = manifest.category ?? 'hg';
+  const scoringFormat = manifest.scoring_format ?? 'gap';
+  console.log(`Seeding "${compName}" (${SLUG}) into ${where}…`);
   console.log(`  classes: ${manifest.classes.join(', ')}`);
+  console.log(`  category: ${category}, scoring: ${scoringFormat}`);
 
   // Read every task, sharing one resolved timezone across the comp.
   const tzOut: { value?: string } = {};
@@ -272,7 +286,7 @@ function main(): void {
   const defaultClass = manifest.classes[0];
 
   // 1) Find or create the comp (stable comp_id across reruns).
-  const existing = rows(`SELECT comp_id FROM comp WHERE name = ${q(SAMPLE_COMP_NAME)};`);
+  const existing = rows(`SELECT comp_id FROM comp WHERE name = ${q(compName)};`);
   let compId: number;
   if (existing.length > 0) {
     compId = Number(existing[0].comp_id);
@@ -291,16 +305,17 @@ function main(): void {
         `DELETE FROM task WHERE comp_id = ${compId};`,
         `DELETE FROM comp_pilot WHERE comp_id = ${compId};`,
         `DELETE FROM audit_log WHERE comp_id = ${compId};`,
-        `UPDATE comp SET category='hg', test=0, pilot_classes=${q(classesJson)},
+        `UPDATE comp SET category=${q(category)}, test=0, scoring_format=${q(scoringFormat)},
+           pilot_classes=${q(classesJson)},
            default_pilot_class=${q(defaultClass)} WHERE comp_id = ${compId};`,
       ].join('\n'),
     );
   } else {
     exec(
-      `INSERT INTO comp (name, creation_date, category, test, pilot_classes, default_pilot_class)
-       VALUES (${q(SAMPLE_COMP_NAME)}, ${q(today)}, 'hg', 0, ${q(classesJson)}, ${q(defaultClass)});`,
+      `INSERT INTO comp (name, creation_date, category, test, scoring_format, pilot_classes, default_pilot_class)
+       VALUES (${q(compName)}, ${q(today)}, ${q(category)}, 0, ${q(scoringFormat)}, ${q(classesJson)}, ${q(defaultClass)});`,
     );
-    compId = Number(rows(`SELECT comp_id FROM comp WHERE name = ${q(SAMPLE_COMP_NAME)};`)[0].comp_id);
+    compId = Number(rows(`SELECT comp_id FROM comp WHERE name = ${q(compName)};`)[0].comp_id);
     console.log(`  created comp_id ${compId}`);
   }
 
