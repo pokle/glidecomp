@@ -390,8 +390,12 @@ function main(): void {
 
       // Launch scatter: 150–950 m from the paddock centre → pilots take off
       // within ~2 km of each other (ground towing), all outside the cylinder.
+      // Constrained to the downwind hemisphere (±80° of the flight bearing) so
+      // no track ever flies back across the take-off cylinder — that keeps each
+      // pilot's scored origin their own launch (open distance = the metres they
+      // actually flew downwind), rather than snapping to a cylinder re-crossing.
       const scatterR = 150 + rng() * 800;
-      const scatterB = rng() * Math.PI * 2;
+      const scatterB = task.bearing * DEG + (rng() - 0.5) * (160 * DEG);
       const p0 = destinationPoint(LAUNCH.lat, LAUNCH.lon, scatterR, scatterB);
       const start = { lat: p0.lat, lon: p0.lon, alt: LAUNCH.alt };
 
