@@ -186,9 +186,7 @@
           <div class="flex items-center justify-between mb-3">
             <h2 class="text-sm font-medium text-muted-foreground uppercase tracking-wider">Tracks</h2>
             <div class="flex items-center gap-2">
-              <button id="upload-behalf-btn" class="hidden btn btn-ghost btn-sm text-xs">Upload for pilot</button>
-              <button id="upload-self-btn" class="hidden btn btn-primary btn-sm text-xs">Upload for me</button>
-              <input id="track-upload-input" type="file" accept=".igc" class="hidden">
+              <button id="upload-track-btn" class="hidden btn btn-primary btn-sm text-xs">Submit track</button>
               <span id="task-closed-badge" class="items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground" style="display:none">
                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                 Closed
@@ -196,10 +194,6 @@
               <span id="task-track-count" class="text-xs text-muted-foreground"></span>
             </div>
           </div>
-          <div id="track-upload-status" class="hidden mb-3 text-center">
-            <p id="track-upload-message" class="text-sm"></p>
-          </div>
-
           <!-- Track list -->
           <div id="track-list" class="space-y-2"></div>
           <div id="tracks-empty" class="text-center py-6 border border-dashed border-border/50 rounded-lg">
@@ -446,9 +440,9 @@
     class="fixed inset-0 m-auto h-fit rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50"
     onclick="if (event.target === this) this.close()">
     <div class="w-96 p-6">
-      <h2 class="text-lg font-semibold mb-4">Upload for Pilot</h2>
+      <h2 class="text-lg font-semibold mb-4">Submit track</h2>
       <div class="space-y-4">
-        <div>
+        <div id="behalf-pilot-row">
           <label for="behalf-pilot-select" class="text-sm font-medium block mb-1">Pilot</label>
           <select id="behalf-pilot-select" class="input w-full" required></select>
         </div>
