@@ -165,7 +165,7 @@ async function gzipString(text: string): Promise<Blob> {
   return new Response(stream).blob();
 }
 
-async function gunzipResponse(res: Response): Promise<string> {
+export async function gunzipResponse(res: Response): Promise<string> {
   // The /api/user endpoints return gzipped bodies with Content-Encoding: gzip;
   // most browsers auto-decompress when fetch sees that header. But some
   // dev-server proxies strip it, so we decompress defensively if the header
