@@ -12,6 +12,7 @@ interface TaskInfo {
   task_id: string;
   task_name: string;
   task_date: string;
+  classes: string[];
 }
 
 interface PilotStanding {
@@ -74,6 +75,10 @@ function renderScoresPage(comp: CompInfo, scores: CompScores) {
   const multiClass = scores.standings.length > 1;
 
   for (const cls of scores.standings) {
+    // Only show columns for tasks flown by this pilot class — classes fly
+    // different tasks, so mixing them would leave every off-class cell blank.
+    const classTasks = scores.tasks.filter((t) => t.classes.includes(cls.pilot_class));
+
     // Panel
     const panel = document.createElement("div");
     panel.className = "class-panel";
@@ -95,14 +100,14 @@ function renderScoresPage(comp: CompInfo, scores: CompScores) {
     const headerRow = document.createElement("tr");
     headerRow.className = "text-left text-xs text-muted-foreground border-b border-border/50";
 
-    const headers = ["#", "Pilot", ...scores.tasks.map((t) => t.task_name), "Total"];
+    const headers = ["#", "Pilot", ...classTasks.map((t) => t.task_name), "Total"];
     for (let i = 0; i < headers.length; i++) {
       const th = document.createElement("th");
       th.className = "py-1.5 pr-3 font-medium";
       th.textContent = headers[i];
       // Add task date as title tooltip for task columns
       if (i >= 2 && i < headers.length - 1) {
-        th.title = scores.tasks[i - 2].task_date;
+        th.title = classTasks[i - 2].task_date;
       }
       headerRow.appendChild(th);
     }
@@ -129,7 +134,7 @@ function renderScoresPage(comp: CompInfo, scores: CompScores) {
       tr.appendChild(nameTd);
 
       // Per-task score columns
-      for (const task of scores.tasks) {
+      for (const task of classTasks) {
         const td = document.createElement("td");
         td.className = "py-1.5 pr-3";
         const entry = p.tasks.find((t) => t.task_id === task.task_id);
