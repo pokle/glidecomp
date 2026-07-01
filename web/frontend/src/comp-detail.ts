@@ -52,6 +52,22 @@ function escapeHtml(str: string): string {
   return el.innerHTML;
 }
 
+/**
+ * The comp/task GET right after this same session's create/update write can
+ * transiently 500 (e.g. D1 lock contention under the write that just
+ * happened) even though the write itself succeeded. Retry once before
+ * treating it as a real failure — a 404 is left alone since that's a
+ * genuine "not found", not a transient error.
+ */
+async function fetchWithRetry<T extends { ok: boolean; status: number }>(
+  fetcher: () => Promise<T>
+): Promise<T> {
+  const res = await fetcher();
+  if (res.ok || res.status === 404) return res;
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  return fetcher();
+}
+
 function categoryLabel(cat: string): string {
   return cat === "hg" ? "HG" : "PG";
 }
@@ -149,9 +165,11 @@ async function initTaskDetail(compId: string, taskId: string, user: AuthUser | n
 
   try {
     // Fetch task first — this is the primary data we need
-    const taskRes = await api.api.comp[":comp_id"].task[":task_id"].$get({
-      param: { comp_id: compId, task_id: taskId },
-    });
+    const taskRes = await fetchWithRetry(() =>
+      api.api.comp[":comp_id"].task[":task_id"].$get({
+        param: { comp_id: compId, task_id: taskId },
+      })
+    );
 
     if (!taskRes.ok) {
       showNotFound();
@@ -833,15 +851,11 @@ async function setupTrackSection(
     document.getElementById("task-closed-badge")!.style.display = "inline-flex";
   }
 
-  // Show upload buttons for authenticated users (unless comp is closed)
+  // Single "Submit track" button for authenticated users (unless closed). The
+  // dialog defaults to "Myself"; admins and (when comp.open_igc_upload is on)
+  // registered pilots can also pick another pilot to submit for.
   if (isAuthenticated && !isClosed) {
-    setupSelfUpload(compId, taskId, isAdmin, isClosed);
-  }
-
-  // Upload on behalf: available to admins, and to registered pilots when
-  // comp.open_igc_upload is enabled.
-  if (canUploadOnBehalf && !isClosed) {
-    setupUploadOnBehalf(compId, taskId, isAdmin, isClosed);
+    setupTrackUpload(compId, taskId, isAdmin, isClosed, canUploadOnBehalf);
   }
 }
 
@@ -1074,130 +1088,61 @@ function openPenaltyDialog(
   dialog.showModal();
 }
 
-function setupSelfUpload(
+// Single "Submit track" entry point on the task page. Opens a dialog that
+// defaults to submitting the signed-in user's own track ("Myself"); when the
+// user may upload on behalf (admin, or registered pilot with open_igc_upload),
+// the pilot dropdown also lists registered pilots. "Myself" posts to /igc, a
+// chosen pilot to /igc/:comp_pilot_id.
+function setupTrackUpload(
   compId: string,
   taskId: string,
   isAdmin: boolean,
-  isClosed: boolean
+  isClosed: boolean,
+  canUploadOnBehalf: boolean
 ) {
-  const btn = document.getElementById("upload-self-btn")!;
-  const input = document.getElementById("track-upload-input") as HTMLInputElement;
-  const statusDiv = document.getElementById("track-upload-status")!;
-  const messageEl = document.getElementById("track-upload-message")!;
+  const SELF = "self";
 
-  btn.classList.remove("hidden");
-
-  btn.addEventListener("click", () => input.click());
-
-  input.addEventListener("change", async () => {
-    const file = input.files?.[0];
-    if (!file) return;
-
-    if (!file.name.toLowerCase().endsWith(".igc")) {
-      showUploadStatus(messageEl, statusDiv, "Please select an IGC file", true);
-      input.value = "";
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      showUploadStatus(messageEl, statusDiv, "File too large (max 5MB)", true);
-      input.value = "";
-      return;
-    }
-
-    btn.setAttribute("disabled", "");
-    btn.textContent = "Uploading...";
-    showUploadStatus(messageEl, statusDiv, "Compressing and uploading...", false);
-
-    try {
-      const compressed = await compressIgc(file);
-
-      const res = await fetch(
-        `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc`,
-        {
-          method: "POST",
-          credentials: "include",
-          body: compressed,
-        }
-      );
-
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        showUploadStatus(messageEl, statusDiv, err.error || "Upload failed", true);
-        return;
-      }
-
-      const data = (await res.json()) as { replaced: boolean };
-      showUploadStatus(
-        messageEl,
-        statusDiv,
-        data.replaced ? "Track replaced" : "Track uploaded",
-        false
-      );
-
-      const tracks = await loadTracks(compId, taskId);
-      renderTrackList(tracks, compId, taskId, isAdmin, isClosed);
-      setupScoreSection(compId, taskId).catch(() => {});
-    } catch {
-      showUploadStatus(messageEl, statusDiv, "Network error", true);
-    } finally {
-      btn.removeAttribute("disabled");
-      btn.textContent = "Upload for me";
-      input.value = "";
-    }
-  });
-}
-
-function showUploadStatus(
-  messageEl: HTMLElement,
-  statusDiv: HTMLElement,
-  msg: string,
-  isError: boolean
-) {
-  statusDiv.classList.remove("hidden");
-  messageEl.textContent = msg;
-  messageEl.className = `text-sm ${isError ? "text-destructive" : "text-muted-foreground"}`;
-}
-
-function setupUploadOnBehalf(
-  compId: string,
-  taskId: string,
-  isAdmin: boolean,
-  isClosed: boolean
-) {
-  const btn = document.getElementById("upload-behalf-btn")!;
+  const btn = document.getElementById("upload-track-btn")!;
   btn.classList.remove("hidden");
 
   const dialog = document.getElementById("upload-behalf-dialog") as HTMLDialogElement;
+  const pilotRow = document.getElementById("behalf-pilot-row")!;
   const pilotSelect = document.getElementById("behalf-pilot-select") as unknown as HTMLSelectElement;
   const fileInput = document.getElementById("behalf-file-input") as HTMLInputElement;
   const uploadBtn = document.getElementById("behalf-upload-btn") as HTMLButtonElement;
   const statusDiv = document.getElementById("behalf-upload-status")!;
   const messageEl = document.getElementById("behalf-upload-message")!;
 
+  function showStatus(msg: string, isError: boolean) {
+    messageEl.textContent = msg;
+    messageEl.className = `text-sm ${isError ? "text-destructive" : "text-muted-foreground"}`;
+    statusDiv.classList.remove("hidden");
+  }
+
   btn.addEventListener("click", async () => {
-    // Fetch registered pilots
-    pilotSelect.innerHTML = '<option value="">Loading...</option>';
     fileInput.value = "";
     statusDiv.classList.add("hidden");
+
+    // Always start with "Myself"; only privileged users see other pilots.
+    pilotSelect.innerHTML = "";
+    const selfOpt = document.createElement("option");
+    selfOpt.value = SELF;
+    selfOpt.textContent = "Myself";
+    pilotSelect.appendChild(selfOpt);
+    pilotRow.classList.toggle("hidden", !canUploadOnBehalf);
+
     dialog.showModal();
+
+    if (!canUploadOnBehalf) return;
 
     try {
       const res = await api.api.comp[":comp_id"].pilot.$get({
         param: { comp_id: compId },
       });
-      if (!res.ok) {
-        pilotSelect.innerHTML = '<option value="">Failed to load pilots</option>';
-        return;
-      }
+      if (!res.ok) return;
       const data = (await res.json()) as {
         pilots: Array<{ comp_pilot_id: string; name: string; pilot_class: string }>;
       };
-      pilotSelect.innerHTML = "";
-      if (data.pilots.length === 0) {
-        pilotSelect.innerHTML = '<option value="">No registered pilots</option>';
-        return;
-      }
       for (const p of data.pilots) {
         const opt = document.createElement("option");
         opt.value = p.comp_pilot_id;
@@ -1205,7 +1150,7 @@ function setupUploadOnBehalf(
         pilotSelect.appendChild(opt);
       }
     } catch {
-      pilotSelect.innerHTML = '<option value="">Network error</option>';
+      // Non-fatal: the user can still submit for themselves.
     }
   });
 
@@ -1214,73 +1159,62 @@ function setupUploadOnBehalf(
   });
 
   uploadBtn.addEventListener("click", async () => {
-    const selectedPilot = pilotSelect.value;
-    if (!selectedPilot) {
-      messageEl.textContent = "Select a pilot";
-      messageEl.className = "text-sm text-destructive";
-      statusDiv.classList.remove("hidden");
-      return;
-    }
+    const selected = pilotSelect.value || SELF;
 
     const file = fileInput.files?.[0];
     if (!file) {
-      messageEl.textContent = "Select an IGC file";
-      messageEl.className = "text-sm text-destructive";
-      statusDiv.classList.remove("hidden");
+      showStatus("Select an IGC file", true);
       return;
     }
-
     if (!file.name.toLowerCase().endsWith(".igc")) {
-      messageEl.textContent = "Please select an IGC file";
-      messageEl.className = "text-sm text-destructive";
-      statusDiv.classList.remove("hidden");
+      showStatus("Please select an IGC file", true);
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showStatus("File too large (max 5MB)", true);
       return;
     }
 
     uploadBtn.disabled = true;
     uploadBtn.textContent = "Uploading...";
-    messageEl.textContent = "Compressing and uploading...";
-    messageEl.className = "text-sm text-muted-foreground";
-    statusDiv.classList.remove("hidden");
+    showStatus("Compressing and uploading...", false);
 
     try {
       const compressed = await compressIgc(file);
 
-      const res = await fetch(
-        `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(selectedPilot)}`,
-        {
-          method: "POST",
-          credentials: "include",
-          body: compressed,
-        }
-      );
+      const base = `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc`;
+      const url = selected === SELF ? base : `${base}/${encodeURIComponent(selected)}`;
+      const res = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        body: compressed,
+      });
 
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        messageEl.textContent = err.error || "Upload failed";
-        messageEl.className = "text-sm text-destructive";
+        showStatus(err.error || "Upload failed", true);
         return;
       }
 
       const data = (await res.json()) as { replaced: boolean };
-      messageEl.textContent = data.replaced
-        ? "Track replaced successfully"
-        : "Track uploaded successfully";
-      messageEl.className = "text-sm text-muted-foreground";
+      showStatus(
+        data.replaced ? "Track replaced successfully" : "Track uploaded successfully",
+        false
+      );
 
       // Reload track list and refresh scores
       const tracks = await loadTracks(compId, taskId);
       renderTrackList(tracks, compId, taskId, isAdmin, isClosed);
       setupScoreSection(compId, taskId).catch(() => {});
 
-      // Close after a brief delay so user sees success
+      // Close after a brief delay so the user sees success
       setTimeout(() => dialog.close(), 1000);
     } catch {
-      messageEl.textContent = "Network error. Please try again.";
-      messageEl.className = "text-sm text-destructive";
+      showStatus("Network error. Please try again.", true);
     } finally {
       uploadBtn.disabled = false;
       uploadBtn.textContent = "Upload";
+      fileInput.value = "";
     }
   });
 }
@@ -1461,9 +1395,11 @@ async function initCompDetail(compId: string, user: AuthUser | null) {
   let comp: CompDetail;
 
   try {
-    const res = await api.api.comp[":comp_id"].$get({
-      param: { comp_id: compId },
-    });
+    const res = await fetchWithRetry(() =>
+      api.api.comp[":comp_id"].$get({
+        param: { comp_id: compId },
+      })
+    );
 
     if (!res.ok) {
       showNotFound();
@@ -1506,7 +1442,14 @@ async function initCompDetail(compId: string, user: AuthUser | null) {
 
   // ── Tasks ──────────────────────────────────────────────────────────────
 
-  renderTasks(comp.tasks, compId);
+  // Treat close_date as end-of-day local time (see setupTrackSection).
+  const compClosed =
+    comp.close_date != null &&
+    comp.close_date !== "" &&
+    new Date() > new Date(comp.close_date + "T23:59:59");
+  const canSubmitTrack = user != null && !compClosed;
+
+  renderTasks(comp.tasks, compId, canSubmitTrack);
 
   // Show scores link when there's at least one task with a defined route
   if (comp.tasks.some((t) => t.has_xctsk)) {
@@ -1695,7 +1638,11 @@ function formatAuditTime(iso: string): string {
 
 // ── Render tasks list ────────────────────────────────────────────────────────
 
-function renderTasks(tasks: TaskSummary[], compId: string) {
+function renderTasks(
+  tasks: TaskSummary[],
+  compId: string,
+  canSubmitTrack: boolean
+) {
   const tasksList = document.getElementById("tasks-list")!;
   const tasksEmpty = document.getElementById("tasks-empty")!;
 
@@ -1723,10 +1670,13 @@ function renderTasks(tasks: TaskSummary[], compId: string) {
       tasksList.appendChild(dateLabel);
 
       for (const task of dateTasks) {
+        const row = document.createElement("div");
+        row.className = "flex items-center gap-2";
+
         const a = document.createElement("a");
         a.href = `/comp/${compId}/task/${task.task_id}`;
         a.className =
-          "flex items-center justify-between rounded-lg border border-border/50 px-4 py-3 hover:bg-muted/50 transition-colors";
+          "flex flex-1 min-w-0 items-center justify-between rounded-lg border border-border/50 px-4 py-3 hover:bg-muted/50 transition-colors";
 
         const xctskBadge = task.has_xctsk
           ? `<span class="inline-flex items-center rounded-md bg-green-500/10 text-green-500 px-1.5 py-0.5 text-xs font-medium">Task set</span>`
@@ -1744,12 +1694,87 @@ function renderTasks(tasks: TaskSummary[], compId: string) {
             <polyline points="9 18 15 12 9 6"/>
           </svg>
         `;
-        tasksList.appendChild(a);
+        row.appendChild(a);
+
+        // Submit track button — same job as the task page's "Submit track":
+        // lets a signed-in user upload their own IGC for this task.
+        if (canSubmitTrack) {
+          const submit = document.createElement("button");
+          submit.type = "button";
+          submit.className = "btn btn-primary btn-sm text-xs shrink-0";
+          submit.textContent = "Submit track";
+          wireSubmitTrack(submit, compId, task.task_id);
+          row.appendChild(submit);
+        }
+
+        // 3D replay button — opens the flight replay for this task.
+        const replay = document.createElement("a");
+        replay.href = `/samples/3dvis?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(task.task_id)}`;
+        replay.className = "btn btn-secondary btn-sm text-xs shrink-0";
+        replay.title = "Open the 3D flight replay for this task";
+        replay.textContent = "3D replay";
+        row.appendChild(replay);
+
+        tasksList.appendChild(row);
       }
     }
   } else {
     tasksEmpty.classList.remove("hidden");
   }
+}
+
+// Wire a task-list "Submit track" button to upload the signed-in user's own IGC
+// for that task — the same self-upload flow as the task detail page's dialog.
+function wireSubmitTrack(btn: HTMLButtonElement, compId: string, taskId: string) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".igc";
+  input.className = "hidden";
+  document.body.appendChild(input);
+
+  btn.addEventListener("click", () => input.click());
+
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith(".igc")) {
+      toast.error("Please select an IGC file");
+      input.value = "";
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File too large (max 5MB)");
+      input.value = "";
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "Uploading...";
+
+    try {
+      const compressed = await compressIgc(file);
+      const res = await fetch(
+        `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc`,
+        { method: "POST", credentials: "include", body: compressed }
+      );
+
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        toast.error(err.error || "Upload failed");
+        return;
+      }
+
+      const data = (await res.json()) as { replaced: boolean };
+      toast.success(data.replaced ? "Track replaced" : "Track uploaded");
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Submit track";
+      input.value = "";
+    }
+  });
 }
 
 // ── Render class coverage warnings ───────────────────────────────────────────

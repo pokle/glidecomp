@@ -52,24 +52,6 @@ function renderScoresPage(comp: CompInfo, scores: CompScores) {
   backLink.href = `/comp/${scores.comp_id}`;
   document.getElementById("scores-back-comp-name")!.textContent = comp.name;
 
-  // 3D replay links — one per task (opens the flight replay for that task).
-  const replayLinks = document.getElementById("scores-3dvis-links")!;
-  replayLinks.innerHTML = "";
-  if (scores.tasks.length > 0) {
-    const label = document.createElement("span");
-    label.className = "text-xs text-muted-foreground uppercase tracking-wider";
-    label.textContent = "3D replay";
-    replayLinks.appendChild(label);
-    for (const task of scores.tasks) {
-      const a = document.createElement("a");
-      a.href = `/samples/3dvis?comp=${encodeURIComponent(scores.comp_id)}&task=${encodeURIComponent(task.task_id)}`;
-      a.className = "btn btn-secondary btn-sm text-xs";
-      a.textContent = task.task_name;
-      replayLinks.appendChild(a);
-    }
-    replayLinks.classList.remove("hidden");
-  }
-
   const tabsContainer = document.getElementById("scores-class-tabs")!;
   const panelsContainer = document.getElementById("scores-panels")!;
   const multiClass = scores.standings.length > 1;
