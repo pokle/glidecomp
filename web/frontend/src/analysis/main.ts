@@ -1924,7 +1924,7 @@ async function init(): Promise<void> {
   // Sample competition buttons
   document.getElementById('sample-comp-corryong')?.addEventListener('click', () => {
     const params = new URLSearchParams(window.location.search);
-    params.set('sampleComp', 'corryong-cup-2026-t1');
+    params.set('sampleComp', 'corryong-cup-2026-open-t1');
     params.delete('task');
     params.delete('track');
     params.delete('storedTask');

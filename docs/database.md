@@ -39,10 +39,12 @@ writes whose rows you don't read back. (This is why
 
 ## Sample competition
 
-`bun run seed:sample` loads the public sample competition (Corryong Cup 2026,
-from `web/samples/comps/corryong-cup-2026-t1`) into D1 + R2, so every user can
-view it and the 3D replay (`/samples/3dvis`) can pull packed tracks from the
-competition-api Worker (`GET /api/comp/sample-3dvis`).
+`bun run seed:sample` loads the public sample competition (Corryong Cup 2026)
+into D1 + R2, so every user can view it and the 3D replay (`/samples/3dvis`) can
+pull packed tracks from the competition-api Worker (`GET /api/comp/sample-3dvis`).
+It reads `web/samples/comps/corryong-cup-2026/comp.json`, which lists every task
+with its pilot class (open + floater — see the CLAUDE.md "Updating bundled data"
+notes). Refresh the source folders with `bun web/scripts/download-airscore-comp.ts`.
 
 - **Idempotent:** the comp is identified by name (`SAMPLE_COMP_NAME`). Reruns
   wipe that comp's tasks / pilots / tracks (D1) and IGC objects (R2) and rebuild

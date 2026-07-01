@@ -168,10 +168,10 @@ bun run score-task <task.xctsk> <igc-file-or-folder>... [options]
 #   --no-arrival              Disable arrival points
 #   --json                    Output as JSON
 
-# Example: score Corryong Cup 2026 Task 1 (HG, no leading/arrival)
+# Example: score Corryong Cup 2026 Open Task 1 (HG, no leading/arrival)
 bun run score-task \
-  web/engine/tests/fixtures/corryong-cup-2026-t1/task.xctsk \
-  web/engine/tests/fixtures/corryong-cup-2026-t1/ \
+  web/samples/comps/corryong-cup-2026-open-t1/task.xctsk \
+  web/samples/comps/corryong-cup-2026-open-t1/ \
   --scoring HG --no-leading --no-arrival \
   --nominal-distance 35000 --nominal-goal 0.3
 ```

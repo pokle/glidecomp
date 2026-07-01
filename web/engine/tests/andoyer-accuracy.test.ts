@@ -107,7 +107,7 @@ describe('andoyerDistance vs Vincenty reference', () => {
   });
 
   describe('accumulated track distance on IGC fixtures (<1m error per track)', () => {
-    const fixtureDir = resolveCompDir('corryong-cup-2026-t1');
+    const fixtureDir = resolveCompDir('corryong-cup-2026-open-t1');
     const igcFiles = loadIGCFiles(fixtureDir);
 
     for (const file of igcFiles) {

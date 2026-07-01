@@ -5,6 +5,11 @@
  * can view it and the /samples/3dvis page can pull packed track data from the
  * competition-api Worker (GET /api/comp/sample-3dvis).
  *
+ * Loads the full Corryong Cup 2026 competition — all three tasks and every
+ * pilot track — as a single comp. Each task lives in its own source directory
+ * (web/samples/comps/corryong-cup-2026-t{1,2,3}); a pilot who flew several
+ * tasks gets one comp_pilot row (keyed by CIVL id) with a task_track per task.
+ *
  * Idempotent: the comp is identified by name (SAMPLE_COMP_NAME). On a rerun the
  * existing comp's tasks / pilots / tracks (D1) and IGC objects (R2) are wiped
  * and rebuilt under the SAME comp_id, so if users have messed with the loaded
@@ -14,7 +19,11 @@
  *   bun run seed:sample            # local dev state (web/.wrangler/state)
  *   bun run seed:sample --remote   # production D1 + R2 (needs wrangler auth)
  *
- * Source files: web/samples/comps/corryong-cup-2026-t1 (33 IGC + task.xctsk).
+ * Source: the comp folders written by download-airscore-comp.ts, described by
+ * web/samples/comps/<slug>/comp.json. That manifest lists every task with its
+ * pilot class (AirScore runs "open" and "floater" as separate comps flying
+ * different tasks per day; here they become one comp with two classes). A pilot
+ * who flew in both classes gets one comp_pilot row per class.
  */
 
 import { readFileSync, readdirSync, writeFileSync, mkdtempSync } from 'node:fs';
@@ -28,7 +37,10 @@ import { parseIGC } from '@glidecomp/engine';
 import { SAMPLE_COMP_NAME } from '../workers/competition-api/src/sample';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-const COMP_DIR = join(REPO_ROOT, 'web/samples/comps/corryong-cup-2026-t1');
+const COMPS_ROOT = join(REPO_ROOT, 'web/samples/comps');
+// Which downloaded comp to seed (matches a folder under COMPS_ROOT). The
+// `--remote` flag and the slug can appear in any arg order.
+const SLUG = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'corryong-cup-2026';
 const DB_NAME = 'taskscore-auth';
 const R2_BUCKET = 'glidecomp';
 const PERSIST = 'web/.wrangler/state';
@@ -128,33 +140,62 @@ interface SamplePilot {
   fileSize: number;
 }
 
-function readSample(): { pilots: SamplePilot[]; xctsk: string; timezone?: string } {
-  const entries = readdirSync(COMP_DIR);
+interface TaskSpec {
+  dir: string;
+  name: string;
+  date: string;
+  pilotClass: string;
+}
+
+interface SampleTask extends TaskSpec {
+  xctsk: string;
+  pilots: SamplePilot[];
+}
+
+interface CompManifest {
+  name: string;
+  slug: string;
+  classes: string[];
+  tasks: Array<{ pilot_class: string; name: string; date: string; dir: string }>;
+}
+
+/** Best-effort timezone from a lat/lon via the engine workspace's geo-tz. */
+function resolveTimezone(lat: number, lon: number): string | undefined {
+  try {
+    // geo-tz is a node lib living in the engine workspace; resolve it from
+    // there (best-effort — the viewer falls back to the browser zone).
+    const engineRequire = createRequire(join(REPO_ROOT, 'web/engine/package.json'));
+    const { find } = engineRequire('geo-tz') as {
+      find: (lat: number, lon: number) => string[];
+    };
+    return find(lat, lon)[0];
+  } catch {
+    return undefined; // leave unresolved → viewer falls back to browser zone
+  }
+}
+
+/**
+ * Read one task directory: its .xctsk and every non-empty IGC track. Returns
+ * the (possibly timezone-stamped) task JSON plus the parsed pilots. `tzOut` is
+ * populated with the first resolved timezone so the caller can share it.
+ */
+function readTask(spec: TaskSpec, tzOut: { value?: string }): SampleTask {
+  const compDir = join(COMPS_ROOT, spec.dir);
+  const entries = readdirSync(compDir);
   const igcFiles = entries.filter((f) => f.toLowerCase().endsWith('.igc')).sort();
-  if (igcFiles.length === 0) throw new Error(`No IGC files in ${COMP_DIR}`);
+  if (igcFiles.length === 0) throw new Error(`No IGC files in ${compDir}`);
 
   const taskFile = entries.find((f) => f.toLowerCase().endsWith('.xctsk'));
-  if (!taskFile) throw new Error(`No .xctsk task file in ${COMP_DIR}`);
-  const xctskRaw = readFileSync(join(COMP_DIR, taskFile), 'utf-8');
+  if (!taskFile) throw new Error(`No .xctsk task file in ${compDir}`);
+  const xctskRaw = readFileSync(join(compDir, taskFile), 'utf-8');
 
-  let timezone: string | undefined;
   const pilots: SamplePilot[] = [];
   for (const file of igcFiles) {
-    const text = readFileSync(join(COMP_DIR, file), 'utf-8');
+    const text = readFileSync(join(compDir, file), 'utf-8');
     const igc = parseIGC(text);
     if (igc.fixes.length === 0) continue;
-    if (timezone === undefined) {
-      try {
-        // geo-tz is a node lib living in the engine workspace; resolve it from
-        // there (best-effort — the viewer falls back to the browser zone).
-        const engineRequire = createRequire(join(REPO_ROOT, 'web/engine/package.json'));
-        const { find } = engineRequire('geo-tz') as {
-          find: (lat: number, lon: number) => string[];
-        };
-        timezone = find(igc.fixes[0].latitude, igc.fixes[0].longitude)[0];
-      } catch {
-        /* leave unresolved → viewer falls back to browser zone */
-      }
+    if (tzOut.value === undefined) {
+      tzOut.value = resolveTimezone(igc.fixes[0].latitude, igc.fixes[0].longitude);
     }
     const name = (igc.header.pilot || basename(file, '.igc')).replace(/\s+/g, ' ').trim();
     const gz = gzipSync(Buffer.from(text, 'utf-8'), { level: 9 });
@@ -164,25 +205,71 @@ function readSample(): { pilots: SamplePilot[]; xctsk: string; timezone?: string
   // Stash the timezone in the stored task JSON so the Worker (which can't run
   // geo-tz) can put it on the manifest. `_timezone` is ignored by parseXCTask.
   let xctsk = xctskRaw;
-  if (timezone) {
+  if (tzOut.value) {
     const obj = JSON.parse(xctskRaw);
-    obj._timezone = timezone;
+    obj._timezone = tzOut.value;
     xctsk = JSON.stringify(obj);
   }
-  return { pilots, xctsk, timezone };
+  return { ...spec, xctsk, pilots };
 }
 
 // --- seed ------------------------------------------------------------------
 
+/**
+ * Registry key for a pilot within a class: CIVL id when known (the primary
+ * match key), else the display name, scoped by pilot class. A pilot who flew in
+ * two classes (e.g. floater one day, open the next) gets one comp_pilot row per
+ * class; within a class, all their tasks share a single row.
+ */
+function pilotKey(pilotClass: string, civl: string | null, name: string): string {
+  return `${pilotClass} ${civl ? `civl:${civl}` : `name:${name}`}`;
+}
+
+/** "open" → "Open", so task names read "Task 1 (Open)". */
+function classLabel(pilotClass: string): string {
+  return pilotClass.charAt(0).toUpperCase() + pilotClass.slice(1);
+}
+
+function loadManifest(): CompManifest {
+  const path = join(COMPS_ROOT, SLUG, 'comp.json');
+  return JSON.parse(readFileSync(path, 'utf-8')) as CompManifest;
+}
+
 function main(): void {
   const where = REMOTE ? 'REMOTE (production)' : `local (${PERSIST})`;
-  console.log(`Seeding "${SAMPLE_COMP_NAME}" into ${where}…`);
+  const manifest = loadManifest();
+  console.log(`Seeding "${SAMPLE_COMP_NAME}" (${SLUG}) into ${where}…`);
+  console.log(`  classes: ${manifest.classes.join(', ')}`);
 
-  const { pilots, xctsk, timezone } = readSample();
-  console.log(`  ${pilots.length} pilots, timezone ${timezone ?? 'unresolved'}`);
+  // Read every task, sharing one resolved timezone across the comp.
+  const tzOut: { value?: string } = {};
+  const tasks = manifest.tasks.map((t) =>
+    readTask({ dir: t.dir, name: t.name, date: t.date, pilotClass: t.pilot_class }, tzOut),
+  );
+  for (const t of tasks) {
+    console.log(`  ${t.pilotClass}/${t.name} (${t.date}): ${t.pilots.length} pilots`);
+  }
+  console.log(`  timezone ${tzOut.value ?? 'unresolved'}`);
+
+  // One comp_pilot row per (class, pilot). First-seen name/civl wins within a key.
+  interface RegPilot { name: string; civl: string | null; pilotClass: string }
+  const registry = new Map<string, RegPilot>();
+  for (const t of tasks) {
+    for (const p of t.pilots) {
+      const key = pilotKey(t.pilotClass, p.civl, p.name);
+      if (!registry.has(key)) {
+        registry.set(key, { name: p.name, civl: p.civl, pilotClass: t.pilotClass });
+      }
+    }
+  }
+  const perClass = manifest.classes
+    .map((c) => `${c}: ${[...registry.values()].filter((p) => p.pilotClass === c).length}`)
+    .join(', ');
+  console.log(`  ${registry.size} pilot registrations (${perClass})`);
 
   const today = new Date().toISOString().slice(0, 10);
-  const taskDate = '2026-01-05'; // the sample flight date
+  const classesJson = JSON.stringify(manifest.classes);
+  const defaultClass = manifest.classes[0];
 
   // 1) Find or create the comp (stable comp_id across reruns).
   const existing = rows(`SELECT comp_id FROM comp WHERE name = ${q(SAMPLE_COMP_NAME)};`);
@@ -204,67 +291,85 @@ function main(): void {
         `DELETE FROM task WHERE comp_id = ${compId};`,
         `DELETE FROM comp_pilot WHERE comp_id = ${compId};`,
         `DELETE FROM audit_log WHERE comp_id = ${compId};`,
-        `UPDATE comp SET category='hg', test=0, pilot_classes='["open"]',
-           default_pilot_class='open' WHERE comp_id = ${compId};`,
+        `UPDATE comp SET category='hg', test=0, pilot_classes=${q(classesJson)},
+           default_pilot_class=${q(defaultClass)} WHERE comp_id = ${compId};`,
       ].join('\n'),
     );
   } else {
     exec(
       `INSERT INTO comp (name, creation_date, category, test, pilot_classes, default_pilot_class)
-       VALUES (${q(SAMPLE_COMP_NAME)}, ${q(today)}, 'hg', 0, '["open"]', 'open');`,
+       VALUES (${q(SAMPLE_COMP_NAME)}, ${q(today)}, 'hg', 0, ${q(classesJson)}, ${q(defaultClass)});`,
     );
     compId = Number(rows(`SELECT comp_id FROM comp WHERE name = ${q(SAMPLE_COMP_NAME)};`)[0].comp_id);
     console.log(`  created comp_id ${compId}`);
   }
 
-  // 2) Task + its scored class.
+  // 2) comp_pilot rows (one per registration), then read back ids by our key.
+  const registrations = [...registry.values()];
   exec(
-    `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk)
-     VALUES (${compId}, 'Task 1', ${q(taskDate)}, ${q(today)}, ${q(xctsk)});`,
-  );
-  const taskId = Number(
-    rows(`SELECT task_id FROM task WHERE comp_id = ${compId} ORDER BY task_id LIMIT 1;`)[0].task_id,
-  );
-  exec(`INSERT INTO task_class (task_id, pilot_class) VALUES (${taskId}, 'open');`);
-
-  // 3) comp_pilot rows (one per pilot), then read back their ids by name.
-  exec(
-    pilots
+    registrations
       .map(
         (p) =>
           `INSERT INTO comp_pilot (comp_id, registered_pilot_name, registered_pilot_civl_id, pilot_class)
-           VALUES (${compId}, ${q(p.name)}, ${q(p.civl)}, 'open');`,
+           VALUES (${compId}, ${q(p.name)}, ${q(p.civl)}, ${q(p.pilotClass)});`,
       )
       .join('\n'),
   );
   const cpRows = rows(
-    `SELECT comp_pilot_id, registered_pilot_name FROM comp_pilot WHERE comp_id = ${compId};`,
+    `SELECT comp_pilot_id, registered_pilot_name, registered_pilot_civl_id, pilot_class
+       FROM comp_pilot WHERE comp_id = ${compId};`,
   );
-  const cpByName = new Map(
-    cpRows.map((r) => [String(r.registered_pilot_name), Number(r.comp_pilot_id)]),
+  // Re-derive the same (class, civl-or-name) key from the read-back rows.
+  const cpByKey = new Map(
+    cpRows.map((r) => {
+      const civl = r.registered_pilot_civl_id ? String(r.registered_pilot_civl_id) : null;
+      const key = pilotKey(String(r.pilot_class), civl, String(r.registered_pilot_name));
+      return [key, Number(r.comp_pilot_id)];
+    }),
   );
 
-  // 4) Upload each IGC to R2 and insert its task_track row.
+  // 3) Per task: insert the task + its single scored class, then upload each IGC
+  //    to R2 and insert its task_track row (linked to the class's comp_pilot).
+  //    Open and floater "Task 1" share a date but are distinct rows, named by
+  //    class so the app's task list disambiguates them.
   const tmpDir = mkdtempSync(join(tmpdir(), 'seed-igc-'));
   const now = new Date().toISOString();
-  const trackInserts: string[] = [];
-  let n = 0;
-  for (const p of pilots) {
-    const compPilotId = cpByName.get(p.name);
-    if (compPilotId === undefined) continue;
-    const key = `c/${compId}/t/${taskId}/${compPilotId}.igc`;
-    const gzFile = join(tmpDir, `${compPilotId}.igc.gz`);
-    writeFileSync(gzFile, p.gz);
-    r2Put(key, gzFile);
-    trackInserts.push(
-      `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name)
-       VALUES (${taskId}, ${compPilotId}, ${q(key)}, ${q(now)}, ${p.fileSize}, ${q(p.name)});`,
+  let totalTracks = 0;
+  const taskSummaries: string[] = [];
+  for (const t of tasks) {
+    const taskName = `${t.name} (${classLabel(t.pilotClass)})`;
+    exec(
+      `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk)
+       VALUES (${compId}, ${q(taskName)}, ${q(t.date)}, ${q(today)}, ${q(t.xctsk)});`,
     );
-    if (++n % 10 === 0) console.log(`  uploaded ${n}/${pilots.length} tracks…`);
-  }
-  exec(trackInserts.join('\n'));
+    const taskId = Number(
+      rows(`SELECT task_id FROM task WHERE comp_id = ${compId} AND name = ${q(taskName)};`)[0].task_id,
+    );
+    exec(`INSERT INTO task_class (task_id, pilot_class) VALUES (${taskId}, ${q(t.pilotClass)});`);
 
-  console.log(`\nDone. comp_id=${compId} task_id=${taskId} (${n} tracks)`);
+    const trackInserts: string[] = [];
+    let n = 0;
+    for (const p of t.pilots) {
+      const compPilotId = cpByKey.get(pilotKey(t.pilotClass, p.civl, p.name));
+      if (compPilotId === undefined) continue;
+      const key = `c/${compId}/t/${taskId}/${compPilotId}.igc`;
+      const gzFile = join(tmpDir, `${taskId}-${compPilotId}.igc.gz`);
+      writeFileSync(gzFile, p.gz);
+      r2Put(key, gzFile);
+      trackInserts.push(
+        `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name)
+         VALUES (${taskId}, ${compPilotId}, ${q(key)}, ${q(now)}, ${p.fileSize}, ${q(p.name)});`,
+      );
+      n++;
+    }
+    exec(trackInserts.join('\n'));
+    totalTracks += n;
+    taskSummaries.push(`${taskName} (task_id=${taskId}, ${n} tracks)`);
+    console.log(`  seeded ${taskName}: task_id=${taskId}, ${n} tracks`);
+  }
+
+  console.log(`\nDone. comp_id=${compId} — ${tasks.length} tasks, ${totalTracks} tracks total`);
+  for (const s of taskSummaries) console.log(`    ${s}`);
   console.log(`  Sample 3dvis: GET /api/comp/sample-3dvis`);
   console.log(`  View at:      /samples/3dvis`);
   if (!REMOTE) console.log('  (local state — start dev servers with `bun run dev`)');

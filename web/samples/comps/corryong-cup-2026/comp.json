@@ -1,0 +1,69 @@
+{
+  "name": "Corryong Cup 2026",
+  "slug": "corryong-cup-2026",
+  "source_host": "https://xc.highcloud.net",
+  "classes": [
+    "open",
+    "floater"
+  ],
+  "waypoint_region": {
+    "regPk": 700,
+    "name": "CorryongHG2026_0m"
+  },
+  "tasks": [
+    {
+      "pilot_class": "open",
+      "name": "Task 1",
+      "date": "2026-01-05",
+      "dir": "corryong-cup-2026-open-t1",
+      "tasPk": 2027,
+      "comPk": 466,
+      "task_type": "speedrun-interval"
+    },
+    {
+      "pilot_class": "open",
+      "name": "Task 2",
+      "date": "2026-01-06",
+      "dir": "corryong-cup-2026-open-t2",
+      "tasPk": 2029,
+      "comPk": 466,
+      "task_type": "speedrun-interval"
+    },
+    {
+      "pilot_class": "open",
+      "name": "Task 3",
+      "date": "2026-01-07",
+      "dir": "corryong-cup-2026-open-t3",
+      "tasPk": 2030,
+      "comPk": 466,
+      "task_type": "speedrun-interval"
+    },
+    {
+      "pilot_class": "floater",
+      "name": "Task 1",
+      "date": "2026-01-05",
+      "dir": "corryong-cup-2026-floater-t1",
+      "tasPk": 2026,
+      "comPk": 465,
+      "task_type": "speedrun"
+    },
+    {
+      "pilot_class": "floater",
+      "name": "Task 2",
+      "date": "2026-01-06",
+      "dir": "corryong-cup-2026-floater-t2",
+      "tasPk": 2028,
+      "comPk": 465,
+      "task_type": "speedrun"
+    },
+    {
+      "pilot_class": "floater",
+      "name": "Task 3",
+      "date": "2026-01-07",
+      "dir": "corryong-cup-2026-floater-t3",
+      "tasPk": 2031,
+      "comPk": 465,
+      "task_type": "speedrun"
+    }
+  ]
+}
