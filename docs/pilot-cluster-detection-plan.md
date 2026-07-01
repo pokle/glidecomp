@@ -2,7 +2,7 @@
 
 Find and visualize **clusters of pilots flying together** during a competition
 task, and make those clusters easy to notice forming/dissolving as you scrub the
-3D replay. We build and iterate against the existing **`/samples/3dvis`** flight
+3D replay. We build and iterate against the existing **`/replay`** flight
 replay (Corryong Cup 2026 Task 1, ~32 pilots).
 
 ---
@@ -69,8 +69,8 @@ Key facts we reuse:
 |---|---|---|
 | Cluster + episode detection (pure, tested) | **`web/engine/src/cluster-detector.ts`** (export from `index.ts`) | DOM/fs-free, unit-testable, reusable in a Worker later — same discipline as `track-packer.ts` |
 | Engine tests | **`web/engine/tests/cluster-detector.test.ts`** | matches existing `web/engine/tests/*.test.ts` layout |
-| Live in-scene overlay (Three) | **`web/frontend/src/samples/gaggle-layer.ts`** | sibling to `flight-scene.ts`; hosted by both backends |
-| Wiring (panel, timeline ribbon, toggle) | **`web/frontend/src/samples/3dvis.ts` / `3dvis.html`** | same place pilot legend / controls already live |
+| Live in-scene overlay (Three) | **`web/frontend/src/replay/gaggle-layer.ts`** | sibling to `flight-scene.ts`; hosted by both backends |
+| Wiring (panel, timeline ribbon, toggle) | **`web/frontend/src/replay/main.ts` / `replay.html`** | same place pilot legend / controls already live |
 
 **Compute timing:** run detection **at load time in the browser** (right after
 `viewer.load(...)`, from the loaded tracks), *not* at build time — so tuning a
@@ -240,7 +240,7 @@ live without editing constants.
 
 ## 5. Demo & iterate loop (on the 3dvis sample)
 
-1. `bun run dev:frontend` → http://localhost:3000/samples/3dvis (asset already
+1. `bun run dev:frontend` → http://localhost:3000/replay (asset already
    built; `bun run build-3dvis` only if regenerating).
 2. Compute gaggles at load from the loaded tracks; render blobs + ribbon + panel.
 3. **Calibrate against ground truth in the sample:**
