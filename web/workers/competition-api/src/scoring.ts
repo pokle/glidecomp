@@ -5,10 +5,12 @@ import {
   scoreFlights,
   toFlightScoringData,
   taskForDistanceOrigin,
+  computeLeadingAggregate,
   calculateOptimizedTaskDistance,
   DEFAULT_GAP_PARAMETERS,
   type GAPParameters,
   type FlightScoringData,
+  type LeadingAggregate,
 } from "@glidecomp/engine";
 import { encodeId } from "./sqids";
 
@@ -127,6 +129,10 @@ interface CachedFlightAnalysis {
   speedSectionTime: number | null;
   sssTimeMs: number | null;
   essTimeMs: number | null;
+  /** Present only for leading-enabled comps — the per-track leading scan,
+   * cached so a new upload doesn't force a re-scan of the whole field. Its
+   * validity is tied to the task geometry + leading formula in the cache key. */
+  leadingAggregate?: LeadingAggregate;
 }
 
 /** Short SHA-256 hex digest (16 chars) of a string — used for cache keys. */
@@ -217,10 +223,11 @@ export async function computeTaskScore(
       calculateOptimizedTaskDistance(xcTask) * 0.7;
   }
 
-  // Resolve the parameters that shape per-pilot geometry. distanceOrigin trims
-  // the task; useLeading decides whether the tracklog is needed downstream.
+  // Resolve the parameters that shape per-pilot analysis. distanceOrigin trims
+  // the task; useLeading + leadingFormula shape the cached leading aggregate.
   const distanceOrigin = gapParams.distanceOrigin ?? DEFAULT_GAP_PARAMETERS.distanceOrigin;
   const useLeading = gapParams.useLeading ?? DEFAULT_GAP_PARAMETERS.useLeading;
+  const leadingFormula = gapParams.leadingFormula ?? DEFAULT_GAP_PARAMETERS.leadingFormula;
   const scoringTask = taskForDistanceOrigin(xcTask, distanceOrigin);
 
   // Load all tracks joined with pilot info, grouped by class
@@ -257,11 +264,15 @@ export async function computeTaskScore(
   const scoredTracks = tracks.results.filter((t) => scoredClasses.has(t.pilot_class));
 
   // Per-track analysis cache key prefix: any change to the task geometry
-  // (xctsk) or the distance origin invalidates every cached analysis. The
-  // leading-coefficient path needs the raw tracklog, so it is never cached.
-  const geomHash = kv && !useLeading
-    ? await shortHash(`${taskRow.xctsk} ${distanceOrigin}`)
-    : "";
+  // (xctsk) or distance origin invalidates every cached analysis. Leading
+  // comps also cache — but the leading aggregate depends on the formula, so
+  // it is folded into the key (and the payload carries the aggregate). The
+  // leading vs no-leading variants use distinct keys so a hit always has the
+  // shape it needs.
+  const geomKey = useLeading
+    ? `${taskRow.xctsk} ${distanceOrigin} lead:${leadingFormula}`
+    : `${taskRow.xctsk} ${distanceOrigin} nolead`;
+  const geomHash = kv ? await shortHash(geomKey) : "";
 
   type AnalyzedPilot = {
     flight: FlightScoringData;
@@ -318,23 +329,35 @@ export async function computeTaskScore(
         if (igc.fixes.length === 0) return null;
 
         const result = resolveTurnpointSequence(scoringTask, igc.fixes);
-        flight = toFlightScoringData(
+        // Base (field-independent) analysis, without retaining the heavy
+        // tracklog. Leading comps additionally capture the per-track leading
+        // scan as an aggregate, so a later upload doesn't re-scan the field.
+        const base = toFlightScoringData(
           { pilotName: track.pilot_name, trackFile: track.igc_filename, fixes: igc.fixes },
           result,
-          useLeading
+          false
         );
+        const leadingAggregate = useLeading
+          ? computeLeadingAggregate(
+              igc.fixes, scoringTask, result.sequence,
+              base.sssTimeMs, base.essTimeMs, leadingFormula
+            )
+          : undefined;
+        flight = leadingAggregate ? { ...base, leadingAggregate } : base;
 
         // Cache the compact, field-independent analysis for reuse. Store only
-        // the geometric fields — the pilot name/id come fresh from the DB each
-        // run, so renames and penalties never invalidate this entry.
+        // the geometric fields (+ leading aggregate) — the pilot name/id come
+        // fresh from the DB each run, so renames and penalties never
+        // invalidate this entry.
         if (cacheKey && kv) {
           const compact: CachedFlightAnalysis = {
-            flownDistance: flight.flownDistance,
-            madeGoal: flight.madeGoal,
-            reachedESS: flight.reachedESS,
-            speedSectionTime: flight.speedSectionTime,
-            sssTimeMs: flight.sssTimeMs,
-            essTimeMs: flight.essTimeMs,
+            flownDistance: base.flownDistance,
+            madeGoal: base.madeGoal,
+            reachedESS: base.reachedESS,
+            speedSectionTime: base.speedSectionTime,
+            sssTimeMs: base.sssTimeMs,
+            essTimeMs: base.essTimeMs,
+            ...(leadingAggregate ? { leadingAggregate } : {}),
           };
           const put = kv.put(cacheKey, JSON.stringify(compact), {
             expirationTtl: 604800,
