@@ -11,6 +11,8 @@ import {
   calculateSpeedFraction,
   calculateTimePoints,
   calculateLeadingCoefficient,
+  computeLeadingAggregate,
+  combineLeadingCoefficient,
   calculateLeadingPoints,
   calculateArrivalPoints,
   applyMinimumDistance,
@@ -22,6 +24,7 @@ import {
   type GAPParameters,
   type PilotFlight,
   type FlightScoringData,
+  type LeadingFormula,
 } from '../src/gap-scoring';
 import { resolveTurnpointSequence } from '../src/turnpoint-sequence';
 import { calculateOptimizedTaskDistance } from '../src/task-optimizer';
@@ -851,23 +854,33 @@ describe('scoreFlights (cache-equivalent path)', () => {
 
   /**
    * Rebuild FlightScoringData exactly as the worker's per-track cache does:
-   * resolve → toFlightScoringData → keep only the compact geometric fields →
-   * JSON round-trip (as KV storage would) → re-attach fresh pilot name/track.
+   * resolve → compact geometric fields (+ leading aggregate when leading is on,
+   * in place of the tracklog) → JSON round-trip (as KV storage would) →
+   * re-attach fresh pilot name/track. No fixes/sequence survive the cache.
    */
-  function cachedInputs(task: XCTask, pilots: PilotFlight[], useLeading: boolean): FlightScoringData[] {
+  function cachedInputs(
+    task: XCTask, pilots: PilotFlight[], useLeading: boolean,
+    formula: LeadingFormula = 'weighted',
+  ): FlightScoringData[] {
     const scoringTask = taskForDistanceOrigin(task, DEFAULT_GAP_PARAMETERS.distanceOrigin);
     return pilots.map(p => {
       const result = resolveTurnpointSequence(scoringTask, p.fixes);
-      const data = toFlightScoringData(p, result, useLeading);
-      if (useLeading) return data; // leading needs fixes/sequence, not cached
-      const compact = JSON.parse(JSON.stringify({
+      const data = toFlightScoringData(p, result, false);
+      const payload: Record<string, unknown> = {
         flownDistance: data.flownDistance,
         madeGoal: data.madeGoal,
         reachedESS: data.reachedESS,
         speedSectionTime: data.speedSectionTime,
         sssTimeMs: data.sssTimeMs,
         essTimeMs: data.essTimeMs,
-      }));
+      };
+      if (useLeading) {
+        payload.leadingAggregate = computeLeadingAggregate(
+          p.fixes, scoringTask, result.sequence,
+          data.sssTimeMs, data.essTimeMs, formula,
+        );
+      }
+      const compact = JSON.parse(JSON.stringify(payload));
       return { pilotName: p.pilotName, trackFile: p.trackFile, ...compact };
     });
   }
@@ -900,32 +913,89 @@ describe('scoreFlights (cache-equivalent path)', () => {
     }
   });
 
-  it('matches scoreTask with leading enabled (fixes/sequence passed through)', () => {
+  for (const formula of ['weighted', 'classic'] as const) {
+    it(`matches scoreTask with leading enabled via a cached aggregate (${formula})`, () => {
+      const pilots = buildPilots();
+      const params: Partial<GAPParameters> = {
+        nominalDistance: 10000, nominalTime: 600, useLeading: true, leadingFormula: formula,
+      };
+
+      const full = scoreTask(standardTask, pilots, params);
+      const scoringTask = taskForDistanceOrigin(standardTask, DEFAULT_GAP_PARAMETERS.distanceOrigin);
+      // The cached path carries only a JSON-round-tripped leading aggregate —
+      // no fixes. It must reproduce scoreTask's leading output exactly, since
+      // both feed the same aggregate into combineLeadingCoefficient.
+      const viaCache = scoreFlights(scoringTask, cachedInputs(standardTask, pilots, true, formula), params);
+
+      expect(viaCache.availablePoints.leading).toBe(full.availablePoints.leading);
+      const fullByTrack = new Map(full.pilotScores.map(p => [p.trackFile, p]));
+      for (const ps of viaCache.pilotScores) {
+        const f = fullByTrack.get(ps.trackFile)!;
+        expect(ps.totalScore).toBe(f.totalScore);
+        expect(ps.leadingPoints).toBe(f.leadingPoints);
+        expect(ps.leadingCoefficient).toBe(f.leadingCoefficient);
+      }
+    });
+  }
+
+  it('throws if leading is enabled but a flight lacks both tracklog and aggregate', () => {
     const pilots = buildPilots();
-    const params: Partial<GAPParameters> = {
-      nominalDistance: 10000, nominalTime: 600, useLeading: true,
-    };
-
-    const full = scoreTask(standardTask, pilots, params);
     const scoringTask = taskForDistanceOrigin(standardTask, DEFAULT_GAP_PARAMETERS.distanceOrigin);
-    const viaCore = scoreFlights(scoringTask, cachedInputs(standardTask, pilots, true), params);
-
-    const fullByTrack = new Map(full.pilotScores.map(p => [p.trackFile, p]));
-    for (const ps of viaCore.pilotScores) {
-      const f = fullByTrack.get(ps.trackFile)!;
-      expect(ps.totalScore).toBe(f.totalScore);
-      expect(ps.leadingPoints).toBe(f.leadingPoints);
-      expect(ps.leadingCoefficient).toBe(f.leadingCoefficient);
-    }
-  });
-
-  it('throws if leading is enabled but a flight lacks its tracklog', () => {
-    const pilots = buildPilots();
-    const scoringTask = taskForDistanceOrigin(standardTask, DEFAULT_GAP_PARAMETERS.distanceOrigin);
-    // Compact inputs (no fixes/sequence) + useLeading is a programming error.
+    // Compact inputs with no fixes/sequence AND no leadingAggregate + useLeading
+    // is a programming error.
     const compact = cachedInputs(standardTask, pilots, false);
     expect(() =>
       scoreFlights(scoringTask, compact, { nominalDistance: 10000, useLeading: true }),
     ).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Leading aggregate split — computeLeadingAggregate + combineLeadingCoefficient
+// must reproduce calculateLeadingCoefficient (the cacheable decomposition).
+// ---------------------------------------------------------------------------
+
+describe('leading aggregate ≡ calculateLeadingCoefficient', () => {
+  function scenario() {
+    const leader = createTrackThroughCylinders(standardWaypoints, { fixIntervalMinutes: 1 });
+    const lander = createTrackThroughCylinders(standardWaypoints.slice(0, 2), { fixIntervalMinutes: 1 });
+    const lSeq = resolveTurnpointSequence(standardTask, leader);
+    const dSeq = resolveTurnpointSequence(standardTask, lander);
+    const firstSSS = lSeq.sssReaching!.time.getTime();
+    // Give the field a later last-ESS so the land-out tail term is exercised.
+    const lastESS = lSeq.essReaching!.time.getTime() + 600000;
+    return { leader, lander, lSeq, dSeq, firstSSS, lastESS };
+  }
+
+  for (const formula of ['weighted', 'classic'] as const) {
+    it(`${formula}: aggregate+combine equals the direct call (ESS finisher & land-out)`, () => {
+      const { leader, lander, lSeq, dSeq, firstSSS, lastESS } = scenario();
+
+      // ESS finisher
+      const directFin = calculateLeadingCoefficient(
+        leader, standardTask, lSeq.sequence, firstSSS, lastESS,
+        lSeq.sssReaching!.time.getTime(), lSeq.essReaching!.time.getTime(), formula);
+      const aggFin = JSON.parse(JSON.stringify(computeLeadingAggregate(
+        leader, standardTask, lSeq.sequence,
+        lSeq.sssReaching!.time.getTime(), lSeq.essReaching!.time.getTime(), formula)));
+      expect(combineLeadingCoefficient(aggFin, firstSSS, lastESS, formula)).toBe(directFin);
+
+      // Land-out pilot (no ESS → tail term)
+      const directLand = calculateLeadingCoefficient(
+        lander, standardTask, dSeq.sequence, firstSSS, lastESS,
+        dSeq.sssReaching!.time.getTime(), null, formula);
+      const aggLand = JSON.parse(JSON.stringify(computeLeadingAggregate(
+        lander, standardTask, dSeq.sequence,
+        dSeq.sssReaching!.time.getTime(), null, formula)));
+      expect(combineLeadingCoefficient(aggLand, firstSSS, lastESS, formula)).toBe(directLand);
+    });
+  }
+
+  it('an invalid aggregate (never started) combines to Infinity', () => {
+    const leader = createTrackThroughCylinders(standardWaypoints, { fixIntervalMinutes: 1 });
+    const seq = resolveTurnpointSequence(standardTask, leader);
+    const agg = computeLeadingAggregate(leader, standardTask, seq.sequence, null, null, 'weighted');
+    expect(agg.valid).toBe(false);
+    expect(combineLeadingCoefficient(agg, 0, 600000, 'weighted')).toBe(Infinity);
   });
 });

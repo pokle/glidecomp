@@ -247,6 +247,83 @@ describe("Live Scoring", () => {
     expect(penalisedPilot.rank).toBeGreaterThan(1);
   });
 
+  test("PG leading-points comp: cached-aggregate scoring matches the engine", async () => {
+    const taskXctsk = JSON.parse(env.SAMPLE_TASK_XCTSK);
+    // A paragliding comp with leading (departure) points enabled — the path
+    // that caches a per-track leading aggregate instead of re-scanning tracks.
+    const gapParams = {
+      nominalLaunch: 0.96,
+      nominalGoal: 0.3,
+      nominalTime: 5400,
+      minimumDistance: 5000,
+      scoring: "PG" as const,
+      useLeading: true,
+      useArrival: false,
+      leadingFormula: "weighted" as const,
+    };
+    const compId = await createComp({ category: "pg", gap_params: gapParams });
+    const taskId = await createTask(compId, {
+      xctsk: taskXctsk,
+      pilot_classes: ["open"],
+    });
+
+    const igcEntries = sampleIgcEntries().slice(0, 3);
+    const users = ["user-1", "user-2", "user-3"];
+    for (let i = 0; i < igcEntries.length; i++) {
+      const res = await uploadRequest(
+        `/api/comp/${compId}/task/${taskId}/igc`,
+        await compressText(igcEntries[i][1]),
+        { user: users[i] }
+      );
+      expect(res.status).toBe(201);
+    }
+
+    const res = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("X-Cache")).toBe("MISS");
+    const data = (await res.json()) as {
+      classes: Array<{
+        pilot_class: string;
+        available_points: { leading: number };
+        pilots: Array<{ total_score: number; leading_points: number }>;
+      }>;
+    };
+    const openClass = data.classes.find((c) => c.pilot_class === "open")!;
+
+    // Engine ground truth with the same leading params (worker auto-computes
+    // nominalDistance as 70% of task distance when unset).
+    const xcTask = parseXCTask(env.SAMPLE_TASK_XCTSK);
+    const taskDistance = calculateOptimizedTaskDistance(xcTask);
+    const enginePilots = igcEntries.map(([, text]) => {
+      const igc = parseIGC(text);
+      return {
+        pilotName: igc.header.pilot || igc.header.competitionId || "unknown",
+        trackFile: "sample.igc",
+        fixes: igc.fixes,
+      };
+    });
+    const engineResult = scoreTask(xcTask, enginePilots, {
+      ...gapParams,
+      nominalDistance: taskDistance * 0.7,
+    });
+
+    // Whole-field parity: the per-pilot totals (which include leading points
+    // via the cached aggregate) match the engine exactly, as does the leading
+    // points pool.
+    const apiTotals = openClass.pilots.map((p) => p.total_score).sort((a, b) => a - b);
+    const engineTotals = engineResult.pilotScores.map((p) => p.totalScore).sort((a, b) => a - b);
+    expect(apiTotals).toEqual(engineTotals);
+    expect(openClass.available_points.leading).toBeCloseTo(
+      engineResult.availablePoints.leading,
+      5
+    );
+
+    // Second request is served from the result cache, unchanged.
+    const res2 = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
+    expect(res2.headers.get("X-Cache")).toBe("HIT");
+    expect(await res2.json()).toEqual(data);
+  });
+
   test("task without xctsk returns 422", async () => {
     const compId = await createComp();
     const taskId = await createTask(compId); // no xctsk
