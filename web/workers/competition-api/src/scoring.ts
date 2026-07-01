@@ -2,6 +2,7 @@ import {
   parseIGC,
   parseXCTask,
   scoreTask,
+  scoreOpenDistance,
   calculateOptimizedTaskDistance,
   type GAPParameters,
   type PilotFlight,
@@ -42,6 +43,8 @@ export interface TaskScoreResponse {
   task_id: string;
   comp_id: string;
   task_date: string;
+  /** How the task was scored — lets the UI pick the right columns. */
+  scoring_format: "gap" | "open_distance";
   classes: ClassScore[];
 }
 
@@ -59,9 +62,13 @@ export async function computeScoreCacheKey(
   db: D1Database
 ): Promise<string> {
   const task = await db
-    .prepare("SELECT xctsk FROM task WHERE task_id = ?")
+    .prepare(
+      `SELECT t.xctsk, c.scoring_format
+       FROM task t JOIN comp c ON c.comp_id = t.comp_id
+       WHERE t.task_id = ?`
+    )
     .bind(taskId)
-    .first<{ xctsk: string | null }>();
+    .first<{ xctsk: string | null; scoring_format: string | null }>();
 
   // Include the pilot roster (comp_pilot_id, name, class) in the hashed state.
   // The scored output embeds these fields, so a roster change — a rename, a
@@ -87,6 +94,7 @@ export async function computeScoreCacheKey(
     }>();
 
   const stateString = [
+    task?.scoring_format ?? "gap",
     task?.xctsk ?? "",
     ...tracks.results.map(
       (t) =>
@@ -103,7 +111,8 @@ export async function computeScoreCacheKey(
     .join("")
     .slice(0, 16);
 
-  return `score:v4:${taskId}:${hex}`;
+  // v5: added scoring_format to the hashed state (open-distance support).
+  return `score:v5:${taskId}:${hex}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +136,7 @@ export async function computeTaskScore(
   const taskRow = await db
     .prepare(
       `SELECT t.task_id, t.comp_id, t.task_date, t.xctsk,
-              c.gap_params
+              c.gap_params, c.scoring_format
        FROM task t
        JOIN comp c ON t.comp_id = c.comp_id
        WHERE t.task_id = ?`
@@ -139,17 +148,22 @@ export async function computeTaskScore(
       task_date: string;
       xctsk: string;
       gap_params: string | null;
+      scoring_format: string | null;
     }>();
 
   if (!taskRow) throw new Error("Task not found");
+
+  const scoringFormat: "gap" | "open_distance" =
+    taskRow.scoring_format === "open_distance" ? "open_distance" : "gap";
 
   const xcTask = parseXCTask(taskRow.xctsk);
   const gapParams: Partial<GAPParameters> = taskRow.gap_params
     ? JSON.parse(taskRow.gap_params)
     : {};
 
-  // Default nominalDistance to 70% of task distance if not set
-  if (!gapParams.nominalDistance) {
+  // Default nominalDistance to 70% of task distance if not set. Only relevant
+  // to GAP — open distance ignores GAP parameters entirely.
+  if (scoringFormat === "gap" && !gapParams.nominalDistance) {
     gapParams.nominalDistance =
       calculateOptimizedTaskDistance(xcTask) * 0.7;
   }
@@ -250,11 +264,11 @@ export async function computeTaskScore(
       continue;
     }
 
-    const result = scoreTask(
-      xcTask,
-      classPilots.map((p) => p.flight),
-      gapParams
-    );
+    const flights = classPilots.map((p) => p.flight);
+    const result =
+      scoringFormat === "open_distance"
+        ? scoreOpenDistance(xcTask, flights)
+        : scoreTask(xcTask, flights, gapParams);
 
     // Apply penalties and re-rank. scoreTask() sorts its pilotScores by rank,
     // so the output order does NOT match the classPilots input order — pairing
@@ -308,6 +322,7 @@ export async function computeTaskScore(
     task_id: encodeId(alphabet, taskRow.task_id),
     comp_id: encodeId(alphabet, taskRow.comp_id),
     task_date: taskRow.task_date,
+    scoring_format: scoringFormat,
     classes: classScores,
   };
 }

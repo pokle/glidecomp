@@ -8,6 +8,9 @@ import { DEFAULT_GAP_PARAMETERS, type XCTask, type GAPParameters } from "@glidec
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
+/** How a competition's tasks are scored (see competition-api migration 0009). */
+type ScoringFormat = "gap" | "open_distance";
+
 interface PilotStatusConfig {
   key: string;
   label: string;
@@ -24,6 +27,7 @@ interface CompDetail {
   pilot_classes: string[];
   default_pilot_class: string;
   gap_params: GAPParameters | null;
+  scoring_format: ScoringFormat;
   open_igc_upload: boolean;
   pilot_statuses: PilotStatusConfig[];
   tasks: TaskSummary[];
@@ -125,6 +129,7 @@ interface TaskScoreData {
   task_id: string;
   comp_id: string;
   task_date: string;
+  scoring_format: ScoringFormat;
   classes: ClassScore[];
 }
 
@@ -236,14 +241,15 @@ async function initTaskDetail(compId: string, taskId: string, user: AuthUser | n
   }
 
   // Admin actions
+  const isOpenDistance = comp?.scoring_format === "open_distance";
   if (isAdmin && comp) {
     document.getElementById("task-admin-actions")!.classList.remove("hidden");
     setupEditTaskDialog(compId, taskId, task, comp.pilot_classes);
     setupDeleteTask(compId, taskId);
-    setupTaskEditor(compId, taskId, task.xctsk as XCTask | null, false);
+    setupTaskEditor(compId, taskId, task.xctsk as XCTask | null, false, isOpenDistance);
   } else if (task.xctsk) {
     // Non-admin: show read-only task viewer when task is defined
-    setupTaskEditor(compId, taskId, task.xctsk as XCTask, true);
+    setupTaskEditor(compId, taskId, task.xctsk as XCTask, true, isOpenDistance);
   }
 
   // Determine if current user can upload on behalf. Admins always can;
@@ -417,7 +423,8 @@ async function setupTaskEditor(
   compId: string,
   taskId: string,
   xctsk: XCTask | null,
-  isReadOnly: boolean
+  isReadOnly: boolean,
+  openDistance: boolean
 ) {
   const section = document.getElementById("task-editor-section")!;
   const container = document.getElementById("task-editor-container")!;
@@ -468,6 +475,7 @@ async function setupTaskEditor(
     },
     hiddenAddMethods: ['search', 'map'],
     readOnly: isReadOnly,
+    openDistance,
   });
 
   // Load existing xctsk into the editor (null shows empty editor ready for use)
@@ -1221,7 +1229,12 @@ function setupTrackUpload(
 
 // ── Scoring section ──────────────────────────────────────────────────────────
 
-function renderScoreClass(cls: ClassScore, showClassName: boolean): HTMLElement {
+function renderScoreClass(
+  cls: ClassScore,
+  showClassName: boolean,
+  format: ScoringFormat
+): HTMLElement {
+  const isOpenDistance = format === "open_distance";
   const wrapper = document.createElement("div");
   wrapper.className = "mb-6";
 
@@ -1240,13 +1253,16 @@ function renderScoreClass(cls: ClassScore, showClassName: boolean): HTMLElement 
   const table = document.createElement("table");
   table.className = "w-full text-sm border-collapse";
 
-  // thead
+  // thead. Open distance has no goal, speed section, or GAP point split — the
+  // score is simply the distance flown — so those columns are omitted.
   const thead = document.createElement("thead");
   const headerRow = document.createElement("tr");
   headerRow.className = "text-left text-xs text-muted-foreground border-b border-border/50";
-  const headers = ["#", "Pilot", "Goal", "Distance"];
+  const headers = ["#", "Pilot"];
+  if (!isOpenDistance) headers.push("Goal");
+  headers.push("Distance");
   if (hasSpeed) headers.push("Speed");
-  headers.push("Dist Pts");
+  if (!isOpenDistance) headers.push("Dist Pts");
   if (hasTimePoints) headers.push("Time Pts");
   if (hasLeadPoints) headers.push("Lead Pts");
   if (hasPenalties) headers.push("Penalty");
@@ -1268,14 +1284,15 @@ function renderScoreClass(cls: ClassScore, showClassName: boolean): HTMLElement 
     const tr = document.createElement("tr");
     tr.className = i % 2 === 1 ? "bg-muted/30" : "";
 
-    const cells: string[] = [
-      String(p.rank),
-      escapeHtml(p.pilot_name),
-      p.made_goal
-        ? `<span class="text-green-500">✓</span>`
-        : `<span class="text-muted-foreground">—</span>`,
-      `${(p.flown_distance / 1000).toFixed(1)} km`,
-    ];
+    const cells: string[] = [String(p.rank), escapeHtml(p.pilot_name)];
+    if (!isOpenDistance) {
+      cells.push(
+        p.made_goal
+          ? `<span class="text-green-500">✓</span>`
+          : `<span class="text-muted-foreground">—</span>`
+      );
+    }
+    cells.push(`${(p.flown_distance / 1000).toFixed(1)} km`);
 
     if (hasSpeed) {
       cells.push(
@@ -1285,13 +1302,15 @@ function renderScoreClass(cls: ClassScore, showClassName: boolean): HTMLElement 
       );
     }
 
-    // Show the linear/difficulty split as a tooltip when HG difficulty applies.
-    const diffPts = p.distance_difficulty_points ?? 0;
-    cells.push(
-      diffPts > 0
-        ? `<span class="cursor-help underline decoration-dotted" title="${Math.round(p.distance_linear_points)} linear + ${Math.round(diffPts)} difficulty">${Math.round(p.distance_points)}</span>`
-        : Math.round(p.distance_points).toString()
-    );
+    if (!isOpenDistance) {
+      // Show the linear/difficulty split as a tooltip when HG difficulty applies.
+      const diffPts = p.distance_difficulty_points ?? 0;
+      cells.push(
+        diffPts > 0
+          ? `<span class="cursor-help underline decoration-dotted" title="${Math.round(p.distance_linear_points)} linear + ${Math.round(diffPts)} difficulty">${Math.round(p.distance_points)}</span>`
+          : Math.round(p.distance_points).toString()
+      );
+    }
     if (hasTimePoints) cells.push(Math.round(p.time_points).toString());
     if (hasLeadPoints) cells.push(Math.round(p.leading_points).toString());
 
@@ -1335,12 +1354,18 @@ function renderScoreClass(cls: ClassScore, showClassName: boolean): HTMLElement 
   table.appendChild(tbody);
   wrapper.appendChild(table);
 
-  // Validity summary
-  const v = cls.task_validity;
-  const ap = cls.available_points;
+  // Footer: GAP validity/available-points breakdown, or a plain explainer for
+  // open distance (which has no validity or point pool).
   const summary = document.createElement("p");
   summary.className = "text-xs text-muted-foreground mt-2";
-  summary.textContent = `Task validity: ${(v.task * 100).toFixed(0)}% · Available: ${Math.round(ap.total)} pts (dist ${Math.round(ap.distance)}, time ${Math.round(ap.time)}, lead ${Math.round(ap.leading)})`;
+  if (isOpenDistance) {
+    summary.textContent =
+      "Open distance — score is metres flown from the take-off exit to the furthest point reached.";
+  } else {
+    const v = cls.task_validity;
+    const ap = cls.available_points;
+    summary.textContent = `Task validity: ${(v.task * 100).toFixed(0)}% · Available: ${Math.round(ap.total)} pts (dist ${Math.round(ap.distance)}, time ${Math.round(ap.time)}, lead ${Math.round(ap.leading)})`;
+  }
   wrapper.appendChild(summary);
 
   return wrapper;
@@ -1371,8 +1396,10 @@ async function setupScoreSection(compId: string, taskId: string) {
 
   content.innerHTML = "";
   const showClassName = data.classes.length > 1;
+  const format: ScoringFormat =
+    data.scoring_format === "open_distance" ? "open_distance" : "gap";
   for (const cls of data.classes) {
-    content.appendChild(renderScoreClass(cls, showClassName));
+    content.appendChild(renderScoreClass(cls, showClassName, format));
   }
 
   scoresLink.href = `/scores?comp_id=${encodeURIComponent(compId)}`;
@@ -2081,6 +2108,21 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
   const useDifficultyCheckbox = document.getElementById(
     "settings-use-difficulty"
   ) as HTMLInputElement;
+  const scoringFormatSelect = document.getElementById(
+    "settings-scoring-format"
+  ) as unknown as HTMLSelectElement;
+  const gapSection = document.getElementById(
+    "settings-gap-section"
+  ) as HTMLElement;
+
+  // GAP parameters only apply to GAP scoring; hide them for open distance.
+  function updateScoringFormatVisibility() {
+    gapSection.classList.toggle(
+      "hidden",
+      scoringFormatSelect.value === "open_distance"
+    );
+  }
+  scoringFormatSelect.addEventListener("change", updateScoringFormatVisibility);
 
   addStatusBtn.addEventListener("click", () => {
     statusesList.appendChild(buildStatusRow());
@@ -2146,6 +2188,9 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
       leadingFormulaSelect.value = gp.leadingFormula ?? "weighted";
       distanceOriginSelect.value = gp.distanceOrigin ?? "takeoff";
       useDifficultyCheckbox.checked = gp.useDistanceDifficulty ?? true;
+
+      scoringFormatSelect.value = comp.scoring_format ?? "gap";
+      updateScoringFormatVisibility();
 
       dialog.showModal();
     });
@@ -2271,6 +2316,7 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
           admin_emails: adminEmails,
           pilot_statuses: pilotStatuses,
           gap_params: gapParams,
+          scoring_format: scoringFormatSelect.value as ScoringFormat,
         },
       });
 

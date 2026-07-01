@@ -408,3 +408,90 @@ describe("DELETE /api/comp/:comp_id/task/:task_id", () => {
     expect(res.status).toBe(404);
   });
 });
+
+// ── Open-distance task geometry guard ─────────────────────────────────────
+
+describe("Open distance task geometry", () => {
+  const wp = (name: string, lat: number, lon: number) => ({ name, lat, lon });
+
+  const takeoffOnly = {
+    taskType: "OPEN-DISTANCE",
+    version: 1,
+    earthModel: "WGS84",
+    turnpoints: [{ type: "TAKEOFF", radius: 400, waypoint: wp("Launch", -36.2, 147.9) }],
+  };
+
+  const multiTurnpoint = {
+    taskType: "CLASSIC",
+    version: 1,
+    earthModel: "WGS84",
+    turnpoints: [
+      { type: "TAKEOFF", radius: 400, waypoint: wp("Launch", -36.2, 147.9) },
+      { type: "SSS", radius: 1000, waypoint: wp("Start", -36.1, 148.0) },
+      { radius: 2000, waypoint: wp("TP1", -36.0, 148.2) },
+    ],
+  };
+
+  test("accepts a single Takeoff turnpoint", async () => {
+    const compId = await createComp({ scoring_format: "open_distance" });
+    const res = await authRequest("POST", `/api/comp/${compId}/task`, {
+      name: "OD Task",
+      task_date: "2026-01-15",
+      pilot_classes: ["open"],
+      xctsk: takeoffOnly,
+    });
+    expect(res.status).toBe(201);
+  });
+
+  test("rejects a multi-turnpoint route", async () => {
+    const compId = await createComp({ scoring_format: "open_distance" });
+    const res = await authRequest("POST", `/api/comp/${compId}/task`, {
+      name: "Bad OD",
+      task_date: "2026-01-15",
+      pilot_classes: ["open"],
+      xctsk: multiTurnpoint,
+    });
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { error: string };
+    expect(data.error).toContain("Takeoff");
+  });
+
+  test("rejects a single non-Takeoff turnpoint", async () => {
+    const compId = await createComp({ scoring_format: "open_distance" });
+    const res = await authRequest("POST", `/api/comp/${compId}/task`, {
+      name: "Bad OD 2",
+      task_date: "2026-01-15",
+      pilot_classes: ["open"],
+      xctsk: {
+        taskType: "X",
+        version: 1,
+        earthModel: "WGS84",
+        turnpoints: [{ type: "SSS", radius: 1000, waypoint: wp("Start", -36, 148) }],
+      },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test("does not constrain GAP comps", async () => {
+    const compId = await createComp({ scoring_format: "gap" });
+    const res = await authRequest("POST", `/api/comp/${compId}/task`, {
+      name: "Gap Task",
+      task_date: "2026-01-15",
+      pilot_classes: ["open"],
+      xctsk: multiTurnpoint,
+    });
+    expect(res.status).toBe(201);
+  });
+
+  test("blocks switching an open-distance task to multi-turnpoint via PATCH", async () => {
+    const compId = await createComp({ scoring_format: "open_distance" });
+    const taskId = await createTask(compId, {
+      xctsk: takeoffOnly,
+      pilot_classes: ["open"],
+    });
+    const res = await authRequest("PATCH", `/api/comp/${compId}/task/${taskId}`, {
+      xctsk: multiTurnpoint,
+    });
+    expect(res.status).toBe(400);
+  });
+});

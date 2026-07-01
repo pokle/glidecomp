@@ -23,6 +23,12 @@ export interface TaskEditorOptions {
   hiddenAddMethods?: Array<'search' | 'map'>;
   /** Display task in read-only mode (no toolbar, no editing, no drag/delete) */
   readOnly?: boolean;
+  /**
+   * Open-distance competition: tasks must define a single Takeoff turnpoint
+   * and are scored on distance from the take-off exit. Shows a guidance
+   * notice; the competition-api enforces the single-Takeoff rule on save.
+   */
+  openDistance?: boolean;
 }
 
 export interface TaskEditor {
@@ -86,7 +92,7 @@ const ICON_GLOBE = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="1
 // ---------------------------------------------------------------------------
 
 export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
-  const { container, onTaskChanged, onTurnpointClick, onMapClickModeRequest, hiddenAddMethods = [], readOnly = false } = options;
+  const { container, onTaskChanged, onTurnpointClick, onMapClickModeRequest, hiddenAddMethods = [], readOnly = false, openDistance = false } = options;
 
   let currentTask: XCTask | null = null;
   let waypointDatabase: WaypointRecord[] = [];
@@ -216,6 +222,14 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
 
   function render(): void {
     container.innerHTML = '';
+
+    if (openDistance) {
+      const notice = document.createElement('div');
+      notice.className = 'border-b border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground';
+      notice.textContent =
+        'Open distance: define a single Takeoff turnpoint. Distance is scored from the take-off exit — there is no goal.';
+      container.appendChild(notice);
+    }
 
     if (!readOnly) {
       // Zone A: Toolbar

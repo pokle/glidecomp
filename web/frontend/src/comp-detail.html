@@ -348,6 +348,14 @@
           </span>
         </label>
         <div class="border-t border-border pt-4">
+          <label for="settings-scoring-format" class="text-sm font-medium block mb-1">Scoring format</label>
+          <select id="settings-scoring-format" class="input w-full">
+            <option value="gap">GAP — race to goal / elapsed time</option>
+            <option value="open_distance">Open distance — fly as far as possible</option>
+          </select>
+          <p class="text-xs text-muted-foreground mt-1">Open distance scores metres flown from the take-off exit; each task has a single Takeoff turnpoint and no goal.</p>
+        </div>
+        <div id="settings-gap-section" class="pt-2">
           <label class="text-sm font-medium block mb-1">GAP Scoring Parameters</label>
           <p class="text-xs text-muted-foreground mb-3">
             Competition-wide scoring constants. The scoring class (HG/PG) follows the Category above.
