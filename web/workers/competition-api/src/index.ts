@@ -12,6 +12,7 @@ import { scoreRoutes } from "./routes/score";
 import { auditRoutes } from "./routes/audit";
 import { userFilesRoutes } from "./routes/user-files";
 import { visualizationRoutes } from "./routes/visualization";
+import { adminRoutes } from "./routes/admin";
 
 type Variables = {
   user: AuthUser;
@@ -49,6 +50,7 @@ const corsConfig = cors({
 app.use("/api/comp/*", corsConfig);
 app.use("/api/user/*", corsConfig);
 app.use("/api/u/*", corsConfig);
+app.use("/api/admin/*", corsConfig);
 
 // Cap request-body size at the HTTP layer so oversize bodies are rejected
 // while streaming, before any handler buffers them (c.req.arrayBuffer() /
@@ -86,7 +88,8 @@ const routes = app
   .route("/", taskRoutes)
   .route("/", scoreRoutes)
   .route("/", auditRoutes)
-  .route("/", userFilesRoutes);
+  .route("/", userFilesRoutes)
+  .route("/", adminRoutes);
 
 export type AppType = typeof routes;
 
