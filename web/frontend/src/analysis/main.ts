@@ -11,7 +11,7 @@ import '../theme';
  * - Event detection and display
  */
 
-import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistance, igcTaskToXCTask, resolveTurnpointSequence, scoreTask, maxBy, parseThresholdInput, formatThresholdForDisplay, DEFAULT_THRESHOLDS, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord, type DetectionThresholds, type PartialThresholds, type ThresholdDimension, type PilotFlight, type TaskScoreResult } from '@glidecomp/engine';
+import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistance, igcTaskToXCTask, resolveTurnpointSequence, scoreTask, maxBy, parseThresholdInput, formatThresholdForDisplay, DEFAULT_THRESHOLDS, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord, type DetectionThresholds, type PartialThresholds, type ThresholdDimension, type PilotFlight, type TaskScoreResult, type GAPParameters } from '@glidecomp/engine';
 import { SAMPLE_COMPS } from '@glidecomp/samples';
 import { getCurrentUser } from '../auth/client';
 import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
@@ -1446,8 +1446,10 @@ async function init(): Promise<void> {
 
   /**
    * Load multiple IGC files at once (replaces the full track set)
+   * @param pilotNames - optional display names keyed by filename; overrides
+   *   the IGC header pilot name (used for competition rosters)
    */
-  async function loadMultipleIGCFiles(files: File[], skipStorage = false): Promise<void> {
+  async function loadMultipleIGCFiles(files: File[], skipStorage = false, pilotNames?: Map<string, string>): Promise<void> {
     const tracks: LoadedTrack[] = [];
 
     for (const [index, file] of files.entries()) {
@@ -1471,7 +1473,7 @@ async function init(): Promise<void> {
         const events = detectFlightEvents(igcFile.fixes, state.task || undefined, config.getPartialThresholds());
 
         tracks.push({
-          pilotName: igcFile.header.pilot || file.name.replace(/\.igc$/i, ''),
+          pilotName: pilotNames?.get(file.name) || igcFile.header.pilot || file.name.replace(/\.igc$/i, ''),
           date: igcFile.header.date || null,
           filename: file.name,
           fixes: igcFile.fixes,
@@ -1645,36 +1647,119 @@ async function init(): Promise<void> {
   }
 
   /**
-   * Load a single competition track, fetched straight from the competition
-   * download endpoint. Used by the "View" link on a task page. The track is
-   * not stored in browser storage (it isn't the viewer's own upload); it runs
+   * Load a competition task straight from the competition API: the task
+   * definition (xctsk), the comp's GAP parameters, and every uploaded track —
+   * so the page shows the track over the task and can compute competition
+   * scores (scores are relative, so the whole field is needed). Used by the
+   * "View" links on the task and scores pages. Tracks are not stored in
+   * browser storage (they aren't the viewer's own uploads); everything runs
    * in-memory like a public-link view.
+   *
+   * When pilotId is given, that pilot is pre-focused: their track (with event
+   * markers) on the map, while the score table keeps the full field.
    */
-  async function loadCompTrack(
+  async function loadCompTask(
     compId: string,
     taskId: string,
-    pilotId: string
+    pilotId: string | null
   ): Promise<void> {
     try {
-      showStatus('Loading track...', 'info');
-      const res = await fetch(
-        `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(pilotId)}/download`
-      );
-      if (!res.ok) {
-        showStatus('Failed to load track', 'error');
+      showStatus('Loading competition task...', 'info');
+      const taskBase = `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}`;
+      const [compRes, taskRes, listRes] = await Promise.all([
+        fetch(`/api/comp/${encodeURIComponent(compId)}`),
+        fetch(taskBase),
+        fetch(`${taskBase}/igc`),
+      ]);
+      if (!taskRes.ok || !listRes.ok) {
+        showStatus('Failed to load competition task', 'error');
         return;
       }
-      // The download endpoint returns a gzipped body with Content-Encoding:
-      // gzip; gunzipResponse decompresses defensively when the browser/proxy
-      // leaves the header in place (mirrors the stored-track flow).
-      const content = await gunzipResponse(res);
-      // Paint the status toast before the CPU-heavy parse blocks the thread.
-      await nextPaint();
-      await loadIGCContent(content, `${pilotId}.igc`, false);
-      showStatus('Loaded track', 'success');
+      const taskDetail = (await taskRes.json()) as { xctsk: unknown | null };
+      const { tracks: trackList } = (await listRes.json()) as {
+        tracks: Array<{ comp_pilot_id: string; pilot_name: string }>;
+      };
+
+      // Task definition (a task may not have an xctsk set yet)
+      if (taskDetail.xctsk) {
+        try {
+          applyTask(parseXCTask(JSON.stringify(taskDetail.xctsk)));
+        } catch (err) {
+          console.error('Failed to parse competition task definition:', err);
+          showStatus(`Failed to parse task definition: ${err}`, 'error');
+        }
+      }
+
+      // Apply the comp's GAP parameters so client-side scores match the
+      // competition's configuration (mirrors loadSampleComp).
+      if (compRes.ok) {
+        const comp = (await compRes.json()) as { gap_params: Partial<GAPParameters> | null };
+        if (comp.gap_params) {
+          const { nominalDistance, ...gapParams } = comp.gap_params;
+          config.setGAPParameters(gapParams);
+          if (state.task) {
+            const taskDist = calculateOptimizedTaskDistance(state.task);
+            if (taskDist > 0) {
+              // The comp stores nominal distance in meters; the analysis page
+              // works in % of task distance. Unset means the server's 70%
+              // default applies.
+              const nominal = nominalDistance ?? taskDist * 0.7;
+              config.setNominalDistancePct(Math.round((nominal / taskDist) * 100));
+            }
+          }
+        }
+      }
+
+      if (trackList.length === 0) {
+        showStatus('No tracks uploaded for this task yet', 'warning');
+        return;
+      }
+
+      let loaded = 0;
+      const fetchResults = await Promise.allSettled(
+        trackList.map(async (t) => {
+          const res = await fetch(`${taskBase}/igc/${encodeURIComponent(t.comp_pilot_id)}/download`);
+          if (!res.ok) throw new Error(`HTTP ${res.status} for ${t.pilot_name}`);
+          // The download endpoint returns a gzipped body with Content-Encoding:
+          // gzip; gunzipResponse decompresses defensively when the browser/proxy
+          // leaves the header in place (mirrors the stored-track flow).
+          const content = await gunzipResponse(res);
+          loaded++;
+          showStatus(`Loading tracks: ${loaded}/${trackList.length}`, 'info');
+          return new File([content], `${t.comp_pilot_id}.igc`, { type: 'text/plain' });
+        })
+      );
+
+      const files: File[] = [];
+      for (const result of fetchResults) {
+        if (result.status === 'fulfilled') {
+          files.push(result.value);
+        } else {
+          console.warn('Failed to load track:', result.reason);
+        }
+      }
+      if (files.length === 0) {
+        showStatus('No tracks loaded', 'error');
+        return;
+      }
+
+      // Registered pilot names (keyed by download filename) beat IGC header
+      // names so tracks match the official roster and the pilotId param.
+      const pilotNames = new Map(trackList.map((t) => [`${t.comp_pilot_id}.igc`, t.pilot_name]));
+      await loadMultipleIGCFiles(files, true, pilotNames);
+
+      if (pilotId && state.tracks.length > 1) {
+        const focused = state.tracks.find((t) => t.filename === `${pilotId}.igc`);
+        if (focused) analysisPanel?.setPilotSelection(new Set([focused.pilotName]));
+      }
+
+      // A partially-loaded field skews competition scores — say so.
+      if (files.length < trackList.length) {
+        showStatus(`Loaded ${files.length} of ${trackList.length} tracks — some downloads failed`, 'warning');
+      }
     } catch (err) {
-      console.error('Failed to load competition track:', err);
-      showStatus(`Failed to load track: ${err}`, 'error');
+      console.error('Failed to load competition task:', err);
+      showStatus(`Failed to load competition task: ${err}`, 'error');
     }
   }
 
@@ -1968,15 +2053,16 @@ async function init(): Promise<void> {
 
   // Load sample competition if specified (exclusive — skips individual track/task params)
   const sampleCompId = params.get('sampleComp');
-  // Competition track view (exclusive) — ?compId=X&taskId=Y&pilotId=Z opens a
-  // single task track straight from the competition download endpoint.
+  // Competition task view (exclusive) — ?compId=X&taskId=Y loads the task
+  // definition plus every uploaded track straight from the competition API;
+  // an optional &pilotId=Z pre-focuses that pilot's track.
   const compTrackCompId = params.get('compId');
   const compTrackTaskId = params.get('taskId');
   const compTrackPilotId = params.get('pilotId');
   if (sampleCompId) {
     await loadSampleComp(sampleCompId);
-  } else if (compTrackCompId && compTrackTaskId && compTrackPilotId) {
-    await loadCompTrack(compTrackCompId, compTrackTaskId, compTrackPilotId);
+  } else if (compTrackCompId && compTrackTaskId) {
+    await loadCompTask(compTrackCompId, compTrackTaskId, compTrackPilotId);
   } else {
     // Load from query params if present (e.g., ?task=buje&track=sample.igc)
     await loadFromQueryParams(loadTask, loadLocalTask, loadIGCFile, loadStoredTrack, loadStoredTask);
@@ -1994,7 +2080,7 @@ async function init(): Promise<void> {
   }
 
   // If no task or track was loaded, open the command menu to guide users
-  if (!params.get('task') && !params.get('track') && !params.get('storedTrack') && !params.get('storedTask') && !params.get('sampleComp') && params.get('shared') !== '1' && !state.igcFile && !state.task) {
+  if (!params.get('task') && !params.get('track') && !params.get('storedTrack') && !params.get('storedTask') && !params.get('sampleComp') && !params.get('compId') && params.get('shared') !== '1' && !state.igcFile && !state.task) {
     commandDialog?.showModal();
   }
 
