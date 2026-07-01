@@ -495,7 +495,7 @@ async function init(): Promise<void> {
     const params = config.getGAPParameters();
     const nominalPct = config.getNominalDistancePct();
     const helpLink = (hash: string, text: string, heading = false) =>
-      `<a href="/scoring.html#${hash}" target="_blank" rel="noopener noreferrer" class="text-sm ${heading ? 'font-medium' : 'text-muted-foreground'} hover:text-foreground inline-flex items-center gap-0.5">${text} <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>`;
+      `<a href="/scoring-gap.html#${hash}" target="_blank" rel="noopener noreferrer" class="text-sm ${heading ? 'font-medium' : 'text-muted-foreground'} hover:text-foreground inline-flex items-center gap-0.5">${text} <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>`;
     competitionSettingsContent.innerHTML = `
       <form id="competition-settings-form" class="space-y-4">
         <div class="space-y-3">
@@ -542,11 +542,11 @@ async function init(): Promise<void> {
           <label class="text-sm font-medium">Point Categories</label>
           <label class="flex items-center gap-1.5 text-sm cursor-pointer">
             <input type="checkbox" id="gap-use-leading" ${params.useLeading ? 'checked' : ''} class="accent-primary">
-            <a href="/scoring.html#leading-points" target="_blank" rel="noopener noreferrer" class="hover:text-foreground">Leading (departure) points</a>
+            <a href="/scoring-gap.html#leading-points" target="_blank" rel="noopener noreferrer" class="hover:text-foreground">Leading (departure) points</a>
           </label>
           <label class="flex items-center gap-1.5 text-sm cursor-pointer">
             <input type="checkbox" id="gap-use-arrival" ${params.useArrival ? 'checked' : ''} class="accent-primary">
-            <a href="/scoring.html#arrival-points" target="_blank" rel="noopener noreferrer" class="hover:text-foreground">Arrival points (HG only)</a>
+            <a href="/scoring-gap.html#arrival-points" target="_blank" rel="noopener noreferrer" class="hover:text-foreground">Arrival points (HG only)</a>
           </label>
         </div>
 
@@ -556,7 +556,7 @@ async function init(): Promise<void> {
         </div>
 
         <div class="pt-2 text-xs text-center">
-          <a href="/scoring.html" target="_blank" rel="noopener noreferrer" class="text-muted-foreground hover:text-foreground transition-colors underline">How does GAP scoring work?</a>
+          <a href="/scoring-gap.html" target="_blank" rel="noopener noreferrer" class="text-muted-foreground hover:text-foreground transition-colors underline">How does GAP scoring work?</a>
         </div>
       </form>
     `;
