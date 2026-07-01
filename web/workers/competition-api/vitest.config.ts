@@ -29,6 +29,14 @@ const TEST_USERS: Record<string, object> = {
     image: null,
     username: "pilot3",
   },
+  // Email is on the hardcoded super-admin allowlist (see src/super-admin.ts).
+  "user-super": {
+    id: "user-super",
+    name: "Super Admin",
+    email: "tushar.pokle@gmail.com",
+    image: null,
+    username: "superadmin",
+  },
 };
 
 // Read sample files in Node.js context (full filesystem access, no miniflare sandbox)

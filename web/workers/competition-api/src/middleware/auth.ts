@@ -1,5 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import type { Env, AuthUser } from "../env";
+import { isCompAdmin } from "../super-admin";
 
 /**
  * Resolve the caller via auth-api. Forward whichever inbound credential
@@ -85,13 +86,7 @@ export const requireCompAdmin = createMiddleware<{
     return c.json({ error: "Missing comp_id" }, 400);
   }
 
-  const row = await c.env.DB.prepare(
-    "SELECT 1 FROM comp_admin WHERE comp_id = ? AND user_id = ?"
-  )
-    .bind(compId, c.var.user.id)
-    .first();
-
-  if (!row) {
+  if (!(await isCompAdmin(c.env.DB, compId, c.var.user))) {
     return c.json({ error: "Forbidden" }, 403);
   }
 

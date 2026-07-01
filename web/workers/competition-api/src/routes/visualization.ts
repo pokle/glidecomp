@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import type { Env, AuthUser } from "../env";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { optionalAuth } from "../middleware/auth";
+import { isCompAdmin } from "../super-admin";
 import { SAMPLE_COMP_NAME } from "../sample";
 import { buildTask3dvisBundle, compute3dvisCacheKey } from "../visualization";
 
@@ -85,12 +86,8 @@ export const visualizationRoutes = new Hono<HonoEnv>()
 
       if (comp.test) {
         if (!user) return c.json({ error: "Not found" }, 404);
-        const isAdmin = await c.env.DB.prepare(
-          "SELECT 1 FROM comp_admin WHERE comp_id = ? AND user_id = ?"
-        )
-          .bind(compId, user.id)
-          .first();
-        if (!isAdmin) return c.json({ error: "Not found" }, 404);
+        if (!(await isCompAdmin(c.env.DB, compId, user)))
+          return c.json({ error: "Not found" }, 404);
       }
 
       const task = await c.env.DB.prepare(

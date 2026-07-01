@@ -4,6 +4,7 @@ import type { Env, AuthUser } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
+import { isCompAdmin } from "../super-admin";
 import { createTaskSchema, updateTaskSchema } from "../validators";
 import { audit, describeChange } from "../audit";
 import { summarizeXctskChange, describeTaskSummary } from "../xctsk-summary";
@@ -145,12 +146,7 @@ export const taskRoutes = new Hono<HonoEnv>()
         if (!user) {
           return c.json({ error: "Not found" }, 404);
         }
-        const isAdmin = await c.env.DB.prepare(
-          "SELECT 1 FROM comp_admin WHERE comp_id = ? AND user_id = ?"
-        )
-          .bind(compId, user.id)
-          .first();
-        if (!isAdmin) {
+        if (!(await isCompAdmin(c.env.DB, compId, user))) {
           return c.json({ error: "Not found" }, 404);
         }
       }
