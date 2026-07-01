@@ -171,9 +171,11 @@ export const compRoutes = new Hono<HonoEnv>()
 
       const now = new Date().toISOString();
 
+      const scoringFormat = body.scoring_format ?? "gap";
+
       const compResult = await c.env.DB.prepare(
-        `INSERT INTO comp (name, creation_date, close_date, category, test, pilot_classes, default_pilot_class, gap_params, pilot_statuses)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO comp (name, creation_date, close_date, category, test, pilot_classes, default_pilot_class, gap_params, scoring_format, pilot_statuses)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
         .bind(
           body.name,
@@ -184,6 +186,7 @@ export const compRoutes = new Hono<HonoEnv>()
           JSON.stringify(pilotClasses),
           defaultClass,
           body.gap_params ? JSON.stringify(body.gap_params) : null,
+          scoringFormat,
           JSON.stringify(DEFAULT_PILOT_STATUSES)
         )
         .run();
@@ -215,6 +218,7 @@ export const compRoutes = new Hono<HonoEnv>()
           pilot_classes: pilotClasses,
           default_pilot_class: defaultClass,
           gap_params: body.gap_params ?? null,
+          scoring_format: scoringFormat,
           open_igc_upload: true,
           pilot_statuses: DEFAULT_PILOT_STATUSES,
         },
@@ -234,7 +238,7 @@ export const compRoutes = new Hono<HonoEnv>()
     const cutoffStr = cutoff.toISOString();
 
     const publicComps = await c.env.DB.prepare(
-      `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, open_igc_upload, pilot_statuses
+      `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, open_igc_upload, pilot_statuses
        FROM comp
        WHERE test = 0 AND creation_date >= ?
        ORDER BY creation_date DESC`
@@ -246,7 +250,7 @@ export const compRoutes = new Hono<HonoEnv>()
 
     if (user) {
       adminComps = await c.env.DB.prepare(
-        `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params, c.open_igc_upload
+        `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params, c.scoring_format, c.open_igc_upload
          FROM comp c
          JOIN comp_admin ca ON c.comp_id = ca.comp_id
          WHERE ca.user_id = ?
@@ -299,7 +303,7 @@ export const compRoutes = new Hono<HonoEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, open_igc_upload, pilot_statuses
+        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, open_igc_upload, pilot_statuses
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -386,6 +390,7 @@ export const compRoutes = new Hono<HonoEnv>()
         gap_params: comp.gap_params
           ? JSON.parse(comp.gap_params as string)
           : null,
+        scoring_format: (comp.scoring_format as string) ?? "gap",
         open_igc_upload: !!(comp.open_igc_upload as number),
         pilot_statuses: parsePilotStatuses(comp.pilot_statuses),
         admins: adminList,
@@ -418,7 +423,7 @@ export const compRoutes = new Hono<HonoEnv>()
 
       // Fetch current state so we can compute audit diffs and validate consistency
       const current = await c.env.DB.prepare(
-        `SELECT name, category, close_date, test, pilot_classes, default_pilot_class, gap_params, open_igc_upload, pilot_statuses
+        `SELECT name, category, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, open_igc_upload, pilot_statuses
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -430,6 +435,7 @@ export const compRoutes = new Hono<HonoEnv>()
           pilot_classes: string;
           default_pilot_class: string;
           gap_params: string | null;
+          scoring_format: string;
           open_igc_upload: number;
           pilot_statuses: string;
         }>();
@@ -484,6 +490,10 @@ export const compRoutes = new Hono<HonoEnv>()
         values.push(
           body.gap_params ? JSON.stringify(body.gap_params) : null
         );
+      }
+      if (body.scoring_format !== undefined) {
+        updates.push("scoring_format = ?");
+        values.push(body.scoring_format);
       }
       if (body.open_igc_upload !== undefined) {
         updates.push("open_igc_upload = ?");
@@ -556,6 +566,17 @@ export const compRoutes = new Hono<HonoEnv>()
         }
       }
       if (
+        body.scoring_format !== undefined &&
+        body.scoring_format !== current.scoring_format
+      ) {
+        // Changing the scoring format re-scores every task in the comp.
+        const fmtLabel = (f: string) =>
+          f === "open_distance" ? "Open distance" : "GAP";
+        auditChanges.push(
+          `Changed scoring format from ${fmtLabel(current.scoring_format)} to ${fmtLabel(body.scoring_format)}`
+        );
+      }
+      if (
         body.open_igc_upload !== undefined &&
         (body.open_igc_upload ? 1 : 0) !== current.open_igc_upload
       ) {
@@ -616,7 +637,7 @@ export const compRoutes = new Hono<HonoEnv>()
 
       // Return updated comp
       const updated = await c.env.DB.prepare(
-        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, open_igc_upload, pilot_statuses
+        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, open_igc_upload, pilot_statuses
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -640,6 +661,7 @@ export const compRoutes = new Hono<HonoEnv>()
         gap_params: updated.gap_params
           ? JSON.parse(updated.gap_params as string)
           : null,
+        scoring_format: (updated.scoring_format as string) ?? "gap",
         open_igc_upload: !!(updated.open_igc_upload as number),
         pilot_statuses: parsePilotStatuses(updated.pilot_statuses),
         admins: admins.results,

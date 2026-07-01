@@ -127,6 +127,8 @@ export default defineConfig({
         about: resolve(__dirname, 'src/about.html'),
         legal: resolve(__dirname, 'src/legal.html'),
         scoring: resolve(__dirname, 'src/scoring.html'),
+        'scoring-gap': resolve(__dirname, 'src/scoring-gap.html'),
+        'scoring-open-distance': resolve(__dirname, 'src/scoring-open-distance.html'),
         comp: resolve(__dirname, 'src/comp.html'),
         'comp-detail': resolve(__dirname, 'src/comp-detail.html'),
         scores: resolve(__dirname, 'src/scores.html'),

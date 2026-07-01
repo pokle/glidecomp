@@ -18,6 +18,26 @@ type HonoEnv = { Bindings: Env; Variables: Variables };
 
 const MAX_TASKS_PER_COMP = 50;
 
+/**
+ * Validate a task's geometry against the competition's scoring format.
+ *
+ * Open-distance competitions score from the take-off exit with no goal, so
+ * every task must define exactly one turnpoint, typed TAKEOFF. GAP tasks are
+ * unconstrained here. Returns an error message, or null when the geometry is
+ * acceptable (including when no route is set yet).
+ */
+function validateTaskGeometryForFormat(
+  scoringFormat: string,
+  xctsk: { turnpoints?: { type?: string }[] } | null | undefined
+): string | null {
+  if (scoringFormat !== "open_distance" || !xctsk) return null;
+  const turnpoints = xctsk.turnpoints ?? [];
+  if (turnpoints.length !== 1 || turnpoints[0]?.type !== "TAKEOFF") {
+    return "Open distance tasks must have exactly one turnpoint, of type Takeoff.";
+  }
+  return null;
+}
+
 export const taskRoutes = new Hono<HonoEnv>()
   // ── POST /api/comp/:comp_id/task ── Create task
   .post(
@@ -33,10 +53,10 @@ export const taskRoutes = new Hono<HonoEnv>()
 
       // Verify comp exists
       const comp = await c.env.DB.prepare(
-        "SELECT pilot_classes FROM comp WHERE comp_id = ?"
+        "SELECT pilot_classes, scoring_format FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ pilot_classes: string }>();
+        .first<{ pilot_classes: string; scoring_format: string }>();
 
       if (!comp) {
         return c.json({ error: "Competition not found" }, 404);
@@ -54,6 +74,15 @@ export const taskRoutes = new Hono<HonoEnv>()
           },
           400
         );
+      }
+
+      // Validate task geometry against the comp's scoring format
+      const geometryError = validateTaskGeometryForFormat(
+        comp.scoring_format,
+        body.xctsk
+      );
+      if (geometryError) {
+        return c.json({ error: geometryError }, 400);
       }
 
       // Enforce task limit
@@ -216,6 +245,22 @@ export const taskRoutes = new Hono<HonoEnv>()
 
       if (!task) {
         return c.json({ error: "Task not found" }, 404);
+      }
+
+      // If a route is being set, validate it against the comp's scoring format
+      if (body.xctsk) {
+        const comp = await c.env.DB.prepare(
+          "SELECT scoring_format FROM comp WHERE comp_id = ?"
+        )
+          .bind(compId)
+          .first<{ scoring_format: string }>();
+        const geometryError = validateTaskGeometryForFormat(
+          comp?.scoring_format ?? "gap",
+          body.xctsk
+        );
+        if (geometryError) {
+          return c.json({ error: geometryError }, 400);
+        }
       }
 
       // Fetch current pilot classes for audit diff

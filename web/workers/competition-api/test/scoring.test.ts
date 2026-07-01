@@ -392,3 +392,162 @@ describe("Live Scoring", () => {
     expect(sportClass!.pilots).toHaveLength(1);
   });
 });
+
+/** Build a single-Takeoff open-distance task from the sample task's launch. */
+function openDistanceTaskFromSample() {
+  const sample = JSON.parse(env.SAMPLE_TASK_XCTSK) as {
+    turnpoints: Array<{ radius: number; waypoint: unknown }>;
+  };
+  return {
+    taskType: "OPEN-DISTANCE",
+    version: 1,
+    earthModel: "WGS84",
+    turnpoints: [
+      { type: "TAKEOFF", radius: 400, waypoint: sample.turnpoints[0].waypoint },
+    ],
+  };
+}
+
+describe("Open distance scoring", () => {
+  test("scores by distance from take-off and reports the format", async () => {
+    const compId = await createComp({
+      category: "hg",
+      scoring_format: "open_distance",
+    });
+    const taskId = await createTask(compId, {
+      xctsk: openDistanceTaskFromSample(),
+      pilot_classes: ["open"],
+    });
+
+    const igcEntries = sampleIgcEntries().slice(0, 3);
+    const users = ["user-1", "user-2", "user-3"];
+    for (let i = 0; i < igcEntries.length; i++) {
+      const res = await uploadRequest(
+        `/api/comp/${compId}/task/${taskId}/igc`,
+        await compressText(igcEntries[i][1]),
+        { user: users[i] }
+      );
+      expect(res.status).toBe(201);
+    }
+
+    const res = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      scoring_format: string;
+      classes: Array<{
+        pilots: Array<{
+          rank: number;
+          total_score: number;
+          flown_distance: number;
+          made_goal: boolean;
+          time_points: number;
+          leading_points: number;
+        }>;
+      }>;
+    };
+
+    expect(data.scoring_format).toBe("open_distance");
+    const pilots = data.classes[0].pilots;
+    expect(pilots.length).toBe(3);
+
+    // Ranked by open distance, furthest first.
+    const distances = pilots.map((p) => p.flown_distance);
+    expect(distances).toEqual([...distances].sort((a, b) => b - a));
+    expect(pilots[0].rank).toBe(1);
+    expect(pilots[0].flown_distance).toBeGreaterThan(0);
+
+    // Score is the distance in whole metres; no GAP point components.
+    for (const p of pilots) {
+      expect(p.total_score).toBe(Math.round(p.flown_distance));
+      expect(p.made_goal).toBe(false);
+      expect(p.time_points).toBe(0);
+      expect(p.leading_points).toBe(0);
+    }
+  });
+
+  test("switching a comp to open distance re-scores (cache miss) and is audit-logged", async () => {
+    const sampleTask = JSON.parse(env.SAMPLE_TASK_XCTSK);
+    const compId = await createComp({ category: "hg" }); // GAP by default
+    const taskId = await createTask(compId, {
+      xctsk: sampleTask,
+      pilot_classes: ["open"],
+    });
+
+    const igcEntries = sampleIgcEntries();
+    for (const [i, user] of ["user-1", "user-2"].entries()) {
+      await uploadRequest(
+        `/api/comp/${compId}/task/${taskId}/igc`,
+        await compressText(igcEntries[i][1]),
+        { user }
+      );
+    }
+
+    // Score as GAP first — populates the cache under the GAP-format key.
+    const gapRes = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
+    const gap = (await gapRes.json()) as { scoring_format: string };
+    expect(gap.scoring_format).toBe("gap");
+
+    // Switch the comp to open distance.
+    const patch = await authRequest("PATCH", `/api/comp/${compId}`, {
+      scoring_format: "open_distance",
+    });
+    expect(patch.status).toBe(200);
+
+    // Re-score: the cache key now includes the new format, so this is a MISS
+    // and returns the open-distance result.
+    const odRes = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
+    expect(odRes.headers.get("X-Cache")).toBe("MISS");
+    const od = (await odRes.json()) as { scoring_format: string };
+    expect(od.scoring_format).toBe("open_distance");
+
+    // The format change is recorded in the (publicly visible) audit log.
+    const audit = await env.DB.prepare(
+      "SELECT description FROM audit_log WHERE description LIKE 'Changed scoring format%'"
+    ).all<{ description: string }>();
+    expect(audit.results.length).toBe(1);
+    expect(audit.results[0].description).toContain("Open distance");
+  });
+
+  test("reuses the per-track cache when a new track is added", async () => {
+    const compId = await createComp({
+      category: "hg",
+      scoring_format: "open_distance",
+    });
+    const taskId = await createTask(compId, {
+      xctsk: openDistanceTaskFromSample(),
+      pilot_classes: ["open"],
+    });
+    const igcEntries = sampleIgcEntries();
+
+    // First pilot → score (miss).
+    await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc`,
+      await compressText(igcEntries[0][1]),
+      { user: "user-1" }
+    );
+    const res1 = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
+    const data1 = (await res1.json()) as {
+      classes: Array<{ pilots: Array<{ pilot_name: string; flown_distance: number }> }>;
+    };
+    const first = data1.classes[0].pilots[0];
+
+    // Second pilot → the whole-task cache key changes, so this recomputes. The
+    // first pilot's distance comes from the per-track cache and is unchanged.
+    await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc`,
+      await compressText(igcEntries[1][1]),
+      { user: "user-2" }
+    );
+    const res2 = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
+    expect(res2.headers.get("X-Cache")).toBe("MISS");
+    const data2 = (await res2.json()) as {
+      classes: Array<{ pilots: Array<{ pilot_name: string; flown_distance: number }> }>;
+    };
+
+    expect(data2.classes[0].pilots.length).toBe(2);
+    const firstAgain = data2.classes[0].pilots.find(
+      (p) => p.pilot_name === first.pilot_name
+    )!;
+    expect(firstAgain.flown_distance).toBe(first.flown_distance);
+  });
+});

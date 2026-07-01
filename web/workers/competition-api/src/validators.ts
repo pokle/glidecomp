@@ -63,6 +63,11 @@ const gapParamsSchema = z
   })
   .strict();
 
+// Competition scoring format — see migration 0009. "gap" is the default
+// CIVL GAP scoring (driven by gap_params); "open_distance" scores each pilot
+// by the metres of open distance flown from the take-off exit.
+export const scoringFormatSchema = z.enum(["gap", "open_distance"]);
+
 export const createCompSchema = z.object({
   name: z.string().min(1).max(MAX_TEXT),
   category: z.enum(["hg", "pg"]),
@@ -71,6 +76,7 @@ export const createCompSchema = z.object({
   pilot_classes: pilotClassesArray.optional(),
   default_pilot_class: pilotClassString.optional(),
   gap_params: gapParamsSchema.nullable().optional(),
+  scoring_format: scoringFormatSchema.optional(),
 });
 
 export const updateCompSchema = z.object({
@@ -81,6 +87,7 @@ export const updateCompSchema = z.object({
   pilot_classes: pilotClassesArray.optional(),
   default_pilot_class: pilotClassString.optional(),
   gap_params: gapParamsSchema.nullable().optional(),
+  scoring_format: scoringFormatSchema.optional(),
   open_igc_upload: z.boolean().optional(),
   admin_emails: z.array(z.string().email().max(MAX_TEXT)).min(1).optional(),
   pilot_statuses: pilotStatusesArray.optional(),
