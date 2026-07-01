@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'bun:test';
-import { scoreOpenDistance } from '../src/open-distance-scoring';
+import {
+  scoreOpenDistance,
+  scoreOpenDistanceFlights,
+  openDistanceForFlight,
+} from '../src/open-distance-scoring';
 import type { PilotFlight } from '../src/gap-scoring';
 import type { XCTask } from '../src/xctsk-parser';
 import { destinationPoint } from '../src/geo';
@@ -112,5 +116,44 @@ describe('scoreOpenDistance', () => {
     const result = scoreOpenDistance(TASK, []);
     expect(result.pilotScores).toEqual([]);
     expect(result.stats.bestDistance).toBe(0);
+  });
+});
+
+describe('openDistanceForFlight + scoreOpenDistanceFlights (cacheable split)', () => {
+  it('openDistanceForFlight returns the furthest distance from the take-off exit', () => {
+    const pilot = flight('far', [fixEast(0, 0), fixEast(60, 2000), fixEast(120, 50000)]);
+    const d = openDistanceForFlight(TASK, pilot);
+    expect(d).toBeGreaterThan(48800);
+    expect(d).toBeLessThan(49200);
+  });
+
+  it('scoreOpenDistanceFlights ranks pre-computed distances furthest-first', () => {
+    const result = scoreOpenDistanceFlights([
+      { pilotName: 'A', trackFile: 'A.igc', distance: 30000 },
+      { pilotName: 'B', trackFile: 'B.igc', distance: 60000 },
+      { pilotName: 'C', trackFile: 'C.igc', distance: 45000 },
+    ]);
+    expect(result.pilotScores.map((p) => p.pilotName)).toEqual(['B', 'C', 'A']);
+    expect(result.pilotScores.map((p) => p.rank)).toEqual([1, 2, 3]);
+    // Score is the distance in whole metres.
+    expect(result.pilotScores[0].totalScore).toBe(60000);
+    expect(result.pilotScores[0].flownDistance).toBe(60000);
+  });
+
+  it('matches scoreOpenDistance when fed the same per-track distances', () => {
+    const pilots = [
+      flight('A', [fixEast(0, 0), fixEast(60, 2000), fixEast(120, 60000)]),
+      flight('B', [fixEast(0, 0), fixEast(60, 2000), fixEast(120, 30000)]),
+    ];
+    const direct = scoreOpenDistance(TASK, pilots);
+    const viaSplit = scoreOpenDistanceFlights(
+      pilots.map((p) => ({
+        pilotName: p.pilotName,
+        trackFile: p.trackFile,
+        distance: openDistanceForFlight(TASK, p),
+      }))
+    );
+    expect(viaSplit.pilotScores.map((p) => [p.trackFile, p.totalScore, p.rank]))
+      .toEqual(direct.pilotScores.map((p) => [p.trackFile, p.totalScore, p.rank]));
   });
 });

@@ -507,4 +507,47 @@ describe("Open distance scoring", () => {
     expect(audit.results.length).toBe(1);
     expect(audit.results[0].description).toContain("Open distance");
   });
+
+  test("reuses the per-track cache when a new track is added", async () => {
+    const compId = await createComp({
+      category: "hg",
+      scoring_format: "open_distance",
+    });
+    const taskId = await createTask(compId, {
+      xctsk: openDistanceTaskFromSample(),
+      pilot_classes: ["open"],
+    });
+    const igcEntries = sampleIgcEntries();
+
+    // First pilot → score (miss).
+    await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc`,
+      await compressText(igcEntries[0][1]),
+      { user: "user-1" }
+    );
+    const res1 = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
+    const data1 = (await res1.json()) as {
+      classes: Array<{ pilots: Array<{ pilot_name: string; flown_distance: number }> }>;
+    };
+    const first = data1.classes[0].pilots[0];
+
+    // Second pilot → the whole-task cache key changes, so this recomputes. The
+    // first pilot's distance comes from the per-track cache and is unchanged.
+    await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc`,
+      await compressText(igcEntries[1][1]),
+      { user: "user-2" }
+    );
+    const res2 = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
+    expect(res2.headers.get("X-Cache")).toBe("MISS");
+    const data2 = (await res2.json()) as {
+      classes: Array<{ pilots: Array<{ pilot_name: string; flown_distance: number }> }>;
+    };
+
+    expect(data2.classes[0].pilots.length).toBe(2);
+    const firstAgain = data2.classes[0].pilots.find(
+      (p) => p.pilot_name === first.pilot_name
+    )!;
+    expect(firstAgain.flown_distance).toBe(first.flown_distance);
+  });
 });

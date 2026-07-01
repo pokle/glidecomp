@@ -104,8 +104,12 @@ function resolveTakeoffExit(
  * Open distance (metres) for one flight: the furthest straight-line distance
  * from the take-off exit origin to any fix flown at or after that exit.
  * Returns 0 for a pilot who never leaves the take-off cylinder.
+ *
+ * This is the field-independent, cacheable per-track unit — it depends only on
+ * the pilot's own track and the take-off, so the backend caches it per track
+ * (mirrors {@link toFlightScoringData} for GAP).
  */
-function openDistanceForFlight(task: XCTask, pilot: PilotFlight): number {
+export function openDistanceForFlight(task: XCTask, pilot: PilotFlight): number {
   const origin = resolveTakeoffExit(task, pilot.fixes);
   if (!origin) return 0;
 
@@ -140,32 +144,40 @@ function openDistanceTurnpointResult(distance: number): TurnpointSequenceResult 
 }
 
 /**
- * Score an open-distance task for a field of pilots.
- *
- * Each pilot's total score equals their open distance in metres (rounded to
- * the nearest metre); pilots are ranked by that distance, furthest first.
- *
- * @param task    The task — its first turnpoint is the take-off. Additional
- *                turnpoints (if any) are ignored; distance is always open
- *                distance from the take-off exit.
- * @param pilots  Parsed flights to score.
- * @param numPresent Optional count of pilots present (for stats only).
+ * Per-pilot open-distance scoring input — the field-independent result of one
+ * flight (its open distance in metres). Because it depends only on the pilot's
+ * own track and the take-off, the backend caches it per track and reuses it
+ * across recomputes (mirrors {@link FlightScoringData} for GAP).
  */
-export function scoreOpenDistance(
-  task: XCTask,
-  pilots: PilotFlight[],
+export interface OpenDistanceFlightData {
+  pilotName: string;
+  trackFile: string;
+  /** Open distance flown in metres (take-off exit → furthest fix). */
+  distance: number;
+}
+
+/**
+ * Aggregate pre-computed per-pilot open distances into a task result: rank the
+ * field furthest-first and build the (neutral) {@link TaskScoreResult}
+ * scaffolding. Each pilot's total score equals their open distance in metres
+ * (rounded). Open distance has no GAP validity, weighting, time/leading/arrival
+ * points, or 1000-point pool — those fields exist only to satisfy the shared
+ * result shape and are not surfaced in the open-distance UI.
+ *
+ * This is the field-aggregation half of open-distance scoring (mirrors
+ * {@link scoreFlights} for GAP); the competition backend feeds it cached
+ * per-track distances so unchanged tracks are never re-fetched or re-parsed.
+ */
+export function scoreOpenDistanceFlights(
+  flights: OpenDistanceFlightData[],
   numPresent?: number,
 ): TaskScoreResult {
-  const scored = pilots.map((pilot) => ({
-    pilot,
-    distance: openDistanceForFlight(task, pilot),
-  }));
-
-  const pilotScores: PilotScore[] = scored.map(({ pilot, distance }) => {
+  const pilotScores: PilotScore[] = flights.map((flight) => {
+    const distance = flight.distance;
     const score = Math.round(distance);
     return {
-      pilotName: pilot.pilotName,
-      trackFile: pilot.trackFile,
+      pilotName: flight.pilotName,
+      trackFile: flight.trackFile,
       flownDistance: distance,
       speedSectionTime: null,
       madeGoal: false,
@@ -197,8 +209,8 @@ export function scoreOpenDistance(
   const bestDistance = pilotScores.length > 0 ? pilotScores[0].flownDistance : 0;
 
   const stats: TaskStats = {
-    numPresent: numPresent ?? pilots.length,
-    numFlying: pilots.length,
+    numPresent: numPresent ?? flights.length,
+    numFlying: flights.length,
     numInGoal: 0,
     numReachedESS: 0,
     bestDistance,
@@ -207,9 +219,6 @@ export function scoreOpenDistance(
     taskDistance: 0,
   };
 
-  // Open distance has no GAP validity, weighting, or 1000-point pool. These
-  // fields exist only to satisfy the shared TaskScoreResult shape and are not
-  // surfaced in the open-distance UI.
   return {
     parameters: DEFAULT_GAP_PARAMETERS,
     taskValidity: { launch: 1, distance: 1, time: 1, task: 1 },
@@ -218,4 +227,29 @@ export function scoreOpenDistance(
     pilotScores,
     stats,
   };
+}
+
+/**
+ * Score an open-distance task for a field of pilots: compute each pilot's open
+ * distance from their fixes, then aggregate. Convenience wrapper over
+ * {@link openDistanceForFlight} + {@link scoreOpenDistanceFlights} — the
+ * backend calls those two separately so it can cache the per-track distance.
+ *
+ * @param task    The task — its first turnpoint is the take-off. Additional
+ *                turnpoints (if any) are ignored; distance is always open
+ *                distance from the take-off exit.
+ * @param pilots  Parsed flights to score.
+ * @param numPresent Optional count of pilots present (for stats only).
+ */
+export function scoreOpenDistance(
+  task: XCTask,
+  pilots: PilotFlight[],
+  numPresent?: number,
+): TaskScoreResult {
+  const flights: OpenDistanceFlightData[] = pilots.map((pilot) => ({
+    pilotName: pilot.pilotName,
+    trackFile: pilot.trackFile,
+    distance: openDistanceForFlight(task, pilot),
+  }));
+  return scoreOpenDistanceFlights(flights, numPresent);
 }

@@ -3,7 +3,8 @@ import {
   parseXCTask,
   resolveTurnpointSequence,
   scoreFlights,
-  scoreOpenDistance,
+  scoreOpenDistanceFlights,
+  openDistanceForFlight,
   toFlightScoringData,
   taskForDistanceOrigin,
   computeLeadingAggregate,
@@ -11,7 +12,7 @@ import {
   DEFAULT_GAP_PARAMETERS,
   type GAPParameters,
   type FlightScoringData,
-  type PilotFlight,
+  type OpenDistanceFlightData,
   type TaskScoreCore,
   type LeadingAggregate,
 } from "@glidecomp/engine";
@@ -195,9 +196,9 @@ function emptyClassScore(pilotClass: string): ClassScore {
  * response. Shared by the GAP and open-distance paths — both produce a result
  * with the same taskValidity / availablePoints / pilotScores shape.
  *
- * scoreFlights()/scoreOpenDistance() sort pilotScores by rank, so the output
- * order does NOT match the input order — pair each score back to its pilot by
- * trackFile (the unique igc_filename), never by array index.
+ * scoreFlights()/scoreOpenDistanceFlights() sort pilotScores by rank, so the
+ * output order does NOT match the input order — pair each score back to its
+ * pilot by trackFile (the unique igc_filename), never by array index.
  */
 function buildClassScore(
   pilotClass: string,
@@ -348,12 +349,18 @@ export async function computeTaskScore(
   const scoredTracks = tracks.results.filter((t) => scoredClasses.has(t.pilot_class));
 
   // Open distance: score each pilot on how far they flew from the take-off
-  // exit. This needs the raw fixes (not the GAP turnpoint analysis), so it
-  // fetches and parses each track directly and bypasses the GAP per-track
-  // cache. The whole-task score cache still prevents recompute on repeat GETs.
+  // exit. Each pilot's open distance is field-independent, so — like the GAP
+  // path — it is cached per track in KV and reused across recomputes; only new
+  // or changed tracks are fetched from R2, decompressed and re-parsed. Open
+  // distance needs the raw fixes (not the GAP turnpoint analysis), so it uses
+  // its own cache holding just the computed distance.
   if (scoringFormat === "open_distance") {
-    type OpenDistancePilot = {
-      flight: PilotFlight;
+    // Per-track cache key prefix: any change to the task geometry (xctsk, which
+    // holds the take-off cylinder) invalidates every cached distance.
+    const geomHash = kv ? await shortHash(taskRow.xctsk) : "";
+
+    type AnalyzedOpenPilot = {
+      flight: OpenDistanceFlightData;
       comp_pilot_id: number;
       pilot_class: string;
       penalty_points: number;
@@ -362,29 +369,56 @@ export async function computeTaskScore(
     const analyzed = await mapWithConcurrency(
       scoredTracks,
       TRACK_FETCH_CONCURRENCY,
-      async (track): Promise<OpenDistancePilot | null> => {
-        const object = await r2.get(track.igc_filename);
-        if (!object) return null;
-        const compressed = await object.arrayBuffer();
-        const decompressedStream = new Response(compressed).body!.pipeThrough(
-          new DecompressionStream("gzip")
-        );
-        const igcText = new TextDecoder().decode(
-          await new Response(decompressedStream).arrayBuffer()
-        );
-        let igc;
-        try {
-          igc = parseIGC(igcText);
-        } catch {
-          console.warn(`Skipping unparseable IGC: ${track.igc_filename}`);
-          return null;
+      async (track): Promise<AnalyzedOpenPilot | null> => {
+        const cacheKey = geomHash
+          ? `od:v1:${geomHash}:${track.task_track_id}:${track.uploaded_at}`
+          : "";
+
+        let distance: number | null = null;
+        if (cacheKey && kv) {
+          const cached = (await kv.get(cacheKey, "json")) as { distance: number } | null;
+          if (cached) distance = cached.distance;
         }
-        if (igc.fixes.length === 0) return null;
+
+        if (distance === null) {
+          const object = await r2.get(track.igc_filename);
+          if (!object) return null;
+          const compressed = await object.arrayBuffer();
+          const decompressedStream = new Response(compressed).body!.pipeThrough(
+            new DecompressionStream("gzip")
+          );
+          const igcText = new TextDecoder().decode(
+            await new Response(decompressedStream).arrayBuffer()
+          );
+          let igc;
+          try {
+            igc = parseIGC(igcText);
+          } catch {
+            console.warn(`Skipping unparseable IGC: ${track.igc_filename}`);
+            return null;
+          }
+          if (igc.fixes.length === 0) return null;
+
+          distance = openDistanceForFlight(xcTask, {
+            pilotName: track.pilot_name,
+            trackFile: track.igc_filename,
+            fixes: igc.fixes,
+          });
+
+          if (cacheKey && kv) {
+            const put = kv.put(cacheKey, JSON.stringify({ distance }), {
+              expirationTtl: 604800,
+            });
+            if (waitUntil) waitUntil(put);
+            else await put;
+          }
+        }
+
         return {
           flight: {
             pilotName: track.pilot_name,
             trackFile: track.igc_filename,
-            fixes: igc.fixes,
+            distance,
           },
           comp_pilot_id: track.comp_pilot_id,
           pilot_class: track.pilot_class,
@@ -394,7 +428,7 @@ export async function computeTaskScore(
       }
     );
     const analyzedPilots = analyzed.filter(
-      (p): p is OpenDistancePilot => p !== null
+      (p): p is AnalyzedOpenPilot => p !== null
     );
 
     const classScores: ClassScore[] = [];
@@ -404,10 +438,7 @@ export async function computeTaskScore(
         classScores.push(emptyClassScore(pilotClass));
         continue;
       }
-      const result = scoreOpenDistance(
-        xcTask,
-        classPilots.map((p) => p.flight)
-      );
+      const result = scoreOpenDistanceFlights(classPilots.map((p) => p.flight));
       const pilotMeta = new Map(
         classPilots.map((p) => [
           p.flight.trackFile,
