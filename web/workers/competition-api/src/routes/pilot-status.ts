@@ -4,6 +4,7 @@ import type { Env, AuthUser } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth } from "../middleware/auth";
+import { isCompAdmin } from "../super-admin";
 import {
   upsertPilotStatusSchema,
   updatePilotStatusNoteSchema,
@@ -71,11 +72,7 @@ async function authorizeStatusMutation(
   user: AuthUser,
   openIgcUpload: boolean
 ): Promise<{ status: 403; error: string } | null> {
-  const isAdmin = await db
-    .prepare("SELECT 1 FROM comp_admin WHERE comp_id = ? AND user_id = ?")
-    .bind(compId, user.id)
-    .first();
-  if (isAdmin) return null;
+  if (await isCompAdmin(db, compId, user)) return null;
 
   // Is the caller the registered pilot themselves?
   const self = await db
@@ -135,12 +132,8 @@ export const pilotStatusRoutes = new Hono<HonoEnv>()
 
       if (comp.test) {
         if (!user) return c.json({ error: "Not found" }, 404);
-        const isAdmin = await c.env.DB.prepare(
-          "SELECT 1 FROM comp_admin WHERE comp_id = ? AND user_id = ?"
-        )
-          .bind(compId, user.id)
-          .first();
-        if (!isAdmin) return c.json({ error: "Not found" }, 404);
+        if (!(await isCompAdmin(c.env.DB, compId, user)))
+          return c.json({ error: "Not found" }, 404);
       }
 
       // Verify task belongs to this comp

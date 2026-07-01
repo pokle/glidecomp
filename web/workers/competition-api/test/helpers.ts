@@ -111,5 +111,10 @@ export async function clearCompData(): Promise<void> {
       `INSERT OR REPLACE INTO "user" (id, name, email, "createdAt", "updatedAt")
        VALUES (?, ?, ?, ?, ?)`
     ).bind("user-3", "Pilot Three", "pilot3@test.com", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
+    // Email is on the hardcoded super-admin allowlist (see src/super-admin.ts).
+    env.DB.prepare(
+      `INSERT OR REPLACE INTO "user" (id, name, email, "createdAt", "updatedAt")
+       VALUES (?, ?, ?, ?, ?)`
+    ).bind("user-super", "Super Admin", "tushar.pokle@gmail.com", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
   ]);
 }

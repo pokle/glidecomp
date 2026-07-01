@@ -4,6 +4,7 @@ import type { Env, AuthUser } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
+import { isCompAdmin, isSuperAdmin } from "../super-admin";
 import { createCompSchema, updateCompSchema } from "../validators";
 import { audit, describeChange } from "../audit";
 import { DEFAULT_GAP_PARAMETERS, type GAPParameters } from "@glidecomp/engine";
@@ -255,7 +256,9 @@ export const compRoutes = new Hono<HonoEnv>()
         .all();
     }
 
-    // Merge: admin comps first, then public (deduped)
+    // Merge: admin comps first, then public (deduped). A super admin
+    // administers every comp, so mark the public ones as admin too.
+    const superAdmin = isSuperAdmin(user);
     const adminIds = new Set(
       adminComps.results.map((r) => r.comp_id as number)
     );
@@ -273,7 +276,7 @@ export const compRoutes = new Hono<HonoEnv>()
         .filter((r) => !adminIds.has(r.comp_id as number))
         .map((r) => ({
           ...encodeComp(alphabet, r),
-          is_admin: false,
+          is_admin: superAdmin,
           pilot_classes: JSON.parse(r.pilot_classes as string),
           gap_params: r.gap_params ? JSON.parse(r.gap_params as string) : null,
           test: !!(r.test as number),
@@ -306,19 +309,11 @@ export const compRoutes = new Hono<HonoEnv>()
         return c.json({ error: "Competition not found" }, 404);
       }
 
+      const isAdmin = await isCompAdmin(c.env.DB, compId, user);
+
       // Test comps require admin access
-      if (comp.test) {
-        if (!user) {
-          return c.json({ error: "Competition not found" }, 404);
-        }
-        const isAdmin = await c.env.DB.prepare(
-          "SELECT 1 FROM comp_admin WHERE comp_id = ? AND user_id = ?"
-        )
-          .bind(compId, user.id)
-          .first();
-        if (!isAdmin) {
-          return c.json({ error: "Competition not found" }, 404);
-        }
+      if (comp.test && !isAdmin) {
+        return c.json({ error: "Competition not found" }, 404);
       }
 
       // Get admin list (emails)
@@ -329,6 +324,18 @@ export const compRoutes = new Hono<HonoEnv>()
       )
         .bind(compId)
         .all<{ email: string; name: string }>();
+
+      // A super admin administers every comp without a comp_admin row. Surface
+      // that to *their own* response (not other viewers) so the admin UI, which
+      // keys off the caller's email appearing in `admins`, activates for them.
+      const adminList = admins.results;
+      if (
+        isSuperAdmin(user) &&
+        user &&
+        !adminList.some((a) => a.email === user.email)
+      ) {
+        adminList.push({ email: user.email, name: user.name });
+      }
 
       // Get tasks summary
       const tasks = await c.env.DB.prepare(
@@ -381,7 +388,8 @@ export const compRoutes = new Hono<HonoEnv>()
           : null,
         open_igc_upload: !!(comp.open_igc_upload as number),
         pilot_statuses: parsePilotStatuses(comp.pilot_statuses),
-        admins: admins.results,
+        admins: adminList,
+        is_admin: isAdmin,
         tasks: tasks.results.map((t) => ({
           task_id: encodeId(alphabet, t.task_id as number),
           name: t.name,

@@ -4,6 +4,7 @@ import type { Env, AuthUser } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
+import { isCompAdmin } from "../super-admin";
 import { updatePenaltySchema } from "../validators";
 import { parseIGC } from "@glidecomp/engine";
 import { audit } from "../audit";
@@ -389,11 +390,7 @@ export const igcRoutes = new Hono<HonoEnv>()
       }
 
       // Authorisation: admin OR registered pilot (when open_igc_upload enabled)
-      const isAdmin = await c.env.DB.prepare(
-        "SELECT 1 FROM comp_admin WHERE comp_id = ? AND user_id = ?"
-      )
-        .bind(compId, user.id)
-        .first();
+      const isAdmin = await isCompAdmin(c.env.DB, compId, user);
       if (!isAdmin) {
         if (!comp.open_igc_upload) {
           return c.json(
@@ -625,12 +622,7 @@ export const igcRoutes = new Hono<HonoEnv>()
         if (!user) {
           return c.json({ error: "Not found" }, 404);
         }
-        const isAdmin = await c.env.DB.prepare(
-          "SELECT 1 FROM comp_admin WHERE comp_id = ? AND user_id = ?"
-        )
-          .bind(compId, user.id)
-          .first();
-        if (!isAdmin) {
+        if (!(await isCompAdmin(c.env.DB, compId, user))) {
           return c.json({ error: "Not found" }, 404);
         }
       }
@@ -724,12 +716,7 @@ export const igcRoutes = new Hono<HonoEnv>()
         if (!user) {
           return c.json({ error: "Not found" }, 404);
         }
-        const isAdmin = await c.env.DB.prepare(
-          "SELECT 1 FROM comp_admin WHERE comp_id = ? AND user_id = ?"
-        )
-          .bind(compId, user.id)
-          .first();
-        if (!isAdmin) {
+        if (!(await isCompAdmin(c.env.DB, compId, user))) {
           return c.json({ error: "Not found" }, 404);
         }
       }

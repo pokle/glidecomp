@@ -4,6 +4,7 @@ import type { Env, AuthUser } from "../env";
 import { encodeId, decodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
+import { isCompAdmin } from "../super-admin";
 import {
   updatePilotSchema,
   updateCompPilotSchema,
@@ -391,13 +392,7 @@ export const pilotRoutes = new Hono<HonoEnv>()
       // Test comps already require admin to see anything; for non-test
       // comps we keep public visibility of names/IDs/classes but redact
       // the PII fields via `serializeCompPilotPublic`.
-      const isAdmin = user
-        ? !!(await c.env.DB.prepare(
-            "SELECT 1 FROM comp_admin WHERE comp_id = ? AND user_id = ?"
-          )
-            .bind(compId, user.id)
-            .first())
-        : false;
+      const isAdmin = await isCompAdmin(c.env.DB, compId, user);
 
       if (comp.test && !isAdmin) {
         return c.json({ error: "Not found" }, 404);
