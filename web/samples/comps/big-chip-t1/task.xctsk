@@ -5,7 +5,7 @@
   "turnpoints": [
     {
       "type": "TAKEOFF",
-      "radius": 100,
+      "radius": 5000,
       "waypoint": {
         "name": "JILJIL",
         "description": "Jil Jil Farm",

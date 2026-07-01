@@ -31,7 +31,7 @@
 import { mkdirSync, writeFileSync, rmSync, existsSync, readdirSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { destinationPoint, andoyerDistance } from '@glidecomp/engine';
+import { destinationPoint, parseXCTask, openDistanceForFlight } from '@glidecomp/engine';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const COMPS_ROOT = join(REPO_ROOT, 'web/samples/comps');
@@ -40,10 +40,11 @@ const COMPS_ROOT = join(REPO_ROOT, 'web/samples/comps');
 // both tasks. Flat farmland, ~90 m AMSL; pilots are ground-towed aloft.
 const LAUNCH = { name: 'JILJIL', description: 'Jil Jil Farm', lat: -35.86, lon: 142.89, alt: 90 };
 
-// The open-distance take-off cylinder. Kept small (100 m) so the whole tow
-// paddock sits outside it: every track starts airborne outside the cylinder,
-// so open-distance scoring measures from the first fix (see resolveTakeoffExit).
-const TAKEOFF_RADIUS = 100;
+// The open-distance take-off ("launch") cylinder. A big 5 km radius: pilots are
+// towed up inside it, and open-distance scoring measures from where each pilot
+// exits it. Short flights never leave the cylinder and score zero ("landed in
+// the launch paddock"); pilots who just cross the boundary barely score.
+const TAKEOFF_RADIUS = 5000;
 
 const DEG = Math.PI / 180;
 
@@ -288,17 +289,45 @@ function openDistanceTask(): string {
 // --- distance distribution -------------------------------------------------
 
 /**
- * Spread 50 open-distance targets across [minKm, maxKm]. A mild power curve
- * bunches the field toward the shorter end (most pilots bomb out early, a few
- * stars go long), giving a realistic, well-ranked leaderboard.
+ * Inverse standard-normal CDF (probit) — Acklam's rational approximation.
+ * Maps a probability in (0,1) to its z-score. Used to lay the field out on a
+ * bell curve deterministically (no RNG needed for the shape).
+ */
+function probit(p: number): number {
+  const a = [-3.969683028665376e1, 2.209460984245205e2, -2.759285104469687e2, 1.38357751867269e2, -3.066479806614716e1, 2.506628277459239e0];
+  const b = [-5.447609879822406e1, 1.615858368580409e2, -1.556989798598866e2, 6.680131188771972e1, -1.328068155288572e1];
+  const c = [-7.784894002430293e-3, -3.223964580411365e-1, -2.400758277161838e0, -2.549732539343734e0, 4.374664141464968e0, 2.938163982698783e0];
+  const d = [7.784695709041462e-3, 3.224671290700398e-1, 2.445134137142996e0, 3.754408661907416e0];
+  const plow = 0.02425;
+  const phigh = 1 - plow;
+  if (p < plow) {
+    const q = Math.sqrt(-2 * Math.log(p));
+    return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  }
+  if (p <= phigh) {
+    const q = p - 0.5;
+    const r = q * q;
+    return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+  }
+  const q = Math.sqrt(-2 * Math.log(1 - p));
+  return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+}
+
+/**
+ * Lay 50 flown-distance targets out on a bell curve across [minKm, maxKm]:
+ * the field is centred on ~half the maximum (the bulk make about half the
+ * distance), with short symmetric tails — a handful barely get out of the
+ * launch cylinder, and a small number reach the long distances. Deterministic
+ * (evenly-spaced normal quantiles) with a little RNG jitter for texture.
  */
 function distanceTargets(minKm: number, maxKm: number, rng: () => number): number[] {
+  const mean = maxKm * 0.5;   // bulk make about half the distance
+  const std = maxKm * 0.23;   // spread: tails reach the min/max
   const out: number[] = [];
   for (let i = 0; i < 50; i++) {
-    const frac = i / 49;
-    const curved = Math.pow(frac, 1.6);
-    const jitter = (rng() - 0.5) * 0.03;
-    const km = minKm + (maxKm - minKm) * Math.max(0, Math.min(1, curved + jitter));
+    const p = (i + 0.5) / 50; // quantile of the i-th pilot
+    const jitter = (rng() - 0.5) * std * 0.15;
+    const km = Math.max(minKm, Math.min(maxKm, mean + probit(p) * std + jitter));
     out.push(km * 1000);
   }
   return out;
@@ -373,7 +402,7 @@ function main(): void {
   writeFileSync(join(metaDir, 'pilots.tsv'), [header, ...rows].join('\n') + '\n');
 
   // 2) Per-task: task file + one track per pilot.
-  const scored: Record<string, number[]> = {};
+  const parsedTask = parseXCTask(openDistanceTask());
   for (const task of TASKS) {
     cleanTaskDir(task.dir);
     const taskDir = join(COMPS_ROOT, task.dir);
@@ -389,13 +418,10 @@ function main(): void {
       const rng = mulberry32(pilot.civl * 131 + task.bearing);
 
       // Launch scatter: 150–950 m from the paddock centre → pilots take off
-      // within ~2 km of each other (ground towing), all outside the cylinder.
-      // Constrained to the downwind hemisphere (±80° of the flight bearing) so
-      // no track ever flies back across the take-off cylinder — that keeps each
-      // pilot's scored origin their own launch (open distance = the metres they
-      // actually flew downwind), rather than snapping to a cylinder re-crossing.
+      // within ~2 km of each other (ground towing), all well inside the 5 km
+      // launch cylinder. Scattered 360° around the centre.
       const scatterR = 150 + rng() * 800;
-      const scatterB = task.bearing * DEG + (rng() - 0.5) * (160 * DEG);
+      const scatterB = rng() * Math.PI * 2;
       const p0 = destinationPoint(LAUNCH.lat, LAUNCH.lon, scatterR, scatterB);
       const start = { lat: p0.lat, lon: p0.lon, alt: LAUNCH.alt };
 
@@ -409,19 +435,28 @@ function main(): void {
       const fname = `${pilot.surname.toLowerCase()}_${pilot.civl}_bc${task.dir.endsWith('t1') ? 1 : 2}.igc`;
       writeFileSync(join(taskDir, fname), igcFile(pilot, dateCode, fixes));
 
-      // Sanity: measured open distance from the first fix (the scored origin).
-      let furthest = 0;
-      for (const f of fixes) {
-        const d = andoyerDistance(fixes[0].lat, fixes[0].lon, f.lat, f.lon);
-        if (d > furthest) furthest = d;
-      }
-      distances.push(furthest);
+      // Sanity: the real scored open distance (from the 5 km launch-cylinder
+      // exit), computed with the same engine routine the CLI/backend use.
+      const scoredM = openDistanceForFlight(parsedTask, {
+        pilotName: pilot.name,
+        trackFile: fname,
+        fixes: fixes.map((f) => ({
+          latitude: f.lat,
+          longitude: f.lon,
+          pressureAltitude: 0,
+          gnssAltitude: f.alt,
+          time: new Date(f.sec * 1000),
+          valid: true,
+        })),
+      });
+      distances.push(scoredM);
     }
-    scored[task.dir] = distances;
     const sorted = [...distances].sort((a, b) => b - a);
+    const inside = distances.filter((d) => d === 0).length;
     console.log(
       `${task.name} (${task.wind}, downwind ${task.bearing}°): 50 tracks, ` +
-        `open distance ${(sorted[sorted.length - 1] / 1000).toFixed(1)}–${(sorted[0] / 1000).toFixed(1)} km`,
+        `scored ${(sorted[sorted.length - 1] / 1000).toFixed(1)}–${(sorted[0] / 1000).toFixed(1)} km, ` +
+        `${inside} landed inside the ${(TAKEOFF_RADIUS / 1000).toFixed(0)} km cylinder (scored 0)`,
     );
   }
 
