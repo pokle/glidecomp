@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import type { Env, AuthUser } from "../env";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { optionalAuth } from "../middleware/auth";
@@ -7,8 +8,14 @@ import { encodeId } from "../sqids";
 import {
   computeScoreCacheKey,
   computeTaskScore,
+  mapWithConcurrency,
   type TaskScoreResponse,
 } from "../scoring";
+
+/** How many cold tasks to score in parallel for the comp-level endpoint. Each
+ * task itself fans out over its tracks, so this stays small to bound total R2
+ * concurrency. */
+const COMP_TASK_CONCURRENCY = 3;
 
 type Variables = {
   user: AuthUser;
@@ -16,6 +23,22 @@ type Variables = {
 };
 
 type HonoEnv = { Bindings: Env; Variables: Variables };
+
+/**
+ * Cloudflare's waitUntil, if this invocation has an ExecutionContext — lets us
+ * persist per-track analysis cache writes without blocking the response.
+ * Returns undefined outside a Worker request (the caller then awaits instead).
+ */
+function getWaitUntil(
+  c: Context<HonoEnv>
+): ((promise: Promise<unknown>) => void) | undefined {
+  try {
+    const ctx = c.executionCtx;
+    return ctx.waitUntil.bind(ctx);
+  } catch {
+    return undefined;
+  }
+}
 
 export const scoreRoutes = new Hono<HonoEnv>()
 
@@ -74,7 +97,9 @@ export const scoreRoutes = new Hono<HonoEnv>()
         taskId,
         c.env.DB,
         c.env.R2,
-        alphabet
+        alphabet,
+        c.env.glidecomp_scores_cache,
+        getWaitUntil(c)
       );
 
       // Store in KV with 7-day TTL
@@ -140,35 +165,44 @@ export const scoreRoutes = new Hono<HonoEnv>()
         return c.json(cachedComp, 200, { "X-Cache": "HIT" });
       }
 
-      // Load or compute each task's scores
-      const taskScores: Array<{
-        task_id: string;
-        task_name: string;
-        task_date: string;
-        classes: TaskScoreResponse["classes"];
-      }> = [];
+      // Load or compute each task's scores. Tasks are independent, so cold ones
+      // are scored with bounded concurrency; each reuses its own per-task cache
+      // and (on a miss) the per-track analysis cache.
+      const waitUntil = getWaitUntil(c);
+      const taskScores = await mapWithConcurrency(
+        tasks.results,
+        COMP_TASK_CONCURRENCY,
+        async (task, index) => {
+          const cacheKey = taskCacheKeys[index];
+          const cached = await c.env.glidecomp_scores_cache.get(cacheKey, "json") as TaskScoreResponse | null;
 
-      for (const task of tasks.results) {
-        const cacheKey = taskCacheKeys[tasks.results.indexOf(task)];
-        const cached = await c.env.glidecomp_scores_cache.get(cacheKey, "json") as TaskScoreResponse | null;
+          let score: TaskScoreResponse;
+          if (cached) {
+            score = cached;
+          } else {
+            score = await computeTaskScore(
+              task.task_id,
+              c.env.DB,
+              c.env.R2,
+              alphabet,
+              c.env.glidecomp_scores_cache,
+              waitUntil
+            );
+            const put = c.env.glidecomp_scores_cache.put(cacheKey, JSON.stringify(score), {
+              expirationTtl: 604800,
+            });
+            if (waitUntil) waitUntil(put);
+            else await put;
+          }
 
-        let score: TaskScoreResponse;
-        if (cached) {
-          score = cached;
-        } else {
-          score = await computeTaskScore(task.task_id, c.env.DB, c.env.R2, alphabet);
-          await c.env.glidecomp_scores_cache.put(cacheKey, JSON.stringify(score), {
-            expirationTtl: 604800,
-          });
+          return {
+            task_id: encodeId(alphabet, task.task_id),
+            task_name: task.name,
+            task_date: task.task_date,
+            classes: score.classes,
+          };
         }
-
-        taskScores.push({
-          task_id: encodeId(alphabet, task.task_id),
-          task_name: task.name,
-          task_date: task.task_date,
-          classes: score.classes,
-        });
-      }
+      );
 
       // Aggregate total points per pilot per class across all tasks
       type PilotTotals = {
