@@ -8,12 +8,12 @@ const __dirname = dirname(__filename);
 const SAMPLE_IGC = resolve(
   __dirname,
   "..",
-  "web/samples/comps/corryong-cup-2026-t1/lamb_18239_050126.igc"
+  "web/samples/comps/corryong-cup-2026-open-t1/lamb_18239_050126.igc"
 );
 const SAMPLE_XCTSK = resolve(
   __dirname,
   "..",
-  "web/samples/comps/corryong-cup-2026-t1/task.xctsk"
+  "web/samples/comps/corryong-cup-2026-open-t1/task.xctsk"
 );
 
 interface TestUser {
