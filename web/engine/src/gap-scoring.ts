@@ -619,42 +619,75 @@ function lcContribution(
 }
 
 /**
- * Calculate the leading coefficient (LC) for a single pilot, matching
- * AirScore's `classic` and `weighted` formulas (CIVL GAP / FAI S7F).
+ * The field-independent part of a pilot's leading coefficient.
  *
- * The curve is distance-to-ESS measured **along the optimized course**
- * (distance to the next un-reached turnpoint's cylinder edge plus the
- * optimized legs from there to ESS), sampled per fix, with a ratchet:
- * the best distance never increases even if the pilot flies away from ESS.
- * Lower LC = more leading = more points. The raw per-interval sum is then
- * normalized and given a late-start (classic) and/or land-out tail term,
- * exactly as AirScore's `tot_lc_calculation`.
+ * The leading coefficient depends on the whole field only through two
+ * scalars — the first pilot's start time and the last pilot's ESS time.
+ * Everything else is a single-pilot tracklog scan. {@link computeLeadingAggregate}
+ * does that scan once and captures the per-pilot pieces here, so the backend
+ * can cache it per track and {@link combineLeadingCoefficient} can fold in the
+ * field scalars cheaply — no re-scan when another pilot uploads.
+ *
+ * Plain numbers/booleans only, so it JSON round-trips losslessly.
+ */
+export interface LeadingAggregate {
+  /** false → pilot never started / had no in-window fixes; LC is Infinity. */
+  valid: boolean;
+  /** Speed-section length along the optimized course (km). */
+  ssKm: number;
+  /** Best (minimum) distance-to-ESS reached along the course (km). */
+  bestDistKm: number;
+  /** Whether the pilot reached ESS (drives the land-out tail term). */
+  reachedESS: boolean;
+  /** Pilot's own SSS reaching time (epoch ms). */
+  pilotSSSMs: number;
+  /** Time of the pilot's last fix (epoch ms) — classic land-out tail. */
+  lastFixMs: number;
+  /**
+   * weighted: Σ wᵢ·Δbestᵢ·(tᵢ − pilotSSS), summed against the pilot's OWN
+   * start so the epoch-second terms stay small (no catastrophic cancellation).
+   * combineLeadingCoefficient re-references it to the field's first start.
+   */
+  weightedTimeSum: number;
+  /** weighted: Σ wᵢ·Δbestᵢ — the multiplier for the start-time shift. */
+  weightedDeltaSum: number;
+  /** classic: the field-independent Σ (already referenced to the pilot's own start). */
+  classicSum: number;
+}
+
+/**
+ * Scan one pilot's tracklog and capture the field-independent pieces of the
+ * leading coefficient (see {@link LeadingAggregate}). This is the expensive
+ * per-fix pass; it is independent of the rest of the field, so it can be
+ * computed once and cached.
  *
  * @param fixes - Pilot's tracklog fixes (time-ordered)
- * @param task - The competition task
+ * @param task - The competition task (already trimmed for the distance origin)
  * @param sequence - The pilot's resolved turnpoint reachings (for progress)
- * @param taskFirstSSSTime - Time the first pilot crossed SSS (ms since epoch)
- * @param taskLastESSTime - Time the last pilot reached ESS (ms since epoch)
  * @param pilotSSSTime - The pilot's own start time (ms), or null if no start
  * @param pilotESSTime - The pilot's ESS time (ms), or null if not reached
  * @param formula - 'weighted' (modern default) or 'classic'
- * @returns Normalized leading coefficient (lower is better), or Infinity
  */
-export function calculateLeadingCoefficient(
+export function computeLeadingAggregate(
   fixes: IGCFix[],
   task: XCTask,
   sequence: TurnpointReaching[],
-  taskFirstSSSTime: number,
-  taskLastESSTime: number,
   pilotSSSTime: number | null,
   pilotESSTime: number | null,
   formula: LeadingFormula = 'weighted',
-): number {
+): LeadingAggregate {
+  const invalid: LeadingAggregate = {
+    valid: false, ssKm: 0, bestDistKm: 0,
+    reachedESS: pilotESSTime !== null,
+    pilotSSSMs: pilotSSSTime ?? 0, lastFixMs: 0,
+    weightedTimeSum: 0, weightedDeltaSum: 0, classicSum: 0,
+  };
+
   const essIdx = getESSIndex(task);
   const sssIdx = Math.max(0, getSSSIndex(task));
   // Pilots who never started get the worst possible LC.
   if (essIdx <= sssIdx || fixes.length === 0 || pilotSSSTime === null) {
-    return Infinity;
+    return invalid;
   }
 
   // Optimized along-course distance from each turnpoint to ESS (meters).
@@ -664,20 +697,23 @@ export function calculateLeadingCoefficient(
     cumToESS[j] = cumToESS[j + 1] + segs[j];
   }
   const ssKm = cumToESS[sssIdx] / 1000; // speed-section length (km)
-  if (ssKm <= 0) return Infinity;
+  if (ssKm <= 0) return invalid;
 
   // Reaching time per task index, so we know which turnpoint the pilot is
   // flying toward at each fix (the next un-reached one before ESS).
   const reachTime: Array<number | undefined> = [];
   for (const r of sequence) reachTime[r.taskIndex] = r.time.getTime();
 
-  // Time origin: the pilot's own start for classic, the first pilot's
-  // start for weighted (per the GAP2020+ spec wording).
-  const startRefSec = (formula === 'classic' ? pilotSSSTime : taskFirstSSSTime) / 1000;
+  // Reference times to the pilot's OWN start. For classic this is exactly the
+  // spec's time origin; for weighted it keeps the summed terms small and is
+  // rebased to the field's first start in combineLeadingCoefficient.
+  const pilotSSSSec = pilotSSSTime / 1000;
   const endTime = pilotESSTime ?? Infinity;
 
   let prevBestKm = ssKm; // best_dist_to_ess ratchet, starts at full SS length
-  let summing = 0;
+  let weightedTimeSum = 0;
+  let weightedDeltaSum = 0;
+  let classicSum = 0;
   let nextReq = Math.min(sssIdx + 1, essIdx);
   let prevDistKm: number | null = null;
 
@@ -705,40 +741,119 @@ export function calculateLeadingCoefficient(
       // AirScore appends this fix's distance to the ratchet window, then
       // weights the interval by this ("next") fix's time.
       const curBestKm = Math.min(prevDistKm, ssKm, prevBestKm);
-      const timeSec = tms / 1000 - startRefSec;
-      summing += lcContribution(formula, prevBestKm, curBestKm, timeSec, ssKm);
+      const localTimeSec = tms / 1000 - pilotSSSSec;
+      if (formula === 'classic') {
+        classicSum += lcContribution('classic', prevBestKm, curBestKm, localTimeSec, ssKm);
+      } else if (prevBestKm > curBestKm) {
+        // weighted: split w·Δbest·time into (Σ w·Δbest·time) and (Σ w·Δbest)
+        // so the field's start-time offset can be applied later.
+        const w = leadWeight(curBestKm / ssKm);
+        if (w !== 0) {
+          const delta = w * (prevBestKm - curBestKm);
+          weightedTimeSum += delta * localTimeSec;
+          weightedDeltaSum += delta;
+        }
+      }
       prevBestKm = curBestKm;
     }
     prevDistKm = distKm;
   }
 
-  if (prevDistKm === null) return Infinity; // no fixes in the leading window
+  if (prevDistKm === null) return invalid; // no fixes in the leading window
   // Fold the final fix's distance into the ratchet (used by the tail term).
   const bestDistKm = Math.min(prevDistKm, ssKm, prevBestKm);
 
-  // tot_lc_calculation: late-start rectangle (classic only) + land-out
-  // tail (no ESS) + normalization.
+  return {
+    valid: true, ssKm, bestDistKm,
+    reachedESS: pilotESSTime !== null,
+    pilotSSSMs: pilotSSSTime,
+    lastFixMs: fixes[fixes.length - 1].time.getTime(),
+    weightedTimeSum, weightedDeltaSum, classicSum,
+  };
+}
+
+/**
+ * Fold the field-level scalars into a per-pilot {@link LeadingAggregate} to
+ * produce the final leading coefficient — the cheap, field-dependent half of
+ * `tot_lc_calculation` (late-start rectangle for classic, land-out tail, and
+ * normalization). Lower LC = more leading = more points.
+ *
+ * @param agg - The pilot's cached/computed field-independent aggregate
+ * @param taskFirstSSSTime - Time the first pilot crossed SSS (ms since epoch)
+ * @param taskLastESSTime - Time the last pilot reached ESS (ms since epoch)
+ * @param formula - 'weighted' (modern default) or 'classic'
+ * @returns Normalized leading coefficient (lower is better), or Infinity
+ */
+export function combineLeadingCoefficient(
+  agg: LeadingAggregate,
+  taskFirstSSSTime: number,
+  taskLastESSTime: number,
+  formula: LeadingFormula = 'weighted',
+): number {
+  if (!agg.valid) return Infinity;
+  const { ssKm, bestDistKm, reachedESS, pilotSSSMs, lastFixMs } = agg;
+
   if (formula === 'classic') {
-    let total = summing;
-    if (pilotSSSTime > taskFirstSSSTime) {
+    let total = agg.classicSum;
+    if (pilotSSSMs > taskFirstSSSTime) {
       // Full-distance rectangle for the time before this pilot started.
-      total += ssKm * ssKm * (pilotSSSTime - taskFirstSSSTime) / 1000;
+      total += ssKm * ssKm * (pilotSSSMs - taskFirstSSSTime) / 1000;
     }
-    if (pilotESSTime === null) {
-      const lastFix = fixes[fixes.length - 1].time.getTime();
-      const maxTime = Math.max(taskLastESSTime, lastFix);
-      total += bestDistKm * bestDistKm * (maxTime - pilotSSSTime) / 1000;
+    if (!reachedESS) {
+      const maxTime = Math.max(taskLastESSTime, lastFixMs);
+      total += bestDistKm * bestDistKm * (maxTime - pilotSSSMs) / 1000;
     }
     return total / (1800 * ssKm * ssKm);
   }
 
-  // weighted
-  let total = summing;
-  if (pilotESSTime === null) {
+  // weighted: rebase the per-pilot sum from the pilot's own start to the
+  // field's first start — Σ w·Δbest·(t − first) = weightedTimeSum + (pilotSSS − first)·weightedDeltaSum.
+  const shiftSec = pilotSSSMs / 1000 - taskFirstSSSTime / 1000;
+  let total = agg.weightedTimeSum + shiftSec * agg.weightedDeltaSum;
+  if (!reachedESS) {
     const missingTimeSec = (taskLastESSTime - taskFirstSSSTime) / 1000;
     total += weightFalling(bestDistKm / ssKm) * missingTimeSec * bestDistKm;
   }
   return total / (1800 * ssKm);
+}
+
+/**
+ * Calculate the leading coefficient (LC) for a single pilot, matching
+ * AirScore's `classic` and `weighted` formulas (CIVL GAP / FAI S7F).
+ *
+ * The curve is distance-to-ESS measured **along the optimized course**
+ * (distance to the next un-reached turnpoint's cylinder edge plus the
+ * optimized legs from there to ESS), sampled per fix, with a ratchet:
+ * the best distance never increases even if the pilot flies away from ESS.
+ * Lower LC = more leading = more points. The raw per-interval sum is then
+ * normalized and given a late-start (classic) and/or land-out tail term,
+ * exactly as AirScore's `tot_lc_calculation`.
+ *
+ * Thin wrapper over {@link computeLeadingAggregate} + {@link combineLeadingCoefficient};
+ * see those for the cacheable split.
+ *
+ * @param fixes - Pilot's tracklog fixes (time-ordered)
+ * @param task - The competition task
+ * @param sequence - The pilot's resolved turnpoint reachings (for progress)
+ * @param taskFirstSSSTime - Time the first pilot crossed SSS (ms since epoch)
+ * @param taskLastESSTime - Time the last pilot reached ESS (ms since epoch)
+ * @param pilotSSSTime - The pilot's own start time (ms), or null if no start
+ * @param pilotESSTime - The pilot's ESS time (ms), or null if not reached
+ * @param formula - 'weighted' (modern default) or 'classic'
+ * @returns Normalized leading coefficient (lower is better), or Infinity
+ */
+export function calculateLeadingCoefficient(
+  fixes: IGCFix[],
+  task: XCTask,
+  sequence: TurnpointReaching[],
+  taskFirstSSSTime: number,
+  taskLastESSTime: number,
+  pilotSSSTime: number | null,
+  pilotESSTime: number | null,
+  formula: LeadingFormula = 'weighted',
+): number {
+  const agg = computeLeadingAggregate(fixes, task, sequence, pilotSSSTime, pilotESSTime, formula);
+  return combineLeadingCoefficient(agg, taskFirstSSSTime, taskLastESSTime, formula);
 }
 
 // ---------------------------------------------------------------------------
@@ -835,9 +950,16 @@ export interface FlightScoringData {
   sssTimeMs: number | null;
   /** ESS reaching time (epoch ms), or null if ESS not reached */
   essTimeMs: number | null;
-  /** Tracklog fixes — required only when useLeading is true */
+  /**
+   * Leading calculation input, needed only when useLeading is true. Provide
+   * EITHER the precomputed {@link LeadingAggregate} (lets the backend cache the
+   * per-track scan and skip the tracklog entirely) OR the raw fixes + sequence
+   * (scoreTask's path — the aggregate is then computed on the fly).
+   */
+  leadingAggregate?: LeadingAggregate;
+  /** Tracklog fixes — an alternative to leadingAggregate when useLeading is true */
   fixes?: IGCFix[];
-  /** Resolved turnpoint reachings — required only when useLeading is true */
+  /** Resolved turnpoint reachings — an alternative to leadingAggregate when useLeading is true */
   sequence?: TurnpointReaching[];
 }
 
@@ -978,16 +1100,22 @@ export function scoreFlights(
     const taskLastESSTime = allESSTimes.length > 0 ? maxBy(allESSTimes, t => t) : taskFirstSSSTime + 3600000;
 
     leadingCoefficients = flights.map(f => {
-      if (!f.fixes || !f.sequence) {
-        throw new Error(
-          'scoreFlights: useLeading requires fixes and sequence in FlightScoringData',
+      // Prefer a precomputed aggregate (backend cache); otherwise scan the
+      // tracklog now. Either way the field scalars fold in the same way.
+      let agg = f.leadingAggregate;
+      if (!agg) {
+        if (!f.fixes || !f.sequence) {
+          throw new Error(
+            'scoreFlights: useLeading requires a leadingAggregate, or fixes + sequence, in FlightScoringData',
+          );
+        }
+        agg = computeLeadingAggregate(
+          f.fixes, scoringTask, f.sequence,
+          f.sssTimeMs, f.essTimeMs, fullParams.leadingFormula,
         );
       }
-      return calculateLeadingCoefficient(
-        f.fixes, scoringTask, f.sequence,
-        taskFirstSSSTime, taskLastESSTime,
-        f.sssTimeMs, f.essTimeMs,
-        fullParams.leadingFormula,
+      return combineLeadingCoefficient(
+        agg, taskFirstSSSTime, taskLastESSTime, fullParams.leadingFormula,
       );
     });
 
