@@ -22,11 +22,7 @@
       "date": "2026-02-14",
       "dir": "big-chip-t1",
       "wind": "SW 5 kt",
-      "downwind_bearing": 45,
-      "distance_km": [
-        0.5,
-        77
-      ]
+      "downwind_bearing": 45
     },
     {
       "pilot_class": "open",
@@ -34,11 +30,7 @@
       "date": "2026-02-15",
       "dir": "big-chip-t2",
       "wind": "NW 10 kt",
-      "downwind_bearing": 135,
-      "distance_km": [
-        0.7,
-        122
-      ]
+      "downwind_bearing": 135
     }
   ]
 }
