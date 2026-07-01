@@ -5,7 +5,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <title>GlideComp — 3D Flight Replay (Corryong Cup 2026, Task 1)</title>
+  <title>GlideComp — 3D Flight Replay</title>
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <meta name="theme-color" content="#0a0f1a">
   <link rel="stylesheet" href="/styles.css">
@@ -43,7 +43,7 @@
       #scrubber::-moz-range-thumb { width: 28px; height: 28px; }
     }
 </style>
-  <script type="module" src="/samples/3dvis.ts"></script>
+  <script type="module" src="/replay/main.ts"></script>
 </head>
 
 <body class="text-slate-100 font-sans antialiased">
@@ -56,14 +56,6 @@
     <!-- hover tooltip -->
     <div id="tooltip"
       class="pointer-events-none absolute z-30 hidden rounded-md panel px-2.5 py-1.5 text-xs shadow-lg">
-    </div>
-
-    <!-- top-left: title + stats -->
-    <div class="absolute left-3 top-3 z-20 max-w-[14rem] sm:max-w-xs rounded-lg panel px-3 py-2 sm:px-4 sm:py-3 shadow-xl">
-      <a href="/" class="text-[11px] text-slate-400 hover:text-slate-200 transition-colors">← GlideComp</a>
-      <h1 class="mt-0.5 text-sm sm:text-base font-semibold leading-tight">3D Flight Replay</h1>
-      <p id="subtitle" class="text-[11px] sm:text-xs text-slate-400">Corryong Cup 2026 · Task 1</p>
-      <p id="stats" class="mt-1 text-[11px] text-slate-500 hidden sm:block">Loading tracks…</p>
     </div>
 
     <!-- single hamburger button — opens the control drawer -->

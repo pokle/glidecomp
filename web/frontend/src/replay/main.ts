@@ -1,7 +1,7 @@
 // Copyright (c) 2026, Tushar Pokle.  All rights reserved.
 
 /**
- * Entry point for the standalone /samples/3dvis flight-replay page.
+ * Entry point for the standalone /replay flight-replay page.
  * Wires the Three.js ReplayViewer to the DOM chrome (timeline scrubber,
  * play/pause, colour modes, vertical exaggeration, pilot legend, scale bar,
  * compass, hover tooltip). No authentication, no framework — just the viewer.
@@ -151,14 +151,6 @@ async function main(): Promise<void> {
   // console or automation (which gaggles are active at the current frame, etc.).
   if (import.meta.env.DEV) (window as unknown as { __viewer: unknown }).__viewer = viewer;
 
-  // --- stats line ---
-  const durMin = ((manifest.t1 - manifest.t0) / 60).toFixed(0);
-  function updateStats(): void {
-    $('stats').textContent =
-      `${manifest.pilots.length} pilots · ${(manifest.vertexCount / 1000).toFixed(0)}k fixes · ${durMin} min · ${viewer.gaggleCount} gaggles · drag to orbit`;
-  }
-  updateStats();
-
   // --- scrubber + clock ---
   const duration = manifest.t1 - manifest.t0;
   const scrubber = $<HTMLInputElement>('scrubber');
@@ -275,16 +267,12 @@ async function main(): Promise<void> {
   async function switchBackdrop(mode: 'abstract' | 'terrain'): Promise<void> {
     if (mode === viewer.currentBackdrop) return;
     bdAbstract.disabled = bdTerrain.disabled = true;
-    const prevStats = $('stats').textContent;
-    if (mode === 'terrain') $('stats').textContent = 'Loading map…';
     try {
       await viewer.setBackdrop(mode);
       paintBackdrop(mode);
       mapStyleRow.classList.toggle('hidden', mode !== 'terrain');
-      $('stats').textContent = prevStats;
     } catch (err) {
       console.error(err);
-      $('stats').textContent = `Map unavailable: ${(err as Error).message}`;
       paintBackdrop(viewer.currentBackdrop);
     } finally {
       bdAbstract.disabled = false;
@@ -453,7 +441,6 @@ async function main(): Promise<void> {
       gaggleUI = buildGaggleUI(result);
       gaggleUI.setActiveOnly(activeOnly);
       gaggleUI.setTime(viewer.currentTime);
-      updateStats();
     };
     for (const el of [ggR, ggB, ggM]) el.addEventListener('change', recompute);
   }

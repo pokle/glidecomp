@@ -3,7 +3,8 @@
 /**
  * build-3dvis — Turn a folder of IGC tracks (+ optional task.xctsk) into the
  * compact gzipped binary asset consumed by the 3D flight-replay viewer
- * (web/frontend/src/samples/3dvis.*). See docs/flight-replay-3d-brief.md.
+ * (web/frontend/src/replay.* and web/frontend/src/replay/). See
+ * docs/flight-replay-3d-brief.md.
  *
  * The heavy lifting lives in the pure, fs-free `packTracks()` in the engine, so
  * this exact pipeline can later be lifted into a Cloudflare Worker (swap the
@@ -14,7 +15,7 @@
  *
  * Defaults:
  *   comp-dir = web/samples/comps/corryong-cup-2026-open-t1
- *   out-dir  = web/frontend/public/samples/3dvis
+ *   out-dir  = web/frontend/public/replay-offline
  *
  * Writes <out-dir>/tracks.bin.gz and <out-dir>/manifest.json.
  */
@@ -31,7 +32,7 @@ const REPO_ROOT = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
 
 const args = process.argv.slice(2);
 const compDir = resolve(args[0] ?? join(REPO_ROOT, 'web/samples/comps/corryong-cup-2026-open-t1'));
-const outDir = resolve(args[1] ?? join(REPO_ROOT, 'web/frontend/public/samples/3dvis'));
+const outDir = resolve(args[1] ?? join(REPO_ROOT, 'web/frontend/public/replay-offline'));
 
 /** Pull a CIVL-ish id out of `lamb_18239_050126.igc` → `18239`, else the stem. */
 function pilotIdFromFilename(file: string): string {

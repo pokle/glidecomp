@@ -2,7 +2,7 @@
 
 A WebGL replay of a whole competition task: every pilot's IGC track rendered as
 time-animated 3D trajectories, scrubbable, in either an abstract free-orbit view
-or draped over a Mapbox satellite/terrain map. Lives at **`/samples/3dvis`**
+or draped over a Mapbox satellite/terrain map. Lives at **`/replay`**
 (standalone page, no auth; track data comes from the competition-api Worker —
 see §8).
 
@@ -14,7 +14,7 @@ viewer was built from) as background.
 
 ## 1. What was built
 
-- A page `/samples/3dvis` showing all ~32 pilots of Corryong Cup 2026 Task 1
+- A page `/replay` showing all ~32 pilots of Corryong Cup 2026 Task 1
   with synchronized playback, pilot identity, altitude/vario colouring, task
   geometry, gaggle detection, and a selectable backdrop (abstract vs Mapbox
   terrain).
@@ -26,7 +26,7 @@ viewer was built from) as background.
     [manifest JSON][gzipped Float32 data]` — cached in KV. This is what the page
     loads (`viewer.loadBundle`).
   - **Build-time mirror (offline):** the `build-3dvis` CLI writes the same
-    manifest + `tracks.bin.gz` to `web/frontend/public/samples/3dvis/` for
+    manifest + `tracks.bin.gz` to `web/frontend/public/replay-offline/` for
     offline inspection/regression. No longer on the page's hot path.
 - The sample is a **real competition in the database** (comp + task + pilots +
   IGC in R2), so every user can view it; see *Sample competition* below.
@@ -34,7 +34,7 @@ viewer was built from) as background.
 ### Run / regenerate
 
 ```bash
-bun run dev                   # workers + frontend; http://localhost:3000/samples/3dvis
+bun run dev                   # workers + frontend; http://localhost:3000/replay
 bun run seed:sample           # load the sample comp into local D1 + R2 (idempotent)
 bun run seed:sample --remote  # …or into production D1 + R2
 bun run build-3dvis           # offline: regenerate the static asset mirror
@@ -86,7 +86,7 @@ Worker (`web/workers/competition-api/src/`):
 - `visualization.ts` (`buildTask3dvisBundle`) + `routes/visualization.ts` — the
   runtime path the page actually loads (see §8).
 
-Frontend (`web/frontend/src/samples/`):
+Frontend (`web/frontend/src/replay.html` + `web/frontend/src/replay/`):
 - `track-data.ts` — `loadTracksBundle` (one Worker fetch) / `loadTracks`
   (two-file mirror) + `DecompressionStream("gzip")` → typed arrays;
   per-vertex `aPilot`/`aVario`; `samplePilot()` binary-search + lerp.
@@ -96,7 +96,7 @@ Frontend (`web/frontend/src/samples/`):
 - `replay-viewer.ts` — orchestrator (owns view state, drives the loop).
 - `map-styles.ts` — Mapbox style list (no mapbox-gl import → stays out of the
   initial bundle).
-- `3dvis.html` / `3dvis.ts` — page chrome + wiring.
+- `replay.html` / `replay/main.ts` — page chrome + wiring.
 
 `mapbox-gl` is **lazy-imported** by `terrain-backend.ts` only, so it's a separate
 ~508 KB-gzip chunk fetched only when the user picks the map backdrop; the initial
@@ -403,10 +403,10 @@ file, so any user can view it and the same path serves any comp task.
   puts it on the manifest (`parseXCTask` ignores the extra key). Without it the
   viewer falls back to the browser zone.
 - **Frontend:** `loadTracksBundle` in `track-data.ts` (one fetch, split manifest
-  from gzipped data) → `ReplayViewer.loadBundle`. `3dvis.ts` builds the URL.
-- **Entry points:** the homepage links to the sample (`/samples/3dvis`, no
+  from gzipped data) → `ReplayViewer.loadBundle`. `replay/main.ts` builds the URL.
+- **Entry points:** the homepage links to the replay (`/replay`, no
   params → `sample-3dvis`). Every competition **task page** (`comp-detail.ts`)
-  and the **score page** (`scores.ts`) link to `/samples/3dvis?comp=<id>&task=<id>`
+  and the **score page** (`scores.ts`) link to `/replay?comp=<id>&task=<id>`
   for their real tasks — the in-app path needs no `sample-3dvis` (the page knows
   the ids). The task-page link appears once the task has scoreable tracks.
 
