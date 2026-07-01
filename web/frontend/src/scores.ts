@@ -115,13 +115,21 @@ function renderScoresPage(comp: CompInfo, scores: CompScores) {
       nameTd.textContent = p.pilot_name;
       tr.appendChild(nameTd);
 
-      // Per-task score columns
+      // Per-task score columns — each score links to the analysis page for
+      // that pilot's track on that task
       for (const task of classTasks) {
         const td = document.createElement("td");
         td.className = "py-1.5 pr-3";
         const entry = p.tasks.find((t) => t.task_id === task.task_id);
         if (entry) {
-          td.innerHTML = `${Math.round(entry.score)} <span class="text-muted-foreground text-xs">(${ordinal(entry.rank)})</span>`;
+          const link = document.createElement("a");
+          link.href = `/analysis.html?compId=${encodeURIComponent(scores.comp_id)}&taskId=${encodeURIComponent(task.task_id)}&pilotId=${encodeURIComponent(p.comp_pilot_id)}`;
+          link.target = "_blank";
+          link.rel = "noopener";
+          link.className = "hover:underline";
+          link.title = `Analyse ${p.pilot_name}'s track for ${task.task_name}`;
+          link.innerHTML = `${Math.round(entry.score)} <span class="text-muted-foreground text-xs">(${ordinal(entry.rank)})</span>`;
+          td.appendChild(link);
         } else {
           td.innerHTML = `<span class="text-muted-foreground">—</span>`;
         }
