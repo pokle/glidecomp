@@ -140,7 +140,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("")
         .slice(0, 16);
-      const compCacheKey = `compscore:${compId}:${compHex}`;
+      const compCacheKey = `compscore:v2:${compId}:${compHex}`;
 
       const cachedComp = await c.env.glidecomp_scores_cache.get(compCacheKey, "json");
       if (cachedComp) {
@@ -229,6 +229,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
           task_id: t.task_id,
           task_name: t.task_name,
           task_date: t.task_date,
+          classes: t.classes.map((cls) => cls.pilot_class),
         })),
         standings,
       };

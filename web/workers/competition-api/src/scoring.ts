@@ -63,18 +63,34 @@ export async function computeScoreCacheKey(
     .bind(taskId)
     .first<{ xctsk: string | null }>();
 
+  // Include the pilot roster (comp_pilot_id, name, class) in the hashed state.
+  // The scored output embeds these fields, so a roster change — a rename, a
+  // class change, or a re-seed that remaps comp_pilot IDs — must invalidate the
+  // cache. Hashing only track-file identity let stale results (with the wrong
+  // pilot names/IDs) survive a re-seed. See scores stale-cache investigation.
   const tracks = await db
     .prepare(
-      `SELECT task_track_id, uploaded_at, penalty_points
-       FROM task_track WHERE task_id = ? ORDER BY task_track_id`
+      `SELECT tt.task_track_id, tt.uploaded_at, tt.penalty_points,
+              tt.comp_pilot_id, cp.registered_pilot_name, cp.pilot_class
+       FROM task_track tt
+       JOIN comp_pilot cp ON cp.comp_pilot_id = tt.comp_pilot_id
+       WHERE tt.task_id = ? ORDER BY tt.task_track_id`
     )
     .bind(taskId)
-    .all<{ task_track_id: number; uploaded_at: string; penalty_points: number }>();
+    .all<{
+      task_track_id: number;
+      uploaded_at: string;
+      penalty_points: number;
+      comp_pilot_id: number;
+      registered_pilot_name: string;
+      pilot_class: string;
+    }>();
 
   const stateString = [
     task?.xctsk ?? "",
     ...tracks.results.map(
-      (t) => `${t.task_track_id}:${t.uploaded_at}:${t.penalty_points}`
+      (t) =>
+        `${t.task_track_id}:${t.uploaded_at}:${t.penalty_points}:${t.comp_pilot_id}:${t.registered_pilot_name}:${t.pilot_class}`
     ),
   ].join("|");
 
@@ -87,7 +103,7 @@ export async function computeScoreCacheKey(
     .join("")
     .slice(0, 16);
 
-  return `score:v2:${taskId}:${hex}`;
+  return `score:v4:${taskId}:${hex}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -240,9 +256,15 @@ export async function computeTaskScore(
       gapParams
     );
 
-    // Apply penalties and re-rank
-    const withPenalties = result.pilotScores.map((ps, idx) => {
-      const pilot = classPilots[idx];
+    // Apply penalties and re-rank. scoreTask() sorts its pilotScores by rank,
+    // so the output order does NOT match the classPilots input order — pairing
+    // by index would attach each score to the wrong comp_pilot (wrong id, name,
+    // and penalties). Match on trackFile (the unique igc_filename) instead.
+    const pilotByTrackFile = new Map(
+      classPilots.map((p) => [p.flight.trackFile, p])
+    );
+    const withPenalties = result.pilotScores.map((ps) => {
+      const pilot = pilotByTrackFile.get(ps.trackFile)!;
       const penalised = Math.max(0, ps.totalScore - pilot.penalty_points);
       return {
         pilotScore: ps,
