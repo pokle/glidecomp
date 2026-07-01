@@ -24,7 +24,7 @@ import { scoreTask, type PilotFlight } from '../src/gap-scoring';
 
 const COMP_DIR = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  '../../samples/comps/corryong-cup-2026-t1',
+  '../../samples/comps/corryong-cup-2026-open-t1',
 );
 
 interface RefPilot {

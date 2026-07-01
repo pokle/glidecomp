@@ -13,7 +13,7 @@
  *   bun run build-3dvis [-- <comp-dir> <out-dir>]
  *
  * Defaults:
- *   comp-dir = web/samples/comps/corryong-cup-2026-t1
+ *   comp-dir = web/samples/comps/corryong-cup-2026-open-t1
  *   out-dir  = web/frontend/public/samples/3dvis
  *
  * Writes <out-dir>/tracks.bin.gz and <out-dir>/manifest.json.
@@ -30,7 +30,7 @@ import { packTracksFromIgc, type PilotIgc } from '../src/track-pack-pipeline';
 const REPO_ROOT = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
 
 const args = process.argv.slice(2);
-const compDir = resolve(args[0] ?? join(REPO_ROOT, 'web/samples/comps/corryong-cup-2026-t1'));
+const compDir = resolve(args[0] ?? join(REPO_ROOT, 'web/samples/comps/corryong-cup-2026-open-t1'));
 const outDir = resolve(args[1] ?? join(REPO_ROOT, 'web/frontend/public/samples/3dvis'));
 
 /** Pull a CIVL-ish id out of `lamb_18239_050126.igc` → `18239`, else the stem. */

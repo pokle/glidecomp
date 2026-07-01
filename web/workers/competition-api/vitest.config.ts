@@ -32,7 +32,7 @@ const TEST_USERS: Record<string, object> = {
 };
 
 // Read sample files in Node.js context (full filesystem access, no miniflare sandbox)
-const SAMPLES_DIR = path.resolve(__dirname, "../../samples/comps/corryong-cup-2026-t1");
+const SAMPLES_DIR = path.resolve(__dirname, "../../samples/comps/corryong-cup-2026-open-t1");
 const SAMPLE_TASK_XCTSK = readFileSync(path.resolve(SAMPLES_DIR, "task.xctsk"), "utf-8");
 const SAMPLE_IGC_FILES = JSON.stringify(
   Object.fromEntries(

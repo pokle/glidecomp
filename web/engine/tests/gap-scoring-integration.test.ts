@@ -23,7 +23,7 @@ import { parseXCTask } from '../src/xctsk-parser';
 import { scoreTask, type PilotFlight } from '../src/gap-scoring';
 import { resolveCompDir } from '@glidecomp/samples/node';
 
-const FIXTURES_DIR = resolveCompDir('corryong-cup-2026-t1');
+const FIXTURES_DIR = resolveCompDir('corryong-cup-2026-open-t1');
 
 function loadTask() {
   const taskContent = readFileSync(resolve(FIXTURES_DIR, 'task.xctsk'), 'utf-8');

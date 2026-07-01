@@ -383,7 +383,10 @@ SSS edge; it's intentional and rule-correct.
 The replay is fed by a **real competition in the database** rather than a static
 file, so any user can view it and the same path serves any comp task.
 
-- **Source:** `web/samples/comps/corryong-cup-2026-t1/` (33 IGC + `task.xctsk`).
+- **Source:** `web/samples/comps/corryong-cup-2026-open-t1/` (33 IGC + `task.xctsk`)
+  — the first task of the bundled Corryong Cup 2026 comp; `sample-3dvis` serves
+  the earliest task by date. See the CLAUDE.md "Updating bundled data" notes for
+  the full open/floater multi-class layout.
 - **Seed:** `bun run seed:sample` (`--remote` for production). Idempotent — the
   comp is found by name (`SAMPLE_COMP_NAME`, shared in
   `web/workers/competition-api/src/sample.ts`); reruns wipe that comp's tasks /

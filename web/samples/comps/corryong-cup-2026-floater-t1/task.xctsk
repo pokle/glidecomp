@@ -1,0 +1,81 @@
+{
+  "earthModel": "WGS84",
+  "goal": {
+    "deadline": "12:00:00Z",
+    "type": "CYLINDER"
+  },
+  "sss": {
+    "direction": "EXIT",
+    "timeGates": [
+      "02:30:00Z"
+    ],
+    "type": "RACE"
+  },
+  "taskType": "CLASSIC",
+  "turnpoints": [
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.185833,
+        "lon": 147.976667,
+        "altSmoothed": 0,
+        "name": "ELLIOT",
+        "description": "ELLIOT"
+      },
+      "type": "TAKEOFF"
+    },
+    {
+      "radius": 5000,
+      "waypoint": {
+        "lat": -36.185833,
+        "lon": 147.976667,
+        "altSmoothed": 0,
+        "name": "ELLIOT",
+        "description": "ELLIOT"
+      },
+      "type": "SSS"
+    },
+    {
+      "radius": 3000,
+      "waypoint": {
+        "lat": -36.2641,
+        "lon": 147.938467,
+        "altSmoothed": 0,
+        "name": "KANGCK",
+        "description": "KANGCK"
+      }
+    },
+    {
+      "radius": 8000,
+      "waypoint": {
+        "lat": -36.05195,
+        "lon": 147.926933,
+        "altSmoothed": 0,
+        "name": "TINTAL",
+        "description": "TINTAL"
+      }
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.177753,
+        "lon": 147.92406,
+        "altSmoothed": 0,
+        "name": "NCORGL",
+        "description": "North"
+      },
+      "type": "ESS"
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.177753,
+        "lon": 147.92406,
+        "altSmoothed": 0,
+        "name": "NCORGL",
+        "description": "North"
+      }
+    }
+  ],
+  "version": 1
+}

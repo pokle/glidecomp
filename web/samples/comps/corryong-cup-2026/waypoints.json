@@ -1,0 +1,368 @@
+{
+  "region": [
+    "32254",
+    "CorryongHG2026_0m"
+  ],
+  "waypoints": [
+    {
+      "rwpPk": "32210",
+      "name": "BIGARA",
+      "lat": "-36.263625",
+      "lon": "148.020957",
+      "alt": "0",
+      "desc": "BIGARA"
+    },
+    {
+      "rwpPk": "32211",
+      "name": "BRADGP",
+      "lat": "-36.175212",
+      "lon": "148.149587",
+      "alt": "0",
+      "desc": "Bradneys"
+    },
+    {
+      "rwpPk": "32212",
+      "name": "BRNBRG",
+      "lat": "-36.142868",
+      "lon": "148.051779",
+      "alt": "0",
+      "desc": "BRNBRG"
+    },
+    {
+      "rwpPk": "32213",
+      "name": "CLCCLC",
+      "lat": "-36.218033",
+      "lon": "147.828883",
+      "alt": "0",
+      "desc": "CLCCLC"
+    },
+    {
+      "rwpPk": "32214",
+      "name": "CORRY",
+      "lat": "-36.185",
+      "lon": "147.8914",
+      "alt": "0",
+      "desc": "CORRY"
+    },
+    {
+      "rwpPk": "32215",
+      "name": "CUDG",
+      "lat": "-36.192283",
+      "lon": "147.770217",
+      "alt": "0",
+      "desc": "CUDG"
+    },
+    {
+      "rwpPk": "32216",
+      "name": "CUDGNO",
+      "lat": "-36.096867",
+      "lon": "147.814283",
+      "alt": "0",
+      "desc": "CUDGNO"
+    },
+    {
+      "rwpPk": "32217",
+      "name": "CUDGWE",
+      "lat": "-36.223183",
+      "lon": "147.7288",
+      "alt": "0",
+      "desc": "CUDGWE"
+    },
+    {
+      "rwpPk": "32218",
+      "name": "DWYERS",
+      "lat": "-36.242792",
+      "lon": "147.883678",
+      "alt": "0",
+      "desc": "DWYERS"
+    },
+    {
+      "rwpPk": "32219",
+      "name": "ELLIOT",
+      "lat": "-36.185833",
+      "lon": "147.976667",
+      "alt": "0",
+      "desc": "ELLIOT"
+    },
+    {
+      "rwpPk": "32220",
+      "name": "ELLITP",
+      "lat": "-36.185833",
+      "lon": "147.976667",
+      "alt": "0",
+      "desc": "ELLITP"
+    },
+    {
+      "rwpPk": "32221",
+      "name": "GEHI",
+      "lat": "-36.383283",
+      "lon": "148.181683",
+      "alt": "0",
+      "desc": "GEHI"
+    },
+    {
+      "rwpPk": "32222",
+      "name": "GRGGRG",
+      "lat": "-36.059067",
+      "lon": "148.039833",
+      "alt": "0",
+      "desc": "GRGGRG"
+    },
+    {
+      "rwpPk": "32223",
+      "name": "GUYFOR",
+      "lat": "-36.072233",
+      "lon": "147.641883",
+      "alt": "0",
+      "desc": "GUYFOR"
+    },
+    {
+      "rwpPk": "32224",
+      "name": "HALFWY",
+      "lat": "-36.265473",
+      "lon": "147.873444",
+      "alt": "0",
+      "desc": "Half"
+    },
+    {
+      "rwpPk": "32225",
+      "name": "HOLBRK",
+      "lat": "-35.685367",
+      "lon": "147.3205",
+      "alt": "0",
+      "desc": "HOLBRK"
+    },
+    {
+      "rwpPk": "32226",
+      "name": "INDI",
+      "lat": "-36.220621",
+      "lon": "148.040848",
+      "alt": "0",
+      "desc": "INDI"
+    },
+    {
+      "rwpPk": "32227",
+      "name": "INDIRG",
+      "lat": "-36.22672",
+      "lon": "148.081609",
+      "alt": "0",
+      "desc": "Indi"
+    },
+    {
+      "rwpPk": "32228",
+      "name": "JINGEL",
+      "lat": "-35.93361",
+      "lon": "147.70056",
+      "alt": "0",
+      "desc": "JINGEL"
+    },
+    {
+      "rwpPk": "32229",
+      "name": "KANGCK",
+      "lat": "-36.2641",
+      "lon": "147.938467",
+      "alt": "0",
+      "desc": "KANGCK"
+    },
+    {
+      "rwpPk": "32230",
+      "name": "KHANCO",
+      "lat": "-36.216217",
+      "lon": "148.109783",
+      "alt": "0",
+      "desc": "KHANCO"
+    },
+    {
+      "rwpPk": "32231",
+      "name": "LIGHTH",
+      "lat": "-36.086533",
+      "lon": "148.045583",
+      "alt": "0",
+      "desc": "LIGHTH"
+    },
+    {
+      "rwpPk": "32232",
+      "name": "MCNAMX",
+      "lat": "-36.285305",
+      "lon": "147.852531",
+      "alt": "0",
+      "desc": "McNamara"
+    },
+    {
+      "rwpPk": "32233",
+      "name": "MTKOSC",
+      "lat": "-36.452233",
+      "lon": "148.250533",
+      "alt": "0",
+      "desc": "MTKOSC"
+    },
+    {
+      "rwpPk": "32234",
+      "name": "MTMITA",
+      "lat": "-36.14895",
+      "lon": "147.864183",
+      "alt": "0",
+      "desc": "MTMITA"
+    },
+    {
+      "rwpPk": "32235",
+      "name": "MUNDER",
+      "lat": "-35.8386",
+      "lon": "147.87475",
+      "alt": "0",
+      "desc": "MUNDER"
+    },
+    {
+      "rwpPk": "32236",
+      "name": "NARIEL",
+      "lat": "-36.280995",
+      "lon": "147.870964",
+      "alt": "0",
+      "desc": "Nariel"
+    },
+    {
+      "rwpPk": "32237",
+      "name": "NCORGL",
+      "lat": "-36.177753",
+      "lon": "147.92406",
+      "alt": "0",
+      "desc": "North"
+    },
+    {
+      "rwpPk": "32238",
+      "name": "PINEFO",
+      "lat": "-36.108216",
+      "lon": "147.923422",
+      "alt": "0",
+      "desc": "PINEFO"
+    },
+    {
+      "rwpPk": "32239",
+      "name": "PINEMT",
+      "lat": "-36.018894",
+      "lon": "147.825228",
+      "alt": "0",
+      "desc": "PINEMT"
+    },
+    {
+      "rwpPk": "32240",
+      "name": "POWER",
+      "lat": "-36.170397",
+      "lon": "148.044918",
+      "alt": "0",
+      "desc": "Power"
+    },
+    {
+      "rwpPk": "32241",
+      "name": "ROSSL",
+      "lat": "-36.16206",
+      "lon": "147.801855",
+      "alt": "0",
+      "desc": "RossL"
+    },
+    {
+      "rwpPk": "32242",
+      "name": "SWAMPY",
+      "lat": "-36.263651",
+      "lon": "148.123147",
+      "alt": "0",
+      "desc": "Swampy"
+    },
+    {
+      "rwpPk": "32243",
+      "name": "THOWGL",
+      "lat": "-36.305417",
+      "lon": "147.898867",
+      "alt": "0",
+      "desc": "THOWGL"
+    },
+    {
+      "rwpPk": "32244",
+      "name": "TINTAL",
+      "lat": "-36.05195",
+      "lon": "147.926933",
+      "alt": "0",
+      "desc": "TINTAL"
+    },
+    {
+      "rwpPk": "32245",
+      "name": "TOOMA",
+      "lat": "-35.96785",
+      "lon": "148.05805",
+      "alt": "0",
+      "desc": "TOOMA"
+    },
+    {
+      "rwpPk": "32246",
+      "name": "TOWONG",
+      "lat": "-36.127133",
+      "lon": "147.985733",
+      "alt": "0",
+      "desc": "TOWONG"
+    },
+    {
+      "rwpPk": "32247",
+      "name": "TRASH",
+      "lat": "-36.22068",
+      "lon": "147.890371",
+      "alt": "0",
+      "desc": "TRASH"
+    },
+    {
+      "rwpPk": "32248",
+      "name": "TURBNS",
+      "lat": "-36.243085",
+      "lon": "148.135526",
+      "alt": "0",
+      "desc": "TURBNS"
+    },
+    {
+      "rwpPk": "32249",
+      "name": "TURNOF",
+      "lat": "-36.180938",
+      "lon": "148.102279",
+      "alt": "0",
+      "desc": "Oak"
+    },
+    {
+      "rwpPk": "32250",
+      "name": "UPTWNG",
+      "lat": "-36.196939",
+      "lon": "148.020296",
+      "alt": "0",
+      "desc": "UPTWNG"
+    },
+    {
+      "rwpPk": "32251",
+      "name": "WALWA",
+      "lat": "-35.966217",
+      "lon": "147.734183",
+      "alt": "0",
+      "desc": "WALWA"
+    },
+    {
+      "rwpPk": "32252",
+      "name": "WELGNG",
+      "lat": "-36.013587",
+      "lon": "147.961513",
+      "alt": "0",
+      "desc": "WELGNG"
+    },
+    {
+      "rwpPk": "32253",
+      "name": "WILSPR",
+      "lat": "-36.112563",
+      "lon": "148.090756",
+      "alt": "0",
+      "desc": "WILSPR"
+    },
+    {
+      "rwpPk": "32254",
+      "name": "XING27",
+      "lat": "-36.123251",
+      "lon": "147.836111",
+      "alt": "0",
+      "desc": "Crossing"
+    }
+  ]
+}
