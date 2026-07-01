@@ -1,0 +1,18 @@
+{
+  "taskType": "OPEN-DISTANCE",
+  "version": 1,
+  "earthModel": "WGS84",
+  "turnpoints": [
+    {
+      "type": "TAKEOFF",
+      "radius": 100,
+      "waypoint": {
+        "name": "JILJIL",
+        "description": "Jil Jil Farm",
+        "lat": -35.86,
+        "lon": 142.89,
+        "altSmoothed": 90
+      }
+    }
+  ]
+}

@@ -26,6 +26,7 @@ import { parseIGC } from '../src/igc-parser';
 import { parseXCTask } from '../src/xctsk-parser';
 import { calculateOptimizedTaskDistance } from '../src/task-optimizer';
 import { scoreTask, DEFAULT_GAP_PARAMETERS, type GAPParameters, type PilotFlight } from '../src/gap-scoring';
+import { scoreOpenDistance } from '../src/open-distance-scoring';
 
 // ---------------------------------------------------------------------------
 // Argument parsing
@@ -44,6 +45,9 @@ function usage(): never {
     '  --scoring <PG|HG>          Sport type (default: HG)\n' +
     '  --distance-origin <where>  takeoff | start — where scored distance begins\n' +
     '                             (default: takeoff; "start" excludes the take-off→SSS leg)\n' +
+    '  --open-distance            Score as open distance (single TAKEOFF turnpoint,\n' +
+    '                             no goal): each pilot scores metres from take-off\n' +
+    '                             exit to their furthest fix. GAP options are ignored.\n' +
     '  --leading                  Enable leading (departure) points (default: off)\n' +
     '  --no-leading               Disable leading (departure) points\n' +
     '  --arrival                  Enable arrival points, HG only (default: off)\n' +
@@ -60,6 +64,7 @@ if (args.length < 2) usage();
 // Parse options
 const params: Partial<GAPParameters> = {};
 let jsonOutput = false;
+let openDistance = false;
 let nominalDistancePct: number | undefined;
 const positional: string[] = [];
 
@@ -107,6 +112,9 @@ for (let i = 0; i < args.length; i++) {
       break;
     case '--no-arrival':
       params.useArrival = false;
+      break;
+    case '--open-distance':
+      openDistance = true;
       break;
     case '--json':
       jsonOutput = true;
@@ -194,10 +202,12 @@ if (igcPaths.length === 0) {
 // Parse task
 const taskContent = readFileSync(taskPath, 'utf-8');
 const task = parseXCTask(taskContent);
-const taskDistance = calculateOptimizedTaskDistance(task);
+// Open distance has no goal/route, so there is no optimized task distance and
+// no nominal-distance resolution — the take-off is the only turnpoint.
+const taskDistance = openDistance ? 0 : calculateOptimizedTaskDistance(task);
 
 // Resolve nominal distance: explicit meters > percentage > default 70%
-if (params.nominalDistance === undefined) {
+if (!openDistance && params.nominalDistance === undefined) {
   const pct = nominalDistancePct ?? 70;
   params.nominalDistance = taskDistance * (pct / 100);
 }
@@ -224,10 +234,14 @@ if (pilots.length === 0) {
   process.exit(1);
 }
 
-process.stderr.write(`Scoring ${pilots.length} pilots against task (${formatDist(taskDistance)})\n`);
+if (openDistance) {
+  process.stderr.write(`Scoring ${pilots.length} pilots as open distance\n`);
+} else {
+  process.stderr.write(`Scoring ${pilots.length} pilots against task (${formatDist(taskDistance)})\n`);
+}
 
 // Score
-const result = scoreTask(task, pilots, params);
+const result = openDistance ? scoreOpenDistance(task, pilots) : scoreTask(task, pilots, params);
 
 // ---------------------------------------------------------------------------
 // Output
@@ -245,6 +259,33 @@ if (jsonOutput) {
     }),
   };
   console.log(JSON.stringify(output, null, 2));
+} else if (openDistance) {
+  // Open-distance table — the score IS the metres flown from the take-off exit,
+  // so the GAP validity/weight/points columns don't apply.
+  const s = result.stats;
+  console.log('');
+  console.log('=== Open Distance Results ===');
+  console.log('');
+  console.log(`Take-off:         ${task.turnpoints[0]?.waypoint.name ?? '(unnamed)'}`);
+  console.log(`Pilots:           ${s.numFlying} flying / ${s.numPresent} present`);
+  console.log(`Best distance:    ${formatDist(s.bestDistance)}`);
+  console.log('');
+  const header = [padLeft('#', 4), padRight('Pilot', 25), padLeft('Distance', 12), padLeft('Score', 8)];
+  console.log(header.join('  '));
+  console.log('-'.repeat(header.join('  ').length));
+  for (const ps of result.pilotScores) {
+    console.log(
+      [
+        padLeft(String(ps.rank), 4),
+        padRight(ps.pilotName.slice(0, 25), 25),
+        padLeft(formatDist(ps.flownDistance), 12),
+        padLeft(String(ps.totalScore), 8),
+      ].join('  '),
+    );
+  }
+  console.log('');
+  console.log('Score = open distance in metres (take-off exit → furthest fix).');
+  console.log('');
 } else {
   // Table output
   const tv = result.taskValidity;

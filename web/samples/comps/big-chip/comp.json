@@ -1,0 +1,44 @@
+{
+  "name": "Big Chip",
+  "slug": "big-chip",
+  "comp_name": "Big Chip (Sample)",
+  "category": "hg",
+  "scoring_format": "open_distance",
+  "classes": [
+    "open"
+  ],
+  "location": {
+    "name": "JILJIL",
+    "description": "Jil Jil Farm",
+    "lat": -35.86,
+    "lon": 142.89,
+    "alt": 90
+  },
+  "synthetic": true,
+  "tasks": [
+    {
+      "pilot_class": "open",
+      "name": "Task 1",
+      "date": "2026-02-14",
+      "dir": "big-chip-t1",
+      "wind": "SW 5 kt",
+      "downwind_bearing": 45,
+      "distance_km": [
+        0.5,
+        77
+      ]
+    },
+    {
+      "pilot_class": "open",
+      "name": "Task 2",
+      "date": "2026-02-15",
+      "dir": "big-chip-t2",
+      "wind": "NW 10 kt",
+      "downwind_bearing": 135,
+      "distance_km": [
+        0.7,
+        122
+      ]
+    }
+  ]
+}
