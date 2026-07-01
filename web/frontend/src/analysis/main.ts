@@ -20,7 +20,7 @@ import { createAnalysisPanel, AnalysisPanel, FlightInfo } from './analysis-panel
 import { loadCorryongWaypoints } from './waypoint-loader';
 import { config, type UnitPreferences } from './config';
 import { formatAltitude, formatDistance, onUnitsChanged } from './units-browser';
-import { storage, AuthRequiredError, QuotaExceededError } from './storage';
+import { storage, AuthRequiredError, QuotaExceededError, gunzipResponse } from './storage';
 import { StorageMenu } from './storage-menu';
 import { fetchAirScoreTask, fetchAirScoreTrack } from './airscore-client';
 import { downloadTask } from './task-editor';
@@ -1645,6 +1645,40 @@ async function init(): Promise<void> {
   }
 
   /**
+   * Load a single competition track, fetched straight from the competition
+   * download endpoint. Used by the "View" link on a task page. The track is
+   * not stored in browser storage (it isn't the viewer's own upload); it runs
+   * in-memory like a public-link view.
+   */
+  async function loadCompTrack(
+    compId: string,
+    taskId: string,
+    pilotId: string
+  ): Promise<void> {
+    try {
+      showStatus('Loading track...', 'info');
+      const res = await fetch(
+        `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(pilotId)}/download`
+      );
+      if (!res.ok) {
+        showStatus('Failed to load track', 'error');
+        return;
+      }
+      // The download endpoint returns a gzipped body with Content-Encoding:
+      // gzip; gunzipResponse decompresses defensively when the browser/proxy
+      // leaves the header in place (mirrors the stored-track flow).
+      const content = await gunzipResponse(res);
+      // Paint the status toast before the CPU-heavy parse blocks the thread.
+      await nextPaint();
+      await loadIGCContent(content, `${pilotId}.igc`, false);
+      showStatus('Loaded track', 'success');
+    } catch (err) {
+      console.error('Failed to load competition track:', err);
+      showStatus(`Failed to load track: ${err}`, 'error');
+    }
+  }
+
+  /**
    * Load task by code
    */
   async function loadTask(code: string): Promise<void> {
@@ -1934,8 +1968,15 @@ async function init(): Promise<void> {
 
   // Load sample competition if specified (exclusive — skips individual track/task params)
   const sampleCompId = params.get('sampleComp');
+  // Competition track view (exclusive) — ?compId=X&taskId=Y&pilotId=Z opens a
+  // single task track straight from the competition download endpoint.
+  const compTrackCompId = params.get('compId');
+  const compTrackTaskId = params.get('taskId');
+  const compTrackPilotId = params.get('pilotId');
   if (sampleCompId) {
     await loadSampleComp(sampleCompId);
+  } else if (compTrackCompId && compTrackTaskId && compTrackPilotId) {
+    await loadCompTrack(compTrackCompId, compTrackTaskId, compTrackPilotId);
   } else {
     // Load from query params if present (e.g., ?task=buje&track=sample.igc)
     await loadFromQueryParams(loadTask, loadLocalTask, loadIGCFile, loadStoredTrack, loadStoredTask);

@@ -2,7 +2,7 @@
 // Copyright (c) 2026, Tushar Pokle.  All rights reserved.
 /**
  * Seed (or re-seed) the public sample competition into D1 + R2, so every user
- * can view it and the /samples/3dvis page can pull packed track data from the
+ * can view it and the /replay page can pull packed track data from the
  * competition-api Worker (GET /api/comp/sample-3dvis).
  *
  * Loads the full Corryong Cup 2026 competition — all three tasks and every
@@ -371,7 +371,7 @@ function main(): void {
   console.log(`\nDone. comp_id=${compId} — ${tasks.length} tasks, ${totalTracks} tracks total`);
   for (const s of taskSummaries) console.log(`    ${s}`);
   console.log(`  Sample 3dvis: GET /api/comp/sample-3dvis`);
-  console.log(`  View at:      /samples/3dvis`);
+  console.log(`  View at:      /replay`);
   if (!REMOTE) console.log('  (local state — start dev servers with `bun run dev`)');
 }
 

@@ -15,7 +15,7 @@
 
 import type { XCTask } from './xctsk-parser';
 import type { IGCFix } from './igc-parser';
-import { isInsideCylinder, andoyerDistance } from './geo';
+import { andoyerDistance } from './geo';
 import { getSSSIndex, getESSIndex, getGoalIndex } from './xctsk-parser';
 import { calculateOptimizedTaskLine } from './task-optimizer';
 
@@ -252,22 +252,38 @@ export function detectCylinderCrossings(
   // Default 0.5% (Cat 2 maximum) to compensate for distance calculation differences.
   const tolerance = task.cylinderTolerance ?? 0.005;
 
+  const DEG = Math.PI / 180;
+
   for (let tpIdx = 0; tpIdx < task.turnpoints.length; tpIdx++) {
     const tp = task.turnpoints[tpIdx];
     const centerLat = tp.waypoint.lat;
     const centerLon = tp.waypoint.lon;
     const radius = tp.radius * (1 + tolerance);
 
-    let prevInside = isInsideCylinder(
-      fixes[0].latitude, fixes[0].longitude,
-      centerLat, centerLon, radius
-    );
+    // Conservative lat/lon bounding box around the cylinder. Any point inside
+    // the cylinder is guaranteed to fall inside this box, so a fix outside the
+    // box is definitely outside the cylinder and can skip the (much costlier)
+    // ellipsoidal distance call. The denominators under-estimate metres-per-
+    // degree and a 1% margin is added, so the box strictly contains the
+    // cylinder — this is a pure speed-up with no effect on which fixes are
+    // classified inside/outside. (Assumes tasks don't span the ±180° meridian,
+    // the same assumption the linear crossing interpolation below already makes.)
+    const latDelta = (radius / 110540) * 1.01;
+    const cosLat = Math.cos((Math.abs(centerLat) + latDelta) * DEG);
+    const lonDelta = (radius / (111000 * Math.max(cosLat, 1e-6))) * 1.01;
+
+    const isInside = (lat: number, lon: number): boolean => {
+      const dLat = lat - centerLat;
+      if (dLat > latDelta || dLat < -latDelta) return false;
+      const dLon = lon - centerLon;
+      if (dLon > lonDelta || dLon < -lonDelta) return false;
+      return andoyerDistance(lat, lon, centerLat, centerLon) <= radius;
+    };
+
+    let prevInside = isInside(fixes[0].latitude, fixes[0].longitude);
 
     for (let fixIdx = 1; fixIdx < fixes.length; fixIdx++) {
-      const currInside = isInsideCylinder(
-        fixes[fixIdx].latitude, fixes[fixIdx].longitude,
-        centerLat, centerLon, radius
-      );
+      const currInside = isInside(fixes[fixIdx].latitude, fixes[fixIdx].longitude);
 
       if (prevInside !== currInside) {
         const prevFix = fixes[fixIdx - 1];

@@ -1,11 +1,17 @@
 import {
   parseIGC,
   parseXCTask,
-  scoreTask,
+  resolveTurnpointSequence,
+  scoreFlights,
   scoreOpenDistance,
+  toFlightScoringData,
+  taskForDistanceOrigin,
   calculateOptimizedTaskDistance,
+  DEFAULT_GAP_PARAMETERS,
   type GAPParameters,
+  type FlightScoringData,
   type PilotFlight,
+  type TaskScoreCore,
 } from "@glidecomp/engine";
 import { encodeId } from "./sqids";
 
@@ -119,18 +125,145 @@ export async function computeScoreCacheKey(
 // Scoring
 // ---------------------------------------------------------------------------
 
+/** Per-track analysis cached in KV — the field-independent result of
+ * resolving one pilot's turnpoint sequence. Keyed by task geometry + track
+ * identity, so it survives roster/penalty edits and (crucially) new track
+ * submissions: only the newly-added track misses the cache, the rest of the
+ * field is reused instead of being re-fetched, re-parsed and re-resolved.
+ * Plain numbers/booleans only, so JSON round-trips losslessly. */
+interface CachedFlightAnalysis {
+  flownDistance: number;
+  madeGoal: boolean;
+  reachedESS: boolean;
+  speedSectionTime: number | null;
+  sssTimeMs: number | null;
+  essTimeMs: number | null;
+}
+
+/** Short SHA-256 hex digest (16 chars) of a string — used for cache keys. */
+async function shortHash(input: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 16);
+}
+
+/** Map over items with bounded concurrency, preserving input order. Keeps peak
+ * memory (decompressed tracklogs) and outbound concurrency in check on a
+ * Worker while still overlapping R2 latency across many tracks. */
+export async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  const workers = Array.from({ length: Math.min(limit, items.length) }, worker);
+  await Promise.all(workers);
+  return results;
+}
+
+/** How many tracks to fetch/parse from R2 at once on a cache miss. */
+const TRACK_FETCH_CONCURRENCY = 10;
+
+/** An empty class result — used when a class has no scored tracks. */
+function emptyClassScore(pilotClass: string): ClassScore {
+  return {
+    pilot_class: pilotClass,
+    task_validity: { launch: 0, distance: 0, time: 0, task: 0 },
+    available_points: { distance: 0, time: 0, leading: 0, arrival: 0, total: 0 },
+    pilots: [],
+  };
+}
+
 /**
- * Compute scores for a task by fetching IGC files from R2 sequentially,
- * parsing them, and running the GAP formula per pilot class.
+ * Apply penalties, re-rank, and shape one class's engine result into the API
+ * response. Shared by the GAP and open-distance paths — both produce a result
+ * with the same taskValidity / availablePoints / pilotScores shape.
  *
- * Penalties are applied after scoreTask() — deducted from totalScore,
- * floored at 0, then pilots are re-ranked within their class.
+ * scoreFlights()/scoreOpenDistance() sort pilotScores by rank, so the output
+ * order does NOT match the input order — pair each score back to its pilot by
+ * trackFile (the unique igc_filename), never by array index.
+ */
+function buildClassScore(
+  pilotClass: string,
+  result: Pick<TaskScoreCore, "taskValidity" | "availablePoints" | "pilotScores">,
+  pilotMeta: Map<
+    string,
+    { comp_pilot_id: number; penalty_points: number; penalty_reason: string | null }
+  >,
+  alphabet: string
+): ClassScore {
+  const withPenalties = result.pilotScores.map((ps) => {
+    const pilot = pilotMeta.get(ps.trackFile)!;
+    return {
+      pilotScore: ps,
+      comp_pilot_id: pilot.comp_pilot_id,
+      penalty_points: pilot.penalty_points,
+      penalty_reason: pilot.penalty_reason,
+      finalScore: Math.max(0, ps.totalScore - pilot.penalty_points),
+    };
+  });
+
+  withPenalties.sort((a, b) => b.finalScore - a.finalScore);
+
+  const pilots: PilotScoreEntry[] = withPenalties.map((p, i) => ({
+    rank: i + 1,
+    comp_pilot_id: encodeId(alphabet, p.comp_pilot_id),
+    pilot_name: p.pilotScore.pilotName,
+    made_goal: p.pilotScore.madeGoal,
+    reached_ess: p.pilotScore.reachedESS,
+    flown_distance: p.pilotScore.flownDistance,
+    speed_section_time: p.pilotScore.speedSectionTime,
+    distance_points: p.pilotScore.distancePoints,
+    distance_linear_points: p.pilotScore.distanceLinearPoints,
+    distance_difficulty_points: p.pilotScore.distanceDifficultyPoints,
+    time_points: p.pilotScore.timePoints,
+    leading_points: p.pilotScore.leadingPoints,
+    arrival_points: p.pilotScore.arrivalPoints,
+    penalty_points: p.penalty_points,
+    penalty_reason: p.penalty_reason,
+    total_score: p.finalScore,
+  }));
+
+  return {
+    pilot_class: pilotClass,
+    task_validity: result.taskValidity,
+    available_points: result.availablePoints,
+    pilots,
+  };
+}
+
+/**
+ * Compute scores for a task by gathering each pilot's flight analysis, then
+ * running the GAP formula per pilot class.
+ *
+ * Each pilot's turnpoint-sequence resolution (the expensive tracklog scan) is
+ * independent of the rest of the field, so it is cached per-track in KV and
+ * reused across recomputes; only tracks that are new or changed are fetched
+ * from R2, decompressed and re-parsed, and those run with bounded concurrency.
+ * When leading points are enabled the tracklog is needed for the
+ * leading-coefficient calculation, so that path always fetches/parses and
+ * skips the per-track cache.
+ *
+ * Penalties are applied after scoring — deducted from totalScore, floored at 0,
+ * then pilots are re-ranked within their class.
  */
 export async function computeTaskScore(
   taskId: number,
   db: D1Database,
   r2: R2Bucket,
-  alphabet: string
+  alphabet: string,
+  kv?: KVNamespace,
+  waitUntil?: (promise: Promise<unknown>) => void
 ): Promise<TaskScoreResponse> {
   // Load task + comp gap_params
   const taskRow = await db
@@ -168,10 +301,16 @@ export async function computeTaskScore(
       calculateOptimizedTaskDistance(xcTask) * 0.7;
   }
 
+  // Resolve the parameters that shape per-pilot geometry. distanceOrigin trims
+  // the task; useLeading decides whether the tracklog is needed downstream.
+  const distanceOrigin = gapParams.distanceOrigin ?? DEFAULT_GAP_PARAMETERS.distanceOrigin;
+  const useLeading = gapParams.useLeading ?? DEFAULT_GAP_PARAMETERS.useLeading;
+  const scoringTask = taskForDistanceOrigin(xcTask, distanceOrigin);
+
   // Load all tracks joined with pilot info, grouped by class
   const tracks = await db
     .prepare(
-      `SELECT tt.task_track_id, tt.comp_pilot_id, tt.igc_filename,
+      `SELECT tt.task_track_id, tt.comp_pilot_id, tt.igc_filename, tt.uploaded_at,
               tt.penalty_points, tt.penalty_reason,
               cp.registered_pilot_name AS pilot_name,
               cp.pilot_class
@@ -185,6 +324,7 @@ export async function computeTaskScore(
       task_track_id: number;
       comp_pilot_id: number;
       igc_filename: string;
+      uploaded_at: string;
       penalty_points: number;
       penalty_reason: string | null;
       pilot_name: string;
@@ -198,124 +338,220 @@ export async function computeTaskScore(
     .all<{ pilot_class: string }>();
 
   const scoredClasses = new Set(taskClasses.results.map((r) => r.pilot_class));
+  const scoredTracks = tracks.results.filter((t) => scoredClasses.has(t.pilot_class));
 
-  // Fetch and parse IGC files sequentially to keep peak memory manageable.
-  // Only include pilots whose class is scored by this task.
-  type ParsedPilot = {
-    flight: PilotFlight;
+  // Open distance: score each pilot on how far they flew from the take-off
+  // exit. This needs the raw fixes (not the GAP turnpoint analysis), so it
+  // fetches and parses each track directly and bypasses the GAP per-track
+  // cache. The whole-task score cache still prevents recompute on repeat GETs.
+  if (scoringFormat === "open_distance") {
+    type OpenDistancePilot = {
+      flight: PilotFlight;
+      comp_pilot_id: number;
+      pilot_class: string;
+      penalty_points: number;
+      penalty_reason: string | null;
+    };
+    const analyzed = await mapWithConcurrency(
+      scoredTracks,
+      TRACK_FETCH_CONCURRENCY,
+      async (track): Promise<OpenDistancePilot | null> => {
+        const object = await r2.get(track.igc_filename);
+        if (!object) return null;
+        const compressed = await object.arrayBuffer();
+        const decompressedStream = new Response(compressed).body!.pipeThrough(
+          new DecompressionStream("gzip")
+        );
+        const igcText = new TextDecoder().decode(
+          await new Response(decompressedStream).arrayBuffer()
+        );
+        let igc;
+        try {
+          igc = parseIGC(igcText);
+        } catch {
+          console.warn(`Skipping unparseable IGC: ${track.igc_filename}`);
+          return null;
+        }
+        if (igc.fixes.length === 0) return null;
+        return {
+          flight: {
+            pilotName: track.pilot_name,
+            trackFile: track.igc_filename,
+            fixes: igc.fixes,
+          },
+          comp_pilot_id: track.comp_pilot_id,
+          pilot_class: track.pilot_class,
+          penalty_points: track.penalty_points,
+          penalty_reason: track.penalty_reason,
+        };
+      }
+    );
+    const analyzedPilots = analyzed.filter(
+      (p): p is OpenDistancePilot => p !== null
+    );
+
+    const classScores: ClassScore[] = [];
+    for (const pilotClass of scoredClasses) {
+      const classPilots = analyzedPilots.filter((p) => p.pilot_class === pilotClass);
+      if (classPilots.length === 0) {
+        classScores.push(emptyClassScore(pilotClass));
+        continue;
+      }
+      const result = scoreOpenDistance(
+        xcTask,
+        classPilots.map((p) => p.flight)
+      );
+      const pilotMeta = new Map(
+        classPilots.map((p) => [
+          p.flight.trackFile,
+          {
+            comp_pilot_id: p.comp_pilot_id,
+            penalty_points: p.penalty_points,
+            penalty_reason: p.penalty_reason,
+          },
+        ])
+      );
+      classScores.push(buildClassScore(pilotClass, result, pilotMeta, alphabet));
+    }
+
+    return {
+      task_id: encodeId(alphabet, taskRow.task_id),
+      comp_id: encodeId(alphabet, taskRow.comp_id),
+      task_date: taskRow.task_date,
+      scoring_format: "open_distance",
+      classes: classScores,
+    };
+  }
+
+  // Per-track analysis cache key prefix: any change to the task geometry
+  // (xctsk) or the distance origin invalidates every cached analysis. The
+  // leading-coefficient path needs the raw tracklog, so it is never cached.
+  const geomHash = kv && !useLeading
+    ? await shortHash(`${taskRow.xctsk} ${distanceOrigin}`)
+    : "";
+
+  type AnalyzedPilot = {
+    flight: FlightScoringData;
     comp_pilot_id: number;
     pilot_class: string;
     penalty_points: number;
     penalty_reason: string | null;
   };
 
-  const parsedPilots: ParsedPilot[] = [];
+  // Gather each pilot's scoring inputs — from the per-track KV cache when
+  // possible, otherwise by fetching + decompressing + parsing the IGC from R2
+  // and resolving its turnpoint sequence. Bounded concurrency overlaps R2
+  // latency while capping peak memory from decompressed tracklogs.
+  const analyzed = await mapWithConcurrency(
+    scoredTracks,
+    TRACK_FETCH_CONCURRENCY,
+    async (track): Promise<AnalyzedPilot | null> => {
+      const cacheKey = geomHash
+        ? `pa:v1:${geomHash}:${track.task_track_id}:${track.uploaded_at}`
+        : "";
 
-  for (const track of tracks.results) {
-    if (!scoredClasses.has(track.pilot_class)) continue;
+      let flight: FlightScoringData | null = null;
 
-    const object = await r2.get(track.igc_filename);
-    if (!object) continue;
+      if (cacheKey && kv) {
+        const cached = (await kv.get(cacheKey, "json")) as CachedFlightAnalysis | null;
+        if (cached) {
+          flight = {
+            pilotName: track.pilot_name,
+            trackFile: track.igc_filename,
+            ...cached,
+          };
+        }
+      }
 
-    const compressed = await object.arrayBuffer();
-    const decompressedStream = new Response(compressed).body!.pipeThrough(
-      new DecompressionStream("gzip")
-    );
-    const decompressed = await new Response(decompressedStream).arrayBuffer();
-    const igcText = new TextDecoder().decode(decompressed);
+      if (!flight) {
+        const object = await r2.get(track.igc_filename);
+        if (!object) return null;
 
-    let igc;
-    try {
-      igc = parseIGC(igcText);
-    } catch {
-      // Skip unparseable tracks — admin can delete and ask pilot to re-upload
-      console.warn(`Skipping unparseable IGC: ${track.igc_filename}`);
-      continue;
+        const compressed = await object.arrayBuffer();
+        const decompressedStream = new Response(compressed).body!.pipeThrough(
+          new DecompressionStream("gzip")
+        );
+        const decompressed = await new Response(decompressedStream).arrayBuffer();
+        const igcText = new TextDecoder().decode(decompressed);
+
+        let igc;
+        try {
+          igc = parseIGC(igcText);
+        } catch {
+          // Skip unparseable tracks — admin can delete and ask pilot to re-upload
+          console.warn(`Skipping unparseable IGC: ${track.igc_filename}`);
+          return null;
+        }
+        if (igc.fixes.length === 0) return null;
+
+        const result = resolveTurnpointSequence(scoringTask, igc.fixes);
+        flight = toFlightScoringData(
+          { pilotName: track.pilot_name, trackFile: track.igc_filename, fixes: igc.fixes },
+          result,
+          useLeading
+        );
+
+        // Cache the compact, field-independent analysis for reuse. Store only
+        // the geometric fields — the pilot name/id come fresh from the DB each
+        // run, so renames and penalties never invalidate this entry.
+        if (cacheKey && kv) {
+          const compact: CachedFlightAnalysis = {
+            flownDistance: flight.flownDistance,
+            madeGoal: flight.madeGoal,
+            reachedESS: flight.reachedESS,
+            speedSectionTime: flight.speedSectionTime,
+            sssTimeMs: flight.sssTimeMs,
+            essTimeMs: flight.essTimeMs,
+          };
+          const put = kv.put(cacheKey, JSON.stringify(compact), {
+            expirationTtl: 604800,
+          });
+          if (waitUntil) waitUntil(put);
+          else await put;
+        }
+      }
+
+      return {
+        flight,
+        comp_pilot_id: track.comp_pilot_id,
+        pilot_class: track.pilot_class,
+        penalty_points: track.penalty_points,
+        penalty_reason: track.penalty_reason,
+      };
     }
+  );
 
-    if (igc.fixes.length === 0) continue;
-
-    const pilotName = track.pilot_name;
-
-    parsedPilots.push({
-      flight: { pilotName, trackFile: track.igc_filename, fixes: igc.fixes },
-      comp_pilot_id: track.comp_pilot_id,
-      pilot_class: track.pilot_class,
-      penalty_points: track.penalty_points,
-      penalty_reason: track.penalty_reason,
-    });
-  }
+  const analyzedPilots = analyzed.filter((p): p is AnalyzedPilot => p !== null);
 
   // Score each class separately
   const classScores: ClassScore[] = [];
 
   for (const pilotClass of scoredClasses) {
-    const classPilots = parsedPilots.filter(
+    const classPilots = analyzedPilots.filter(
       (p) => p.pilot_class === pilotClass
     );
 
     if (classPilots.length === 0) {
-      classScores.push({
-        pilot_class: pilotClass,
-        task_validity: { launch: 0, distance: 0, time: 0, task: 0 },
-        available_points: { distance: 0, time: 0, leading: 0, arrival: 0, total: 0 },
-        pilots: [],
-      });
+      classScores.push(emptyClassScore(pilotClass));
       continue;
     }
 
-    const flights = classPilots.map((p) => p.flight);
-    const result =
-      scoringFormat === "open_distance"
-        ? scoreOpenDistance(xcTask, flights)
-        : scoreTask(xcTask, flights, gapParams);
-
-    // Apply penalties and re-rank. scoreTask() sorts its pilotScores by rank,
-    // so the output order does NOT match the classPilots input order — pairing
-    // by index would attach each score to the wrong comp_pilot (wrong id, name,
-    // and penalties). Match on trackFile (the unique igc_filename) instead.
-    const pilotByTrackFile = new Map(
-      classPilots.map((p) => [p.flight.trackFile, p])
+    const result = scoreFlights(
+      scoringTask,
+      classPilots.map((p) => p.flight),
+      gapParams
     );
-    const withPenalties = result.pilotScores.map((ps) => {
-      const pilot = pilotByTrackFile.get(ps.trackFile)!;
-      const penalised = Math.max(0, ps.totalScore - pilot.penalty_points);
-      return {
-        pilotScore: ps,
-        comp_pilot_id: pilot.comp_pilot_id,
-        penalty_points: pilot.penalty_points,
-        penalty_reason: pilot.penalty_reason,
-        finalScore: penalised,
-      };
-    });
-
-    withPenalties.sort((a, b) => b.finalScore - a.finalScore);
-
-    const pilotEntries: PilotScoreEntry[] = withPenalties.map((p, i) => ({
-      rank: i + 1,
-      comp_pilot_id: encodeId(alphabet, p.comp_pilot_id),
-      pilot_name: p.pilotScore.pilotName,
-      made_goal: p.pilotScore.madeGoal,
-      reached_ess: p.pilotScore.reachedESS,
-      flown_distance: p.pilotScore.flownDistance,
-      speed_section_time: p.pilotScore.speedSectionTime,
-      distance_points: p.pilotScore.distancePoints,
-      distance_linear_points: p.pilotScore.distanceLinearPoints,
-      distance_difficulty_points: p.pilotScore.distanceDifficultyPoints,
-      time_points: p.pilotScore.timePoints,
-      leading_points: p.pilotScore.leadingPoints,
-      arrival_points: p.pilotScore.arrivalPoints,
-      penalty_points: p.penalty_points,
-      penalty_reason: p.penalty_reason,
-      total_score: p.finalScore,
-    }));
-
-    classScores.push({
-      pilot_class: pilotClass,
-      task_validity: result.taskValidity,
-      available_points: result.availablePoints,
-      pilots: pilotEntries,
-    });
+    const pilotMeta = new Map(
+      classPilots.map((p) => [
+        p.flight.trackFile,
+        {
+          comp_pilot_id: p.comp_pilot_id,
+          penalty_points: p.penalty_points,
+          penalty_reason: p.penalty_reason,
+        },
+      ])
+    );
+    classScores.push(buildClassScore(pilotClass, result, pilotMeta, alphabet));
   }
 
   return {

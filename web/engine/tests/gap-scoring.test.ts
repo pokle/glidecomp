@@ -15,10 +15,13 @@ import {
   calculateArrivalPoints,
   applyMinimumDistance,
   scoreTask,
+  scoreFlights,
+  toFlightScoringData,
   taskForDistanceOrigin,
   DEFAULT_GAP_PARAMETERS,
   type GAPParameters,
   type PilotFlight,
+  type FlightScoringData,
 } from '../src/gap-scoring';
 import { resolveTurnpointSequence } from '../src/turnpoint-sequence';
 import { calculateOptimizedTaskDistance } from '../src/task-optimizer';
@@ -829,5 +832,100 @@ describe('calculateWeights with flags', () => {
     expect(w.leading).toBe(0);
     expect(w.arrival).toBe(0);
     expect(w.distance + w.time).toBeCloseTo(1, 5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// scoreFlights — the shared aggregation core that lets the competition
+// backend cache per-track analysis and skip re-parsing unchanged tracks.
+// ---------------------------------------------------------------------------
+
+describe('scoreFlights (cache-equivalent path)', () => {
+  // Two pilots: one completes the task, one only reaches SSS+TP1.
+  function buildPilots(): PilotFlight[] {
+    return [
+      { pilotName: 'Fast', trackFile: 'fast.igc', fixes: createTrackThroughCylinders(standardWaypoints) },
+      { pilotName: 'Slow', trackFile: 'slow.igc', fixes: createTrackThroughCylinders(standardWaypoints.slice(0, 2)) },
+    ];
+  }
+
+  /**
+   * Rebuild FlightScoringData exactly as the worker's per-track cache does:
+   * resolve → toFlightScoringData → keep only the compact geometric fields →
+   * JSON round-trip (as KV storage would) → re-attach fresh pilot name/track.
+   */
+  function cachedInputs(task: XCTask, pilots: PilotFlight[], useLeading: boolean): FlightScoringData[] {
+    const scoringTask = taskForDistanceOrigin(task, DEFAULT_GAP_PARAMETERS.distanceOrigin);
+    return pilots.map(p => {
+      const result = resolveTurnpointSequence(scoringTask, p.fixes);
+      const data = toFlightScoringData(p, result, useLeading);
+      if (useLeading) return data; // leading needs fixes/sequence, not cached
+      const compact = JSON.parse(JSON.stringify({
+        flownDistance: data.flownDistance,
+        madeGoal: data.madeGoal,
+        reachedESS: data.reachedESS,
+        speedSectionTime: data.speedSectionTime,
+        sssTimeMs: data.sssTimeMs,
+        essTimeMs: data.essTimeMs,
+      }));
+      return { pilotName: p.pilotName, trackFile: p.trackFile, ...compact };
+    });
+  }
+
+  it('matches scoreTask for a no-leading HG task (the cached fast path)', () => {
+    const pilots = buildPilots();
+    const params: Partial<GAPParameters> = { nominalDistance: 10000, nominalTime: 600 };
+
+    const full = scoreTask(standardTask, pilots, params);
+    const scoringTask = taskForDistanceOrigin(standardTask, DEFAULT_GAP_PARAMETERS.distanceOrigin);
+    const viaCache = scoreFlights(scoringTask, cachedInputs(standardTask, pilots, false), params);
+
+    // Field-level aggregates identical
+    expect(viaCache.taskValidity).toEqual(full.taskValidity);
+    expect(viaCache.availablePoints).toEqual(full.availablePoints);
+    expect(viaCache.stats).toEqual(full.stats);
+
+    // Every pilot's scored output identical (pair by trackFile, the unique key)
+    const fullByTrack = new Map(full.pilotScores.map(p => [p.trackFile, p]));
+    expect(viaCache.pilotScores).toHaveLength(full.pilotScores.length);
+    for (const ps of viaCache.pilotScores) {
+      const f = fullByTrack.get(ps.trackFile)!;
+      expect(ps.rank).toBe(f.rank);
+      expect(ps.totalScore).toBe(f.totalScore);
+      expect(ps.distancePoints).toBe(f.distancePoints);
+      expect(ps.distanceDifficultyPoints).toBe(f.distanceDifficultyPoints);
+      expect(ps.timePoints).toBe(f.timePoints);
+      expect(ps.flownDistance).toBe(f.flownDistance);
+      expect(ps.madeGoal).toBe(f.madeGoal);
+    }
+  });
+
+  it('matches scoreTask with leading enabled (fixes/sequence passed through)', () => {
+    const pilots = buildPilots();
+    const params: Partial<GAPParameters> = {
+      nominalDistance: 10000, nominalTime: 600, useLeading: true,
+    };
+
+    const full = scoreTask(standardTask, pilots, params);
+    const scoringTask = taskForDistanceOrigin(standardTask, DEFAULT_GAP_PARAMETERS.distanceOrigin);
+    const viaCore = scoreFlights(scoringTask, cachedInputs(standardTask, pilots, true), params);
+
+    const fullByTrack = new Map(full.pilotScores.map(p => [p.trackFile, p]));
+    for (const ps of viaCore.pilotScores) {
+      const f = fullByTrack.get(ps.trackFile)!;
+      expect(ps.totalScore).toBe(f.totalScore);
+      expect(ps.leadingPoints).toBe(f.leadingPoints);
+      expect(ps.leadingCoefficient).toBe(f.leadingCoefficient);
+    }
+  });
+
+  it('throws if leading is enabled but a flight lacks its tracklog', () => {
+    const pilots = buildPilots();
+    const scoringTask = taskForDistanceOrigin(standardTask, DEFAULT_GAP_PARAMETERS.distanceOrigin);
+    // Compact inputs (no fixes/sequence) + useLeading is a programming error.
+    const compact = cachedInputs(standardTask, pilots, false);
+    expect(() =>
+      scoreFlights(scoringTask, compact, { nominalDistance: 10000, useLeading: true }),
+    ).toThrow();
   });
 });

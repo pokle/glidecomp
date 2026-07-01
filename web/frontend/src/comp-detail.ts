@@ -926,6 +926,11 @@ function renderTrackList(
         </div>
       </div>
       <div class="flex items-center gap-1 shrink-0">
+        <a href="/analysis.html?compId=${encodeURIComponent(compId)}&amp;taskId=${encodeURIComponent(taskId)}&amp;pilotId=${encodeURIComponent(track.comp_pilot_id)}"
+           class="btn btn-ghost btn-sm text-xs" title="View analysis" target="_blank" rel="noopener">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+          <span class="ml-1">View</span>
+        </a>
         <a href="/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(track.comp_pilot_id)}/download"
            class="btn btn-ghost btn-sm text-xs" title="Download">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -1410,7 +1415,7 @@ async function setupScoreSection(compId: string, taskId: string) {
   if (data.classes.some((cls) => cls.pilots.length > 0)) {
     const replayLink = document.getElementById("task-3dvis-link") as HTMLAnchorElement | null;
     if (replayLink) {
-      replayLink.href = `/samples/3dvis?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}`;
+      replayLink.href = `/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}`;
       replayLink.classList.remove("hidden");
     }
   }
@@ -1736,7 +1741,7 @@ function renderTasks(
 
         // 3D replay button — opens the flight replay for this task.
         const replay = document.createElement("a");
-        replay.href = `/samples/3dvis?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(task.task_id)}`;
+        replay.href = `/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(task.task_id)}`;
         replay.className = "btn btn-secondary btn-sm text-xs shrink-0";
         replay.title = "Open the 3D flight replay for this task";
         replay.textContent = "3D replay";

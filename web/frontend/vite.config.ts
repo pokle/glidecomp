@@ -105,8 +105,10 @@ export default defineConfig({
             req.url = '/theme-editor.html';
           } else if (req.url === '/kitchensink' || req.url === '/kitchensink/') {
             req.url = '/kitchensink.html';
-          } else if (req.url === '/samples/3dvis' || req.url === '/samples/3dvis/') {
-            req.url = '/samples/3dvis.html';
+          } else if (req.url === '/replay' || req.url === '/replay/') {
+            req.url = '/replay.html';
+          } else if (req.url === '/admin/users' || req.url === '/admin/users/') {
+            req.url = '/admin-users.html';
           }
           next();
         });
@@ -134,7 +136,8 @@ export default defineConfig({
         settings: resolve(__dirname, 'src/settings.html'),
         'theme-editor': resolve(__dirname, 'src/theme-editor.html'),
         kitchensink: resolve(__dirname, 'src/kitchensink.html'),
-        'samples/3dvis': resolve(__dirname, 'src/samples/3dvis.html'),
+        replay: resolve(__dirname, 'src/replay.html'),
+        'admin-users': resolve(__dirname, 'src/admin-users.html'),
       },
     },
   },
@@ -159,6 +162,10 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/api/u/': {
+        target: process.env.COMP_API_URL || 'http://localhost:8789',
+        changeOrigin: true,
+      },
+      '/api/admin': {
         target: process.env.COMP_API_URL || 'http://localhost:8789',
         changeOrigin: true,
       },
