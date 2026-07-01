@@ -805,29 +805,104 @@ export function calculateArrivalPoints(
  * @param numPresent - Number of pilots present at launch (defaults to pilots.length)
  * @returns Complete scored results with transparency data
  */
-export function scoreTask(
-  task: XCTask,
-  pilots: PilotFlight[],
+/**
+ * Compact, per-pilot scoring inputs — everything the whole-field GAP
+ * aggregation needs from one flight, in a plain-JSON-serializable shape.
+ *
+ * This is the boundary that lets the scoring backend cache per-track work:
+ * resolving a pilot's turnpoint sequence (the expensive tracklog scan) is
+ * independent of the rest of the field, so it can be computed once and reused
+ * while the cheap field-level aggregation re-runs whenever the roster changes.
+ *
+ * `fixes` and `sequence` are only needed when {@link GAPParameters.useLeading}
+ * is enabled (the leading-coefficient calculation re-scans the tracklog);
+ * leave them undefined for the common no-leading case.
+ */
+export interface FlightScoringData {
+  /** Pilot name (from IGC header, filename, or roster) */
+  pilotName: string;
+  /** Source file path — the unique key used to pair scores back to a pilot */
+  trackFile: string;
+  /** Raw scored flown distance in metres (pre minimum-distance floor) */
+  flownDistance: number;
+  /** Whether the pilot completed the task */
+  madeGoal: boolean;
+  /** Whether the pilot reached End of Speed Section */
+  reachedESS: boolean;
+  /** Speed section time in seconds, or null if ESS not reached */
+  speedSectionTime: number | null;
+  /** SSS reaching time (epoch ms), or null if the pilot never started */
+  sssTimeMs: number | null;
+  /** ESS reaching time (epoch ms), or null if ESS not reached */
+  essTimeMs: number | null;
+  /** Tracklog fixes — required only when useLeading is true */
+  fixes?: IGCFix[];
+  /** Resolved turnpoint reachings — required only when useLeading is true */
+  sequence?: TurnpointReaching[];
+}
+
+/** A scored pilot without the (heavy) transparency turnpoint result. */
+export type PilotScoreCore = Omit<PilotScore, 'turnpointResult'>;
+
+/** {@link TaskScoreResult} without the per-pilot turnpoint results. */
+export type TaskScoreCore = Omit<TaskScoreResult, 'pilotScores'> & {
+  pilotScores: PilotScoreCore[];
+};
+
+/**
+ * Build the compact scoring inputs for one flight from its resolved
+ * turnpoint sequence. `includeTrack` attaches the fixes/sequence needed for
+ * the leading-coefficient calculation (only when leading is enabled).
+ */
+export function toFlightScoringData(
+  pilot: PilotFlight,
+  result: TurnpointSequenceResult,
+  includeTrack: boolean,
+): FlightScoringData {
+  return {
+    pilotName: pilot.pilotName,
+    trackFile: pilot.trackFile,
+    flownDistance: result.flownDistance,
+    madeGoal: result.madeGoal,
+    reachedESS: result.essReaching !== null,
+    speedSectionTime: result.speedSectionTime,
+    sssTimeMs: result.sssReaching?.time.getTime() ?? null,
+    essTimeMs: result.essReaching?.time.getTime() ?? null,
+    fixes: includeTrack ? pilot.fixes : undefined,
+    sequence: includeTrack ? result.sequence : undefined,
+  };
+}
+
+/**
+ * Whole-field GAP aggregation over compact per-pilot inputs.
+ *
+ * This is the single source of truth for task validity, weight distribution,
+ * available points, and per-pilot point breakdowns. {@link scoreTask} feeds it
+ * the results of {@link resolveTurnpointSequence}; the competition backend can
+ * feed it cached {@link FlightScoringData} to avoid re-parsing unchanged
+ * tracks. The returned pilot scores omit `turnpointResult` — callers that need
+ * the full transparency data (like scoreTask) re-attach it by trackFile.
+ *
+ * @param scoringTask - The task, already trimmed for the distance origin
+ *   (see {@link taskForDistanceOrigin}). Callers pass the trimmed task so the
+ *   optimized distance is computed once here.
+ * @param flights - Compact per-pilot scoring inputs
+ * @param params - GAP competition parameters (uses defaults if not provided)
+ * @param numPresent - Number of pilots present at launch (defaults to flights.length)
+ */
+export function scoreFlights(
+  scoringTask: XCTask,
+  flights: FlightScoringData[],
   params: Partial<GAPParameters> = {},
   numPresent?: number,
-): TaskScoreResult {
+): TaskScoreCore {
   const fullParams: GAPParameters = { ...DEFAULT_GAP_PARAMETERS, ...params };
-  const actualNumPresent = numPresent ?? pilots.length;
-
-  // Apply the distance-origin convention (take-off vs start cylinder) once,
-  // up front; everything downstream scores against this task.
-  const scoringTask = taskForDistanceOrigin(task, fullParams.distanceOrigin);
-
-  // Step 1: Resolve turnpoint sequences for all pilots
-  const pilotResults = pilots.map(pilot => ({
-    pilot,
-    result: resolveTurnpointSequence(scoringTask, pilot.fixes),
-  }));
+  const actualNumPresent = numPresent ?? flights.length;
 
   // Step 2: Gather aggregate statistics
   // Apply minimum distance floor and clamp negative distances
-  const scoredDistances = pilotResults.map(pr =>
-    applyMinimumDistance(pr.result.flownDistance, fullParams.minimumDistance)
+  const scoredDistances = flights.map(f =>
+    applyMinimumDistance(f.flownDistance, fullParams.minimumDistance)
   );
   const bestDistance = scoredDistances.length > 0 ? maxBy(scoredDistances, d => d) : 0;
 
@@ -837,26 +912,24 @@ export function scoreTask(
   const difficulty = useDifficulty
     ? calculateDistanceDifficulty(
         scoredDistances,
-        pilotResults.map(pr => pr.result.madeGoal),
+        flights.map(f => f.madeGoal),
         fullParams.minimumDistance,
       )
     : null;
 
-  const goalPilots = pilotResults.filter(pr => pr.result.madeGoal);
-  const essPilots = pilotResults.filter(pr => pr.result.essReaching !== null);
-  const numInGoal = goalPilots.length;
-  const numReachedESS = essPilots.length;
+  const numInGoal = flights.reduce((n, f) => n + (f.madeGoal ? 1 : 0), 0);
+  const numReachedESS = flights.reduce((n, f) => n + (f.reachedESS ? 1 : 0), 0);
 
   // Best time: fastest speed section among goal pilots (PG) or ESS pilots (HG)
-  const timeCandidates = fullParams.scoring === 'PG' ? goalPilots : essPilots;
-  const validTimes = timeCandidates
-    .map(pr => pr.result.speedSectionTime)
+  const validTimes = flights
+    .filter(f => (fullParams.scoring === 'PG' ? f.madeGoal : f.reachedESS))
+    .map(f => f.speedSectionTime)
     .filter((t): t is number => t !== null && t > 0);
   const bestTime = validTimes.length > 0 ? minBy(validTimes, t => t) : null;
 
   const taskDistance = calculateOptimizedTaskDistance(scoringTask);
 
-  const numFlying = pilots.length;
+  const numFlying = flights.length;
   const goalRatio = numFlying > 0 ? numInGoal / numFlying : 0;
 
   const stats: TaskStats = {
@@ -894,23 +967,26 @@ export function scoreTask(
   let minLC = 0;
 
   if (fullParams.useLeading) {
-    const allSSSTimes = pilotResults
-      .map(pr => pr.result.sssReaching?.time.getTime())
-      .filter((t): t is number => t !== undefined);
-    const allESSTimes = pilotResults
-      .map(pr => pr.result.essReaching?.time.getTime())
-      .filter((t): t is number => t !== undefined);
+    const allSSSTimes = flights
+      .map(f => f.sssTimeMs)
+      .filter((t): t is number => t !== null);
+    const allESSTimes = flights
+      .map(f => f.essTimeMs)
+      .filter((t): t is number => t !== null);
 
     const taskFirstSSSTime = allSSSTimes.length > 0 ? minBy(allSSSTimes, t => t) : 0;
     const taskLastESSTime = allESSTimes.length > 0 ? maxBy(allESSTimes, t => t) : taskFirstSSSTime + 3600000;
 
-    leadingCoefficients = pilotResults.map(pr => {
-      const sssTime = pr.result.sssReaching?.time.getTime() ?? null;
-      const essTime = pr.result.essReaching?.time.getTime() ?? null;
+    leadingCoefficients = flights.map(f => {
+      if (!f.fixes || !f.sequence) {
+        throw new Error(
+          'scoreFlights: useLeading requires fixes and sequence in FlightScoringData',
+        );
+      }
       return calculateLeadingCoefficient(
-        pr.pilot.fixes, scoringTask, pr.result.sequence,
+        f.fixes, scoringTask, f.sequence,
         taskFirstSSSTime, taskLastESSTime,
-        sssTime, essTime,
+        f.sssTimeMs, f.essTimeMs,
         fullParams.leadingFormula,
       );
     });
@@ -918,15 +994,15 @@ export function scoreTask(
     const finiteLCs = leadingCoefficients.filter(lc => isFinite(lc));
     minLC = finiteLCs.length > 0 ? minBy(finiteLCs, lc => lc) : 0;
   } else {
-    leadingCoefficients = pilotResults.map(() => Infinity);
+    leadingCoefficients = flights.map(() => Infinity);
   }
 
   // Step 6: Determine ESS arrival order for HG arrival points (skip when not needed)
   const essPositionMap = new Map<number, number>();
   if (fullParams.scoring === 'HG' && fullParams.useArrival) {
-    pilotResults
-      .map((pr, idx) => ({ idx, time: pr.result.essReaching?.time.getTime() }))
-      .filter((entry): entry is { idx: number; time: number } => entry.time !== undefined)
+    flights
+      .map((f, idx) => ({ idx, time: f.essTimeMs }))
+      .filter((entry): entry is { idx: number; time: number } => entry.time !== null)
       .sort((a, b) => a.time - b.time)
       .forEach(({ idx }, position) => {
         essPositionMap.set(idx, position + 1);
@@ -934,15 +1010,13 @@ export function scoreTask(
   }
 
   // Step 7: Score each pilot
-  const pilotScores: PilotScore[] = pilotResults.map((pr, idx) => {
-    const { result } = pr;
-    const { pilot } = pr;
+  const pilotScores: PilotScoreCore[] = flights.map((f, idx) => {
     const pilotScoredDistance = scoredDistances[idx];
 
     const distScore: DistanceScore = difficulty
       ? calculateDistancePointsHG(
           pilotScoredDistance, bestDistance, availablePoints.distance,
-          difficulty, result.madeGoal,
+          difficulty, f.madeGoal,
         )
       : (() => {
           const linear = calculateDistancePoints(
@@ -953,8 +1027,8 @@ export function scoreTask(
     const distPts = distScore.total;
 
     const timePts = calculateTimePoints(
-      result.speedSectionTime, bestTime,
-      result.madeGoal, result.essReaching !== null,
+      f.speedSectionTime, bestTime,
+      f.madeGoal, f.reachedESS,
       availablePoints.time, fullParams.scoring,
       fullParams.leadingFormula,
     );
@@ -971,12 +1045,12 @@ export function scoreTask(
     const total = Math.round(distPts + timePts + leadPts + arrPts);
 
     return {
-      pilotName: pilot.pilotName,
-      trackFile: pilot.trackFile,
+      pilotName: f.pilotName,
+      trackFile: f.trackFile,
       flownDistance: pilotScoredDistance,
-      speedSectionTime: result.speedSectionTime,
-      madeGoal: result.madeGoal,
-      reachedESS: result.essReaching !== null,
+      speedSectionTime: f.speedSectionTime,
+      madeGoal: f.madeGoal,
+      reachedESS: f.reachedESS,
       distancePoints: Math.round(distPts * 10) / 10,
       distanceLinearPoints: Math.round(distScore.linear * 10) / 10,
       distanceDifficultyPoints: Math.round(distScore.difficulty * 10) / 10,
@@ -986,7 +1060,6 @@ export function scoreTask(
       totalScore: total,
       rank: 0, // assigned after sorting
       leadingCoefficient: leadingCoefficients[idx],
-      turnpointResult: result,
     };
   });
 
@@ -1013,4 +1086,40 @@ export function scoreTask(
     pilotScores,
     stats,
   };
+}
+
+export function scoreTask(
+  task: XCTask,
+  pilots: PilotFlight[],
+  params: Partial<GAPParameters> = {},
+  numPresent?: number,
+): TaskScoreResult {
+  const fullParams: GAPParameters = { ...DEFAULT_GAP_PARAMETERS, ...params };
+
+  // Apply the distance-origin convention (take-off vs start cylinder) once,
+  // up front; everything downstream scores against this task.
+  const scoringTask = taskForDistanceOrigin(task, fullParams.distanceOrigin);
+
+  // Step 1: Resolve turnpoint sequences for all pilots (the per-pilot,
+  // field-independent work), then aggregate over the whole field.
+  const results = pilots.map(pilot =>
+    resolveTurnpointSequence(scoringTask, pilot.fixes)
+  );
+  const flights = pilots.map((pilot, idx) =>
+    toFlightScoringData(pilot, results[idx], fullParams.useLeading)
+  );
+
+  const core = scoreFlights(scoringTask, flights, params, numPresent);
+
+  // Re-attach the per-pilot turnpoint result (transparency data) by trackFile,
+  // the same unique key the sorted scores carry.
+  const resultByTrack = new Map(
+    pilots.map((pilot, idx) => [pilot.trackFile, results[idx]]),
+  );
+  const pilotScores: PilotScore[] = core.pilotScores.map(ps => ({
+    ...ps,
+    turnpointResult: resultByTrack.get(ps.trackFile)!,
+  }));
+
+  return { ...core, pilotScores };
 }
