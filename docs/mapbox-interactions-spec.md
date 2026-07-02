@@ -91,6 +91,16 @@ Track is rendered as individual per-segment LineString features (one per consecu
 
 - **Fit bounds** — if no track loaded, map fits to task turnpoint bounds with 50px padding, 1s animation
 
+## Open Distance Line
+
+Shown for open-distance tasks (single TAKEOFF turnpoint): one line per visible pilot from the point they exit the take-off cylinder to the furthest fix they reached — the geometry of the scored distance.
+
+- **Line** (`open-distance-line` layer): `#6366f1` (indigo), width 2, dash `[4, 4]`, opacity 0.8 — same style as the task route line
+- **Distance label** (`open-distance-labels` layer): the scored distance (e.g. `"42.3 km"`), placed along the line (`symbol-placement: line-center`, offset `[0, -0.8]`), text size 16, color `#6366f1`, halo `#eeeeee` 2px
+- Pilots who never leave the take-off cylinder score 0 and have no line
+- Set via `setOpenDistanceLines(lines)` / cleared via `clearOpenDistanceLines()`; re-applied on style reload
+- With multiple pilots selected, one line + label is drawn per selected pilot (Mapbox symbol collision hides overlapping labels)
+
 ## Event Markers
 
 - Shown only for key event types: takeoff, landing, start_reaching, turnpoint_reaching, ess_reaching, goal_reaching, max_altitude
@@ -205,9 +215,11 @@ When enabled via the "Show Track Metrics" command palette option, displays glide
 9. `task-points` — turnpoint dots
 10. `task-labels` — turnpoint name labels
 11. `task-segment-labels` — leg distance labels
-12. `annotation-strokes-layer` — committed annotation strokes
-13. `annotation-live-layer` — in-progress annotation stroke preview
-14. `threebox-layer` — 3D custom rendering layer (Threebox)
+12. `open-distance-line` — dashed scored open-distance line per pilot
+13. `open-distance-labels` — distance label along each open-distance line
+14. `annotation-strokes-layer` — committed annotation strokes
+15. `annotation-live-layer` — in-progress annotation stroke preview
+16. `threebox-layer` — 3D custom rendering layer (Threebox)
 
 ## 3D Drone Follow Camera
 

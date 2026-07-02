@@ -9,7 +9,7 @@
 import * as mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
 import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult, type PilotScore } from '@glidecomp/engine';
-import type { MapProvider, LoadedTrack } from './map-provider';
+import type { MapProvider, LoadedTrack, OpenDistanceLine } from './map-provider';
 import { config } from './config';
 import {
   MAP_FONT_FAMILY, GLIDE_LABEL_TEXT_SHADOW, GLIDE_LABEL_SPARSE_MIN_ZOOM, GLIDE_LABEL_SPEED_MIN_ZOOM,
@@ -22,7 +22,7 @@ import {
   formatGlideLabel, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement, computeOccludedLabels,
   calculateAltitudeRange, buildTrackSegments,
 } from './map-provider-shared';
-import { formatAltitude } from './units-browser';
+import { formatAltitude, formatDistance } from './units-browser';
 import { createMapAnnotationLayer, type MapAnnotationLayer } from './map-annotations';
 
 const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -121,6 +121,8 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       // Multi-track state
       let multiTrackData: LoadedTrack[] = [];
       let multiTrackScores: PilotScore[] = [];
+      // Open-distance scored lines (take-off exit → furthest fix, per pilot)
+      let openDistanceLineData: OpenDistanceLine[] = [];
       let multiTrackClickCallback: ((trackIndex: number, fixIndex: number) => void) | null = null;
       let isMultiTrackMode = false;
       // 3D multi-track state
@@ -426,6 +428,8 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
       function addCustomLayers(): void {
         // Remove existing custom layers to ensure correct ordering
         const customLayers = [
+          'open-distance-labels',
+          'open-distance-line',
           'task-segment-labels',
           'task-labels',
           'task-points',
@@ -464,7 +468,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         }
 
         // Other sources with default simplification
-        const sourcesToAdd = ['task-line', 'task-points', 'task-cylinders', 'task-segment-labels', 'highlight-segment', 'speed-fastest-segment'];
+        const sourcesToAdd = ['task-line', 'task-points', 'task-cylinders', 'task-segment-labels', 'highlight-segment', 'speed-fastest-segment', 'open-distance-lines'];
         for (const sourceId of sourcesToAdd) {
           if (!map.getSource(sourceId)) {
             map.addSource(sourceId, {
@@ -736,6 +740,41 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
             'text-halo-width': 2,
           },
         });
+
+        // 9. Open-distance scored lines (take-off exit → furthest fix, per pilot)
+        map.addLayer({
+          id: 'open-distance-line',
+          type: 'line',
+          source: 'open-distance-lines',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round',
+          },
+          paint: {
+            'line-color': '#6366f1',
+            'line-width': 2,
+            'line-dasharray': [4, 4],
+            'line-opacity': 0.8,
+          },
+        });
+
+        // 9b. Distance label riding along each open-distance line
+        map.addLayer({
+          id: 'open-distance-labels',
+          type: 'symbol',
+          source: 'open-distance-lines',
+          layout: {
+            'symbol-placement': 'line-center',
+            'text-field': ['get', 'label'],
+            'text-size': 16,
+            'text-offset': [0, -0.8],
+          },
+          paint: {
+            'text-color': '#6366f1',
+            'text-halo-color': '#eeeeee',
+            'text-halo-width': 2,
+          },
+        });
       }
 
       /**
@@ -750,6 +789,9 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
         }
         if (currentEvents.length > 0) {
           renderer.setEvents(currentEvents);
+        }
+        if (openDistanceLineData.length > 0) {
+          renderer.setOpenDistanceLines?.(openDistanceLineData);
         }
         updateTrackRendering();
       }
@@ -2747,6 +2789,30 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           if (map.getLayer('track-line')) map.setLayoutProperty('track-line', 'visibility', 'visible');
           if (map.getLayer('track-line-outline')) map.setLayoutProperty('track-line-outline', 'visibility', 'visible');
           clearMulti3DTracks();
+        },
+
+        setOpenDistanceLines(lines: OpenDistanceLine[]) {
+          openDistanceLineData = lines;
+          const features = lines.map((line) => ({
+            type: 'Feature' as const,
+            properties: {
+              pilotName: line.pilotName,
+              label: formatDistance(line.distance, { decimals: 1 }).withUnit,
+            },
+            geometry: {
+              type: 'LineString' as const,
+              coordinates: [
+                [line.origin.lon, line.origin.lat],
+                [line.end.lon, line.end.lat],
+              ],
+            },
+          }));
+          updateGeoJSONSource(map, 'open-distance-lines', features);
+        },
+
+        clearOpenDistanceLines() {
+          openDistanceLineData = [];
+          updateGeoJSONSource(map, 'open-distance-lines', []);
         },
 
         onMultiTrackClick(callback: (trackIndex: number, fixIndex: number) => void) {

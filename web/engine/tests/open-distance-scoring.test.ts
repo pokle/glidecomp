@@ -3,6 +3,8 @@ import {
   scoreOpenDistance,
   scoreOpenDistanceFlights,
   openDistanceForFlight,
+  openDistanceGeometryForFlight,
+  isOpenDistanceTask,
 } from '../src/open-distance-scoring';
 import type { PilotFlight } from '../src/gap-scoring';
 import type { XCTask } from '../src/xctsk-parser';
@@ -116,6 +118,69 @@ describe('scoreOpenDistance', () => {
     const result = scoreOpenDistance(TASK, []);
     expect(result.pilotScores).toEqual([]);
     expect(result.stats.bestDistance).toBe(0);
+  });
+});
+
+describe('openDistanceGeometryForFlight', () => {
+  it('returns the take-off exit origin and the furthest fix', () => {
+    const pilot = flight('outandback', [
+      fixEast(0, 0),
+      fixEast(60, 2000),
+      fixEast(120, 40000), // furthest
+      fixEast(180, 10000), // lands back closer in
+    ]);
+    const geom = openDistanceGeometryForFlight(TASK, pilot)!;
+
+    // Origin sits on the 1000 m cylinder boundary, due east of the centre.
+    const originFromCentre = destinationPoint(LAT, LON, TAKEOFF_RADIUS, EAST);
+    expect(geom.origin.latitude).toBeCloseTo(originFromCentre.lat, 3);
+    expect(geom.origin.longitude).toBeCloseTo(originFromCentre.lon, 3);
+
+    // Furthest is the 40 km fix (index 2), not the landing fix.
+    expect(geom.furthest.fixIndex).toBe(2);
+    expect(geom.furthest.latitude).toBeCloseTo(pilot.fixes[2].latitude, 6);
+    expect(geom.furthest.longitude).toBeCloseTo(pilot.fixes[2].longitude, 6);
+
+    // Distance matches the scored open distance.
+    expect(geom.distance).toBe(openDistanceForFlight(TASK, pilot));
+    expect(geom.distance).toBeGreaterThan(38800);
+    expect(geom.distance).toBeLessThan(39200);
+  });
+
+  it('uses the first fix as origin when the track starts outside the cylinder', () => {
+    const pilot = flight('airborne', [fixEast(0, 3000), fixEast(60, 30000)]);
+    const geom = openDistanceGeometryForFlight(TASK, pilot)!;
+    expect(geom.origin.fixIndex).toBe(0);
+    expect(geom.origin.latitude).toBeCloseTo(pilot.fixes[0].latitude, 6);
+    expect(geom.furthest.fixIndex).toBe(1);
+  });
+
+  it('returns null for a pilot who never leaves the take-off cylinder', () => {
+    const pilot = flight('stayer', [fixEast(0, 0), fixEast(60, 500), fixEast(120, 0)]);
+    expect(openDistanceGeometryForFlight(TASK, pilot)).toBeNull();
+  });
+});
+
+describe('isOpenDistanceTask', () => {
+  it('recognises a single-TAKEOFF task', () => {
+    expect(isOpenDistanceTask(TASK)).toBe(true);
+  });
+
+  it('recognises a declared OPEN-DISTANCE task regardless of turnpoints', () => {
+    expect(isOpenDistanceTask({ ...TASK, taskType: 'OPEN-DISTANCE' })).toBe(true);
+  });
+
+  it('rejects a classic race task', () => {
+    const race: XCTask = {
+      taskType: 'CLASSIC',
+      version: 1,
+      earthModel: 'WGS84',
+      turnpoints: [
+        { type: 'TAKEOFF', radius: 400, waypoint: { name: 'Launch', lat: LAT, lon: LON } },
+        { type: 'SSS', radius: 2000, waypoint: { name: 'Start', lat: LAT, lon: LON } },
+      ],
+    };
+    expect(isOpenDistanceTask(race)).toBe(false);
   });
 });
 

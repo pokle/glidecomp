@@ -15,6 +15,23 @@ import { createTaskEditor, type TaskEditor } from './task-editor';
  */
 export type PanelTabType = 'task' | 'score' | 'events' | 'glides' | 'climbs' | 'sinks' | 'comp-score' | 'gap-config';
 
+/** Which scoring format the multi-track score tab should present */
+export type CompScoringFormat = 'gap' | 'open_distance';
+
+/**
+ * Per-pilot open-distance display stats that the score result alone doesn't
+ * carry: what the pilot actually flew (track length and airtime) alongside the
+ * straight-line scored distance in `PilotScore.flownDistance`.
+ */
+export interface OpenDistancePilotStats {
+  /** Distance flown along the track (takeoff → landing), metres */
+  flownTrackDistance: number;
+  /** Time in the air (takeoff → landing), seconds; null when unknown */
+  airtimeSeconds: number | null;
+  /** False when the pilot never left the take-off cylinder (scores 0) */
+  leftTakeoff: boolean;
+}
+
 export interface AnalysisPanelOptions {
   container: HTMLElement;
   onEventClick: (event: FlightEvent, options?: { skipPan?: boolean }) => void;
@@ -64,6 +81,14 @@ export interface AnalysisPanel {
   setMultiTrackMode(enabled: boolean): void;
   /** Set competition score result for multi-track scoring */
   setCompetitionScore(result: TaskScoreResult | null): void;
+  /** Select which scoring format the multi-track score tab presents (GAP
+   *  breakdown vs open-distance table). Does not re-render on its own — call
+   *  before setCompetitionScore. */
+  setCompetitionScoringFormat(format: CompScoringFormat): void;
+  /** Per-pilot flown-distance/airtime stats for the open-distance table,
+   *  keyed by pilot name. Does not re-render on its own — call before
+   *  setCompetitionScore. */
+  setOpenDistanceStats(stats: Map<string, OpenDistancePilotStats> | null): void;
   /** Pre-select which pilots' tracks show on the map (null = all); fires onPilotSelectionChanged */
   setPilotSelection(pilots: Set<string> | null): void;
 }
@@ -367,6 +392,10 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   let isPanelHidden = true;
   let isMultiTrackMode = false;
   let currentCompScore: TaskScoreResult | null = null;
+  /** Scoring format the comp-score tab presents (GAP vs open distance) */
+  let compScoringFormat: CompScoringFormat = 'gap';
+  /** Per-pilot flown/airtime stats for the open-distance table (by pilot name) */
+  let openDistanceStats: Map<string, OpenDistancePilotStats> | null = null;
   /** Selected pilot names in competition score tab (null = all selected) */
   let selectedPilots: Set<string> | null = null;
   const TAB_STORAGE_KEY = 'glidecomp-active-tab';
@@ -1316,7 +1345,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   }
 
   /**
-   * Render the competition score table (multi-track mode)
+   * Render the competition score tab (multi-track mode): the GAP breakdown,
+   * or the open-distance table when the comp scores open distance.
    */
   function renderCompetitionScore(): void {
     if (!currentCompScore) {
@@ -1329,7 +1359,128 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       return;
     }
 
-    const result = currentCompScore;
+    if (compScoringFormat === 'open_distance') {
+      renderOpenDistanceScore(currentCompScore);
+    } else {
+      renderGapCompetitionScore(currentCompScore);
+    }
+  }
+
+  /**
+   * Wire the select-all + per-pilot checkboxes of a rendered score table.
+   * Shared by the GAP and open-distance renderers; both emit the same
+   * `#comp-select-all` / `.comp-pilot-cb` controls.
+   */
+  function wirePilotSelection(result: TaskScoreResult): void {
+    const selectAllCb = compScorePanelContent.querySelector('#comp-select-all') as HTMLInputElement;
+    selectAllCb?.addEventListener('change', () => {
+      if (selectAllCb.checked) {
+        selectedPilots = null; // all selected
+      } else {
+        selectedPilots = new Set(); // none selected
+      }
+      renderCompetitionScore();
+      options.onPilotSelectionChanged?.(selectedPilots);
+    });
+
+    compScorePanelContent.querySelectorAll('.comp-pilot-cb').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const input = cb as HTMLInputElement;
+        const pilot = input.dataset.pilot!;
+
+        if (selectedPilots === null) {
+          // Transitioning from "all selected" to individual selection:
+          // populate the set with everyone, then toggle this one off
+          selectedPilots = new Set(result.pilotScores.map(ps => ps.pilotName));
+          selectedPilots.delete(pilot);
+        } else if (input.checked) {
+          selectedPilots.add(pilot);
+          // If all are now checked, go back to null (= all selected)
+          if (selectedPilots.size === result.pilotScores.length) {
+            selectedPilots = null;
+          }
+        } else {
+          selectedPilots.delete(pilot);
+        }
+
+        renderCompetitionScore();
+        options.onPilotSelectionChanged?.(selectedPilots);
+      });
+    });
+  }
+
+  /**
+   * Render the open-distance score table: every pilot's straight-line scored
+   * distance next to what they actually flew (track distance and airtime).
+   */
+  function renderOpenDistanceScore(result: TaskScoreResult): void {
+    const stats = result.stats;
+    const allSelected = selectedPilots === null;
+    const neverLeft = result.pilotScores.filter(
+      ps => openDistanceStats?.get(ps.pilotName)?.leftTakeoff === false
+    ).length;
+
+    eventCountEl.textContent =
+      `${result.pilotScores.length} pilots · best ${formatDistance(stats.bestDistance).withUnit}`;
+
+    let html = '<div class="space-y-3">';
+
+    html += `<div class="flex justify-end"><a href="/scoring-open-distance.html" target="_blank" rel="noopener noreferrer" class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>How Open Distance works</a></div>`;
+
+    // Stats
+    html += `
+      <div class="rounded-lg border border-border bg-muted/30 p-3">
+        <div class="text-xs text-muted-foreground mb-1">Stats</div>
+        <div class="flex gap-3 text-sm flex-wrap">
+          <span title="Pilots with a tracklog${stats.numPresent !== stats.numFlying ? ` (of ${stats.numPresent} present)` : ''}">Pilots: ${stats.numFlying}${stats.numPresent !== stats.numFlying ? ` / ${stats.numPresent}` : ''}</span>
+          <span>Best dist: ${formatDistance(stats.bestDistance).withUnit}</span>
+          ${neverLeft > 0 ? `<span title="Pilots who never left the take-off cylinder score 0">Never left launch: ${neverLeft}</span>` : ''}
+        </div>
+      </div>
+    `;
+
+    // Ranked distances table
+    html += `<div class="rounded-lg border border-border overflow-x-auto overflow-y-hidden">`;
+    html += `<table class="text-sm">`;
+    html += `<thead class="bg-muted/50"><tr>
+      <th class="px-2 py-1.5 text-left font-medium sticky left-0 z-10 bg-muted/50"><input type="checkbox" id="comp-select-all" class="accent-primary" ${allSelected ? 'checked' : ''}></th>
+      <th class="px-2 py-1.5 text-left font-medium sticky left-[28px] z-10 bg-muted/50">#</th>
+      <th class="px-2 py-1.5 text-left font-medium sticky left-[52px] z-10 bg-muted/50 after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border">Pilot</th>
+      <th class="px-2 py-1.5 text-right font-medium" title="Straight-line distance from the take-off cylinder exit to the furthest point reached — this is the score">Scored</th>
+      <th class="px-2 py-1.5 text-right font-medium" title="Distance actually flown along the track">Flown</th>
+      <th class="px-2 py-1.5 text-right font-medium" title="Time in the air (takeoff to landing)">Airtime</th>
+    </tr></thead>`;
+    html += `<tbody>`;
+
+    for (const ps of result.pilotScores) {
+      const isChecked = allSelected || selectedPilots!.has(ps.pilotName);
+      const od = openDistanceStats?.get(ps.pilotName);
+      const stayedMark = od?.leftTakeoff === false
+        ? '<span class="text-amber-500" title="Never left the take-off cylinder — open distance is measured from the cylinder exit, so this flight scores 0">*</span>'
+        : '';
+      html += `<tr class="border-t border-border hover:bg-muted/30${!isChecked ? ' opacity-40' : ''}">
+        <td class="px-2 py-1.5 sticky left-0 z-10 bg-background"><input type="checkbox" class="comp-pilot-cb accent-primary" data-pilot="${ps.pilotName}" ${isChecked ? 'checked' : ''}></td>
+        <td class="px-2 py-1.5 font-medium sticky left-[28px] z-10 bg-background">${ps.rank}</td>
+        <td class="px-2 py-1.5 truncate max-w-[140px] sticky left-[52px] z-10 bg-background after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border" title="${ps.pilotName}">${ps.pilotName}</td>
+        <td class="px-2 py-1.5 text-right font-medium tabular-nums">${formatDistance(ps.flownDistance).withUnit}${stayedMark}</td>
+        <td class="px-2 py-1.5 text-right tabular-nums">${od ? formatDistance(od.flownTrackDistance).withUnit : '—'}</td>
+        <td class="px-2 py-1.5 text-right tabular-nums">${od && od.airtimeSeconds !== null ? formatHMS(od.airtimeSeconds) : '—'}</td>
+      </tr>`;
+    }
+
+    html += `</tbody></table></div>`;
+
+    html += `<p class="text-xs text-muted-foreground px-1">Scored distance is the straight line from where the pilot exits the take-off cylinder to the furthest point they reached, drawn on the map as a dashed line. Pilots who never leave the take-off cylinder score 0.</p>`;
+    html += '</div>';
+    compScorePanelContent.innerHTML = html;
+
+    wirePilotSelection(result);
+  }
+
+  /**
+   * Render the GAP competition score table (multi-track mode)
+   */
+  function renderGapCompetitionScore(result: TaskScoreResult): void {
     const params = result.parameters;
     const stats = result.stats;
 
@@ -1498,41 +1649,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     compScorePanelContent.innerHTML = html;
 
     // Wire checkbox handlers
-    const selectAllCb = compScorePanelContent.querySelector('#comp-select-all') as HTMLInputElement;
-    selectAllCb?.addEventListener('change', () => {
-      if (selectAllCb.checked) {
-        selectedPilots = null; // all selected
-      } else {
-        selectedPilots = new Set(); // none selected
-      }
-      renderCompetitionScore();
-      options.onPilotSelectionChanged?.(selectedPilots);
-    });
-
-    compScorePanelContent.querySelectorAll('.comp-pilot-cb').forEach(cb => {
-      cb.addEventListener('change', () => {
-        const input = cb as HTMLInputElement;
-        const pilot = input.dataset.pilot!;
-
-        if (selectedPilots === null) {
-          // Transitioning from "all selected" to individual selection:
-          // populate the set with everyone, then toggle this one off
-          selectedPilots = new Set(result.pilotScores.map(ps => ps.pilotName));
-          selectedPilots.delete(pilot);
-        } else if (input.checked) {
-          selectedPilots.add(pilot);
-          // If all are now checked, go back to null (= all selected)
-          if (selectedPilots.size === result.pilotScores.length) {
-            selectedPilots = null;
-          }
-        } else {
-          selectedPilots.delete(pilot);
-        }
-
-        renderCompetitionScore();
-        options.onPilotSelectionChanged?.(selectedPilots);
-      });
-    });
+    wirePilotSelection(result);
 
     // Wire gear icon
     compScorePanelContent.querySelector('.comp-settings-btn')?.addEventListener('click', () => {
@@ -1712,6 +1829,15 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       if (currentTab === 'comp-score') {
         renderCompetitionScore();
       }
+    },
+
+    setCompetitionScoringFormat(format: CompScoringFormat) {
+      compScoringFormat = format;
+      tabCompScore.textContent = format === 'open_distance' ? 'Open Distance' : 'Competition Score';
+    },
+
+    setOpenDistanceStats(stats: Map<string, OpenDistancePilotStats> | null) {
+      openDistanceStats = stats;
     },
 
     setPilotSelection(pilots: Set<string> | null) {

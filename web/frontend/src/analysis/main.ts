@@ -11,12 +11,12 @@ import '../theme';
  * - Event detection and display
  */
 
-import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistance, igcTaskToXCTask, resolveTurnpointSequence, scoreTask, maxBy, parseThresholdInput, formatThresholdForDisplay, DEFAULT_THRESHOLDS, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord, type DetectionThresholds, type PartialThresholds, type ThresholdDimension, type PilotFlight, type TaskScoreResult, type GAPParameters } from '@glidecomp/engine';
+import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistance, calculateTrackDistance, igcTaskToXCTask, resolveTurnpointSequence, scoreTask, scoreOpenDistance, openDistanceGeometryForFlight, isOpenDistanceTask, maxBy, parseThresholdInput, formatThresholdForDisplay, DEFAULT_THRESHOLDS, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord, type DetectionThresholds, type PartialThresholds, type ThresholdDimension, type PilotFlight, type TaskScoreResult, type GAPParameters } from '@glidecomp/engine';
 import { SAMPLE_COMPS } from '@glidecomp/samples';
 import { getCurrentUser } from '../auth/client';
 import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
-import { createMapProvider, type MapProvider, type MapProviderType, type LoadedTrack } from './map-provider';
-import { createAnalysisPanel, AnalysisPanel, FlightInfo } from './analysis-panel';
+import { createMapProvider, type MapProvider, type MapProviderType, type LoadedTrack, type OpenDistanceLine } from './map-provider';
+import { createAnalysisPanel, AnalysisPanel, FlightInfo, type OpenDistancePilotStats } from './analysis-panel';
 import { loadCorryongWaypoints } from './waypoint-loader';
 import { config, type UnitPreferences } from './config';
 import { formatAltitude, formatDistance, onUnitsChanged } from './units-browser';
@@ -45,6 +45,8 @@ interface AppState {
   selectedTrack: number | 'all';
   /** Competition score result (computed when 'all' is selected with a task) */
   compScore: TaskScoreResult | null;
+  /** The loaded competition's declared scoring format (null = not a comp view) */
+  compScoringFormat: 'gap' | 'open_distance' | null;
 }
 
 const state: AppState = {
@@ -55,7 +57,18 @@ const state: AppState = {
   tracks: [],
   selectedTrack: 0,
   compScore: null,
+  compScoringFormat: null,
 };
+
+/**
+ * Whether the page should present open-distance scoring: the loaded comp
+ * declares it, or (outside a comp) the task itself is an open-distance task
+ * (a single TAKEOFF turnpoint). A comp that declares GAP always gets GAP.
+ */
+function isOpenDistanceMode(): boolean {
+  if (state.compScoringFormat) return state.compScoringFormat === 'open_distance';
+  return state.task !== null && isOpenDistanceTask(state.task);
+}
 
 let mapRenderer: MapProvider | null = null;
 let analysisPanel: AnalysisPanel | null = null;
@@ -610,9 +623,10 @@ async function init(): Promise<void> {
   function onCompetitionSettingsChanged(): void {
     if (state.selectedTrack === 'all' && state.tracks.length > 1) {
       computeCompetitionScore();
-      analysisPanel?.setCompetitionScore(state.compScore);
+      pushCompetitionScoreToPanel();
       const pilotScores = state.compScore?.pilotScores ?? [];
       mapRenderer?.setMultiTrack?.(state.tracks, pilotScores);
+      updateOpenDistanceMapLines(state.tracks);
     }
   }
 
@@ -630,6 +644,7 @@ async function init(): Promise<void> {
     state.tracks = [];
     state.selectedTrack = 0;
     state.compScore = null;
+    state.compScoringFormat = null;
     updateDownloadTaskVisibility();
 
     // Clear map
@@ -638,6 +653,7 @@ async function init(): Promise<void> {
       mapRenderer.clearTask();
       mapRenderer.clearEvents();
       mapRenderer.clearMultiTrack?.();
+      mapRenderer.clearOpenDistanceLines?.();
     }
 
     // Reset speed overlay state (must call setSpeedOverlay to clear provider flag)
@@ -979,6 +995,7 @@ async function init(): Promise<void> {
         // All selected — show all tracks, no event markers
         mapRenderer?.clearEvents();
         mapRenderer?.setMultiTrack?.(state.tracks, pilotScores);
+        updateOpenDistanceMapLines(state.tracks);
       } else {
         const filteredTracks = state.tracks.filter(t => selected.has(t.pilotName));
         const filteredScores = pilotScores.filter(ps => selected.has(ps.pilotName));
@@ -989,6 +1006,7 @@ async function init(): Promise<void> {
           mapRenderer?.clearEvents();
         }
         mapRenderer?.setMultiTrack?.(filteredTracks, filteredScores);
+        updateOpenDistanceMapLines(filteredTracks);
       }
     },
     onOpenCompetitionSettings: () => openCompetitionSettings(),
@@ -1325,9 +1343,10 @@ async function init(): Promise<void> {
         track.events = detectFlightEvents(track.fixes, task, config.getPartialThresholds());
       }
       computeCompetitionScore();
-      analysisPanel?.setCompetitionScore(state.compScore);
+      pushCompetitionScoreToPanel();
       const pilotScores = state.compScore?.pilotScores ?? [];
       mapRenderer?.setMultiTrack?.(state.tracks, pilotScores);
+      updateOpenDistanceMapLines(state.tracks);
     }
   }
 
@@ -1375,6 +1394,7 @@ async function init(): Promise<void> {
     analysisPanel?.setMultiTrackMode(false);
 
     mapRenderer?.setTrack(igcFile.fixes);
+    updateOpenDistanceMapLines(state.tracks);
     redetectEvents();
     analysisPanel?.setAltitudes(igcFile.fixes.map(f => f.gnssAltitude), igcFile.fixes.map(f => f.time));
 
@@ -1542,6 +1562,7 @@ async function init(): Promise<void> {
     // Render single track
     mapRenderer?.setTrack(track.fixes);
     mapRenderer?.setEvents(track.events);
+    updateOpenDistanceMapLines([track]);
 
     // Update analysis panel for single-track mode
     analysisPanel?.setMultiTrackMode(false);
@@ -1560,7 +1581,9 @@ async function init(): Promise<void> {
       info.maxAlt = formatAltitude(maxBy(track.fixes, f => f.gnssAltitude)).withUnit;
     }
     if (state.task) {
-      info.task = formatDistance(calculateOptimizedTaskDistance(state.task)).withUnit;
+      info.task = isOpenDistanceMode()
+        ? 'Open distance'
+        : formatDistance(calculateOptimizedTaskDistance(state.task)).withUnit;
     }
     analysisPanel?.setFlightInfo(info);
 
@@ -1588,16 +1611,22 @@ async function init(): Promise<void> {
 
     // Render all tracks on map with rank colors
     mapRenderer?.setMultiTrack?.(state.tracks, pilotScores);
+    updateOpenDistanceMapLines(state.tracks);
 
-    // Switch analysis panel to multi-track mode
+    // Push score + format before entering multi-track mode, which switches to
+    // the comp-score tab and renders it.
+    pushCompetitionScoreToPanel();
     analysisPanel?.setMultiTrackMode(true);
-    analysisPanel?.setCompetitionScore(state.compScore);
 
     // Update flight info for all tracks
     const info: FlightInfo = {};
     info.pilot = `${state.tracks.length} pilots`;
     if (state.task) {
-      info.task = formatDistance(calculateOptimizedTaskDistance(state.task)).withUnit;
+      // An open-distance task has no route to measure — label the format
+      // (with the field's best distance) instead of a 0.00 km task distance.
+      info.task = isOpenDistanceMode()
+        ? `Open distance · best ${formatDistance(state.compScore?.stats.bestDistance ?? 0).withUnit}`
+        : formatDistance(calculateOptimizedTaskDistance(state.task)).withUnit;
     }
     analysisPanel?.setFlightInfo(info);
   }
@@ -1617,6 +1646,12 @@ async function init(): Promise<void> {
       fixes: track.fixes,
     }));
 
+    // Open distance has no GAP parameters — the score IS the distance.
+    if (isOpenDistanceMode()) {
+      state.compScore = scoreOpenDistance(state.task, pilots);
+      return;
+    }
+
     const gapParams = config.getGAPParameters();
 
     // Compute nominal distance from percentage of task distance
@@ -1624,6 +1659,89 @@ async function init(): Promise<void> {
     gapParams.nominalDistance = calculateOptimizedTaskDistance(state.task) * (nominalPct / 100);
 
     state.compScore = scoreTask(state.task, pilots, gapParams);
+  }
+
+  /** Fix index carried by an event's details, when present. */
+  function eventFixIndex(event: FlightEvent | undefined): number | null {
+    const details = event?.details as { fixIndex?: number } | undefined;
+    return typeof details?.fixIndex === 'number' ? details.fixIndex : null;
+  }
+
+  /**
+   * Per-pilot open-distance display stats: what each pilot actually flew
+   * (track distance and airtime, takeoff → landing) alongside the scored
+   * straight line. Keyed by pilot name for the analysis panel's table.
+   */
+  function computeOpenDistanceStats(): Map<string, OpenDistancePilotStats> | null {
+    if (!state.task) return null;
+
+    const stats = new Map<string, OpenDistancePilotStats>();
+    for (const track of state.tracks) {
+      if (track.fixes.length === 0) continue;
+      const geometry = openDistanceGeometryForFlight(state.task, {
+        pilotName: track.pilotName,
+        trackFile: track.filename,
+        fixes: track.fixes,
+      });
+
+      // Flown distance and airtime span takeoff → landing when detected,
+      // falling back to the whole track (e.g. a logger started mid-flight).
+      const takeoff = track.events.find(e => e.type === 'takeoff');
+      const landing = track.events.find(e => e.type === 'landing');
+      const startIndex = eventFixIndex(takeoff) ?? 0;
+      const endIndex = eventFixIndex(landing) ?? track.fixes.length - 1;
+      const startTime = (takeoff?.time ?? track.fixes[0].time).getTime();
+      const endTime = (landing?.time ?? track.fixes[track.fixes.length - 1].time).getTime();
+
+      stats.set(track.pilotName, {
+        flownTrackDistance: calculateTrackDistance(track.fixes, startIndex, endIndex),
+        airtimeSeconds: endTime > startTime ? (endTime - startTime) / 1000 : null,
+        leftTakeoff: geometry !== null,
+      });
+    }
+    return stats;
+  }
+
+  /**
+   * Push the competition score to the analysis panel, telling it which
+   * scoring format to present (and, for open distance, the per-pilot
+   * flown/airtime stats the score result alone doesn't carry).
+   */
+  function pushCompetitionScoreToPanel(): void {
+    const openDistance = isOpenDistanceMode();
+    analysisPanel?.setCompetitionScoringFormat(openDistance ? 'open_distance' : 'gap');
+    analysisPanel?.setOpenDistanceStats(openDistance ? computeOpenDistanceStats() : null);
+    analysisPanel?.setCompetitionScore(state.compScore);
+  }
+
+  /**
+   * Draw each visible pilot's scored open-distance line on the map (take-off
+   * cylinder exit → furthest fix, annotated with the distance), or clear the
+   * lines when not in open-distance mode. Pilots who never left the take-off
+   * cylinder have nothing to draw.
+   */
+  function updateOpenDistanceMapLines(visibleTracks: LoadedTrack[]): void {
+    if (!state.task || !isOpenDistanceMode()) {
+      mapRenderer?.clearOpenDistanceLines?.();
+      return;
+    }
+
+    const lines: OpenDistanceLine[] = [];
+    for (const track of visibleTracks) {
+      const geometry = openDistanceGeometryForFlight(state.task, {
+        pilotName: track.pilotName,
+        trackFile: track.filename,
+        fixes: track.fixes,
+      });
+      if (!geometry || geometry.distance <= 0) continue;
+      lines.push({
+        pilotName: track.pilotName,
+        origin: { lat: geometry.origin.latitude, lon: geometry.origin.longitude },
+        end: { lat: geometry.furthest.latitude, lon: geometry.furthest.longitude },
+        distance: geometry.distance,
+      });
+    }
+    mapRenderer?.setOpenDistanceLines?.(lines);
   }
 
   /**
@@ -1708,8 +1826,12 @@ async function init(): Promise<void> {
       // the stock defaults, matching the server-side scorer.
       let compGap: Partial<GAPParameters> = {};
       if (compRes.ok) {
-        const comp = (await compRes.json()) as { gap_params: Partial<GAPParameters> | null };
+        const comp = (await compRes.json()) as {
+          gap_params: Partial<GAPParameters> | null;
+          scoring_format?: string | null;
+        };
         compGap = comp.gap_params ?? {};
+        state.compScoringFormat = comp.scoring_format === 'open_distance' ? 'open_distance' : 'gap';
       }
       const { nominalDistance, ...gapParameters } = compGap;
       let nominalDistancePct = 70;
