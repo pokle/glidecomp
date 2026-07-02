@@ -25,6 +25,22 @@ async function init() {
   document.getElementById("settings-loading")!.classList.add("hidden");
   document.getElementById("settings-content")!.classList.remove("hidden");
 
+  // Reveal the Superadmin section only for super admins. /api/admin/whoami is
+  // a cheap check (no DB query) — the actual users list / cache stats are
+  // fetched only when a link is followed.
+  (async () => {
+    try {
+      const res = await fetch("/api/admin/whoami", { credentials: "include" });
+      if (!res.ok) return;
+      const data = (await res.json()) as { is_super_admin: boolean };
+      if (data.is_super_admin) {
+        document.getElementById("superadmin-section")!.classList.remove("hidden");
+      }
+    } catch {
+      /* not signed in / network error — leave the section hidden */
+    }
+  })();
+
   // --- API Key Management ---
 
   const apiKeysList = document.getElementById("api-keys-list")!;

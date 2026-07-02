@@ -29,16 +29,29 @@ async function serve3dvis(
   env: Env,
   taskId: number
 ): Promise<{ body: ArrayBuffer; cache: "HIT" | "MISS" }> {
+  const t0 = performance.now();
   const cacheKey = await compute3dvisCacheKey(taskId, env.DB);
   const cached = await env.glidecomp_scores_cache.get(cacheKey, "arrayBuffer");
-  if (cached) return { body: cached, cache: "HIT" };
+  if (cached) {
+    console.log(
+      `[3dvis] task ${taskId}: cache HIT (${cacheKey}, ${cached.byteLength}B) ` +
+        `in ${(performance.now() - t0).toFixed(0)}ms`
+    );
+    return { body: cached, cache: "HIT" };
+  }
+  console.log(`[3dvis] task ${taskId}: cache MISS (${cacheKey}) — building bundle`);
 
   const bundle = await buildTask3dvisBundle(taskId, env.DB, env.R2);
   const body = bundle.buffer.slice(
     bundle.byteOffset,
     bundle.byteOffset + bundle.byteLength
   ) as ArrayBuffer;
+  const tPutStart = performance.now();
   await env.glidecomp_scores_cache.put(cacheKey, body, { expirationTtl: 604800 });
+  console.log(
+    `[3dvis] task ${taskId}: cached bundle (${(performance.now() - tPutStart).toFixed(0)}ms KV put) — ` +
+      `total serve time ${(performance.now() - t0).toFixed(0)}ms`
+  );
   return { body, cache: "MISS" };
 }
 

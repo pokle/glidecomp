@@ -17,6 +17,10 @@ bucket_name = "glidecomp"
 binding = "AUTH_API"
 service = "auth-api"
 
+[[services]]
+binding = "AIRSCORE_API"
+service = "airscore-api"
+
 [vars]
 # This is the default SQIDS_ALPHABET if not set elsewhere
 # in cloudflare console, or in web/workers/competition-api/.dev.vars

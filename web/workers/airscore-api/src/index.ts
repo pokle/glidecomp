@@ -13,6 +13,7 @@
 
 import { handleTaskRequest } from './handlers/task';
 import { handleTrackRequest } from './handlers/track';
+import { getCacheStats, clearCache } from './cache';
 import type { Env } from './types';
 
 // CORS headers for browser requests
@@ -91,6 +92,18 @@ export default {
     // Handle preflight
     if (request.method === 'OPTIONS') {
       return handleOptions();
+    }
+
+    // Cache admin, called only via service binding from competition-api's
+    // superadmin-gated /api/admin/cache routes — not on the public
+    // `/api/airscore/*` route pattern, so unreachable from the internet.
+    if (url.pathname === '/internal/cache/stats' && request.method === 'GET') {
+      const stats = await getCacheStats(env.AIRSCORE_CACHE);
+      return Response.json(stats);
+    }
+    if (url.pathname === '/internal/cache/clear' && request.method === 'POST') {
+      const cleared = await clearCache(env.AIRSCORE_CACHE);
+      return Response.json({ cleared });
     }
 
     // Only allow GET requests
