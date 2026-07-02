@@ -221,9 +221,7 @@ async function init() {
 
   function switchTab(tab: "tracks" | "tasks") {
     const isTracksActive = tab === "tracks";
-    tabTracks.classList.toggle("tab-btn-active", isTracksActive);
     tabTracks.setAttribute("aria-selected", String(isTracksActive));
-    tabTasks.classList.toggle("tab-btn-active", !isTracksActive);
     tabTasks.setAttribute("aria-selected", String(!isTracksActive));
     panelTracks.classList.toggle("hidden", !isTracksActive);
     panelTasks.classList.toggle("hidden", isTracksActive);

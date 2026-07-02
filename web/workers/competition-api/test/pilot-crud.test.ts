@@ -76,6 +76,7 @@ describe("POST /api/comp/:comp_id/pilot (single create)", () => {
     const data = (await res.json()) as Record<string, unknown>;
     expect(data.linked).toBe(true);
     expect(data.linked_email).toBe("pilot3@test.com");
+    expect(data.linked_username).toBe("pilot3");
   });
 
   test("does not auto-link on name-only match (admin resolves manually)", async () => {
@@ -281,8 +282,9 @@ describe("GET /api/comp/:comp_id/pilot", () => {
 
   // SEC-15 regression: the pilot list endpoint is publicly readable for
   // non-test comps, but PII (admin-entered email, Better Auth linked email,
-  // driver_contact phone) must never be returned to non-admin callers.
-  test("redacts PII (email, linked_email, driver_contact) for anonymous callers", async () => {
+  // linked username, driver_contact phone) must never be returned to
+  // non-admin callers.
+  test("redacts PII (email, linked_email, linked_username, driver_contact) for anonymous callers", async () => {
     // Seed an existing user-3 / pilot-3 row so registration resolves a
     // `linked_email` — exercising the worst-case PII leak path.
     await env.DB.prepare(
@@ -314,6 +316,7 @@ describe("GET /api/comp/:comp_id/pilot", () => {
     // PII fields must be redacted to null
     expect(p.email).toBeNull();
     expect(p.linked_email).toBeNull();
+    expect(p.linked_username).toBeNull();
     expect(p.driver_contact).toBeNull();
 
     // Non-PII fields stay visible for transparency
