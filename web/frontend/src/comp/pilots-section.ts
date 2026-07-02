@@ -26,6 +26,7 @@ interface CompPilot {
   comp_pilot_id: string;
   linked: boolean;
   linked_email: string | null;
+  linked_username: string | null;
   name: string;
   email: string | null;
   civl_id: string | null;
@@ -164,6 +165,7 @@ function renderTable(): void {
     tr.className = "border-b border-border/30";
 
     tr.appendChild(nameCell(p));
+    tr.appendChild(accountCell(p));
     tr.appendChild(textCell(p.civl_id));
     tr.appendChild(textCell(p.safa_id));
     tr.appendChild(textCell(p.pilot_class));
@@ -176,24 +178,24 @@ function renderTable(): void {
 
 function nameCell(p: CompPilot): HTMLTableCellElement {
   const td = document.createElement("td");
-  td.className = "py-1.5 pr-3";
-  const name = document.createElement("span");
-  name.textContent = p.name;
-  name.className = "font-medium";
-  const icon = document.createElement("span");
-  icon.className = "ml-1.5 text-xs";
-  if (p.linked) {
-    icon.textContent = "🔗";
-    icon.title = p.linked_email
-      ? `Linked to ${p.linked_email}`
-      : "Linked to GlideComp account";
-  } else {
-    icon.textContent = "⚠";
-    icon.title = "Not linked to any GlideComp account";
-    icon.className += " text-muted-foreground/50";
+  td.className = "py-1.5 pr-3 font-medium";
+  td.textContent = p.name;
+  return td;
+}
+
+/** Shows the linked GlideComp account's username, linking to their public
+ * profile page. Blank if the pilot isn't linked, or (for non-admin viewers)
+ * the linked username is redacted. */
+function accountCell(p: CompPilot): HTMLTableCellElement {
+  const td = document.createElement("td");
+  td.className = "py-1.5 pr-3 text-muted-foreground";
+  if (p.linked && p.linked_username) {
+    const a = document.createElement("a");
+    a.href = `/u/${encodeURIComponent(p.linked_username)}/`;
+    a.className = "text-primary hover:underline";
+    a.textContent = `@${p.linked_username}`;
+    td.appendChild(a);
   }
-  td.appendChild(name);
-  td.appendChild(icon);
   return td;
 }
 
