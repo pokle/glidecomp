@@ -362,14 +362,24 @@ export class ReplayViewer {
     let n = 0;
     for (const m of g.members) {
       const s = samples[m];
-      if (!s?.active) continue;
+      if (!s?.active || s.landed) continue;
       x += s.x;
       y += s.y;
       z += s.z;
       n++;
     }
     if (n === 0) return null;
-    return { pilot: -1, active: true, x: x / n, y: y / n, z: z / n, altMsl: 0, climb: 0, name: '' };
+    return {
+      pilot: -1,
+      active: true,
+      landed: false,
+      x: x / n,
+      y: y / n,
+      z: z / n,
+      altMsl: 0,
+      climb: 0,
+      name: '',
+    };
   }
 
   resetCamera(): void {

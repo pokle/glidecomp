@@ -162,7 +162,7 @@ export class GaggleLayer {
       let cy = 0;
       for (const m of members) {
         const s = samples[m];
-        if (!s || !s.active) continue;
+        if (!s || !s.active || s.landed) continue;
         this.scratch.push({ x: s.x, z: s.z });
         cy += s.y;
       }
