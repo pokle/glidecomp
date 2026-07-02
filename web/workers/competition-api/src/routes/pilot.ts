@@ -90,12 +90,13 @@ interface CompPilotRow {
 
 function serializeCompPilot(
   alphabet: string,
-  row: CompPilotRow & { linked_email?: string | null }
+  row: CompPilotRow & { linked_email?: string | null; linked_username?: string | null }
 ) {
   return {
     comp_pilot_id: encodeId(alphabet, row.comp_pilot_id),
     linked: row.pilot_id !== null,
     linked_email: row.linked_email ?? null,
+    linked_username: row.linked_username ?? null,
     name: row.registered_pilot_name,
     email: row.registered_pilot_email,
     civl_id: row.registered_pilot_civl_id,
@@ -125,11 +126,12 @@ function serializeCompPilot(
  */
 function serializeCompPilotPublic(
   alphabet: string,
-  row: CompPilotRow & { linked_email?: string | null }
+  row: CompPilotRow & { linked_email?: string | null; linked_username?: string | null }
 ) {
   const full = serializeCompPilot(alphabet, row);
   full.email = null;
   full.linked_email = null;
+  full.linked_username = null;
   full.driver_contact = null;
   return full;
 }
@@ -234,17 +236,19 @@ function buildUpdateValues(
 async function fetchCompPilot(
   db: D1Database,
   compPilotId: number
-): Promise<(CompPilotRow & { linked_email: string | null }) | null> {
+): Promise<
+  (CompPilotRow & { linked_email: string | null; linked_username: string | null }) | null
+> {
   return db
     .prepare(
-      `SELECT ${COMP_PILOT_COLUMNS.join(", ")}, u.email AS linked_email
+      `SELECT ${COMP_PILOT_COLUMNS.join(", ")}, u.email AS linked_email, u.username AS linked_username
        FROM comp_pilot cp
        LEFT JOIN pilot p ON cp.pilot_id = p.pilot_id
        LEFT JOIN "user" u ON p.user_id = u.id
        WHERE cp.comp_pilot_id = ?`
     )
     .bind(compPilotId)
-    .first<CompPilotRow & { linked_email: string | null }>();
+    .first<CompPilotRow & { linked_email: string | null; linked_username: string | null }>();
 }
 
 function serializeProfile(row: ProfileRow | null, fallbackName: string) {
@@ -405,7 +409,7 @@ export const pilotRoutes = new Hono<HonoEnv>()
       }
 
       const pilots = await c.env.DB.prepare(
-        `SELECT ${COMP_PILOT_COLUMNS.join(", ")}, u.email AS linked_email
+        `SELECT ${COMP_PILOT_COLUMNS.join(", ")}, u.email AS linked_email, u.username AS linked_username
          FROM comp_pilot cp
          LEFT JOIN pilot p ON cp.pilot_id = p.pilot_id
          LEFT JOIN "user" u ON p.user_id = u.id
@@ -413,7 +417,7 @@ export const pilotRoutes = new Hono<HonoEnv>()
          ORDER BY cp.registered_pilot_name COLLATE NOCASE ASC`
       )
         .bind(compId)
-        .all<CompPilotRow & { linked_email: string | null }>();
+        .all<CompPilotRow & { linked_email: string | null; linked_username: string | null }>();
 
       const serialize = isAdmin ? serializeCompPilot : serializeCompPilotPublic;
       return c.json({
@@ -745,7 +749,7 @@ export const pilotRoutes = new Hono<HonoEnv>()
 
       // Return the new state of all pilots in the comp.
       const after = await c.env.DB.prepare(
-        `SELECT ${COMP_PILOT_COLUMNS.join(", ")}, u.email AS linked_email
+        `SELECT ${COMP_PILOT_COLUMNS.join(", ")}, u.email AS linked_email, u.username AS linked_username
          FROM comp_pilot cp
          LEFT JOIN pilot p ON cp.pilot_id = p.pilot_id
          LEFT JOIN "user" u ON p.user_id = u.id
@@ -753,7 +757,7 @@ export const pilotRoutes = new Hono<HonoEnv>()
          ORDER BY cp.registered_pilot_name COLLATE NOCASE ASC`
       )
         .bind(compId)
-        .all<CompPilotRow & { linked_email: string | null }>();
+        .all<CompPilotRow & { linked_email: string | null; linked_username: string | null }>();
 
       return c.json({
         pilots: after.results.map((p) => serializeCompPilot(alphabet, p)),
