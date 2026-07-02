@@ -19,6 +19,15 @@ export interface LoadedTrack {
 
 export type MapProviderType = 'mapbox' | 'leaflet';
 
+/** One pilot's scored open-distance line: take-off cylinder exit → furthest fix */
+export interface OpenDistanceLine {
+    pilotName: string;
+    origin: { lat: number; lon: number };
+    end: { lat: number; lon: number };
+    /** Scored straight-line distance in metres (drawn as the line's label) */
+    distance: number;
+}
+
 /**
  * Interaction mode for the map. Controls which click/hover handlers are active.
  * - 'view': default mode — track clicks, turnpoint clicks, hover cursors all active
@@ -141,6 +150,15 @@ export interface MapProvider {
 
     /** Show pilot name in HUD */
     showTrackPointHUDWithName?(fixIndex: number, pilotName: string): void;
+
+    // ── Open distance support ──
+
+    /** Draw scored open-distance lines (take-off exit → furthest fix), each
+     *  annotated with its distance. Replaces any previously drawn lines. */
+    setOpenDistanceLines?(lines: OpenDistanceLine[]): void;
+
+    /** Clear all open-distance lines */
+    clearOpenDistanceLines?(): void;
 }
 
 /**
