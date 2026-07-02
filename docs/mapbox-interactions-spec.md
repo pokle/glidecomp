@@ -46,6 +46,16 @@ Track is rendered as individual per-segment LineString features (one per consecu
 
 - **Fit bounds** — on track load, map fits to track bounding box with 50px padding, 1s animation
 
+## Multi-Track (competition view)
+
+When multiple tracks are loaded (competition mode), single-track layers are hidden and every visible pilot's track renders at once.
+
+- **Track lines** (`multi-track-line` over `multi-track-outline`): one LineString per track, colored by position in the *visible* set via `getRankColor()` — bright orange `#ff8c00` for the leader interpolating to grey `#888888` for last. Outline black, opacity 0.4. Zoom-adaptive widths (line 2–4 px, outline 4–6 px).
+- **Pilot name labels** (`multi-track-name-labels`): each pilot's name at their landing point (the detected landing event's fix, else the final fix), so tracks are attributable when the whole field is on screen. Text size 13, anchored left of the point with offset `[0.6, 0]`, colored to match the pilot's track color, white halo 2px. Mapbox symbol collision hides overlapping names until zoomed in.
+- **Interactions**: click/tap a track → `onMultiTrackClick(trackIndex, fixIndex)` → HUD with the pilot's name; hover → pointer cursor.
+- **Fit bounds** to all tracks with 50px padding, 1s animation.
+- In 3D mode, tracks render as Threebox polylines with the same rank colors (no name labels).
+
 ## Task
 
 - **Optimized route line**
@@ -217,9 +227,10 @@ When enabled via the "Show Track Metrics" command palette option, displays glide
 11. `task-segment-labels` — leg distance labels
 12. `open-distance-line` — dashed scored open-distance line per pilot
 13. `open-distance-labels` — distance label along each open-distance line
-14. `annotation-strokes-layer` — committed annotation strokes
-15. `annotation-live-layer` — in-progress annotation stroke preview
-16. `threebox-layer` — 3D custom rendering layer (Threebox)
+14. `multi-track-name-labels` — pilot name at each track's landing point
+15. `annotation-strokes-layer` — committed annotation strokes
+16. `annotation-live-layer` — in-progress annotation stroke preview
+17. `threebox-layer` — 3D custom rendering layer (Threebox)
 
 ## 3D Drone Follow Camera
 
