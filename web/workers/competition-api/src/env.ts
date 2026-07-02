@@ -2,6 +2,7 @@ export type Env = {
   DB: D1Database;
   R2: R2Bucket;
   AUTH_API: Fetcher;
+  AIRSCORE_API: Fetcher;
   SQIDS_ALPHABET: string;
   glidecomp_scores_cache: KVNamespace;
 };

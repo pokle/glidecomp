@@ -61,7 +61,7 @@ export default defineConfig(async () => {
         miniflare: {
           bindings: { TEST_MIGRATIONS: migrations, SAMPLE_TASK_XCTSK, SAMPLE_IGC_FILES },
           r2Buckets: ["R2"],
-          kvNamespaces: ["SCORES_CACHE"],
+          kvNamespaces: ["glidecomp_scores_cache"],
           // Allow access to the root directory for samples
           unsafeNodeModules: ["node:fs", "node:path"],
           serviceBindings: {
@@ -76,6 +76,24 @@ export default defineConfig(async () => {
                   ? TEST_USERS[userId] ?? null
                   : null;
               return Response.json({ user });
+            },
+            // Mock AIRSCORE_API: fixed stats, matching the real worker's
+            // /internal/cache/stats and /internal/cache/clear contract
+            // (see web/workers/airscore-api/src/cache.ts). Deliberately
+            // stateless — cache.test.ts asserts on these fixed numbers
+            // rather than simulating real KV storage.
+            AIRSCORE_API(request: Request): Response {
+              const url = new URL(request.url);
+              if (url.pathname === "/internal/cache/stats") {
+                return Response.json({
+                  item_count: 3,
+                  by_prefix: { "Task results": 2, "Track files": 1 },
+                });
+              }
+              if (url.pathname === "/internal/cache/clear") {
+                return Response.json({ cleared: 3 });
+              }
+              return new Response("Not found", { status: 404 });
             },
           },
         },

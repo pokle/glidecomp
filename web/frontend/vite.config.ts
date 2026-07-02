@@ -109,6 +109,8 @@ export default defineConfig({
             req.url = '/replay.html';
           } else if (req.url === '/admin/users' || req.url === '/admin/users/') {
             req.url = '/admin-users.html';
+          } else if (req.url === '/admin/cache' || req.url === '/admin/cache/') {
+            req.url = '/admin-cache.html';
           }
           next();
         });
@@ -138,6 +140,7 @@ export default defineConfig({
         kitchensink: resolve(__dirname, 'src/kitchensink.html'),
         replay: resolve(__dirname, 'src/replay.html'),
         'admin-users': resolve(__dirname, 'src/admin-users.html'),
+        'admin-cache': resolve(__dirname, 'src/admin-cache.html'),
       },
     },
   },

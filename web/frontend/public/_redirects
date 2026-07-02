@@ -7,3 +7,4 @@
 /settings  /settings  200
 /theme-editor  /theme-editor  200
 /admin/users  /admin-users  200
+/admin/cache  /admin-cache  200
