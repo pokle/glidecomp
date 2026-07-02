@@ -101,6 +101,73 @@ function resolveTakeoffExit(
 }
 
 /**
+ * Whether a task is an open-distance task: a single TAKEOFF turnpoint (the
+ * geometry the competition backend enforces for open-distance comps), or a
+ * task that declares itself `OPEN-DISTANCE`. Lets the UI pick the right
+ * scoring treatment from the task alone, without competition context.
+ */
+export function isOpenDistanceTask(task: XCTask): boolean {
+  if (task.taskType === 'OPEN-DISTANCE') return true;
+  return task.turnpoints.length === 1 && task.turnpoints[0].type === 'TAKEOFF';
+}
+
+/**
+ * The two endpoints of one flight's scored open-distance line, plus the
+ * distance between them. `origin` is the take-off cylinder exit (or the first
+ * fix when the track started outside the cylinder); `furthest` is the fix the
+ * scored distance is measured to.
+ */
+export interface OpenDistanceGeometry {
+  origin: { latitude: number; longitude: number; fixIndex: number };
+  furthest: { latitude: number; longitude: number; fixIndex: number };
+  /** Straight-line distance origin → furthest, metres. */
+  distance: number;
+}
+
+/**
+ * Resolve the scored open-distance geometry for one flight: the take-off exit
+ * origin and the furthest fix reached at or after it. Returns null for a
+ * pilot who never leaves the take-off cylinder (scored 0, nothing to draw).
+ *
+ * This is the explainable/drawable form of {@link openDistanceForFlight} —
+ * same origin and distance, but keeping both endpoints so the UI can render
+ * the scored line and annotate it.
+ */
+export function openDistanceGeometryForFlight(
+  task: XCTask,
+  pilot: PilotFlight,
+): OpenDistanceGeometry | null {
+  const origin = resolveTakeoffExit(task, pilot.fixes);
+  if (!origin) return null;
+
+  let furthest = 0;
+  let furthestIndex = origin.fromFixIndex;
+  for (let i = origin.fromFixIndex; i < pilot.fixes.length; i++) {
+    const fix = pilot.fixes[i];
+    const d = andoyerDistance(origin.latitude, origin.longitude, fix.latitude, fix.longitude);
+    if (d > furthest) {
+      furthest = d;
+      furthestIndex = i;
+    }
+  }
+
+  const furthestFix = pilot.fixes[furthestIndex];
+  return {
+    origin: {
+      latitude: origin.latitude,
+      longitude: origin.longitude,
+      fixIndex: origin.fromFixIndex,
+    },
+    furthest: {
+      latitude: furthestFix.latitude,
+      longitude: furthestFix.longitude,
+      fixIndex: furthestIndex,
+    },
+    distance: furthest,
+  };
+}
+
+/**
  * Open distance (metres) for one flight: the furthest straight-line distance
  * from the take-off exit origin to any fix flown at or after that exit.
  * Returns 0 for a pilot who never leaves the take-off cylinder.
@@ -110,16 +177,7 @@ function resolveTakeoffExit(
  * (mirrors {@link toFlightScoringData} for GAP).
  */
 export function openDistanceForFlight(task: XCTask, pilot: PilotFlight): number {
-  const origin = resolveTakeoffExit(task, pilot.fixes);
-  if (!origin) return 0;
-
-  let furthest = 0;
-  for (let i = origin.fromFixIndex; i < pilot.fixes.length; i++) {
-    const fix = pilot.fixes[i];
-    const d = andoyerDistance(origin.latitude, origin.longitude, fix.latitude, fix.longitude);
-    if (d > furthest) furthest = d;
-  }
-  return furthest;
+  return openDistanceGeometryForFlight(task, pilot)?.distance ?? 0;
 }
 
 /**
