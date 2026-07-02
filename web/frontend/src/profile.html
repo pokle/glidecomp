@@ -101,6 +101,20 @@
             </div>
           </div>
 
+          <fieldset class="space-y-3 border border-border/50 rounded-lg p-4">
+            <legend class="text-xs font-medium text-muted-foreground uppercase tracking-wider px-1">Emergency contact (optional)</legend>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label for="profile-emergency-name" class="text-xs font-medium block mb-1">Name</label>
+                <input id="profile-emergency-name" type="text" class="input w-full text-sm" maxlength="128">
+              </div>
+              <div>
+                <label for="profile-emergency-phone" class="text-xs font-medium block mb-1">Phone</label>
+                <input id="profile-emergency-phone" type="tel" class="input w-full text-sm" maxlength="128" placeholder="+61 400 000 000">
+              </div>
+            </div>
+          </fieldset>
+
           <div id="profile-status" class="hidden rounded-md px-3 py-2 text-sm"></div>
 
           <div class="flex justify-end gap-2">

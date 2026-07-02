@@ -119,6 +119,8 @@ export const updatePilotSchema = z.object({
   fai_id: idField,
   phone: z.string().max(MAX_TEXT).nullable().optional(),
   glider: z.string().max(MAX_TEXT).nullable().optional(),
+  emergency_contact_name: z.string().max(MAX_TEXT).nullable().optional(),
+  emergency_contact_phone: z.string().max(MAX_TEXT).nullable().optional(),
 });
 
 // ── Track validators ──
