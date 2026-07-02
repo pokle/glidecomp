@@ -33,6 +33,8 @@ const PROFILE_COLUMNS = [
   "fai_id",
   "phone",
   "glider",
+  "emergency_contact_name",
+  "emergency_contact_phone",
 ] as const;
 
 type ProfileRow = {
@@ -258,6 +260,8 @@ function serializeProfile(row: ProfileRow | null, fallbackName: string) {
       fai_id: null,
       phone: null,
       glider: null,
+      emergency_contact_name: null,
+      emergency_contact_phone: null,
     };
   }
   return {
@@ -271,6 +275,8 @@ function serializeProfile(row: ProfileRow | null, fallbackName: string) {
     fai_id: row.fai_id ?? null,
     phone: row.phone ?? null,
     glider: row.glider ?? null,
+    emergency_contact_name: row.emergency_contact_name ?? null,
+    emergency_contact_phone: row.emergency_contact_phone ?? null,
   };
 }
 

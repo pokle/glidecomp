@@ -14,6 +14,8 @@ interface PilotProfile {
   fai_id: string | null;
   phone: string | null;
   glider: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
 }
 
 const PROFILE_FIELDS = [
@@ -27,6 +29,8 @@ const PROFILE_FIELDS = [
   { key: "fai_id", el: "profile-fai" },
   { key: "phone", el: "profile-phone" },
   { key: "glider", el: "profile-glider" },
+  { key: "emergency_contact_name", el: "profile-emergency-name" },
+  { key: "emergency_contact_phone", el: "profile-emergency-phone" },
 ] as const;
 
 async function init() {
