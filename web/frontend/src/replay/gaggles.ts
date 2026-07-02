@@ -55,7 +55,9 @@ export function detectGaggles(
     const states = [];
     for (let i = 0; i < nPilots; i++) {
       const s = samplePilot(tracks, i, t, alt0);
-      if (s.active) states.push({ pilot: i, x: s.x, y: s.y, z: s.z });
+      // landed pilots hold their final position for the markers, but pilots
+      // parked on the ground must not cluster into gaggles
+      if (s.active && !s.landed) states.push({ pilot: i, x: s.x, y: s.y, z: s.z });
     }
     frames.push({ t, states });
   }

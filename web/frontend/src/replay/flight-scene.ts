@@ -36,6 +36,8 @@ export const VARIO_MAX = 4;
 export interface MarkerSample {
   pilot: number;
   active: boolean;
+  /** True once the pilot has landed — the marker is held at the landing spot. */
+  landed: boolean;
   x: number;
   y: number;
   z: number;
@@ -186,6 +188,7 @@ export class FlightScene {
       this.samplesOut.push({
         pilot: i,
         active: false,
+        landed: false,
         x: 0,
         y: 0,
         z: 0,
@@ -396,6 +399,7 @@ export class FlightScene {
       const out = this.samplesOut[i];
       if (!s.active) {
         out.active = false;
+        out.landed = false;
         out.x = out.y = out.z = 0;
         this.dummy.scale.set(0, 0, 0);
         this.dummy.position.set(0, -1e9, 0);
@@ -413,6 +417,7 @@ export class FlightScene {
       this.dummy.updateMatrix();
       this.markers.setMatrixAt(i, this.dummy.matrix);
       out.active = true;
+      out.landed = s.landed;
       out.x = s.x;
       out.y = wy;
       out.z = s.z;
