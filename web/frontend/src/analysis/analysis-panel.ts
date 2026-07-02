@@ -64,6 +64,8 @@ export interface AnalysisPanel {
   setMultiTrackMode(enabled: boolean): void;
   /** Set competition score result for multi-track scoring */
   setCompetitionScore(result: TaskScoreResult | null): void;
+  /** Pre-select which pilots' tracks show on the map (null = all); fires onPilotSelectionChanged */
+  setPilotSelection(pilots: Set<string> | null): void;
 }
 
 /**
@@ -1710,6 +1712,14 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       if (currentTab === 'comp-score') {
         renderCompetitionScore();
       }
+    },
+
+    setPilotSelection(pilots: Set<string> | null) {
+      selectedPilots = pilots;
+      if (currentTab === 'comp-score') {
+        renderCompetitionScore();
+      }
+      options.onPilotSelectionChanged?.(selectedPilots);
     },
 
   };
