@@ -145,11 +145,31 @@ export const scoreRoutes = new Hono<HonoEnv>()
         .bind(compId)
         .all<{ task_id: number; name: string; task_date: string }>();
 
+      // Team assignments are embedded in the response (for the Teams view), so
+      // they must also be part of the hashed cache state — a team change
+      // doesn't touch any task score cache key.
+      const teamRows = await c.env.DB.prepare(
+        `SELECT comp_pilot_id, team_name FROM comp_pilot
+         WHERE comp_id = ? ORDER BY comp_pilot_id`
+      )
+        .bind(compId)
+        .all<{ comp_pilot_id: number; team_name: string | null }>();
+      const teamByPilot = new Map(
+        teamRows.results.map((r) => [
+          encodeId(alphabet, r.comp_pilot_id),
+          r.team_name,
+        ])
+      );
+
       // Compute cache key for comp scores: hash of all task score cache keys
+      // plus the team assignments
       const taskCacheKeys = await Promise.all(
         tasks.results.map((t) => computeScoreCacheKey(t.task_id, c.env.DB))
       );
-      const compStateString = taskCacheKeys.join("|");
+      const compStateString = [
+        ...taskCacheKeys,
+        ...teamRows.results.map((r) => `${r.comp_pilot_id}=${r.team_name ?? ""}`),
+      ].join("|");
       const compHashBuffer = await crypto.subtle.digest(
         "SHA-256",
         new TextEncoder().encode(compStateString)
@@ -158,7 +178,8 @@ export const scoreRoutes = new Hono<HonoEnv>()
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("")
         .slice(0, 16);
-      const compCacheKey = `compscore:v2:${compId}:${compHex}`;
+      // v3: added team_name per pilot (and team assignments to the hash).
+      const compCacheKey = `compscore:v3:${compId}:${compHex}`;
 
       const cachedComp = await c.env.glidecomp_scores_cache.get(compCacheKey, "json");
       if (cachedComp) {
@@ -208,6 +229,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
       type PilotTotals = {
         pilot_name: string;
         comp_pilot_id: string;
+        team_name: string | null;
         total_score: number;
         tasks: Array<{ task_id: string; task_date: string; score: number; rank: number }>;
       };
@@ -224,6 +246,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
               classStandings[cls.pilot_class][pilot.comp_pilot_id] = {
                 pilot_name: pilot.pilot_name,
                 comp_pilot_id: pilot.comp_pilot_id,
+                team_name: teamByPilot.get(pilot.comp_pilot_id) ?? null,
                 total_score: 0,
                 tasks: [],
               };
