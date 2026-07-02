@@ -1,14 +1,16 @@
 /**
  * Pilots section on the comp detail page.
  *
- * Renders a read-only table of registered pilots and — for admins — wires up
- * three actions: Edit as text (TSV modal), Import CSV (preview modal), and
- * Export CSV. Full editable table view is deferred to Iteration 8e.
+ * Renders a read-only table of registered pilots and — for admins — a single
+ * Edit action that opens a Tabulator-based editable table dialog with CSV
+ * import/export built in.
  *
  * All mutations funnel through POST /api/comp/:comp_id/pilot/bulk so the
  * backend's diff-and-write logic (from Iteration 8b) is the single source of
  * truth for inserts / updates / deletes.
  */
+
+import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
 
 import { api } from "./api";
 
@@ -17,8 +19,8 @@ import { api } from "./api";
 /**
  * The full shape a `comp_pilot` row takes when rendered in the UI. Matches
  * the server serialiser in routes/pilot.ts exactly — any field the server
- * returns is mirrored here so round-trips through the edit-as-text dialog
- * lose nothing.
+ * returns is mirrored here so round-trips through the edit dialog lose
+ * nothing.
  */
 interface CompPilot {
   comp_pilot_id: string;
@@ -40,10 +42,10 @@ interface CompPilot {
   first_start_order: number | null;
 }
 
-/** Column metadata for TSV/CSV serialisation. Kept as a single source of truth. */
+/** Column metadata for CSV serialisation. Kept as a single source of truth. */
 interface ColumnDef {
   key: keyof CompPilot;
-  /** External name used in TSV/CSV headers and in user-facing hints. */
+  /** External name used in CSV headers and in user-facing hints. */
   header: string;
   /** Accepted aliases when parsing an imported header row (case-insensitive). */
   aliases?: string[];
@@ -64,6 +66,9 @@ const COLUMNS: ColumnDef[] = [
   { key: "driver_contact", header: "driver", aliases: ["driver_contact"] },
   { key: "glider", header: "glider" },
 ];
+
+/** Maximum pilots per comp — mirrors MAX_PILOTS_PER_COMP on the server. */
+const MAX_PILOTS = 250;
 
 /** Request body sent to POST /api/comp/:comp_id/pilot/bulk. */
 interface BulkPilotRow {
@@ -94,8 +99,8 @@ let currentCompSlug = "pilots";
 
 /**
  * Wire up the Pilots section. Loads pilots for the comp and renders the
- * read-only table. If the caller is a comp admin, the Edit/Import/Export
- * buttons are revealed and their handlers attached.
+ * read-only table. If the caller is a comp admin, the Edit button is
+ * revealed and its handler attached.
  */
 export async function setupPilotsSection(
   compId: string,
@@ -109,7 +114,7 @@ export async function setupPilotsSection(
 
   if (isAdmin) {
     document.getElementById("pilots-admin-actions")!.classList.remove("hidden");
-    wireAdminActions();
+    document.getElementById("pilots-edit-btn")!.addEventListener("click", openEditDialog);
   }
 
   await loadPilots();
@@ -207,26 +212,317 @@ function renderError(): void {
   empty.querySelector("p")!.textContent = "Could not load pilots";
 }
 
-// ── Admin actions ────────────────────────────────────────────────────────────
+// ── Edit dialog (Tabulator grid) ─────────────────────────────────────────────
 
-function wireAdminActions(): void {
-  document.getElementById("pilots-export-btn")!.addEventListener("click", exportCsv);
-  document.getElementById("pilots-edit-text-btn")!.addEventListener("click", openTextDialog);
-  document.getElementById("pilots-import-btn")!.addEventListener("click", openImportDialog);
+/**
+ * One row in the edit grid: the editable CSV columns plus the original
+ * comp_pilot_id (absent for newly added / unmatched imported rows) so the
+ * bulk endpoint treats existing rows as updates rather than delete+create.
+ */
+interface ParsedRow {
+  comp_pilot_id?: string;
+  name: string;
+  email: string | null;
+  civl_id: string | null;
+  safa_id: string | null;
+  ushpa_id: string | null;
+  bhpa_id: string | null;
+  dhv_id: string | null;
+  ffvl_id: string | null;
+  fai_id: string | null;
+  pilot_class: string;
+  team_name: string | null;
+  driver_contact: string | null;
+  glider: string | null;
+}
+
+let editTable: Tabulator | null = null;
+
+async function openEditDialog(): Promise<void> {
+  // Tabulator is admin-only, so it's lazy-loaded to keep it (and its CSS)
+  // out of the comp-detail chunk every visitor downloads.
+  const [{ TabulatorFull }] = await Promise.all([
+    import("tabulator-tables"),
+    import("tabulator-tables/dist/css/tabulator_simple.min.css"),
+    import("./pilots-grid.css"),
+  ]);
+
+  const dialog = document.getElementById("pilots-edit-dialog") as HTMLDialogElement;
+  const gridEl = document.getElementById("pilots-grid")!;
+  const saveBtn = document.getElementById("pilots-edit-save") as HTMLButtonElement;
+  const importInput = document.getElementById("pilots-edit-import-file") as HTMLInputElement;
+
+  hideEditStatus();
+  hideEditErrors();
+  saveBtn.disabled = false;
+  importInput.value = "";
+
+  // Tabulator measures its container, so the dialog must be visible first.
+  dialog.showModal();
+
+  editTable = new TabulatorFull(gridEl, {
+    data: currentPilots.map(pilotToGridRow),
+    columns: gridColumns(),
+    layout: "fitDataStretch",
+    height: "100%",
+    placeholder: "No pilots yet — use Add row, or Import CSV",
+    // Editor popups (class list) must render inside the modal dialog,
+    // otherwise the <dialog> paints over them.
+    popupContainer: "#pilots-edit-dialog",
+  });
+
+  document.getElementById("pilots-edit-add-row")!.onclick = () => {
+    editTable?.addRow(emptyGridRow());
+  };
+
+  document.getElementById("pilots-edit-import")!.onclick = () => importInput.click();
+  importInput.onchange = () => importCsvIntoGrid(importInput);
+
+  document.getElementById("pilots-edit-export")!.onclick = () => {
+    exportCsv(gridRows());
+  };
+
+  document.getElementById("pilots-edit-cancel")!.onclick = () => dialog.close();
+
+  saveBtn.onclick = async () => {
+    const { payload, errors } = validateGridRows(gridRows());
+    if (errors.length > 0) {
+      showEditErrors(errors);
+      return;
+    }
+    hideEditErrors();
+    saveBtn.disabled = true;
+    const error = await submitBulk(payload);
+    saveBtn.disabled = false;
+    if (error === null) {
+      dialog.close();
+      await loadPilots();
+    } else {
+      showEditErrors([error]);
+    }
+  };
+
+  dialog.onclose = () => {
+    editTable?.destroy();
+    editTable = null;
+  };
+}
+
+function gridColumns(): ColumnDefinition[] {
+  const remove: ColumnDefinition = {
+    title: "",
+    width: 36,
+    hozAlign: "center",
+    headerSort: false,
+    frozen: true,
+    formatter: () =>
+      '<span class="text-muted-foreground cursor-pointer" title="Remove pilot">✕</span>',
+    cellClick: (_e: UIEvent, cell: CellComponent) => {
+      cell.getRow().delete();
+    },
+  };
+
+  const dataCols = COLUMNS.map((c): ColumnDefinition => {
+    const def: ColumnDefinition = {
+      title: c.header,
+      field: c.key,
+      editor: "input",
+      // Select the existing value on edit so typing replaces it (matches
+      // spreadsheet behaviour; without this, mobile taps append text).
+      editorParams: { selectContents: true },
+      minWidth: 90,
+    };
+    if (c.key === "name") {
+      def.frozen = true;
+      def.minWidth = 140;
+    }
+    if (c.key === "pilot_class") {
+      def.editor = "list";
+      def.editorParams = { values: currentCompClasses };
+    }
+    return def;
+  });
+
+  return [remove, ...dataCols];
+}
+
+function pilotToGridRow(p: CompPilot): ParsedRow {
+  return {
+    comp_pilot_id: p.comp_pilot_id,
+    name: p.name,
+    email: p.email,
+    civl_id: p.civl_id,
+    safa_id: p.safa_id,
+    ushpa_id: p.ushpa_id,
+    bhpa_id: p.bhpa_id,
+    dhv_id: p.dhv_id,
+    ffvl_id: p.ffvl_id,
+    fai_id: p.fai_id,
+    pilot_class: p.pilot_class,
+    team_name: p.team_name,
+    driver_contact: p.driver_contact,
+    glider: p.glider,
+  };
+}
+
+function emptyGridRow(): ParsedRow {
+  return {
+    name: "",
+    email: null,
+    civl_id: null,
+    safa_id: null,
+    ushpa_id: null,
+    bhpa_id: null,
+    dhv_id: null,
+    ffvl_id: null,
+    fai_id: null,
+    pilot_class: currentCompClasses.length === 1 ? currentCompClasses[0] : "",
+    team_name: null,
+    driver_contact: null,
+    glider: null,
+  };
+}
+
+/** Current grid contents, normalised (trimmed, empty optionals → null). */
+function gridRows(): ParsedRow[] {
+  if (!editTable) return [];
+  return (editTable.getData() as Record<string, unknown>[]).map((raw) => {
+    const row = { ...emptyGridRow() };
+    if (typeof raw.comp_pilot_id === "string" && raw.comp_pilot_id) {
+      row.comp_pilot_id = raw.comp_pilot_id;
+    }
+    for (const c of COLUMNS) {
+      const value =
+        raw[c.key] === null || raw[c.key] === undefined ? "" : String(raw[c.key]).trim();
+      if (c.key === "name" || c.key === "pilot_class") {
+        (row as unknown as Record<string, unknown>)[c.key] = value;
+      } else {
+        (row as unknown as Record<string, unknown>)[c.key] = value || null;
+      }
+    }
+    return row;
+  });
+}
+
+/**
+ * Validate grid rows before save. Rows that are completely empty (e.g. an
+ * unused "Add row") are silently dropped; anything with content needs a name
+ * and a valid class.
+ */
+function validateGridRows(rows: ParsedRow[]): {
+  payload: BulkPilotRow[];
+  errors: string[];
+} {
+  const errors: string[] = [];
+  const kept: ParsedRow[] = [];
+
+  rows.forEach((row, i) => {
+    const hasContent = COLUMNS.some((c) => {
+      const v = (row as unknown as Record<string, unknown>)[c.key];
+      return v !== null && v !== undefined && String(v) !== "";
+    });
+    if (!hasContent) return;
+
+    if (!row.name) {
+      errors.push(`Row ${i + 1}: name is required`);
+      return;
+    }
+    if (!row.pilot_class) {
+      errors.push(`Row ${i + 1} (${row.name}): class is required`);
+    } else if (!currentCompClasses.includes(row.pilot_class)) {
+      errors.push(
+        `Row ${i + 1} (${row.name}): class "${row.pilot_class}" is not valid for this competition (valid: ${currentCompClasses.join(", ")})`
+      );
+    }
+    kept.push(row);
+  });
+
+  if (kept.length > MAX_PILOTS) {
+    errors.push(`Too many pilots: ${kept.length} (max ${MAX_PILOTS})`);
+  }
+
+  return { payload: kept.map(parsedRowToBulk), errors };
+}
+
+// ── Edit-dialog CSV import ───────────────────────────────────────────────────
+
+/**
+ * Load a CSV file into the grid, replacing all current rows. Imported rows
+ * that match an existing pilot (by CIVL → other IDs → email, mirroring the
+ * server resolver) keep their comp_pilot_id so saving treats them as updates.
+ */
+async function importCsvIntoGrid(input: HTMLInputElement): Promise<void> {
+  const file = input.files?.[0];
+  if (!file) return;
+  const text = await file.text();
+  input.value = ""; // allow re-selecting the same file
+
+  hideEditStatus();
+  const result = parseImportedCsv(text);
+  if (result.rows.length === 0) {
+    showEditErrors(result.errors.length > 0 ? result.errors : ["No pilot rows found in file"]);
+    return;
+  }
+
+  const classified = classifyImportRows(result.rows);
+  const rows: ParsedRow[] = classified.map((cr) =>
+    cr.action === "match" && cr.matchedId
+      ? { ...cr.parsed, comp_pilot_id: cr.matchedId }
+      : cr.parsed
+  );
+  await editTable?.setData(rows);
+
+  const matched = classified.filter((cr) => cr.action === "match").length;
+  showEditStatus(
+    `Loaded ${rows.length} row${rows.length === 1 ? "" : "s"} from ${file.name}: ` +
+      `${matched} matched existing pilots, ${rows.length - matched} new. ` +
+      `Existing pilots not in the import will be removed when you save.`
+  );
+  if (result.errors.length > 0) {
+    showEditErrors(result.errors);
+  } else {
+    hideEditErrors();
+  }
+}
+
+function showEditStatus(message: string): void {
+  const el = document.getElementById("pilots-edit-status")!;
+  el.textContent = message;
+  el.classList.remove("hidden");
+}
+
+function hideEditStatus(): void {
+  document.getElementById("pilots-edit-status")!.classList.add("hidden");
+}
+
+function showEditErrors(errors: string[]): void {
+  const el = document.getElementById("pilots-edit-errors")!;
+  el.textContent = errors.slice(0, 20).join("\n");
+  if (errors.length > 20) {
+    el.textContent += `\n… and ${errors.length - 20} more`;
+  }
+  el.classList.remove("hidden");
+}
+
+function hideEditErrors(): void {
+  document.getElementById("pilots-edit-errors")!.classList.add("hidden");
 }
 
 // ── CSV export ───────────────────────────────────────────────────────────────
 
 /**
- * Download pilots as a CSV file. Emits the full column set (including IDs not
- * visible in the read-only table) so re-importing is a no-op.
+ * Download rows as a CSV file. Emits the full column set (including IDs not
+ * visible in the read-only table) so re-importing is a no-op. The header row
+ * is always written, so an empty table still yields a fillable template.
  */
-function exportCsv(): void {
+function exportCsv(rows: ParsedRow[]): void {
   const header = COLUMNS.map((c) => c.header).join(",");
-  const rows = currentPilots.map((p) =>
-    COLUMNS.map((c) => csvEscape(p[c.key] as string | null | undefined)).join(",")
+  const lines = rows.map((r) =>
+    COLUMNS.map((c) =>
+      csvEscape((r as unknown as Record<string, unknown>)[c.key] as string | null | undefined)
+    ).join(",")
   );
-  const content = [header, ...rows].join("\n") + "\n";
+  const content = [header, ...lines].join("\n") + "\n";
 
   const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -248,413 +544,16 @@ function csvEscape(value: string | number | null | undefined): string {
   return s;
 }
 
-// ── Edit-as-text dialog ──────────────────────────────────────────────────────
-
-/**
- * Per-line tracking of the original comp_pilot_id so that re-saving the TSV
- * recognises existing rows as updates. The array is indexed by line number
- * (0-based) in the current textarea contents and rebuilt whenever the buffer
- * is fully re-populated (open, sort, parse-on-save).
- */
-let textLineIds: (string | undefined)[] = [];
-
-function openTextDialog(): void {
-  const dialog = document.getElementById("pilots-text-dialog") as HTMLDialogElement;
-  const textarea = document.getElementById("pilots-text-area") as HTMLTextAreaElement;
-  const errorsDiv = document.getElementById("pilots-text-errors")!;
-  const sortSelect = document.getElementById("pilots-text-sort")! as unknown as HTMLSelectElement;
-
-  sortSelect.value = "name";
-  errorsDiv.classList.add("hidden");
-  errorsDiv.textContent = "";
-
-  const sorted = sortPilots(currentPilots, "name");
-  textarea.value = serializePilotsToTsv(sorted);
-  textLineIds = sorted.map((p) => p.comp_pilot_id);
-
-  sortSelect.onchange = () => {
-    const sortKey = sortSelect.value as "name" | "class" | "team";
-    // Re-parse current buffer so in-flight edits aren't lost; if parse fails,
-    // fall back to sorting the original data.
-    const parsed = parseTsv(textarea.value, textLineIds);
-    if (parsed.errors.length > 0) {
-      // Just re-sort from current server state rather than mangled buffer
-      const sorted2 = sortPilots(currentPilots, sortKey);
-      textarea.value = serializePilotsToTsv(sorted2);
-      textLineIds = sorted2.map((p) => p.comp_pilot_id);
-    } else {
-      const sorted2 = sortParsedRows(parsed.rows, sortKey);
-      textarea.value = serializeParsedRowsToTsv(sorted2);
-      textLineIds = sorted2.map((r) => r.comp_pilot_id);
-    }
-  };
-
-  textarea.oninput = () => {
-    // Debounced validation pass — just check basic shape so user gets fast feedback.
-    const errors = validateTsv(textarea.value);
-    if (errors.length > 0) {
-      errorsDiv.textContent = errors.slice(0, 10).join("\n");
-      if (errors.length > 10) {
-        errorsDiv.textContent += `\n… and ${errors.length - 10} more`;
-      }
-      errorsDiv.classList.remove("hidden");
-    } else {
-      errorsDiv.classList.add("hidden");
-    }
-  };
-
-  const copyHeadersBtn = document.getElementById(
-    "pilots-text-copy-headers"
-  ) as HTMLButtonElement;
-  const copyHeadersLabel = copyHeadersBtn.textContent ?? "Copy headers";
-  copyHeadersBtn.onclick = async () => {
-    const headers = COLUMNS.map((c) => c.header).join("\t");
-    try {
-      await navigator.clipboard.writeText(headers);
-      copyHeadersBtn.textContent = "Copied!";
-    } catch {
-      // Clipboard API may be unavailable (non-HTTPS, permissions denied).
-      // Fall back to selecting the headers in the textarea so the user
-      // can Ctrl+C them.
-      const textarea = document.getElementById(
-        "pilots-text-area"
-      ) as HTMLTextAreaElement;
-      textarea.value = headers + "\n" + textarea.value;
-      textarea.focus();
-      textarea.setSelectionRange(0, headers.length);
-      copyHeadersBtn.textContent = "Select + Ctrl+C";
-    }
-    setTimeout(() => {
-      copyHeadersBtn.textContent = copyHeadersLabel;
-    }, 1500);
-  };
-
-  document.getElementById("pilots-text-cancel")!.onclick = () => dialog.close();
-  document.getElementById("pilots-text-save")!.onclick = async () => {
-    const parsed = parseTsv(textarea.value, textLineIds);
-    if (parsed.errors.length > 0) {
-      errorsDiv.textContent = parsed.errors.join("\n");
-      errorsDiv.classList.remove("hidden");
-      return;
-    }
-    const payload: BulkPilotRow[] = parsed.rows.map(parsedRowToBulk);
-    const ok = await submitBulk(payload);
-    if (ok) {
-      dialog.close();
-      await loadPilots();
-    } else {
-      errorsDiv.textContent = "Save failed. See console for details.";
-      errorsDiv.classList.remove("hidden");
-    }
-  };
-
-  dialog.showModal();
-}
-
-// ── CSV import dialog ────────────────────────────────────────────────────────
-
-interface ImportPreviewRow {
-  /** Source row index in the imported data (0-based, excluding header). */
-  index: number;
-  parsed: ParsedRow | null;
-  action: "new" | "match" | "name" | "error";
-  /** The existing comp_pilot_id (if matched). */
-  matchedId?: string;
-  /** How the match was found, for the preview label. */
-  matchReason?: string;
-  error?: string;
-}
-
-let importPreview: ImportPreviewRow[] = [];
-
-function openImportDialog(): void {
-  const dialog = document.getElementById("pilots-import-dialog") as HTMLDialogElement;
-  const fileInput = document.getElementById("pilots-import-file") as HTMLInputElement;
-  const textarea = document.getElementById("pilots-import-text") as HTMLTextAreaElement;
-  const previewBtn = document.getElementById("pilots-import-preview-btn") as HTMLButtonElement;
-  const applyBtn = document.getElementById("pilots-import-apply") as HTMLButtonElement;
-  const previewDiv = document.getElementById("pilots-import-preview")!;
-  const errorsDiv = document.getElementById("pilots-import-errors")!;
-  const removeMissingCheckbox = document.getElementById("pilots-import-remove-missing") as HTMLInputElement;
-
-  // Reset state
-  fileInput.value = "";
-  textarea.value = "";
-  previewDiv.classList.add("hidden");
-  errorsDiv.classList.add("hidden");
-  applyBtn.disabled = true;
-  removeMissingCheckbox.checked = false;
-  importPreview = [];
-
-  fileInput.onchange = async () => {
-    const file = fileInput.files?.[0];
-    if (!file) return;
-    textarea.value = await file.text();
-  };
-
-  previewBtn.onclick = () => {
-    errorsDiv.classList.add("hidden");
-    const result = parseImportedCsv(textarea.value);
-    if (result.errors.length > 0) {
-      errorsDiv.textContent = result.errors.join("\n");
-      errorsDiv.classList.remove("hidden");
-      previewDiv.classList.add("hidden");
-      applyBtn.disabled = true;
-      return;
-    }
-    importPreview = classifyImportRows(result.rows);
-    renderImportPreview();
-    previewDiv.classList.remove("hidden");
-    const hasApplyable = importPreview.some(
-      (r) => r.action === "new" || r.action === "match"
-    );
-    applyBtn.disabled = !hasApplyable;
-  };
-
-  document.getElementById("pilots-import-cancel")!.onclick = () => dialog.close();
-
-  applyBtn.onclick = async () => {
-    const payload = buildBulkFromImport(importPreview, removeMissingCheckbox.checked);
-    const ok = await submitBulk(payload);
-    if (ok) {
-      dialog.close();
-      await loadPilots();
-    } else {
-      errorsDiv.textContent = "Import failed. See console for details.";
-      errorsDiv.classList.remove("hidden");
-    }
-  };
-
-  dialog.showModal();
-}
-
-function renderImportPreview(): void {
-  const list = document.getElementById("pilots-import-preview-list")!;
-  list.innerHTML = "";
-  for (const row of importPreview) {
-    const li = document.createElement("li");
-    li.className = "flex items-start gap-2 px-2 py-1";
-
-    const badge = document.createElement("span");
-    badge.className = "text-[10px] font-medium uppercase tracking-wider w-14 shrink-0";
-    switch (row.action) {
-      case "new":
-        badge.textContent = "new";
-        badge.classList.add("text-emerald-600");
-        break;
-      case "match":
-        badge.textContent = "update";
-        badge.classList.add("text-blue-600");
-        break;
-      case "name":
-        badge.textContent = "name?";
-        badge.classList.add("text-amber-600");
-        break;
-      case "error":
-        badge.textContent = "error";
-        badge.classList.add("text-destructive");
-        break;
-    }
-
-    const label = document.createElement("span");
-    label.className = "flex-1 min-w-0";
-    if (row.parsed) {
-      label.textContent = `${row.parsed.name || "(no name)"}`;
-      if (row.parsed.pilot_class) {
-        const cls = document.createElement("span");
-        cls.className = "text-muted-foreground ml-2";
-        cls.textContent = `class: ${row.parsed.pilot_class}`;
-        label.appendChild(cls);
-      }
-      if (row.matchReason) {
-        const reason = document.createElement("span");
-        reason.className = "text-muted-foreground ml-2 text-[11px]";
-        reason.textContent = `(${row.matchReason})`;
-        label.appendChild(reason);
-      }
-    } else if (row.error) {
-      label.textContent = `row ${row.index + 1}: ${row.error}`;
-      label.classList.add("text-destructive");
-    }
-
-    li.appendChild(badge);
-    li.appendChild(label);
-    list.appendChild(li);
-  }
-}
-
-// ── Parsing and serialisation helpers ────────────────────────────────────────
-
-interface ParsedRow {
-  comp_pilot_id?: string;
-  name: string;
-  email: string | null;
-  civl_id: string | null;
-  safa_id: string | null;
-  ushpa_id: string | null;
-  bhpa_id: string | null;
-  dhv_id: string | null;
-  ffvl_id: string | null;
-  fai_id: string | null;
-  pilot_class: string;
-  team_name: string | null;
-  driver_contact: string | null;
-  glider: string | null;
-}
-
-function sortPilots(pilots: CompPilot[], key: "name" | "class" | "team"): CompPilot[] {
-  const copy = [...pilots];
-  copy.sort((a, b) => {
-    const av = sortKeyValue(a, key);
-    const bv = sortKeyValue(b, key);
-    return av.localeCompare(bv, undefined, { sensitivity: "base" });
-  });
-  return copy;
-}
-
-function sortKeyValue(p: CompPilot, key: "name" | "class" | "team"): string {
-  if (key === "name") return p.name || "";
-  if (key === "class") return p.pilot_class || "";
-  return p.team_name || "";
-}
-
-function sortParsedRows(rows: ParsedRow[], key: "name" | "class" | "team"): ParsedRow[] {
-  const copy = [...rows];
-  copy.sort((a, b) => {
-    const av =
-      key === "name" ? a.name : key === "class" ? a.pilot_class : a.team_name ?? "";
-    const bv =
-      key === "name" ? b.name : key === "class" ? b.pilot_class : b.team_name ?? "";
-    return av.localeCompare(bv, undefined, { sensitivity: "base" });
-  });
-  return copy;
-}
-
-/**
- * Serialise pilots as TSV using the canonical column order. Skips the
- * `comp_pilot_id` since it's tracked in a side-array (textLineIds) — keeping
- * opaque IDs out of the user's editing surface avoids accidents.
- */
-function serializePilotsToTsv(pilots: CompPilot[]): string {
-  return pilots
-    .map((p) => COLUMNS.map((c) => cleanCell(p[c.key])).join("\t"))
-    .join("\n");
-}
-
-function serializeParsedRowsToTsv(rows: ParsedRow[]): string {
-  return rows
-    .map((r) =>
-      COLUMNS.map((c) => cleanCell((r as unknown as Record<string, unknown>)[c.key]))
-        .join("\t")
-    )
-    .join("\n");
-}
-
-function cleanCell(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  // Strip tab and newline from cell contents — they're the row/column delimiters.
-  return String(value).replace(/[\t\n\r]/g, " ");
-}
-
-/**
- * Recognise a pasted header row so it isn't treated as a pilot named "name"
- * with CIVL ID "civl_id". A line counts as a header if its cells (lowercased,
- * trimmed) are all recognised column names — the canonical header or any of
- * the CSV-import aliases.
- *
- * This runs in both validateTsv and parseTsv so the line-to-id side-array
- * stays aligned: both functions must skip header lines the same way.
- */
-function isHeaderLine(cells: string[]): boolean {
-  if (cells.length < 2) return false;
-  const known = new Set<string>();
-  for (const col of COLUMNS) {
-    known.add(col.header.toLowerCase());
-    for (const alias of col.aliases ?? []) {
-      known.add(alias.toLowerCase());
-    }
-  }
-  for (const cell of cells) {
-    const normalised = cell.trim().toLowerCase();
-    if (!normalised) continue;
-    if (!known.has(normalised)) return false;
-  }
-  return true;
-}
-
-/** Quick structural validation used while the user is typing in the TSV. */
-function validateTsv(text: string): string[] {
-  const errors: string[] = [];
-  const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
-  const expected = COLUMNS.length;
-  for (let i = 0; i < lines.length; i++) {
-    const cols = lines[i].split("\t");
-    if (isHeaderLine(cols)) continue; // pasted header row — not a pilot
-    if (cols.length !== expected) {
-      errors.push(
-        `Line ${i + 1}: expected ${expected} columns (tab-separated), got ${cols.length}`
-      );
-      continue;
-    }
-    const name = cols[0].trim();
-    if (!name) {
-      errors.push(`Line ${i + 1}: name is required`);
-    }
-    const pilotClass = cols[9].trim();
-    if (!pilotClass) {
-      errors.push(`Line ${i + 1}: class is required`);
-    } else if (!currentCompClasses.includes(pilotClass)) {
-      errors.push(
-        `Line ${i + 1}: class "${pilotClass}" is not valid for this competition (valid: ${currentCompClasses.join(", ")})`
-      );
-    }
-  }
-  return errors;
-}
-
-function parseTsv(
-  text: string,
-  lineIds: (string | undefined)[]
-): { rows: ParsedRow[]; errors: string[] } {
-  const errors = validateTsv(text);
-  if (errors.length > 0) return { rows: [], errors };
-
-  const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
-  const rows: ParsedRow[] = [];
-  // textLineIds was populated with one entry per pilot (no header), so
-  // walk the pilot lines with a separate counter so that a pasted header
-  // anywhere in the buffer doesn't shift id assignments downstream.
-  let pilotIdx = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const cols = lines[i].split("\t").map((c) => c.trim());
-    if (isHeaderLine(cols)) continue; // skip pasted header row
-    rows.push({
-      comp_pilot_id: lineIds[pilotIdx],
-      name: cols[0],
-      email: cols[1] || null,
-      civl_id: cols[2] || null,
-      safa_id: cols[3] || null,
-      ushpa_id: cols[4] || null,
-      bhpa_id: cols[5] || null,
-      dhv_id: cols[6] || null,
-      ffvl_id: cols[7] || null,
-      fai_id: cols[8] || null,
-      pilot_class: cols[9],
-      team_name: cols[10] || null,
-      driver_contact: cols[11] || null,
-      glider: cols[12] || null,
-    });
-    pilotIdx++;
-  }
-  return { rows, errors: [] };
-}
-
 // ── CSV parsing ──────────────────────────────────────────────────────────────
 
 /**
  * Parse CSV or TSV with header row. Handles quoted fields, doubled-quote
  * escaping, and both comma and tab separators (auto-detected from the header).
  * Unknown columns are ignored (no error); missing columns → null.
+ *
+ * Rows with a missing or invalid class are still returned (the grid's class
+ * editor is the easiest place to fix them) with an error noting the problem;
+ * rows without a name are dropped.
  */
 function parseImportedCsv(text: string): { rows: ParsedRow[]; errors: string[] } {
   const trimmed = text.trim();
@@ -676,13 +575,7 @@ function parseImportedCsv(text: string): { rows: ParsedRow[]; errors: string[] }
   // Build header → ParsedRow-key map using COLUMNS aliases
   const keyOf = new Map<string, keyof ParsedRow>();
   for (const col of COLUMNS) {
-    const parsedKey = col.key === "pilot_class"
-      ? "pilot_class"
-      : col.key === "team_name"
-        ? "team_name"
-        : col.key === "driver_contact"
-          ? "driver_contact"
-          : (col.key as keyof ParsedRow);
+    const parsedKey = col.key as keyof ParsedRow;
     keyOf.set(col.header.toLowerCase(), parsedKey);
     for (const alias of col.aliases ?? []) {
       keyOf.set(alias.toLowerCase(), parsedKey);
@@ -736,18 +629,15 @@ function parseImportedCsv(text: string): { rows: ParsedRow[]; errors: string[] }
       }
     }
     if (!row.name) {
-      errors.push(`Row ${i}: name is required`);
+      errors.push(`Row ${i}: name is required — row skipped`);
       continue;
     }
     if (!row.pilot_class) {
-      errors.push(`Row ${i}: class is required`);
-      continue;
-    }
-    if (!currentCompClasses.includes(row.pilot_class)) {
+      errors.push(`Row ${i} (${row.name}): class is missing — set it before saving`);
+    } else if (!currentCompClasses.includes(row.pilot_class)) {
       errors.push(
-        `Row ${i}: class "${row.pilot_class}" is not valid (valid: ${currentCompClasses.join(", ")})`
+        `Row ${i} (${row.name}): class "${row.pilot_class}" is not valid (valid: ${currentCompClasses.join(", ")}) — fix it before saving`
       );
-      continue;
     }
     rows.push(row);
   }
@@ -814,6 +704,13 @@ function parseCsvLine(line: string, sep: string): string[] {
 
 // ── Import classification ────────────────────────────────────────────────────
 
+interface ImportClassifiedRow {
+  parsed: ParsedRow;
+  action: "new" | "match" | "name";
+  /** The existing comp_pilot_id (if matched). */
+  matchedId?: string;
+}
+
 /**
  * Classify each parsed import row against the currently loaded pilots.
  *
@@ -821,7 +718,7 @@ function parseCsvLine(line: string, sep: string): string[] {
  * Name-only matches are flagged but DO NOT auto-link; the user has to fix the
  * CSV manually. This prevents accidental merges when two pilots share a name.
  */
-function classifyImportRows(rows: ParsedRow[]): ImportPreviewRow[] {
+function classifyImportRows(rows: ParsedRow[]): ImportClassifiedRow[] {
   const byCivl = new Map<string, CompPilot>();
   const byEmail = new Map<string, CompPilot>();
   const byName = new Map<string, CompPilot[]>();
@@ -846,110 +743,35 @@ function classifyImportRows(rows: ParsedRow[]): ImportPreviewRow[] {
     }
   }
 
-  const out: ImportPreviewRow[] = [];
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
+  const out: ImportClassifiedRow[] = [];
+  for (const r of rows) {
     let matched: CompPilot | undefined;
-    let reason = "";
     if (r.civl_id && byCivl.has(r.civl_id)) {
       matched = byCivl.get(r.civl_id);
-      reason = "CIVL ID";
     } else {
       for (const [k, map] of Object.entries(byOtherId)) {
         const val = (r as unknown as Record<string, string | null>)[k];
         if (val && map.has(val)) {
           matched = map.get(val);
-          reason = k.replace("_id", "").toUpperCase() + " ID";
           break;
         }
       }
     }
     if (!matched && r.email) {
-      const hit = byEmail.get(r.email.toLowerCase());
-      if (hit) {
-        matched = hit;
-        reason = "email";
-      }
+      matched = byEmail.get(r.email.toLowerCase());
     }
 
     if (matched) {
-      out.push({
-        index: i,
-        parsed: r,
-        action: "match",
-        matchedId: matched.comp_pilot_id,
-        matchReason: `matched by ${reason}`,
-      });
+      out.push({ parsed: r, action: "match", matchedId: matched.comp_pilot_id });
       continue;
     }
 
     // Name-only? Flagged but not auto-matched.
     const nameHits = byName.get(r.name.toLowerCase()) ?? [];
-    if (nameHits.length > 0) {
-      out.push({
-        index: i,
-        parsed: r,
-        action: "name",
-        matchReason: `${nameHits.length} existing pilot${nameHits.length === 1 ? "" : "s"} with same name — not auto-linked`,
-      });
-      continue;
-    }
-
-    out.push({ index: i, parsed: r, action: "new" });
+    out.push({ parsed: r, action: nameHits.length > 0 ? "name" : "new" });
   }
 
   return out;
-}
-
-function buildBulkFromImport(
-  preview: ImportPreviewRow[],
-  removeMissing: boolean
-): BulkPilotRow[] {
-  const payload: BulkPilotRow[] = [];
-  const touchedIds = new Set<string>();
-
-  for (const row of preview) {
-    if (!row.parsed || row.action === "error") continue;
-    // Name-only matches are treated as inserts — the user can fix the CSV if
-    // they meant to update. Better than a silent merge.
-    const bulk: BulkPilotRow = {
-      ...parsedRowToBulk(row.parsed),
-    };
-    if (row.action === "match" && row.matchedId) {
-      bulk.comp_pilot_id = row.matchedId;
-      touchedIds.add(row.matchedId);
-    }
-    payload.push(bulk);
-  }
-
-  if (removeMissing) {
-    // Nothing extra needed — the bulk endpoint already deletes rows absent
-    // from the payload. But in additive mode we must include untouched
-    // existing pilots so they survive the diff.
-  } else {
-    for (const p of currentPilots) {
-      if (touchedIds.has(p.comp_pilot_id)) continue;
-      // Pass-through row to keep existing pilots alive in an additive import.
-      payload.push({
-        comp_pilot_id: p.comp_pilot_id,
-        registered_pilot_name: p.name,
-        registered_pilot_email: p.email,
-        registered_pilot_civl_id: p.civl_id,
-        registered_pilot_safa_id: p.safa_id,
-        registered_pilot_ushpa_id: p.ushpa_id,
-        registered_pilot_bhpa_id: p.bhpa_id,
-        registered_pilot_dhv_id: p.dhv_id,
-        registered_pilot_ffvl_id: p.ffvl_id,
-        registered_pilot_fai_id: p.fai_id,
-        registered_pilot_glider: p.glider,
-        pilot_class: p.pilot_class,
-        team_name: p.team_name,
-        driver_contact: p.driver_contact,
-      });
-    }
-  }
-
-  return payload;
 }
 
 function parsedRowToBulk(row: ParsedRow): BulkPilotRow {
@@ -973,7 +795,8 @@ function parsedRowToBulk(row: ParsedRow): BulkPilotRow {
 
 // ── Bulk save ────────────────────────────────────────────────────────────────
 
-async function submitBulk(pilots: BulkPilotRow[]): Promise<boolean> {
+/** Returns null on success, or a human-readable error message. */
+async function submitBulk(pilots: BulkPilotRow[]): Promise<string | null> {
   try {
     const res = await api.api.comp[":comp_id"].pilot.bulk.$post({
       param: { comp_id: currentCompId },
@@ -982,13 +805,25 @@ async function submitBulk(pilots: BulkPilotRow[]): Promise<boolean> {
     if (!res.ok) {
       const body = await res.text();
       console.error("bulk pilot save failed", res.status, body);
-      return false;
+      return `Save failed (${res.status}): ${serverErrorMessage(body)}`;
     }
-    return true;
+    return null;
   } catch (err) {
     console.error("bulk pilot save error", err);
-    return false;
+    return "Save failed: network error";
   }
+}
+
+/** Pull a readable message out of a JSON error body, or fall back to raw text. */
+function serverErrorMessage(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { error?: unknown; message?: unknown };
+    if (typeof parsed.error === "string") return parsed.error;
+    if (typeof parsed.message === "string") return parsed.message;
+  } catch {
+    // not JSON — fall through to raw text
+  }
+  return body.slice(0, 300) || "unknown error";
 }
 
 // ── Misc helpers ─────────────────────────────────────────────────────────────

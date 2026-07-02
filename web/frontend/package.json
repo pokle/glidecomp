@@ -15,8 +15,9 @@
   "//": "Basecoat fork - see docs/basecoat-fork.md for build/publish instructions",
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260628.1",
-    "@tailwindcss/vite": "^4.3.1",
     "@pokle/basecoat": "0.3.10-beta3.pokle-selections",
+    "@tailwindcss/vite": "^4.3.1",
+    "@types/tabulator-tables": "^6.3.5",
     "jsdom": "^25.0.1",
     "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3",
@@ -33,6 +34,7 @@
     "katex": "^0.16.47",
     "leaflet": "2.0.0-alpha.1",
     "mapbox-gl": "^3.25.0",
+    "tabulator-tables": "^6.5.2",
     "three": "^0.185.0",
     "threebox-plugin": "^2.2.7"
   }
