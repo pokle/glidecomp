@@ -28,8 +28,13 @@ export interface LoadedTracks {
 
 /** Result of sampling one pilot's interpolated position at a given time. */
 export interface Sample {
-  /** True if `time` falls within the pilot's flown window. */
+  /**
+   * True if the pilot has a position at `time`: either mid-flight, or landed
+   * (held at the final fix). Only false before launch / with no data.
+   */
   active: boolean;
+  /** True once `time` is past the pilot's last fix — the sample is the landing spot. */
+  landed: boolean;
   x: number;
   y: number;
   z: number;
@@ -151,9 +156,30 @@ export function samplePilot(
   const lo = p.vertexOffset;
   const hi = p.vertexOffset + p.vertexCount - 1;
 
-  const inactive: Sample = { active: false, x: 0, y: 0, z: 0, climb: 0, heading: 0, altMsl: 0 };
+  const inactive: Sample = {
+    active: false,
+    landed: false,
+    x: 0,
+    y: 0,
+    z: 0,
+    climb: 0,
+    heading: 0,
+    altMsl: 0,
+  };
   if (p.vertexCount === 0) return inactive;
-  if (t < time[lo] || t > time[hi]) return inactive;
+  if (t < time[lo]) return inactive;
+
+  // Past the last fix: the pilot has landed — hold the final position so the
+  // viewer keeps showing where they came down. Heading follows the last
+  // segment; climb is zero on the ground.
+  if (t > time[hi]) {
+    const x = pos[hi * 3];
+    const y = pos[hi * 3 + 1];
+    const z = pos[hi * 3 + 2];
+    const heading =
+      hi > lo ? Math.atan2(x - pos[(hi - 1) * 3], z - pos[(hi - 1) * 3 + 2]) : 0;
+    return { active: true, landed: true, x, y, z, climb: 0, heading, altMsl: y + alt0 };
+  }
 
   // Find the last index with time <= t.
   let a = lo;
@@ -182,5 +208,5 @@ export function samplePilot(
   const dt = t1 - t0;
   const climb = dt > 0 ? (yj - yi) / dt : 0;
   const heading = Math.atan2(xj - xi, zj - zi); // east, north
-  return { active: true, x, y, z, climb, heading, altMsl: y + alt0 };
+  return { active: true, landed: false, x, y, z, climb, heading, altMsl: y + alt0 };
 }
