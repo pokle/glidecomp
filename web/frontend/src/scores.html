@@ -42,20 +42,27 @@
       </div>
 
       <div id="scores-content" class="hidden">
-        <nav class="mb-4">
+        <nav class="mb-4 print:hidden">
           <a id="scores-back-link" href="/comp" class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
             <span id="scores-back-comp-name">Competition</span>
           </a>
         </nav>
 
-        <h1 id="scores-comp-title" class="text-2xl font-bold tracking-tight mb-6"></h1>
+        <h1 id="scores-comp-title" class="text-2xl font-bold tracking-tight mb-1"></h1>
+        <p id="scores-comp-info" class="text-sm text-muted-foreground mb-6"></p>
 
-        <!-- Class tabs (hidden if single class) -->
-        <div id="scores-class-tabs" class="hidden flex gap-1 mb-4"></div>
+        <!-- View tabs: one per pilot class, plus Top 3 and Teams views -->
+        <div id="scores-class-tabs" class="hidden flex flex-wrap gap-1 mb-4 print:hidden"></div>
 
-        <!-- Standings panels injected by JS -->
+        <!-- Standings panels (one table per pilot class) injected by JS -->
         <div id="scores-panels"></div>
+
+        <!-- Top 3 per task & class panels injected by JS -->
+        <div id="scores-top3" class="hidden space-y-8"></div>
+
+        <!-- Team standings injected by JS -->
+        <div id="scores-teams" class="hidden"></div>
       </div>
     </main>
 
