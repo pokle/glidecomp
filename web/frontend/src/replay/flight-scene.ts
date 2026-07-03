@@ -43,8 +43,10 @@ export interface MarkerSample {
   z: number;
   /** Altitude MSL (metres), un-exaggerated. */
   altMsl: number;
-  /** Climb rate, m/s. */
+  /** Climb rate, m/s (smoothed). */
   climb: number;
+  /** Ground speed, m/s (smoothed). */
+  speed: number;
   name: string;
 }
 
@@ -194,6 +196,7 @@ export class FlightScene {
         z: 0,
         altMsl: 0,
         climb: 0,
+        speed: 0,
         name: this.tracks.manifest.pilots[i].name,
       });
     }
@@ -401,6 +404,7 @@ export class FlightScene {
         out.active = false;
         out.landed = false;
         out.x = out.y = out.z = 0;
+        out.climb = out.speed = out.altMsl = 0;
         this.dummy.scale.set(0, 0, 0);
         this.dummy.position.set(0, -1e9, 0);
         this.dummy.updateMatrix();
@@ -423,6 +427,7 @@ export class FlightScene {
       out.z = s.z;
       out.altMsl = s.altMsl;
       out.climb = s.climb;
+      out.speed = s.speed;
     }
     this.markers.instanceMatrix.needsUpdate = true;
     this.gaggleLayer?.update(t, this.samplesOut);

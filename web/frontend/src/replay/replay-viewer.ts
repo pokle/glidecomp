@@ -27,14 +27,42 @@ export interface HoverInfo {
   name: string;
   altMsl: number;
   climb: number;
+  speed: number;
   screenX: number;
   screenY: number;
+}
+
+/**
+ * One pilot's state for this frame, projected to container px — the feed for
+ * DOM overlays (rank badges on the cones, the metrics callout). The array is
+ * reused across frames; consumers must not hold references between frames.
+ */
+export interface PilotScreenSample {
+  pilot: number;
+  /** Has a position now (launched) and is not hidden via the legend. */
+  active: boolean;
+  landed: boolean;
+  /** Container-relative px of the marker cone. */
+  screenX: number;
+  screenY: number;
+  /** False when the marker projects off-screen / behind the camera. */
+  onScreen: boolean;
+  altMsl: number;
+  climb: number;
+  speed: number;
 }
 
 export interface ViewerCallbacks {
   onTime?(tRel: number): void;
   onPlayState?(playing: boolean): void;
   onHover?(info: HoverInfo | null): void;
+  /** Fires every frame with all pilots' projected positions + live metrics. */
+  onFrame?(samples: readonly PilotScreenSample[]): void;
+  /**
+   * Fires when the user clicks (not drags) the canvas: the picked pilot's
+   * index, or -1 when the click landed away from every marker cone.
+   */
+  onPick?(pilotIdx: number): void;
   onScale?(metresPerPixel: number): void;
   onCompass?(northAngleDeg: number): void;
 }
@@ -56,7 +84,7 @@ export class ReplayViewer {
   private playing = false;
   private speed = 16;
   private vScale = 3;
-  private colorMode: ColorMode = 'pilot';
+  private colorMode: ColorMode = 'vario';
   private tailSeconds = 600; // 10 min comet tail by default
   private trailWidth = 3; // CSS px
   private mapStyle = DEFAULT_MAP_STYLE.url;
@@ -70,6 +98,11 @@ export class ReplayViewer {
   // picking
   private pointer = { x: 0, y: 0, inside: false };
   private hover = -1;
+  /** pointerdown position for click-vs-drag discrimination (null = no press). */
+  private press: { x: number; y: number } | null = null;
+
+  /** Reused per-frame screen-space samples (one per pilot) for DOM overlays. */
+  private screenSamples: PilotScreenSample[] = [];
 
   constructor(
     private container: HTMLElement,
@@ -92,6 +125,17 @@ export class ReplayViewer {
     this.duration = this.tracks.manifest.t1 - this.tracks.manifest.t0;
     this.visibility = new Array(this.tracks.manifest.pilots.length).fill(true);
     this.gaggles = detectGaggles(this.tracks);
+    this.screenSamples = this.tracks.manifest.pilots.map((_, i) => ({
+      pilot: i,
+      active: false,
+      landed: false,
+      screenX: 0,
+      screenY: 0,
+      onScreen: false,
+      altMsl: 0,
+      climb: 0,
+      speed: 0,
+    }));
 
     this.scene = new FlightScene(this.tracks, this.gaggles);
     this.applySceneState();
@@ -101,6 +145,8 @@ export class ReplayViewer {
 
     this.container.addEventListener('pointermove', this.onPointerMove);
     this.container.addEventListener('pointerleave', this.onPointerLeave);
+    this.container.addEventListener('pointerdown', this.onPointerDown);
+    this.container.addEventListener('pointerup', this.onPointerUp);
     window.addEventListener('resize', this.onResize);
 
     this.startLoop();
@@ -186,47 +232,67 @@ export class ReplayViewer {
     else if (this.follow >= 0) this.backend.followTo(samples[this.follow]);
     this.backend.render();
 
+    this.projectSamples(samples);
     this.updatePicking(samples);
+    this.cb.onFrame?.(this.screenSamples);
     this.cb.onScale?.(this.backend.getMetresPerPixel());
     this.cb.onCompass?.(this.backend.getBearingDeg());
   }
 
-  private updatePicking(samples: MarkerSample[]): void {
-    let hover = -1;
-    let hoverX = 0;
-    let hoverY = 0;
-    if (this.pointer.inside) {
-      let bestD = 20;
-      for (const s of samples) {
-        if (!s.active) continue;
-        const p = this.backend.projectToScreen(s.x, s.y, s.z);
-        if (!p.visible) continue;
-        const d = Math.hypot(p.x - this.pointer.x, p.y - this.pointer.y);
-        if (d < bestD) {
-          bestD = d;
-          hover = s.pilot;
-          hoverX = p.x;
-          hoverY = p.y;
-        }
+  /** Project every pilot's marker into the reused screen-sample array. */
+  private projectSamples(samples: MarkerSample[]): void {
+    for (const s of samples) {
+      const out = this.screenSamples[s.pilot];
+      out.active = s.active && this.visibility[s.pilot];
+      out.landed = s.landed;
+      out.altMsl = s.altMsl;
+      out.climb = s.climb;
+      out.speed = s.speed;
+      if (!out.active) {
+        out.onScreen = false;
+        continue;
+      }
+      const p = this.backend.projectToScreen(s.x, s.y, s.z);
+      out.screenX = p.x;
+      out.screenY = p.y;
+      out.onScreen = p.visible;
+    }
+  }
+
+  /** Nearest on-screen marker within `radius` px of (px, py), or -1. */
+  private pickAt(px: number, py: number, radius: number): number {
+    let best = -1;
+    let bestD = radius;
+    for (const s of this.screenSamples) {
+      if (!s.active || !s.onScreen) continue;
+      const d = Math.hypot(s.screenX - px, s.screenY - py);
+      if (d < bestD) {
+        bestD = d;
+        best = s.pilot;
       }
     }
+    return best;
+  }
+
+  private updatePicking(samples: MarkerSample[]): void {
+    const hover = this.pointer.inside ? this.pickAt(this.pointer.x, this.pointer.y, 20) : -1;
     this.hover = hover;
 
     // effective highlight: hovered pilot wins, else the followed pilot
     const eff = hover >= 0 ? hover : this.follow;
     this.scene.setHighlight(eff);
 
-    if (eff >= 0 && samples[eff]?.active) {
+    if (eff >= 0 && samples[eff]?.active && this.screenSamples[eff].active) {
       const s = samples[eff];
-      // reuse the projection from the picking loop when the hovered pilot won
-      const p = eff === hover ? { x: hoverX, y: hoverY } : this.backend.projectToScreen(s.x, s.y, s.z);
+      const p = this.screenSamples[eff];
       this.cb.onHover?.({
         pilotIdx: eff,
         name: s.name,
         altMsl: s.altMsl,
         climb: s.climb,
-        screenX: p.x,
-        screenY: p.y,
+        speed: s.speed,
+        screenX: p.screenX,
+        screenY: p.screenY,
       });
     } else {
       this.cb.onHover?.(null);
@@ -243,6 +309,29 @@ export class ReplayViewer {
   };
   private onPointerLeave = (): void => {
     this.pointer.inside = false;
+  };
+  /**
+   * Click detection: a primary-pointer press that releases within a few px
+   * (i.e. not a camera pan/orbit drag, not a multi-touch gesture) reports the
+   * nearest marker cone under the cursor — or -1 for a background click.
+   */
+  private onPointerDown = (e: PointerEvent): void => {
+    if (!e.isPrimary) {
+      this.press = null; // a second finger landed — this is a gesture, not a click
+      return;
+    }
+    const rect = this.container.getBoundingClientRect();
+    this.press = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
+  private onPointerUp = (e: PointerEvent): void => {
+    const press = this.press;
+    this.press = null;
+    if (!press || !e.isPrimary) return;
+    const rect = this.container.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    if (Math.hypot(x - press.x, y - press.y) > 5) return; // it was a drag
+    this.cb.onPick?.(this.pickAt(x, y, 20));
   };
   private onResize = (): void => this.backend.resize();
 
@@ -378,6 +467,7 @@ export class ReplayViewer {
       z: z / n,
       altMsl: 0,
       climb: 0,
+      speed: 0,
       name: '',
     };
   }
@@ -402,6 +492,8 @@ export class ReplayViewer {
     cancelAnimationFrame(this.raf);
     this.container.removeEventListener('pointermove', this.onPointerMove);
     this.container.removeEventListener('pointerleave', this.onPointerLeave);
+    this.container.removeEventListener('pointerdown', this.onPointerDown);
+    this.container.removeEventListener('pointerup', this.onPointerUp);
     window.removeEventListener('resize', this.onResize);
     this.backend?.dispose();
     this.scene?.dispose();

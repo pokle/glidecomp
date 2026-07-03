@@ -18,6 +18,13 @@ viewer was built from) as background.
   with synchronized playback, pilot identity, altitude/vario colouring, task
   geometry, gaggle detection, and a selectable backdrop (abstract vs Mapbox
   terrain).
+- **Per-pilot live metrics** (see §5.15): rank badges pinned to the marker
+  cones, and a draggable metrics callout (altitude / climb / ground speed /
+  glide ratio) with a leader line to the pilot's cone. There is deliberately
+  **no tooltip window next to the pilot** — hovering a cone routes that
+  pilot's metrics into the callout as a live preview; clicking the cone pins
+  (follows) them. Clicking/tapping away from every cone toggles play/pause
+  (as does the spacebar), so the whole canvas is the play button.
 - The packing logic is **pure and fs/DOM-free** (`packTracksFromIgc` in the
   engine), so the *same* code runs in two places:
   - **Runtime, Worker-served (primary):** `GET /api/comp/:comp_id/task/:task_id/3dvis`
@@ -133,8 +140,9 @@ transparently gunzip.)
   0). `alt0` = min altitude, so the scene floor sits at y=0.
 - **Origin:** mean of pilots' first fixes (takeoffs).
 - **Scoring ranks** are computed at build time via the engine's `scoreTask()` and
-  baked into the manifest; the legend sorts by rank ("1. Jon Durand … 1000").
-  Matches the published AirScore order at the top.
+  baked into the manifest; the legend sorts by rank, showing each pilot's rank
+  chip (same badge as their cone in the scene) + score. Matches the published
+  AirScore order at the top.
 - **Pilot colours hash the name** (`colorForName` in `track-packer.ts`), not the
   roster index, so a pilot keeps the same colour across rebuilds even if the
   field changes. FNV-1a → hue, reusing `buildPalette`'s saturation/lightness
@@ -346,6 +354,45 @@ get it for free; `depthTest: false` keeps it over the terrain like the rings.
 `TAKEOFF` — FAI treats a takeoff as a fixed point (`firstTurnpointRadius` → 0),
 and this matches the 2D analysis map exactly. Don't "fix" it to start at the
 SSS edge; it's intentional and rule-correct.
+
+### 5.15 Per-pilot metrics overlays — DOM, not in-scene sprites
+
+Rank badges on the cones and the follow callout are **DOM elements positioned
+from `projectToScreen` every frame**, not THREE.Sprites. Reasons:
+
+- The terrain backend bakes the whole view into `camera.projectionMatrix`
+  (mercator bridge, §5.3), so sprite billboarding — which reads the
+  model-view matrix — mis-orients there. DOM overlays sidestep this entirely
+  and behave identically on both backends.
+- DOM text is crisp at any zoom, styleable with Tailwind, and free to layer
+  (z-index) against the other chrome.
+
+The viewer emits a per-frame `onFrame(samples: PilotScreenSample[])` callback
+with every pilot's projected screen position + live metrics; the array is
+**reused across frames** (no allocation). Picking (`pickAt`) shares those same
+projections. Click-vs-drag on the canvas is discriminated by pointer travel
+(≤5 px = click; primary pointer only, so multi-touch gestures never count).
+A click on a cone follows that pilot; a background click toggles play/pause
+(suppressed when it's dismissing the open control drawer), as does Space
+(unless a form control has focus).
+
+**Ground speed and climb are smoothed over a ±3-fix window** in `samplePilot`
+(matching the per-vertex vario smoothing). Speed is the horizontal *path
+length* over the window — a straight-line delta reads near zero while
+circling in a thermal. Glide ratio is derived as `speed / -climb`, shown as
+`∞` when level/climbing and capped (>40 → `∞`) so noise never prints absurd
+numbers.
+
+The callout is draggable (pointer capture on the bubble, clamped to the
+viewport, position persisted in `localStorage`), with an SVG leader line that
+exits the bubble's nearest edge and ends in a dot on the pilot's cone —
+hidden when the cone is off-screen or under the bubble.
+
+The callout is the **single metrics surface**: hovering any cone shows that
+pilot in it (a live preview — no floating tooltip beside the pilot, so the
+racing stays unobscured), and clicking pins the followed pilot. The ✕ (stop
+following) is hidden during hover-only previews. The old `#tooltip` element
+remains only for the gaggle-ribbon hovers (GaggleUI).
 
 ---
 
