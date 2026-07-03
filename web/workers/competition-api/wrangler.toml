@@ -3,6 +3,15 @@ main = "src/index.ts"
 compatibility_date = "2025-03-10"
 compatibility_flags = ["nodejs_compat"]
 
+# Run this worker near its storage (D1 primary / R2 bucket) instead of near
+# the client. Requests here make many sequential D1/R2/KV round trips (4 D1
+# queries even on a cache hit; up to ~35 R2 GETs on a cold 3dvis build), so
+# trading one long client hop for short storage hops wins for far-away users.
+# See docs/performance-investigation-2026-07.md. Smart Placement learns from
+# live traffic, so expect it to take effect some time after deploy.
+[placement]
+mode = "smart"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "taskscore-auth"
