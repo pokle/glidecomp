@@ -38,8 +38,10 @@ export interface Sample {
   x: number;
   y: number;
   z: number;
-  /** Climb rate in m/s (from the bracketing fixes). */
+  /** Climb rate in m/s, smoothed over a ±3-fix window. */
   climb: number;
+  /** Ground speed in m/s (path length over the same smoothing window). */
+  speed: number;
   /** Horizontal heading, radians, atan2(east, north). */
   heading: number;
   /** Altitude in metres MSL (y + alt0). */
@@ -143,7 +145,11 @@ async function fetchGzipped(url: string): Promise<ArrayBuffer> {
 
 /**
  * Binary-search a pilot's fixes for `t` (seconds since t0) and linearly
- * interpolate position + climb + heading. ~free at 100 pilots/frame.
+ * interpolate position + heading. Climb and ground speed are smoothed over a
+ * ±3-fix window (~6 s at typical cadence): climb is the window's net altitude
+ * change over its duration; speed is the horizontal *path length* over the
+ * window (so circling in a thermal still reads the true airspeed-ish value,
+ * not the near-zero straight-line drift). ~free at 100 pilots/frame.
  */
 export function samplePilot(
   tracks: LoadedTracks,
@@ -163,6 +169,7 @@ export function samplePilot(
     y: 0,
     z: 0,
     climb: 0,
+    speed: 0,
     heading: 0,
     altMsl: 0,
   };
@@ -171,14 +178,14 @@ export function samplePilot(
 
   // Past the last fix: the pilot has landed — hold the final position so the
   // viewer keeps showing where they came down. Heading follows the last
-  // segment; climb is zero on the ground.
+  // segment; climb and speed are zero on the ground.
   if (t > time[hi]) {
     const x = pos[hi * 3];
     const y = pos[hi * 3 + 1];
     const z = pos[hi * 3 + 2];
     const heading =
       hi > lo ? Math.atan2(x - pos[(hi - 1) * 3], z - pos[(hi - 1) * 3 + 2]) : 0;
-    return { active: true, landed: true, x, y, z, climb: 0, heading, altMsl: y + alt0 };
+    return { active: true, landed: true, x, y, z, climb: 0, speed: 0, heading, altMsl: y + alt0 };
   }
 
   // Find the last index with time <= t.
@@ -205,8 +212,26 @@ export function samplePilot(
   const x = xi + (xj - xi) * f;
   const y = yi + (yj - yi) * f;
   const z = zi + (zj - zi) * f;
-  const dt = t1 - t0;
-  const climb = dt > 0 ? (yj - yi) / dt : 0;
   const heading = Math.atan2(xj - xi, zj - zi); // east, north
-  return { active: true, landed: false, x, y, z, climb, heading, altMsl: y + alt0 };
+
+  // Smoothed climb + ground speed over a ±HW-fix window around the bracket.
+  const HW = 3; // matches the per-vertex vario smoothing in assembleTracks
+  const a0 = Math.max(lo, i - HW);
+  const b0 = Math.min(hi, j + HW);
+  const wdt = time[b0] - time[a0];
+  let climb = 0;
+  let speed = 0;
+  if (wdt > 0) {
+    climb = (pos[b0 * 3 + 1] - pos[a0 * 3 + 1]) / wdt;
+    let path = 0;
+    for (let v = a0; v < b0; v++) {
+      path += Math.hypot(pos[(v + 1) * 3] - pos[v * 3], pos[(v + 1) * 3 + 2] - pos[v * 3 + 2]);
+    }
+    speed = path / wdt;
+  } else {
+    const dt = t1 - t0;
+    climb = dt > 0 ? (yj - yi) / dt : 0;
+    speed = dt > 0 ? Math.hypot(xj - xi, zj - zi) / dt : 0;
+  }
+  return { active: true, landed: false, x, y, z, climb, speed, heading, altMsl: y + alt0 };
 }

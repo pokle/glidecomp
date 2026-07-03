@@ -18,6 +18,10 @@ viewer was built from) as background.
   with synchronized playback, pilot identity, altitude/vario colouring, task
   geometry, gaggle detection, and a selectable backdrop (abstract vs Mapbox
   terrain).
+- **Per-pilot live metrics** (see §5.15): rank badges pinned to the marker
+  cones, and a draggable metrics callout (altitude / climb / ground speed /
+  glide ratio) with a leader line to the followed pilot. Clicking a cone
+  follows that pilot.
 - The packing logic is **pure and fs/DOM-free** (`packTracksFromIgc` in the
   engine), so the *same* code runs in two places:
   - **Runtime, Worker-served (primary):** `GET /api/comp/:comp_id/task/:task_id/3dvis`
@@ -346,6 +350,36 @@ get it for free; `depthTest: false` keeps it over the terrain like the rings.
 `TAKEOFF` — FAI treats a takeoff as a fixed point (`firstTurnpointRadius` → 0),
 and this matches the 2D analysis map exactly. Don't "fix" it to start at the
 SSS edge; it's intentional and rule-correct.
+
+### 5.15 Per-pilot metrics overlays — DOM, not in-scene sprites
+
+Rank badges on the cones and the follow callout are **DOM elements positioned
+from `projectToScreen` every frame**, not THREE.Sprites. Reasons:
+
+- The terrain backend bakes the whole view into `camera.projectionMatrix`
+  (mercator bridge, §5.3), so sprite billboarding — which reads the
+  model-view matrix — mis-orients there. DOM overlays sidestep this entirely
+  and behave identically on both backends.
+- DOM text is crisp at any zoom, styleable with Tailwind, and free to layer
+  (z-index) against the other chrome.
+
+The viewer emits a per-frame `onFrame(samples: PilotScreenSample[])` callback
+with every pilot's projected screen position + live metrics; the array is
+**reused across frames** (no allocation). Picking (`pickAt`) shares those same
+projections. Click-vs-drag on the canvas is discriminated by pointer travel
+(≤5 px = click → follow the picked pilot).
+
+**Ground speed and climb are smoothed over a ±3-fix window** in `samplePilot`
+(matching the per-vertex vario smoothing). Speed is the horizontal *path
+length* over the window — a straight-line delta reads near zero while
+circling in a thermal. Glide ratio is derived as `speed / -climb`, shown as
+`∞` when level/climbing and capped (>40 → `∞`) so noise never prints absurd
+numbers.
+
+The callout is draggable (pointer capture on the bubble, clamped to the
+viewport, position persisted in `localStorage`), with an SVG leader line that
+exits the bubble's nearest edge and ends in a dot on the pilot's cone —
+hidden when the cone is off-screen or under the bubble.
 
 ---
 

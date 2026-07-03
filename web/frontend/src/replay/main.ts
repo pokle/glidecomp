@@ -7,7 +7,7 @@
  * compass, hover tooltip). No authentication, no framework — just the viewer.
  */
 
-import { ReplayViewer, type ColorMode, type HoverInfo } from './replay-viewer';
+import { ReplayViewer, type ColorMode, type HoverInfo, type PilotScreenSample } from './replay-viewer';
 import { MAP_STYLES, DEFAULT_MAP_STYLE } from './map-styles';
 import { VARIO_MAX } from './flight-scene';
 import { GaggleUI } from './gaggle-ui';
@@ -128,6 +128,8 @@ async function main(): Promise<void> {
         $('playPause').textContent = p ? '❚❚' : '▶';
       },
       onHover: (info) => showTooltip(info),
+      onFrame: (samples) => onFrameTick(samples),
+      onPick: (i) => onPickPilot(i),
       onScale: (mpp) => updateScaleBar(mpp),
       onCompass: (deg) => {
         $('compassRot').setAttribute('transform', `rotate(${-deg} 20 20)`);
@@ -284,6 +286,11 @@ async function main(): Promise<void> {
 
   // --- pilot legend (ordered by GAP result) ---
   let followIdx = -1;
+  let hoverIdx = -1;
+  function pilotRgb(i: number): string {
+    const c = manifest.colors[i] ?? [0.8, 0.8, 0.8];
+    return `rgb(${(c[0] * 255) | 0}, ${(c[1] * 255) | 0}, ${(c[2] * 255) | 0})`;
+  }
   const rows: HTMLLIElement[] = new Array(manifest.pilots.length);
   const legend = $('legend');
   // rank ascending; pilots without a rank fall to the bottom, name-sorted
@@ -300,8 +307,7 @@ async function main(): Promise<void> {
 
   for (const i of order) {
     const p = manifest.pilots[i];
-    const c = manifest.colors[i] ?? [0.8, 0.8, 0.8];
-    const rgb = `rgb(${(c[0] * 255) | 0}, ${(c[1] * 255) | 0}, ${(c[2] * 255) | 0})`;
+    const rgb = pilotRgb(i);
     const rankLabel = p.rank != null ? `${p.rank}. ` : '';
     const scoreLabel = p.score != null ? String(Math.round(p.score)) : '';
     const li = document.createElement('li');
@@ -351,6 +357,7 @@ async function main(): Promise<void> {
     rows.forEach((r, k) => r.classList.toggle('bg-slate-700/60', k === i));
     $('followName').textContent = manifest.pilots[i].name;
     $('followBar').classList.remove('hidden');
+    showCallout(i);
   }
   function clearFollow(): void {
     followIdx = -1;
@@ -358,8 +365,15 @@ async function main(): Promise<void> {
     viewer.setHighlight(-1);
     rows.forEach((r) => r.classList.remove('bg-slate-700/60'));
     $('followBar').classList.add('hidden');
+    hideCallout();
   }
   $('unfollow').addEventListener('click', clearFollow);
+
+  /** Click on a cone: follow that pilot (click the followed one again to stop). */
+  function onPickPilot(i: number): void {
+    if (i === followIdx) clearFollow();
+    else setFollow(i);
+  }
 
   let allHidden = false;
   $('toggleAll').addEventListener('click', (e) => {
@@ -374,6 +388,7 @@ async function main(): Promise<void> {
   function showGaggleFollow(id: number): void {
     const ep = viewer.gaggleResult?.episodes.find((e) => e.id === id);
     followIdx = -1;
+    hideCallout();
     rows.forEach((r) => r.classList.remove('bg-slate-700/60'));
     $('followName').textContent = ep ? `${ep.peakSize}-pilot gaggle` : 'gaggle';
     $('followBar').classList.remove('hidden');
@@ -445,6 +460,181 @@ async function main(): Promise<void> {
     for (const el of [ggR, ggB, ggM]) el.addEventListener('change', recompute);
   }
 
+  // --- rank badges on the pilot cones ---
+  // Small DOM chips repositioned every frame from the viewer's projected marker
+  // positions — crisp text in both backends (in-scene sprites don't billboard
+  // correctly under the Mapbox custom-layer projection).
+  const badgesLayer = $('badges');
+  let badgesOn = true;
+  const badges: (HTMLDivElement | null)[] = manifest.pilots.map((p, i) => {
+    if (p.rank == null) return null;
+    const el = document.createElement('div');
+    el.className =
+      'absolute left-0 top-0 grid place-items-center h-4 min-w-4 px-1 rounded-full text-[10px] font-bold text-slate-900 leading-none';
+    el.style.background = pilotRgb(i);
+    el.style.boxShadow = '0 0 0 1px rgba(8,12,22,0.6)';
+    el.style.display = 'none';
+    el.textContent = String(p.rank);
+    badgesLayer.appendChild(el);
+    return el;
+  });
+  $<HTMLInputElement>('rankBadges').addEventListener('change', (e) => {
+    badgesOn = (e.target as HTMLInputElement).checked;
+  });
+
+  // --- metrics callout (draggable, leader line to the followed pilot) ---
+  const callout = $('callout');
+  const calloutStatus = $('calloutStatus');
+  const leader = $('leader');
+  const leaderLine = $('leaderLine');
+  const leaderDot = $('leaderDot');
+  const coAlt = $('coAlt');
+  const coClimb = $('coClimb');
+  const coSpeed = $('coSpeed');
+  const coGlide = $('coGlide');
+  const CALLOUT_POS_KEY = 'replay.calloutPos';
+
+  /** Clamp the callout inside the viewport (viewport coords == #app coords). */
+  function placeCallout(x: number, y: number): void {
+    const app = $('app').getBoundingClientRect();
+    const r = callout.getBoundingClientRect();
+    callout.style.left = `${Math.max(4, Math.min(app.width - r.width - 4, x))}px`;
+    callout.style.top = `${Math.max(4, Math.min(app.height - r.height - 4, y))}px`;
+  }
+  function showCallout(i: number): void {
+    const p = manifest.pilots[i];
+    $('calloutName').textContent = p.name;
+    const rank = $('calloutRank');
+    rank.style.display = p.rank != null ? '' : 'none';
+    rank.textContent = p.rank != null ? String(p.rank) : '';
+    rank.style.background = pilotRgb(i);
+    leaderLine.setAttribute('stroke', pilotRgb(i));
+    leaderDot.setAttribute('fill', pilotRgb(i));
+    callout.classList.remove('hidden');
+    placeCallout(parseFloat(callout.style.left), parseFloat(callout.style.top));
+  }
+  function hideCallout(): void {
+    callout.classList.add('hidden');
+    leader.classList.add('hidden');
+  }
+  $('calloutClose').addEventListener('click', clearFollow);
+
+  // drag anywhere on the bubble (except the ✕); position persists locally
+  {
+    let drag: { dx: number; dy: number } | null = null;
+    callout.addEventListener('pointerdown', (e) => {
+      if ((e.target as HTMLElement).closest('#calloutClose')) return;
+      const r = callout.getBoundingClientRect();
+      drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+      callout.setPointerCapture(e.pointerId);
+      callout.classList.replace('cursor-grab', 'cursor-grabbing');
+    });
+    callout.addEventListener('pointermove', (e) => {
+      if (drag) placeCallout(e.clientX - drag.dx, e.clientY - drag.dy);
+    });
+    const endDrag = (): void => {
+      if (!drag) return;
+      drag = null;
+      callout.classList.replace('cursor-grabbing', 'cursor-grab');
+      try {
+        localStorage.setItem(
+          CALLOUT_POS_KEY,
+          JSON.stringify({ left: callout.style.left, top: callout.style.top }),
+        );
+      } catch {
+        /* storage unavailable (private mode) — position just won't persist */
+      }
+    };
+    callout.addEventListener('pointerup', endDrag);
+    callout.addEventListener('pointercancel', endDrag);
+    try {
+      const saved = JSON.parse(localStorage.getItem(CALLOUT_POS_KEY) ?? 'null') as {
+        left?: string;
+        top?: string;
+      } | null;
+      if (saved?.left) callout.style.left = saved.left;
+      if (saved?.top) callout.style.top = saved.top;
+    } catch {
+      /* corrupt saved state — keep the default position */
+    }
+  }
+
+  /** Glide ratio for display: '—' when not gliding, '∞' when level/climbing. */
+  function fmtGlide(speed: number, climb: number): string {
+    if (speed < 1) return '—';
+    if (climb > -0.05) return '∞';
+    const r = speed / -climb;
+    return r > 40 ? '∞' : r.toFixed(1);
+  }
+  function fmtClimb(climb: number): string {
+    return `${climb >= 0 ? '+' : ''}${climb.toFixed(1)} m/s`;
+  }
+
+  /** Per-frame overlay refresh: badge positions + callout values + leader line. */
+  function onFrameTick(samples: readonly PilotScreenSample[]): void {
+    const eff = hoverIdx >= 0 ? hoverIdx : followIdx;
+    for (const s of samples) {
+      const el = badges[s.pilot];
+      if (!el) continue;
+      const show = badgesOn && s.active && s.onScreen;
+      el.style.display = show ? '' : 'none';
+      if (!show) continue;
+      // pinned just above the cone tip
+      el.style.transform = `translate(${s.screenX.toFixed(1)}px, ${s.screenY.toFixed(1)}px) translate(-50%, -175%)`;
+      el.style.opacity = eff >= 0 && s.pilot !== eff ? '0.15' : s.landed ? '0.45' : '1';
+    }
+
+    if (followIdx < 0) return;
+    const s = samples[followIdx];
+    const flying = s.active && !s.landed;
+    coAlt.textContent = s.active ? `${Math.round(s.altMsl)} m` : '—';
+    coClimb.textContent = flying ? fmtClimb(s.climb) : '—';
+    coClimb.classList.toggle('text-lime-400', flying && s.climb >= 0);
+    coClimb.classList.toggle('text-sky-400', flying && s.climb < 0);
+    coSpeed.textContent = flying ? `${Math.round(s.speed * 3.6)} km/h` : '—';
+    coGlide.textContent = flying ? fmtGlide(s.speed, s.climb) : '—';
+    const p = manifest.pilots[followIdx];
+    const status = [
+      p.score != null ? `${Math.round(p.score)} pts` : '',
+      !s.active ? 'not launched yet' : s.landed ? 'landed' : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    if (calloutStatus.textContent !== status) calloutStatus.textContent = status;
+    updateLeader(s);
+  }
+
+  /**
+   * Leader line from the callout's nearest edge to the pilot's cone. Hidden when
+   * the cone is off-screen or sits under the bubble itself.
+   */
+  function updateLeader(s: PilotScreenSample): void {
+    if (!s.active || !s.onScreen || callout.classList.contains('hidden')) {
+      leader.classList.add('hidden');
+      return;
+    }
+    const r = callout.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    const dx = s.screenX - cx;
+    const dy = s.screenY - cy;
+    // scale factor from the bubble centre to where the ray exits the (padded) rect
+    const kx = dx !== 0 ? (r.width / 2 + 6) / Math.abs(dx) : Infinity;
+    const ky = dy !== 0 ? (r.height / 2 + 6) / Math.abs(dy) : Infinity;
+    const k = Math.min(kx, ky);
+    if (!isFinite(k) || k >= 1) {
+      leader.classList.add('hidden');
+      return;
+    }
+    leaderLine.setAttribute('x1', (cx + dx * k).toFixed(1));
+    leaderLine.setAttribute('y1', (cy + dy * k).toFixed(1));
+    leaderLine.setAttribute('x2', s.screenX.toFixed(1));
+    leaderLine.setAttribute('y2', s.screenY.toFixed(1));
+    leaderDot.setAttribute('cx', s.screenX.toFixed(1));
+    leaderDot.setAttribute('cy', s.screenY.toFixed(1));
+    leader.classList.remove('hidden');
+  }
+
   // --- colour scale legend (altitude / vertical speed) ---
   const ALT_GRADIENT =
     'linear-gradient(to right, rgb(33,102,217), rgb(26,191,204), rgb(77,204,77), rgb(242,204,51), rgb(235,64,51))';
@@ -473,13 +663,16 @@ async function main(): Promise<void> {
   // --- tooltip ---
   function showTooltip(info: HoverInfo | null): void {
     const el = $('tooltip');
+    hoverIdx = info ? info.pilotIdx : -1;
     if (!info) {
       el.classList.add('hidden');
       return;
     }
-    const climb = info.climb >= 0 ? `+${info.climb.toFixed(1)}` : info.climb.toFixed(1);
-    el.innerHTML = `<div class="font-medium">${escapeHtml(info.name)}</div>
-      <div class="text-slate-400">${info.altMsl.toFixed(0)} m · <span class="${info.climb >= 0 ? 'text-lime-400' : 'text-sky-400'}">${climb} m/s</span></div>`;
+    const p = manifest.pilots[info.pilotIdx];
+    const rank = p.rank != null ? `<span class="text-slate-400">#${p.rank}</span> ` : '';
+    el.innerHTML = `<div class="font-medium">${rank}${escapeHtml(info.name)}</div>
+      <div class="text-slate-400 tabular-nums">${info.altMsl.toFixed(0)} m · <span class="${info.climb >= 0 ? 'text-lime-400' : 'text-sky-400'}">${fmtClimb(info.climb)}</span></div>
+      <div class="text-slate-400 tabular-nums">${Math.round(info.speed * 3.6)} km/h · glide ${fmtGlide(info.speed, info.climb)}</div>`;
     el.style.left = `${info.screenX + 14}px`;
     el.style.top = `${info.screenY - 8}px`;
     el.classList.remove('hidden');

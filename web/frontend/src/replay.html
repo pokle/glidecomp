@@ -53,6 +53,46 @@
          override `absolute` and collapse the inset-0 height to 0. -->
     <div id="viewer" class="absolute inset-0 h-full w-full"></div>
 
+    <!-- rank badges pinned to the pilot cones (filled by main.ts each frame) -->
+    <div id="badges" class="pointer-events-none absolute inset-0 z-10 overflow-hidden"></div>
+
+    <!-- leader line from the metrics callout to the followed pilot's cone -->
+    <svg id="leader" class="pointer-events-none absolute inset-0 z-20 hidden h-full w-full">
+      <line id="leaderLine" stroke-width="1.5" stroke-opacity="0.85"></line>
+      <circle id="leaderDot" r="3" fill-opacity="0.9"></circle>
+    </svg>
+
+    <!-- draggable pilot metrics callout (shown while following a pilot) -->
+    <div id="callout" class="absolute z-30 hidden w-48 rounded-lg panel text-xs shadow-xl select-none touch-none cursor-grab"
+      style="left: 12px; top: 12px;">
+      <div class="flex items-center gap-2 pl-3 pr-1.5 pt-2">
+        <span id="calloutRank"
+          class="shrink-0 grid place-items-center min-w-5 h-5 px-1 rounded-full text-[11px] font-bold text-slate-900 leading-none"></span>
+        <span id="calloutName" class="flex-1 truncate font-medium"></span>
+        <button id="calloutClose" aria-label="Stop following"
+          class="shrink-0 grid place-items-center w-6 h-6 rounded-md text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 leading-none cursor-pointer">✕</button>
+      </div>
+      <div id="calloutStatus" class="px-3 text-[10px] text-slate-400 leading-tight"></div>
+      <div class="grid grid-cols-2 gap-x-3 gap-y-1.5 px-3 pb-2.5 pt-1.5">
+        <div>
+          <div class="text-[9px] uppercase tracking-wider text-slate-400 leading-none">Altitude</div>
+          <div id="coAlt" class="text-[13px] tabular-nums leading-tight mt-0.5">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase tracking-wider text-slate-400 leading-none">Climb</div>
+          <div id="coClimb" class="text-[13px] tabular-nums leading-tight mt-0.5">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase tracking-wider text-slate-400 leading-none">Speed</div>
+          <div id="coSpeed" class="text-[13px] tabular-nums leading-tight mt-0.5">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase tracking-wider text-slate-400 leading-none">Glide</div>
+          <div id="coGlide" class="text-[13px] tabular-nums leading-tight mt-0.5">—</div>
+        </div>
+      </div>
+    </div>
+
     <!-- hover tooltip -->
     <div id="tooltip"
       class="pointer-events-none absolute z-30 hidden rounded-md panel px-2.5 py-1.5 text-xs shadow-lg">
@@ -108,6 +148,10 @@
               </div>
             </div>
           </div>
+          <label class="flex items-center gap-2 text-xs cursor-pointer">
+            <input id="rankBadges" type="checkbox" checked class="accent-lime-500">
+            <span>Rank badges on pilots</span>
+          </label>
           <div>
             <label class="flex justify-between text-[11px] uppercase tracking-wide text-slate-400 mb-1">
               <span>Vertical ×</span><span id="vscaleVal" class="text-slate-300 normal-case">3.0×</span>
