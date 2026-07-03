@@ -23,7 +23,8 @@ viewer was built from) as background.
   glide ratio) with a leader line to the pilot's cone. There is deliberately
   **no tooltip window next to the pilot** — hovering a cone routes that
   pilot's metrics into the callout as a live preview; clicking the cone pins
-  (follows) them.
+  (follows) them. Clicking/tapping away from every cone toggles play/pause
+  (as does the spacebar), so the whole canvas is the play button.
 - The packing logic is **pure and fs/DOM-free** (`packTracksFromIgc` in the
   engine), so the *same* code runs in two places:
   - **Runtime, Worker-served (primary):** `GET /api/comp/:comp_id/task/:task_id/3dvis`
@@ -370,7 +371,10 @@ The viewer emits a per-frame `onFrame(samples: PilotScreenSample[])` callback
 with every pilot's projected screen position + live metrics; the array is
 **reused across frames** (no allocation). Picking (`pickAt`) shares those same
 projections. Click-vs-drag on the canvas is discriminated by pointer travel
-(≤5 px = click → follow the picked pilot).
+(≤5 px = click; primary pointer only, so multi-touch gestures never count).
+A click on a cone follows that pilot; a background click toggles play/pause
+(suppressed when it's dismissing the open control drawer), as does Space
+(unless a form control has focus).
 
 **Ground speed and climb are smoothed over a ±3-fix window** in `samplePilot`
 (matching the per-vertex vario smoothing). Speed is the horizontal *path

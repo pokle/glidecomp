@@ -58,7 +58,10 @@ export interface ViewerCallbacks {
   onHover?(info: HoverInfo | null): void;
   /** Fires every frame with all pilots' projected positions + live metrics. */
   onFrame?(samples: readonly PilotScreenSample[]): void;
-  /** Fires when the user clicks (not drags) on a pilot's marker cone. */
+  /**
+   * Fires when the user clicks (not drags) the canvas: the picked pilot's
+   * index, or -1 when the click landed away from every marker cone.
+   */
   onPick?(pilotIdx: number): void;
   onScale?(metresPerPixel: number): void;
   onCompass?(northAngleDeg: number): void;
@@ -308,23 +311,27 @@ export class ReplayViewer {
     this.pointer.inside = false;
   };
   /**
-   * Click-to-select: a press that releases within a few px (i.e. not a camera
-   * pan/orbit drag) picks the nearest marker cone under the cursor.
+   * Click detection: a primary-pointer press that releases within a few px
+   * (i.e. not a camera pan/orbit drag, not a multi-touch gesture) reports the
+   * nearest marker cone under the cursor — or -1 for a background click.
    */
   private onPointerDown = (e: PointerEvent): void => {
+    if (!e.isPrimary) {
+      this.press = null; // a second finger landed — this is a gesture, not a click
+      return;
+    }
     const rect = this.container.getBoundingClientRect();
     this.press = { x: e.clientX - rect.left, y: e.clientY - rect.top };
   };
   private onPointerUp = (e: PointerEvent): void => {
     const press = this.press;
     this.press = null;
-    if (!press) return;
+    if (!press || !e.isPrimary) return;
     const rect = this.container.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     if (Math.hypot(x - press.x, y - press.y) > 5) return; // it was a drag
-    const picked = this.pickAt(x, y, 20);
-    if (picked >= 0) this.cb.onPick?.(picked);
+    this.cb.onPick?.(this.pickAt(x, y, 20));
   };
   private onResize = (): void => this.backend.resize();
 

@@ -204,6 +204,21 @@ async function main(): Promise<void> {
   $<HTMLSelectElement>('speed').addEventListener('change', (e) => {
     viewer.setSpeed(Number((e.target as HTMLSelectElement).value));
   });
+  // Space toggles play/pause — unless a form control has focus (space there
+  // means "activate that control", e.g. re-clicking a focused button).
+  document.addEventListener('keydown', (e) => {
+    if (e.code !== 'Space') return;
+    const t = e.target as HTMLElement;
+    if (
+      t instanceof HTMLInputElement ||
+      t instanceof HTMLSelectElement ||
+      t instanceof HTMLTextAreaElement ||
+      t instanceof HTMLButtonElement
+    )
+      return;
+    e.preventDefault(); // don't scroll the page
+    viewer.togglePlay();
+  });
 
   // --- view controls ---
   $<HTMLSelectElement>('colorMode').addEventListener('change', (e) => {
@@ -391,8 +406,16 @@ async function main(): Promise<void> {
   }
   $('unfollow').addEventListener('click', clearFollow);
 
-  /** Click on a cone: follow that pilot (click the followed one again to stop). */
+  /**
+   * Canvas click: on a cone, follow that pilot (click the followed one again
+   * to stop); away from every cone, toggle play/pause — unless the click is
+   * dismissing the open control drawer, which shouldn't also start playback.
+   */
   function onPickPilot(i: number): void {
+    if (i < 0) {
+      if (!$('menuPanel').classList.contains('open')) viewer.togglePlay();
+      return;
+    }
     if (i === followIdx) clearFollow();
     else setFollow(i);
   }
