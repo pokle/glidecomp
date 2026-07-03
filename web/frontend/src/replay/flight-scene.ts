@@ -77,7 +77,18 @@ export class FlightScene {
   private gaggles?: GaggleResult;
   private gaggleLayer?: GaggleLayer;
 
-  constructor(tracks: LoadedTracks, gaggles?: GaggleResult) {
+  /**
+   * `light` themes the in-scene furniture for a light backdrop (abstract
+   * light mode): dark ground-label text with a light halo, and a darker
+   * vario-ramp "zero" so near-level trail segments don't vanish into an
+   * off-white background. The terrain backdrop always builds with
+   * `light = false` — there the backdrop is map imagery, not the UI theme.
+   */
+  constructor(
+    tracks: LoadedTracks,
+    gaggles?: GaggleResult,
+    private light = false,
+  ) {
     this.tracks = tracks;
     this.gaggles = gaggles;
     this.buildTrails();
@@ -128,6 +139,10 @@ export class FlightScene {
       uAltMax: { value: manifest.altMax },
       uVarioMax: { value: VARIO_MAX },
       uWidth: { value: this.width * pixelRatio() },
+      // vario-ramp "zero": pale on the dark backdrop, slate on the light one
+      uVarioZero: {
+        value: this.light ? new THREE.Vector3(0.42, 0.45, 0.5) : new THREE.Vector3(0.85, 0.85, 0.88),
+      },
     };
 
     // depthTest off so trails are never hidden by terrain (and never z-fight it).
@@ -250,7 +265,7 @@ export class FlightScene {
       // Turnpoint name, laid flat on the ground at the centre. Fixed orientation
       // (North = up) so it reads upright when the camera faces north.
       if (tp.name) {
-        const label = makeGroundLabel(tp.name, Math.min(tp.radius * 1.5, this.extentXZ * 0.11));
+        const label = makeGroundLabel(tp.name, Math.min(tp.radius * 1.5, this.extentXZ * 0.11), this.light);
         label.position.set(tp.x, 0, tp.z);
         label.renderOrder = 5;
         this.group.add(label);
@@ -362,7 +377,7 @@ export class FlightScene {
   /** Build the gaggle blob layer (hull + label pool) and host it in the group. */
   private buildGaggleLayer(): void {
     if (!this.gaggles) return;
-    this.gaggleLayer = new GaggleLayer(this.gaggles, this.nPilots, this.extentXZ);
+    this.gaggleLayer = new GaggleLayer(this.gaggles, this.nPilots, this.extentXZ, this.light);
     this.group.add(this.gaggleLayer.group);
   }
 
@@ -501,7 +516,7 @@ export class FlightScene {
  * the same chirality (the mercator model-matrix reflection and Mapbox's own
  * north-up mercator flip cancel out), so no per-backend canvas flip is needed.
  */
-function makeGroundLabel(text: string, worldWidth: number): THREE.Mesh {
+function makeGroundLabel(text: string, worldWidth: number, light = false): THREE.Mesh {
   const fontPx = 64;
   const pad = 28;
   const canvas = document.createElement('canvas');
@@ -516,9 +531,10 @@ function makeGroundLabel(text: string, worldWidth: number): THREE.Mesh {
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
   ctx.lineWidth = 8;
-  ctx.strokeStyle = 'rgba(8,12,22,0.9)';
+  // halo + text invert with the backdrop theme
+  ctx.strokeStyle = light ? 'rgba(250,250,246,0.92)' : 'rgba(8,12,22,0.9)';
   ctx.strokeText(text, w / 2, h / 2);
-  ctx.fillStyle = '#f1f5f9';
+  ctx.fillStyle = light ? '#1e293b' : '#f1f5f9';
   ctx.fillText(text, w / 2, h / 2);
 
   const tex = new THREE.CanvasTexture(canvas);
@@ -555,6 +571,7 @@ function trailVertexShader(nPilots: number): string {
     uniform float uAltMin;
     uniform float uAltMax;
     uniform float uVarioMax;
+    uniform vec3  uVarioZero;   // vario-ramp centre colour (theme-dependent)
     uniform float uWidth;       // point size (px); ignored by LineSegments
     varying float vAge;
     varying vec3  vColor;
@@ -572,12 +589,11 @@ function trailVertexShader(nPilots: number): string {
       return mix(c3, c4, (t - 0.75) / 0.25);
     }
 
-    // diverging: blue (sink) -> pale (level) -> red (climb)
+    // diverging: blue (sink) -> uVarioZero (level) -> red (climb)
     vec3 varioRamp(float t) {
       vec3 sink = vec3(0.20, 0.45, 0.95);
-      vec3 zero = vec3(0.85, 0.85, 0.88);
       vec3 climb = vec3(0.95, 0.25, 0.20);
-      return t < 0.5 ? mix(sink, zero, t / 0.5) : mix(zero, climb, (t - 0.5) / 0.5);
+      return t < 0.5 ? mix(sink, uVarioZero, t / 0.5) : mix(uVarioZero, climb, (t - 0.5) / 0.5);
     }
 
     void main() {

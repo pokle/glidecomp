@@ -123,7 +123,9 @@ function setupPanels(): void {
 // updateLegend, which runs during early wiring)
 const ALT_GRADIENT =
   'linear-gradient(to right, rgb(33,102,217), rgb(26,191,204), rgb(77,204,77), rgb(242,204,51), rgb(235,64,51))';
+// vario "zero" is pale on dark, slate on light — mirrors uVarioZero in the trail shader
 const VARIO_GRADIENT = 'linear-gradient(to right, rgb(51,115,242), rgb(217,217,224), rgb(242,64,51))';
+const VARIO_GRADIENT_LIGHT = 'linear-gradient(to right, rgb(51,115,242), rgb(107,115,128), rgb(242,64,51))';
 
 /** Round n down to a "nice" 1/2/5×10^k value for the scale bar. */
 function niceNumber(n: number): number {
@@ -143,6 +145,16 @@ async function main(): Promise<void> {
   // can never hit the temporal dead zone.
   let followIdx = -1;
   let hoverIdx = -1;
+
+  // Apply the saved theme to the chrome immediately so a light-mode user never
+  // sees a dark flash while the tracks load; the full switch is wired below.
+  const savedTheme = config.getPreferences().theme ?? 'dark';
+  document.documentElement.classList.toggle(
+    'light',
+    savedTheme === 'system'
+      ? window.matchMedia('(prefers-color-scheme: light)').matches
+      : savedTheme === 'light',
+  );
 
   let manifest: TrackManifest;
   const viewer = new ReplayViewer(
@@ -168,6 +180,9 @@ async function main(): Promise<void> {
     },
     import.meta.env.VITE_MAPBOX_TOKEN,
   );
+
+  // the first scene build honours the saved theme (no-op rebuild before load)
+  void viewer.setLightTheme(document.documentElement.classList.contains('light'));
 
   try {
     const tracks = await viewer.loadBundle(bundleUrl());
@@ -590,6 +605,20 @@ async function main(): Promise<void> {
       ctx.stroke();
     };
 
+    // canvas colours come from the --rp-* theme tokens (re-read on theme change)
+    const palette = { arc: '', tick: '', strong: '', label: '', pos: '', neg: '' };
+    const readPalette = (): void => {
+      const cs = getComputedStyle(document.documentElement);
+      const v = (name: string, fallback: string): string => cs.getPropertyValue(name).trim() || fallback;
+      palette.arc = v('--rp-dial-arc', 'rgba(148,163,184,0.35)');
+      palette.tick = v('--rp-dial-tick', 'rgba(148,163,184,0.55)');
+      palette.strong = v('--rp-dial-strong', 'rgba(226,232,240,0.9)');
+      palette.label = v('--rp-dial-label', 'rgba(148,163,184,0.8)');
+      palette.pos = v('--rp-climb-pos', '#a3e635');
+      palette.neg = v('--rp-climb-neg', '#38bdf8');
+    };
+    readPalette();
+
     // static dial: arc, ticks each 1 m/s (major each 2), labels at −max/0/+max
     // in the user's climb-rate unit (the dial's physical range stays ±VARIO_MAX
     // m/s to match the vario colour ramp; only the labels convert).
@@ -599,7 +628,7 @@ async function main(): Promise<void> {
     };
     const drawScale = (): void => {
       sctx.clearRect(0, 0, W, H);
-      sctx.strokeStyle = 'rgba(148,163,184,0.35)';
+      sctx.strokeStyle = palette.arc;
       sctx.lineWidth = 1;
       sctx.beginPath();
       sctx.arc(CX, CY, R, Math.PI, 2 * Math.PI);
@@ -609,15 +638,15 @@ async function main(): Promise<void> {
       sctx.font = '8px system-ui, sans-serif';
       for (let v = -VARIO_MAX; v <= VARIO_MAX; v++) {
         const a = angleOf(v);
-        sctx.strokeStyle = v === 0 ? 'rgba(226,232,240,0.9)' : 'rgba(148,163,184,0.55)';
+        sctx.strokeStyle = v === 0 ? palette.strong : palette.tick;
         sctx.lineWidth = v === 0 ? 1.5 : 1;
         ray(sctx, a, R - (v % 2 === 0 ? 6 : 3.5), R);
         if (v === -VARIO_MAX || v === 0 || v === VARIO_MAX) {
-          sctx.fillStyle = 'rgba(148,163,184,0.8)';
+          sctx.fillStyle = palette.label;
           sctx.fillText(dialLabel(v), CX + Math.cos(a) * (R - 13), CY + Math.sin(a) * (R - 13));
         }
       }
-      sctx.fillStyle = 'rgba(226,232,240,0.6)';
+      sctx.fillStyle = palette.strong;
       sctx.beginPath();
       sctx.arc(CX, CY, 2, 0, 2 * Math.PI);
       sctx.fill();
@@ -630,6 +659,11 @@ async function main(): Promise<void> {
     return {
       /** Repaint the static dial (climb-rate unit changed). */
       redrawScale: drawScale,
+      /** Re-read the --rp-* tokens and repaint the dial (theme changed). */
+      refreshTheme(): void {
+        readPalette();
+        drawScale();
+      },
       /** Wipe the trail (switching pilots). */
       reset(): void {
         hist.fill(NaN);
@@ -647,12 +681,12 @@ async function main(): Promise<void> {
           const hv = hist[(head + k) % HISTORY];
           if (Number.isNaN(hv)) continue;
           tctx.globalAlpha = 0.16 * (k / HISTORY) ** 2;
-          tctx.strokeStyle = hv >= 0 ? '#a3e635' : '#38bdf8';
+          tctx.strokeStyle = hv >= 0 ? palette.pos : palette.neg;
           ray(tctx, angleOf(hv), 10, R - 8);
         }
         // the live needle, with a soft glow
         if (v != null) {
-          const color = v >= 0 ? '#a3e635' : '#38bdf8';
+          const color = v >= 0 ? palette.pos : palette.neg;
           tctx.globalAlpha = 0.95;
           tctx.strokeStyle = color;
           tctx.shadowColor = color;
@@ -863,6 +897,41 @@ async function main(): Promise<void> {
     digitsPilot = -1; // repaint the callout digits immediately, skip the 1 s throttle
   });
 
+  // --- theme: dark / light / auto (same shared preferences store) ---
+  type ThemeMode = 'light' | 'dark' | 'system';
+  const themeButtons: Record<ThemeMode, HTMLButtonElement> = {
+    dark: $('thDark'),
+    light: $('thLight'),
+    system: $('thAuto'),
+  };
+  const prefersLight = window.matchMedia('(prefers-color-scheme: light)');
+  let themeMode: ThemeMode = config.getPreferences().theme ?? 'dark';
+  function applyThemeMode(): void {
+    const light = themeMode === 'system' ? prefersLight.matches : themeMode === 'light';
+    document.documentElement.classList.toggle('light', light);
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', light ? '#f2f0e9' : '#0a0f1a');
+    (Object.keys(themeButtons) as ThemeMode[]).forEach((m) =>
+      setActive(themeButtons[m], m === themeMode),
+    );
+    gauge.refreshTheme();
+    updateLegend($<HTMLSelectElement>('colorMode').value as ColorMode);
+    void viewer.setLightTheme(light); // rebuilds the abstract scene when needed
+  }
+  for (const m of Object.keys(themeButtons) as ThemeMode[]) {
+    themeButtons[m].addEventListener('click', () => {
+      themeMode = m;
+      config.setPreferences({ theme: m });
+      applyThemeMode();
+    });
+  }
+  // in Auto, follow live OS scheme changes
+  prefersLight.addEventListener('change', () => {
+    if (themeMode === 'system') applyThemeMode();
+  });
+  applyThemeMode();
+
   // --- colour scale legend (altitude / vertical speed) ---
   function updateLegend(mode: ColorMode): void {
     const box = $('colorLegend');
@@ -878,7 +947,9 @@ async function main(): Promise<void> {
       $('legendMid').textContent = '';
       $('legendHi').textContent = formatAltitude(alt0 + manifest.altMax).withUnit;
     } else {
-      $('legendBar').style.background = VARIO_GRADIENT;
+      $('legendBar').style.background = document.documentElement.classList.contains('light')
+        ? VARIO_GRADIENT_LIGHT
+        : VARIO_GRADIENT;
       $('legendLo').textContent = formatClimbRate(-VARIO_MAX).withUnit;
       $('legendMid').textContent = '0';
       $('legendHi').textContent = formatClimbRate(VARIO_MAX).withUnit;

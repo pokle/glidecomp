@@ -54,6 +54,8 @@ export class GaggleLayer {
     private gaggles: GaggleResult,
     nPilots: number,
     extentXZ: number,
+    /** Light backdrop: dark count-label text with a light halo. */
+    private light = false,
   ) {
     // Pad the hull a touch wider than a marker so it wraps with breathing room.
     this.pad = Math.max(extentXZ * 0.018, 60);
@@ -257,9 +259,9 @@ export class GaggleLayer {
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
     ctx.lineWidth = 10;
-    ctx.strokeStyle = 'rgba(8,12,22,0.92)';
+    ctx.strokeStyle = this.light ? 'rgba(250,250,246,0.92)' : 'rgba(8,12,22,0.92)';
     ctx.strokeText(String(count), s / 2, s / 2);
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = this.light ? '#1e293b' : '#f8fafc';
     ctx.fillText(String(count), s / 2, s / 2);
     blob.labelTex.needsUpdate = true;
     blob.labelCount = count;

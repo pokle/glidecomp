@@ -412,6 +412,21 @@ racing stays unobscured), and clicking pins the followed pilot. The ✕ (stop
 following) is hidden during hover-only previews. The old `#tooltip` element
 remains only for the gaggle-ribbon hovers (GaggleUI).
 
+**Theme (dark / light / auto)**: a switch in the control drawer, stored as
+`theme` in the same `glidecomp:preferences` record ('system' = auto, follows
+`prefers-color-scheme` live). Light mode uses an **off-white** background
+(`#f2f0e9`, deliberately not full white). Mechanics: main.ts toggles a
+`light` class on `<html>`; the page's own `<style>` defines `--rp-*` tokens
+plus scoped remaps of the dark slate utilities the markup uses (the page is
+standalone, so remapping beats duplicating a light class next to every
+utility). The gauge canvas reads the `--rp-*` tokens so it follows. In-scene
+furniture (clear colour, grid, ground/gaggle labels, the vario-ramp zero via
+a `uVarioZero` uniform) follows the theme **only on the abstract backdrop**,
+which is rebuilt in place on switch — on terrain the backdrop is map
+imagery, so the scene always builds dark-styled there. The saved theme is
+applied to the chrome at the top of main() so light users don't get a dark
+flash during load.
+
 **Units** honour the same preferences as the analysis page: the `config`
 singleton (`analysis/config.ts`, localStorage key `glidecomp:preferences`,
 cloud-synced by `auth/preferences-sync` when a signed-in page runs — its

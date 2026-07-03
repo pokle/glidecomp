@@ -100,6 +100,9 @@ export class ReplayViewer {
   private tailSeconds = 600; // 10 min comet tail by default
   private trailWidth = 3; // CSS px
   private mapStyle = DEFAULT_MAP_STYLE.url;
+  /** UI theme; the scene only follows it on the abstract backdrop (the
+   * terrain backdrop's colours come from the map imagery, not the theme). */
+  private lightTheme = false;
   private visibility!: boolean[];
   private follow = -1;
   /** Gaggle id being followed by its live centroid (-1 = none). */
@@ -150,7 +153,7 @@ export class ReplayViewer {
       climbInst: 0,
     }));
 
-    this.scene = new FlightScene(this.tracks, this.gaggles);
+    this.scene = new FlightScene(this.tracks, this.gaggles, this.sceneLight('abstract'));
     this.applySceneState();
     this.backend = await this.makeBackend('abstract');
     this.backend.setVScale(this.vScale);
@@ -174,12 +177,35 @@ export class ReplayViewer {
 
   async setBackdrop(mode: Backdrop): Promise<void> {
     if (mode === this.backdrop || this.switching) return;
+    await this.rebuild(mode);
+  }
+
+  /**
+   * Set the UI theme. The in-scene furniture (background, grid, ground labels,
+   * vario-ramp zero) follows it only on the abstract backdrop, which is
+   * rebuilt in place; on terrain nothing in-scene changes.
+   */
+  async setLightTheme(light: boolean): Promise<void> {
+    if (light === this.lightTheme) return;
+    this.lightTheme = light;
+    // Before load (no scene yet) init() picks the flag up; mid-switch skip.
+    if (!this.scene || this.switching) return;
+    if (this.backdrop === 'abstract') await this.rebuild('abstract');
+  }
+
+  /** Whether the in-scene furniture should be light-themed for `mode`. */
+  private sceneLight(mode: Backdrop): boolean {
+    return this.lightTheme && mode === 'abstract';
+  }
+
+  /** Dispose and rebuild the scene + backend for `mode`, re-applying view state. */
+  private async rebuild(mode: Backdrop): Promise<void> {
     this.switching = true;
     try {
       this.backend.dispose();
       this.scene.dispose();
 
-      this.scene = new FlightScene(this.tracks, this.gaggles);
+      this.scene = new FlightScene(this.tracks, this.gaggles, this.sceneLight(mode));
       this.applySceneState();
       this.backend = await this.makeBackend(mode);
       this.backend.setVScale(this.vScale);
@@ -197,7 +223,7 @@ export class ReplayViewer {
       const { TerrainBackend } = await import('./terrain-backend');
       return new TerrainBackend(this.container, this.scene, this.tracks.manifest, this.mapboxToken, this.mapStyle);
     }
-    return new AbstractBackend(this.container, this.scene);
+    return new AbstractBackend(this.container, this.scene, this.sceneLight(mode));
   }
 
   /** Re-push every scene-level setting onto a freshly built FlightScene. */
