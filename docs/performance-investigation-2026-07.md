@@ -122,8 +122,10 @@ numbers is TLS setup, and the 3dvis HIT includes downloading a 3 MB bundle.
 
 1. ~~Parallelize 3dvis R2 fetches~~ — done in this branch (expected: cold
    3dvis ~8 s → ~2–3 s in production).
-2. Enable Smart Placement on competition-api; measure warm + cold latency
-   from a far-away region before/after.
+2. ~~Enable Smart Placement on competition-api~~ — done in this branch
+   (`[placement] mode = "smart"`). Smart Placement learns from live traffic,
+   so measure warm + cold latency from a far-away region a while after the
+   merge deploys it, and compare against the numbers above.
 3. Precompute score + 3dvis caches at upload time (waitUntil or a queue), so
    users almost never see a cold path.
 4. If/when on Workers Paid, set `limits.cpu_ms` explicitly for headroom on
