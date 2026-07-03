@@ -22,6 +22,14 @@ import type { Backend } from './backend';
 export type { ColorMode } from './flight-scene';
 export type Backdrop = 'abstract' | 'terrain';
 
+/**
+ * Fixed flight-time window (seconds) for the averaged climb/speed metrics,
+ * independent of playback speed — a "20 s average climb" means the same thing
+ * at 1× and 240×, which is what you want for judging how a thermal is going.
+ * The UI labels the readout with this value ("20s avg").
+ */
+export const METRIC_AVG_SECONDS = 20;
+
 export interface HoverInfo {
   pilotIdx: number;
   name: string;
@@ -48,8 +56,12 @@ export interface PilotScreenSample {
   /** False when the marker projects off-screen / behind the camera. */
   onScreen: boolean;
   altMsl: number;
+  /** Climb averaged over the fixed METRIC_AVG_SECONDS window, m/s. */
   climb: number;
+  /** Ground speed averaged over the same window, m/s. */
   speed: number;
+  /** Near-instantaneous climb (±3-fix window), m/s — the gauge needle. */
+  climbInst: number;
 }
 
 export interface ViewerCallbacks {
@@ -135,6 +147,7 @@ export class ReplayViewer {
       altMsl: 0,
       climb: 0,
       speed: 0,
+      climbInst: 0,
     }));
 
     this.scene = new FlightScene(this.tracks, this.gaggles);
@@ -226,7 +239,7 @@ export class ReplayViewer {
     }
 
     this.scene.setTime(this.time);
-    const samples = this.scene.updateMarkers(this.time);
+    const samples = this.scene.updateMarkers(this.time, METRIC_AVG_SECONDS);
 
     if (this.followGaggleId >= 0) this.backend.followTo(this.gaggleCentroid(samples));
     else if (this.follow >= 0) this.backend.followTo(samples[this.follow]);
@@ -248,6 +261,7 @@ export class ReplayViewer {
       out.altMsl = s.altMsl;
       out.climb = s.climb;
       out.speed = s.speed;
+      out.climbInst = s.climbInst;
       if (!out.active) {
         out.onScreen = false;
         continue;
@@ -468,6 +482,7 @@ export class ReplayViewer {
       altMsl: 0,
       climb: 0,
       speed: 0,
+      climbInst: 0,
       name: '',
     };
   }

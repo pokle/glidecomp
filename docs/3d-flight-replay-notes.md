@@ -376,12 +376,30 @@ A click on a cone follows that pilot; a background click toggles play/pause
 (suppressed when it's dismissing the open control drawer), as does Space
 (unless a form control has focus).
 
-**Ground speed and climb are smoothed over a ±3-fix window** in `samplePilot`
-(matching the per-vertex vario smoothing). Speed is the horizontal *path
-length* over the window — a straight-line delta reads near zero while
-circling in a thermal. Glide ratio is derived as `speed / -climb`, shown as
-`∞` when level/climbing and capped (>40 → `∞`) so noise never prints absurd
-numbers.
+**Ground speed and climb are averaged over a fixed window** in `samplePilot`
+(`METRIC_AVG_SECONDS` = 20 s of flight time, independent of playback speed —
+the readout is labelled "(20s avg)"). The jitter this fixes is *not* sensor
+noise: at 16× the display replays the pilot's genuine within-thermal-circle
+oscillation (climb really does swing −3 → +1 around each ~20 s circle, i.e.
+flicker at ~0.7 Hz on screen). A fixed window was chosen over scaling with
+playback speed deliberately: a "20 s average climb" means the same thing at
+1× and 240×, which is what you want for judging how well a thermal is going.
+Speed is the horizontal *path length* over the window — a straight-line
+delta reads near zero while circling. Glide ratio is derived as
+`speed / -climb`, shown as `∞` when level/climbing and capped (>40 → `∞`).
+On top of that the callout digits repaint at most ~1×/s during playback
+(live when paused or on pilot change); altitude stays per-frame (it's steady
+by nature).
+
+**The climb readout is a vario gauge, not just digits**: a half-dial
+(−4…+4 m/s) whose needle shows the *near-instantaneous* climb (fixed ±3-fix
+window, `climbInst`) at full frame rate — flicker is intentional — drawn over
+a phosphor trail of its last ~3 s of positions fading like a radium dial, so
+the flicker's spread reads as a glowing variance band while the digit beneath
+stays averaged. Implementation note: the trail is a ring buffer of needle
+angles redrawn from scratch each frame; do NOT fade with
+`destination-out` fills — 8-bit alpha rounding leaves permanently stuck ghost
+pixels at low alpha. The trail resets on pilot switch.
 
 The callout is draggable (pointer capture on the bubble, clamped to the
 viewport, position persisted in `localStorage`), with an SVG leader line that

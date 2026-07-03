@@ -43,10 +43,12 @@ export interface MarkerSample {
   z: number;
   /** Altitude MSL (metres), un-exaggerated. */
   altMsl: number;
-  /** Climb rate, m/s (smoothed). */
+  /** Climb rate, m/s (averaged over the caller's fixed smoothing window). */
   climb: number;
-  /** Ground speed, m/s (smoothed). */
+  /** Ground speed, m/s (averaged over the same window). */
   speed: number;
+  /** Near-instantaneous climb, m/s (±3-fix window) — the live gauge needle. */
+  climbInst: number;
   name: string;
 }
 
@@ -197,6 +199,7 @@ export class FlightScene {
         altMsl: 0,
         climb: 0,
         speed: 0,
+        climbInst: 0,
         name: this.tracks.manifest.pilots[i].name,
       });
     }
@@ -393,18 +396,19 @@ export class FlightScene {
   /**
    * Update marker instance matrices for time `t` and return per-pilot samples
    * (local ENU metres, y already multiplied by vScale) for the backend to
-   * project / follow.
+   * project / follow. `smoothSeconds` is the metric-averaging window of
+   * flight time (fixed by the caller; see METRIC_AVG_SECONDS).
    */
-  updateMarkers(t: number): MarkerSample[] {
+  updateMarkers(t: number, smoothSeconds = 6): MarkerSample[] {
     const n = this.nPilots;
     for (let i = 0; i < n; i++) {
-      const s = samplePilot(this.tracks, i, t, this.alt0);
+      const s = samplePilot(this.tracks, i, t, this.alt0, smoothSeconds);
       const out = this.samplesOut[i];
       if (!s.active) {
         out.active = false;
         out.landed = false;
         out.x = out.y = out.z = 0;
-        out.climb = out.speed = out.altMsl = 0;
+        out.climb = out.speed = out.climbInst = out.altMsl = 0;
         this.dummy.scale.set(0, 0, 0);
         this.dummy.position.set(0, -1e9, 0);
         this.dummy.updateMatrix();
@@ -428,6 +432,7 @@ export class FlightScene {
       out.altMsl = s.altMsl;
       out.climb = s.climb;
       out.speed = s.speed;
+      out.climbInst = s.climbInst;
     }
     this.markers.instanceMatrix.needsUpdate = true;
     this.gaggleLayer?.update(t, this.samplesOut);
