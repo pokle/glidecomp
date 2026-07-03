@@ -41,6 +41,21 @@ export class TerrainBackend implements Backend {
   // follow: shift the map by the pilot's movement so the user can still drag/rotate/zoom.
   private followPilot = -1;
   private followLngLat: [number, number] | null = null;
+  /**
+   * Live pointers on the map. While a gesture is in progress the follow must
+   * NOT call setCenter: Mapbox's jumpTo (which setCenter wraps) calls stop(),
+   * and stop() cancels the active gesture handlers — per-frame recentering
+   * therefore made touch pan/orbit impossible while following. Mouse drags
+   * mostly survived because they re-establish on every mousemove; touch
+   * gestures are stateful and died continuously.
+   */
+  private activePointers = 0;
+  private readonly onWindowPointerUp = (): void => {
+    this.activePointers = Math.max(0, this.activePointers - 1);
+  };
+  private readonly onContainerPointerDown = (): void => {
+    this.activePointers++;
+  };
   private readonly combined = new THREE.Matrix4();
   private readonly model = new THREE.Matrix4(); // local→mercator; rebuilt only on vScale change
 
@@ -57,6 +72,13 @@ export class TerrainBackend implements Backend {
     this.originMerc = mapboxgl.MercatorCoordinate.fromLngLat([lon0, lat0], 0);
     this.s = this.originMerc.meterInMercatorCoordinateUnits();
     this.rebuildModel();
+
+    // Gesture tracking for followTo (see activePointers). Down on the
+    // container, up/cancel on the window — a finger released outside the
+    // container would otherwise leak the counter.
+    this.container.addEventListener('pointerdown', this.onContainerPointerDown, true);
+    window.addEventListener('pointerup', this.onWindowPointerUp, true);
+    window.addEventListener('pointercancel', this.onWindowPointerUp, true);
 
     return new Promise((resolve, reject) => {
       try {
@@ -223,11 +245,23 @@ export class TerrainBackend implements Backend {
       this.followLngLat = [lng, lat];
       return;
     }
-    // pan the map by the pilot's movement since last frame; reading the live
-    // centre first means any user drag/rotate/zoom is preserved.
-    const c = this.map.getCenter();
-    this.map.setCenter([c.lng + (lng - this.followLngLat[0]), c.lat + (lat - this.followLngLat[1])]);
+    const dLng = lng - this.followLngLat[0];
+    const dLat = lat - this.followLngLat[1];
     this.followLngLat = [lng, lat];
+    // Nothing moved (paused playback): don't call setCenter at all — its
+    // implicit stop() would cancel gestures for no reason.
+    if (dLng === 0 && dLat === 0) return;
+    // Yield to the user: while a gesture (touch pan/orbit, drag — tracked via
+    // activePointers) or one of our own easeTo orientation presets (isEasing)
+    // is running, setCenter's implicit stop() would kill it. The anchor above
+    // stays fresh, so the follow resumes from the pilot's current position
+    // without a jump when the gesture ends. (isEasing, not isMoving: isMoving
+    // could in principle report our own per-frame jumpTo and starve the follow.)
+    if (this.activePointers > 0 || this.map.isEasing()) return;
+    // pan the map by the pilot's movement since last frame; reading the live
+    // centre first means any user zoom/rotate is preserved.
+    const c = this.map.getCenter();
+    this.map.setCenter([c.lng + dLng, c.lat + dLat]);
   }
 
   projectToScreen(x: number, y: number, z: number): ScreenPoint {
@@ -267,6 +301,9 @@ export class TerrainBackend implements Backend {
   }
 
   dispose(): void {
+    this.container.removeEventListener('pointerdown', this.onContainerPointerDown, true);
+    window.removeEventListener('pointerup', this.onWindowPointerUp, true);
+    window.removeEventListener('pointercancel', this.onWindowPointerUp, true);
     // Detach shared objects before tearing down the map (which destroys the GL
     // context the renderer3 borrowed). Do NOT renderer3.dispose() afterwards —
     // the context is already gone (mirrors the Threebox-on-style-change rule).

@@ -323,6 +323,23 @@ first so user drag survives. (Verified: pure follow pins the pilot to the exact
 pixel; only transient OrbitControls damping causes a few px of settle after an
 orbit/pan.)
 
+**Terrain follow must YIELD to gestures.** Mapbox's `setCenter` wraps `jumpTo`,
+whose first act is `stop()` — and `stop()` cancels the active gesture handlers.
+Per-frame recentering therefore made **touch pan/orbit impossible while
+following** (mouse drags mostly survived because they re-establish on every
+mousemove; touch gestures are stateful and died continuously — it even fired
+with playback paused, since the delta-zero case still called `setCenter`).
+Fix (see `terrain-follow.test.ts`): keep the follow anchor fresh every frame
+but skip `setCenter` when (a) the delta is zero, (b) any pointer is down on the
+map (counter: container `pointerdown` / window `pointerup`+`pointercancel`, so
+a finger released off-map can't leak it), or (c) `map.isEasing()` — our own
+orientation presets, which the per-frame `stop()` used to kill too. Use
+`isEasing()`, not `isMoving()`, in that guard: `isMoving()` could in principle
+report the follow's own jumpTo and starve it. Because the anchor keeps
+tracking during the gesture, the follow resumes from the pilot's live position
+with no jump. The abstract backend needs none of this — OrbitControls deltas
+compose with the follow shift naturally.
+
 ### 5.13 Orientation presets (compass / top / side) — drive OrbitControls via Spherical
 
 Compass-click = north-up, plus Top/Side buttons. There's no `setAzimuthalAngle`
