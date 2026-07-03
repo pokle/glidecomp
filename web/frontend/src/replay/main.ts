@@ -542,6 +542,105 @@ async function main(): Promise<void> {
   /** Pilot whose identity the callout header is currently painted for. */
   let calloutPilot = -1;
 
+  /**
+   * Vario gauge in the callout: a static half-dial (−VARIO_MAX…+VARIO_MAX m/s)
+   * plus a live needle showing near-instantaneous climb. The needle is allowed
+   * to flicker — it's drawn over a phosphor trail of its last ~3 s of
+   * positions, fading like traces on a radium dial, so the spread of the
+   * flicker reads as a glowing variance band while the digits stay averaged.
+   * The trail is a ring buffer redrawn from scratch each frame (no
+   * destination-out decay, which leaves stuck ghost pixels at low alpha).
+   */
+  const gauge = (() => {
+    const W = 168;
+    const H = 72;
+    const CX = W / 2;
+    const CY = H - 16; // needle pivot (climb readout sits below)
+    const R = 46;
+    const HISTORY = 180; // ~3 s of needle positions at 60 fps
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const sctx = $<HTMLCanvasElement>('gaugeScale').getContext('2d')!;
+    const tctx = $<HTMLCanvasElement>('gaugeTrail').getContext('2d')!;
+    for (const ctx of [sctx, tctx]) {
+      ctx.canvas.width = W * dpr;
+      ctx.canvas.height = H * dpr;
+      ctx.scale(dpr, dpr);
+    }
+    const angleOf = (v: number): number => {
+      const c = Math.max(-VARIO_MAX, Math.min(VARIO_MAX, v));
+      return Math.PI + ((c + VARIO_MAX) / (2 * VARIO_MAX)) * Math.PI;
+    };
+    const ray = (ctx: CanvasRenderingContext2D, a: number, r0: number, r1: number): void => {
+      ctx.beginPath();
+      ctx.moveTo(CX + Math.cos(a) * r0, CY + Math.sin(a) * r0);
+      ctx.lineTo(CX + Math.cos(a) * r1, CY + Math.sin(a) * r1);
+      ctx.stroke();
+    };
+
+    // static dial: arc, ticks each 1 m/s (major each 2), labels at −max/0/+max
+    sctx.strokeStyle = 'rgba(148,163,184,0.35)';
+    sctx.lineWidth = 1;
+    sctx.beginPath();
+    sctx.arc(CX, CY, R, Math.PI, 2 * Math.PI);
+    sctx.stroke();
+    sctx.textAlign = 'center';
+    sctx.textBaseline = 'middle';
+    sctx.font = '8px system-ui, sans-serif';
+    for (let v = -VARIO_MAX; v <= VARIO_MAX; v++) {
+      const a = angleOf(v);
+      sctx.strokeStyle = v === 0 ? 'rgba(226,232,240,0.9)' : 'rgba(148,163,184,0.55)';
+      sctx.lineWidth = v === 0 ? 1.5 : 1;
+      ray(sctx, a, R - (v % 2 === 0 ? 6 : 3.5), R);
+      if (v === -VARIO_MAX || v === 0 || v === VARIO_MAX) {
+        sctx.fillStyle = 'rgba(148,163,184,0.8)';
+        sctx.fillText(v > 0 ? `+${v}` : String(v), CX + Math.cos(a) * (R - 13), CY + Math.sin(a) * (R - 13));
+      }
+    }
+    sctx.fillStyle = 'rgba(226,232,240,0.6)';
+    sctx.beginPath();
+    sctx.arc(CX, CY, 2, 0, 2 * Math.PI);
+    sctx.fill();
+
+    // needle history ring buffer (NaN = no reading that frame)
+    const hist = new Float32Array(HISTORY).fill(NaN);
+    let head = 0;
+    return {
+      /** Wipe the trail (switching pilots). */
+      reset(): void {
+        hist.fill(NaN);
+        tctx.clearRect(0, 0, W, H);
+      },
+      /** Per-frame: record `v` (null = no reading) and repaint trail + needle. */
+      tick(v: number | null): void {
+        hist[head] = v == null ? NaN : v;
+        head = (head + 1) % HISTORY;
+        tctx.clearRect(0, 0, W, H);
+        tctx.lineCap = 'round';
+        // phosphor trail, oldest (faintest) first
+        tctx.lineWidth = 1.4;
+        for (let k = 1; k < HISTORY; k++) {
+          const hv = hist[(head + k) % HISTORY];
+          if (Number.isNaN(hv)) continue;
+          tctx.globalAlpha = 0.16 * (k / HISTORY) ** 2;
+          tctx.strokeStyle = hv >= 0 ? '#a3e635' : '#38bdf8';
+          ray(tctx, angleOf(hv), 10, R - 8);
+        }
+        // the live needle, with a soft glow
+        if (v != null) {
+          const color = v >= 0 ? '#a3e635' : '#38bdf8';
+          tctx.globalAlpha = 0.95;
+          tctx.strokeStyle = color;
+          tctx.shadowColor = color;
+          tctx.shadowBlur = 7;
+          tctx.lineWidth = 2;
+          ray(tctx, angleOf(v), 6, R - 8);
+          tctx.shadowBlur = 0;
+        }
+        tctx.globalAlpha = 1;
+      },
+    };
+  })();
+
   /** Clamp the callout inside the viewport (viewport coords == #app coords). */
   function placeCallout(x: number, y: number): void {
     const app = $('app').getBoundingClientRect();
@@ -559,6 +658,7 @@ async function main(): Promise<void> {
     rank.style.background = pilotRgb(i);
     leaderLine.setAttribute('stroke', pilotRgb(i));
     leaderDot.setAttribute('fill', pilotRgb(i));
+    gauge.reset(); // don't smear one pilot's needle history into the next
     callout.classList.remove('hidden');
     placeCallout(parseFloat(callout.style.left), parseFloat(callout.style.top));
   }
@@ -620,6 +720,10 @@ async function main(): Promise<void> {
     return `${climb >= 0 ? '+' : ''}${climb.toFixed(1)} m/s`;
   }
 
+  // digit-repaint throttle state (see onFrameTick)
+  let digitsPilot = -1;
+  let digitsAt = 0;
+
   /** Per-frame overlay refresh: badge positions + callout values + leader line. */
   function onFrameTick(samples: readonly PilotScreenSample[]): void {
     const eff = hoverIdx >= 0 ? hoverIdx : followIdx;
@@ -647,7 +751,20 @@ async function main(): Promise<void> {
     calloutClose.style.visibility = followIdx >= 0 ? '' : 'hidden';
     const s = samples[display];
     const flying = s.active && !s.landed;
+
+    // Every frame: altitude (steady by nature), the gauge needle (flicker is
+    // the point — the phosphor trail turns it into a variance band), leader.
     coAlt.textContent = s.active ? `${Math.round(s.altMsl)} m` : '—';
+    gauge.tick(flying ? s.climbInst : null);
+    updateLeader(s);
+
+    // Digits: already averaged over the playback-scaled window, and repainted
+    // at most ~1×/s during playback so they're readable; live when paused or
+    // when the displayed pilot changes.
+    const now = performance.now();
+    if (display === digitsPilot && viewer.isPlaying && now - digitsAt < 1000) return;
+    digitsPilot = display;
+    digitsAt = now;
     coClimb.textContent = flying ? fmtClimb(s.climb) : '—';
     coClimb.classList.toggle('text-lime-400', flying && s.climb >= 0);
     coClimb.classList.toggle('text-sky-400', flying && s.climb < 0);
@@ -661,7 +778,6 @@ async function main(): Promise<void> {
       .filter(Boolean)
       .join(' · ');
     if (calloutStatus.textContent !== status) calloutStatus.textContent = status;
-    updateLeader(s);
   }
 
   /**

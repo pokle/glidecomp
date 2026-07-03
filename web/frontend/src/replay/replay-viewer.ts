@@ -48,8 +48,12 @@ export interface PilotScreenSample {
   /** False when the marker projects off-screen / behind the camera. */
   onScreen: boolean;
   altMsl: number;
+  /** Climb averaged over the playback-scaled smoothing window, m/s. */
   climb: number;
+  /** Ground speed averaged over the same window, m/s. */
   speed: number;
+  /** Near-instantaneous climb (±3-fix window), m/s — the gauge needle. */
+  climbInst: number;
 }
 
 export interface ViewerCallbacks {
@@ -135,6 +139,7 @@ export class ReplayViewer {
       altMsl: 0,
       climb: 0,
       speed: 0,
+      climbInst: 0,
     }));
 
     this.scene = new FlightScene(this.tracks, this.gaggles);
@@ -226,7 +231,7 @@ export class ReplayViewer {
     }
 
     this.scene.setTime(this.time);
-    const samples = this.scene.updateMarkers(this.time);
+    const samples = this.scene.updateMarkers(this.time, this.smoothSeconds());
 
     if (this.followGaggleId >= 0) this.backend.followTo(this.gaggleCentroid(samples));
     else if (this.follow >= 0) this.backend.followTo(samples[this.follow]);
@@ -239,6 +244,17 @@ export class ReplayViewer {
     this.cb.onCompass?.(this.backend.getBearingDeg());
   }
 
+  /**
+   * Metric-averaging window (flight seconds). While playing, scale it with
+   * playback speed so climb/speed average over ≈1 wall-second of what the eye
+   * sees (at 16× a fixed 6 s window replays the pilot's real within-circle
+   * oscillation as flicker). Capped so very fast playback still tracks trends;
+   * paused/scrubbing uses the short window for inspecting a precise moment.
+   */
+  private smoothSeconds(): number {
+    return this.playing ? Math.min(Math.max(this.speed, 6), 120) : 6;
+  }
+
   /** Project every pilot's marker into the reused screen-sample array. */
   private projectSamples(samples: MarkerSample[]): void {
     for (const s of samples) {
@@ -248,6 +264,7 @@ export class ReplayViewer {
       out.altMsl = s.altMsl;
       out.climb = s.climb;
       out.speed = s.speed;
+      out.climbInst = s.climbInst;
       if (!out.active) {
         out.onScreen = false;
         continue;
@@ -468,6 +485,7 @@ export class ReplayViewer {
       altMsl: 0,
       climb: 0,
       speed: 0,
+      climbInst: 0,
       name: '',
     };
   }

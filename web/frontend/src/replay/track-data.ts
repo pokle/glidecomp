@@ -38,10 +38,16 @@ export interface Sample {
   x: number;
   y: number;
   z: number;
-  /** Climb rate in m/s, smoothed over a ±3-fix window. */
+  /** Climb rate in m/s, averaged over the `smoothSeconds` window. */
   climb: number;
-  /** Ground speed in m/s (path length over the same smoothing window). */
+  /** Ground speed in m/s (path length over the `smoothSeconds` window). */
   speed: number;
+  /**
+   * Near-instantaneous climb (±3-fix window, ~6 s of flight) regardless of
+   * `smoothSeconds` — drives the live gauge needle, which is allowed to
+   * flicker while the digits stay averaged.
+   */
+  climbInst: number;
   /** Horizontal heading, radians, atan2(east, north). */
   heading: number;
   /** Altitude in metres MSL (y + alt0). */
@@ -145,17 +151,24 @@ async function fetchGzipped(url: string): Promise<ArrayBuffer> {
 
 /**
  * Binary-search a pilot's fixes for `t` (seconds since t0) and linearly
- * interpolate position + heading. Climb and ground speed are smoothed over a
- * ±3-fix window (~6 s at typical cadence): climb is the window's net altitude
- * change over its duration; speed is the horizontal *path length* over the
- * window (so circling in a thermal still reads the true airspeed-ish value,
- * not the near-zero straight-line drift). ~free at 100 pilots/frame.
+ * interpolate position + heading. Climb and ground speed are averaged over a
+ * `smoothSeconds`-wide window of *flight time* centred on `t`: climb is the
+ * window's net altitude change over its duration; speed is the horizontal
+ * *path length* over the window (so circling in a thermal still reads the
+ * true airspeed-ish value, not the near-zero straight-line drift).
+ *
+ * `smoothSeconds` should scale with playback speed (≈ 1 wall-second of what
+ * the eye sees): at 16× a 6 s window replays the pilot's real within-circle
+ * climb oscillation as unreadable flicker, so the caller widens the window to
+ * match. `climbInst` always uses the short ±3-fix window for the gauge
+ * needle. ~free at 100 pilots/frame even at wide windows.
  */
 export function samplePilot(
   tracks: LoadedTracks,
   pilotIdx: number,
   t: number,
   alt0: number,
+  smoothSeconds = 6,
 ): Sample {
   const p = tracks.manifest.pilots[pilotIdx];
   const { pos, time } = tracks;
@@ -170,6 +183,7 @@ export function samplePilot(
     z: 0,
     climb: 0,
     speed: 0,
+    climbInst: 0,
     heading: 0,
     altMsl: 0,
   };
@@ -185,7 +199,18 @@ export function samplePilot(
     const z = pos[hi * 3 + 2];
     const heading =
       hi > lo ? Math.atan2(x - pos[(hi - 1) * 3], z - pos[(hi - 1) * 3 + 2]) : 0;
-    return { active: true, landed: true, x, y, z, climb: 0, speed: 0, heading, altMsl: y + alt0 };
+    return {
+      active: true,
+      landed: true,
+      x,
+      y,
+      z,
+      climb: 0,
+      speed: 0,
+      climbInst: 0,
+      heading,
+      altMsl: y + alt0,
+    };
   }
 
   // Find the last index with time <= t.
@@ -214,12 +239,28 @@ export function samplePilot(
   const z = zi + (zj - zi) * f;
   const heading = Math.atan2(xj - xi, zj - zi); // east, north
 
-  // Smoothed climb + ground speed over a ±HW-fix window around the bracket.
-  const HW = 3; // matches the per-vertex vario smoothing in assembleTracks
-  const a0 = Math.max(lo, i - HW);
-  const b0 = Math.min(hi, j + HW);
+  // Near-instantaneous climb over a ±HW-fix window around the bracket (the
+  // gauge needle; HW matches the per-vertex vario smoothing in assembleTracks).
+  const HW = 3;
+  const ia = Math.max(lo, i - HW);
+  const ib = Math.min(hi, j + HW);
+  const idt = time[ib] - time[ia];
+  let climbInst = 0;
+  if (idt > 0) climbInst = (pos[ib * 3 + 1] - pos[ia * 3 + 1]) / idt;
+  else {
+    const dt = t1 - t0;
+    climbInst = dt > 0 ? (yj - yi) / dt : 0;
+  }
+
+  // Averaged climb + ground speed over the smoothSeconds window of flight
+  // time centred on t (clamped to the track; never narrower than ±HW fixes).
+  const half = smoothSeconds / 2;
+  let a0 = ia;
+  let b0 = ib;
+  while (a0 > lo && time[a0 - 1] >= t - half) a0--;
+  while (b0 < hi && time[b0 + 1] <= t + half) b0++;
   const wdt = time[b0] - time[a0];
-  let climb = 0;
+  let climb = climbInst;
   let speed = 0;
   if (wdt > 0) {
     climb = (pos[b0 * 3 + 1] - pos[a0 * 3 + 1]) / wdt;
@@ -230,8 +271,18 @@ export function samplePilot(
     speed = path / wdt;
   } else {
     const dt = t1 - t0;
-    climb = dt > 0 ? (yj - yi) / dt : 0;
     speed = dt > 0 ? Math.hypot(xj - xi, zj - zi) / dt : 0;
   }
-  return { active: true, landed: false, x, y, z, climb, speed, heading, altMsl: y + alt0 };
+  return {
+    active: true,
+    landed: false,
+    x,
+    y,
+    z,
+    climb,
+    speed,
+    climbInst,
+    heading,
+    altMsl: y + alt0,
+  };
 }
