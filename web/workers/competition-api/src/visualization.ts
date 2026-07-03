@@ -13,6 +13,13 @@
  */
 
 import { packTracksFromIgc, type GAPParameters, type PilotIgc } from "@glidecomp/engine";
+import { mapWithConcurrency } from "./scoring";
+
+/** How many tracks to fetch from R2 at once. The pack step already holds every
+ * decompressed IGC in memory simultaneously, so fetching concurrently doesn't
+ * raise peak memory — it only overlaps the per-object R2 round-trip latency,
+ * which dominates the cold path (~150ms × N tracks when fetched one by one). */
+const TRACK_FETCH_CONCURRENCY = 10;
 
 /**
  * Cache key from the current task state (xctsk + track set + penalties), so the
@@ -114,29 +121,34 @@ export async function buildTask3dvisBundle(
     `[3dvis] task ${taskId}: found ${tracks.results.length} track rows in ${(performance.now() - tTracksStart).toFixed(0)}ms`
   );
 
-  // Fetch + decompress IGC files sequentially to keep peak memory manageable.
+  // Fetch + decompress IGC files with bounded concurrency (same pattern as the
+  // scoring path) — cold-path time is dominated by R2 round trips, not CPU.
   const tFetchStart = performance.now();
-  const pilots: PilotIgc[] = [];
-  for (const track of tracks.results) {
-    const tTrackStart = performance.now();
-    const object = await r2.get(track.igc_filename);
-    if (!object) {
-      console.warn(`[3dvis] task ${taskId}: missing R2 object ${track.igc_filename}`);
-      continue;
+  const fetched = await mapWithConcurrency(
+    tracks.results,
+    TRACK_FETCH_CONCURRENCY,
+    async (track): Promise<PilotIgc | null> => {
+      const tTrackStart = performance.now();
+      const object = await r2.get(track.igc_filename);
+      if (!object) {
+        console.warn(`[3dvis] task ${taskId}: missing R2 object ${track.igc_filename}`);
+        return null;
+      }
+      const compressed = await object.arrayBuffer();
+      const stream = new Response(compressed).body!.pipeThrough(new DecompressionStream("gzip"));
+      const igc = new TextDecoder().decode(await new Response(stream).arrayBuffer());
+      console.log(
+        `[3dvis] task ${taskId}: fetched+decompressed ${track.igc_filename} ` +
+          `(${compressed.byteLength}B gz → ${igc.length}B igc) in ${(performance.now() - tTrackStart).toFixed(0)}ms`
+      );
+      return {
+        id: track.civl_id ?? String(track.comp_pilot_id),
+        name: track.pilot_name,
+        igc,
+      };
     }
-    const compressed = await object.arrayBuffer();
-    const stream = new Response(compressed).body!.pipeThrough(new DecompressionStream("gzip"));
-    const igc = new TextDecoder().decode(await new Response(stream).arrayBuffer());
-    pilots.push({
-      id: track.civl_id ?? String(track.comp_pilot_id),
-      name: track.pilot_name,
-      igc,
-    });
-    console.log(
-      `[3dvis] task ${taskId}: fetched+decompressed ${track.igc_filename} ` +
-        `(${compressed.byteLength}B gz → ${igc.length}B igc) in ${(performance.now() - tTrackStart).toFixed(0)}ms`
-    );
-  }
+  );
+  const pilots: PilotIgc[] = fetched.filter((p): p is PilotIgc => p !== null);
   console.log(
     `[3dvis] task ${taskId}: fetched ${pilots.length}/${tracks.results.length} tracks from R2 ` +
       `in ${(performance.now() - tFetchStart).toFixed(0)}ms total`
