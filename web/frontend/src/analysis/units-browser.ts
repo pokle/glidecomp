@@ -29,7 +29,7 @@ export const formatAltitude = (m: number, opts?: { showSign?: boolean; decimals?
 export const formatDistance = (m: number, opts?: { decimals?: number }) =>
   _formatDistance(m, { ...opts, prefs: config.getUnits() });
 
-export const formatClimbRate = (mps: number, opts?: { showSign?: boolean }) =>
+export const formatClimbRate = (mps: number, opts?: { showSign?: boolean; decimals?: number }) =>
   _formatClimbRate(mps, { ...opts, prefs: config.getUnits() });
 
 export const formatAltitudeChange = (m: number) =>

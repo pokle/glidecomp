@@ -14,6 +14,14 @@ import {
   type ColorMode,
   type PilotScreenSample,
 } from './replay-viewer';
+import { config } from '../analysis/config';
+import {
+  formatAltitude,
+  formatClimbRate,
+  formatSpeed,
+  onUnitsChanged,
+  type UnitPreferences,
+} from '../analysis/units-browser';
 import { MAP_STYLES, DEFAULT_MAP_STYLE } from './map-styles';
 import { VARIO_MAX } from './flight-scene';
 import { GaggleUI } from './gaggle-ui';
@@ -583,33 +591,45 @@ async function main(): Promise<void> {
     };
 
     // static dial: arc, ticks each 1 m/s (major each 2), labels at −max/0/+max
-    sctx.strokeStyle = 'rgba(148,163,184,0.35)';
-    sctx.lineWidth = 1;
-    sctx.beginPath();
-    sctx.arc(CX, CY, R, Math.PI, 2 * Math.PI);
-    sctx.stroke();
-    sctx.textAlign = 'center';
-    sctx.textBaseline = 'middle';
-    sctx.font = '8px system-ui, sans-serif';
-    for (let v = -VARIO_MAX; v <= VARIO_MAX; v++) {
-      const a = angleOf(v);
-      sctx.strokeStyle = v === 0 ? 'rgba(226,232,240,0.9)' : 'rgba(148,163,184,0.55)';
-      sctx.lineWidth = v === 0 ? 1.5 : 1;
-      ray(sctx, a, R - (v % 2 === 0 ? 6 : 3.5), R);
-      if (v === -VARIO_MAX || v === 0 || v === VARIO_MAX) {
-        sctx.fillStyle = 'rgba(148,163,184,0.8)';
-        sctx.fillText(v > 0 ? `+${v}` : String(v), CX + Math.cos(a) * (R - 13), CY + Math.sin(a) * (R - 13));
+    // in the user's climb-rate unit (the dial's physical range stays ±VARIO_MAX
+    // m/s to match the vario colour ramp; only the labels convert).
+    const dialLabel = (v: number): string => {
+      const u = config.getUnits().climbRate;
+      return formatClimbRate(v, { decimals: u === 'm/s' ? 0 : undefined }).formatted;
+    };
+    const drawScale = (): void => {
+      sctx.clearRect(0, 0, W, H);
+      sctx.strokeStyle = 'rgba(148,163,184,0.35)';
+      sctx.lineWidth = 1;
+      sctx.beginPath();
+      sctx.arc(CX, CY, R, Math.PI, 2 * Math.PI);
+      sctx.stroke();
+      sctx.textAlign = 'center';
+      sctx.textBaseline = 'middle';
+      sctx.font = '8px system-ui, sans-serif';
+      for (let v = -VARIO_MAX; v <= VARIO_MAX; v++) {
+        const a = angleOf(v);
+        sctx.strokeStyle = v === 0 ? 'rgba(226,232,240,0.9)' : 'rgba(148,163,184,0.55)';
+        sctx.lineWidth = v === 0 ? 1.5 : 1;
+        ray(sctx, a, R - (v % 2 === 0 ? 6 : 3.5), R);
+        if (v === -VARIO_MAX || v === 0 || v === VARIO_MAX) {
+          sctx.fillStyle = 'rgba(148,163,184,0.8)';
+          sctx.fillText(dialLabel(v), CX + Math.cos(a) * (R - 13), CY + Math.sin(a) * (R - 13));
+        }
       }
-    }
-    sctx.fillStyle = 'rgba(226,232,240,0.6)';
-    sctx.beginPath();
-    sctx.arc(CX, CY, 2, 0, 2 * Math.PI);
-    sctx.fill();
+      sctx.fillStyle = 'rgba(226,232,240,0.6)';
+      sctx.beginPath();
+      sctx.arc(CX, CY, 2, 0, 2 * Math.PI);
+      sctx.fill();
+    };
+    drawScale();
 
     // needle history ring buffer (NaN = no reading that frame)
     const hist = new Float32Array(HISTORY).fill(NaN);
     let head = 0;
     return {
+      /** Repaint the static dial (climb-rate unit changed). */
+      redrawScale: drawScale,
       /** Wipe the trail (switching pilots). */
       reset(): void {
         hist.fill(NaN);
@@ -721,10 +741,6 @@ async function main(): Promise<void> {
     const r = speed / -climb;
     return r > 40 ? '∞' : r.toFixed(1);
   }
-  function fmtClimb(climb: number): string {
-    return `${climb >= 0 ? '+' : ''}${climb.toFixed(1)} m/s`;
-  }
-
   // digit-repaint throttle state (see onFrameTick)
   let digitsPilot = -1;
   let digitsAt = 0;
@@ -762,7 +778,7 @@ async function main(): Promise<void> {
 
     // Every frame: altitude (steady by nature), the gauge needle (flicker is
     // the point — the phosphor trail turns it into a variance band), leader.
-    coAlt.textContent = s.active ? `${Math.round(s.altMsl)} m` : '—';
+    coAlt.textContent = s.active ? formatAltitude(s.altMsl).withUnit : '—';
     gauge.tick(flying ? s.climbInst : null);
     updateLeader(s);
 
@@ -773,10 +789,10 @@ async function main(): Promise<void> {
     if (display === digitsPilot && viewer.isPlaying && now - digitsAt < 1000) return;
     digitsPilot = display;
     digitsAt = now;
-    coClimb.textContent = flying ? fmtClimb(s.climb) : '—';
+    coClimb.textContent = flying ? formatClimbRate(s.climb).withUnit : '—';
     coClimb.classList.toggle('text-lime-400', flying && s.climb >= 0);
     coClimb.classList.toggle('text-sky-400', flying && s.climb < 0);
-    coSpeed.textContent = flying ? `${Math.round(s.speed * 3.6)} km/h` : '—';
+    coSpeed.textContent = flying ? formatSpeed(s.speed).withUnit : '—';
     coGlide.textContent = flying ? fmtGlide(s.speed, s.climb) : '—';
     const p = manifest.pilots[display];
     const status = [
@@ -819,6 +835,34 @@ async function main(): Promise<void> {
     leader.classList.remove('hidden');
   }
 
+  // --- units (same glidecomp:preferences store the analysis page uses) ---
+  const unitSelects: Record<keyof UnitPreferences, HTMLSelectElement> = {
+    speed: $('unitSpeed'),
+    altitude: $('unitAltitude'),
+    climbRate: $('unitClimb'),
+    distance: $('unitDistance'),
+  };
+  function syncUnitSelects(): void {
+    const u = config.getUnits();
+    for (const k of Object.keys(unitSelects) as (keyof UnitPreferences)[]) {
+      unitSelects[k].value = u[k];
+    }
+  }
+  syncUnitSelects();
+  for (const k of Object.keys(unitSelects) as (keyof UnitPreferences)[]) {
+    unitSelects[k].addEventListener('change', () => {
+      config.setUnit(k, unitSelects[k].value as UnitPreferences[typeof k]);
+    });
+  }
+  // Fires for our own edits and for changes made elsewhere (analysis page /
+  // another tab): refresh every unit-bearing surface.
+  onUnitsChanged(() => {
+    syncUnitSelects();
+    gauge.redrawScale();
+    updateLegend($<HTMLSelectElement>('colorMode').value as ColorMode);
+    digitsPilot = -1; // repaint the callout digits immediately, skip the 1 s throttle
+  });
+
   // --- colour scale legend (altitude / vertical speed) ---
   function updateLegend(mode: ColorMode): void {
     const box = $('colorLegend');
@@ -830,24 +874,46 @@ async function main(): Promise<void> {
     if (mode === 'altitude') {
       const alt0 = manifest.origin.alt0;
       $('legendBar').style.background = ALT_GRADIENT;
-      $('legendLo').textContent = `${Math.round(alt0 + manifest.altMin)} m`;
+      $('legendLo').textContent = formatAltitude(alt0 + manifest.altMin).withUnit;
       $('legendMid').textContent = '';
-      $('legendHi').textContent = `${Math.round(alt0 + manifest.altMax)} m`;
+      $('legendHi').textContent = formatAltitude(alt0 + manifest.altMax).withUnit;
     } else {
       $('legendBar').style.background = VARIO_GRADIENT;
-      $('legendLo').textContent = `−${VARIO_MAX} m/s`;
+      $('legendLo').textContent = formatClimbRate(-VARIO_MAX).withUnit;
       $('legendMid').textContent = '0';
-      $('legendHi').textContent = `+${VARIO_MAX} m/s`;
+      $('legendHi').textContent = formatClimbRate(VARIO_MAX).withUnit;
     }
   }
 
-  // --- scale bar ---
+  // --- scale bar (in the user's distance unit, sub-unit for short bars) ---
   function updateScaleBar(mpp: number): void {
     if (!isFinite(mpp) || mpp <= 0) return;
-    const meters = niceNumber(mpp * 90);
-    const px = meters / mpp;
-    $('scaleBar').style.width = `${px}px`;
-    $('scaleLabel').textContent = meters >= 1000 ? `${(meters / 1000).toFixed(meters % 1000 === 0 ? 0 : 1)} km` : `${meters} m`;
+    const targetM = mpp * 90;
+    const unit = config.getUnits().distance;
+    let meters: number;
+    let label: string;
+    if (unit === 'mi') {
+      const ft = targetM * 3.28084;
+      if (ft < 2640) {
+        const nice = niceNumber(ft);
+        meters = nice / 3.28084;
+        label = `${nice} ft`;
+      } else {
+        const nice = niceNumber(targetM / 1609.344);
+        meters = nice * 1609.344;
+        label = `${nice} mi`;
+      }
+    } else if (unit === 'nmi') {
+      const nice = niceNumber(targetM / 1852);
+      meters = nice * 1852;
+      label = `${nice} NM`;
+    } else {
+      const nice = niceNumber(targetM);
+      meters = nice;
+      label = nice >= 1000 ? `${(nice / 1000).toFixed(nice % 1000 === 0 ? 0 : 1)} km` : `${nice} m`;
+    }
+    $('scaleBar').style.width = `${meters / mpp}px`;
+    $('scaleLabel').textContent = label;
   }
 
   // start paused at t=0; user presses play
