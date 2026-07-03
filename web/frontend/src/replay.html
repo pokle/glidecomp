@@ -10,16 +10,69 @@
   <meta name="theme-color" content="#0a0f1a">
   <link rel="stylesheet" href="/styles.css">
   <style>
-    html, body { height: 100%; margin: 0; overflow: hidden; background: #0a0f1a; }
-    /* range inputs that read well over the dark canvas */
+    /* Theme tokens. Dark is the default; main.ts toggles `light` on <html>
+       (dark / light / auto switch in the menu, stored in glidecomp:preferences).
+       The canvas + gauge read the --rp-* values too, so the WebGL scene and
+       the DOM chrome stay in step. */
+    :root {
+      color-scheme: dark;
+      --rp-bg: #0a0f1a;
+      --rp-track: #334155;
+      --rp-climb-pos: #a3e635;
+      --rp-climb-neg: #38bdf8;
+      --rp-dial-arc: rgba(148, 163, 184, 0.35);
+      --rp-dial-tick: rgba(148, 163, 184, 0.55);
+      --rp-dial-strong: rgba(226, 232, 240, 0.9);
+      --rp-dial-label: rgba(148, 163, 184, 0.8);
+    }
+    html.light {
+      color-scheme: light;
+      --rp-bg: #f2f0e9; /* off-white, deliberately not full white */
+      --rp-track: #b9bdb0;
+      --rp-climb-pos: #4d7c0f;
+      --rp-climb-neg: #0369a1;
+      --rp-dial-arc: rgba(30, 41, 59, 0.3);
+      --rp-dial-tick: rgba(30, 41, 59, 0.45);
+      --rp-dial-strong: rgba(15, 23, 42, 0.85);
+      --rp-dial-label: rgba(51, 65, 85, 0.9);
+    }
+    html, body { height: 100%; margin: 0; overflow: hidden; background: var(--rp-bg); }
+    /* range inputs that read well over the canvas */
     input[type="range"] { -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; }
-    input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 9999px; background: #334155; }
-    input[type="range"]::-moz-range-track { height: 4px; border-radius: 9999px; background: #334155; }
-    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; margin-top: -6px; width: 16px; height: 16px; border-radius: 9999px; background: #bcc817; box-shadow: 0 0 0 2px #0a0f1a; }
-    input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border: none; border-radius: 9999px; background: #bcc817; box-shadow: 0 0 0 2px #0a0f1a; }
+    input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 9999px; background: var(--rp-track); }
+    input[type="range"]::-moz-range-track { height: 4px; border-radius: 9999px; background: var(--rp-track); }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; margin-top: -6px; width: 16px; height: 16px; border-radius: 9999px; background: #bcc817; box-shadow: 0 0 0 2px var(--rp-bg); }
+    input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border: none; border-radius: 9999px; background: #bcc817; box-shadow: 0 0 0 2px var(--rp-bg); }
     #scrubber::-webkit-slider-runnable-track { height: 6px; }
     #scrubber::-webkit-slider-thumb { margin-top: -5px; }
     .panel { background: rgba(15, 23, 42, 0.82); backdrop-filter: blur(8px); border: 1px solid rgba(148, 163, 184, 0.18); }
+
+    /* Light theme — this page is standalone, so rather than duplicating a
+       light class next to every dark slate utility in the markup, remap the
+       handful of dark utilities the page actually uses. Scoped to this file's
+       own <style>; no other page is affected. */
+    html.light body { color: #1e293b; }
+    html.light .panel { background: rgba(251, 250, 246, 0.85); border-color: rgba(30, 41, 59, 0.15); }
+    html.light .text-slate-100, html.light .text-slate-200 { color: #0f172a; }
+    html.light .text-slate-300 { color: #334155; }
+    html.light .text-slate-400 { color: #475569; }
+    html.light .text-slate-500 { color: #64748b; }
+    html.light .text-lime-400 { color: #4d7c0f; }
+    html.light .text-sky-400 { color: #0369a1; }
+    html.light .bg-slate-800, html.light .bg-slate-800\/60 { background-color: rgba(15, 23, 42, 0.07); }
+    html.light .bg-slate-800\/40 { background-color: rgba(15, 23, 42, 0.05); }
+    html.light .bg-slate-900\/80 { background-color: rgba(251, 250, 246, 0.92); }
+    html.light .bg-slate-950\/70 { background-color: rgba(242, 240, 233, 0.8); }
+    html.light .bg-slate-700\/60 { background-color: rgba(15, 23, 42, 0.14); }
+    html.light .bg-slate-200 { background-color: #334155; } /* scale bar */
+    html.light .border-slate-600 { border-color: rgba(15, 23, 42, 0.28); }
+    html.light .border-slate-700\/60 { border-color: rgba(15, 23, 42, 0.12); }
+    html.light .hover\:bg-slate-700:hover,
+    html.light .hover\:bg-slate-700\/50:hover,
+    html.light .hover\:bg-slate-700\/40:hover { background-color: rgba(15, 23, 42, 0.1); }
+    html.light .hover\:text-slate-100:hover,
+    html.light .hover\:text-slate-200:hover { color: #0f172a; }
+    html.light #compass text { fill: #1e293b; }
 
     /* Single slide-in control drawer (matches the hamburger pattern). Every
        control — View, Pilots, Gaggles — lives in this one scrolling panel,
@@ -126,6 +179,18 @@
         <!-- ===== View ===== -->
         <section class="space-y-3">
           <h3 class="text-[11px] uppercase tracking-wide text-lime-400 font-semibold">View</h3>
+          <div>
+            <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">Theme</label>
+            <div class="grid grid-cols-3 gap-1">
+              <button id="thDark"
+                class="rounded-md border border-slate-600 px-2 py-1 text-xs transition-colors bg-lime-500 text-slate-900">Dark</button>
+              <button id="thLight"
+                class="rounded-md border border-slate-600 px-2 py-1 text-xs transition-colors bg-slate-800 text-slate-300 hover:bg-slate-700">Light</button>
+              <button id="thAuto"
+                class="rounded-md border border-slate-600 px-2 py-1 text-xs transition-colors bg-slate-800 text-slate-300 hover:bg-slate-700"
+                title="Follow the system colour scheme">Auto</button>
+            </div>
+          </div>
           <div>
             <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">Backdrop</label>
             <div class="grid grid-cols-2 gap-1">

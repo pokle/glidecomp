@@ -39,6 +39,8 @@ export class AbstractBackend implements Backend {
   constructor(
     private container: HTMLElement,
     private flight: FlightScene,
+    /** Light theme: off-white clear colour + darker grid lines. */
+    private light = false,
   ) {}
 
   async mount(): Promise<void> {
@@ -48,7 +50,8 @@ export class AbstractBackend implements Backend {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(w, h);
-    this.renderer.setClearColor(0x0a0f1a, 1);
+    // light mode uses an off-white, not full white — matches --rp-bg in replay.html
+    this.renderer.setClearColor(this.light ? 0xf2f0e9 : 0x0a0f1a, 1);
     this.container.appendChild(this.renderer.domElement);
 
     this.camera = new THREE.PerspectiveCamera(55, w / h, 1, 5_000_000);
@@ -94,7 +97,9 @@ export class AbstractBackend implements Backend {
 
   private buildGround(): void {
     const size = this.flight.extentXZ * 2.2;
-    const grid = new THREE.GridHelper(size, 24, 0x33415c, 0x1e293b);
+    const grid = this.light
+      ? new THREE.GridHelper(size, 24, 0x8a93a5, 0xc6c9be)
+      : new THREE.GridHelper(size, 24, 0x33415c, 0x1e293b);
     grid.position.set(this.flight.center.x, 0, this.flight.center.z);
     (grid.material as THREE.Material).transparent = true;
     (grid.material as THREE.Material).opacity = 0.5;

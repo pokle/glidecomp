@@ -323,6 +323,23 @@ first so user drag survives. (Verified: pure follow pins the pilot to the exact
 pixel; only transient OrbitControls damping causes a few px of settle after an
 orbit/pan.)
 
+**Terrain follow must YIELD to gestures.** Mapbox's `setCenter` wraps `jumpTo`,
+whose first act is `stop()` — and `stop()` cancels the active gesture handlers.
+Per-frame recentering therefore made **touch pan/orbit impossible while
+following** (mouse drags mostly survived because they re-establish on every
+mousemove; touch gestures are stateful and died continuously — it even fired
+with playback paused, since the delta-zero case still called `setCenter`).
+Fix (see `terrain-follow.test.ts`): keep the follow anchor fresh every frame
+but skip `setCenter` when (a) the delta is zero, (b) any pointer is down on the
+map (counter: container `pointerdown` / window `pointerup`+`pointercancel`, so
+a finger released off-map can't leak it), or (c) `map.isEasing()` — our own
+orientation presets, which the per-frame `stop()` used to kill too. Use
+`isEasing()`, not `isMoving()`, in that guard: `isMoving()` could in principle
+report the follow's own jumpTo and starve it. Because the anchor keeps
+tracking during the gesture, the follow resumes from the pilot's live position
+with no jump. The abstract backend needs none of this — OrbitControls deltas
+compose with the follow shift naturally.
+
 ### 5.13 Orientation presets (compass / top / side) — drive OrbitControls via Spherical
 
 Compass-click = north-up, plus Top/Side buttons. There's no `setAzimuthalAngle`
@@ -411,6 +428,21 @@ pilot in it (a live preview — no floating tooltip beside the pilot, so the
 racing stays unobscured), and clicking pins the followed pilot. The ✕ (stop
 following) is hidden during hover-only previews. The old `#tooltip` element
 remains only for the gaggle-ribbon hovers (GaggleUI).
+
+**Theme (dark / light / auto)**: a switch in the control drawer, stored as
+`theme` in the same `glidecomp:preferences` record ('system' = auto, follows
+`prefers-color-scheme` live). Light mode uses an **off-white** background
+(`#f2f0e9`, deliberately not full white). Mechanics: main.ts toggles a
+`light` class on `<html>`; the page's own `<style>` defines `--rp-*` tokens
+plus scoped remaps of the dark slate utilities the markup uses (the page is
+standalone, so remapping beats duplicating a light class next to every
+utility). The gauge canvas reads the `--rp-*` tokens so it follows. In-scene
+furniture (clear colour, grid, ground/gaggle labels, the vario-ramp zero via
+a `uVarioZero` uniform) follows the theme **only on the abstract backdrop**,
+which is rebuilt in place on switch — on terrain the backdrop is map
+imagery, so the scene always builds dark-styled there. The saved theme is
+applied to the chrome at the top of main() so light users don't get a dark
+flash during load.
 
 **Units** honour the same preferences as the analysis page: the `config`
 singleton (`analysis/config.ts`, localStorage key `glidecomp:preferences`,
