@@ -5,6 +5,7 @@ import type { AuthUser } from "./auth/client";
 import { api } from "./comp/api";
 import { setupPilotsSection } from "./comp/pilots-section";
 import { DEFAULT_GAP_PARAMETERS, type XCTask, type GAPParameters } from "@glidecomp/engine";
+import { escapeHtml } from "./escape-html";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,12 +50,6 @@ interface TaskSummary {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function escapeHtml(str: string): string {
-  const el = document.createElement("span");
-  el.textContent = str;
-  return el.innerHTML;
-}
 
 /**
  * The comp/task GET right after this same session's create/update write can

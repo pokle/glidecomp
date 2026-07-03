@@ -22,6 +22,7 @@
 | 2026-06-21 | Claude   | Re-review (no new app code); closed scope-gap #3 (parser fuzzing) → new finding SEC-20 (parser robustness) | SEC-20 fixed inline (this PR) |
 | 2026-06-21 (II) | Claude | Re-review (no new app code); extended fuzzing to scope-gap #3's leftover paths (XCTSKZ deflate + v2 polyline) → new finding SEC-21 (deflate-path TypeError + unhandled rejection) | SEC-21 fixed inline (this PR) |
 | 2026-06-28 | Claude   | Re-review (9 new app commits #186–#194: GAP-scoring rewrites, build-time track-packer, static 3D-vis sample, bounded validator additions, audit-description improvement) | No new findings; `bun audit` clean; all prior fixes intact |
+| 2026-07-03 | Claude   | Re-review (33 new app commits #196–#230: v1 launch — MCP worker removed, super-admin allowlist + admin/cache/visualization routes, open-distance scoring format, Worker-served 3D replay `/replay`, Corryong + Big Chip samples, Teams/Top-3 scores, emergency-contact fields) → new findings SEC-22..27 | SEC-22 (High, stored XSS) + SEC-23/24/25 (Low) fixed inline (this PR); SEC-26 (Low) deferred; SEC-27 (Info) documented; `bun audit` clean |
 
 ---
 
@@ -1666,3 +1667,150 @@ Carried forward from prior rounds (none newly opened this round):
 4. Walk any new mutating endpoints (authn / authz / `audit()` / Zod). The #179 v1-launch plan targets 2026-07-01 (~3 days out) — expect the surface to keep growing. Watch especially for: shared/public-profile or results-export features, new fields on public-readable endpoints (SEC-15-class PII), and any **runtime** caller newly wired to the engine's `packTracks` (e.g. a worker that packs *uploaded* tracks for the 3D viewer) — that would convert `track-packer.ts` from build-time-only into an untrusted-input surface needing input bounds + a fuzz pass.
 5. The 3D-vis page (`/samples/3dvis`) is currently static-data-only. If it is later pointed at a real competition's tracks (via a comp-scoped data URL), re-review (a) the data-source URL construction for attacker control, and (b) the `track-data.ts` binary unpack loop for bounds when the `.bin` is not maintainer-built.
 6. Do NOT re-open SEC-03. It is accepted by design — comp organisers' emails are intentionally visible to all pilots and to the public.
+
+---
+
+## 2026-07-03 — Re-review (v1 launch)
+
+> The v1-launch burst the prior round predicted landed in full. **33 new application commits (#196–#230)** since the recorded base `7b7cc5e`. The headline structural changes: the **MCP worker was deleted outright** (#198), a **hardcoded super-admin allowlist** with new `/api/admin/*` routes (users directory + KV-cache management, #210/#214/#219) was added, an **open-distance scoring format** (#215) and its geometry validation landed, the **3D replay moved to a Worker-served endpoint** at `/replay` fed by a *runtime* caller of the engine packer (#197/#211 — exactly the scenario the last round flagged), and the analysis/scores pages gained open-distance tables, Teams/Top-3 views, and emergency-contact profile fields. This round found **one High stored-XSS** (SEC-22) and four Low/Info items; the High plus three Lows are fixed inline.
+
+### Methodology
+
+- Read `docs/security-review.md` end-to-end first. Per scope-gap #9, the review base is the prior round's recorded HEAD `7b7cc5e` (**not** the parent of this PR). `git merge-base --is-ancestor 7b7cc5e HEAD` → true; HEAD = `7a1cf60`.
+- `git log --oneline 7b7cc5e..HEAD` → 34 commits. One (`3d2b3b6`, #195) is the prior 2026-06-28 review's own PR — already documented, excluded. The other **33 (#196–#230)** are new application code, reviewed this round.
+- Ran the scoped diffs. `git diff --stat 7b7cc5e..HEAD -- '**/wrangler.toml' 'functions/**'` → the MCP worker's `wrangler.toml` (with its public `glidecomp.com/mcp*` `[[routes]]`) was **deleted**; competition-api's `wrangler.toml` gained `[placement] mode = "smart"` and a new `AIRSCORE_API` service binding (no new `[[routes]]`); a new `functions/api/admin/[[path]].ts` Pages-Function proxy was added (service-binding passthrough only). airscore's route pattern is unchanged (`glidecomp.com/api/airscore/*`).
+- Walked every **new/changed route handler** for the four-point checklist (authn / authz / `audit()` / bounded Zod): the new `routes/admin.ts`, `routes/cache.ts`, `routes/visualization.ts`, the airscore `/internal/cache/*` endpoints, plus the changed `comp.ts` (scoring_format), `task.ts` (open-distance geometry), `score.ts` (team embedding + caching), `pilot.ts` (emergency contacts + `linked_username`), and the `isCompAdmin`/`optionalAuth` middleware refactor.
+- Walked every **new/changed frontend file** (58 files) for DOM sinks and untrusted-data flow, with a parallel focused sub-review. Traced the comp-mode pilot-name data path end-to-end (comp DB `registered_pilot_name` → tracks API → client analysis → `innerHTML`).
+- Re-walked every prior `SEC-NN` against current code; confirmed each structural fix intact (greps recorded in the status table).
+- `bun install` then `bun audit` at HEAD → **0 vulnerabilities**; all eight overrides still resolve to single fixed versions.
+- `bun run typecheck:all` → clean. `bun run test:all` → **833 pass / 0 fail** (491 root/engine/airscore + 56 auth-api [+6 todo] + 286 competition-api; the `Decompressed file too large` lines are the SEC-11 gzip-bomb tests asserting rejection, not failures). New regression test for the SEC-22 fix runs under the frontend vitest suite (`web/frontend`, jsdom) — `src/escape-html.test.ts`, 5/5 pass.
+- Did **not** re-run a dynamic CSRF PoC, live cookie-attribute checks, a Cloudflare zone-settings snapshot, or a live-deploy CSP flip — still in scope-gaps.
+
+### Executive summary
+
+The worst new issue is **SEC-22 (High): a stored XSS in the analysis score tables and the map track-point HUD**. Competition pilot names (`registered_pilot_name`) are validated only for length (`z.string().min(1).max(128)`) and are **never HTML-encoded** anywhere in competition-api, yet the new open-distance score table (#220) and its GAP twin, plus the multi-track map HUD, interpolate the name **raw** into `innerHTML` — in attribute *and* text positions. Because any registered user can create a public (non-test) comp, add a pilot with an arbitrary name, and the comp-mode analysis page is publicly viewable, a crafted name executes arbitrary JS on the `glidecomp.com` origin in any viewer's browser (including unauthenticated visitors). **Fixed inline** with a new shared quote-safe `escapeHtml` helper applied at all six sinks, plus a regression test. Three Low findings are also fixed inline (SEC-23 gaggle-tooltip turnpoint name, SEC-24 admin-users username-in-href, SEC-25 comp-detail quote-unsafe attribute escape); none were exploitable in isolation but each was a real render-time inconsistency. SEC-26 (Low, 3dvis packer decompression cap) is documented and deferred — not exploitable today because SEC-11's upload validator bounds every stored blob. SEC-27 (Info) notes the super-admin allowlist matches on email alone. **`bun audit` is clean, all prior fixes are intact, and the MCP-worker removal is a net attack-surface reduction** (it retires the `glidecomp.com/mcp*` public routes, SEC-14, and scope-gap #4).
+
+### Status of prior findings
+
+| ID      | Title                                                                  | Status @ 2026-07-03 | Notes                                                                |
+|---------|------------------------------------------------------------------------|---------------------|----------------------------------------------------------------------|
+| SEC-01  | Reflective CORS w/ credentials                                         | **Fixed**           | `isAllowedOrigin` allowlist intact on both public workers (`auth-api/src/index.ts:16,30`, `competition-api/src/index.ts:29,41`); empty origin for disallowed callers. |
+| SEC-02  | No security response headers (`_headers`)                              | **Fixed (2026-05-25)** | `web/frontend/public/_headers` present; CSP still Report-Only (flip = scope-gap #8; the `/replay` Mapbox origins are a fresh CSP surface). |
+| SEC-03  | Admin emails returned on public comp detail                            | **Accepted (by design)** | Unchanged. The super-admin's own email is now pushed into the admin list **only in their own response** (`comp.ts`), never leaked to other viewers. Not re-opened. |
+| SEC-04  | IGC upload size/shape — manufacturer-record check                      | **Fixed (2026-06-08)** | `igc-validation.ts` checks untouched; all three upload callsites inherit them (`validateAndDecompressIgc` referenced 3× in `routes/igc.ts`). |
+| SEC-05  | `innerHTML` is the default render primitive                            | **Open**            | Still per-author discipline. This round *found and fixed* three concrete lapses of this class (SEC-22/23/25). A new shared `escape-html.ts` helper now exists — consolidating the 7 per-file copies onto it + a lint rule remains the incremental step. |
+| SEC-06  | No JSON body-size cap                                                  | **Fixed (2026-06-12)** | `bodyLimit` still 2× on each public worker. New `scoring_format` bounded by `z.enum`; `team_name` bounded by `optionalText`. |
+| SEC-07  | Dev-only endpoints gated by `BETTER_AUTH_URL` hostname                 | **Verified safe**   | `auth-api/wrangler.toml` untouched; `isLocalDev` (`auth.ts:7-13`) matches only `localhost`; `emailAndPassword` + `minPasswordLength:1` stay dev-only (`auth.ts:57-58`). Now also load-bearing for SEC-27 — re-flag every deploy. |
+| SEC-08  | Rate-limit headers not surfaced                                        | **Fixed (2026-06-11)** | Auth-api `index.ts` 429 `Retry-After` path intact. |
+| SEC-09  | `Math.random()` non-security use                                       | **Closed (Info)**   | No new security-sensitive randomness in the new engine/scoring code. |
+| SEC-10  | Auth bypass via trusted `X-Glidecomp-Internal-User` header             | **Fixed**           | `middleware/auth.ts` refactored (super-admin bypass added to `requireCompAdmin` via `isCompAdmin`) but still forwards only inbound `cookie` / `x-api-key`; `grep INTERNAL_USER_HEADER web/workers/**/src` → 0. MCP worker (the only former setter) is deleted. |
+| SEC-11  | IGC gzip-bomb decompression                                           | **Fixed**           | `validateAndDecompressIgc` streaming cap untouched; gzip-bomb regression test still asserts rejection. NB: the new 3dvis packer path decompresses stored blobs *without* re-applying this cap — see SEC-26. |
+| SEC-12  | `xctsk` body shape/depth/size cap                                      | **Fixed**           | `xctskSchema` untouched. New open-distance geometry validator (`validateTaskGeometryForFormat`) adds a shape check, not a bypass. |
+| SEC-13  | Service worker unsanitised share-target filenames                     | **Fixed (2026-06-01)** | `sw.js` control-char strip + `encodeURIComponent` intact. |
+| SEC-14  | Service-binding trust comment misleads readers                        | **Closed / moot**   | The MCP worker it referred to is deleted. |
+| SEC-15  | Unauthenticated PII on public pilot list                              | **Fixed**           | `serializeCompPilotPublic` still nulls `email`/`linked_email`/`driver_contact` and now also **`linked_username`** (the new field added this round). Emergency-contact fields are profile-only (owner-scoped `/api/comp/pilot`), never in `COMP_PILOT_COLUMNS`. |
+| SEC-16  | Transitive `kysely` JSON-path traversal                                | **Fixed**           | Override held; `bun audit` clean. |
+| SEC-17  | `qs` (DoS) / `ws` (memory disclosure)                                  | **Fixed**           | Overrides held; `bun audit` clean. |
+| SEC-18  | Transitive `shell-quote` newline-escaping bypass                      | **Fixed (2026-06-11)** | Override held; `bun audit` clean. |
+| SEC-19  | Dirty `bun audit` — 11 transitive dev/test/build advisories           | **Fixed (2026-06-20)** | Overrides held; `bun audit` clean. |
+| SEC-20  | `parseXCTask` `TypeError` on untrusted input                          | **Fixed (2026-06-21)** | `sanitize.ts` coercion + non-object guard intact; now doubly relevant since the packer runtime path re-parses stored xctsk (`parseXCTask` in `track-pack-pipeline.ts`). |
+| SEC-21  | `parseXCTaskAsync` deflate-path `TypeError` + unhandled rejection      | **Fixed (2026-06-21)** | `xctsk-parser.ts` deflate branch intact. |
+
+### New findings
+
+---
+
+#### SEC-22 — Stored XSS via unescaped competition pilot name in the analysis score tables and map HUD — **High** — ~~Open~~ **Fixed (2026-07-03, this PR)**
+
+> **Resolution:** a new shared, quote-safe helper `web/frontend/src/escape-html.ts` (`escapeHtml`, escaping `& < > " '`) is now applied at every sink that renders a competition pilot name into `innerHTML`: the open-distance score table (`analysis-panel.ts` — `data-pilot`, `title`, and text cell), the GAP score table twin (checkbox `data-pilot`, toggle `data-pilot` + `title` + text, and the detail row's `data-detail-for`), and the multi-track map track-point HUD (`mapbox-provider.ts` `showTrackPointHUDWithName`). Reading the escaped `data-*` attributes back via `dataset` decodes them to the original name, so pilot selection/detail-toggle matching is unaffected. Regression test `web/frontend/src/escape-html.test.ts` proves the `"`-breakout payload is neutralised (parses to a `<span>` with only the intended `title` attribute, no injected handler).
+
+**Files**
+- `web/frontend/src/analysis/analysis-panel.ts` — `renderOpenDistanceScore` (new, #220) and `renderGapCompetitionScore` (the identical pre-existing twin)
+- `web/frontend/src/analysis/mapbox-provider.ts:showTrackPointHUDWithName` (pre-existing, #177; same data path)
+- Data source: `web/workers/competition-api/src/validators.ts:144` (`registered_pilot_name: z.string().min(1).max(128)` — length only) and `web/frontend/src/analysis/main.ts:1885-1886` (comp mode maps the display name to the comp DB `pilot_name`, overriding the sanitized IGC header name)
+
+**Evidence.** In comp mode the analysis page loads a task's tracks and derives each pilot's display name from `t.pilot_name` (= `registered_pilot_name`) — **not** the IGC header, which is the value the engine's `sanitizeText` HTML-encodes. competition-api contains no `sanitizeText`/HTML-encoding of any stored string, so `registered_pilot_name` is served verbatim and reached the sinks raw, e.g. `title="${ps.pilotName}">${ps.pilotName}` and `data-pilot="${ps.pilotName}"`. A name like `x" onmouseover="alert(document.domain)` or `<img src=x onerror=…>` breaks out of the attribute / injects a tag.
+
+**Impact.** Stored XSS on the production origin. The attacker only needs a registered account (to create a comp and add a pilot — both admin-of-own-comp operations, available to any of the up-to-50 comps a user may create); the victim is anyone who opens that comp's task analysis page, **including unauthenticated public viewers** (non-test comps are public). Session cookies are `HttpOnly` so this is not direct cookie theft, but arbitrary same-origin JS as the victim allows authenticated action-on-behalf and reading of any comp data the victim can see. Rated **High** rather than Critical only because there is no direct credential theft and the victim must navigate to the analysis view.
+
+**Remediation.** Done inline (see Resolution). Longer term this is the concrete SEC-05 case for consolidating all pilot/comp-name rendering onto the shared `escapeHtml` (or DOM construction) and adding a lint rule.
+
+---
+
+#### SEC-23 — 3D-replay gaggle tooltip renders a turnpoint name into `innerHTML` unescaped — **Low** — ~~Open~~ **Fixed (2026-07-03, this PR)**
+
+**File:** `web/frontend/src/replay/gaggle-ui.ts:118` (`showTip` → `tip.innerHTML`)
+
+`showTip` interpolated `this.tpLabel(ep)` (which embeds a task turnpoint name) **raw**, while the sibling panel render at `:205` wraps the identical call in `esc(...)` and `memberNames` at `:234` is likewise escaped — this one path was the anomaly. **Not exploitable in the current pipeline** because turnpoint names are HTML-encoded at parse time by the engine's `sanitizeText` (`xctsk-parser.ts:145,241`), so the value arrives pre-encoded; but the render-time boundary should not depend on that upstream invariant. **Fixed** by wrapping in `esc(this.tpLabel(ep))` to match the sibling.
+
+---
+
+#### SEC-24 — Super-admin users page interpolates a username into an `href` attribute with a tag-only escape — **Low** — ~~Open~~ **Fixed (2026-07-03, this PR)**
+
+**File:** `web/frontend/src/admin-users.ts:29`
+
+The username was placed into `href="/u/${escapeHtml(u.username)}/"`, but that file's `escapeHtml` escapes only `& < >` (not quotes), so in a double-quoted attribute a `"` in the value would break out. **Not exploitable** because usernames are server-restricted to `^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$` (`auth-api/src/index.ts:130`), which admits no quote. **Fixed** by switching the URL segment to `encodeURIComponent(u.username)`, matching the same `/u/<username>/` link in `pilots-section.ts`. (The text-context `@${escapeHtml(u.username)}`, and the `name`/`email` cells, are text-context and correctly served by the tag-only escape.)
+
+---
+
+#### SEC-25 — `comp-detail.ts` uses a quote-unsafe `escapeHtml` in a task-class `value` attribute — **Low** — ~~Open~~ **Fixed (2026-07-03, this PR)**
+
+**Files:** `web/frontend/src/comp-detail.ts:331,1885` (task-class checkbox `value="${escapeHtml(cls)}"`)
+
+comp-detail's local `escapeHtml` was the `textContent`→`innerHTML` variant, which does **not** escape quotes, yet `cls` (a pilot class, free-text `z.string().min(1).max(128)` with no charset restriction) is rendered into a double-quoted `value` attribute. Impact is limited: both sinks are inside the **admin-only** task create/edit forms, so this is self- or co-admin XSS (a comp admin injecting into their own comp's editing UI), hence **Low**. **Fixed** by pointing `comp-detail.ts` at the new shared quote-safe `escapeHtml` (`web/frontend/src/escape-html.ts`); output is visually identical in the file's many text contexts and now also safe in attribute contexts.
+
+---
+
+#### SEC-26 — 3D-replay Worker packer decompresses stored IGC without re-enforcing the SEC-11 decompressed-size cap — **Low** — Open (deferred; not exploitable today)
+
+**File:** `web/workers/competition-api/src/visualization.ts:132-139` (`buildTask3dvisBundle`)
+
+This is the **runtime caller of the engine packer** the prior round predicted (3D replay moved from a static asset to `GET /api/comp/:comp_id/task/:task_id/3dvis`, public for non-test comps). On a cache miss it fetches every track's gzip blob from R2 and decompresses each with `new Response(stream).arrayBuffer()` — **no counting `TransformStream`, no post-decompress cap**, unlike SEC-11's `validateAndDecompressIgc`. It also holds every decompressed IGC in memory simultaneously before packing.
+
+**Why not exploitable now:** every blob at those R2 keys was written through the SEC-11 upload validator (compressed ≤ 1 MiB, decompressed ≤ 2 MiB) and R2 keys are computed server-side, so no bomb can be stored and per-track size is bounded. The residual risk is (a) reliance on that upload invariant never regressing, and (b) aggregate memory on a very large field (admin-bounded, cached 7 days, content-addressed key limits repeat cold builds). **Remediation (defense-in-depth):** reuse the SEC-11 streaming cap in the packer fetch loop and bound the track count; deferred to its own PR so it can carry a targeted test.
+
+---
+
+#### SEC-27 — Super-admin allowlist matches on email alone, not `email_verified` — **Info** — Open (documented)
+
+**File:** `web/workers/competition-api/src/super-admin.ts:16-22` (`isSuperAdmin`)
+
+The hardcoded allowlist (`SUPER_ADMIN_EMAILS`) grants admin over **every** competition to a matching email, compared case-insensitively but **without checking `email_verified`**. In production this is safe: email/password sign-up is dev-only (SEC-07), so the only way to hold an account with the super-admin's address is Google OAuth for that Google account, where Google has verified the address. The finding records the coupling: if email/password sign-up were ever enabled in prod, an unverified sign-up with the super-admin email would inherit the bypass. **Remediation (defense-in-depth):** gate `isSuperAdmin` on `email_verified` as well, so it never depends on SEC-07 staying true.
+
+### Re-checked but no change
+
+- **New super-admin surface (authz).** `super-admin.ts` is the single source of truth (`isCompAdmin` = super-admin OR `comp_admin` row); every admin gate was migrated onto it (`comp.ts`, `task.ts`, `igc.ts`, `pilot.ts`, `pilot-status.ts`, `audit.ts`, `score.ts`, `visualization.ts`). The new `/api/admin/*` routes (`admin.ts` `whoami`/`users`, `cache.ts` `stats`/`clear`) are all `requireAuth` + `isSuperAdmin`. All are read-only except `DELETE /api/admin/cache` (a global, non-comp action → no `audit_log` row possible since it requires `comp_id`; it emits a worker log line instead — acceptable and matches the doc'd audit model).
+- **airscore `/internal/cache/*` (SEC-10 class).** No auth, but protected by **route-pattern isolation**: the worker's only public `[[routes]]` is `glidecomp.com/api/airscore/*`, which `/internal/*` does not match, so those paths are reachable only via the competition-api service binding. Unlike header-stripping, route-pattern scoping is a real Cloudflare guarantee — this is the SEC-10-safe pattern, not a SEC-10 regression.
+- **`audit()` coverage.** New comp `scoring_format` change is audited with a human-readable before/after line (`comp.ts`); `team_name` mutation is audited via the `["team_name","team"]` `describeChange` mapping (`pilot.ts:899`). No mutating path lost its `audit()`.
+- **Input validation.** `scoring_format` = `z.enum(["gap","open_distance"])`; `team_name` = `optionalText`; `emergency_contact_name/phone` = `z.string().max(128).nullable().optional()`. No new `z.record(z.unknown())`, no unbounded strings.
+- **PII exposure.** Emergency-contact fields are in `PROFILE_COLUMNS`/`serializeProfile` only, returned by the owner-scoped `GET/PATCH /api/comp/pilot` (`requireAuth`, `WHERE user_id = ?`); they are not in `COMP_PILOT_COLUMNS`, so no public leak. The new `linked_username` is nulled by `serializeCompPilotPublic`. Super-admin `/api/admin/users` (which returns every user's email) is `isSuperAdmin`-gated.
+- **Parameterised SQL.** Every new query (`admin.ts` correlated-subquery user stats, `cache.ts` none, `visualization.ts` task/track loads, `score.ts` team rows) uses `.bind(...)`. No concatenation.
+- **DOM sinks / untrusted flow.** Full sweep of the 58 changed frontend files. Cleared: scores Top-3/Teams (`textContent`/`createTextNode`), Tabulator pilot dialog (`input` editors, constant `html` formatter, CSV client-side), `/replay` (`bundleUrl` params via `encodeURIComponent`; pilot legend via `escapeHtml`; map-style from a constant), `admin-cache.ts` (escaped labels, numeric counts), `feedback.ts` (escaped). The 3dvis data URL is built only from `comp`/`task` sqids (no `location`/`URLSearchParams`-to-`innerHTML`). New `target="_blank"` links carry `rel="noopener noreferrer"`.
+- **Secrets.** No new hard-coded keys in source or any `wrangler.toml`; `[placement] mode="smart"` and the `AIRSCORE_API` binding add no secret. API-key prefix still `glc_`.
+- **Dependencies.** `bun audit` clean; eight overrides resolve to single fixed versions.
+
+### Scope gaps still not done
+
+Carried forward (unfinished from prior rounds) plus new:
+
+1. Dynamic CSRF PoC against the allowlisted CORS.
+2. Cookie attribute verification on a live deploy.
+3. ~~IGC / XCTask parser fuzzing~~ — closed 2026-06-21; re-open only if a new parser/format lands.
+4. Cloudflare zone settings snapshot (HSTS, TLS min, WAF, bot management).
+5. Verify SEC-10 fix on a deployed comp-api endpoint (not just the miniflare regression test).
+6. Confirm the comp-api worker doesn't accept a legacy `Cookie: test-user=…` header in production (static check clean; live confirmation pending).
+7. TOCTOU / idempotency on `/api/user/tracks` + `/api/user/tasks` quota checks (UX class, no security exposure).
+8. **Flip CSP from Report-Only to enforced** — re-validate now that `/replay` is a live page loading Mapbox tile/style/worker origins.
+9. Review-base selection must derive from the doc's recorded HEAD, not `master`'s linear log (applied again this round; base `7b7cc5e`, `merge-base --is-ancestor` confirmed).
+10. **(new) SEC-26 packer decompression cap** — add the SEC-11 streaming cap + track-count bound to `buildTask3dvisBundle`, with a test.
+11. **(new) Consolidate the 7 per-file `escapeHtml` copies** onto the shared `web/frontend/src/escape-html.ts` (the quote-safe one) and add a lint rule forbidding `innerHTML =` with interpolated non-constant template literals — the concrete SEC-05 close-out.
+12. **(new) Frontend vitest suite hygiene:** `src/replay/gaggle-hull.test.ts` and `src/replay/terrain-follow.test.ts` import `bun:test` but are globbed by the vitest `include` (`src/**/*.test.ts`), so `vitest run` cannot load them (pre-existing, not introduced here). Either move them under `bun test` or exclude them from the vitest glob so the frontend suite runs green; `test:all` does not currently run the frontend vitest suite at all.
+
+### Where to start the next review
+
+1. Commit reviewed up to: HEAD = `7a1cf60` (base `7b7cc5e`). Next round, per scope-gap #9, derive the base from this recorded `7a1cf60` and `merge-base --is-ancestor` any sibling PRs merged in the window.
+2. **Verify SEC-22 on a live deploy:** create a throwaway public comp, set a pilot name to `<img src=x onerror=alert(document.domain)>`, open the task's open-distance and GAP analysis views and the map HUD, confirm no execution. Then sweep for any *other* place a comp-controlled string (`registered_pilot_name`, `team_name`, `pilot_class`, comp/task `name`, `driver_contact`) reaches `innerHTML` — the root cause (no server-side HTML-encoding of stored comp strings) is unchanged, so new render sites are the risk.
+3. `bun audit` should stay clean; if an advisory appears, walk reachability first (SEC-16/17/18/19 are the template).
+4. Close SEC-26 (packer decompression cap) and scope-gaps #11/#12.
+5. Watch new mutating endpoints for the four-point checklist. The super-admin surface is new — any future super-admin **write** beyond cache-clear (e.g. editing/deleting other users' comps) needs its own authz + audit review, and consider whether such global actions warrant an `audit_log` schema that tolerates a null `comp_id`.
+6. Do NOT re-open SEC-03 (accepted by design).

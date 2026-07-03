@@ -9,6 +9,7 @@ import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, 
 import { formatAltitude, formatSpeed, formatDistance, formatClimbRate } from './units-browser';
 import { config } from './config';
 import { createTaskEditor, type TaskEditor } from './task-editor';
+import { escapeHtml } from '../escape-html';
 
 /**
  * Unified panel tabs
@@ -1459,9 +1460,9 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         ? '<span class="text-amber-500" title="Never left the take-off cylinder — open distance is measured from the cylinder exit, so this flight scores 0">*</span>'
         : '';
       html += `<tr class="border-t border-border hover:bg-muted/30${!isChecked ? ' opacity-40' : ''}">
-        <td class="px-2 py-1.5 sticky left-0 z-10 bg-background"><input type="checkbox" class="comp-pilot-cb accent-primary" data-pilot="${ps.pilotName}" ${isChecked ? 'checked' : ''}></td>
+        <td class="px-2 py-1.5 sticky left-0 z-10 bg-background"><input type="checkbox" class="comp-pilot-cb accent-primary" data-pilot="${escapeHtml(ps.pilotName)}" ${isChecked ? 'checked' : ''}></td>
         <td class="px-2 py-1.5 font-medium sticky left-[28px] z-10 bg-background">${ps.rank}</td>
-        <td class="px-2 py-1.5 truncate max-w-[140px] sticky left-[52px] z-10 bg-background after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border" title="${ps.pilotName}">${ps.pilotName}</td>
+        <td class="px-2 py-1.5 truncate max-w-[140px] sticky left-[52px] z-10 bg-background after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border" title="${escapeHtml(ps.pilotName)}">${escapeHtml(ps.pilotName)}</td>
         <td class="px-2 py-1.5 text-right font-medium tabular-nums">${formatDistance(ps.flownDistance).withUnit}${stayedMark}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${od ? formatDistance(od.flownTrackDistance).withUnit : '—'}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${od && od.airtimeSeconds !== null ? formatHMS(od.airtimeSeconds) : '—'}</td>
@@ -1627,9 +1628,9 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         ? `<span class="cursor-help underline decoration-dotted" title="${ps.distanceLinearPoints.toFixed(1)} linear + ${ps.distanceDifficultyPoints.toFixed(1)} difficulty">${ps.distancePoints.toFixed(1)}</span>`
         : ps.distancePoints.toFixed(1);
       html += `<tr class="border-t border-border hover:bg-muted/30${!isChecked ? ' opacity-40' : ''}">
-        <td class="px-2 py-1.5 sticky left-0 z-10 bg-background"><input type="checkbox" class="comp-pilot-cb accent-primary" data-pilot="${ps.pilotName}" ${isChecked ? 'checked' : ''}></td>
+        <td class="px-2 py-1.5 sticky left-0 z-10 bg-background"><input type="checkbox" class="comp-pilot-cb accent-primary" data-pilot="${escapeHtml(ps.pilotName)}" ${isChecked ? 'checked' : ''}></td>
         <td class="px-2 py-1.5 font-medium sticky left-[28px] z-10 bg-background">${ps.rank}</td>
-        <td class="comp-detail-toggle px-2 py-1.5 truncate max-w-[120px] sticky left-[52px] z-10 bg-background cursor-pointer select-none after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border" data-pilot="${ps.pilotName}" title="Show scoring breakdown for ${ps.pilotName}"><span class="comp-caret inline-block text-muted-foreground transition-transform">&#9656;</span> ${ps.pilotName}${goalIcon}</td>
+        <td class="comp-detail-toggle px-2 py-1.5 truncate max-w-[120px] sticky left-[52px] z-10 bg-background cursor-pointer select-none after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border" data-pilot="${escapeHtml(ps.pilotName)}" title="Show scoring breakdown for ${escapeHtml(ps.pilotName)}"><span class="comp-caret inline-block text-muted-foreground transition-transform">&#9656;</span> ${escapeHtml(ps.pilotName)}${goalIcon}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${formatDistance(ps.flownDistance).withUnit}${distMark}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${ps.madeGoal && ps.speedSectionTime !== null ? formatHMS(ps.speedSectionTime) : ps.reachedESS ? 'ESS' : 'LO'}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${distPtsCell}</td>
@@ -1639,7 +1640,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         ${params.scoring === 'HG' ? `<td class="px-2 py-1.5 text-right tabular-nums">${ps.arrivalPoints.toFixed(1)}</td>` : ''}
         <td class="px-2 py-1.5 text-right font-medium tabular-nums">${ps.totalScore}</td>
       </tr>
-      <tr class="comp-detail-row hidden bg-muted/20" data-detail-for="${ps.pilotName}">
+      <tr class="comp-detail-row hidden bg-muted/20" data-detail-for="${escapeHtml(ps.pilotName)}">
         <td colspan="${colCount}" class="px-3 py-2 border-t border-border/40">${renderDetail(ps)}</td>
       </tr>`;
     }
