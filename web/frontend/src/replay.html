@@ -194,6 +194,48 @@
           </div>
         </section>
 
+        <!-- ===== Units (shared with the analysis page via glidecomp:preferences) ===== -->
+        <section class="space-y-2 border-t border-slate-700/60 pt-5">
+          <h3 class="text-[11px] uppercase tracking-wide text-lime-400 font-semibold">Units</h3>
+          <div class="grid grid-cols-2 gap-x-3 gap-y-2">
+            <div>
+              <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1" for="unitSpeed">Speed</label>
+              <select id="unitSpeed"
+                class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400">
+                <option value="km/h">km/h</option>
+                <option value="mph">mph</option>
+                <option value="knots">kts</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1" for="unitAltitude">Altitude</label>
+              <select id="unitAltitude"
+                class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400">
+                <option value="m">m</option>
+                <option value="ft">ft</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1" for="unitClimb">Climb</label>
+              <select id="unitClimb"
+                class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400">
+                <option value="m/s">m/s</option>
+                <option value="ft/min">fpm</option>
+                <option value="knots">kts</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1" for="unitDistance">Distance</label>
+              <select id="unitDistance"
+                class="w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400">
+                <option value="km">km</option>
+                <option value="mi">mi</option>
+                <option value="nmi">NM</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
         <!-- ===== Pilots ===== -->
         <section class="space-y-2 border-t border-slate-700/60 pt-5">
           <div class="flex items-center gap-2">

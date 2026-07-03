@@ -115,7 +115,7 @@ export const formatAltitude = (m: number, opts?: { showSign?: boolean; decimals?
 export const formatDistance = (m: number, opts?: { decimals?: number; prefs?: UnitPreferences }) =>
   formatUnit(m, 'distance', opts);
 
-export const formatClimbRate = (mps: number, opts?: { showSign?: boolean; prefs?: UnitPreferences }) =>
+export const formatClimbRate = (mps: number, opts?: { showSign?: boolean; decimals?: number; prefs?: UnitPreferences }) =>
   formatUnit(mps, 'climbRate', { ...opts, showSign: opts?.showSign ?? true });
 
 /**

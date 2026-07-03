@@ -412,6 +412,18 @@ racing stays unobscured), and clicking pins the followed pilot. The ✕ (stop
 following) is hidden during hover-only previews. The old `#tooltip` element
 remains only for the gaggle-ribbon hovers (GaggleUI).
 
+**Units** honour the same preferences as the analysis page: the `config`
+singleton (`analysis/config.ts`, localStorage key `glidecomp:preferences`,
+cloud-synced by `auth/preferences-sync` when a signed-in page runs — its
+`schedulePush` no-ops on this no-auth page, so replay edits persist locally
+and upload on the next authed page load). A "Units" section in the control
+drawer edits them via `config.setUnit`; `onUnitsChanged` refreshes every
+unit-bearing surface — callout digits (repaint forced past the 1 s throttle),
+gauge dial labels (dial range stays ±VARIO_MAX m/s to match the colour ramp;
+only the −max/0/+max labels convert), colour-scale legend, and the scale bar
+(nice-number ladder computed in the chosen distance unit, with a `ft`
+sub-unit for short bars in `mi` mode).
+
 ---
 
 ## 6. Performance notes
