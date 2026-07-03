@@ -376,14 +376,16 @@ A click on a cone follows that pilot; a background click toggles play/pause
 (suppressed when it's dismissing the open control drawer), as does Space
 (unless a form control has focus).
 
-**Ground speed and climb are averaged over a playback-scaled window** in
-`samplePilot` (`smoothSeconds ≈ clamp(playbackSpeed, 6, 120)` while playing,
-6 s when paused/scrubbing). The jitter this fixes is *not* sensor noise: at
-16× the display replays the pilot's genuine within-thermal-circle oscillation
-(climb really does swing −3 → +1 around each ~20 s circle, i.e. flicker at
-~0.7 Hz on screen), so the window must scale to ≈1 wall-second of what the
-eye sees. Speed is the horizontal *path length* over the window — a
-straight-line delta reads near zero while circling. Glide ratio is derived as
+**Ground speed and climb are averaged over a fixed window** in `samplePilot`
+(`METRIC_AVG_SECONDS` = 20 s of flight time, independent of playback speed —
+the readout is labelled "(20s avg)"). The jitter this fixes is *not* sensor
+noise: at 16× the display replays the pilot's genuine within-thermal-circle
+oscillation (climb really does swing −3 → +1 around each ~20 s circle, i.e.
+flicker at ~0.7 Hz on screen). A fixed window was chosen over scaling with
+playback speed deliberately: a "20 s average climb" means the same thing at
+1× and 240×, which is what you want for judging how well a thermal is going.
+Speed is the horizontal *path length* over the window — a straight-line
+delta reads near zero while circling. Glide ratio is derived as
 `speed / -climb`, shown as `∞` when level/climbing and capped (>40 → `∞`).
 On top of that the callout digits repaint at most ~1×/s during playback
 (live when paused or on pilot change); altitude stays per-frame (it's steady

@@ -8,7 +8,12 @@
  * just the viewer.
  */
 
-import { ReplayViewer, type ColorMode, type PilotScreenSample } from './replay-viewer';
+import {
+  METRIC_AVG_SECONDS,
+  ReplayViewer,
+  type ColorMode,
+  type PilotScreenSample,
+} from './replay-viewer';
 import { MAP_STYLES, DEFAULT_MAP_STYLE } from './map-styles';
 import { VARIO_MAX } from './flight-scene';
 import { GaggleUI } from './gaggle-ui';
@@ -723,6 +728,9 @@ async function main(): Promise<void> {
   // digit-repaint throttle state (see onFrameTick)
   let digitsPilot = -1;
   let digitsAt = 0;
+
+  // the climb digit is a fixed-window average (the needle stays instantaneous)
+  $('coClimbAvg').textContent = `(${METRIC_AVG_SECONDS}s avg)`;
 
   /** Per-frame overlay refresh: badge positions + callout values + leader line. */
   function onFrameTick(samples: readonly PilotScreenSample[]): void {

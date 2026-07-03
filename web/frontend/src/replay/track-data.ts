@@ -157,11 +157,11 @@ async function fetchGzipped(url: string): Promise<ArrayBuffer> {
  * *path length* over the window (so circling in a thermal still reads the
  * true airspeed-ish value, not the near-zero straight-line drift).
  *
- * `smoothSeconds` should scale with playback speed (≈ 1 wall-second of what
- * the eye sees): at 16× a 6 s window replays the pilot's real within-circle
- * climb oscillation as unreadable flicker, so the caller widens the window to
- * match. `climbInst` always uses the short ±3-fix window for the gauge
- * needle. ~free at 100 pilots/frame even at wide windows.
+ * The viewer passes a fixed `smoothSeconds` (METRIC_AVG_SECONDS, 20 s)
+ * regardless of playback speed, so the averaged climb means the same thing at
+ * 1× and 240× — the number you'd use to judge how a thermal is going.
+ * `climbInst` always uses the short ±3-fix window for the gauge needle.
+ * ~free at 100 pilots/frame even at wide windows.
  */
 export function samplePilot(
   tracks: LoadedTracks,

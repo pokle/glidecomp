@@ -22,6 +22,14 @@ import type { Backend } from './backend';
 export type { ColorMode } from './flight-scene';
 export type Backdrop = 'abstract' | 'terrain';
 
+/**
+ * Fixed flight-time window (seconds) for the averaged climb/speed metrics,
+ * independent of playback speed — a "20 s average climb" means the same thing
+ * at 1× and 240×, which is what you want for judging how a thermal is going.
+ * The UI labels the readout with this value ("20s avg").
+ */
+export const METRIC_AVG_SECONDS = 20;
+
 export interface HoverInfo {
   pilotIdx: number;
   name: string;
@@ -48,7 +56,7 @@ export interface PilotScreenSample {
   /** False when the marker projects off-screen / behind the camera. */
   onScreen: boolean;
   altMsl: number;
-  /** Climb averaged over the playback-scaled smoothing window, m/s. */
+  /** Climb averaged over the fixed METRIC_AVG_SECONDS window, m/s. */
   climb: number;
   /** Ground speed averaged over the same window, m/s. */
   speed: number;
@@ -231,7 +239,7 @@ export class ReplayViewer {
     }
 
     this.scene.setTime(this.time);
-    const samples = this.scene.updateMarkers(this.time, this.smoothSeconds());
+    const samples = this.scene.updateMarkers(this.time, METRIC_AVG_SECONDS);
 
     if (this.followGaggleId >= 0) this.backend.followTo(this.gaggleCentroid(samples));
     else if (this.follow >= 0) this.backend.followTo(samples[this.follow]);
@@ -242,17 +250,6 @@ export class ReplayViewer {
     this.cb.onFrame?.(this.screenSamples);
     this.cb.onScale?.(this.backend.getMetresPerPixel());
     this.cb.onCompass?.(this.backend.getBearingDeg());
-  }
-
-  /**
-   * Metric-averaging window (flight seconds). While playing, scale it with
-   * playback speed so climb/speed average over ≈1 wall-second of what the eye
-   * sees (at 16× a fixed 6 s window replays the pilot's real within-circle
-   * oscillation as flicker). Capped so very fast playback still tracks trends;
-   * paused/scrubbing uses the short window for inspecting a precise moment.
-   */
-  private smoothSeconds(): number {
-    return this.playing ? Math.min(Math.max(this.speed, 6), 120) : 6;
   }
 
   /** Project every pilot's marker into the reused screen-sample array. */

@@ -43,7 +43,7 @@ export interface MarkerSample {
   z: number;
   /** Altitude MSL (metres), un-exaggerated. */
   altMsl: number;
-  /** Climb rate, m/s (averaged over the playback-scaled smoothing window). */
+  /** Climb rate, m/s (averaged over the caller's fixed smoothing window). */
   climb: number;
   /** Ground speed, m/s (averaged over the same window). */
   speed: number;
@@ -397,7 +397,7 @@ export class FlightScene {
    * Update marker instance matrices for time `t` and return per-pilot samples
    * (local ENU metres, y already multiplied by vScale) for the backend to
    * project / follow. `smoothSeconds` is the metric-averaging window of
-   * flight time (scaled with playback speed by the caller).
+   * flight time (fixed by the caller; see METRIC_AVG_SECONDS).
    */
   updateMarkers(t: number, smoothSeconds = 6): MarkerSample[] {
     const n = this.nPilots;
