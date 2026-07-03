@@ -57,6 +57,13 @@ export class FlightScene {
   readonly group = new THREE.Group();
   /** Current-position markers. Add to the render root. */
   markers!: THREE.InstancedMesh;
+  /**
+   * Light mode only: a dark inverted-hull silhouette behind each cone, so
+   * pale pilot colours (light lime, yellow…) still read against the
+   * off-white backdrop without altering the identity colour itself. Lives in
+   * `group`; matrices mirror `markers` each frame.
+   */
+  private markerOutlines?: THREE.InstancedMesh;
 
   readonly center = new THREE.Vector3();
   extentXZ = 1000;
@@ -198,6 +205,19 @@ export class FlightScene {
     this.markers.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.markers.frustumCulled = false;
 
+    if (this.light) {
+      // inverted hull: a ~16% larger back-face-only cone reads as a dark rim
+      const outlineGeom = new THREE.ConeGeometry(size * 0.5 * 1.16, size * 1.8 * 1.16, 10);
+      this.markerOutlines = new THREE.InstancedMesh(
+        outlineGeom,
+        new THREE.MeshBasicMaterial({ color: 0x334155, side: THREE.BackSide }),
+        n,
+      );
+      this.markerOutlines.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      this.markerOutlines.frustumCulled = false;
+      this.group.add(this.markerOutlines);
+    }
+
     const col = new THREE.Color();
     for (let i = 0; i < n; i++) {
       const c = this.tracks.manifest.colors[i] ?? [0.8, 0.8, 0.8];
@@ -230,7 +250,12 @@ export class FlightScene {
     for (const tp of task.turnpoints) {
       const isStart = tp.type === 'SSS' || tp.type === 'TAKEOFF';
       const isEnd = tp.type === 'ESS';
-      const color = isStart ? 0x34d399 : isEnd ? 0xf87171 : 0xfbbf24;
+      // dark-backdrop pastels wash out on the off-white — use deeper shades there
+      const color = isStart
+        ? this.light ? 0x047857 : 0x34d399
+        : isEnd
+          ? this.light ? 0xdc2626 : 0xf87171
+          : this.light ? 0xb45309 : 0xfbbf24;
 
       const ringPts: THREE.Vector3[] = [];
       const segs = 72;
@@ -253,7 +278,9 @@ export class FlightScene {
         new THREE.MeshBasicMaterial({
           color,
           transparent: true,
-          opacity: 0.06,
+          // the light-mode wall colour is much darker, so less opacity carries
+          // the same weight (DoubleSide walls stack up to 4 layers deep)
+          opacity: this.light ? 0.05 : 0.06,
           side: THREE.DoubleSide,
           depthWrite: false,
         }),
@@ -428,6 +455,7 @@ export class FlightScene {
         this.dummy.position.set(0, -1e9, 0);
         this.dummy.updateMatrix();
         this.markers.setMatrixAt(i, this.dummy.matrix);
+        this.markerOutlines?.setMatrixAt(i, this.dummy.matrix);
         continue;
       }
       const wy = s.y * this.vScale;
@@ -439,6 +467,7 @@ export class FlightScene {
       this.dummy.scale.set(sc, sc, sc);
       this.dummy.updateMatrix();
       this.markers.setMatrixAt(i, this.dummy.matrix);
+      this.markerOutlines?.setMatrixAt(i, this.dummy.matrix);
       out.active = true;
       out.landed = s.landed;
       out.x = s.x;
@@ -450,6 +479,7 @@ export class FlightScene {
       out.climbInst = s.climbInst;
     }
     this.markers.instanceMatrix.needsUpdate = true;
+    if (this.markerOutlines) this.markerOutlines.instanceMatrix.needsUpdate = true;
     this.gaggleLayer?.update(t, this.samplesOut);
     return this.samplesOut;
   }
@@ -503,6 +533,7 @@ export class FlightScene {
     this.markers.geometry.dispose();
     (this.markers.material as THREE.Material).dispose();
     this.markers.dispose();
+    this.markerOutlines?.dispose();
   }
 }
 
