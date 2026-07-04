@@ -333,7 +333,10 @@
         <div>
           <label for="settings-close-date" class="text-sm font-medium block mb-1">Close Date</label>
           <input id="settings-close-date" type="date" class="input w-full">
-          <p class="text-xs text-muted-foreground mt-1">After this date, track submissions are rejected. Leave empty for open-ended.</p>
+          <div class="flex items-center justify-between gap-2 mt-1">
+            <p class="text-xs text-muted-foreground">After this date, track submissions are rejected. Leave empty for open-ended.</p>
+            <button type="button" id="settings-close-date-clear" class="text-xs text-muted-foreground hover:text-foreground underline shrink-0">Clear</button>
+          </div>
         </div>
         <label class="flex items-center gap-2 cursor-pointer">
           <input id="settings-test" type="checkbox" class="accent-primary w-4 h-4">
