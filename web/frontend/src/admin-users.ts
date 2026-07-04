@@ -26,7 +26,7 @@ function renderRow(u: AdminUser): string {
     ? '<span class="ml-2 inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">super admin</span>'
     : "";
   const usernameLine = u.username
-    ? `<a href="/u/${escapeHtml(u.username)}/" class="hover:underline">@${escapeHtml(u.username)}</a>`
+    ? `<a href="/u/${encodeURIComponent(u.username)}/" class="hover:underline">@${escapeHtml(u.username)}</a>`
     : '<span class="italic">no username</span>';
   const unverified = u.email_verified
     ? ""

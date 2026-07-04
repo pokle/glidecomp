@@ -24,6 +24,7 @@ import {
 } from './map-provider-shared';
 import { formatAltitude, formatDistance } from './units-browser';
 import { createMapAnnotationLayer, type MapAnnotationLayer } from './map-annotations';
+import { escapeHtml } from '../escape-html';
 
 const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -2876,7 +2877,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           // Add pilot name to HUD
           const summaryEl = hudElement.querySelector('.hud-summary');
           if (summaryEl) {
-            summaryEl.innerHTML = `${CROSSHAIR_MAP_SVG}<span style="font-weight:600;color:#ff8c00">${pilotName}</span>`;
+            summaryEl.innerHTML = `${CROSSHAIR_MAP_SVG}<span style="font-weight:600;color:#ff8c00">${escapeHtml(pilotName)}</span>`;
           }
           updateTrackPointHUD(hudElement, data);
         },

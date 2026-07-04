@@ -115,7 +115,7 @@ export class GaggleUI {
   private showTip(ep: GaggleEpisode, e: PointerEvent): void {
     const tip = this.d.tooltip;
     tip.innerHTML = `<div class="font-medium" style="color:${css(gaggleColor(ep.id))}">${ep.peakSize} pilots</div>
-      <div class="text-slate-400">${this.d.fmtTime(ep.tStart)}–${this.d.fmtTime(ep.tEnd)}${this.tpLabel(ep)}</div>
+      <div class="text-slate-400">${this.d.fmtTime(ep.tStart)}–${this.d.fmtTime(ep.tEnd)}${esc(this.tpLabel(ep))}</div>
       <div class="text-slate-500 max-w-[14rem] truncate">${this.memberNames(ep)}</div>`;
     tip.style.left = `${e.clientX + 14}px`;
     tip.style.top = `${e.clientY - 8}px`;
