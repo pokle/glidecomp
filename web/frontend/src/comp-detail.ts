@@ -2148,6 +2148,12 @@ function setupSettingsDialog(compId: string, comp: CompDetail) {
   pilotClassesInput.addEventListener("input", updateDefaultClassOptions);
 
   document
+    .getElementById("settings-close-date-clear")!
+    .addEventListener("click", () => {
+      closeDateInput.value = "";
+    });
+
+  document
     .getElementById("comp-settings-btn")!
     .addEventListener("click", () => {
       // Populate form with current values

@@ -171,6 +171,13 @@ export const compRoutes = new Hono<HonoEnv>()
 
       const now = new Date().toISOString();
 
+      // Default close_date to one month out so a forgotten close date
+      // doesn't silently leave the comp open-ended forever.
+      const defaultCloseDate = new Date(now);
+      defaultCloseDate.setUTCMonth(defaultCloseDate.getUTCMonth() + 1);
+      const closeDate =
+        body.close_date ?? defaultCloseDate.toISOString().split("T")[0];
+
       const scoringFormat = body.scoring_format ?? "gap";
 
       const compResult = await c.env.DB.prepare(
@@ -180,7 +187,7 @@ export const compRoutes = new Hono<HonoEnv>()
         .bind(
           body.name,
           now,
-          body.close_date ?? null,
+          closeDate,
           body.category,
           body.test ? 1 : 0,
           JSON.stringify(pilotClasses),
@@ -204,7 +211,9 @@ export const compRoutes = new Hono<HonoEnv>()
         subject_type: "comp",
         subject_id: compId,
         subject_name: body.name,
-        description: `Created competition "${body.name}"`,
+        description: body.close_date
+          ? `Created competition "${body.name}"`
+          : `Created competition "${body.name}" (close date defaulted to ${closeDate})`,
       });
 
       return c.json(
@@ -213,7 +222,7 @@ export const compRoutes = new Hono<HonoEnv>()
           name: body.name,
           category: body.category,
           creation_date: now,
-          close_date: body.close_date ?? null,
+          close_date: closeDate,
           test: body.test ?? false,
           pilot_classes: pilotClasses,
           default_pilot_class: defaultClass,

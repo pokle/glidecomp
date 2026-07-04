@@ -42,7 +42,9 @@ describe("audit log write-through", () => {
     const { entries } = await getAudit(compId);
     expect(entries).toHaveLength(1);
     expect(entries[0].subject_type).toBe("comp");
-    expect(entries[0].description).toBe('Created competition "Bells 2026"');
+    expect(entries[0].description).toMatch(
+      /^Created competition "Bells 2026"/
+    );
     expect(entries[0].actor_name).toBe("Test Pilot");
   });
 
