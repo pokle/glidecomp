@@ -255,12 +255,16 @@ export class TerrainBackend implements Backend {
     // implicit stop() would cancel gestures for no reason.
     if (dLng === 0 && dLat === 0) return;
     // Yield to the user: while a gesture (touch pan/orbit, drag — tracked via
-    // activePointers) or one of our own easeTo orientation presets (isEasing)
-    // is running, setCenter's implicit stop() would kill it. The anchor above
-    // stays fresh, so the follow resumes from the pilot's current position
-    // without a jump when the gesture ends. (isEasing, not isMoving: isMoving
-    // could in principle report our own per-frame jumpTo and starve the follow.)
-    if (this.activePointers > 0 || this.map.isEasing()) return;
+    // activePointers), a scroll/trackpad pinch-zoom (isZooming — these fire as
+    // wheel events, never pointerdown, so activePointers can't see them), or
+    // one of our own easeTo orientation presets (isEasing) is running,
+    // setCenter's implicit stop() would kill it (stop() calls handlers.stop(),
+    // which resets every interaction handler including scrollZoom). The anchor
+    // above stays fresh, so the follow resumes from the pilot's current
+    // position without a jump when the gesture ends. (isEasing, not isMoving:
+    // isMoving could in principle report our own per-frame jumpTo and starve
+    // the follow.)
+    if (this.activePointers > 0 || this.map.isEasing() || this.map.isZooming()) return;
     // pan the map by the pilot's movement since last frame; reading the live
     // centre first means any user zoom/rotate is preserved.
     const c = this.map.getCenter();
