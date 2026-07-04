@@ -23,7 +23,7 @@ import { samplePilot, type LoadedTracks } from './track-data';
 import { type GaggleResult } from './gaggles';
 import { GaggleLayer } from './gaggle-layer';
 
-export type ColorMode = 'pilot' | 'altitude' | 'vario';
+export type ColorMode = 'pilot' | 'altitude' | 'vario' | 'speed' | 'glide';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const WALL_HEIGHT = 1400; // metres, task-cylinder walls (pre vertical exaggeration)
@@ -31,6 +31,23 @@ const TASK_LINE_COLOR = 0x6366f1; // indigo — matches the 2D analysis optimise
 
 /** Vertical-speed colour mode saturates at ±this many m/s. */
 export const VARIO_MAX = 4;
+
+/**
+ * Speed colour mode ramps from SPEED_MIN to SPEED_MAX m/s (≈18–108 km/h).
+ * The floor isn't 0 because nobody flies below stall speed — starting the
+ * ramp there would waste its bottom third and compress the useful range.
+ */
+export const SPEED_MIN = 5;
+export const SPEED_MAX = 30;
+
+/**
+ * Glide-ratio colour mode: the ramp runs logarithmically from GLIDE_LO to
+ * GLIDE_HI (ratios span a large range, and 4 → 8 matters as much as 16 → 32).
+ * Climbing / level segments render as a flat colour — glide ratio is
+ * effectively infinite there (the shader reuses the themed vario-zero colour).
+ */
+export const GLIDE_LO = 2;
+export const GLIDE_HI = 32;
 
 /** One pilot's interpolated marker state in local ENU metres (y already exaggerated). */
 export interface MarkerSample {
@@ -123,6 +140,7 @@ export class FlightScene {
     geom.setAttribute('aTime', new THREE.BufferAttribute(time, 1));
     geom.setAttribute('aPilot', new THREE.BufferAttribute(pilotIndex, 1));
     geom.setAttribute('aVario', new THREE.BufferAttribute(this.tracks.vario, 1));
+    geom.setAttribute('aSpeed', new THREE.BufferAttribute(this.tracks.speed, 1));
     geom.setIndex(new THREE.BufferAttribute(index, 1));
 
     const nPilots = manifest.pilots.length;
@@ -145,6 +163,8 @@ export class FlightScene {
       uAltMin: { value: manifest.altMin },
       uAltMax: { value: manifest.altMax },
       uVarioMax: { value: VARIO_MAX },
+      uSpeedMin: { value: SPEED_MIN },
+      uSpeedMax: { value: SPEED_MAX },
       uWidth: { value: this.width * pixelRatio() },
       // vario-ramp "zero": pale on the dark backdrop, slate on the light one
       uVarioZero: {
@@ -168,7 +188,7 @@ export class FlightScene {
     // Round points carry the adjustable width (gl.LINES width is capped at 1px on
     // most platforms). Same attributes, no index (one point per fix), shared uniforms.
     const pgeom = new THREE.BufferGeometry();
-    for (const name of ['position', 'aTime', 'aPilot', 'aVario']) {
+    for (const name of ['position', 'aTime', 'aPilot', 'aVario', 'aSpeed']) {
       pgeom.setAttribute(name, geom.getAttribute(name));
     }
     const pointMat = new THREE.ShaderMaterial({
@@ -493,7 +513,8 @@ export class FlightScene {
   }
 
   setColorMode(mode: ColorMode): void {
-    this.trailMat.uniforms.uColorMode.value = mode === 'altitude' ? 1 : mode === 'vario' ? 2 : 0;
+    const modes: Record<ColorMode, number> = { pilot: 0, altitude: 1, vario: 2, speed: 3, glide: 4 };
+    this.trailMat.uniforms.uColorMode.value = modes[mode] ?? 0;
   }
 
   /** Trail width in CSS px (drives the round-points pass). */
@@ -593,16 +614,19 @@ function trailVertexShader(nPilots: number): string {
     attribute float aTime;
     attribute float aPilot;
     attribute float aVario;
+    attribute float aSpeed;
     uniform float uTime;
     uniform vec3  uColors[${nPilots}];
     uniform float uVisible[${nPilots}];
-    uniform int   uColorMode;   // 0 = pilot, 1 = altitude, 2 = vertical speed
+    uniform int   uColorMode;   // 0 pilot, 1 altitude, 2 vertical speed, 3 speed, 4 glide ratio
     uniform int   uHighlight;   // -1 = none
     uniform float uVScale;      // vertical exaggeration
     uniform float uAltMin;
     uniform float uAltMax;
     uniform float uVarioMax;
-    uniform vec3  uVarioZero;   // vario-ramp centre colour (theme-dependent)
+    uniform float uSpeedMin;
+    uniform float uSpeedMax;
+    uniform vec3  uVarioZero;   // vario-ramp centre / glide "infinity" colour (theme-dependent)
     uniform float uWidth;       // point size (px); ignored by LineSegments
     varying float vAge;
     varying vec3  vColor;
@@ -627,6 +651,14 @@ function trailVertexShader(nPilots: number): string {
       return t < 0.5 ? mix(sink, uVarioZero, t / 0.5) : mix(uVarioZero, climb, (t - 0.5) / 0.5);
     }
 
+    // sequential: red (poor glide) -> yellow -> green (good glide)
+    vec3 glideRamp(float t) {
+      vec3 poor = vec3(0.86, 0.24, 0.20);
+      vec3 mid  = vec3(0.95, 0.80, 0.20);
+      vec3 good = vec3(0.16, 0.68, 0.38);
+      return t < 0.5 ? mix(poor, mid, t / 0.5) : mix(mid, good, (t - 0.5) / 0.5);
+    }
+
     void main() {
       int pid = int(aPilot + 0.5);
       vAge = uTime - aTime;
@@ -638,6 +670,18 @@ function trailVertexShader(nPilots: number): string {
       } else if (uColorMode == 2) {
         float a = clamp(aVario / uVarioMax * 0.5 + 0.5, 0.0, 1.0);
         vColor = varioRamp(a);
+      } else if (uColorMode == 3) {
+        vColor = altRamp(clamp((aSpeed - uSpeedMin) / (uSpeedMax - uSpeedMin), 0.0, 1.0));
+      } else if (uColorMode == 4) {
+        if (aVario > -0.05) {
+          vColor = uVarioZero;            // climbing/level: glide is infinite — flat colour
+        } else {
+          // log scale over GLIDE_LO..GLIDE_HI (${GLIDE_LO}..${GLIDE_HI}):
+          // a 4 -> 8 improvement reads as strongly as 16 -> 32
+          float g = aSpeed / -aVario;
+          float t = clamp(log2(g / ${GLIDE_LO.toFixed(1)}) / ${Math.log2(GLIDE_HI / GLIDE_LO).toFixed(1)}, 0.0, 1.0);
+          vColor = glideRamp(t);
+        }
       }
       if (uVisible[pid] < 0.5) {
         gl_Position = vec4(0.0, 0.0, 0.0, -1.0);

@@ -183,11 +183,11 @@
             <label class="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">Theme</label>
             <div class="grid grid-cols-3 gap-1">
               <button id="thDark"
-                class="rounded-md border border-slate-600 px-2 py-1 text-xs transition-colors bg-lime-500 text-slate-900">Dark</button>
+                class="rounded-md border border-slate-600 px-2 py-1 text-xs transition-colors bg-slate-800 text-slate-300 hover:bg-slate-700">Dark</button>
               <button id="thLight"
                 class="rounded-md border border-slate-600 px-2 py-1 text-xs transition-colors bg-slate-800 text-slate-300 hover:bg-slate-700">Light</button>
               <button id="thAuto"
-                class="rounded-md border border-slate-600 px-2 py-1 text-xs transition-colors bg-slate-800 text-slate-300 hover:bg-slate-700"
+                class="rounded-md border border-slate-600 px-2 py-1 text-xs transition-colors bg-lime-500 text-slate-900"
                 title="Follow the system colour scheme">Auto</button>
             </div>
           </div>
@@ -212,6 +212,8 @@
               <option value="pilot">Pilot</option>
               <option value="altitude">Altitude</option>
               <option value="vario" selected>Vertical speed</option>
+              <option value="speed">Speed</option>
+              <option value="glide">Glide ratio</option>
             </select>
             <!-- colour scale legend (shown for altitude / vertical speed) -->
             <div id="colorLegend" class="hidden mt-1.5">

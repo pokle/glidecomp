@@ -15,9 +15,14 @@ viewer was built from) as background.
 ## 1. What was built
 
 - A page `/replay` showing all ~32 pilots of Corryong Cup 2026 Task 1
-  with synchronized playback, pilot identity, altitude/vario colouring, task
+  with synchronized playback, pilot identity, trail colouring (pilot /
+  altitude / vertical speed [default] / **speed** / **glide ratio**), task
   geometry, gaggle detection, and a selectable backdrop (abstract vs Mapbox
-  terrain).
+  terrain). Speed and glide colour from a per-vertex smoothed ground speed
+  computed at load (prefix-sum path length over the same ±3-fix window as
+  vario). The glide ramp is **logarithmic** over `GLIDE_LO..GLIDE_HI` (2…32 —
+  a 4→8 improvement reads as strongly as 16→32); climbing/level segments
+  render flat in the themed vario-zero colour (glide is effectively ∞ there).
 - **Per-pilot live metrics** (see §5.15): rank badges pinned to the marker
   cones, and a draggable metrics callout (altitude / climb / ground speed /
   glide ratio) with a leader line to the pilot's cone. There is deliberately
@@ -431,7 +436,7 @@ remains only for the gaggle-ribbon hovers (GaggleUI).
 
 **Theme (dark / light / auto)**: a switch in the control drawer, stored as
 `theme` in the same `glidecomp:preferences` record ('system' = auto, follows
-`prefers-color-scheme` live). Light mode uses an **off-white** background
+`prefers-color-scheme` live; **auto is the default** when nothing is stored). Light mode uses an **off-white** background
 (`#f2f0e9`, deliberately not full white). Mechanics: main.ts toggles a
 `light` class on `<html>`; the page's own `<style>` defines `--rp-*` tokens
 plus scoped remaps of the dark slate utilities the markup uses (the page is
