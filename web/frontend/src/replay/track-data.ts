@@ -24,6 +24,11 @@ export interface LoadedTracks {
   index: Uint32Array;
   /** Per-vertex smoothed climb rate, m/s (for the vertical-speed colour mode). */
   vario: Float32Array;
+  /**
+   * Per-vertex smoothed ground speed, m/s — horizontal path length over the
+   * same ±3-fix window (for the speed and glide-ratio colour modes).
+   */
+  speed: Float32Array;
 }
 
 /** Result of sampling one pilot's interpolated position at a given time. */
@@ -106,18 +111,28 @@ function assembleTracks(manifest: TrackManifest, data: Float32Array): LoadedTrac
   for (const p of manifest.pilots) segCount += Math.max(0, p.vertexCount - 1);
   const index = new Uint32Array(segCount * 2);
   const vario = new Float32Array(N);
+  const speed = new Float32Array(N);
+  // cumulative horizontal path length per vertex (reset at pilot seams) so the
+  // windowed speed is a prefix-sum difference, not an inner loop
+  const pathAcc = new Float64Array(N);
   let k = 0;
   const HW = 3; // ±3-fix window (~6s) — smooths 1–2s-cadence noise
   for (let pi = 0; pi < manifest.pilots.length; pi++) {
     const p = manifest.pilots[pi];
     const start = p.vertexOffset;
     const end = start + p.vertexCount;
+    for (let v = start + 1; v < end; v++) {
+      pathAcc[v] =
+        pathAcc[v - 1] +
+        Math.hypot(pos[v * 3] - pos[(v - 1) * 3], pos[v * 3 + 2] - pos[(v - 1) * 3 + 2]);
+    }
     for (let v = start; v < end; v++) {
       pilotIndex[v] = pi;
       const a = Math.max(start, v - HW);
       const b = Math.min(end - 1, v + HW);
       const dt = time[b] - time[a];
       vario[v] = dt > 0 ? (pos[b * 3 + 1] - pos[a * 3 + 1]) / dt : 0;
+      speed[v] = dt > 0 ? (pathAcc[b] - pathAcc[a]) / dt : 0;
     }
     for (let v = start; v < end - 1; v++) {
       index[k++] = v;
@@ -125,7 +140,7 @@ function assembleTracks(manifest: TrackManifest, data: Float32Array): LoadedTrac
     }
   }
 
-  return { manifest, pos, time, pilotIndex, index, vario };
+  return { manifest, pos, time, pilotIndex, index, vario, speed };
 }
 
 /** Gunzip an ArrayBuffer via the platform DecompressionStream. */

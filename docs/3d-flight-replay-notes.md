@@ -15,9 +15,14 @@ viewer was built from) as background.
 ## 1. What was built
 
 - A page `/replay` showing all ~32 pilots of Corryong Cup 2026 Task 1
-  with synchronized playback, pilot identity, altitude/vario colouring, task
+  with synchronized playback, pilot identity, trail colouring (pilot /
+  altitude / vertical speed [default] / **speed** / **glide ratio**), task
   geometry, gaggle detection, and a selectable backdrop (abstract vs Mapbox
-  terrain).
+  terrain). Speed and glide colour from a per-vertex smoothed ground speed
+  computed at load (prefix-sum path length over the same ±3-fix window as
+  vario). The glide ramp is **logarithmic** over `GLIDE_LO..GLIDE_HI` (2…32 —
+  a 4→8 improvement reads as strongly as 16→32); climbing/level segments
+  render flat in the themed vario-zero colour (glide is effectively ∞ there).
 - **Per-pilot live metrics** (see §5.15): rank badges pinned to the marker
   cones, and a draggable metrics callout (altitude / climb / ground speed /
   glide ratio) with a leader line to the pilot's cone. There is deliberately
@@ -372,6 +377,25 @@ get it for free; `depthTest: false` keeps it over the terrain like the rings.
 and this matches the 2D analysis map exactly. Don't "fix" it to start at the
 SSS edge; it's intentional and rule-correct.
 
+### 5.14b Backdrop/theme switches hand the camera over (ViewState)
+
+Switching abstract ↔ map (or rebuilding for a theme change) used to snap to
+each backend's default framing — a jarring loss of continuity. Both camera
+models reduce to the same five numbers, so `rebuild()` captures a
+backend-agnostic **`ViewState`** from the outgoing backend and seeds the
+incoming one (`setInitialView` before `mount()`, applied instead of the
+default whole-task framing): look-at point in local ENU (`y` = 0 from the
+map side — it has no elevated look-at), `bearingDeg`, `pitchDeg` (0 =
+straight down, Mapbox convention; abstract's polar angle maps 1:1, clamped
+to Mapbox's 85° max), and **`mpp`** (metres per pixel at the view centre) —
+which carries the zoom without either side knowing the other's projection.
+Abstract: camera distance `= mpp·viewportH / (2·tan(fov/2))`, azimuth
+`θ = −bearing` (θ grows counter-clockwise, bearing clockwise). Map:
+`zoom = log2(40075016.686·cos(lat) / mpp) − 9` — the exact inverse of its
+`getMetresPerPixel`. Round-trip pinned by `terrain-view.test.ts`; the
+abstract path is exercised by every theme switch (verified: bearing and
+scale-bar width survive a rebuild).
+
 ### 5.15 Per-pilot metrics overlays — DOM, not in-scene sprites
 
 Rank badges on the cones and the follow callout are **DOM elements positioned
@@ -431,7 +455,7 @@ remains only for the gaggle-ribbon hovers (GaggleUI).
 
 **Theme (dark / light / auto)**: a switch in the control drawer, stored as
 `theme` in the same `glidecomp:preferences` record ('system' = auto, follows
-`prefers-color-scheme` live). Light mode uses an **off-white** background
+`prefers-color-scheme` live; **auto is the default** when nothing is stored). Light mode uses an **off-white** background
 (`#f2f0e9`, deliberately not full white). Mechanics: main.ts toggles a
 `light` class on `<html>`; the page's own `<style>` defines `--rp-*` tokens
 plus scoped remaps of the dark slate utilities the markup uses (the page is

@@ -18,6 +18,26 @@ export interface ScreenPoint {
   visible: boolean;
 }
 
+/**
+ * Backend-agnostic camera pose, used to hand the view over when the backdrop
+ * (or theme) switches so the user keeps visual continuity. Both camera models
+ * reduce to the same five numbers:
+ *  - the look-at point in local ENU metres (`x`, `y`, `z`; the map backend has
+ *    no elevated look-at, so it reports/uses y = 0),
+ *  - `bearingDeg` (compass heading, same convention as getBearingDeg),
+ *  - `pitchDeg` (0 = straight down, Mapbox-style),
+ *  - `mpp` — metres per pixel at the view centre, which carries the zoom
+ *    without either side needing the other's projection model.
+ */
+export interface ViewState {
+  x: number;
+  y: number;
+  z: number;
+  bearingDeg: number;
+  pitchDeg: number;
+  mpp: number;
+}
+
 export interface Backend {
   /** Async because the terrain backend must wait for the map style to load. */
   mount(): Promise<void>;
@@ -25,6 +45,13 @@ export interface Backend {
   render(): void;
   /** Frame the whole task. */
   resetCamera(): void;
+  /** Current camera pose for handover to another backend. */
+  getViewState(): ViewState;
+  /**
+   * Seed the camera pose to adopt on mount (instead of the default whole-task
+   * framing). Must be called before mount().
+   */
+  setInitialView(view: ViewState): void;
   /** Spin the view so north is up, keeping zoom/pitch and any active follow. */
   faceNorth(): void;
   /** Orient straight down (north up), keeping any active follow. */

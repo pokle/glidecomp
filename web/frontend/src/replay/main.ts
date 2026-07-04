@@ -23,7 +23,7 @@ import {
   type UnitPreferences,
 } from '../analysis/units-browser';
 import { MAP_STYLES, DEFAULT_MAP_STYLE } from './map-styles';
-import { VARIO_MAX } from './flight-scene';
+import { GLIDE_HI, GLIDE_LO, SPEED_MAX, SPEED_MIN, VARIO_MAX } from './flight-scene';
 import { GaggleUI } from './gaggle-ui';
 import type { GaggleResult } from './gaggles';
 import type { TrackManifest } from '@glidecomp/engine';
@@ -126,6 +126,8 @@ const ALT_GRADIENT =
 // vario "zero" is pale on dark, slate on light — mirrors uVarioZero in the trail shader
 const VARIO_GRADIENT = 'linear-gradient(to right, rgb(51,115,242), rgb(217,217,224), rgb(242,64,51))';
 const VARIO_GRADIENT_LIGHT = 'linear-gradient(to right, rgb(51,115,242), rgb(107,115,128), rgb(242,64,51))';
+// mirrors glideRamp in the trail shader (red = poor glide → green = good)
+const GLIDE_GRADIENT = 'linear-gradient(to right, rgb(219,61,51), rgb(242,204,51), rgb(41,173,97))';
 
 /** Round n down to a "nice" 1/2/5×10^k value for the scale bar. */
 function niceNumber(n: number): number {
@@ -148,7 +150,8 @@ async function main(): Promise<void> {
 
   // Apply the saved theme to the chrome immediately so a light-mode user never
   // sees a dark flash while the tracks load; the full switch is wired below.
-  const savedTheme = config.getPreferences().theme ?? 'dark';
+  // Default is auto ('system') — follow the OS unless the user chose a mode.
+  const savedTheme = config.getPreferences().theme ?? 'system';
   document.documentElement.classList.toggle(
     'light',
     savedTheme === 'system'
@@ -905,7 +908,7 @@ async function main(): Promise<void> {
     system: $('thAuto'),
   };
   const prefersLight = window.matchMedia('(prefers-color-scheme: light)');
-  let themeMode: ThemeMode = config.getPreferences().theme ?? 'dark';
+  let themeMode: ThemeMode = config.getPreferences().theme ?? 'system';
   function applyThemeMode(): void {
     const light = themeMode === 'system' ? prefersLight.matches : themeMode === 'light';
     document.documentElement.classList.toggle('light', light);
@@ -946,6 +949,17 @@ async function main(): Promise<void> {
       $('legendLo').textContent = formatAltitude(alt0 + manifest.altMin).withUnit;
       $('legendMid').textContent = '';
       $('legendHi').textContent = formatAltitude(alt0 + manifest.altMax).withUnit;
+    } else if (mode === 'speed') {
+      $('legendBar').style.background = ALT_GRADIENT; // same sequential ramp as the shader
+      $('legendLo').textContent = `≤${formatSpeed(SPEED_MIN).withUnit}`;
+      $('legendMid').textContent = '';
+      $('legendHi').textContent = `≥${formatSpeed(SPEED_MAX).withUnit}`;
+    } else if (mode === 'glide') {
+      $('legendBar').style.background = GLIDE_GRADIENT;
+      $('legendLo').textContent = `≤${GLIDE_LO}`;
+      // log-scaled ramp: the midpoint is the geometric mean, not the average
+      $('legendMid').textContent = String(Math.round(Math.sqrt(GLIDE_LO * GLIDE_HI)));
+      $('legendHi').textContent = `≥${GLIDE_HI} · climb = grey`;
     } else {
       $('legendBar').style.background = document.documentElement.classList.contains('light')
         ? VARIO_GRADIENT_LIGHT
