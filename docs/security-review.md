@@ -1733,7 +1733,7 @@ The worst new issue is **SEC-22 (High): a stored XSS in the analysis score table
 
 **Impact.** Stored XSS on the production origin. The attacker only needs a registered account (to create a comp and add a pilot — both admin-of-own-comp operations, available to any of the up-to-50 comps a user may create); the victim is anyone who opens that comp's task analysis page, **including unauthenticated public viewers** (non-test comps are public). Session cookies are `HttpOnly` so this is not direct cookie theft, but arbitrary same-origin JS as the victim allows authenticated action-on-behalf and reading of any comp data the victim can see. Rated **High** rather than Critical only because there is no direct credential theft and the victim must navigate to the analysis view.
 
-**Remediation.** Done inline (see Resolution). Longer term this is the concrete SEC-05 case for consolidating all pilot/comp-name rendering onto the shared `escapeHtml` (or DOM construction) and adding a lint rule.
+**Remediation.** Done inline (see Resolution). Longer term this is the concrete SEC-05 case for consolidating all pilot/comp-name rendering onto the shared `escapeHtml` (or DOM construction) and adding a lint rule. On *why the fix is output-encoding rather than sanitising `registered_pilot_name` on write*, see [`docs/security-output-encoding.md`](security-output-encoding.md) — encoding on input would corrupt the CSV export, audit log, API responses, and name sorting/matching, and still would not remove the render-time escape.
 
 ---
 
