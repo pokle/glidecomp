@@ -25,7 +25,7 @@ import * as mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import * as THREE from 'three';
 import type { TrackManifest } from '@glidecomp/engine';
-import type { Backend, ScreenPoint } from './backend';
+import type { Backend, ScreenPoint, ViewState } from './backend';
 import type { FlightScene, MarkerSample } from './flight-scene';
 
 export class TerrainBackend implements Backend {
@@ -38,6 +38,8 @@ export class TerrainBackend implements Backend {
   private s = 1;
   private vScale = 3;
   private firstLoad = true;
+  /** Camera pose to adopt on first load instead of the default framing. */
+  private initialView: ViewState | null = null;
   // follow: shift the map by the pilot's movement so the user can still drag/rotate/zoom.
   private followPilot = -1;
   private followLngLat: [number, number] | null = null;
@@ -100,7 +102,8 @@ export class TerrainBackend implements Backend {
           this.addTerrainAndLayers();
           if (this.firstLoad) {
             this.firstLoad = false;
-            this.resetCamera();
+            if (this.initialView) this.applyView(this.initialView);
+            else this.resetCamera();
             // Dev-only handle so headless tests can force a synchronous render
             // (the preview tab suspends rAF, so Mapbox never auto-paints).
             if (import.meta.env.DEV) {
@@ -286,6 +289,36 @@ export class TerrainBackend implements Backend {
 
   getBearingDeg(): number {
     return this.map.getBearing();
+  }
+
+  setInitialView(view: ViewState): void {
+    this.initialView = view;
+  }
+
+  getViewState(): ViewState {
+    const c = this.map.getCenter();
+    const { lat0, lon0, mPerDegLat, mPerDegLon } = this.toGeoParams();
+    return {
+      x: (c.lng - lon0) * mPerDegLon,
+      y: 0, // the map looks at the ground; there is no elevated look-at to hand over
+      z: (lat0 - c.lat) * mPerDegLat,
+      bearingDeg: this.map.getBearing(),
+      pitchDeg: this.map.getPitch(),
+      mpp: this.getMetresPerPixel(),
+    };
+  }
+
+  /** Adopt a handed-over camera pose (zoom = inverse of getMetresPerPixel). */
+  private applyView(v: ViewState): void {
+    const { lat0, lon0, mPerDegLat, mPerDegLon } = this.toGeoParams();
+    const lat = lat0 - v.z / mPerDegLat;
+    const zoom = Math.log2((40075016.686 * Math.cos((lat * Math.PI) / 180)) / v.mpp) - 9;
+    this.map.jumpTo({
+      center: [lon0 + v.x / mPerDegLon, lat],
+      bearing: v.bearingDeg,
+      pitch: Math.min(v.pitchDeg, 85), // abstract allows ~89°; Mapbox caps at 85
+      zoom,
+    });
   }
 
   setVScale(v: number): void {

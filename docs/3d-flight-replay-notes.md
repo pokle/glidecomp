@@ -377,6 +377,25 @@ get it for free; `depthTest: false` keeps it over the terrain like the rings.
 and this matches the 2D analysis map exactly. Don't "fix" it to start at the
 SSS edge; it's intentional and rule-correct.
 
+### 5.14b Backdrop/theme switches hand the camera over (ViewState)
+
+Switching abstract ↔ map (or rebuilding for a theme change) used to snap to
+each backend's default framing — a jarring loss of continuity. Both camera
+models reduce to the same five numbers, so `rebuild()` captures a
+backend-agnostic **`ViewState`** from the outgoing backend and seeds the
+incoming one (`setInitialView` before `mount()`, applied instead of the
+default whole-task framing): look-at point in local ENU (`y` = 0 from the
+map side — it has no elevated look-at), `bearingDeg`, `pitchDeg` (0 =
+straight down, Mapbox convention; abstract's polar angle maps 1:1, clamped
+to Mapbox's 85° max), and **`mpp`** (metres per pixel at the view centre) —
+which carries the zoom without either side knowing the other's projection.
+Abstract: camera distance `= mpp·viewportH / (2·tan(fov/2))`, azimuth
+`θ = −bearing` (θ grows counter-clockwise, bearing clockwise). Map:
+`zoom = log2(40075016.686·cos(lat) / mpp) − 9` — the exact inverse of its
+`getMetresPerPixel`. Round-trip pinned by `terrain-view.test.ts`; the
+abstract path is exercised by every theme switch (verified: bearing and
+scale-bar width survive a rebuild).
+
 ### 5.15 Per-pilot metrics overlays — DOM, not in-scene sprites
 
 Rank badges on the cones and the follow callout are **DOM elements positioned

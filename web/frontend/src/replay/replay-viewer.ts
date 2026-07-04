@@ -202,12 +202,16 @@ export class ReplayViewer {
   private async rebuild(mode: Backdrop): Promise<void> {
     this.switching = true;
     try {
+      // Hand the camera pose over so switching backdrop (or theme) keeps
+      // visual continuity instead of snapping to each backend's default frame.
+      const view = this.backend.getViewState();
       this.backend.dispose();
       this.scene.dispose();
 
       this.scene = new FlightScene(this.tracks, this.gaggles, this.sceneLight(mode));
       this.applySceneState();
       this.backend = await this.makeBackend(mode);
+      this.backend.setInitialView(view);
       this.backend.setVScale(this.vScale);
       await this.backend.mount();
       this.backdrop = mode;

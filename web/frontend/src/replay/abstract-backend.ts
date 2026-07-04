@@ -8,7 +8,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import type { Backend, ScreenPoint } from './backend';
+import type { Backend, ScreenPoint, ViewState } from './backend';
 import type { FlightScene, MarkerSample } from './flight-scene';
 
 export class AbstractBackend implements Backend {
@@ -20,6 +20,8 @@ export class AbstractBackend implements Backend {
   private onPointerDown!: (e: PointerEvent) => void;
   private vScale = 3;
   private v = new THREE.Vector3(); // scratch for projection / bearing
+  /** Camera pose to adopt on mount instead of the default framing. */
+  private initialView: ViewState | null = null;
 
   // follow state: track the pilot's frame-to-frame movement rather than snapping
   // the camera onto it, so the user can pan/orbit/zoom while following.
@@ -89,7 +91,8 @@ export class AbstractBackend implements Backend {
     this.scene.add(this.flight.group);
     this.scene.add(this.flight.markers);
     this.buildGround();
-    this.resetCamera();
+    if (this.initialView) this.applyView(this.initialView);
+    else this.resetCamera();
 
     this.resizeObs = new ResizeObserver(() => this.resize());
     this.resizeObs.observe(this.container);
@@ -171,6 +174,46 @@ export class AbstractBackend implements Backend {
 
   setVScale(v: number): void {
     this.vScale = v;
+  }
+
+  setInitialView(view: ViewState): void {
+    this.initialView = view;
+  }
+
+  getViewState(): ViewState {
+    const offset = this.v.subVectors(this.camera.position, this.controls.target);
+    const r = offset.length();
+    // polar angle from +Y: 0 = camera straight above (top-down) — matches
+    // Mapbox's pitch convention directly.
+    const pitchDeg = (Math.acos(Math.max(-1, Math.min(1, offset.y / r))) * 180) / Math.PI;
+    return {
+      x: this.controls.target.x,
+      y: this.controls.target.y,
+      z: this.controls.target.z,
+      bearingDeg: this.getBearingDeg(),
+      pitchDeg,
+      mpp: this.getMetresPerPixel(),
+    };
+  }
+
+  /**
+   * Adopt a handed-over camera pose: look at (x, y, z) from the bearing/pitch,
+   * at a distance that reproduces the same metres-per-pixel at the target
+   * (inverse of getMetresPerPixel). Azimuth θ = −bearing: θ = 0 puts the
+   * camera due south looking north (bearing 0), and bearing grows clockwise
+   * while θ grows counter-clockwise.
+   */
+  private applyView(v: ViewState): void {
+    const h = this.container.clientHeight || 600;
+    const dist = (v.mpp * h) / (2 * Math.tan((this.camera.fov * Math.PI) / 360));
+    const phi = Math.max(
+      0.02,
+      Math.min(this.controls.maxPolarAngle, (v.pitchDeg * Math.PI) / 180),
+    );
+    this.controls.target.set(v.x, v.y, v.z);
+    this.sph.set(dist, phi, (-v.bearingDeg * Math.PI) / 180);
+    this.camera.position.copy(this.controls.target).add(this.v.setFromSpherical(this.sph));
+    this.controls.update();
   }
 
   followTo(sample: MarkerSample | null): void {
