@@ -28,9 +28,11 @@ function makeBackend() {
   const calls: [number, number][] = [];
   const fakeMap = {
     easing: false,
+    zooming: false,
     getCenter: () => ({ lng: LON0, lat: LAT0 }),
     setCenter: (c: [number, number]) => calls.push(c),
     isEasing: () => fakeMap.easing,
+    isZooming: () => fakeMap.zooming,
   };
   const manifest = {
     origin: { lat0: LAT0, lon0: LON0, alt0: 0 },
@@ -98,6 +100,18 @@ describe('TerrainBackend.followTo', () => {
     backend.followTo(sample(100, 0));
     expect(calls).toHaveLength(0);
     fakeMap.easing = false;
+    backend.followTo(sample(200, 0));
+    expect(calls).toHaveLength(1); // resumed with just the new delta
+    expect(calls[0][0]).toBeCloseTo(LON0 + 0.001, 9);
+  });
+
+  it('yields while a scroll/trackpad pinch-zoom is in progress (no pointerdown fires for wheel gestures)', () => {
+    const { backend, fakeMap, calls } = makeBackend();
+    backend.followTo(sample(0, 0));
+    fakeMap.zooming = true;
+    backend.followTo(sample(100, 0));
+    expect(calls).toHaveLength(0); // zoom gesture untouched
+    fakeMap.zooming = false;
     backend.followTo(sample(200, 0));
     expect(calls).toHaveLength(1); // resumed with just the new delta
     expect(calls[0][0]).toBeCloseTo(LON0 + 0.001, 9);
