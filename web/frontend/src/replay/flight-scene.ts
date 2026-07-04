@@ -324,6 +324,7 @@ export class FlightScene {
           depthWrite: false,
         }),
       );
+      wall.position.set(tp.x, 0, tp.z);
       wall.frustumCulled = false;
       this.cylinderWalls.push(wall);
       this.group.add(wall);
