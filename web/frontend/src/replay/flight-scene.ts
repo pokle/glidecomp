@@ -27,7 +27,9 @@ export type ColorMode = 'pilot' | 'altitude' | 'vario' | 'speed' | 'glide';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const WALL_HEIGHT = 1400; // metres, task-cylinder walls (pre vertical exaggeration)
-const TASK_LINE_COLOR = 0x6366f1; // indigo — matches the 2D analysis optimised line
+// Above every depthTest:false ground overlay (task rings/line/chevrons/labels max
+// out at 5, gaggle layer at 7) so live pilot markers are never swallowed by them.
+const MARKER_RENDER_ORDER = 10;
 
 /** Vertical-speed colour mode saturates at ±this many m/s. */
 export const VARIO_MAX = 4;
@@ -131,6 +133,11 @@ export class FlightScene {
     return this.tracks.manifest.altMax - this.tracks.manifest.altMin;
   }
 
+  /** Regular-turnpoint amber — also used for the task line/chevrons so they read as one family. */
+  private get regularTurnpointColor(): number {
+    return this.light ? 0xb45309 : 0xfbbf24;
+  }
+
   // --- build ---------------------------------------------------------------
 
   private buildTrails(): void {
@@ -220,21 +227,27 @@ export class FlightScene {
     const n = this.nPilots;
     const size = this.extentXZ * 0.012;
     const geom = new THREE.ConeGeometry(size * 0.5, size * 1.8, 10);
-    const mat = new THREE.MeshBasicMaterial(); // per-instance colour via setColorAt
+    // transparent (at full opacity) so this joins the transparent render queue,
+    // where MARKER_RENDER_ORDER lets it paint over the depthTest:false ground
+    // overlay (task line/chevrons/rings/labels) instead of being swallowed by
+    // it — depthTest stays on, so terrain/gaggle occlusion is unaffected.
+    const mat = new THREE.MeshBasicMaterial({ transparent: true }); // per-instance colour via setColorAt
     this.markers = new THREE.InstancedMesh(geom, mat, n);
     this.markers.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.markers.frustumCulled = false;
+    this.markers.renderOrder = MARKER_RENDER_ORDER;
 
     if (this.light) {
       // inverted hull: a ~16% larger back-face-only cone reads as a dark rim
       const outlineGeom = new THREE.ConeGeometry(size * 0.5 * 1.16, size * 1.8 * 1.16, 10);
       this.markerOutlines = new THREE.InstancedMesh(
         outlineGeom,
-        new THREE.MeshBasicMaterial({ color: 0x334155, side: THREE.BackSide }),
+        new THREE.MeshBasicMaterial({ color: 0x334155, side: THREE.BackSide, transparent: true }),
         n,
       );
       this.markerOutlines.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       this.markerOutlines.frustumCulled = false;
+      this.markerOutlines.renderOrder = MARKER_RENDER_ORDER;
       this.group.add(this.markerOutlines);
     }
 
@@ -267,15 +280,18 @@ export class FlightScene {
     const task = this.tracks.manifest.task;
     if (!task) return;
     this.buildOptimizedPath(task.optimizedPath);
-    for (const tp of task.turnpoints) {
+    task.turnpoints.forEach((tp, idx) => {
       const isStart = tp.type === 'SSS' || tp.type === 'TAKEOFF';
+      // The goal is the last turnpoint by definition (see engine's getGoalIndex) —
+      // not necessarily the one tagged 'ESS', which some tasks place earlier.
+      const isGoal = idx === task.turnpoints.length - 1;
       const isEnd = tp.type === 'ESS';
       // dark-backdrop pastels wash out on the off-white — use deeper shades there
       const color = isStart
         ? this.light ? 0x047857 : 0x34d399
         : isEnd
           ? this.light ? 0xdc2626 : 0xf87171
-          : this.light ? 0xb45309 : 0xfbbf24;
+          : this.regularTurnpointColor;
 
       const ringPts: THREE.Vector3[] = [];
       const segs = 72;
@@ -292,7 +308,10 @@ export class FlightScene {
       ring.frustumCulled = false;
       this.group.add(ring);
 
-      const wallGeom = new THREE.CylinderGeometry(tp.radius, tp.radius, WALL_HEIGHT, 64, 1, true);
+      // Goal gets a capped drum (closed top/bottom) instead of the open tube
+      // every other turnpoint uses, so it reads as a solid 3D landmark — it's
+      // the one cylinder pilots actually have to fly *into*, not just track.
+      const wallGeom = new THREE.CylinderGeometry(tp.radius, tp.radius, WALL_HEIGHT, 64, 1, !isGoal);
       const wall = new THREE.Mesh(
         wallGeom,
         new THREE.MeshBasicMaterial({
@@ -300,11 +319,12 @@ export class FlightScene {
           transparent: true,
           // the light-mode wall colour is much darker, so less opacity carries
           // the same weight (DoubleSide walls stack up to 4 layers deep)
-          opacity: this.light ? 0.05 : 0.06,
+          opacity: isGoal ? (this.light ? 0.09 : 0.1) : this.light ? 0.05 : 0.06,
           side: THREE.DoubleSide,
           depthWrite: false,
         }),
       );
+      wall.position.set(tp.x, 0, tp.z);
       wall.frustumCulled = false;
       this.cylinderWalls.push(wall);
       this.group.add(wall);
@@ -317,100 +337,75 @@ export class FlightScene {
         label.renderOrder = 5;
         this.group.add(label);
       }
-    }
+    });
     this.applyWallScale();
   }
 
   /**
    * The optimised (shortest) task line tagging each cylinder edge, drawn flat on
-   * the ground as a dashed indigo polyline with course-direction arrowheads —
-   * the same `#6366f1` dashed line + arrows the 2D analysis map shows.
+   * the ground as a solid polyline with course-direction chevrons, in the same
+   * amber used for the regular-turnpoint rings/walls so it reads as part of
+   * that family rather than a separately-styled overlay (the 2D analysis map's
+   * optimised line is indigo — intentionally different, to stand out here
+   * against the 3D scene's terrain/trails). The chevrons share this same
+   * `LineBasicMaterial` (open "v" outlines, not a filled shape) so they read as
+   * part of the line rather than a separate, heavier decoration.
    * Pre-projected to ENU at build time (see track-packer).
    */
   private buildOptimizedPath(path?: { x: number; z: number }[]): void {
     if (!path || path.length < 2) return;
     const pts = path.map((p) => new THREE.Vector3(p.x, 0, p.z));
-    const line = new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints(pts),
-      new THREE.LineDashedMaterial({
-        color: TASK_LINE_COLOR,
-        transparent: true,
-        opacity: 0.85,
-        depthTest: false,
-        dashSize: this.extentXZ * 0.012,
-        gapSize: this.extentXZ * 0.012,
-      }),
-    );
-    line.computeLineDistances(); // required for the dash pattern
+    const mat = new THREE.LineBasicMaterial({
+      color: this.regularTurnpointColor,
+      transparent: true,
+      opacity: 0.85,
+      depthTest: false,
+    });
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
     line.frustumCulled = false;
     line.renderOrder = 4;
     this.group.add(line);
-    this.buildPathArrows(pts);
+    this.buildPathArrows(pts, mat);
   }
 
   /**
-   * Flat indigo chevrons laid on the ground at each leg's midpoint, pointing
-   * along the course so the direction of travel is unambiguous (mirrors the
-   * arrow icons the 2D analysis line carries). A chevron (open ">" stroke)
-   * rather than a filled triangle, so it isn't mistaken for the triangular
-   * shadow a pilot cone casts. depthTest off so it reads over the terrain in
-   * the map backend, like the dashed line and cylinder rings.
+   * Open "v" chevrons laid on the ground at each leg's midpoint, pointing along
+   * the course so the direction of travel is unambiguous (mirrors the arrow
+   * icons the 2D analysis line carries). Drawn with the task line's own
+   * `LineBasicMaterial` — same colour, opacity and (browser-capped ~1px) stroke
+   * weight as the line itself, so they look like part of it rather than a
+   * separate filled shape.
    */
-  private buildPathArrows(pts: THREE.Vector3[]): void {
+  private buildPathArrows(pts: THREE.Vector3[], mat: THREE.LineBasicMaterial): void {
     const size = Math.min(this.extentXZ * 0.02, 700); // metres (pre-exaggeration)
-    // A flat ">" chevron in the XZ plane pointing toward +X (East); we then
-    // rotate it about Y so its tip faces the leg direction. Built as two thick
-    // arms (an outer V minus an inner V offset back by the stroke width) so the
-    // back is concave — the hallmark of a chevron vs. a solid triangle.
-    const s = size; //   tip-forward extent
+    // A flat ">" outline in the XZ plane pointing toward +X (East); rotated
+    // about Y so its tip faces the leg direction.
+    const s = size; // tip-forward extent
     const zs = size * 0.6; // arm half-span (lateral, on Z)
     const xb = -size * 0.15; // arm-back X (just behind the origin)
-    const d = size * 0.55; // stroke width along X
-    const O: [number, number] = [s, 0]; //          outer tip
-    const UA: [number, number] = [xb, zs]; //        outer upper arm-back
-    const LA: [number, number] = [xb, -zs]; //       outer lower arm-back
-    const I: [number, number] = [s - d, 0]; //       inner tip (the notch)
-    const UI: [number, number] = [xb - d, zs]; //    inner upper arm-back
-    const LI: [number, number] = [xb - d, -zs]; //   inner lower arm-back
-    const v = (p: [number, number]): number[] => [p[0], 0, p[1]];
-    const geom = new THREE.BufferGeometry();
-    geom.setAttribute(
-      'position',
-      new THREE.Float32BufferAttribute(
-        [
-          // upper arm quad (UA, O, I, UI)
-          ...v(UA), ...v(O), ...v(I),
-          ...v(UA), ...v(I), ...v(UI),
-          // lower arm quad (O, LA, LI, I)
-          ...v(O), ...v(LA), ...v(LI),
-          ...v(O), ...v(LI), ...v(I),
-        ],
-        3,
-      ),
-    );
-    const mat = new THREE.MeshBasicMaterial({
-      color: TASK_LINE_COLOR,
-      transparent: true,
-      opacity: 0.95,
-      side: THREE.DoubleSide,
-      depthTest: false,
-      depthWrite: false,
-    });
     const minLeg = size * 2; // chevron spans ~1.7·size end-to-end; skip legs too short to fit it
+    const positions: number[] = [];
     for (let i = 0; i < pts.length - 1; i++) {
       const a = pts[i];
       const b = pts[i + 1];
       const dx = b.x - a.x;
       const dz = b.z - a.z;
       if (Math.hypot(dx, dz) < minLeg) continue; // skip legs too short to fit a chevron
-      const arrow = new THREE.Mesh(geom, mat);
       // heading clockwise from +X in the XZ plane: rotate about Y by -atan2(dz, dx)
-      arrow.rotation.y = -Math.atan2(dz, dx);
-      arrow.position.set((a.x + b.x) / 2, 0, (a.z + b.z) / 2);
-      arrow.frustumCulled = false;
-      arrow.renderOrder = 5;
-      this.group.add(arrow);
+      const theta = -Math.atan2(dz, dx);
+      const center = new THREE.Vector3((a.x + b.x) / 2, 0, (a.z + b.z) / 2);
+      const ua = new THREE.Vector3(xb, 0, zs).applyAxisAngle(UP, theta).add(center);
+      const o = new THREE.Vector3(s, 0, 0).applyAxisAngle(UP, theta).add(center);
+      const la = new THREE.Vector3(xb, 0, -zs).applyAxisAngle(UP, theta).add(center);
+      positions.push(ua.x, ua.y, ua.z, o.x, o.y, o.z, o.x, o.y, o.z, la.x, la.y, la.z);
     }
+    if (!positions.length) return;
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    const arrows = new THREE.LineSegments(geom, mat);
+    arrows.frustumCulled = false;
+    arrows.renderOrder = 4;
+    this.group.add(arrows);
   }
 
   /** Scale cylinder walls on their own Y so vertical exaggeration matches the trails. */
