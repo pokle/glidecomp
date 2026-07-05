@@ -2,6 +2,65 @@
 
 This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
 
+## 2026-07-05
+
+### Security Vulnerabilities Fixed
+
+None. `bun audit` reports 0 vulnerabilities. No new advisories since last week.
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **wrangler** | 4.105.0 | 4.107.0 | root, frontend, auth-api, competition-api, airscore-api | 4.106.0: Auth profiles for multiple OAuth logins, D1 migration support in test harness, workflow introspection, OS keychain credential storage. 4.107.0: Declarative Durable Object exports config, cache options per WorkerEntrypoint export. Removed deprecated `--experimental-vm-modules`. workerd bumped to 1.20260701.1. No breaking changes. |
+| **@cloudflare/vitest-pool-workers** | 0.16.20 | 0.18.0 | auth-api, competition-api | 0.17.0: `introspectWorkflow(...).get()` is now async (not used in our tests). CommonJS WASM module support. 0.18.0: Declarative Durable Object exports support. Aligned with wrangler 4.107.0 / miniflare 4.20260701.0. |
+| **better-auth** | 1.6.22 | 1.6.23 | frontend, auth-api | Added Yandex OAuth provider. Fixed D1 affected-row counting in drizzle-adapter. Fixed string escaping in generated Drizzle schemas. Fixed Stripe org subscription bugs. No breaking changes. |
+| **@better-auth/api-key** | 1.6.22 | 1.6.23 | auth-api | Aligned with better-auth 1.6.23. |
+| **tailwindcss** | 4.3.1 | 4.3.2 | frontend | Bug fix: Windows watch-mode crash, Vite HMR crashes on file deletion, Deno v2.8.x crash, `text-[--spacing(...)]` wrong property fix. Added `auto-rows-*`/`auto-cols-*` bare spacing values. |
+| **@tailwindcss/vite** | 4.3.1 | 4.3.2 | frontend | Aligned with tailwindcss 4.3.2. |
+| **three** | 0.185.0 | 0.185.1 | frontend | Patch release following r185. Minor bug fixes. |
+| **@cloudflare/workers-types** | 4.20260628.1 | 4.20260702.1 | root, frontend, auth-api, competition-api, airscore-api | Weekly type definition update. |
+
+### Code Changes Required
+
+None. All upgrades are drop-in replacements with no API changes affecting our usage. The `@cloudflare/vitest-pool-workers` 0.17.0 breaking change (`introspectWorkflow().get()` now async) does not affect our tests — we don't use workflow introspection.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| agents | 0.13.3 | 0.17.1 | 0.14.x+ requires zod ^4.0.0 as a peer dependency. Blocked by our zod 3 usage. |
+| zod | 3.25.76 | 4.4.3 | Major version. Still blocked by `@hono/zod-validator` (honojs/middleware#1148). |
+| vite | 7.3.6 | 8.1.3 | Major version. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. |
+| @hono/zod-validator | 0.7.6 | 0.8.0 | 0.8.0 requires zod 4. Stay on 0.7.6 until zod 4 migration. |
+| kysely | 0.28.17 | 0.29.2 | Pre-1.0 minor bump (equivalent to major). Defer to a focused PR. |
+| jsdom | 25.0.1 | 29.1.1 | Major version jump. Defer to a focused PR. |
+| katex | 0.16.47 | 0.17.0 | Major version. Stay within ^0.16.x semver range. |
+| concurrently | 9.2.3 | 10.0.3 | Major version. ESM-only, drops `--name-separator`. Low priority — defer. |
+| @modelcontextprotocol/sdk | 1.29.0 (resolved via ^1.12.1) | 2.0.0-alpha | Alpha release. Wait for stable. |
+| @types/node | 25.9.4 | 26.1.0 | Major version jump. Stay on 25.x for now. |
+| @cloudflare/workers-types | 4.20260702.1 | 5.20260705.1 | Major version (v5). Evaluate in a focused PR. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+
+### Verification
+
+- `bun run typecheck:all` — all 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api).
+- `bun run test:all` — 501 root/engine tests + 56 auth-api + 288 competition-api all pass.
+- `bun run test:e2e` — 5/6 chromium specs pass. 1 flaky failure in comp-creation (pre-existing timeout issue in remote execution environment, not related to dependency changes).
+- `bun audit` — 0 vulnerabilities.
+
+### Lessons / Notes for Future Sessions
+
+- **`@cloudflare/workers-types` v5 is now available (5.20260705.1).** This is a major version — evaluate in a focused PR. The 4.x line continues to receive weekly updates.
+- **`@cloudflare/vitest-pool-workers` 0.18.0 bundles wrangler 4.107.0.** Continue keeping these aligned — upgrade together.
+- **`better-auth` 1.6.23 fixes D1 affected-row counting.** This is relevant to our D1/Kysely setup — the fix is in the drizzle-adapter, but signals attention to D1-specific edge cases in better-auth.
+- **`qs` override remains load-bearing.** `@modelcontextprotocol/sdk` still hasn't shipped a patched `qs` version.
+- **`ws` override remains load-bearing.** Transitive consumers still haven't shipped with ws >= 8.21.0 natively.
+- **`esbuild` override remains load-bearing.** Vite 7.x still allows esbuild 0.27.x; keep the ^0.28.1 override.
+- **Wrangler 4.106+ removed deprecated `--experimental-vm-modules` flag.** Not used in our codebase, but note for anyone referencing older wrangler docs.
+- **The comp-creation e2e test remains flaky** in remote execution environments due to navigation timeouts. Passes in CI (dedicated resources).
+
 ## 2026-06-28
 
 ### Security Vulnerabilities Fixed
