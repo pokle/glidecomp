@@ -637,6 +637,70 @@ describe('scoreTask', () => {
     expect(result.taskValidity.task).toBe(0);
   });
 
+  it('scores a task with no SSS turnpoint via the start fallback (regression)', () => {
+    // Forgetting to mark an SSS turnpoint used to zero every pilot's score.
+    // The first turnpoint now acts as the start.
+    const noSSSTask = createTask([
+      { name: 'LAUNCH', lat: 47.0, lon: 11.0, radius: 400, type: 'TAKEOFF' },
+      { name: 'TP1', lat: 47.0, lon: 11.13, radius: 400 },
+      { name: 'GOAL', lat: 47.0, lon: 11.26, radius: 400, type: 'ESS' },
+    ]);
+    const waypoints = noSSSTask.turnpoints.map(tp => ({
+      lat: tp.waypoint.lat, lon: tp.waypoint.lon, radius: tp.radius,
+    }));
+    const pilots: PilotFlight[] = [
+      { pilotName: 'Full', trackFile: 'full.igc', fixes: createTrackThroughCylinders(waypoints) },
+      { pilotName: 'Partial', trackFile: 'partial.igc', fixes: createTrackThroughCylinders(waypoints.slice(0, 2)) },
+    ];
+
+    const result = scoreTask(noSSSTask, pilots, {
+      nominalDistance: 10000,
+      nominalTime: 600,
+    });
+
+    const full = result.pilotScores.find(p => p.pilotName === 'Full')!;
+    const partial = result.pilotScores.find(p => p.pilotName === 'Partial')!;
+    expect(full.madeGoal).toBe(true);
+    expect(full.totalScore).toBeGreaterThan(0);
+    expect(full.timePoints).toBeGreaterThan(0); // TAKEOFF→ESS acts as the speed section
+    expect(partial.flownDistance).toBeGreaterThan(0);
+    expect(full.totalScore).toBeGreaterThan(partial.totalScore);
+  });
+
+  it('scores a task with no ESS turnpoint via the goal fallback (regression)', () => {
+    // Forgetting the ESS used to leave every goal pilot without a speed-
+    // section time: time points were allocated but unearnable, so all goal
+    // pilots tied on distance alone. The speed section now ends at goal.
+    const noESSTask = createTask([
+      { name: 'SSS', lat: 47.0, lon: 11.0, radius: 1000, type: 'SSS' },
+      { name: 'TP1', lat: 47.0, lon: 11.13, radius: 400 },
+      { name: 'GOAL', lat: 47.0, lon: 11.26, radius: 400 },
+    ]);
+    const waypoints = noESSTask.turnpoints.map(tp => ({
+      lat: tp.waypoint.lat, lon: tp.waypoint.lon, radius: tp.radius,
+    }));
+    const pilots: PilotFlight[] = [
+      { pilotName: 'Fast', trackFile: 'fast.igc', fixes: createTrackThroughCylinders(waypoints) },
+      { pilotName: 'Slow', trackFile: 'slow.igc', fixes: createTrackThroughCylinders(waypoints, { fixIntervalMinutes: 2 }) },
+    ];
+
+    const result = scoreTask(noESSTask, pilots, {
+      nominalDistance: 10000,
+      nominalTime: 600,
+    });
+
+    const fast = result.pilotScores.find(p => p.pilotName === 'Fast')!;
+    const slow = result.pilotScores.find(p => p.pilotName === 'Slow')!;
+    expect(fast.madeGoal).toBe(true);
+    expect(slow.madeGoal).toBe(true);
+    expect(fast.reachedESS).toBe(true);
+    expect(fast.speedSectionTime).not.toBeNull();
+    expect(fast.timePoints).toBeGreaterThan(0);
+    // Equal distance, different speed — the faster pilot must win, not tie.
+    expect(fast.timePoints).toBeGreaterThan(slow.timePoints);
+    expect(fast.totalScore).toBeGreaterThan(slow.totalScore);
+  });
+
   it('handles ties in scoring', () => {
     const fixes = createTrackThroughCylinders(standardWaypoints);
     const pilots: PilotFlight[] = [

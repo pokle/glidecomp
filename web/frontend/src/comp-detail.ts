@@ -47,6 +47,10 @@ interface TaskSummary {
   task_date: string;
   has_xctsk: boolean;
   pilot_classes: string[];
+  /** GAP task defined without an SSS-typed turnpoint (scoring falls back to the first turnpoint). */
+  missing_sss: boolean;
+  /** GAP task defined without an ESS-typed turnpoint (speed section falls back to goal). */
+  missing_ess: boolean;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -1463,9 +1467,9 @@ async function initCompDetail(compId: string, user: AuthUser | null) {
     document.getElementById("comp-settings-btn")!.classList.remove("hidden");
   }
 
-  // ── Class coverage warnings ────────────────────────────────────────────
+  // ── Task warnings (class coverage + task setup) ────────────────────────
 
-  renderWarnings(comp.class_coverage_warnings);
+  renderWarnings(comp.class_coverage_warnings, comp.tasks);
 
   // ── Tasks ──────────────────────────────────────────────────────────────
 
@@ -1709,11 +1713,22 @@ function renderTasks(
           ? `<span class="inline-flex items-center rounded-md bg-green-500/10 text-green-500 px-1.5 py-0.5 text-xs font-medium">Task set</span>`
           : `<span class="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">No task</span>`;
 
+        const setupBadges = [
+          task.missing_sss ? "No SSS" : null,
+          task.missing_ess ? "No ESS" : null,
+        ]
+          .filter((label): label is string => label !== null)
+          .map(
+            (label) =>
+              `<span class="inline-flex items-center rounded-md bg-amber-500/10 text-amber-500 px-1.5 py-0.5 text-xs font-medium" title="Scoring falls back — see Task Warnings above">${label}</span>`
+          )
+          .join("");
+
         a.innerHTML = `
           <div class="flex-1 min-w-0">
             <div class="font-medium text-sm">${escapeHtml(task.name)}</div>
             <div class="flex items-center gap-2 mt-0.5">
-              ${xctskBadge}
+              ${xctskBadge}${setupBadges}
               <span class="text-xs text-muted-foreground">${escapeHtml(task.pilot_classes.join(", "))}</span>
             </div>
           </div>
@@ -1804,13 +1819,27 @@ function wireSubmitTrack(btn: HTMLButtonElement, compId: string, taskId: string)
   });
 }
 
-// ── Render class coverage warnings ───────────────────────────────────────────
+// ── Render task warnings (class coverage + task setup) ───────────────────────
 
 function renderWarnings(
-  warnings: CompDetail["class_coverage_warnings"]
+  warnings: CompDetail["class_coverage_warnings"],
+  tasks: TaskSummary[]
 ) {
   const container = document.getElementById("class-warnings")!;
-  if (warnings.length === 0) {
+
+  // Task-setup warnings: GAP tasks defined without SSS/ESS turnpoint types
+  // still score via engine fallbacks, but it's almost always a mistake.
+  const setupItems: string[] = [];
+  for (const t of tasks) {
+    const parts: string[] = [];
+    if (t.missing_sss) parts.push("no Start (SSS) turnpoint — scoring treats the first turnpoint as the start");
+    if (t.missing_ess) parts.push("no ESS turnpoint — the speed section ends at goal");
+    if (parts.length > 0) {
+      setupItems.push(`<strong>${escapeHtml(t.name)}</strong> &mdash; ${parts.join("; ")}`);
+    }
+  }
+
+  if (warnings.length === 0 && setupItems.length === 0) {
     container.classList.add("hidden");
     return;
   }
@@ -1824,7 +1853,7 @@ function renderWarnings(
   wrapper.innerHTML = `
     <div class="flex items-center gap-2 mb-2">
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-amber-500"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      <span class="text-sm font-medium text-amber-500">Task Coverage Issues</span>
+      <span class="text-sm font-medium text-amber-500">Task Warnings</span>
     </div>
   `;
 
@@ -1848,6 +1877,13 @@ function renderWarnings(
     const li = document.createElement("li");
     li.className = "text-xs text-amber-500/80";
     li.innerHTML = `<strong>${dateStr}</strong> &mdash; ${parts.join("; ")}`;
+    list.appendChild(li);
+  }
+
+  for (const item of setupItems) {
+    const li = document.createElement("li");
+    li.className = "text-xs text-amber-500/80";
+    li.innerHTML = item;
     list.appendChild(li);
   }
 

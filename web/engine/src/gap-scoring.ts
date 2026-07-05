@@ -15,7 +15,7 @@ import type { XCTask } from './xctsk-parser';
 import type { IGCFix } from './igc-parser';
 import type { TurnpointSequenceResult, TurnpointReaching } from './turnpoint-sequence';
 import { resolveTurnpointSequence } from './turnpoint-sequence';
-import { getESSIndex, getSSSIndex } from './xctsk-parser';
+import { getSSSIndex, getEffectiveSSSIndex, getEffectiveESSIndex } from './xctsk-parser';
 import { calculateOptimizedTaskDistance, getOptimizedSegmentDistances } from './task-optimizer';
 import { andoyerDistance } from './geo';
 import { maxBy, minBy } from './array-utils';
@@ -683,8 +683,8 @@ export function computeLeadingAggregate(
     weightedTimeSum: 0, weightedDeltaSum: 0, classicSum: 0,
   };
 
-  const essIdx = getESSIndex(task);
-  const sssIdx = Math.max(0, getSSSIndex(task));
+  const essIdx = getEffectiveESSIndex(task);
+  const sssIdx = Math.max(0, getEffectiveSSSIndex(task));
   // Pilots who never started get the worst possible LC.
   if (essIdx <= sssIdx || fixes.length === 0 || pilotSSSTime === null) {
     return invalid;
