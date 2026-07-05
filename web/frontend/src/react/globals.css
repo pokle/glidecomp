@@ -11,6 +11,20 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Alte Haas Grotesk — brand wordmark (hero title and header logo) */
+@font-face {
+  font-family: 'Alte Haas Grotesk';
+  src: url('/fonts/AlteHaasGroteskRegular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Alte Haas Grotesk';
+  src: url('/fonts/AlteHaasGroteskBold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: swap;
+}
+
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -100,6 +114,7 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --font-sans: var(--font-app);
+  --font-brand: 'Alte Haas Grotesk', var(--font-app);
 }
 
 @layer base {

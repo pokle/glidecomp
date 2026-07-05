@@ -29,7 +29,7 @@ export function Shell() {
           aria-label="Main"
           className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3"
         >
-          <Link to="/" className="text-base font-bold">
+          <Link to="/" className="font-brand text-base font-bold">
             GlideComp
           </Link>
           <NavLink to={flightsHref} className={navLinkClass}>
