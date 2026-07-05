@@ -64,6 +64,11 @@ interface CompConfig {
    * every other comp MUST set this, or seeding it would overwrite the sample.
    */
   compName?: string;
+  /**
+   * Comp category ('hg' | 'pg'), matching the hg/pg symbol AirScore shows in
+   * its comp list. When omitted the seed script defaults to 'hg'.
+   */
+  category?: string;
 }
 
 const HIGHCLOUD = 'https://xc.highcloud.net';
@@ -109,6 +114,7 @@ const COMPS: Record<string, CompConfig> = {
     name: 'Unungra Cup',
     compName: 'Unungra Cup',
     host: HIGHCLOUD,
+    category: 'pg', // unlike the (hang gliding) Corryong Cups, this one is PG
     sources: [{ comPk: 303, pilotClass: 'open' }],
   },
   'corryong-cup-2017': corryongCup(2017, 208, 209),
@@ -404,6 +410,7 @@ async function downloadComp(slug: string): Promise<void> {
     slug,
     source_host: cfg.host,
     ...(cfg.compName ? { comp_name: cfg.compName } : {}),
+    ...(cfg.category ? { category: cfg.category } : {}),
     classes,
     waypoint_region: regPk ? { regPk: Number(regPk), name: regionName ?? null } : null,
     tasks,
