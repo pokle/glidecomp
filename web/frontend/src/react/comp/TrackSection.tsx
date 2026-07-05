@@ -248,13 +248,13 @@ function PenaltyDialog({
       }}
     >
       <Dialog.Portal>
-        <Dialog.Backdrop />
-        <Dialog.Popup>
-          <Dialog.Title>Set Penalty</Dialog.Title>
+        <Dialog.Backdrop className="Dialog-backdrop" />
+        <Dialog.Popup className="Dialog-popup">
+          <Dialog.Title className="Dialog-title">Set Penalty</Dialog.Title>
           <p>{track.pilot_name}</p>
           <form onSubmit={(e) => void save(e)}>
-            <Field.Root>
-              <Field.Label>Penalty Points</Field.Label>
+            <Field.Root className="Field">
+              <Field.Label className="Field-label">Penalty Points</Field.Label>
               <Input
                 type="number"
                 step="any"
@@ -262,12 +262,12 @@ function PenaltyDialog({
                 value={points}
                 onValueChange={(v) => setPoints(v)}
               />
-              <Field.Description>
+              <Field.Description className="Field-description">
                 Positive = deduction, negative = bonus. 0 to clear.
               </Field.Description>
             </Field.Root>
-            <Field.Root>
-              <Field.Label>Reason</Field.Label>
+            <Field.Root className="Field">
+              <Field.Label className="Field-label">Reason</Field.Label>
               <Input
                 maxLength={128}
                 placeholder="e.g. Airspace violation"
@@ -396,9 +396,9 @@ function SubmitTrackDialog({
       }}
     >
       <Dialog.Portal>
-        <Dialog.Backdrop />
-        <Dialog.Popup>
-          <Dialog.Title>Submit track</Dialog.Title>
+        <Dialog.Backdrop className="Dialog-backdrop" />
+        <Dialog.Popup className="Dialog-popup">
+          <Dialog.Title className="Dialog-title">Submit track</Dialog.Title>
           {canUploadOnBehalf ? (
             <div>
               <h3>Pilot</h3>

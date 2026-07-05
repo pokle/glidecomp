@@ -7,6 +7,7 @@ import { Input } from "@base-ui/react/input";
 import { Radio } from "@base-ui/react/radio";
 import { RadioGroup } from "@base-ui/react/radio-group";
 import { Checkbox } from "@base-ui/react/checkbox";
+import { CheckIcon } from "../components/icons";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useUser } from "../lib/user";
@@ -145,12 +146,12 @@ function CreateCompDialog({
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <Dialog.Portal>
-        <Dialog.Backdrop />
-        <Dialog.Popup>
-          <Dialog.Title>Create Competition</Dialog.Title>
+        <Dialog.Backdrop className="Dialog-backdrop" />
+        <Dialog.Popup className="Dialog-popup">
+          <Dialog.Title className="Dialog-title">Create Competition</Dialog.Title>
           <form onSubmit={handleSubmit}>
-            <Field.Root>
-              <Field.Label>Name</Field.Label>
+            <Field.Root className="Field">
+              <Field.Label className="Field-label">Name</Field.Label>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -161,46 +162,52 @@ function CreateCompDialog({
               />
             </Field.Root>
 
-            <Field.Root>
-              <Field.Label>Category</Field.Label>
+            <Field.Root className="Field">
+              <Field.Label className="Field-label">Category</Field.Label>
               <RadioGroup
                 value={category}
                 onValueChange={(value) => setCategory(value as "hg" | "pg")}
+                className="RadioGroup"
               >
-                {/* Text glyphs: like the checkbox, an unselected Base UI
-                    radio is a zero-size span until styled. */}
-                <label>
-                  <Radio.Root value="hg">{category === "hg" ? "◉" : "○"}</Radio.Root>
+                <label className="Radio-item">
+                  <Radio.Root value="hg" className="Radio">
+                    <Radio.Indicator className="Radio-indicator" />
+                  </Radio.Root>
                   Hang Gliding
                 </label>
-                <label>
-                  <Radio.Root value="pg">{category === "pg" ? "◉" : "○"}</Radio.Root>
+                <label className="Radio-item">
+                  <Radio.Root value="pg" className="Radio">
+                    <Radio.Indicator className="Radio-indicator" />
+                  </Radio.Root>
                   Paragliding
                 </label>
               </RadioGroup>
             </Field.Root>
 
-            <Field.Root>
-              <Field.Label>Pilot Classes</Field.Label>
+            <Field.Root className="Field">
+              <Field.Label className="Field-label">Pilot Classes</Field.Label>
               <Input
                 value={pilotClasses}
                 onChange={(e) => setPilotClasses(e.target.value)}
                 placeholder="open, sport, floater"
               />
-              <Field.Description>Comma-separated class names</Field.Description>
+              <Field.Description className="Field-description">Comma-separated class names</Field.Description>
             </Field.Root>
 
-            <label>
-              {/* Text glyph for both states: an unchecked Base UI checkbox is
-                  an empty (zero-size) span until styled, i.e. invisible and
-                  unclickable in this unstyled UI. */}
-              <Checkbox.Root checked={test} onCheckedChange={(checked) => setTest(checked === true)}>
-                {test ? "☑" : "☐"}
+            <label className="Checkbox-label">
+              <Checkbox.Root
+                checked={test}
+                onCheckedChange={(checked) => setTest(checked === true)}
+                className="Checkbox"
+              >
+                <Checkbox.Indicator className="Checkbox-indicator">
+                  <CheckIcon />
+                </Checkbox.Indicator>
               </Checkbox.Root>
               Test competition (only visible to admins)
             </label>
 
-            <div>
+            <div className="Dialog-actions">
               <Dialog.Close>Cancel</Dialog.Close>
               <button type="submit" disabled={submitting}>
                 {submitting ? "Creating..." : "Create"}

@@ -125,8 +125,8 @@ export function Profile() {
 
       <form onSubmit={handleSubmit}>
         {PROFILE_FIELDS.map((field) => (
-          <Field.Root key={field.key}>
-            <Field.Label>{field.label}</Field.Label>
+          <Field.Root className="Field" key={field.key}>
+            <Field.Label className="Field-label">{field.label}</Field.Label>
             <Input
               value={values[field.key]}
               onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}

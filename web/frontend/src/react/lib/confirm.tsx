@@ -49,26 +49,33 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
         }}
       >
         <AlertDialog.Portal>
-          <AlertDialog.Backdrop />
-          <AlertDialog.Popup>
-            <AlertDialog.Title>{opts?.title}</AlertDialog.Title>
+          <AlertDialog.Backdrop className="Dialog-backdrop" />
+          <AlertDialog.Popup className="Dialog-popup">
+            <AlertDialog.Title className="Dialog-title">{opts?.title}</AlertDialog.Title>
             {opts?.message ? (
-              <AlertDialog.Description>{opts.message}</AlertDialog.Description>
+              <AlertDialog.Description className="Dialog-description">{opts.message}</AlertDialog.Description>
             ) : null}
-            {opts?.alert ? (
-              <button type="button" autoFocus onClick={() => finish(true)}>
-                OK
-              </button>
-            ) : (
-              <>
-                <button type="button" onClick={() => finish(false)}>
-                  {opts?.cancelLabel ?? "Cancel"}
-                </button>
+            <div className="Dialog-actions">
+              {opts?.alert ? (
                 <button type="button" autoFocus onClick={() => finish(true)}>
-                  {opts?.confirmLabel ?? "Confirm"}
+                  OK
                 </button>
-              </>
-            )}
+              ) : (
+                <>
+                  <button type="button" onClick={() => finish(false)}>
+                    {opts?.cancelLabel ?? "Cancel"}
+                  </button>
+                  <button
+                    type="button"
+                    autoFocus
+                    data-color={opts?.destructive ? "red" : undefined}
+                    onClick={() => finish(true)}
+                  >
+                    {opts?.confirmLabel ?? "Confirm"}
+                  </button>
+                </>
+              )}
+            </div>
           </AlertDialog.Popup>
         </AlertDialog.Portal>
       </AlertDialog.Root>

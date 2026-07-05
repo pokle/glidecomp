@@ -92,29 +92,29 @@ export function Onboarding() {
       <p>Set up your GlideComp account</p>
 
       <form onSubmit={handleSubmit}>
-        <Field.Root>
-          <Field.Label>Full name</Field.Label>
+        <Field.Root className="Field">
+          <Field.Label className="Field-label">Full name</Field.Label>
           <Input value={name} onChange={(e) => setName(e.target.value)} required maxLength={128} />
         </Field.Root>
 
-        <Field.Root>
-          <Field.Label>Username</Field.Label>
+        <Field.Root className="Field">
+          <Field.Label className="Field-label">Username</Field.Label>
           <Input
             value={username}
             onChange={(e) => setUsernameValue(e.target.value)}
             required
             autoFocus
           />
-          {usernameError ? <Field.Error match>{usernameError}</Field.Error> : null}
+          {usernameError ? <Field.Error className="Field-error" match>{usernameError}</Field.Error> : null}
         </Field.Root>
 
-        <Field.Root>
-          <Field.Label>CIVL ID (optional)</Field.Label>
+        <Field.Root className="Field">
+          <Field.Label className="Field-label">CIVL ID (optional)</Field.Label>
           <Input value={civlId} onChange={(e) => setCivlId(e.target.value)} />
         </Field.Root>
 
-        <Field.Root>
-          <Field.Label>SAFA ID (optional)</Field.Label>
+        <Field.Root className="Field">
+          <Field.Label className="Field-label">SAFA ID (optional)</Field.Label>
           <Input value={safaId} onChange={(e) => setSafaId(e.target.value)} />
         </Field.Root>
 

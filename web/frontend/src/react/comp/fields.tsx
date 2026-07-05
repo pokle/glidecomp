@@ -6,6 +6,7 @@
 import { Checkbox } from "@base-ui/react/checkbox";
 import { Field } from "@base-ui/react/field";
 import { Select } from "@base-ui/react/select";
+import { CaretDownIcon, CaretUpDownIcon, CaretUpIcon, CheckIcon } from "../components/icons";
 
 export interface SelectOption {
   value: string;
@@ -32,17 +33,31 @@ export function SimpleSelect({
       items={options}
       disabled={disabled}
     >
-      <Select.Trigger aria-label={ariaLabel}>
-        <Select.Value />
+      <Select.Trigger aria-label={ariaLabel} className="Select-trigger">
+        <Select.Value className="Select-value" />
+        <Select.Icon>
+          <CaretUpDownIcon />
+        </Select.Icon>
       </Select.Trigger>
       <Select.Portal>
-        <Select.Positioner>
-          <Select.Popup>
-            {options.map((o) => (
-              <Select.Item key={o.value} value={o.value}>
-                <Select.ItemText>{o.label}</Select.ItemText>
-              </Select.Item>
-            ))}
+        <Select.Positioner className="Select-positioner" sideOffset={4}>
+          <Select.Popup className="Select-popup">
+            <Select.ScrollUpArrow className="Select-scrollArrow">
+              <CaretUpIcon />
+            </Select.ScrollUpArrow>
+            <Select.List className="Select-list">
+              {options.map((o) => (
+                <Select.Item key={o.value} value={o.value} className="Select-item">
+                  <Select.ItemIndicator className="Select-itemIndicator">
+                    <CheckIcon />
+                  </Select.ItemIndicator>
+                  <Select.ItemText className="Select-itemText">{o.label}</Select.ItemText>
+                </Select.Item>
+              ))}
+            </Select.List>
+            <Select.ScrollDownArrow className="Select-scrollArrow">
+              <CaretDownIcon />
+            </Select.ScrollDownArrow>
           </Select.Popup>
         </Select.Positioner>
       </Select.Portal>
@@ -62,17 +77,16 @@ export function CheckboxField({
   hint?: React.ReactNode;
 }) {
   return (
-    <Field.Root>
-      <Field.Label>
-        {/* Text glyph for both states: an unchecked Base UI checkbox is an
-            empty (zero-size) span until styled, i.e. invisible and
-            unclickable in this unstyled UI. */}
-        <Checkbox.Root checked={checked} onCheckedChange={(c) => onChange(c)}>
-          {checked ? "☑" : "☐"}
+    <Field.Root className="Field">
+      <Field.Label className="Checkbox-label">
+        <Checkbox.Root checked={checked} onCheckedChange={(c) => onChange(c)} className="Checkbox">
+          <Checkbox.Indicator className="Checkbox-indicator">
+            <CheckIcon />
+          </Checkbox.Indicator>
         </Checkbox.Root>{" "}
         {label}
       </Field.Label>
-      {hint ? <Field.Description>{hint}</Field.Description> : null}
+      {hint ? <Field.Description className="Field-description">{hint}</Field.Description> : null}
     </Field.Root>
   );
 }

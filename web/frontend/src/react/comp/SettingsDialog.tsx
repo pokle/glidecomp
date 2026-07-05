@@ -226,12 +226,12 @@ export function SettingsDialog({
       }}
     >
       <Dialog.Portal>
-        <Dialog.Backdrop />
-        <Dialog.Popup>
-          <Dialog.Title>Competition Settings</Dialog.Title>
+        <Dialog.Backdrop className="Dialog-backdrop" />
+        <Dialog.Popup className="Dialog-popup Dialog-popup--wide">
+          <Dialog.Title className="Dialog-title">Competition Settings</Dialog.Title>
           <form onSubmit={(e) => void save(e)}>
-            <Field.Root>
-              <Field.Label>Name</Field.Label>
+            <Field.Root className="Field">
+              <Field.Label className="Field-label">Name</Field.Label>
               <Input
                 required
                 maxLength={128}
@@ -245,26 +245,31 @@ export function SettingsDialog({
               <RadioGroup
                 value={category}
                 onValueChange={(v) => setCategory(v as "hg" | "pg")}
+                className="RadioGroup"
               >
-                <label>
-                  <Radio.Root value="hg">{category === "hg" ? "◉" : "○"}</Radio.Root>{" "}
+                <label className="Radio-item">
+                  <Radio.Root value="hg" className="Radio">
+                    <Radio.Indicator className="Radio-indicator" />
+                  </Radio.Root>{" "}
                   HG
                 </label>
-                <label>
-                  <Radio.Root value="pg">{category === "pg" ? "◉" : "○"}</Radio.Root>{" "}
+                <label className="Radio-item">
+                  <Radio.Root value="pg" className="Radio">
+                    <Radio.Indicator className="Radio-indicator" />
+                  </Radio.Root>{" "}
                   PG
                 </label>
               </RadioGroup>
             </fieldset>
 
-            <Field.Root>
-              <Field.Label>Pilot Classes</Field.Label>
+            <Field.Root className="Field">
+              <Field.Label className="Field-label">Pilot Classes</Field.Label>
               <Input
                 placeholder="open, sport, floater"
                 value={pilotClassesText}
                 onValueChange={(v) => setPilotClassesText(v)}
               />
-              <Field.Description>Comma-separated class names</Field.Description>
+              <Field.Description className="Field-description">Comma-separated class names</Field.Description>
             </Field.Root>
 
             <div>
@@ -278,10 +283,10 @@ export function SettingsDialog({
               <p>Assigned to auto-registered pilots</p>
             </div>
 
-            <Field.Root>
-              <Field.Label>Close Date</Field.Label>
+            <Field.Root className="Field">
+              <Field.Label className="Field-label">Close Date</Field.Label>
               <Input type="date" value={closeDate} onValueChange={(v) => setCloseDate(v)} />
-              <Field.Description>
+              <Field.Description className="Field-description">
                 After this date, track submissions are rejected. Leave empty for open-ended.
               </Field.Description>
               <button type="button" onClick={() => setCloseDate("")}>
@@ -329,8 +334,8 @@ export function SettingsDialog({
                     How does GAP scoring work?
                   </a>
                 </p>
-                <Field.Root>
-                  <Field.Label>Nominal distance (km)</Field.Label>
+                <Field.Root className="Field">
+                  <Field.Label className="Field-label">Nominal distance (km)</Field.Label>
                   <Input
                     type="number"
                     min={0}
@@ -339,10 +344,10 @@ export function SettingsDialog({
                     value={nominalDistance}
                     onValueChange={(v) => setNominalDistance(v)}
                   />
-                  <Field.Description>Blank = auto (70% of task)</Field.Description>
+                  <Field.Description className="Field-description">Blank = auto (70% of task)</Field.Description>
                 </Field.Root>
-                <Field.Root>
-                  <Field.Label>Nominal time (min)</Field.Label>
+                <Field.Root className="Field">
+                  <Field.Label className="Field-label">Nominal time (min)</Field.Label>
                   <Input
                     type="number"
                     min={0}
@@ -351,8 +356,8 @@ export function SettingsDialog({
                     onValueChange={(v) => setNominalTime(v)}
                   />
                 </Field.Root>
-                <Field.Root>
-                  <Field.Label>Nominal goal (%)</Field.Label>
+                <Field.Root className="Field">
+                  <Field.Label className="Field-label">Nominal goal (%)</Field.Label>
                   <Input
                     type="number"
                     min={0}
@@ -362,8 +367,8 @@ export function SettingsDialog({
                     onValueChange={(v) => setNominalGoal(v)}
                   />
                 </Field.Root>
-                <Field.Root>
-                  <Field.Label>Nominal launch (%)</Field.Label>
+                <Field.Root className="Field">
+                  <Field.Label className="Field-label">Nominal launch (%)</Field.Label>
                   <Input
                     type="number"
                     min={0}
@@ -373,8 +378,8 @@ export function SettingsDialog({
                     onValueChange={(v) => setNominalLaunch(v)}
                   />
                 </Field.Root>
-                <Field.Root>
-                  <Field.Label>Minimum distance (km)</Field.Label>
+                <Field.Root className="Field">
+                  <Field.Label className="Field-label">Minimum distance (km)</Field.Label>
                   <Input
                     type="number"
                     min={0}
@@ -433,14 +438,14 @@ export function SettingsDialog({
               </div>
             ) : null}
 
-            <Field.Root>
-              <Field.Label>Admin Emails</Field.Label>
+            <Field.Root className="Field">
+              <Field.Label className="Field-label">Admin Emails</Field.Label>
               <Input
                 placeholder="admin1@example.com, admin2@example.com"
                 value={adminsText}
                 onValueChange={(v) => setAdminsText(v)}
               />
-              <Field.Description>Comma-separated. At least one required.</Field.Description>
+              <Field.Description className="Field-description">Comma-separated. At least one required.</Field.Description>
             </Field.Root>
 
             <div>

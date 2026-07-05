@@ -82,15 +82,15 @@ export function ActivitySection({ compId }: { compId: string }) {
     <section>
       <h2>Activity</h2>
       <Tabs.Root value={filter} onValueChange={(v) => setFilter(v as string)}>
-        <Tabs.List>
+        <Tabs.List className="Tabs-list">
           {FILTERS.map((f) => (
-            <Tabs.Tab key={f.value} value={f.value}>
+            <Tabs.Tab className="Tabs-tab" key={f.value} value={f.value}>
               {f.label}
             </Tabs.Tab>
           ))}
-        </Tabs.List>
+        <Tabs.Indicator className="Tabs-indicator" /></Tabs.List>
         {/* One shared panel: its value always matches the active tab. */}
-        <Tabs.Panel value={filter}>
+        <Tabs.Panel className="Tabs-panel" value={filter}>
           {error ? (
             <p>Could not load activity</p>
           ) : loaded && entries.length === 0 ? (

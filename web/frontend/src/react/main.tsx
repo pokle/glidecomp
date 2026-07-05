@@ -6,6 +6,7 @@
  */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import "./theme.css";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AppToastProvider } from "./lib/toast";
 import { ConfirmProvider } from "./lib/confirm";

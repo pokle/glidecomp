@@ -16,21 +16,27 @@ export function Shell() {
 
   return (
     <div>
-      <header>
-        <nav aria-label="Main">
-          <Link to="/">GlideComp</Link>{" "}
-          <NavLink to={flightsHref}>My Flights</NavLink>{" "}
-          <NavLink to="/comp">Competitions</NavLink>{" "}
+      <header className="Shell-header">
+        <nav aria-label="Main" className="Shell-nav">
+          <Link to="/" className="Shell-brand">
+            GlideComp
+          </Link>
+          <NavLink to={flightsHref}>My Flights</NavLink>
+          <NavLink to="/comp">Competitions</NavLink>
           {user ? (
             <>
-              <NavLink to="/profile">My Profile</NavLink>{" "}
+              <NavLink to="/profile">My Profile</NavLink>
               <NavLink to="/settings" aria-label="Account settings">
                 Settings
               </NavLink>
             </>
           ) : null}
           {!user && !loading ? (
-            <button type="button" onClick={() => signInWithGoogle()}>
+            <button
+              type="button"
+              className="Shell-nav-spacer"
+              onClick={() => signInWithGoogle()}
+            >
               Sign in
             </button>
           ) : null}
@@ -41,9 +47,9 @@ export function Shell() {
         <Outlet />
       </main>
 
-      <Separator />
+      <Separator className="Separator" />
 
-      <footer>
+      <footer className="Shell-footer">
         <span>
           GlideComp{" "}
           <a

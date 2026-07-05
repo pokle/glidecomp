@@ -21,12 +21,16 @@ export const toast = {
 function ToastList() {
   const { toasts } = Toast.useToastManager();
   return toasts.map((t) => (
-    <Toast.Root key={t.id} toast={t}>
-      <Toast.Content>
-        {t.type ? <Toast.Title>{t.type}</Toast.Title> : null}
-        <Toast.Description />
+    <Toast.Root key={t.id} toast={t} className="Toast-root" data-type={t.type}>
+      <Toast.Content className="Toast-content">
+        <div className="Toast-text">
+          {t.type ? <Toast.Title className="Toast-title">{t.type}</Toast.Title> : null}
+          <Toast.Description className="Toast-description" />
+        </div>
+        <Toast.Close aria-label="Close notification" className="Toast-close">
+          Dismiss
+        </Toast.Close>
       </Toast.Content>
-      <Toast.Close aria-label="Close notification">×</Toast.Close>
     </Toast.Root>
   ));
 }
@@ -36,7 +40,7 @@ export function AppToastProvider({ children }: { children: React.ReactNode }) {
     <Toast.Provider toastManager={toastManager}>
       {children}
       <Toast.Portal>
-        <Toast.Viewport>
+        <Toast.Viewport className="Toast-viewport">
           <ToastList />
         </Toast.Viewport>
       </Toast.Portal>

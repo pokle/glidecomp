@@ -174,12 +174,12 @@ export function Dashboard() {
       <StorageUsage tracks={tracks} tasks={tasks} />
 
       <Tabs.Root value={tab} onValueChange={(value) => setTab(value as "tracks" | "tasks")}>
-        <Tabs.List>
-          <Tabs.Tab value="tracks">Tracks {tracks.length > 0 ? `(${tracks.length})` : ""}</Tabs.Tab>
-          <Tabs.Tab value="tasks">Tasks {tasks.length > 0 ? `(${tasks.length})` : ""}</Tabs.Tab>
-        </Tabs.List>
+        <Tabs.List className="Tabs-list">
+          <Tabs.Tab className="Tabs-tab" value="tracks">Tracks {tracks.length > 0 ? `(${tracks.length})` : ""}</Tabs.Tab>
+          <Tabs.Tab className="Tabs-tab" value="tasks">Tasks {tasks.length > 0 ? `(${tasks.length})` : ""}</Tabs.Tab>
+        <Tabs.Indicator className="Tabs-indicator" /></Tabs.List>
 
-        <Tabs.Panel value="tracks">
+        <Tabs.Panel className="Tabs-panel" value="tracks">
           <UploadZone accept=".igc" hint=".igc" onFiles={handleFiles} />
           {tracks.length === 0 ? (
             <div>
@@ -224,7 +224,7 @@ export function Dashboard() {
           )}
         </Tabs.Panel>
 
-        <Tabs.Panel value="tasks">
+        <Tabs.Panel className="Tabs-panel" value="tasks">
           <UploadZone accept=".xctsk" hint=".xctsk" onFiles={handleFiles} />
           {tasks.length === 0 ? (
             <div>
@@ -272,7 +272,7 @@ export function Dashboard() {
       </Tabs.Root>
 
       {dragOver ? (
-        <div role="status">
+        <div role="status" className="DropOverlay">
           <p>Drop files to upload</p>
           <p>.igc and .xctsk files</p>
         </div>
@@ -299,12 +299,13 @@ function UploadZone({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
-    <label>
+    <label className="UploadZone">
       <input
         ref={inputRef}
         type="file"
         accept={accept}
         multiple
+        className="visually-hidden"
         onChange={async (e) => {
           if (e.target.files?.length) {
             await onFiles(e.target.files);
@@ -336,11 +337,11 @@ function StorageUsage({ tracks, tasks }: { tracks: StoredTrack[]; tasks: StoredT
   if (tasks.length / MAX_USER_TASKS >= 0.8) parts.push(`${tasks.length} of ${MAX_USER_TASKS} tasks`);
 
   return (
-    <Meter.Root value={Math.min(100, Math.max(1, fraction * 100))}>
-      <Meter.Label>Storage</Meter.Label>
-      <span>{parts.join(" · ")}</span>
-      <Meter.Track>
-        <Meter.Indicator />
+    <Meter.Root value={Math.min(100, Math.max(1, fraction * 100))} className="Meter">
+      <Meter.Label className="Meter-label">Storage</Meter.Label>
+      <span className="Meter-value">{parts.join(" · ")}</span>
+      <Meter.Track className="Meter-track">
+        <Meter.Indicator className="Meter-indicator" />
       </Meter.Track>
     </Meter.Root>
   );

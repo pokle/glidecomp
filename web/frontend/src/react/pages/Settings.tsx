@@ -205,12 +205,12 @@ function ApiKeysSection() {
 
       <Dialog.Root open={createOpen} onOpenChange={setCreateOpen}>
         <Dialog.Portal>
-          <Dialog.Backdrop />
-          <Dialog.Popup>
-            <Dialog.Title>Create API key</Dialog.Title>
+          <Dialog.Backdrop className="Dialog-backdrop" />
+          <Dialog.Popup className="Dialog-popup">
+            <Dialog.Title className="Dialog-title">Create API key</Dialog.Title>
             <form onSubmit={handleCreate}>
-              <Field.Root>
-                <Field.Label>Label (optional)</Field.Label>
+              <Field.Root className="Field">
+                <Field.Label className="Field-label">Label (optional)</Field.Label>
                 <Input
                   value={keyName}
                   onChange={(e) => setKeyName(e.target.value)}
@@ -218,8 +218,7 @@ function ApiKeysSection() {
                   autoFocus
                 />
               </Field.Root>
-              <div>
-                <Dialog.Close>Cancel</Dialog.Close>
+              <div className="Dialog-actions">                <Dialog.Close>Cancel</Dialog.Close>
                 <button type="submit" disabled={creating}>
                   {creating ? "Creating..." : "Create"}
                 </button>
@@ -239,10 +238,10 @@ function ApiKeysSection() {
         }}
       >
         <Dialog.Portal>
-          <Dialog.Backdrop />
-          <Dialog.Popup>
-            <Dialog.Title>API key created</Dialog.Title>
-            <Dialog.Description>
+          <Dialog.Backdrop className="Dialog-backdrop" />
+          <Dialog.Popup className="Dialog-popup">
+            <Dialog.Title className="Dialog-title">API key created</Dialog.Title>
+            <Dialog.Description className="Dialog-description">
               Copy this key now — it won't be shown again.
             </Dialog.Description>
             <code>{createdKey}</code>

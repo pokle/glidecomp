@@ -377,12 +377,12 @@ function EditTaskDialog({
       }}
     >
       <Dialog.Portal>
-        <Dialog.Backdrop />
-        <Dialog.Popup>
-          <Dialog.Title>Task Settings</Dialog.Title>
+        <Dialog.Backdrop className="Dialog-backdrop" />
+        <Dialog.Popup className="Dialog-popup">
+          <Dialog.Title className="Dialog-title">Task Settings</Dialog.Title>
           <form onSubmit={(e) => void save(e)}>
-            <Field.Root>
-              <Field.Label>Name</Field.Label>
+            <Field.Root className="Field">
+              <Field.Label className="Field-label">Name</Field.Label>
               <Input
                 required
                 maxLength={128}
@@ -390,8 +390,8 @@ function EditTaskDialog({
                 onValueChange={(v) => setName(v)}
               />
             </Field.Root>
-            <Field.Root>
-              <Field.Label>Date</Field.Label>
+            <Field.Root className="Field">
+              <Field.Label className="Field-label">Date</Field.Label>
               <Input
                 type="date"
                 required

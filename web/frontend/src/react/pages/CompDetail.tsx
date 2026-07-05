@@ -379,12 +379,12 @@ function CreateTaskDialog({
       }}
     >
       <Dialog.Portal>
-        <Dialog.Backdrop />
-        <Dialog.Popup>
-          <Dialog.Title>Create Task</Dialog.Title>
+        <Dialog.Backdrop className="Dialog-backdrop" />
+        <Dialog.Popup className="Dialog-popup">
+          <Dialog.Title className="Dialog-title">Create Task</Dialog.Title>
           <form onSubmit={(e) => void submit(e)}>
-            <Field.Root>
-              <Field.Label>Name</Field.Label>
+            <Field.Root className="Field">
+              <Field.Label className="Field-label">Name</Field.Label>
               <Input
                 required
                 maxLength={128}
@@ -394,8 +394,8 @@ function CreateTaskDialog({
                 onValueChange={(v) => setName(v)}
               />
             </Field.Root>
-            <Field.Root>
-              <Field.Label>Date</Field.Label>
+            <Field.Root className="Field">
+              <Field.Label className="Field-label">Date</Field.Label>
               <Input
                 type="date"
                 required

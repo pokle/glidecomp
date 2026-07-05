@@ -266,9 +266,9 @@ function EditPilotsDialog({
       }}
     >
       <Dialog.Portal>
-        <Dialog.Backdrop />
-        <Dialog.Popup>
-          <Dialog.Title>Edit pilots</Dialog.Title>
+        <Dialog.Backdrop className="Dialog-backdrop" />
+        <Dialog.Popup className="Dialog-popup Dialog-popup--xwide">
+          <Dialog.Title className="Dialog-title">Edit pilots</Dialog.Title>
           <p>Edit any cell directly. Rows without a name are ignored on save.</p>
 
           <table>

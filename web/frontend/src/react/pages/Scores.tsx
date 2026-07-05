@@ -108,23 +108,23 @@ function ScoresViews({ scores }: { scores: CompScores }) {
 
   return (
     <Tabs.Root value={tab} onValueChange={(value) => setTab(value as string)}>
-      <Tabs.List>
+      <Tabs.List className="Tabs-list">
         {scores.standings.map((cls) => (
-          <Tabs.Tab key={cls.pilot_class} value={`standings:${cls.pilot_class}`}>
+          <Tabs.Tab className="Tabs-tab" key={cls.pilot_class} value={`standings:${cls.pilot_class}`}>
             {cls.pilot_class}
           </Tabs.Tab>
         ))}
-        <Tabs.Tab value="top3">Top 3 per task &amp; class</Tabs.Tab>
-        {teams.length > 0 ? <Tabs.Tab value="teams">Teams</Tabs.Tab> : null}
-      </Tabs.List>
+        <Tabs.Tab className="Tabs-tab" value="top3">Top 3 per task &amp; class</Tabs.Tab>
+        {teams.length > 0 ? <Tabs.Tab className="Tabs-tab" value="teams">Teams</Tabs.Tab> : null}
+      <Tabs.Indicator className="Tabs-indicator" /></Tabs.List>
 
       {scores.standings.map((cls) => (
-        <Tabs.Panel key={cls.pilot_class} value={`standings:${cls.pilot_class}`}>
+        <Tabs.Panel className="Tabs-panel" key={cls.pilot_class} value={`standings:${cls.pilot_class}`}>
           <StandingsTable scores={scores} cls={cls} />
         </Tabs.Panel>
       ))}
 
-      <Tabs.Panel value="top3">
+      <Tabs.Panel className="Tabs-panel" value="top3">
         {groups.map((group) => (
           <section key={group.label}>
             <h2>{group.label}</h2>
@@ -135,7 +135,7 @@ function ScoresViews({ scores }: { scores: CompScores }) {
       </Tabs.Panel>
 
       {teams.length > 0 ? (
-        <Tabs.Panel value="teams">
+        <Tabs.Panel className="Tabs-panel" value="teams">
           <TeamsTable scores={scores} teams={teams} />
         </Tabs.Panel>
       ) : null}
