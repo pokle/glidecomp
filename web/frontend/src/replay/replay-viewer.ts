@@ -100,6 +100,8 @@ export class ReplayViewer {
   private tailSeconds = 600; // 10 min comet tail by default
   private trailWidth = 3; // CSS px
   private mapStyle = DEFAULT_MAP_STYLE.url;
+  private mapDesaturate = 0;
+  private mapFadeWhite = 0;
   /** UI theme; the scene only follows it on the abstract backdrop (the
    * terrain backdrop's colours come from the map imagery, not the theme). */
   private lightTheme = false;
@@ -225,7 +227,15 @@ export class ReplayViewer {
     if (mode === 'terrain') {
       if (!this.mapboxToken) throw new Error('Mapbox token not configured (VITE_MAPBOX_TOKEN)');
       const { TerrainBackend } = await import('./terrain-backend');
-      return new TerrainBackend(this.container, this.scene, this.tracks.manifest, this.mapboxToken, this.mapStyle);
+      return new TerrainBackend(
+        this.container,
+        this.scene,
+        this.tracks.manifest,
+        this.mapboxToken,
+        this.mapStyle,
+        this.mapDesaturate,
+        this.mapFadeWhite,
+      );
     }
     return new AbstractBackend(this.container, this.scene, this.sceneLight(mode));
   }
@@ -433,6 +443,22 @@ export class ReplayViewer {
   }
   get currentMapStyle(): string {
     return this.mapStyle;
+  }
+  /** Basemap desaturation for the terrain backdrop; remembered across backdrop switches. */
+  setMapDesaturate(v: number): void {
+    this.mapDesaturate = v;
+    this.backend.setMapDesaturate?.(v);
+  }
+  get currentMapDesaturate(): number {
+    return this.mapDesaturate;
+  }
+  /** Basemap fade-to-white for the terrain backdrop; remembered across backdrop switches. */
+  setMapFadeWhite(v: number): void {
+    this.mapFadeWhite = v;
+    this.backend.setMapFadeWhite?.(v);
+  }
+  get currentMapFadeWhite(): number {
+    return this.mapFadeWhite;
   }
   setTailSeconds(s: number): void {
     this.tailSeconds = s;
