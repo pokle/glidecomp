@@ -1453,7 +1453,7 @@ async function initCompDetail(compId: string, user: AuthUser | null) {
     comp.category
   );
   if (comp.test) {
-    document.getElementById("comp-test-badge")!.classList.remove("hidden");
+    document.getElementById("comp-test-badge")!.hidden = false;
   }
   document.getElementById("comp-classes")!.textContent =
     comp.pilot_classes.join(", ");
