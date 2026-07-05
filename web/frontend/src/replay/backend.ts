@@ -74,6 +74,10 @@ export interface Backend {
   setVScale(v: number): void;
   /** Change the basemap style (terrain only; no-op elsewhere). */
   setMapStyle?(url: string): void;
+  /** Mute the basemap imagery's colour, 0 (full colour) – 1 (greyscale) (terrain only; no-op elsewhere). */
+  setMapDesaturate?(v: number): void;
+  /** Fade the basemap imagery toward white, 0 (full colour) – 1 (solid white) (terrain only; no-op elsewhere). */
+  setMapFadeWhite?(v: number): void;
   resize(): void;
   dispose(): void;
 }

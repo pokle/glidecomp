@@ -331,6 +331,20 @@ async function main(): Promise<void> {
   mapStyleSel.value = DEFAULT_MAP_STYLE.url;
   mapStyleSel.addEventListener('change', () => viewer.setMapStyle(mapStyleSel.value));
 
+  const mapDesaturate = $<HTMLInputElement>('mapDesaturate');
+  mapDesaturate.addEventListener('input', () => {
+    const v = Number(mapDesaturate.value);
+    viewer.setMapDesaturate(v);
+    $('mapDesaturateVal').textContent = `${Math.round(v * 100)}%`;
+  });
+
+  const mapFadeWhite = $<HTMLInputElement>('mapFadeWhite');
+  mapFadeWhite.addEventListener('input', () => {
+    const v = Number(mapFadeWhite.value);
+    viewer.setMapFadeWhite(v);
+    $('mapFadeWhiteVal').textContent = `${Math.round(v * 100)}%`;
+  });
+
   async function switchBackdrop(mode: 'abstract' | 'terrain'): Promise<void> {
     if (mode === viewer.currentBackdrop) return;
     bdAbstract.disabled = bdTerrain.disabled = true;

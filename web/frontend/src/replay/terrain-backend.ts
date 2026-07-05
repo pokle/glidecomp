@@ -37,6 +37,8 @@ export class TerrainBackend implements Backend {
   private originMerc!: mapboxgl.MercatorCoordinate;
   private s = 1;
   private vScale = 3;
+  private mapDesaturate = 0;
+  private mapFadeWhite = 0;
   private firstLoad = true;
   /** Camera pose to adopt on first load instead of the default framing. */
   private initialView: ViewState | null = null;
@@ -67,7 +69,12 @@ export class TerrainBackend implements Backend {
     private manifest: TrackManifest,
     private token: string,
     private style: string,
-  ) {}
+    mapDesaturate = 0,
+    mapFadeWhite = 0,
+  ) {
+    this.mapDesaturate = mapDesaturate;
+    this.mapFadeWhite = mapFadeWhite;
+  }
 
   mount(): Promise<void> {
     const { lat0, lon0 } = this.manifest.origin;
@@ -142,6 +149,8 @@ export class TerrainBackend implements Backend {
       });
     }
     if (!this.map.getLayer('tracks-3d')) this.map.addLayer(this.customLayer());
+    this.applyMapDesaturate();
+    this.applyMapFadeWhite();
   }
 
   setMapStyle(url: string): void {
@@ -150,6 +159,49 @@ export class TerrainBackend implements Backend {
     // setStyle wipes sources/layers; the style.load handler re-adds them. The
     // shared GL context (and renderer3) survive, so the camera/scene persist.
     this.map.setStyle(url);
+  }
+
+  /** Mute the raster imagery's colour (0 = full colour, 1 = greyscale) so it
+   *  competes less with the coloured trails while the DEM-driven 3D relief and
+   *  shading — which live in the terrain geometry, not the raster pixels —
+   *  stay exactly as legible as before. Applied to every raster layer in the
+   *  style; re-run on each style.load since setStyle() drops all paint-property
+   *  overrides along with the layers. */
+  setMapDesaturate(v: number): void {
+    this.mapDesaturate = v;
+    this.applyMapDesaturate();
+  }
+
+  private applyMapDesaturate(): void {
+    // No isStyleLoaded() guard: this runs from within the style.load handler
+    // itself (via addTerrainAndLayers), where isStyleLoaded() still reports
+    // false even though the style's sources/layers are already queryable.
+    if (!this.map) return;
+    for (const layer of this.map.getStyle()?.layers ?? []) {
+      if (layer.type === 'raster') this.map.setPaintProperty(layer.id, 'raster-saturation', -this.mapDesaturate);
+    }
+  }
+
+  /** Fade the raster imagery toward white (0 = full colour, 1 = solid white),
+   *  independent of desaturation. Unlike plain raster-opacity — which reveals
+   *  the style's own (usually near-black) background layer as it fades — this
+   *  repaints that background layer white first, so low opacity reveals white
+   *  instead of black. Skipped on styles with no raster layer (e.g. vector
+   *  styles like Outdoors), where there's nothing to fade and recolouring the
+   *  background would visibly tint the whole map for no reason. */
+  setMapFadeWhite(v: number): void {
+    this.mapFadeWhite = v;
+    this.applyMapFadeWhite();
+  }
+
+  private applyMapFadeWhite(): void {
+    if (!this.map) return;
+    const layers = this.map.getStyle()?.layers ?? [];
+    if (!layers.some((l) => l.type === 'raster')) return;
+    for (const layer of layers) {
+      if (layer.type === 'background') this.map.setPaintProperty(layer.id, 'background-color', '#ffffff');
+      if (layer.type === 'raster') this.map.setPaintProperty(layer.id, 'raster-opacity', 1 - this.mapFadeWhite);
+    }
   }
 
   private customLayer(): mapboxgl.CustomLayerInterface {
