@@ -51,6 +51,10 @@ export interface TaskSummary {
   task_date: string;
   has_xctsk: boolean;
   pilot_classes: string[];
+  /** GAP task defined without an SSS-typed turnpoint (scoring falls back to the first turnpoint). */
+  missing_sss: boolean;
+  /** GAP task defined without an ESS-typed turnpoint (speed section falls back to goal). */
+  missing_ess: boolean;
 }
 
 export interface TaskDetailData {

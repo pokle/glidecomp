@@ -43,6 +43,27 @@ function safeParse(json: string | null): TaskLike | null {
 }
 
 /**
+ * Task-definition warnings for the comp UI: a GAP race task missing its
+ * SSS/ESS turnpoint types is still scoreable (the engine falls back to the
+ * first turnpoint / goal — see getEffectiveSSSIndex / getEffectiveESSIndex
+ * in the engine), but it's almost always a task-setting mistake worth
+ * surfacing. Tasks with fewer than two turnpoints have no course to race,
+ * so they report no warnings; open-distance comps never carry these types,
+ * so callers skip them by scoring format.
+ */
+export function speedSectionTypeWarnings(
+  xctskJson: string | null
+): { missing_sss: boolean; missing_ess: boolean } {
+  const task = safeParse(xctskJson);
+  const tps = task?.turnpoints ?? [];
+  if (tps.length < 2) return { missing_sss: false, missing_ess: false };
+  return {
+    missing_sss: !tps.some((tp) => tp?.type === "SSS"),
+    missing_ess: !tps.some((tp) => tp?.type === "ESS"),
+  };
+}
+
+/**
  * Short summary of a task's current state. Used when the task route is
  * being set for the first time. Example: "7 turnpoints, race, goal cylinder".
  */

@@ -1,0 +1,52 @@
+{
+  "name": "Unungra Cup",
+  "slug": "unungra-cup-2020",
+  "source_host": "https://xc.highcloud.net",
+  "comp_name": "Unungra Cup",
+  "category": "pg",
+  "classes": [
+    "open"
+  ],
+  "waypoint_region": {
+    "regPk": 28,
+    "name": "NthEastVic2020"
+  },
+  "tasks": [
+    {
+      "pilot_class": "open",
+      "name": "Task 1",
+      "date": "2020-12-08",
+      "dir": "unungra-cup-2020-open-t1",
+      "tasPk": 1324,
+      "comPk": 303,
+      "task_type": "race"
+    },
+    {
+      "pilot_class": "open",
+      "name": "Task 2",
+      "date": "2020-12-09",
+      "dir": "unungra-cup-2020-open-t2",
+      "tasPk": 1325,
+      "comPk": 303,
+      "task_type": "race"
+    },
+    {
+      "pilot_class": "open",
+      "name": "Task 3",
+      "date": "2020-12-11",
+      "dir": "unungra-cup-2020-open-t3",
+      "tasPk": 1327,
+      "comPk": 303,
+      "task_type": "race"
+    },
+    {
+      "pilot_class": "open",
+      "name": "Task 4",
+      "date": "2020-12-12",
+      "dir": "unungra-cup-2020-open-t4",
+      "tasPk": 1330,
+      "comPk": 303,
+      "task_type": "race"
+    }
+  ]
+}

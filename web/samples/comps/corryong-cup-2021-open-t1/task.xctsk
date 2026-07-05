@@ -1,0 +1,98 @@
+{
+  "earthModel": "WGS84",
+  "goal": {
+    "deadline": "10:00:00Z",
+    "type": "CYLINDER"
+  },
+  "sss": {
+    "direction": "EXIT",
+    "timeGates": [
+      "03:15:00Z",
+      "03:30:00Z",
+      "04:00:00Z",
+      "04:15:00Z",
+      "04:30:00Z",
+      "04:45:00Z",
+      "05:00:00Z",
+      "05:15:00Z",
+      "05:45:00Z"
+    ],
+    "type": "RACE"
+  },
+  "taskType": "CLASSIC",
+  "turnpoints": [
+    {
+      "radius": 500,
+      "waypoint": {
+        "lat": -36.185833,
+        "lon": 147.976667,
+        "altSmoothed": 935,
+        "name": "ELLIOT",
+        "description": "ELLIOT"
+      }
+    },
+    {
+      "radius": 5000,
+      "waypoint": {
+        "lat": -36.185833,
+        "lon": 147.976667,
+        "altSmoothed": 935,
+        "name": "ELLIOT",
+        "description": "ELLIOT"
+      },
+      "type": "TAKEOFF"
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.305417,
+        "lon": 147.898867,
+        "altSmoothed": 426,
+        "name": "THOWGL",
+        "description": "THOWGL"
+      }
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.2641,
+        "lon": 147.938467,
+        "altSmoothed": 376,
+        "name": "KANGCK",
+        "description": "KANGCK"
+      }
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.223183,
+        "lon": 147.7288,
+        "altSmoothed": 432,
+        "name": "CUDGWE",
+        "description": "CUDGWE"
+      }
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.185,
+        "lon": 147.8914,
+        "altSmoothed": 291,
+        "name": "CORRY",
+        "description": "CORRY"
+      },
+      "type": "ESS"
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.185,
+        "lon": 147.8914,
+        "altSmoothed": 291,
+        "name": "CORRY",
+        "description": "CORRY"
+      }
+    }
+  ],
+  "version": 1
+}

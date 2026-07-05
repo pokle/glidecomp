@@ -8,7 +8,7 @@
 import {
   andoyerDistance, getCirclePoints, calculateBearing, calculatePointMetrics,
   calculateOptimizedTaskLine, getOptimizedSegmentDistances,
-  resolveTurnpointSequence, getSSSIndex,
+  resolveTurnpointSequence, getEffectiveSSSIndex,
   type IGCFix, type FlightEvent, type XCTask, type Turnpoint,
   type GlideContext, type GlideMarker, type TurnpointSequenceResult,
 } from '@glidecomp/engine';
@@ -774,8 +774,8 @@ export function buildNextTurnpointContext(
   if (lastReached.length > 0) {
     nextTaskIndex = lastReached[lastReached.length - 1].taskIndex + 1;
   } else {
-    // No TP reached yet — next is SSS
-    nextTaskIndex = getSSSIndex(task);
+    // No TP reached yet — next is the start (first turnpoint when no SSS)
+    nextTaskIndex = getEffectiveSSSIndex(task);
     if (nextTaskIndex < 0) return undefined;
   }
 

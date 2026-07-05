@@ -231,6 +231,34 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
       container.appendChild(notice);
     }
 
+    // Task-setup warnings: a GAP race task missing its SSS/ESS turnpoint
+    // types still scores (the engine falls back to the first turnpoint /
+    // goal), but it's almost always a task-setting mistake — surface it
+    // where the type can be fixed.
+    if (!openDistance) {
+      const allTps = currentTask?.turnpoints ?? [];
+      if (allTps.length >= 2) {
+        const warnings: string[] = [];
+        if (!allTps.some(tp => tp.type === 'SSS')) {
+          warnings.push('No Start (SSS) turnpoint — scoring will treat the first turnpoint as the start.');
+        }
+        if (!allTps.some(tp => tp.type === 'ESS')) {
+          warnings.push('No ESS turnpoint — the speed section will end at the last turnpoint (goal).');
+        }
+        if (warnings.length > 0) {
+          const warn = document.createElement('div');
+          warn.className = 'border-b border-amber-500/30 bg-amber-500/5 px-3 py-2 space-y-0.5';
+          for (const w of warnings) {
+            const line = document.createElement('div');
+            line.className = 'text-xs text-amber-500';
+            line.textContent = `⚠ ${w}`;
+            warn.appendChild(line);
+          }
+          container.appendChild(warn);
+        }
+      }
+    }
+
     if (!readOnly) {
       // Zone A: Toolbar
       const toolbar = document.createElement('div');

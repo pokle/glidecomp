@@ -1033,4 +1033,159 @@ describe('resolveTurnpointSequence', () => {
       expect(result.bestProgress!.distanceToGoal).toBeGreaterThan(straightLineToGoal * 3);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Start fallback: task with no SSS turnpoint
+  // ---------------------------------------------------------------------------
+  describe('Start fallback (no SSS turnpoint)', () => {
+    // A realistic mis-set task: TAKEOFF + plain turnpoints + goal, but nobody
+    // marked a turnpoint as SSS. Without the fallback every pilot scores zero.
+    const noSSSDefs: TaskDef[] = [
+      { name: 'LAUNCH', lat: 47.0, lon: 11.0, radius: 400, type: 'TAKEOFF' },
+      { name: 'TP1', lat: 47.0, lon: 11.13, radius: 400 },
+      { name: 'GOAL', lat: 47.0, lon: 11.26, radius: 400, type: 'ESS' },
+    ];
+    const noSSSCylinders = noSSSDefs.map(d => ({ lat: d.lat, lon: d.lon, radius: d.radius }));
+
+    it('anchors the start on the first turnpoint and scores the flight', () => {
+      const task = createTask(noSSSDefs);
+      const track = createTrackThroughCylinders(noSSSCylinders);
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.startFallback).toBe('first_turnpoint');
+      expect(result.sssReaching).not.toBeNull();
+      expect(result.sssReaching!.taskIndex).toBe(0);
+      expect(result.madeGoal).toBe(true);
+      expect(result.flownDistance).toBe(result.taskDistance);
+      expect(result.speedSectionTime).not.toBeNull();
+    });
+
+    it('ignores the sss direction config when no SSS turnpoint exists', () => {
+      // ENTER would reject the take-off exit if the direction filter applied
+      // to the fallback start.
+      const task = createTask(noSSSDefs, { direction: 'ENTER' });
+      const track = [
+        createFix(0, 47.0, 11.0),    // inside take-off (center)
+        createFix(2, 47.0, 11.02),   // outside take-off — only an exit crossing
+        createFix(4, 47.0, 11.13),   // TP1 center
+        createFix(6, 47.0, 11.26),   // goal center
+      ];
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.startFallback).toBe('first_turnpoint');
+      expect(result.sssReaching).not.toBeNull();
+      expect(result.madeGoal).toBe(true);
+    });
+
+    it('falls back to the first fix when the track begins outside the first cylinder', () => {
+      // Logger started after launch — no take-off cylinder crossing exists.
+      const task = createTask(noSSSDefs);
+      const track = [
+        createFix(0, 47.0, 11.06),   // already en route, outside take-off
+        createFix(2, 47.0, 11.13),   // TP1 center
+        createFix(4, 47.0, 11.26),   // goal center
+      ];
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.startFallback).toBe('track_start');
+      expect(result.sssReaching).not.toBeNull();
+      expect(result.sssReaching!.selectionReason).toBe('track_start');
+      expect(result.sssReaching!.fixIndex).toBe(0);
+      expect(result.madeGoal).toBe(true);
+    });
+
+    it('scores zero for a pilot who never leaves the first cylinder', () => {
+      const task = createTask(noSSSDefs);
+      // All fixes within ~150m of the take-off center (radius 400m)
+      const track = [
+        createFix(0, 47.0, 11.0),
+        createFix(2, 47.0, 11.001),
+        createFix(4, 47.0, 11.002),
+      ];
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.startFallback).toBe('first_turnpoint');
+      expect(result.sssReaching).toBeNull();
+      expect(result.sequence).toHaveLength(0);
+      expect(result.flownDistance).toBe(0);
+    });
+
+    it('tasks with an explicit SSS never report a start fallback', () => {
+      const task = threePointTask();
+      const track = createTrackThroughCylinders([
+        { lat: 47.0, lon: 11.0, radius: 1000 },
+        { lat: 47.0, lon: 11.13, radius: 400 },
+        { lat: 47.0, lon: 11.26, radius: 400 },
+      ]);
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.startFallback).toBeUndefined();
+      expect(result.essFallback).toBeUndefined();
+      expect(result.madeGoal).toBe(true);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // ESS fallback: task with no ESS turnpoint
+  // ---------------------------------------------------------------------------
+  describe('ESS fallback (no ESS turnpoint)', () => {
+    // The other half of the mis-set-task trap: without an ESS the speed
+    // section never ends, so no pilot gets a speed-section time and every
+    // goal pilot would tie on distance alone.
+    const noESSDefs: TaskDef[] = [
+      { name: 'SSS', lat: 47.0, lon: 11.0, radius: 1000, type: 'SSS' },
+      { name: 'TP1', lat: 47.0, lon: 11.13, radius: 400 },
+      { name: 'GOAL', lat: 47.0, lon: 11.26, radius: 400 },
+    ];
+    const noESSCylinders = noESSDefs.map(d => ({ lat: d.lat, lon: d.lon, radius: d.radius }));
+
+    it('ends the speed section at goal and yields a speed-section time', () => {
+      const task = createTask(noESSDefs);
+      const track = createTrackThroughCylinders(noESSCylinders);
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.essFallback).toBe('last_turnpoint');
+      expect(result.madeGoal).toBe(true);
+      expect(result.essReaching).not.toBeNull();
+      expect(result.essReaching!.taskIndex).toBe(2); // goal
+      expect(result.speedSectionTime).not.toBeNull();
+      expect(result.speedSectionTime!).toBeGreaterThan(0);
+    });
+
+    it('no ESS time for a pilot who lands out before goal', () => {
+      const task = createTask(noESSDefs);
+      const track = createTrackThroughCylinders(noESSCylinders.slice(0, 2));
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.essFallback).toBe('last_turnpoint');
+      expect(result.essReaching).toBeNull();
+      expect(result.speedSectionTime).toBeNull();
+      expect(result.flownDistance).toBeGreaterThan(0);
+    });
+
+    it('handles a task missing both SSS and ESS types', () => {
+      const task = createTask([
+        { name: 'LAUNCH', lat: 47.0, lon: 11.0, radius: 400, type: 'TAKEOFF' },
+        { name: 'TP1', lat: 47.0, lon: 11.13, radius: 400 },
+        { name: 'GOAL', lat: 47.0, lon: 11.26, radius: 400 },
+      ]);
+      const track = createTrackThroughCylinders(
+        task.turnpoints.map(tp => ({ lat: tp.waypoint.lat, lon: tp.waypoint.lon, radius: tp.radius }))
+      );
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.startFallback).toBe('first_turnpoint');
+      expect(result.essFallback).toBe('last_turnpoint');
+      expect(result.madeGoal).toBe(true);
+      expect(result.speedSectionTime).not.toBeNull(); // whole course is the speed section
+    });
+  });
 });

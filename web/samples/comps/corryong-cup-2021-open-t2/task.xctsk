@@ -1,0 +1,75 @@
+{
+  "earthModel": "WGS84",
+  "goal": {
+    "deadline": "10:00:00Z",
+    "type": "CYLINDER"
+  },
+  "sss": {
+    "direction": "EXIT",
+    "timeGates": [
+      "03:15:00Z",
+      "03:45:00Z",
+      "04:00:00Z",
+      "04:15:00Z",
+      "04:30:00Z",
+      "05:00:00Z"
+    ],
+    "type": "RACE"
+  },
+  "taskType": "CLASSIC",
+  "turnpoints": [
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.185833,
+        "lon": 147.976667,
+        "altSmoothed": 935,
+        "name": "ELLIOT",
+        "description": "ELLIOT"
+      }
+    },
+    {
+      "radius": 5000,
+      "waypoint": {
+        "lat": -36.185833,
+        "lon": 147.976667,
+        "altSmoothed": 935,
+        "name": "ELLIOT",
+        "description": "ELLIOT"
+      },
+      "type": "TAKEOFF"
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -35.966217,
+        "lon": 147.734183,
+        "altSmoothed": 224,
+        "name": "WALWA",
+        "description": "WALWA"
+      }
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.185,
+        "lon": 147.8914,
+        "altSmoothed": 291,
+        "name": "CORRY",
+        "description": "CORRY"
+      },
+      "type": "ESS"
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.185,
+        "lon": 147.8914,
+        "altSmoothed": 291,
+        "name": "CORRY",
+        "description": "CORRY"
+      }
+    }
+  ],
+  "version": 1
+}

@@ -128,7 +128,7 @@ export function CompDetail() {
         </Button>
       ) : null}
 
-      <ClassWarnings warnings={comp.class_coverage_warnings} />
+      <ClassWarnings warnings={comp.class_coverage_warnings} tasks={comp.tasks} />
 
       <section>
         <h2 className="mt-8 text-lg font-bold">
@@ -199,13 +199,30 @@ export function CompDetail() {
 
 function ClassWarnings({
   warnings,
+  tasks,
 }: {
   warnings: CompDetailData["class_coverage_warnings"];
+  tasks: TaskSummary[];
 }) {
-  if (warnings.length === 0) return null;
+  // Task-setup warnings: GAP tasks defined without SSS/ESS turnpoint types
+  // still score via engine fallbacks, but it's almost always a mistake.
+  const setupWarnings = tasks
+    .map((t) => {
+      const parts: string[] = [];
+      if (t.missing_sss) {
+        parts.push("no Start (SSS) turnpoint — scoring treats the first turnpoint as the start");
+      }
+      if (t.missing_ess) {
+        parts.push("no ESS turnpoint — the speed section ends at goal");
+      }
+      return parts.length > 0 ? { name: t.name, text: parts.join("; ") } : null;
+    })
+    .filter((w): w is { name: string; text: string } => w !== null);
+
+  if (warnings.length === 0 && setupWarnings.length === 0) return null;
   return (
     <section>
-      <h2 className="mt-8 text-lg font-bold">Task Coverage Issues</h2>
+      <h2 className="mt-8 text-lg font-bold">Task Warnings</h2>
       <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
         {warnings.map((w) => {
           const parts: string[] = [];
@@ -222,6 +239,11 @@ function ClassWarnings({
             </li>
           );
         })}
+        {setupWarnings.map((w) => (
+          <li key={w.name} className="text-amber-500/80">
+            <strong>{w.name}</strong> — {w.text}
+          </li>
+        ))}
       </ul>
     </section>
   );
@@ -264,6 +286,22 @@ function TasksList({
                   <span className="text-muted-foreground">
                     {task.has_xctsk ? "Task set" : "No task"}
                   </span>{" "}
+                  {task.missing_sss ? (
+                    <span
+                      className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-500"
+                      title="Scoring falls back — see Task Warnings above"
+                    >
+                      No SSS
+                    </span>
+                  ) : null}{" "}
+                  {task.missing_ess ? (
+                    <span
+                      className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-500"
+                      title="Scoring falls back — see Task Warnings above"
+                    >
+                      No ESS
+                    </span>
+                  ) : null}{" "}
                   <span className="text-muted-foreground">
                     {task.pilot_classes.join(", ")}
                   </span>
