@@ -1,3 +1,4 @@
+/react/*  /react  200
 /u/*  /dashboard  200
 /comp/  /comp  301
 /comp/:comp_id/task/*  /comp-detail  200

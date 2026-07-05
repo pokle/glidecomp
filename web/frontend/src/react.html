@@ -1,0 +1,25 @@
+<!-- Copyright (c) 2026, Tushar Pokle.  All rights reserved. -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GlideComp (React)</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <style>
+    /* Base UI quick-start requirements (not visual styling):
+       - the app root needs its own stacking context so popups layer above
+         page content (https://base-ui.com/react/overview/quick-start)
+       - body { position: relative } is required for iOS 26+ Safari */
+    #root { isolation: isolate; }
+    body { position: relative; }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/react/main.tsx"></script>
+</body>
+
+</html>

@@ -3,6 +3,7 @@ import { resolve } from 'path';
 import { readFileSync, existsSync, cpSync } from 'fs';
 import { execSync } from 'child_process';
 import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
 
 function airscoreWorkerCheck(): Plugin {
   return {
@@ -81,6 +82,7 @@ export default defineConfig({
   },
   plugins: [
     tailwindcss(),
+    react(),
     airscoreWorkerCheck(),
     sampleCompFiles(),
     copySampleComps(),
@@ -89,7 +91,11 @@ export default defineConfig({
       name: 'rewrite-spa-routes',
       configureServer(server) {
         server.middlewares.use((req: Connect.IncomingMessage, _res, next) => {
-          if (req.url?.startsWith('/u/')) {
+          // React SPA: any /react route without a file extension serves the
+          // React entry; module/asset requests (contain a dot) pass through.
+          if (req.url === '/react' || (req.url?.startsWith('/react/') && !req.url.split('?')[0].includes('.'))) {
+            req.url = '/react.html';
+          } else if (req.url?.startsWith('/u/')) {
             req.url = '/dashboard.html';
           } else if (req.url === '/comp' || req.url === '/comp/') {
             req.url = '/comp.html';
@@ -141,6 +147,7 @@ export default defineConfig({
         replay: resolve(__dirname, 'src/replay.html'),
         'admin-users': resolve(__dirname, 'src/admin-users.html'),
         'admin-cache': resolve(__dirname, 'src/admin-cache.html'),
+        react: resolve(__dirname, 'src/react.html'),
       },
     },
   },

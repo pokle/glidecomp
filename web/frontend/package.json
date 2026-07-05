@@ -17,7 +17,10 @@
     "@cloudflare/workers-types": "^4.20260628.1",
     "@pokle/basecoat": "0.3.10-beta3.pokle-selections",
     "@tailwindcss/vite": "^4.3.1",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.1",
     "@types/tabulator-tables": "^6.3.5",
+    "@vitejs/plugin-react": "^5.1.4",
     "jsdom": "^25.0.1",
     "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3",
@@ -26,6 +29,7 @@
     "wrangler": "4.105.0"
   },
   "dependencies": {
+    "@base-ui/react": "^1.1.0",
     "@glidecomp/engine": "workspace:*",
     "@glidecomp/samples": "workspace:*",
     "@types/three": "^0.185.0",
@@ -34,6 +38,9 @@
     "katex": "^0.16.47",
     "leaflet": "2.0.0-alpha.1",
     "mapbox-gl": "^3.25.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.5",
     "tabulator-tables": "^6.5.2",
     "three": "^0.185.0",
     "threebox-plugin": "^2.2.7"
