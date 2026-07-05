@@ -3,11 +3,19 @@
  * Mutations that used to window.location.reload() instead bump a refresh
  * counter that re-runs the comp fetch.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Dialog } from "@base-ui/react/dialog";
-import { Field } from "@base-ui/react/field";
-import { Input } from "@base-ui/react/input";
+import { Button } from "@/react/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/react/ui/dialog";
+import { Field, FieldLabel, FieldLegend, FieldSet } from "@/react/ui/field";
+import { Input } from "@/react/ui/input";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useUser } from "../lib/user";
@@ -66,14 +74,16 @@ export function CompDetail() {
     return (
       <div>
         <p>Competition not found</p>
-        <Link to="/comp">Back to Competitions</Link>
+        <Link className="underline underline-offset-4" to="/comp">
+          Back to Competitions
+        </Link>
       </div>
     );
   }
 
   if (!comp) {
     return (
-      <p role="status" aria-label="Loading competition">
+      <p role="status" aria-label="Loading competition" className="text-muted-foreground">
         Loading competition…
       </p>
     );
@@ -85,37 +95,55 @@ export function CompDetail() {
 
   return (
     <div>
-      <nav>
-        <Link to="/comp">All Competitions</Link>
+      <nav className="text-sm">
+        <Link className="underline underline-offset-4" to="/comp">
+          All Competitions
+        </Link>
       </nav>
 
-      <h1>{comp.name}</h1>
-      <p>
+      <h1 className="mt-2 text-2xl font-bold">{comp.name}</h1>
+      <p className="text-sm text-muted-foreground">
         <span>{categoryLabel(comp.category)}</span>
         {comp.test ? <span> Test</span> : null} <span>{comp.pilot_classes.join(", ")}</span>
       </p>
       {comp.tasks.some((t) => t.has_xctsk) ? (
-        <p>
-          <Link to={`/scores?comp_id=${encodeURIComponent(compId)}`}>View scores →</Link>
+        <p className="mt-2 text-sm">
+          <Link
+            className="underline underline-offset-4"
+            to={`/scores?comp_id=${encodeURIComponent(compId)}`}
+          >
+            View scores →
+          </Link>
         </p>
       ) : null}
       {isAdmin ? (
-        <button type="button" onClick={() => setSettingsOpen(true)}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-2"
+          onClick={() => setSettingsOpen(true)}
+        >
           Settings
-        </button>
+        </Button>
       ) : null}
 
       <ClassWarnings warnings={comp.class_coverage_warnings} />
 
       <section>
-        <h2>
+        <h2 className="mt-8 text-lg font-bold">
           Tasks
           {isAdmin ? (
             <>
               {" "}
-              <button type="button" onClick={() => setCreateOpen(true)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCreateOpen(true)}
+              >
                 New Task
-              </button>
+              </Button>
             </>
           ) : null}
         </h2>
@@ -132,11 +160,11 @@ export function CompDetail() {
       <ActivitySection compId={compId} />
 
       <section>
-        <h2>Admins</h2>
-        <ul>
+        <h2 className="mt-8 text-lg font-bold">Admins</h2>
+        <ul className="mt-2 space-y-1 text-sm">
           {comp.admins.map((admin) => (
             <li key={admin.email}>
-              {admin.name} ({admin.email})
+              {admin.name} <span className="text-muted-foreground">({admin.email})</span>
             </li>
           ))}
         </ul>
@@ -177,8 +205,8 @@ function ClassWarnings({
   if (warnings.length === 0) return null;
   return (
     <section>
-      <h2>Task Coverage Issues</h2>
-      <ul>
+      <h2 className="mt-8 text-lg font-bold">Task Coverage Issues</h2>
+      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
         {warnings.map((w) => {
           const parts: string[] = [];
           if (w.missing_classes && w.missing_classes.length > 0) {
@@ -209,7 +237,7 @@ function TasksList({
   canSubmitTrack: boolean;
 }) {
   if (tasks.length === 0) {
-    return <p>No tasks yet</p>;
+    return <p className="text-muted-foreground">No tasks yet</p>;
   }
 
   // Group tasks by date (insertion order preserved, as in the vanilla page)
@@ -221,22 +249,30 @@ function TasksList({
   }
 
   return (
-    <div>
+    <div className="mt-2 space-y-4">
       {[...byDate.entries()].map(([date, dateTasks]) => (
         <div key={date}>
-          <h3>{formatTaskDate(date)}</h3>
-          <ul>
+          <h3 className="font-semibold">{formatTaskDate(date)}</h3>
+          <ul className="mt-1 space-y-1 text-sm">
             {dateTasks.map((task) => (
-              <li key={task.task_id}>
-                <Link to={`/comp/${compId}/task/${task.task_id}`}>
+              <li key={task.task_id} className="flex flex-wrap items-center gap-2">
+                <Link
+                  className="underline-offset-4 hover:underline"
+                  to={`/comp/${compId}/task/${task.task_id}`}
+                >
                   <strong>{task.name}</strong>{" "}
-                  <span>{task.has_xctsk ? "Task set" : "No task"}</span>{" "}
-                  <span>{task.pilot_classes.join(", ")}</span>
+                  <span className="text-muted-foreground">
+                    {task.has_xctsk ? "Task set" : "No task"}
+                  </span>{" "}
+                  <span className="text-muted-foreground">
+                    {task.pilot_classes.join(", ")}
+                  </span>
                 </Link>{" "}
                 {canSubmitTrack ? (
                   <SubmitTrackButton compId={compId} taskId={task.task_id} />
                 ) : null}{" "}
                 <a
+                  className="underline underline-offset-4"
                   href={`/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(task.task_id)}`}
                   title="Open the 3D flight replay for this task"
                 >
@@ -308,13 +344,15 @@ function SubmitTrackButton({ compId, taskId }: { compId: string; taskId: string 
         hidden
         onChange={(e) => void handleFile(e.currentTarget)}
       />
-      <button
+      <Button
         type="button"
+        variant="outline"
+        size="sm"
         disabled={uploading}
         onClick={() => inputRef.current?.click()}
       >
         {uploading ? "Uploading..." : "Submit track"}
-      </button>
+      </Button>
     </>
   );
 }
@@ -330,6 +368,8 @@ function CreateTaskDialog({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const nameId = useId();
+  const dateId = useId();
   const [name, setName] = useState("");
   const [taskDate, setTaskDate] = useState(new Date().toISOString().split("T")[0]);
   // All classes checked by default, matching the vanilla dialog.
@@ -372,55 +412,60 @@ function CreateTaskDialog({
   }
 
   return (
-    <Dialog.Root
+    <Dialog
       open
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Backdrop className="Dialog-backdrop" />
-        <Dialog.Popup className="Dialog-popup">
-          <Dialog.Title className="Dialog-title">Create Task</Dialog.Title>
-          <form onSubmit={(e) => void submit(e)}>
-            <Field.Root className="Field">
-              <Field.Label className="Field-label">Name</Field.Label>
-              <Input
-                required
-                maxLength={128}
-                autoFocus
-                placeholder="e.g. Day 1 - Ridge Run"
-                value={name}
-                onValueChange={(v) => setName(v)}
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Create Task</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
+          <Field>
+            <FieldLabel htmlFor={nameId}>Name</FieldLabel>
+            <Input
+              id={nameId}
+              required
+              maxLength={128}
+              autoFocus
+              placeholder="e.g. Day 1 - Ridge Run"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor={dateId}>Date</FieldLabel>
+            <Input
+              id={dateId}
+              type="date"
+              required
+              value={taskDate}
+              onChange={(e) => setTaskDate(e.target.value)}
+            />
+          </Field>
+          <FieldSet>
+            <FieldLegend variant="label">Pilot Classes</FieldLegend>
+            {pilotClasses.map((cls) => (
+              <CheckboxField
+                key={cls}
+                checked={selectedClasses.includes(cls)}
+                onChange={(checked) => toggleClass(cls, checked)}
+                label={cls}
               />
-            </Field.Root>
-            <Field.Root className="Field">
-              <Field.Label className="Field-label">Date</Field.Label>
-              <Input
-                type="date"
-                required
-                value={taskDate}
-                onValueChange={(v) => setTaskDate(v)}
-              />
-            </Field.Root>
-            <fieldset>
-              <legend>Pilot Classes</legend>
-              {pilotClasses.map((cls) => (
-                <CheckboxField
-                  key={cls}
-                  checked={selectedClasses.includes(cls)}
-                  onChange={(checked) => toggleClass(cls, checked)}
-                  label={cls}
-                />
-              ))}
-            </fieldset>
-            <Dialog.Close>Cancel</Dialog.Close>{" "}
-            <button type="submit" disabled={submitting}>
+            ))}
+          </FieldSet>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" />}>
+              Cancel
+            </DialogClose>
+            <Button type="submit" disabled={submitting}>
               {submitting ? "Creating..." : "Create"}
-            </button>
-          </form>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -4,7 +4,16 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Tabs } from "@base-ui/react/tabs";
+import { Button } from "@/react/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/react/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/react/ui/tabs";
 import {
   aggregateTeams,
   buildClassGroups,
@@ -71,7 +80,9 @@ export function Scores() {
     return (
       <section>
         <p>Competition not found</p>
-        <Link to="/comp">Back to Competitions</Link>
+        <Link to="/comp" className="underline underline-offset-4">
+          Back to Competitions
+        </Link>
       </section>
     );
   }
@@ -85,14 +96,20 @@ export function Scores() {
 
   return (
     <section>
-      <nav>
-        <Link to="/comp">Competitions</Link> › <Link to={`/comp/${comp.comp_id}`}>{comp.name}</Link>
+      <nav className="text-sm text-muted-foreground">
+        <Link to="/comp" className="underline underline-offset-4">
+          Competitions
+        </Link>{" "}
+        ›{" "}
+        <Link to={`/comp/${comp.comp_id}`} className="underline underline-offset-4">
+          {comp.name}
+        </Link>
       </nav>
-      <h1>{comp.name} — Scores</h1>
-      <p>{facts.join(" · ")}</p>
+      <h1 className="mt-2 text-2xl font-bold">{comp.name} — Scores</h1>
+      <p className="text-muted-foreground">{facts.join(" · ")}</p>
 
       {scores.standings.length === 0 ? (
-        <p>No scored tasks yet.</p>
+        <p className="mt-4 text-muted-foreground">No scored tasks yet.</p>
       ) : (
         <ScoresViews scores={scores} />
       )}
@@ -107,39 +124,43 @@ function ScoresViews({ scores }: { scores: CompScores }) {
   const [tab, setTab] = useState(firstTab);
 
   return (
-    <Tabs.Root value={tab} onValueChange={(value) => setTab(value as string)}>
-      <Tabs.List className="Tabs-list">
+    <Tabs value={tab} onValueChange={(value) => setTab(value as string)} className="mt-6">
+      <TabsList>
         {scores.standings.map((cls) => (
-          <Tabs.Tab className="Tabs-tab" key={cls.pilot_class} value={`standings:${cls.pilot_class}`}>
+          <TabsTrigger key={cls.pilot_class} value={`standings:${cls.pilot_class}`}>
             {cls.pilot_class}
-          </Tabs.Tab>
+          </TabsTrigger>
         ))}
-        <Tabs.Tab className="Tabs-tab" value="top3">Top 3 per task &amp; class</Tabs.Tab>
-        {teams.length > 0 ? <Tabs.Tab className="Tabs-tab" value="teams">Teams</Tabs.Tab> : null}
-      <Tabs.Indicator className="Tabs-indicator" /></Tabs.List>
+        <TabsTrigger value="top3">Top 3 per task &amp; class</TabsTrigger>
+        {teams.length > 0 ? <TabsTrigger value="teams">Teams</TabsTrigger> : null}
+      </TabsList>
 
       {scores.standings.map((cls) => (
-        <Tabs.Panel className="Tabs-panel" key={cls.pilot_class} value={`standings:${cls.pilot_class}`}>
+        <TabsContent key={cls.pilot_class} value={`standings:${cls.pilot_class}`}>
           <StandingsTable scores={scores} cls={cls} />
-        </Tabs.Panel>
+        </TabsContent>
       ))}
 
-      <Tabs.Panel className="Tabs-panel" value="top3">
+      <TabsContent value="top3">
         {groups.map((group) => (
           <section key={group.label}>
-            <h2>{group.label}</h2>
-            {group.classes.length > 1 ? <p>Combined: {group.classes.join(", ")}</p> : null}
+            <h2 className="mt-8 text-lg font-bold">{group.label}</h2>
+            {group.classes.length > 1 ? (
+              <p className="text-sm text-muted-foreground">
+                Combined: {group.classes.join(", ")}
+              </p>
+            ) : null}
             <Top3Table scores={scores} group={group} />
           </section>
         ))}
-      </Tabs.Panel>
+      </TabsContent>
 
       {teams.length > 0 ? (
-        <Tabs.Panel className="Tabs-panel" value="teams">
+        <TabsContent value="teams">
           <TeamsTable scores={scores} teams={teams} />
-        </Tabs.Panel>
+        </TabsContent>
       ) : null}
-    </Tabs.Root>
+    </Tabs>
   );
 }
 
@@ -192,35 +213,43 @@ function SortableTable({ columns, rows }: { columns: ColumnSpec[]; rows: CellSpe
   }
 
   return (
-    <table>
-      <thead>
-        <tr>
-          {columns.map((col, i) => (
-            <th
-              key={i}
-              title={col.title}
-              aria-sort={
-                sort?.col === i ? (sort.dir === "asc" ? "ascending" : "descending") : undefined
-              }
-            >
-              <button type="button" onClick={() => handleHeaderClick(i)}>
-                {col.label}
-                {sort?.col === i ? (sort.dir === "asc" ? " ▲" : " ▼") : ""}
-              </button>
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {sortedRows.map((row, i) => (
-          <tr key={i}>
-            {row.map((cell, j) => (
-              <td key={j}>{cell.node}</td>
+    <div className="mt-3 overflow-x-auto rounded-lg border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {columns.map((col, i) => (
+              <TableHead
+                key={i}
+                title={col.title}
+                aria-sort={
+                  sort?.col === i ? (sort.dir === "asc" ? "ascending" : "descending") : undefined
+                }
+              >
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="-ml-2"
+                  onClick={() => handleHeaderClick(i)}
+                >
+                  {col.label}
+                  {sort?.col === i ? (sort.dir === "asc" ? " ▲" : " ▼") : ""}
+                </Button>
+              </TableHead>
             ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sortedRows.map((row, i) => (
+            <TableRow key={i}>
+              {row.map((cell, j) => (
+                <TableCell key={j}>{cell.node}</TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
@@ -252,8 +281,10 @@ function StandingsTable({ scores, cls }: { scores: CompScores; cls: ClassStandin
             target="_blank"
             rel="noopener"
             title={`Analyse ${p.pilot_name}'s track for ${task.task_name}`}
+            className="underline underline-offset-4"
           >
-            {formatScore(entry.score)} <span>({ordinal(entry.rank)})</span>
+            {formatScore(entry.score)}{" "}
+            <span className="text-muted-foreground">({ordinal(entry.rank)})</span>
           </a>
         ),
       };
@@ -303,6 +334,7 @@ function Top3Table({
               target="_blank"
               rel="noopener"
               title={`Analyse ${entry.pilot_name}'s track for ${row.label}`}
+              className="underline underline-offset-4"
             >
               {content}
             </a>
@@ -340,7 +372,7 @@ function TeamsTable({
           <div>
             <strong>{team.team_name}</strong>
           </div>
-          <div>{team.pilots.join(", ")}</div>
+          <div className="text-sm text-muted-foreground">{team.pilots.join(", ")}</div>
         </>
       ),
     },

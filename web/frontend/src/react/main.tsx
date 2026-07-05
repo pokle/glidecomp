@@ -6,9 +6,9 @@
  */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import "./theme.css";
+import "./globals.css";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { AppToastProvider } from "./lib/toast";
+import { AppToaster } from "./lib/toast";
 import { ConfirmProvider } from "./lib/confirm";
 import { UserProvider } from "./lib/user";
 import { Shell } from "./components/Shell";
@@ -22,6 +22,15 @@ import { Scores } from "./pages/Scores";
 import { Profile } from "./pages/Profile";
 import { Settings } from "./pages/Settings";
 
+// shadcn theming keys dark mode off a `.dark` class on <html>; follow the
+// OS preference (matching the previous prefers-color-scheme behaviour).
+const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+function syncDarkClass() {
+  document.documentElement.classList.toggle("dark", darkQuery.matches);
+}
+syncDarkClass();
+darkQuery.addEventListener("change", syncDarkClass);
+
 function NotFound() {
   return (
     <main>
@@ -33,8 +42,8 @@ function NotFound() {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <UserProvider>
-      <AppToastProvider>
-        <ConfirmProvider>
+      <AppToaster />
+      <ConfirmProvider>
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Home />} />
@@ -51,8 +60,7 @@ createRoot(document.getElementById("root")!).render(
               </Route>
             </Routes>
           </BrowserRouter>
-        </ConfirmProvider>
-      </AppToastProvider>
+      </ConfirmProvider>
     </UserProvider>
   </StrictMode>
 );

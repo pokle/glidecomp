@@ -1,8 +1,9 @@
 /** First-login onboarding — React port of onboarding.ts / onboarding.html. */
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Field } from "@base-ui/react/field";
-import { Input } from "@base-ui/react/input";
+import { Button } from "@/react/ui/button";
+import { Field, FieldError, FieldLabel } from "@/react/ui/field";
+import { Input } from "@/react/ui/input";
 import { setUsername } from "../../auth/client";
 import { api } from "../../comp/api";
 import { useUser } from "../lib/user";
@@ -18,6 +19,10 @@ export function Onboarding() {
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const nameId = useId();
+  const usernameId = useId();
+  const civlIdInput = useId();
+  const safaIdInput = useId();
 
   useEffect(() => {
     document.title = "GlideComp - Welcome";
@@ -86,43 +91,54 @@ export function Onboarding() {
   }
 
   return (
-    <main>
-      {user.image ? <img src={user.image} alt={user.name} /> : null}
-      <h1>Welcome, {firstName}!</h1>
-      <p>Set up your GlideComp account</p>
+    <main className="mx-auto flex max-w-md flex-col gap-4 px-4 py-10">
+      {user.image ? (
+        <img src={user.image} alt={user.name} className="size-16 rounded-full border" />
+      ) : null}
+      <h1 className="text-2xl font-bold">Welcome, {firstName}!</h1>
+      <p className="text-muted-foreground">Set up your GlideComp account</p>
 
-      <form onSubmit={handleSubmit}>
-        <Field.Root className="Field">
-          <Field.Label className="Field-label">Full name</Field.Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} required maxLength={128} />
-        </Field.Root>
-
-        <Field.Root className="Field">
-          <Field.Label className="Field-label">Username</Field.Label>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <Field>
+          <FieldLabel htmlFor={nameId}>Full name</FieldLabel>
           <Input
+            id={nameId}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            maxLength={128}
+          />
+        </Field>
+
+        <Field>
+          <FieldLabel htmlFor={usernameId}>Username</FieldLabel>
+          <Input
+            id={usernameId}
             value={username}
             onChange={(e) => setUsernameValue(e.target.value)}
             required
             autoFocus
           />
-          {usernameError ? <Field.Error className="Field-error" match>{usernameError}</Field.Error> : null}
-        </Field.Root>
+          {usernameError ? <FieldError>{usernameError}</FieldError> : null}
+        </Field>
 
-        <Field.Root className="Field">
-          <Field.Label className="Field-label">CIVL ID (optional)</Field.Label>
-          <Input value={civlId} onChange={(e) => setCivlId(e.target.value)} />
-        </Field.Root>
+        <Field>
+          <FieldLabel htmlFor={civlIdInput}>CIVL ID (optional)</FieldLabel>
+          <Input id={civlIdInput} value={civlId} onChange={(e) => setCivlId(e.target.value)} />
+        </Field>
 
-        <Field.Root className="Field">
-          <Field.Label className="Field-label">SAFA ID (optional)</Field.Label>
-          <Input value={safaId} onChange={(e) => setSafaId(e.target.value)} />
-        </Field.Root>
+        <Field>
+          <FieldLabel htmlFor={safaIdInput}>SAFA ID (optional)</FieldLabel>
+          <Input id={safaIdInput} value={safaId} onChange={(e) => setSafaId(e.target.value)} />
+        </Field>
 
         {generalError ? <p role="alert">{generalError}</p> : null}
 
-        <button type="submit" disabled={submitting}>
-          {submitting ? "Saving..." : "Continue"}
-        </button>
+        <div>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? "Saving..." : "Continue"}
+          </Button>
+        </div>
       </form>
     </main>
   );

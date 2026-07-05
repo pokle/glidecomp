@@ -9,7 +9,7 @@ GlideComp is a web application for analyzing hanggliding/paragliding competition
 Cloudflare monorepo, free-tier focused:
 
 - `web/engine` — pure TypeScript analysis library (IGC/XCTask parsing, event detection, GAP scoring). No DOM dependencies; all track analysis runs client-side in the browser.
-- `web/frontend` — Vite app on Cloudflare Pages. The main UI (home, competitions, comp/task detail, scores, dashboard, profile, settings, onboarding) is a React + Base UI SPA under `src/react/` served from `src/index.html`; the analysis, 3D replay, scoring-explainer, theme-editor, kitchensink and admin pages remain separate vanilla-TS Vite entries.
+- `web/frontend` — Vite app on Cloudflare Pages. The main UI (home, competitions, comp/task detail, scores, dashboard, profile, settings, onboarding) is a React SPA under `src/react/` served from `src/index.html`, built with shadcn/ui components (Base UI foundation) in `src/react/ui/` and Tailwind (tokens in `src/react/globals.css`); the analysis, 3D replay, scoring-explainer, theme-editor, kitchensink and admin pages remain separate vanilla-TS Vite entries.
 - `web/workers/*` — Workers (auth-api, competition-api, airscore-api) backed by D1 + R2, handling accounts, user file storage, and competition management. Reached via Pages Functions proxies in `functions/api/`.
 
 ## Build & Development
@@ -34,7 +34,7 @@ If `node_modules/` is missing or a dependency can't be resolved, run `bun instal
 
 - Decisions MUST be explainable - return explanations for scoring decisions and support unit testing
 - **Every mutation that could affect a competition's scores MUST be audit-logged.** Use the `audit()` helper in `web/workers/competition-api/src/audit.ts` from every mutating route handler (comp / task / pilot / track / penalty / xctsk / settings). The description must be a specific human-readable sentence — include the subject name and, where available, the old and new values via `describeChange()`. The audit log is publicly visible (for non-test comps) and is the transparency record for the competition. When you add a new mutating endpoint or field, adding the audit call is part of "done".
-- Main UI (React, `src/react/`): use [Base UI](https://base-ui.com/) components - check https://base-ui.com/react/components before creating custom components. Remaining vanilla pages (analysis, replay, admin, theme-editor): use [Basecoat](https://basecoatui.com/) components
+- Main UI (React, `src/react/`): use [shadcn/ui](https://ui.shadcn.com/) components (generated on the Base UI foundation) from `src/react/ui/` - add missing ones with `bunx shadcn@latest add <name>` (config in `web/frontend/components.json`) before creating custom components. Remaining vanilla pages (analysis, replay, admin, theme-editor): use [Basecoat](https://basecoatui.com/) components
 - Use Tailwind utility classes for styling - avoid custom CSS when Tailwind provides equivalent functionality
 - **Never** implement inline geo math (distance, bearing, etc.) - always use `web/engine/src/geo.ts` which provides WGS84 ellipsoid formulas (Andoyer-Lambert distance, Vincenty direct destination) and Turf.js for bearing/bbox
 - **Single source of truth for map visuals/interactions**: [`docs/mapbox-interactions-spec.md`](docs/mapbox-interactions-spec.md) - all map providers must match this spec

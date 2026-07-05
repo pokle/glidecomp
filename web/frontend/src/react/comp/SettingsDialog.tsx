@@ -3,14 +3,22 @@
  * Mounted only while open, so field state initialises fresh from the comp
  * on every open.
  */
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Dialog } from "@base-ui/react/dialog";
-import { Field } from "@base-ui/react/field";
-import { Input } from "@base-ui/react/input";
-import { Radio } from "@base-ui/react/radio";
-import { RadioGroup } from "@base-ui/react/radio-group";
 import { DEFAULT_GAP_PARAMETERS } from "@glidecomp/engine";
+import { Button } from "@/react/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/react/ui/dialog";
+import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "@/react/ui/field";
+import { Input } from "@/react/ui/input";
+import { Label } from "@/react/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/react/ui/radio-group";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
@@ -44,6 +52,19 @@ export function SettingsDialog({
 }) {
   const navigate = useNavigate();
   const confirm = useConfirm();
+  const ids = {
+    name: useId(),
+    hg: useId(),
+    pg: useId(),
+    pilotClasses: useId(),
+    closeDate: useId(),
+    adminEmails: useId(),
+    nominalDistance: useId(),
+    nominalTime: useId(),
+    nominalGoal: useId(),
+    nominalLaunch: useId(),
+    minimumDistance: useId(),
+  };
 
   // GAP scoring parameters — fall back to engine defaults when unset.
   // nominalDistance stays blank when unset so the scorer auto-computes
@@ -219,299 +240,343 @@ export function SettingsDialog({
   }
 
   return (
-    <Dialog.Root
+    <Dialog
       open
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Backdrop className="Dialog-backdrop" />
-        <Dialog.Popup className="Dialog-popup Dialog-popup--wide">
-          <Dialog.Title className="Dialog-title">Competition Settings</Dialog.Title>
-          <form onSubmit={(e) => void save(e)}>
-            <Field.Root className="Field">
-              <Field.Label className="Field-label">Name</Field.Label>
-              <Input
-                required
-                maxLength={128}
-                value={name}
-                onValueChange={(v) => setName(v)}
-              />
-            </Field.Root>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Competition Settings</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={(e) => void save(e)} className="flex flex-col gap-4">
+          <Field>
+            <FieldLabel htmlFor={ids.name}>Name</FieldLabel>
+            <Input
+              id={ids.name}
+              required
+              maxLength={128}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </Field>
 
-            <fieldset>
-              <legend>Category</legend>
-              <RadioGroup
-                value={category}
-                onValueChange={(v) => setCategory(v as "hg" | "pg")}
-                className="RadioGroup"
-              >
-                <label className="Radio-item">
-                  <Radio.Root value="hg" className="Radio">
-                    <Radio.Indicator className="Radio-indicator" />
-                  </Radio.Root>{" "}
+          <FieldSet>
+            <FieldLegend variant="label">Category</FieldLegend>
+            <RadioGroup
+              value={category}
+              onValueChange={(v) => setCategory(v as "hg" | "pg")}
+              className="flex flex-row gap-4"
+            >
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="hg" id={ids.hg} />
+                <Label htmlFor={ids.hg} className="font-normal">
                   HG
-                </label>
-                <label className="Radio-item">
-                  <Radio.Root value="pg" className="Radio">
-                    <Radio.Indicator className="Radio-indicator" />
-                  </Radio.Root>{" "}
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="pg" id={ids.pg} />
+                <Label htmlFor={ids.pg} className="font-normal">
                   PG
-                </label>
-              </RadioGroup>
-            </fieldset>
+                </Label>
+              </div>
+            </RadioGroup>
+          </FieldSet>
 
-            <Field.Root className="Field">
-              <Field.Label className="Field-label">Pilot Classes</Field.Label>
-              <Input
-                placeholder="open, sport, floater"
-                value={pilotClassesText}
-                onValueChange={(v) => setPilotClassesText(v)}
-              />
-              <Field.Description className="Field-description">Comma-separated class names</Field.Description>
-            </Field.Root>
-
-            <div>
-              <h3>Default Pilot Class</h3>
-              <SimpleSelect
-                value={effectiveDefault}
-                onChange={(v) => setDefaultClass(v)}
-                options={classes.map((cls) => ({ value: cls, label: cls }))}
-                ariaLabel="Default pilot class"
-              />
-              <p>Assigned to auto-registered pilots</p>
-            </div>
-
-            <Field.Root className="Field">
-              <Field.Label className="Field-label">Close Date</Field.Label>
-              <Input type="date" value={closeDate} onValueChange={(v) => setCloseDate(v)} />
-              <Field.Description className="Field-description">
-                After this date, track submissions are rejected. Leave empty for open-ended.
-              </Field.Description>
-              <button type="button" onClick={() => setCloseDate("")}>
-                Clear
-              </button>
-            </Field.Root>
-
-            <CheckboxField
-              checked={test}
-              onChange={setTest}
-              label="Test competition (only visible to admins)"
+          <Field>
+            <FieldLabel htmlFor={ids.pilotClasses}>Pilot Classes</FieldLabel>
+            <Input
+              id={ids.pilotClasses}
+              placeholder="open, sport, floater"
+              value={pilotClassesText}
+              onChange={(e) => setPilotClassesText(e.target.value)}
             />
-            <CheckboxField
-              checked={openUpload}
-              onChange={setOpenUpload}
-              label="Allow registered pilots to upload IGC files for each other"
-              hint="Admins can always upload regardless of this setting."
+            <FieldDescription>Comma-separated class names</FieldDescription>
+          </Field>
+
+          <div>
+            <h3 className="mb-1.5 text-sm font-medium">Default Pilot Class</h3>
+            <SimpleSelect
+              value={effectiveDefault}
+              onChange={(v) => setDefaultClass(v)}
+              options={classes.map((cls) => ({ value: cls, label: cls }))}
+              ariaLabel="Default pilot class"
             />
+            <p className="mt-1 text-sm text-muted-foreground">
+              Assigned to auto-registered pilots
+            </p>
+          </div>
 
-            <div>
-              <h3>Scoring format</h3>
-              <SimpleSelect
-                value={scoringFormat}
-                onChange={(v) => setScoringFormat(v as ScoringFormat)}
-                options={[
-                  { value: "gap", label: "GAP — race to goal / elapsed time" },
-                  { value: "open_distance", label: "Open distance — fly as far as possible" },
-                ]}
-                ariaLabel="Scoring format"
-              />
-              <p>
-                Open distance scores metres flown from the take-off exit; each task has a
-                single Takeoff turnpoint and no goal.
-              </p>
-            </div>
+          <Field>
+            <FieldLabel htmlFor={ids.closeDate}>Close Date</FieldLabel>
+            <Input
+              id={ids.closeDate}
+              type="date"
+              value={closeDate}
+              onChange={(e) => setCloseDate(e.target.value)}
+            />
+            <FieldDescription>
+              After this date, track submissions are rejected. Leave empty for open-ended.
+            </FieldDescription>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="self-start"
+              onClick={() => setCloseDate("")}
+            >
+              Clear
+            </Button>
+          </Field>
 
-            {/* GAP parameters only apply to GAP scoring; hide them for open distance. */}
-            {scoringFormat !== "open_distance" ? (
+          <CheckboxField
+            checked={test}
+            onChange={setTest}
+            label="Test competition (only visible to admins)"
+          />
+          <CheckboxField
+            checked={openUpload}
+            onChange={setOpenUpload}
+            label="Allow registered pilots to upload IGC files for each other"
+            hint="Admins can always upload regardless of this setting."
+          />
+
+          <div>
+            <h3 className="mb-1.5 text-sm font-medium">Scoring format</h3>
+            <SimpleSelect
+              value={scoringFormat}
+              onChange={(v) => setScoringFormat(v as ScoringFormat)}
+              options={[
+                { value: "gap", label: "GAP — race to goal / elapsed time" },
+                { value: "open_distance", label: "Open distance — fly as far as possible" },
+              ]}
+              ariaLabel="Scoring format"
+            />
+            <p className="mt-1 text-sm text-muted-foreground">
+              Open distance scores metres flown from the take-off exit; each task has a
+              single Takeoff turnpoint and no goal.
+            </p>
+          </div>
+
+          {/* GAP parameters only apply to GAP scoring; hide them for open distance. */}
+          {scoringFormat !== "open_distance" ? (
+            <div className="flex flex-col gap-4">
               <div>
-                <h3>GAP Scoring Parameters</h3>
-                <p>
+                <h3 className="text-sm font-medium">GAP Scoring Parameters</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
                   Competition-wide scoring constants. The scoring class (HG/PG) follows the
                   Category above.{" "}
-                  <a href="/scoring-gap.html" target="_blank" rel="noopener noreferrer">
+                  <a
+                    className="underline underline-offset-4"
+                    href="/scoring-gap.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     How does GAP scoring work?
                   </a>
                 </p>
-                <Field.Root className="Field">
-                  <Field.Label className="Field-label">Nominal distance (km)</Field.Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={1}
-                    placeholder="auto"
-                    value={nominalDistance}
-                    onValueChange={(v) => setNominalDistance(v)}
-                  />
-                  <Field.Description className="Field-description">Blank = auto (70% of task)</Field.Description>
-                </Field.Root>
-                <Field.Root className="Field">
-                  <Field.Label className="Field-label">Nominal time (min)</Field.Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={nominalTime}
-                    onValueChange={(v) => setNominalTime(v)}
-                  />
-                </Field.Root>
-                <Field.Root className="Field">
-                  <Field.Label className="Field-label">Nominal goal (%)</Field.Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={nominalGoal}
-                    onValueChange={(v) => setNominalGoal(v)}
-                  />
-                </Field.Root>
-                <Field.Root className="Field">
-                  <Field.Label className="Field-label">Nominal launch (%)</Field.Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={nominalLaunch}
-                    onValueChange={(v) => setNominalLaunch(v)}
-                  />
-                </Field.Root>
-                <Field.Root className="Field">
-                  <Field.Label className="Field-label">Minimum distance (km)</Field.Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={0.1}
-                    value={minimumDistance}
-                    onValueChange={(v) => setMinimumDistance(v)}
-                  />
-                </Field.Root>
-
-                <CheckboxField
-                  checked={useLeading}
-                  onChange={setUseLeading}
-                  label="Leading (departure) points"
-                />
-                <CheckboxField
-                  checked={useArrival}
-                  onChange={setUseArrival}
-                  label="Arrival points (HG only)"
-                />
-                <CheckboxField
-                  checked={useDifficulty}
-                  onChange={setUseDifficulty}
-                  label="Distance difficulty (HG only)"
-                  hint="Splits HG distance points half linear, half difficulty (FAI S7F). No effect on PG."
-                />
-
-                <div>
-                  <h4>Leading coefficient formula</h4>
-                  <SimpleSelect
-                    value={leadingFormula}
-                    onChange={(v) => setLeadingFormula(v as "weighted" | "classic")}
-                    options={[
-                      { value: "weighted", label: "Weighted — GAP2020+ / current FAI S7F" },
-                      { value: "classic", label: "Classic — GAP2016/2018, PWC ≤2017" },
-                    ]}
-                    ariaLabel="Leading coefficient formula"
-                  />
-                  <p>Both match AirScore; weighted is the modern default.</p>
-                </div>
-                <div>
-                  <h4>Distance origin</h4>
-                  <SimpleSelect
-                    value={distanceOrigin}
-                    onChange={(v) => setDistanceOrigin(v as "takeoff" | "start")}
-                    options={[
-                      { value: "takeoff", label: "Take-off — FAI CIVL GAP / PWCA (default)" },
-                      { value: "start", label: 'Start cylinder — HGFA / "Move Origin"' },
-                    ]}
-                    ariaLabel="Distance origin"
-                  />
-                  <p>
-                    Where scored distance begins for tasks with a take-off turnpoint. "Start"
-                    excludes the take-off→SSS leg.
-                  </p>
-                </div>
               </div>
-            ) : null}
+              <Field>
+                <FieldLabel htmlFor={ids.nominalDistance}>Nominal distance (km)</FieldLabel>
+                <Input
+                  id={ids.nominalDistance}
+                  type="number"
+                  min={0}
+                  step={1}
+                  placeholder="auto"
+                  value={nominalDistance}
+                  onChange={(e) => setNominalDistance(e.target.value)}
+                />
+                <FieldDescription>Blank = auto (70% of task)</FieldDescription>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={ids.nominalTime}>Nominal time (min)</FieldLabel>
+                <Input
+                  id={ids.nominalTime}
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={nominalTime}
+                  onChange={(e) => setNominalTime(e.target.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={ids.nominalGoal}>Nominal goal (%)</FieldLabel>
+                <Input
+                  id={ids.nominalGoal}
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={nominalGoal}
+                  onChange={(e) => setNominalGoal(e.target.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={ids.nominalLaunch}>Nominal launch (%)</FieldLabel>
+                <Input
+                  id={ids.nominalLaunch}
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={nominalLaunch}
+                  onChange={(e) => setNominalLaunch(e.target.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={ids.minimumDistance}>Minimum distance (km)</FieldLabel>
+                <Input
+                  id={ids.minimumDistance}
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={minimumDistance}
+                  onChange={(e) => setMinimumDistance(e.target.value)}
+                />
+              </Field>
 
-            <Field.Root className="Field">
-              <Field.Label className="Field-label">Admin Emails</Field.Label>
-              <Input
-                placeholder="admin1@example.com, admin2@example.com"
-                value={adminsText}
-                onValueChange={(v) => setAdminsText(v)}
+              <CheckboxField
+                checked={useLeading}
+                onChange={setUseLeading}
+                label="Leading (departure) points"
               />
-              <Field.Description className="Field-description">Comma-separated. At least one required.</Field.Description>
-            </Field.Root>
+              <CheckboxField
+                checked={useArrival}
+                onChange={setUseArrival}
+                label="Arrival points (HG only)"
+              />
+              <CheckboxField
+                checked={useDifficulty}
+                onChange={setUseDifficulty}
+                label="Distance difficulty (HG only)"
+                hint="Splits HG distance points half linear, half difficulty (FAI S7F). No effect on PG."
+              />
 
-            <div>
-              <h3>Pilot Statuses</h3>
-              <p>
-                Statuses pilots can be marked with per task (e.g. "safely landed", "DNF"). The
-                "on track upload" knob decides whether uploading a track clears the status
-                (useful for DNF) or leaves it alone (useful for "safely landed", which is
-                implied by a track).
-              </p>
-              <ul>
-                {statuses.map((s) => (
-                  <li key={s.id}>
-                    <Input
-                      placeholder="e.g. Safely landed"
-                      maxLength={128}
-                      aria-label="Status label"
-                      value={s.label}
-                      onValueChange={(v) => updateStatus(s.id, { label: v })}
-                    />{" "}
-                    <SimpleSelect
-                      value={s.on_track_upload}
-                      onChange={(v) =>
-                        updateStatus(s.id, {
-                          on_track_upload: v as PilotStatusConfig["on_track_upload"],
-                        })
-                      }
-                      options={[
-                        { value: "none", label: "Keep" },
-                        { value: "clear", label: "Clear" },
-                        { value: "set", label: "Set" },
-                      ]}
-                      ariaLabel="On track upload"
-                    />{" "}
-                    <button
-                      type="button"
-                      onClick={() => setStatuses((prev) => prev.filter((x) => x.id !== s.id))}
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <button
-                type="button"
-                onClick={() =>
-                  setStatuses((prev) => [
-                    ...prev,
-                    { id: nextStatusId.current++, key: "", label: "", on_track_upload: "none" },
-                  ])
-                }
-              >
-                + Add status
-              </button>
+              <div>
+                <h4 className="mb-1.5 text-sm font-medium">Leading coefficient formula</h4>
+                <SimpleSelect
+                  value={leadingFormula}
+                  onChange={(v) => setLeadingFormula(v as "weighted" | "classic")}
+                  options={[
+                    { value: "weighted", label: "Weighted — GAP2020+ / current FAI S7F" },
+                    { value: "classic", label: "Classic — GAP2016/2018, PWC ≤2017" },
+                  ]}
+                  ariaLabel="Leading coefficient formula"
+                />
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Both match AirScore; weighted is the modern default.
+                </p>
+              </div>
+              <div>
+                <h4 className="mb-1.5 text-sm font-medium">Distance origin</h4>
+                <SimpleSelect
+                  value={distanceOrigin}
+                  onChange={(v) => setDistanceOrigin(v as "takeoff" | "start")}
+                  options={[
+                    { value: "takeoff", label: "Take-off — FAI CIVL GAP / PWCA (default)" },
+                    { value: "start", label: 'Start cylinder — HGFA / "Move Origin"' },
+                  ]}
+                  ariaLabel="Distance origin"
+                />
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Where scored distance begins for tasks with a take-off turnpoint. "Start"
+                  excludes the take-off→SSS leg.
+                </p>
+              </div>
             </div>
+          ) : null}
 
-            <button type="button" onClick={() => void deleteComp()}>
+          <Field>
+            <FieldLabel htmlFor={ids.adminEmails}>Admin Emails</FieldLabel>
+            <Input
+              id={ids.adminEmails}
+              placeholder="admin1@example.com, admin2@example.com"
+              value={adminsText}
+              onChange={(e) => setAdminsText(e.target.value)}
+            />
+            <FieldDescription>Comma-separated. At least one required.</FieldDescription>
+          </Field>
+
+          <div>
+            <h3 className="text-sm font-medium">Pilot Statuses</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Statuses pilots can be marked with per task (e.g. "safely landed", "DNF"). The
+              "on track upload" knob decides whether uploading a track clears the status
+              (useful for DNF) or leaves it alone (useful for "safely landed", which is
+              implied by a track).
+            </p>
+            <ul className="mt-2 flex flex-col gap-2">
+              {statuses.map((s) => (
+                <li key={s.id} className="flex flex-wrap items-center gap-2">
+                  <Input
+                    className="w-auto flex-1"
+                    placeholder="e.g. Safely landed"
+                    maxLength={128}
+                    aria-label="Status label"
+                    value={s.label}
+                    onChange={(e) => updateStatus(s.id, { label: e.target.value })}
+                  />{" "}
+                  <SimpleSelect
+                    value={s.on_track_upload}
+                    onChange={(v) =>
+                      updateStatus(s.id, {
+                        on_track_upload: v as PilotStatusConfig["on_track_upload"],
+                      })
+                    }
+                    options={[
+                      { value: "none", label: "Keep" },
+                      { value: "clear", label: "Clear" },
+                      { value: "set", label: "Set" },
+                    ]}
+                    ariaLabel="On track upload"
+                  />{" "}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setStatuses((prev) => prev.filter((x) => x.id !== s.id))}
+                  >
+                    Remove
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() =>
+                setStatuses((prev) => [
+                  ...prev,
+                  { id: nextStatusId.current++, key: "", label: "", on_track_upload: "none" },
+                ])
+              }
+            >
+              + Add status
+            </Button>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="destructive"
+              className="sm:mr-auto"
+              onClick={() => void deleteComp()}
+            >
               Delete competition
-            </button>{" "}
-            <Dialog.Close>Cancel</Dialog.Close>{" "}
-            <button type="submit" disabled={saving}>
+            </Button>
+            <DialogClose render={<Button type="button" variant="outline" />}>
+              Cancel
+            </DialogClose>
+            <Button type="submit" disabled={saving}>
               {saving ? "Saving..." : "Save"}
-            </button>
-          </form>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

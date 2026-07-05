@@ -5,7 +5,7 @@
  * on blur/Enter ("one interaction, done").
  */
 import { useEffect, useState } from "react";
-import { Input } from "@base-ui/react/input";
+import { Input } from "@/react/ui/input";
 import type { AuthUser } from "../../auth/client";
 import { api } from "../../comp/api";
 import { SimpleSelect } from "./fields";
@@ -83,17 +83,17 @@ export function PilotStatusSection({
 
   return (
     <section>
-      <h2>
-        Pilot Status <span>{hint}</span>
+      <h2 className="mt-8 text-lg font-bold">
+        Pilot Status <span className="text-sm font-normal text-muted-foreground">{hint}</span>
       </h2>
-      <p>
+      <p className="mt-1 text-sm text-muted-foreground">
         Change a status to save instantly. Safety roll call — especially useful before tracks
         are uploaded.
       </p>
       {pilots.length === 0 ? (
-        <p>No pilots registered yet</p>
+        <p className="mt-2 text-muted-foreground">No pilots registered yet</p>
       ) : (
-        <ul>
+        <ul className="mt-2 space-y-2 text-sm">
           {pilots.map((pilot) => (
             <StatusRow
               key={pilot.comp_pilot_id}
@@ -233,9 +233,11 @@ function StatusRow({
   }
 
   return (
-    <li>
+    <li className="flex flex-wrap items-center gap-2">
       <strong>{pilot.name}</strong>
-      {current ? <span> set by {current.set_by_name}</span> : null}{" "}
+      {current ? (
+        <span className="text-muted-foreground"> set by {current.set_by_name}</span>
+      ) : null}{" "}
       <SimpleSelect
         value={selectedKey}
         onChange={(v) => void saveStatusChange(v)}
@@ -247,12 +249,13 @@ function StatusRow({
         ariaLabel={`Status for ${pilot.name}`}
       />{" "}
       <Input
+        className="h-7 w-auto min-w-40 flex-1"
         placeholder="Add a note…"
         maxLength={128}
         aria-label={`Note for ${pilot.name}`}
         value={note}
         disabled={!canEdit || !selectedKey}
-        onValueChange={(v) => setNote(v)}
+        onChange={(e) => setNote(e.target.value)}
         onBlur={() => void saveNoteChange()}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
@@ -261,7 +264,7 @@ function StatusRow({
           }
         }}
       />{" "}
-      <span>{indicator}</span>
+      <span className="text-xs text-muted-foreground">{indicator}</span>
     </li>
   );
 }

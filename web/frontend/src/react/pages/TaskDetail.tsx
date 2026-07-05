@@ -6,12 +6,28 @@
  * Turnpoints listing is shown, with a link to the vanilla task page for
  * route editing.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Dialog } from "@base-ui/react/dialog";
-import { Field } from "@base-ui/react/field";
-import { Input } from "@base-ui/react/input";
 import type { XCTask } from "@glidecomp/engine";
+import { Button } from "@/react/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/react/ui/dialog";
+import { Field, FieldLabel, FieldLegend, FieldSet } from "@/react/ui/field";
+import { Input } from "@/react/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/react/ui/table";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
@@ -125,14 +141,16 @@ export function TaskDetail() {
     return (
       <div>
         <p>Competition not found</p>
-        <Link to="/comp">Back to Competitions</Link>
+        <Link className="underline underline-offset-4" to="/comp">
+          Back to Competitions
+        </Link>
       </div>
     );
   }
 
   if (!task) {
     return (
-      <p role="status" aria-label="Loading task">
+      <p role="status" aria-label="Loading task" className="text-muted-foreground">
         Loading task…
       </p>
     );
@@ -142,13 +160,18 @@ export function TaskDetail() {
 
   return (
     <div>
-      <nav>
-        <Link to="/comp">Competitions</Link> ›{" "}
-        <Link to={`/comp/${compId}`}>{comp?.name ?? "Back to competition"}</Link>
+      <nav className="text-sm">
+        <Link className="underline underline-offset-4" to="/comp">
+          Competitions
+        </Link>{" "}
+        ›{" "}
+        <Link className="underline underline-offset-4" to={`/comp/${compId}`}>
+          {comp?.name ?? "Back to competition"}
+        </Link>
       </nav>
 
-      <h1>{task.name}</h1>
-      <p>
+      <h1 className="mt-2 text-2xl font-bold">{task.name}</h1>
+      <p className="text-sm text-muted-foreground">
         <span>
           {formatTaskDate(task.task_date, {
             weekday: "long",
@@ -159,14 +182,15 @@ export function TaskDetail() {
         </span>{" "}
         <span>{task.xctsk ? "Task defined" : "No task defined"}</span>
       </p>
-      <ul>
+      <ul className="mt-1 text-sm text-muted-foreground">
         {task.pilot_classes.map((cls) => (
           <li key={cls}>{cls}</li>
         ))}
       </ul>
       {replayAvailable ? (
-        <p>
+        <p className="mt-2 text-sm">
           <a
+            className="underline underline-offset-4"
             href={`/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}`}
             title="Open the 3D flight replay for this task"
           >
@@ -175,9 +199,15 @@ export function TaskDetail() {
         </p>
       ) : null}
       {isAdmin && comp ? (
-        <button type="button" onClick={() => setEditOpen(true)}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-2"
+          onClick={() => setEditOpen(true)}
+        >
           Settings
-        </button>
+        </Button>
       ) : null}
 
       <TurnpointsSection compId={compId} taskId={taskId} xctsk={task.xctsk} isAdmin={isAdmin} />
@@ -247,34 +277,40 @@ function TurnpointsSection({
   if (!xctsk && !isAdmin) return null;
   return (
     <section>
-      <h2>Turnpoints</h2>
+      <h2 className="mt-8 text-lg font-bold">Turnpoints</h2>
       {xctsk && xctsk.turnpoints.length > 0 ? (
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Name</th>
-              <th>Radius</th>
-              <th>Type</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table className="mt-2">
+          <TableHeader>
+            <TableRow>
+              <TableHead>#</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Radius</TableHead>
+              <TableHead>Type</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {xctsk.turnpoints.map((tp, i) => (
-              <tr key={i}>
-                <td>{i + 1}</td>
-                <td>{tp.waypoint.name}</td>
-                <td>{tp.radius} m</td>
-                <td>{tp.type ?? "—"}</td>
-              </tr>
+              <TableRow key={i}>
+                <TableCell>{i + 1}</TableCell>
+                <TableCell>{tp.waypoint.name}</TableCell>
+                <TableCell>{tp.radius} m</TableCell>
+                <TableCell>{tp.type ?? "—"}</TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       ) : (
-        <p>No route defined yet</p>
+        <p className="mt-2 text-muted-foreground">No route defined yet</p>
       )}
-      <p>
+      <p className="mt-2 text-sm text-muted-foreground">
         Route editing is available on the{" "}
-        <a href={`/comp/${compId}/task/${taskId}`}>vanilla task page</a>.
+        <a
+          className="underline underline-offset-4"
+          href={`/comp/${compId}/task/${taskId}`}
+        >
+          vanilla task page
+        </a>
+        .
       </p>
     </section>
   );
@@ -297,6 +333,8 @@ function EditTaskDialog({
 }) {
   const navigate = useNavigate();
   const confirm = useConfirm();
+  const nameId = useId();
+  const dateId = useId();
   const [name, setName] = useState(task.name);
   const [taskDate, setTaskDate] = useState(task.task_date);
   const [selectedClasses, setSelectedClasses] = useState<string[]>(
@@ -370,56 +408,66 @@ function EditTaskDialog({
   }
 
   return (
-    <Dialog.Root
+    <Dialog
       open
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Backdrop className="Dialog-backdrop" />
-        <Dialog.Popup className="Dialog-popup">
-          <Dialog.Title className="Dialog-title">Task Settings</Dialog.Title>
-          <form onSubmit={(e) => void save(e)}>
-            <Field.Root className="Field">
-              <Field.Label className="Field-label">Name</Field.Label>
-              <Input
-                required
-                maxLength={128}
-                value={name}
-                onValueChange={(v) => setName(v)}
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Task Settings</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={(e) => void save(e)} className="flex flex-col gap-4">
+          <Field>
+            <FieldLabel htmlFor={nameId}>Name</FieldLabel>
+            <Input
+              id={nameId}
+              required
+              maxLength={128}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor={dateId}>Date</FieldLabel>
+            <Input
+              id={dateId}
+              type="date"
+              required
+              value={taskDate}
+              onChange={(e) => setTaskDate(e.target.value)}
+            />
+          </Field>
+          <FieldSet>
+            <FieldLegend variant="label">Pilot Classes</FieldLegend>
+            {compPilotClasses.map((cls) => (
+              <CheckboxField
+                key={cls}
+                checked={selectedClasses.includes(cls)}
+                onChange={(checked) => toggleClass(cls, checked)}
+                label={cls}
               />
-            </Field.Root>
-            <Field.Root className="Field">
-              <Field.Label className="Field-label">Date</Field.Label>
-              <Input
-                type="date"
-                required
-                value={taskDate}
-                onValueChange={(v) => setTaskDate(v)}
-              />
-            </Field.Root>
-            <fieldset>
-              <legend>Pilot Classes</legend>
-              {compPilotClasses.map((cls) => (
-                <CheckboxField
-                  key={cls}
-                  checked={selectedClasses.includes(cls)}
-                  onChange={(checked) => toggleClass(cls, checked)}
-                  label={cls}
-                />
-              ))}
-            </fieldset>
-            <button type="button" onClick={() => void deleteTask()}>
+            ))}
+          </FieldSet>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="destructive"
+              className="sm:mr-auto"
+              onClick={() => void deleteTask()}
+            >
               Delete task
-            </button>{" "}
-            <Dialog.Close>Cancel</Dialog.Close>{" "}
-            <button type="submit" disabled={saving}>
+            </Button>
+            <DialogClose render={<Button type="button" variant="outline" />}>
+              Cancel
+            </DialogClose>
+            <Button type="submit" disabled={saving}>
               {saving ? "Saving..." : "Save"}
-            </button>
-          </form>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,13 +1,25 @@
 /** Competition list + create dialog — React port of comp.ts / comp.html. */
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Dialog } from "@base-ui/react/dialog";
-import { Field } from "@base-ui/react/field";
-import { Input } from "@base-ui/react/input";
-import { Radio } from "@base-ui/react/radio";
-import { RadioGroup } from "@base-ui/react/radio-group";
-import { Checkbox } from "@base-ui/react/checkbox";
-import { CheckIcon } from "../components/icons";
+import { Button } from "@/react/ui/button";
+import { Checkbox } from "@/react/ui/checkbox";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/react/ui/dialog";
+import {
+  Field,
+  FieldDescription,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/react/ui/field";
+import { Input } from "@/react/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/react/ui/radio-group";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useUser } from "../lib/user";
@@ -49,29 +61,42 @@ export function Competitions() {
 
   return (
     <section>
-      <h1>Competitions</h1>
-      <p>Manage and score your competitions</p>
+      <h1 className="text-2xl font-bold">Competitions</h1>
+      <p className="text-muted-foreground">Manage and score your competitions</p>
       {user ? (
-        <button type="button" onClick={() => setCreateOpen(true)}>
+        <Button type="button" className="mt-4" onClick={() => setCreateOpen(true)}>
           New Competition
-        </button>
+        </Button>
       ) : null}
 
       {loadError ? (
-        <p role="alert">Failed to load competitions. Please reload the page.</p>
+        <p role="alert" className="mt-4">
+          Failed to load competitions. Please reload the page.
+        </p>
       ) : comps === null ? (
-        <p role="status">Loading competitions…</p>
+        <p role="status" className="mt-4 text-muted-foreground">
+          Loading competitions…
+        </p>
       ) : comps.length === 0 ? (
-        <p>No competitions found</p>
+        <p className="mt-4 text-muted-foreground">No competitions found</p>
       ) : (
-        <ul>
+        <ul className="mt-4 divide-y rounded-lg border">
           {comps.map((comp) => (
-            <li key={comp.comp_id}>
-              <Link to={`/comp/${comp.comp_id}`}>{comp.name}</Link>{" "}
-              <span>{categoryLabel(comp.category)}</span>
-              {comp.test ? <span> Test</span> : null}{" "}
-              <span>{comp.pilot_classes.join(", ")}</span>{" "}
-              <span>{formatDate(comp.creation_date)}</span>
+            <li
+              key={comp.comp_id}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2"
+            >
+              <Link to={`/comp/${comp.comp_id}`} className="font-medium underline underline-offset-4">
+                {comp.name}
+              </Link>
+              <span className="text-sm text-muted-foreground">{categoryLabel(comp.category)}</span>
+              {comp.test ? <span className="text-sm text-muted-foreground"> Test</span> : null}
+              <span className="text-sm text-muted-foreground">
+                {comp.pilot_classes.join(", ")}
+              </span>
+              <span className="ml-auto text-sm text-muted-foreground">
+                {formatDate(comp.creation_date)}
+              </span>
             </li>
           ))}
         </ul>
@@ -100,6 +125,11 @@ function CreateCompDialog({
   const [pilotClasses, setPilotClasses] = useState("open");
   const [test, setTest] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const nameId = useId();
+  const hgId = useId();
+  const pgId = useId();
+  const classesId = useId();
+  const testId = useId();
 
   // Reset the form each time the dialog opens (matches the vanilla behaviour).
   function handleOpenChange(next: boolean) {
@@ -144,78 +174,76 @@ function CreateCompDialog({
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Backdrop className="Dialog-backdrop" />
-        <Dialog.Popup className="Dialog-popup">
-          <Dialog.Title className="Dialog-title">Create Competition</Dialog.Title>
-          <form onSubmit={handleSubmit}>
-            <Field.Root className="Field">
-              <Field.Label className="Field-label">Name</Field.Label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Corryong Cup 2026"
-                required
-                maxLength={128}
-                autoFocus
-              />
-            </Field.Root>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create Competition</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <Field>
+            <FieldLabel htmlFor={nameId}>Name</FieldLabel>
+            <Input
+              id={nameId}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Corryong Cup 2026"
+              required
+              maxLength={128}
+              autoFocus
+            />
+          </Field>
 
-            <Field.Root className="Field">
-              <Field.Label className="Field-label">Category</Field.Label>
-              <RadioGroup
-                value={category}
-                onValueChange={(value) => setCategory(value as "hg" | "pg")}
-                className="RadioGroup"
-              >
-                <label className="Radio-item">
-                  <Radio.Root value="hg" className="Radio">
-                    <Radio.Indicator className="Radio-indicator" />
-                  </Radio.Root>
+          <FieldSet>
+            <FieldLegend variant="label">Category</FieldLegend>
+            <RadioGroup
+              value={category}
+              onValueChange={(value) => setCategory(value as "hg" | "pg")}
+            >
+              <Field orientation="horizontal">
+                <RadioGroupItem value="hg" id={hgId} />
+                <FieldLabel htmlFor={hgId} className="font-normal">
                   Hang Gliding
-                </label>
-                <label className="Radio-item">
-                  <Radio.Root value="pg" className="Radio">
-                    <Radio.Indicator className="Radio-indicator" />
-                  </Radio.Root>
+                </FieldLabel>
+              </Field>
+              <Field orientation="horizontal">
+                <RadioGroupItem value="pg" id={pgId} />
+                <FieldLabel htmlFor={pgId} className="font-normal">
                   Paragliding
-                </label>
-              </RadioGroup>
-            </Field.Root>
+                </FieldLabel>
+              </Field>
+            </RadioGroup>
+          </FieldSet>
 
-            <Field.Root className="Field">
-              <Field.Label className="Field-label">Pilot Classes</Field.Label>
-              <Input
-                value={pilotClasses}
-                onChange={(e) => setPilotClasses(e.target.value)}
-                placeholder="open, sport, floater"
-              />
-              <Field.Description className="Field-description">Comma-separated class names</Field.Description>
-            </Field.Root>
+          <Field>
+            <FieldLabel htmlFor={classesId}>Pilot Classes</FieldLabel>
+            <Input
+              id={classesId}
+              value={pilotClasses}
+              onChange={(e) => setPilotClasses(e.target.value)}
+              placeholder="open, sport, floater"
+            />
+            <FieldDescription>Comma-separated class names</FieldDescription>
+          </Field>
 
-            <label className="Checkbox-label">
-              <Checkbox.Root
-                checked={test}
-                onCheckedChange={(checked) => setTest(checked === true)}
-                className="Checkbox"
-              >
-                <Checkbox.Indicator className="Checkbox-indicator">
-                  <CheckIcon />
-                </Checkbox.Indicator>
-              </Checkbox.Root>
+          <Field orientation="horizontal">
+            <Checkbox
+              id={testId}
+              checked={test}
+              onCheckedChange={(checked) => setTest(checked === true)}
+            />
+            <FieldLabel htmlFor={testId} className="font-normal">
               Test competition (only visible to admins)
-            </label>
+            </FieldLabel>
+          </Field>
 
-            <div className="Dialog-actions">
-              <Dialog.Close>Cancel</Dialog.Close>
-              <button type="submit" disabled={submitting}>
-                {submitting ? "Creating..." : "Create"}
-              </button>
-            </div>
-          </form>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Creating..." : "Create"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

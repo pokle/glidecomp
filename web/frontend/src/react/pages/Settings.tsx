@@ -1,8 +1,25 @@
 /** Account settings (API keys, superadmin links) — React port of settings.ts. */
-import { useCallback, useEffect, useState } from "react";
-import { Dialog } from "@base-ui/react/dialog";
-import { Field } from "@base-ui/react/field";
-import { Input } from "@base-ui/react/input";
+import { useCallback, useEffect, useId, useState } from "react";
+import { Button } from "@/react/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/react/ui/dialog";
+import { Field, FieldLabel } from "@/react/ui/field";
+import { Input } from "@/react/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/react/ui/table";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { signInWithGoogle, useUser } from "../lib/user";
@@ -40,28 +57,32 @@ export function Settings() {
   if (!user) {
     return (
       <section>
-        <h1>Settings</h1>
-        <p>Sign in to manage your account</p>
-        <button type="button" onClick={() => signInWithGoogle()}>
+        <h1 className="text-2xl font-bold">Settings</h1>
+        <p className="text-muted-foreground">Sign in to manage your account</p>
+        <Button type="button" className="mt-4" onClick={() => signInWithGoogle()}>
           Sign in with Google
-        </button>
+        </Button>
       </section>
     );
   }
 
   return (
     <section>
-      <h1>Settings</h1>
+      <h1 className="text-2xl font-bold">Settings</h1>
       <ApiKeysSection />
       {isSuperAdmin ? (
         <section>
-          <h2>Superadmin</h2>
-          <ul>
+          <h2 className="mt-8 text-lg font-bold">Superadmin</h2>
+          <ul className="mt-2 list-inside list-disc">
             <li>
-              <a href="/admin/users">Users</a>
+              <a href="/admin/users" className="underline underline-offset-4">
+                Users
+              </a>
             </li>
             <li>
-              <a href="/admin/cache">Cache</a>
+              <a href="/admin/cache" className="underline underline-offset-4">
+                Cache
+              </a>
             </li>
           </ul>
         </section>
@@ -80,6 +101,7 @@ function ApiKeysSection() {
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
+  const keyNameId = useId();
 
   const loadKeys = useCallback(async () => {
     setLoadError(null);
@@ -155,80 +177,92 @@ function ApiKeysSection() {
 
   return (
     <section>
-      <h2>API Keys</h2>
-      <button
+      <h2 className="mt-8 text-lg font-bold">API Keys</h2>
+      <Button
         type="button"
+        className="mt-2"
         onClick={() => {
           setKeyName("");
           setCreateOpen(true);
         }}
       >
         Create API key
-      </button>
+      </Button>
 
       {loadError ? (
-        <p role="alert">{loadError}</p>
+        <p role="alert" className="mt-4">
+          {loadError}
+        </p>
       ) : keys === null ? (
-        <p role="status">Loading API keys…</p>
+        <p role="status" className="mt-4 text-muted-foreground">
+          Loading API keys…
+        </p>
       ) : keys.length === 0 ? (
-        <p>No API keys yet.</p>
+        <p className="mt-4 text-muted-foreground">No API keys yet.</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Label</th>
-              <th>Created</th>
-              <th>Last used</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {keys.map((key) => (
-              <tr key={key.id}>
-                <td>{key.name ?? <em>Unnamed</em>}</td>
-                <td>{new Date(key.createdAt).toLocaleDateString()}</td>
-                <td>{key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleDateString() : "Never"}</td>
-                <td>
-                  <button
-                    type="button"
-                    disabled={revokingId === key.id}
-                    onClick={() => handleRevoke(key.id)}
-                  >
-                    {revokingId === key.id ? "Revoking..." : "Revoke"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="mt-4 rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Label</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>Last used</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {keys.map((key) => (
+                <TableRow key={key.id}>
+                  <TableCell>{key.name ?? <em>Unnamed</em>}</TableCell>
+                  <TableCell>{new Date(key.createdAt).toLocaleDateString()}</TableCell>
+                  <TableCell>
+                    {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleDateString() : "Never"}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={revokingId === key.id}
+                      onClick={() => handleRevoke(key.id)}
+                    >
+                      {revokingId === key.id ? "Revoking..." : "Revoke"}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       )}
 
-      <Dialog.Root open={createOpen} onOpenChange={setCreateOpen}>
-        <Dialog.Portal>
-          <Dialog.Backdrop className="Dialog-backdrop" />
-          <Dialog.Popup className="Dialog-popup">
-            <Dialog.Title className="Dialog-title">Create API key</Dialog.Title>
-            <form onSubmit={handleCreate}>
-              <Field.Root className="Field">
-                <Field.Label className="Field-label">Label (optional)</Field.Label>
-                <Input
-                  value={keyName}
-                  onChange={(e) => setKeyName(e.target.value)}
-                  placeholder="e.g. My scoring agent"
-                  autoFocus
-                />
-              </Field.Root>
-              <div className="Dialog-actions">                <Dialog.Close>Cancel</Dialog.Close>
-                <button type="submit" disabled={creating}>
-                  {creating ? "Creating..." : "Create"}
-                </button>
-              </div>
-            </form>
-          </Dialog.Popup>
-        </Dialog.Portal>
-      </Dialog.Root>
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create API key</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreate} className="flex flex-col gap-4">
+            <Field>
+              <FieldLabel htmlFor={keyNameId}>Label (optional)</FieldLabel>
+              <Input
+                id={keyNameId}
+                value={keyName}
+                onChange={(e) => setKeyName(e.target.value)}
+                placeholder="e.g. My scoring agent"
+                autoFocus
+              />
+            </Field>
+            <DialogFooter>
+              <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+              <Button type="submit" disabled={creating}>
+                {creating ? "Creating..." : "Create"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-      <Dialog.Root
+      <Dialog
         open={createdKey !== null}
         onOpenChange={(open) => {
           if (!open) {
@@ -237,31 +271,32 @@ function ApiKeysSection() {
           }
         }}
       >
-        <Dialog.Portal>
-          <Dialog.Backdrop className="Dialog-backdrop" />
-          <Dialog.Popup className="Dialog-popup">
-            <Dialog.Title className="Dialog-title">API key created</Dialog.Title>
-            <Dialog.Description className="Dialog-description">
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>API key created</DialogTitle>
+            <DialogDescription>
               Copy this key now — it won't be shown again.
-            </Dialog.Description>
-            <code>{createdKey}</code>
-            <div>
-              <button
-                type="button"
-                onClick={() => {
-                  void navigator.clipboard.writeText(createdKey ?? "").then(() => {
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1500);
-                  });
-                }}
-              >
-                {copied ? "Copied!" : "Copy"}
-              </button>
-              <Dialog.Close>Done</Dialog.Close>
-            </div>
-          </Dialog.Popup>
-        </Dialog.Portal>
-      </Dialog.Root>
+            </DialogDescription>
+          </DialogHeader>
+          <code className="block rounded-md border bg-muted px-3 py-2 font-mono text-sm break-all">
+            {createdKey}
+          </code>
+          <DialogFooter>
+            <Button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard.writeText(createdKey ?? "").then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                });
+              }}
+            >
+              {copied ? "Copied!" : "Copy"}
+            </Button>
+            <DialogClose render={<Button variant="outline" />}>Done</DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

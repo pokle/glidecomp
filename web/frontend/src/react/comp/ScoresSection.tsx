@@ -5,6 +5,14 @@
  */
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/react/ui/table";
 import { api } from "../../comp/api";
 import { formatDuration } from "../lib/format";
 import type { ClassScore, ScoringFormat, TaskScoreData } from "./types";
@@ -66,20 +74,29 @@ export function ScoresSection({
 
   return (
     <section>
-      <h2>
+      <h2 className="mt-8 text-lg font-bold">
         Scores
         {state.kind === "loaded" ? (
           <>
             {" "}
-            <Link to={`/scores?comp_id=${encodeURIComponent(compId)}`}>
+            <Link
+              className="text-sm font-normal underline underline-offset-4"
+              to={`/scores?comp_id=${encodeURIComponent(compId)}`}
+            >
               Full competition scores →
             </Link>
           </>
         ) : null}
       </h2>
-      {state.kind === "loading" ? <p>Loading scores...</p> : null}
-      {state.kind === "no-route" ? <p>No scores yet — task route not defined</p> : null}
-      {state.kind === "unavailable" ? <p>Scores not available</p> : null}
+      {state.kind === "loading" ? (
+        <p className="mt-2 text-muted-foreground">Loading scores...</p>
+      ) : null}
+      {state.kind === "no-route" ? (
+        <p className="mt-2 text-muted-foreground">No scores yet — task route not defined</p>
+      ) : null}
+      {state.kind === "unavailable" ? (
+        <p className="mt-2 text-muted-foreground">Scores not available</p>
+      ) : null}
       {state.kind === "loaded"
         ? state.data.classes.map((cls) => (
             <ScoreClassTable
@@ -113,44 +130,44 @@ function ScoreClassTable({
   const ap = cls.available_points;
 
   return (
-    <div>
-      {showClassName ? <h3>{cls.pilot_class}</h3> : null}
-      <table>
-        <thead>
+    <div className="mt-2">
+      {showClassName ? <h3 className="mt-4 font-semibold">{cls.pilot_class}</h3> : null}
+      <Table>
+        <TableHeader>
           {/* Open distance has no goal, speed section, or GAP point split —
               the score is simply the distance flown — so those columns are
               omitted. */}
-          <tr>
-            <th>#</th>
-            <th>Pilot</th>
-            {!isOpenDistance ? <th>Goal</th> : null}
-            <th>Distance</th>
-            {hasSpeed ? <th>Speed</th> : null}
-            {!isOpenDistance ? <th>Dist Pts</th> : null}
-            {hasTimePoints ? <th>Time Pts</th> : null}
-            {hasLeadPoints ? <th>Lead Pts</th> : null}
-            {hasPenalties ? <th>Penalty</th> : null}
-            <th>Total</th>
-          </tr>
-        </thead>
-        <tbody>
+          <TableRow>
+            <TableHead>#</TableHead>
+            <TableHead>Pilot</TableHead>
+            {!isOpenDistance ? <TableHead>Goal</TableHead> : null}
+            <TableHead>Distance</TableHead>
+            {hasSpeed ? <TableHead>Speed</TableHead> : null}
+            {!isOpenDistance ? <TableHead>Dist Pts</TableHead> : null}
+            {hasTimePoints ? <TableHead>Time Pts</TableHead> : null}
+            {hasLeadPoints ? <TableHead>Lead Pts</TableHead> : null}
+            {hasPenalties ? <TableHead>Penalty</TableHead> : null}
+            <TableHead>Total</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {cls.pilots.map((p) => {
             const diffPts = p.distance_difficulty_points ?? 0;
             return (
-              <tr key={p.comp_pilot_id}>
-                <td>{p.rank}</td>
-                <td>{p.pilot_name}</td>
-                {!isOpenDistance ? <td>{p.made_goal ? "✓" : "—"}</td> : null}
-                <td>{(p.flown_distance / 1000).toFixed(1)} km</td>
+              <TableRow key={p.comp_pilot_id}>
+                <TableCell>{p.rank}</TableCell>
+                <TableCell>{p.pilot_name}</TableCell>
+                {!isOpenDistance ? <TableCell>{p.made_goal ? "✓" : "—"}</TableCell> : null}
+                <TableCell>{(p.flown_distance / 1000).toFixed(1)} km</TableCell>
                 {hasSpeed ? (
-                  <td>
+                  <TableCell>
                     {p.speed_section_time !== null
                       ? formatDuration(p.speed_section_time)
                       : "—"}
-                  </td>
+                  </TableCell>
                 ) : null}
                 {!isOpenDistance ? (
-                  <td>
+                  <TableCell>
                     {/* Show the linear/difficulty split as a tooltip when HG
                         difficulty applies. */}
                     {diffPts > 0 ? (
@@ -162,35 +179,37 @@ function ScoreClassTable({
                     ) : (
                       Math.round(p.distance_points)
                     )}
-                  </td>
+                  </TableCell>
                 ) : null}
-                {hasTimePoints ? <td>{Math.round(p.time_points)}</td> : null}
-                {hasLeadPoints ? <td>{Math.round(p.leading_points)}</td> : null}
+                {hasTimePoints ? <TableCell>{Math.round(p.time_points)}</TableCell> : null}
+                {hasLeadPoints ? (
+                  <TableCell>{Math.round(p.leading_points)}</TableCell>
+                ) : null}
                 {hasPenalties ? (
-                  <td>
+                  <TableCell>
                     {p.penalty_points !== 0 ? (
-                      <span>
+                      <span className="text-destructive">
                         {p.penalty_points < 0
                           ? `+${Math.abs(p.penalty_points)}`
                           : `-${p.penalty_points}`}
                         {p.penalty_reason ? <span> {p.penalty_reason}</span> : null}
                       </span>
                     ) : null}
-                  </td>
+                  </TableCell>
                 ) : null}
-                <td>{Math.round(p.total_score)}</td>
-              </tr>
+                <TableCell>{Math.round(p.total_score)}</TableCell>
+              </TableRow>
             );
           })}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
       {isOpenDistance ? (
-        <p>
+        <p className="mt-2 text-sm text-muted-foreground">
           Open distance — score is metres flown from the take-off exit to the furthest point
           reached.
         </p>
       ) : (
-        <p>
+        <p className="mt-2 text-sm text-muted-foreground">
           Task validity: {(v.task * 100).toFixed(0)}% · Available: {Math.round(ap.total)} pts
           (dist {Math.round(ap.distance)}, time {Math.round(ap.time)}, lead{" "}
           {Math.round(ap.leading)})

@@ -4,7 +4,8 @@
  * simple, with filter tabs and cursor-based load-more.
  */
 import { useEffect, useState } from "react";
-import { Tabs } from "@base-ui/react/tabs";
+import { Button } from "@/react/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/react/ui/tabs";
 import { formatAuditTime, type AuditEntry, type AuditResponse } from "./types";
 
 const FILTERS: Array<{ value: string; label: string }> = [
@@ -80,38 +81,50 @@ export function ActivitySection({ compId }: { compId: string }) {
 
   return (
     <section>
-      <h2>Activity</h2>
-      <Tabs.Root value={filter} onValueChange={(v) => setFilter(v as string)}>
-        <Tabs.List className="Tabs-list">
+      <h2 className="mt-8 text-lg font-bold">Activity</h2>
+      <Tabs
+        className="mt-2"
+        value={filter}
+        onValueChange={(v) => setFilter(v as string)}
+      >
+        <TabsList>
           {FILTERS.map((f) => (
-            <Tabs.Tab className="Tabs-tab" key={f.value} value={f.value}>
+            <TabsTrigger key={f.value} value={f.value}>
               {f.label}
-            </Tabs.Tab>
+            </TabsTrigger>
           ))}
-        <Tabs.Indicator className="Tabs-indicator" /></Tabs.List>
+        </TabsList>
         {/* One shared panel: its value always matches the active tab. */}
-        <Tabs.Panel className="Tabs-panel" value={filter}>
+        <TabsContent value={filter}>
           {error ? (
-            <p>Could not load activity</p>
+            <p className="text-muted-foreground">Could not load activity</p>
           ) : loaded && entries.length === 0 ? (
-            <p>No activity yet</p>
+            <p className="text-muted-foreground">No activity yet</p>
           ) : (
-            <ul>
+            <ul className="space-y-1">
               {entries.map((entry) => (
                 <li key={entry.audit_id}>
-                  <span>{formatAuditTime(entry.timestamp)}</span>{" "}
+                  <span className="text-muted-foreground">
+                    {formatAuditTime(entry.timestamp)}
+                  </span>{" "}
                   <strong>{entry.actor_name}</strong> <span>{entry.description}</span>
                 </li>
               ))}
             </ul>
           )}
           {hasMore ? (
-            <button type="button" onClick={() => void loadMore()}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() => void loadMore()}
+            >
               Load more
-            </button>
+            </Button>
           ) : null}
-        </Tabs.Panel>
-      </Tabs.Root>
+        </TabsContent>
+      </Tabs>
     </section>
   );
 }

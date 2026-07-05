@@ -2,10 +2,18 @@
  * Tracks section on the task detail page — React port of setupTrackSection(),
  * renderTrackList(), setupTrackUpload() and openPenaltyDialog().
  */
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Dialog } from "@base-ui/react/dialog";
-import { Field } from "@base-ui/react/field";
-import { Input } from "@base-ui/react/input";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { Button } from "@/react/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/react/ui/dialog";
+import { Field, FieldDescription, FieldLabel } from "@/react/ui/field";
+import { Input } from "@/react/ui/input";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
@@ -81,34 +89,42 @@ export function TrackSection({
 
   return (
     <section>
-      <h2>
+      <h2 className="mt-8 text-lg font-bold">
         Tracks{" "}
-        <span>
+        <span className="text-sm font-normal text-muted-foreground">
           {tracks.length} track{tracks.length !== 1 ? "s" : ""}
         </span>
-        {isClosed ? <span> (Closed)</span> : null}
+        {isClosed ? (
+          <span className="text-sm font-normal text-muted-foreground"> (Closed)</span>
+        ) : null}
         {isAuthenticated && !isClosed ? (
           <>
             {" "}
-            <button type="button" onClick={() => setUploadOpen(true)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setUploadOpen(true)}
+            >
               Submit track
-            </button>
+            </Button>
           </>
         ) : null}
       </h2>
 
       {tracks.length === 0 ? (
-        <p>No tracks uploaded yet</p>
+        <p className="mt-2 text-muted-foreground">No tracks uploaded yet</p>
       ) : (
-        <ul>
+        <ul className="mt-2 space-y-2 text-sm">
           {tracks.map((track) => (
             <li key={track.task_track_id}>
-              <strong>{track.pilot_name}</strong> <span>{track.pilot_class}</span>
+              <strong>{track.pilot_name}</strong>{" "}
+              <span className="text-muted-foreground">{track.pilot_class}</span>
               {track.igc_pilot_name && track.igc_pilot_name !== track.pilot_name ? (
-                <span> (igc: {track.igc_pilot_name})</span>
+                <span className="text-muted-foreground"> (igc: {track.igc_pilot_name})</span>
               ) : null}
               {track.penalty_points !== 0 ? (
-                <span>
+                <span className="text-destructive">
                   {" "}
                   {track.penalty_points < 0
                     ? `+${Math.abs(track.penalty_points)}`
@@ -117,7 +133,7 @@ export function TrackSection({
                   {track.penalty_reason ? <span> {track.penalty_reason}</span> : null}
                 </span>
               ) : null}
-              <div>
+              <div className="text-muted-foreground">
                 {new Date(track.uploaded_at).toLocaleDateString(undefined, {
                   month: "short",
                   day: "numeric",
@@ -130,6 +146,7 @@ export function TrackSection({
                 ) : null}
               </div>
               <a
+                className="underline underline-offset-4"
                 href={`/analysis.html?compId=${encodeURIComponent(compId)}&taskId=${encodeURIComponent(taskId)}&pilotId=${encodeURIComponent(track.comp_pilot_id)}`}
                 title="View analysis"
                 target="_blank"
@@ -138,6 +155,7 @@ export function TrackSection({
                 View
               </a>{" "}
               <a
+                className="underline underline-offset-4"
                 href={`/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(track.comp_pilot_id)}/download`}
                 title="Download"
               >
@@ -146,20 +164,24 @@ export function TrackSection({
               {isAdmin && !isClosed ? (
                 <>
                   {" "}
-                  <button
+                  <Button
                     type="button"
+                    variant="outline"
+                    size="sm"
                     title="Set penalty"
                     onClick={() => setPenaltyTrack(track)}
                   >
                     Penalty
-                  </button>{" "}
-                  <button
+                  </Button>{" "}
+                  <Button
                     type="button"
+                    variant="destructive"
+                    size="sm"
                     title="Delete track"
                     onClick={() => void deleteTrack(track)}
                   >
                     Delete
-                  </button>
+                  </Button>
                 </>
               ) : null}
             </li>
@@ -210,6 +232,8 @@ function PenaltyDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const pointsId = useId();
+  const reasonId = useId();
   const [points, setPoints] = useState(String(track.penalty_points));
   const [reason, setReason] = useState(track.penalty_reason ?? "");
   const [saving, setSaving] = useState(false);
@@ -241,48 +265,53 @@ function PenaltyDialog({
   }
 
   return (
-    <Dialog.Root
+    <Dialog
       open
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Backdrop className="Dialog-backdrop" />
-        <Dialog.Popup className="Dialog-popup">
-          <Dialog.Title className="Dialog-title">Set Penalty</Dialog.Title>
-          <p>{track.pilot_name}</p>
-          <form onSubmit={(e) => void save(e)}>
-            <Field.Root className="Field">
-              <Field.Label className="Field-label">Penalty Points</Field.Label>
-              <Input
-                type="number"
-                step="any"
-                required
-                value={points}
-                onValueChange={(v) => setPoints(v)}
-              />
-              <Field.Description className="Field-description">
-                Positive = deduction, negative = bonus. 0 to clear.
-              </Field.Description>
-            </Field.Root>
-            <Field.Root className="Field">
-              <Field.Label className="Field-label">Reason</Field.Label>
-              <Input
-                maxLength={128}
-                placeholder="e.g. Airspace violation"
-                value={reason}
-                onValueChange={(v) => setReason(v)}
-              />
-            </Field.Root>
-            <Dialog.Close>Cancel</Dialog.Close>{" "}
-            <button type="submit" disabled={saving}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Set Penalty</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">{track.pilot_name}</p>
+        <form onSubmit={(e) => void save(e)} className="flex flex-col gap-4">
+          <Field>
+            <FieldLabel htmlFor={pointsId}>Penalty Points</FieldLabel>
+            <Input
+              id={pointsId}
+              type="number"
+              step="any"
+              required
+              value={points}
+              onChange={(e) => setPoints(e.target.value)}
+            />
+            <FieldDescription>
+              Positive = deduction, negative = bonus. 0 to clear.
+            </FieldDescription>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor={reasonId}>Reason</FieldLabel>
+            <Input
+              id={reasonId}
+              maxLength={128}
+              placeholder="e.g. Airspace violation"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </Field>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" />}>
+              Cancel
+            </DialogClose>
+            <Button type="submit" disabled={saving}>
               {saving ? "Saving..." : "Save"}
-            </button>
-          </form>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -306,6 +335,7 @@ function SubmitTrackDialog({
   onClose: () => void;
   onUploaded: () => void;
 }) {
+  const fileId = useId();
   const [pilots, setPilots] = useState<
     Array<{ comp_pilot_id: string; name: string; pilot_class: string }>
   >([]);
@@ -389,47 +419,54 @@ function SubmitTrackDialog({
   }
 
   return (
-    <Dialog.Root
+    <Dialog
       open
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Backdrop className="Dialog-backdrop" />
-        <Dialog.Popup className="Dialog-popup">
-          <Dialog.Title className="Dialog-title">Submit track</Dialog.Title>
-          {canUploadOnBehalf ? (
-            <div>
-              <h3>Pilot</h3>
-              <SimpleSelect
-                value={selected}
-                onChange={(v) => setSelected(v || SELF)}
-                options={[
-                  { value: SELF, label: "Myself" },
-                  ...pilots.map((p) => ({
-                    value: p.comp_pilot_id,
-                    label: `${p.name} (${p.pilot_class})`,
-                  })),
-                ]}
-                ariaLabel="Pilot"
-              />
-            </div>
-          ) : null}
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Submit track</DialogTitle>
+        </DialogHeader>
+        {canUploadOnBehalf ? (
           <div>
-            <label>
-              IGC File <input ref={fileInputRef} type="file" accept=".igc" />
-            </label>
+            <h3 className="mb-1.5 text-sm font-medium">Pilot</h3>
+            <SimpleSelect
+              value={selected}
+              onChange={(v) => setSelected(v || SELF)}
+              options={[
+                { value: SELF, label: "Myself" },
+                ...pilots.map((p) => ({
+                  value: p.comp_pilot_id,
+                  label: `${p.name} (${p.pilot_class})`,
+                })),
+              ]}
+              ariaLabel="Pilot"
+            />
           </div>
-          {status ? (
-            <p role={status.isError ? "alert" : "status"}>{status.message}</p>
-          ) : null}
-          <Dialog.Close>Cancel</Dialog.Close>{" "}
-          <button type="button" disabled={uploading} onClick={() => void upload()}>
+        ) : null}
+        <Field>
+          <FieldLabel htmlFor={fileId}>IGC File</FieldLabel>
+          <Input id={fileId} ref={fileInputRef} type="file" accept=".igc" />
+        </Field>
+        {status ? (
+          <p
+            role={status.isError ? "alert" : "status"}
+            className={status.isError ? "text-sm text-destructive" : "text-sm text-muted-foreground"}
+          >
+            {status.message}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <DialogClose render={<Button type="button" variant="outline" />}>
+            Cancel
+          </DialogClose>
+          <Button type="button" disabled={uploading} onClick={() => void upload()}>
             {uploading ? "Uploading..." : "Upload"}
-          </button>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

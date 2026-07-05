@@ -9,8 +9,24 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Dialog } from "@base-ui/react/dialog";
-import { Input } from "@base-ui/react/input";
+import { Button } from "@/react/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/react/ui/dialog";
+import { Input } from "@/react/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/react/ui/table";
 import { api } from "../../comp/api";
 import { downloadFile } from "../lib/format";
 import {
@@ -33,9 +49,6 @@ interface EditRow extends ParsedRow {
   /** Stable React key — comp_pilot_id is absent for new rows. */
   rowId: number;
 }
-
-/** Editable text columns (everything except pilot_class, which is a select). */
-const TEXT_COLUMNS = COLUMNS.filter((c) => c.key !== "pilot_class");
 
 export function PilotsSection({
   compId,
@@ -75,60 +88,68 @@ export function PilotsSection({
 
   return (
     <section>
-      <h2>
+      <h2 className="mt-8 text-lg font-bold">
         Pilots {pilots && pilots.length > 0 ? `(${pilots.length})` : ""}
         {isAdmin ? (
           <>
             {" "}
-            <button type="button" onClick={() => setEditOpen(true)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setEditOpen(true)}
+            >
               Edit
-            </button>
+            </Button>
           </>
         ) : null}
       </h2>
 
       {loadError ? (
-        <p>Could not load pilots</p>
+        <p className="mt-2 text-muted-foreground">Could not load pilots</p>
       ) : pilots === null ? (
-        <p>Loading pilots…</p>
+        <p className="mt-2 text-muted-foreground">Loading pilots…</p>
       ) : pilots.length === 0 ? (
-        <div>
+        <div className="mt-2 text-muted-foreground">
           <p>No pilots registered yet</p>
           <p>Pilots auto-register when they upload an IGC, or use Import CSV</p>
         </div>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>GlideComp account</th>
-              <th>CIVL</th>
-              <th>SAFA</th>
-              <th>Class</th>
-              <th>Team</th>
-              <th>Driver</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table className="mt-2">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>GlideComp account</TableHead>
+              <TableHead>CIVL</TableHead>
+              <TableHead>SAFA</TableHead>
+              <TableHead>Class</TableHead>
+              <TableHead>Team</TableHead>
+              <TableHead>Driver</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {pilots.map((p) => (
-              <tr key={p.comp_pilot_id}>
-                <td>{p.name}</td>
-                <td>
+              <TableRow key={p.comp_pilot_id}>
+                <TableCell>{p.name}</TableCell>
+                <TableCell>
                   {p.linked && p.linked_username ? (
-                    <Link to={`/u/${encodeURIComponent(p.linked_username)}`}>
+                    <Link
+                      className="underline underline-offset-4"
+                      to={`/u/${encodeURIComponent(p.linked_username)}`}
+                    >
                       @{p.linked_username}
                     </Link>
                   ) : null}
-                </td>
-                <td>{p.civl_id ?? ""}</td>
-                <td>{p.safa_id ?? ""}</td>
-                <td>{p.pilot_class}</td>
-                <td>{p.team_name ?? ""}</td>
-                <td>{p.driver_contact ?? ""}</td>
-              </tr>
+                </TableCell>
+                <TableCell>{p.civl_id ?? ""}</TableCell>
+                <TableCell>{p.safa_id ?? ""}</TableCell>
+                <TableCell>{p.pilot_class}</TableCell>
+                <TableCell>{p.team_name ?? ""}</TableCell>
+                <TableCell>{p.driver_contact ?? ""}</TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       )}
 
       {isAdmin && editOpen && pilots !== null ? (
@@ -259,102 +280,122 @@ function EditPilotsDialog({
   const extraErrors = errors.length - shownErrors.length;
 
   return (
-    <Dialog.Root
+    <Dialog
       open
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Backdrop className="Dialog-backdrop" />
-        <Dialog.Popup className="Dialog-popup Dialog-popup--xwide">
-          <Dialog.Title className="Dialog-title">Edit pilots</Dialog.Title>
-          <p>Edit any cell directly. Rows without a name are ignored on save.</p>
+      <DialogContent className="sm:max-w-6xl">
+        <DialogHeader>
+          <DialogTitle>Edit pilots</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Edit any cell directly. Rows without a name are ignored on save.
+        </p>
 
-          <table>
-            <thead>
-              <tr>
-                <th>
+        <div className="max-h-[60vh] overflow-y-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>
                   <span>Remove</span>
-                </th>
+                </TableHead>
                 {COLUMNS.map((c) => (
-                  <th key={c.key}>{c.header}</th>
+                  <TableHead key={c.key}>{c.header}</TableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.map((row) => (
-                <tr key={row.rowId}>
-                  <td>
-                    <button
+                <TableRow key={row.rowId}>
+                  <TableCell>
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="icon-sm"
                       title="Remove pilot"
                       onClick={() => removeRow(row.rowId)}
                     >
                       ✕
-                    </button>
-                  </td>
+                    </Button>
+                  </TableCell>
                   {COLUMNS.map((c) =>
                     c.key === "pilot_class" ? (
-                      <td key={c.key}>
+                      <TableCell key={c.key}>
                         <SimpleSelect
                           value={row.pilot_class}
                           onChange={(v) => updateRow(row.rowId, "pilot_class", v)}
                           options={compClasses.map((cls) => ({ value: cls, label: cls }))}
                           ariaLabel="Pilot class"
                         />
-                      </td>
+                      </TableCell>
                     ) : (
-                      <td key={c.key}>
+                      <TableCell key={c.key}>
                         <Input
+                          className="h-7 min-w-24"
                           value={row[c.key] ?? ""}
                           aria-label={c.header}
-                          onValueChange={(v) => updateRow(row.rowId, c.key, v)}
+                          onChange={(e) => updateRow(row.rowId, c.key, e.target.value)}
                         />
-                      </td>
+                      </TableCell>
                     )
                   )}
-                </tr>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
+        </div>
 
-          {status ? <p>{status}</p> : null}
-          {shownErrors.length > 0 ? (
-            <ul>
-              {shownErrors.map((e, i) => (
-                <li key={i}>{e}</li>
-              ))}
-              {extraErrors > 0 ? <li>… and {extraErrors} more</li> : null}
-            </ul>
-          ) : null}
-          <p>
-            Need a sporting body ID column not listed?{" "}
-            <a href="mailto:tushar.pokle@gmail.com">Contact us</a>.
-          </p>
+        {status ? <p className="text-sm text-muted-foreground">{status}</p> : null}
+        {shownErrors.length > 0 ? (
+          <ul className="list-disc pl-5 text-sm text-destructive">
+            {shownErrors.map((e, i) => (
+              <li key={i}>{e}</li>
+            ))}
+            {extraErrors > 0 ? <li>… and {extraErrors} more</li> : null}
+          </ul>
+        ) : null}
+        <p className="text-sm text-muted-foreground">
+          Need a sporting body ID column not listed?{" "}
+          <a className="underline underline-offset-4" href="mailto:tushar.pokle@gmail.com">
+            Contact us
+          </a>
+          .
+        </p>
 
-          <button type="button" onClick={addRow}>
-            Add row
-          </button>{" "}
-          <button type="button" onClick={() => importInputRef.current?.click()}>
-            Import CSV
-          </button>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept=".csv,.tsv,.txt"
-            hidden
-            onChange={(e) => void importCsv(e.currentTarget)}
-          />{" "}
-          <button type="button" onClick={exportCsv}>
-            Export CSV
-          </button>{" "}
-          <Dialog.Close>Cancel</Dialog.Close>{" "}
-          <button type="button" disabled={saving} onClick={() => void save()}>
+        <DialogFooter>
+          <div className="flex gap-2 sm:mr-auto">
+            <Button type="button" variant="outline" size="sm" onClick={addRow}>
+              Add row
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => importInputRef.current?.click()}
+            >
+              Import CSV
+            </Button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".csv,.tsv,.txt"
+              hidden
+              onChange={(e) => void importCsv(e.currentTarget)}
+            />
+            <Button type="button" variant="outline" size="sm" onClick={exportCsv}>
+              Export CSV
+            </Button>
+          </div>
+          <DialogClose render={<Button type="button" variant="outline" />}>
+            Cancel
+          </DialogClose>
+          <Button type="button" disabled={saving} onClick={() => void save()}>
             {saving ? "Saving..." : "Save"}
-          </button>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

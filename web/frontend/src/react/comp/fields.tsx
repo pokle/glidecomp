@@ -1,12 +1,18 @@
 /**
- * Small Base UI field wrappers shared by the comp/task dialogs so every
- * select and checkbox renders the same full component structure without
- * repeating the popup boilerplate at each call site.
+ * Small field wrappers shared by the comp/task dialogs so every select and
+ * checkbox renders the same structure without repeating boilerplate at each
+ * call site. Built on the shadcn/ui components (Base UI underneath).
  */
-import { Checkbox } from "@base-ui/react/checkbox";
-import { Field } from "@base-ui/react/field";
-import { Select } from "@base-ui/react/select";
-import { CaretDownIcon, CaretUpDownIcon, CaretUpIcon, CheckIcon } from "../components/icons";
+import { useId } from "react";
+import { Checkbox } from "@/react/ui/checkbox";
+import { Field, FieldDescription, FieldLabel } from "@/react/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/react/ui/select";
 
 export interface SelectOption {
   value: string;
@@ -27,41 +33,23 @@ export function SimpleSelect({
   ariaLabel?: string;
 }) {
   return (
-    <Select.Root
+    <Select
       value={value}
-      onValueChange={(v) => onChange(v ?? "")}
+      onValueChange={(v) => onChange((v as string) ?? "")}
       items={options}
       disabled={disabled}
     >
-      <Select.Trigger aria-label={ariaLabel} className="Select-trigger">
-        <Select.Value className="Select-value" />
-        <Select.Icon>
-          <CaretUpDownIcon />
-        </Select.Icon>
-      </Select.Trigger>
-      <Select.Portal>
-        <Select.Positioner className="Select-positioner" sideOffset={4}>
-          <Select.Popup className="Select-popup">
-            <Select.ScrollUpArrow className="Select-scrollArrow">
-              <CaretUpIcon />
-            </Select.ScrollUpArrow>
-            <Select.List className="Select-list">
-              {options.map((o) => (
-                <Select.Item key={o.value} value={o.value} className="Select-item">
-                  <Select.ItemIndicator className="Select-itemIndicator">
-                    <CheckIcon />
-                  </Select.ItemIndicator>
-                  <Select.ItemText className="Select-itemText">{o.label}</Select.ItemText>
-                </Select.Item>
-              ))}
-            </Select.List>
-            <Select.ScrollDownArrow className="Select-scrollArrow">
-              <CaretDownIcon />
-            </Select.ScrollDownArrow>
-          </Select.Popup>
-        </Select.Positioner>
-      </Select.Portal>
-    </Select.Root>
+      <SelectTrigger aria-label={ariaLabel} className="min-w-40">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((o) => (
+          <SelectItem key={o.value} value={o.value}>
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -76,17 +64,14 @@ export function CheckboxField({
   label: React.ReactNode;
   hint?: React.ReactNode;
 }) {
+  const id = useId();
   return (
-    <Field.Root className="Field">
-      <Field.Label className="Checkbox-label">
-        <Checkbox.Root checked={checked} onCheckedChange={(c) => onChange(c)} className="Checkbox">
-          <Checkbox.Indicator className="Checkbox-indicator">
-            <CheckIcon />
-          </Checkbox.Indicator>
-        </Checkbox.Root>{" "}
+    <Field orientation="horizontal">
+      <Checkbox id={id} checked={checked} onCheckedChange={(c) => onChange(c === true)} />
+      <FieldLabel htmlFor={id} className="font-normal">
         {label}
-      </Field.Label>
-      {hint ? <Field.Description className="Field-description">{hint}</Field.Description> : null}
-    </Field.Root>
+      </FieldLabel>
+      {hint ? <FieldDescription className="basis-full">{hint}</FieldDescription> : null}
+    </Field>
   );
 }

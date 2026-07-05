@@ -1,10 +1,18 @@
 /**
- * Promise-based confirm/alert dialogs on Base UI AlertDialog — the React
+ * Promise-based confirm/alert dialogs on the shadcn AlertDialog — the React
  * equivalent of feedback.ts's confirmDialog()/alertDialog(). Pages call
  * `const confirm = useConfirm()` and `await confirm({...})`.
  */
 import { createContext, useContext, useRef, useState } from "react";
-import { AlertDialog } from "@base-ui/react/alert-dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/react/ui/alert-dialog";
+import { Button } from "@/react/ui/button";
 
 export interface ConfirmOptions {
   title: string;
@@ -42,43 +50,42 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   return (
     <ConfirmContext.Provider value={confirm}>
       {children}
-      <AlertDialog.Root
+      <AlertDialog
         open={opts !== null}
         onOpenChange={(open) => {
           if (!open) finish(false);
         }}
       >
-        <AlertDialog.Portal>
-          <AlertDialog.Backdrop className="Dialog-backdrop" />
-          <AlertDialog.Popup className="Dialog-popup">
-            <AlertDialog.Title className="Dialog-title">{opts?.title}</AlertDialog.Title>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{opts?.title}</AlertDialogTitle>
             {opts?.message ? (
-              <AlertDialog.Description className="Dialog-description">{opts.message}</AlertDialog.Description>
+              <AlertDialogDescription>{opts.message}</AlertDialogDescription>
             ) : null}
-            <div className="Dialog-actions">
-              {opts?.alert ? (
-                <button type="button" autoFocus onClick={() => finish(true)}>
-                  OK
-                </button>
-              ) : (
-                <>
-                  <button type="button" onClick={() => finish(false)}>
-                    {opts?.cancelLabel ?? "Cancel"}
-                  </button>
-                  <button
-                    type="button"
-                    autoFocus
-                    data-color={opts?.destructive ? "red" : undefined}
-                    onClick={() => finish(true)}
-                  >
-                    {opts?.confirmLabel ?? "Confirm"}
-                  </button>
-                </>
-              )}
-            </div>
-          </AlertDialog.Popup>
-        </AlertDialog.Portal>
-      </AlertDialog.Root>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            {opts?.alert ? (
+              <Button type="button" autoFocus onClick={() => finish(true)}>
+                OK
+              </Button>
+            ) : (
+              <>
+                <Button type="button" variant="outline" onClick={() => finish(false)}>
+                  {opts?.cancelLabel ?? "Cancel"}
+                </Button>
+                <Button
+                  type="button"
+                  autoFocus
+                  variant={opts?.destructive ? "destructive" : "default"}
+                  onClick={() => finish(true)}
+                >
+                  {opts?.confirmLabel ?? "Confirm"}
+                </Button>
+              </>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </ConfirmContext.Provider>
   );
 }

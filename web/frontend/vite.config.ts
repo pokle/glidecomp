@@ -77,6 +77,11 @@ export default defineConfig({
   root: 'src',
   envDir: resolve(__dirname, '../..'),
   publicDir: '../public',
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, 'src'),
+    },
+  },
   define: {
     __GIT_SHA__: JSON.stringify(GIT_SHA),
   },

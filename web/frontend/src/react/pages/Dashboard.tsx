@@ -5,8 +5,9 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Tabs } from "@base-ui/react/tabs";
-import { Meter } from "@base-ui/react/meter";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/react/ui/tabs";
+import { Progress, ProgressLabel, ProgressValue } from "@/react/ui/progress";
+import { Button } from "@/react/ui/button";
 import { parseIGC, parseXCTask } from "@glidecomp/engine";
 import {
   storage,
@@ -163,126 +164,165 @@ export function Dashboard() {
 
   return (
     <section>
-      <h1>My Flights</h1>
-      <p>Upload and manage your IGC tracks and tasks</p>
+      <h1 className="text-2xl font-bold">My Flights</h1>
+      <p className="text-muted-foreground">Upload and manage your IGC tracks and tasks</p>
 
-      <p role="status" aria-live="polite">
+      <p role="status" aria-live="polite" className="mt-4 rounded-lg border bg-muted/50 px-3 py-2 text-sm">
         <strong>Heads up.</strong> Files you upload here are visible to anyone with a link. Share
         the link to your flight if you want others to see it.
       </p>
 
       <StorageUsage tracks={tracks} tasks={tasks} />
 
-      <Tabs.Root value={tab} onValueChange={(value) => setTab(value as "tracks" | "tasks")}>
-        <Tabs.List className="Tabs-list">
-          <Tabs.Tab className="Tabs-tab" value="tracks">Tracks {tracks.length > 0 ? `(${tracks.length})` : ""}</Tabs.Tab>
-          <Tabs.Tab className="Tabs-tab" value="tasks">Tasks {tasks.length > 0 ? `(${tasks.length})` : ""}</Tabs.Tab>
-        <Tabs.Indicator className="Tabs-indicator" /></Tabs.List>
+      <Tabs
+        value={tab}
+        onValueChange={(value) => setTab(value as "tracks" | "tasks")}
+        className="mt-6"
+      >
+        <TabsList>
+          <TabsTrigger value="tracks">
+            Tracks {tracks.length > 0 ? `(${tracks.length})` : ""}
+          </TabsTrigger>
+          <TabsTrigger value="tasks">
+            Tasks {tasks.length > 0 ? `(${tasks.length})` : ""}
+          </TabsTrigger>
+        </TabsList>
 
-        <Tabs.Panel className="Tabs-panel" value="tracks">
+        <TabsContent value="tracks">
           <UploadZone accept=".igc" hint=".igc" onFiles={handleFiles} />
           {tracks.length === 0 ? (
-            <div>
-              <p>No flight tracks yet</p>
-              <p>Upload IGC files or open tracks in the analysis page</p>
+            <div className="py-8 text-center text-muted-foreground">
+              <p className="font-medium">No flight tracks yet</p>
+              <p className="text-sm">Upload IGC files or open tracks in the analysis page</p>
             </div>
           ) : (
-            <ul>
+            <ul className="mt-3 divide-y rounded-lg border">
               {tracks.map((track) => (
-                <li key={track.id}>
-                  <a href={`/analysis.html?storedTrack=${encodeURIComponent(track.id)}`}>
+                <li key={track.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
+                  <a
+                    href={`/analysis.html?storedTrack=${encodeURIComponent(track.id)}`}
+                    className="font-medium underline underline-offset-4"
+                  >
                     {track.name}
-                  </a>{" "}
-                  <span>
+                  </a>
+                  <span className="text-sm text-muted-foreground">
                     {[track.summary.glider, track.filename].filter(Boolean).join(" · ")}
-                  </span>{" "}
-                  <span>{relativeTime(track.lastAccessedAt)}</span>{" "}
-                  <button
-                    type="button"
-                    title="Download IGC"
-                    onClick={async () => {
-                      const stored = await storage.getTrack(track.id);
-                      if (stored)
-                        downloadFile(stored.filename, stored.content, "application/octet-stream");
-                    }}
-                  >
-                    Download
-                  </button>{" "}
-                  <button
-                    type="button"
-                    title="Remove track"
-                    onClick={async () => {
-                      await storage.deleteTrack(track.id);
-                      await refreshLists();
-                    }}
-                  >
-                    Remove
-                  </button>
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {relativeTime(track.lastAccessedAt)}
+                  </span>
+                  <span className="ml-auto flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      title="Download IGC"
+                      onClick={async () => {
+                        const stored = await storage.getTrack(track.id);
+                        if (stored)
+                          downloadFile(stored.filename, stored.content, "application/octet-stream");
+                      }}
+                    >
+                      Download
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      title="Remove track"
+                      onClick={async () => {
+                        await storage.deleteTrack(track.id);
+                        await refreshLists();
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </span>
                 </li>
               ))}
             </ul>
           )}
-        </Tabs.Panel>
+        </TabsContent>
 
-        <Tabs.Panel className="Tabs-panel" value="tasks">
+        <TabsContent value="tasks">
           <UploadZone accept=".xctsk" hint=".xctsk" onFiles={handleFiles} />
           {tasks.length === 0 ? (
-            <div>
-              <p>No competition tasks yet</p>
-              <p>Upload XCTSK files or load tasks in the analysis page</p>
+            <div className="py-8 text-center text-muted-foreground">
+              <p className="font-medium">No competition tasks yet</p>
+              <p className="text-sm">Upload XCTSK files or load tasks in the analysis page</p>
             </div>
           ) : (
-            <ul>
+            <ul className="mt-3 divide-y rounded-lg border">
               {tasks.map((task) => (
-                <li key={task.id}>
-                  <a href={`/analysis.html?storedTask=${encodeURIComponent(task.id)}`}>
+                <li key={task.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
+                  <a
+                    href={`/analysis.html?storedTask=${encodeURIComponent(task.id)}`}
+                    className="font-medium underline underline-offset-4"
+                  >
                     {task.name}
-                  </a>{" "}
-                  <span>
+                  </a>
+                  <span className="text-sm text-muted-foreground">
                     {task.task.turnpoints.length} turnpoint
                     {task.task.turnpoints.length !== 1 ? "s" : ""} · {task.id}
-                  </span>{" "}
-                  <span>{relativeTime(task.lastAccessedAt)}</span>{" "}
-                  <button
-                    type="button"
-                    title="Download XCTSK"
-                    onClick={async () => {
-                      const stored = await storage.getTask(task.id);
-                      if (stored)
-                        downloadFile(`${stored.id}.xctsk`, stored.rawJson, "application/xctsk+json");
-                    }}
-                  >
-                    Download
-                  </button>{" "}
-                  <button
-                    type="button"
-                    title="Remove task"
-                    onClick={async () => {
-                      await storage.deleteTask(task.id);
-                      await refreshLists();
-                    }}
-                  >
-                    Remove
-                  </button>
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {relativeTime(task.lastAccessedAt)}
+                  </span>
+                  <span className="ml-auto flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      title="Download XCTSK"
+                      onClick={async () => {
+                        const stored = await storage.getTask(task.id);
+                        if (stored)
+                          downloadFile(`${stored.id}.xctsk`, stored.rawJson, "application/xctsk+json");
+                      }}
+                    >
+                      Download
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      title="Remove task"
+                      onClick={async () => {
+                        await storage.deleteTask(task.id);
+                        await refreshLists();
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </span>
                 </li>
               ))}
             </ul>
           )}
-        </Tabs.Panel>
-      </Tabs.Root>
+        </TabsContent>
+      </Tabs>
 
       {dragOver ? (
-        <div role="status" className="DropOverlay">
+        <div
+          role="status"
+          className="pointer-events-none fixed inset-0 z-20 flex flex-col items-center justify-center gap-1 border-2 border-dashed border-primary bg-background/90 font-bold"
+        >
           <p>Drop files to upload</p>
-          <p>.igc and .xctsk files</p>
+          <p className="text-sm font-normal text-muted-foreground">.igc and .xctsk files</p>
         </div>
       ) : null}
 
-      <section>
-        <h2>Danger zone</h2>
-        <button type="button" disabled={deleting} onClick={handleDeleteAccount}>
+      <section className="mt-10">
+        <h2 className="text-lg font-bold">Danger zone</h2>
+        <Button
+          type="button"
+          variant="destructive"
+          className="mt-2"
+          disabled={deleting}
+          onClick={handleDeleteAccount}
+        >
           {deleting ? "Deleting..." : "Delete account"}
-        </button>
+        </Button>
       </section>
     </section>
   );
@@ -299,13 +339,13 @@ function UploadZone({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
-    <label className="UploadZone">
+    <label className="mt-3 block cursor-pointer rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground transition-colors select-none hover:bg-muted hover:text-foreground">
       <input
         ref={inputRef}
         type="file"
         accept={accept}
         multiple
-        className="visually-hidden"
+        className="sr-only"
         onChange={async (e) => {
           if (e.target.files?.length) {
             await onFiles(e.target.files);
@@ -337,12 +377,9 @@ function StorageUsage({ tracks, tasks }: { tracks: StoredTrack[]; tasks: StoredT
   if (tasks.length / MAX_USER_TASKS >= 0.8) parts.push(`${tasks.length} of ${MAX_USER_TASKS} tasks`);
 
   return (
-    <Meter.Root value={Math.min(100, Math.max(1, fraction * 100))} className="Meter">
-      <Meter.Label className="Meter-label">Storage</Meter.Label>
-      <span className="Meter-value">{parts.join(" · ")}</span>
-      <Meter.Track className="Meter-track">
-        <Meter.Indicator className="Meter-indicator" />
-      </Meter.Track>
-    </Meter.Root>
+    <Progress value={Math.min(100, Math.max(1, fraction * 100))} className="mt-4 max-w-60">
+      <ProgressLabel>Storage</ProgressLabel>
+      <ProgressValue className="ml-auto">{() => parts.join(" · ")}</ProgressValue>
+    </Progress>
   );
 }

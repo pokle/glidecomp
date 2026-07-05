@@ -1,7 +1,8 @@
 /** Pilot profile editor — React port of profile.ts / profile.html. */
-import { useEffect, useState } from "react";
-import { Field } from "@base-ui/react/field";
-import { Input } from "@base-ui/react/input";
+import { useEffect, useId, useState } from "react";
+import { Button } from "@/react/ui/button";
+import { Field, FieldLabel } from "@/react/ui/field";
+import { Input } from "@/react/ui/input";
 import { api } from "../../comp/api";
 import { signInWithGoogle, useUser } from "../lib/user";
 
@@ -32,6 +33,7 @@ export function Profile() {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  const idBase = useId();
 
   useEffect(() => {
     document.title = "GlideComp - Profile";
@@ -65,11 +67,11 @@ export function Profile() {
   if (!user) {
     return (
       <section>
-        <h1>My Profile</h1>
-        <p>Sign in to edit your pilot profile</p>
-        <button type="button" onClick={() => signInWithGoogle()}>
+        <h1 className="text-2xl font-bold">My Profile</h1>
+        <p className="text-muted-foreground">Sign in to edit your pilot profile</p>
+        <Button type="button" className="mt-4" onClick={() => signInWithGoogle()}>
           Sign in with Google
-        </button>
+        </Button>
       </section>
     );
   }
@@ -77,7 +79,7 @@ export function Profile() {
   if (state === "error") {
     return (
       <section>
-        <h1>My Profile</h1>
+        <h1 className="text-2xl font-bold">My Profile</h1>
         <p role="alert">Failed to load profile</p>
       </section>
     );
@@ -120,26 +122,31 @@ export function Profile() {
 
   return (
     <section>
-      <h1>My Profile</h1>
-      <p>Your pilot details, used when you register for competitions</p>
+      <h1 className="text-2xl font-bold">My Profile</h1>
+      <p className="text-muted-foreground">
+        Your pilot details, used when you register for competitions
+      </p>
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} className="mt-6 flex max-w-md flex-col gap-4">
         {PROFILE_FIELDS.map((field) => (
-          <Field.Root className="Field" key={field.key}>
-            <Field.Label className="Field-label">{field.label}</Field.Label>
+          <Field key={field.key}>
+            <FieldLabel htmlFor={`${idBase}-${field.key}`}>{field.label}</FieldLabel>
             <Input
+              id={`${idBase}-${field.key}`}
               value={values[field.key]}
               onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
               required={field.key === "name"}
             />
-          </Field.Root>
+          </Field>
         ))}
 
         {status ? <p role={status.kind === "error" ? "alert" : "status"}>{status.message}</p> : null}
 
-        <button type="submit" disabled={saving}>
-          {saving ? "Saving..." : "Save profile"}
-        </button>
+        <div>
+          <Button type="submit" disabled={saving}>
+            {saving ? "Saving..." : "Save profile"}
+          </Button>
+        </div>
       </form>
     </section>
   );
