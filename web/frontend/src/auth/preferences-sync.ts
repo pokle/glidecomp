@@ -1,5 +1,5 @@
 /**
- * Cloud sync layer for user preferences and theme.
+ * Cloud sync layer for user preferences.
  *
  * Architecture
  * ────────────
@@ -8,22 +8,20 @@
  * - On startup we hydrate: fetch cloud, reconcile against local. Cloud wins
  *   where it has data; missing-from-cloud fields get uploaded from local
  *   (one-time migration of existing users).
- * - Mutations fire `schedulePush(kind)` from config.ts and theme.ts. Pushes
- *   are debounced 2s and PUT the *current* full localStorage value.
+ * - Mutations fire `schedulePush()` from config.ts. Pushes are debounced 2s
+ *   and PUT the *current* full localStorage value.
  * - Conflict resolution is last-write-wins. No CAS, no version field.
  *
  * Module-cycle hygiene
  * ────────────────────
- * theme.ts and config.ts statically import this module to call schedulePush.
- * This module imports them only via dynamic import() inside async paths, so
- * there's no init-time cycle.
+ * config.ts statically imports this module to call schedulePush. This module
+ * imports it only via dynamic import() inside async paths, so there's no
+ * init-time cycle.
  */
 
 import type { AuthUser } from "./client";
-import type { GlideCompTheme } from "../theme";
 
 const STORAGE_KEY_PREFS = "glidecomp:preferences";
-const STORAGE_KEY_THEME = "glidecomp:theme";
 const DEBOUNCE_MS = 2000;
 const MAX_RETRIES = 3;
 const BACKOFF_BASE_MS = 1000;
@@ -39,11 +37,10 @@ const BACKOFF_BASE_MS = 1000;
  */
 const LOCAL_ONLY_PREF_KEYS = ["mapLocation"] as const;
 
-type Kind = "prefs" | "theme";
-
 type CloudResponse = {
   prefs: Record<string, unknown>;
-  theme: Record<string, unknown> | null;
+  /** Legacy field from the retired theme system; ignored. */
+  theme?: Record<string, unknown> | null;
   updated_at: string | null;
 };
 
@@ -51,7 +48,6 @@ export class PreferencesSync {
   private user: AuthUser | null = null;
   private hydrating = false;
   private prefsTimer: ReturnType<typeof setTimeout> | null = null;
-  private themeTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly pagehideHandler = () => this.flushPending();
   private readonly storageHandler = (e: StorageEvent) => {
     void this.onStorage(e);
@@ -90,10 +86,6 @@ export class PreferencesSync {
       clearTimeout(this.prefsTimer);
       this.prefsTimer = null;
     }
-    if (this.themeTimer !== null) {
-      clearTimeout(this.themeTimer);
-      this.themeTimer = null;
-    }
     this.user = null;
   }
 
@@ -115,17 +107,6 @@ export class PreferencesSync {
           detail: config.getPreferences(),
         })
       );
-    } else if (e.key === STORAGE_KEY_THEME) {
-      try {
-        const themeMod = await import("../theme");
-        // newValue is null when the other tab removed the key (resetTheme).
-        // loadSavedTheme returns null in that case; fall back to the same
-        // default theme.ts's autoApply uses.
-        const next = themeMod.loadSavedTheme() ?? themeMod.BASECOAT_LIGHT_THEME;
-        themeMod.applyTheme(next);
-      } catch {
-        /* malformed cloud/local theme — leave current theme applied */
-      }
     }
   }
 
@@ -156,35 +137,22 @@ export class PreferencesSync {
     }
   }
 
-  /** Schedule a debounced cloud PUT for the given storage key. */
-  schedulePush(kind: Kind): void {
+  /** Schedule a debounced cloud PUT of the preferences. */
+  schedulePush(): void {
     if (this.hydrating || !this.user) return;
-    if (kind === "prefs") {
-      if (this.prefsTimer !== null) clearTimeout(this.prefsTimer);
-      this.prefsTimer = setTimeout(() => {
-        this.prefsTimer = null;
-        void this.flushOne("prefs");
-      }, DEBOUNCE_MS);
-    } else {
-      if (this.themeTimer !== null) clearTimeout(this.themeTimer);
-      this.themeTimer = setTimeout(() => {
-        this.themeTimer = null;
-        void this.flushOne("theme");
-      }, DEBOUNCE_MS);
-    }
+    if (this.prefsTimer !== null) clearTimeout(this.prefsTimer);
+    this.prefsTimer = setTimeout(() => {
+      this.prefsTimer = null;
+      void this.flushPrefs();
+    }, DEBOUNCE_MS);
   }
 
-  /** Fire any scheduled pushes immediately. Safe on unload. */
+  /** Fire any scheduled push immediately. Safe on unload. */
   private flushPending(): void {
     if (this.prefsTimer !== null) {
       clearTimeout(this.prefsTimer);
       this.prefsTimer = null;
-      void this.flushOne("prefs");
-    }
-    if (this.themeTimer !== null) {
-      clearTimeout(this.themeTimer);
-      this.themeTimer = null;
-      void this.flushOne("theme");
+      void this.flushPrefs();
     }
   }
 
@@ -192,23 +160,16 @@ export class PreferencesSync {
 
   private async reconcile(cloud: CloudResponse): Promise<void> {
     const localPrefsRaw = localStorage.getItem(STORAGE_KEY_PREFS);
-    const localThemeRaw = localStorage.getItem(STORAGE_KEY_THEME);
     const localPrefs = safeParse(localPrefsRaw);
-    const localTheme = safeParse(localThemeRaw);
 
     const cloudHasPrefs = isNonEmptyObject(cloud.prefs);
-    const cloudHasTheme = cloud.theme !== null;
     const localHasPrefs = isNonEmptyObject(localPrefs);
-    const localHasTheme = isNonEmptyObject(localTheme);
 
     // One-time upload of local-only fields: existing users keep their settings
     // when they first sign in to a cloud-synced session. LOCAL_ONLY_PREF_KEYS
     // are stripped here too so they never reach the server.
-    const upload: { prefs?: unknown; theme?: unknown } = {};
-    if (!cloudHasPrefs && localHasPrefs) upload.prefs = stripLocalOnly(localPrefs);
-    if (!cloudHasTheme && localHasTheme) upload.theme = localTheme;
-    if (upload.prefs !== undefined || upload.theme !== undefined) {
-      void this.put(upload);
+    if (!cloudHasPrefs && localHasPrefs) {
+      void this.put({ prefs: stripLocalOnly(localPrefs) });
     }
 
     // Cloud wins where it has data, but we preserve LOCAL_ONLY_PREF_KEYS from
@@ -226,40 +187,18 @@ export class PreferencesSync {
         })
       );
     }
-    if (cloudHasTheme && cloud.theme) {
-      localStorage.setItem(STORAGE_KEY_THEME, JSON.stringify(cloud.theme));
-      // Theme shape is owned by the client; server stores opaque JSON. If a
-      // future schema change makes the cloud value invalid, swallow the
-      // error rather than crashing the page — localStorage still holds the
-      // saved theme; the user can clear it via the editor.
-      try {
-        const { applyTheme } = await import("../theme");
-        applyTheme(cloud.theme as unknown as GlideCompTheme);
-      } catch {
-        /* malformed cloud theme — leave the current applied theme in place */
-      }
-    }
   }
 
-  private async flushOne(kind: Kind): Promise<void> {
-    if (kind === "prefs") {
-      const raw = localStorage.getItem(STORAGE_KEY_PREFS);
-      if (!raw) return;
-      const parsed = safeParse(raw);
-      if (!isNonEmptyObject(parsed)) return;
-      const stripped = stripLocalOnly(parsed);
-      // Don't bother PUTting if the only changed field was local-only
-      // (e.g. map pan). The stripped object may be empty.
-      if (Object.keys(stripped).length === 0) return;
-      await this.put({ prefs: stripped });
-    } else {
-      const raw = localStorage.getItem(STORAGE_KEY_THEME);
-      // theme can legitimately be null (user reset), and we want to tell the
-      // server about that — that's why a missing-from-localStorage theme
-      // PUTs theme=null rather than skipping.
-      const parsed = raw ? safeParse(raw) : null;
-      await this.put({ theme: parsed });
-    }
+  private async flushPrefs(): Promise<void> {
+    const raw = localStorage.getItem(STORAGE_KEY_PREFS);
+    if (!raw) return;
+    const parsed = safeParse(raw);
+    if (!isNonEmptyObject(parsed)) return;
+    const stripped = stripLocalOnly(parsed);
+    // Don't bother PUTting if the only changed field was local-only
+    // (e.g. map pan). The stripped object may be empty.
+    if (Object.keys(stripped).length === 0) return;
+    await this.put({ prefs: stripped });
   }
 
   private async put(body: object, attempt: number = 0): Promise<void> {
@@ -346,8 +285,8 @@ export const preferencesSync = new PreferencesSync(
 );
 
 // ── auto-bootstrap on import ─────────────────────────────────────────────────
-// Mirrors theme.ts's autoApply pattern. Any page that imports this module
-// (directly or transitively via theme.ts/config.ts) gets hydration.
+// Any page that imports this module (directly or transitively via config.ts)
+// gets hydration.
 //
 // After preferences hydrate, we also run the one-time IndexedDB → R2/D1
 // migration for tracks and tasks. Both are signed-in-only.

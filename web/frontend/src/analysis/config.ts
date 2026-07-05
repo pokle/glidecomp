@@ -116,7 +116,7 @@ class ConfigStore {
       })
     );
 
-    preferencesSync.schedulePush('prefs');
+    preferencesSync.schedulePush();
   }
 
   /**

@@ -60,7 +60,6 @@
       },
       "devDependencies": {
         "@cloudflare/workers-types": "^4.20260628.1",
-        "@pokle/basecoat": "0.3.10-beta3.pokle-selections",
         "@tailwindcss/vite": "^4.3.1",
         "@types/react": "^19.2.2",
         "@types/react-dom": "^19.2.1",
@@ -422,8 +421,6 @@
     "@opentelemetry/semantic-conventions": ["@opentelemetry/semantic-conventions@1.40.0", "", {}, "sha512-cifvXDhcqMwwTlTK04GBNeIe7yyo28Mfby85QXFe1Yk8nmi36Ab/5UQwptOx84SsoGNRg+EVSjwzfSZMy6pmlw=="],
 
     "@playwright/test": ["@playwright/test@1.61.1", "", { "dependencies": { "playwright": "1.61.1" }, "bin": { "playwright": "cli.js" } }, "sha512-8nKv6+0RJSL9FE4jYOEGXnPeM/Hg12qZpmqzZjRh3qM0Y7c3z1mrOTfFLids72RDQYVh9WpLEfR5WdpNX4fkig=="],
-
-    "@pokle/basecoat": ["@pokle/basecoat@0.3.10-beta3.pokle-selections", "", {}, "sha512-Fl6dNsCZ35yzTT9Jvfx6a7dAnnK7qgKe8Rgm25Miich3dju+D/ZV4gxQJLZ+q4yE3hkhCkJxPHqcIq8BG6dTEw=="],
 
     "@poppinss/colors": ["@poppinss/colors@4.1.6", "", { "dependencies": { "kleur": "^4.1.5" } }, "sha512-H9xkIdFswbS8n1d6vmRd8+c10t2Qe+rZITbbDHHkQixH5+2x1FDGmi/0K+WgWiqQFKPSlIYB7jlH6Kpfn6Fleg=="],
 

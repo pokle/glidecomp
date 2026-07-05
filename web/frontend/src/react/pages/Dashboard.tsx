@@ -1,7 +1,7 @@
 /**
  * My Flights dashboard — React port of dashboard.ts / dashboard.html.
  * Local IGC/XCTSK library backed by the same IndexedDB storage module the
- * analysis page uses (the analysis page itself is not converted).
+ * (vanilla, imperative-map) analysis page uses.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";

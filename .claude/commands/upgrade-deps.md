@@ -13,7 +13,7 @@ Read `docs/dependency-review-log.md`. At minimum, read the most recent two entri
 - For each upgrade, note:
   - **Code changes required** → make them in this PR.
   - **Runtime requirement changes** (Node version, Bun version, OS) → if the new floor is above what `.github/workflows/*.yml` actually installs, raise the CI version *in the same PR*. Grep workflows for `setup-node` / `setup-bun`. **`engines.node` in package.json is advisory only — bun does not enforce it, so CI must explicitly install the right Node version.** This is the specific hole that broke CI for ~5 days in May 2026.
-  - **Major-version bumps of pre-1.0 packages** → keep them pinned exact (no caret), per existing convention. Examples in the log: `agents`, `@pokle/basecoat`.
+  - **Major-version bumps of pre-1.0 packages** → keep them pinned exact (no caret), per existing convention. Example in the log: `agents`.
   - **Workspace consistency** → if you bump a package at the root, check whether sub-packages in `web/workers/*` and `web/frontend` need the same bump.
 
 ## 3. Verify locally — before pushing

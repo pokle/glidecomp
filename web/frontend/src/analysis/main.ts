@@ -1,5 +1,4 @@
 // Copyright (c) 2026, Tushar Pokle.  All rights reserved.
-import '../theme';
 
 /**
  * IGC Analysis Tool - Main Entry Point
@@ -26,13 +25,10 @@ import { fetchAirScoreTask, fetchAirScoreTrack } from './airscore-client';
 import { downloadTask } from './task-editor';
 
 // Import styles
-import '../styles.css';
+import '../analysis.css';
 
-// Basecoat JS for interactive components
-import "@pokle/basecoat/src/js/basecoat";
-import "@pokle/basecoat/src/js/dropdown-menu";
-import "@pokle/basecoat/src/js/command";
-import "@pokle/basecoat/src/js/sidebar";
+// Command palette behavior (vanilla, local)
+import { initCommandMenus } from './command-menu';
 
 interface AppState {
   igcFile: IGCFile | null;
@@ -150,6 +146,9 @@ async function init(): Promise<void> {
     console.error('Required containers not found');
     return;
   }
+
+  // Wire the command palette (filtering, keyboard nav) on its static markup
+  initCommandMenus();
 
   // Determine map provider: URL param > saved preference > default
   // Force leaflet if no MapBox token is configured
@@ -842,7 +841,8 @@ async function init(): Promise<void> {
 
   // Set up sidebar toggle for mobile
   if (sidebar && sidebarBackdrop) {
-    document.addEventListener('basecoat:sidebar', ((e: CustomEvent) => {
+    sidebarBackdrop.addEventListener('click', () => closeSidebar());
+    document.addEventListener('glidecomp:sidebar', ((e: CustomEvent) => {
       const detail = e.detail || {};
       if (detail.id && detail.id !== 'waypoint-sidebar') return;
       const isOpen = sidebar.getAttribute('aria-hidden') === 'false';
@@ -934,7 +934,7 @@ async function init(): Promise<void> {
 
     // Close sidebar on mobile after selecting an event
     if (window.innerWidth < 768 && sidebar) {
-      document.dispatchEvent(new CustomEvent('basecoat:sidebar', { detail: { action: 'close', id: 'waypoint-sidebar' } }));
+      document.dispatchEvent(new CustomEvent('glidecomp:sidebar', { detail: { action: 'close', id: 'waypoint-sidebar' } }));
     }
   };
 
@@ -953,7 +953,7 @@ async function init(): Promise<void> {
 
     // Close sidebar on mobile after selecting a turnpoint
     if (window.innerWidth < 768 && sidebar) {
-      document.dispatchEvent(new CustomEvent('basecoat:sidebar', { detail: { action: 'close', id: 'waypoint-sidebar' } }));
+      document.dispatchEvent(new CustomEvent('glidecomp:sidebar', { detail: { action: 'close', id: 'waypoint-sidebar' } }));
     }
   };
 

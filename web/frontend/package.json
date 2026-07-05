@@ -12,10 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "//": "Basecoat fork - see docs/basecoat-fork.md for build/publish instructions",
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260628.1",
-    "@pokle/basecoat": "0.3.10-beta3.pokle-selections",
     "@tailwindcss/vite": "^4.3.1",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.1",

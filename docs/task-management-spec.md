@@ -17,7 +17,7 @@ When loading a track (IGC file), we need to find matching task files (.xctsk). C
 ## Current State
 
 - **Frontend only** - No backend workers or D1 database yet (web/workers/ only has the AirScore caching proxy)
-- **Command menu exists** - Uses native `<dialog>` with Basecoat styling
+- **Command menu exists** - Uses native `<dialog>` styled in `analysis.css`
 - **No authentication** - Needs to be implemented first
 - **Task files** - Currently loaded from static `/data/tasks/` or fetched from xcontest.org
 

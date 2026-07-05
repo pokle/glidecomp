@@ -11,7 +11,7 @@
 
 **How it's built:**
 - **Client-side first** — IGC parsing and flight analysis happen entirely in the browser, no server required for core functionality
-- **Frontend**: TypeScript SPA hosted on Cloudflare Pages, using Basecoat UI components and Tailwind CSS
+- **Frontend**: React SPA hosted on Cloudflare Pages, built with shadcn/ui components (Base UI foundation) and Tailwind CSS
 - **Backend**: Cloudflare Workers API for competition management, with D1 (SQLite) database and R2 storage
 - **Engine**: A dedicated `@glidecomp/engine` package handles geo calculations (WGS84 ellipsoid math, Vincenty formulas) and flight analysis
 

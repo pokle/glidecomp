@@ -153,14 +153,22 @@ export function About() {
             </li>
             <li>
               <a
-                href="https://basecoatui.com"
+                href="https://ui.shadcn.com"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium hover:underline"
               >
-                Basecoat
+                shadcn/ui
               </a>
-              <span className="text-muted-foreground"> — UI component library</span>
+              <span className="text-muted-foreground"> — UI components, built on </span>
+              <a
+                href="https://base-ui.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium hover:underline"
+              >
+                Base UI
+              </a>
             </li>
             <li>
               <a

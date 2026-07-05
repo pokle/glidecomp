@@ -1,10 +1,9 @@
 /*
  * React-app stylesheet: Tailwind v4 + shadcn/ui (Base UI foundation).
  *
- * Tokens are shadcn's "neutral" base color — the same values glidecomp.com
- * (Basecoat) ships in production — with the production Inter font stack.
- * Loaded only by the React entry (react/main.tsx); the vanilla pages keep
- * src/styles.css + Basecoat.
+ * Tokens are shadcn's "neutral" base color with the production Inter font
+ * stack. Loaded by the React entry (react/main.tsx) and imported by
+ * src/analysis.css so the vanilla analysis page shares the same tokens.
  */
 @import "tailwindcss";
 @import "tw-animate-css";

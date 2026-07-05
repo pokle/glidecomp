@@ -14,8 +14,6 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-    <!-- Styles -->
-    <link rel="stylesheet" href="/styles.css">
 </head>
 
 <body class="h-screen overflow-hidden bg-background text-foreground">
@@ -48,7 +46,6 @@
         <div
             id="sidebar-backdrop"
             class="fixed top-0 bottom-0 left-0 right-0 z-30 hidden bg-black/50 md:hidden"
-            onclick="document.dispatchEvent(new CustomEvent('basecoat:sidebar', {detail: {action: 'close', id: 'waypoint-sidebar'}}))"
         ></div>
 
         <!-- Map container -->

@@ -340,7 +340,7 @@ Staged iterative plan. Each iteration delivers a working, testable vertical slic
 - [x] Build competition list view (admin comps + recent public comps)
 - [x] Build "Create Competition" form (name, category HG/PG, pilot classes). GAP params use sensible defaults and are editable later via comp detail page.
 - [x] Implement navigation from list to `/comp/{comp_id}` (stub detail page)
-- [x] Use Basecoat components for forms, tables, buttons
+- [x] Use shadcn/ui components for forms, tables, buttons
 
 ## Iteration 3: Task CRUD API + Task Management UI
 
