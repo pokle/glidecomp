@@ -1,0 +1,57 @@
+{
+  "earthModel": "WGS84",
+  "goal": {
+    "deadline": "09:00:00Z",
+    "type": "CYLINDER"
+  },
+  "sss": {
+    "direction": "EXIT",
+    "timeGates": [],
+    "type": "RACE"
+  },
+  "taskType": "CLASSIC",
+  "turnpoints": [
+    {
+      "radius": 5000,
+      "waypoint": {
+        "lat": -36.185833,
+        "lon": 147.976667,
+        "altSmoothed": 935,
+        "name": "ELLIOT",
+        "description": "ELLIOT"
+      },
+      "type": "TAKEOFF"
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -35.966217,
+        "lon": 147.734183,
+        "altSmoothed": 224,
+        "name": "WALWA",
+        "description": "WALWA"
+      }
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.086533,
+        "lon": 148.045583,
+        "altSmoothed": 678,
+        "name": "LIGHTH",
+        "description": "LIGHTH"
+      }
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.216217,
+        "lon": 148.109783,
+        "altSmoothed": 290,
+        "name": "KHANCO",
+        "description": "KHANCO"
+      }
+    }
+  ],
+  "version": 1
+}
