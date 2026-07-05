@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import { describe, expect, test, beforeEach } from "vitest";
-import { request, authRequest, createComp, clearCompData } from "./helpers";
+import { request, authRequest, createComp, createTask, clearCompData } from "./helpers";
 import { encodeId } from "../src/sqids";
 
 const ALPHABET = env.SQIDS_ALPHABET;
@@ -235,6 +235,59 @@ describe("GET /api/comp/:comp_id", () => {
     expect(res.status).toBe(200);
     const data = (await res.json()) as { name: string };
     expect(data.name).toBe("Public");
+  });
+
+  test("flags GAP tasks defined without SSS/ESS turnpoint types", async () => {
+    const compId = await createComp({ name: "Fallback Comp" });
+    const taskId = await createTask(compId);
+
+    // A realistic mis-set task: turnpoints exist but nobody marked SSS/ESS
+    await authRequest("PATCH", `/api/comp/${compId}/task/${taskId}`, {
+      xctsk: {
+        taskType: "CLASSIC",
+        version: 1,
+        turnpoints: [
+          { type: "TAKEOFF", radius: 400, waypoint: { name: "Launch", lat: -37.0, lon: 144.0 } },
+          { radius: 400, waypoint: { name: "TP1", lat: -37.1, lon: 144.1 } },
+          { radius: 400, waypoint: { name: "Goal", lat: -37.2, lon: 144.2 } },
+        ],
+      },
+    });
+
+    const res = await authRequest("GET", `/api/comp/${compId}`);
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      tasks: Array<{ missing_sss: boolean; missing_ess: boolean }>;
+    };
+    expect(data.tasks[0].missing_sss).toBe(true);
+    expect(data.tasks[0].missing_ess).toBe(true);
+  });
+
+  test("no speed-section flags when SSS/ESS are typed or no task is defined", async () => {
+    const compId = await createComp({ name: "Well Set Comp" });
+    const typedTaskId = await createTask(compId, { name: "Typed" });
+    await createTask(compId, { name: "Empty" });
+
+    await authRequest("PATCH", `/api/comp/${compId}/task/${typedTaskId}`, {
+      xctsk: {
+        taskType: "CLASSIC",
+        version: 1,
+        turnpoints: [
+          { type: "SSS", radius: 1000, waypoint: { name: "Start", lat: -37.0, lon: 144.0 } },
+          { type: "ESS", radius: 400, waypoint: { name: "Goal", lat: -37.1, lon: 144.1 } },
+        ],
+      },
+    });
+
+    const res = await authRequest("GET", `/api/comp/${compId}`);
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      tasks: Array<{ name: string; missing_sss: boolean; missing_ess: boolean }>;
+    };
+    for (const task of data.tasks) {
+      expect(task.missing_sss).toBe(false);
+      expect(task.missing_ess).toBe(false);
+    }
   });
 });
 

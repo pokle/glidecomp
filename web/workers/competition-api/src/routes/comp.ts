@@ -7,6 +7,7 @@ import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth"
 import { isCompAdmin, isSuperAdmin } from "../super-admin";
 import { createCompSchema, updateCompSchema } from "../validators";
 import { audit, describeChange } from "../audit";
+import { speedSectionTypeWarnings } from "../xctsk-summary";
 import { DEFAULT_GAP_PARAMETERS, type GAPParameters } from "@glidecomp/engine";
 
 type Variables = {
@@ -350,10 +351,11 @@ export const compRoutes = new Hono<HonoEnv>()
         adminList.push({ email: user.email, name: user.name });
       }
 
-      // Get tasks summary
+      // Get tasks summary (xctsk is fetched only to derive the speed-section
+      // warnings below; it is not echoed back in the response)
       const tasks = await c.env.DB.prepare(
         `SELECT t.task_id, t.name, t.task_date, t.creation_date,
-                (t.xctsk IS NOT NULL) as has_xctsk
+                (t.xctsk IS NOT NULL) as has_xctsk, t.xctsk
          FROM task t WHERE t.comp_id = ?
          ORDER BY t.task_date ASC, t.creation_date ASC`
       )
@@ -404,14 +406,24 @@ export const compRoutes = new Hono<HonoEnv>()
         pilot_statuses: parsePilotStatuses(comp.pilot_statuses),
         admins: adminList,
         is_admin: isAdmin,
-        tasks: tasks.results.map((t) => ({
-          task_id: encodeId(alphabet, t.task_id as number),
-          name: t.name,
-          task_date: t.task_date,
-          creation_date: t.creation_date,
-          has_xctsk: !!(t.has_xctsk as number),
-          pilot_classes: taskClasses[t.task_id as number] ?? [],
-        })),
+        tasks: tasks.results.map((t) => {
+          // Speed-section type warnings only apply to GAP race tasks —
+          // open-distance tasks are a single TAKEOFF and never carry them.
+          const speedSection =
+            ((comp.scoring_format as string) ?? "gap") === "gap"
+              ? speedSectionTypeWarnings(t.xctsk as string | null)
+              : { missing_sss: false, missing_ess: false };
+          return {
+            task_id: encodeId(alphabet, t.task_id as number),
+            name: t.name,
+            task_date: t.task_date,
+            creation_date: t.creation_date,
+            has_xctsk: !!(t.has_xctsk as number),
+            pilot_classes: taskClasses[t.task_id as number] ?? [],
+            missing_sss: speedSection.missing_sss,
+            missing_ess: speedSection.missing_ess,
+          };
+        }),
         pilot_count: pilotCount?.cnt ?? 0,
         class_coverage_warnings: classCoverageWarnings,
       });

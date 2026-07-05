@@ -1016,6 +1016,23 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       html += `<div class="rounded-lg bg-muted px-3 py-2 text-sm font-medium text-muted-foreground">Not started</div>`;
     }
 
+    // A2. Task-setup fallbacks — explain scoring decisions made because the
+    // task is missing its SSS/ESS turnpoint types.
+    const fallbackNotes: string[] = [];
+    if (result.startFallback === 'track_start') {
+      fallbackNotes.push('No Start (SSS) turnpoint in this task — the track began outside the first turnpoint, so scoring starts at the first fix.');
+    } else if (result.startFallback === 'first_turnpoint') {
+      fallbackNotes.push('No Start (SSS) turnpoint in this task — the first turnpoint is treated as the start.');
+    }
+    if (result.essFallback) {
+      fallbackNotes.push('No ESS turnpoint in this task — the speed section ends at the last turnpoint (goal).');
+    }
+    if (fallbackNotes.length > 0) {
+      html += `<div class="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 space-y-0.5">${
+        fallbackNotes.map(n => `<div class="text-xs text-amber-500">&#9888; ${n}</div>`).join('')
+      }</div>`;
+    }
+
     // B. Distance bar
     // For non-goal pilots, show completed leg distance (sum of completed legs)
     // rather than the CIVL GAP flownDistance which can be misleading
