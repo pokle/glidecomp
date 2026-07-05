@@ -283,12 +283,6 @@ export function importTheme(file: File): Promise<GlideCompTheme> {
 
 // ── Shareable URL ────────────────────────────────────────────────────────────
 
-export function encodeThemeToURL(theme: GlideCompTheme, basePath: string = "/theme-editor"): string {
-  const json = JSON.stringify(theme);
-  const encoded = btoa(unescape(encodeURIComponent(json)));
-  return `${window.location.origin}${basePath}#theme=${encoded}`;
-}
-
 export function decodeThemeFromHash(): GlideCompTheme | null {
   const hash = window.location.hash;
   if (!hash.startsWith("#theme=")) return null;

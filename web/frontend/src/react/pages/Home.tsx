@@ -21,9 +21,9 @@ export function Home() {
       </p>
       <p className="text-sm text-muted-foreground">
         By signing in, you agree to our{" "}
-        <a href="/legal.html" className="underline underline-offset-4">
+        <Link to="/legal" className="underline underline-offset-4">
           Privacy Policy &amp; Terms
-        </a>
+        </Link>
       </p>
 
       <img
@@ -67,15 +67,15 @@ export function Home() {
         >
           YouTube
         </a>
-        <a href="/scoring.html" className="underline">
+        <Link to="/scoring" className="underline">
           Scoring
-        </a>
-        <a href="/about.html" className="underline">
+        </Link>
+        <Link to="/about" className="underline">
           About
-        </a>
-        <a href="/legal.html" className="underline">
+        </Link>
+        <Link to="/legal" className="underline">
           Privacy &amp; Terms
-        </a>
+        </Link>
         <Link to="/comp" className="underline">
           Competitions
         </Link>

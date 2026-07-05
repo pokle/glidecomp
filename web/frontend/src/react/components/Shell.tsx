@@ -91,15 +91,12 @@ export function Shell() {
         >
           YouTube
         </a>
-        <a href="/scoring.html" className="underline underline-offset-4 hover:text-foreground">
+        <Link to="/scoring" className="underline underline-offset-4 hover:text-foreground">
           Scoring
-        </a>
-        <a href="/theme-editor" className="underline underline-offset-4 hover:text-foreground">
-          Theme Editor
-        </a>
-        <a href="/legal.html" className="underline underline-offset-4 hover:text-foreground">
+        </Link>
+        <Link to="/legal" className="underline underline-offset-4 hover:text-foreground">
           Privacy &amp; Terms
-        </a>
+        </Link>
         {user ? (
           <Button
             type="button"

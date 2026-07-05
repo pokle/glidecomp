@@ -105,19 +105,29 @@ export default defineConfig({
               path === '/comp' ||
               /^\/comp\/[a-z]+(\/|\/task\/[a-z]+\/?)?$/.test(path) ||
               path === '/scores' ||
-              /^\/(profile|settings|onboarding)\/?$/.test(path));
+              /^\/(profile|settings|onboarding|about|legal)\/?$/.test(path) ||
+              /^\/scoring(\/(gap|open-distance))?\/?$/.test(path) ||
+              /^\/admin\/(users|cache)\/?$/.test(path));
+          // Old static-page URLs 301 to their SPA routes (mirrors _redirects).
+          const movedTo: Record<string, string> = {
+            '/about.html': '/about',
+            '/legal.html': '/legal',
+            '/scoring.html': '/scoring',
+            '/scoring-gap.html': '/scoring/gap',
+            '/scoring-open-distance.html': '/scoring/open-distance',
+            '/theme-editor': '/',
+            '/kitchensink.html': '/',
+          };
+          if (movedTo[path]) {
+            _res.statusCode = 301;
+            _res.setHeader('Location', movedTo[path]);
+            _res.end();
+            return;
+          }
           if (isSpaRoute) {
             req.url = '/index.html';
-          } else if (req.url === '/theme-editor' || req.url === '/theme-editor/') {
-            req.url = '/theme-editor.html';
-          } else if (req.url === '/kitchensink' || req.url === '/kitchensink/') {
-            req.url = '/kitchensink.html';
           } else if (req.url === '/replay' || req.url === '/replay/') {
             req.url = '/replay.html';
-          } else if (req.url === '/admin/users' || req.url === '/admin/users/') {
-            req.url = '/admin-users.html';
-          } else if (req.url === '/admin/cache' || req.url === '/admin/cache/') {
-            req.url = '/admin-cache.html';
           }
           next();
         });
@@ -131,16 +141,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'src/index.html'),
         analysis: resolve(__dirname, 'src/analysis.html'),
-        about: resolve(__dirname, 'src/about.html'),
-        legal: resolve(__dirname, 'src/legal.html'),
-        scoring: resolve(__dirname, 'src/scoring.html'),
-        'scoring-gap': resolve(__dirname, 'src/scoring-gap.html'),
-        'scoring-open-distance': resolve(__dirname, 'src/scoring-open-distance.html'),
-        'theme-editor': resolve(__dirname, 'src/theme-editor.html'),
-        kitchensink: resolve(__dirname, 'src/kitchensink.html'),
         replay: resolve(__dirname, 'src/replay.html'),
-        'admin-users': resolve(__dirname, 'src/admin-users.html'),
-        'admin-cache': resolve(__dirname, 'src/admin-cache.html'),
       },
     },
   },

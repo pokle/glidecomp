@@ -1,8 +1,8 @@
 /**
  * The main GlideComp UI: a React + Base UI SPA served at /, /comp, /u/*,
- * /scores, /profile, /settings and /onboarding. The analysis, 3D replay,
- * admin, scoring-explainer and theme-editor pages remain separate vanilla
- * entries — links point at those pages directly.
+ * /scores, /profile, /settings, /onboarding, the static about/legal/scoring
+ * pages and the /admin pages. The analysis and 3D replay pages remain
+ * separate vanilla entries — links point at those pages directly.
  */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -21,6 +21,13 @@ import { TaskDetail } from "./pages/TaskDetail";
 import { Scores } from "./pages/Scores";
 import { Profile } from "./pages/Profile";
 import { Settings } from "./pages/Settings";
+import { About } from "./pages/About";
+import { Legal } from "./pages/Legal";
+import { Scoring } from "./pages/Scoring";
+import { ScoringGap } from "./pages/ScoringGap";
+import { ScoringOpenDistance } from "./pages/ScoringOpenDistance";
+import { AdminUsers } from "./pages/AdminUsers";
+import { AdminCache } from "./pages/AdminCache";
 
 // shadcn theming keys dark mode off a `.dark` class on <html>; follow the
 // OS preference (matching the previous prefers-color-scheme behaviour).
@@ -48,6 +55,11 @@ createRoot(document.getElementById("root")!).render(
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/onboarding" element={<Onboarding />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/legal" element={<Legal />} />
+              <Route path="/scoring" element={<Scoring />} />
+              <Route path="/scoring/gap" element={<ScoringGap />} />
+              <Route path="/scoring/open-distance" element={<ScoringOpenDistance />} />
               <Route element={<Shell />}>
                 <Route path="/u/:username" element={<Dashboard />} />
                 <Route path="/comp" element={<Competitions />} />
@@ -56,6 +68,8 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/scores" element={<Scores />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/admin/users" element={<AdminUsers />} />
+                <Route path="/admin/cache" element={<AdminCache />} />
                 <Route path="*" element={<NotFound />} />
               </Route>
             </Routes>

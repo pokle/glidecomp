@@ -369,7 +369,7 @@ export function SettingsDialog({
                   Category above.{" "}
                   <a
                     className="underline underline-offset-4"
-                    href="/scoring-gap.html"
+                    href="/scoring/gap"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
