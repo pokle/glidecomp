@@ -1,0 +1,96 @@
+{
+  "earthModel": "WGS84",
+  "goal": {
+    "deadline": "12:00:00Z",
+    "type": "CYLINDER"
+  },
+  "sss": {
+    "direction": "EXIT",
+    "timeGates": [
+      "01:15:00Z",
+      "01:30:00Z",
+      "01:45:00Z",
+      "02:00:00Z",
+      "02:15:00Z",
+      "02:30:00Z"
+    ],
+    "type": "RACE"
+  },
+  "taskType": "CLASSIC",
+  "turnpoints": [
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.185833,
+        "lon": 147.976667,
+        "altSmoothed": 935,
+        "name": "ELLIOT",
+        "description": "ELLIOT"
+      },
+      "type": "TAKEOFF"
+    },
+    {
+      "radius": 5000,
+      "waypoint": {
+        "lat": -36.185833,
+        "lon": 147.976667,
+        "altSmoothed": 935,
+        "name": "ELLIOT",
+        "description": "ELLIOT"
+      },
+      "type": "SSS"
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.305417,
+        "lon": 147.898867,
+        "altSmoothed": 426,
+        "name": "THOWGL",
+        "description": "THOWGL"
+      }
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.096867,
+        "lon": 147.814283,
+        "altSmoothed": 314,
+        "name": "CUDGNO",
+        "description": "CUDGNO"
+      }
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.192283,
+        "lon": 147.770217,
+        "altSmoothed": 325,
+        "name": "CUDG",
+        "description": "CUDG"
+      }
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.185,
+        "lon": 147.8914,
+        "altSmoothed": 291,
+        "name": "CORRY",
+        "description": "CORRY"
+      },
+      "type": "ESS"
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.185,
+        "lon": 147.8914,
+        "altSmoothed": 291,
+        "name": "CORRY",
+        "description": "CORRY"
+      }
+    }
+  ],
+  "version": 1
+}

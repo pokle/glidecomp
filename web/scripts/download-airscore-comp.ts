@@ -58,18 +58,66 @@ interface CompConfig {
   name: string;
   host: string;
   sources: CompSource[];
+  /**
+   * D1 comp name the seed script should use. When omitted the seed script
+   * falls back to the fixed SAMPLE_COMP_NAME (the Corryong 2026 sample) — so
+   * every other comp MUST set this, or seeding it would overwrite the sample.
+   */
+  compName?: string;
+  /**
+   * Comp category ('hg' | 'pg'), matching the hg/pg symbol AirScore shows in
+   * its comp list. When omitted the seed script defaults to 'hg'.
+   */
+  category?: string;
+}
+
+const HIGHCLOUD = 'https://xc.highcloud.net';
+
+/**
+ * Helper for the Corryong Cup lineage: one event, two AirScore comps (open +
+ * floater), merged here into one GlideComp comp with two pilot classes.
+ */
+function corryongCup(year: number, openComPk: number, floaterComPk: number): CompConfig {
+  return {
+    name: `Corryong Cup ${year}`,
+    compName: `Corryong Cup ${year}`,
+    host: HIGHCLOUD,
+    sources: [
+      { comPk: openComPk, pilotClass: 'open' },
+      { comPk: floaterComPk, pilotClass: 'floater' },
+    ],
+  };
 }
 
 const COMPS: Record<string, CompConfig> = {
   'corryong-cup-2026': {
     name: 'Corryong Cup 2026',
-    host: 'https://xc.highcloud.net',
+    host: HIGHCLOUD,
     // AirScore splits the event into two comps by class; same real competition.
+    // No compName: the 2026 sample keeps seeding under the fixed SAMPLE_COMP_NAME.
     sources: [
       { comPk: 466, pilotClass: 'open' },
       { comPk: 465, pilotClass: 'floater' },
     ],
   },
+  // Prior years of the same event. AirScore names vary ("Corryong Cup 2025" is
+  // the open comp even without the word "Open"); comPks come from
+  // get_all_comps.php on the host.
+  'corryong-cup-2025': corryongCup(2025, 428, 427),
+  'corryong-cup-2024': corryongCup(2024, 393, 394),
+  'corryong-cup-2023': corryongCup(2023, 363, 364),
+  'corryong-cup-2022': corryongCup(2022, 335, 336),
+  'corryong-cup-2021': corryongCup(2021, 305, 308),
+  // Dec 2020 stand-in for the Corryong Cup (COVID season); a single comp with
+  // no separate floater class.
+  'unungra-cup-2020': {
+    name: 'Unungra Cup',
+    compName: 'Unungra Cup',
+    host: HIGHCLOUD,
+    category: 'pg', // unlike the (hang gliding) Corryong Cups, this one is PG
+    sources: [{ comPk: 303, pilotClass: 'open' }],
+  },
+  'corryong-cup-2017': corryongCup(2017, 208, 209),
 };
 
 // --- polite HTTP -----------------------------------------------------------
@@ -361,6 +409,8 @@ async function downloadComp(slug: string): Promise<void> {
     name: cfg.name,
     slug,
     source_host: cfg.host,
+    ...(cfg.compName ? { comp_name: cfg.compName } : {}),
+    ...(cfg.category ? { category: cfg.category } : {}),
     classes,
     waypoint_region: regPk ? { regPk: Number(regPk), name: regionName ?? null } : null,
     tasks,

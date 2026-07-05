@@ -1,0 +1,67 @@
+{
+  "earthModel": "WGS84",
+  "goal": {
+    "deadline": "10:00:00Z",
+    "type": "CYLINDER"
+  },
+  "sss": {
+    "direction": "EXIT",
+    "timeGates": [],
+    "type": "RACE"
+  },
+  "taskType": "CLASSIC",
+  "turnpoints": [
+    {
+      "radius": 5000,
+      "waypoint": {
+        "lat": -36.185833,
+        "lon": 147.976667,
+        "altSmoothed": 935,
+        "name": "ELLIOT",
+        "description": "ELLIOT"
+      },
+      "type": "TAKEOFF"
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.086533,
+        "lon": 148.045583,
+        "altSmoothed": 678,
+        "name": "LIGHTH",
+        "description": "LIGHTH"
+      }
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.242792,
+        "lon": 147.883678,
+        "altSmoothed": 0,
+        "name": "DWYERS",
+        "description": "DWYERS"
+      }
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.192283,
+        "lon": 147.770217,
+        "altSmoothed": 325,
+        "name": "CUDG",
+        "description": "CUDG"
+      }
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.185,
+        "lon": 147.8914,
+        "altSmoothed": 291,
+        "name": "CORRY",
+        "description": "CORRY"
+      }
+    }
+  ],
+  "version": 1
+}

@@ -1,0 +1,91 @@
+{
+  "earthModel": "WGS84",
+  "goal": {
+    "deadline": "07:00:00Z",
+    "type": "CYLINDER"
+  },
+  "sss": {
+    "direction": "EXIT",
+    "timeGates": [
+      "02:30:00Z"
+    ],
+    "type": "RACE"
+  },
+  "taskType": "CLASSIC",
+  "turnpoints": [
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.186035,
+        "lon": 147.974553,
+        "altSmoothed": 940,
+        "name": "ell094",
+        "description": "ElliotLaunch"
+      },
+      "type": "TAKEOFF"
+    },
+    {
+      "radius": 2000,
+      "waypoint": {
+        "lat": -36.186035,
+        "lon": 147.974553,
+        "altSmoothed": 940,
+        "name": "ell094",
+        "description": "ElliotLaunch"
+      },
+      "type": "SSS"
+    },
+    {
+      "radius": 10000,
+      "waypoint": {
+        "lat": -36.0010628168,
+        "lon": 147.684402466,
+        "altSmoothed": 500,
+        "name": "she050",
+        "description": "ShellyRd"
+      }
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.0904476477,
+        "lon": 147.961807251,
+        "altSmoothed": 460,
+        "name": "mur046",
+        "description": "MurrayRiverRd"
+      }
+    },
+    {
+      "radius": 3000,
+      "waypoint": {
+        "lat": -36.190814942,
+        "lon": 147.771434784,
+        "altSmoothed": 340,
+        "name": "cud034",
+        "description": "Cudgewa"
+      }
+    },
+    {
+      "radius": 2000,
+      "waypoint": {
+        "lat": -36.1738072898,
+        "lon": 147.946443558,
+        "altSmoothed": 310,
+        "name": "ell030",
+        "description": "ElliotLanding"
+      },
+      "type": "ESS"
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.1738072898,
+        "lon": 147.946443558,
+        "altSmoothed": 310,
+        "name": "ell030",
+        "description": "ElliotLanding"
+      }
+    }
+  ],
+  "version": 1
+}

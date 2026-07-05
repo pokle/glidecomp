@@ -129,7 +129,11 @@ function q(v: string | number | null): string {
 
 /** Pull a CIVL-ish id out of `lamb_18239_050126.igc` → `18239`, else null. */
 function civlFromFilename(file: string): string | null {
-  const parts = basename(file, '.igc').split('_');
+  // Drop the trailing _DDMMYY date stamp first so it can't be mistaken for an
+  // id when the real one is too short to match (e.g. `rigg_0_050125.igc`,
+  // whose CIVL id "0" means none — without this the pilot got a different
+  // fake id per task date and split into one comp_pilot row per task).
+  const parts = basename(file, '.igc').replace(/_\d{6}$/, '').split('_');
   return parts.find((p) => /^\d{3,}$/.test(p)) ?? null;
 }
 

@@ -1,0 +1,71 @@
+{
+  "earthModel": "WGS84",
+  "goal": {
+    "deadline": "07:00:00Z",
+    "type": "CYLINDER"
+  },
+  "sss": {
+    "direction": "EXIT",
+    "timeGates": [
+      "01:30:00Z"
+    ],
+    "type": "RACE"
+  },
+  "taskType": "CLASSIC",
+  "turnpoints": [
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.185833,
+        "lon": 147.976667,
+        "altSmoothed": 935,
+        "name": "ELLIOT",
+        "description": "ELLIOT"
+      },
+      "type": "TAKEOFF"
+    },
+    {
+      "radius": 5000,
+      "waypoint": {
+        "lat": -36.185833,
+        "lon": 147.976667,
+        "altSmoothed": 935,
+        "name": "ELLIOT",
+        "description": "ELLIOT"
+      },
+      "type": "SSS"
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.2641,
+        "lon": 147.938467,
+        "altSmoothed": 376,
+        "name": "KANGCK",
+        "description": "KANGCK"
+      }
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.185,
+        "lon": 147.8914,
+        "altSmoothed": 291,
+        "name": "CORRY",
+        "description": "CORRY"
+      },
+      "type": "ESS"
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.185,
+        "lon": 147.8914,
+        "altSmoothed": 291,
+        "name": "CORRY",
+        "description": "CORRY"
+      }
+    }
+  ],
+  "version": 1
+}

@@ -1,0 +1,68 @@
+{
+  "earthModel": "WGS84",
+  "goal": {
+    "deadline": "10:00:00Z",
+    "type": "CYLINDER"
+  },
+  "sss": {
+    "direction": "EXIT",
+    "timeGates": [],
+    "type": "RACE"
+  },
+  "taskType": "CLASSIC",
+  "turnpoints": [
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.185833,
+        "lon": 147.976667,
+        "altSmoothed": 935,
+        "name": "ELLIOT",
+        "description": "ELLIOT"
+      }
+    },
+    {
+      "radius": 5000,
+      "waypoint": {
+        "lat": -36.185833,
+        "lon": 147.976667,
+        "altSmoothed": 935,
+        "name": "ELLIOT",
+        "description": "ELLIOT"
+      },
+      "type": "TAKEOFF"
+    },
+    {
+      "radius": 2000,
+      "waypoint": {
+        "lat": -36.2641,
+        "lon": 147.938467,
+        "altSmoothed": 376,
+        "name": "KANGCK",
+        "description": "KANGCK"
+      }
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.127133,
+        "lon": 147.985733,
+        "altSmoothed": 259,
+        "name": "TOWONG",
+        "description": "TOWONG"
+      },
+      "type": "ESS"
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.127133,
+        "lon": 147.985733,
+        "altSmoothed": 259,
+        "name": "TOWONG",
+        "description": "TOWONG"
+      }
+    }
+  ],
+  "version": 1
+}
