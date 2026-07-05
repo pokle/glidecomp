@@ -15,8 +15,8 @@
 
 import type { XCTask } from './xctsk-parser';
 import type { IGCFix } from './igc-parser';
-import { andoyerDistance } from './geo';
-import { getSSSIndex, getESSIndex, getGoalIndex } from './xctsk-parser';
+import { andoyerDistance, isInsideCylinder } from './geo';
+import { getSSSIndex, getEffectiveSSSIndex, getESSIndex, getGoalIndex } from './xctsk-parser';
 import { calculateOptimizedTaskLine } from './task-optimizer';
 
 // ---------------------------------------------------------------------------
@@ -93,8 +93,10 @@ export interface TurnpointReaching {
    * - 'last_before_next': SSS rule — last crossing before continuing to next TP
    * - 'first_after_previous': Standard rule — first crossing after previous TP reached
    * - 'first_crossing': ESS rule — always first crossing, no re-tries
+   * - 'track_start': No-SSS fallback only — the track began outside the first
+   *   turnpoint's cylinder with no crossing, so the first fix anchors the start
    */
-  selectionReason: 'last_before_next' | 'first_after_previous' | 'first_crossing';
+  selectionReason: 'last_before_next' | 'first_after_previous' | 'first_crossing' | 'track_start';
 
   /**
    * How many candidate crossings existed for this task position.
@@ -219,6 +221,18 @@ export interface TurnpointSequenceResult {
    * Null if SSS or ESS not reached.
    */
   speedSectionTime: number | null;
+
+  /**
+   * How the start was anchored when the task defines no SSS-typed turnpoint
+   * (a common task-setting mistake that would otherwise zero every score):
+   * - 'first_turnpoint' — crossings of the first turnpoint (usually the
+   *   TAKEOFF) acted as the start
+   * - 'track_start' — the track began outside the first turnpoint's cylinder
+   *   with no crossing (e.g. the logger started after launch), so the first
+   *   fix anchored the sequence
+   * Absent when the task has an explicit SSS turnpoint.
+   */
+  startFallback?: 'first_turnpoint' | 'track_start';
 }
 
 // ---------------------------------------------------------------------------
@@ -347,6 +361,7 @@ function buildForwardPath(
   sssIdx: number,
   essIdx: number,
   goalIdx: number,
+  startSelectionReason: TurnpointReaching['selectionReason'] = 'last_before_next',
 ): TurnpointReaching[] {
   const sequence: TurnpointReaching[] = [];
 
@@ -358,7 +373,7 @@ function buildForwardPath(
     latitude: sssCrossing.latitude,
     longitude: sssCrossing.longitude,
     altitude: sssCrossing.altitude,
-    selectionReason: 'last_before_next',
+    selectionReason: startSelectionReason,
     candidateCount: crossingsByTP.get(sssIdx)?.length ?? 0,
   });
 
@@ -523,7 +538,13 @@ export function resolveTurnpointSequence(
     ));
   }
   const taskDistance = segmentDistances.reduce((sum, d) => sum + d, 0);
-  const sssIdx = getSSSIndex(task);
+  // Tasks are supposed to mark one turnpoint as SSS, but hand-built tasks
+  // often omit it. Without a start anchor every pilot would score zero, so
+  // when the SSS is missing the first turnpoint (usually the take-off) acts
+  // as the start — see getEffectiveSSSIndex.
+  const explicitSSSIdx = getSSSIndex(task);
+  const sssIdx = getEffectiveSSSIndex(task);
+  const sssIsFallback = explicitSSSIdx < 0 && sssIdx >= 0;
   const essIdx = getESSIndex(task);
   const goalIdx = getGoalIndex(task);
 
@@ -548,11 +569,51 @@ export function resolveTurnpointSequence(
 
   // Filter SSS crossings by the required direction (e.g. EXIT for paragliding races).
   // If no SSS config or direction is unspecified, accept all crossings for backward compat.
-  const requiredDirection = task.sss?.direction?.toLowerCase() as 'enter' | 'exit' | undefined;
+  // The direction rule describes the explicit SSS cylinder; in fallback mode the
+  // anchor is the first turnpoint (not a configured start), so no filter applies.
+  const requiredDirection = sssIsFallback
+    ? undefined
+    : task.sss?.direction?.toLowerCase() as 'enter' | 'exit' | undefined;
   const allSSSCrossings = sssIdx >= 0 ? (crossingsByTP.get(sssIdx) ?? []) : [];
-  const sssCrossings = requiredDirection
+  let sssCrossings = requiredDirection
     ? allSSSCrossings.filter(c => c.direction === requiredDirection)
     : allSSSCrossings;
+
+  // Fallback start with no crossings: if the track began outside the first
+  // turnpoint's cylinder (e.g. the logger started after launch) there is no
+  // boundary to cross, so the first fix anchors the sequence — mirroring
+  // open-distance scoring's take-off origin. A track that began inside and
+  // never crossed out means the pilot never left launch: no start.
+  let startSelectionReason: TurnpointReaching['selectionReason'] = 'last_before_next';
+  if (sssIsFallback && sssCrossings.length === 0 && fixes.length > 0) {
+    const startTP = task.turnpoints[sssIdx];
+    const first = fixes[0];
+    const startedInside = isInsideCylinder(
+      first.latitude, first.longitude,
+      startTP.waypoint.lat, startTP.waypoint.lon, startTP.radius,
+    );
+    if (!startedInside) {
+      sssCrossings = [{
+        taskIndex: sssIdx,
+        fixIndex: 0,
+        time: first.time,
+        latitude: first.latitude,
+        longitude: first.longitude,
+        altitude: first.gnssAltitude,
+        direction: 'exit',
+        distanceToCenter: andoyerDistance(
+          first.latitude, first.longitude,
+          startTP.waypoint.lat, startTP.waypoint.lon,
+        ),
+      }];
+      startSelectionReason = 'track_start';
+    }
+  }
+
+  const startFallback = sssIsFallback
+    ? (startSelectionReason === 'track_start' ? 'track_start' as const : 'first_turnpoint' as const)
+    : undefined;
+
   if (sssCrossings.length === 0) {
     return {
       crossings: allCrossings,
@@ -566,6 +627,7 @@ export function resolveTurnpointSequence(
       flownDistance: 0,
       legs,
       speedSectionTime: null,
+      ...(startFallback ? { startFallback } : {}),
     };
   }
 
@@ -578,7 +640,7 @@ export function resolveTurnpointSequence(
   for (let i = sssCrossings.length - 1; i >= 0; i--) {
     const sssCrossing = sssCrossings[i];
     const candidateSequence = buildForwardPath(
-      sssCrossing, crossingsByTP, sssIdx, essIdx, goalIdx
+      sssCrossing, crossingsByTP, sssIdx, essIdx, goalIdx, startSelectionReason
     );
 
     const tpsReached = candidateSequence.length;
@@ -677,5 +739,6 @@ export function resolveTurnpointSequence(
     flownDistance,
     legs,
     speedSectionTime,
+    ...(startFallback ? { startFallback } : {}),
   };
 }

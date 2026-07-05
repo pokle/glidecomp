@@ -1033,4 +1033,99 @@ describe('resolveTurnpointSequence', () => {
       expect(result.bestProgress!.distanceToGoal).toBeGreaterThan(straightLineToGoal * 3);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Start fallback: task with no SSS turnpoint
+  // ---------------------------------------------------------------------------
+  describe('Start fallback (no SSS turnpoint)', () => {
+    // A realistic mis-set task: TAKEOFF + plain turnpoints + goal, but nobody
+    // marked a turnpoint as SSS. Without the fallback every pilot scores zero.
+    const noSSSDefs: TaskDef[] = [
+      { name: 'LAUNCH', lat: 47.0, lon: 11.0, radius: 400, type: 'TAKEOFF' },
+      { name: 'TP1', lat: 47.0, lon: 11.13, radius: 400 },
+      { name: 'GOAL', lat: 47.0, lon: 11.26, radius: 400, type: 'ESS' },
+    ];
+    const noSSSCylinders = noSSSDefs.map(d => ({ lat: d.lat, lon: d.lon, radius: d.radius }));
+
+    it('anchors the start on the first turnpoint and scores the flight', () => {
+      const task = createTask(noSSSDefs);
+      const track = createTrackThroughCylinders(noSSSCylinders);
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.startFallback).toBe('first_turnpoint');
+      expect(result.sssReaching).not.toBeNull();
+      expect(result.sssReaching!.taskIndex).toBe(0);
+      expect(result.madeGoal).toBe(true);
+      expect(result.flownDistance).toBe(result.taskDistance);
+      expect(result.speedSectionTime).not.toBeNull();
+    });
+
+    it('ignores the sss direction config when no SSS turnpoint exists', () => {
+      // ENTER would reject the take-off exit if the direction filter applied
+      // to the fallback start.
+      const task = createTask(noSSSDefs, { direction: 'ENTER' });
+      const track = [
+        createFix(0, 47.0, 11.0),    // inside take-off (center)
+        createFix(2, 47.0, 11.02),   // outside take-off — only an exit crossing
+        createFix(4, 47.0, 11.13),   // TP1 center
+        createFix(6, 47.0, 11.26),   // goal center
+      ];
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.startFallback).toBe('first_turnpoint');
+      expect(result.sssReaching).not.toBeNull();
+      expect(result.madeGoal).toBe(true);
+    });
+
+    it('falls back to the first fix when the track begins outside the first cylinder', () => {
+      // Logger started after launch — no take-off cylinder crossing exists.
+      const task = createTask(noSSSDefs);
+      const track = [
+        createFix(0, 47.0, 11.06),   // already en route, outside take-off
+        createFix(2, 47.0, 11.13),   // TP1 center
+        createFix(4, 47.0, 11.26),   // goal center
+      ];
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.startFallback).toBe('track_start');
+      expect(result.sssReaching).not.toBeNull();
+      expect(result.sssReaching!.selectionReason).toBe('track_start');
+      expect(result.sssReaching!.fixIndex).toBe(0);
+      expect(result.madeGoal).toBe(true);
+    });
+
+    it('scores zero for a pilot who never leaves the first cylinder', () => {
+      const task = createTask(noSSSDefs);
+      // All fixes within ~150m of the take-off center (radius 400m)
+      const track = [
+        createFix(0, 47.0, 11.0),
+        createFix(2, 47.0, 11.001),
+        createFix(4, 47.0, 11.002),
+      ];
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.startFallback).toBe('first_turnpoint');
+      expect(result.sssReaching).toBeNull();
+      expect(result.sequence).toHaveLength(0);
+      expect(result.flownDistance).toBe(0);
+    });
+
+    it('tasks with an explicit SSS never report a start fallback', () => {
+      const task = threePointTask();
+      const track = createTrackThroughCylinders([
+        { lat: 47.0, lon: 11.0, radius: 1000 },
+        { lat: 47.0, lon: 11.13, radius: 400 },
+        { lat: 47.0, lon: 11.26, radius: 400 },
+      ]);
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.startFallback).toBeUndefined();
+      expect(result.madeGoal).toBe(true);
+    });
+  });
 });

@@ -1092,6 +1092,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
           reasonStr = `First of ${reaching.candidateCount} crossings`;
         } else if (reaching.selectionReason === 'first_crossing' && reaching.candidateCount > 1) {
           reasonStr = `First of ${reaching.candidateCount} crossings`;
+        } else if (reaching.selectionReason === 'track_start') {
+          reasonStr = 'Track began outside the start cylinder — measured from first fix';
         }
 
         html += `

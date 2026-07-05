@@ -484,6 +484,23 @@ export function getSSSIndex(task: XCTask): number {
 }
 
 /**
+ * Get the effective start turnpoint index for scoring.
+ *
+ * Tasks are supposed to mark one turnpoint as 'SSS', but tasks built by hand
+ * (or imported from other tools) often omit it — and without a start anchor
+ * the GAP sequence resolution would score every pilot zero. When no turnpoint
+ * is typed 'SSS', the first turnpoint (usually the TAKEOFF) is treated as the
+ * start instead.
+ *
+ * Returns -1 only when the task has no turnpoints at all.
+ */
+export function getEffectiveSSSIndex(task: XCTask): number {
+  const explicit = getSSSIndex(task);
+  if (explicit >= 0) return explicit;
+  return task.turnpoints.length > 0 ? 0 : -1;
+}
+
+/**
  * Get the ESS (end of speed section) turnpoint index
  */
 export function getESSIndex(task: XCTask): number {

@@ -488,8 +488,10 @@ export async function computeTaskScore(
     scoredTracks,
     TRACK_FETCH_CONCURRENCY,
     async (track): Promise<AnalyzedPilot | null> => {
+      // v2: engine gained the no-SSS start fallback — v1 entries for tasks
+      // without an SSS turnpoint hold zero distances for the same geometry.
       const cacheKey = geomHash
-        ? `pa:v1:${geomHash}:${track.task_track_id}:${track.uploaded_at}`
+        ? `pa:v2:${geomHash}:${track.task_track_id}:${track.uploaded_at}`
         : "";
 
       let flight: FlightScoringData | null = null;
