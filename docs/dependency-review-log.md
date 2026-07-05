@@ -2,6 +2,63 @@
 
 This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
 
+## 2026-07-05
+
+### Security Vulnerabilities Fixed
+
+None. `bun audit` reported 0 vulnerabilities before and after this cycle. All upgrades this week are routine maintenance bumps, not security-forced.
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **wrangler** | 4.105.0 | 4.107.0 | root, frontend, auth-api, competition-api, airscore-api | 4.106.0: AI Search job management, R2 jurisdiction support, multi-profile auth (`wrangler auth create/list/…`), D1 migrations in test harness (`worker.applyD1Migrations()`), workflow introspection helpers. 4.107.0: cache options for WorkerEntrypoint exports, declarative Durable Object `exports` map (alternative to `migrations`), `wrangler flagship` commands, OS-keychain OAuth storage (`--use-keyring`). **Removed the deprecated `--experimental-vm-modules` flag** (not used here — grepped). workerd → 1.20260701.1. Requires Node ≥22.0.0 (CI installs Node 22 — no bump needed). No breaking changes affecting our usage. |
+| **@cloudflare/vitest-pool-workers** | 0.16.20 | 0.18.0 | auth-api, competition-api | Bundles wrangler 4.107.0 + miniflare 4.20260701.0 (keeps them aligned). 0.17.0: `introspectWorkflow(...).get()` now returns a promise (breaking, but we don't use Workflows — grepped `introspectWorkflow`, no hits); CommonJS `require("./x.wasm?module")` fix. 0.18.0: declarative Durable Object `exports` support. Peer dep vitest ^4.1.0 (we're on 4.1.9). |
+| **better-auth** | 1.6.22 | 1.6.23 | frontend, auth-api | Feature/bugfix release: Yandex OAuth provider added; drizzle-adapter D1/postgres-js affected-row counting fix; Stripe org-subscription actions target the correct org; CLI Drizzle schema default-value escaping fix. No security fixes, no breaking API changes. |
+| **@better-auth/api-key** | 1.6.22 | 1.6.23 | auth-api | Aligned with better-auth 1.6.23. |
+| **@cloudflare/workers-types** | 4.20260628.1 | 4.20260702.1 | root, frontend, auth-api, competition-api, airscore-api | Weekly type definition update (stays within `^4`; the new 5.x major is intentionally deferred — see below). |
+| **tailwindcss** | 4.3.1 | 4.3.2 | frontend | Patch release. |
+| **@tailwindcss/vite** | 4.3.2 | 4.3.2 | frontend | Aligned with tailwindcss 4.3.2. |
+| **three** | 0.185.0 | 0.185.1 | frontend | Patch release. |
+| **concurrently** | 9.2.1 | 9.2.3 | root | Patch bump within `^9` (major 10.x still deferred — ESM-only, drops `--name-separator`). |
+
+### Code Changes Required
+
+None. All upgrades are drop-in replacements with no API changes affecting our usage. The two flagged breaking changes (wrangler dropping `--experimental-vm-modules`, vitest-pool-workers' `introspectWorkflow().get()` becoming async) were both verified as unused in this repo via grep before upgrading.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| @cloudflare/workers-types | 4.20260702.1 | 5.20260705.1 | **New major (5.x) this cycle.** Stay within `^4` per convention. Evaluate in a focused PR — Cloudflare's date-versioned major bumps usually track a compatibility-date/runtime-surface change. |
+| zod | 3.25.76 | 4.4.3 | Major version. Still blocked by `@hono/zod-validator` (honojs/middleware#1148). |
+| @hono/zod-validator | 0.7.6 | 0.8.0 | 0.8.0 requires zod 4. Stay on 0.7.6 until zod 4 migration. |
+| vite | 7.3.6 | 8.1.3 | Major version. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. |
+| @vitejs/plugin-react | 5.1.4 | 6.0.3 | Major version. Defer to a focused PR (pairs with the Vite 8 evaluation). |
+| kysely | 0.28.17 | 0.29.3 | Pre-1.0 minor bump (equivalent to major). Defer to a focused PR. |
+| jsdom | 25.0.1 | 29.1.1 | Major version jump. Defer to a focused PR. |
+| katex | 0.16.47 | 0.17.0 | Major version. Stay within `^0.16.x` semver range. |
+| concurrently | 9.2.3 | 10.0.3 | Major version. ESM-only, drops `--name-separator`. Low priority — defer. |
+| @types/node | 25.9.4 | 26.1.0 | Major version jump. Stay on 25.x for now. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+
+### Verification
+
+- `bun run typecheck:all` — all 5 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api). (The former `mcp-api` worker has been removed from the repo; `typecheck:all` no longer includes it.)
+- `bun run test:all` — 501 root/engine tests + 56 auth-api (6 todo) + 288 competition-api all pass. Competition-api reports "6 errors" (unhandled rejections from the deliberate `controller.error()` in the `decompressed_too_large` igc-validation test); verified pre-existing by re-running the suite on the pre-upgrade lockfile (identical 288 passed / 6 errors / exit 0). Overall exit 0.
+- `bun run test:e2e` — 6/6 chromium specs pass. Under full parallel load `comp-creation` flaked once with a "New Competition" button click timeout, then passed cleanly on an isolated retry (3.1s) — the same pre-existing remote-environment timing flake documented in every prior entry, not a dependency regression.
+- `bun audit` — 0 vulnerabilities.
+
+### Lessons / Notes for Future Sessions
+
+- **`mcp-api` worker is gone.** The repo now has only three workers (`airscore-api`, `auth-api`, `competition-api`); `typecheck:all` / `test:all` cover 5 workspaces, not 6. Older log entries reference `mcp-api` and the `@modelcontextprotocol/sdk` / `agents` deps — those are stale. The `qs`, `fast-uri`, and `ip-address` overrides were originally added for `@modelcontextprotocol/sdk`; with mcp-api removed they may now be **droppable**, but `bun audit` is clean and removing overrides risks re-surfacing a transitive vuln, so they were left in place this cycle. A future focused cleanup could verify whether any dep still pulls those packages and drop the dead overrides.
+- **Pre-installed Playwright browsers can be stale relative to the project's Playwright version.** This cycle the environment shipped chromium/headless-shell **rev 1194**, but `@playwright/test` 1.61.1 pins **rev 1228** — every e2e test failed at browser launch (`Executable doesn't exist at …chromium_headless_shell-1228…`). Fix: `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` (the download succeeded this time; the CDN is not always reachable, per earlier lessons). This is **not** caused by the dependency bumps (we didn't touch Playwright) — it's an environment provisioning mismatch. Check `ls /opt/pw-browsers/` against the rev Playwright wants if e2e fails at launch.
+- **`@cloudflare/vitest-pool-workers` 0.18.0 bundles wrangler 4.107.0.** Continue upgrading these two together — 0.18.0 is the aligned partner for wrangler 4.107.0.
+- **`@cloudflare/workers-types` shipped a 5.x major** (5.20260705.1). First major bump of this package in a while. Deferred — needs a focused look at whether the type surface diverges from our compatibility date.
+- **wrangler 4.107.0 still only requires Node ≥22.0.0.** CI's `setup-node@v4` with `node-version: 22` (in both `deploy.yml` and `branch-deploy.yml`) remains sufficient — no CI version bump needed this cycle.
+- **`esbuild`, `qs`, `ws`, `hono`, `fast-uri`, `ip-address` overrides remain in place.** hono is already at latest (4.12.27). `bun audit` is clean; keep the overrides load-bearing until upstreams ship patched versions natively (and until the mcp-api-removal cleanup above confirms the MCP-SDK-related ones are truly unused).
+
 ## 2026-06-28
 
 ### Security Vulnerabilities Fixed

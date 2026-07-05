@@ -31,11 +31,7 @@ bun audit
 
 ## 4. Push, then watch CI to green
 
-After pushing, wait for the Branch Deploy run to complete:
-
-```
-gh run watch <run-id> --exit-status
-```
+After pushing, wait for the Branch Deploy run to complete. On Claude Code on the web there is **no `gh` CLI** — watch CI with the GitHub MCP tools instead: `mcp__github__actions_list` (find the latest `branch-deploy.yml` run for your branch/head SHA), then poll `mcp__github__actions_get` until it concludes, and `mcp__github__get_job_logs` (with `failed_only`) to read failures. Do **not** poll with Bash `sleep`; if you need to wait between checks, end the turn and use the `send_later` MCP tool to resume. (On a local terminal with `gh` available, `gh run watch <run-id> --exit-status` is the equivalent.)
 
 If CI fails:
 
