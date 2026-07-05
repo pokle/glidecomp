@@ -508,6 +508,22 @@ export function getESSIndex(task: XCTask): number {
 }
 
 /**
+ * Get the effective end-of-speed-section index for scoring.
+ *
+ * When no turnpoint is typed 'ESS', the speed section is taken to end at
+ * goal (the last turnpoint) — the usual race-to-goal convention. Without
+ * this, a mis-set task with pilots in goal would allocate time points that
+ * nobody could earn, and every goal pilot would tie on distance alone.
+ *
+ * Returns -1 when the task has fewer than two turnpoints (no course to race).
+ */
+export function getEffectiveESSIndex(task: XCTask): number {
+  const explicit = getESSIndex(task);
+  if (explicit >= 0) return explicit;
+  return task.turnpoints.length >= 2 ? getGoalIndex(task) : -1;
+}
+
+/**
  * Get all turnpoints that are intermediate (not SSS/ESS/TAKEOFF)
  */
 export function getIntermediateTurnpoints(task: XCTask): Turnpoint[] {

@@ -11,7 +11,7 @@
 
 import { IGCFix } from './igc-parser';
 import { andoyerDistance, calculateTrackDistance } from './geo';
-import { XCTask, getEffectiveSSSIndex, getESSIndex, getGoalIndex } from './xctsk-parser';
+import { XCTask, getEffectiveSSSIndex, getEffectiveESSIndex, getGoalIndex } from './xctsk-parser';
 import { resolveTurnpointSequence } from './turnpoint-sequence';
 import { detectCircles } from './circle-detector';
 import { resolveThresholds, DEFAULT_THRESHOLDS, type DetectionThresholds, type PartialThresholds } from './thresholds';
@@ -356,10 +356,10 @@ function detectTurnpointEvents(
   const events: FlightEvent[] = [];
   const result = resolveTurnpointSequence(task, fixes);
 
-  // Effective index so a no-SSS task (start fallback) still labels its
-  // start crossings/reachings as start events.
+  // Effective indices so a task missing its SSS/ESS types (start/speed-
+  // section fallbacks) still labels start and ESS events consistently.
   const sssIdx = getEffectiveSSSIndex(task);
-  const essIdx = getESSIndex(task);
+  const essIdx = getEffectiveESSIndex(task);
   const goalIdx = getGoalIndex(task);
 
   // --- Raw crossings → crossing events ---

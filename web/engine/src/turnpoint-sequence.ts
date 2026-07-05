@@ -16,7 +16,7 @@
 import type { XCTask } from './xctsk-parser';
 import type { IGCFix } from './igc-parser';
 import { andoyerDistance, isInsideCylinder } from './geo';
-import { getSSSIndex, getEffectiveSSSIndex, getESSIndex, getGoalIndex } from './xctsk-parser';
+import { getSSSIndex, getEffectiveSSSIndex, getESSIndex, getEffectiveESSIndex, getGoalIndex } from './xctsk-parser';
 import { calculateOptimizedTaskLine } from './task-optimizer';
 
 // ---------------------------------------------------------------------------
@@ -233,6 +233,15 @@ export interface TurnpointSequenceResult {
    * Absent when the task has an explicit SSS turnpoint.
    */
   startFallback?: 'first_turnpoint' | 'track_start';
+
+  /**
+   * Set when the task defines no ESS-typed turnpoint (the other half of the
+   * mis-set-task trap): the speed section is taken to end at goal — the last
+   * turnpoint — per the usual race-to-goal convention, so speed-section
+   * times, time points, and arrival order still exist. Absent when the task
+   * has an explicit ESS turnpoint.
+   */
+  essFallback?: 'last_turnpoint';
 }
 
 // ---------------------------------------------------------------------------
@@ -545,7 +554,12 @@ export function resolveTurnpointSequence(
   const explicitSSSIdx = getSSSIndex(task);
   const sssIdx = getEffectiveSSSIndex(task);
   const sssIsFallback = explicitSSSIdx < 0 && sssIdx >= 0;
-  const essIdx = getESSIndex(task);
+  // Same idea for the ESS: when missing, the speed section ends at goal —
+  // otherwise time/arrival/leading points exist that no pilot can earn and
+  // every goal pilot ties on distance alone. See getEffectiveESSIndex.
+  const explicitESSIdx = getESSIndex(task);
+  const essIdx = getEffectiveESSIndex(task);
+  const essIsFallback = explicitESSIdx < 0 && essIdx >= 0;
   const goalIdx = getGoalIndex(task);
 
   // Build legs with default completed = false
@@ -628,6 +642,7 @@ export function resolveTurnpointSequence(
       legs,
       speedSectionTime: null,
       ...(startFallback ? { startFallback } : {}),
+      ...(essIsFallback ? { essFallback: 'last_turnpoint' as const } : {}),
     };
   }
 
@@ -740,5 +755,6 @@ export function resolveTurnpointSequence(
     legs,
     speedSectionTime,
     ...(startFallback ? { startFallback } : {}),
+    ...(essIsFallback ? { essFallback: 'last_turnpoint' as const } : {}),
   };
 }

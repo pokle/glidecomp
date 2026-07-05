@@ -1125,7 +1125,67 @@ describe('resolveTurnpointSequence', () => {
       const result = resolveTurnpointSequence(task, track);
 
       expect(result.startFallback).toBeUndefined();
+      expect(result.essFallback).toBeUndefined();
       expect(result.madeGoal).toBe(true);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // ESS fallback: task with no ESS turnpoint
+  // ---------------------------------------------------------------------------
+  describe('ESS fallback (no ESS turnpoint)', () => {
+    // The other half of the mis-set-task trap: without an ESS the speed
+    // section never ends, so no pilot gets a speed-section time and every
+    // goal pilot would tie on distance alone.
+    const noESSDefs: TaskDef[] = [
+      { name: 'SSS', lat: 47.0, lon: 11.0, radius: 1000, type: 'SSS' },
+      { name: 'TP1', lat: 47.0, lon: 11.13, radius: 400 },
+      { name: 'GOAL', lat: 47.0, lon: 11.26, radius: 400 },
+    ];
+    const noESSCylinders = noESSDefs.map(d => ({ lat: d.lat, lon: d.lon, radius: d.radius }));
+
+    it('ends the speed section at goal and yields a speed-section time', () => {
+      const task = createTask(noESSDefs);
+      const track = createTrackThroughCylinders(noESSCylinders);
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.essFallback).toBe('last_turnpoint');
+      expect(result.madeGoal).toBe(true);
+      expect(result.essReaching).not.toBeNull();
+      expect(result.essReaching!.taskIndex).toBe(2); // goal
+      expect(result.speedSectionTime).not.toBeNull();
+      expect(result.speedSectionTime!).toBeGreaterThan(0);
+    });
+
+    it('no ESS time for a pilot who lands out before goal', () => {
+      const task = createTask(noESSDefs);
+      const track = createTrackThroughCylinders(noESSCylinders.slice(0, 2));
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.essFallback).toBe('last_turnpoint');
+      expect(result.essReaching).toBeNull();
+      expect(result.speedSectionTime).toBeNull();
+      expect(result.flownDistance).toBeGreaterThan(0);
+    });
+
+    it('handles a task missing both SSS and ESS types', () => {
+      const task = createTask([
+        { name: 'LAUNCH', lat: 47.0, lon: 11.0, radius: 400, type: 'TAKEOFF' },
+        { name: 'TP1', lat: 47.0, lon: 11.13, radius: 400 },
+        { name: 'GOAL', lat: 47.0, lon: 11.26, radius: 400 },
+      ]);
+      const track = createTrackThroughCylinders(
+        task.turnpoints.map(tp => ({ lat: tp.waypoint.lat, lon: tp.waypoint.lon, radius: tp.radius }))
+      );
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.startFallback).toBe('first_turnpoint');
+      expect(result.essFallback).toBe('last_turnpoint');
+      expect(result.madeGoal).toBe(true);
+      expect(result.speedSectionTime).not.toBeNull(); // whole course is the speed section
     });
   });
 });
