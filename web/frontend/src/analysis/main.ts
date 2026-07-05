@@ -103,7 +103,7 @@ async function init(): Promise<void> {
     return;
   }
   if (!user.username) {
-    window.location.href = "/onboarding.html";
+    window.location.href = "/onboarding";
     return;
   }
 

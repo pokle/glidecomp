@@ -247,15 +247,11 @@ export function SettingsDialog({
                 onValueChange={(v) => setCategory(v as "hg" | "pg")}
               >
                 <label>
-                  <Radio.Root value="hg">
-                    <Radio.Indicator>●</Radio.Indicator>
-                  </Radio.Root>{" "}
+                  <Radio.Root value="hg">{category === "hg" ? "◉" : "○"}</Radio.Root>{" "}
                   HG
                 </label>
                 <label>
-                  <Radio.Root value="pg">
-                    <Radio.Indicator>●</Radio.Indicator>
-                  </Radio.Root>{" "}
+                  <Radio.Root value="pg">{category === "pg" ? "◉" : "○"}</Radio.Root>{" "}
                   PG
                 </label>
               </RadioGroup>

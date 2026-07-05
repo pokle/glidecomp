@@ -64,8 +64,11 @@ export function CheckboxField({
   return (
     <Field.Root>
       <Field.Label>
+        {/* Text glyph for both states: an unchecked Base UI checkbox is an
+            empty (zero-size) span until styled, i.e. invisible and
+            unclickable in this unstyled UI. */}
         <Checkbox.Root checked={checked} onCheckedChange={(c) => onChange(c)}>
-          <Checkbox.Indicator>✓</Checkbox.Indicator>
+          {checked ? "☑" : "☐"}
         </Checkbox.Root>{" "}
         {label}
       </Field.Label>

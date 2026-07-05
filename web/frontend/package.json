@@ -19,7 +19,6 @@
     "@tailwindcss/vite": "^4.3.1",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.1",
-    "@types/tabulator-tables": "^6.3.5",
     "@vitejs/plugin-react": "^5.1.4",
     "jsdom": "^25.0.1",
     "tailwindcss": "^4.3.1",
@@ -41,7 +40,6 @@
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-router-dom": "^7.9.5",
-    "tabulator-tables": "^6.5.2",
     "three": "^0.185.0",
     "threebox-plugin": "^2.2.7"
   }

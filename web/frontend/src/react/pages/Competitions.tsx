@@ -167,16 +167,14 @@ function CreateCompDialog({
                 value={category}
                 onValueChange={(value) => setCategory(value as "hg" | "pg")}
               >
+                {/* Text glyphs: like the checkbox, an unselected Base UI
+                    radio is a zero-size span until styled. */}
                 <label>
-                  <Radio.Root value="hg">
-                    <Radio.Indicator />
-                  </Radio.Root>
+                  <Radio.Root value="hg">{category === "hg" ? "◉" : "○"}</Radio.Root>
                   Hang Gliding
                 </label>
                 <label>
-                  <Radio.Root value="pg">
-                    <Radio.Indicator />
-                  </Radio.Root>
+                  <Radio.Root value="pg">{category === "pg" ? "◉" : "○"}</Radio.Root>
                   Paragliding
                 </label>
               </RadioGroup>
@@ -193,8 +191,11 @@ function CreateCompDialog({
             </Field.Root>
 
             <label>
+              {/* Text glyph for both states: an unchecked Base UI checkbox is
+                  an empty (zero-size) span until styled, i.e. invisible and
+                  unclickable in this unstyled UI. */}
               <Checkbox.Root checked={test} onCheckedChange={(checked) => setTest(checked === true)}>
-                <Checkbox.Indicator>✓</Checkbox.Indicator>
+                {test ? "☑" : "☐"}
               </Checkbox.Root>
               Test competition (only visible to admins)
             </label>

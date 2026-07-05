@@ -1,7 +1,8 @@
 /**
- * React + Base UI version of the main GlideComp UI, served at /react/*.
- * The analysis and 3D replay pages are intentionally not converted — links
- * point at the existing vanilla pages.
+ * The main GlideComp UI: a React + Base UI SPA served at /, /comp, /u/*,
+ * /scores, /profile, /settings and /onboarding. The analysis, 3D replay,
+ * admin, scoring-explainer and theme-editor pages remain separate vanilla
+ * entries — links point at those pages directly.
  */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -33,7 +34,7 @@ createRoot(document.getElementById("root")!).render(
     <UserProvider>
       <AppToastProvider>
         <ConfirmProvider>
-          <BrowserRouter basename="/react">
+          <BrowserRouter>
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/onboarding" element={<Onboarding />} />

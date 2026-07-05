@@ -19,7 +19,7 @@ Browser                    Cloudflare
 - **Pages Function** at `/api/auth/*` proxies requests to the auth-api worker via a [service binding](https://developers.cloudflare.com/pages/functions/bindings/#service-bindings) (see `functions/api/auth/[[path]].ts` and root `wrangler.toml`)
 - **Auth worker** handles all auth logic (Hono + Better Auth + D1)
 - **Frontend pages** served by Cloudflare Pages (static)
-- **`/u/*`** rewritten to `dashboard.html` via `_redirects` (200 rewrite, URL preserved)
+- **`/u/*`** (and the other main-UI routes) rewritten to `/` — the React SPA entry — via `_redirects` (200 rewrite, URL preserved)
 
 ## OAuth Flow
 
@@ -29,10 +29,10 @@ Browser                    Cloudflare
 3. Browser redirects to Google consent screen
 4. Google redirects back to /api/auth/callback/google
 5. Better Auth creates/updates user + session in D1, sets session cookie
-6. Browser redirects to /u/me/ (callbackURL) which loads dashboard.html
-7. dashboard.ts detects session:
+6. Browser redirects to /u/me (callbackURL) which loads the React SPA dashboard
+7. The dashboard route detects the session:
    - Has username? → show dashboard
-   - No username?  → redirect to /onboarding.html
+   - No username?  → redirect to /onboarding
 8. User picks a username on onboarding page
 9. POST /api/auth/set-username → redirect to /u/{username}/
 ```
@@ -58,8 +58,8 @@ Browser                    Cloudflare
 
 | Page | File | Purpose |
 |------|------|---------|
-| Onboarding | `onboarding.html` + `onboarding.ts` | Username picker for new users |
-| Dashboard | `dashboard.html` + `dashboard.ts` | Welcome page at `/u/{username}/`, shows Google sign-in if not authenticated |
+| Onboarding | `react/pages/Onboarding.tsx` (route `/onboarding`) | Username picker for new users |
+| Dashboard | `react/pages/Dashboard.tsx` (route `/u/{username}`) | My Flights page, redirects anonymous visitors to Google sign-in |
 
 ### API Endpoints
 

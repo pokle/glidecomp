@@ -91,22 +91,18 @@ export default defineConfig({
       name: 'rewrite-spa-routes',
       configureServer(server) {
         server.middlewares.use((req: Connect.IncomingMessage, _res, next) => {
-          // React SPA: any /react route without a file extension serves the
-          // React entry; module/asset requests (contain a dot) pass through.
-          if (req.url === '/react' || (req.url?.startsWith('/react/') && !req.url.split('?')[0].includes('.'))) {
-            req.url = '/react.html';
-          } else if (req.url?.startsWith('/u/')) {
-            req.url = '/dashboard.html';
-          } else if (req.url === '/comp' || req.url === '/comp/') {
-            req.url = '/comp.html';
-          } else if (req.url?.match(/^\/comp\/[a-z]+(\/|\/task\/[a-z]+\/?)?$/) && !req.url?.includes('.')) {
-            req.url = '/comp-detail.html';
-          } else if (req.url === '/scores' || req.url?.startsWith('/scores?')) {
-            req.url = '/scores.html';
-          } else if (req.url === '/profile' || req.url === '/profile/') {
-            req.url = '/profile.html';
-          } else if (req.url === '/settings' || req.url === '/settings/') {
-            req.url = '/settings.html';
+          // Main-UI routes are handled by the React SPA at /index.html.
+          // Module/asset requests (they contain a dot) pass through untouched.
+          const path = req.url?.split('?')[0] ?? '';
+          const isSpaRoute =
+            !path.includes('.') &&
+            (path.startsWith('/u/') ||
+              path === '/comp' ||
+              /^\/comp\/[a-z]+(\/|\/task\/[a-z]+\/?)?$/.test(path) ||
+              path === '/scores' ||
+              /^\/(profile|settings|onboarding)\/?$/.test(path));
+          if (isSpaRoute) {
+            req.url = '/index.html';
           } else if (req.url === '/theme-editor' || req.url === '/theme-editor/') {
             req.url = '/theme-editor.html';
           } else if (req.url === '/kitchensink' || req.url === '/kitchensink/') {
@@ -130,24 +126,16 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'src/index.html'),
         analysis: resolve(__dirname, 'src/analysis.html'),
-        onboarding: resolve(__dirname, 'src/onboarding.html'),
-        dashboard: resolve(__dirname, 'src/dashboard.html'),
         about: resolve(__dirname, 'src/about.html'),
         legal: resolve(__dirname, 'src/legal.html'),
         scoring: resolve(__dirname, 'src/scoring.html'),
         'scoring-gap': resolve(__dirname, 'src/scoring-gap.html'),
         'scoring-open-distance': resolve(__dirname, 'src/scoring-open-distance.html'),
-        comp: resolve(__dirname, 'src/comp.html'),
-        'comp-detail': resolve(__dirname, 'src/comp-detail.html'),
-        scores: resolve(__dirname, 'src/scores.html'),
-        profile: resolve(__dirname, 'src/profile.html'),
-        settings: resolve(__dirname, 'src/settings.html'),
         'theme-editor': resolve(__dirname, 'src/theme-editor.html'),
         kitchensink: resolve(__dirname, 'src/kitchensink.html'),
         replay: resolve(__dirname, 'src/replay.html'),
         'admin-users': resolve(__dirname, 'src/admin-users.html'),
         'admin-cache': resolve(__dirname, 'src/admin-cache.html'),
-        react: resolve(__dirname, 'src/react.html'),
       },
     },
   },

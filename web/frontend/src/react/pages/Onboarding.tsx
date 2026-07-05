@@ -53,6 +53,10 @@ export function Onboarding() {
       return;
     }
 
+    // Full page load, not navigate(): the UserProvider context still holds
+    // username: null, so a client-side hop would bounce the dashboard's
+    // "no username → onboarding" guard straight back here. Reloading
+    // refetches /api/auth/me with the new username.
     const dest = `/u/${usernameResult.username}`;
     try {
       const res = await api.api.comp.pilot.$patch({
@@ -68,17 +72,17 @@ export function Onboarding() {
           err.error || "Could not save profile. You can update it later on your profile page."
         );
         // Username is already saved — proceed after the user sees the message.
-        setTimeout(() => navigate(dest), 2000);
+        setTimeout(() => window.location.assign(dest), 2000);
         return;
       }
     } catch {
       setGeneralError(
         "Could not save pilot details right now. You can add them later on your profile page."
       );
-      setTimeout(() => navigate(dest), 2000);
+      setTimeout(() => window.location.assign(dest), 2000);
       return;
     }
-    navigate(dest);
+    window.location.assign(dest);
   }
 
   return (

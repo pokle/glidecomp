@@ -13,13 +13,24 @@ interface UserState {
 
 const UserContext = createContext<UserState>({ user: null, loading: true });
 
+/**
+ * One /api/auth/me round trip per page load, shared across StrictMode's
+ * double effect run. Two concurrent calls aren't just wasteful — under
+ * load the local auth worker can answer one of them with user:null, and
+ * whichever response lands last would win.
+ */
+let mePromise: Promise<AuthUser | null> | null = null;
+function fetchCurrentUserOnce(): Promise<AuthUser | null> {
+  mePromise ??= getCurrentUser();
+  return mePromise;
+}
+
 export function useUser(): UserState {
   return useContext(UserContext);
 }
 
-/** Google sign-in that lands back in the React app rather than the vanilla dashboard. */
 export function signInWithGoogle() {
-  return authClient.signIn.social({ provider: "google", callbackURL: "/react/u/me" });
+  return authClient.signIn.social({ provider: "google", callbackURL: "/u/me" });
 }
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
@@ -27,7 +38,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    getCurrentUser().then((user) => {
+    fetchCurrentUserOnce().then((user) => {
       if (!cancelled) setState({ user, loading: false });
     });
     return () => {
