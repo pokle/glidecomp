@@ -1,0 +1,67 @@
+{
+  "earthModel": "WGS84",
+  "goal": {
+    "deadline": "10:00:00Z",
+    "type": "CYLINDER"
+  },
+  "sss": {
+    "direction": "EXIT",
+    "timeGates": [],
+    "type": "RACE"
+  },
+  "taskType": "CLASSIC",
+  "turnpoints": [
+    {
+      "radius": 5000,
+      "waypoint": {
+        "lat": -36.185833,
+        "lon": 147.976667,
+        "altSmoothed": 935,
+        "name": "ELLIOT",
+        "description": "ELLIOT"
+      },
+      "type": "TAKEOFF"
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.059067,
+        "lon": 148.039833,
+        "altSmoothed": 244,
+        "name": "GRGGRG",
+        "description": "GRGGRG"
+      }
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.14895,
+        "lon": 147.864183,
+        "altSmoothed": 990,
+        "name": "MTMITA",
+        "description": "MTMITA"
+      }
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.223183,
+        "lon": 147.7288,
+        "altSmoothed": 432,
+        "name": "CUDGWE",
+        "description": "CUDGWE"
+      }
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.185,
+        "lon": 147.8914,
+        "altSmoothed": 291,
+        "name": "CORRY",
+        "description": "CORRY"
+      }
+    }
+  ],
+  "version": 1
+}
