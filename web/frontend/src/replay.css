@@ -1,0 +1,8 @@
+/*
+ * Replay-only stylesheet. The 3D replay styles itself: theme tokens, panel
+ * and light-mode remaps live in replay.html's own <style> block, and the
+ * markup uses plain Tailwind utilities. It needs no Basecoat and no shadcn
+ * tokens — just Tailwind. (The analysis page is the only remaining consumer
+ * of styles.css/Basecoat.)
+ */
+@import "tailwindcss";
