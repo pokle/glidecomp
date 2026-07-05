@@ -1,0 +1,150 @@
+/*
+ * React-app stylesheet: Tailwind v4 + shadcn/ui (Base UI foundation).
+ *
+ * Tokens are shadcn's "neutral" base color with the production Inter font
+ * stack. Loaded by the React entry (react/main.tsx) and imported by
+ * src/analysis.css so the vanilla analysis page shares the same tokens.
+ */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Alte Haas Grotesk — brand wordmark (hero title and header logo) */
+@font-face {
+  font-family: 'Alte Haas Grotesk';
+  src: url('/fonts/AlteHaasGroteskRegular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Alte Haas Grotesk';
+  src: url('/fonts/AlteHaasGroteskBold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --radius: 0.625rem;
+  /* Production (glidecomp.com) body font stack. */
+  --font-app:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-app);
+  --font-brand: 'Alte Haas Grotesk', var(--font-app);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Base UI quick-start requirements:
+     - the app root needs its own stacking context so portaled popups layer
+       above page content (https://base-ui.com/react/overview/quick-start)
+     - body { position: relative } is required for iOS 26+ Safari backdrops */
+  #root {
+    isolation: isolate;
+  }
+
+  body {
+    position: relative;
+  }
+
+  /* SVG Background based on https://www.svgbackgrounds.com/set/free-svg-backgrounds-and-patterns/
+     Scoped to .bg-hills — Safari's background-attachment:fixed on body breaks
+     pointer events for position:absolute children (e.g. map controls). */
+  .bg-hills {
+    background-color: var(--background);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900'%3E%3Cpolygon fill='%23C8D51A' points='957 765 539 900 1396 900'/%3E%3Cpolygon fill='%23A0AE11' points='957 765 872.9 900 1396 900'/%3E%3Cpolygon fill='%23BCCA17' points='-60 900 398 829 816 900'/%3E%3Cpolygon fill='%2396A00E' points='337 900 398 829 816 900'/%3E%3Cpolygon fill='%23C2CF18' points='1203 794 1552 900 876 900'/%3E%3Cpolygon fill='%238C980E' points='1203 794 1552 900 1162 900'/%3E%3Cpolygon fill='%23B4C215' points='641 839 886 900 367 900'/%3E%3Cpolygon fill='%2394A00F' points='587 900 641 839 886 900'/%3E%3Cpolygon fill='%23BAC616' points='1710 900 1401 820 1096 900'/%3E%3Cpolygon fill='%237E8A0A' points='1710 900 1401 820 1365 900'/%3E%3Cpolygon fill='%23C6D319' points='1210 900 971 836 725 900'/%3E%3Cpolygon fill='%23849010' points='943 900 1210 900 971 836'/%3E%3C/svg%3E");
+    background-attachment: fixed;
+    background-size: cover;
+  }
+}

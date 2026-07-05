@@ -8,9 +8,11 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+    "jsx": "react-jsx",
     "noEmit": true,
     "paths": {
-      "@glidecomp/engine": ["./web/engine/src/index.ts"]
+      "@glidecomp/engine": ["./web/engine/src/index.ts"],
+      "@/*": ["./web/frontend/src/*"]
     },
     "lib": [
       "ES2022",

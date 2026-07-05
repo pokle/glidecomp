@@ -1,5 +1,7 @@
 // Copyright (c) 2026, Tushar Pokle.  All rights reserved.
 
+import "../replay.css";
+
 /**
  * Entry point for the standalone /replay flight-replay page.
  * Wires the Three.js ReplayViewer to the DOM chrome (timeline scrubber,

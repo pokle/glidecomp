@@ -1,10 +1,22 @@
-/u/*  /dashboard  200
-/comp/  /comp  301
-/comp/:comp_id/task/*  /comp-detail  200
-/comp/:comp_id  /comp-detail  200
-/scores  /scores  200
-/profile  /profile  200
-/settings  /settings  200
-/theme-editor  /theme-editor  200
-/admin/users  /admin-users  200
-/admin/cache  /admin-cache  200
+/u/*  /  200
+/comp  /  200
+/comp/*  /  200
+/scores  /  200
+/profile  /  200
+/settings  /  200
+/onboarding  /  200
+/about  /  200
+/legal  /  200
+/scoring  /  200
+/scoring/*  /  200
+/admin/users  /  200
+/admin/cache  /  200
+
+# Old static-page URLs (linked from bookmarks and the vanilla analysis/replay pages)
+/about.html  /about  301
+/legal.html  /legal  301
+/scoring.html  /scoring  301
+/scoring-gap.html  /scoring/gap  301
+/scoring-open-distance.html  /scoring/open-distance  301
+/theme-editor  /  301
+/kitchensink.html  /  301

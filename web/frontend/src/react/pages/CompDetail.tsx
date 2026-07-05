@@ -1,0 +1,509 @@
+/**
+ * Competition detail page — React port of the comp view in comp-detail.ts.
+ * Mutations that used to window.location.reload() instead bump a refresh
+ * counter that re-runs the comp fetch.
+ */
+import { useEffect, useId, useRef, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { Button } from "@/react/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/react/ui/dialog";
+import { Field, FieldLabel, FieldLegend, FieldSet } from "@/react/ui/field";
+import { Input } from "@/react/ui/input";
+import { api } from "../../comp/api";
+import { toast } from "../lib/toast";
+import { useUser } from "../lib/user";
+import { categoryLabel, formatTaskDate } from "../lib/format";
+import { ActivitySection } from "../comp/ActivitySection";
+import { PilotsSection } from "../comp/PilotsSection";
+import { SettingsDialog } from "../comp/SettingsDialog";
+import { CheckboxField } from "../comp/fields";
+import {
+  compressIgc,
+  fetchWithRetry,
+  isPastCloseDate,
+  type CompDetailData,
+  type TaskSummary,
+} from "../comp/types";
+
+export function CompDetail() {
+  const { compId } = useParams<{ compId: string }>();
+  const { user } = useUser();
+  const [comp, setComp] = useState<CompDetailData | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [refresh, setRefresh] = useState(0);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!compId) {
+      setNotFound(true);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchWithRetry(() =>
+          api.api.comp[":comp_id"].$get({ param: { comp_id: compId } })
+        );
+        if (cancelled) return;
+        if (!res.ok) {
+          setNotFound(true);
+          return;
+        }
+        const data = (await res.json()) as unknown as CompDetailData;
+        if (cancelled) return;
+        setComp(data);
+        document.title = `GlideComp - ${data.name}`;
+      } catch {
+        if (!cancelled) setNotFound(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [compId, refresh]);
+
+  if (notFound || !compId) {
+    return (
+      <div>
+        <p>Competition not found</p>
+        <Link className="underline underline-offset-4" to="/comp">
+          Back to Competitions
+        </Link>
+      </div>
+    );
+  }
+
+  if (!comp) {
+    return (
+      <p role="status" aria-label="Loading competition" className="text-muted-foreground">
+        Loading competition…
+      </p>
+    );
+  }
+
+  const isAdmin = user != null && comp.admins.some((a) => a.email === user.email);
+  const compClosed = isPastCloseDate(comp.close_date);
+  const canSubmitTrack = user != null && !compClosed;
+
+  return (
+    <div>
+      <nav className="text-sm">
+        <Link className="underline underline-offset-4" to="/comp">
+          All Competitions
+        </Link>
+      </nav>
+
+      <h1 className="mt-2 text-2xl font-bold">{comp.name}</h1>
+      <p className="text-sm text-muted-foreground">
+        <span>{categoryLabel(comp.category)}</span>
+        {comp.test ? <span> Test</span> : null} <span>{comp.pilot_classes.join(", ")}</span>
+      </p>
+      {comp.tasks.some((t) => t.has_xctsk) ? (
+        <p className="mt-2 text-sm">
+          <Link
+            className="underline underline-offset-4"
+            to={`/scores?comp_id=${encodeURIComponent(compId)}`}
+          >
+            View scores →
+          </Link>
+        </p>
+      ) : null}
+      {isAdmin ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-2"
+          onClick={() => setSettingsOpen(true)}
+        >
+          Settings
+        </Button>
+      ) : null}
+
+      <ClassWarnings warnings={comp.class_coverage_warnings} tasks={comp.tasks} />
+
+      <section>
+        <h2 className="mt-8 text-lg font-bold">
+          Tasks
+          {isAdmin ? (
+            <>
+              {" "}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCreateOpen(true)}
+              >
+                New Task
+              </Button>
+            </>
+          ) : null}
+        </h2>
+        <TasksList tasks={comp.tasks} compId={compId} canSubmitTrack={canSubmitTrack} />
+      </section>
+
+      <PilotsSection
+        compId={compId}
+        compName={comp.name}
+        compClasses={comp.pilot_classes}
+        isAdmin={isAdmin}
+      />
+
+      <ActivitySection compId={compId} />
+
+      <section>
+        <h2 className="mt-8 text-lg font-bold">Admins</h2>
+        <ul className="mt-2 space-y-1 text-sm">
+          {comp.admins.map((admin) => (
+            <li key={admin.email}>
+              {admin.name} <span className="text-muted-foreground">({admin.email})</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {isAdmin && createOpen ? (
+        <CreateTaskDialog
+          compId={compId}
+          pilotClasses={comp.pilot_classes}
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => {
+            setCreateOpen(false);
+            setRefresh((n) => n + 1);
+          }}
+        />
+      ) : null}
+
+      {isAdmin && settingsOpen ? (
+        <SettingsDialog
+          compId={compId}
+          comp={comp}
+          onClose={() => setSettingsOpen(false)}
+          onSaved={() => {
+            setSettingsOpen(false);
+            setRefresh((n) => n + 1);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ClassWarnings({
+  warnings,
+  tasks,
+}: {
+  warnings: CompDetailData["class_coverage_warnings"];
+  tasks: TaskSummary[];
+}) {
+  // Task-setup warnings: GAP tasks defined without SSS/ESS turnpoint types
+  // still score via engine fallbacks, but it's almost always a mistake.
+  const setupWarnings = tasks
+    .map((t) => {
+      const parts: string[] = [];
+      if (t.missing_sss) {
+        parts.push("no Start (SSS) turnpoint — scoring treats the first turnpoint as the start");
+      }
+      if (t.missing_ess) {
+        parts.push("no ESS turnpoint — the speed section ends at goal");
+      }
+      return parts.length > 0 ? { name: t.name, text: parts.join("; ") } : null;
+    })
+    .filter((w): w is { name: string; text: string } => w !== null);
+
+  if (warnings.length === 0 && setupWarnings.length === 0) return null;
+  return (
+    <section>
+      <h2 className="mt-8 text-lg font-bold">Task Warnings</h2>
+      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+        {warnings.map((w) => {
+          const parts: string[] = [];
+          if (w.missing_classes && w.missing_classes.length > 0) {
+            parts.push(`missing classes: ${w.missing_classes.join(", ")}`);
+          }
+          if (w.inconsistent_groupings) {
+            parts.push("inconsistent task-class groupings");
+          }
+          return (
+            <li key={w.date}>
+              <strong>{formatTaskDate(w.date, { month: "short", day: "numeric" })}</strong> —{" "}
+              {parts.join("; ")}
+            </li>
+          );
+        })}
+        {setupWarnings.map((w) => (
+          <li key={w.name} className="text-amber-500/80">
+            <strong>{w.name}</strong> — {w.text}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function TasksList({
+  tasks,
+  compId,
+  canSubmitTrack,
+}: {
+  tasks: TaskSummary[];
+  compId: string;
+  canSubmitTrack: boolean;
+}) {
+  if (tasks.length === 0) {
+    return <p className="text-muted-foreground">No tasks yet</p>;
+  }
+
+  // Group tasks by date (insertion order preserved, as in the vanilla page)
+  const byDate = new Map<string, TaskSummary[]>();
+  for (const task of tasks) {
+    const list = byDate.get(task.task_date) ?? [];
+    list.push(task);
+    byDate.set(task.task_date, list);
+  }
+
+  return (
+    <div className="mt-2 space-y-4">
+      {[...byDate.entries()].map(([date, dateTasks]) => (
+        <div key={date}>
+          <h3 className="font-semibold">{formatTaskDate(date)}</h3>
+          <ul className="mt-1 space-y-1 text-sm">
+            {dateTasks.map((task) => (
+              <li key={task.task_id} className="flex flex-wrap items-center gap-2">
+                <Link
+                  className="underline-offset-4 hover:underline"
+                  to={`/comp/${compId}/task/${task.task_id}`}
+                >
+                  <strong>{task.name}</strong>{" "}
+                  <span className="text-muted-foreground">
+                    {task.has_xctsk ? "Task set" : "No task"}
+                  </span>{" "}
+                  {task.missing_sss ? (
+                    <span
+                      className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-500"
+                      title="Scoring falls back — see Task Warnings above"
+                    >
+                      No SSS
+                    </span>
+                  ) : null}{" "}
+                  {task.missing_ess ? (
+                    <span
+                      className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-500"
+                      title="Scoring falls back — see Task Warnings above"
+                    >
+                      No ESS
+                    </span>
+                  ) : null}{" "}
+                  <span className="text-muted-foreground">
+                    {task.pilot_classes.join(", ")}
+                  </span>
+                </Link>{" "}
+                {canSubmitTrack ? (
+                  <SubmitTrackButton compId={compId} taskId={task.task_id} />
+                ) : null}{" "}
+                <a
+                  className="underline underline-offset-4"
+                  href={`/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(task.task_id)}`}
+                  title="Open the 3D flight replay for this task"
+                >
+                  3D replay
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Task-list "Submit track" button — same job as the task page's dialog: lets
+ * a signed-in user upload their own IGC for this task, straight from a file
+ * picker.
+ */
+function SubmitTrackButton({ compId, taskId }: { compId: string; taskId: string }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function handleFile(input: HTMLInputElement) {
+    const file = input.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith(".igc")) {
+      toast.error("Please select an IGC file");
+      input.value = "";
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File too large (max 5MB)");
+      input.value = "";
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const compressed = await compressIgc(file);
+      const res = await fetch(
+        `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc`,
+        { method: "POST", credentials: "include", body: compressed }
+      );
+
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        toast.error(err.error || "Upload failed");
+        return;
+      }
+
+      const data = (await res.json()) as { replaced: boolean };
+      toast.success(data.replaced ? "Track replaced" : "Track uploaded");
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setUploading(false);
+      input.value = "";
+    }
+  }
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".igc"
+        hidden
+        onChange={(e) => void handleFile(e.currentTarget)}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={uploading}
+        onClick={() => inputRef.current?.click()}
+      >
+        {uploading ? "Uploading..." : "Submit track"}
+      </Button>
+    </>
+  );
+}
+
+function CreateTaskDialog({
+  compId,
+  pilotClasses,
+  onClose,
+  onCreated,
+}: {
+  compId: string;
+  pilotClasses: string[];
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const nameId = useId();
+  const dateId = useId();
+  const [name, setName] = useState("");
+  const [taskDate, setTaskDate] = useState(new Date().toISOString().split("T")[0]);
+  // All classes checked by default, matching the vanilla dialog.
+  const [selectedClasses, setSelectedClasses] = useState<string[]>(pilotClasses);
+  const [submitting, setSubmitting] = useState(false);
+
+  function toggleClass(cls: string, checked: boolean) {
+    setSelectedClasses((prev) =>
+      checked ? [...prev.filter((c) => c !== cls), cls] : prev.filter((c) => c !== cls)
+    );
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (selectedClasses.length === 0) {
+      toast.warning("Select at least one pilot class");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await api.api.comp[":comp_id"].task.$post({
+        param: { comp_id: compId },
+        json: { name: name.trim(), task_date: taskDate, pilot_classes: selectedClasses },
+      });
+
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        toast.error(err.error || "Failed to create task");
+        return;
+      }
+
+      onCreated();
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Create Task</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
+          <Field>
+            <FieldLabel htmlFor={nameId}>Name</FieldLabel>
+            <Input
+              id={nameId}
+              required
+              maxLength={128}
+              autoFocus
+              placeholder="e.g. Day 1 - Ridge Run"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor={dateId}>Date</FieldLabel>
+            <Input
+              id={dateId}
+              type="date"
+              required
+              value={taskDate}
+              onChange={(e) => setTaskDate(e.target.value)}
+            />
+          </Field>
+          <FieldSet>
+            <FieldLegend variant="label">Pilot Classes</FieldLegend>
+            {pilotClasses.map((cls) => (
+              <CheckboxField
+                key={cls}
+                checked={selectedClasses.includes(cls)}
+                onChange={(checked) => toggleClass(cls, checked)}
+                label={cls}
+              />
+            ))}
+          </FieldSet>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" />}>
+              Cancel
+            </DialogClose>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Creating..." : "Create"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -181,8 +181,8 @@ When an event is selected from the panel, the map highlights the event location 
 └── score-task.ts                # Score multiple pilots against a task (CIVL GAP)
 
 /web/frontend/src/
-├── analysis.html                # Main HTML page with Tailwind/Basecoat layout
-├── styles.css                   # Global styles (Tailwind, Basecoat, MapBox CSS)
+├── analysis.html                # Main HTML page with Tailwind layout
+├── analysis.css                 # Page styles (Tailwind, shadcn tokens, MapBox/Leaflet CSS)
 └── analysis/
     ├── main.ts                  # Application entry point and orchestration
     ├── analysis-panel.ts        # Tabbed panel UI (Track/Task/Score tabs)
@@ -268,7 +268,6 @@ ext     - Optional extensions
 - **mapbox-gl**: Map rendering with 3D terrain and sky atmosphere
 - **threebox-plugin**: 3D track rendering on MapBox
 - **tailwindcss**: Utility-first CSS framework
-- **@pokle/basecoat**: Lightweight UI component library (fork of basecoat-css, see `basecoat-fork.md`)
 - **@turf/***: Geographic utilities (bearing, bounding box). Distance and destination use custom WGS84 implementations (Andoyer-Lambert, Vincenty direct)
 - **vite**: TypeScript bundling and dev server with HMR
 

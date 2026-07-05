@@ -32,8 +32,10 @@ function newTestUser(prefix: string): TestUser {
 }
 
 /**
- * Dev-login + onboarding so the page is parked at /u/<username>/ with a session
- * cookie attached. Returns the chosen username so callers can build public URLs.
+ * Dev-login + onboarding so the page is parked at /u/<username> with a session
+ * cookie attached. Returns once the dashboard's tracks panel has rendered —
+ * the file inputs only exist after storage init + the first list refresh, so
+ * syncing on the empty state guarantees setInputFiles has a target.
  */
 async function signInAndOnboard(
   request: APIRequestContext,
@@ -60,83 +62,72 @@ async function signInAndOnboard(
     },
   ]);
 
-  await page.goto("/onboarding.html");
-  await page.fill("#username", user.username);
-  await page.click("#onboarding-submit");
-  await page.waitForURL(`**/u/${user.username}/*`);
-  // dashboard.ts attaches the file-input change listeners only after storage
-  // init + the first refreshLists() runs; that's also when #tracks-empty stops
-  // being `hidden`. Sync on it so setInputFiles isn't called before the page
-  // is listening — without this, fast CI loses the change event.
-  await expect(page.locator("#tracks-empty")).toBeVisible();
+  await page.goto("/onboarding");
+  await page.getByLabel("Username").fill(user.username);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.waitForURL(`**/u/${user.username}`);
+  await expect(page.getByText("No flight tracks yet")).toBeVisible();
 }
 
 test("upload IGC file via the My Flights dashboard", async ({ page, request }) => {
   const user = newTestUser("igc");
   await signInAndOnboard(request, page, user);
 
-  // Dashboard renders the tracks panel by default; empty state should be visible.
-  await expect(page.locator("#tracks-empty")).toBeVisible();
-  await expect(page.locator("#tracks-count")).toBeHidden();
-
   // setInputFiles fires the change event the dashboard listens for. Use the
-  // hidden file input directly — clicking the upload-zone would open the OS
+  // file input directly — clicking the upload-zone label would open the OS
   // file picker which Playwright would have to negotiate via filechooser.
-  await page.setInputFiles("#igc-file-input", SAMPLE_IGC);
+  await page.setInputFiles('input[accept=".igc"]', SAMPLE_IGC);
 
-  // The list reflows after refreshLists(); look for the parsed pilot name from
-  // the IGC header so we know the worker round-tripped and we're not just
+  // The list reflows after the refresh; look for the parsed pilot name from
+  // the IGC header so we know the round-trip happened and we're not just
   // seeing the filename.
-  const trackCard = page.locator("#tracks-list .file-card").first();
-  await expect(trackCard).toBeVisible();
-  await expect(trackCard).toContainText("Michael lamb");
-  await expect(page.locator("#tracks-count")).toHaveText("1");
+  await expect(page.getByRole("link", { name: /Michael lamb/ })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Tracks (1)" })).toBeVisible();
 });
 
-test("upload XCTSK file and switch to the Tasks tab", async ({ page, request }) => {
+test("upload XCTSK file via the Tasks tab", async ({ page, request }) => {
   const user = newTestUser("xctsk");
   await signInAndOnboard(request, page, user);
 
-  await expect(page.locator("#tasks-empty")).toBeHidden(); // tasks panel starts hidden
-  await page.setInputFiles("#task-file-input", SAMPLE_XCTSK);
+  // Base UI only mounts the active tab panel, so the .xctsk input exists
+  // only once the Tasks tab is selected.
+  await page.getByRole("tab", { name: /Tasks/ }).click();
+  await expect(page.getByText("No competition tasks yet")).toBeVisible();
+  await page.setInputFiles('input[accept=".xctsk"]', SAMPLE_XCTSK);
 
-  // dashboard.ts auto-switches to the tasks tab when only tasks were added.
-  await expect(page.locator("#panel-tasks")).toBeVisible();
-  const taskCard = page.locator("#tasks-list .file-card").first();
-  await expect(taskCard).toBeVisible();
   // Sample task has 5 turnpoints; assert the count rather than the name so the
   // assertion stays meaningful even if deriveTaskName() changes its format.
-  await expect(taskCard).toContainText(/turnpoint/);
-  await expect(page.locator("#tasks-count")).toHaveText("1");
+  await expect(page.getByText(/turnpoint/).first()).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Tasks (1)" })).toBeVisible();
 });
 
 test("delete an uploaded track", async ({ page, request }) => {
   const user = newTestUser("del");
   await signInAndOnboard(request, page, user);
 
-  await page.setInputFiles("#igc-file-input", SAMPLE_IGC);
-  const trackCard = page.locator("#tracks-list .file-card").first();
-  await expect(trackCard).toBeVisible();
+  await page.setInputFiles('input[accept=".igc"]', SAMPLE_IGC);
+  const trackItem = page.locator("li", { hasText: "Michael lamb" });
+  await expect(trackItem).toBeVisible();
 
-  // The delete button is a sibling of the download button inside the same card.
-  await trackCard.locator(".delete-btn").click();
+  await trackItem.getByRole("button", { name: "Remove" }).click();
 
-  await expect(page.locator("#tracks-empty")).toBeVisible();
-  await expect(page.locator("#tracks-list .file-card")).toHaveCount(0);
+  await expect(page.getByText("No flight tracks yet")).toBeVisible();
+  await expect(page.locator('a[href*="storedTrack="]')).toHaveCount(0);
 });
 
 test("delete an uploaded task", async ({ page, request }) => {
   const user = newTestUser("tdel");
   await signInAndOnboard(request, page, user);
 
-  await page.setInputFiles("#task-file-input", SAMPLE_XCTSK);
-  const taskCard = page.locator("#tasks-list .file-card").first();
-  await expect(taskCard).toBeVisible();
+  await page.getByRole("tab", { name: /Tasks/ }).click();
+  await page.setInputFiles('input[accept=".xctsk"]', SAMPLE_XCTSK);
+  const taskItem = page.locator("li", { hasText: /turnpoint/ });
+  await expect(taskItem).toBeVisible();
 
-  await taskCard.locator(".delete-btn").click();
+  await taskItem.getByRole("button", { name: "Remove" }).click();
 
-  await expect(page.locator("#tasks-empty")).toBeVisible();
-  await expect(page.locator("#tasks-list .file-card")).toHaveCount(0);
+  await expect(page.getByText("No competition tasks yet")).toBeVisible();
+  await expect(page.locator('a[href*="storedTask="]')).toHaveCount(0);
 });
 
 test("public-link viewer can read a track uploaded by another user", async ({
@@ -150,17 +141,13 @@ test("public-link viewer can read a track uploaded by another user", async ({
   const ownerCtx = await browser.newContext();
   const ownerPage = await ownerCtx.newPage();
   await signInAndOnboard(request, ownerPage, owner);
-  await ownerPage.setInputFiles("#igc-file-input", SAMPLE_IGC);
-  await expect(
-    ownerPage.locator("#tracks-list .file-card").first()
-  ).toBeVisible();
+  await ownerPage.setInputFiles('input[accept=".igc"]', SAMPLE_IGC);
 
   // Pull the track_id straight from the dashboard link — the storage layer
   // stores it as a sha256 hex on the analysis href.
-  const trackHref = await ownerPage
-    .locator("#tracks-list .file-card")
-    .first()
-    .getAttribute("href");
+  const trackLink = ownerPage.locator('a[href*="storedTrack="]').first();
+  await expect(trackLink).toBeVisible();
+  const trackHref = await trackLink.getAttribute("href");
   const trackId = trackHref?.match(/storedTrack=([0-9a-f]{64})/)?.[1];
   expect(trackId, `expected a sha256 track id in ${trackHref}`).toBeTruthy();
   await ownerCtx.close();

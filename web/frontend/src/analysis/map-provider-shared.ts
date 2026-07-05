@@ -271,7 +271,7 @@ export function createCirclePolygon(
 
 /**
  * Create the glide legend help button and append it to the container.
- * Styling is handled by CSS (#glide-legend rules in styles.css).
+ * Styling is handled by CSS (#glide-legend rules in analysis.css).
  */
 export function createGlideLegend(container: HTMLElement): HTMLElement {
   const legend = document.createElement('div');

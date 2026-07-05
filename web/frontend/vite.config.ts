@@ -3,6 +3,7 @@ import { resolve } from 'path';
 import { readFileSync, existsSync, cpSync } from 'fs';
 import { execSync } from 'child_process';
 import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
 
 function airscoreWorkerCheck(): Plugin {
   return {
@@ -76,11 +77,17 @@ export default defineConfig({
   root: 'src',
   envDir: resolve(__dirname, '../..'),
   publicDir: '../public',
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, 'src'),
+    },
+  },
   define: {
     __GIT_SHA__: JSON.stringify(GIT_SHA),
   },
   plugins: [
     tailwindcss(),
+    react(),
     airscoreWorkerCheck(),
     sampleCompFiles(),
     copySampleComps(),
@@ -89,28 +96,38 @@ export default defineConfig({
       name: 'rewrite-spa-routes',
       configureServer(server) {
         server.middlewares.use((req: Connect.IncomingMessage, _res, next) => {
-          if (req.url?.startsWith('/u/')) {
-            req.url = '/dashboard.html';
-          } else if (req.url === '/comp' || req.url === '/comp/') {
-            req.url = '/comp.html';
-          } else if (req.url?.match(/^\/comp\/[a-z]+(\/|\/task\/[a-z]+\/?)?$/) && !req.url?.includes('.')) {
-            req.url = '/comp-detail.html';
-          } else if (req.url === '/scores' || req.url?.startsWith('/scores?')) {
-            req.url = '/scores.html';
-          } else if (req.url === '/profile' || req.url === '/profile/') {
-            req.url = '/profile.html';
-          } else if (req.url === '/settings' || req.url === '/settings/') {
-            req.url = '/settings.html';
-          } else if (req.url === '/theme-editor' || req.url === '/theme-editor/') {
-            req.url = '/theme-editor.html';
-          } else if (req.url === '/kitchensink' || req.url === '/kitchensink/') {
-            req.url = '/kitchensink.html';
+          // Main-UI routes are handled by the React SPA at /index.html.
+          // Module/asset requests (they contain a dot) pass through untouched.
+          const path = req.url?.split('?')[0] ?? '';
+          const isSpaRoute =
+            !path.includes('.') &&
+            (path.startsWith('/u/') ||
+              path === '/comp' ||
+              /^\/comp\/[a-z]+(\/|\/task\/[a-z]+\/?)?$/.test(path) ||
+              path === '/scores' ||
+              /^\/(profile|settings|onboarding|about|legal)\/?$/.test(path) ||
+              /^\/scoring(\/(gap|open-distance))?\/?$/.test(path) ||
+              /^\/admin\/(users|cache)\/?$/.test(path));
+          // Old static-page URLs 301 to their SPA routes (mirrors _redirects).
+          const movedTo: Record<string, string> = {
+            '/about.html': '/about',
+            '/legal.html': '/legal',
+            '/scoring.html': '/scoring',
+            '/scoring-gap.html': '/scoring/gap',
+            '/scoring-open-distance.html': '/scoring/open-distance',
+            '/theme-editor': '/',
+            '/kitchensink.html': '/',
+          };
+          if (movedTo[path]) {
+            _res.statusCode = 301;
+            _res.setHeader('Location', movedTo[path]);
+            _res.end();
+            return;
+          }
+          if (isSpaRoute) {
+            req.url = '/index.html';
           } else if (req.url === '/replay' || req.url === '/replay/') {
             req.url = '/replay.html';
-          } else if (req.url === '/admin/users' || req.url === '/admin/users/') {
-            req.url = '/admin-users.html';
-          } else if (req.url === '/admin/cache' || req.url === '/admin/cache/') {
-            req.url = '/admin-cache.html';
           }
           next();
         });
@@ -124,23 +141,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'src/index.html'),
         analysis: resolve(__dirname, 'src/analysis.html'),
-        onboarding: resolve(__dirname, 'src/onboarding.html'),
-        dashboard: resolve(__dirname, 'src/dashboard.html'),
-        about: resolve(__dirname, 'src/about.html'),
-        legal: resolve(__dirname, 'src/legal.html'),
-        scoring: resolve(__dirname, 'src/scoring.html'),
-        'scoring-gap': resolve(__dirname, 'src/scoring-gap.html'),
-        'scoring-open-distance': resolve(__dirname, 'src/scoring-open-distance.html'),
-        comp: resolve(__dirname, 'src/comp.html'),
-        'comp-detail': resolve(__dirname, 'src/comp-detail.html'),
-        scores: resolve(__dirname, 'src/scores.html'),
-        profile: resolve(__dirname, 'src/profile.html'),
-        settings: resolve(__dirname, 'src/settings.html'),
-        'theme-editor': resolve(__dirname, 'src/theme-editor.html'),
-        kitchensink: resolve(__dirname, 'src/kitchensink.html'),
         replay: resolve(__dirname, 'src/replay.html'),
-        'admin-users': resolve(__dirname, 'src/admin-users.html'),
-        'admin-cache': resolve(__dirname, 'src/admin-cache.html'),
       },
     },
   },

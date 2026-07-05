@@ -1,0 +1,736 @@
+/**
+ * GAP scoring guide — React port of scoring-gap.html. Formulas are authored
+ * as KaTeX \( ... \) delimiters (kept in String.raw so JSX leaves the braces
+ * and backslashes alone) and typeset by renderMathInElement on mount.
+ */
+import { useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
+import "katex/dist/katex.min.css";
+import renderMathInElement from "katex/dist/contrib/auto-render.mjs";
+
+export function ScoringGap() {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    document.title = "GlideComp - How GAP Scoring Works";
+  }, []);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    renderMathInElement(containerRef.current, {
+      delimiters: [
+        { left: "$$", right: "$$", display: true },
+        { left: "\\(", right: "\\)", display: false },
+      ],
+    });
+  }, []);
+
+  return (
+    <div ref={containerRef} className="min-h-screen bg-background text-foreground p-6 bg-hills">
+      <div className="max-w-2xl mx-auto">
+        <header className="mb-10">
+          <Link
+            to="/scoring"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+            Scoring
+          </Link>
+          <h1 className="text-3xl font-bold flex items-center gap-3">
+            <img src="/icon.svg" alt="GlideComp logo" className="w-8 h-8" />
+            How GAP Scoring Works
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            A guide to competition scoring for paragliding and hang gliding pilots
+          </p>
+        </header>
+
+        {/* Table of Contents */}
+        <nav className="mb-10 p-4 rounded-lg border border-border bg-card">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+            Contents
+          </h2>
+          <ul className="space-y-1 text-sm">
+            <li>
+              <a href="#what-is-gap" className="hover:underline">
+                What is GAP?
+              </a>
+            </li>
+            <li>
+              <a href="#how-a-task-works" className="hover:underline">
+                How a Task Works
+              </a>
+            </li>
+            <li>
+              <a href="#task-validity" className="hover:underline">
+                Task Validity
+              </a>
+            </li>
+            <li>
+              <a href="#scoring-components" className="hover:underline">
+                The Four Scoring Components
+              </a>
+            </li>
+            <li>
+              <a href="#distance-points" className="hover:underline">
+                Distance Points
+              </a>
+            </li>
+            <li>
+              <a href="#time-points" className="hover:underline">
+                Time Points
+              </a>
+            </li>
+            <li>
+              <a href="#leading-points" className="hover:underline">
+                Leading Points
+              </a>
+            </li>
+            <li>
+              <a href="#arrival-points" className="hover:underline">
+                Arrival Points
+              </a>
+            </li>
+            <li>
+              <a href="#total-score" className="hover:underline">
+                Your Total Score
+              </a>
+            </li>
+            <li>
+              <a href="#glidecomp-notes" className="hover:underline">
+                GlideComp Implementation Notes
+              </a>
+            </li>
+            <li>
+              <a href="#references" className="hover:underline">
+                Official References
+              </a>
+            </li>
+          </ul>
+        </nav>
+
+        {/* What is GAP? */}
+        <section id="what-is-gap" className="mb-14">
+          <h2 className="text-2xl font-bold mb-4">What is GAP?</h2>
+          <div className="space-y-4 text-sm leading-relaxed">
+            <p className="text-muted-foreground">
+              GAP is the scoring system used at most paragliding (PG) and hang gliding (HG)
+              cross-country competitions worldwide. It is maintained by the{" "}
+              <a
+                href="https://www.fai.org/commission/civl"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                FAI/CIVL
+              </a>{" "}
+              (the international body that governs free-flight sports) and defined in{" "}
+              <strong>Section 7F of the FAI Sporting Code</strong>.
+            </p>
+            <p className="text-muted-foreground">
+              The name "GAP" comes from its original creators — Gerolf Heinrichs, Angelo
+              Crapanzano, and Paul Mollison — who designed it in the early 2000s. It has been
+              refined many times since then.
+            </p>
+            <p className="text-muted-foreground">
+              The core idea is simple: <strong>a perfect task day is worth 1000 points</strong>.
+              Those 1000 points are divided among four categories — distance, time, leading, and
+              arrival — and each pilot receives a share of the available points based on how they
+              performed relative to the other pilots. If the task day wasn't ideal (few pilots
+              launched, nobody flew far, etc.), the task is worth fewer than 1000 points.
+            </p>
+          </div>
+        </section>
+
+        {/* How a Task Works */}
+        <section id="how-a-task-works" className="mb-14">
+          <h2 className="text-2xl font-bold mb-4">How a Task Works</h2>
+          <div className="space-y-4 text-sm leading-relaxed">
+            <p className="text-muted-foreground">
+              If you've never flown a competition task before, here's how it works:
+            </p>
+            <p className="text-muted-foreground">
+              The task committee defines a route as a series of <strong>turnpoints</strong> — GPS
+              coordinates with a cylinder radius around each. Pilots must fly through (or into)
+              each cylinder in order. A typical task looks like this:
+            </p>
+            <ul className="list-disc list-inside text-muted-foreground space-y-2 ml-2">
+              <li>
+                <strong>Launch</strong> — Where pilots take off. You must be at launch to be
+                scored.
+              </li>
+              <li>
+                <strong>Start of Speed Section (SSS)</strong> — The "start gate." Your timed run
+                begins when you cross this cylinder. Some competitions use a fixed clock start;
+                others let you choose when to start.
+              </li>
+              <li>
+                <strong>Turnpoints</strong> — Intermediate waypoints you must tag in order. You
+                "tag" a turnpoint by flying into its cylinder (typically 400m–2km radius).
+              </li>
+              <li>
+                <strong>End of Speed Section (ESS)</strong> — The finish line for timing. Your
+                speed section time stops here. In many tasks, ESS is the last turnpoint before
+                goal.
+              </li>
+              <li>
+                <strong>Goal</strong> — The final turnpoint. Reaching goal means you completed the
+                task. In PG, you must reach goal (not just ESS) to receive time points.
+              </li>
+            </ul>
+            <p className="text-muted-foreground">
+              Your <strong>speed section time</strong> is measured from when you cross SSS to when
+              you reach ESS. Your <strong>flown distance</strong> is measured along the optimized
+              route through the turnpoints you reached.
+            </p>
+          </div>
+        </section>
+
+        {/* Task Validity */}
+        <section id="task-validity" className="mb-14">
+          <h2 className="text-2xl font-bold mb-4">Task Validity</h2>
+          <div className="space-y-4 text-sm leading-relaxed">
+            <p className="text-muted-foreground">
+              Not every task day deserves a full 1000 points. If conditions were poor and most
+              pilots bombed out near launch, the scores should count for less in the overall
+              standings. GAP handles this with <strong>task validity</strong> — a multiplier
+              between 0 and 1 that scales the available points.
+            </p>
+            <p className="text-muted-foreground">
+              Task validity is the product of three independent sub-validities:
+            </p>
+
+            <div className="ml-2 space-y-4">
+              <div>
+                <h3 className="text-base font-semibold mb-1">Launch Validity</h3>
+                <p className="text-muted-foreground">
+                  Reduced when fewer pilots launch than expected. If almost everyone flies (above
+                  the "nominal launch" threshold, typically 96%), launch validity is 1.0. If half
+                  the field stays on the ground, it drops significantly. This prevents a task where
+                  only a few pilots launched from being worth too much.
+                </p>
+              </div>
+              <div>
+                <h3 className="text-base font-semibold mb-1">Distance Validity</h3>
+                <p className="text-muted-foreground">
+                  Reduced when pilots don't fly far enough relative to the expected task distance.
+                  It looks at the spread of distances flown by all pilots. If most pilots bombed
+                  out near launch, the task probably wasn't fair and scores are reduced.
+                </p>
+              </div>
+              <div>
+                <h3 className="text-base font-semibold mb-1">Time Validity</h3>
+                <p className="text-muted-foreground">
+                  Reduced when the fastest time is too short relative to the expected task duration
+                  (the "nominal time," typically 90 minutes). A very short winning time might
+                  indicate that the task was too easy or conditions were unusual.
+                </p>
+              </div>
+            </div>
+
+            <p className="text-muted-foreground">The overall task validity is:</p>
+            <p className="bg-muted/50 rounded px-3 py-2 inline-block">
+              {String.raw`\( \text{Task Validity} = \text{Launch Validity} \times \text{Distance Validity} \times \text{Time Validity} \)`}
+            </p>
+            <p className="text-muted-foreground">And the total available points for the task are:</p>
+            <p className="bg-muted/50 rounded px-3 py-2 inline-block">
+              {String.raw`\( \text{Available Points} = 1000 \times \text{Task Validity} \)`}
+            </p>
+            <p className="text-muted-foreground">
+              On a great day with good conditions, task validity will be close to 1.0 and there
+              will be nearly 1000 points on offer. On a poor day, it might drop to 200–400 points.
+            </p>
+          </div>
+        </section>
+
+        {/* The Four Scoring Components */}
+        <section id="scoring-components" className="mb-14">
+          <h2 className="text-2xl font-bold mb-4">The Four Scoring Components</h2>
+          <div className="space-y-4 text-sm leading-relaxed">
+            <p className="text-muted-foreground">
+              The available points are divided among four categories. The split depends on how many
+              pilots made goal — this is called the <strong>goal ratio</strong>.
+            </p>
+            <ul className="list-disc list-inside text-muted-foreground space-y-2 ml-2">
+              <li>
+                <strong>Distance Points</strong> — Reward how far you flew. Always the largest
+                share.
+              </li>
+              <li>
+                <strong>Time Points</strong> — Reward how fast you completed the speed section.
+                Worth more when many pilots make goal.
+              </li>
+              <li>
+                <strong>Leading Points</strong> — Reward pilots who led the way at the front of the
+                pack (also called "departure points"). Optional — not all competitions use them.
+              </li>
+              <li>
+                <strong>Arrival Points</strong> — Reward early arrival at ESS.{" "}
+                <strong>Hang gliding only.</strong> Optional.
+              </li>
+            </ul>
+            <p className="text-muted-foreground">
+              When nobody makes goal, almost all points go to distance. As the goal ratio
+              increases, more points shift to time and leading. This makes sense — if everyone
+              completed the task, the interesting question is who was fastest, not who flew
+              farthest.
+            </p>
+            <p className="text-muted-foreground">
+              The weight of each component is calculated from a polynomial formula based on the
+              goal ratio. For example, when the goal ratio is 0 (nobody made goal), the distance
+              weight is about 0.9 (90% of points). When 50% of pilots make goal, the distance
+              weight drops to about 0.55.
+            </p>
+          </div>
+        </section>
+
+        {/* Distance Points */}
+        <section id="distance-points" className="mb-14">
+          <h2 className="text-2xl font-bold mb-4">Distance Points</h2>
+          <div className="space-y-4 text-sm leading-relaxed">
+            <p className="text-muted-foreground">
+              Every pilot who launches receives distance points, making this the "bread and butter"
+              of your score. For <strong>paragliding</strong>, the formula is a straight proportion
+              of how far you flew:
+            </p>
+            <p className="bg-muted/50 rounded px-3 py-2 inline-block">
+              {String.raw`\( \text{Distance Points} = \dfrac{\text{Your Distance}}{\text{Best Distance}} \times \text{Available Distance Points} \)`}
+            </p>
+            <p className="text-muted-foreground">
+              The pilot who flew the farthest gets the full distance points. Everyone else gets a
+              proportional share based on how far they flew. For <strong>hang gliding</strong>,
+              half of the points use this proportion and the other half use a "difficulty" measure
+              (see below).
+            </p>
+
+            <div className="ml-2">
+              <h3 className="text-base font-semibold mb-1">Minimum Distance</h3>
+              <p className="text-muted-foreground">
+                There is a <strong>minimum scored distance</strong> (typically 5 km). If you
+                launched but only flew 1 km before landing, you're still scored as if you flew 5
+                km. Pilots sometimes call these "bomb-out points" — the system is designed to
+                encourage you to at least launch and give it a go rather than sitting out a task
+                entirely.
+              </p>
+            </div>
+
+            <div className="ml-2">
+              <h3 id="distance-difficulty" className="text-base font-semibold mb-1 scroll-mt-20">
+                Distance Difficulty{" "}
+                <span className="text-sm font-normal text-muted-foreground">
+                  (hang gliding only)
+                </span>
+              </h3>
+              <p className="text-muted-foreground">
+                In hang gliding, distance points are split into two halves (per the FAI rules, S7F
+                §11.1.1):
+              </p>
+              <p className="bg-muted/50 rounded px-3 py-2 inline-block">
+                {String.raw`\( \text{Distance Points} = \left( \tfrac{1}{2}\,\text{Linear} + \tfrac{1}{2}\,\text{Difficulty} \right) \times \text{Available Distance Points} \)`}
+              </p>
+              <ul className="list-disc list-inside text-muted-foreground space-y-2 ml-2 mt-2">
+                <li>
+                  <strong>The linear half</strong> is the same proportion-of-best-distance as
+                  above.
+                </li>
+                <li>
+                  <strong>The difficulty half</strong> looks at where other pilots landed. Each
+                  stretch of the course is "harder" when few pilots managed to fly past it. Pushing
+                  on past a cluster of landed gliders is therefore worth extra points, while flying
+                  just a little further into a spot where everyone already landed is worth less.
+                </li>
+              </ul>
+              <p className="text-muted-foreground mt-2">
+                Why? Two reasons from the rulebook: for safety and retrieve, pilots shouldn't be
+                tempted to fly just past a group that landed; and a pilot who lands somewhere often
+                hit trouble just before, so the final glide into a landing field is "easy"
+                distance. Pilots who reach goal always get the full distance points. Your results
+                page shows the linear and difficulty halves separately so you can see how each
+                contributed.
+              </p>
+              <p className="text-muted-foreground mt-2">
+                Difficulty does <strong>not</strong> apply to paragliding, and a competition can
+                switch it off (scoring hang gliding on the linear formula instead) in its settings.
+              </p>
+            </div>
+
+            <div className="ml-2">
+              <h3 id="distance-origin" className="text-base font-semibold mb-1 scroll-mt-20">
+                Where distance is measured from
+              </h3>
+              <p className="text-muted-foreground">
+                When a task defines a separate <strong>take-off</strong> turnpoint before the start
+                (SSS), competitions differ on whether the take-off→start leg counts toward scored
+                distance. GlideComp offers two settings (chosen per competition):
+              </p>
+              <ul className="list-disc list-inside text-muted-foreground space-y-2 ml-2 mt-2">
+                <li>
+                  <strong>Take-off</strong> (default) — distance is measured from the take-off
+                  point, through the start cylinder, to goal. The take-off is treated as a fixed
+                  launch point. This follows the <strong>FAI CIVL GAP</strong> and{" "}
+                  <strong>PWCA</strong> rules and matches most scoring software (including
+                  AirScore).
+                </li>
+                <li>
+                  <strong>Start cylinder</strong> — distance is measured from the edge of the start
+                  cylinder onward, so the take-off→start leg is <em>not</em> scored. This follows
+                  the wording of some national hang-gliding rules (e.g. Australia's HGFA/SAFA) and
+                  the "Move Origin" option in the Davis/SeeYou scoring toolchain.
+                </li>
+              </ul>
+              <p className="text-muted-foreground mt-2">
+                The two only differ for tasks that include a take-off turnpoint; tasks that begin
+                at the SSS score the same either way. The speed section (SSS→ESS), and therefore
+                time and leading points, is unaffected by this setting.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Time Points */}
+        <section id="time-points" className="mb-14">
+          <h2 className="text-2xl font-bold mb-4">Time Points</h2>
+          <div className="space-y-4 text-sm leading-relaxed">
+            <p className="text-muted-foreground">
+              Time points reward pilots who completed the speed section quickly. The key rules:
+            </p>
+            <ul className="list-disc list-inside text-muted-foreground space-y-2 ml-2">
+              <li>
+                <strong>Paragliding:</strong> You must <strong>make goal</strong> to receive any
+                time points.
+              </li>
+              <li>
+                <strong>Hang gliding:</strong> You must <strong>reach ESS</strong> to receive time
+                points.
+              </li>
+            </ul>
+            <p className="text-muted-foreground">
+              If you're eligible, your time points are based on your <strong>speed fraction</strong>{" "}
+              — a value between 0 and 1 that measures how close your time was to the fastest
+              pilot's time:
+            </p>
+            <p className="bg-muted/50 rounded px-3 py-2 inline-block">
+              {String.raw`\( \text{SF} = \max\!\left(0,\; 1 - \sqrt[3]{\dfrac{(\Delta t)^2}{\sqrt{t_{\text{best}}}}} \right) \)`}
+            </p>
+            <p className="text-muted-foreground">
+              Where {String.raw`\(\Delta t\)`} is the difference between your time and the best
+              time (in hours), and {String.raw`\(t_{\text{best}}\)`} is the fastest pilot's time
+              (in hours).
+            </p>
+            <p className="text-muted-foreground">
+              This cube-root formula creates a generous curve: pilots close to the fastest time get
+              nearly full points, and the penalty increases gradually for slower times. It's not a
+              cliff — finishing 10 minutes behind the winner still earns you a good share of time
+              points.
+            </p>
+            <p className="bg-muted/50 rounded px-3 py-2 inline-block">
+              {String.raw`\( \text{Time Points} = \text{SF} \times \text{Available Time Points} \)`}
+            </p>
+          </div>
+        </section>
+
+        {/* Leading Points */}
+        <section id="leading-points" className="mb-14">
+          <h2 className="text-2xl font-bold mb-4">Leading Points</h2>
+          <div className="space-y-4 text-sm leading-relaxed">
+            <p className="text-muted-foreground">
+              Leading points (sometimes called "departure points") reward pilots who take the risk
+              of flying at the front of the gaggle and leading the way towards goal. Without this
+              incentive, the optimal strategy would be to wait in a thermal and let others do the
+              pathfinding.
+            </p>
+
+            <div className="ml-2 space-y-4">
+              <div>
+                <h3 id="leading-coefficient" className="text-base font-semibold mb-1 scroll-mt-20">
+                  The Leading Coefficient
+                </h3>
+                <p className="text-muted-foreground">
+                  Each pilot gets a <strong>leading coefficient (LC)</strong> — a number that
+                  represents how much time they spent close to ESS while ahead of the pack.
+                  Technically, it's the area under a curve of "remaining distance to ESS" (measured
+                  along the course, from the start gate opening) plotted over time. A "ratchet"
+                  mechanism means your distance only counts when it's decreasing (flying toward
+                  ESS) — flying away doesn't reset your progress. This matches the CIVL GAP /
+                  AirScore leading coefficient; competitions can pick the modern <em>weighted</em>{" "}
+                  variant (GAP2020+) or the older <em>classic</em> variant in settings.
+                </p>
+                <p className="text-muted-foreground">
+                  A <strong>lower</strong> LC means you spent more time at the front. The pilot
+                  with the lowest LC gets the maximum leading points.
+                </p>
+              </div>
+              <div>
+                <h3 className="text-base font-semibold mb-1">How Points Are Awarded</h3>
+                <p className="text-muted-foreground">
+                  Leading points use a similar shape to time points, applied to LC values instead
+                  of times:
+                </p>
+                <p className="bg-muted/50 rounded px-3 py-2 inline-block">
+                  {String.raw`\( \text{LF} = \max\!\left(0,\; 1 - \left(\dfrac{\text{LC} - \text{LC}_{\min}}{\sqrt{\text{LC}_{\min}}}\right)^{2/3} \right) \)`}
+                </p>
+                <p className="text-muted-foreground">
+                  The pilot with the best (lowest) LC gets full leading points. Others get
+                  proportionally less based on how their LC compares.
+                </p>
+              </div>
+            </div>
+
+            <p className="text-muted-foreground">
+              Leading points are optional and not all competitions enable them. PG competitions
+              that use leading points give them a higher weight than HG competitions.
+            </p>
+          </div>
+        </section>
+
+        {/* Arrival Points */}
+        <section id="arrival-points" className="mb-14">
+          <h2 className="text-2xl font-bold mb-4">Arrival Points</h2>
+          <div className="space-y-4 text-sm leading-relaxed">
+            <p className="text-muted-foreground">
+              <strong>Hang gliding only.</strong> Arrival points reward pilots based on their order
+              of arrival at ESS. The first pilot to reach ESS gets the most arrival points, and
+              later arrivals get progressively less.
+            </p>
+            <p className="text-muted-foreground">
+              The first arrival receives roughly 100% of the available arrival points, while the
+              last arrival still receives about 20%. The curve is defined by a polynomial that
+              ensures even late arrivals get meaningful points.
+            </p>
+            <p className="text-muted-foreground">
+              Arrival points are optional and can be disabled in competition settings. They do not
+              apply to paragliding competitions.
+            </p>
+          </div>
+        </section>
+
+        {/* Your Total Score */}
+        <section id="total-score" className="mb-14">
+          <h2 className="text-2xl font-bold mb-4">Your Total Score</h2>
+          <div className="space-y-4 text-sm leading-relaxed">
+            <p className="text-muted-foreground">
+              Your total score for a task is simply the sum of your four component scores, rounded
+              to the nearest whole number:
+            </p>
+            <p className="bg-muted/50 rounded px-3 py-2 inline-block">
+              {String.raw`\( \text{Total} = \text{round}(\text{Distance Pts} + \text{Time Pts} + \text{Leading Pts} + \text{Arrival Pts}) \)`}
+            </p>
+            <p className="text-muted-foreground">
+              Pilots are ranked by total score (highest first). In case of a tie, the pilot with
+              the greater flown distance is ranked higher.
+            </p>
+
+            <div className="ml-2">
+              <h3 className="text-base font-semibold mb-1">Practical Example</h3>
+              <p className="text-muted-foreground">
+                Imagine a task day with good conditions (task validity = 0.95) and 20% of pilots
+                making goal, with leading and arrival points disabled. The available points would
+                be about 950. The breakdown might be roughly:
+              </p>
+              <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-2">
+                <li>Distance: ~570 points available (60% weight)</li>
+                <li>Time: ~380 points available (40% weight)</li>
+              </ul>
+              <p className="text-muted-foreground mt-2">
+                A pilot who made goal with the fastest time would score 570 + 380 = 950 points. A
+                pilot who flew 80% of the best distance but didn't make goal would score about 456
+                + 0 = 456 points (no time points without goal in PG).
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* GlideComp Implementation Notes */}
+        <section id="glidecomp-notes" className="mb-14">
+          <h2 className="text-2xl font-bold mb-4">GlideComp Implementation Notes</h2>
+          <div className="space-y-4 text-sm leading-relaxed">
+            <p className="text-muted-foreground">
+              GlideComp implements the core GAP formulas from the 2024 edition of the CIVL Sporting
+              Code Section 7F. All validity polynomials, weight distributions, and point
+              calculations match the official specification. However, there are some features from
+              the full spec that are not yet implemented:
+            </p>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-2 pr-4 font-semibold">Feature</th>
+                    <th className="text-left py-2 font-semibold">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="text-muted-foreground">
+                  <tr className="border-b border-border/50">
+                    <td className="py-2 pr-4">Task validity (launch, distance, time)</td>
+                    <td className="py-2">Implemented</td>
+                  </tr>
+                  <tr className="border-b border-border/50">
+                    <td className="py-2 pr-4">Distance, time, leading, arrival points</td>
+                    <td className="py-2">Implemented</td>
+                  </tr>
+                  <tr className="border-b border-border/50">
+                    <td className="py-2 pr-4">Weight distribution</td>
+                    <td className="py-2">Implemented</td>
+                  </tr>
+                  <tr className="border-b border-border/50">
+                    <td className="py-2 pr-4">PG and HG scoring differences</td>
+                    <td className="py-2">Implemented</td>
+                  </tr>
+                  <tr className="border-b border-border/50">
+                    <td className="py-2 pr-4">Leading coefficient (ratchet mechanism)</td>
+                    <td className="py-2">Implemented</td>
+                  </tr>
+                  <tr className="border-b border-border/50">
+                    <td className="py-2 pr-4">Minimum distance floor</td>
+                    <td className="py-2">Implemented</td>
+                  </tr>
+                  <tr className="border-b border-border/50">
+                    <td className="py-2 pr-4">Penalties (rule violations, late starts)</td>
+                    <td className="py-2">Not implemented</td>
+                  </tr>
+                  <tr className="border-b border-border/50">
+                    <td className="py-2 pr-4">Stopped tasks (weather calldowns)</td>
+                    <td className="py-2">Not implemented</td>
+                  </tr>
+                  <tr className="border-b border-border/50">
+                    <td className="py-2 pr-4">Wave/interval start gates</td>
+                    <td className="py-2">Not implemented</td>
+                  </tr>
+                  <tr className="border-b border-border/50">
+                    <td className="py-2 pr-4">Multi-task series scoring</td>
+                    <td className="py-2">Not implemented</td>
+                  </tr>
+                  <tr className="border-b border-border/50">
+                    <td className="py-2 pr-4">FTV (fixed total validity) for series</td>
+                    <td className="py-2">Not implemented</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p className="text-muted-foreground">
+              GlideComp defaults to having leading and arrival points <strong>disabled</strong>.
+              These must be explicitly enabled in the competition parameters.
+            </p>
+            <p className="text-muted-foreground">
+              Distance (including the hang-gliding difficulty calculation), time and leading points
+              are all computed to match the CIVL GAP formulas. Exact point values for pilots who
+              don't reach goal can still differ slightly from other tools such as{" "}
+              <a
+                href="https://airscore.org"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                AirScore
+              </a>{" "}
+              because the optimized per-pilot flown distance isn't bit-identical between
+              implementations; this affects absolute values more than relative ranking.
+            </p>
+            <p className="text-muted-foreground">
+              The scoring engine source code is open and available on{" "}
+              <a
+                href="https://github.com/pokle/glidecomp"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                GitHub
+              </a>
+              .
+            </p>
+          </div>
+        </section>
+
+        {/* Official References */}
+        <section id="references" className="mb-14">
+          <h2 className="text-2xl font-bold mb-4">Official References</h2>
+          <div className="space-y-4 text-sm leading-relaxed">
+            <ul className="space-y-3 text-muted-foreground">
+              <li>
+                <a
+                  href="https://www.fai.org/sites/default/files/civl/documents/sporting_code_s7_f_-_xc_scoring_2024.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-foreground hover:underline"
+                >
+                  CIVL Sporting Code Section 7F — XC Scoring (2024 Edition)
+                </a>
+                <br />
+                <span>
+                  The definitive specification. Contains all formulas, coefficients, and rules
+                  including penalties, stopped tasks, and series scoring.
+                </span>
+              </li>
+              <li>
+                <a
+                  href="https://www.fai.org/commission/civl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-foreground hover:underline"
+                >
+                  FAI/CIVL — International Hang Gliding and Paragliding Commission
+                </a>
+                <br />
+                <span>
+                  The governing body that maintains the GAP scoring rules and organizes World and
+                  Continental championships.
+                </span>
+              </li>
+              <li>
+                <a
+                  href="https://www.fai.org/page/sporting-code"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-foreground hover:underline"
+                >
+                  FAI Sporting Code
+                </a>
+                <br />
+                <span>
+                  The full collection of FAI sporting codes across all air sports. Section 7 covers
+                  hang gliding and paragliding.
+                </span>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <footer className="pt-6 border-t border-border text-sm text-muted-foreground flex items-center gap-4">
+          <a
+            href="https://github.com/pokle/glidecomp"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
+            </svg>
+            GlideComp on GitHub
+          </a>
+          <Link to="/scoring" className="hover:text-foreground transition-colors">
+            Scoring
+          </Link>
+          <Link to="/about" className="hover:text-foreground transition-colors">
+            About
+          </Link>
+          <Link to="/legal" className="hover:text-foreground transition-colors">
+            Privacy &amp; Terms
+          </Link>
+        </footer>
+      </div>
+    </div>
+  );
+}

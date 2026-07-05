@@ -60,7 +60,6 @@ These are the main doc files and the source files they describe:
 | `docs/sparkline-spec.md` | `web/frontend/src/analysis/analysis-panel.ts` |
 | `docs/optimized-task-line-spec.md` | `web/engine/src/task-optimizer.ts` |
 | `docs/browser-storage-spec.md` | `web/frontend/src/analysis/storage.ts`, `storage-menu.ts` |
-| `docs/basecoat-fork.md` | `web/frontend/package.json` |
 | `docs/airscore-api-worker-spec.md` | `web/workers/airscore-api/src/**/*.ts` |
 | `docs/event-detection/*.md` | `web/engine/src/event-detector.ts`, `circle-detector.ts`, `glide-speed.ts` |
 | `docs/TODO.md` | All source files (check completed items) |

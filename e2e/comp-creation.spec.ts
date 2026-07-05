@@ -39,74 +39,50 @@ test("dev login, onboarding, create competition and task", async ({ page }) => {
   }
 
   // Step 2: Navigate to onboarding (new user has no username)
-  await page.goto("/onboarding.html");
+  await page.goto("/onboarding");
 
-  // Step 3: Complete onboarding
-  await expect(page.locator("#onboarding-name")).toHaveValue(testUser.name);
-  await page.fill("#username", username);
-  await page.click("#onboarding-submit");
+  // Step 3: Complete onboarding. The full-name field is pre-filled from the
+  // auth user; assertion doubles as the "page is interactive" sync point.
+  await expect(page.getByLabel("Full name")).toHaveValue(testUser.name);
+  await page.getByLabel("Username").fill(username);
+  await page.getByRole("button", { name: "Continue" }).click();
 
-  // Should redirect to the user's dashboard
-  await page.waitForURL(`**/u/${username}/*`);
+  // Should land on the user's dashboard (full page load so the user context
+  // picks up the new username)
+  await page.waitForURL(`**/u/${username}`);
 
-  // Step 4: Navigate to competitions page
+  // Step 4: Navigate to competitions page. The "New Competition" button
+  // renders once the signed-in user resolves; Playwright's click auto-waits.
   await page.goto("/comp");
-  await page.waitForSelector("#comp-page:not(.hidden)");
-
-  // The "New Competition" button should be visible for authenticated users
-  await expect(page.locator("#create-comp-btn")).toBeVisible();
-
-  // comp.ts attaches the dialog-opening click handler only after loadComps()
-  // resolves. Wait for the loading skeleton to be gone (replaced by cards or
-  // the empty state) — that's the actual signal the listener is attached.
-  // networkidle is the wrong tool here: it can resolve during a brief gap
-  // between unrelated requests before loadComps() has even started, or hang
-  // indefinitely on an unrelated in-flight request left over from the
-  // previous page.
-  await expect(
-    page.locator('[aria-label="Loading competitions"]')
-  ).toBeHidden();
 
   // Step 5: Create a competition
-  await page.click("#create-comp-btn");
-  await page.waitForSelector("dialog#create-comp-dialog[open]");
-  await page.fill("#comp-name", "E2E Test Competition");
-  // Category defaults to HG (pre-checked) — no change needed
-  // Mark as test competition
-  await page.check("#comp-test");
-  await page.click("#create-submit-btn");
+  await page.getByRole("button", { name: "New Competition" }).click();
+  const createDialog = page.getByRole("dialog");
+  await createDialog.getByLabel("Name").fill("E2E Test Competition");
+  // Category defaults to HG — no change needed. Mark as test competition.
+  await createDialog
+    .getByRole("checkbox", { name: /Test competition/ })
+    .click();
+  await createDialog.getByRole("button", { name: "Create" }).click();
 
-  // Should navigate to the competition detail page. toHaveText already
-  // polls until comp-detail.ts's fetch resolves and populates the title —
-  // no need to wait on networkidle first, which was both redundant (the
-  // assertion already retries) and a source of hangs when a leftover
-  // in-flight request from the previous page never settles.
+  // Client-side navigation to the competition detail page; the heading
+  // assertion polls until the comp fetch resolves.
   await page.waitForURL("**/comp/*");
-  await expect(page.locator("#comp-title")).toHaveText("E2E Test Competition");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "E2E Test Competition"
+  );
 
   // Step 6: Create a task
-  await expect(page.locator("#create-task-btn")).toBeVisible();
-  await page.click("#create-task-btn");
-  await page.waitForSelector("dialog#create-task-dialog[open]");
-  await page.fill("#task-name", "Day 1 - Ridge Run");
-  await page.fill("#task-date", "2026-04-15");
+  await page.getByRole("button", { name: "New Task" }).click();
+  const taskDialog = page.getByRole("dialog");
+  await taskDialog.getByLabel("Name").fill("Day 1 - Ridge Run");
+  await taskDialog.getByLabel("Date").fill("2026-04-15");
   // Pilot class checkboxes default to all checked (just "open")
-  // Click submit and wait for both the POST response and the subsequent
-  // page reload. The form handler calls window.location.reload() after a
-  // successful POST — we need to capture that reload navigation so the
-  // assertions below run against the fresh page, not the pre-reload DOM.
-  await Promise.all([
-    page.waitForResponse(
-      (r) =>
-        r.url().includes("/api/comp/") &&
-        r.url().includes("/task") &&
-        r.request().method() === "POST"
-    ),
-    page.click("#task-submit-btn"),
-  ]);
+  await taskDialog.getByRole("button", { name: "Create" }).click();
 
-  // The reload is now in-flight. toContainText polls until initCompDetail()
-  // has fetched and rendered the task list — see the toHaveText assertion
-  // above for why we don't wait on networkidle here either.
-  await expect(page.locator("#tasks-list")).toContainText("Day 1 - Ridge Run");
+  // A successful create closes the dialog and re-fetches the comp; the task
+  // link assertion polls until the refreshed task list renders.
+  await expect(
+    page.getByRole("link", { name: /Day 1 - Ridge Run/ })
+  ).toBeVisible();
 });

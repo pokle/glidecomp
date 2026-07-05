@@ -1,0 +1,684 @@
+/*
+ * Analysis-page stylesheet. Tokens and Tailwind come from the shared React
+ * stylesheet so the page matches the rest of the app; on top of that this
+ * file defines:
+ *
+ * 1. A small set of vanilla component classes (.btn*, .input, .alert*,
+ *    .tabs, .command) — the analysis page builds its DOM imperatively, so it
+ *    can't use the React components in src/react/ui/. These are the same
+ *    shadcn recipes, expressed as classes.
+ * 2. Analysis-specific styles: map container, map controls, track-point HUD,
+ *    glide legend, panel list items, drop zone.
+ */
+
+@import "./react/globals.css";
+
+/* Map libraries */
+@import "mapbox-gl/dist/mapbox-gl.css";
+@import "leaflet/dist/leaflet.css";
+
+:root {
+  color-scheme: light;
+
+  /* .scrollbar (thin styled scrollbars in panel lists) */
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(0, 0, 0, 0.3);
+  --scrollbar-width: 6px;
+  --scrollbar-radius: 6px;
+}
+
+@layer base {
+  body {
+    @apply overscroll-none antialiased;
+  }
+
+  /* Heading sizes (Tailwind preflight strips them; panel markup relies on
+     these base sizes, with utility classes overriding where set) */
+  h1, h2, h3 {
+    @apply font-bold;
+  }
+  h1 { font-size: 24px; }
+  h2 { font-size: 20px; }
+  h3 { font-size: 16px; }
+
+  .scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    &::-webkit-scrollbar { width: var(--scrollbar-width); }
+    &::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+    &::-webkit-scrollbar-thumb {
+      background: var(--scrollbar-thumb);
+      border-radius: var(--scrollbar-radius);
+    }
+  }
+
+  /* Prevent browser zoom gestures on UI elements (header, sidebar, dialogs)
+     while allowing the map to handle its own touch interactions */
+  body > div,
+  header,
+  aside,
+  dialog {
+    touch-action: pan-x pan-y;
+  }
+
+  /* iOS Safari auto-zooms the viewport when focusing form fields whose
+     font-size is below 16px, and often does not restore the zoom afterwards —
+     leaving the page subtly scaled in and pushing map controls off-screen.
+     Force 16px on form fields for iOS Safari only (scoped via the iOS-only
+     -webkit-touch-callout feature query) so desktop visuals are unaffected. */
+  @supports (-webkit-touch-callout: none) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
+}
+
+@layer components {
+  /* ── Vanilla component classes (shadcn recipes) ─────────────────────── */
+
+  /* Button — base + the variants the page uses. Sizes: default and icon. */
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost,
+  .btn-icon {
+    @apply inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] cursor-pointer;
+  }
+
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost {
+    @apply gap-2 h-9 px-4 py-2 has-[>svg]:px-3;
+  }
+
+  .btn-icon {
+    @apply size-9;
+  }
+
+  .btn,
+  .btn-primary {
+    @apply bg-primary text-primary-foreground shadow-xs hover:bg-primary/90;
+  }
+
+  .btn-secondary {
+    @apply bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80;
+  }
+
+  .btn-ghost,
+  .btn-icon {
+    @apply bg-transparent text-inherit shadow-none hover:bg-accent hover:text-accent-foreground;
+  }
+
+  /* Text-style inputs (the page uses type=text and type=number) */
+  .input[type='text'],
+  .input[type='number'] {
+    @apply appearance-none placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground border-input flex h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm;
+    @apply focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px];
+  }
+
+  /* Alert (the on-map status banner). Only the destructive variant is
+     styled; showStatus's success/warning classes are intentionally
+     appearance-neutral (matching the previous look). */
+  .alert,
+  .alert-destructive {
+    @apply relative w-full rounded-lg border px-4 py-3 text-sm grid has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr_auto] grid-cols-[0_1fr_auto] has-[>svg]:gap-x-3 gap-y-0.5 items-start [&>svg]:size-4 [&>svg]:translate-y-0.5 [&>svg]:text-current;
+  }
+
+  .alert {
+    @apply bg-card text-card-foreground;
+  }
+
+  .alert-destructive {
+    @apply text-destructive bg-card;
+  }
+
+  /* Tabs (panel tab strip; switching behavior is the page's own JS) */
+  .tabs {
+    @apply flex flex-col gap-2;
+
+    [role='tablist'] {
+      @apply bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px];
+
+      [role='tab'] {
+        @apply focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring text-foreground inline-flex h-[calc(100%_-_1px)] flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 cursor-pointer;
+
+        &[aria-selected='true'] {
+          @apply bg-background shadow-sm;
+        }
+      }
+    }
+
+    [role='tabpanel'] {
+      @apply flex-1 outline-none;
+    }
+  }
+
+  /* Collapsible <details>/<summary> (settings accordion, HUD groups) */
+  details {
+    &::details-content {
+      block-size: 0;
+      @apply block opacity-0 transition-discrete transition-all;
+    }
+
+    &[open]::details-content {
+      block-size: auto;
+      block-size: calc-size(auto, size);
+      @apply opacity-100;
+    }
+
+    summary {
+      @apply inline-flex items-center cursor-pointer;
+    }
+  }
+
+  details > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  /* ── Command palette ────────────────────────────────────────────────── */
+
+  .command-dialog {
+    @apply inset-y-0 opacity-0 transition-all transition-discrete;
+
+    &[open] {
+      @apply opacity-100;
+      &::backdrop { @apply opacity-100; }
+      > * { @apply scale-100; }
+
+      @starting-style {
+        @apply opacity-0;
+        &::backdrop { @apply opacity-0; }
+        > * { @apply scale-95; }
+      }
+    }
+
+    &::backdrop {
+      @apply bg-black/50 opacity-0 transition-all transition-discrete;
+    }
+
+    > * {
+      @apply bg-background fixed top-[50%] left-[50%] z-50 flex flex-col w-full max-w-[calc(100%_-_2rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-lg border shadow-lg sm:max-w-lg max-h-[min(640px,calc(100%_-_2rem))];
+      @apply transition-all scale-95;
+    }
+
+    .command {
+      > header input { @apply h-12; }
+
+      [role='menu'] {
+        @apply px-2;
+        [role='menuitem'] { @apply py-3 px-2 [&_svg]:size-5; }
+        [role='heading'] { @apply px-2 py-1.5 font-medium text-muted-foreground; }
+      }
+    }
+  }
+
+  .command {
+    > header {
+      @apply flex items-center border-b px-3 gap-2;
+
+      svg { @apply size-4 shrink-0 opacity-50; }
+
+      input {
+        @apply placeholder:text-muted-foreground flex h-10 w-full rounded-md bg-transparent py-3 text-base md:text-sm outline-hidden disabled:cursor-not-allowed disabled:opacity-50;
+      }
+    }
+
+    [role='menu'] {
+      @apply max-h-[300px] overflow-y-auto overflow-x-hidden p-1;
+
+      [role='menuitem'] {
+        @apply aria-hidden:hidden relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none aria-disabled:opacity-50 aria-disabled:pointer-events-none w-full truncate [&_svg:not([class*='text-'])]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4;
+
+        &.active { @apply bg-accent text-accent-foreground; }
+      }
+
+      [role='heading'] {
+        @apply text-muted-foreground flex px-2 py-1.5 text-xs font-medium;
+      }
+
+      /* Groups with no visible items disappear along with their headings */
+      [role='group']:not(:has([role='menuitem']:not([aria-hidden='true']))) {
+        @apply hidden;
+      }
+
+      [role='separator'] { @apply border-border -mx-1 my-1; }
+
+      /* Empty state once the filter matches nothing */
+      &:not(:has([role='menuitem']:not([aria-hidden='true'])))::before {
+        @apply flex items-center justify-center py-6 px-3 text-sm truncate -m-1 content-['No_results_found'];
+      }
+    }
+
+    /* Group separators are noise while filtering */
+    &:has(> header input:not(:placeholder-shown)) [role='separator'] {
+      @apply hidden;
+    }
+  }
+
+  /* ── Analysis-specific styles ───────────────────────────────────────── */
+
+  /* Drop zone overlay */
+  .drop-zone {
+    @apply absolute inset-0 z-50 flex items-center justify-center;
+    @apply bg-black/70 opacity-0 pointer-events-none transition-opacity duration-200;
+  }
+
+  .drop-zone.drag-over {
+    @apply opacity-100 pointer-events-auto;
+  }
+
+  /* Event item in the panel */
+  .event-item {
+    @apply flex items-start gap-2 w-full p-2 bg-transparent border-0;
+    @apply rounded-md cursor-pointer text-left transition-colors duration-150;
+  }
+
+  .event-item:hover {
+    @apply bg-muted;
+  }
+
+  .event-item.selected {
+    @apply bg-primary/20;
+  }
+
+  /* Event icon container */
+  .event-icon {
+    @apply flex items-center justify-center w-6 h-6 shrink-0;
+  }
+
+  .event-icon svg {
+    @apply w-4 h-4;
+  }
+
+  /* Event content */
+  .event-content {
+    @apply flex flex-col gap-0.5 min-w-0;
+  }
+
+  .event-type {
+    @apply text-xs font-semibold uppercase tracking-wide;
+  }
+
+  .event-desc {
+    @apply text-sm whitespace-nowrap overflow-hidden text-ellipsis;
+  }
+
+  .event-meta {
+    @apply text-xs text-muted-foreground;
+  }
+
+  /* Filter button active state */
+  .filter-btn.active {
+    @apply bg-primary/20 text-primary;
+  }
+
+  /* Glide item in the panel */
+  .glide-item {
+    @apply flex items-start gap-3 w-full p-3 bg-muted/30 border border-border;
+    @apply rounded-lg cursor-pointer text-left transition-colors duration-150;
+  }
+
+  .glide-item:hover {
+    @apply bg-muted;
+  }
+
+  .glide-item.selected {
+    @apply bg-primary/20 border-primary/50;
+  }
+
+  .glide-rank {
+    @apply flex items-center justify-center w-8 h-8 shrink-0;
+    @apply bg-primary/10 text-primary font-bold text-sm rounded-full;
+  }
+
+  .glide-details {
+    @apply flex flex-col gap-1 min-w-0 flex-1;
+  }
+
+  .glide-primary {
+    @apply flex items-baseline justify-between gap-2;
+  }
+
+  .glide-distance {
+    @apply text-base font-semibold text-foreground;
+  }
+
+  .glide-time {
+    @apply text-xs text-muted-foreground;
+  }
+
+  .glide-stats {
+    @apply flex flex-wrap gap-x-3 gap-y-1 text-xs;
+  }
+
+  .glide-stat {
+    @apply text-muted-foreground;
+  }
+
+  .glide-stat strong {
+    @apply text-foreground font-medium;
+  }
+
+  .glide-altitudes {
+    @apply text-xs text-muted-foreground;
+  }
+
+  /* Climb item in the panel */
+  .climb-item {
+    @apply flex items-start gap-3 w-full p-3 bg-muted/30 border border-border;
+    @apply rounded-lg cursor-pointer text-left transition-colors duration-150;
+  }
+
+  .climb-item:hover {
+    @apply bg-muted;
+  }
+
+  .climb-item.selected {
+    @apply bg-primary/20 border-primary/50;
+  }
+
+  .climb-rank {
+    @apply flex items-center justify-center w-8 h-8 shrink-0;
+    @apply bg-green-500/20 text-green-600 font-bold text-sm rounded-full;
+  }
+
+  .climb-details {
+    @apply flex flex-col gap-1 min-w-0 flex-1;
+  }
+
+  .climb-primary {
+    @apply flex items-baseline justify-between gap-2;
+  }
+
+  .climb-gain {
+    @apply text-base font-semibold text-green-600;
+  }
+
+  .climb-time {
+    @apply text-xs text-muted-foreground;
+  }
+
+  .climb-stats {
+    @apply flex flex-wrap gap-x-3 gap-y-1 text-xs;
+  }
+
+  .climb-stat {
+    @apply text-muted-foreground;
+  }
+
+  .climb-stat strong {
+    @apply text-foreground font-medium;
+  }
+
+  .climb-altitudes {
+    @apply text-xs text-muted-foreground;
+  }
+
+  /* Sink item in the panel */
+  .sink-item {
+    @apply flex items-start gap-3 w-full p-3 bg-muted/30 border border-border;
+    @apply rounded-lg cursor-pointer text-left transition-colors duration-150;
+  }
+
+  .sink-item:hover {
+    @apply bg-muted;
+  }
+
+  .sink-item.selected {
+    @apply bg-primary/20 border-primary/50;
+  }
+
+  .sink-rank {
+    @apply flex items-center justify-center w-8 h-8 shrink-0;
+    @apply bg-red-500/20 text-red-600 font-bold text-sm rounded-full;
+  }
+
+  .sink-details {
+    @apply flex flex-col gap-1 min-w-0 flex-1;
+  }
+
+  .sink-primary {
+    @apply flex items-baseline justify-between gap-2;
+  }
+
+  .sink-drop {
+    @apply text-base font-semibold text-red-600;
+  }
+
+  .sink-time {
+    @apply text-xs text-muted-foreground;
+  }
+
+  .sink-stats {
+    @apply flex flex-wrap gap-x-3 gap-y-1 text-xs;
+  }
+
+  .sink-stat {
+    @apply text-muted-foreground;
+  }
+
+  .sink-stat strong {
+    @apply text-foreground font-medium;
+  }
+
+  .sink-altitudes {
+    @apply text-xs text-muted-foreground;
+  }
+
+  /* Map container - use !important to ensure it displays.
+     z-index: 0 creates a stacking context so Leaflet's internal z-indices
+     (400–1000) don't escape and overlay the sidebar (z-40). */
+  #map {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 0;
+  }
+
+  /* NOTE: Do not force CSS width/height on .mapboxgl-canvas. Mapbox GL keeps
+     the canvas's inline CSS size in sync with the drawing-buffer size it
+     measured; overriding it with 100% !important stretches a stale-sized
+     buffer over the container, turning a recoverable mis-measurement (iOS
+     layout churn at init) into a map that renders offset until reload.
+     Size resyncs are handled via map.resize()/invalidateSize() in
+     analysis/main.ts and the map providers. */
+
+  /* Throb animation for event markers */
+  @keyframes throb {
+    0%, 100% { box-shadow: 0 0 0 0 currentColor; }
+    50% { box-shadow: 0 0 0 20px transparent; }
+  }
+
+  .throb-marker {
+    animation: throb 0.5s ease-in-out 4;
+  }
+
+  /* Throb animation for the Analysis button when flight data loads */
+  @keyframes throb-attention {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+  }
+
+  .pulse-attention {
+    animation: throb-attention 0.4s ease-in-out 3;
+  }
+
+  /* Allow throb to scale beyond the control group boundary */
+  .mapboxgl-ctrl-group:has(.pulse-attention),
+  .leaflet-bar:has(.pulse-attention) {
+    overflow: visible !important;
+  }
+
+  /* Allow labeled map control buttons to expand beyond default fixed width */
+  .mapboxgl-ctrl-group button:has(.mapctl-label) {
+    width: auto !important;
+  }
+
+  /* Hide text labels on map control buttons on mobile, keep icon-only at 36px */
+  @media (max-width: 639px) {
+    .mapctl-label {
+      display: none !important;
+    }
+  }
+
+  /* First-visit tooltip for Analysis button */
+  .analysis-tooltip {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 6px;
+    padding: 6px 12px;
+    background: #1e293b;
+    color: #f1f5f9;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+    white-space: nowrap;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    pointer-events: none;
+    animation: tooltip-fade-in 0.2s ease-out;
+  }
+
+  .analysis-tooltip::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    right: 12px;
+    border: 6px solid transparent;
+    border-bottom-color: #1e293b;
+  }
+
+  @keyframes tooltip-fade-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Glide legend styles */
+  #glide-legend {
+    @apply absolute bottom-8 right-2 font-sans;
+    z-index: 1100;
+  }
+
+  #glide-legend .glide-legend-btn {
+    @apply w-7 h-7 rounded-full border-0 bg-primary text-primary-foreground;
+    @apply text-base font-bold cursor-pointer shadow-md transition-transform duration-200;
+  }
+
+  #glide-legend .glide-legend-btn:hover {
+    @apply scale-110;
+  }
+
+  #glide-legend .glide-legend-content {
+    @apply hidden absolute bottom-9 right-0 bg-background rounded-lg p-3 min-w-64 shadow-lg;
+  }
+
+  #glide-legend.expanded .glide-legend-content {
+    @apply block;
+  }
+
+  #glide-legend .glide-legend-title {
+    @apply font-semibold text-sm mb-2 text-primary border-b border-border pb-1.5;
+  }
+
+  #glide-legend .glide-legend-item {
+    @apply text-xs text-foreground my-1.5 leading-relaxed;
+  }
+
+  #glide-legend .glide-legend-item strong {
+    @apply text-primary;
+  }
+
+  /* Track-point HUD overlay — translucent dark card with accordion groups */
+  #track-point-hud {
+    @apply absolute;
+    @apply rounded-lg px-3 py-2;
+    z-index: 1100;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    font-family: 'Atkinson Hyperlegible Next', ui-monospace, monospace;
+    touch-action: none;
+    user-select: none;
+  }
+
+  #track-point-hud .hud-drag-handle {
+    cursor: grab;
+    width: 32px;
+    height: 5px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.3);
+    margin: 0 auto 4px;
+  }
+
+  #track-point-hud .hud-drag-handle:active {
+    cursor: grabbing;
+  }
+
+  #track-point-hud .hud-toggle {
+    @apply text-white/60 hover:text-white cursor-pointer;
+    @apply rounded leading-none text-sm w-5 h-5 flex items-center justify-center ml-auto;
+    background: none;
+    border: none;
+  }
+
+  #track-point-hud.hud-minimized {
+    @apply p-1;
+  }
+
+  #track-point-hud.hud-minimized .hud-body {
+    @apply hidden;
+  }
+
+  #track-point-hud .hud-group {
+    @apply text-white;
+  }
+
+  #track-point-hud .hud-summary {
+    @apply text-white/60 text-xs font-semibold uppercase tracking-wide cursor-pointer;
+    @apply list-none select-none py-0.5;
+  }
+
+  #track-point-hud .hud-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  #track-point-hud .hud-summary::before {
+    content: '▸ ';
+  }
+
+  #track-point-hud details[open] > .hud-summary::before {
+    content: '▾ ';
+  }
+
+  #track-point-hud .hud-divider {
+    @apply border-t border-white/20 my-1;
+  }
+
+  #track-point-hud .hud-alt {
+    @apply text-white text-lg font-bold leading-tight pl-3;
+  }
+
+  #track-point-hud .hud-speed {
+    @apply text-white text-sm leading-tight pl-3;
+  }
+
+  #track-point-hud .hud-req {
+    @apply text-white/60 text-sm leading-tight pl-3;
+  }
+
+  #track-point-hud .hud-thermal-alt {
+    @apply text-white text-sm leading-tight pl-3;
+  }
+
+  #track-point-hud .hud-wind {
+    @apply text-white/75 text-sm leading-tight pl-3;
+  }
+}

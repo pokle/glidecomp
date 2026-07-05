@@ -19,7 +19,6 @@ const USER: AuthUser = {
 };
 
 const STORAGE_KEY_PREFS = "glidecomp:preferences";
-const STORAGE_KEY_THEME = "glidecomp:theme";
 
 const SAMPLE_PREFS = {
   units: { speed: "mph", altitude: "ft", distance: "mi", climbRate: "ft/min" },
@@ -27,40 +26,6 @@ const SAMPLE_PREFS = {
 };
 const ALT_PREFS = { units: { speed: "knots" } };
 
-const SAMPLE_THEME = {
-  name: "Test Theme",
-  author: "Tester",
-  version: 1,
-  colors: {
-    background: "#000",
-    foreground: "#fff",
-    card: "#111",
-    "card-foreground": "#fff",
-    popover: "#111",
-    "popover-foreground": "#fff",
-    primary: "#f00",
-    "primary-foreground": "#fff",
-    secondary: "#222",
-    "secondary-foreground": "#fff",
-    muted: "#333",
-    "muted-foreground": "#aaa",
-    accent: "#444",
-    "accent-foreground": "#fff",
-    destructive: "#f00",
-    border: "#555",
-    input: "#666",
-    ring: "#777",
-  },
-  radius: "0.5rem",
-  buttonRadius: "0.25rem",
-  fonts: {
-    heading: { family: "Roboto", weight: 700, size: 24 },
-    body: { family: "Roboto", weight: 400, size: 16 },
-    button: { family: "Roboto", weight: 500, size: 14 },
-    caption: { family: "Roboto", weight: 400, size: 12 },
-    nav: { family: "Roboto", weight: 500, size: 14 },
-  },
-};
 
 type FetchMock = ReturnType<typeof vi.fn>;
 
@@ -168,22 +133,17 @@ describe("hydrate", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  test("cloud has theme: writes localStorage and applies", async () => {
+  test("legacy cloud theme field is ignored", async () => {
     fetchMock.mockResolvedValueOnce(
-      jsonResponse({ prefs: {}, theme: SAMPLE_THEME, updated_at: "now" })
+      jsonResponse({ prefs: {}, theme: { name: "Old" }, updated_at: "now" })
     );
 
     await sync.hydrate(USER);
-    // Wait for the dynamic import of theme.ts and applyTheme call to settle
     await flushMicrotasks();
 
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY_THEME)!)).toEqual(
-      SAMPLE_THEME
-    );
-    // applyTheme sets CSS custom properties on documentElement
-    expect(
-      document.documentElement.style.getPropertyValue("--background")
-    ).toBe("#000");
+    // The retired theme system's cloud data is neither stored nor uploaded
+    expect(localStorage.getItem("glidecomp:theme")).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   test("GET network error: stays local-only, no writes", async () => {
@@ -246,23 +206,6 @@ describe("hydrate", () => {
     expect(stored.mapLocation).toEqual(localMap);
   });
 
-  test("uploads BOTH prefs and theme when both are local-only", async () => {
-    localStorage.setItem(STORAGE_KEY_PREFS, JSON.stringify(SAMPLE_PREFS));
-    localStorage.setItem(STORAGE_KEY_THEME, JSON.stringify(SAMPLE_THEME));
-    fetchMock
-      .mockResolvedValueOnce(
-        jsonResponse({ prefs: {}, theme: null, updated_at: null })
-      )
-      .mockResolvedValueOnce(jsonResponse({ updated_at: "now" }));
-
-    await sync.hydrate(USER);
-    await flushMicrotasks();
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const body = JSON.parse(fetchMock.mock.calls[1][1].body);
-    expect(body.prefs).toEqual(SAMPLE_PREFS);
-    expect(body.theme).toEqual(SAMPLE_THEME);
-  });
 });
 
 // ── schedulePush ────────────────────────────────────────────────────────────
@@ -270,7 +213,7 @@ describe("hydrate", () => {
 describe("schedulePush", () => {
   test("no-op when user is null", () => {
     vi.useFakeTimers();
-    sync.schedulePush("prefs");
+    sync.schedulePush();
     vi.advanceTimersByTime(5000);
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -281,33 +224,14 @@ describe("schedulePush", () => {
     fetchMock.mockResolvedValue(jsonResponse({ updated_at: "now" }));
 
     vi.useFakeTimers();
-    sync.schedulePush("prefs");
-    sync.schedulePush("prefs");
-    sync.schedulePush("prefs");
+    sync.schedulePush();
+    sync.schedulePush();
+    sync.schedulePush();
     expect(fetchMock).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(2000);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][1].method).toBe("PUT");
-  });
-
-  test("prefs and theme have independent debouncers", async () => {
-    await primeSignedIn();
-    localStorage.setItem(STORAGE_KEY_PREFS, JSON.stringify(SAMPLE_PREFS));
-    localStorage.setItem(STORAGE_KEY_THEME, JSON.stringify(SAMPLE_THEME));
-    fetchMock.mockResolvedValue(jsonResponse({ updated_at: "now" }));
-
-    vi.useFakeTimers();
-    sync.schedulePush("prefs");
-    sync.schedulePush("theme");
-
-    await vi.advanceTimersByTimeAsync(2000);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const bodies = fetchMock.mock.calls.map((c) => JSON.parse(c[1].body));
-    const hasPrefs = bodies.some((b) => b.prefs !== undefined);
-    const hasTheme = bodies.some((b) => b.theme !== undefined);
-    expect(hasPrefs).toBe(true);
-    expect(hasTheme).toBe(true);
   });
 
   test("pushes prefs from current localStorage at flush time, not schedule time", async () => {
@@ -316,7 +240,7 @@ describe("schedulePush", () => {
     fetchMock.mockResolvedValue(jsonResponse({ updated_at: "now" }));
 
     vi.useFakeTimers();
-    sync.schedulePush("prefs");
+    sync.schedulePush();
     // Mutate localStorage AFTER scheduling but BEFORE flush
     localStorage.setItem(STORAGE_KEY_PREFS, JSON.stringify(ALT_PREFS));
     await vi.advanceTimersByTimeAsync(2000);
@@ -325,7 +249,7 @@ describe("schedulePush", () => {
     expect(body.prefs).toEqual(ALT_PREFS);
   });
 
-  test("schedulePush('prefs') skips PUT when only mapLocation changed", async () => {
+  test("schedulePush() skips PUT when only mapLocation changed", async () => {
     await primeSignedIn();
     // localStorage has only mapLocation — nothing else worth syncing
     localStorage.setItem(
@@ -335,13 +259,13 @@ describe("schedulePush", () => {
     fetchMock.mockResolvedValue(jsonResponse({ updated_at: "now" }));
 
     vi.useFakeTimers();
-    sync.schedulePush("prefs");
+    sync.schedulePush();
     await vi.advanceTimersByTimeAsync(2000);
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  test("schedulePush('prefs') strips mapLocation but PUTs other fields", async () => {
+  test("schedulePush() strips mapLocation but PUTs other fields", async () => {
     await primeSignedIn();
     localStorage.setItem(
       STORAGE_KEY_PREFS,
@@ -353,7 +277,7 @@ describe("schedulePush", () => {
     fetchMock.mockResolvedValue(jsonResponse({ updated_at: "now" }));
 
     vi.useFakeTimers();
-    sync.schedulePush("prefs");
+    sync.schedulePush();
     await vi.advanceTimersByTimeAsync(2000);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -362,17 +286,6 @@ describe("schedulePush", () => {
     expect(body.prefs.units).toEqual(SAMPLE_PREFS.units);
   });
 
-  test("schedulePush('theme') with no localStorage entry sends theme=null", async () => {
-    await primeSignedIn();
-    fetchMock.mockResolvedValue(jsonResponse({ updated_at: "now" }));
-
-    vi.useFakeTimers();
-    sync.schedulePush("theme");
-    await vi.advanceTimersByTimeAsync(2000);
-
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
-    expect(body.theme).toBeNull();
-  });
 });
 
 // ── put failure modes ──────────────────────────────────────────────────────
@@ -384,12 +297,12 @@ describe("put error handling", () => {
     fetchMock.mockResolvedValueOnce(new Response("", { status: 401 }));
 
     vi.useFakeTimers();
-    sync.schedulePush("prefs");
+    sync.schedulePush();
     await vi.advanceTimersByTimeAsync(2000);
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     // Subsequent schedule should be ignored
-    sync.schedulePush("prefs");
+    sync.schedulePush();
     await vi.advanceTimersByTimeAsync(2000);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -400,7 +313,7 @@ describe("put error handling", () => {
     fetchMock.mockResolvedValue(new Response("", { status: 500 }));
 
     vi.useFakeTimers();
-    sync.schedulePush("prefs");
+    sync.schedulePush();
     await vi.advanceTimersByTimeAsync(2000); // debounce fires, attempt 0
     await vi.advanceTimersByTimeAsync(1000); // backoff for attempt 1
     await vi.advanceTimersByTimeAsync(2000); // backoff for attempt 2
@@ -418,7 +331,7 @@ describe("put error handling", () => {
       .mockResolvedValueOnce(jsonResponse({ updated_at: "now" }));
 
     vi.useFakeTimers();
-    sync.schedulePush("prefs");
+    sync.schedulePush();
     await vi.advanceTimersByTimeAsync(2000);
     await vi.advanceTimersByTimeAsync(1000);
 
@@ -431,7 +344,7 @@ describe("put error handling", () => {
     fetchMock.mockResolvedValue(jsonResponse({ updated_at: "now" }));
 
     vi.useFakeTimers();
-    sync.schedulePush("prefs");
+    sync.schedulePush();
     await vi.advanceTimersByTimeAsync(2000);
 
     expect(fetchMock.mock.calls[0][1].keepalive).toBe(true);
@@ -447,7 +360,7 @@ describe("pagehide flush", () => {
     fetchMock.mockResolvedValue(jsonResponse({ updated_at: "now" }));
 
     vi.useFakeTimers();
-    sync.schedulePush("prefs");
+    sync.schedulePush();
     expect(fetchMock).not.toHaveBeenCalled();
 
     // Fire pagehide BEFORE the 2s debounce elapses
@@ -490,34 +403,6 @@ describe("cross-tab storage event", () => {
     expect(events.length).toBe(1);
     // The detail should be a merged UserPreferences with our units
     expect((events[0] as { units: unknown }).units).toEqual(SAMPLE_PREFS.units);
-  });
-
-  test("theme storage event applies the new theme via CSS variables", async () => {
-    localStorage.setItem(STORAGE_KEY_THEME, JSON.stringify(SAMPLE_THEME));
-    fireStorage(STORAGE_KEY_THEME, JSON.stringify(SAMPLE_THEME));
-
-    await flushMicrotasks();
-
-    expect(
-      document.documentElement.style.getPropertyValue("--background")
-    ).toBe("#000");
-  });
-
-  test("theme storage event with newValue=null re-applies default theme", async () => {
-    // Pre-state: a non-default theme is currently applied
-    localStorage.setItem(STORAGE_KEY_THEME, JSON.stringify(SAMPLE_THEME));
-    fireStorage(STORAGE_KEY_THEME, JSON.stringify(SAMPLE_THEME));
-    await flushMicrotasks();
-
-    // Other tab clears the theme (resetTheme)
-    localStorage.removeItem(STORAGE_KEY_THEME);
-    fireStorage(STORAGE_KEY_THEME, null);
-    await flushMicrotasks();
-
-    // BASECOAT_LIGHT_THEME has background #ffffff
-    expect(
-      document.documentElement.style.getPropertyValue("--background")
-    ).toBe("#ffffff");
   });
 
   test("storage event for unrelated key is ignored", async () => {
