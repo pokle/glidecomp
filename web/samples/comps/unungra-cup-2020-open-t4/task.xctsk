@@ -1,0 +1,101 @@
+{
+  "earthModel": "WGS84",
+  "goal": {
+    "deadline": "07:00:00Z",
+    "type": "CYLINDER"
+  },
+  "sss": {
+    "direction": "EXIT",
+    "timeGates": [
+      "02:45:00Z"
+    ],
+    "type": "RACE"
+  },
+  "taskType": "CLASSIC",
+  "turnpoints": [
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.186035,
+        "lon": 147.974553,
+        "altSmoothed": 940,
+        "name": "ell094",
+        "description": "ElliotLaunch"
+      },
+      "type": "TAKEOFF"
+    },
+    {
+      "radius": 2000,
+      "waypoint": {
+        "lat": -36.186035,
+        "lon": 147.974553,
+        "altSmoothed": 940,
+        "name": "ell094",
+        "description": "ElliotLaunch"
+      },
+      "type": "SSS"
+    },
+    {
+      "radius": 3000,
+      "waypoint": {
+        "lat": -36.2705734099,
+        "lon": 147.961807251,
+        "altSmoothed": 840,
+        "name": "tho084",
+        "description": "Thowgla"
+      }
+    },
+    {
+      "radius": 5000,
+      "waypoint": {
+        "lat": -36.2212878474,
+        "lon": 147.729549408,
+        "altSmoothed": 410,
+        "name": "mur041",
+        "description": "MurrayCudgewa"
+      }
+    },
+    {
+      "radius": 4000,
+      "waypoint": {
+        "lat": -36.0490989591,
+        "lon": 147.930908203,
+        "altSmoothed": 300,
+        "name": "tin030",
+        "description": "Tintaldra"
+      }
+    },
+    {
+      "radius": 4000,
+      "waypoint": {
+        "lat": -36.2803211,
+        "lon": 147.8718548,
+        "altSmoothed": 560,
+        "name": "chn056",
+        "description": "ChinamansHat"
+      }
+    },
+    {
+      "radius": 2000,
+      "waypoint": {
+        "lat": -36.1738072898,
+        "lon": 147.946443558,
+        "altSmoothed": 310,
+        "name": "ell030",
+        "description": "ElliotLanding"
+      },
+      "type": "ESS"
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.1738072898,
+        "lon": 147.946443558,
+        "altSmoothed": 310,
+        "name": "ell030",
+        "description": "ElliotLanding"
+      }
+    }
+  ],
+  "version": 1
+}
