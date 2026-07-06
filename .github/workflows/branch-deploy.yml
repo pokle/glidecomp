@@ -154,24 +154,40 @@ jobs:
             gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body "$COMMENT_BODY"
           fi
 
-      - name: Smoke test — verify correct version is deployed
+      - name: Smoke test — SPA routes serve the app shell at the right version
         run: |
           DEPLOY_URL="${{ steps.deploy.outputs.deployment-url }}"
           EXPECTED_SHA="${{ github.sha }}"
-          echo "Checking ${DEPLOY_URL} for commit ${EXPECTED_SHA}"
+          echo "Checking ${DEPLOY_URL} @ ${EXPECTED_SHA}"
+          fail=0
 
-          # Fetch the deployed page and extract the git SHA from data-git-sha attribute
-          DEPLOYED_SHA=$(curl -s "${DEPLOY_URL}/comp" | grep -oP 'data-git-sha="\K[a-f0-9]+' | head -1)
+          # SPA routes must serve the app shell directly with HTTP 200 (no
+          # redirect). Catches _redirects / Cloudflare clean-URL regressions
+          # that send SPA routes elsewhere — e.g. the /app.html -> /app outage
+          # where every SPA route 308-redirected to a "Page not found". Running
+          # this on the PR preview means such a regression fails the PR, not prod.
+          for route in /comp /u/me /scores; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "${DEPLOY_URL}${route}")
+            echo "${route} -> ${code}"
+            if [ "$code" != "200" ]; then
+              echo "::error::${route} returned HTTP ${code} (expected 200 — SPA route not serving the app shell)"
+              fail=1
+            fi
+          done
+
+          # Version check via the build-time <meta name="git-sha"> in the shell.
+          DEPLOYED_SHA=$(curl -s "${DEPLOY_URL}/comp" | grep -oP '<meta name="git-sha" content="\K[a-f0-9]+' | head -1)
           echo "Deployed SHA: ${DEPLOYED_SHA:-<not found>}"
-
           if [ -z "$DEPLOYED_SHA" ]; then
-            echo "::warning::Could not extract git SHA from deployed page"
+            echo "::error::Could not read git-sha meta from ${DEPLOY_URL}/comp"
+            fail=1
           elif [ "$DEPLOYED_SHA" != "$EXPECTED_SHA" ]; then
             echo "::error::Deployed SHA ${DEPLOYED_SHA} does not match expected ${EXPECTED_SHA}"
-            exit 1
-          else
-            echo "Good — deployed version matches commit"
+            fail=1
           fi
+
+          if [ "$fail" = "0" ]; then echo "Good — SPA routes serve ${EXPECTED_SHA}"; fi
+          exit $fail
 
       - name: Smoke test — verify dev-login is NOT accessible
         run: |

@@ -151,6 +151,16 @@ export default defineConfig({
     sampleCompFiles(),
     copySampleComps(),
     {
+      // Emit the build's git SHA as <meta name="git-sha"> in every HTML entry
+      // so the post-deploy smoke test can read the deployed version from the
+      // raw HTML. The footer's data-git-sha is client-rendered by React and so
+      // invisible to curl.
+      name: 'inject-git-sha-meta',
+      transformIndexHtml() {
+        return [{ tag: 'meta', attrs: { name: 'git-sha', content: GIT_SHA }, injectTo: 'head' as const }];
+      },
+    },
+    {
       // Dev routing (mirrors the production _redirects + Astro/Vite split):
       //   /_static/* and the static page URLs  -> Astro dev server
       //   SPA routes                            -> the React app shell (app.html)
