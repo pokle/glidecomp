@@ -39,15 +39,21 @@ export default function ScoreDetailMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const [provider, setProvider] = useState<MapProvider | null>(null);
 
-  // Create the provider once per mount; destroy on unmount (guarding the
-  // async creation against StrictMode's mount/unmount/mount cycle).
+  // Create the provider once per mount; destroy on unmount. Each mount gets
+  // its own inner DOM node — StrictMode mounts twice, and the async provider
+  // creation races otherwise (Leaflet refuses to re-init a container that a
+  // not-yet-destroyed instance is still attached to).
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    const outer = containerRef.current;
+    if (!outer) return;
+    const inner = document.createElement("div");
+    inner.style.width = "100%";
+    inner.style.height = "100%";
+    outer.appendChild(inner);
     let cancelled = false;
     let created: MapProvider | null = null;
     const providerType = import.meta.env.VITE_MAPBOX_TOKEN ? "mapbox" : "leaflet";
-    createMapProvider(container, providerType, { appControls: false })
+    createMapProvider(inner, providerType, { appControls: false })
       .then((p) => {
         if (cancelled) {
           p.destroy();
@@ -63,6 +69,7 @@ export default function ScoreDetailMap({
       cancelled = true;
       created?.destroy();
       setProvider(null);
+      inner.remove();
     };
   }, []);
 

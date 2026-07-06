@@ -172,7 +172,7 @@ describe('explainGapScore — flight narrative', () => {
     const summary = flight.items.find((i) => i.id === 'start-multiple');
     expect(summary).toBeDefined();
     expect(summary!.text).toContain('3 times');
-    expect(summary!.text).toContain('last valid crossing');
+    expect(summary!.text).toContain('latest crossing');
 
     // All three boundary crossings are listed with anchors...
     const crossings = flight.items.filter((i) => i.id.startsWith('start-crossing-'));

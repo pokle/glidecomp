@@ -165,7 +165,7 @@ export default defineConfig({
             !path.includes('.') &&
             (path.startsWith('/u/') ||
               path === '/comp' ||
-              /^\/comp\/[a-z]+(\/|\/task\/[a-z]+\/?)?$/.test(path) ||
+              /^\/comp\/[a-z0-9]+(\/|\/task\/[a-z0-9]+(\/|\/pilot\/[a-z0-9]+\/?)?)?$/.test(path) ||
               path === '/scores' ||
               /^\/(profile|settings|onboarding)\/?$/.test(path) ||
               /^\/admin\/(users|cache)\/?$/.test(path));

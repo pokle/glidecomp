@@ -197,8 +197,9 @@ function pct(fraction: number): string {
   return `${(fraction * 100).toFixed(0)}%`;
 }
 
+// Floors like the scores tables do, so the same time never differs by a second.
 function duration(seconds: number): string {
-  const s = Math.round(seconds);
+  const s = Math.floor(seconds);
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
@@ -284,9 +285,12 @@ function buildFlightSection(
       const startCrossings = result.crossings.filter(
         (c) => c.taskIndex === sssIdx,
       );
+      // Careful wording: the scored crossing can be the first one (later
+      // crossings were just flying back through the cylinder mid-task) or a
+      // later one (a re-start superseded an earlier start).
       items.push({
         id: 'start-multiple',
-        text: `Crossed the start cylinder boundary ${startCrossings.length} times — the scored start is the last valid crossing before continuing along the course. Earlier starts were superseded by re-entering.`,
+        text: `Crossed the start cylinder boundary ${startCrossings.length} times. The scored start is the latest crossing from which the flight still makes its best run along the course — re-starting supersedes an earlier start, while simply flying back through the cylinder later in the task changes nothing.`,
         emphasis: 'muted',
       });
       const listed = startCrossings.slice(0, MAX_START_CROSSINGS_LISTED);
