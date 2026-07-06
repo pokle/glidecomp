@@ -21,7 +21,7 @@ Before reading code, write down (in your head or as TaskCreate items) what you i
 
 - Every worker under `web/workers/*/src/` (auth-api, competition-api, airscore-api).
 - Pages Functions under `functions/api/`.
-- Frontend SPA under `web/frontend/src/` — focus on data flow from untrusted files (IGC, XCTask, share-target uploads) into the DOM, and on any `innerHTML`-style sinks.
+- Frontend under `web/frontend/src/` — the main UI is a React SPA under `src/react/` (grep it for `dangerouslySetInnerHTML`, ref-based DOM HTML writes, and unencoded interpolation into `href`/`src`/`location.*`); the vanilla analysis page (`src/analysis/**`) and 3D replay (`src/replay/**`) are where `innerHTML`-style sinks still live. Across both: data flow from untrusted files (IGC, XCTask, share-target uploads) and API strings (pilot/team/comp/task names) into the DOM.
 - Engine package under `web/engine/src/` — parsers (`igc-parser.ts`, `xctsk-parser.ts`) and any `eval`/`Function`-style constructs.
 - Infrastructure: every `wrangler.toml` (especially `[[routes]]` blocks and binding IDs), `Dockerfile.dev`, `docker-compose.yml`, `web/frontend/public/_redirects`, `web/frontend/public/_headers` (if present), `web/frontend/public/sw.js`.
 - `package.json` + `bun.lock` via `bun audit`.
@@ -56,7 +56,7 @@ Run static analysis with the full set of categories in mind. The list below is n
 - **Input validation**: Zod schemas on every body, with bounded string/array/JSON sizes. No `z.record(z.unknown())` on stored fields.
 - **SQL**: every query parameterised via `.bind(...)`. No string concatenation into SQL.
 - **File uploads**: size cap on compressed *and* decompressed payload, content-type / magic-byte check, per-route cap not just the global Workers ceiling.
-- **DOM sinks**: `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write` — every interpolation must be escaped or come from a trusted constant.
+- **DOM sinks**: `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`, and in the React tree `dangerouslySetInnerHTML` — every interpolation must be escaped or come from a trusted constant. In JSX, also check URL-valued attributes (`href`/`src`) built from untrusted data: JSX blocks quote-breakout but not `javascript:` schemes or unencoded params.
 - **Secrets**: no hard-coded keys in source or `wrangler.toml` (only env refs). API-key prefixes preserved (`glc_`).
 - **Headers**: `_headers` file on Pages with CSP, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`. HSTS at the zone level (note for operator).
 - **Audit logging**: every mutating handler calls `audit()` with `describeChange()`-style descriptions. No secrets or full emails in audit payloads.
