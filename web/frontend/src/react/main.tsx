@@ -1,8 +1,9 @@
 /**
- * The main GlideComp UI: a React + Base UI SPA served at /, /comp, /u/*,
- * /scores, /settings, /onboarding, the static about/legal/scoring pages and
- * the /admin pages. The analysis and 3D replay pages remain separate vanilla
- * entries — links point at those pages directly.
+ * The main GlideComp UI: a React + Base UI SPA served from /app.html and
+ * mapped to /comp, /u/*, /scores, /settings, /onboarding and the /admin
+ * routes via _redirects. Home, about, legal and the scoring guides are static
+ * pages built by ./static (Astro); the analysis and 3D replay pages remain
+ * separate vanilla entries — links point at those pages directly.
  */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -12,7 +13,6 @@ import { AppToaster } from "./lib/toast";
 import { ConfirmProvider } from "./lib/confirm";
 import { UserProvider } from "./lib/user";
 import { Shell } from "./components/Shell";
-import { Home } from "./pages/Home";
 import { Dashboard } from "./pages/Dashboard";
 import { Onboarding } from "./pages/Onboarding";
 import { Competitions } from "./pages/Competitions";
@@ -20,11 +20,6 @@ import { CompDetail } from "./pages/CompDetail";
 import { TaskDetail } from "./pages/TaskDetail";
 import { Scores } from "./pages/Scores";
 import { Settings } from "./pages/Settings";
-import { About } from "./pages/About";
-import { Legal } from "./pages/Legal";
-import { Scoring } from "./pages/Scoring";
-import { ScoringGap } from "./pages/ScoringGap";
-import { ScoringOpenDistance } from "./pages/ScoringOpenDistance";
 import { AdminUsers } from "./pages/AdminUsers";
 import { AdminCache } from "./pages/AdminCache";
 
@@ -52,13 +47,9 @@ createRoot(document.getElementById("root")!).render(
       <ConfirmProvider>
           <BrowserRouter>
             <Routes>
-              <Route path="/" element={<Home />} />
+              {/* Home, about, legal and the scoring guides are static pages
+                  built by ./static (Astro) — served outside the SPA. */}
               <Route path="/onboarding" element={<Onboarding />} />
-              <Route path="/about" element={<About />} />
-              <Route path="/legal" element={<Legal />} />
-              <Route path="/scoring" element={<Scoring />} />
-              <Route path="/scoring/gap" element={<ScoringGap />} />
-              <Route path="/scoring/open-distance" element={<ScoringOpenDistance />} />
               <Route element={<Shell />}>
                 <Route path="/u/:username" element={<Dashboard />} />
                 <Route path="/comp" element={<Competitions />} />

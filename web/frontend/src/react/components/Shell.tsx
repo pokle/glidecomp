@@ -2,7 +2,7 @@
  * Shared app chrome: header nav + footer around each routed page.
  * React port of nav.ts's initNav()/buildFooterHTML().
  */
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Button } from "@/react/ui/button";
 import { Separator } from "@/react/ui/separator";
 import { cn } from "@/react/lib/utils";
@@ -29,9 +29,10 @@ export function Shell() {
           aria-label="Main"
           className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3"
         >
-          <Link to="/" className="font-brand text-base font-bold">
+          {/* Home is a static (Astro) page, so use a full navigation. */}
+          <a href="/" className="font-brand text-base font-bold">
             GlideComp
-          </Link>
+          </a>
           <NavLink to={flightsHref} className={navLinkClass}>
             My Flights
           </NavLink>
@@ -86,12 +87,12 @@ export function Shell() {
         >
           YouTube
         </a>
-        <Link to="/scoring" className="underline underline-offset-4 hover:text-foreground">
+        <a href="/scoring" className="underline underline-offset-4 hover:text-foreground">
           Scoring
-        </Link>
-        <Link to="/legal" className="underline underline-offset-4 hover:text-foreground">
+        </a>
+        <a href="/legal" className="underline underline-offset-4 hover:text-foreground">
           Privacy &amp; Terms
-        </Link>
+        </a>
         {user ? (
           <Button
             type="button"

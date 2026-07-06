@@ -1,0 +1,28 @@
+---
+/** Chevron "back" link used in the header of every sub-page. */
+interface Props {
+  href: string;
+  label?: string;
+}
+const { href, label = "Back" } = Astro.props;
+---
+
+<a
+  href={href}
+  class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
+>
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <polyline points="15 18 9 12 15 6"></polyline>
+  </svg>
+  {label}
+</a>
