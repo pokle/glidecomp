@@ -64,8 +64,21 @@ interface DetailData {
   /** Marker events for every anchored explanation item, keyed by item id. */
   eventsByItem: Map<string, FlightEvent>;
   openDistanceLine: OpenDistanceLine | null;
-  /** Set when the analysis disagrees with the published (cached) score. */
-  staleScoreWarning: boolean;
+}
+
+/**
+ * Invariant check: the score and the analysis are cached under keys that
+ * pin the same inputs AND the same engine version (see the engine's
+ * scoring-version.ts), so they must agree. If this ever fires, that
+ * cache-versioning guarantee is broken — a bug to fix, not a state to
+ * present to the user.
+ */
+function assertAnalysisMatchesScore(analysedDistance: number, scoredDistance: number) {
+  if (Math.abs(analysedDistance - scoredDistance) > 500) {
+    console.error(
+      `Score/analysis mismatch: analysis says ${analysedDistance} m, published score says ${scoredDistance} m — the scoring cache-versioning guarantee is broken`,
+    );
+  }
 }
 
 type DetailState =
@@ -170,6 +183,7 @@ async function loadDetail(
             distance: od.distance,
           }
         : null;
+    assertAnalysisMatchesScore(Math.round(od?.distance ?? 0), entry.flown_distance);
     const explanation = explainOpenDistanceScore({
       task: task.xctsk,
       geometry,
@@ -200,8 +214,6 @@ async function loadDetail(
             distance: geometry.distance,
           }
         : null,
-      staleScoreWarning:
-        Math.abs(Math.round(od?.distance ?? 0) - entry.flown_distance) > 500,
     };
   }
 
@@ -227,14 +239,11 @@ async function loadDetail(
     formatTime: formatLocalTime,
   });
 
-  // The score and the analysis are cached independently; if they disagree
-  // on the scored distance (e.g. an engine change rolled one cache but not
-  // the other yet), say so rather than presenting a narrative that doesn't
-  // match the scoreboard.
   const minimumDistance = params.minimumDistance ?? 5000;
-  const analysedDistance = Math.max(result.flownDistance, minimumDistance);
-  const staleScoreWarning =
-    Math.abs(analysedDistance - entry.flown_distance) > 500;
+  assertAnalysisMatchesScore(
+    Math.max(result.flownDistance, minimumDistance),
+    entry.flown_distance,
+  );
 
   return {
     comp,
@@ -245,7 +254,6 @@ async function loadDetail(
     mapTask: scoringTask,
     eventsByItem: anchoredEvents(explanation),
     openDistanceLine: null,
-    staleScoreWarning,
   };
 }
 
@@ -385,14 +393,6 @@ export function PilotScoreDetail() {
         </p>
         <p className="mt-1 font-medium">{explanation.headline}</p>
       </header>
-
-      {data.staleScoreWarning ? (
-        <p className="mt-3 rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
-          The track analysis on this page doesn't match the published score —
-          the scoreboard may be showing a cached result. The published numbers
-          are shown; the narrative below reflects the current track and task.
-        </p>
-      ) : null}
 
       <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,11fr)_minmax(0,9fr)] lg:gap-6">
         {/* Map — supporting evidence. Sticky so it stays in view while the

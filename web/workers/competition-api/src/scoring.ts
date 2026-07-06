@@ -11,6 +11,7 @@ import {
   computeLeadingAggregate,
   calculateOptimizedTaskDistance,
   DEFAULT_GAP_PARAMETERS,
+  SCORING_ENGINE_VERSION,
   type GAPParameters,
   type FlightScoringData,
   type OpenDistanceFlightData,
@@ -105,6 +106,11 @@ export async function computeScoreCacheKey(
     }>();
 
   const stateString = [
+    // Engine generation: rolls every scoring cache key when scoring
+    // behaviour changes (see engine scoring-version.ts), so a cached score
+    // and a cached per-pilot analysis can never come from different engine
+    // versions — the guarantee behind the exact score-details narrative.
+    `engine:${SCORING_ENGINE_VERSION}`,
     task?.scoring_format ?? "gap",
     task?.xctsk ?? "",
     ...tracks.results.map(
@@ -359,7 +365,9 @@ export async function computeTaskScore(
   if (scoringFormat === "open_distance") {
     // Per-track cache key prefix: any change to the task geometry (xctsk, which
     // holds the take-off cylinder) invalidates every cached distance.
-    const geomHash = kv ? await shortHash(taskRow.xctsk) : "";
+    const geomHash = kv
+      ? await shortHash(`${taskRow.xctsk} engine:${SCORING_ENGINE_VERSION}`)
+      : "";
 
     type AnalyzedOpenPilot = {
       flight: OpenDistanceFlightData;
@@ -472,7 +480,9 @@ export async function computeTaskScore(
   const geomKey = useLeading
     ? `${taskRow.xctsk} ${distanceOrigin} lead:${leadingFormula}`
     : `${taskRow.xctsk} ${distanceOrigin} nolead`;
-  const geomHash = kv ? await shortHash(geomKey) : "";
+  const geomHash = kv
+    ? await shortHash(`${geomKey} engine:${SCORING_ENGINE_VERSION}`)
+    : "";
 
   type AnalyzedPilot = {
     flight: FlightScoringData;
@@ -709,7 +719,7 @@ export async function computePilotAnalysis(
     gapParams.distanceOrigin ?? DEFAULT_GAP_PARAMETERS.distanceOrigin;
 
   const cacheKey = kv
-    ? `pd:v1:${await shortHash(`${taskRow.xctsk} ${scoringFormat} ${distanceOrigin}`)}:${track.task_track_id}:${track.uploaded_at}`
+    ? `pd:v1:${await shortHash(`${taskRow.xctsk} ${scoringFormat} ${distanceOrigin} engine:${SCORING_ENGINE_VERSION}`)}:${track.task_track_id}:${track.uploaded_at}`
     : "";
 
   let payload: PilotAnalysisPayload | null = null;
