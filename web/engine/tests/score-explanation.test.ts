@@ -510,3 +510,46 @@ describe('explainOpenDistanceScore', () => {
     expect(explanation.headline).toBe('Never left the launch cylinder — 0 points');
   });
 });
+
+describe('explainOpenDistanceScore — anchorInfo (no fixes at hand)', () => {
+  const odTask = {
+    taskType: 'CLASSIC',
+    version: 1,
+    turnpoints: [
+      {
+        type: 'TAKEOFF',
+        radius: 5000,
+        waypoint: { name: 'JIL', lat: -35.98, lon: 142.92, altSmoothed: 100 },
+      },
+    ],
+  } as unknown as XCTask;
+
+  it('anchors origin/furthest from anchorInfo when fixes are absent', () => {
+    const explanation = explainOpenDistanceScore({
+      task: odTask,
+      geometry: {
+        origin: { latitude: -35.94, longitude: 142.97, fixIndex: 1 },
+        furthest: { latitude: -35.6, longitude: 143.4, fixIndex: 2 },
+        distance: 52_341,
+      },
+      anchorInfo: {
+        origin: { timeMs: at(10).getTime(), altitude: 850 },
+        furthest: { timeMs: at(120).getTime(), altitude: 620 },
+      },
+      entry: {
+        flown_distance: 52_341,
+        penalty_points: 0,
+        penalty_reason: null,
+        total_score: 52_341,
+      },
+    });
+    const flight = explanation.sections.find((s) => s.id === 'flight')!;
+    const origin = flight.items.find((i) => i.id === 'origin')!;
+    expect(origin.anchor!.timeMs).toBe(at(10).getTime());
+    expect(origin.anchor!.altitude).toBe(850);
+    expect(origin.value).toBeDefined();
+    const furthest = flight.items.find((i) => i.id === 'furthest')!;
+    expect(furthest.anchor!.timeMs).toBe(at(120).getTime());
+    expect(furthest.anchor!.altitude).toBe(620);
+  });
+});

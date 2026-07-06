@@ -758,3 +758,58 @@ export function resolveTurnpointSequence(
     ...(essIsFallback ? { essFallback: 'last_turnpoint' as const } : {}),
   };
 }
+
+// ---------------------------------------------------------------------------
+// JSON wire form
+// ---------------------------------------------------------------------------
+
+/** {@link CylinderCrossing} as it arrives over JSON — `time` serialized. */
+export type CylinderCrossingJSON = Omit<CylinderCrossing, 'time'> & {
+  time: string | number;
+};
+
+/** {@link TurnpointReaching} as it arrives over JSON — `time` serialized. */
+export type TurnpointReachingJSON = Omit<TurnpointReaching, 'time'> & {
+  time: string | number;
+};
+
+/** {@link BestProgress} as it arrives over JSON — `time` serialized. */
+export type BestProgressJSON = Omit<BestProgress, 'time'> & {
+  time: string | number;
+};
+
+/**
+ * {@link TurnpointSequenceResult} as it arrives over JSON. `Date` fields
+ * serialize to ISO strings (JSON.stringify's default) or epoch milliseconds;
+ * {@link reviveTurnpointSequenceResult} turns either back into `Date`s.
+ * This is the wire format of the competition API's per-pilot analysis
+ * endpoint, which feeds the score-details explanation.
+ */
+export interface TurnpointSequenceResultJSON
+  extends Omit<
+    TurnpointSequenceResult,
+    'crossings' | 'sequence' | 'sssReaching' | 'essReaching' | 'bestProgress'
+  > {
+  crossings: CylinderCrossingJSON[];
+  sequence: TurnpointReachingJSON[];
+  sssReaching: TurnpointReachingJSON | null;
+  essReaching: TurnpointReachingJSON | null;
+  bestProgress: BestProgressJSON | null;
+}
+
+/** Revive a JSON-round-tripped {@link TurnpointSequenceResult}. */
+export function reviveTurnpointSequenceResult(
+  raw: TurnpointSequenceResultJSON,
+): TurnpointSequenceResult {
+  const revive = <T extends { time: string | number }>(
+    v: T,
+  ): Omit<T, 'time'> & { time: Date } => ({ ...v, time: new Date(v.time) });
+  return {
+    ...raw,
+    crossings: raw.crossings.map(revive),
+    sequence: raw.sequence.map(revive),
+    sssReaching: raw.sssReaching ? revive(raw.sssReaching) : null,
+    essReaching: raw.essReaching ? revive(raw.essReaching) : null,
+    bestProgress: raw.bestProgress ? revive(raw.bestProgress) : null,
+  };
+}

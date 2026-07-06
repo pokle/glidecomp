@@ -6,6 +6,7 @@ import { optionalAuth } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
 import { encodeId } from "../sqids";
 import {
+  computePilotAnalysis,
   computeScoreCacheKey,
   computeTaskScore,
   mapWithConcurrency,
@@ -289,5 +290,71 @@ export const scoreRoutes = new Hono<HonoEnv>()
       });
 
       return c.json(result, 200, { "X-Cache": "MISS" });
+    }
+  )
+
+  // ── GET /api/comp/:comp_id/task/:task_id/pilot/:comp_pilot_id/analysis ──
+  // Per-pilot scoring transparency: the turnpoint-sequence result (GAP) or
+  // the scored open-distance line, for the score-details explanation. Same
+  // engine + inputs as the scorer; public for non-test comps like the scores.
+  .get(
+    "/api/comp/:comp_id/task/:task_id/pilot/:comp_pilot_id/analysis",
+    optionalAuth,
+    sqidsMiddleware,
+    async (c) => {
+      const compId = c.var.ids.comp_id!;
+      const taskId = c.var.ids.task_id!;
+      const compPilotId = c.var.ids.comp_pilot_id!;
+      const user = c.var.user;
+
+      // Check comp exists and handle test visibility
+      const comp = await c.env.DB.prepare(
+        "SELECT comp_id, test FROM comp WHERE comp_id = ?"
+      )
+        .bind(compId)
+        .first<{ comp_id: number; test: number }>();
+
+      if (!comp) {
+        return c.json({ error: "Not found" }, 404);
+      }
+
+      if (comp.test) {
+        if (!user) {
+          return c.json({ error: "Not found" }, 404);
+        }
+        if (!(await isCompAdmin(c.env.DB, compId, user))) {
+          return c.json({ error: "Not found" }, 404);
+        }
+      }
+
+      // Verify task belongs to comp
+      const task = await c.env.DB.prepare(
+        "SELECT task_id FROM task WHERE task_id = ? AND comp_id = ?"
+      )
+        .bind(taskId, compId)
+        .first();
+
+      if (!task) {
+        return c.json({ error: "Task not found" }, 404);
+      }
+
+      try {
+        const result = await computePilotAnalysis(
+          taskId,
+          compPilotId,
+          c.env.DB,
+          c.env.R2,
+          c.env.SQIDS_ALPHABET,
+          c.env.glidecomp_scores_cache,
+          getWaitUntil(c)
+        );
+        if (!result) {
+          return c.json({ error: "Track not found" }, 404);
+        }
+        return c.json(result);
+      } catch (err) {
+        console.error("Pilot analysis failed:", err);
+        return c.json({ error: "Failed to analyze track" }, 500);
+      }
     }
   );

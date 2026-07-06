@@ -9,18 +9,18 @@
  *
  * The published point values come from the score API (authoritative).
  * The narrative (start crossings incl. re-entries, turnpoint reachings,
- * best progress) is recomputed in the browser from the pilot's IGC with
- * the same engine code the server scorer runs, mirroring its exact
- * inputs (distance-origin trim + comp GAP parameters).
+ * best progress) comes from the per-pilot analysis endpoint — computed
+ * server-side by the same engine code the scorer runs, from the same
+ * inputs — so the page renders without downloading the tracklog. The
+ * IGC is fetched separately, only to draw the track on the map.
  */
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   explainGapScore,
   explainOpenDistanceScore,
-  openDistanceGeometryForFlight,
   parseIGC,
-  resolveTurnpointSequence,
+  reviveTurnpointSequenceResult,
   taskForDistanceOrigin,
   type ExplanationAnchor,
   type FlightEvent,
@@ -39,6 +39,7 @@ import { formatTaskDate } from "../lib/format";
 import type {
   ClassScore,
   CompDetailData,
+  PilotAnalysisData,
   PilotScoreEntry,
   TaskDetailData,
   TaskScoreData,
@@ -60,11 +61,10 @@ interface DetailData {
   explanation: ScoreExplanation;
   /** The task drawn on the map (the sequence was resolved against it). */
   mapTask: XCTask;
-  fixes: IGCFix[];
   /** Marker events for every anchored explanation item, keyed by item id. */
   eventsByItem: Map<string, FlightEvent>;
   openDistanceLine: OpenDistanceLine | null;
-  /** Set when the browser re-analysis disagrees with the published score. */
+  /** Set when the analysis disagrees with the published (cached) score. */
   staleScoreWarning: boolean;
 }
 
@@ -115,7 +115,7 @@ async function loadDetail(
   taskId: string,
   pilotId: string,
 ): Promise<DetailData> {
-  const [compRes, taskRes, scoreRes, igcRes] = await Promise.all([
+  const [compRes, taskRes, scoreRes, analysisRes] = await Promise.all([
     api.api.comp[":comp_id"].$get({ param: { comp_id: compId } }),
     api.api.comp[":comp_id"].task[":task_id"].$get({
       param: { comp_id: compId, task_id: taskId },
@@ -123,20 +123,20 @@ async function loadDetail(
     api.api.comp[":comp_id"].task[":task_id"].score.$get({
       param: { comp_id: compId, task_id: taskId },
     }),
-    fetch(
-      `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(pilotId)}/download`,
-      { credentials: "include" },
-    ),
+    api.api.comp[":comp_id"].task[":task_id"].pilot[":comp_pilot_id"].analysis.$get({
+      param: { comp_id: compId, task_id: taskId, comp_pilot_id: pilotId },
+    }),
   ]);
 
   if (!compRes.ok || !taskRes.ok) throw new Error("Task not found");
   if (!scoreRes.ok) throw new Error("Scores are not available for this task");
-  if (!igcRes.ok) throw new Error("The pilot's track could not be loaded");
+  if (!analysisRes.ok)
+    throw new Error("The analysis of the pilot's track is not available");
 
   const comp = (await compRes.json()) as unknown as CompDetailData;
   const task = (await taskRes.json()) as unknown as TaskDetailData;
   const score = (await scoreRes.json()) as unknown as TaskScoreData;
-  const igcText = await gunzipResponse(igcRes);
+  const analysis = (await analysisRes.json()) as unknown as PilotAnalysisData;
 
   if (!task.xctsk) throw new Error("This task has no route defined");
 
@@ -152,19 +152,35 @@ async function loadDetail(
   }
   if (!cls || !entry) throw new Error("No score found for this pilot");
 
-  const igc = parseIGC(igcText);
-  if (igc.fixes.length === 0) throw new Error("The pilot's track has no GPS fixes");
-
   if (score.scoring_format === "open_distance") {
-    const geometry = openDistanceGeometryForFlight(task.xctsk, {
-      pilotName: entry.pilot_name,
-      trackFile: `${pilotId}.igc`,
-      fixes: igc.fixes,
-    });
+    const od = analysis.open_distance;
+    const geometry =
+      od && od.origin && od.furthest
+        ? {
+            origin: {
+              latitude: od.origin.latitude,
+              longitude: od.origin.longitude,
+              fixIndex: -1,
+            },
+            furthest: {
+              latitude: od.furthest.latitude,
+              longitude: od.furthest.longitude,
+              fixIndex: -1,
+            },
+            distance: od.distance,
+          }
+        : null;
     const explanation = explainOpenDistanceScore({
       task: task.xctsk,
       geometry,
-      fixes: igc.fixes,
+      anchorInfo: {
+        origin: od?.origin
+          ? { timeMs: od.origin.time_ms, altitude: od.origin.altitude }
+          : undefined,
+        furthest: od?.furthest
+          ? { timeMs: od.furthest.time_ms, altitude: od.furthest.altitude }
+          : undefined,
+      },
       entry,
       formatTime: formatLocalTime,
     });
@@ -175,7 +191,6 @@ async function loadDetail(
       pilotClass: cls.pilot_class,
       explanation,
       mapTask: task.xctsk,
-      fixes: igc.fixes,
       eventsByItem: anchoredEvents(explanation),
       openDistanceLine: geometry
         ? {
@@ -186,14 +201,16 @@ async function loadDetail(
           }
         : null,
       staleScoreWarning:
-        Math.abs(Math.round(geometry?.distance ?? 0) - entry.flown_distance) > 500,
+        Math.abs(Math.round(od?.distance ?? 0) - entry.flown_distance) > 500,
     };
   }
 
-  // GAP — mirror the server scorer's inputs exactly: strip the unset
-  // nominalDistance (the server defaults it to 70% of task distance, which
-  // only affects validity, not this pilot's analysis) and trim the task to
-  // the comp's distance origin before resolving the sequence.
+  // GAP — the analysis endpoint resolved the sequence with the scorer's
+  // exact inputs; mirror the same distance-origin trim here so the task
+  // indexes in the result line up with the task drawn on the map.
+  if (!analysis.turnpoint_result)
+    throw new Error("The analysis of the pilot's track is not available");
+  const result = reviveTurnpointSequenceResult(analysis.turnpoint_result);
   const { nominalDistance, ...gapRest } = comp.gap_params ?? {};
   const params: Partial<GAPParameters> =
     nominalDistance != null ? { ...gapRest, nominalDistance } : gapRest;
@@ -201,7 +218,6 @@ async function loadDetail(
     task.xctsk,
     params.distanceOrigin ?? "takeoff",
   );
-  const result = resolveTurnpointSequence(scoringTask, igc.fixes);
   const explanation = explainGapScore({
     task: scoringTask,
     result,
@@ -211,9 +227,10 @@ async function loadDetail(
     formatTime: formatLocalTime,
   });
 
-  // The published score comes from the server's (cached) analysis; if this
-  // browser re-analysis lands on a different distance, say so rather than
-  // presenting a narrative that doesn't match the scoreboard.
+  // The score and the analysis are cached independently; if they disagree
+  // on the scored distance (e.g. an engine change rolled one cache but not
+  // the other yet), say so rather than presenting a narrative that doesn't
+  // match the scoreboard.
   const minimumDistance = params.minimumDistance ?? 5000;
   const analysedDistance = Math.max(result.flownDistance, minimumDistance);
   const staleScoreWarning =
@@ -226,7 +243,6 @@ async function loadDetail(
     pilotClass: cls.pilot_class,
     explanation,
     mapTask: scoringTask,
-    fixes: igc.fixes,
     eventsByItem: anchoredEvents(explanation),
     openDistanceLine: null,
     staleScoreWarning,
@@ -244,6 +260,7 @@ export function PilotScoreDetail() {
     pilotId: string;
   }>();
   const [state, setState] = useState<DetailState>({ kind: "loading" });
+  const [fixes, setFixes] = useState<IGCFix[] | null>(null);
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [mapExpanded, setMapExpanded] = useState(false);
@@ -282,6 +299,32 @@ export function PilotScoreDetail() {
             message: err instanceof Error ? err.message : "Failed to load score details",
           });
       });
+    return () => {
+      cancelled = true;
+    };
+  }, [compId, taskId, pilotId]);
+
+  // The tracklog is only needed to draw the flight on the map — the
+  // explanation renders from the analysis endpoint without it, so load it
+  // independently and let the map fill in when it arrives. A failed
+  // download degrades to a map without the track (markers still work).
+  useEffect(() => {
+    if (!compId || !taskId || !pilotId) return;
+    let cancelled = false;
+    setFixes(null);
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(pilotId)}/download`,
+          { credentials: "include" },
+        );
+        if (!res.ok) return;
+        const igc = parseIGC(await gunzipResponse(res));
+        if (!cancelled && igc.fixes.length > 0) setFixes(igc.fixes);
+      } catch (err) {
+        console.warn("Track unavailable for the map:", err);
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -380,7 +423,7 @@ export function PilotScoreDetail() {
             >
               <ScoreDetailMap
                 task={data.mapTask}
-                fixes={data.fixes}
+                fixes={fixes}
                 events={markerEvents}
                 focus={focus}
                 openDistanceLine={data.openDistanceLine}

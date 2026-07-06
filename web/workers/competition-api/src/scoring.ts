@@ -5,6 +5,7 @@ import {
   scoreFlights,
   scoreOpenDistanceFlights,
   openDistanceForFlight,
+  openDistanceGeometryForFlight,
   toFlightScoringData,
   taskForDistanceOrigin,
   computeLeadingAggregate,
@@ -15,6 +16,7 @@ import {
   type OpenDistanceFlightData,
   type TaskScoreCore,
   type LeadingAggregate,
+  type TurnpointSequenceResultJSON,
 } from "@glidecomp/engine";
 import { encodeId } from "./sqids";
 
@@ -616,5 +618,172 @@ export async function computeTaskScore(
     task_date: taskRow.task_date,
     scoring_format: scoringFormat,
     classes: classScores,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Per-pilot analysis (scoring transparency)
+// ---------------------------------------------------------------------------
+
+/**
+ * The per-pilot scoring-transparency payload behind
+ * `GET /api/comp/:comp_id/task/:task_id/pilot/:comp_pilot_id/analysis`.
+ *
+ * Feeds the score-details page's explanation without the browser having to
+ * download and re-analyze the raw tracklog: for GAP it carries the full
+ * turnpoint-sequence result (every cylinder crossing with time/coords,
+ * selection reasons, legs, best progress); for open distance the scored
+ * line's endpoints with times. Computed by the same engine code the scorer
+ * runs, from the same inputs, so the narrative always matches the score.
+ */
+export interface PilotAnalysisResponse {
+  comp_pilot_id: string;
+  scoring_format: "gap" | "open_distance";
+  /** GAP transparency data (dates as ISO strings on the wire). */
+  turnpoint_result: TurnpointSequenceResultJSON | null;
+  /** Open-distance scored line, endpoints enriched with fix time/altitude. */
+  open_distance: {
+    /** Scored straight-line distance in metres (0 = never left launch). */
+    distance: number;
+    origin: OpenDistanceAnchorPoint | null;
+    furthest: OpenDistanceAnchorPoint | null;
+  } | null;
+}
+
+export interface OpenDistanceAnchorPoint {
+  latitude: number;
+  longitude: number;
+  time_ms: number;
+  altitude: number;
+}
+
+/** The cacheable (comp-pilot-independent) part of {@link PilotAnalysisResponse}. */
+type PilotAnalysisPayload = Pick<
+  PilotAnalysisResponse,
+  "turnpoint_result" | "open_distance"
+>;
+
+/**
+ * Compute one pilot's scoring-transparency analysis for a task, mirroring
+ * computeTaskScore's inputs exactly (distance-origin trim, task geometry).
+ * Cached per track in KV — any xctsk / scoring-format / distance-origin /
+ * re-upload change rolls the key. Returns null when the task or the pilot's
+ * track doesn't exist.
+ */
+export async function computePilotAnalysis(
+  taskId: number,
+  compPilotId: number,
+  db: D1Database,
+  r2: R2Bucket,
+  alphabet: string,
+  kv?: KVNamespace,
+  waitUntil?: (promise: Promise<unknown>) => void
+): Promise<PilotAnalysisResponse | null> {
+  const taskRow = await db
+    .prepare(
+      `SELECT t.xctsk, c.gap_params, c.scoring_format
+       FROM task t
+       JOIN comp c ON t.comp_id = c.comp_id
+       WHERE t.task_id = ?`
+    )
+    .bind(taskId)
+    .first<{ xctsk: string; gap_params: string | null; scoring_format: string | null }>();
+  if (!taskRow || !taskRow.xctsk) return null;
+
+  const track = await db
+    .prepare(
+      `SELECT task_track_id, igc_filename, uploaded_at
+       FROM task_track
+       WHERE task_id = ? AND comp_pilot_id = ?`
+    )
+    .bind(taskId, compPilotId)
+    .first<{ task_track_id: number; igc_filename: string; uploaded_at: string }>();
+  if (!track) return null;
+
+  const scoringFormat: "gap" | "open_distance" =
+    taskRow.scoring_format === "open_distance" ? "open_distance" : "gap";
+  const gapParams: Partial<GAPParameters> = taskRow.gap_params
+    ? JSON.parse(taskRow.gap_params)
+    : {};
+  const distanceOrigin =
+    gapParams.distanceOrigin ?? DEFAULT_GAP_PARAMETERS.distanceOrigin;
+
+  const cacheKey = kv
+    ? `pd:v1:${await shortHash(`${taskRow.xctsk} ${scoringFormat} ${distanceOrigin}`)}:${track.task_track_id}:${track.uploaded_at}`
+    : "";
+
+  let payload: PilotAnalysisPayload | null = null;
+  if (cacheKey && kv) {
+    payload = (await kv.get(cacheKey, "json")) as PilotAnalysisPayload | null;
+  }
+
+  if (!payload) {
+    const object = await r2.get(track.igc_filename);
+    if (!object) return null;
+    const compressed = await object.arrayBuffer();
+    const decompressedStream = new Response(compressed).body!.pipeThrough(
+      new DecompressionStream("gzip")
+    );
+    const igcText = new TextDecoder().decode(
+      await new Response(decompressedStream).arrayBuffer()
+    );
+    let igc;
+    try {
+      igc = parseIGC(igcText);
+    } catch {
+      return null;
+    }
+    if (igc.fixes.length === 0) return null;
+
+    const xcTask = parseXCTask(taskRow.xctsk);
+    if (scoringFormat === "open_distance") {
+      const geometry = openDistanceGeometryForFlight(xcTask, {
+        pilotName: "",
+        trackFile: track.igc_filename,
+        fixes: igc.fixes,
+      });
+      const anchor = (p: { latitude: number; longitude: number; fixIndex: number }) => {
+        const fix = igc.fixes[p.fixIndex];
+        return {
+          latitude: p.latitude,
+          longitude: p.longitude,
+          time_ms: fix.time.getTime(),
+          altitude: fix.gnssAltitude,
+        };
+      };
+      payload = {
+        turnpoint_result: null,
+        open_distance: geometry
+          ? {
+              distance: geometry.distance,
+              origin: anchor(geometry.origin),
+              furthest: anchor(geometry.furthest),
+            }
+          : { distance: 0, origin: null, furthest: null },
+      };
+    } else {
+      const scoringTask = taskForDistanceOrigin(xcTask, distanceOrigin);
+      const result = resolveTurnpointSequence(scoringTask, igc.fixes);
+      // Round-trip through JSON so the payload is typed as the wire format
+      // (Dates → ISO strings) — exactly what KV stores and the client revives.
+      payload = {
+        turnpoint_result: JSON.parse(JSON.stringify(result)) as TurnpointSequenceResultJSON,
+        open_distance: null,
+      };
+    }
+
+    if (cacheKey && kv) {
+      const put = kv.put(cacheKey, JSON.stringify(payload), {
+        expirationTtl: 604800,
+      });
+      if (waitUntil) waitUntil(put);
+      else await put;
+    }
+  }
+
+  return {
+    comp_pilot_id: encodeId(alphabet, compPilotId),
+    scoring_format: scoringFormat,
+    ...payload,
   };
 }

@@ -165,6 +165,12 @@ export interface ExplainGapScoreInput {
   formatTime?: (d: Date) => string;
 }
 
+/** Time/altitude for an open-distance anchor when fixes aren't at hand. */
+export interface OpenDistanceAnchorInfo {
+  timeMs?: number;
+  altitude?: number;
+}
+
 export interface ExplainOpenDistanceInput {
   /** The task (first turnpoint is the launch cylinder). */
   task: XCTask;
@@ -172,6 +178,15 @@ export interface ExplainOpenDistanceInput {
   geometry: OpenDistanceGeometry | null;
   /** The pilot's fixes — used to timestamp the origin/furthest anchors. */
   fixes?: IGCFix[];
+  /**
+   * Anchor time/altitude supplied directly (e.g. from the competition API's
+   * analysis endpoint, which has the fixes server-side). Takes precedence
+   * over the `fixes` lookup.
+   */
+  anchorInfo?: {
+    origin?: OpenDistanceAnchorInfo;
+    furthest?: OpenDistanceAnchorInfo;
+  };
   /** The published score being explained. */
   entry: Pick<
     ScoreEntryInput,
@@ -736,28 +751,36 @@ export function explainOpenDistanceScore(
   } else {
     const originFix = fixes?.[geometry.origin.fixIndex];
     const furthestFix = fixes?.[geometry.furthest.fixIndex];
+    const originTimeMs =
+      input.anchorInfo?.origin?.timeMs ?? originFix?.time.getTime();
+    const originAltitude =
+      input.anchorInfo?.origin?.altitude ?? originFix?.gnssAltitude;
+    const furthestTimeMs =
+      input.anchorInfo?.furthest?.timeMs ?? furthestFix?.time.getTime();
+    const furthestAltitude =
+      input.anchorInfo?.furthest?.altitude ?? furthestFix?.gnssAltitude;
     items.push({
       id: 'origin',
       text: `Left the ${km(launchRadius)} launch cylinder — the scored distance starts here (the last outward crossing counts).`,
-      value: originFix ? fmt(originFix.time) : undefined,
+      value: originTimeMs !== undefined ? fmt(new Date(originTimeMs)) : undefined,
       anchor: {
         kind: 'origin',
         latitude: geometry.origin.latitude,
         longitude: geometry.origin.longitude,
-        altitude: originFix?.gnssAltitude,
-        timeMs: originFix?.time.getTime(),
+        altitude: originAltitude,
+        timeMs: originTimeMs,
       },
     });
     items.push({
       id: 'furthest',
       text: 'Furthest point reached after the exit — the scored distance ends here.',
-      value: furthestFix ? fmt(furthestFix.time) : undefined,
+      value: furthestTimeMs !== undefined ? fmt(new Date(furthestTimeMs)) : undefined,
       anchor: {
         kind: 'furthest',
         latitude: geometry.furthest.latitude,
         longitude: geometry.furthest.longitude,
-        altitude: furthestFix?.gnssAltitude,
-        timeMs: furthestFix?.time.getTime(),
+        altitude: furthestAltitude,
+        timeMs: furthestTimeMs,
       },
     });
     items.push({

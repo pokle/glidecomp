@@ -3,7 +3,11 @@
  * Ported from src/comp-detail.ts — the shapes mirror the competition-api
  * serialisers exactly.
  */
-import type { GAPParameters, XCTask } from "@glidecomp/engine";
+import type {
+  GAPParameters,
+  TurnpointSequenceResultJSON,
+  XCTask,
+} from "@glidecomp/engine";
 
 /** How a competition's tasks are scored (see competition-api migration 0009). */
 export type ScoringFormat = "gap" | "open_distance";
@@ -121,6 +125,31 @@ export interface TaskScoreData {
   task_date: string;
   scoring_format: ScoringFormat;
   classes: ClassScore[];
+}
+
+/** One endpoint of the scored open-distance line, with fix time/altitude. */
+export interface OpenDistanceAnchorPointData {
+  latitude: number;
+  longitude: number;
+  time_ms: number;
+  altitude: number;
+}
+
+/**
+ * Per-pilot scoring transparency from
+ * GET /api/comp/:comp_id/task/:task_id/pilot/:comp_pilot_id/analysis —
+ * the input to the score-details explanation, computed server-side by the
+ * same engine code the scorer runs (no tracklog download needed).
+ */
+export interface PilotAnalysisData {
+  comp_pilot_id: string;
+  scoring_format: ScoringFormat;
+  turnpoint_result: TurnpointSequenceResultJSON | null;
+  open_distance: {
+    distance: number;
+    origin: OpenDistanceAnchorPointData | null;
+    furthest: OpenDistanceAnchorPointData | null;
+  } | null;
 }
 
 export interface AuditEntry {
