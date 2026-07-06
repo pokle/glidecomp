@@ -15,7 +15,6 @@ import {
   type StoredTask,
   type StoredTrack,
 } from "../../analysis/storage";
-import { deleteAccount } from "../../auth/client";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { signInWithGoogle, useUser } from "../lib/user";
@@ -38,7 +37,6 @@ export function Dashboard() {
   const [ready, setReady] = useState(false);
   const [tab, setTab] = useState<"tracks" | "tasks">("tracks");
   const [dragOver, setDragOver] = useState(false);
-  const [deleting, setDeleting] = useState(false);
 
   const refreshLists = useCallback(async () => {
     const [nextTracks, nextTasks] = await Promise.all([storage.listTracks(), storage.listTasks()]);
@@ -139,28 +137,6 @@ export function Dashboard() {
   }, [ready, handleFiles]);
 
   if (!ready) return <p role="status">Loading…</p>;
-
-  async function handleDeleteAccount() {
-    const confirmed = await confirm({
-      title: "Delete Account",
-      message:
-        "This will permanently delete your account and all associated data. This action cannot be undone.",
-      confirmLabel: "Delete my account",
-      destructive: true,
-    });
-    if (!confirmed) return;
-    setDeleting(true);
-    const result = await deleteAccount();
-    if (result.success) {
-      localStorage.clear();
-      storage.close();
-      indexedDB.deleteDatabase("glidecomp");
-      window.location.href = "/react/";
-    } else {
-      setDeleting(false);
-      toast.error(result.error || "Failed to delete account. Please try again.");
-    }
-  }
 
   return (
     <section>
@@ -311,19 +287,6 @@ export function Dashboard() {
           <p className="text-sm font-normal text-muted-foreground">.igc and .xctsk files</p>
         </div>
       ) : null}
-
-      <section className="mt-10">
-        <h2 className="text-lg font-bold">Danger zone</h2>
-        <Button
-          type="button"
-          variant="destructive"
-          className="mt-2"
-          disabled={deleting}
-          onClick={handleDeleteAccount}
-        >
-          {deleting ? "Deleting..." : "Delete account"}
-        </Button>
-      </section>
     </section>
   );
 }
