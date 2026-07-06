@@ -8,6 +8,7 @@ import { Separator } from "@/react/ui/separator";
 import { cn } from "@/react/lib/utils";
 import { signOut } from "../../auth/client";
 import { signInWithGoogle, useUser } from "../lib/user";
+import { useScrollRestoration } from "../lib/scroll-restoration";
 
 declare const __GIT_SHA__: string;
 
@@ -20,6 +21,7 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 export function Shell() {
   const { user, loading } = useUser();
   const navigate = useNavigate();
+  useScrollRestoration();
   const flightsHref = user?.username ? `/u/${user.username}` : "/u/me";
 
   return (

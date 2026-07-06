@@ -38,6 +38,13 @@ export default function ScoreDetailMap({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [provider, setProvider] = useState<MapProvider | null>(null);
+  // On unmount React runs effect cleanups in definition order, so the map is
+  // destroy()ed before the data-effect cleanups below run. Calling clear*()
+  // on a destroyed Mapbox map throws (its style is gone), and an error thrown
+  // while React is unmounting for a navigation takes the whole app down — a
+  // blank page on browser-back. This flag lets the later cleanups skip work
+  // that destroy() already did.
+  const destroyedRef = useRef(false);
 
   // Create the provider once per mount; destroy on unmount. Each mount gets
   // its own inner DOM node — StrictMode mounts twice, and the async provider
@@ -52,6 +59,7 @@ export default function ScoreDetailMap({
     outer.appendChild(inner);
     let cancelled = false;
     let created: MapProvider | null = null;
+    destroyedRef.current = false;
     const providerType = import.meta.env.VITE_MAPBOX_TOKEN ? "mapbox" : "leaflet";
     createMapProvider(inner, providerType, { appControls: false })
       .then((p) => {
@@ -67,7 +75,12 @@ export default function ScoreDetailMap({
       });
     return () => {
       cancelled = true;
-      created?.destroy();
+      destroyedRef.current = true;
+      try {
+        created?.destroy();
+      } catch (err) {
+        console.warn("Map teardown failed:", err);
+      }
       setProvider(null);
       inner.remove();
     };
@@ -76,25 +89,33 @@ export default function ScoreDetailMap({
   useEffect(() => {
     if (!provider || !task) return;
     void provider.setTask(task);
-    return () => provider.clearTask();
+    return () => {
+      if (!destroyedRef.current) provider.clearTask();
+    };
   }, [provider, task]);
 
   useEffect(() => {
     if (!provider || !fixes || fixes.length === 0) return;
     provider.setTrack(fixes);
-    return () => provider.clearTrack();
+    return () => {
+      if (!destroyedRef.current) provider.clearTrack();
+    };
   }, [provider, fixes]);
 
   useEffect(() => {
     if (!provider || events.length === 0) return;
     provider.setEvents(events);
-    return () => provider.clearEvents();
+    return () => {
+      if (!destroyedRef.current) provider.clearEvents();
+    };
   }, [provider, events]);
 
   useEffect(() => {
     if (!provider || !openDistanceLine) return;
     provider.setOpenDistanceLines?.([openDistanceLine]);
-    return () => provider.clearOpenDistanceLines?.();
+    return () => {
+      if (!destroyedRef.current) provider.clearOpenDistanceLines?.();
+    };
   }, [provider, openDistanceLine]);
 
   useEffect(() => {
