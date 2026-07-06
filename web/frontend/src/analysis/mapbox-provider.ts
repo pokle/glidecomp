@@ -57,7 +57,11 @@ function updateGeoJSONSource(
 /**
  * Create a MapBox map provider
  */
-export function createMapBoxProvider(container: HTMLElement): Promise<MapProvider> {
+export function createMapBoxProvider(
+  container: HTMLElement,
+  options: import('./map-provider').MapProviderOptions = {},
+): Promise<MapProvider> {
+  const appControls = options.appControls ?? true;
   return new Promise((resolve, reject) => {
     try {
       // Get saved or default style
@@ -843,15 +847,19 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           panelToggleBtn = null;
         }
       }
-      map.addControl(new PanelToggleControl(), 'top-right');
+      if (appControls) map.addControl(new PanelToggleControl(), 'top-right');
 
       // Navigation controls (top-right, below panel toggle)
       map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }));
-      map.addControl(new mapboxgl.FullscreenControl());
+      if (appControls) map.addControl(new mapboxgl.FullscreenControl());
       map.addControl(new mapboxgl.ScaleControl({ maxWidth: 200 }));
 
-      // Always show compass overlay
-      createCompass();
+      // The large compass overlay is analysis-page chrome — embedded maps
+      // (score details) rely on NavigationControl's built-in compass, and the
+      // embedding page provides its own expand/restore control (the native
+      // FullscreenControl self-hides on iOS, where the Fullscreen API is
+      // unavailable).
+      if (appControls) createCompass();
 
       // Custom menu button control (top-left, added first so it's topmost)
       let menuButtonCallback: (() => void) | null = null;
@@ -892,7 +900,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           menuButtonContainer = null;
         }
       }
-      map.addControl(new MenuButtonControl(), 'top-left');
+      if (appControls) map.addControl(new MenuButtonControl(), 'top-left');
 
       // Style selector control (top-left, below menu button)
       class MapBoxStyleControl implements mapboxgl.IControl {

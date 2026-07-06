@@ -37,8 +37,8 @@ interface CompScores {
   standings: ClassStanding[];
 }
 
-function analysisHref(compId: string, taskId: string, pilotId: string): string {
-  return `/analysis.html?compId=${encodeURIComponent(compId)}&taskId=${encodeURIComponent(taskId)}&pilotId=${encodeURIComponent(pilotId)}`;
+function scoreDetailHref(compId: string, taskId: string, pilotId: string): string {
+  return `/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/pilot/${encodeURIComponent(pilotId)}`;
 }
 
 export function Scores() {
@@ -276,16 +276,14 @@ function StandingsTable({ scores, cls }: { scores: CompScores; cls: ClassStandin
       return {
         sort: String(entry.score),
         node: (
-          <a
-            href={analysisHref(scores.comp_id, task.task_id, p.comp_pilot_id)}
-            target="_blank"
-            rel="noopener"
-            title={`Analyse ${p.pilot_name}'s track for ${task.task_name}`}
+          <Link
+            to={scoreDetailHref(scores.comp_id, task.task_id, p.comp_pilot_id)}
+            title={`How ${p.pilot_name}'s score for ${task.task_name} was calculated`}
             className="underline underline-offset-4"
           >
             {formatScore(entry.score)}{" "}
             <span className="text-muted-foreground">({ordinal(entry.rank)})</span>
-          </a>
+          </Link>
         ),
       };
     }),
@@ -329,15 +327,13 @@ function Top3Table({
         return {
           sort: String(entry.score),
           node: row.task_id ? (
-            <a
-              href={analysisHref(scores.comp_id, row.task_id, entry.comp_pilot_id)}
-              target="_blank"
-              rel="noopener"
-              title={`Analyse ${entry.pilot_name}'s track for ${row.label}`}
+            <Link
+              to={scoreDetailHref(scores.comp_id, row.task_id, entry.comp_pilot_id)}
+              title={`How ${entry.pilot_name}'s score for ${row.label} was calculated`}
               className="underline underline-offset-4"
             >
               {content}
-            </a>
+            </Link>
           ) : (
             content
           ),

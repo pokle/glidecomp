@@ -161,18 +161,29 @@ export interface MapProvider {
     clearOpenDistanceLines?(): void;
 }
 
+/** Options shared by both provider factories. */
+export interface MapProviderOptions {
+    /**
+     * Add the analysis-app chrome (menu + panel-toggle buttons). Default
+     * true; embedders like the score-details page pass false to get a plain
+     * map with only the standard navigation controls.
+     */
+    appControls?: boolean;
+}
+
 /**
  * Factory function to create a map provider.
  * Uses dynamic import so only the selected provider's code is bundled.
  */
 export async function createMapProvider(
     container: HTMLElement,
-    providerType: MapProviderType = 'mapbox'
+    providerType: MapProviderType = 'mapbox',
+    options: MapProviderOptions = {}
 ): Promise<MapProvider> {
     if (providerType === 'leaflet') {
         const { createLeafletProvider } = await import('./leaflet-provider');
-        return createLeafletProvider(container);
+        return createLeafletProvider(container, options);
     }
     const { createMapBoxProvider } = await import('./mapbox-provider');
-    return createMapBoxProvider(container);
+    return createMapBoxProvider(container, options);
 }

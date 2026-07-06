@@ -4,7 +4,7 @@
  * omits goal, distance-points and validity (the score is metres flown).
  */
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Table,
   TableBody,
@@ -101,25 +101,39 @@ export function ScoresSection({
         ? state.data.classes.map((cls) => (
             <ScoreClassTable
               key={cls.pilot_class}
+              compId={compId}
+              taskId={taskId}
               cls={cls}
               showClassName={state.data.classes.length > 1}
               format={state.data.scoring_format === "open_distance" ? "open_distance" : "gap"}
             />
           ))
         : null}
+      {state.kind === "loaded" &&
+      state.data.classes.some((cls) => cls.pilots.length > 0) ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          Click a pilot's row for the full score breakdown — every start,
+          turnpoint and point calculation, shown on the map.
+        </p>
+      ) : null}
     </section>
   );
 }
 
 function ScoreClassTable({
+  compId,
+  taskId,
   cls,
   showClassName,
   format,
 }: {
+  compId: string;
+  taskId: string;
   cls: ClassScore;
   showClassName: boolean;
   format: ScoringFormat;
 }) {
+  const navigate = useNavigate();
   const isOpenDistance = format === "open_distance";
   const hasSpeed = cls.pilots.some((p) => p.speed_section_time !== null);
   const hasTimePoints = cls.pilots.some((p) => p.time_points !== 0);
@@ -153,10 +167,26 @@ function ScoreClassTable({
         <TableBody>
           {cls.pilots.map((p) => {
             const diffPts = p.distance_difficulty_points ?? 0;
+            const detailHref = `/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/pilot/${encodeURIComponent(p.comp_pilot_id)}`;
             return (
-              <TableRow key={p.comp_pilot_id}>
+              <TableRow
+                key={p.comp_pilot_id}
+                className="cursor-pointer"
+                title={`How ${p.pilot_name}'s score was calculated`}
+                onClick={() => navigate(detailHref)}
+              >
                 <TableCell>{p.rank}</TableCell>
-                <TableCell>{p.pilot_name}</TableCell>
+                <TableCell>
+                  {/* Real link inside the clickable row for middle-click /
+                      keyboard access. */}
+                  <Link
+                    to={detailHref}
+                    className="underline decoration-muted-foreground/40 underline-offset-4 hover:decoration-current"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {p.pilot_name}
+                  </Link>
+                </TableCell>
                 {!isOpenDistance ? <TableCell>{p.made_goal ? "✓" : "—"}</TableCell> : null}
                 <TableCell>{(p.flown_distance / 1000).toFixed(1)} km</TableCell>
                 {hasSpeed ? (

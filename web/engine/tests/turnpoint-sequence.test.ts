@@ -1189,3 +1189,38 @@ describe('resolveTurnpointSequence', () => {
     });
   });
 });
+
+describe('reviveTurnpointSequenceResult', () => {
+  it('round-trips a result through JSON, restoring all Date fields', async () => {
+    const { reviveTurnpointSequenceResult } = await import('../src/turnpoint-sequence');
+    const time = new Date('2026-01-10T02:30:00Z');
+    const reaching = {
+      taskIndex: 1, fixIndex: 10, time, latitude: -36, longitude: 147,
+      altitude: 1500, selectionReason: 'last_before_next' as const, candidateCount: 2,
+    };
+    const original = {
+      crossings: [{
+        taskIndex: 1, fixIndex: 10, time, latitude: -36, longitude: 147,
+        direction: 'exit' as const, altitude: 1500, distanceToCenter: 2000,
+      }],
+      sequence: [reaching],
+      sssReaching: reaching,
+      essReaching: null,
+      madeGoal: false,
+      lastTurnpointReached: 1,
+      bestProgress: { fixIndex: 20, time, latitude: -36.1, longitude: 147.1, distanceToGoal: 9000 },
+      taskDistance: 60000,
+      flownDistance: 42000,
+      legs: [{ fromTaskIndex: 0, toTaskIndex: 1, distance: 5000, completed: true }],
+      speedSectionTime: null,
+    };
+    const revived = reviveTurnpointSequenceResult(JSON.parse(JSON.stringify(original)));
+    expect(revived.crossings[0].time).toEqual(time);
+    expect(revived.sequence[0].time).toEqual(time);
+    expect(revived.sssReaching!.time).toEqual(time);
+    expect(revived.essReaching).toBeNull();
+    expect(revived.bestProgress!.time).toEqual(time);
+    expect(revived.legs).toEqual(original.legs);
+    expect(revived.flownDistance).toBe(42000);
+  });
+});
