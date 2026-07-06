@@ -8,7 +8,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./globals.css";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
 import { AppToaster } from "./lib/toast";
 import { ConfirmProvider } from "./lib/confirm";
 import { UserProvider } from "./lib/user";
@@ -33,9 +33,20 @@ syncDarkClass();
 darkQuery.addEventListener("change", syncDarkClass);
 
 function NotFound() {
+  const linkClass = "underline underline-offset-4 hover:text-foreground";
   return (
-    <main>
-      <p>Page not found</p>
+    <main className="mx-auto flex max-w-md flex-col items-start gap-4 py-12">
+      <h1 className="text-2xl font-bold">Page not found</h1>
+      <p className="text-muted-foreground">
+        The page you're looking for doesn't exist or may have moved. Try one of these:
+      </p>
+      <ul className="flex flex-col gap-2 text-sm">
+        {/* Home and Scoring are static (Astro) pages — full navigation. */}
+        <li><a href="/" className={linkClass}>Home</a></li>
+        <li><Link to="/comp" className={linkClass}>Competitions</Link></li>
+        <li><Link to="/u/me" className={linkClass}>My Flights</Link></li>
+        <li><a href="/scoring" className={linkClass}>How scoring works</a></li>
+      </ul>
     </main>
   );
 }
