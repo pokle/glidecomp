@@ -46,6 +46,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
           <li><a href="#arrival-points" class="hover:underline">Arrival Points</a></li>
           <li><a href="#total-score" class="hover:underline">Your Total Score</a></li>
           <li><a href="#glidecomp-notes" class="hover:underline">GlideComp Implementation Notes</a></li>
+          <li><a href="#spec-differences" class="hover:underline">Differences from the Official Spec</a></li>
           <li><a href="#references" class="hover:underline">Official References</a></li>
         </ul>
       </nav>
@@ -337,19 +338,27 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             — a value between 0 and 1 that measures how close your time was to the fastest
             pilot's time:
           </p>
-          <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{SF} = \max\!\left(0,\; 1 - \sqrt[3]{\dfrac{(\Delta t)^2}{\sqrt{t_{\text{best}}}}} \right)`)}></p>
+          <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{SF} = \max\!\left(0,\; 1 - \left(\dfrac{\Delta t}{\sqrt{t_{\text{best}}}}\right)^{5/6} \right)`)}></p>
           <p class="text-muted-foreground">
             Where <Fragment set:html={km(String.raw`\Delta t`)} /> is the difference between your time and the best
             time (in hours), and <Fragment set:html={km(String.raw`t_{\text{best}}`)} /> is the fastest pilot's time
-            (in hours).
+            (in hours). Competitions scored with the older <em>classic</em> formula
+            (GAP2016/2018-era) use a 2/3 exponent instead of 5/6, which gives a slightly more
+            generous curve.
           </p>
           <p class="text-muted-foreground">
-            This cube-root formula creates a generous curve: pilots close to the fastest time get
-            nearly full points, and the penalty increases gradually for slower times. It's not a
-            cliff — finishing 10 minutes behind the winner still earns you a good share of time
-            points.
+            This creates a generous curve: pilots close to the fastest time get nearly full points,
+            and the penalty increases gradually for slower times. It's not a cliff — finishing 10
+            minutes behind the winner still earns you a good share of time points.
           </p>
           <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Time Points} = \text{SF} \times \text{Available Time Points}`)}></p>
+          <p class="text-muted-foreground">
+            One thing to be aware of: in an official race-to-goal task with start gates, your clock
+            runs from the <strong>start gate</strong> you took, not from the moment you crossed the
+            start cylinder. GlideComp currently times every pilot from their actual start-cylinder
+            crossing — see
+            <a href="#spec-differences" class="underline hover:text-foreground">Differences from the Official Spec</a>.
+          </p>
         </div>
       </section>
 
@@ -378,6 +387,13 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 ESS) — flying away doesn't reset your progress. This matches the CIVL GAP /
                 AirScore leading coefficient; competitions can pick the modern <em>weighted</em>
                 variant (GAP2020+) or the older <em>classic</em> variant in settings.
+              </p>
+              <p class="text-muted-foreground">
+                In the 2024 FAI spec the two variants are sport-specific — hang gliding uses the
+                classic squared-distance area, paragliding the weighted area. GlideComp instead
+                applies whichever variant the competition selects to either sport (default:
+                weighted) — see
+                <a href="#spec-differences" class="underline hover:text-foreground">Differences from the Official Spec</a>.
               </p>
               <p class="text-muted-foreground">
                 A <strong>lower</strong> LC means you spent more time at the front. The pilot
@@ -466,9 +482,12 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
             GlideComp implements the core GAP formulas from the 2024 edition of the CIVL Sporting
-            Code Section 7F. All validity polynomials, weight distributions, and point
-            calculations match the official specification. However, there are some features from
-            the full spec that are not yet implemented:
+            Code Section 7F, and its results are validated against real AirScore-published
+            competition scores. The validity polynomials, weight distributions, and point
+            formulas follow the official specification, but not every feature of the full spec is
+            implemented, and in a few places the behaviour deliberately or currently differs —
+            those differences are called out explicitly in the
+            <a href="#spec-differences" class="underline hover:text-foreground">next section</a>.
           </p>
 
           <div class="overflow-x-auto">
@@ -505,15 +524,27 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   <td class="py-2">Implemented</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Penalties (rule violations, late starts)</td>
+                  <td class="py-2 pr-4">Penalties — absolute points (S7F §12.4)</td>
+                  <td class="py-2">Implemented (entered by the scorekeeper, audit-logged)</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">Penalties — percentage &amp; jump-the-gun (§12.2, §12.4)</td>
                   <td class="py-2">Not implemented</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Stopped tasks (weather calldowns)</td>
+                  <td class="py-2 pr-4">Start gates / race start times (§6.3.3, §8.3.1)</td>
+                  <td class="py-2">Not implemented — all tasks timed as elapsed time</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">Goal lines (§6.2.3, §8.5.2)</td>
+                  <td class="py-2">Partial — scored as a cylinder</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">Task deadline enforcement (§8.3)</td>
                   <td class="py-2">Not implemented</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Wave/interval start gates</td>
+                  <td class="py-2 pr-4">Stopped tasks (weather calldowns, §12.3)</td>
                   <td class="py-2">Not implemented</td>
                 </tr>
                 <tr class="border-b border-border/50">
@@ -533,20 +564,158 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             These must be explicitly enabled in the competition parameters.
           </p>
           <p class="text-muted-foreground">
-            Distance (including the hang-gliding difficulty calculation), time and leading points
-            are all computed to match the CIVL GAP formulas. Exact point values for pilots who
-            don't reach goal can still differ slightly from other tools such as
-            <a href="https://airscore.org" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">
-              AirScore
-            </a>
-            because the optimized per-pilot flown distance isn't bit-identical between
-            implementations; this affects absolute values more than relative ranking.
-          </p>
-          <p class="text-muted-foreground">
             The scoring engine source code is open and available on
             <a href="https://github.com/pokle/glidecomp" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">
               GitHub
             </a>.
+          </p>
+        </div>
+      </section>
+
+      {/* Differences from the Official Spec */}
+      <section id="spec-differences" class="mb-14 scroll-mt-20">
+        <h2 class="text-2xl font-bold mb-4">Differences from the Official Spec</h2>
+        <div class="space-y-4 text-sm leading-relaxed">
+          <p class="text-muted-foreground">
+            We compared the GlideComp scoring engine line-by-line against the FAI Sporting Code
+            Section 7F (2024 edition). Beyond the unimplemented features listed above, these are
+            the places where GlideComp's behaviour differs from the letter of the spec. Section
+            numbers (§) refer to the 2024 edition.
+          </p>
+
+          <div class="space-y-4 ml-2">
+            <div>
+              <h3 class="text-base font-semibold mb-1">Start times: every task is scored as elapsed time (§6.3.3, §8.3.1)</h3>
+              <p class="text-muted-foreground">
+                In a race-to-goal task, the spec sets each pilot's start time to the
+                <strong>last start gate before their start-cylinder crossing</strong> — cross at
+                13:49 with gates at 13:30/13:50 and your clock has been running since 13:30.
+                GlideComp parses the start gates from the task file but does not use them: every
+                pilot's speed-section time runs from the moment they actually crossed the start
+                cylinder, which is the spec's <em>elapsed-time</em> rule (§6.3.4). For true
+                race-to-goal tasks this makes GlideComp's times shorter than official ones for
+                anyone who crossed after the gate. For the same reason, early starts ("jumping the
+                gun", §12.2) are not detected or penalised, and the leading-coefficient clock
+                starts at the first pilot's actual crossing rather than the first gate time
+                (§11.3.1).
+              </p>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold mb-1">Hang gliding: no penalty for reaching ESS but not goal (§12.1)</h3>
+              <p class="text-muted-foreground">
+                The spec docks pilots who cross ESS but fail to reach goal: paragliders lose all
+                time points, and hang glider pilots keep only 80% (by default) of their time and
+                arrival points. GlideComp applies the paragliding rule correctly (no goal, no time
+                points) but pays hang glider pilots their <strong>full</strong> time and arrival
+                points once they reach ESS. Relatedly, the spec takes "best time" from the fastest
+                pilot <em>who also reached goal</em>; GlideComp's hang-gliding best time is the
+                fastest pilot to reach ESS, whether or not they made goal.
+              </p>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold mb-1">Paragliding leading weight uses the GAP2020 formula (§10)</h3>
+              <p class="text-muted-foreground">
+                The 2024 spec derives the PG leading weight from a per-task
+                <em>LeadingTimeRatio</em> parameter (default 26% of the non-distance weight, and
+                100% of it when nobody makes goal). GlideComp uses the earlier GAP2020 formula:
+                35% of the non-distance weight when someone makes goal, and
+                <Fragment set:html={km(String.raw`0.1 \times \text{BestDist}/\text{TaskDist}`)} /> when nobody does.
+                This matches AirScore's gap2020/gap2021 presets rather than the 2024 wording. The
+                hang-gliding weights match the 2024 spec.
+              </p>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold mb-1">One leading/time formula variant for both sports (§11.2, §11.3.1)</h3>
+              <p class="text-muted-foreground">
+                The 2024 spec pairs hang gliding with the classic squared-distance leading
+                coefficient and paragliding with the weighted-area one, both with the 5/6
+                time-points exponent. GlideComp exposes a single per-competition
+                <em>formula</em> setting applied to either sport: <em>weighted</em> (the default —
+                weighted-area LC, 5/6 exponent) or <em>classic</em> (squared-distance LC
+                <strong>and</strong> the older 2/3 exponent, matching GAP2016/2018). A
+                hang-gliding competition on defaults therefore uses the paragliding-style
+                weighted LC, and the exact 2024-spec hang-gliding combination (classic LC with the
+                5/6 exponent) is not currently selectable.
+              </p>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold mb-1">Goal lines are scored as cylinders (§6.2.3, §8.5.2)</h3>
+              <p class="text-muted-foreground">
+                The spec defines a goal line with a semi-circular control zone behind it, crossed
+                in the direction of the last leg. GlideComp reads line goals from the task file
+                but scores them as a cylinder whose radius is half the line length. That is more
+                permissive than the spec (a pilot passing "in front of" the line inside that
+                radius is counted), though for typical straight-in finishes the result is the
+                same. Line-type intermediate control zones and the 120&nbsp;km/h two-fix line
+                validation rule (§8.4) are likewise not implemented.
+              </p>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold mb-1">Task deadline is not enforced (§8.3)</h3>
+              <p class="text-muted-foreground">
+                The spec only counts turnpoint crossings recorded before the task deadline, and
+                measures landed-out pilots' best distance up to the deadline. GlideComp parses the
+                goal deadline from the task file but scores the whole track regardless of time — a
+                pilot tagging a turnpoint after the deadline would still be credited.
+              </p>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold mb-1">Launch validity is effectively always 1.0 (§9.1)</h3>
+              <p class="text-muted-foreground">
+                The spec counts "pilots present" (including those who chose not to fly — DNFs) so
+                a day when much of the field stays on launch is devalued. GlideComp scores from
+                uploaded tracks and currently treats every scored pilot as having flown, so the
+                launch-validity term never drops below 1. Distance and time validity are
+                unaffected and fully implemented.
+              </p>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold mb-1">Smaller details</h3>
+              <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2">
+                <li>
+                  <strong>Cylinder tolerance (§8.1):</strong> GlideComp applies the percentage
+                  tolerance (default 0.5%, the Cat 2 maximum) as an outward expansion of the
+                  cylinder only. The spec's 5&nbsp;m absolute minimum tolerance and the inner
+                  tolerance band are not applied, so very small cylinders are judged slightly more
+                  strictly than the spec allows.
+                </li>
+                <li>
+                  <strong>Rounding (§11):</strong> the 2024 spec rounds each pilot's total to one
+                  decimal place; GlideComp rounds totals to whole points (as most scoring software
+                  displays them). Component points are kept to 0.1.
+                </li>
+                <li>
+                  <strong>Optional leading/arrival points:</strong> the spec always allocates
+                  leading weight (and arrival weight in hang gliding classes 1 and 5). GlideComp
+                  lets a competition switch either off — and defaults to off — which is common in
+                  club-level scoring but is itself a departure from the spec when disabled.
+                </li>
+                <li>
+                  <strong>Distance origin:</strong> the optional
+                  <a href="#distance-origin" class="underline hover:text-foreground">"start cylinder" distance origin</a>
+                  deliberately deviates from the spec's launch-to-goal task distance (§6.4.2) to
+                  match some national (e.g. HGFA/SAFA) rule wording. The default "take-off"
+                  setting follows the spec.
+                </li>
+                <li>
+                  <strong>Distance precision:</strong> distances are computed on the WGS84
+                  ellipsoid as the spec requires (§4.2), but the optimized route isn't
+                  bit-identical to other tools such as
+                  <a href="https://airscore.org" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">AirScore</a>,
+                  so landed-out pilots' point values can differ slightly. This affects absolute
+                  values more than relative ranking.
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <p class="text-muted-foreground">
+            If any of these matter for your competition, or you spot a difference not listed here,
+            please
+            <a href="https://github.com/pokle/glidecomp/issues" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">
+              open an issue on GitHub
+            </a>
+            — scoring transparency is the point of this project.
           </p>
         </div>
       </section>
