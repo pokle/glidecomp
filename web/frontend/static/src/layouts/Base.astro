@@ -1,0 +1,40 @@
+---
+/**
+ * Shared shell for every static page: <head>, design-token stylesheet and the
+ * OS-preference dark-mode sync (mirrors react/main.tsx's `.dark` class toggle).
+ */
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="/icon.svg" />
+    <title>{title}</title>
+    {description && <meta name="description" content={description} />}
+    <script is:inline>
+      // Follow the OS colour scheme via a `.dark` class on <html>, matching the
+      // SPA. Inline + in <head> so it runs before paint (no flash).
+      (function () {
+        var q = window.matchMedia("(prefers-color-scheme: dark)");
+        var sync = function () {
+          document.documentElement.classList.toggle("dark", q.matches);
+        };
+        sync();
+        q.addEventListener("change", sync);
+      })();
+    </script>
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

@@ -1,0 +1,186 @@
+---
+/** About page. Ported from react/pages/About.tsx. */
+import Base from "../layouts/Base.astro";
+import BackLink from "../components/BackLink.astro";
+import SiteFooter from "../components/SiteFooter.astro";
+
+// Simple "name — description" acknowledgement sections, in display order. The
+// "UI & Styling" section has a nested link so it stays inline below.
+const sections = [
+  {
+    heading: "Mapping & Geospatial",
+    items: [
+      { href: "https://github.com/mapbox/mapbox-gl-js", name: "Mapbox GL JS", desc: " — Interactive vector maps" },
+      { href: "https://github.com/Leaflet/Leaflet", name: "Leaflet", desc: " — Lightweight map library" },
+      { href: "https://github.com/Turfjs/turf", name: "Turf.js", desc: " — Geospatial analysis (distance, bearing, bounding boxes)" },
+      { href: "https://github.com/peterqliu/threebox", name: "Threebox", desc: " — Three.js integration for Mapbox GL" },
+    ],
+  },
+  {
+    heading: "3D & Rendering",
+    items: [{ href: "https://github.com/mrdoob/three.js", name: "Three.js", desc: " — 3D graphics library" }],
+  },
+];
+
+const backend = [
+  { href: "https://hono.dev", name: "Hono", desc: " — Web framework for Cloudflare Workers" },
+  { href: "https://www.better-auth.com", name: "Better Auth", desc: " — Authentication library" },
+  { href: "https://kysely.dev", name: "Kysely", desc: " — Type-safe SQL query builder" },
+];
+
+const build = [
+  { href: "https://vite.dev", name: "Vite", desc: " — Build tool and dev server" },
+  { href: "https://astro.build", name: "Astro", desc: " — Static site builder for the content pages" },
+  { href: "https://www.typescriptlang.org", name: "TypeScript", desc: " — Typed JavaScript" },
+  { href: "https://bun.sh", name: "Bun", desc: " — JavaScript runtime and package manager" },
+  { href: "https://www.cloudflare.com", name: "Cloudflare", desc: " — Pages, Workers, and D1 hosting" },
+];
+---
+
+<Base title="GlideComp - About">
+  <div class="min-h-screen bg-background text-foreground p-6 bg-hills">
+    <div class="max-w-2xl mx-auto">
+      <header class="mb-10">
+        <BackLink href="/" />
+        <h1 class="text-3xl font-bold flex items-center gap-3">
+          <img src="/icon.svg" alt="GlideComp logo" class="w-8 h-8" />
+          About GlideComp
+        </h1>
+      </header>
+
+      <h2 class="text-xl font-semibold mb-4">About me</h2>
+      <section class="mb-10 space-y-4">
+        <p>I want to learn from better pilots, and ultimately out compete them!</p>
+        <p>
+          Gliding competitions are a unique experience where you can fly in the same air as the
+          best pilots in the world. After the day's task, you can talk to them, and analyse their
+          flight data.
+        </p>
+        <p>
+          I built GlideComp to figure out which line they took, how fast they flew, how well they
+          climbed, and ultimately how they scored in the task!
+        </p>
+        <p class="text-sm text-muted-foreground mt-2">— Tushar Pokle (Summer 2026)</p>
+      </section>
+
+      <h2 class="text-xl font-semibold mb-4">About the tooling</h2>
+      <p class="text-muted-foreground mb-6">
+        GlideComp would not have been possible without these libraries, tools and resources
+      </p>
+
+      {
+        sections.map((group) => (
+          <section class="mb-10">
+            <h2 class="text-xl font-semibold mb-4">{group.heading}</h2>
+            <ul class="space-y-3">
+              {group.items.map((item) => (
+                <li>
+                  <a href={item.href} target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+                    {item.name}
+                  </a>
+                  <span class="text-muted-foreground">{item.desc}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))
+      }
+
+      <section class="mb-10">
+        <h2 class="text-xl font-semibold mb-4">UI &amp; Styling</h2>
+        <ul class="space-y-3">
+          <li>
+            <a href="https://katex.org" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              KaTeX
+            </a>
+            <span class="text-muted-foreground"> — Fast math typesetting</span>
+          </li>
+          <li>
+            <a href="https://tailwindcss.com" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              Tailwind CSS
+            </a>
+            <span class="text-muted-foreground"> — Utility-first CSS framework</span>
+          </li>
+          <li>
+            <a href="https://ui.shadcn.com" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              shadcn/ui
+            </a>
+            <span class="text-muted-foreground"> — UI components, built on </span>
+            <a href="https://base-ui.com" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              Base UI
+            </a>
+          </li>
+          <li>
+            <a href="https://github.com/fontsource/fontsource" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              Fontsource / Atkinson Hyperlegible Next
+            </a>
+            <span class="text-muted-foreground"> — Self-hosted web font designed for readability</span>
+          </li>
+        </ul>
+      </section>
+
+      <section class="mb-10">
+        <h2 class="text-xl font-semibold mb-4">Backend &amp; Auth</h2>
+        <ul class="space-y-3">
+          {
+            backend.map((item) => (
+              <li>
+                <a href={item.href} target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+                  {item.name}
+                </a>
+                <span class="text-muted-foreground">{item.desc}</span>
+              </li>
+            ))
+          }
+        </ul>
+      </section>
+
+      <section class="mb-10">
+        <h2 class="text-xl font-semibold mb-4">Build &amp; Platform</h2>
+        <ul class="space-y-3">
+          {
+            build.map((item) => (
+              <li>
+                <a href={item.href} target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+                  {item.name}
+                </a>
+                <span class="text-muted-foreground">{item.desc}</span>
+              </li>
+            ))
+          }
+        </ul>
+      </section>
+
+      <section class="mb-10">
+        <h2 class="text-xl font-semibold mb-4">AI</h2>
+        <ul class="space-y-3">
+          <li>
+            <a href="https://claude.ai/claude-code" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              Claude Code
+            </a>
+            <span class="text-muted-foreground"> — AI coding assistant by Anthropic</span>
+          </li>
+        </ul>
+      </section>
+
+      <section class="mb-10">
+        <h2 class="text-xl font-semibold mb-4">Design Resources</h2>
+        <ul class="space-y-3">
+          <li>
+            <a
+              href="https://www.svgbackgrounds.com/set/free-svg-backgrounds-and-patterns/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="font-medium hover:underline"
+            >
+              Free SVG Backgrounds and Patterns by SVGBackgrounds.com
+            </a>
+            <span class="text-muted-foreground"> — SVG background patterns</span>
+          </li>
+        </ul>
+      </section>
+
+      <SiteFooter />
+    </div>
+  </div>
+</Base>

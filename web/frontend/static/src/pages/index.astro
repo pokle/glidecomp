@@ -1,0 +1,70 @@
+---
+/** Landing page. Ported from react/pages/Home.tsx. */
+import Base from "../layouts/Base.astro";
+import SiteFooter from "../components/SiteFooter.astro";
+
+// Screenshots live in this app's own public/ dir; prefix with BASE_URL so they
+// resolve under the /_static dev base and at the site root in production.
+// Normalise to no trailing slash so `${base}/file` is correct either way.
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+---
+
+<Base title="GlideComp">
+  <div class="min-h-screen bg-background text-foreground p-6 bg-hills">
+    <div class="max-w-2xl mx-auto flex flex-col gap-4">
+      <header class="flex items-start justify-between gap-4">
+        <div>
+          <h1 class="font-brand text-2xl font-bold">GlideComp</h1>
+          <p class="text-muted-foreground">
+            Competition track log analysis for hanggliding and paragliding
+          </p>
+        </div>
+        <button
+          id="google-signin"
+          type="button"
+          class="inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 h-8 gap-1.5 px-2.5 bg-primary text-primary-foreground hover:bg-primary/80 cursor-pointer"
+        >
+          Login with Google
+        </button>
+      </header>
+
+      <p class="text-sm text-muted-foreground">
+        By signing in, you agree to our
+        <a href="/legal" class="underline underline-offset-4">
+          Privacy Policy &amp; Terms
+        </a>
+      </p>
+
+      <img
+        src={`${base}/glidecomp-screenshot.png`}
+        alt="GlideComp analysis interface showing a map with flight tracks and waypoints"
+        class="rounded-lg border"
+      />
+
+      <a href="/replay" class="mt-4 flex flex-col gap-2">
+        <img
+          src={`${base}/3dvis-screenshot.jpg`}
+          alt="3D flight replay showing colourful glider tracks weaving between task cylinders"
+          class="rounded-lg border"
+        />
+        <h2 class="text-lg font-bold">3D Flight Replay</h2>
+        <span class="text-sm text-muted-foreground">Experimental</span>
+        <p>
+          An experimental 3D replay of a competition (Corryong Cup 2026 Task 1). Shows the flight
+          path of all gliders all together.
+        </p>
+        <p class="text-sm text-muted-foreground">28 June 2026</p>
+      </a>
+
+      <SiteFooter />
+    </div>
+  </div>
+</Base>
+
+<script>
+  // Only interactive element on the page: kick off Google OAuth via better-auth.
+  import { signInWithGoogle } from "../../../src/auth/client";
+  document
+    .getElementById("google-signin")
+    ?.addEventListener("click", () => void signInWithGoogle());
+</script>

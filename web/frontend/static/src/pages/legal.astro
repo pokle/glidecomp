@@ -1,0 +1,290 @@
+---
+/** Privacy Policy & Terms page. Ported from react/pages/Legal.tsx. */
+import Base from "../layouts/Base.astro";
+import BackLink from "../components/BackLink.astro";
+import SiteFooter from "../components/SiteFooter.astro";
+---
+
+<Base title="GlideComp - Privacy Policy & Terms">
+  <div class="min-h-screen bg-background text-foreground p-6 bg-hills">
+    <div class="max-w-2xl mx-auto">
+      <header class="mb-10">
+        <BackLink href="/" />
+        <h1 class="text-3xl font-bold flex items-center gap-3">
+          <img src="/icon.svg" alt="GlideComp logo" class="w-8 h-8" />
+          Privacy Policy &amp; Terms
+        </h1>
+        <p class="text-muted-foreground mt-1">Last updated: April 6, 2026</p>
+      </header>
+
+      {/* Table of Contents */}
+      <nav class="mb-10 p-4 rounded-lg border border-border bg-card">
+        <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+          Contents
+        </h2>
+        <ul class="space-y-1 text-sm">
+          <li>
+            <a href="#privacy-policy" class="hover:underline">
+              Privacy Policy
+            </a>
+          </li>
+          <li>
+            <a href="#terms" class="hover:underline">
+              Terms and Conditions
+            </a>
+          </li>
+        </ul>
+      </nav>
+
+      {/* Privacy Policy */}
+      <section id="privacy-policy" class="mb-14">
+        <h2 class="text-2xl font-bold mb-6">Privacy Policy</h2>
+
+        <div class="space-y-6 text-sm leading-relaxed">
+          <div>
+            <h3 class="text-lg font-semibold mb-2">1. What We Collect</h3>
+            <p class="text-muted-foreground">
+              When you sign in with Google, we store your name, email address, and profile
+              picture to create your account. We do not access any other Google account data.
+            </p>
+            <p class="text-muted-foreground mt-2">
+              When you use GlideComp, we collect and store the following data on our servers:
+            </p>
+            <ul class="list-disc list-inside text-muted-foreground space-y-1 mt-2">
+              <li>IGC track files you upload</li>
+              <li>Task definitions and competition data</li>
+              <li>Analysis results and metadata associated with your tracks</li>
+            </ul>
+            <p class="text-muted-foreground mt-2">
+              Some data may also be cached locally in your browser (localStorage/IndexedDB) for
+              performance.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">2. How We Use Your Data</h3>
+            <ul class="list-disc list-inside text-muted-foreground space-y-1">
+              <li>
+                Account information (name, email, profile picture) is used to identify you within
+                the application
+              </li>
+              <li>
+                Track files and task data are stored securely in the cloud so you can access them
+                from any device
+              </li>
+              <li>
+                Analysis results are stored to avoid re-processing and to enable sharing features
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">3. Third-Party Services</h3>
+            <p class="text-muted-foreground">
+              GlideComp uses the following third-party services:
+            </p>
+            <ul class="list-disc list-inside text-muted-foreground space-y-1 mt-2">
+              <li>
+                <strong>Google OAuth</strong> — for authentication. Subject to
+                <a
+                  href="https://policies.google.com/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="underline hover:text-foreground"
+                >
+                  Google's Privacy Policy
+                </a>
+              </li>
+              <li>
+                <strong>Mapbox</strong> — for map rendering. Subject to
+                <a
+                  href="https://www.mapbox.com/legal/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="underline hover:text-foreground"
+                >
+                  Mapbox's Privacy Policy
+                </a>
+              </li>
+              <li>
+                <strong>Cloudflare</strong> — for hosting, content delivery, and cloud storage (R2
+                object storage and D1 database). Subject to
+                <a
+                  href="https://www.cloudflare.com/privacypolicy/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="underline hover:text-foreground"
+                >
+                  Cloudflare's Privacy Policy
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">4. Cookies &amp; Local Storage</h3>
+            <p class="text-muted-foreground">
+              We use cookies for authentication sessions. We may use your browser's localStorage
+              and IndexedDB to cache data and store application preferences locally on your
+              device.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">5. Data Retention &amp; Deletion</h3>
+            <p class="text-muted-foreground">
+              You can delete your account at any time from your dashboard. This removes all
+              account data, uploaded track files, competition registrations, and associated
+              metadata from our servers, and revokes the Google OAuth grant. Local browser data
+              (localStorage/IndexedDB) can be cleared through your browser settings.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">6. Data Storage &amp; Security</h3>
+            <p class="text-muted-foreground">
+              Your data is stored on Cloudflare's infrastructure:
+            </p>
+            <ul class="list-disc list-inside text-muted-foreground space-y-1 mt-2">
+              <li>Account and metadata are stored in Cloudflare D1 (SQLite database)</li>
+              <li>
+                Track files and other uploaded content are stored in Cloudflare R2 (object
+                storage)
+              </li>
+            </ul>
+            <p class="text-muted-foreground mt-2">
+              We take reasonable measures to protect your data but cannot guarantee absolute
+              security. You are responsible for keeping your account credentials safe.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">7. Children's Privacy</h3>
+            <p class="text-muted-foreground">
+              GlideComp is not directed at children under 13. We do not knowingly collect
+              personal information from children under 13.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">8. Contact</h3>
+            <p class="text-muted-foreground">
+              For privacy questions, open an issue on our
+              <a
+                href="https://github.com/pokle/glidecomp"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="underline hover:text-foreground"
+              >
+                GitHub repository
+              </a>
+              .
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Terms and Conditions */}
+      <section id="terms" class="mb-14">
+        <h2 class="text-2xl font-bold mb-6">Terms and Conditions</h2>
+
+        <div class="space-y-6 text-sm leading-relaxed">
+          <div>
+            <h3 class="text-lg font-semibold mb-2">1. Acceptance of Terms</h3>
+            <p class="text-muted-foreground">
+              By accessing or using GlideComp, you agree to be bound by these Terms and
+              Conditions. If you do not agree, do not use the service.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">2. Description of Service</h3>
+            <p class="text-muted-foreground">
+              GlideComp is a free tool for managing and scoring hanggliding and paragliding
+              competitions. The service allows competition administrators to create competitions,
+              define tasks, and manage pilot registrations. Pilots can upload IGC track files,
+              which are analyzed and scored automatically using the GAP formula. Task definitions
+              and scoring results are publicly viewable.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">3. User Accounts</h3>
+            <p class="text-muted-foreground">
+              You may create an account using Google sign-in. You are responsible for maintaining
+              the security of your account. You may delete your account at any time.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">4. User Content</h3>
+            <p class="text-muted-foreground">
+              You retain ownership of any content you upload to GlideComp, including IGC track
+              files and task definitions. By uploading content, you grant GlideComp a
+              non-exclusive license to store, process, and display that content as necessary to
+              provide the service. You may delete your content at any time.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">5. Acceptable Use</h3>
+            <p class="text-muted-foreground">You agree not to:</p>
+            <ul class="list-disc list-inside text-muted-foreground space-y-1 mt-2">
+              <li>Use the service for any unlawful purpose</li>
+              <li>Attempt to interfere with the service's operation</li>
+              <li>
+                Reverse engineer or attempt to extract the source code (beyond what is publicly
+                available on GitHub)
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">6. Disclaimer of Warranties</h3>
+            <p class="text-muted-foreground">
+              GlideComp is provided "as is" without warranties of any kind, either express or
+              implied. We do not guarantee that the service will be uninterrupted, error-free, or
+              that analysis results will be accurate. Flight analysis results should not be used
+              as the sole basis for safety-critical decisions.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">7. Limitation of Liability</h3>
+            <p class="text-muted-foreground">
+              To the fullest extent permitted by law, GlideComp and its contributors shall not be
+              liable for any indirect, incidental, special, or consequential damages arising from
+              your use of the service.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">8. Open Source</h3>
+            <p class="text-muted-foreground">
+              GlideComp is open-source software. The source code is available on
+              <a
+                href="https://github.com/pokle/glidecomp"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="underline hover:text-foreground"
+              >
+                GitHub
+              </a> and is subject to its own license terms.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">9. Changes to Terms</h3>
+            <p class="text-muted-foreground">
+              We may update these terms from time to time. Continued use of GlideComp after
+              changes constitutes acceptance of the updated terms. Changes will be reflected in
+              the "Last updated" date at the top of this page.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <SiteFooter />
+    </div>
+  </div>
+</Base>

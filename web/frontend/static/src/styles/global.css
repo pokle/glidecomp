@@ -1,0 +1,11 @@
+/*
+ * Stylesheet for the static content pages. Reuses the SPA's design tokens,
+ * fonts and .bg-hills utility verbatim by importing its globals.css, so the
+ * static pages stay pixel-identical to the React app. Tailwind v4 scans the
+ * Astro templates below for utility classes.
+ */
+@import "../../../src/react/globals.css";
+
+@source "../pages/**/*.{astro,mdx}";
+@source "../layouts/**/*.astro";
+@source "../components/**/*.astro";
