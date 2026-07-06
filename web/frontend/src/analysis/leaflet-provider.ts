@@ -194,19 +194,23 @@ export function createLeafletProvider(
       if (key) config.setPreferences({ mapStyle: key });
     });
 
-    // Fullscreen control
-    createLeafletControlButton({
-      position: 'topleft',
-      title: 'Toggle fullscreen',
-      innerHTML: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>',
-      onClick: () => {
-        if (document.fullscreenElement) {
-          document.exitFullscreen();
-        } else {
-          container.requestFullscreen();
-        }
-      },
-    }).addTo(map);
+    // Fullscreen control — analysis-page chrome only. Embedded maps (score
+    // details) get an expand/restore control from the embedding page instead;
+    // the Fullscreen API this relies on is unavailable on iOS anyway.
+    if (appControls) {
+      createLeafletControlButton({
+        position: 'topleft',
+        title: 'Toggle fullscreen',
+        innerHTML: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>',
+        onClick: () => {
+          if (document.fullscreenElement) {
+            document.exitFullscreen();
+          } else {
+            container.requestFullscreen();
+          }
+        },
+      }).addTo(map);
+    }
 
     // Scale control
     new Control.Scale({ maxWidth: 200 }).addTo(map);

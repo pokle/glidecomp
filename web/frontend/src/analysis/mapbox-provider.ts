@@ -851,11 +851,15 @@ export function createMapBoxProvider(
 
       // Navigation controls (top-right, below panel toggle)
       map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }));
-      map.addControl(new mapboxgl.FullscreenControl());
+      if (appControls) map.addControl(new mapboxgl.FullscreenControl());
       map.addControl(new mapboxgl.ScaleControl({ maxWidth: 200 }));
 
-      // Always show compass overlay
-      createCompass();
+      // The large compass overlay is analysis-page chrome — embedded maps
+      // (score details) rely on NavigationControl's built-in compass, and the
+      // embedding page provides its own expand/restore control (the native
+      // FullscreenControl self-hides on iOS, where the Fullscreen API is
+      // unavailable).
+      if (appControls) createCompass();
 
       // Custom menu button control (top-left, added first so it's topmost)
       let menuButtonCallback: (() => void) | null = null;

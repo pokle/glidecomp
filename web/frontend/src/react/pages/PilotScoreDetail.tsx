@@ -246,6 +246,23 @@ export function PilotScoreDetail() {
   const [state, setState] = useState<DetailState>({ kind: "loading" });
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
+  const [mapExpanded, setMapExpanded] = useState(false);
+
+  // While the map is expanded to fill the viewport: Esc restores it, and the
+  // page behind it must not scroll.
+  useEffect(() => {
+    if (!mapExpanded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMapExpanded(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mapExpanded]);
 
   useEffect(() => {
     if (!compId || !taskId || !pilotId) return;
@@ -253,6 +270,7 @@ export function PilotScoreDetail() {
     setState({ kind: "loading" });
     setFocus(null);
     setSelectedItem(null);
+    setMapExpanded(false);
     loadDetail(compId, taskId, pilotId)
       .then((data) => {
         if (!cancelled) setState({ kind: "ready", data });
@@ -336,9 +354,23 @@ export function PilotScoreDetail() {
       <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,11fr)_minmax(0,9fr)] lg:gap-6">
         {/* Map — supporting evidence. Sticky so it stays in view while the
             explanation scrolls (top of the page on mobile, right column on
-            desktop). */}
-        <div className="sticky top-0 z-10 -mx-4 bg-background px-4 pb-2 pt-2 sm:-mx-6 sm:px-6 lg:order-2 lg:top-4 lg:m-0 lg:p-0">
-          <div className="h-56 overflow-hidden rounded-lg border sm:h-72 lg:h-[calc(100vh-6rem)]">
+            desktop). The expand toggle fills the viewport and restores on a
+            second tap — done in CSS rather than the Fullscreen API so it
+            works on iOS too. */}
+        <div
+          className={
+            mapExpanded
+              ? "fixed inset-0 z-50 bg-background"
+              : "sticky top-0 z-10 -mx-4 bg-background px-4 pb-2 pt-2 sm:-mx-6 sm:px-6 lg:order-2 lg:top-4 lg:m-0 lg:p-0"
+          }
+        >
+          <div
+            className={`relative overflow-hidden ${
+              mapExpanded
+                ? "h-full w-full"
+                : "h-56 rounded-lg border sm:h-72 lg:h-[calc(100vh-6rem)]"
+            }`}
+          >
             <Suspense
               fallback={
                 <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -354,11 +386,25 @@ export function PilotScoreDetail() {
                 openDistanceLine={data.openDistanceLine}
               />
             </Suspense>
+            {/* Styled like the providers' own controls (white regardless of
+                theme) and kept clear of them: bottom-right, above the
+                attribution line. */}
+            <button
+              type="button"
+              onClick={() => setMapExpanded((v) => !v)}
+              title={mapExpanded ? "Restore map (Esc)" : "Expand map"}
+              aria-label={mapExpanded ? "Restore map" : "Expand map"}
+              className="absolute bottom-8 right-2 z-20 flex size-10 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md"
+            >
+              {mapExpanded ? <MinimizeIcon /> : <MaximizeIcon />}
+            </button>
           </div>
-          <p className="mt-1 hidden text-xs text-muted-foreground lg:block">
-            Click any highlighted step in the explanation to see where it
-            happened.
-          </p>
+          {mapExpanded ? null : (
+            <p className="mt-1 hidden text-xs text-muted-foreground lg:block">
+              Click any highlighted step in the explanation to see where it
+              happened.
+            </p>
+          )}
         </div>
 
         {/* The explanation — the primary content. */}
@@ -475,6 +521,50 @@ function ExplanationItem({
     >
       {body}
     </button>
+  );
+}
+
+function MaximizeIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="15 3 21 3 21 9" />
+      <polyline points="9 21 3 21 3 15" />
+      <line x1="21" y1="3" x2="14" y2="10" />
+      <line x1="3" y1="21" x2="10" y2="14" />
+    </svg>
+  );
+}
+
+function MinimizeIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="4 14 10 14 10 20" />
+      <polyline points="20 10 14 10 14 4" />
+      <line x1="14" y1="10" x2="21" y2="3" />
+      <line x1="3" y1="21" x2="10" y2="14" />
+    </svg>
   );
 }
 
