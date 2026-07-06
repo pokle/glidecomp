@@ -306,7 +306,7 @@ function TurnpointsSection({
         Route editing is available on the{" "}
         <a
           className="underline underline-offset-4"
-          href={`/comp/${compId}/task/${taskId}`}
+          href={`/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}`}
         >
           vanilla task page
         </a>

