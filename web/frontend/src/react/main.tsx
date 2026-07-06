@@ -49,6 +49,11 @@ createRoot(document.getElementById("root")!).render(
             <Routes>
               {/* Home, about, legal and the scoring guides are static pages
                   built by ./static (Astro) — served outside the SPA. */}
+              {/* /app is the SPA shell's own URL. Browsers that cached the old
+                  broken 308 (SPA route -> /app) before the _redirects fix land
+                  here; bounce them to the dashboard. This is a client-side
+                  (pushState) nav, so it doesn't re-trigger the cached redirect. */}
+              <Route path="/app" element={<Navigate to="/u/me" replace />} />
               <Route path="/onboarding" element={<Onboarding />} />
               <Route element={<Shell />}>
                 <Route path="/u/:username" element={<Dashboard />} />
