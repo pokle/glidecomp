@@ -1,15 +1,19 @@
-# SPA (React) routes -> the app shell. The static content pages (/, /about,
-# /legal, /scoring, /scoring/*) are real prerendered files (built by ./static
-# with Astro) and are served directly, so they need no rule here.
-/u/*  /app.html  200
-/comp  /app.html  200
-/comp/*  /app.html  200
-/scores  /app.html  200
-/profile  /app.html  200
-/settings  /app.html  200
-/onboarding  /app.html  200
-/admin/users  /app.html  200
-/admin/cache  /app.html  200
+# SPA (React) routes -> the app shell. Target the EXTENSIONLESS /app, not
+# /app.html: Cloudflare Pages' automatic .html clean-URL handling turns a
+# rewrite to /app.html into a 308 redirect to /app, which drops the original
+# path (e.g. /comp) and lands the SPA on /app with no matching route. Serving
+# the clean /app keeps the request URL intact so react-router routes correctly.
+# The static content pages (/, /about, /legal, /scoring, /scoring/*) are real
+# prerendered files (built by ./static with Astro) and are served directly.
+/u/*  /app  200
+/comp  /app  200
+/comp/*  /app  200
+/scores  /app  200
+/profile  /app  200
+/settings  /app  200
+/onboarding  /app  200
+/admin/users  /app  200
+/admin/cache  /app  200
 
 # Old static-page URLs (linked from bookmarks and the vanilla analysis/replay pages)
 /about.html  /about  301
