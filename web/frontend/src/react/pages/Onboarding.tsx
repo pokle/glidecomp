@@ -74,7 +74,7 @@ export function Onboarding() {
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
         setGeneralError(
-          err.error || "Could not save profile. You can update it later on your profile page."
+          err.error || "Could not save profile. You can update it later in Settings."
         );
         // Username is already saved — proceed after the user sees the message.
         setTimeout(() => window.location.assign(dest), 2000);
@@ -82,7 +82,7 @@ export function Onboarding() {
       }
     } catch {
       setGeneralError(
-        "Could not save pilot details right now. You can add them later on your profile page."
+        "Could not save pilot details right now. You can add them later in Settings."
       );
       setTimeout(() => window.location.assign(dest), 2000);
       return;

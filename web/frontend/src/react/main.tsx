@@ -1,13 +1,13 @@
 /**
  * The main GlideComp UI: a React + Base UI SPA served at /, /comp, /u/*,
- * /scores, /profile, /settings, /onboarding, the static about/legal/scoring
- * pages and the /admin pages. The analysis and 3D replay pages remain
- * separate vanilla entries — links point at those pages directly.
+ * /scores, /settings, /onboarding, the static about/legal/scoring pages and
+ * the /admin pages. The analysis and 3D replay pages remain separate vanilla
+ * entries — links point at those pages directly.
  */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./globals.css";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppToaster } from "./lib/toast";
 import { ConfirmProvider } from "./lib/confirm";
 import { UserProvider } from "./lib/user";
@@ -19,7 +19,6 @@ import { Competitions } from "./pages/Competitions";
 import { CompDetail } from "./pages/CompDetail";
 import { TaskDetail } from "./pages/TaskDetail";
 import { Scores } from "./pages/Scores";
-import { Profile } from "./pages/Profile";
 import { Settings } from "./pages/Settings";
 import { About } from "./pages/About";
 import { Legal } from "./pages/Legal";
@@ -66,7 +65,8 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/comp/:compId" element={<CompDetail />} />
                 <Route path="/comp/:compId/task/:taskId" element={<TaskDetail />} />
                 <Route path="/scores" element={<Scores />} />
-                <Route path="/profile" element={<Profile />} />
+                {/* "My Profile" merged into Settings; keep the old path working. */}
+                <Route path="/profile" element={<Navigate to="/settings" replace />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/admin/users" element={<AdminUsers />} />
                 <Route path="/admin/cache" element={<AdminCache />} />

@@ -39,14 +39,9 @@ export function Shell() {
             Competitions
           </NavLink>
           {user ? (
-            <>
-              <NavLink to="/profile" className={navLinkClass}>
-                My Profile
-              </NavLink>
-              <NavLink to="/settings" aria-label="Account settings" className={navLinkClass}>
-                Settings
-              </NavLink>
-            </>
+            <NavLink to="/settings" aria-label="Account settings" className={navLinkClass}>
+              Settings
+            </NavLink>
           ) : null}
           {!user && !loading ? (
             <Button type="button" className="ml-auto" onClick={() => signInWithGoogle()}>
