@@ -15,7 +15,11 @@
  * file and fails the build when they change without a bump here. After a
  * bump, update SCORING_SOURCE_FINGERPRINT to the hash the test prints.
  */
-export const SCORING_ENGINE_VERSION = 1;
+// v2: start gates (S7F §6.3.3/§8.3.1) — gated races time the speed section
+//     from the start gate taken, drop pre-gate start crossings, anchor the
+//     leading-coefficient clock at the first gate, and apply the §12.2
+//     early-start rules (PG launch→SSS, HG jump-the-gun penalty).
+export const SCORING_ENGINE_VERSION = 2;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -23,4 +27,4 @@ export const SCORING_ENGINE_VERSION = 1;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "a2d30700a458fcfe8332c0fa826288513cc116e25c042e1e882f5c8ff1753627";
+  "cfe81121a63d3cdf8748820e0357faec19e91cf33ec55c475aae6b83b7dc576c";

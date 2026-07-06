@@ -415,7 +415,8 @@ describe('explainGapScore — point components', () => {
     expect(penalty.items[0].text).toBe('Airspace infringement');
     expect(penalty.items[0].value).toBe('−50 pts');
     const total = section(penalised, 'total');
-    expect(total.items[0].detail).toContain('− 50 penalty = 731');
+    expect(total.items[0].detail).toContain('− 50 penalty');
+    expect(total.items[0].detail).toContain('= 731');
   });
 
   it('omits leading/arrival sections when those components are off', () => {
@@ -551,5 +552,87 @@ describe('explainOpenDistanceScore — anchorInfo (no fixes at hand)', () => {
     const furthest = flight.items.find((i) => i.id === 'furthest')!;
     expect(furthest.anchor!.timeMs).toBe(at(120).getTime());
     expect(furthest.anchor!.altitude).toBe(620);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Start gates & early starts (S7F §8.3.1, §12.2)
+// ---------------------------------------------------------------------------
+
+describe('explainGapScore — start gates & early starts', () => {
+  it('narrates the gate taken vs the actual crossing and the gate-based clock', () => {
+    const result: TurnpointSequenceResult = {
+      ...makeReentryResult(),
+      startGate: { time: at(25), index: 1, gateCount: 3 },
+      speedSectionTime: 75 * 60, // ESS at 100 min − gate at 25 min
+    };
+    const entry = { ...makeGoalEntry(), speed_section_time: 75 * 60 };
+    const x = explainGapScore({
+      task: makeTask(), result, entry, classContext: makeClassContext(),
+    });
+    const flight = section(x, 'flight');
+    const gateItem = flight.items.find((i) => i.id === 'start-gate')!;
+    expect(gateItem.text).toContain('gate 2 of 3');
+    expect(gateItem.text).toContain('not from the crossing');
+    const time = section(x, 'time');
+    const yourTime = time.items.find((i) => i.id === 'your-time')!;
+    expect(yourTime.detail).toContain('start gate');
+    expect(yourTime.detail).toContain('you crossed the start');
+  });
+
+  it('explains the HG jump-the-gun penalty with the formula substitution', () => {
+    const result: TurnpointSequenceResult = {
+      ...makeReentryResult(),
+      startGate: { time: at(32), index: 0, gateCount: 3 },
+      earlyStart: { crossingTime: at(30), firstGateTime: at(32), secondsEarly: 120 },
+    };
+    const entry: ScoreEntryInput = {
+      ...makeGoalEntry(),
+      early_start_seconds: 120,
+      early_start_outcome: 'hg_penalty',
+      jump_the_gun_penalty: 60,
+      total_score: 720,
+    };
+    const x = explainGapScore({
+      task: makeTask(), result, entry, classContext: makeClassContext(),
+    });
+    const flight = section(x, 'flight');
+    const early = flight.items.find((i) => i.id === 'early-start')!;
+    expect(early.text).toContain('before the first start gate');
+    expect(early.emphasis).toBe('warning');
+    const penalty = section(x, 'penalty');
+    const jtg = penalty.items.find((i) => i.id === 'jump-the-gun')!;
+    expect(jtg.value).toBe('−60 pts');
+    expect(jtg.detail).toContain('120 s early ÷ 2 s per point = 60 points');
+    const total = section(x, 'total');
+    expect(total.items[0].detail).toContain('− 60 jump-the-gun');
+  });
+
+  it('explains the PG early-start launch→SSS clamp', () => {
+    const result: TurnpointSequenceResult = {
+      ...makeReentryResult(),
+      startGate: { time: at(32), index: 0, gateCount: 3 },
+      earlyStart: { crossingTime: at(30), firstGateTime: at(32), secondsEarly: 120 },
+    };
+    const entry: ScoreEntryInput = {
+      ...makeGoalEntry(),
+      made_goal: false,
+      reached_ess: false,
+      speed_section_time: null,
+      flown_distance: 2800,
+      early_start_seconds: 120,
+      early_start_outcome: 'pg_launch_to_sss',
+      total_score: 40,
+    };
+    const x = explainGapScore({
+      task: makeTask(), result, entry,
+      classContext: makeClassContext(),
+      params: { scoring: 'PG' },
+    });
+    expect(x.headline).toContain('Early start');
+    const distance = section(x, 'distance');
+    const clamp = distance.items.find((i) => i.id === 'early-start-distance')!;
+    expect(clamp.text).toContain('launch to the start cylinder');
+    expect(clamp.emphasis).toBe('warning');
   });
 });

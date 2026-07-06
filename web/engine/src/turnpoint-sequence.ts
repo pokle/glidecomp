@@ -18,6 +18,7 @@ import type { IGCFix } from './igc-parser';
 import { andoyerDistance, isInsideCylinder } from './geo';
 import { getSSSIndex, getEffectiveSSSIndex, getESSIndex, getEffectiveESSIndex, getGoalIndex } from './xctsk-parser';
 import { calculateOptimizedTaskLine } from './task-optimizer';
+import { resolveStartGates, gateIndexForCrossing } from './time-gates';
 
 // ---------------------------------------------------------------------------
 // Raw crossing detection
@@ -153,6 +154,41 @@ export interface LegDistance {
 }
 
 // ---------------------------------------------------------------------------
+// Start gates
+// ---------------------------------------------------------------------------
+
+/**
+ * The start gate that defined a pilot's official start time in a gated
+ * race to goal (FAI S7F §8.3.1): the last gate at or before the pilot's
+ * start-cylinder crossing. Early starters (§12.2) are anchored to the
+ * first gate.
+ */
+export interface StartGateTaken {
+  /** The gate time — the pilot's official start time. */
+  time: Date;
+  /** Index into the task's sorted gate list (0 = first gate). */
+  index: number;
+  /** How many gates the task defines. */
+  gateCount: number;
+}
+
+/**
+ * An early start ("jumping the gun", FAI S7F §12.2): the pilot's scored
+ * start-cylinder crossing happened before the first start gate opened.
+ * How this reshapes the score is sport-specific and decided by the scorer
+ * (PG: scored launch→SSS only; HG: penalty or minimum distance) — the
+ * sequence result just reports the facts.
+ */
+export interface EarlyStart {
+  /** The scored (last) start-cylinder crossing. */
+  crossingTime: Date;
+  /** When the first start gate opened. */
+  firstGateTime: Date;
+  /** How many seconds before the first gate the pilot started. */
+  secondsEarly: number;
+}
+
+// ---------------------------------------------------------------------------
 // Complete result
 // ---------------------------------------------------------------------------
 
@@ -217,10 +253,31 @@ export interface TurnpointSequenceResult {
   // --- Speed scoring ---
 
   /**
-   * Speed section time in seconds (SSS reaching time to ESS reaching time).
-   * Null if SSS or ESS not reached.
+   * Speed section time in seconds. Null if SSS or ESS not reached.
+   *
+   * In a gated race to goal (RACE type with start gates) the clock runs
+   * from the start gate taken (see {@link startGate}) to the ESS reaching
+   * (FAI S7F §8.7) — not from the pilot's actual crossing. For elapsed-time
+   * tasks and races without usable gates it is ESS reaching time minus SSS
+   * reaching time.
    */
   speedSectionTime: number | null;
+
+  /**
+   * Present for gated races when the pilot started: the gate that defined
+   * their official start time (§8.3.1) — the last gate at or before their
+   * crossing, or the first gate for early starters. Absent for elapsed-time
+   * tasks, races without gates, and pilots who never started.
+   */
+  startGate?: StartGateTaken;
+
+  /**
+   * Present when the pilot's scored start crossing was before the first
+   * start gate (§12.2 "jumping the gun"). The sequence and distances are
+   * still resolved from the actual flight; the sport-specific consequences
+   * (PG launch→SSS distance, HG penalty) are applied by the scorer.
+   */
+  earlyStart?: EarlyStart;
 
   /**
    * How the start was anchored when the task defines no SSS-typed turnpoint
@@ -518,12 +575,17 @@ function computeBestProgress(
  *
  * Algorithm (per CIVL GAP / Section 7F):
  * 1. Detect all cylinder crossings per task position
- * 2. For SSS: use last valid crossing before continuing to next TP
- * 3. For other TPs: use first valid crossing after previous TP reached
- * 4. For ESS: always first crossing (no re-tries)
- * 5. For multi-gate/elapsed-time: iterate SSS crossings, keep best path
+ * 2. For gated races: drop SSS crossings before the first start gate
+ *    (§8.3 — a start can't validate before the gate opens); when every
+ *    crossing is pre-gate, resolve from them anyway and report earlyStart
+ * 3. For SSS: use last valid crossing before continuing to next TP
+ * 4. For other TPs: use first valid crossing after previous TP reached
+ * 5. For ESS: always first crossing (no re-tries)
+ * 6. For multi-gate/elapsed-time: iterate SSS crossings, keep best path
  *    (most TPs reached, then most flown distance, then latest SSS)
- * 6. Compute optimized leg distances and flown distance
+ * 7. Snap the start time to the last gate ≤ crossing (§8.3.1) and time the
+ *    speed section from the gate (§8.7)
+ * 8. Compute optimized leg distances and flown distance
  *
  * @param task - The competition task definition
  * @param fixes - The pilot's GPS tracklog
@@ -592,6 +654,27 @@ export function resolveTurnpointSequence(
   let sssCrossings = requiredDirection
     ? allSSSCrossings.filter(c => c.direction === requiredDirection)
     : allSSSCrossings;
+
+  // Start gates (RACE tasks, §6.3.3/§8.3): crossings before the first gate
+  // cannot validate a start — filter them out so the best-path iteration
+  // only considers gate-legal starts. When EVERY crossing is pre-gate the
+  // pilot "jumped the gun" (§12.2): the sequence is still resolved from
+  // those crossings (HG scores the complete flight with a penalty; the
+  // PG launch→SSS clamp happens in the scorer) and earlyStart reports the
+  // facts. Gates describe the configured start cylinder, so — like the
+  // direction rule above — they don't apply in fallback-start mode.
+  // The reference instant (any SSS crossing, else the first fix) only
+  // places the gates' time-of-day on the right calendar day.
+  const gateReferenceMs = sssCrossings.length > 0
+    ? sssCrossings[0].time.getTime()
+    : (fixes.length > 0 ? fixes[0].time.getTime() : null);
+  const gates = !sssIsFallback && gateReferenceMs !== null
+    ? resolveStartGates(task, gateReferenceMs)
+    : null;
+  if (gates && sssCrossings.length > 0) {
+    const legal = sssCrossings.filter(c => c.time.getTime() >= gates[0]);
+    if (legal.length > 0) sssCrossings = legal;
+  }
 
   // Fallback start with no crossings: if the track began outside the first
   // turnpoint's cylinder (e.g. the logger started after launch) there is no
@@ -736,10 +819,32 @@ export function resolveTurnpointSequence(
       : 0;
   }
 
-  // Speed section time
+  // Start-gate snapping (§8.3.1): the pilot's official start time is the
+  // last gate at or before their crossing; a crossing after the last gate
+  // takes the last gate; an early starter is anchored to the first gate.
+  let startGate: StartGateTaken | undefined;
+  let earlyStart: EarlyStart | undefined;
+  if (gates && sssReaching) {
+    const crossingMs = sssReaching.time.getTime();
+    const gateIdx = gateIndexForCrossing(gates, crossingMs);
+    if (gateIdx < 0) {
+      earlyStart = {
+        crossingTime: sssReaching.time,
+        firstGateTime: new Date(gates[0]),
+        secondsEarly: (gates[0] - crossingMs) / 1000,
+      };
+      startGate = { time: new Date(gates[0]), index: 0, gateCount: gates.length };
+    } else {
+      startGate = { time: new Date(gates[gateIdx]), index: gateIdx, gateCount: gates.length };
+    }
+  }
+
+  // Speed section time: from the start gate taken when the race has gates
+  // (§8.7), otherwise from the pilot's actual crossing (elapsed time).
   let speedSectionTime: number | null = null;
   if (sssReaching && essReaching) {
-    speedSectionTime = (essReaching.time.getTime() - sssReaching.time.getTime()) / 1000;
+    const startMs = startGate ? startGate.time.getTime() : sssReaching.time.getTime();
+    speedSectionTime = (essReaching.time.getTime() - startMs) / 1000;
   }
 
   return {
@@ -754,6 +859,8 @@ export function resolveTurnpointSequence(
     flownDistance,
     legs,
     speedSectionTime,
+    ...(startGate ? { startGate } : {}),
+    ...(earlyStart ? { earlyStart } : {}),
     ...(startFallback ? { startFallback } : {}),
     ...(essIsFallback ? { essFallback: 'last_turnpoint' as const } : {}),
   };
@@ -778,6 +885,17 @@ export type BestProgressJSON = Omit<BestProgress, 'time'> & {
   time: string | number;
 };
 
+/** {@link StartGateTaken} as it arrives over JSON — `time` serialized. */
+export type StartGateTakenJSON = Omit<StartGateTaken, 'time'> & {
+  time: string | number;
+};
+
+/** {@link EarlyStart} as it arrives over JSON — `Date`s serialized. */
+export type EarlyStartJSON = Omit<EarlyStart, 'crossingTime' | 'firstGateTime'> & {
+  crossingTime: string | number;
+  firstGateTime: string | number;
+};
+
 /**
  * {@link TurnpointSequenceResult} as it arrives over JSON. `Date` fields
  * serialize to ISO strings (JSON.stringify's default) or epoch milliseconds;
@@ -789,12 +907,15 @@ export interface TurnpointSequenceResultJSON
   extends Omit<
     TurnpointSequenceResult,
     'crossings' | 'sequence' | 'sssReaching' | 'essReaching' | 'bestProgress'
+    | 'startGate' | 'earlyStart'
   > {
   crossings: CylinderCrossingJSON[];
   sequence: TurnpointReachingJSON[];
   sssReaching: TurnpointReachingJSON | null;
   essReaching: TurnpointReachingJSON | null;
   bestProgress: BestProgressJSON | null;
+  startGate?: StartGateTakenJSON;
+  earlyStart?: EarlyStartJSON;
 }
 
 /** Revive a JSON-round-tripped {@link TurnpointSequenceResult}. */
@@ -804,12 +925,23 @@ export function reviveTurnpointSequenceResult(
   const revive = <T extends { time: string | number }>(
     v: T,
   ): Omit<T, 'time'> & { time: Date } => ({ ...v, time: new Date(v.time) });
+  const { startGate, earlyStart, ...rest } = raw;
   return {
-    ...raw,
+    ...rest,
     crossings: raw.crossings.map(revive),
     sequence: raw.sequence.map(revive),
     sssReaching: raw.sssReaching ? revive(raw.sssReaching) : null,
     essReaching: raw.essReaching ? revive(raw.essReaching) : null,
     bestProgress: raw.bestProgress ? revive(raw.bestProgress) : null,
+    ...(startGate ? { startGate: revive(startGate) } : {}),
+    ...(earlyStart
+      ? {
+          earlyStart: {
+            ...earlyStart,
+            crossingTime: new Date(earlyStart.crossingTime),
+            firstGateTime: new Date(earlyStart.firstGateTime),
+          },
+        }
+      : {}),
   };
 }

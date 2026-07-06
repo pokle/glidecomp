@@ -42,6 +42,12 @@ export interface PilotScoreEntry {
   penalty_points: number;
   penalty_reason: string | null;
   total_score: number;
+  /** Seconds started before the first start gate (S7F §12.2), when early. */
+  early_start_seconds: number | null;
+  /** How the early start reshaped the score — see engine PilotScore. */
+  early_start_outcome: "pg_launch_to_sss" | "hg_penalty" | "hg_min_distance" | null;
+  /** Automatic jump-the-gun penalty points deducted (HG early starts). */
+  jump_the_gun_penalty: number | null;
 }
 
 export interface ClassScore {
@@ -149,6 +155,8 @@ interface CachedFlightAnalysis {
   speedSectionTime: number | null;
   sssTimeMs: number | null;
   essTimeMs: number | null;
+  /** Seconds started before the first gate (S7F §12.2), when early. */
+  earlyStartSeconds?: number;
   /** Present only for leading-enabled comps — the per-track leading scan,
    * cached so a new upload doesn't force a re-scan of the whole field. Its
    * validity is tied to the task geometry + leading formula in the cache key. */
@@ -247,6 +255,9 @@ function buildClassScore(
     penalty_points: p.penalty_points,
     penalty_reason: p.penalty_reason,
     total_score: p.finalScore,
+    early_start_seconds: p.pilotScore.earlyStartSeconds ?? null,
+    early_start_outcome: p.pilotScore.earlyStartOutcome ?? null,
+    jump_the_gun_penalty: p.pilotScore.jumpTheGunPenalty ?? null,
   }));
 
   return {
@@ -569,6 +580,9 @@ export async function computeTaskScore(
             speedSectionTime: base.speedSectionTime,
             sssTimeMs: base.sssTimeMs,
             essTimeMs: base.essTimeMs,
+            ...(base.earlyStartSeconds !== undefined
+              ? { earlyStartSeconds: base.earlyStartSeconds }
+              : {}),
             ...(leadingAggregate ? { leadingAggregate } : {}),
           };
           const put = kv.put(cacheKey, JSON.stringify(compact), {

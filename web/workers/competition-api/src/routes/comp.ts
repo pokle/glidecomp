@@ -102,6 +102,22 @@ function describeGapParamChanges(
         : "Disabled HG distance difficulty (pure linear distance points)",
     );
   }
+  // Jump-the-gun settings (S7F §12.2) directly change how HG early starts
+  // are penalised, so both knobs are individually audit-logged.
+  const oJtgX = o.jumpTheGunFactor ?? 2;
+  const nJtgX = n.jumpTheGunFactor ?? 2;
+  if (oJtgX !== nJtgX) {
+    out.push(
+      `Changed jump-the-gun penalty rate from 1 point per ${oJtgX} s early to 1 point per ${nJtgX} s early`
+    );
+  }
+  const oJtgY = o.jumpTheGunMaxSeconds ?? 300;
+  const nJtgY = n.jumpTheGunMaxSeconds ?? 300;
+  if (oJtgY !== nJtgY) {
+    out.push(
+      `Changed jump-the-gun limit from ${oJtgY} s to ${nJtgY} s early (beyond it, minimum distance)`
+    );
+  }
   return out;
 }
 

@@ -8,7 +8,7 @@
  */
 import { useEffect, useId, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { XCTask } from "@glidecomp/engine";
+import type { SSSConfig, XCTask } from "@glidecomp/engine";
 import { Button } from "@/react/ui/button";
 import {
   Dialog,
@@ -33,7 +33,7 @@ import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
-import { CheckboxField } from "../comp/fields";
+import { CheckboxField, SimpleSelect } from "../comp/fields";
 import { PilotStatusSection } from "../comp/PilotStatusSection";
 import { ScoresSection } from "../comp/ScoresSection";
 import { TrackSection } from "../comp/TrackSection";
@@ -56,6 +56,7 @@ export function TaskDetail() {
   const [replayAvailable, setReplayAvailable] = useState(false);
   const [canUploadOnBehalf, setCanUploadOnBehalf] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [gatesOpen, setGatesOpen] = useState(false);
 
   useEffect(() => {
     if (!compId || !taskId) {
@@ -210,7 +211,13 @@ export function TaskDetail() {
         </Button>
       ) : null}
 
-      <TurnpointsSection compId={compId} taskId={taskId} xctsk={task.xctsk} isAdmin={isAdmin} />
+      <TurnpointsSection
+        compId={compId}
+        taskId={taskId}
+        xctsk={task.xctsk}
+        isAdmin={isAdmin}
+        onEditStartGates={() => setGatesOpen(true)}
+      />
 
       <TrackSection
         compId={compId}
@@ -255,24 +262,76 @@ export function TaskDetail() {
           }}
         />
       ) : null}
+
+      {isAdmin && gatesOpen && task.xctsk ? (
+        <StartGatesDialog
+          compId={compId}
+          taskId={taskId}
+          xctsk={task.xctsk}
+          taskDate={task.task_date}
+          onClose={() => setGatesOpen(false)}
+          onSaved={() => {
+            setGatesOpen(false);
+            setRefresh((n) => n + 1);
+            setScoresRefresh((n) => n + 1);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
 
+/** "HH:MM:SSZ" / "HH:MM" (the xctsk gate format) → "HH:MM", or null. */
+function gateToHHMM(value: string): string | null {
+  const m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?Z?$/.exec(value.trim());
+  if (!m) return null;
+  return `${m[1].padStart(2, "0")}:${m[2]}`;
+}
+
+/** The task's real gates as "HH:MM" — drops the lone 00:00 placeholder. */
+function editableGates(sss: SSSConfig | undefined): string[] {
+  const gates = (sss?.timeGates ?? [])
+    .map(gateToHHMM)
+    .filter((g): g is string => g !== null);
+  // toXctskJSON writes a lone 00:00:00Z to satisfy the format's
+  // non-empty-gates rule; scoring ignores it, so the editor does too.
+  if (gates.length === 1 && gates[0] === "00:00") return [];
+  return gates;
+}
+
+/** One-line human summary of the start configuration. */
+function startConfigSummary(sss: SSSConfig): string {
+  const kind = sss.type === "ELAPSED-TIME" ? "Elapsed time" : "Race to goal";
+  const dir = sss.direction === "ENTER" ? "enter" : "exit";
+  const gates = editableGates(sss);
+  const gateStr =
+    sss.type === "ELAPSED-TIME"
+      ? gates.length > 0
+        ? ` · start opens ${gates[0]} UTC`
+        : ""
+      : gates.length > 0
+        ? ` · ${gates.length} start gate${gates.length === 1 ? "" : "s"}: ${gates.join(", ")} UTC`
+        : " · no start gates (pilots timed from their crossing)";
+  return `${kind} · ${dir} start${gateStr}`;
+}
+
 /**
  * Read-only turnpoint listing. The interactive route editor is only on the
- * vanilla task page — deliberate omission in the React port.
+ * vanilla task page — deliberate omission in the React port. Start-gate
+ * configuration, however, is editable here (admins) via a dialog.
  */
 function TurnpointsSection({
   compId,
   taskId,
   xctsk,
   isAdmin,
+  onEditStartGates,
 }: {
   compId: string;
   taskId: string;
   xctsk: XCTask | null;
   isAdmin: boolean;
+  onEditStartGates: () => void;
 }) {
   if (!xctsk && !isAdmin) return null;
   return (
@@ -302,6 +361,20 @@ function TurnpointsSection({
       ) : (
         <p className="mt-2 text-muted-foreground">No route defined yet</p>
       )}
+      {xctsk?.sss ? (
+        <p className="mt-2 text-sm text-muted-foreground">{startConfigSummary(xctsk.sss)}</p>
+      ) : null}
+      {isAdmin && xctsk ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-2"
+          onClick={onEditStartGates}
+        >
+          Start gates…
+        </Button>
+      ) : null}
       <p className="mt-2 text-sm text-muted-foreground">
         Route editing is available on the{" "}
         <a
@@ -313,6 +386,287 @@ function TurnpointsSection({
         .
       </p>
     </section>
+  );
+}
+
+/**
+ * Serialize a parsed XCTask back to the strict shape the API's xctsk
+ * validator accepts, with the given start (SSS) configuration swapped in.
+ * Picks only known fields so stray keys from older stored tasks can't
+ * fail the strict schema on the round-trip.
+ */
+function xctskWithSSS(task: XCTask, sss: SSSConfig): Record<string, unknown> {
+  return {
+    taskType: task.taskType || "CLASSIC",
+    version: task.version ?? 1,
+    ...(task.earthModel ? { earthModel: task.earthModel } : {}),
+    turnpoints: task.turnpoints.map((tp) => ({
+      ...(tp.type ? { type: tp.type } : {}),
+      radius: tp.radius,
+      waypoint: {
+        name: tp.waypoint.name,
+        ...(tp.waypoint.description !== undefined
+          ? { description: tp.waypoint.description }
+          : {}),
+        lat: tp.waypoint.lat,
+        lon: tp.waypoint.lon,
+        ...(tp.waypoint.altSmoothed !== undefined
+          ? { altSmoothed: tp.waypoint.altSmoothed }
+          : {}),
+      },
+    })),
+    ...(task.takeoff ? { takeoff: { ...task.takeoff } } : {}),
+    sss: {
+      type: sss.type,
+      direction: sss.direction,
+      ...(sss.timeGates && sss.timeGates.length > 0 ? { timeGates: sss.timeGates } : {}),
+    },
+    ...(task.goal ? { goal: { ...task.goal } } : {}),
+    ...(task.cylinderTolerance !== undefined
+      ? { cylinderTolerance: task.cylinderTolerance }
+      : {}),
+  };
+}
+
+/** Add minutes to an "HH:MM" time of day, wrapping at midnight. */
+function addMinutes(hhmm: string, minutes: number): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  const total = (((h * 60 + m + minutes) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Start-gate configuration dialog (S7F §6.3.3). Edits the task's SSS block —
+ * race vs elapsed time, start direction, and the list of gate times —
+ * and PATCHes the full xctsk back (the server audit-logs gate changes).
+ */
+function StartGatesDialog({
+  compId,
+  taskId,
+  xctsk,
+  taskDate,
+  onClose,
+  onSaved,
+}: {
+  compId: string;
+  taskId: string;
+  xctsk: XCTask;
+  taskDate: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [sssType, setSssType] = useState<SSSConfig["type"]>(xctsk.sss?.type ?? "RACE");
+  const [direction, setDirection] = useState<SSSConfig["direction"]>(
+    xctsk.sss?.direction ?? "EXIT"
+  );
+  const [gates, setGates] = useState<string[]>(() => editableGates(xctsk.sss));
+  const [genCount, setGenCount] = useState("4");
+  const [genInterval, setGenInterval] = useState("15");
+  const [saving, setSaving] = useState(false);
+
+  const hasSSSTurnpoint = xctsk.turnpoints.some((tp) => tp.type === "SSS");
+  const isRace = sssType === "RACE";
+
+  /** The viewer's local wall-clock for a UTC gate on the task date. */
+  function localPreview(hhmm: string): string | null {
+    const d = new Date(`${taskDate}T${hhmm}:00Z`);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function updateGate(index: number, value: string) {
+    setGates((prev) => prev.map((g, i) => (i === index ? value : g)));
+  }
+
+  function removeGate(index: number) {
+    setGates((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function addGate() {
+    setGates((prev) => {
+      const last = prev[prev.length - 1];
+      const interval = parseInt(genInterval, 10) || 15;
+      return [...prev, last ? addMinutes(last, interval) : "12:00"];
+    });
+  }
+
+  function generateSeries() {
+    const count = Math.min(Math.max(parseInt(genCount, 10) || 0, 1), 100);
+    const interval = parseInt(genInterval, 10) || 15;
+    setGates((prev) => {
+      const first = prev[0] ?? "12:00";
+      return Array.from({ length: count }, (_, i) => addMinutes(first, i * interval));
+    });
+  }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+
+    const cleaned = gates.map((g) => gateToHHMM(g)).filter((g): g is string => g !== null);
+    if (cleaned.length !== gates.length) {
+      toast.warning("Every gate needs a valid time");
+      return;
+    }
+    const sorted = [...new Set(cleaned)].sort();
+    const sss: SSSConfig = {
+      type: sssType,
+      direction,
+      ...(sorted.length > 0 ? { timeGates: sorted.map((g) => `${g}:00Z`) } : {}),
+    };
+
+    setSaving(true);
+    try {
+      const res = await api.api.comp[":comp_id"].task[":task_id"].$patch({
+        param: { comp_id: compId, task_id: taskId },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        json: { xctsk: xctskWithSSS(xctsk, sss) as any },
+      });
+
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        toast.error(err.error || "Failed to update start gates");
+        return;
+      }
+
+      onSaved();
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Start Gates</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={(e) => void save(e)} className="flex flex-col gap-4">
+          {!hasSSSTurnpoint ? (
+            <p className="text-sm text-amber-500">
+              ⚠ This task has no Start (SSS) turnpoint — set one in the route editor,
+              otherwise gates have no cylinder to apply to.
+            </p>
+          ) : null}
+
+          <div>
+            <h3 className="mb-1.5 text-sm font-medium">Start type</h3>
+            <SimpleSelect
+              value={sssType}
+              onChange={(v) => setSssType(v as SSSConfig["type"])}
+              options={[
+                { value: "RACE", label: "Race to goal — timed from a start gate" },
+                { value: "ELAPSED-TIME", label: "Elapsed time — timed from each pilot's crossing" },
+              ]}
+              ariaLabel="Start type"
+            />
+          </div>
+
+          <div>
+            <h3 className="mb-1.5 text-sm font-medium">Start direction</h3>
+            <SimpleSelect
+              value={direction}
+              onChange={(v) => setDirection(v as SSSConfig["direction"])}
+              options={[
+                { value: "EXIT", label: "Exit — cross outward (start cylinder around launch)" },
+                { value: "ENTER", label: "Enter — cross inward (start cylinder away from launch)" },
+              ]}
+              ariaLabel="Start direction"
+            />
+          </div>
+
+          <div>
+            <h3 className="text-sm font-medium">
+              {isRace ? "Start gates (UTC)" : "Start open (UTC)"}
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {isRace
+                ? "A pilot's start time is the last gate at or before their start crossing (FAI S7F §8.3.1). Starting before the first gate is an early start."
+                : "Elapsed-time pilots are timed from their actual start crossing; a gate only sets when the start opens."}
+            </p>
+            <ul className="mt-2 flex flex-col gap-2">
+              {gates.map((g, i) => (
+                <li key={i} className="flex items-center gap-2">
+                  <Input
+                    type="time"
+                    className="w-32"
+                    required
+                    aria-label={`Gate ${i + 1} time (UTC)`}
+                    value={g}
+                    onChange={(e) => updateGate(i, e.target.value)}
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    {localPreview(g) ? `≈ ${localPreview(g)} your time` : ""}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="ml-auto"
+                    onClick={() => removeGate(i)}
+                  >
+                    Remove
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            {isRace && gates.length === 0 ? (
+              <p className="mt-2 text-sm text-amber-500">
+                ⚠ No start gates — every pilot will be timed from their actual start
+                crossing, like an elapsed-time task.
+              </p>
+            ) : null}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={addGate}>
+                + Add gate
+              </Button>
+              {isRace ? (
+                <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={100}
+                    className="w-16"
+                    aria-label="Number of gates"
+                    value={genCount}
+                    onChange={(e) => setGenCount(e.target.value)}
+                  />
+                  gates every
+                  <Input
+                    type="number"
+                    min={1}
+                    max={720}
+                    className="w-16"
+                    aria-label="Gate interval (minutes)"
+                    value={genInterval}
+                    onChange={(e) => setGenInterval(e.target.value)}
+                  />
+                  min
+                  <Button type="button" variant="outline" size="sm" onClick={generateSeries}>
+                    Generate from first gate
+                  </Button>
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" />}>
+              Cancel
+            </DialogClose>
+            <Button type="submit" disabled={saving}>
+              {saving ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

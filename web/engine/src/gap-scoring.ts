@@ -17,6 +17,7 @@ import type { TurnpointSequenceResult, TurnpointReaching } from './turnpoint-seq
 import { resolveTurnpointSequence } from './turnpoint-sequence';
 import { getSSSIndex, getEffectiveSSSIndex, getEffectiveESSIndex } from './xctsk-parser';
 import { calculateOptimizedTaskDistance, getOptimizedSegmentDistances } from './task-optimizer';
+import { resolveStartGates } from './time-gates';
 import { andoyerDistance } from './geo';
 import { maxBy, minBy } from './array-utils';
 
@@ -73,6 +74,20 @@ export interface GAPParameters {
    * pure linear.
    */
   useDistanceDifficulty: boolean;
+  /**
+   * Hang-gliding "jump the gun" (FAI S7F §12.2): seconds of early start
+   * per 1 penalty point (the spec's X; default 2). Only applies to HG in
+   * gated races — a PG early starter is instead scored only for the
+   * launch→SSS distance.
+   */
+  jumpTheGunFactor: number;
+  /**
+   * Hang-gliding "jump the gun" (FAI S7F §12.2): maximum seconds a pilot
+   * may start early and still be scored for the complete flight (the
+   * spec's Y; default 300). Beyond this the pilot is scored for minimum
+   * distance only.
+   */
+  jumpTheGunMaxSeconds: number;
 }
 
 /** Leading coefficient variant — see {@link GAPParameters.leadingFormula}. */
@@ -94,6 +109,8 @@ export const DEFAULT_GAP_PARAMETERS: GAPParameters = {
   leadingFormula: 'weighted',
   distanceOrigin: 'takeoff',
   useDistanceDifficulty: true,
+  jumpTheGunFactor: 2,
+  jumpTheGunMaxSeconds: 300,
 };
 
 /**
@@ -173,6 +190,24 @@ export interface PilotScore {
   rank: number;
   /** Leading coefficient value */
   leadingCoefficient: number;
+  /**
+   * Seconds the pilot started before the first start gate (§12.2), when an
+   * early start was detected. Absent for normal starts.
+   */
+  earlyStartSeconds?: number;
+  /**
+   * How the early start reshaped the score (§12.2):
+   * - 'pg_launch_to_sss' — PG: scored only for the launch→SSS distance
+   * - 'hg_penalty' — HG within the limit: full flight scored, penalty applied
+   * - 'hg_min_distance' — HG beyond the limit: scored for minimum distance
+   */
+  earlyStartOutcome?: 'pg_launch_to_sss' | 'hg_penalty' | 'hg_min_distance';
+  /**
+   * Jump-the-gun penalty points deducted from the total (HG 'hg_penalty'
+   * outcome): earlyStartSeconds ÷ jumpTheGunFactor, with the total floored
+   * at the minimum-distance score rather than zero (§12.2).
+   */
+  jumpTheGunPenalty?: number;
   /** Underlying turnpoint sequence result for transparency */
   turnpointResult: TurnpointSequenceResult;
 }
@@ -944,12 +979,27 @@ export interface FlightScoringData {
   madeGoal: boolean;
   /** Whether the pilot reached End of Speed Section */
   reachedESS: boolean;
-  /** Speed section time in seconds, or null if ESS not reached */
+  /**
+   * Speed section time in seconds, or null if ESS not reached. In a gated
+   * race this is already gate-based (ESS time − start gate time, §8.7) —
+   * resolveTurnpointSequence computes it that way.
+   */
   speedSectionTime: number | null;
-  /** SSS reaching time (epoch ms), or null if the pilot never started */
+  /**
+   * SSS reaching time (epoch ms), or null if the pilot never started.
+   * Always the pilot's ACTUAL crossing (it anchors the leading-coefficient
+   * tracklog scan and places the gates on the right day); the gate-based
+   * official start time is already folded into speedSectionTime.
+   */
   sssTimeMs: number | null;
   /** ESS reaching time (epoch ms), or null if ESS not reached */
   essTimeMs: number | null;
+  /**
+   * Seconds the pilot started before the first start gate (§12.2 early
+   * start), when detected. Drives the sport-specific early-start scoring
+   * (PG launch→SSS clamp, HG jump-the-gun penalty).
+   */
+  earlyStartSeconds?: number;
   /**
    * Leading calculation input, needed only when useLeading is true. Provide
    * EITHER the precomputed {@link LeadingAggregate} (lets the backend cache the
@@ -990,6 +1040,9 @@ export function toFlightScoringData(
     speedSectionTime: result.speedSectionTime,
     sssTimeMs: result.sssReaching?.time.getTime() ?? null,
     essTimeMs: result.essReaching?.time.getTime() ?? null,
+    ...(result.earlyStart
+      ? { earlyStartSeconds: result.earlyStart.secondsEarly }
+      : {}),
     fixes: includeTrack ? pilot.fixes : undefined,
     sequence: includeTrack ? result.sequence : undefined,
   };
@@ -1021,9 +1074,54 @@ export function scoreFlights(
   const fullParams: GAPParameters = { ...DEFAULT_GAP_PARAMETERS, ...params };
   const actualNumPresent = numPresent ?? flights.length;
 
+  // Step 1: Early starts (FAI S7F §12.2) reshape a pilot's scoring inputs
+  // before any field aggregation:
+  // - PG: scored only for the launch→SSS distance; no time/leading/arrival.
+  // - HG within jumpTheGunMaxSeconds: complete flight scored; a penalty of
+  //   (seconds early ÷ jumpTheGunFactor) points is applied at the total,
+  //   floored at the minimum-distance score (not zero).
+  // - HG beyond the limit: scored for minimum distance only.
+  const sssClampIdx = Math.max(0, getEffectiveSSSIndex(scoringTask));
+  const earlyOutcomes: Array<PilotScoreCore['earlyStartOutcome']> = flights.map(f => {
+    if (!f.earlyStartSeconds || f.earlyStartSeconds <= 0) return undefined;
+    if (fullParams.scoring === 'PG') return 'pg_launch_to_sss';
+    return f.earlyStartSeconds > fullParams.jumpTheGunMaxSeconds
+      ? 'hg_min_distance'
+      : 'hg_penalty';
+  });
+  const anyNeutralized = earlyOutcomes.some(
+    o => o === 'pg_launch_to_sss' || o === 'hg_min_distance',
+  );
+  // Optimized launch→SSS distance — what a PG early starter is scored for.
+  // Under distanceOrigin 'start' the task is already trimmed to begin at
+  // the SSS, so this is 0 and the minimum-distance floor takes over.
+  let launchToSssMeters = 0;
+  if (anyNeutralized) {
+    const segs = getOptimizedSegmentDistances(scoringTask);
+    for (let i = 0; i < sssClampIdx; i++) launchToSssMeters += segs[i];
+  }
+  const effFlights: FlightScoringData[] = flights.map((f, i) => {
+    const outcome = earlyOutcomes[i];
+    if (outcome === 'pg_launch_to_sss' || outcome === 'hg_min_distance') {
+      return {
+        ...f,
+        flownDistance: outcome === 'pg_launch_to_sss'
+          ? Math.min(f.flownDistance, launchToSssMeters)
+          : 0, // → minimum-distance floor below
+        madeGoal: false,
+        reachedESS: false,
+        speedSectionTime: null,
+        // No valid start for time/leading/arrival purposes.
+        sssTimeMs: null,
+        essTimeMs: null,
+      };
+    }
+    return f;
+  });
+
   // Step 2: Gather aggregate statistics
   // Apply minimum distance floor and clamp negative distances
-  const scoredDistances = flights.map(f =>
+  const scoredDistances = effFlights.map(f =>
     applyMinimumDistance(f.flownDistance, fullParams.minimumDistance)
   );
   const bestDistance = scoredDistances.length > 0 ? maxBy(scoredDistances, d => d) : 0;
@@ -1034,16 +1132,16 @@ export function scoreFlights(
   const difficulty = useDifficulty
     ? calculateDistanceDifficulty(
         scoredDistances,
-        flights.map(f => f.madeGoal),
+        effFlights.map(f => f.madeGoal),
         fullParams.minimumDistance,
       )
     : null;
 
-  const numInGoal = flights.reduce((n, f) => n + (f.madeGoal ? 1 : 0), 0);
-  const numReachedESS = flights.reduce((n, f) => n + (f.reachedESS ? 1 : 0), 0);
+  const numInGoal = effFlights.reduce((n, f) => n + (f.madeGoal ? 1 : 0), 0);
+  const numReachedESS = effFlights.reduce((n, f) => n + (f.reachedESS ? 1 : 0), 0);
 
   // Best time: fastest speed section among goal pilots (PG) or ESS pilots (HG)
-  const validTimes = flights
+  const validTimes = effFlights
     .filter(f => (fullParams.scoring === 'PG' ? f.madeGoal : f.reachedESS))
     .map(f => f.speedSectionTime)
     .filter((t): t is number => t !== null && t > 0);
@@ -1089,17 +1187,30 @@ export function scoreFlights(
   let minLC = 0;
 
   if (fullParams.useLeading) {
-    const allSSSTimes = flights
+    const allSSSTimes = effFlights
       .map(f => f.sssTimeMs)
       .filter((t): t is number => t !== null);
-    const allESSTimes = flights
+    const allESSTimes = effFlights
       .map(f => f.essTimeMs)
       .filter((t): t is number => t !== null);
 
-    const taskFirstSSSTime = allSSSTimes.length > 0 ? minBy(allSSSTimes, t => t) : 0;
+    let taskFirstSSSTime = allSSSTimes.length > 0 ? minBy(allSSSTimes, t => t) : 0;
+    // §11.3.1: in a gated race the leading-coefficient time axis starts at
+    // the first start gate, not at the field's first actual crossing. Any
+    // pilot's crossing works as the day reference for the gate times.
+    if (allSSSTimes.length > 0) {
+      const gates = resolveStartGates(scoringTask, taskFirstSSSTime);
+      if (gates) taskFirstSSSTime = gates[0];
+    }
     const taskLastESSTime = allESSTimes.length > 0 ? maxBy(allESSTimes, t => t) : taskFirstSSSTime + 3600000;
 
-    leadingCoefficients = flights.map(f => {
+    leadingCoefficients = effFlights.map((f, idx) => {
+      // Early starters scored only for distance (§12.2) earn no leading
+      // points — their cached aggregate must not resurrect a coefficient.
+      const outcome = earlyOutcomes[idx];
+      if (outcome === 'pg_launch_to_sss' || outcome === 'hg_min_distance') {
+        return Infinity;
+      }
       // Prefer a precomputed aggregate (backend cache); otherwise scan the
       // tracklog now. Either way the field scalars fold in the same way.
       let agg = f.leadingAggregate;
@@ -1128,7 +1239,7 @@ export function scoreFlights(
   // Step 6: Determine ESS arrival order for HG arrival points (skip when not needed)
   const essPositionMap = new Map<number, number>();
   if (fullParams.scoring === 'HG' && fullParams.useArrival) {
-    flights
+    effFlights
       .map((f, idx) => ({ idx, time: f.essTimeMs }))
       .filter((entry): entry is { idx: number; time: number } => entry.time !== null)
       .sort((a, b) => a.time - b.time)
@@ -1137,8 +1248,23 @@ export function scoreFlights(
       });
   }
 
+  // §12.2 floor for the jump-the-gun penalty: the score a pilot would get
+  // for exactly the minimum distance (distance points only) — the penalty
+  // never drops a pilot below it, unlike the generic §12.4 zero floor.
+  const anyJtgPenalty = earlyOutcomes.some(o => o === 'hg_penalty');
+  const scoreForMinDistance = anyJtgPenalty
+    ? (difficulty
+        ? calculateDistancePointsHG(
+            fullParams.minimumDistance, bestDistance,
+            availablePoints.distance, difficulty, false,
+          ).total
+        : calculateDistancePoints(
+            fullParams.minimumDistance, bestDistance, availablePoints.distance,
+          ))
+    : 0;
+
   // Step 7: Score each pilot
-  const pilotScores: PilotScoreCore[] = flights.map((f, idx) => {
+  const pilotScores: PilotScoreCore[] = effFlights.map((f, idx) => {
     const pilotScoredDistance = scoredDistances[idx];
 
     const distScore: DistanceScore = difficulty
@@ -1170,7 +1296,16 @@ export function scoreFlights(
       ? calculateArrivalPoints(position, numReachedESS, availablePoints.arrival)
       : 0;
 
-    const total = Math.round(distPts + timePts + leadPts + arrPts);
+    // Jump the gun (§12.2, HG within the limit): 1 point per
+    // jumpTheGunFactor seconds early, floored at the minimum-distance score.
+    const outcome = earlyOutcomes[idx];
+    const jtgPenalty = outcome === 'hg_penalty' && f.earlyStartSeconds
+      ? f.earlyStartSeconds / fullParams.jumpTheGunFactor
+      : 0;
+    const rawTotal = distPts + timePts + leadPts + arrPts;
+    const total = Math.round(
+      jtgPenalty > 0 ? Math.max(rawTotal - jtgPenalty, scoreForMinDistance) : rawTotal,
+    );
 
     return {
       pilotName: f.pilotName,
@@ -1188,6 +1323,13 @@ export function scoreFlights(
       totalScore: total,
       rank: 0, // assigned after sorting
       leadingCoefficient: leadingCoefficients[idx],
+      ...(f.earlyStartSeconds && f.earlyStartSeconds > 0
+        ? { earlyStartSeconds: f.earlyStartSeconds }
+        : {}),
+      ...(outcome ? { earlyStartOutcome: outcome } : {}),
+      ...(jtgPenalty > 0
+        ? { jumpTheGunPenalty: Math.round(jtgPenalty * 10) / 10 }
+        : {}),
     };
   });
 

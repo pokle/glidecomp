@@ -111,19 +111,39 @@ describe('AirScore parity — Corryong Cup 2026 T1', () => {
     expect(carrLinear.distanceDifficultyPoints).toBe(0);
   });
 
-  it('time points track AirScore for the leading goal finishers (gap2020+ 5/6)', () => {
+  it('time points match AirScore for every ESS pilot (start gates + gap2020+ 5/6)', () => {
     const r = scoreTask(task, pilots, { ...baseParams, useLeading: false });
-    const byName = new Map(r.pilotScores.map((p) => [p.pilotName, p]));
-    // The 5/6 speed formula puts the top goal pilots within a handful of
-    // points of AirScore (vs ~30+ off under the old 2/3 + sqrt-bug form).
-    // A residual remains for slower pilots because this task uses interval
-    // start gates and our speed-section time differs there — a separate,
-    // out-of-scope pipeline detail.
-    for (const surname of ['holtkamp', 'burkitt', 'opsanger']) {
-      const ours = byName.get(surname)!;
-      const ref = refBySurname.get(surname)!;
-      expect(Math.abs(ours.timePoints - ref.timePts)).toBeLessThan(20);
+    // This task is a gated race (8 gates every 15 min). With speed-section
+    // times running from each pilot's start gate (S7F §8.3.1/§8.7), every
+    // ESS pilot's time points land within 0.2 of AirScore's published
+    // numbers — before gate support this needed a 20-point tolerance.
+    let checked = 0;
+    for (const p of r.pilotScores) {
+      if (!p.reachedESS) continue;
+      const ref = refBySurname.get(p.pilotName);
+      if (!ref) continue;
+      expect(Math.abs(p.timePoints - ref.timePts)).toBeLessThan(0.2);
+      checked++;
     }
+    expect(checked).toBe(12);
+  });
+
+  it('every pilot takes the same start gate AirScore assigned', () => {
+    const r = scoreTask(task, pilots, { ...baseParams, useLeading: false });
+    // AirScore publishes local start times (UTC+11): 14:45 → 03:45Z (gate 2),
+    // 15:00 → 04:00Z (gate 3), 15:30 → 04:30Z (gate 5).
+    let checked = 0;
+    for (const p of r.pilotScores) {
+      const ref = refBySurname.get(p.pilotName);
+      if (!ref?.start) continue;
+      const gate = p.turnpointResult.startGate;
+      expect(gate).toBeDefined();
+      const [hh, mm] = ref.start.split(':').map(Number);
+      const utc = `${String((hh - 11 + 24) % 24).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00`;
+      expect(gate!.time.toISOString().slice(11, 19)).toBe(utc);
+      checked++;
+    }
+    expect(checked).toBeGreaterThanOrEqual(12);
   });
 
   it('distance origin: take-off matches AirScore; start excludes the launch leg', () => {

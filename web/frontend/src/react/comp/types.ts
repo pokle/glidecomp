@@ -104,6 +104,12 @@ export interface PilotScoreEntry {
   penalty_points: number;
   penalty_reason: string | null;
   total_score: number;
+  /** Seconds started before the first start gate (S7F §12.2), when early. */
+  early_start_seconds?: number | null;
+  /** How the early start reshaped the score. */
+  early_start_outcome?: "pg_launch_to_sss" | "hg_penalty" | "hg_min_distance" | null;
+  /** Automatic jump-the-gun penalty points deducted (HG early starts). */
+  jump_the_gun_penalty?: number | null;
 }
 
 export interface ClassScore {
