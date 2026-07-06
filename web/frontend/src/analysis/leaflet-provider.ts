@@ -96,7 +96,11 @@ function createLeafletControlButton(opts: {
 /**
  * Create a Leaflet map provider
  */
-export function createLeafletProvider(container: HTMLElement): Promise<MapProvider> {
+export function createLeafletProvider(
+  container: HTMLElement,
+  options: import('./map-provider').MapProviderOptions = {},
+): Promise<MapProvider> {
+  const appControls = options.appControls ?? true;
   return new Promise((resolve, reject) => {
     try {
       // Saved map location
@@ -139,11 +143,13 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
       innerHTML: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></svg><span class="mapctl-label" style="font-size:13px;font-weight:500;margin-left:4px;">Analysis</span>`,
       onClick: () => panelToggleCallback?.(),
     });
-    panelToggleCtrl.addTo(map);
-    // Grab the button element for highlighting
-    panelToggleBtn = (panelToggleCtrl as unknown as { getContainer(): HTMLElement }).getContainer?.()?.querySelector('a') ?? null;
-    if (panelToggleBtn) {
-      panelToggleBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:auto;height:36px;padding:0 10px;white-space:nowrap;color:#333;';
+    if (appControls) {
+      panelToggleCtrl.addTo(map);
+      // Grab the button element for highlighting
+      panelToggleBtn = (panelToggleCtrl as unknown as { getContainer(): HTMLElement }).getContainer?.()?.querySelector('a') ?? null;
+      if (panelToggleBtn) {
+        panelToggleBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:auto;height:36px;padding:0 10px;white-space:nowrap;color:#333;';
+      }
     }
 
     // Menu button control (top-left, added first so it's topmost)
@@ -156,10 +162,13 @@ export function createLeafletProvider(container: HTMLElement): Promise<MapProvid
       innerHTML: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg><span class="mapctl-label" style="font-size:13px;font-weight:500;margin-left:4px;">Menu</span><kbd class="mapctl-label" style="font-size:11px;margin-left:4px;padding:1px 5px;border-radius:3px;background:rgba(0,0,0,0.08);opacity:0.6;font-family:inherit;">${kbdHint}</kbd>`,
       onClick: () => menuButtonCallback?.(),
     });
-    menuCtrl.addTo(map);
-    const menuBtn = (menuCtrl as unknown as { getContainer(): HTMLElement }).getContainer?.()?.querySelector('a');
-    if (menuBtn) {
-      menuBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:auto;height:36px;padding:0 10px;white-space:nowrap;color:#333;';
+    let menuBtn: HTMLElement | null = null;
+    if (appControls) {
+      menuCtrl.addTo(map);
+      menuBtn = (menuCtrl as unknown as { getContainer(): HTMLElement }).getContainer?.()?.querySelector('a') ?? null;
+      if (menuBtn) {
+        menuBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:auto;height:36px;padding:0 10px;white-space:nowrap;color:#333;';
+      }
     }
 
     // Zoom control (top-left, below menu button)

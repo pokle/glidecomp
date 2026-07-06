@@ -18,6 +18,7 @@ import { Onboarding } from "./pages/Onboarding";
 import { Competitions } from "./pages/Competitions";
 import { CompDetail } from "./pages/CompDetail";
 import { TaskDetail } from "./pages/TaskDetail";
+import { PilotScoreDetail } from "./pages/PilotScoreDetail";
 import { Scores } from "./pages/Scores";
 import { Settings } from "./pages/Settings";
 import { AdminUsers } from "./pages/AdminUsers";
@@ -60,6 +61,10 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/comp" element={<Competitions />} />
                 <Route path="/comp/:compId" element={<CompDetail />} />
                 <Route path="/comp/:compId/task/:taskId" element={<TaskDetail />} />
+                <Route
+                  path="/comp/:compId/task/:taskId/pilot/:pilotId"
+                  element={<PilotScoreDetail />}
+                />
                 <Route path="/scores" element={<Scores />} />
                 {/* "My Profile" merged into Settings; keep the old path working. */}
                 <Route path="/profile" element={<Navigate to="/settings" replace />} />

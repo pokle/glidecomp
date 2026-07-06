@@ -57,7 +57,11 @@ function updateGeoJSONSource(
 /**
  * Create a MapBox map provider
  */
-export function createMapBoxProvider(container: HTMLElement): Promise<MapProvider> {
+export function createMapBoxProvider(
+  container: HTMLElement,
+  options: import('./map-provider').MapProviderOptions = {},
+): Promise<MapProvider> {
+  const appControls = options.appControls ?? true;
   return new Promise((resolve, reject) => {
     try {
       // Get saved or default style
@@ -843,7 +847,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           panelToggleBtn = null;
         }
       }
-      map.addControl(new PanelToggleControl(), 'top-right');
+      if (appControls) map.addControl(new PanelToggleControl(), 'top-right');
 
       // Navigation controls (top-right, below panel toggle)
       map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }));
@@ -892,7 +896,7 @@ export function createMapBoxProvider(container: HTMLElement): Promise<MapProvide
           menuButtonContainer = null;
         }
       }
-      map.addControl(new MenuButtonControl(), 'top-left');
+      if (appControls) map.addControl(new MenuButtonControl(), 'top-left');
 
       // Style selector control (top-left, below menu button)
       class MapBoxStyleControl implements mapboxgl.IControl {
