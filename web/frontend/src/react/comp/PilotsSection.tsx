@@ -3,12 +3,14 @@
  * src/comp/pilots-section.ts.
  *
  * Renders a read-only table of registered pilots and — for admins — an Edit
- * dialog: a plain table where every cell is an input (class is a select
- * limited to the comp's classes) with CSV import/export. All mutations
- * funnel through POST /api/comp/:comp_id/pilot/bulk.
+ * dialog: a Tabulator editable grid (frozen name column, fixed header,
+ * spreadsheet-style cells, class as a list editor limited to the comp's
+ * classes) with CSV import/export. All mutations funnel through
+ * POST /api/comp/:comp_id/pilot/bulk.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
 import { Button } from "@/react/ui/button";
 import {
   Dialog,
@@ -18,7 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/react/ui/dialog";
-import { Input } from "@/react/ui/input";
 import {
   Table,
   TableBody,
@@ -43,12 +44,6 @@ import {
   type CompPilot,
   type ParsedRow,
 } from "./csv";
-import { SimpleSelect } from "./fields";
-
-interface EditRow extends ParsedRow {
-  /** Stable React key — comp_pilot_id is absent for new rows. */
-  rowId: number;
-}
 
 export function PilotsSection({
   compId,
@@ -169,6 +164,50 @@ export function PilotsSection({
   );
 }
 
+/**
+ * Tabulator column definitions: a frozen remove button, then one editable
+ * column per CSV column. The class column is a list editor limited to the
+ * comp's classes; the name column is frozen so horizontal scrolling never
+ * loses track of whose row is being edited.
+ */
+function gridColumns(compClasses: string[]): ColumnDefinition[] {
+  const remove: ColumnDefinition = {
+    title: "",
+    width: 36,
+    hozAlign: "center",
+    headerSort: false,
+    frozen: true,
+    formatter: () =>
+      '<span class="text-muted-foreground cursor-pointer" title="Remove pilot">✕</span>',
+    cellClick: (_e: UIEvent, cell: CellComponent) => {
+      cell.getRow().delete();
+    },
+  };
+
+  const dataCols = COLUMNS.map((c): ColumnDefinition => {
+    const def: ColumnDefinition = {
+      title: c.header,
+      field: c.key,
+      editor: "input",
+      // Select the existing value on edit so typing replaces it (matches
+      // spreadsheet behaviour; without this, mobile taps append text).
+      editorParams: { selectContents: true },
+      minWidth: 90,
+    };
+    if (c.key === "name") {
+      def.frozen = true;
+      def.minWidth = 140;
+    }
+    if (c.key === "pilot_class") {
+      def.editor = "list";
+      def.editorParams = { values: compClasses };
+    }
+    return def;
+  });
+
+  return [remove, ...dataCols];
+}
+
 function EditPilotsDialog({
   compId,
   compName,
@@ -184,28 +223,57 @@ function EditPilotsDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const nextId = useRef(0);
-  const newRowId = () => nextId.current++;
-  const [rows, setRows] = useState<EditRow[]>(() =>
-    pilots.map((p) => ({ ...pilotToRow(p), rowId: newRowId() }))
-  );
+  const gridRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<Tabulator | null>(null);
+  const [gridReady, setGridReady] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
-  function updateRow(rowId: number, key: keyof ParsedRow, value: string) {
-    setRows((prev) =>
-      prev.map((r) => (r.rowId === rowId ? { ...r, [key]: value } : r))
-    );
+  useEffect(() => {
+    let cancelled = false;
+    let table: Tabulator | null = null;
+    void (async () => {
+      // Tabulator is admin-only, so it's lazy-loaded to keep it (and its
+      // CSS) out of the comp-detail chunk every visitor downloads.
+      const [{ TabulatorFull }] = await Promise.all([
+        import("tabulator-tables"),
+        import("tabulator-tables/dist/css/tabulator_simple.min.css"),
+        import("./pilots-grid.css"),
+      ]);
+      if (cancelled || !gridRef.current) return;
+      table = new TabulatorFull(gridRef.current, {
+        data: pilots.map(pilotToRow),
+        columns: gridColumns(compClasses),
+        layout: "fitDataStretch",
+        height: "100%",
+        placeholder: "No pilots yet — use Add row, or Import CSV",
+        // Editor popups (class list) must render inside the modal dialog,
+        // otherwise the dialog paints over them.
+        popupContainer: "#pilots-edit-dialog",
+      });
+      table.on("tableBuilt", () => {
+        if (!cancelled) setGridReady(true);
+      });
+      tableRef.current = table;
+    })();
+    return () => {
+      cancelled = true;
+      table?.destroy();
+      tableRef.current = null;
+    };
+  }, [pilots, compClasses]);
+
+  /** Current grid contents, normalised (trimmed, empty optionals → null). */
+  function gridRows(): ParsedRow[] {
+    const table = tableRef.current;
+    if (!table) return [];
+    return (table.getData() as ParsedRow[]).map(normalizeRow);
   }
 
   function addRow() {
-    setRows((prev) => [...prev, { ...emptyRow(compClasses), rowId: newRowId() }]);
-  }
-
-  function removeRow(rowId: number) {
-    setRows((prev) => prev.filter((r) => r.rowId !== rowId));
+    void tableRef.current?.addRow(emptyRow(compClasses));
   }
 
   async function importCsv(input: HTMLInputElement) {
@@ -222,13 +290,12 @@ function EditPilotsDialog({
     }
 
     const classified = classifyImportRows(result.rows, pilots);
-    const imported: EditRow[] = classified.map((cr) => ({
-      ...(cr.action === "match" && cr.matchedId
+    const imported: ParsedRow[] = classified.map((cr) =>
+      cr.action === "match" && cr.matchedId
         ? { ...cr.parsed, comp_pilot_id: cr.matchedId }
-        : cr.parsed),
-      rowId: newRowId(),
-    }));
-    setRows(imported);
+        : cr.parsed
+    );
+    await tableRef.current?.setData(imported);
 
     const matched = classified.filter((cr) => cr.action === "match").length;
     setStatus(
@@ -242,13 +309,13 @@ function EditPilotsDialog({
   function exportCsv() {
     downloadFile(
       `pilots-${slugify(compName)}.csv`,
-      exportCsvContent(rows.map(normalizeRow)),
+      exportCsvContent(gridRows()),
       "text/csv;charset=utf-8"
     );
   }
 
   async function save() {
-    const { payload, errors: validationErrors } = validateRows(rows, compClasses);
+    const { payload, errors: validationErrors } = validateRows(gridRows(), compClasses);
     if (validationErrors.length > 0) {
       setErrors(validationErrors);
       return;
@@ -286,66 +353,22 @@ function EditPilotsDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-6xl">
+      <DialogContent
+        id="pilots-edit-dialog"
+        className="flex h-[min(700px,85vh)] flex-col sm:max-w-6xl"
+      >
         <DialogHeader>
           <DialogTitle>Edit pilots</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Edit any cell directly. Rows without a name are ignored on save.
+          Tap a cell to edit. Rows without a name are ignored on save.
         </p>
 
-        <div className="max-h-[60vh] overflow-y-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>
-                  <span>Remove</span>
-                </TableHead>
-                {COLUMNS.map((c) => (
-                  <TableHead key={c.key}>{c.header}</TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow key={row.rowId}>
-                  <TableCell>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      title="Remove pilot"
-                      onClick={() => removeRow(row.rowId)}
-                    >
-                      ✕
-                    </Button>
-                  </TableCell>
-                  {COLUMNS.map((c) =>
-                    c.key === "pilot_class" ? (
-                      <TableCell key={c.key}>
-                        <SimpleSelect
-                          value={row.pilot_class}
-                          onChange={(v) => updateRow(row.rowId, "pilot_class", v)}
-                          options={compClasses.map((cls) => ({ value: cls, label: cls }))}
-                          ariaLabel="Pilot class"
-                        />
-                      </TableCell>
-                    ) : (
-                      <TableCell key={c.key}>
-                        <Input
-                          className="h-7 min-w-24"
-                          value={row[c.key] ?? ""}
-                          aria-label={c.header}
-                          onChange={(e) => updateRow(row.rowId, c.key, e.target.value)}
-                        />
-                      </TableCell>
-                    )
-                  )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <div
+          ref={gridRef}
+          id="pilots-grid"
+          className="min-h-0 flex-1 rounded border border-border"
+        />
 
         {status ? <p className="text-sm text-muted-foreground">{status}</p> : null}
         {shownErrors.length > 0 ? (
@@ -359,20 +382,27 @@ function EditPilotsDialog({
         <p className="text-sm text-muted-foreground">
           Need a sporting body ID column not listed?{" "}
           <a className="underline underline-offset-4" href="mailto:tushar.pokle@gmail.com">
-            Contact us
+            Contact me
           </a>
           .
         </p>
 
         <DialogFooter>
           <div className="flex gap-2 sm:mr-auto">
-            <Button type="button" variant="outline" size="sm" onClick={addRow}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!gridReady}
+              onClick={addRow}
+            >
               Add row
             </Button>
             <Button
               type="button"
               variant="outline"
               size="sm"
+              disabled={!gridReady}
               onClick={() => importInputRef.current?.click()}
             >
               Import CSV
@@ -384,14 +414,24 @@ function EditPilotsDialog({
               hidden
               onChange={(e) => void importCsv(e.currentTarget)}
             />
-            <Button type="button" variant="outline" size="sm" onClick={exportCsv}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!gridReady}
+              onClick={exportCsv}
+            >
               Export CSV
             </Button>
           </div>
           <DialogClose render={<Button type="button" variant="outline" />}>
             Cancel
           </DialogClose>
-          <Button type="button" disabled={saving} onClick={() => void save()}>
+          <Button
+            type="button"
+            disabled={saving || !gridReady}
+            onClick={() => void save()}
+          >
             {saving ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
