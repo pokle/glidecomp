@@ -154,7 +154,7 @@ All components operate within Cloudflare's free tier for typical competition usa
 Planned but **not yet implemented**:
 
 - **Email submission** — pilots email IGC files to `submit@{domain}`; an Email Worker archives, validates, and links submissions to pilots. Full design (workflow, dedup, submission states): [docs/email-submission-spec.md](email-submission-spec.md).
-- **SSR public pages** — server-render the public competition/score pages for SEO: [docs/ssr-public-pages-plan.md](ssr-public-pages-plan.md).
+- **SSR public pages** — server-render the public competition/score pages for SEO: [docs/2026-07-06-ssr-public-pages-plan.md](2026-07-06-ssr-public-pages-plan.md).
 - **Live tracking** — integration with live tracking services during competition.
 - **Multi-tenant** — richer support for multiple competition organizers (today any user can create a comp and add co-admins; super-admin is a hardcoded allowlist).
 - **XContest integration** — import tasks directly from XContest.

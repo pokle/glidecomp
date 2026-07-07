@@ -3,7 +3,7 @@
 **Date:** 2026-07-07
 **Status:** implemented (see "Implementation notes" at the end; supersedes
 the KV `latest`-pointer draft of this doc)
-**Companion to:** [ssr-public-pages-plan.md](./ssr-public-pages-plan.md)
+**Companion to:** [2026-07-06-ssr-public-pages-plan.md](./2026-07-06-ssr-public-pages-plan.md)
 
 ## Principle
 
