@@ -104,16 +104,16 @@ describe("formatComputedAt", () => {
     expect(out).toMatch(/GMT\+10|AEST/);
   });
 
-  test("falls back to UTC when the comp has no timezone", () => {
-    const out = formatComputedAt(iso, null);
-    expect(out).toContain("7 Jul 2026");
-    expect(out).toContain("14:32");
-    expect(out).toMatch(/UTC|GMT(?!\+)/);
+  test("falls back to the viewer's local timezone when the comp has no timezone", () => {
+    const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    // null → the runtime default zone, i.e. identical to naming the local zone.
+    expect(formatComputedAt(iso, null)).toBe(formatComputedAt(iso, localZone));
+    expect(formatComputedAt(iso, null)).toContain("2026");
   });
 
-  test("falls back to UTC on an unknown IANA zone instead of throwing", () => {
-    const out = formatComputedAt(iso, "Not/AZone");
-    expect(out).toContain("7 Jul 2026");
-    expect(out).toContain("14:32");
+  test("falls back to the viewer's local timezone on an unknown IANA zone instead of throwing", () => {
+    const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(() => formatComputedAt(iso, "Not/AZone")).not.toThrow();
+    expect(formatComputedAt(iso, "Not/AZone")).toBe(formatComputedAt(iso, localZone));
   });
 });

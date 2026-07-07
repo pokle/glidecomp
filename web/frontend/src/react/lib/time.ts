@@ -135,10 +135,15 @@ export function formatTimeInZone(d: Date, timeZone?: string): string {
 }
 
 /**
- * Absolute "scores computed at" stamp in the comp's timezone (UTC when
- * unset) with a fixed locale — deterministic output, per the SSR plan's
- * no-relative-times rule, e.g. "7 Jul 2026, 14:32 UTC". An unknown IANA
- * zone in comp settings falls back to UTC rather than throwing.
+ * Absolute "scores computed at" stamp with a fixed locale — e.g.
+ * "7 Jul 2026, 14:32 AEST". Rendered in the comp's timezone when it has one
+ * (so it lines up with the page's other comp-local times); with no comp
+ * timezone set it falls back to the viewer's own local zone rather than UTC,
+ * since a "when were these computed" freshness stamp reads most naturally in
+ * the reader's wall clock. An unknown IANA zone in comp settings also falls
+ * back to the viewer's local zone instead of throwing. Always absolute (never
+ * a relative "2 min ago") per the SSR plan's hydration rule; the viewer-local
+ * fallback resolves in the browser, which is correct on today's SPA path.
  */
 export function formatComputedAt(iso: string, timezone: string | null): string {
   const date = new Date(iso);
@@ -151,8 +156,9 @@ export function formatComputedAt(iso: string, timezone: string | null): string {
     timeZoneName: "short",
   };
   try {
-    return date.toLocaleString("en-GB", { ...opts, timeZone: timezone ?? "UTC" });
+    // `timeZone: undefined` → the runtime default, i.e. the viewer's local zone.
+    return date.toLocaleString("en-GB", { ...opts, timeZone: timezone ?? undefined });
   } catch {
-    return date.toLocaleString("en-GB", { ...opts, timeZone: "UTC" });
+    return date.toLocaleString("en-GB", opts);
   }
 }
