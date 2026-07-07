@@ -3,7 +3,7 @@ import {
   formatTimeInZone,
   utcToZonedHHMM,
   zonedToUtcHHMM,
-  zoneAbbreviation,
+  zoneNameWithOffset,
 } from "./time";
 
 const MEL = "Australia/Melbourne";
@@ -57,18 +57,24 @@ describe("zonedToUtcHHMM", () => {
   });
 });
 
-describe("zoneAbbreviation", () => {
-  test("labels the zone at the reference date (DST-aware)", () => {
-    expect(zoneAbbreviation(new Date("2026-07-07T00:00:00Z"), MEL)).toMatch(
-      /AEST|GMT\+10/
+describe("zoneNameWithOffset", () => {
+  test("shows the zone name with the offset in force at the reference date", () => {
+    expect(zoneNameWithOffset(new Date("2026-07-07T00:00:00Z"), MEL)).toBe(
+      "Australia/Melbourne (GMT+10)"
     );
-    expect(zoneAbbreviation(new Date("2026-02-07T00:00:00Z"), MEL)).toMatch(
-      /AEDT|GMT\+11/
+    expect(zoneNameWithOffset(new Date("2026-02-07T00:00:00Z"), MEL)).toBe(
+      "Australia/Melbourne (GMT+11)"
     );
   });
 
-  test("falls back to 'local' for unknown zones", () => {
-    expect(zoneAbbreviation(new Date(), "Not/AZone")).toBe("local");
+  test("uses the viewer's zone when none is given", () => {
+    const label = zoneNameWithOffset(new Date("2026-02-07T00:00:00Z"));
+    expect(label).toContain(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    expect(label).toMatch(/\(GMT[+-]?[\d:]*\)$/);
+  });
+
+  test("falls back to the bare name for unknown zones", () => {
+    expect(zoneNameWithOffset(new Date(), "Not/AZone")).toBe("Not/AZone");
   });
 });
 

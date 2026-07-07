@@ -102,20 +102,22 @@ export function zonedToUtcHHMM(
 }
 
 /**
- * Short zone label for display next to times — "AEST", "GMT+11", or the
- * viewer's zone when `timeZone` is undefined. Computed at `refDate` so the
- * DST offset matches the comp date. Falls back to "local" when the zone is
- * unknown to the runtime.
+ * Zone label for display next to times: the IANA name plus its UTC offset
+ * at `refDate` — "Australia/Melbourne (GMT+11)" — so the DST offset matches
+ * the comp date. Uses the viewer's zone when `timeZone` is undefined. Falls
+ * back to the bare name (or "local") when the zone is unknown to the runtime.
  */
-export function zoneAbbreviation(refDate: Date, timeZone?: string): string {
+export function zoneNameWithOffset(refDate: Date, timeZone?: string): string {
   try {
-    const parts = new Intl.DateTimeFormat(undefined, {
-      timeZoneName: "short",
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZoneName: "shortOffset",
       timeZone,
     }).formatToParts(refDate);
-    return parts.find((p) => p.type === "timeZoneName")?.value ?? "local";
+    const offset = parts.find((p) => p.type === "timeZoneName")?.value;
+    const name = timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return offset ? `${name} (${offset})` : name;
   } catch {
-    return "local";
+    return timeZone ?? "local";
   }
 }
 
