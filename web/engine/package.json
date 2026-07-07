@@ -7,15 +7,20 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./timezone": {
+      "types": "./src/timezone.ts",
+      "default": "./src/timezone.ts"
     }
   },
   "dependencies": {
     "@turf/bbox": "^7.3.5",
     "@turf/bearing": "^7.3.5",
-    "@turf/helpers": "^7.3.5"
+    "@turf/helpers": "^7.3.5",
+    "tz-lookup": "^6.1.25"
   },
   "devDependencies": {
     "@glidecomp/samples": "workspace:*",
-    "geo-tz": "^8.1.7"
+    "@types/tz-lookup": "^6.1.2"
   }
 }

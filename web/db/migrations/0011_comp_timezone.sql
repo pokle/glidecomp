@@ -1,0 +1,12 @@
+-- Competition-local timezone (#269, #274).
+--
+-- comp.timezone holds the competition's IANA zone name (e.g.
+-- "Australia/Melbourne"). It is purely presentational — gates, fixes and
+-- all scoring run on UTC — and is used to display comp-local times in the
+-- start-gate editor, task page, score analysis, and the 3D replay clock.
+--
+-- NULL means "not set yet": the competition-api derives the zone from the
+-- task's turnpoint coordinates the first time a route is saved, and an
+-- organizer can override it in Competition Settings. The value is validated
+-- as an IANA name in the app layer (validators.ts).
+ALTER TABLE comp ADD COLUMN timezone TEXT;

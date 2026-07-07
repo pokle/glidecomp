@@ -37,6 +37,12 @@ export interface CompDetailData {
   default_pilot_class: string;
   gap_params: CompGapParams | null;
   scoring_format: ScoringFormat;
+  /**
+   * Comp-local IANA zone (e.g. "Australia/Melbourne") for displaying times;
+   * scoring runs on UTC regardless. Null until the first saved route derives
+   * it from the task location (or an organizer sets it in Settings).
+   */
+  timezone: string | null;
   open_igc_upload: boolean;
   pilot_statuses: PilotStatusConfig[];
   tasks: TaskSummary[];

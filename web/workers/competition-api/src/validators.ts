@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidTimezone } from "@glidecomp/engine/timezone";
 
 const MAX_TEXT = 128;
 
@@ -70,6 +71,17 @@ const gapParamsSchema = z
   })
   .strict();
 
+// Competition-local timezone — see migration 0011. Anything the runtime's
+// Intl accepts (IANA names like "Australia/Melbourne"); null clears the
+// setting so the server re-derives it from the task location.
+export const timezoneSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .refine(isValidTimezone, {
+    message: "Must be a valid timezone name (e.g. Australia/Melbourne)",
+  });
+
 // Competition scoring format — see migration 0009. "gap" is the default
 // CIVL GAP scoring (driven by gap_params); "open_distance" scores each pilot
 // by the metres of open distance flown from the take-off exit.
@@ -84,6 +96,7 @@ export const createCompSchema = z.object({
   default_pilot_class: pilotClassString.optional(),
   gap_params: gapParamsSchema.nullable().optional(),
   scoring_format: scoringFormatSchema.optional(),
+  timezone: timezoneSchema.nullable().optional(),
 });
 
 export const updateCompSchema = z.object({
@@ -95,6 +108,7 @@ export const updateCompSchema = z.object({
   default_pilot_class: pilotClassString.optional(),
   gap_params: gapParamsSchema.nullable().optional(),
   scoring_format: scoringFormatSchema.optional(),
+  timezone: timezoneSchema.nullable().optional(),
   open_igc_upload: z.boolean().optional(),
   admin_emails: z.array(z.string().email().max(MAX_TEXT)).min(1).optional(),
   pilot_statuses: pilotStatusesArray.optional(),

@@ -9,6 +9,7 @@ import { createCompSchema, updateCompSchema } from "../validators";
 import { audit, describeChange } from "../audit";
 import { speedSectionTypeWarnings } from "../xctsk-summary";
 import { DEFAULT_GAP_PARAMETERS, type GAPParameters } from "@glidecomp/engine";
+import { timezoneForXctsk } from "@glidecomp/engine/timezone";
 
 type Variables = {
   user: AuthUser;
@@ -198,8 +199,8 @@ export const compRoutes = new Hono<HonoEnv>()
       const scoringFormat = body.scoring_format ?? "gap";
 
       const compResult = await c.env.DB.prepare(
-        `INSERT INTO comp (name, creation_date, close_date, category, test, pilot_classes, default_pilot_class, gap_params, scoring_format, pilot_statuses)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO comp (name, creation_date, close_date, category, test, pilot_classes, default_pilot_class, gap_params, scoring_format, timezone, pilot_statuses)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
         .bind(
           body.name,
@@ -211,6 +212,7 @@ export const compRoutes = new Hono<HonoEnv>()
           defaultClass,
           body.gap_params ? JSON.stringify(body.gap_params) : null,
           scoringFormat,
+          body.timezone ?? null,
           JSON.stringify(DEFAULT_PILOT_STATUSES)
         )
         .run();
@@ -245,6 +247,7 @@ export const compRoutes = new Hono<HonoEnv>()
           default_pilot_class: defaultClass,
           gap_params: body.gap_params ?? null,
           scoring_format: scoringFormat,
+          timezone: body.timezone ?? null,
           open_igc_upload: true,
           pilot_statuses: DEFAULT_PILOT_STATUSES,
         },
@@ -264,7 +267,7 @@ export const compRoutes = new Hono<HonoEnv>()
     const cutoffStr = cutoff.toISOString();
 
     const publicComps = await c.env.DB.prepare(
-      `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, open_igc_upload, pilot_statuses
+      `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, timezone, open_igc_upload, pilot_statuses
        FROM comp
        WHERE test = 0 AND creation_date >= ?
        ORDER BY creation_date DESC`
@@ -276,7 +279,7 @@ export const compRoutes = new Hono<HonoEnv>()
 
     if (user) {
       adminComps = await c.env.DB.prepare(
-        `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params, c.scoring_format, c.open_igc_upload
+        `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params, c.scoring_format, c.timezone, c.open_igc_upload
          FROM comp c
          JOIN comp_admin ca ON c.comp_id = ca.comp_id
          WHERE ca.user_id = ?
@@ -329,7 +332,7 @@ export const compRoutes = new Hono<HonoEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, open_igc_upload, pilot_statuses
+        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, timezone, open_igc_upload, pilot_statuses
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -460,7 +463,7 @@ export const compRoutes = new Hono<HonoEnv>()
 
       // Fetch current state so we can compute audit diffs and validate consistency
       const current = await c.env.DB.prepare(
-        `SELECT name, category, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, open_igc_upload, pilot_statuses
+        `SELECT name, category, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, timezone, open_igc_upload, pilot_statuses
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -473,10 +476,30 @@ export const compRoutes = new Hono<HonoEnv>()
           default_pilot_class: string;
           gap_params: string | null;
           scoring_format: string;
+          timezone: string | null;
           open_igc_upload: number;
           pilot_statuses: string;
         }>();
       if (!current) return c.json({ error: "Competition not found" }, 404);
+
+      // Resolve the new timezone up front: an explicit name is stored as-is,
+      // while null means "back to automatic" — re-derive it from the task
+      // location right away so the change is visible immediately (and stays
+      // null only when the comp has no located task yet).
+      let newTimezone: string | null | undefined;
+      if (body.timezone !== undefined) {
+        newTimezone = body.timezone;
+        if (newTimezone === null) {
+          const firstTask = await c.env.DB.prepare(
+            `SELECT xctsk FROM task
+             WHERE comp_id = ? AND xctsk IS NOT NULL
+             ORDER BY task_date ASC, creation_date ASC LIMIT 1`
+          )
+            .bind(compId)
+            .first<{ xctsk: string }>();
+          newTimezone = timezoneForXctsk(firstTask?.xctsk) ?? null;
+        }
+      }
 
       // If updating pilot_classes or default_pilot_class, validate consistency
       if (body.pilot_classes || body.default_pilot_class) {
@@ -531,6 +554,10 @@ export const compRoutes = new Hono<HonoEnv>()
       if (body.scoring_format !== undefined) {
         updates.push("scoring_format = ?");
         values.push(body.scoring_format);
+      }
+      if (newTimezone !== undefined) {
+        updates.push("timezone = ?");
+        values.push(newTimezone);
       }
       if (body.open_igc_upload !== undefined) {
         updates.push("open_igc_upload = ?");
@@ -613,6 +640,23 @@ export const compRoutes = new Hono<HonoEnv>()
           `Changed scoring format from ${fmtLabel(current.scoring_format)} to ${fmtLabel(body.scoring_format)}`
         );
       }
+      // Timezone is presentational only (scoring runs on UTC), but the
+      // change is audit-logged like every other settings knob.
+      if (newTimezone !== undefined && newTimezone !== current.timezone) {
+        if (body.timezone === null) {
+          auditChanges.push(
+            newTimezone
+              ? current.timezone
+                ? `Reset timezone to automatic — derived "${newTimezone}" from the task location`
+                : `Set timezone to "${newTimezone}" (derived from the task location)`
+              : "Cleared timezone (no task location to derive it from)"
+          );
+        } else {
+          auditChanges.push(
+            describeChange("timezone", current.timezone, newTimezone)
+          );
+        }
+      }
       if (
         body.open_igc_upload !== undefined &&
         (body.open_igc_upload ? 1 : 0) !== current.open_igc_upload
@@ -674,7 +718,7 @@ export const compRoutes = new Hono<HonoEnv>()
 
       // Return updated comp
       const updated = await c.env.DB.prepare(
-        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, open_igc_upload, pilot_statuses
+        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, timezone, open_igc_upload, pilot_statuses
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)

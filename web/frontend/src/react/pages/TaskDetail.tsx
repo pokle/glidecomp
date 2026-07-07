@@ -214,6 +214,8 @@ export function TaskDetail() {
 
       <TurnpointsSection
         xctsk={task.xctsk}
+        taskDate={task.task_date}
+        timezone={comp?.timezone ?? null}
         isAdmin={isAdmin}
         onEditRoute={() => setRouteOpen(true)}
       />
@@ -270,6 +272,7 @@ export function TaskDetail() {
           taskDate={task.task_date}
           xctsk={task.xctsk}
           openDistance={comp.scoring_format === "open_distance"}
+          timezone={comp.timezone ?? null}
           onClose={() => setRouteOpen(false)}
           onSaved={() => {
             setRouteOpen(false);
@@ -289,10 +292,15 @@ export function TaskDetail() {
  */
 function TurnpointsSection({
   xctsk,
+  taskDate,
+  timezone,
   isAdmin,
   onEditRoute,
 }: {
   xctsk: XCTask | null;
+  taskDate: string;
+  /** Comp-local IANA zone; gate times in the summary show comp-local when set. */
+  timezone: string | null;
   isAdmin: boolean;
   onEditRoute: () => void;
 }) {
@@ -325,7 +333,9 @@ function TurnpointsSection({
         <p className="mt-2 text-muted-foreground">No route defined yet</p>
       )}
       {xctsk?.sss ? (
-        <p className="mt-2 text-sm text-muted-foreground">{startConfigSummary(xctsk.sss)}</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {startConfigSummary(xctsk.sss, { timeZone: timezone, taskDate })}
+        </p>
       ) : null}
       {isAdmin ? (
         <div className="mt-2 flex flex-wrap gap-2">

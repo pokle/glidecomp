@@ -32,8 +32,8 @@ import { tmpdir } from 'node:os';
 import { gzipSync } from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
 import { parseIGC } from '@glidecomp/engine';
+import { timezoneForXctsk } from '@glidecomp/engine/timezone';
 import { SAMPLE_COMP_NAME } from '../workers/competition-api/src/sample';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
@@ -171,25 +171,11 @@ interface CompManifest {
   scoring_format?: 'gap' | 'open_distance';
 }
 
-/** Best-effort timezone from a lat/lon via the engine workspace's geo-tz. */
-function resolveTimezone(lat: number, lon: number): string | undefined {
-  try {
-    // geo-tz is a node lib living in the engine workspace; resolve it from
-    // there (best-effort — the viewer falls back to the browser zone).
-    const engineRequire = createRequire(join(REPO_ROOT, 'web/engine/package.json'));
-    const { find } = engineRequire('geo-tz') as {
-      find: (lat: number, lon: number) => string[];
-    };
-    return find(lat, lon)[0];
-  } catch {
-    return undefined; // leave unresolved → viewer falls back to browser zone
-  }
-}
-
 /**
- * Read one task directory: its .xctsk and every non-empty IGC track. Returns
- * the (possibly timezone-stamped) task JSON plus the parsed pilots. `tzOut` is
- * populated with the first resolved timezone so the caller can share it.
+ * Read one task directory: its .xctsk and every non-empty IGC track. `tzOut`
+ * is populated with the first timezone derived from a task's location (via
+ * the engine's tz-lookup helper — the same derivation the competition-api
+ * runs on route save) so the caller can stamp it on the comp row.
  */
 function readTask(spec: TaskSpec, tzOut: { value?: string }): SampleTask {
   const compDir = join(COMPS_ROOT, spec.dir);
@@ -199,29 +185,21 @@ function readTask(spec: TaskSpec, tzOut: { value?: string }): SampleTask {
 
   const taskFile = entries.find((f) => f.toLowerCase().endsWith('.xctsk'));
   if (!taskFile) throw new Error(`No .xctsk task file in ${compDir}`);
-  const xctskRaw = readFileSync(join(compDir, taskFile), 'utf-8');
+  const xctsk = readFileSync(join(compDir, taskFile), 'utf-8');
+  if (tzOut.value === undefined) {
+    tzOut.value = timezoneForXctsk(xctsk);
+  }
 
   const pilots: SamplePilot[] = [];
   for (const file of igcFiles) {
     const text = readFileSync(join(compDir, file), 'utf-8');
     const igc = parseIGC(text);
     if (igc.fixes.length === 0) continue;
-    if (tzOut.value === undefined) {
-      tzOut.value = resolveTimezone(igc.fixes[0].latitude, igc.fixes[0].longitude);
-    }
     const name = (igc.header.pilot || basename(file, '.igc')).replace(/\s+/g, ' ').trim();
     const gz = gzipSync(Buffer.from(text, 'utf-8'), { level: 9 });
     pilots.push({ name, civl: civlFromFilename(file), gz, fileSize: gz.byteLength });
   }
 
-  // Stash the timezone in the stored task JSON so the Worker (which can't run
-  // geo-tz) can put it on the manifest. `_timezone` is ignored by parseXCTask.
-  let xctsk = xctskRaw;
-  if (tzOut.value) {
-    const obj = JSON.parse(xctskRaw);
-    obj._timezone = tzOut.value;
-    xctsk = JSON.stringify(obj);
-  }
   return { ...spec, xctsk, pilots };
 }
 
@@ -311,13 +289,14 @@ function main(): void {
         `DELETE FROM audit_log WHERE comp_id = ${compId};`,
         `UPDATE comp SET category=${q(category)}, test=0, scoring_format=${q(scoringFormat)},
            pilot_classes=${q(classesJson)},
-           default_pilot_class=${q(defaultClass)} WHERE comp_id = ${compId};`,
+           default_pilot_class=${q(defaultClass)},
+           timezone=${q(tzOut.value ?? null)} WHERE comp_id = ${compId};`,
       ].join('\n'),
     );
   } else {
     exec(
-      `INSERT INTO comp (name, creation_date, category, test, scoring_format, pilot_classes, default_pilot_class)
-       VALUES (${q(compName)}, ${q(today)}, ${q(category)}, 0, ${q(scoringFormat)}, ${q(classesJson)}, ${q(defaultClass)});`,
+      `INSERT INTO comp (name, creation_date, category, test, scoring_format, pilot_classes, default_pilot_class, timezone)
+       VALUES (${q(compName)}, ${q(today)}, ${q(category)}, 0, ${q(scoringFormat)}, ${q(classesJson)}, ${q(defaultClass)}, ${q(tzOut.value ?? null)});`,
     );
     compId = Number(rows(`SELECT comp_id FROM comp WHERE name = ${q(compName)};`)[0].comp_id);
     console.log(`  created comp_id ${compId}`);

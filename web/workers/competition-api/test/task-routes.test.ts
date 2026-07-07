@@ -495,3 +495,76 @@ describe("Open distance task geometry", () => {
     expect(res.status).toBe(400);
   });
 });
+
+// ── Timezone derivation on route save (#269) ───────────────────────────────
+
+describe("Comp timezone derivation from task location", () => {
+  const corryongTask = {
+    taskType: "CLASSIC",
+    version: 1,
+    turnpoints: [
+      {
+        type: "TAKEOFF",
+        radius: 400,
+        // Corryong, VIC → Australia/Melbourne
+        waypoint: { name: "Launch", lat: -36.195, lon: 147.9 },
+      },
+    ],
+  };
+
+  async function getCompTimezone(compId: string): Promise<unknown> {
+    const res = await request("GET", `/api/comp/${compId}`, { user: "user-1" });
+    const data = (await res.json()) as { timezone: unknown };
+    return data.timezone;
+  }
+
+  test("creating a task with a route fills in the comp timezone", async () => {
+    const compId = await createComp();
+    expect(await getCompTimezone(compId)).toBeNull();
+
+    await createTask(compId, { xctsk: corryongTask });
+    expect(await getCompTimezone(compId)).toBe("Australia/Melbourne");
+  });
+
+  test("saving a route via PATCH fills in the comp timezone", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+    expect(await getCompTimezone(compId)).toBeNull();
+
+    const res = await authRequest("PATCH", `/api/comp/${compId}/task/${taskId}`, {
+      xctsk: corryongTask,
+    });
+    expect(res.status).toBe(200);
+    expect(await getCompTimezone(compId)).toBe("Australia/Melbourne");
+  });
+
+  test("derivation never overwrites an explicit comp timezone", async () => {
+    const compId = await createComp({ timezone: "Europe/Paris" });
+    await createTask(compId, { xctsk: corryongTask });
+    expect(await getCompTimezone(compId)).toBe("Europe/Paris");
+  });
+
+  test("derivation is audit-logged against the comp", async () => {
+    const compId = await createComp();
+    await createTask(compId, { xctsk: corryongTask });
+
+    const res = await request("GET", `/api/comp/${compId}/audit`, {
+      user: "user-1",
+    });
+    const data = (await res.json()) as {
+      entries: Array<{ subject_type: string; description: string }>;
+    };
+    const entry = data.entries.find((e) =>
+      e.description.includes("Australia/Melbourne")
+    );
+    expect(entry).toBeDefined();
+    expect(entry!.subject_type).toBe("comp");
+    expect(entry!.description).toContain("derived from the task location");
+  });
+
+  test("a task without a route leaves the timezone unset", async () => {
+    const compId = await createComp();
+    await createTask(compId);
+    expect(await getCompTimezone(compId)).toBeNull();
+  });
+});

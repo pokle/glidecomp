@@ -495,3 +495,109 @@ describe("DELETE /api/comp/:comp_id", () => {
     expect(row!.cnt).toBe(1);
   });
 });
+
+// ── Comp timezone setting (#269 / #274) ─────────────────────────────────────
+
+describe("Comp timezone setting", () => {
+  const corryongTask = {
+    taskType: "CLASSIC",
+    version: 1,
+    turnpoints: [
+      {
+        type: "TAKEOFF",
+        radius: 400,
+        waypoint: { name: "Launch", lat: -36.195, lon: 147.9 },
+      },
+    ],
+  };
+
+  test("defaults to null on create and round-trips an explicit value", async () => {
+    const res = await authRequest("POST", "/api/comp", {
+      name: "TZ Comp",
+      category: "hg",
+    });
+    const data = (await res.json()) as { timezone: unknown };
+    expect(data.timezone).toBeNull();
+
+    const res2 = await authRequest("POST", "/api/comp", {
+      name: "TZ Comp 2",
+      category: "hg",
+      timezone: "Australia/Melbourne",
+    });
+    const data2 = (await res2.json()) as { timezone: unknown };
+    expect(data2.timezone).toBe("Australia/Melbourne");
+  });
+
+  test("rejects a garbage timezone", async () => {
+    const res = await authRequest("POST", "/api/comp", {
+      name: "Bad TZ",
+      category: "hg",
+      timezone: "Not/AZone",
+    });
+    expect(res.status).toBe(400);
+
+    const compId = await createComp();
+    const patch = await authRequest("PATCH", `/api/comp/${compId}`, {
+      timezone: "gibberish",
+    });
+    expect(patch.status).toBe(400);
+  });
+
+  test("PATCH sets the timezone and audit-logs the change", async () => {
+    const compId = await createComp();
+
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      timezone: "Europe/Paris",
+    });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { timezone: unknown };
+    expect(data.timezone).toBe("Europe/Paris");
+
+    const auditRes = await request("GET", `/api/comp/${compId}/audit`, {
+      user: "user-1",
+    });
+    const auditData = (await auditRes.json()) as {
+      entries: Array<{ description: string }>;
+    };
+    expect(
+      auditData.entries.some((e) =>
+        e.description.includes('Set timezone to "Europe/Paris"')
+      )
+    ).toBe(true);
+  });
+
+  test("PATCH with null re-derives from the task location", async () => {
+    const compId = await createComp({ timezone: "Europe/Paris" });
+    await createTask(compId, { xctsk: corryongTask });
+
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      timezone: null,
+    });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { timezone: unknown };
+    expect(data.timezone).toBe("Australia/Melbourne");
+
+    const auditRes = await request("GET", `/api/comp/${compId}/audit`, {
+      user: "user-1",
+    });
+    const auditData = (await auditRes.json()) as {
+      entries: Array<{ description: string }>;
+    };
+    expect(
+      auditData.entries.some((e) =>
+        e.description.includes("Reset timezone to automatic")
+      )
+    ).toBe(true);
+  });
+
+  test("PATCH with null clears the timezone when no task has a route", async () => {
+    const compId = await createComp({ timezone: "Europe/Paris" });
+
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      timezone: null,
+    });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { timezone: unknown };
+    expect(data.timezone).toBeNull();
+  });
+});

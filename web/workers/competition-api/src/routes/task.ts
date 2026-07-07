@@ -8,6 +8,7 @@ import { isCompAdmin } from "../super-admin";
 import { createTaskSchema, updateTaskSchema } from "../validators";
 import { audit, describeChange } from "../audit";
 import { summarizeXctskChange, describeTaskSummary } from "../xctsk-summary";
+import { timezoneForXctsk } from "@glidecomp/engine/timezone";
 
 type Variables = {
   user: AuthUser;
@@ -36,6 +37,37 @@ function validateTaskGeometryForFormat(
     return "Open distance tasks must have exactly one turnpoint, of type Takeoff.";
   }
   return null;
+}
+
+/**
+ * Fill in the comp's timezone from a just-saved route's location (#269).
+ * Write-time derivation: only runs while comp.timezone is NULL, so an
+ * explicit organizer setting (or an earlier derivation) is never
+ * overwritten. Purely presentational — scoring runs on UTC regardless.
+ */
+async function deriveCompTimezone(
+  db: D1Database,
+  user: AuthUser | null | undefined,
+  compId: number,
+  xctsk: unknown
+): Promise<void> {
+  const comp = await db
+    .prepare("SELECT name, timezone FROM comp WHERE comp_id = ?")
+    .bind(compId)
+    .first<{ name: string; timezone: string | null }>();
+  if (!comp || comp.timezone !== null) return;
+  const zone = timezoneForXctsk(xctsk);
+  if (!zone) return;
+  await db
+    .prepare("UPDATE comp SET timezone = ? WHERE comp_id = ?")
+    .bind(zone, compId)
+    .run();
+  await audit(db, user, compId, {
+    subject_type: "comp",
+    subject_id: compId,
+    subject_name: comp.name,
+    description: `Set timezone to "${zone}" (derived from the task location; adjustable in Competition Settings)`,
+  });
 }
 
 export const taskRoutes = new Hono<HonoEnv>()
@@ -132,6 +164,10 @@ export const taskRoutes = new Hono<HonoEnv>()
         subject_name: body.name,
         description: `Created task "${body.name}" (${body.task_date}, classes: ${body.pilot_classes.join(", ")})`,
       });
+
+      if (body.xctsk) {
+        await deriveCompTimezone(c.env.DB, c.var.user, compId, body.xctsk);
+      }
 
       return c.json(
         {
@@ -386,6 +422,10 @@ export const taskRoutes = new Hono<HonoEnv>()
           subject_name: taskName,
           description,
         });
+      }
+
+      if (body.xctsk) {
+        await deriveCompTimezone(c.env.DB, c.var.user, compId, body.xctsk);
       }
 
       // Return updated task
