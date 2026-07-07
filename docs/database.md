@@ -2,12 +2,11 @@
 
 ## D1 Database
 
-GlideComp uses Cloudflare D1 (SQLite) for auth storage.
+GlideComp uses a single Cloudflare D1 (SQLite) database shared by the `auth-api` and `competition-api` workers — auth tables, competition data, user files, and materialized scores all live here.
 
 - **Database name:** `taskscore-auth`
 - **Database ID:** `aa8b644f-368e-493a-8b49-1af0d756aff4`
-- **Schema file:** `web/workers/auth-api/src/db/schema.sql`
-- **Migrations:** `web/db/migrations/` — shared by `auth-api` and `competition-api` (both wrangler.tomls point at this directory). Apply locally with `bun run db:migrate`.
+- **Migrations:** `web/db/migrations/` — the schema source of truth, shared by `auth-api` and `competition-api` (both wrangler.tomls point at this directory). Apply locally with `bun run db:migrate`.
 
 ## Running Wrangler
 
@@ -18,7 +17,7 @@ bindings resolve, and target local or remote explicitly:
 # Remote (production) — pass --remote, or you only touch the local dev DB:
 bunx wrangler d1 execute taskscore-auth \
   --config web/workers/competition-api/wrangler.toml --remote \
-  --file=web/workers/auth-api/src/db/schema.sql
+  --file=web/db/migrations/0001_auth_init.sql
 
 # Local dev state (what `bun run dev` uses) lives at web/.wrangler/state:
 bunx wrangler d1 execute taskscore-auth \

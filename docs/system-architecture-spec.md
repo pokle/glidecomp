@@ -2,291 +2,159 @@
 
 ## Overview
 
-GlideComp is a client-heavy web application for analyzing hang gliding and paragliding competition track logs (IGC files) against defined tasks. The architecture prioritizes simplicity, minimal operational overhead, and generous free-tier usage.
+GlideComp is a client-heavy web application for analyzing hang gliding and paragliding competition track logs (IGC files) against defined tasks, with competition management, GAP / open-distance scoring, and a public transparency record. The architecture prioritizes simplicity, minimal operational overhead, and generous free-tier usage — everything runs on Cloudflare (Pages, Workers, D1, R2, KV).
+
+Production: https://glidecomp.com
 
 ## Current Architecture
 
-GlideComp is currently a **storage-free, client-side application** hosted on Cloudflare Pages. Users load IGC track files and XCTask task files directly in the browser via drag-and-drop or file picker. Browser local storage (IndexedDB) provides optional persistence.
-
 ```
-┌─────────────────────────────────────┐
-│         Cloudflare Pages            │
-│   Static frontend application       │
-│                                     │
-│   - Load IGC files (drag & drop)    │
-│   - Load task files (.xctsk)        │
-│   - Client-side IGC analysis        │
-│   - Map visualization               │
-│   - Browser local storage           │
-└─────────────────────────────────────┘
-       ▲
-       │
-   User loads files
-   via browser
-```
-
-### Cloudflare Pages (Frontend)
-
-Static web application hosting the user interface.
-
-**Features:**
-- Load IGC track files and XCTask task files via drag-and-drop or file picker
-- View competition tasks and turn points on a map
-- Analyze IGC files against tasks (client-side processing)
-- View flight analysis results (events, distances, scores)
-- Store loaded tracks and tasks in browser local storage (IndexedDB)
-
-### AirScore Caching Proxy (Worker)
-
-The only current Worker is a caching proxy for AirScore API requests (`web/workers/`).
-
-## Design Principles
-
-1. **Client-Heavy Processing** - IGC parsing and analysis runs entirely in the browser, reducing backend complexity and costs
-
-2. **Storage-Free** - No server-side storage; all data lives in the user's browser
-
-3. **Progressive Enhancement** - Start with static site, add Workers incrementally as needed
-
-4. **Single Vendor** - All infrastructure on Cloudflare for operational simplicity
-
-5. **Generous Free Tier** - Architecture designed to operate within free tier limits
-
-## Infrastructure Costs
-
-Currently minimal — only Cloudflare Pages (free tier).
-
-| Component | Free Tier Allowance | Current Usage |
-|-----------|---------------------|---------------|
-| Pages | Unlimited bandwidth | Static assets |
-
----
-
-## Future Roadmap
-
-The following components are planned but **not yet implemented**.
-
-### Planned Architecture
-
-```
-                                 ┌─────────────────────────────────┐
-                                 │        Cloudflare Pages         │
-                                 │   - Public: view flights/tasks  │
-                                 │   - Admin: manage competitions  │
-                                 └────────────────┬────────────────┘
-                                                  │
-       ┌──────────────────────────────────────────┼───────────────┐
-       │                                          │               │
-       ▼                                          ▼               ▼
-┌─────────────────┐    ┌─────────────────┐   ┌─────────┐   ┌─────────┐
-│  Email Worker   │    │   API Worker    │   │   R2    │   │   D1    │
-│                 │───▶│                 │──▶│ Storage │   │   DB    │
-│ - Receive email │    │ - CRUD tasks    │   │ (IGCs)  │   │         │
-│ - Check sender  │    │ - List flights  │   └─────────┘   │ - Pilots│
-│ - Parse IGC     │    │ - Admin auth    │                 │ - Tasks │
-│ - Store to R2   │    └─────────────────┘                 │ - Comps │
-└─────────────────┘                                        └─────────┘
-       ▲
-       │
-   pilot@email
-   sends IGC
+┌──────────────────────────────────────────────────────────────────┐
+│                        Cloudflare Pages                          │
+│                                                                  │
+│  Prerendered Astro pages   /, /about, /legal, /scoring/*         │
+│  React SPA (app.html)      /comp, /u/:username, /scores,         │
+│                            /settings, /onboarding, /admin/*      │
+│  Vanilla-TS entries        /analysis (map app), /replay (3D)     │
+│                                                                  │
+│  Pages Functions           functions/api/* → service-binding     │
+│                            proxies to the Workers below          │
+└─────────┬───────────────────────┬──────────────────────┬─────────┘
+          │ /api/auth/*           │ /api/comp|user|u|    │ /api/airscore/*
+          │                       │ admin/*              │
+          ▼                       ▼                      ▼
+┌──────────────────┐   ┌────────────────────┐   ┌──────────────────┐
+│     auth-api     │◀──│  competition-api   │──▶│   airscore-api   │
+│   Better Auth    │   │  comps · tasks ·   │   │  caching proxy   │
+│  Google OAuth,   │   │  pilots · tracks · │   │  for AirScore    │
+│  API keys        │   │  scores · user     │   │  (KV cache) →    │
+└────────┬─────────┘   │  files · audit     │   │ xc.highcloud.net │
+         │             └───┬────────┬───┬───┘   └──────────────────┘
+         │                 │        │   │
+         ▼                 ▼        ▼   ▼
+   ┌─────────────────────────┐   ┌────┐ ┌──────────────────────┐
+   │  D1: taskscore-auth     │   │ R2 │ │ KV: scores/3dvis     │
+   │  (one shared database)  │   └────┘ │     cache            │
+   └─────────────────────────┘          └──────────────────────┘
 ```
 
-### Email Worker (Future)
+All flight analysis (IGC parsing, event detection, scoring math) runs **client-side in the browser** via the pure-TypeScript engine (`web/engine`). The Workers store data, enforce auth, and serve materialized scores — they reuse the same engine for server-side score computation, but reads never compute (see [Score storage](#score-storage-stale-first)).
 
-Will receive and process pilot track log submissions via email.
+### Frontend (Cloudflare Pages)
 
-**Planned Responsibilities:**
-- Receive incoming emails at `submit@{domain}`
-- Archive raw email to R2 (audit trail)
-- Validate sender against authorized pilot list (D1 lookup)
-- Parse email attachments using MIME parser (e.g., `postal-mime`)
-- Validate attachment is a valid IGC file
-- Store IGC file in R2 with appropriate metadata
-- Record submission in D1 database
-- Send confirmation reply to pilot
-- Forward errors/failures to admin inbox for review
+One Pages project (`glidecomp`, output `web/frontend/dist`) with three kinds of surface:
 
-**Planned Email Processing Flow:**
-1. Pilot emails IGC attachment to submission address
-2. Email Worker receives the message
-3. **Archive raw email to R2** (always, before any processing)
-4. Extract sender email from headers
-5. Parse MIME content to extract attachments
-6. Validate IGC file format
-7. **Compute SHA-256 hash** of IGC file content
-8. **Check if hash exists** in `igc_files` table
-9. **Always store IGC file** - if new, store at `/igc/{hash}.igc` in R2 and insert into `igc_files`
-10. **Look up sender email** in `pilot_emails` table
-11. **Always create submission record** with sender email, IGC hash, and pilot_id (if found)
-12. If pilot found: check `pilot_competitions` for active competitions
-13. If entered in competition: link submission to competition, status = `entered`, send success confirmation
-14. If pilot found but not in competition: status = `matched`, notify pilot flight is stored
-15. If pilot not found: status = `unmatched`, **forward to admin inbox**, notify sender their flight is stored but not yet linked to a pilot
-16. Log metadata to D1 (links to raw email archive)
+- **Prerendered static pages** — a small Astro app in `web/frontend/static/` builds the content pages (`/`, `/about`, `/legal`, `/scoring`, `/scoring/gap`, `/scoring/open-distance`) as zero-client-JS HTML (KaTeX on the GAP page is rendered at build time). `bun run build` runs the Vite build, then the Astro build, and merges both into `dist/`.
+- **React SPA** — the main UI (`src/react/`, served from `app.html`): competitions, comp/task detail, pilot score detail, scores, dashboard, settings, onboarding, super-admin pages. Built with shadcn/ui components on the Base UI foundation and Tailwind. SPA routes reach the shell via `public/_redirects` rewrites (`/comp/*`, `/u/*`, `/scores`, … → `/app` 200).
+- **Vanilla-TS Vite entries** — the analysis page (`src/analysis/`, an imperative map app) and the 3D replay (`src/replay/`, three.js + Mapbox) are separate entries from the SPA.
 
-**Email Archival Strategy:**
+Local dev (`bun run dev`) runs the three Workers under wrangler plus Vite and `astro dev` together; the Vite dev server proxies `/api/*` to the local Workers and the static routes to Astro, so everything is seamless on `:3000`.
 
-Cloudflare Email Workers do not store emails after processing - they are discarded once the Worker completes. To maintain an audit trail and allow manual review:
+### Analysis Engine (`web/engine`)
 
-1. **Always archive raw email to R2** - Store the complete `.eml` file before any processing, ensuring nothing is lost even if processing fails
-2. **Forward failures to admin inbox** - Unauthorized senders, invalid attachments, and processing errors are forwarded to the admin's email for human review
-3. **Log metadata to D1** - Each submission record links to its raw email archive for later retrieval
+Pure TypeScript library with no DOM dependencies, consumed by the browser, the Workers, and CLI scripts (`web/engine/cli/`). Major modules: IGC parsing (`igc-parser.ts`), XCTask parsing (`xctsk-parser.ts`), event detection (`event-detector.ts`, `circle-detector.ts`, `cluster-detector.ts`), GAP scoring (`gap-scoring.ts`), open-distance scoring (`open-distance-scoring.ts`), task-line optimization (`task-optimizer.ts`), geo math (`geo.ts` — the single home for distance/bearing formulas), score explanations (`score-explanation.ts`), and 3D track packing (`track-packer.ts`).
 
-### API Worker (Future)
+### Workers
 
-RESTful API for frontend operations and admin functions.
+Three Workers under `web/workers/`, all deployed on routes of the `glidecomp.com` zone.
 
-**Public Endpoints:**
-- `GET /competitions` - List competitions
-- `GET /competitions/:id/tasks` - Get tasks for a competition
-- `GET /competitions/:id/flights` - List submitted flights
-- `GET /flights/:id` - Get flight details and IGC file URL
+**auth-api** — authentication, built on [Better Auth](https://better-auth.com) (Hono + Kysely over D1).
 
-**Admin Endpoints (authenticated):**
-- `POST /competitions` - Create competition
-- `PUT /competitions/:id` - Update competition
-- `POST /competitions/:id/tasks` - Create task
-- `POST /competitions/:id/pilots` - Add authorized pilots
-- `DELETE /pilots/:id` - Remove pilot authorization
+- Route `glidecomp.com/api/auth/*`; bindings: the shared D1 database, the `glidecomp` R2 bucket.
+- Google OAuth is the only production sign-in method (with the `oAuthProxy` plugin so preview deployments can complete the flow). Email+password / `dev-login` exist only in local dev.
+- API keys via the Better Auth `apiKey` plugin (prefix `glc_`, rate-limited, usable wherever a session cookie is).
+- Custom endpoints beyond the Better Auth handler: `GET /api/auth/me`, `POST /api/auth/set-username`, user preferences routes, and `POST /api/auth/delete-account` — which purges every R2 object under `u/{userId}/` and then deletes the `user` row, cascading to sessions, accounts, preferences, user tracks/tasks/annotations (see [docs/database.md](database.md)).
 
-### R2 Storage (Future)
+**competition-api** — the main application/data worker (Hono, Smart Placement enabled so it runs near D1).
 
-Object storage for IGC track log files and email archives.
+- Routes `glidecomp.com/api/comp*`, `/api/user*`, `/api/u/*`; bindings: the shared D1 database, the `glidecomp` R2 bucket, a KV namespace for score/3dvis caching, and service bindings to `auth-api` and `airscore-api`.
+- Identity is resolved by forwarding the inbound cookie / `x-api-key` to auth-api over the service binding (`/api/auth/me`) — client-supplied identity headers are never trusted. Middleware layers: `requireAuth` (401), `optionalAuth`, `requireCompAdmin` (403), and a super-admin allowlist for the admin/cache endpoints. Public IDs are Sqids-encoded, decoded by middleware.
+- Route groups: comp CRUD, tasks, pilots (incl. bulk paste + pre-registration), per-task pilot status, IGC track upload/download, scores + per-pilot analysis, 3D visualization data (`/3dvis`, KV-cached), user-owned files (`/api/user/*` private, `/api/u/:username/*` public-by-link), the public audit log, and super-admin user/cache pages.
+- Every score-affecting mutation must call `audit()` and `bumpAndRevalidateScores()` — see Coding Rules in [CLAUDE.md](../CLAUDE.md).
 
-**Structure (live):**
+**airscore-api** — a read-only caching proxy for the external AirScore server (`xc.highcloud.net`), used to import tasks and tracks.
+
+- Route `glidecomp.com/api/airscore/*`; KV-cached responses (task TTL 1 h, track TTL 24 h); transforms AirScore data into GlideComp format. Internal cache stats/clear endpoints are reachable only via competition-api's service binding (super-admin cache page). See [docs/airscore-api-worker-spec.md](airscore-api-worker-spec.md).
+
+### API Routing
+
+`/api/*` reaches the Workers by two paths:
+
+1. **Worker routes** on the `glidecomp.com` zone (declared in each worker's `wrangler.toml`) serve production traffic directly.
+2. **Pages Functions proxies** (`functions/api/{auth,comp,user,u,admin}/[[path]].ts`) forward requests over service bindings (`AUTH_API`, `COMPETITION_API` in the root `wrangler.toml`). This makes the API work on every Pages deployment — including `*.glidecomp.pages.dev` previews that the zone routes don't cover.
+
+In local dev the Vite server proxies `/api/*` to the wrangler dev ports instead.
+
+### Data Layer
+
+#### D1 (single shared database)
+
+One database, `taskscore-auth`, bound by both auth-api and competition-api; migrations live in `web/db/migrations/` and are shared by both workers. Table groups:
+
+- **Auth (Better Auth):** `user`, `session`, `account`, `verification`, `apikey`
+- **Competition:** `pilot` (per-user pilot profile), `comp`, `comp_admin`, `comp_pilot` (`pilot_id` nullable for pre-registration; linked later by CIVL ID), `task`, `task_class`, `task_track` (one IGC per task+pilot, with penalty fields), `task_pilot_status`, `audit_log`
+- **Score cache:** `task_scores` (materialized stale-first score rows), `track_analysis` (per-track cached analyses)
+- **User files:** `user_preferences`, `user_track`, `user_task` (XCTSK JSON stored inline in D1 — tiny, and row-level transactions make account deletion trivial), `user_annotation`
+
+#### R2 (bucket `glidecomp`)
+
 ```
 c/{compId}/t/{taskId}/{compPilotId}.igc   # Competition tracks (gzipped)
 u/{userId}/track/{sha256}.igc.gz          # User-owned tracks (gzipped)
 ```
 
-**Structure (future, email submission):**
-```
-/igc/{sha256}.igc          # Content-addressed IGC storage (email pipeline)
-/emails/{timestamp}-{from}.eml
-```
-
 Per-user tracks are namespaced under `u/{userId}/` so the auth-api delete-account flow can purge a user's entire R2 footprint with a prefixed list+delete. Cross-user dedup was rejected to keep cascade-delete trivial (storage is cheap). Within a user's namespace tracks are still content-addressed by SHA-256, so re-uploading the same file from another device is idempotent.
 
-User-owned XCTSK tasks live in D1 (`user_task.xctsk_json`), not R2 — they're tiny (≤32 KB) and benefit from row-level transactions during account deletion.
+#### KV
 
-**Access:**
-- Public read access for viewing/downloading flight logs
-- Private access for email archives (admin only)
-- Write access only via Email Worker and API Worker
+Two namespaces: the airscore-api response cache, and competition-api's cache for packed 3D-visualization tracks. Scores are **not** in KV — they moved to D1 (below).
 
-**IGC Deduplication:**
+#### Score storage (stale-first)
 
-IGC files are stored using content-addressing (SHA-256 checksum as filename):
+Task scores are materialized rows in D1 (`task_scores`): **reads never compute, writes do**. A score-affecting mutation bumps `inputs_rev` (instantly marking the row stale) and schedules background revalidation; freshness is derived (`computed_rev === inputs_rev` and matching engine version), so deploying a new scoring-engine version rolls every row stale without a migration. A lease lock makes revalidation exactly-once under concurrency. Full design: [docs/score-caching-stale-first-plan.md](score-caching-stale-first-plan.md).
 
-1. On submission, compute SHA-256 hash of IGC file content
-2. Check if `/igc/{hash}.igc` already exists in R2
-3. If exists, skip upload (file already stored)
-4. If new, store file at `/igc/{hash}.igc`
-5. Flight submission record references the hash
+#### Audit log
 
-Benefits:
-- Re-submissions don't create duplicates
-- Same flight submitted to multiple competitions shares one file
-- Hash serves as unique identifier and integrity check
-- Storage costs minimized
+Every mutation that could affect a competition's scores is recorded in `audit_log` via the `audit()` helper — free-text, human-readable descriptions with old/new values. The log is publicly readable (`GET /api/comp/:comp_id/audit`) and is the transparency record for the competition.
 
-### D1 Database (Future)
+### Sample data
 
-SQLite database for relational data.
+`bun run seed:sample` loads bundled sample competitions from `web/samples/comps/` (Corryong Cup 2026 by default; `big-chip` for the synthetic open-distance comp) into D1 + R2, idempotently. The 3D replay's default dataset is served from the seeded sample via `GET /api/comp/sample-3dvis`.
 
-**Tables:**
-- `competitions` - Competition definitions
-- `tasks` - Task definitions with turn points
-- `pilots` - Pilot records (name, ID, etc.) - the canonical identity
-- `pilot_emails` - Email addresses linked to pilots (many-to-one)
-- `pilot_competitions` - Pilots registered for competitions (many-to-many)
-- `igc_files` - IGC file registry (hash, original filename, upload date, size)
-- `submissions` - Flight submissions storing: sender email, IGC hash, pilot_id (nullable), competition_id (nullable)
+## Design Principles
 
-**Key Concept: Pilot is the Identity**
+1. **Client-Heavy Processing** — IGC parsing and analysis run in the browser; the same engine is reused server-side only to materialize scores on write.
 
-- A pilot can have multiple email addresses (e.g., personal, work, old address)
-- Email addresses can be added or changed over time
-- IGC files are ultimately associated with the pilot, not the email
-- The sender email is always recorded for audit, but the pilot linkage is what matters
+2. **Explainable Decisions** — scoring returns explanations, is unit-tested, and every score-affecting mutation is publicly audit-logged.
 
-**Submission States:**
-- `unmatched` - IGC stored, sender email not recognized
-- `matched` - IGC linked to a pilot (via email lookup)
-- `entered` - IGC linked to pilot AND a specific competition
+3. **Reads Never Compute** — score reads serve materialized rows; mutations mark them stale and revalidate in the background.
 
-**Email-to-Pilot Resolution:**
+4. **Single Vendor** — all infrastructure on Cloudflare for operational simplicity.
 
-When a submission arrives:
-1. Look up sender email in `pilot_emails`
-2. If found → link submission to that pilot
-3. If not found → submission remains `unmatched`, awaiting admin action
+5. **Generous Free Tier** — designed to operate within free-tier limits for typical competition usage.
 
-**Late Registration / Email Addition Flow:**
+6. **Trivial Account Deletion** — user data is namespaced (R2 prefix, D1 cascades) so deleting an account is a prefix purge plus one row delete.
 
-When admin adds an email address to a pilot:
-1. Insert into `pilot_emails`
-2. Query `submissions` for any `unmatched` entries from that email
-3. Update those submissions to link to the pilot
-4. If pilot is registered for competitions, check if submissions should be entered
-5. Notify pilot of any newly linked flights
+## Infrastructure Costs
 
-### Authentication (Future)
+All components operate within Cloudflare's free tier for typical competition usage.
 
-#### Pilots (No Authentication Required)
-
-Pilots will be authorized via email whitelist, not traditional authentication.
-
-- Admin adds pilot email addresses to competition
-- Email Worker validates sender address against whitelist
-- No login, passwords, or tokens for pilots
-- Simple and friction-free for competition participants
-
-#### Admin Authentication
-
-Single admin user (competition organizer) with secure access to management features.
-
-**Options (in order of recommendation):**
-
-1. **Cloudflare Access** (Recommended)
-   - Zero Trust authentication
-   - Lock admin routes behind identity provider (Google, GitHub, etc.)
-   - Free for up to 50 users
-   - No code changes required for auth logic
-
-2. **Simple Bearer Token**
-   - Secret token stored in Worker environment variables
-   - Pass token in `Authorization` header
-   - Suitable for single admin user
-
-3. **Magic Link**
-   - Admin requests login link via email
-   - Time-limited token sent to admin email
-   - Click link to establish session
-
-### Planned Infrastructure Costs
-
-All planned components would operate within Cloudflare's free tier for typical competition usage.
-
-| Component | Free Tier Allowance | Typical Usage |
+| Component | Free Tier Allowance | Current Usage |
 |-----------|---------------------|---------------|
-| Pages | Unlimited bandwidth | Static assets |
-| Email Routing | Free | Receiving submissions |
-| Workers | 100,000 requests/day | API + Email processing |
-| R2 | 10 GB storage, 10M reads/month | IGC files (~100KB) + email archives |
-| D1 | 5 GB storage, 5M reads/day | Metadata queries |
-| Access | 50 users | Admin auth (optional) |
+| Pages | Unlimited bandwidth | Static pages + SPA + Functions proxies |
+| Workers | 100,000 requests/day | auth-api, competition-api, airscore-api |
+| D1 | 5 GB storage, 5M reads/day | Shared app database |
+| R2 | 10 GB storage, 10M reads/month | Gzipped IGC tracks (~100 KB each) |
+| KV | 100,000 reads/day | AirScore + 3dvis caches |
 
-### Design Principles for Future Backend
+---
 
-1. **No Flight Data Lost** - Every valid IGC file is stored, regardless of pilot registration status. Administrative issues (late registration, typos in email) must never cause flight data to be discarded. Sorting out associations can happen later.
+## Future Roadmap
 
-2. **Email as Interface** - Pilots submit via email, eliminating the need for user accounts and login flows
+Planned but **not yet implemented**:
 
-### Other Future Considerations
-
-- **Live Tracking** - Integration with live tracking services during competition
-- **Scoring Engine** - The CIVL GAP scoring engine (`web/engine/src/gap-scoring.ts`) currently runs client-side and via CLI; future work may add server-side scoring for official results
-- **Multi-Tenant** - Support for multiple competition organizers
-- **XContest Integration** - Import tasks directly from XContest
+- **Email submission** — pilots email IGC files to `submit@{domain}`; an Email Worker archives, validates, and links submissions to pilots. Full design (workflow, dedup, submission states): [docs/email-submission-spec.md](email-submission-spec.md).
+- **SSR public pages** — server-render the public competition/score pages for SEO: [docs/ssr-public-pages-plan.md](ssr-public-pages-plan.md).
+- **Live tracking** — integration with live tracking services during competition.
+- **Multi-tenant** — richer support for multiple competition organizers (today any user can create a comp and add co-admins; super-admin is a hardcoded allowlist).
+- **XContest integration** — import tasks directly from XContest.
