@@ -22,7 +22,7 @@ import { RadioGroup, RadioGroupItem } from "@/react/ui/radio-group";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
-import { CheckboxField, SimpleSelect } from "./fields";
+import { CheckboxField, SearchableSelect, SimpleSelect } from "./fields";
 import {
   slugifyStatusKey,
   type CompDetailData,
@@ -359,11 +359,12 @@ export function SettingsDialog({
 
           <div>
             <h3 className="mb-1.5 text-sm font-medium">Timezone</h3>
-            <SimpleSelect
+            <SearchableSelect
               value={timezone}
               onChange={setTimezone}
               options={timezoneOptions(comp.timezone)}
               ariaLabel="Competition timezone"
+              placeholder="Type to search, e.g. Melbourne"
             />
             <p className="mt-1 text-sm text-muted-foreground">
               Comp-local zone for displaying times (start gates, replay clock, score
