@@ -6,9 +6,15 @@
  * Turnpoints listing is shown, with a link to the vanilla task page for
  * route editing.
  */
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { SSSConfig, XCTask } from "@glidecomp/engine";
+import {
+  calculateOptimizedTaskDistance,
+  isValidTask,
+  parseXCTaskAsync,
+  type SSSConfig,
+  type XCTask,
+} from "@glidecomp/engine";
 import { Button } from "@/react/ui/button";
 import {
   Dialog,
@@ -217,6 +223,10 @@ export function TaskDetail() {
         xctsk={task.xctsk}
         isAdmin={isAdmin}
         onEditStartGates={() => setGatesOpen(true)}
+        onRouteChanged={() => {
+          setRefresh((n) => n + 1);
+          setScoresRefresh((n) => n + 1);
+        }}
       />
 
       <TrackSection
@@ -316,9 +326,11 @@ function startConfigSummary(sss: SSSConfig): string {
 }
 
 /**
- * Read-only turnpoint listing. The interactive route editor is only on the
- * vanilla task page — deliberate omission in the React port. Start-gate
- * configuration, however, is editable here (admins) via a dialog.
+ * Turnpoint listing with admin route management. The interactive route
+ * *editor* is not ported to React (see #270 — the vanilla one was removed
+ * with the SPA migration); admins set a route by uploading a .xctsk file
+ * (built in XCTrack or the analysis page) and configure start gates via a
+ * dialog.
  */
 function TurnpointsSection({
   compId,
@@ -326,13 +338,68 @@ function TurnpointsSection({
   xctsk,
   isAdmin,
   onEditStartGates,
+  onRouteChanged,
 }: {
   compId: string;
   taskId: string;
   xctsk: XCTask | null;
   isAdmin: boolean;
   onEditStartGates: () => void;
+  onRouteChanged: () => void;
 }) {
+  const confirm = useConfirm();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function handleFile(input: HTMLInputElement) {
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+
+    let parsed: XCTask;
+    try {
+      parsed = await parseXCTaskAsync(await file.text());
+    } catch {
+      toast.error(`Could not read ${file.name} — is it a valid .xctsk task file?`);
+      return;
+    }
+    if (!isValidTask(parsed)) {
+      toast.error(`${file.name} has no valid turnpoints`);
+      return;
+    }
+
+    const km = (calculateOptimizedTaskDistance(parsed) / 1000).toFixed(1);
+    if (xctsk && xctsk.turnpoints.length > 0) {
+      const ok = await confirm({
+        title: "Replace the current route?",
+        message: `The uploaded task has ${parsed.turnpoints.length} turnpoints (${km} km optimized). This replaces the existing route and scores will be recomputed against it.`,
+        confirmLabel: "Replace route",
+        destructive: true,
+      });
+      if (!ok) return;
+    }
+
+    setUploading(true);
+    try {
+      const res = await api.api.comp[":comp_id"].task[":task_id"].$patch({
+        param: { comp_id: compId, task_id: taskId },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        json: { xctsk: xctskForPatch(parsed) as any },
+      });
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        toast.error(err.error || "Failed to save the route");
+        return;
+      }
+      toast.success(`Route set: ${parsed.turnpoints.length} turnpoints, ${km} km`);
+      onRouteChanged();
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   if (!xctsk && !isAdmin) return null;
   return (
     <section>
@@ -364,38 +431,59 @@ function TurnpointsSection({
       {xctsk?.sss ? (
         <p className="mt-2 text-sm text-muted-foreground">{startConfigSummary(xctsk.sss)}</p>
       ) : null}
-      {isAdmin && xctsk ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="mt-2"
-          onClick={onEditStartGates}
-        >
-          Start gates…
-        </Button>
+      {isAdmin ? (
+        <>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xctsk"
+              hidden
+              onChange={(e) => void handleFile(e.currentTarget)}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={uploading}
+              onClick={() => fileRef.current?.click()}
+            >
+              {uploading
+                ? "Uploading…"
+                : xctsk && xctsk.turnpoints.length > 0
+                  ? "Replace route (.xctsk)…"
+                  : "Upload route (.xctsk)…"}
+            </Button>
+            {xctsk ? (
+              <Button type="button" variant="outline" size="sm" onClick={onEditStartGates}>
+                Start gates…
+              </Button>
+            ) : null}
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Build a route in XCTrack or the{" "}
+            <a className="underline underline-offset-4" href="/analysis.html">
+              analysis page
+            </a>
+            , save it as .xctsk, and upload it here.
+          </p>
+        </>
       ) : null}
-      <p className="mt-2 text-sm text-muted-foreground">
-        Route editing is available on the{" "}
-        <a
-          className="underline underline-offset-4"
-          href={`/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}`}
-        >
-          vanilla task page
-        </a>
-        .
-      </p>
     </section>
   );
 }
 
 /**
- * Serialize a parsed XCTask back to the strict shape the API's xctsk
- * validator accepts, with the given start (SSS) configuration swapped in.
- * Picks only known fields so stray keys from older stored tasks can't
- * fail the strict schema on the round-trip.
+ * Serialize a parsed XCTask to the strict shape the API's xctsk validator
+ * accepts. Picks only known fields so stray keys (e.g. from tasks stored
+ * by the seed script, or spec extensions in uploaded files) can't fail
+ * the strict schema.
  */
-function xctskWithSSS(task: XCTask, sss: SSSConfig): Record<string, unknown> {
+function xctskForPatch(task: XCTask): Record<string, unknown> {
+  const takeoff = {
+    ...(task.takeoff?.timeOpen !== undefined ? { timeOpen: task.takeoff.timeOpen } : {}),
+    ...(task.takeoff?.timeClose !== undefined ? { timeClose: task.takeoff.timeClose } : {}),
+  };
   return {
     taskType: task.taskType || "CLASSIC",
     version: task.version ?? 1,
@@ -415,13 +503,29 @@ function xctskWithSSS(task: XCTask, sss: SSSConfig): Record<string, unknown> {
           : {}),
       },
     })),
-    ...(task.takeoff ? { takeoff: { ...task.takeoff } } : {}),
-    sss: {
-      type: sss.type,
-      direction: sss.direction,
-      ...(sss.timeGates && sss.timeGates.length > 0 ? { timeGates: sss.timeGates } : {}),
-    },
-    ...(task.goal ? { goal: { ...task.goal } } : {}),
+    ...(Object.keys(takeoff).length > 0 ? { takeoff } : {}),
+    ...(task.sss
+      ? {
+          sss: {
+            type: task.sss.type,
+            direction: task.sss.direction,
+            ...(task.sss.timeGates && task.sss.timeGates.length > 0
+              ? { timeGates: task.sss.timeGates }
+              : {}),
+          },
+        }
+      : {}),
+    ...(task.goal
+      ? {
+          goal: {
+            type: task.goal.type ?? "CYLINDER",
+            ...(task.goal.deadline !== undefined ? { deadline: task.goal.deadline } : {}),
+            ...(task.goal.finishAltitude !== undefined
+              ? { finishAltitude: task.goal.finishAltitude }
+              : {}),
+          },
+        }
+      : {}),
     ...(task.cylinderTolerance !== undefined
       ? { cylinderTolerance: task.cylinderTolerance }
       : {}),
@@ -519,7 +623,7 @@ function StartGatesDialog({
       const res = await api.api.comp[":comp_id"].task[":task_id"].$patch({
         param: { comp_id: compId, task_id: taskId },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        json: { xctsk: xctskWithSSS(xctsk, sss) as any },
+        json: { xctsk: xctskForPatch({ ...xctsk, sss }) as any },
       });
 
       if (!res.ok) {
