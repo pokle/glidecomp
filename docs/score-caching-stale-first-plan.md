@@ -133,9 +133,25 @@ ETag makes must-revalidate cheap).
   the tables — e.g. "Scores computed 7 Jul 2026, 14:32 UTC" (absolute, in the
   comp timezone, so SSR output is deterministic — no relative "2 min ago" on
   the server-rendered path, per the SSR plan's hydration-mismatch rule).
-- When `stale: true`: show a subtle "updating…" affordance and schedule **one**
-  refetch ~8 s later; if the refetch comes back fresh, swap the data in. No
-  polling loops — one shot, then the timestamp speaks for itself.
+- **Re-score banner (JS frontend only).** When the response has
+  `stale: true`, the score list shows a clearly visible notice:
+  *"Hold tight, scores are being re-scored…"*. The client then polls the same
+  endpoint for freshness and, once the re-score has landed, switches the
+  notice to *"Re-score finished [Reload]"* — a button that reloads the page
+  on tap/click. No silent data swap: rankings reordering under the reader is
+  more disorienting than an explicit reload, and the reload path also works
+  identically once the pages are SSR'd (the fresh HTML simply renders the new
+  scores, no banner).
+  - **Polling is conditional and cheap.** Each poll is a `fetch` with
+    `If-None-Match: <ETag of the stale body>`. While the revalidation is
+    still running, `latest` is unchanged → `304`, no body. When it finishes,
+    the served `state_key` changes → `200` → show the Reload button. Polls
+    never trigger extra computation: a stale hit only *schedules*
+    revalidation, and the lock dedupes.
+  - Cadence: every ~4 s, backing off to ~15 s, giving up after ~2 minutes
+    (leave the "being re-scored" notice with the timestamp — the next manual
+    reload picks up whatever is newest). Stop polling when the tab is hidden
+    (`visibilitychange`) and resume on return.
 - The comp scores page passes `computed_at` down so per-task and comp-level
   standings can't silently disagree about what the user is looking at.
 
@@ -210,13 +226,16 @@ Effects:
    alongside the existing `test/cache.test.ts` / `scoring.test.ts` patterns:
    fresh hit, stale hit serves old body + schedules revalidation, lock
    dedupes, 304 on matching ETag, envelope-version mismatch → cold.
-2. **UI freshness** — timestamps on all scores surfaces, stale indicator +
-   one-shot refetch.
+2. **UI freshness** — timestamps on all scores surfaces; the re-score
+   banner: "Hold tight, scores are being re-scored…" on `stale: true`,
+   conditional-GET polling, then "Re-score finished [Reload]".
 3. **Warm on mutation** — `waitUntil` revalidation from every audit-logged
    score-affecting handler, with the lock-release state recheck.
 4. **Verification** — e2e: scores pages show the timestamp; penalty-edit
-   flow shows updated scores within the one-shot refetch; `X-Cache`
-   assertions in the deploy smoke test.
+   flow shows the re-score banner, then the Reload button, and reloading
+   shows the updated scores; polls are `304`s while stale (assert no
+   recompute is triggered by polling); `X-Cache` assertions in the deploy
+   smoke test.
 
 ## Acceptance criteria
 
@@ -226,6 +245,9 @@ Effects:
 2. After a penalty edit, the next response is either fresh or `stale: true`
    with the pre-edit scores and their `computed_at`; the fresh result is
    servable within seconds without any user-facing slow request.
+   A viewer already on the page sees "Hold tight, scores are being
+   re-scored…", then "Re-score finished [Reload]", and reloading shows the
+   updated scores.
 3. N concurrent requests during a revalidation trigger at most ~1 recompute
    (lock-deduped) and all get instant responses.
 4. Every scores surface (SPA and, later, SSR HTML) displays the
