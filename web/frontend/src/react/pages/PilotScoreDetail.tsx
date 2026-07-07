@@ -36,11 +36,8 @@ import { api } from "../../comp/api";
 import { gunzipResponse } from "../../analysis/storage";
 import type { OpenDistanceLine } from "../../analysis/map-provider";
 import { formatTaskDate } from "../lib/format";
-import {
-  formatComputedAt,
-  formatTimeInZone,
-  zoneNameWithOffset,
-} from "../lib/time";
+import { formatTimeInZone, zoneNameWithOffset } from "../lib/time";
+import { Timestamp } from "../components/Timestamp";
 import type {
   ClassScore,
   CompDetailData,
@@ -412,7 +409,8 @@ export function PilotScoreDetail() {
           )}
         </p>
         <p className="text-sm text-muted-foreground">
-          Scores computed {formatComputedAt(data.scoreComputedAt, data.comp.timezone)}
+          Scores computed{" "}
+          <Timestamp value={data.scoreComputedAt} compTimezone={data.comp.timezone} />
           {data.scoreStale ? " — a re-score is in progress" : ""}
         </p>
         <p className="mt-1 font-medium">{explanation.headline}</p>

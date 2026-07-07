@@ -12,7 +12,7 @@
 import { useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/react/ui/alert";
 import { Button } from "@/react/ui/button";
-import { formatComputedAt } from "../lib/time";
+import { Timestamp } from "../components/Timestamp";
 
 /** Poll cadence: every ~4s backing off to ~15s, giving up after ~2 minutes
  * (the notice stays; the next manual reload picks up whatever is newest). */
@@ -106,7 +106,7 @@ export function ScoreFreshness({
   /** ISO compute timestamp; null (comp with no scored tasks) renders nothing. */
   computedAt: string | null;
   stale: boolean;
-  /** Comp-local IANA zone for the timestamp; UTC when unset. */
+  /** Comp IANA zone; the timestamp defaults to it, else the viewer's local zone. */
   timezone: string | null;
   /** ETag of the (stale) body being shown — enables conditional polling. */
   etag?: string | null;
@@ -120,7 +120,7 @@ export function ScoreFreshness({
   return (
     <div className="mt-2 space-y-2">
       <p className="text-sm text-muted-foreground">
-        Scores computed {formatComputedAt(computedAt, timezone)}
+        Scores computed <Timestamp value={computedAt} compTimezone={timezone} />
       </p>
       {rescore === "rescoring" ? (
         <Alert role="status" aria-live="polite">
