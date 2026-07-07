@@ -60,6 +60,13 @@ const gapParamsSchema = z
     // HG distance difficulty (FAI S7F §11.1.1). Optional; defaults to true.
     // No effect on paragliding.
     useDistanceDifficulty: z.boolean().optional(),
+    // HG jump-the-gun (FAI S7F §12.2): seconds of early start per 1 penalty
+    // point (X) and the maximum seconds early (Y) before the pilot is
+    // scored for minimum distance. Optional; the scorer defaults to the
+    // spec's X=2 / Y=300. PG early starts are handled without settings
+    // (scored launch→SSS only).
+    jumpTheGunFactor: z.number().positive().max(3600).optional(),
+    jumpTheGunMaxSeconds: z.number().min(0).max(86400).optional(),
   })
   .strict();
 

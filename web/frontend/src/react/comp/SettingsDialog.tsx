@@ -64,6 +64,8 @@ export function SettingsDialog({
     nominalGoal: useId(),
     nominalLaunch: useId(),
     minimumDistance: useId(),
+    jtgFactor: useId(),
+    jtgMax: useId(),
   };
 
   // GAP scoring parameters — fall back to engine defaults when unset.
@@ -103,6 +105,8 @@ export function SettingsDialog({
   const [distanceOrigin, setDistanceOrigin] = useState<"takeoff" | "start">(
     gp.distanceOrigin ?? "takeoff"
   );
+  const [jtgFactor, setJtgFactor] = useState(String(gp.jumpTheGunFactor ?? 2));
+  const [jtgMax, setJtgMax] = useState(String(gp.jumpTheGunMaxSeconds ?? 300));
 
   const nextStatusId = useRef(0);
   const [statuses, setStatuses] = useState<StatusRowState[]>(() =>
@@ -182,6 +186,8 @@ export function SettingsDialog({
       leadingFormula,
       distanceOrigin,
       useDistanceDifficulty: useDifficulty,
+      jumpTheGunFactor: parseField(jtgFactor, 2),
+      jumpTheGunMaxSeconds: parseField(jtgMax, 300),
     };
 
     // Collect status rows: skip blank labels; preserve existing keys (so the
@@ -435,6 +441,41 @@ export function SettingsDialog({
                   value={minimumDistance}
                   onChange={(e) => setMinimumDistance(e.target.value)}
                 />
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor={ids.jtgFactor}>
+                  Jump-the-gun: seconds per penalty point (HG)
+                </FieldLabel>
+                <Input
+                  id={ids.jtgFactor}
+                  type="number"
+                  min={0.1}
+                  step={0.1}
+                  value={jtgFactor}
+                  onChange={(e) => setJtgFactor(e.target.value)}
+                />
+                <FieldDescription>
+                  FAI S7F §12.2: an HG pilot starting early loses 1 point per this many
+                  seconds. Spec default 2. No effect on PG (early starts are scored
+                  launch→start only).
+                </FieldDescription>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={ids.jtgMax}>
+                  Jump-the-gun: maximum seconds early (HG)
+                </FieldLabel>
+                <Input
+                  id={ids.jtgMax}
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={jtgMax}
+                  onChange={(e) => setJtgMax(e.target.value)}
+                />
+                <FieldDescription>
+                  Starting earlier than this scores minimum distance only. Spec default 300.
+                </FieldDescription>
               </Field>
 
               <CheckboxField

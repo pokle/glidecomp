@@ -125,6 +125,12 @@ export interface ScoreEntryInput {
   penalty_points: number;
   penalty_reason: string | null;
   total_score: number;
+  /** Seconds started before the first start gate (S7F §12.2), when early. */
+  early_start_seconds?: number | null;
+  /** How the early start reshaped the score — see engine PilotScore. */
+  early_start_outcome?: 'pg_launch_to_sss' | 'hg_penalty' | 'hg_min_distance' | null;
+  /** Automatic jump-the-gun penalty points deducted (HG early starts). */
+  jump_the_gun_penalty?: number | null;
 }
 
 /** The pilot's class context — the field the score was computed against. */
@@ -351,6 +357,27 @@ function buildFlightSection(
         anchor: reachingAnchor(sss, 'start'),
       });
     }
+
+    // Start-gate story (gated races): the official start time is the gate
+    // taken, not the crossing — make the snapping visible.
+    if (result.earlyStart) {
+      items.push({
+        id: 'early-start',
+        text: `Crossed the start ${duration(result.earlyStart.secondsEarly)} before the first start gate opened at ${fmt(result.earlyStart.firstGateTime)} — an early start ("jumping the gun", FAI S7F §12.2). The speed-section clock runs from the first gate.`,
+        emphasis: 'warning',
+      });
+    } else if (result.startGate) {
+      const gate = result.startGate;
+      items.push({
+        id: 'start-gate',
+        text:
+          gate.gateCount > 1
+            ? `Start time taken: gate ${gate.index + 1} of ${gate.gateCount} — the last start gate at or before the crossing. The speed-section clock runs from the gate, not from the crossing (FAI S7F §8.3.1).`
+            : 'Start time taken: the start gate — the speed-section clock runs from the gate, not from the crossing (FAI S7F §8.3.1).',
+        value: fmt(gate.time),
+        emphasis: 'muted',
+      });
+    }
   }
 
   // Turnpoints after the start, in scored order.
@@ -476,7 +503,19 @@ function buildDistanceSection(
 
   const items: ScoreExplanationItem[] = [];
 
-  if (result.flownDistance < params.minimumDistance) {
+  if (entry.early_start_outcome === 'pg_launch_to_sss') {
+    items.push({
+      id: 'early-start-distance',
+      text: 'Early start (FAI S7F §12.2): paraglider pilots who start before the first start gate are scored only for the distance from launch to the start cylinder — the rest of the flight earns no points.',
+      emphasis: 'warning',
+    });
+  } else if (entry.early_start_outcome === 'hg_min_distance') {
+    items.push({
+      id: 'early-start-distance',
+      text: `Early start of ${duration(entry.early_start_seconds ?? 0)} — more than the ${params.jumpTheGunMaxSeconds} s jump-the-gun limit (FAI S7F §12.2), so the flight is scored as the minimum distance.`,
+      emphasis: 'warning',
+    });
+  } else if (result.flownDistance < params.minimumDistance) {
     items.push({
       id: 'minimum-distance',
       text: `Flew ${km(result.flownDistance)}, less than the ${km(params.minimumDistance)} minimum — scored as the minimum distance.`,
@@ -538,6 +577,8 @@ function buildTimeSection(
   entry: ScoreEntryInput,
   classContext: ClassContextInput,
   params: GAPParameters,
+  result: TurnpointSequenceResult,
+  fmt: (d: Date) => string,
 ): ScoreExplanationSection {
   const ap = classContext.available_points;
   const items: ScoreExplanationItem[] = [];
@@ -572,6 +613,16 @@ function buildTimeSection(
       id: 'your-time',
       text: 'Your speed section time',
       value: duration(entry.speed_section_time),
+      // In a gated race the clock ran from the gate, not the crossing —
+      // spell it out so the time never looks wrong next to the tracklog.
+      detail: result.startGate
+        ? `Timed from your ${fmt(result.startGate.time)} start gate to the end of the speed section (FAI S7F §8.7)${
+            result.sssReaching &&
+            result.sssReaching.time.getTime() !== result.startGate.time.getTime()
+              ? ` — you crossed the start at ${fmt(result.sssReaching.time)}`
+              : ''
+          }.`
+        : undefined,
     });
     items.push({
       id: 'best-time',
@@ -617,10 +668,22 @@ function buildTotalSection(entry: ScoreEntryInput): ScoreExplanationSection {
     .filter((c, i) => c > 0 || i < 2) // always show distance + time, others only when earned
     .map((c) => c.toFixed(1))
     .join(' + ');
-  const detail =
-    entry.penalty_points !== 0
-      ? `round(${parts}) = ${sum}; ${sum} ${entry.penalty_points > 0 ? '−' : '+'} ${Math.abs(entry.penalty_points)} penalty = ${entry.total_score} (scores never go below 0)`
-      : `round(${parts}) = ${entry.total_score}`;
+  const jtg = entry.jump_the_gun_penalty ?? 0;
+  let detail: string;
+  if (jtg === 0 && entry.penalty_points === 0) {
+    detail = `round(${parts}) = ${entry.total_score}`;
+  } else {
+    const steps = [`round(${parts}) = ${sum}`];
+    if (jtg !== 0) {
+      steps.push(`− ${jtg} jump-the-gun (never below the minimum-distance score)`);
+    }
+    if (entry.penalty_points !== 0) {
+      steps.push(
+        `${entry.penalty_points > 0 ? '−' : '+'} ${Math.abs(entry.penalty_points)} penalty (scores never go below 0)`,
+      );
+    }
+    detail = `${steps.join(' ')} = ${entry.total_score}`;
+  }
   return {
     id: 'total',
     title: 'Total',
@@ -637,23 +700,43 @@ function buildTotalSection(entry: ScoreEntryInput): ScoreExplanationSection {
 }
 
 function buildPenaltySection(
-  entry: Pick<ScoreEntryInput, 'penalty_points' | 'penalty_reason'>,
+  entry: {
+    penalty_points: number;
+    penalty_reason: string | null;
+    early_start_seconds?: number | null;
+    jump_the_gun_penalty?: number | null;
+  },
+  jumpTheGunFactor = DEFAULT_GAP_PARAMETERS.jumpTheGunFactor,
 ): ScoreExplanationSection | null {
-  if (entry.penalty_points === 0) return null;
-  const isBonus = entry.penalty_points < 0;
+  const jtg = entry.jump_the_gun_penalty ?? 0;
+  if (entry.penalty_points === 0 && jtg === 0) return null;
+  const items: ScoreExplanationItem[] = [];
+  if (jtg > 0) {
+    const secs = entry.early_start_seconds ?? 0;
+    items.push({
+      id: 'jump-the-gun',
+      text: `Jump the gun (FAI S7F §12.2): started ${duration(secs)} before the first start gate. The complete flight is scored, with 1 penalty point per ${jumpTheGunFactor} seconds early; the total never drops below the minimum-distance score.`,
+      value: `−${jtg} pts`,
+      detail: `${Math.round(secs)} s early ÷ ${jumpTheGunFactor} s per point = ${jtg} points`,
+      emphasis: 'warning',
+    });
+  }
+  if (entry.penalty_points !== 0) {
+    const isBonus = entry.penalty_points < 0;
+    items.push({
+      id: 'penalty',
+      text: entry.penalty_reason || (isBonus ? 'Bonus applied by the scorer.' : 'Penalty applied by the scorer.'),
+      value: `${isBonus ? '+' : '−'}${Math.abs(entry.penalty_points)} pts`,
+      detail: 'Applied after scoring — see the competition audit log for who applied it and when.',
+      emphasis: isBonus ? 'normal' : 'warning',
+    });
+  }
+  const isBonusOnly = jtg === 0 && entry.penalty_points < 0;
   return {
     id: 'penalty',
-    title: isBonus ? 'Bonus' : 'Penalty',
-    points: -entry.penalty_points,
-    items: [
-      {
-        id: 'penalty',
-        text: entry.penalty_reason || (isBonus ? 'Bonus applied by the scorer.' : 'Penalty applied by the scorer.'),
-        value: `${isBonus ? '+' : '−'}${Math.abs(entry.penalty_points)} pts`,
-        detail: 'Applied after scoring — see the competition audit log for who applied it and when.',
-        emphasis: isBonus ? 'normal' : 'warning',
-      },
-    ],
+    title: isBonusOnly ? 'Bonus' : 'Penalty',
+    points: -(entry.penalty_points + jtg),
+    items,
   };
 }
 
@@ -673,7 +756,7 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
     buildFlightSection(task, result, entry, fmt),
     buildValiditySection(classContext),
     buildDistanceSection(entry, classContext, result, params),
-    buildTimeSection(entry, classContext, params),
+    buildTimeSection(entry, classContext, params, result, fmt),
   ];
 
   if (classContext.available_points.leading > 0 || entry.leading_points > 0) {
@@ -706,12 +789,16 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
     });
   }
 
-  const penalty = buildPenaltySection(entry);
+  const penalty = buildPenaltySection(entry, params.jumpTheGunFactor);
   if (penalty) sections.push(penalty);
   sections.push(buildTotalSection(entry));
 
   let headline: string;
-  if (entry.made_goal && entry.speed_section_time !== null) {
+  if (entry.early_start_outcome === 'pg_launch_to_sss') {
+    headline = `Early start — scored to the start cylinder only — ${entry.total_score} points`;
+  } else if (entry.early_start_outcome === 'hg_min_distance') {
+    headline = `Early start beyond the limit — scored minimum distance — ${entry.total_score} points`;
+  } else if (entry.made_goal && entry.speed_section_time !== null) {
     headline = `Made goal in ${duration(entry.speed_section_time)} — ${entry.total_score} points`;
   } else if (entry.made_goal) {
     headline = `Made goal — ${entry.total_score} points`;

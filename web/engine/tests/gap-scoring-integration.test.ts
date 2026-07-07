@@ -101,8 +101,8 @@ describe('Corryong Cup 2026 Task 1 — integration', () => {
     'Glen Mcfarlane',
     'Paul Bissett-Amess',
     'Steven Crosby',
-    'Rory Duncan',
     'Vic Hare',
+    'Rory Duncan',
     'Todd Wisewould',
     'Gordon Rigg',
     'Craig Taylor',
@@ -160,14 +160,18 @@ describe('Corryong Cup 2026 Task 1 — integration', () => {
     timePts: number;
     madeGoal: boolean;
   }> = [
-    // Leading — goal finishers
+    // Leading — goal finishers. This task is a gated race (8 start gates
+    // every 15 min), so speed-section times run from each pilot's start
+    // gate (S7F §8.3.1/§8.7) — these totals track AirScore's published
+    // results (Holtkamp 907, Burkitt 890 there; ±1–2 pts here from the
+    // different launch-validity denominator and difficulty residuals).
     { name: 'Jon Durand',        rank: 1,  total: 1000, distPts: 485.6, timePts: 514.4, madeGoal: true },
-    { name: 'Rohan Holtkamp',    rank: 2,  total: 919,  distPts: 485.6, timePts: 433.2, madeGoal: true },
-    { name: 'Peter  Burkitt',    rank: 3,  total: 896,  distPts: 485.6, timePts: 410.2, madeGoal: true },
+    { name: 'Rohan Holtkamp',    rank: 2,  total: 906,  distPts: 485.6, timePts: 420.1, madeGoal: true },
+    { name: 'Peter  Burkitt',    rank: 3,  total: 888,  distPts: 485.6, timePts: 402.4, madeGoal: true },
 
     // Mid-pack — goal finishers
-    { name: 'Glen Mcfarlane',    rank: 5,  total: 686,  distPts: 485.6, timePts: 200.4, madeGoal: true },
-    { name: 'Todd Wisewould',    rank: 10, total: 568,  distPts: 485.6, timePts: 82.9,  madeGoal: true },
+    { name: 'Glen Mcfarlane',    rank: 5,  total: 671,  distPts: 485.6, timePts: 185.2, madeGoal: true },
+    { name: 'Todd Wisewould',    rank: 10, total: 546,  distPts: 485.6, timePts: 60.0,  madeGoal: true },
     { name: 'Craig Taylor',      rank: 12, total: 486,  distPts: 485.6, timePts: 0,     madeGoal: true },
 
     // First non-goal pilot (distance points now include the HG difficulty half)

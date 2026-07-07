@@ -97,9 +97,10 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               scored.
             </li>
             <li>
-              <strong>Start of Speed Section (SSS)</strong> — The "start gate." Your timed run
-              begins when you cross this cylinder. Some competitions use a fixed clock start;
-              others let you choose when to start.
+              <strong>Start of Speed Section (SSS)</strong> — Where your timed run begins. In a
+              race to goal your clock starts at a fixed <em>start gate</em> time (the last gate
+              at or before your crossing); in an elapsed-time task it starts the moment you cross
+              the cylinder.
             </li>
             <li>
               <strong>Turnpoints</strong> — Intermediate waypoints you must tag in order. You
@@ -353,11 +354,12 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
           </p>
           <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Time Points} = \text{SF} \times \text{Available Time Points}`)}></p>
           <p class="text-muted-foreground">
-            One thing to be aware of: in an official race-to-goal task with start gates, your clock
-            runs from the <strong>start gate</strong> you took, not from the moment you crossed the
-            start cylinder. GlideComp currently times every pilot from their actual start-cylinder
-            crossing — see
-            <a href="#spec-differences" class="underline hover:text-foreground">Differences from the Official Spec</a>.
+            One thing to be aware of: in a race-to-goal task with start gates, your clock runs
+            from the <strong>start gate</strong> you took — the last gate at or before your
+            start-cylinder crossing — not from the crossing itself (§8.3.1). Cross at 13:49 with
+            gates at 13:30/13:50 and your clock has been running since 13:30. Elapsed-time tasks
+            are timed from your actual crossing. GlideComp scores both per the spec, and the
+            per-pilot score analysis shows which gate you took alongside your crossing time.
           </p>
         </div>
       </section>
@@ -528,12 +530,16 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   <td class="py-2">Implemented (entered by the scorekeeper, audit-logged)</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Penalties — percentage &amp; jump-the-gun (§12.2, §12.4)</td>
+                  <td class="py-2 pr-4">Penalties — percentage (§12.4)</td>
                   <td class="py-2">Not implemented</td>
                 </tr>
                 <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">Early starts &amp; jump-the-gun (§12.2)</td>
+                  <td class="py-2">Implemented — PG scored launch→start; HG 1 pt per X s early (X, Y configurable, defaults 2/300)</td>
+                </tr>
+                <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Start gates / race start times (§6.3.3, §8.3.1)</td>
-                  <td class="py-2">Not implemented — all tasks timed as elapsed time</td>
+                  <td class="py-2">Implemented — start snapped to the last gate ≤ crossing; LC clock from the first gate (§11.3.1)</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Goal lines (§6.2.3, §8.5.2)</td>
@@ -585,19 +591,17 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
 
           <div class="space-y-4 ml-2">
             <div>
-              <h3 class="text-base font-semibold mb-1">Start times: every task is scored as elapsed time (§6.3.3, §8.3.1)</h3>
+              <h3 class="text-base font-semibold mb-1">Start gates: placeholder midnight gates are ignored (§6.3.3)</h3>
               <p class="text-muted-foreground">
-                In a race-to-goal task, the spec sets each pilot's start time to the
-                <strong>last start gate before their start-cylinder crossing</strong> — cross at
-                13:49 with gates at 13:30/13:50 and your clock has been running since 13:30.
-                GlideComp parses the start gates from the task file but does not use them: every
-                pilot's speed-section time runs from the moment they actually crossed the start
-                cylinder, which is the spec's <em>elapsed-time</em> rule (§6.3.4). For true
-                race-to-goal tasks this makes GlideComp's times shorter than official ones for
-                anyone who crossed after the gate. For the same reason, early starts ("jumping the
-                gun", §12.2) are not detected or penalised, and the leading-coefficient clock
-                starts at the first pilot's actual crossing rather than the first gate time
-                (§11.3.1).
+                GlideComp scores race-to-goal start gates per the spec: each pilot's start time is
+                the last gate at or before their start-cylinder crossing (§8.3.1), crossings
+                before the first gate cannot validate a start (§8.3), early starts follow the
+                §12.2 rules (paragliders scored launch→start; hang gliders get the jump-the-gun
+                penalty), and the leading-coefficient clock runs from the first gate (§11.3.1).
+                One pragmatic deviation: a race task whose <em>only</em> gate is exactly 00:00:00
+                UTC is treated as having no gates and timed as elapsed time — some tools write
+                that lone midnight gate as a placeholder to satisfy the file format's
+                non-empty-gates rule, and a real midnight-UTC gate does not occur in practice.
               </p>
             </div>
             <div>
