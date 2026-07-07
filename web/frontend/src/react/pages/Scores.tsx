@@ -21,6 +21,7 @@ import {
   type ClassStanding,
   type TaskInfo,
 } from "../../scores-views";
+import { ScoreFreshness } from "../comp/ScoreFreshness";
 import { formatScore, ordinal } from "../lib/format";
 
 interface CompInfo {
@@ -29,12 +30,17 @@ interface CompInfo {
   category: "hg" | "pg";
   scoring_format: "gap" | "open_distance";
   pilot_count?: number;
+  timezone?: string | null;
 }
 
 interface CompScores {
   comp_id: string;
   tasks: TaskInfo[];
   standings: ClassStanding[];
+  /** Oldest constituent task compute; null when no tasks are scored yet. */
+  computed_at: string | null;
+  /** True when any task's scores have a re-score in flight or pending. */
+  stale: boolean;
 }
 
 function scoreDetailHref(compId: string, taskId: string, pilotId: string): string {
@@ -47,7 +53,7 @@ export function Scores() {
   const [state, setState] = useState<
     | { kind: "loading" }
     | { kind: "not-found" }
-    | { kind: "ready"; comp: CompInfo; scores: CompScores }
+    | { kind: "ready"; comp: CompInfo; scores: CompScores; etag: string | null }
   >({ kind: "loading" });
 
   useEffect(() => {
@@ -68,7 +74,12 @@ export function Scores() {
         const comp = (await compRes.json()) as CompInfo;
         const scores = (await scoresRes.json()) as CompScores;
         document.title = `GlideComp - ${comp.name} Scores`;
-        setState({ kind: "ready", comp, scores });
+        setState({
+          kind: "ready",
+          comp,
+          scores,
+          etag: scoresRes.headers.get("ETag"),
+        });
       } catch {
         setState({ kind: "not-found" });
       }
@@ -107,6 +118,13 @@ export function Scores() {
       </nav>
       <h1 className="mt-2 text-2xl font-bold">{comp.name} — Scores</h1>
       <p className="text-muted-foreground">{facts.join(" · ")}</p>
+      <ScoreFreshness
+        computedAt={scores.computed_at}
+        stale={scores.stale}
+        timezone={comp.timezone ?? null}
+        etag={state.etag}
+        pollUrl={compId ? `/api/comp/${encodeURIComponent(compId)}/scores` : null}
+      />
 
       {scores.standings.length === 0 ? (
         <p className="mt-4 text-muted-foreground">No scored tasks yet.</p>

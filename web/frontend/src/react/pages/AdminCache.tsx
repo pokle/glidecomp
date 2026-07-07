@@ -62,9 +62,9 @@ export function AdminCache() {
 
   async function handleClear() {
     const confirmed = await confirm({
-      title: "Clear entire cache?",
+      title: "Re-score everything?",
       message:
-        "This deletes every cached score, comp score, and flight analysis. The next request for each will recompute from scratch — pages may load slower until the cache warms back up.",
+        "This marks every stored task score stale (they recompute in the background — readers keep getting instant, timestamped scores) and clears the KV and AirScore caches. Nothing goes slow.",
       confirmLabel: "Clear cache",
       destructive: true,
     });
@@ -120,7 +120,8 @@ export function AdminCache() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Cache</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            KV caches backing scoring and the AirScore proxy
+            Materialized scores in D1, the KV replay-bundle cache, and the
+            AirScore proxy cache
           </p>
         </div>
         <Button

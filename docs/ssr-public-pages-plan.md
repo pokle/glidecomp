@@ -227,12 +227,14 @@ routes fall back to the SPA shell.
   status hydrate in an effect (render-then-upgrade), or mark those subtrees
   client-only. Never SSR anything derived from the session except via the
   forwarded-cookie loader.
-- **Cold-score latency.** First hit on an unscored task makes the worker fetch
-  every track from R2 and score it (`computeTaskScore`) — the Pages Function
-  only awaits a fetch (wall time, ~no CPU), but the response could take
-  seconds. Mitigation: loader timeout (~5s) → fall back to the SPA shell for
-  that request; the client fetch then populates the KV cache and subsequent
-  crawls get fast SSR.
+- **Cold-score latency.** Addressed by the stale-first score store
+  ([score-caching-stale-first-plan.md](./score-caching-stale-first-plan.md),
+  implemented): mutations compute scores on write into the D1 `task_scores`
+  rows, so score reads are a single row read and never compute. A task only
+  goes cold if it predates that feature or slipped the mutation hooks, in
+  which case the worker still scores it synchronously (R2 fan-out, seconds).
+  The loader timeout (~5s) → SPA-shell fallback stays as a belt-and-braces
+  guard but is no longer the mitigation of record.
 - **SSR bundle size.** `react-dom/server` + the four pages + the engine
   explanation module must stay under the Pages Functions bundle limit. The
   Vite SSR build tree-shakes mapbox/three/leaflet out (they're behind dynamic

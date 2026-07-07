@@ -247,6 +247,7 @@ export function TaskDetail() {
         compId={compId}
         taskId={taskId}
         refresh={scoresRefresh}
+        timezone={comp?.timezone ?? null}
         onReplayAvailable={setReplayAvailable}
       />
 

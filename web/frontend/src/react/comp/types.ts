@@ -137,6 +137,10 @@ export interface TaskScoreData {
   task_date: string;
   scoring_format: ScoringFormat;
   classes: ClassScore[];
+  /** ISO timestamp of when these scores were computed (stale-first store). */
+  computed_at: string;
+  /** True when newer inputs exist and a re-score is in flight or pending. */
+  stale: boolean;
 }
 
 /** One endpoint of the scored open-distance line, with fix time/altitude. */

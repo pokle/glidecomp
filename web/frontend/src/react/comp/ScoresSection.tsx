@@ -15,24 +15,28 @@ import {
 } from "@/react/ui/table";
 import { api } from "../../comp/api";
 import { formatDuration } from "../lib/format";
+import { ScoreFreshness } from "./ScoreFreshness";
 import type { ClassScore, ScoringFormat, TaskScoreData } from "./types";
 
 type ScoresState =
   | { kind: "loading" }
   | { kind: "no-route" }
   | { kind: "unavailable" }
-  | { kind: "loaded"; data: TaskScoreData };
+  | { kind: "loaded"; data: TaskScoreData; etag: string | null };
 
 export function ScoresSection({
   compId,
   taskId,
   refresh,
+  timezone,
   onReplayAvailable,
 }: {
   compId: string;
   taskId: string;
   /** Bump to re-fetch scores (after uploads / penalties / deletes). */
   refresh: number;
+  /** Comp-local IANA zone for the computed-at timestamp. */
+  timezone: string | null;
   /** Reports whether the task has scored tracks (reveals the 3D replay link). */
   onReplayAvailable: (available: boolean) => void;
 }) {
@@ -56,7 +60,7 @@ export function ScoresSection({
         }
         const data = (await res.json()) as unknown as TaskScoreData;
         if (cancelled) return;
-        setState({ kind: "loaded", data });
+        setState({ kind: "loaded", data, etag: res.headers.get("ETag") });
         // Reveal the 3D replay link once the task has tracks to show (the
         // bundle endpoint needs an xctsk + at least one track, both implied
         // by a scored pilot).
@@ -96,6 +100,15 @@ export function ScoresSection({
       ) : null}
       {state.kind === "unavailable" ? (
         <p className="mt-2 text-muted-foreground">Scores not available</p>
+      ) : null}
+      {state.kind === "loaded" ? (
+        <ScoreFreshness
+          computedAt={state.data.computed_at}
+          stale={state.data.stale}
+          timezone={timezone}
+          etag={state.etag}
+          pollUrl={`/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/score`}
+        />
       ) : null}
       {state.kind === "loaded"
         ? state.data.classes.map((cls) => (

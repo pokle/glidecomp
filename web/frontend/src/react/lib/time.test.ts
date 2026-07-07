@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  formatComputedAt,
   formatTimeInZone,
   utcToZonedHHMM,
   zonedToUtcHHMM,
@@ -89,5 +90,30 @@ describe("formatTimeInZone", () => {
     expect(() =>
       formatTimeInZone(new Date("2026-02-07T01:30:05Z"), "Not/AZone")
     ).not.toThrow();
+  });
+});
+
+describe("formatComputedAt", () => {
+  const iso = "2026-07-07T14:32:00Z";
+
+  test("renders an absolute time in the comp timezone with the zone name", () => {
+    const out = formatComputedAt(iso, MEL);
+    // 14:32 UTC = 00:32 the next day in AEST (UTC+10, no DST in July).
+    expect(out).toContain("8 Jul 2026");
+    expect(out).toContain("00:32");
+    expect(out).toMatch(/GMT\+10|AEST/);
+  });
+
+  test("falls back to UTC when the comp has no timezone", () => {
+    const out = formatComputedAt(iso, null);
+    expect(out).toContain("7 Jul 2026");
+    expect(out).toContain("14:32");
+    expect(out).toMatch(/UTC|GMT(?!\+)/);
+  });
+
+  test("falls back to UTC on an unknown IANA zone instead of throwing", () => {
+    const out = formatComputedAt(iso, "Not/AZone");
+    expect(out).toContain("7 Jul 2026");
+    expect(out).toContain("14:32");
   });
 });

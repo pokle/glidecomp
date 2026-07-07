@@ -7,15 +7,26 @@ import { isCompAdmin } from "../super-admin";
 import { encodeId } from "../sqids";
 import {
   computePilotAnalysis,
-  computeScoreCacheKey,
-  computeTaskScore,
   mapWithConcurrency,
+  shortHash,
   type TaskScoreResponse,
 } from "../scoring";
+import {
+  computeAndStoreTaskScore,
+  ifNoneMatchMatches,
+  isRowStale,
+  readTaskScoreRow,
+  readTaskScoreRowsForComp,
+  rowHasResult,
+  scheduleTaskRevalidation,
+  toEtag,
+  type StoredTaskScore,
+} from "../score-store";
 
-/** How many cold tasks to score in parallel for the comp-level endpoint. Each
- * task itself fans out over its tracks, so this stays small to bound total R2
- * concurrency. */
+/** How many rowless (cold) tasks to score in parallel for the comp-level
+ * endpoint. Each task itself fans out over its tracks, so this stays small
+ * to bound total R2 concurrency. Normal tasks are materialized rows and
+ * never hit this path. */
 const COMP_TASK_CONCURRENCY = 3;
 
 type Variables = {
@@ -26,24 +37,26 @@ type Variables = {
 type HonoEnv = { Bindings: Env; Variables: Variables };
 
 /**
- * Cloudflare's waitUntil, if this invocation has an ExecutionContext — lets us
- * persist per-track analysis cache writes without blocking the response.
- * Returns undefined outside a Worker request (the caller then awaits instead).
+ * Cache-Control for score responses (matches the SSR plan): signed-in
+ * viewers must never see another session's cached body; anonymous readers
+ * and crawlers may cache but must revalidate — the ETag makes that a
+ * one-row 304.
  */
-function getWaitUntil(
-  c: Context<HonoEnv>
-): ((promise: Promise<unknown>) => void) | undefined {
-  try {
-    const ctx = c.executionCtx;
-    return ctx.waitUntil.bind(ctx);
-  } catch {
-    return undefined;
-  }
+function cacheControl(c: Context<HonoEnv>): string {
+  return c.var.user
+    ? "private, no-store"
+    : "public, max-age=0, must-revalidate";
 }
 
 export const scoreRoutes = new Hono<HonoEnv>()
 
   // ── GET /api/comp/:comp_id/task/:task_id/score ── Task scores (public for non-test)
+  //
+  // Stale-first: served from the task's materialized task_scores row in a
+  // single D1 read. A stale row is served immediately (labelled stale) while
+  // revalidation runs in the background; only a task with no usable row —
+  // one predating this feature or that slipped past the mutation hooks —
+  // computes synchronously.
   .get(
     "/api/comp/:comp_id/task/:task_id/score",
     optionalAuth,
@@ -52,7 +65,6 @@ export const scoreRoutes = new Hono<HonoEnv>()
       const compId = c.var.ids.comp_id!;
       const taskId = c.var.ids.task_id!;
       const user = c.var.user;
-      const alphabet = c.env.SQIDS_ALPHABET;
 
       // Check comp exists and handle test visibility
       const comp = await c.env.DB.prepare(
@@ -85,34 +97,50 @@ export const scoreRoutes = new Hono<HonoEnv>()
         );
       }
 
-      // Check KV cache
-      const cacheKey = await computeScoreCacheKey(taskId, c.env.DB);
-      const cached = await c.env.glidecomp_scores_cache.get(cacheKey, "json") as TaskScoreResponse | null;
+      const row = await readTaskScoreRow(c.env.DB, taskId);
 
-      if (cached) {
-        return c.json(cached, 200, { "X-Cache": "HIT" });
+      if (row && rowHasResult(row)) {
+        const stale = isRowStale(row);
+        if (stale) scheduleTaskRevalidation(c, [taskId]);
+        // The ETag is the identity of the served body: the stored state_key
+        // plus the staleness label riding on it — a stale-labelled body must
+        // never revalidate a fresh one (or a browser would re-serve the
+        // banner after the re-score concluded). Re-score polls carry the
+        // stale ETag: 304 while the row is unchanged (one D1 read, no body),
+        // 200 the moment the re-score lands — even a no-op re-score whose
+        // recomputed state_key is identical.
+        const etagKey = stale ? `${row.state_key}:stale` : row.state_key;
+        const headers = {
+          ETag: toEtag(etagKey),
+          "X-Cache": stale ? "HIT-STALE" : "HIT",
+          "Cache-Control": cacheControl(c),
+        };
+        if (ifNoneMatchMatches(c.req.header("If-None-Match"), etagKey)) {
+          return c.body(null, 304, headers);
+        }
+        const body = JSON.parse(row.response_json) as StoredTaskScore;
+        return c.json({ ...body, stale }, 200, headers);
       }
 
-      // Cache miss — compute scores
-      const result = await computeTaskScore(
+      // Cold — no servable blob. Compute synchronously, store, serve.
+      const { response, stateKey } = await computeAndStoreTaskScore(
+        c.env,
         taskId,
-        c.env.DB,
-        c.env.R2,
-        alphabet,
-        c.env.glidecomp_scores_cache,
-        getWaitUntil(c)
+        row?.inputs_rev ?? 0
       );
-
-      // Store in KV with 7-day TTL
-      await c.env.glidecomp_scores_cache.put(cacheKey, JSON.stringify(result), {
-        expirationTtl: 604800,
+      return c.json({ ...response, stale: false }, 200, {
+        ETag: toEtag(stateKey),
+        "X-Cache": "MISS",
+        "Cache-Control": cacheControl(c),
       });
-
-      return c.json(result, 200, { "X-Cache": "MISS" });
     }
   )
 
   // ── GET /api/comp/:comp_id/scores ── Competition-level scores (public for non-test)
+  //
+  // Pure aggregation over the per-task task_scores rows plus live team
+  // assignments — no comp-level materialization to keep consistent. Reports
+  // computed_at = the oldest constituent task's, stale = any task stale.
   .get(
     "/api/comp/:comp_id/scores",
     optionalAuth,
@@ -146,9 +174,9 @@ export const scoreRoutes = new Hono<HonoEnv>()
         .bind(compId)
         .all<{ task_id: number; name: string; task_date: string }>();
 
-      // Team assignments are embedded in the response (for the Teams view), so
-      // they must also be part of the hashed cache state — a team change
-      // doesn't touch any task score cache key.
+      // Team assignments are embedded in the response (for the Teams view).
+      // Read fresh every time and folded into the comp ETag — a team edit
+      // needs no cache handling at all.
       const teamRows = await c.env.DB.prepare(
         `SELECT comp_pilot_id, team_name FROM comp_pilot
          WHERE comp_id = ? ORDER BY comp_pilot_id`
@@ -162,59 +190,36 @@ export const scoreRoutes = new Hono<HonoEnv>()
         ])
       );
 
-      // Compute cache key for comp scores: hash of all task score cache keys
-      // plus the team assignments
-      const taskCacheKeys = await Promise.all(
-        tasks.results.map((t) => computeScoreCacheKey(t.task_id, c.env.DB))
-      );
-      const compStateString = [
-        ...taskCacheKeys,
-        ...teamRows.results.map((r) => `${r.comp_pilot_id}=${r.team_name ?? ""}`),
-      ].join("|");
-      const compHashBuffer = await crypto.subtle.digest(
-        "SHA-256",
-        new TextEncoder().encode(compStateString)
-      );
-      const compHex = Array.from(new Uint8Array(compHashBuffer))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("")
-        .slice(0, 16);
-      // v3: added team_name per pilot (and team assignments to the hash).
-      const compCacheKey = `compscore:v3:${compId}:${compHex}`;
+      // One query for every task's materialized scores. Stale rows are
+      // served as-is (revalidation is scheduled below); only rowless tasks
+      // compute synchronously.
+      const scoreRows = await readTaskScoreRowsForComp(c.env.DB, compId);
 
-      const cachedComp = await c.env.glidecomp_scores_cache.get(compCacheKey, "json");
-      if (cachedComp) {
-        return c.json(cachedComp, 200, { "X-Cache": "HIT" });
-      }
+      const staleTaskIds: number[] = [];
+      let anyCold = false;
 
-      // Load or compute each task's scores. Tasks are independent, so cold ones
-      // are scored with bounded concurrency; each reuses its own per-task cache
-      // and (on a miss) the per-track analysis cache.
-      const waitUntil = getWaitUntil(c);
       const taskScores = await mapWithConcurrency(
         tasks.results,
         COMP_TASK_CONCURRENCY,
-        async (task, index) => {
-          const cacheKey = taskCacheKeys[index];
-          const cached = await c.env.glidecomp_scores_cache.get(cacheKey, "json") as TaskScoreResponse | null;
-
-          let score: TaskScoreResponse;
-          if (cached) {
-            score = cached;
+        async (task) => {
+          const row = scoreRows.get(task.task_id);
+          let score: StoredTaskScore;
+          let stateKey: string;
+          let stale = false;
+          if (row && rowHasResult(row)) {
+            score = JSON.parse(row.response_json) as StoredTaskScore;
+            stateKey = row.state_key;
+            stale = isRowStale(row);
+            if (stale) staleTaskIds.push(task.task_id);
           } else {
-            score = await computeTaskScore(
+            anyCold = true;
+            const computed = await computeAndStoreTaskScore(
+              c.env,
               task.task_id,
-              c.env.DB,
-              c.env.R2,
-              alphabet,
-              c.env.glidecomp_scores_cache,
-              waitUntil
+              row?.inputs_rev ?? 0
             );
-            const put = c.env.glidecomp_scores_cache.put(cacheKey, JSON.stringify(score), {
-              expirationTtl: 604800,
-            });
-            if (waitUntil) waitUntil(put);
-            else await put;
+            score = computed.response;
+            stateKey = computed.stateKey;
           }
 
           return {
@@ -222,9 +227,43 @@ export const scoreRoutes = new Hono<HonoEnv>()
             task_name: task.name,
             task_date: task.task_date,
             classes: score.classes,
+            computed_at: score.computed_at,
+            state_key: stateKey,
+            stale,
           };
         }
       );
+
+      if (staleTaskIds.length > 0) scheduleTaskRevalidation(c, staleTaskIds);
+
+      const anyStale = taskScores.some((t) => t.stale);
+      // Oldest constituent compute: the honest "as of" for aggregated
+      // standings. Null for a comp with no scoreable tasks.
+      const computedAt = taskScores.reduce<string | null>(
+        (oldest, t) =>
+          oldest === null || t.computed_at < oldest ? t.computed_at : oldest,
+        null
+      );
+
+      // Comp-level ETag: the identity of everything the response is built
+      // from — each task's stored state_key plus the team assignments, with
+      // the staleness label folded in (as on the task endpoint) so a
+      // stale-labelled body never revalidates a fresh one.
+      const compStateString = [
+        ...taskScores.map((t) => t.state_key),
+        ...teamRows.results.map((r) => `${r.comp_pilot_id}=${r.team_name ?? ""}`),
+      ].join("|");
+      const compEtagKey =
+        `compscores:${compId}:${await shortHash(compStateString)}` +
+        (anyStale ? ":stale" : "");
+      const headers = {
+        ETag: toEtag(compEtagKey),
+        "X-Cache": anyCold ? "MISS" : anyStale ? "HIT-STALE" : "HIT",
+        "Cache-Control": cacheControl(c),
+      };
+      if (ifNoneMatchMatches(c.req.header("If-None-Match"), compEtagKey)) {
+        return c.body(null, 304, headers);
+      }
 
       // Aggregate total points per pilot per class across all tasks
       type PilotTotals = {
@@ -283,13 +322,11 @@ export const scoreRoutes = new Hono<HonoEnv>()
           classes: t.classes.map((cls) => cls.pilot_class),
         })),
         standings,
+        computed_at: computedAt,
+        stale: anyStale,
       };
 
-      await c.env.glidecomp_scores_cache.put(compCacheKey, JSON.stringify(result), {
-        expirationTtl: 604800,
-      });
-
-      return c.json(result, 200, { "X-Cache": "MISS" });
+      return c.json(result, 200, headers);
     }
   )
 
@@ -344,9 +381,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
           compPilotId,
           c.env.DB,
           c.env.R2,
-          c.env.SQIDS_ALPHABET,
-          c.env.glidecomp_scores_cache,
-          getWaitUntil(c)
+          c.env.SQIDS_ALPHABET
         );
         if (!result) {
           return c.json({ error: "Track not found" }, 404);
@@ -358,3 +393,10 @@ export const scoreRoutes = new Hono<HonoEnv>()
       }
     }
   );
+
+/** Response type of the task score endpoint (materialized blob + read-time
+ * staleness), re-exported for tests and typed clients. */
+export type ServedTaskScore = TaskScoreResponse & {
+  computed_at: string;
+  stale: boolean;
+};

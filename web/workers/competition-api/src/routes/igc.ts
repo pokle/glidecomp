@@ -7,6 +7,7 @@ import { isCompAdmin } from "../super-admin";
 import { updatePenaltySchema, validated } from "../validators";
 import { parseIGC } from "@glidecomp/engine";
 import { audit } from "../audit";
+import { bumpAndRevalidateScores } from "../score-store";
 import { linkExistingRegistrations } from "../pilot-linker";
 import { applyStatusOnTrackUpload } from "./pilot-status";
 import {
@@ -271,6 +272,7 @@ export const igcRoutes = new Hono<HonoEnv>()
           )
           .run();
 
+        await bumpAndRevalidateScores(c, [taskId]);
         await audit(c.env.DB, c.var.user, compId, {
           subject_type: "track",
           subject_id: existingTrack.task_track_id,
@@ -317,6 +319,7 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       const newTrackId = trackResult.meta.last_row_id;
 
+      await bumpAndRevalidateScores(c, [taskId]);
       await audit(c.env.DB, c.var.user, compId, {
         subject_type: "track",
         subject_id: newTrackId,
@@ -519,6 +522,7 @@ export const igcRoutes = new Hono<HonoEnv>()
           )
           .run();
 
+        await bumpAndRevalidateScores(c, [taskId]);
         await audit(c.env.DB, c.var.user, compId, {
           subject_type: "track",
           subject_id: existingTrack.task_track_id,
@@ -564,6 +568,7 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       const newTrackId = trackResult.meta.last_row_id;
 
+      await bumpAndRevalidateScores(c, [taskId]);
       await audit(c.env.DB, c.var.user, compId, {
         subject_type: "track",
         subject_id: newTrackId,
@@ -796,6 +801,8 @@ export const igcRoutes = new Hono<HonoEnv>()
         )
         .run();
 
+      await bumpAndRevalidateScores(c, [taskId]);
+
       const reasonSuffix = body.penalty_reason ? `: ${body.penalty_reason}` : "";
       const description =
         track.old_points === 0
@@ -851,6 +858,7 @@ export const igcRoutes = new Hono<HonoEnv>()
         c.env.R2.delete(track.igc_filename),
       ]);
 
+      await bumpAndRevalidateScores(c, [taskId]);
       await audit(c.env.DB, c.var.user, compId, {
         subject_type: "track",
         subject_id: track.task_track_id,
