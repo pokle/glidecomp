@@ -1,7 +1,9 @@
 # Plan: SEO-friendly SSR for the public competition pages
 
 **Date:** 2026-07-06
-**Status:** proposed
+**Status:** proposed — not yet implemented. This is a point-in-time plan; the
+"current state" notes below were refreshed 2026-07-07 for the stale-first
+score store, but verify file/line references against the code before building.
 
 ## Goal
 
@@ -27,16 +29,18 @@ Non-goals: SSR for auth-gated pages (`/u/*`, `/settings`, `/onboarding`,
 
 The exploration that informed this plan (see file references throughout):
 
-- **All the data is already server-side and public.** The competition-api
-  worker computes scores and per-pilot analyses on demand and caches them in
-  KV with a 7-day TTL (`web/workers/competition-api/src/routes/score.ts`,
-  `scoring.ts`). Public GETs, `optionalAuth`, JSON-serializable:
-  - `GET /api/comp` — comp list (`routes/comp.ts:241`)
-  - `GET /api/comp/:comp_id` — comp detail (`routes/comp.ts:306`)
-  - `GET /api/comp/:comp_id/scores` — comp standings, KV-cached (`routes/score.ts:116`)
-  - `GET /api/comp/:comp_id/task/:task_id` — task detail (`routes/task.ts:153`)
-  - `GET /api/comp/:comp_id/task/:task_id/score` — task scores, KV-cached (`routes/score.ts:47`)
-  - `GET .../pilot/:comp_pilot_id/analysis` — narrative input, KV-cached (`routes/score.ts:300`)
+- **All the data is already server-side and public.** Task scores are
+  materialized stale-first rows in D1 (`task_scores` — see
+  [score-caching-stale-first-plan.md](./score-caching-stale-first-plan.md)):
+  reads are a single row read and never compute
+  (`web/workers/competition-api/src/routes/score.ts`, `score-store.ts`).
+  Public GETs, `optionalAuth`, JSON-serializable:
+  - `GET /api/comp` — comp list (`routes/comp.ts:260`)
+  - `GET /api/comp/:comp_id` — comp detail (`routes/comp.ts:324`)
+  - `GET /api/comp/:comp_id/scores` — comp standings, aggregated from `task_scores` (`routes/score.ts:144`)
+  - `GET /api/comp/:comp_id/task/:task_id` — task detail (`routes/task.ts:191`)
+  - `GET /api/comp/:comp_id/task/:task_id/score` — task scores, served from `task_scores` (`routes/score.ts:60`)
+  - `GET .../pilot/:comp_pilot_id/analysis` — narrative input, cached in `track_analysis` (`routes/score.ts:337`)
 - **The narrative text needs no tracklog.** `PilotScoreDetail.tsx` builds the
   prose from the `analysis` + `score` responses via the isomorphic engine
   (`explainGapScore` / `explainOpenDistanceScore` in
@@ -199,8 +203,8 @@ routes fall back to the SPA shell.
   existing `document.title` effects for client-side navigations.
 - Expand `sitemap.xml` to include task and narrative URLs with `<lastmod>`
   from task dates.
-- Optional later: OG images, edge-caching SSR HTML keyed to the score KV cache
-  version.
+- Optional later: OG images, edge-caching SSR HTML keyed to the score rows'
+  `state_key` (already served as the score endpoints' ETag).
 
 ### Phase 4 — verification
 
