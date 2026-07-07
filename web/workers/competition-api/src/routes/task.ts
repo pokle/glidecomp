@@ -1,11 +1,10 @@
 import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
 import type { Env, AuthUser } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
-import { createTaskSchema, updateTaskSchema } from "../validators";
+import { createTaskSchema, updateTaskSchema, validated } from "../validators";
 import { audit, describeChange } from "../audit";
 import { summarizeXctskChange, describeTaskSummary } from "../xctsk-summary";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
@@ -77,7 +76,7 @@ export const taskRoutes = new Hono<HonoEnv>()
     requireAuth,
     sqidsMiddleware,
     requireCompAdmin,
-    zValidator("json", createTaskSchema),
+    validated("json", createTaskSchema),
     async (c) => {
       const compId = c.var.ids.comp_id!;
       const body = c.req.valid("json");
@@ -260,7 +259,7 @@ export const taskRoutes = new Hono<HonoEnv>()
     requireAuth,
     sqidsMiddleware,
     requireCompAdmin,
-    zValidator("json", updateTaskSchema),
+    validated("json", updateTaskSchema),
     async (c) => {
       const compId = c.var.ids.comp_id!;
       const taskId = c.var.ids.task_id!;

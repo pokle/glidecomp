@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
 import type { Env, AuthUser } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
@@ -8,6 +7,7 @@ import { isCompAdmin } from "../super-admin";
 import {
   upsertPilotStatusSchema,
   updatePilotStatusNoteSchema,
+  validated,
 } from "../validators";
 import { audit, describeChange } from "../audit";
 import { parsePilotStatuses, type PilotStatusConfig } from "./comp";
@@ -170,7 +170,7 @@ export const pilotStatusRoutes = new Hono<HonoEnv>()
     "/api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id",
     requireAuth,
     sqidsMiddleware,
-    zValidator("json", upsertPilotStatusSchema),
+    validated("json", upsertPilotStatusSchema),
     async (c) => {
       const compId = c.var.ids.comp_id!;
       const taskId = c.var.ids.task_id!;
@@ -331,7 +331,7 @@ export const pilotStatusRoutes = new Hono<HonoEnv>()
     "/api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id",
     requireAuth,
     sqidsMiddleware,
-    zValidator("json", updatePilotStatusNoteSchema),
+    validated("json", updatePilotStatusNoteSchema),
     async (c) => {
       const compId = c.var.ids.comp_id!;
       const taskId = c.var.ids.task_id!;

@@ -1,11 +1,10 @@
 import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
 import type { Env, AuthUser } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin, isSuperAdmin } from "../super-admin";
-import { createCompSchema, updateCompSchema } from "../validators";
+import { createCompSchema, updateCompSchema, validated } from "../validators";
 import { audit, describeChange } from "../audit";
 import { speedSectionTypeWarnings } from "../xctsk-summary";
 import { DEFAULT_GAP_PARAMETERS, type GAPParameters } from "@glidecomp/engine";
@@ -157,7 +156,7 @@ export const compRoutes = new Hono<HonoEnv>()
   .post(
     "/api/comp",
     requireAuth,
-    zValidator("json", createCompSchema),
+    validated("json", createCompSchema),
     async (c) => {
       const user = c.var.user;
       const body = c.req.valid("json");
@@ -455,7 +454,7 @@ export const compRoutes = new Hono<HonoEnv>()
     requireAuth,
     sqidsMiddleware,
     requireCompAdmin,
-    zValidator("json", updateCompSchema),
+    validated("json", updateCompSchema),
     async (c) => {
       const compId = c.var.ids.comp_id!;
       const body = c.req.valid("json");

@@ -122,6 +122,34 @@ describe("POST /api/comp", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  test("validation failures return a readable string error, not a ZodError object", async () => {
+    const res = await authRequest("POST", "/api/comp", {
+      name: "Bad Zone",
+      category: "hg",
+      timezone: "Mars/OlympusMons",
+    });
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { error: unknown };
+    expect(typeof data.error).toBe("string");
+    expect(data.error).toContain("timezone");
+    expect(data.error).toContain("valid timezone");
+  });
+
+  test("string error names the offending field on nested paths", async () => {
+    const comp = await authRequest("POST", "/api/comp", {
+      name: "Email Comp",
+      category: "hg",
+    });
+    const { comp_id } = (await comp.json()) as { comp_id: string };
+    const res = await authRequest("PATCH", `/api/comp/${comp_id}`, {
+      admin_emails: ["admin@example.com", "not-an-email"],
+    });
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { error: unknown };
+    expect(typeof data.error).toBe("string");
+    expect(data.error).toBe("admin_emails.1: Invalid email");
+  });
 });
 
 // ── GET /api/comp ───────────────────────────────────────────────────────────

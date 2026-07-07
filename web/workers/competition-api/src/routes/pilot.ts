@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
 import type { Env, AuthUser } from "../env";
 import { encodeId, decodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
@@ -10,6 +9,7 @@ import {
   updateCompPilotSchema,
   createCompPilotSchema,
   bulkPilotsSchema,
+  validated,
 } from "../validators";
 import { resolvePilotId } from "../pilot-resolver";
 import { linkExistingRegistrations } from "../pilot-linker";
@@ -303,7 +303,7 @@ export const pilotRoutes = new Hono<HonoEnv>()
   .patch(
     "/api/comp/pilot",
     requireAuth,
-    zValidator("json", updatePilotSchema),
+    validated("json", updatePilotSchema),
     async (c) => {
       const user = c.var.user;
       const body = c.req.valid("json");
@@ -432,7 +432,7 @@ export const pilotRoutes = new Hono<HonoEnv>()
     requireAuth,
     sqidsMiddleware,
     requireCompAdmin,
-    zValidator("json", createCompPilotSchema),
+    validated("json", createCompPilotSchema),
     async (c) => {
       const compId = c.var.ids.comp_id!;
       const body = c.req.valid("json");
@@ -524,7 +524,7 @@ export const pilotRoutes = new Hono<HonoEnv>()
     requireAuth,
     sqidsMiddleware,
     requireCompAdmin,
-    zValidator("json", bulkPilotsSchema),
+    validated("json", bulkPilotsSchema),
     async (c) => {
       const compId = c.var.ids.comp_id!;
       const { pilots } = c.req.valid("json");
@@ -773,7 +773,7 @@ export const pilotRoutes = new Hono<HonoEnv>()
     requireAuth,
     sqidsMiddleware,
     requireCompAdmin,
-    zValidator("json", updateCompPilotSchema),
+    validated("json", updateCompPilotSchema),
     async (c) => {
       const compId = c.var.ids.comp_id!;
       const compPilotId = c.var.ids.comp_pilot_id!;

@@ -7,11 +7,25 @@ import { createPortal } from "react-dom";
 import { toast as sonnerToast } from "sonner";
 import { Toaster } from "@/react/ui/sonner";
 
+// Coerce whatever a caller passes into a renderable string. API error
+// handlers do `toast.error(err.error || fallback)` and `err.error` is only
+// a string by convention — an object here would be rendered as a React
+// child by sonner and crash the tree, killing the toast it was meant to show.
+function asMessage(message: unknown): string {
+  if (typeof message === "string") return message;
+  if (message instanceof Error) return message.message;
+  try {
+    return JSON.stringify(message);
+  } catch {
+    return String(message);
+  }
+}
+
 export const toast = {
-  success: (message: string) => sonnerToast.success(message),
-  error: (message: string) => sonnerToast.error(message),
-  info: (message: string) => sonnerToast.info(message),
-  warning: (message: string) => sonnerToast.warning(message),
+  success: (message: string) => sonnerToast.success(asMessage(message)),
+  error: (message: string) => sonnerToast.error(asMessage(message)),
+  info: (message: string) => sonnerToast.info(asMessage(message)),
+  warning: (message: string) => sonnerToast.warning(asMessage(message)),
 };
 
 export function AppToaster() {

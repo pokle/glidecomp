@@ -1,5 +1,27 @@
 import { z } from "zod";
+import { zValidator } from "@hono/zod-validator";
+import type { ValidationTargets } from "hono";
 import { isValidTimezone } from "@glidecomp/engine/timezone";
+
+/**
+ * zValidator with a hook that turns zod failures into the API's standard
+ * `{ error: string }` shape (e.g. "admin_emails.1: Invalid email"). Without
+ * the hook the default 400 body nests the raw ZodError object under `error`,
+ * which clients expecting a string render as nothing at all — the request
+ * fails silently. All routes must use this instead of bare zValidator.
+ */
+export function validated<T extends z.ZodType, Target extends keyof ValidationTargets>(
+  target: Target,
+  schema: T
+) {
+  return zValidator(target, schema, (result, c) => {
+    if (!result.success) {
+      const issue = result.error.issues[0];
+      const path = issue && issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
+      return c.json({ error: `${path}${issue?.message ?? "Invalid request"}` }, 400);
+    }
+  });
+}
 
 const MAX_TEXT = 128;
 
