@@ -5,6 +5,7 @@
  * shared with the task detail page. Kept DOM-free so it's unit-testable.
  */
 import type { SSSConfig, Turnpoint, TurnpointType, XCTask } from "@glidecomp/engine";
+import { utcToZonedHHMM, zoneAbbreviation } from "../lib/time";
 
 // ---------------------------------------------------------------------------
 // Grid rows
@@ -240,18 +241,34 @@ export function addMinutes(hhmm: string, minutes: number): string {
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
-/** One-line human summary of the start configuration. */
-export function startConfigSummary(sss: SSSConfig): string {
+/**
+ * One-line human summary of the start configuration. When the comp's
+ * timezone and the task date are known, gate times are shown comp-local
+ * (labelled with the zone); otherwise they stay UTC as stored.
+ */
+export function startConfigSummary(
+  sss: SSSConfig,
+  opts?: { timeZone?: string | null; taskDate?: string }
+): string {
   const kind = sss.type === "ELAPSED-TIME" ? "Elapsed time" : "Race to goal";
   const dir = sss.direction === "ENTER" ? "enter" : "exit";
-  const gates = editableGates(sss);
+  let gates = editableGates(sss);
+  let zoneLabel = "UTC";
+  const tz = opts?.timeZone;
+  if (tz && opts?.taskDate && gates.length > 0) {
+    const converted = gates.map((g) => utcToZonedHHMM(opts.taskDate!, g, tz));
+    if (converted.every((g): g is string => g !== null)) {
+      gates = converted;
+      zoneLabel = zoneAbbreviation(new Date(`${opts.taskDate}T12:00:00Z`), tz);
+    }
+  }
   const gateStr =
     sss.type === "ELAPSED-TIME"
       ? gates.length > 0
-        ? ` · start opens ${gates[0]} UTC`
+        ? ` · start opens ${gates[0]} ${zoneLabel}`
         : ""
       : gates.length > 0
-        ? ` · ${gates.length} start gate${gates.length === 1 ? "" : "s"}: ${gates.join(", ")} UTC`
+        ? ` · ${gates.length} start gate${gates.length === 1 ? "" : "s"}: ${gates.join(", ")} ${zoneLabel}`
         : " · no start gates (pilots timed from their crossing)";
   return `${kind} · ${dir} start${gateStr}`;
 }

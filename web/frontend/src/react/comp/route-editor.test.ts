@@ -207,6 +207,25 @@ describe("gate helpers", () => {
       startConfigSummary({ type: "RACE", direction: "EXIT", timeGates: ["13:00:00Z"] })
     ).toBe("Race to goal · exit start · 1 start gate: 13:00 UTC");
   });
+
+  it("startConfigSummary shows comp-local gates when the comp zone is known", () => {
+    const summary = startConfigSummary(
+      // 01:30 / 02:00 UTC on 2026-02-07 = 12:30 / 13:00 AEDT
+      { type: "RACE", direction: "EXIT", timeGates: ["01:30:00Z", "02:00:00Z"] },
+      { timeZone: "Australia/Melbourne", taskDate: "2026-02-07" }
+    );
+    expect(summary).toContain("2 start gates: 12:30, 13:00");
+    expect(summary).not.toContain("UTC");
+  });
+
+  it("startConfigSummary stays UTC when no comp zone is set", () => {
+    expect(
+      startConfigSummary(
+        { type: "RACE", direction: "EXIT", timeGates: ["13:00:00Z"] },
+        { timeZone: null, taskDate: "2026-02-07" }
+      )
+    ).toBe("Race to goal · exit start · 1 start gate: 13:00 UTC");
+  });
 });
 
 describe("xctskForPatch", () => {

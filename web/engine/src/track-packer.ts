@@ -59,10 +59,10 @@ export interface PackInput {
   task?: XCTask;
   /**
    * IANA timezone for the comp location (e.g. "Australia/Melbourne"), if the
-   * caller can resolve it. Stored on the manifest so the viewer shows the
-   * comp's local time regardless of who's watching. Resolving from lat/lon
-   * needs a node-only library (geo-tz), so a Worker passes it through from
-   * stored comp data instead.
+   * caller can resolve it — the comp's stored `timezone` setting, or a
+   * lookup via `src/timezone.ts` (tz-lookup, pure JS). Stored on the
+   * manifest so the viewer shows the comp's local time regardless of who's
+   * watching.
    */
   timezone?: string;
 }

@@ -15,12 +15,11 @@
  *   - 200 MiB total track storage (gzipped)
  */
 import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { parseIGC, parseXCTask, type XCTask, type IGCFile } from "@glidecomp/engine";
 import type { Env, AuthUser } from "../env";
 import { requireAuth, optionalAuth } from "../middleware/auth";
-import { xctskSchema } from "../validators";
+import { xctskSchema, validated } from "../validators";
 import {
   validateAndDecompressIgc,
   IgcValidationException,
@@ -457,7 +456,7 @@ export const userFilesRoutes = new Hono<HonoEnv>()
   .post(
     "/api/user/tasks",
     requireAuth,
-    zValidator("json", createTaskSchema),
+    validated("json", createTaskSchema),
     async (c) => {
       const user = c.var.user!;
       const body = c.req.valid("json");
@@ -612,7 +611,7 @@ export const userFilesRoutes = new Hono<HonoEnv>()
   .put(
     "/api/user/tracks/:track_id/annotations/:stroke_id",
     requireAuth,
-    zValidator("json", annotationSchema),
+    validated("json", annotationSchema),
     async (c) => {
       const user = c.var.user!;
       const trackId = c.req.param("track_id");

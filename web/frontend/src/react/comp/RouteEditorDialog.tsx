@@ -36,6 +36,7 @@ import { fetchTaskByCodeWithRaw } from "../../analysis/xctsk-fetch";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { downloadFile } from "../lib/format";
+import { utcToZonedHHMM, zonedToUtcHHMM, zoneAbbreviation } from "../lib/time";
 import { SimpleSelect } from "./fields";
 import { slugify } from "./csv";
 import {
@@ -58,6 +59,7 @@ export function RouteEditorDialog({
   taskDate,
   xctsk,
   openDistance,
+  timezone,
   onClose,
   onSaved,
 }: {
@@ -68,10 +70,28 @@ export function RouteEditorDialog({
   xctsk: XCTask | null;
   /** Comp scoring format is open distance: single-Takeoff rule, no SSS/goal. */
   openDistance: boolean;
+  /**
+   * Comp-local IANA zone (comp settings). When set, gates and the goal
+   * deadline are edited in comp-local time (stored as UTC either way);
+   * when null the editor falls back to UTC, today's behaviour.
+   */
+  timezone: string | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const confirm = useConfirm();
+
+  // Gate/deadline times are edited in the comp zone when one is set (#274).
+  // The xctsk file stores UTC, so times convert on load and on save; all
+  // conversions anchor to the task date so DST offsets are the day's own.
+  const tz = timezone;
+  const toDisplayTime = (hhmm: string): string =>
+    tz ? (utcToZonedHHMM(taskDate, hhmm, tz) ?? hhmm) : hhmm;
+  const toUtcTime = (hhmm: string): string =>
+    tz ? (zonedToUtcHHMM(taskDate, hhmm, tz) ?? hhmm) : hhmm;
+  const timeZoneLabel = tz
+    ? zoneAbbreviation(new Date(`${taskDate}T12:00:00Z`), tz)
+    : "UTC";
   const gridRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<Tabulator | null>(null);
   const [gridReady, setGridReady] = useState(false);
@@ -101,7 +121,9 @@ export function RouteEditorDialog({
   const [direction, setDirection] = useState<SSSConfig["direction"]>(
     xctsk?.sss?.direction ?? "EXIT"
   );
-  const [gates, setGates] = useState<string[]>(() => editableGates(xctsk?.sss));
+  const [gates, setGates] = useState<string[]>(() =>
+    editableGates(xctsk?.sss).map(toDisplayTime)
+  );
   const [genCount, setGenCount] = useState("4");
   const [genInterval, setGenInterval] = useState("15");
 
@@ -109,9 +131,10 @@ export function RouteEditorDialog({
   const [goalType, setGoalType] = useState<GoalConfig["type"]>(
     xctsk?.goal?.type ?? "CYLINDER"
   );
-  const [goalDeadline, setGoalDeadline] = useState<string>(
-    xctsk?.goal?.deadline ? (gateToHHMM(xctsk.goal.deadline) ?? "") : ""
-  );
+  const [goalDeadline, setGoalDeadline] = useState<string>(() => {
+    const hhmm = xctsk?.goal?.deadline ? gateToHHMM(xctsk.goal.deadline) : null;
+    return hhmm ? toDisplayTime(hhmm) : "";
+  });
 
   function newRow(): RouteRow {
     wpCounterRef.current++;
@@ -328,9 +351,10 @@ export function RouteEditorDialog({
     wpCounterRef.current = task.turnpoints.length;
     setSssType(task.sss?.type ?? "RACE");
     setDirection(task.sss?.direction ?? "EXIT");
-    setGates(editableGates(task.sss));
+    setGates(editableGates(task.sss).map(toDisplayTime));
     setGoalType(task.goal?.type ?? "CYLINDER");
-    setGoalDeadline(task.goal?.deadline ? (gateToHHMM(task.goal.deadline) ?? "") : "");
+    const deadline = task.goal?.deadline ? gateToHHMM(task.goal.deadline) : null;
+    setGoalDeadline(deadline ? toDisplayTime(deadline) : "");
     recompute();
     toast.success(`Loaded ${task.turnpoints.length} turnpoints from ${sourceLabel}`);
   }
@@ -401,15 +425,21 @@ export function RouteEditorDialog({
       toast.warning("Every start gate needs a valid time");
       return null;
     }
+    // Dedup + sort in the editing zone: the comp's flying day is contiguous
+    // on its own clock, while the equivalent UTC times can wrap midnight
+    // (Australian mornings are the previous UTC evening) — sorting the UTC
+    // strings would misorder the gates.
     const sorted = [...new Set(cleaned)].sort();
     task.sss = {
       type: sssType,
       direction,
-      ...(sorted.length > 0 ? { timeGates: sorted.map((g) => `${g}:00Z`) } : {}),
+      ...(sorted.length > 0
+        ? { timeGates: sorted.map((g) => `${toUtcTime(g)}:00Z`) }
+        : {}),
     };
     task.goal = {
       type: goalType,
-      ...(goalDeadline ? { deadline: `${goalDeadline}:00Z` } : {}),
+      ...(goalDeadline ? { deadline: `${toUtcTime(goalDeadline)}:00Z` } : {}),
       ...(base?.goal?.finishAltitude !== undefined
         ? { finishAltitude: base.goal.finishAltitude }
         : {}),
@@ -456,11 +486,18 @@ export function RouteEditorDialog({
     }
   }
 
-  /** The viewer's local wall-clock for a UTC gate on the task date. */
-  function localPreview(hhmm: string): string | null {
+  /**
+   * Secondary reading for a gate/deadline input: the UTC equivalent when
+   * editing comp-local (the file format is UTC, so keep it visible), or the
+   * viewer's wall clock when editing UTC (no comp zone known yet).
+   */
+  function timePreview(value: string): string | null {
+    const hhmm = gateToHHMM(value);
+    if (!hhmm) return null;
+    if (tz) return `= ${toUtcTime(hhmm)} UTC`;
     const d = new Date(`${taskDate}T${hhmm}:00Z`);
     if (Number.isNaN(d.getTime())) return null;
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return `≈ ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} your time`;
   }
 
   function updateGate(index: number, value: string) {
@@ -592,12 +629,15 @@ export function RouteEditorDialog({
               </div>
 
               <h4 className="mt-3 text-sm font-medium">
-                {isRace ? "Start gates (UTC)" : "Start open (UTC)"}
+                {isRace ? `Start gates (${timeZoneLabel})` : `Start open (${timeZoneLabel})`}
               </h4>
               <p className="mt-1 text-sm text-muted-foreground">
                 {isRace
                   ? "A pilot's start time is the last gate at or before their start crossing (FAI S7F §8.3.1). Starting before the first gate is an early start."
-                  : "Elapsed-time pilots are timed from their actual start crossing; a gate only sets when the start opens."}
+                  : "Elapsed-time pilots are timed from their actual start crossing; a gate only sets when the start opens."}{" "}
+                {tz
+                  ? `Times are comp-local (${tz}, from Competition Settings).`
+                  : "Times are UTC — save a route (or set a timezone in Competition Settings) to edit in comp-local time."}
               </p>
               <ul className="mt-2 flex flex-col gap-2">
                 {gates.map((g, i) => (
@@ -606,12 +646,12 @@ export function RouteEditorDialog({
                       type="time"
                       className="w-32"
                       required
-                      aria-label={`Gate ${i + 1} time (UTC)`}
+                      aria-label={`Gate ${i + 1} time (${timeZoneLabel})`}
                       value={g}
                       onChange={(e) => updateGate(i, e.target.value)}
                     />
                     <span className="text-xs text-muted-foreground">
-                      {localPreview(g) ? `≈ ${localPreview(g)} your time` : ""}
+                      {timePreview(g) ?? ""}
                     </span>
                     <Button
                       type="button"
@@ -683,14 +723,15 @@ export function RouteEditorDialog({
                   ariaLabel="Goal type"
                 />
                 <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  Deadline (UTC)
+                  Deadline ({timeZoneLabel})
                   <Input
                     type="time"
                     className="w-32"
-                    aria-label="Goal deadline (UTC)"
+                    aria-label={`Goal deadline (${timeZoneLabel})`}
                     value={goalDeadline}
                     onChange={(e) => setGoalDeadline(e.target.value)}
                   />
+                  <span className="text-xs">{goalDeadline ? (timePreview(goalDeadline) ?? "") : ""}</span>
                   {goalDeadline ? (
                     <Button
                       type="button"

@@ -12,6 +12,7 @@
     "noEmit": true,
     "paths": {
       "@glidecomp/engine": ["./web/engine/src/index.ts"],
+      "@glidecomp/engine/timezone": ["./web/engine/src/timezone.ts"],
       "@/*": ["./web/frontend/src/*"]
     },
     "lib": [

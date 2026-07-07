@@ -24,9 +24,9 @@ import { readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
 import { resolve, join, basename } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
-import { find as findTimezone } from 'geo-tz';
 import { parseIGC } from '../src/igc-parser';
 import { packTracksFromIgc, type PilotIgc } from '../src/track-pack-pipeline';
+import { timezoneForCoords, timezoneForXctsk } from '../src/timezone';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
 
@@ -53,18 +53,16 @@ function main(): void {
   const taskFile = entries.find((f) => f.toLowerCase().endsWith('.xctsk'));
   const taskXctsk = taskFile ? readFileSync(join(compDir, taskFile), 'utf-8') : undefined;
 
-  // Resolve the comp's IANA timezone from the first fix (offline, via geo-tz) so
-  // the viewer can show the comp's local time regardless of who's watching.
-  let timezone: string | undefined;
+  // Resolve the comp's IANA timezone from the task location (or the first
+  // fix when there's no task) so the viewer can show the comp's local time
+  // regardless of who's watching — the same tz-lookup derivation the
+  // competition-api runs on route save.
+  let timezone: string | undefined = timezoneForXctsk(taskXctsk);
   const pilots: PilotIgc[] = igcFiles.map((file) => {
     const text = readFileSync(join(compDir, file), 'utf-8');
     const igc = parseIGC(text);
     if (timezone === undefined && igc.fixes.length > 0) {
-      try {
-        timezone = findTimezone(igc.fixes[0].latitude, igc.fixes[0].longitude)[0];
-      } catch {
-        /* leave unresolved */
-      }
+      timezone = timezoneForCoords(igc.fixes[0].latitude, igc.fixes[0].longitude);
     }
     const name = (igc.header.pilot || basename(file, '.igc')).replace(/\s+/g, ' ').trim();
     return { id: pilotIdFromFilename(file), name, igc: text };

@@ -77,6 +77,15 @@ bun run test:e2e      # Playwright e2e (auto-copies .dev.vars, runs db:migrate)
 
 ## Gotchas
 
+- **Driving admin-only UI (settings / route-editor dialogs) headless:** sign
+  in with dev-login *from inside the page* so the browser stores the session
+  cookie — `page.goto('/comp')`, then `page.evaluate(() =>
+  fetch('/api/auth/dev-login', { method: 'POST', headers: { 'Content-Type':
+  'application/json' }, body: JSON.stringify({ name, email }), credentials:
+  'include' }))`. Playwright's `ctx.request.post()` breaks under bun on the
+  relative-URL set-cookie, and fetching from the static home page `/` fails —
+  use an SPA page. Wait for `networkidle` before logging in: a login racing
+  the page's own API calls can trip local D1's transient-500 contention flake.
 - **The comp's public id (sqid) changes every seed.** Never hardcode it; the
   driver resolves it by matching the comp **name** via `GET /api/comp`. If you
   navigate by hand, grab the id from that endpoint first.

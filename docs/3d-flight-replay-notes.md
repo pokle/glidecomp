@@ -92,7 +92,8 @@ Engine (pure, no DOM — runs in both the Worker and the CLI):
 - `web/engine/src/track-pack-pipeline.ts` — `packTracksFromIgc()`: parse IGC →
   GAP score → `packTracks`. Shared by the Worker and the CLI.
 - `web/engine/cli/build-3dvis.ts` — offline mirror: reads IGC + task, resolves
-  the timezone (geo-tz), gzips, writes the static asset.
+  the timezone (engine `src/timezone.ts` / tz-lookup), gzips, writes the
+  static asset.
 
 Worker (`web/workers/competition-api/src/`):
 - `visualization.ts` (`buildTask3dvisBundle`) + `routes/visualization.ts` — the
@@ -258,16 +259,18 @@ every host transform **uniform**, so neither backend has to deal with a
 non-uniform scale (which would shear the marker cones). Mapbox terrain
 exaggeration is kept equal to `vScale`.
 
-### 5.9 Local time — geo-tz at build time
+### 5.9 Local time — tz-lookup from the task location
 
 IGC fixes are UTC and the comp's timezone isn't in the data. Resolve the IANA
-zone from the task origin with **`geo-tz`** at build time (offline; added as an
-engine *devDependency* so it never reaches the browser/Worker bundle) and store
-`manifest.timezone` (e.g. `Australia/Melbourne`). The viewer formats with
+zone from the task location with the engine's `src/timezone.ts` helper
+(**`tz-lookup`**, pure JS, ~70 KB — runs in the Worker, bun and the browser;
+kept out of the engine's main index so browser bundles never pay for it) and
+store `manifest.timezone` (e.g. `Australia/Melbourne`). At runtime the Worker
+prefers the comp's stored `timezone` setting (derived on route save,
+organizer-overridable) and derives only as a fallback. The viewer formats with
 `Intl`, which applies the correct DST offset per fix date. Compute the zone
 *label* at the comp date, not today's, or the abbreviation is off by an hour
-across a DST boundary. (For runtime lookups in a Worker, `@photostructure/tz-lookup`
-is small enough to bundle; prebaking is better whenever there's a build step.)
+across a DST boundary.
 
 ### 5.10 Headless preview can't screenshot Mapbox — use Playwright
 
@@ -531,10 +534,12 @@ file, so any user can view it and the same path serves any comp task.
   fetch `task_track` rows → R2 `get` → gunzip → `packTracksFromIgc` → gzip data
   → frame the bundle → cache in KV (`3dvis:v1:<taskId>:<hash>`, invalidated by
   the same task-state hash as scores).
-- **Timezone:** `geo-tz` is node-only, so the seed resolves it and stashes it as
-  `_timezone` inside the stored task xctsk JSON; the Worker reads it back and
-  puts it on the manifest (`parseXCTask` ignores the extra key). Without it the
-  viewer falls back to the browser zone.
+- **Timezone:** the manifest carries the comp's IANA zone from `comp.timezone`
+  (migration 0011: derived from the task location on route save via the
+  engine's `tz-lookup` helper, organizer-overridable in Competition Settings —
+  see #269). When the column is unset (comps predating it) the Worker derives
+  the zone from the task's first turnpoint at bundle-build time. Without
+  either, the viewer falls back to the browser zone.
 - **Frontend:** `loadTracksBundle` in `track-data.ts` (one fetch, split manifest
   from gzipped data) → `ReplayViewer.loadBundle`. `replay/main.ts` builds the URL.
 - **Entry points:** the homepage links to the replay (`/replay`, no

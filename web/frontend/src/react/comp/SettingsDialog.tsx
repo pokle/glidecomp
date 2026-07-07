@@ -22,13 +22,30 @@ import { RadioGroup, RadioGroupItem } from "@/react/ui/radio-group";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
-import { CheckboxField, SimpleSelect } from "./fields";
+import { CheckboxField, SearchableSelect, SimpleSelect } from "./fields";
 import {
   slugifyStatusKey,
   type CompDetailData,
   type PilotStatusConfig,
   type ScoringFormat,
 } from "./types";
+
+/**
+ * Timezone dropdown options: "auto" plus every zone the runtime knows.
+ * A stored zone the runtime doesn't list (e.g. saved by a newer browser)
+ * is kept selectable rather than silently remapped.
+ */
+function timezoneOptions(current: string | null) {
+  const zones: string[] =
+    typeof Intl.supportedValuesOf === "function"
+      ? [...Intl.supportedValuesOf("timeZone")]
+      : [];
+  if (current && !zones.includes(current)) zones.unshift(current);
+  return [
+    { value: "auto", label: "Auto — derive from the task location" },
+    ...zones.map((z) => ({ value: z, label: z })),
+  ];
+}
 
 interface StatusRowState {
   /** Stable React key for the row. */
@@ -82,6 +99,9 @@ export function SettingsDialog({
   );
   const [test, setTest] = useState(comp.test);
   const [openUpload, setOpenUpload] = useState(comp.open_igc_upload ?? true);
+  // "auto" = no explicit zone: the server derives one from the task
+  // location (and re-derives when saved as auto).
+  const [timezone, setTimezone] = useState(comp.timezone ?? "auto");
   const [adminsText, setAdminsText] = useState(comp.admins.map((a) => a.email).join(", "));
   const [scoringFormat, setScoringFormat] = useState<ScoringFormat>(
     comp.scoring_format ?? "gap"
@@ -223,6 +243,7 @@ export function SettingsDialog({
           default_pilot_class: effectiveDefault,
           close_date: closeDate || null,
           test,
+          timezone: timezone === "auto" ? null : timezone,
           open_igc_upload: openUpload,
           admin_emails: adminEmails,
           pilot_statuses: pilotStatuses,
@@ -335,6 +356,22 @@ export function SettingsDialog({
               Clear
             </Button>
           </Field>
+
+          <div>
+            <h3 className="mb-1.5 text-sm font-medium">Timezone</h3>
+            <SearchableSelect
+              value={timezone}
+              onChange={setTimezone}
+              options={timezoneOptions(comp.timezone)}
+              ariaLabel="Competition timezone"
+              placeholder="Type to search, e.g. Melbourne"
+            />
+            <p className="mt-1 text-sm text-muted-foreground">
+              Comp-local zone for displaying times (start gates, replay clock, score
+              narratives). Auto derives it from the task location. Scoring runs on UTC
+              and is unaffected.
+            </p>
+          </div>
 
           <CheckboxField
             checked={test}

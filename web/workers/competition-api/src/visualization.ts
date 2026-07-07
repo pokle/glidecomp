@@ -13,6 +13,7 @@
  */
 
 import { packTracksFromIgc, type GAPParameters, type PilotIgc } from "@glidecomp/engine";
+import { timezoneForXctsk } from "@glidecomp/engine/timezone";
 import { mapWithConcurrency } from "./scoring";
 
 /** How many tracks to fetch from R2 at once. The pack step already holds every
@@ -22,18 +23,24 @@ import { mapWithConcurrency } from "./scoring";
 const TRACK_FETCH_CONCURRENCY = 10;
 
 /**
- * Cache key from the current task state (xctsk + track set + penalties), so the
- * bundle is recomputed automatically whenever an input changes. Mirrors the
- * score cache key but with its own prefix/version.
+ * Cache key from the current task state (xctsk + comp timezone + track set +
+ * penalties), so the bundle is recomputed automatically whenever an input
+ * changes — the comp timezone is baked into the manifest, so an organizer
+ * override must invalidate the bundle too. Mirrors the score cache key but
+ * with its own prefix/version.
  */
 export async function compute3dvisCacheKey(
   taskId: number,
   db: D1Database
 ): Promise<string> {
   const task = await db
-    .prepare("SELECT xctsk FROM task WHERE task_id = ?")
+    .prepare(
+      `SELECT t.xctsk, c.timezone FROM task t
+       JOIN comp c ON t.comp_id = c.comp_id
+       WHERE t.task_id = ?`
+    )
     .bind(taskId)
-    .first<{ xctsk: string | null }>();
+    .first<{ xctsk: string | null; timezone: string | null }>();
 
   const tracks = await db
     .prepare(
@@ -44,6 +51,7 @@ export async function compute3dvisCacheKey(
 
   const stateString = [
     task?.xctsk ?? "",
+    task?.timezone ?? "",
     ...tracks.results.map((t) => `${t.task_track_id}:${t.uploaded_at}`),
   ].join("|");
 
@@ -72,26 +80,28 @@ export async function buildTask3dvisBundle(
   const t0 = performance.now();
   const taskRow = await db
     .prepare(
-      `SELECT t.task_id, t.comp_id, t.xctsk, c.gap_params
+      `SELECT t.task_id, t.comp_id, t.xctsk, c.gap_params, c.timezone
        FROM task t JOIN comp c ON t.comp_id = c.comp_id
        WHERE t.task_id = ?`
     )
     .bind(taskId)
-    .first<{ task_id: number; comp_id: number; xctsk: string | null; gap_params: string | null }>();
+    .first<{
+      task_id: number;
+      comp_id: number;
+      xctsk: string | null;
+      gap_params: string | null;
+      timezone: string | null;
+    }>();
 
   if (!taskRow) throw new Error("Task not found");
   if (!taskRow.xctsk) throw new Error("Task has no xctsk definition");
   console.log(`[3dvis] task ${taskId}: loaded task row in ${(performance.now() - t0).toFixed(0)}ms`);
 
-  // Optional IANA timezone the seed stashes in the task JSON (geo-tz is
-  // node-only, so it can't be resolved here).
-  let timezone: string | undefined;
-  try {
-    const raw = JSON.parse(taskRow.xctsk) as { _timezone?: unknown };
-    if (typeof raw._timezone === "string") timezone = raw._timezone;
-  } catch {
-    /* not JSON we can read — leave undefined */
-  }
+  // Comp-local IANA zone for the replay clock (#269): the comp setting when
+  // present (task saves derive it, organizers can override), else derived
+  // here from the task location so comps predating the setting still get a
+  // comp-local clock. Undefined → the viewer falls back to the browser zone.
+  const timezone = taskRow.timezone ?? timezoneForXctsk(taskRow.xctsk);
 
   const gapParams: Partial<GAPParameters> = taskRow.gap_params
     ? JSON.parse(taskRow.gap_params)

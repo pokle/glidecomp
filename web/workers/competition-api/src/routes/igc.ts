@@ -1,11 +1,10 @@
 import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
 import type { Env, AuthUser } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
-import { updatePenaltySchema } from "../validators";
+import { updatePenaltySchema, validated } from "../validators";
 import { parseIGC } from "@glidecomp/engine";
 import { audit } from "../audit";
 import { linkExistingRegistrations } from "../pilot-linker";
@@ -760,7 +759,7 @@ export const igcRoutes = new Hono<HonoEnv>()
     requireAuth,
     sqidsMiddleware,
     requireCompAdmin,
-    zValidator("json", updatePenaltySchema),
+    validated("json", updatePenaltySchema),
     async (c) => {
       const compId = c.var.ids.comp_id!;
       const taskId = c.var.ids.task_id!;

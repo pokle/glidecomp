@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { zValidator } from "@hono/zod-validator";
 import type { Env, AuthUser } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { optionalAuth } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
+import { validated } from "../validators";
 
 type Variables = {
   user: AuthUser | null;
@@ -28,7 +28,7 @@ export const auditRoutes = new Hono<HonoEnv>()
     "/api/comp/:comp_id/audit",
     optionalAuth,
     sqidsMiddleware,
-    zValidator("query", auditQuerySchema),
+    validated("query", auditQuerySchema),
     async (c) => {
       const compId = c.var.ids.comp_id!;
       const user = c.var.user;

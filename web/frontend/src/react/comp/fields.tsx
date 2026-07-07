@@ -5,6 +5,14 @@
  */
 import { useId } from "react";
 import { Checkbox } from "@/react/ui/checkbox";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/react/ui/combobox";
 import { Field, FieldDescription, FieldLabel } from "@/react/ui/field";
 import {
   Select,
@@ -50,6 +58,54 @@ export function SimpleSelect({
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+/**
+ * Select-like combobox for long option lists (e.g. timezones): clicking or
+ * typing in the input filters the options, so "aus" narrows hundreds of
+ * entries down to the Australia/* ones. Same props as SimpleSelect.
+ * Clearing the input without picking anything keeps the current value.
+ */
+export function SearchableSelect({
+  value,
+  onChange,
+  options,
+  disabled,
+  ariaLabel,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: SelectOption[];
+  disabled?: boolean;
+  ariaLabel?: string;
+  placeholder?: string;
+}) {
+  const selected = options.find((o) => o.value === value) ?? null;
+  return (
+    <Combobox
+      items={options}
+      value={selected}
+      onValueChange={(item) => {
+        if (item) onChange(item.value);
+      }}
+      isItemEqualToValue={(a, b) => a.value === b.value}
+      autoHighlight
+      disabled={disabled}
+    >
+      <ComboboxInput aria-label={ariaLabel} placeholder={placeholder} className="w-full" />
+      <ComboboxContent>
+        <ComboboxEmpty>No matches.</ComboboxEmpty>
+        <ComboboxList>
+          {(item: SelectOption) => (
+            <ComboboxItem key={item.value} value={item}>
+              {item.label}
+            </ComboboxItem>
+          )}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
   );
 }
 

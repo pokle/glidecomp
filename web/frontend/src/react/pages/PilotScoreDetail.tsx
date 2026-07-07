@@ -36,6 +36,7 @@ import { api } from "../../comp/api";
 import { gunzipResponse } from "../../analysis/storage";
 import type { OpenDistanceLine } from "../../analysis/map-provider";
 import { formatTaskDate } from "../lib/format";
+import { formatTimeInZone, zoneAbbreviation } from "../lib/time";
 import type {
   ClassScore,
   CompDetailData,
@@ -97,9 +98,12 @@ const ANCHOR_EVENT_TYPE: Record<ExplanationAnchor["kind"], FlightEventType> = {
   furthest: "landing",
 };
 
-/** Local wall-clock time for narrative items (tracklogs are UTC). */
-function formatLocalTime(d: Date): string {
-  return d.toLocaleTimeString(undefined, { hour12: false });
+/**
+ * Wall-clock time for narrative items (tracklogs are UTC): comp-local when
+ * the comp has a timezone set, else the viewer's zone as before.
+ */
+function narrativeTimeFormatter(timezone: string | null): (d: Date) => string {
+  return (d) => formatTimeInZone(d, timezone ?? undefined);
 }
 
 function anchoredEvents(
@@ -196,7 +200,7 @@ async function loadDetail(
           : undefined,
       },
       entry,
-      formatTime: formatLocalTime,
+      formatTime: narrativeTimeFormatter(comp.timezone),
     });
     return {
       comp,
@@ -236,7 +240,7 @@ async function loadDetail(
     entry,
     classContext: cls,
     params,
-    formatTime: formatLocalTime,
+    formatTime: narrativeTimeFormatter(comp.timezone),
   });
 
   const minimumDistance = params.minimumDistance ?? 5000;
@@ -389,7 +393,11 @@ export function PilotScoreDetail() {
         <h1 className="text-xl font-bold">{entry.pilot_name}</h1>
         <p className="text-sm text-muted-foreground">
           {data.comp.name} · {data.task.name} ({formatTaskDate(data.task.task_date)}) ·{" "}
-          {data.pilotClass} · ranked #{entry.rank}
+          {data.pilotClass} · ranked #{entry.rank} · times in{" "}
+          {zoneAbbreviation(
+            new Date(data.task.task_date + "T12:00:00Z"),
+            data.comp.timezone ?? undefined
+          )}
         </p>
         <p className="mt-1 font-medium">{explanation.headline}</p>
       </header>
