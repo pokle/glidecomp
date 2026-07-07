@@ -243,11 +243,21 @@ jobs:
             exit 0
           fi
           echo "Checking comp ${COMP_ID} scores"
+          # Worker deploys propagate over a minute or two — a request landing
+          # on a not-yet-updated instance serves the previous version's
+          # headers (this bit the first stale-first deploy: an old instance
+          # answered X-Cache: HIT with no ETag). Retry until the new
+          # signature (X-Cache AND ETag) appears, then assert on it.
           HEADERS=$(mktemp)
-          curl -s -o /dev/null -D "$HEADERS" "${API}/api/comp/${COMP_ID}/scores"
-          XCACHE=$(grep -i '^x-cache:' "$HEADERS" | tr -d '\r' | awk '{print $2}')
-          ETAG=$(grep -i '^etag:' "$HEADERS" | tr -d '\r' | cut -d' ' -f2-)
-          echo "X-Cache: ${XCACHE:-<missing>}  ETag: ${ETAG:-<missing>}"
+          XCACHE=""; ETAG=""
+          for attempt in 1 2 3 4 5 6; do
+            curl -s -o /dev/null -D "$HEADERS" "${API}/api/comp/${COMP_ID}/scores"
+            XCACHE=$(grep -i '^x-cache:' "$HEADERS" | tr -d '\r' | awk '{print $2}')
+            ETAG=$(grep -i '^etag:' "$HEADERS" | tr -d '\r' | cut -d' ' -f2-)
+            echo "attempt ${attempt}: X-Cache: ${XCACHE:-<missing>}  ETag: ${ETAG:-<missing>}"
+            if [ -n "$XCACHE" ] && [ -n "$ETAG" ]; then break; fi
+            sleep 10
+          done
           case "$XCACHE" in
             HIT|HIT-STALE|MISS) ;;
             *) echo "::error::/scores X-Cache header missing or unexpected (${XCACHE:-none})"; exit 1 ;;
