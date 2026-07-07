@@ -36,7 +36,7 @@ import { fetchTaskByCodeWithRaw } from "../../analysis/xctsk-fetch";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { downloadFile } from "../lib/format";
-import { utcToZonedHHMM, zonedToUtcHHMM, zoneAbbreviation } from "../lib/time";
+import { utcToZonedHHMM, zonedToUtcHHMM, zoneNameWithOffset } from "../lib/time";
 import { SimpleSelect } from "./fields";
 import { slugify } from "./csv";
 import {
@@ -90,7 +90,7 @@ export function RouteEditorDialog({
   const toUtcTime = (hhmm: string): string =>
     tz ? (zonedToUtcHHMM(taskDate, hhmm, tz) ?? hhmm) : hhmm;
   const timeZoneLabel = tz
-    ? zoneAbbreviation(new Date(`${taskDate}T12:00:00Z`), tz)
+    ? zoneNameWithOffset(new Date(`${taskDate}T12:00:00Z`), tz)
     : "UTC";
   const gridRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<Tabulator | null>(null);
@@ -486,20 +486,6 @@ export function RouteEditorDialog({
     }
   }
 
-  /**
-   * Secondary reading for a gate/deadline input: the UTC equivalent when
-   * editing comp-local (the file format is UTC, so keep it visible), or the
-   * viewer's wall clock when editing UTC (no comp zone known yet).
-   */
-  function timePreview(value: string): string | null {
-    const hhmm = gateToHHMM(value);
-    if (!hhmm) return null;
-    if (tz) return `= ${toUtcTime(hhmm)} UTC`;
-    const d = new Date(`${taskDate}T${hhmm}:00Z`);
-    if (Number.isNaN(d.getTime())) return null;
-    return `≈ ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} your time`;
-  }
-
   function updateGate(index: number, value: string) {
     setGates((prev) => prev.map((g, i) => (i === index ? value : g)));
   }
@@ -629,14 +615,14 @@ export function RouteEditorDialog({
               </div>
 
               <h4 className="mt-3 text-sm font-medium">
-                {isRace ? `Start gates (${timeZoneLabel})` : `Start open (${timeZoneLabel})`}
+                {isRace ? `Start gates — ${timeZoneLabel}` : `Start open — ${timeZoneLabel}`}
               </h4>
               <p className="mt-1 text-sm text-muted-foreground">
                 {isRace
                   ? "A pilot's start time is the last gate at or before their start crossing (FAI S7F §8.3.1). Starting before the first gate is an early start."
                   : "Elapsed-time pilots are timed from their actual start crossing; a gate only sets when the start opens."}{" "}
                 {tz
-                  ? `Times are comp-local (${tz}, from Competition Settings).`
+                  ? "Times are comp-local (set in Competition Settings)."
                   : "Times are UTC — save a route (or set a timezone in Competition Settings) to edit in comp-local time."}
               </p>
               <ul className="mt-2 flex flex-col gap-2">
@@ -646,13 +632,10 @@ export function RouteEditorDialog({
                       type="time"
                       className="w-32"
                       required
-                      aria-label={`Gate ${i + 1} time (${timeZoneLabel})`}
+                      aria-label={`Gate ${i + 1} time — ${timeZoneLabel}`}
                       value={g}
                       onChange={(e) => updateGate(i, e.target.value)}
                     />
-                    <span className="text-xs text-muted-foreground">
-                      {timePreview(g) ?? ""}
-                    </span>
                     <Button
                       type="button"
                       variant="outline"
@@ -723,15 +706,14 @@ export function RouteEditorDialog({
                   ariaLabel="Goal type"
                 />
                 <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  Deadline ({timeZoneLabel})
+                  Deadline — {timeZoneLabel}
                   <Input
                     type="time"
                     className="w-32"
-                    aria-label={`Goal deadline (${timeZoneLabel})`}
+                    aria-label={`Goal deadline — ${timeZoneLabel}`}
                     value={goalDeadline}
                     onChange={(e) => setGoalDeadline(e.target.value)}
                   />
-                  <span className="text-xs">{goalDeadline ? (timePreview(goalDeadline) ?? "") : ""}</span>
                   {goalDeadline ? (
                     <Button
                       type="button"

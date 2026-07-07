@@ -214,7 +214,9 @@ describe("gate helpers", () => {
       { type: "RACE", direction: "EXIT", timeGates: ["01:30:00Z", "02:00:00Z"] },
       { timeZone: "Australia/Melbourne", taskDate: "2026-02-07" }
     );
-    expect(summary).toContain("2 start gates: 12:30, 13:00");
+    expect(summary).toContain(
+      "2 start gates: 12:30, 13:00 Australia/Melbourne (GMT+11)"
+    );
     expect(summary).not.toContain("UTC");
   });
 

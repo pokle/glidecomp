@@ -5,7 +5,7 @@
  * shared with the task detail page. Kept DOM-free so it's unit-testable.
  */
 import type { SSSConfig, Turnpoint, TurnpointType, XCTask } from "@glidecomp/engine";
-import { utcToZonedHHMM, zoneAbbreviation } from "../lib/time";
+import { utcToZonedHHMM, zoneNameWithOffset } from "../lib/time";
 
 // ---------------------------------------------------------------------------
 // Grid rows
@@ -259,7 +259,7 @@ export function startConfigSummary(
     const converted = gates.map((g) => utcToZonedHHMM(opts.taskDate!, g, tz));
     if (converted.every((g): g is string => g !== null)) {
       gates = converted;
-      zoneLabel = zoneAbbreviation(new Date(`${opts.taskDate}T12:00:00Z`), tz);
+      zoneLabel = zoneNameWithOffset(new Date(`${opts.taskDate}T12:00:00Z`), tz);
     }
   }
   const gateStr =

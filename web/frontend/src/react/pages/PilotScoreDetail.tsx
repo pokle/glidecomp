@@ -36,7 +36,7 @@ import { api } from "../../comp/api";
 import { gunzipResponse } from "../../analysis/storage";
 import type { OpenDistanceLine } from "../../analysis/map-provider";
 import { formatTaskDate } from "../lib/format";
-import { formatTimeInZone, zoneAbbreviation } from "../lib/time";
+import { formatTimeInZone, zoneNameWithOffset } from "../lib/time";
 import type {
   ClassScore,
   CompDetailData,
@@ -394,7 +394,7 @@ export function PilotScoreDetail() {
         <p className="text-sm text-muted-foreground">
           {data.comp.name} · {data.task.name} ({formatTaskDate(data.task.task_date)}) ·{" "}
           {data.pilotClass} · ranked #{entry.rank} · times in{" "}
-          {zoneAbbreviation(
+          {zoneNameWithOffset(
             new Date(data.task.task_date + "T12:00:00Z"),
             data.comp.timezone ?? undefined
           )}
