@@ -382,7 +382,7 @@ function EditPilotsDialog({
         <p className="text-sm text-muted-foreground">
           Need a sporting body ID column not listed?{" "}
           <a className="underline underline-offset-4" href="mailto:tushar.pokle@gmail.com">
-            Contact us
+            Contact me
           </a>
           .
         </p>
