@@ -1,9 +1,11 @@
 import { describe, expect, test } from "vitest";
 import {
-  formatComputedAt,
+  buildZoneCycle,
+  formatInstant,
   formatTimeInZone,
   utcToZonedHHMM,
   zonedToUtcHHMM,
+  zoneLabel,
   zoneNameWithOffset,
 } from "./time";
 
@@ -93,27 +95,71 @@ describe("formatTimeInZone", () => {
   });
 });
 
-describe("formatComputedAt", () => {
-  const iso = "2026-07-07T14:32:00Z";
+describe("zoneLabel", () => {
+  // Winter in the southern hemisphere (AEST, no DST), summer in the north.
+  const winter = new Date("2026-07-07T14:32:00Z");
+  // Southern summer (AEDT), northern winter (PST).
+  const summer = new Date("2026-01-15T14:32:00Z");
 
-  test("renders an absolute time in the comp timezone with the zone name", () => {
-    const out = formatComputedAt(iso, MEL);
-    // 14:32 UTC = 00:32 the next day in AEST (UTC+10, no DST in July).
-    expect(out).toContain("8 Jul 2026");
-    expect(out).toContain("00:32");
-    expect(out).toMatch(/GMT\+10|AEST/);
+  test("names + numeric offset when an abbreviation is available", () => {
+    expect(zoneLabel(winter, MEL)).toBe("AEST (GMT+10)");
+    expect(zoneLabel(summer, MEL)).toBe("AEDT (GMT+11)");
+    expect(zoneLabel(winter, "America/Los_Angeles")).toBe("PDT (GMT-7)");
+    expect(zoneLabel(summer, "America/Los_Angeles")).toBe("PST (GMT-8)");
+    expect(zoneLabel(winter, "Europe/London")).toBe("BST (GMT+1)");
   });
 
-  test("falls back to the viewer's local timezone when the comp has no timezone", () => {
-    const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    // null → the runtime default zone, i.e. identical to naming the local zone.
-    expect(formatComputedAt(iso, null)).toBe(formatComputedAt(iso, localZone));
-    expect(formatComputedAt(iso, null)).toContain("2026");
+  test("bare offset when the zone has no named abbreviation", () => {
+    expect(zoneLabel(winter, "Asia/Kolkata")).toBe("GMT+5:30");
+    expect(zoneLabel(winter, "Africa/Nairobi")).toBe("GMT+3");
   });
 
-  test("falls back to the viewer's local timezone on an unknown IANA zone instead of throwing", () => {
-    const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    expect(() => formatComputedAt(iso, "Not/AZone")).not.toThrow();
-    expect(formatComputedAt(iso, "Not/AZone")).toBe(formatComputedAt(iso, localZone));
+  test("renders a zero offset as UTC", () => {
+    expect(zoneLabel(winter, "UTC")).toBe("UTC");
+    expect(zoneLabel(winter, "Etc/UTC")).toBe("UTC");
+  });
+});
+
+describe("formatInstant", () => {
+  const d = new Date("2026-07-07T14:32:00Z");
+
+  test("fixed en-GB 24h date/time plus the zone label", () => {
+    expect(formatInstant(d, "UTC")).toBe("7 Jul 2026, 14:32 UTC");
+    // 14:32 UTC = 00:32 the next day in AEST.
+    expect(formatInstant(d, MEL)).toBe("8 Jul 2026, 00:32 AEST (GMT+10)");
+  });
+});
+
+describe("buildZoneCycle", () => {
+  const d = new Date("2026-07-07T14:32:00Z");
+
+  test("empty for an invalid date", () => {
+    expect(buildZoneCycle(new Date("nope"), MEL)).toEqual([]);
+  });
+
+  test("comp zone leads, is de-duplicated, and every rendering is unique", () => {
+    const choices = buildZoneCycle(d, MEL);
+    expect(choices[0].kind).toBe("comp");
+    expect(choices[0].timeZone).toBe(MEL);
+    expect(choices[0].text).toBe("8 Jul 2026, 00:32 AEST (GMT+10)");
+    // UTC is always reachable, and no two choices render the same string
+    // (true regardless of the machine's local zone).
+    expect(choices.some((c) => c.text === "7 Jul 2026, 14:32 UTC")).toBe(true);
+    expect(new Set(choices.map((c) => c.text)).size).toBe(choices.length);
+  });
+
+  test("an invalid comp zone is dropped, defaulting to the local zone", () => {
+    const choices = buildZoneCycle(d, "Not/AZone");
+    expect(choices.every((c) => c.kind !== "comp")).toBe(true);
+    expect(choices[0].kind).toBe("local");
+  });
+
+  test("a comp zone that renders as UTC absorbs the separate UTC choice", () => {
+    // Whatever the machine's local zone, the UTC candidate collapses into the
+    // identical comp rendering, so no standalone "utc" choice remains.
+    const choices = buildZoneCycle(d, "UTC");
+    expect(choices[0].kind).toBe("comp");
+    expect(choices[0].text).toBe("7 Jul 2026, 14:32 UTC");
+    expect(choices.every((c) => c.kind !== "utc")).toBe(true);
   });
 });

@@ -134,31 +134,137 @@ export function formatTimeInZone(d: Date, timeZone?: string): string {
   }
 }
 
+// A "GMT+10" / "UTC-7" / "GMT+5:30" style numeric offset — i.e. `short` gave
+// us no real abbreviation for the zone, just the offset back again.
+const NUMERIC_OFFSET = /^(?:GMT|UTC)[+-]\d/;
+// A bare zero offset: "GMT", "UTC", "GMT+0", "GMT+00:00".
+const ZERO_OFFSET = /^(?:GMT|UTC)(?:[+-]0(?::00)?)?$/;
+// Locales probed (in order) for a named abbreviation. No single locale names
+// every zone — en-AU knows AEST/AEDT/ACST/AWST, en-US knows PST/EDT/…, en-GB
+// knows BST/GMT — so we take the first that yields a name rather than an
+// offset, which surfaces the abbreviation regardless of the viewer's own
+// locale. Kept to English to stay consistent with the rest of the app.
+const ABBR_LOCALES = ["en-AU", "en-US", "en-GB"];
+
+/** The `timeZoneName` token for `date` in a given locale/style, or null. */
+function zoneToken(
+  date: Date,
+  timeZone: string | undefined,
+  locale: string,
+  style: "short" | "shortOffset"
+): string | null {
+  try {
+    return (
+      new Intl.DateTimeFormat(locale, { timeZone, timeZoneName: style })
+        .formatToParts(date)
+        .find((p) => p.type === "timeZoneName")?.value ?? null
+    );
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Absolute "scores computed at" stamp with a fixed locale — e.g.
- * "7 Jul 2026, 14:32 AEST". Rendered in the comp's timezone when it has one
- * (so it lines up with the page's other comp-local times); with no comp
- * timezone set it falls back to the viewer's own local zone rather than UTC,
- * since a "when were these computed" freshness stamp reads most naturally in
- * the reader's wall clock. An unknown IANA zone in comp settings also falls
- * back to the viewer's local zone instead of throwing. Always absolute (never
- * a relative "2 min ago") per the SSR plan's hydration rule; the viewer-local
- * fallback resolves in the browser, which is correct on today's SPA path.
+ * A human zone label for `date` in `timeZone` (viewer-local when undefined):
+ * the abbreviated name plus its numeric offset when both are available —
+ * "AEST (GMT+10)", "PDT (GMT-7)" — or just the offset when the zone has no
+ * named abbreviation ("GMT+5:30"), or "UTC" for zero offset. The offset is
+ * resolved for `date` itself so DST is the one in force on the day.
  */
-export function formatComputedAt(iso: string, timezone: string | null): string {
-  const date = new Date(iso);
-  const opts: Intl.DateTimeFormatOptions = {
+export function zoneLabel(date: Date, timeZone: string | undefined): string {
+  const offset = zoneToken(date, timeZone, "en-GB", "shortOffset");
+  let abbr: string | null = null;
+  for (const loc of ABBR_LOCALES) {
+    const s = zoneToken(date, timeZone, loc, "short");
+    if (s && !NUMERIC_OFFSET.test(s)) {
+      abbr = s;
+      break;
+    }
+  }
+  const zero = !offset || ZERO_OFFSET.test(offset);
+  if (abbr) {
+    // Named zone (AEST/PDT/BST/UTC/GMT…). Pair it with the numeric offset
+    // unless that would be redundant (identical strings, or UTC/GMT at +0).
+    if (!offset || abbr === offset || ((abbr === "UTC" || abbr === "GMT") && zero)) {
+      return abbr;
+    }
+    return `${abbr} (${offset})`;
+  }
+  // No named abbreviation in our locales: show the offset, rendering a bare
+  // zero as the familiar "UTC".
+  return zero ? "UTC" : (offset as string);
+}
+
+/**
+ * Absolute timestamp for `date` in `timeZone` (viewer-local when undefined)
+ * with a fixed en-GB, 24-hour date/time and a {@link zoneLabel} — e.g.
+ * "8 Jul 2026, 00:32 AEST (GMT+10)". Always absolute (never a relative
+ * "2 min ago"); the en-GB date shape keeps the look consistent for every
+ * viewer while the zone adapts.
+ */
+export function formatInstant(date: Date, timeZone: string | undefined): string {
+  const dateTime = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
     day: "numeric",
     month: "short",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    timeZoneName: "short",
-  };
+    hourCycle: "h23",
+  }).format(date);
+  return `${dateTime} ${zoneLabel(date, timeZone)}`;
+}
+
+/** True when the runtime recognises `tz` as an IANA zone. */
+function isValidTimeZone(tz: string): boolean {
   try {
-    // `timeZone: undefined` → the runtime default, i.e. the viewer's local zone.
-    return date.toLocaleString("en-GB", { ...opts, timeZone: timezone ?? undefined });
+    new Intl.DateTimeFormat("en-GB", { timeZone: tz });
+    return true;
   } catch {
-    return date.toLocaleString("en-GB", opts);
+    return false;
   }
+}
+
+/** One selectable rendering of an instant, used by the Timestamp component. */
+export interface ZoneChoice {
+  kind: "comp" | "local" | "utc";
+  /** Human description of the zone for tooltips/aria. */
+  kindLabel: string;
+  timeZone: string | undefined;
+  /** The fully rendered timestamp in this zone. */
+  text: string;
+}
+
+const KIND_LABELS: Record<ZoneChoice["kind"], string> = {
+  comp: "competition time zone",
+  local: "your local time zone",
+  utc: "UTC",
+};
+
+/**
+ * The time-zone choices a Timestamp cycles through for `date`: the competition
+ * zone (when the instant relates to a comp and the zone is valid), the
+ * viewer's own local zone, then UTC — de-duplicated by what they actually
+ * render, so a viewer already in the comp zone never sees the same value
+ * twice. The first choice is the default shown (comp when present, else the
+ * viewer's local zone). Empty when `date` is invalid.
+ */
+export function buildZoneCycle(date: Date, compTimezone: string | null): ZoneChoice[] {
+  if (Number.isNaN(date.getTime())) return [];
+  const candidates: Array<Pick<ZoneChoice, "kind" | "timeZone">> = [];
+  if (compTimezone && isValidTimeZone(compTimezone)) {
+    candidates.push({ kind: "comp", timeZone: compTimezone });
+  }
+  candidates.push({ kind: "local", timeZone: undefined });
+  candidates.push({ kind: "utc", timeZone: "UTC" });
+
+  const seen = new Set<string>();
+  const choices: ZoneChoice[] = [];
+  for (const { kind, timeZone } of candidates) {
+    const text = formatInstant(date, timeZone);
+    if (seen.has(text)) continue;
+    seen.add(text);
+    choices.push({ kind, kindLabel: KIND_LABELS[kind], timeZone, text });
+  }
+  return choices;
 }
