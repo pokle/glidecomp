@@ -48,7 +48,7 @@ deploys as `<name>-preview` (`competition-api-preview`, `auth-api-preview`,
 | Routes | `glidecomp.com/api/...` | none (`workers_dev = true` only) |
 | D1 | `taskscore-auth` | `taskscore-auth-preview` (new) |
 | R2 | `glidecomp` | `glidecomp-preview` (new) |
-| KV (scores cache) | `dcf6eb84…` | `fc7d966c…` (existing `preview_id`, reused) |
+| KV (3dvis replay-bundle cache; scores moved to D1) | `dcf6eb84…` | `fc7d966c…` (existing `preview_id`, reused) |
 | KV (airscore cache) | `587aa703…` | `824da107…` (existing `preview_id`, reused) |
 | Frontend | `glidecomp.com` (Pages Production) | `<branch>.glidecomp.pages.dev` (Pages Preview) |
 

@@ -237,6 +237,16 @@ No separate download endpoint — the list response includes signed R2 URLs that
 
 #### Scores
 
+> **Superseded (2026-07-07).** This section is the original design, kept as
+> history. The `flight_data` preprocessing + Queue reprocess pipeline was
+> replaced by score-on-demand with a KV cache (Iteration 7-simpler below;
+> `flight_data` itself was dropped in migration 0003 and the `reprocess`
+> endpoint never shipped), which was in turn replaced by stale-first score
+> storage in D1: both GET endpoints now serve a materialized `task_scores`
+> row in a single D1 read (with `computed_at`/`stale` fields and ETag/304
+> support), and score-affecting mutations recompute in the background. See
+> [score-caching-stale-first-plan.md](./score-caching-stale-first-plan.md).
+
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
 | POST | `/api/comp/:comp_id/task/:task_id/reprocess` | Admin | Reprocess all `flight_data` for this task. Enqueues one Cloudflare Queue message per `task_track` — each Queue Consumer fetches the IGC from R2, parses it against the current xctsk, and writes updated `flight_data` back to D1. Use after changing task xctsk. |
@@ -313,7 +323,7 @@ Main flow to create or view competitions:
 6. Define the task using the task editor (reused from analysis UI) — edits are saved automatically via debounced PATCH to the server.
 7. Pilots upload their IGC files individually via the task page. This auto-registers them for the comp.
 8. Admin assigns pilot classes for any auto-registered pilots if the default class isn't correct.
-9. Scores are computed on-demand — viewing the task or comp scores page runs the GAP formula live against preprocessed flight data.
+9. ~~Scores are computed on-demand — viewing the task or comp scores page runs the GAP formula live against preprocessed flight data.~~ — replaced by stale-first score storage: the scores pages serve materialized results instantly (labelled with their compute time), and score-affecting changes recompute in the background ([score-caching-stale-first-plan.md](./score-caching-stale-first-plan.md)).
 
 # Implementation Plan
 
@@ -389,6 +399,14 @@ Iteration 7-simpler below.
 
 Replaces the preprocessing pipeline from Iteration 6 and the cancelled Iteration 7.
 Scoring fetches IGC files from R2 at query time and caches results in Workers KV.
+
+> **Superseded (2026-07-07)** by stale-first score storage in D1
+> ([score-caching-stale-first-plan.md](./score-caching-stale-first-plan.md)):
+> the KV score/analysis entries became the `task_scores` and `track_analysis`
+> tables, reads serve materialized rows without computing, and mutations
+> recompute in the background. The KV namespace now holds only the 3D-replay
+> bundles. The fingerprint idea survives as `state_key` (the ETag / drift
+> detector).
 
 **Architecture:**
 - No preprocessing — `preprocess.ts`, the queue, `/reprocess`, and `flight_data` are removed

@@ -126,10 +126,18 @@ numbers is TLS setup, and the 3dvis HIT includes downloading a 3 MB bundle.
    (`[placement] mode = "smart"`). Smart Placement learns from live traffic,
    so measure warm + cold latency from a far-away region a while after the
    merge deploys it, and compare against the numbers above.
-3. Precompute score + 3dvis caches at upload time (waitUntil or a queue), so
-   users almost never see a cold path.
+3. ~~Precompute score + 3dvis caches at upload time (waitUntil or a queue), so
+   users almost never see a cold path.~~ — the score half landed 2026-07-07
+   as stale-first score storage in D1
+   ([score-caching-stale-first-plan.md](./score-caching-stale-first-plan.md)):
+   mutations compute on write into `task_scores` rows, score reads are one D1
+   query (plus ETag/304 for repeat visitors), and the warm path's per-request
+   cache-key re-hashing (two D1 queries re-reading every track row) is gone.
+   The "score, cold (cache MISS)" row above no longer has a user-facing
+   equivalent except for pre-feature tasks. 3dvis bundles still build on
+   first request (KV-cached).
 4. If/when on Workers Paid, set `limits.cpu_ms` explicitly for headroom on
    very large tasks.
-5. Optionally collapse the warm path's 4 sequential D1 queries (single joined
-   query for comp+task+cache-key state) and add Cache API in front of warm
-   responses.
+5. Optionally collapse the warm path's ~~4~~ remaining sequential D1 queries
+   (comp/task existence + the `task_scores` row) into one joined query and
+   add Cache API in front of warm responses.

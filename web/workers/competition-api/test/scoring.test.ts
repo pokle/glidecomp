@@ -18,6 +18,25 @@ async function compressText(text: string): Promise<Uint8Array> {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
+/**
+ * GET task/comp scores, waiting out any in-flight background re-score.
+ * Stale-first serving means a read right after a mutation may return the
+ * pre-mutation body labelled `stale: true` while revalidation runs in the
+ * background — poll until the store is fresh before asserting on content.
+ */
+async function getFreshScores<T extends { stale: boolean }>(
+  path: string
+): Promise<{ res: Response; data: T }> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await request("GET", path);
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as T;
+    if (data.stale === false) return { res, data };
+    if (attempt >= 50) throw new Error(`scores at ${path} still stale after polling`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
 /** Get all sample IGC files as a sorted array of [filename, content] pairs. */
 function sampleIgcEntries(): Array<[string, string]> {
   const files = JSON.parse(env.SAMPLE_IGC_FILES) as Record<string, string>;
@@ -56,13 +75,12 @@ describe("Live Scoring", () => {
       expect(res.status).toBe(201);
     }
 
-    // Call scoring endpoint
-    const res = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("X-Cache")).toBe("MISS");
-
-    const data = (await res.json()) as {
+    // Call scoring endpoint. Uploads already materialized the scores in the
+    // background (compute-on-write), so the read serves the stored row.
+    const { res, data } = await getFreshScores<{
       task_id: string;
+      computed_at: string;
+      stale: boolean;
       classes: Array<{
         pilot_class: string;
         pilots: Array<{
@@ -73,7 +91,9 @@ describe("Live Scoring", () => {
           flown_distance: number;
         }>;
       }>;
-    };
+    }>(`/api/comp/${compId}/task/${taskId}/score`);
+    expect(res.headers.get("ETag")).toBeTruthy();
+    expect(new Date(data.computed_at).getTime()).not.toBeNaN();
 
     expect(data.classes).toHaveLength(1);
     const openClass = data.classes[0];
@@ -114,7 +134,7 @@ describe("Live Scoring", () => {
     expect(apiTopScore).toBe(engineTopScore);
   });
 
-  test("cache hit returns same result on second request", async () => {
+  test("repeat requests serve the same stored result with its ETag", async () => {
     const taskXctsk = JSON.parse(env.SAMPLE_TASK_XCTSK);
     const compId = await createComp();
     const taskId = await createTask(compId, {
@@ -130,13 +150,11 @@ describe("Live Scoring", () => {
     );
     expect(res0.status).toBe(201);
 
-    // First request — cache miss
-    const res1 = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
-    expect(res1.status).toBe(200);
-    expect(res1.headers.get("X-Cache")).toBe("MISS");
-    const body1 = await res1.json();
+    const { data: body1 } = await getFreshScores(
+      `/api/comp/${compId}/task/${taskId}/score`
+    );
 
-    // Second request — cache hit
+    // Second request — served from the same materialized row.
     const res2 = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
     expect(res2.status).toBe(200);
     expect(res2.headers.get("X-Cache")).toBe("HIT");
@@ -145,7 +163,7 @@ describe("Live Scoring", () => {
     expect(body2).toEqual(body1);
   });
 
-  test("cache invalidates after new upload", async () => {
+  test("a new upload re-scores in the background; readers never wait", async () => {
     const taskXctsk = JSON.parse(env.SAMPLE_TASK_XCTSK);
     const compId = await createComp();
     const taskId = await createTask(compId, {
@@ -155,31 +173,33 @@ describe("Live Scoring", () => {
 
     const igcEntries = sampleIgcEntries();
 
-    // Upload first pilot, score (miss)
+    // Upload first pilot and let the background compute land.
     await uploadRequest(
       `/api/comp/${compId}/task/${taskId}/igc`,
       await compressText(igcEntries[0][1]),
       { user: "user-1" }
     );
-    const res1 = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
-    expect(res1.headers.get("X-Cache")).toBe("MISS");
-    const data1 = (await res1.json()) as { classes: Array<{ pilots: unknown[] }> };
+    const { data: data1 } = await getFreshScores<{
+      stale: boolean;
+      classes: Array<{ pilots: unknown[] }>;
+    }>(`/api/comp/${compId}/task/${taskId}/score`);
+    expect(data1.classes[0].pilots).toHaveLength(1);
 
-    // Upload second pilot
+    // Upload second pilot. Every read stays an instant row read (200) —
+    // possibly the pre-upload body labelled stale — until the re-score
+    // lands, after which the fresh result includes the new pilot.
     await uploadRequest(
       `/api/comp/${compId}/task/${taskId}/igc`,
       await compressText(igcEntries[1][1]),
       { user: "user-2" }
     );
 
-    // Score again — must be a cache miss (new pilot changes cache key)
-    const res2 = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
-    expect(res2.headers.get("X-Cache")).toBe("MISS");
-    const data2 = (await res2.json()) as { classes: Array<{ pilots: unknown[] }> };
-
-    // New result has more pilots
+    const { data: data2 } = await getFreshScores<{
+      stale: boolean;
+      classes: Array<{ pilots: unknown[] }>;
+    }>(`/api/comp/${compId}/task/${taskId}/score`);
     expect(data2.classes[0].pilots.length).toBeGreaterThan(
-      (data1.classes[0].pilots as unknown[]).length
+      data1.classes[0].pilots.length
     );
   });
 
@@ -207,12 +227,12 @@ describe("Live Scoring", () => {
     expect(r2.status).toBe(201);
 
     // Score without penalty
-    const res1 = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
-    const data1 = (await res1.json()) as {
+    const { data: data1 } = await getFreshScores<{
+      stale: boolean;
       classes: Array<{
         pilots: Array<{ rank: number; comp_pilot_id: string; total_score: number }>;
       }>;
-    };
+    }>(`/api/comp/${compId}/task/${taskId}/score`);
     const rank1Pilot = data1.classes[0].pilots.find((p) => p.rank === 1)!;
 
     // Apply penalty large enough to guarantee a re-rank (pilot drops to 0)
@@ -223,10 +243,9 @@ describe("Live Scoring", () => {
       { penalty_points: penalty, penalty_reason: "Test penalty" }
     );
 
-    // Re-score (cache miss due to penalty change)
-    const res2 = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
-    expect(res2.headers.get("X-Cache")).toBe("MISS");
-    const data2 = (await res2.json()) as {
+    // The penalty edit re-scores in the background; wait for it to land.
+    const { data: data2 } = await getFreshScores<{
+      stale: boolean;
       classes: Array<{
         pilots: Array<{
           rank: number;
@@ -235,7 +254,7 @@ describe("Live Scoring", () => {
           penalty_points: number;
         }>;
       }>;
-    };
+    }>(`/api/comp/${compId}/task/${taskId}/score`);
 
     // Penalised pilot's score is reduced
     const penalisedPilot = data2.classes[0].pilots.find(
@@ -278,16 +297,14 @@ describe("Live Scoring", () => {
       expect(res.status).toBe(201);
     }
 
-    const res = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("X-Cache")).toBe("MISS");
-    const data = (await res.json()) as {
+    const { data } = await getFreshScores<{
+      stale: boolean;
       classes: Array<{
         pilot_class: string;
         available_points: { leading: number };
         pilots: Array<{ total_score: number; leading_points: number }>;
       }>;
-    };
+    }>(`/api/comp/${compId}/task/${taskId}/score`);
     const openClass = data.classes.find((c) => c.pilot_class === "open")!;
 
     // Engine ground truth with the same leading params (worker auto-computes
@@ -318,7 +335,7 @@ describe("Live Scoring", () => {
       5
     );
 
-    // Second request is served from the result cache, unchanged.
+    // Second request is served from the materialized row, unchanged.
     const res2 = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
     expect(res2.headers.get("X-Cache")).toBe("HIT");
     expect(await res2.json()).toEqual(data);
@@ -430,9 +447,8 @@ describe("Open distance scoring", () => {
       expect(res.status).toBe(201);
     }
 
-    const res = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as {
+    const { data } = await getFreshScores<{
+      stale: boolean;
       scoring_format: string;
       classes: Array<{
         pilots: Array<{
@@ -444,7 +460,7 @@ describe("Open distance scoring", () => {
           leading_points: number;
         }>;
       }>;
-    };
+    }>(`/api/comp/${compId}/task/${taskId}/score`);
 
     expect(data.scoring_format).toBe("open_distance");
     const pilots = data.classes[0].pilots;
@@ -465,7 +481,7 @@ describe("Open distance scoring", () => {
     }
   });
 
-  test("switching a comp to open distance re-scores (cache miss) and is audit-logged", async () => {
+  test("switching a comp to open distance re-scores every task and is audit-logged", async () => {
     const sampleTask = JSON.parse(env.SAMPLE_TASK_XCTSK);
     const compId = await createComp({ category: "hg" }); // GAP by default
     const taskId = await createTask(compId, {
@@ -482,22 +498,21 @@ describe("Open distance scoring", () => {
       );
     }
 
-    // Score as GAP first — populates the cache under the GAP-format key.
-    const gapRes = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
-    const gap = (await gapRes.json()) as { scoring_format: string };
+    // Score as GAP first — materializes the row under the GAP format.
+    const { data: gap } = await getFreshScores<{ stale: boolean; scoring_format: string }>(
+      `/api/comp/${compId}/task/${taskId}/score`
+    );
     expect(gap.scoring_format).toBe("gap");
 
-    // Switch the comp to open distance.
+    // Switch the comp to open distance — marks the task stale and re-scores.
     const patch = await authRequest("PATCH", `/api/comp/${compId}`, {
       scoring_format: "open_distance",
     });
     expect(patch.status).toBe(200);
 
-    // Re-score: the cache key now includes the new format, so this is a MISS
-    // and returns the open-distance result.
-    const odRes = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
-    expect(odRes.headers.get("X-Cache")).toBe("MISS");
-    const od = (await odRes.json()) as { scoring_format: string };
+    const { data: od } = await getFreshScores<{ stale: boolean; scoring_format: string }>(
+      `/api/comp/${compId}/task/${taskId}/score`
+    );
     expect(od.scoring_format).toBe("open_distance");
 
     // The format change is recorded in the (publicly visible) audit log.
@@ -508,7 +523,7 @@ describe("Open distance scoring", () => {
     expect(audit.results[0].description).toContain("Open distance");
   });
 
-  test("reuses the per-track cache when a new track is added", async () => {
+  test("reuses stored per-track analyses when a new track is added", async () => {
     const compId = await createComp({
       category: "hg",
       scoring_format: "open_distance",
@@ -519,35 +534,47 @@ describe("Open distance scoring", () => {
     });
     const igcEntries = sampleIgcEntries();
 
-    // First pilot → score (miss).
+    // First pilot → score.
     await uploadRequest(
       `/api/comp/${compId}/task/${taskId}/igc`,
       await compressText(igcEntries[0][1]),
       { user: "user-1" }
     );
-    const res1 = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
-    const data1 = (await res1.json()) as {
+    const { data: data1 } = await getFreshScores<{
+      stale: boolean;
       classes: Array<{ pilots: Array<{ pilot_name: string; flown_distance: number }> }>;
-    };
+    }>(`/api/comp/${compId}/task/${taskId}/score`);
     const first = data1.classes[0].pilots[0];
 
-    // Second pilot → the whole-task cache key changes, so this recomputes. The
-    // first pilot's distance comes from the per-track cache and is unchanged.
+    // The compute persisted the field-independent analysis for the track.
+    const analysesAfterFirst = await env.DB.prepare(
+      "SELECT task_track_id, payload_json FROM track_analysis WHERE variant = 'od'"
+    ).all<{ task_track_id: number; payload_json: string }>();
+    expect(analysesAfterFirst.results.length).toBe(1);
+    const firstPayload = analysesAfterFirst.results[0].payload_json;
+
+    // Second pilot → re-score. The first pilot's analysis row is reused
+    // byte-for-byte (not recomputed) and their distance is unchanged.
     await uploadRequest(
       `/api/comp/${compId}/task/${taskId}/igc`,
       await compressText(igcEntries[1][1]),
       { user: "user-2" }
     );
-    const res2 = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
-    expect(res2.headers.get("X-Cache")).toBe("MISS");
-    const data2 = (await res2.json()) as {
+    const { data: data2 } = await getFreshScores<{
+      stale: boolean;
       classes: Array<{ pilots: Array<{ pilot_name: string; flown_distance: number }> }>;
-    };
+    }>(`/api/comp/${compId}/task/${taskId}/score`);
 
     expect(data2.classes[0].pilots.length).toBe(2);
     const firstAgain = data2.classes[0].pilots.find(
       (p) => p.pilot_name === first.pilot_name
     )!;
     expect(firstAgain.flown_distance).toBe(first.flown_distance);
+
+    const analysesAfterSecond = await env.DB.prepare(
+      "SELECT task_track_id, payload_json FROM track_analysis WHERE variant = 'od' ORDER BY task_track_id"
+    ).all<{ task_track_id: number; payload_json: string }>();
+    expect(analysesAfterSecond.results.length).toBe(2);
+    expect(analysesAfterSecond.results[0].payload_json).toBe(firstPayload);
   });
 });

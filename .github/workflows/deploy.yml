@@ -229,3 +229,38 @@ jobs:
             exit 1
           fi
           echo "Good — dev-login is blocked"
+
+      - name: Smoke test — scores serve stale-first from D1 with ETag/304
+        run: |
+          # The competition worker is routed on the apex domain (not the
+          # pages.dev preview), so hit production directly. The sample comp is
+          # always seeded in prod; if the list is ever empty, warn and skip
+          # rather than failing the deploy over missing sample data.
+          API="https://glidecomp.com"
+          COMP_ID=$(curl -s "${API}/api/comp" | jq -r '.comps[0].comp_id // empty')
+          if [ -z "$COMP_ID" ]; then
+            echo "::warning::No public comps found — skipping score smoke test"
+            exit 0
+          fi
+          echo "Checking comp ${COMP_ID} scores"
+          HEADERS=$(mktemp)
+          curl -s -o /dev/null -D "$HEADERS" "${API}/api/comp/${COMP_ID}/scores"
+          XCACHE=$(grep -i '^x-cache:' "$HEADERS" | tr -d '\r' | awk '{print $2}')
+          ETAG=$(grep -i '^etag:' "$HEADERS" | tr -d '\r' | cut -d' ' -f2-)
+          echo "X-Cache: ${XCACHE:-<missing>}  ETag: ${ETAG:-<missing>}"
+          case "$XCACHE" in
+            HIT|HIT-STALE|MISS) ;;
+            *) echo "::error::/scores X-Cache header missing or unexpected (${XCACHE:-none})"; exit 1 ;;
+          esac
+          if [ -z "$ETAG" ]; then
+            echo "::error::/scores response has no ETag"; exit 1
+          fi
+          # A conditional re-request of unchanged scores must transfer nothing.
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "If-None-Match: ${ETAG}" "${API}/api/comp/${COMP_ID}/scores")
+          echo "Conditional GET -> ${CODE}"
+          if [ "$CODE" != "304" ] && [ "$CODE" != "200" ]; then
+            echo "::error::Conditional GET returned ${CODE} (expected 304, or 200 if a re-score landed mid-check)"
+            exit 1
+          fi
+          echo "Good — scores are stale-first with working conditional requests"

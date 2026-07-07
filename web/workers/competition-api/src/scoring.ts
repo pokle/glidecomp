@@ -67,15 +67,21 @@ export interface TaskScoreResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Cache key
+// State key
 // ---------------------------------------------------------------------------
 
 /**
- * Compute a deterministic SHA-256 cache key from the current task state.
- * The key changes automatically whenever any input to scoring changes:
- * xctsk content, track uploads/deletions, or penalty updates.
+ * Compute a deterministic SHA-256 key identifying the current scoring state
+ * of a task. The key changes whenever any input to scoring changes: xctsk
+ * content, track uploads/deletions, penalty updates, roster edits, or an
+ * engine-version bump.
+ *
+ * Stored on the task's `task_scores` row at write time, it is the identity
+ * of the served body — the score endpoints use it as the ETag — and doubles
+ * as a drift detector: a row whose stored key no longer matches a freshly
+ * computed one means some mutation path forgot to bump `inputs_rev`.
  */
-export async function computeScoreCacheKey(
+export async function computeScoreStateKey(
   taskId: number,
   db: D1Database
 ): Promise<string> {
@@ -139,14 +145,93 @@ export async function computeScoreCacheKey(
 }
 
 // ---------------------------------------------------------------------------
+// Per-track analysis store (the `track_analysis` D1 table)
+// ---------------------------------------------------------------------------
+
+/** The kinds of per-track analysis rows `track_analysis` holds. */
+type AnalysisVariant = "gap" | "od" | "pilot-detail";
+
+/**
+ * Load every stored analysis of one variant for a task's tracks that was
+ * computed from the given task geometry, keyed by task_track_id. Callers
+ * must still check the entry's uploaded_at against the track's current
+ * uploaded_at — a re-uploaded track invalidates only its own row.
+ */
+async function loadTrackAnalyses(
+  db: D1Database,
+  taskId: number,
+  variant: AnalysisVariant,
+  geomHash: string
+): Promise<Map<number, { uploaded_at: string; payload_json: string }>> {
+  const rows = await db
+    .prepare(
+      `SELECT ta.task_track_id, ta.uploaded_at, ta.payload_json
+       FROM track_analysis ta
+       JOIN task_track tt ON tt.task_track_id = ta.task_track_id
+       WHERE tt.task_id = ? AND ta.variant = ? AND ta.geom_hash = ?`
+    )
+    .bind(taskId, variant, geomHash)
+    .all<{ task_track_id: number; uploaded_at: string; payload_json: string }>();
+  return new Map(
+    rows.results.map((r) => [
+      r.task_track_id,
+      { uploaded_at: r.uploaded_at, payload_json: r.payload_json },
+    ])
+  );
+}
+
+interface TrackAnalysisWrite {
+  task_track_id: number;
+  variant: AnalysisVariant;
+  geom_hash: string;
+  uploaded_at: string;
+  payload_json: string;
+}
+
+/**
+ * Persist freshly computed per-track analyses in one transactional batch.
+ * The conflict guard keeps an out-of-order writer (a slow compute finishing
+ * after the track was re-uploaded and re-analyzed) from replacing a newer
+ * analysis with an older one for the same geometry. Best-effort: a failure
+ * (e.g. a track deleted mid-compute) only costs a recompute next time.
+ */
+async function saveTrackAnalyses(
+  db: D1Database,
+  writes: TrackAnalysisWrite[]
+): Promise<void> {
+  if (writes.length === 0) return;
+  try {
+    await db.batch(
+      writes.map((w) =>
+        db
+          .prepare(
+            `INSERT INTO track_analysis (task_track_id, variant, geom_hash, uploaded_at, payload_json)
+             VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(task_track_id, variant) DO UPDATE SET
+               geom_hash = excluded.geom_hash,
+               uploaded_at = excluded.uploaded_at,
+               payload_json = excluded.payload_json
+             WHERE excluded.uploaded_at > track_analysis.uploaded_at
+                OR excluded.geom_hash != track_analysis.geom_hash`
+          )
+          .bind(w.task_track_id, w.variant, w.geom_hash, w.uploaded_at, w.payload_json)
+      )
+    );
+  } catch (err) {
+    console.error("track_analysis batch write failed", err);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Scoring
 // ---------------------------------------------------------------------------
 
-/** Per-track analysis cached in KV — the field-independent result of
- * resolving one pilot's turnpoint sequence. Keyed by task geometry + track
- * identity, so it survives roster/penalty edits and (crucially) new track
- * submissions: only the newly-added track misses the cache, the rest of the
- * field is reused instead of being re-fetched, re-parsed and re-resolved.
+/** Per-track analysis stored in D1 (`track_analysis`, variant "gap") — the
+ * field-independent result of resolving one pilot's turnpoint sequence.
+ * Keyed by task geometry + track identity, so it survives roster/penalty
+ * edits and (crucially) new track submissions: only the newly-added track
+ * misses the store, the rest of the field is reused instead of being
+ * re-fetched, re-parsed and re-resolved.
  * Plain numbers/booleans only, so JSON round-trips losslessly. */
 interface CachedFlightAnalysis {
   flownDistance: number;
@@ -163,8 +248,9 @@ interface CachedFlightAnalysis {
   leadingAggregate?: LeadingAggregate;
 }
 
-/** Short SHA-256 hex digest (16 chars) of a string — used for cache keys. */
-async function shortHash(input: string): Promise<string> {
+/** Short SHA-256 hex digest (16 chars) of a string — used for state keys
+ * and the track_analysis geometry hashes. */
+export async function shortHash(input: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
   return Array.from(new Uint8Array(buf))
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -273,12 +359,11 @@ function buildClassScore(
  * running the GAP formula per pilot class.
  *
  * Each pilot's turnpoint-sequence resolution (the expensive tracklog scan) is
- * independent of the rest of the field, so it is cached per-track in KV and
- * reused across recomputes; only tracks that are new or changed are fetched
- * from R2, decompressed and re-parsed, and those run with bounded concurrency.
- * When leading points are enabled the tracklog is needed for the
- * leading-coefficient calculation, so that path always fetches/parses and
- * skips the per-track cache.
+ * independent of the rest of the field, so it is stored per-track in the
+ * track_analysis table and reused across recomputes; only tracks that are new
+ * or changed are fetched from R2, decompressed and re-parsed, and those run
+ * with bounded concurrency. Leading comps store the per-track leading
+ * aggregate alongside, so a new upload doesn't force a re-scan of the field.
  *
  * Penalties are applied after scoring — deducted from totalScore, floored at 0,
  * then pilots are re-ranked within their class.
@@ -287,9 +372,7 @@ export async function computeTaskScore(
   taskId: number,
   db: D1Database,
   r2: R2Bucket,
-  alphabet: string,
-  kv?: KVNamespace,
-  waitUntil?: (promise: Promise<unknown>) => void
+  alphabet: string
 ): Promise<TaskScoreResponse> {
   // Load task + comp gap_params
   const taskRow = await db
@@ -369,16 +452,18 @@ export async function computeTaskScore(
 
   // Open distance: score each pilot on how far they flew from the take-off
   // exit. Each pilot's open distance is field-independent, so — like the GAP
-  // path — it is cached per track in KV and reused across recomputes; only new
-  // or changed tracks are fetched from R2, decompressed and re-parsed. Open
-  // distance needs the raw fixes (not the GAP turnpoint analysis), so it uses
-  // its own cache holding just the computed distance.
+  // path — it is stored per track in track_analysis and reused across
+  // recomputes; only new or changed tracks are fetched from R2, decompressed
+  // and re-parsed. Open distance needs the raw fixes (not the GAP turnpoint
+  // analysis), so it uses its own variant holding just the computed distance.
   if (scoringFormat === "open_distance") {
-    // Per-track cache key prefix: any change to the task geometry (xctsk, which
-    // holds the take-off cylinder) invalidates every cached distance.
-    const geomHash = kv
-      ? await shortHash(`${taskRow.xctsk} engine:${SCORING_ENGINE_VERSION}`)
-      : "";
+    // Any change to the task geometry (xctsk, which holds the take-off
+    // cylinder) invalidates every stored distance.
+    const geomHash = await shortHash(
+      `${taskRow.xctsk} engine:${SCORING_ENGINE_VERSION}`
+    );
+    const stored = await loadTrackAnalyses(db, taskId, "od", geomHash);
+    const analysisWrites: TrackAnalysisWrite[] = [];
 
     type AnalyzedOpenPilot = {
       flight: OpenDistanceFlightData;
@@ -391,14 +476,10 @@ export async function computeTaskScore(
       scoredTracks,
       TRACK_FETCH_CONCURRENCY,
       async (track): Promise<AnalyzedOpenPilot | null> => {
-        const cacheKey = geomHash
-          ? `od:v1:${geomHash}:${track.task_track_id}:${track.uploaded_at}`
-          : "";
-
         let distance: number | null = null;
-        if (cacheKey && kv) {
-          const cached = (await kv.get(cacheKey, "json")) as { distance: number } | null;
-          if (cached) distance = cached.distance;
+        const hit = stored.get(track.task_track_id);
+        if (hit && hit.uploaded_at === track.uploaded_at) {
+          distance = (JSON.parse(hit.payload_json) as { distance: number }).distance;
         }
 
         if (distance === null) {
@@ -426,13 +507,13 @@ export async function computeTaskScore(
             fixes: igc.fixes,
           });
 
-          if (cacheKey && kv) {
-            const put = kv.put(cacheKey, JSON.stringify({ distance }), {
-              expirationTtl: 604800,
-            });
-            if (waitUntil) waitUntil(put);
-            else await put;
-          }
+          analysisWrites.push({
+            task_track_id: track.task_track_id,
+            variant: "od",
+            geom_hash: geomHash,
+            uploaded_at: track.uploaded_at,
+            payload_json: JSON.stringify({ distance }),
+          });
         }
 
         return {
@@ -448,6 +529,7 @@ export async function computeTaskScore(
         };
       }
     );
+    await saveTrackAnalyses(db, analysisWrites);
     const analyzedPilots = analyzed.filter(
       (p): p is AnalyzedOpenPilot => p !== null
     );
@@ -482,18 +564,18 @@ export async function computeTaskScore(
     };
   }
 
-  // Per-track analysis cache key prefix: any change to the task geometry
-  // (xctsk) or distance origin invalidates every cached analysis. Leading
-  // comps also cache — but the leading aggregate depends on the formula, so
-  // it is folded into the key (and the payload carries the aggregate). The
-  // leading vs no-leading variants use distinct keys so a hit always has the
-  // shape it needs.
+  // Per-track analysis geometry hash: any change to the task geometry
+  // (xctsk) or distance origin invalidates every stored analysis. Leading
+  // comps also reuse rows — but the leading aggregate depends on the formula,
+  // so it is folded into the hash (and the payload carries the aggregate).
+  // The leading vs no-leading variants hash differently so a hit always has
+  // the shape it needs.
   const geomKey = useLeading
     ? `${taskRow.xctsk} ${distanceOrigin} lead:${leadingFormula}`
     : `${taskRow.xctsk} ${distanceOrigin} nolead`;
-  const geomHash = kv
-    ? await shortHash(`${geomKey} engine:${SCORING_ENGINE_VERSION}`)
-    : "";
+  const geomHash = await shortHash(`${geomKey} engine:${SCORING_ENGINE_VERSION}`);
+  const stored = await loadTrackAnalyses(db, taskId, "gap", geomHash);
+  const analysisWrites: TrackAnalysisWrite[] = [];
 
   type AnalyzedPilot = {
     flight: FlightScoringData;
@@ -503,31 +585,25 @@ export async function computeTaskScore(
     penalty_reason: string | null;
   };
 
-  // Gather each pilot's scoring inputs — from the per-track KV cache when
-  // possible, otherwise by fetching + decompressing + parsing the IGC from R2
-  // and resolving its turnpoint sequence. Bounded concurrency overlaps R2
-  // latency while capping peak memory from decompressed tracklogs.
+  // Gather each pilot's scoring inputs — from the per-track analysis store
+  // when possible, otherwise by fetching + decompressing + parsing the IGC
+  // from R2 and resolving its turnpoint sequence. Bounded concurrency
+  // overlaps R2 latency while capping peak memory from decompressed
+  // tracklogs.
   const analyzed = await mapWithConcurrency(
     scoredTracks,
     TRACK_FETCH_CONCURRENCY,
     async (track): Promise<AnalyzedPilot | null> => {
-      // v2: engine gained the no-SSS start fallback — v1 entries for tasks
-      // without an SSS turnpoint hold zero distances for the same geometry.
-      const cacheKey = geomHash
-        ? `pa:v2:${geomHash}:${track.task_track_id}:${track.uploaded_at}`
-        : "";
-
       let flight: FlightScoringData | null = null;
 
-      if (cacheKey && kv) {
-        const cached = (await kv.get(cacheKey, "json")) as CachedFlightAnalysis | null;
-        if (cached) {
-          flight = {
-            pilotName: track.pilot_name,
-            trackFile: track.igc_filename,
-            ...cached,
-          };
-        }
+      const hit = stored.get(track.task_track_id);
+      if (hit && hit.uploaded_at === track.uploaded_at) {
+        const cached = JSON.parse(hit.payload_json) as CachedFlightAnalysis;
+        flight = {
+          pilotName: track.pilot_name,
+          trackFile: track.igc_filename,
+          ...cached,
+        };
       }
 
       if (!flight) {
@@ -568,29 +644,29 @@ export async function computeTaskScore(
           : undefined;
         flight = leadingAggregate ? { ...base, leadingAggregate } : base;
 
-        // Cache the compact, field-independent analysis for reuse. Store only
-        // the geometric fields (+ leading aggregate) — the pilot name/id come
+        // Store the compact, field-independent analysis for reuse. Only the
+        // geometric fields (+ leading aggregate) — the pilot name/id come
         // fresh from the DB each run, so renames and penalties never
         // invalidate this entry.
-        if (cacheKey && kv) {
-          const compact: CachedFlightAnalysis = {
-            flownDistance: base.flownDistance,
-            madeGoal: base.madeGoal,
-            reachedESS: base.reachedESS,
-            speedSectionTime: base.speedSectionTime,
-            sssTimeMs: base.sssTimeMs,
-            essTimeMs: base.essTimeMs,
-            ...(base.earlyStartSeconds !== undefined
-              ? { earlyStartSeconds: base.earlyStartSeconds }
-              : {}),
-            ...(leadingAggregate ? { leadingAggregate } : {}),
-          };
-          const put = kv.put(cacheKey, JSON.stringify(compact), {
-            expirationTtl: 604800,
-          });
-          if (waitUntil) waitUntil(put);
-          else await put;
-        }
+        const compact: CachedFlightAnalysis = {
+          flownDistance: base.flownDistance,
+          madeGoal: base.madeGoal,
+          reachedESS: base.reachedESS,
+          speedSectionTime: base.speedSectionTime,
+          sssTimeMs: base.sssTimeMs,
+          essTimeMs: base.essTimeMs,
+          ...(base.earlyStartSeconds !== undefined
+            ? { earlyStartSeconds: base.earlyStartSeconds }
+            : {}),
+          ...(leadingAggregate ? { leadingAggregate } : {}),
+        };
+        analysisWrites.push({
+          task_track_id: track.task_track_id,
+          variant: "gap",
+          geom_hash: geomHash,
+          uploaded_at: track.uploaded_at,
+          payload_json: JSON.stringify(compact),
+        });
       }
 
       return {
@@ -602,6 +678,7 @@ export async function computeTaskScore(
       };
     }
   );
+  await saveTrackAnalyses(db, analysisWrites);
 
   const analyzedPilots = analyzed.filter((p): p is AnalyzedPilot => p !== null);
 
@@ -690,18 +767,17 @@ type PilotAnalysisPayload = Pick<
 /**
  * Compute one pilot's scoring-transparency analysis for a task, mirroring
  * computeTaskScore's inputs exactly (distance-origin trim, task geometry).
- * Cached per track in KV — any xctsk / scoring-format / distance-origin /
- * re-upload change rolls the key. Returns null when the task or the pilot's
- * track doesn't exist.
+ * Stored per track in track_analysis (variant "pilot-detail") — any xctsk /
+ * scoring-format / distance-origin change rolls the geometry hash, and a
+ * re-upload mismatches on uploaded_at. Returns null when the task or the
+ * pilot's track doesn't exist.
  */
 export async function computePilotAnalysis(
   taskId: number,
   compPilotId: number,
   db: D1Database,
   r2: R2Bucket,
-  alphabet: string,
-  kv?: KVNamespace,
-  waitUntil?: (promise: Promise<unknown>) => void
+  alphabet: string
 ): Promise<PilotAnalysisResponse | null> {
   const taskRow = await db
     .prepare(
@@ -732,13 +808,20 @@ export async function computePilotAnalysis(
   const distanceOrigin =
     gapParams.distanceOrigin ?? DEFAULT_GAP_PARAMETERS.distanceOrigin;
 
-  const cacheKey = kv
-    ? `pd:v1:${await shortHash(`${taskRow.xctsk} ${scoringFormat} ${distanceOrigin} engine:${SCORING_ENGINE_VERSION}`)}:${track.task_track_id}:${track.uploaded_at}`
-    : "";
+  const geomHash = await shortHash(
+    `${taskRow.xctsk} ${scoringFormat} ${distanceOrigin} engine:${SCORING_ENGINE_VERSION}`
+  );
 
   let payload: PilotAnalysisPayload | null = null;
-  if (cacheKey && kv) {
-    payload = (await kv.get(cacheKey, "json")) as PilotAnalysisPayload | null;
+  const hit = await db
+    .prepare(
+      `SELECT geom_hash, uploaded_at, payload_json FROM track_analysis
+       WHERE task_track_id = ? AND variant = 'pilot-detail'`
+    )
+    .bind(track.task_track_id)
+    .first<{ geom_hash: string; uploaded_at: string; payload_json: string }>();
+  if (hit && hit.geom_hash === geomHash && hit.uploaded_at === track.uploaded_at) {
+    payload = JSON.parse(hit.payload_json) as PilotAnalysisPayload;
   }
 
   if (!payload) {
@@ -789,20 +872,22 @@ export async function computePilotAnalysis(
       const scoringTask = taskForDistanceOrigin(xcTask, distanceOrigin);
       const result = resolveTurnpointSequence(scoringTask, igc.fixes);
       // Round-trip through JSON so the payload is typed as the wire format
-      // (Dates → ISO strings) — exactly what KV stores and the client revives.
+      // (Dates → ISO strings) — exactly what D1 stores and the client revives.
       payload = {
         turnpoint_result: JSON.parse(JSON.stringify(result)) as TurnpointSequenceResultJSON,
         open_distance: null,
       };
     }
 
-    if (cacheKey && kv) {
-      const put = kv.put(cacheKey, JSON.stringify(payload), {
-        expirationTtl: 604800,
-      });
-      if (waitUntil) waitUntil(put);
-      else await put;
-    }
+    await saveTrackAnalyses(db, [
+      {
+        task_track_id: track.task_track_id,
+        variant: "pilot-detail",
+        geom_hash: geomHash,
+        uploaded_at: track.uploaded_at,
+        payload_json: JSON.stringify(payload),
+      },
+    ]);
   }
 
   return {

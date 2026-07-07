@@ -14,6 +14,7 @@ import {
 import { resolvePilotId } from "../pilot-resolver";
 import { linkExistingRegistrations } from "../pilot-linker";
 import { audit, describeChange } from "../audit";
+import { bumpAndRevalidateScores, taskIdsForPilots } from "../score-store";
 
 type Variables = {
   user: AuthUser;
@@ -665,6 +666,28 @@ export const pilotRoutes = new Hono<HonoEnv>()
         );
       }
 
+      // Scores embed each pilot's name and class, and deleting a pilot
+      // cascade-deletes their tracks — resolve which tasks that touches
+      // BEFORE the batch runs (the cascade removes the task_track rows this
+      // looks at), then mark them stale after it commits.
+      const scoreAffectedPilotIds = [
+        ...toDelete,
+        ...pilots
+          .filter((row) => {
+            if (!row.comp_pilot_id) return false; // new pilots have no tracks yet
+            const old = existingById.get(decodeId(alphabet, row.comp_pilot_id)!)!;
+            return (
+              old.registered_pilot_name !== row.registered_pilot_name ||
+              old.pilot_class !== row.pilot_class
+            );
+          })
+          .map((row) => decodeId(alphabet, row.comp_pilot_id!)!),
+      ];
+      const scoreAffectedTaskIds = await taskIdsForPilots(
+        c.env.DB,
+        scoreAffectedPilotIds
+      );
+
       // Build the batch. All statements execute atomically in D1.batch().
       const statements: D1PreparedStatement[] = [];
 
@@ -698,6 +721,8 @@ export const pilotRoutes = new Hono<HonoEnv>()
       if (statements.length > 0) {
         await c.env.DB.batch(statements);
       }
+
+      await bumpAndRevalidateScores(c, scoreAffectedTaskIds);
 
       // Audit: one per change up to 5 total, otherwise a single rollup.
       const inserts = pilots.filter((p) => !p.comp_pilot_id).length;
@@ -883,6 +908,18 @@ export const pilotRoutes = new Hono<HonoEnv>()
         .bind(...buildUpdateValues(newPilotId, merged, compPilotId, compId))
         .run();
 
+      // Scores embed the pilot's name and are grouped by class — a change to
+      // either marks every task holding one of their tracks stale.
+      if (
+        merged.registered_pilot_name !== existing.registered_pilot_name ||
+        merged.pilot_class !== existing.pilot_class
+      ) {
+        await bumpAndRevalidateScores(
+          c,
+          await taskIdsForPilots(c.env.DB, [compPilotId])
+        );
+      }
+
       // Audit per changed field
       const auditFields: Array<[keyof typeof merged, string]> = [
         ["registered_pilot_name", "name"],
@@ -948,6 +985,10 @@ export const pilotRoutes = new Hono<HonoEnv>()
         return c.json({ error: "Pilot not found in this competition" }, 404);
       }
 
+      // Resolve which tasks lose a track before the cascade removes the
+      // task_track rows this looks at.
+      const affectedTaskIds = await taskIdsForPilots(c.env.DB, [compPilotId]);
+
       // Cascade deletes task_track rows for this comp_pilot.
       await c.env.DB.prepare(
         "DELETE FROM comp_pilot WHERE comp_pilot_id = ?"
@@ -955,6 +996,7 @@ export const pilotRoutes = new Hono<HonoEnv>()
         .bind(compPilotId)
         .run();
 
+      await bumpAndRevalidateScores(c, affectedTaskIds);
       await audit(c.env.DB, c.var.user, compId, {
         subject_type: "pilot",
         subject_id: compPilotId,

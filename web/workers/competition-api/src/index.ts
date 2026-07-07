@@ -42,10 +42,13 @@ const corsConfig = cors({
   credentials: true,
   allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowHeaders: ["Content-Type", "Authorization", "x-filename"],
-  // Custom response headers we want the browser to surface to JS. These are
-  // used by the user-files download endpoints so the frontend can recover the
-  // original filename and display name without an extra metadata round-trip.
-  exposeHeaders: ["X-Filename", "X-Display-Name"],
+  // Custom response headers we want the browser to surface to JS. X-Filename/
+  // X-Display-Name are used by the user-files download endpoints so the
+  // frontend can recover the original filename and display name without an
+  // extra metadata round-trip. ETag/X-Cache back the score endpoints'
+  // conditional re-score polling (ETag is not on the CORS safelist, so
+  // cross-origin dev against a live backend needs it exposed explicitly).
+  exposeHeaders: ["X-Filename", "X-Display-Name", "ETag", "X-Cache"],
 });
 
 app.use("/api/comp/*", corsConfig);

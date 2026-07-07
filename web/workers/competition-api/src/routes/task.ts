@@ -6,6 +6,7 @@ import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth"
 import { isCompAdmin } from "../super-admin";
 import { createTaskSchema, updateTaskSchema, validated } from "../validators";
 import { audit, describeChange } from "../audit";
+import { bumpAndRevalidateScores } from "../score-store";
 import { summarizeXctskChange, describeTaskSummary } from "../xctsk-summary";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
 
@@ -165,6 +166,9 @@ export const taskRoutes = new Hono<HonoEnv>()
       });
 
       if (body.xctsk) {
+        // Materialize a scores row right away (empty field for now) so the
+        // public's first visit reads a row instead of computing.
+        await bumpAndRevalidateScores(c, [taskId]);
         await deriveCompTimezone(c.env.DB, c.var.user, compId, body.xctsk);
       }
 
@@ -376,13 +380,17 @@ export const taskRoutes = new Hono<HonoEnv>()
         }
       }
 
-      // Emit audit entries per changed field
+      // Emit audit entries per changed field. Changes to the task date, the
+      // scored classes, or the route feed the scored output — those also mark
+      // the task's materialized scores stale below.
       const auditChanges: string[] = [];
+      let scoreInputsChanged = false;
       if (body.name !== undefined && body.name !== task.name) {
         auditChanges.push(describeChange("task name", task.name, body.name));
       }
       if (body.task_date !== undefined && body.task_date !== task.task_date) {
         auditChanges.push(describeChange("task date", task.task_date, body.task_date));
+        scoreInputsChanged = true;
       }
       if (body.pilot_classes !== undefined) {
         const newClasses = [...body.pilot_classes].sort();
@@ -390,6 +398,7 @@ export const taskRoutes = new Hono<HonoEnv>()
           auditChanges.push(
             `Changed pilot classes from [${currentClasses.join(", ")}] to [${newClasses.join(", ")}]`
           );
+          scoreInputsChanged = true;
         }
       }
       if (body.xctsk !== undefined) {
@@ -399,8 +408,10 @@ export const taskRoutes = new Hono<HonoEnv>()
           auditChanges.push(
             `Set task route: ${describeTaskSummary(body.xctsk)}`
           );
+          scoreInputsChanged = true;
         } else if (oldHasXctsk && !newHasXctsk) {
           auditChanges.push("Cleared task route");
+          scoreInputsChanged = true;
         } else if (
           oldHasXctsk &&
           newHasXctsk &&
@@ -410,7 +421,12 @@ export const taskRoutes = new Hono<HonoEnv>()
           auditChanges.push(
             summary ? `Updated task route: ${summary}` : "Updated task route"
           );
+          scoreInputsChanged = true;
         }
+      }
+
+      if (scoreInputsChanged) {
+        await bumpAndRevalidateScores(c, [taskId]);
       }
 
       const taskName = body.name ?? task.name;

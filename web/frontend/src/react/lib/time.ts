@@ -133,3 +133,26 @@ export function formatTimeInZone(d: Date, timeZone?: string): string {
     return d.toLocaleTimeString(undefined, { hour12: false });
   }
 }
+
+/**
+ * Absolute "scores computed at" stamp in the comp's timezone (UTC when
+ * unset) with a fixed locale — deterministic output, per the SSR plan's
+ * no-relative-times rule, e.g. "7 Jul 2026, 14:32 UTC". An unknown IANA
+ * zone in comp settings falls back to UTC rather than throwing.
+ */
+export function formatComputedAt(iso: string, timezone: string | null): string {
+  const date = new Date(iso);
+  const opts: Intl.DateTimeFormatOptions = {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZoneName: "short",
+  };
+  try {
+    return date.toLocaleString("en-GB", { ...opts, timeZone: timezone ?? "UTC" });
+  } catch {
+    return date.toLocaleString("en-GB", { ...opts, timeZone: "UTC" });
+  }
+}

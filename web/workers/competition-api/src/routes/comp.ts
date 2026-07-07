@@ -6,6 +6,7 @@ import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth"
 import { isCompAdmin, isSuperAdmin } from "../super-admin";
 import { createCompSchema, updateCompSchema, validated } from "../validators";
 import { audit, describeChange } from "../audit";
+import { bumpAndRevalidateScores, taskIdsForComp } from "../score-store";
 import { speedSectionTypeWarnings } from "../xctsk-summary";
 import { DEFAULT_GAP_PARAMETERS, type GAPParameters } from "@glidecomp/engine";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
@@ -617,6 +618,9 @@ export const compRoutes = new Hono<HonoEnv>()
           )
         );
       }
+      // Scoring behaviour knobs apply to every task in the comp — a change
+      // marks all their materialized scores stale below.
+      let scoringInputsChanged = false;
       if (body.gap_params !== undefined) {
         const oldGap = current.gap_params
           ? (JSON.parse(current.gap_params) as GAPParameters)
@@ -626,6 +630,7 @@ export const compRoutes = new Hono<HonoEnv>()
           body.gap_params ?? null
         )) {
           auditChanges.push(line);
+          scoringInputsChanged = true;
         }
       }
       if (
@@ -638,6 +643,7 @@ export const compRoutes = new Hono<HonoEnv>()
         auditChanges.push(
           `Changed scoring format from ${fmtLabel(current.scoring_format)} to ${fmtLabel(body.scoring_format)}`
         );
+        scoringInputsChanged = true;
       }
       // Timezone is presentational only (scoring runs on UTC), but the
       // change is audit-logged like every other settings knob.
@@ -693,6 +699,13 @@ export const compRoutes = new Hono<HonoEnv>()
             );
           }
         }
+      }
+
+      if (scoringInputsChanged) {
+        await bumpAndRevalidateScores(
+          c,
+          await taskIdsForComp(c.env.DB, compId)
+        );
       }
 
       for (const description of auditChanges) {

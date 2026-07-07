@@ -1,7 +1,8 @@
 # Plan: stale-first score storage in D1 (compute-on-write)
 
 **Date:** 2026-07-07
-**Status:** proposed (supersedes the KV `latest`-pointer draft of this doc)
+**Status:** implemented (see "Implementation notes" at the end; supersedes
+the KV `latest`-pointer draft of this doc)
 **Companion to:** [ssr-public-pages-plan.md](./ssr-public-pages-plan.md)
 
 ## Principle
@@ -318,3 +319,46 @@ delete — a better admin story than blind key deletion.
    computed-at timestamp.
 5. Scoring performs zero KV operations; D1 writes occur only on state
    change, never per read.
+
+## Implementation notes (as built)
+
+Implemented per this plan (migration `0012_task_scores.sql`,
+`competition-api/src/score-store.ts`, `routes/score.ts`, hooks in
+`igc.ts`/`task.ts`/`comp.ts`/`pilot.ts`, `ScoreFreshness.tsx`), with these
+deliberate deltas:
+
+- **Engine bumps need no deploy step.** Instead of a deploy-time
+  `inputs_rev + 1` statement, `task_scores` stores the `engine_version` the
+  blob was computed with, and staleness is
+  `computed_rev < inputs_rev OR engine_version != SCORING_ENGINE_VERSION`.
+  A deploy that bumps the engine version makes every row read as stale on
+  its next visit — same spread-the-recompute behaviour, no pipeline step to
+  forget. The store-write guard treats a changed engine version like a newer
+  revision, so mixed-version workers during a rolling deploy converge.
+- **The bump follows the write.** `bumpScoreInputs()` runs immediately
+  after the mutation's DB write rather than inside one batch with it (the
+  handlers are multi-statement already, like `audit()`). The invariant that
+  matters is ordering: bump strictly AFTER the write, so a concurrent
+  revalidation can never capture a rev that predates data it then reads.
+- **pilot-status.ts has no hook.** Pilot statuses are roll-call metadata —
+  `computeTaskScore` never reads `task_pilot_status` — so status edits
+  don't (and mustn't) re-score. Penalties live in `igc.ts`'s PATCH route,
+  which is hooked. If statuses ever become scoring inputs (DNF/DSQ
+  handling), add the helper beside their `audit()` calls then.
+- **Revalidation also releases the lock on no-op runs** (row already fresh,
+  or the guarded write was filtered because a newer result landed first) —
+  otherwise a redundant trigger would sit on the lease for its full 120 s
+  and delay the next legitimate re-score.
+- **The ETag folds the staleness label in** (`"<state_key>:stale"` while
+  stale). The served body includes `stale`, so a stale-labelled body must
+  not share a validator with the fresh one — otherwise a browser that
+  cached the stale-labelled body keeps re-serving its banner via 304s after
+  the re-score concludes, and a re-score that reproduces identical scores
+  (a no-op bump, e.g. the admin mark-stale) never flips the client's poll
+  to 200. The plan's polling contract is unchanged: 304 while the re-score
+  runs, 200 the moment it lands.
+- **Team edits confirm the no-comp-blob design:** they change the comp
+  ETag (it hashes task state_keys + team assignments) and the served teams
+  with zero recomputes and zero cache handling.
+- The comp endpoint reports `computed_at: null` for a comp with no
+  scoreable tasks; the UI renders no timestamp in that state.

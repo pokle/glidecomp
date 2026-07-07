@@ -36,7 +36,11 @@ import { api } from "../../comp/api";
 import { gunzipResponse } from "../../analysis/storage";
 import type { OpenDistanceLine } from "../../analysis/map-provider";
 import { formatTaskDate } from "../lib/format";
-import { formatTimeInZone, zoneNameWithOffset } from "../lib/time";
+import {
+  formatComputedAt,
+  formatTimeInZone,
+  zoneNameWithOffset,
+} from "../lib/time";
 import type {
   ClassScore,
   CompDetailData,
@@ -65,6 +69,10 @@ interface DetailData {
   /** Marker events for every anchored explanation item, keyed by item id. */
   eventsByItem: Map<string, FlightEvent>;
   openDistanceLine: OpenDistanceLine | null;
+  /** When the published score this narrative explains was computed. */
+  scoreComputedAt: string;
+  /** True when a re-score is in flight — the narrative may soon change. */
+  scoreStale: boolean;
 }
 
 /**
@@ -218,6 +226,8 @@ async function loadDetail(
             distance: geometry.distance,
           }
         : null,
+      scoreComputedAt: score.computed_at,
+      scoreStale: score.stale,
     };
   }
 
@@ -258,6 +268,8 @@ async function loadDetail(
     mapTask: scoringTask,
     eventsByItem: anchoredEvents(explanation),
     openDistanceLine: null,
+    scoreComputedAt: score.computed_at,
+    scoreStale: score.stale,
   };
 }
 
@@ -398,6 +410,10 @@ export function PilotScoreDetail() {
             new Date(data.task.task_date + "T12:00:00Z"),
             data.comp.timezone ?? undefined
           )}
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Scores computed {formatComputedAt(data.scoreComputedAt, data.comp.timezone)}
+          {data.scoreStale ? " — a re-score is in progress" : ""}
         </p>
         <p className="mt-1 font-medium">{explanation.headline}</p>
       </header>
