@@ -65,12 +65,22 @@
             <!-- Map -->
             <div id="map"></div>
 
-            <!-- Back to the app — this full-screen tool has no other way home (IA v2 #277) -->
-            <a href="/"
+            <!-- Back to the app — this full-screen tool has no other way home (IA v2 #277).
+                 Returns to the page the user came from (usually the comp/task page);
+                 the href is the fallback for a fresh tab with no history. -->
+            <a id="backLink" href="/"
                 title="Back to GlideComp"
                 class="absolute left-3 top-3 z-20 rounded-full bg-black/55 px-3.5 py-1.5 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-black/75">
-                ← GlideComp
+                ← Back
             </a>
+            <script>
+                document.getElementById("backLink").addEventListener("click", (e) => {
+                    if (history.length > 1) {
+                        e.preventDefault();
+                        history.back();
+                    }
+                });
+            </script>
 
             <!-- Status alert overlay -->
             <div class="pointer-events-none absolute left-1/2 top-4 z-10 w-full max-w-md -translate-x-1/2 px-4">
