@@ -1,9 +1,14 @@
 # Plan: SEO-friendly SSR for the public competition pages
 
 **Date:** 2026-07-06
-**Status:** proposed — not yet implemented. This is a point-in-time plan; the
-"current state" notes below were refreshed 2026-07-07 for the stale-first
-score store, but verify file/line references against the code before building.
+**Status:** ✅ **Implemented** (2026-07-09, PR #289). All four public routes are
+server-rendered by `functions/comp/[[path]].ts`; see the SSR note in
+[CLAUDE.md](../CLAUDE.md) (Architecture) for the shipped shape and the rules for
+touching these pages. The plan below is the original design record; a few
+details evolved in implementation (react-router `StaticRouter` instead of a
+`react-router-dom/server` subpath; the SSR bundle targets workerd's react-dom
+edge build; `/scores` stays a client redirect to `/comp/:id#scores`; the score
+tables already moved onto the comp page in IA v2 before SSR landed).
 
 ## Goal
 
