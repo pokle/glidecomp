@@ -1787,6 +1787,36 @@ async function init(): Promise<void> {
    * When pilotId is given, that pilot is pre-focused: their track (with event
    * markers) on the map, while the score table keeps the full field.
    */
+  /**
+   * Append "› comp › task" links to the top-center breadcrumb bar so a
+   * shared analysis link (this is a common way flights get shared) leads
+   * back into the competition, not just to the GlideComp home page.
+   */
+  function appendCompBreadcrumbs(
+    compId: string,
+    taskId: string,
+    compName: string | null,
+    taskName: string | null
+  ): void {
+    const nav = document.getElementById('breadcrumbs');
+    if (!nav) return;
+    const crumbs = [
+      { label: compName ?? 'Competition', href: `/comp/${encodeURIComponent(compId)}` },
+      {
+        label: taskName ?? 'Task',
+        href: `/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}`,
+      },
+    ];
+    for (const c of crumbs) {
+      nav.appendChild(document.createTextNode('›'));
+      const a = document.createElement('a');
+      a.href = c.href;
+      a.textContent = c.label;
+      a.className = 'min-w-0 max-w-40 truncate hover:underline underline-offset-4';
+      nav.appendChild(a);
+    }
+  }
+
   async function loadCompTask(
     compId: string,
     taskId: string,
@@ -1804,7 +1834,7 @@ async function init(): Promise<void> {
         showStatus('Failed to load competition task', 'error');
         return;
       }
-      const taskDetail = (await taskRes.json()) as { xctsk: unknown | null };
+      const taskDetail = (await taskRes.json()) as { name?: string; xctsk: unknown | null };
       const { tracks: trackList } = (await listRes.json()) as {
         tracks: Array<{ comp_pilot_id: string; pilot_name: string }>;
       };
@@ -1825,14 +1855,18 @@ async function init(): Promise<void> {
       // viewer's saved preferences. A comp with no stored gap_params seeds
       // the stock defaults, matching the server-side scorer.
       let compGap: Partial<GAPParameters> = {};
+      let compName: string | null = null;
       if (compRes.ok) {
         const comp = (await compRes.json()) as {
+          name?: string;
           gap_params: Partial<GAPParameters> | null;
           scoring_format?: string | null;
         };
+        compName = comp.name ?? null;
         compGap = comp.gap_params ?? {};
         state.compScoringFormat = comp.scoring_format === 'open_distance' ? 'open_distance' : 'gap';
       }
+      appendCompBreadcrumbs(compId, taskId, compName, taskDetail.name ?? null);
       const { nominalDistance, ...gapParameters } = compGap;
       let nominalDistancePct = 70;
       if (state.task) {
