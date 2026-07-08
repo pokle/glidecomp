@@ -248,14 +248,24 @@ const KIND_LABELS: Record<ZoneChoice["kind"], string> = {
  * render, so a viewer already in the comp zone never sees the same value
  * twice. The first choice is the default shown (comp when present, else the
  * viewer's local zone). Empty when `date` is invalid.
+ *
+ * `includeLocal` is false during SSR and the first client render: the viewer's
+ * local zone is `undefined`→runtime-local, which is UTC on the server but the
+ * real zone in the browser, so including it would make the server and client
+ * markup disagree (a hydration mismatch). The Timestamp component flips it on
+ * after mount, adding the local zone as a progressive enhancement.
  */
-export function buildZoneCycle(date: Date, compTimezone: string | null): ZoneChoice[] {
+export function buildZoneCycle(
+  date: Date,
+  compTimezone: string | null,
+  includeLocal = true
+): ZoneChoice[] {
   if (Number.isNaN(date.getTime())) return [];
   const candidates: Array<Pick<ZoneChoice, "kind" | "timeZone">> = [];
   if (compTimezone && isValidTimeZone(compTimezone)) {
     candidates.push({ kind: "comp", timeZone: compTimezone });
   }
-  candidates.push({ kind: "local", timeZone: undefined });
+  if (includeLocal) candidates.push({ kind: "local", timeZone: undefined });
   candidates.push({ kind: "utc", timeZone: "UTC" });
 
   const seen = new Set<string>();

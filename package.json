@@ -42,6 +42,7 @@
     "test:auth": "bun run --filter auth-api test",
     "test:all": "bun run test && bun run test:auth && bun run test:comp",
     "test:e2e": "[ -f web/workers/auth-api/.dev.vars ] || cp web/workers/auth-api/.dev.vars.example web/workers/auth-api/.dev.vars; bun run db:migrate && bunx playwright test",
+    "test:e2e:ssr": "[ -f web/workers/auth-api/.dev.vars ] || cp web/workers/auth-api/.dev.vars.example web/workers/auth-api/.dev.vars; bun run db:migrate && bunx playwright test --config playwright.ssr.config.ts",
     "build-3dvis": "bun web/engine/cli/build-3dvis.ts",
     "seed:sample": "bun web/scripts/seed-sample-comp.ts",
     "detect-events": "bun web/engine/cli/detect-events.ts",

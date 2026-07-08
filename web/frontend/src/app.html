@@ -7,6 +7,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GlideComp</title>
 
+  <!-- Default SEO/social tags. The SSR Function overrides title/description
+       and adds a canonical + JSON-LD per public route; these are the fallback
+       for client-rendered SPA routes and link previews. -->
+  <meta name="description"
+    content="GlideComp analyses hang gliding and paragliding competition tracks: tasks, GAP scoring, and per-pilot score explanations.">
+  <meta property="og:site_name" content="GlideComp">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+
   <!-- PWA -->
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#0f172a">
@@ -32,7 +41,7 @@
 
 <body>
   <div id="root"></div>
-  <script type="module" src="/react/main.tsx"></script>
+  <script type="module" src="/react/entry-client.tsx"></script>
 </body>
 
 </html>

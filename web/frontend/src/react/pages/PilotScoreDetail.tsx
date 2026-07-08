@@ -14,7 +14,7 @@
  * inputs — so the page renders without downloading the tracklog. The
  * IGC is fetched separately, only to draw the track on the map.
  */
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   explainGapScore,
@@ -48,6 +48,8 @@ import type {
   TaskScoreData,
 } from "../comp/types";
 import type { MapFocus } from "../comp/ScoreDetailMap";
+import { useInitialData } from "../lib/initial-data";
+import type { PilotScoreLoaderData } from "../loaders";
 
 // Lazy so mapbox/leaflet (and their CSS) load only with this page's map.
 const ScoreDetailMap = lazy(() => import("../comp/ScoreDetailMap"));
@@ -161,6 +163,21 @@ async function loadDetail(
   const score = (await scoreRes.json()) as unknown as TaskScoreData;
   const analysis = (await analysisRes.json()) as unknown as PilotAnalysisData;
 
+  return buildDetailData(comp, task, score, analysis, pilotId);
+}
+
+/**
+ * Pure derivation of the narrative from the four API payloads — no fetch, no
+ * DOM — so it runs both after a client fetch (loadDetail) and synchronously
+ * when seeding from SSR data. The engine's explain* functions do the work.
+ */
+function buildDetailData(
+  comp: CompDetailData,
+  task: TaskDetailData,
+  score: TaskScoreData,
+  analysis: PilotAnalysisData,
+  pilotId: string,
+): DetailData {
   if (!task.xctsk) throw new Error("This task has no route defined");
 
   let cls: ClassScore | undefined;
@@ -281,7 +298,31 @@ export function PilotScoreDetail() {
     taskId: string;
     pilotId: string;
   }>();
-  const [state, setState] = useState<DetailState>({ kind: "loading" });
+  // SSR seed: the server fetched comp+task+score+analysis for this URL, so
+  // derive the narrative synchronously and render it in the first paint (this
+  // is the SEO centerpiece). The map + tracklog still load client-side.
+  const initial = useInitialData<PilotScoreLoaderData>();
+  const [state, setState] = useState<DetailState>(() => {
+    if (!initial || !pilotId) return { kind: "loading" };
+    try {
+      return {
+        kind: "ready",
+        data: buildDetailData(
+          initial.comp,
+          initial.task,
+          initial.score,
+          initial.analysis,
+          pilotId,
+        ),
+      };
+    } catch (err) {
+      return {
+        kind: "error",
+        message: err instanceof Error ? err.message : "Failed to load score details",
+      };
+    }
+  });
+  const seededRef = useRef(initial != null);
   const [fixes, setFixes] = useState<IGCFix[] | null>(null);
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
@@ -305,6 +346,11 @@ export function PilotScoreDetail() {
 
   useEffect(() => {
     if (!compId || !taskId || !pilotId) return;
+    // Seeded from SSR on the first render — skip the redundant fetch.
+    if (seededRef.current) {
+      seededRef.current = false;
+      return;
+    }
     let cancelled = false;
     setState({ kind: "loading" });
     setFocus(null);

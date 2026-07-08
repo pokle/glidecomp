@@ -42,12 +42,17 @@ import {
   type CompDetailData,
   type TaskSummary,
 } from "../comp/types";
+import { useInitialData } from "../lib/initial-data";
+import type { CompDetailLoaderData, CompScores } from "../loaders";
 
 export function CompDetail() {
   const { compId } = useParams<{ compId: string }>();
   const { user, loading } = useUser();
   const location = useLocation();
-  const [comp, setComp] = useState<CompDetailData | null>(null);
+  // SSR seed: the server ran loadCompDetail for this URL, so render the comp in
+  // the first paint and hydrate the same markup. Null on client boot / SPA nav.
+  const initial = useInitialData<CompDetailLoaderData>();
+  const [comp, setComp] = useState<CompDetailData | null>(initial?.comp ?? null);
   const [notFound, setNotFound] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
@@ -63,6 +68,12 @@ export function CompDetail() {
   useEffect(() => {
     if (!compId) {
       setNotFound(true);
+      return;
+    }
+    // Seeded from SSR on the first render — set the title and skip the fetch.
+    // A mutation bumps `refresh`, which re-runs this and fetches fresh data.
+    if (initial && refresh === 0) {
+      document.title = `GlideComp - ${initial.comp.name}`;
       return;
     }
     let cancelled = false;
@@ -108,6 +119,10 @@ export function CompDetail() {
     );
   }
 
+  // The SSR seed (hero "today" + scores) applies only to the first, un-mutated
+  // render; after a refresh the sections fetch fresh data themselves.
+  const seeded = initial && refresh === 0 ? initial : null;
+
   return (
     <CompDetailView
       compId={compId}
@@ -119,6 +134,9 @@ export function CompDetail() {
       settingsOpen={settingsOpen}
       setSettingsOpen={setSettingsOpen}
       setRefresh={setRefresh}
+      heroToday={seeded?.today}
+      initialScores={seeded?.scores ?? undefined}
+      initialScoresEtag={seeded?.scoresEtag ?? undefined}
     />
   );
 }
@@ -133,6 +151,9 @@ function CompDetailView({
   settingsOpen,
   setSettingsOpen,
   setRefresh,
+  heroToday,
+  initialScores,
+  initialScoresEtag,
 }: {
   compId: string;
   comp: CompDetailData;
@@ -143,6 +164,11 @@ function CompDetailView({
   settingsOpen: boolean;
   setSettingsOpen: (open: boolean) => void;
   setRefresh: React.Dispatch<React.SetStateAction<number>>;
+  /** SSR-computed "today" (comp tz) so the hero pick matches across hydration. */
+  heroToday?: string;
+  /** SSR-seeded whole-comp scores + ETag (first render only). */
+  initialScores?: CompScores;
+  initialScoresEtag?: string | null;
 }) {
   const isAdmin = useAdminView(
     user != null && comp.admins.some((a) => a.email === user.email)
@@ -161,7 +187,7 @@ function CompDetailView({
     facts.push(formatTaskDateRange(taskDates[0], taskDates[taskDates.length - 1]));
   }
 
-  const hero = pickHeroTasks(comp.tasks, comp.timezone);
+  const hero = pickHeroTasks(comp.tasks, comp.timezone, heroToday);
 
   return (
     <div>
@@ -241,6 +267,8 @@ function CompDetailView({
         timezone={comp.timezone}
         tasks={comp.tasks}
         defaultTaskId={hero?.tasks.find((t) => t.has_xctsk)?.task_id ?? null}
+        initialScores={initialScores}
+        initialScoresEtag={initialScoresEtag}
       />
 
       <div id="pilots" className="scroll-mt-4 break-before-page">
@@ -305,16 +333,26 @@ interface HeroPick {
  * comp's timezone, else the next upcoming one, else the most recent. A day
  * can hold several tasks (classes flying different tasks) — show them all.
  */
-function pickHeroTasks(tasks: TaskSummary[], timezone: string | null): HeroPick | null {
+function pickHeroTasks(
+  tasks: TaskSummary[],
+  timezone: string | null,
+  /** SSR-computed "today" (comp tz); pass through so the hero pick is identical
+   *  server- and client-side on hydration. Omitted on client navigations. */
+  injectedToday?: string
+): HeroPick | null {
   if (tasks.length === 0) return null;
   // en-CA formats as YYYY-MM-DD, matching task_date.
   let today: string;
-  try {
-    today = new Intl.DateTimeFormat("en-CA", {
-      ...(timezone ? { timeZone: timezone } : {}),
-    }).format(new Date());
-  } catch {
-    today = new Intl.DateTimeFormat("en-CA").format(new Date());
+  if (injectedToday) {
+    today = injectedToday;
+  } else {
+    try {
+      today = new Intl.DateTimeFormat("en-CA", {
+        ...(timezone ? { timeZone: timezone } : {}),
+      }).format(new Date());
+    } catch {
+      today = new Intl.DateTimeFormat("en-CA").format(new Date());
+    }
   }
   const dates = [...new Set(tasks.map((t) => t.task_date))].sort();
   const date = dates.includes(today)

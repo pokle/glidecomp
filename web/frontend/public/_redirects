@@ -5,9 +5,11 @@
 # the clean /app keeps the request URL intact so react-router routes correctly.
 # The static content pages (/, /about, /legal, /scoring, /scoring/*) are real
 # prerendered files (built by ./static with Astro) and are served directly.
+# /comp and /comp/* are NOT listed here: they are owned by the SSR Pages
+# Function (functions/comp/[[path]].ts, routed via _routes.json), which
+# server-renders the four public routes and falls back to the SPA shell for
+# any other /comp shape.
 /u/*  /app  200
-/comp  /app  200
-/comp/*  /app  200
 /scores  /app  200
 /profile  /app  200
 /settings  /app  200

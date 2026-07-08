@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Send /api/* to Pages Functions; everything else is a static asset. Checked in explicitly because Cloudflare's auto-generated routes manifest has stranded new prefixes (/api/user/, /api/u/) at 404 on preview deployments — see the user-files migration PR.",
-  "include": ["/api/*"],
+  "description": "Send /api/* to the proxy Functions, /comp + /comp/* to the SSR Function (functions/comp/[[path]].ts — unmatched shapes fall back to the SPA shell), and /sitemap.xml to its Function. Everything else is a static asset. Checked in explicitly because Cloudflare's auto-generated routes manifest has stranded new prefixes (/api/user/, /api/u/) at 404 on preview deployments — see the user-files migration PR.",
+  "include": ["/api/*", "/comp", "/comp/*", "/sitemap.xml"],
   "exclude": []
 }

@@ -48,14 +48,19 @@ import {
   type CompDetailData,
   type TaskDetailData,
 } from "../comp/types";
+import { useInitialData } from "../lib/initial-data";
+import type { TaskDetailLoaderData } from "../loaders";
 
 export function TaskDetail() {
   const { compId, taskId } = useParams<{ compId: string; taskId: string }>();
   const { user } = useUser();
   const location = useLocation();
   const navigate = useNavigate();
-  const [task, setTask] = useState<TaskDetailData | null>(null);
-  const [comp, setComp] = useState<CompDetailData | null>(null);
+  // SSR seed for the public half of the page (header, route, scores). Null on
+  // client boot / SPA navigations, where the effect below fetches instead.
+  const initial = useInitialData<TaskDetailLoaderData>();
+  const [task, setTask] = useState<TaskDetailData | null>(initial?.task ?? null);
+  const [comp, setComp] = useState<CompDetailData | null>(initial?.comp ?? null);
   const [notFound, setNotFound] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [scoresRefresh, setScoresRefresh] = useState(0);
@@ -66,6 +71,11 @@ export function TaskDetail() {
   useEffect(() => {
     if (!compId || !taskId) {
       setNotFound(true);
+      return;
+    }
+    // Seeded from SSR on the first render — set the title, skip the fetch.
+    if (initial && refresh === 0) {
+      document.title = `GlideComp - ${initial.task.name}`;
       return;
     }
     let cancelled = false;
@@ -268,6 +278,7 @@ export function TaskDetail() {
         refresh={scoresRefresh}
         timezone={comp?.timezone ?? null}
         onReplayAvailable={setReplayAvailable}
+        initialScore={initial && refresh === 0 ? (initial.score ?? undefined) : undefined}
       />
 
       {isAdmin && comp && editOpen ? (

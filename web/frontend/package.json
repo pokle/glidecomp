@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n vite,astro -c cyan,magenta \"vite\" \"ASTRO_BASE=/_static astro dev --root static\"",
-    "build": "vite build && bun run build:static",
+    "build": "vite build && bun run build:ssr && bun run build:static",
+    "build:ssr": "vite build --config vite.ssr.config.ts",
     "build:static": "astro build --root static && cp -R static/dist/. dist/",
     "preview": "vite preview",
     "deploy": "bun run build && wrangler pages deploy dist --project-name=glidecomp",

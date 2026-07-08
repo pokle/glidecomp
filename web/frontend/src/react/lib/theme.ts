@@ -11,7 +11,13 @@ export type ThemePreference = "light" | "dark" | "auto";
 
 export const THEME_STORAGE_KEY = "glidecomp-theme";
 
-const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+// Guarded so this module is import-safe under SSR (workerd has no `window`):
+// the four public pages' SSR bundle pulls in Settings (a route) → this module.
+// The functions below only ever run in the browser (initTheme from the client
+// entry, the useTheme hooks after hydration), so null here is only the
+// module-load state on the server.
+const darkQuery =
+  typeof window !== "undefined" ? window.matchMedia("(prefers-color-scheme: dark)") : null;
 const listeners = new Set<() => void>();
 
 export function getStoredTheme(): ThemePreference {
@@ -21,7 +27,7 @@ export function getStoredTheme(): ThemePreference {
 
 /** Whether the given preference resolves to dark right now (Auto follows the OS). */
 function resolvesToDark(pref: ThemePreference): boolean {
-  return pref === "dark" || (pref === "auto" && darkQuery.matches);
+  return pref === "dark" || (pref === "auto" && !!darkQuery?.matches);
 }
 
 function applyTheme(pref: ThemePreference): void {
@@ -41,7 +47,7 @@ export function setStoredTheme(pref: ThemePreference): void {
  */
 export function initTheme(): void {
   applyTheme(getStoredTheme());
-  darkQuery.addEventListener("change", () => {
+  darkQuery?.addEventListener("change", () => {
     if (getStoredTheme() === "auto") applyTheme("auto");
     listeners.forEach((fn) => fn());
   });
