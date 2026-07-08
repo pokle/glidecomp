@@ -9,6 +9,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./globals.css";
 import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
+import { initTheme } from "./lib/theme";
 import { AppToaster } from "./lib/toast";
 import { ConfirmProvider } from "./lib/confirm";
 import { UserProvider } from "./lib/user";
@@ -24,14 +25,9 @@ import { Settings } from "./pages/Settings";
 import { AdminUsers } from "./pages/AdminUsers";
 import { AdminCache } from "./pages/AdminCache";
 
-// shadcn theming keys dark mode off a `.dark` class on <html>; follow the
-// OS preference (matching the previous prefers-color-scheme behaviour).
-const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
-function syncDarkClass() {
-  document.documentElement.classList.toggle("dark", darkQuery.matches);
-}
-syncDarkClass();
-darkQuery.addEventListener("change", syncDarkClass);
+// shadcn theming keys dark mode off a `.dark` class on <html>; apply the user's
+// Light/Dark/Auto preference (Auto follows the OS). See ./lib/theme.
+initTheme();
 
 function NotFound() {
   const linkClass = "underline underline-offset-4 hover:text-foreground";

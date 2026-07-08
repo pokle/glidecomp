@@ -25,15 +25,24 @@ const { title, description, active } = Astro.props;
     <title>{title}</title>
     {description && <meta name="description" content={description} />}
     <script is:inline>
-      // Follow the OS colour scheme via a `.dark` class on <html>, matching the
-      // SPA. Inline + in <head> so it runs before paint (no flash).
+      // Apply the Light/Dark/Auto colour-scheme preference via a `.dark` class on
+      // <html>, matching the SPA (localStorage `glidecomp-theme`; missing = auto,
+      // which follows the OS). Inline + in <head> so it runs before paint (no flash).
       (function () {
         var q = window.matchMedia("(prefers-color-scheme: dark)");
         var sync = function () {
-          document.documentElement.classList.toggle("dark", q.matches);
+          var pref = localStorage.getItem("glidecomp-theme");
+          if (pref !== "light" && pref !== "dark" && pref !== "auto") pref = "auto";
+          document.documentElement.classList.toggle(
+            "dark",
+            pref === "dark" || (pref === "auto" && q.matches)
+          );
         };
         sync();
         q.addEventListener("change", sync);
+        window.addEventListener("storage", function (e) {
+          if (e.key === "glidecomp-theme") sync();
+        });
       })();
     </script>
   </head>
