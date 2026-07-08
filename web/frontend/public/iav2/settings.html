@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Settings — GlideComp (IA v2 mockup)</title>
+<link rel="icon" href="/icon.svg" />
+<link rel="stylesheet" href="/iav2/iav2.css" />
+</head>
+<body data-page="settings" data-chrome="tabs">
+<main class="page" style="max-width: 42rem;">
+
+  <div class="only-out card" style="text-align:center; padding: 40px 24px;">
+    <h2 style="margin-bottom: 8px;">Settings</h2>
+    <p class="muted" style="margin: 0 0 16px;">Sign in to manage your account.</p>
+    <button type="button" class="btn" data-signin>Sign in with Google</button>
+  </div>
+
+  <div class="need-auth">
+    <h1>Settings</h1>
+
+    <section class="block card">
+      <h2>Profile</h2>
+      <div class="grid2">
+        <div>
+          <label class="field">Display name</label>
+          <input class="input" value="Asha Patel" />
+          <label class="field">Phone</label>
+          <input class="input" value="+61 400 000 000" />
+          <label class="field">Glider</label>
+          <input class="input" value="Moyes Litespeed RX3.5" />
+        </div>
+        <div>
+          <label class="field">CIVL ID</label>
+          <input class="input" value="46102" />
+          <label class="field">SAFA ID</label>
+          <input class="input" value="12345" />
+          <label class="field">Emergency contact</label>
+          <input class="input" value="Ravi Patel · +61 400 111 222" />
+        </div>
+      </div>
+      <p style="margin: 16px 0 0;"><button type="button" class="btn" data-toast="Profile saved (mock)">Save profile</button></p>
+    </section>
+
+    <section class="block card">
+      <h2>API keys</h2>
+      <p class="muted small" style="margin-top:-6px;">For programmatic access to the GlideComp API (e.g. scoring agents).</p>
+      <table class="tbl">
+        <tbody>
+          <tr><td><code>glc_****…9f2a</code></td><td class="muted">created 3 Jun 2026 · last used yesterday</td><td class="num"><button type="button" class="btn sm ghost" data-open="dlg-revoke">Revoke</button></td></tr>
+        </tbody>
+      </table>
+      <p style="margin: 12px 0 0;"><button type="button" class="btn sm outline" data-open="dlg-newkey">Create API key</button></p>
+    </section>
+
+    <section class="block card need-super">
+      <h2>Superadmin</h2>
+      <p class="muted small" style="margin-top:-6px;">Visible only to site super admins.</p>
+      <p style="display:flex; gap: 8px; margin: 0;">
+        <a class="btn sm outline" href="/iav2/admin-users.html">All users</a>
+        <a class="btn sm outline" href="/iav2/admin-cache.html">Cache</a>
+      </p>
+    </section>
+
+    <section class="block card" style="border-color: var(--destructive);">
+      <h2>Danger zone</h2>
+      <p class="muted small" style="margin-top:-6px;">Deletes your account, stored files and pilot profile.</p>
+      <button type="button" class="btn sm destructive" data-open="dlg-delacct">Delete account&hellip;</button>
+    </section>
+  </div>
+
+</main>
+
+<dialog id="dlg-newkey">
+  <div class="dhead"><h3>Create API key</h3><button type="button" class="xclose" data-close>&times;</button></div>
+  <div class="dbody">
+    <label class="field">Key name</label>
+    <input class="input" placeholder="e.g. scoring-agent" />
+    <p class="muted small">The key is shown once after creation — store it safely.</p>
+  </div>
+  <div class="dfoot">
+    <button type="button" class="btn outline" data-close>Cancel</button>
+    <button type="button" class="btn" data-toast="Key created: glc_mock_o8f2… — copy it now (mock)">Create key</button>
+  </div>
+</dialog>
+
+<dialog id="dlg-revoke">
+  <div class="dhead"><h3>Revoke API key?</h3><button type="button" class="xclose" data-close>&times;</button></div>
+  <div class="dbody"><p>Anything using <code>glc_****…9f2a</code> will stop working immediately.</p></div>
+  <div class="dfoot">
+    <button type="button" class="btn outline" data-close>Cancel</button>
+    <button type="button" class="btn destructive" data-toast="API key revoked (mock)">Revoke</button>
+  </div>
+</dialog>
+
+<dialog id="dlg-delacct">
+  <div class="dhead"><h3>Delete account?</h3><button type="button" class="xclose" data-close>&times;</button></div>
+  <div class="dbody">
+    <p>This permanently deletes your account, your stored tracks and tasks, and your pilot profile. Competitions you administered remain (with their audit history). This cannot be undone.</p>
+  </div>
+  <div class="dfoot">
+    <button type="button" class="btn outline" data-close>Cancel</button>
+    <button type="button" class="btn destructive" data-toast="Account deleted (mock — it wasn't)">Delete my account</button>
+  </div>
+</dialog>
+
+<script src="/iav2/iav2.js"></script>
+</body>
+</html>
