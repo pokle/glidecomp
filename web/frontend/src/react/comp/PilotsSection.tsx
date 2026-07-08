@@ -83,22 +83,23 @@ export function PilotsSection({
 
   return (
     <section>
-      <h2 className="mt-8 text-lg font-bold">
-        Pilots {pilots && pilots.length > 0 ? `(${pilots.length})` : ""}
+      {/* Roster editing is a setting: header row with the action top right,
+          like the comp/task Settings buttons. */}
+      <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <h2 className="min-w-0 flex-1 text-lg font-bold">
+          Pilots {pilots && pilots.length > 0 ? `(${pilots.length})` : ""}
+        </h2>
         {isAdmin ? (
-          <>
-            {" "}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setEditOpen(true)}
-            >
-              Edit
-            </Button>
-          </>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setEditOpen(true)}
+          >
+            Edit
+          </Button>
         ) : null}
-      </h2>
+      </div>
 
       {loadError ? (
         <p className="mt-2 text-muted-foreground">Could not load pilots</p>

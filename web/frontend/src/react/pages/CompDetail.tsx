@@ -5,7 +5,7 @@
  * admins. Mutations that used to window.location.reload() instead bump a
  * refresh counter that re-runs the comp fetch.
  */
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { Button } from "@/react/ui/button";
 import {
@@ -33,8 +33,8 @@ import { PilotsSection } from "../comp/PilotsSection";
 import { SettingsDialog } from "../comp/SettingsDialog";
 import { CheckboxField } from "../comp/fields";
 import { downloadTaskXctsk } from "../comp/download-xctsk";
+import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 import {
-  compressIgc,
   fetchWithRetry,
   isPastCloseDate,
   type CompDetailData,
@@ -147,6 +147,7 @@ function CompDetailView({
   );
   const compClosed = isPastCloseDate(comp.close_date);
   const canSubmitTrack = user != null && !compClosed;
+  const canUploadOnBehalf = useCanUploadOnBehalf(compId, comp.open_igc_upload, isAdmin);
 
   const facts = [
     categoryLabel(comp.category),
@@ -206,6 +207,7 @@ function CompDetailView({
           hero={hero}
           compId={compId}
           canSubmitTrack={canSubmitTrack}
+          canUploadOnBehalf={canUploadOnBehalf}
           signedOut={!user && !loading}
           isAdmin={isAdmin}
         />
@@ -229,7 +231,12 @@ function CompDetailView({
             </>
           ) : null}
         </h2>
-        <TasksList tasks={comp.tasks} compId={compId} canSubmitTrack={canSubmitTrack} />
+        <TasksList
+          tasks={comp.tasks}
+          compId={compId}
+          canSubmitTrack={canSubmitTrack}
+          canUploadOnBehalf={canUploadOnBehalf}
+        />
       </section>
 
       <CompScoresSection
@@ -325,12 +332,14 @@ function TaskHero({
   hero,
   compId,
   canSubmitTrack,
+  canUploadOnBehalf,
   signedOut,
   isAdmin,
 }: {
   hero: HeroPick;
   compId: string;
   canSubmitTrack: boolean;
+  canUploadOnBehalf: boolean;
   signedOut: boolean;
   isAdmin: boolean;
 }) {
@@ -370,7 +379,11 @@ function TaskHero({
               </Button>
             ) : null}
             {canSubmitTrack ? (
-              <SubmitTrackButton compId={compId} taskId={task.task_id} />
+              <SubmitTrackButton
+                compId={compId}
+                taskId={task.task_id}
+                canUploadOnBehalf={canUploadOnBehalf}
+              />
             ) : null}
             {signedOut ? (
               <Button
@@ -466,10 +479,12 @@ function TasksList({
   tasks,
   compId,
   canSubmitTrack,
+  canUploadOnBehalf,
 }: {
   tasks: TaskSummary[];
   compId: string;
   canSubmitTrack: boolean;
+  canUploadOnBehalf: boolean;
 }) {
   if (tasks.length === 0) {
     return <p className="text-muted-foreground">No tasks yet</p>;
@@ -524,7 +539,11 @@ function TasksList({
                   </span>
                 </Link>{" "}
                 {canSubmitTrack ? (
-                  <SubmitTrackButton compId={compId} taskId={task.task_id} />
+                  <SubmitTrackButton
+                    compId={compId}
+                    taskId={task.task_id}
+                    canUploadOnBehalf={canUploadOnBehalf}
+                  />
                 ) : null}{" "}
                 <a
                   className="underline underline-offset-4"
@@ -543,71 +562,34 @@ function TasksList({
 }
 
 /**
- * Task-list "Submit track" button — same job as the task page's dialog: lets
- * a signed-in user upload their own IGC for this task, straight from a file
- * picker.
+ * "Submit track" button (hero + task list) — opens the same SubmitTrackDialog
+ * the task page uses, so submitting always shows who the track is for.
  */
-function SubmitTrackButton({ compId, taskId }: { compId: string; taskId: string }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-
-  async function handleFile(input: HTMLInputElement) {
-    const file = input.files?.[0];
-    if (!file) return;
-
-    if (!file.name.toLowerCase().endsWith(".igc")) {
-      toast.error("Please select an IGC file");
-      input.value = "";
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("File too large (max 5MB)");
-      input.value = "";
-      return;
-    }
-
-    setUploading(true);
-    try {
-      const compressed = await compressIgc(file);
-      const res = await fetch(
-        `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc`,
-        { method: "POST", credentials: "include", body: compressed }
-      );
-
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        toast.error(err.error || "Upload failed");
-        return;
-      }
-
-      const data = (await res.json()) as { replaced: boolean };
-      toast.success(data.replaced ? "Track replaced" : "Track uploaded");
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setUploading(false);
-      input.value = "";
-    }
-  }
+function SubmitTrackButton({
+  compId,
+  taskId,
+  canUploadOnBehalf,
+}: {
+  compId: string;
+  taskId: string;
+  canUploadOnBehalf: boolean;
+}) {
+  const [open, setOpen] = useState(false);
 
   return (
     <>
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".igc"
-        hidden
-        onChange={(e) => void handleFile(e.currentTarget)}
-      />
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={uploading}
-        onClick={() => inputRef.current?.click()}
-      >
-        {uploading ? "Uploading..." : "Submit track"}
+      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+        Submit track
       </Button>
+      {open ? (
+        <SubmitTrackDialog
+          compId={compId}
+          taskId={taskId}
+          canUploadOnBehalf={canUploadOnBehalf}
+          onClose={() => setOpen(false)}
+          onUploaded={() => {}}
+        />
+      ) : null}
     </>
   );
 }
