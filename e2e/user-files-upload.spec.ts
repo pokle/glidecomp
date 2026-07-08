@@ -110,6 +110,8 @@ test("delete an uploaded track", async ({ page, request }) => {
   await expect(trackItem).toBeVisible();
 
   await trackItem.getByRole("button", { name: "Remove" }).click();
+  // Removal now asks for confirmation (IA v2 #277).
+  await page.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
 
   await expect(page.getByText("No flight tracks yet")).toBeVisible();
   await expect(page.locator('a[href*="storedTrack="]')).toHaveCount(0);
@@ -125,6 +127,8 @@ test("delete an uploaded task", async ({ page, request }) => {
   await expect(taskItem).toBeVisible();
 
   await taskItem.getByRole("button", { name: "Remove" }).click();
+  // Removal now asks for confirmation (IA v2 #277).
+  await page.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
 
   await expect(page.getByText("No competition tasks yet")).toBeVisible();
   await expect(page.locator('a[href*="storedTask="]')).toHaveCount(0);

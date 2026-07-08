@@ -2,8 +2,9 @@
  * Tracks section on the task detail page — React port of setupTrackSection(),
  * renderTrackList(), setupTrackUpload() and openPenaltyDialog().
  */
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { Button } from "@/react/ui/button";
+import { SectionHeader } from "../components/SectionHeader";
 import {
   Dialog,
   DialogClose,
@@ -18,10 +19,8 @@ import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { formatFileSize } from "../lib/format";
-import { SimpleSelect } from "./fields";
-import { compressIgc, type TrackInfo } from "./types";
-
-const SELF = "self";
+import { SubmitTrackDialog } from "./SubmitTrackDialog";
+import type { TrackInfo } from "./types";
 
 export function TrackSection({
   compId,
@@ -89,17 +88,20 @@ export function TrackSection({
 
   return (
     <section>
-      <h2 className="mt-8 text-lg font-bold">
-        Tracks{" "}
-        <span className="text-sm font-normal text-muted-foreground">
-          {tracks.length} track{tracks.length !== 1 ? "s" : ""}
-        </span>
-        {isClosed ? (
-          <span className="text-sm font-normal text-muted-foreground"> (Closed)</span>
-        ) : null}
-        {isAuthenticated && !isClosed ? (
+      <SectionHeader
+        title={
           <>
-            {" "}
+            Tracks{" "}
+            <span className="text-sm font-normal text-muted-foreground">
+              {tracks.length} track{tracks.length !== 1 ? "s" : ""}
+            </span>
+            {isClosed ? (
+              <span className="text-sm font-normal text-muted-foreground"> (Closed)</span>
+            ) : null}
+          </>
+        }
+        action={
+          isAuthenticated && !isClosed ? (
             <Button
               type="button"
               variant="outline"
@@ -108,9 +110,9 @@ export function TrackSection({
             >
               Submit track
             </Button>
-          </>
-        ) : null}
-      </h2>
+          ) : null
+        }
+      />
 
       {tracks.length === 0 ? (
         <p className="mt-2 text-muted-foreground">No tracks uploaded yet</p>
@@ -310,162 +312,6 @@ function PenaltyDialog({
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/**
- * Single "Submit track" entry point on the task page. Defaults to submitting
- * the signed-in user's own track ("Myself"); when the user may upload on
- * behalf (admin, or registered pilot with open_igc_upload), the pilot
- * dropdown also lists registered pilots. "Myself" posts to /igc, a chosen
- * pilot to /igc/:comp_pilot_id.
- */
-function SubmitTrackDialog({
-  compId,
-  taskId,
-  canUploadOnBehalf,
-  onClose,
-  onUploaded,
-}: {
-  compId: string;
-  taskId: string;
-  canUploadOnBehalf: boolean;
-  onClose: () => void;
-  onUploaded: () => void;
-}) {
-  const fileId = useId();
-  const [pilots, setPilots] = useState<
-    Array<{ comp_pilot_id: string; name: string; pilot_class: string }>
-  >([]);
-  const [selected, setSelected] = useState(SELF);
-  const [status, setStatus] = useState<{ message: string; isError: boolean } | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!canUploadOnBehalf) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await api.api.comp[":comp_id"].pilot.$get({
-          param: { comp_id: compId },
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as {
-          pilots: Array<{ comp_pilot_id: string; name: string; pilot_class: string }>;
-        };
-        if (!cancelled) setPilots(data.pilots);
-      } catch {
-        // Non-fatal: the user can still submit for themselves.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [compId, canUploadOnBehalf]);
-
-  async function upload() {
-    const file = fileInputRef.current?.files?.[0];
-    if (!file) {
-      setStatus({ message: "Select an IGC file", isError: true });
-      return;
-    }
-    if (!file.name.toLowerCase().endsWith(".igc")) {
-      setStatus({ message: "Please select an IGC file", isError: true });
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setStatus({ message: "File too large (max 5MB)", isError: true });
-      return;
-    }
-
-    setUploading(true);
-    setStatus({ message: "Compressing and uploading...", isError: false });
-
-    try {
-      const compressed = await compressIgc(file);
-      const base = `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc`;
-      const url = selected === SELF ? base : `${base}/${encodeURIComponent(selected)}`;
-      const res = await fetch(url, {
-        method: "POST",
-        credentials: "include",
-        body: compressed,
-      });
-
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        setStatus({ message: err.error || "Upload failed", isError: true });
-        return;
-      }
-
-      const data = (await res.json()) as { replaced: boolean };
-      setStatus({
-        message: data.replaced
-          ? "Track replaced successfully"
-          : "Track uploaded successfully",
-        isError: false,
-      });
-      onUploaded();
-      // Close after a brief delay so the user sees success
-      setTimeout(() => onClose(), 1000);
-    } catch {
-      setStatus({ message: "Network error. Please try again.", isError: true });
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }
-
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Submit track</DialogTitle>
-        </DialogHeader>
-        {canUploadOnBehalf ? (
-          <div>
-            <h3 className="mb-1.5 text-sm font-medium">Pilot</h3>
-            <SimpleSelect
-              value={selected}
-              onChange={(v) => setSelected(v || SELF)}
-              options={[
-                { value: SELF, label: "Myself" },
-                ...pilots.map((p) => ({
-                  value: p.comp_pilot_id,
-                  label: `${p.name} (${p.pilot_class})`,
-                })),
-              ]}
-              ariaLabel="Pilot"
-            />
-          </div>
-        ) : null}
-        <Field>
-          <FieldLabel htmlFor={fileId}>IGC File</FieldLabel>
-          <Input id={fileId} ref={fileInputRef} type="file" accept=".igc" />
-        </Field>
-        {status ? (
-          <p
-            role={status.isError ? "alert" : "status"}
-            className={status.isError ? "text-sm text-destructive" : "text-sm text-muted-foreground"}
-          >
-            {status.message}
-          </p>
-        ) : null}
-        <DialogFooter>
-          <DialogClose render={<Button type="button" variant="outline" />}>
-            Cancel
-          </DialogClose>
-          <Button type="button" disabled={uploading} onClick={() => void upload()}>
-            {uploading ? "Uploading..." : "Upload"}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

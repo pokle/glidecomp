@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Static page — GlideComp (IA v2 mockup)</title>
+<link rel="icon" href="/icon.svg" />
+<link rel="stylesheet" href="/iav2/iav2.css" />
+</head>
+<body data-page="static" data-chrome="tabs">
+<main class="page" style="max-width: 40rem;">
+  <h1 id="ptitle">Static page</h1>
+  <p class="muted" style="margin-top: 8px;">
+    Placeholder for a prerendered content page (About / Scoring guides / Privacy &amp; Terms).
+    Its content is unchanged by IA v2 — what's new is that these pages gain the same
+    header tabs and unified footer as the rest of the site.
+  </p>
+  <div class="card" style="margin-top: 20px;">
+    <p class="muted" style="margin: 0;">Existing page content renders here, exactly as today.</p>
+  </div>
+</main>
+<script>
+  const p = new URLSearchParams(location.search).get("p");
+  if (p) {
+    document.getElementById("ptitle").textContent = p;
+    document.title = p + " — GlideComp (IA v2 mockup)";
+  }
+</script>
+<script src="/iav2/iav2.js"></script>
+</body>
+</html>

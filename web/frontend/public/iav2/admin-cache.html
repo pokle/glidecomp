@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Cache — GlideComp (IA v2 mockup)</title>
+<link rel="icon" href="/icon.svg" />
+<link rel="stylesheet" href="/iav2/iav2.css" />
+</head>
+<body data-page="admin" data-chrome="tabs">
+<main class="page" style="max-width: 44rem;">
+  <div class="card" style="text-align:center; padding: 40px 24px;" id="denied">
+    <h2>You don't have access to this page</h2>
+    <p class="muted">Only site super admins can manage the score caches. Use the "Preview as" switcher below.</p>
+  </div>
+  <div class="need-super" id="content">
+    <h1>Cache</h1>
+    <p class="muted small">Materialized D1 scores, KV replay-bundle cache, and the AirScore proxy cache.</p>
+    <div class="card" style="margin-top: 16px;">
+      <table class="tbl">
+        <tbody>
+          <tr><td>task_scores (D1)</td><td class="num">128 rows</td></tr>
+          <tr><td>replay bundles (KV)</td><td class="num">37 items</td></tr>
+          <tr><td>AirScore proxy (KV)</td><td class="num">214 items</td></tr>
+        </tbody>
+      </table>
+      <p style="margin: 16px 0 0;"><button type="button" class="btn destructive sm" data-open="dlg-clear">Clear entire cache</button></p>
+    </div>
+  </div>
+</main>
+
+<dialog id="dlg-clear">
+  <div class="dhead"><h3>Re-score everything?</h3><button type="button" class="xclose" data-close>&times;</button></div>
+  <div class="dbody"><p>Clears all score stores. Every task re-scores on its next mutation or revalidation. Safe, but expensive.</p></div>
+  <div class="dfoot">
+    <button type="button" class="btn outline" data-close>Cancel</button>
+    <button type="button" class="btn destructive" data-toast="Cache cleared — 379 items dropped (mock)">Clear cache</button>
+  </div>
+</dialog>
+
+<script>
+  const style = document.createElement("style");
+  style.textContent = 'html[data-role="super"] #denied { display: none; }';
+  document.head.appendChild(style);
+</script>
+<script src="/iav2/iav2.js"></script>
+</body>
+</html>

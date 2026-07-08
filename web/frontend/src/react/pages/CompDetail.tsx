@@ -1,10 +1,12 @@
 /**
- * Competition detail page — React port of the comp view in comp-detail.ts.
- * Mutations that used to window.location.reload() instead bump a refresh
- * counter that re-runs the comp fetch.
+ * Competition detail page — the comp "hub" (IA v2 #277): a pilot bookmarks
+ * this one URL and every job is served here or one click away. Today's-task
+ * hero first, then tasks, inline competition scores, pilots, activity,
+ * admins. Mutations that used to window.location.reload() instead bump a
+ * refresh counter that re-runs the comp fetch.
  */
-import { useEffect, useId, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useId, useState } from "react";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { Button } from "@/react/ui/button";
 import {
   Dialog,
@@ -18,14 +20,23 @@ import { Field, FieldLabel, FieldLegend, FieldSet } from "@/react/ui/field";
 import { Input } from "@/react/ui/input";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
-import { useUser } from "../lib/user";
-import { categoryLabel, formatTaskDate } from "../lib/format";
+import { signInWithGoogle, useAdminView, useUser } from "../lib/user";
+import {
+  categoryLabel,
+  formatTaskDate,
+  formatTaskDateRange,
+  scoringFormatLabel,
+} from "../lib/format";
+import { Breadcrumbs } from "../components/Breadcrumbs";
+import { SectionHeader } from "../components/SectionHeader";
 import { ActivitySection } from "../comp/ActivitySection";
+import { CompScoresSection } from "../comp/CompScoresSection";
 import { PilotsSection } from "../comp/PilotsSection";
 import { SettingsDialog } from "../comp/SettingsDialog";
 import { CheckboxField } from "../comp/fields";
+import { downloadTaskXctsk } from "../comp/download-xctsk";
+import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 import {
-  compressIgc,
   fetchWithRetry,
   isPastCloseDate,
   type CompDetailData,
@@ -34,12 +45,20 @@ import {
 
 export function CompDetail() {
   const { compId } = useParams<{ compId: string }>();
-  const { user } = useUser();
+  const { user, loading } = useUser();
+  const location = useLocation();
   const [comp, setComp] = useState<CompDetailData | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Deep links like /comp/:id#scores (the old /scores page redirects there):
+  // scroll once the sections exist.
+  useEffect(() => {
+    if (!comp || !location.hash) return;
+    document.getElementById(location.hash.slice(1))?.scrollIntoView();
+  }, [comp, location.hash]);
 
   useEffect(() => {
     if (!compId) {
@@ -89,53 +108,115 @@ export function CompDetail() {
     );
   }
 
-  const isAdmin = user != null && comp.admins.some((a) => a.email === user.email);
+  return (
+    <CompDetailView
+      compId={compId}
+      comp={comp}
+      user={user}
+      loading={loading}
+      createOpen={createOpen}
+      setCreateOpen={setCreateOpen}
+      settingsOpen={settingsOpen}
+      setSettingsOpen={setSettingsOpen}
+      setRefresh={setRefresh}
+    />
+  );
+}
+
+function CompDetailView({
+  compId,
+  comp,
+  user,
+  loading,
+  createOpen,
+  setCreateOpen,
+  settingsOpen,
+  setSettingsOpen,
+  setRefresh,
+}: {
+  compId: string;
+  comp: CompDetailData;
+  user: ReturnType<typeof useUser>["user"];
+  loading: boolean;
+  createOpen: boolean;
+  setCreateOpen: (open: boolean) => void;
+  settingsOpen: boolean;
+  setSettingsOpen: (open: boolean) => void;
+  setRefresh: React.Dispatch<React.SetStateAction<number>>;
+}) {
+  const isAdmin = useAdminView(
+    user != null && comp.admins.some((a) => a.email === user.email)
+  );
   const compClosed = isPastCloseDate(comp.close_date);
   const canSubmitTrack = user != null && !compClosed;
+  const canUploadOnBehalf = useCanUploadOnBehalf(compId, comp.open_igc_upload, isAdmin);
+
+  const facts = [
+    categoryLabel(comp.category),
+    scoringFormatLabel(comp.scoring_format),
+    comp.pilot_classes.join(", "),
+  ];
+  const taskDates = comp.tasks.map((t) => t.task_date).sort();
+  if (taskDates.length > 0) {
+    facts.push(formatTaskDateRange(taskDates[0], taskDates[taskDates.length - 1]));
+  }
+
+  const hero = pickHeroTasks(comp.tasks, comp.timezone);
 
   return (
     <div>
-      <nav className="text-sm">
-        <Link className="underline underline-offset-4" to="/comp">
-          All Competitions
-        </Link>
-      </nav>
+      <Breadcrumbs items={[{ label: "Competitions", to: "/comp" }]} />
 
-      <h1 className="mt-2 text-2xl font-bold">{comp.name}</h1>
-      <p className="text-sm text-muted-foreground">
-        <span>{categoryLabel(comp.category)}</span>
-        {comp.test ? <span> Test</span> : null} <span>{comp.pilot_classes.join(", ")}</span>
-      </p>
-      {comp.tasks.some((t) => t.has_xctsk) ? (
-        <p className="mt-2 text-sm">
-          <Link
-            className="underline underline-offset-4"
-            to={`/scores?comp_id=${encodeURIComponent(compId)}`}
+      <div className="mt-2 flex flex-wrap items-start gap-x-4 gap-y-2">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold">{comp.name}</h1>
+          <p className="text-sm text-muted-foreground">
+            {facts.join(" · ")}
+            {comp.test ? " · Test" : null}
+          </p>
+        </div>
+        {isAdmin ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setSettingsOpen(true)}
           >
-            View scores →
-          </Link>
-        </p>
-      ) : null}
-      {isAdmin ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="mt-2"
-          onClick={() => setSettingsOpen(true)}
-        >
-          Settings
-        </Button>
-      ) : null}
+            Settings
+          </Button>
+        ) : null}
+      </div>
+
+      <nav
+        aria-label="Sections"
+        className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground"
+      >
+        <a href="#tasks" className="hover:text-foreground hover:underline underline-offset-4">Tasks</a>
+        <a href="#scores" className="hover:text-foreground hover:underline underline-offset-4">Scores</a>
+        <a href="#pilots" className="hover:text-foreground hover:underline underline-offset-4">Pilots</a>
+        <a href="#activity" className="hover:text-foreground hover:underline underline-offset-4">Activity</a>
+        <a href="#admins" className="hover:text-foreground hover:underline underline-offset-4">Admins</a>
+      </nav>
 
       <ClassWarnings warnings={comp.class_coverage_warnings} tasks={comp.tasks} />
 
-      <section>
-        <h2 className="mt-8 text-lg font-bold">
-          Tasks
-          {isAdmin ? (
-            <>
-              {" "}
+      {hero ? (
+        <TaskHero
+          hero={hero}
+          compId={compId}
+          canSubmitTrack={canSubmitTrack}
+          canUploadOnBehalf={canUploadOnBehalf}
+          signedOut={!user && !loading}
+          isAdmin={isAdmin}
+        />
+      ) : null}
+
+      {/* break-before-page: when printing, each major section starts a fresh page. */}
+      <section id="tasks" className="scroll-mt-4 break-before-page">
+        <SectionHeader
+          title="Tasks"
+          action={
+            isAdmin ? (
               <Button
                 type="button"
                 variant="outline"
@@ -144,22 +225,38 @@ export function CompDetail() {
               >
                 New Task
               </Button>
-            </>
-          ) : null}
-        </h2>
-        <TasksList tasks={comp.tasks} compId={compId} canSubmitTrack={canSubmitTrack} />
+            ) : null
+          }
+        />
+        <TasksList
+          tasks={comp.tasks}
+          compId={compId}
+          canSubmitTrack={canSubmitTrack}
+          canUploadOnBehalf={canUploadOnBehalf}
+        />
       </section>
 
-      <PilotsSection
+      <CompScoresSection
         compId={compId}
-        compName={comp.name}
-        compClasses={comp.pilot_classes}
-        isAdmin={isAdmin}
+        timezone={comp.timezone}
+        tasks={comp.tasks}
+        defaultTaskId={hero?.tasks.find((t) => t.has_xctsk)?.task_id ?? null}
       />
 
-      <ActivitySection compId={compId} />
+      <div id="pilots" className="scroll-mt-4 break-before-page">
+        <PilotsSection
+          compId={compId}
+          compName={comp.name}
+          compClasses={comp.pilot_classes}
+          isAdmin={isAdmin}
+        />
+      </div>
 
-      <section>
+      <div id="activity" className="scroll-mt-4 break-before-page">
+        <ActivitySection compId={compId} />
+      </div>
+
+      <section id="admins" className="scroll-mt-4 break-before-page">
         <h2 className="mt-8 text-lg font-bold">Admins</h2>
         <ul className="mt-2 space-y-1 text-sm">
           {comp.admins.map((admin) => (
@@ -193,6 +290,132 @@ export function CompDetail() {
           }}
         />
       ) : null}
+    </div>
+  );
+}
+
+interface HeroPick {
+  label: string;
+  date: string;
+  tasks: TaskSummary[];
+}
+
+/**
+ * The hero shows the task a pilot needs *right now*: today's task in the
+ * comp's timezone, else the next upcoming one, else the most recent. A day
+ * can hold several tasks (classes flying different tasks) — show them all.
+ */
+function pickHeroTasks(tasks: TaskSummary[], timezone: string | null): HeroPick | null {
+  if (tasks.length === 0) return null;
+  // en-CA formats as YYYY-MM-DD, matching task_date.
+  let today: string;
+  try {
+    today = new Intl.DateTimeFormat("en-CA", {
+      ...(timezone ? { timeZone: timezone } : {}),
+    }).format(new Date());
+  } catch {
+    today = new Intl.DateTimeFormat("en-CA").format(new Date());
+  }
+  const dates = [...new Set(tasks.map((t) => t.task_date))].sort();
+  const date = dates.includes(today)
+    ? today
+    : (dates.find((d) => d > today) ?? dates[dates.length - 1]);
+  const label =
+    date === today ? "Today's task" : date > today ? "Next task" : "Latest task";
+  return { label, date, tasks: tasks.filter((t) => t.task_date === date) };
+}
+
+function TaskHero({
+  hero,
+  compId,
+  canSubmitTrack,
+  canUploadOnBehalf,
+  signedOut,
+  isAdmin,
+}: {
+  hero: HeroPick;
+  compId: string;
+  canSubmitTrack: boolean;
+  canUploadOnBehalf: boolean;
+  signedOut: boolean;
+  isAdmin: boolean;
+}) {
+  return (
+    <div className="mt-6 rounded-xl border bg-gradient-to-br from-muted to-card p-5">
+      <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+        {hero.label} · {formatTaskDate(hero.date)}
+      </p>
+      {hero.tasks.map((task) => (
+        <div key={task.task_id} className="mt-2 first:mt-1">
+          <h2 className="text-xl font-bold">
+            {task.name}{" "}
+            <span className="text-sm font-normal text-muted-foreground">
+              {task.pilot_classes.join(", ")}
+              {!task.has_xctsk ? " · route not set yet" : null}
+            </span>
+          </h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button nativeButton={false} size="sm" render={<Link to={`/comp/${compId}/task/${task.task_id}`} />}>
+              Task details
+            </Button>
+            {task.has_xctsk ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                title="Download the task file for your flight instrument"
+                onClick={async () => {
+                  try {
+                    await downloadTaskXctsk(compId, task.task_id, task.name);
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Download failed");
+                  }
+                }}
+              >
+                Download .xctsk
+              </Button>
+            ) : null}
+            {canSubmitTrack ? (
+              <SubmitTrackButton
+                compId={compId}
+                taskId={task.task_id}
+                canUploadOnBehalf={canUploadOnBehalf}
+              />
+            ) : null}
+            {signedOut ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void signInWithGoogle()}
+              >
+                Sign in to submit your track
+              </Button>
+            ) : null}
+            <Button nativeButton={false}
+              variant="outline"
+              size="sm"
+              render={
+                <a
+                  href={`/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(task.task_id)}`}
+                  title="Open the 3D flight replay for this task"
+                />
+              }
+            >
+              3D replay
+            </Button>
+            {isAdmin ? (
+              <Button nativeButton={false}
+                variant="ghost"
+                size="sm"
+                render={<Link to={`/comp/${compId}/task/${task.task_id}#edit-route`} />}
+              >
+                Edit route…
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -253,10 +476,12 @@ function TasksList({
   tasks,
   compId,
   canSubmitTrack,
+  canUploadOnBehalf,
 }: {
   tasks: TaskSummary[];
   compId: string;
   canSubmitTrack: boolean;
+  canUploadOnBehalf: boolean;
 }) {
   if (tasks.length === 0) {
     return <p className="text-muted-foreground">No tasks yet</p>;
@@ -271,11 +496,15 @@ function TasksList({
   }
 
   return (
-    <div className="mt-2 space-y-4">
+    <div className="mt-3 space-y-5">
       {[...byDate.entries()].map(([date, dateTasks]) => (
         <div key={date}>
-          <h3 className="font-semibold">{formatTaskDate(date)}</h3>
-          <ul className="mt-1 space-y-1 text-sm">
+          {/* Same label treatment as the hero: the date is a group heading,
+              the indented rows underneath are the tasks. */}
+          <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+            {formatTaskDate(date)}
+          </h3>
+          <ul className="mt-1.5 space-y-1.5 pl-4 text-sm">
             {dateTasks.map((task) => (
               <li key={task.task_id} className="flex flex-wrap items-center gap-2">
                 <Link
@@ -307,7 +536,11 @@ function TasksList({
                   </span>
                 </Link>{" "}
                 {canSubmitTrack ? (
-                  <SubmitTrackButton compId={compId} taskId={task.task_id} />
+                  <SubmitTrackButton
+                    compId={compId}
+                    taskId={task.task_id}
+                    canUploadOnBehalf={canUploadOnBehalf}
+                  />
                 ) : null}{" "}
                 <a
                   className="underline underline-offset-4"
@@ -326,71 +559,34 @@ function TasksList({
 }
 
 /**
- * Task-list "Submit track" button — same job as the task page's dialog: lets
- * a signed-in user upload their own IGC for this task, straight from a file
- * picker.
+ * "Submit track" button (hero + task list) — opens the same SubmitTrackDialog
+ * the task page uses, so submitting always shows who the track is for.
  */
-function SubmitTrackButton({ compId, taskId }: { compId: string; taskId: string }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-
-  async function handleFile(input: HTMLInputElement) {
-    const file = input.files?.[0];
-    if (!file) return;
-
-    if (!file.name.toLowerCase().endsWith(".igc")) {
-      toast.error("Please select an IGC file");
-      input.value = "";
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("File too large (max 5MB)");
-      input.value = "";
-      return;
-    }
-
-    setUploading(true);
-    try {
-      const compressed = await compressIgc(file);
-      const res = await fetch(
-        `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc`,
-        { method: "POST", credentials: "include", body: compressed }
-      );
-
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        toast.error(err.error || "Upload failed");
-        return;
-      }
-
-      const data = (await res.json()) as { replaced: boolean };
-      toast.success(data.replaced ? "Track replaced" : "Track uploaded");
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setUploading(false);
-      input.value = "";
-    }
-  }
+function SubmitTrackButton({
+  compId,
+  taskId,
+  canUploadOnBehalf,
+}: {
+  compId: string;
+  taskId: string;
+  canUploadOnBehalf: boolean;
+}) {
+  const [open, setOpen] = useState(false);
 
   return (
     <>
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".igc"
-        hidden
-        onChange={(e) => void handleFile(e.currentTarget)}
-      />
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={uploading}
-        onClick={() => inputRef.current?.click()}
-      >
-        {uploading ? "Uploading..." : "Submit track"}
+      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+        Submit track
       </Button>
+      {open ? (
+        <SubmitTrackDialog
+          compId={compId}
+          taskId={taskId}
+          canUploadOnBehalf={canUploadOnBehalf}
+          onClose={() => setOpen(false)}
+          onUploaded={() => {}}
+        />
+      ) : null}
     </>
   );
 }

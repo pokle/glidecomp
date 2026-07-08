@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Big Chip Open 2026 — GlideComp (IA v2 mockup)</title>
+<link rel="icon" href="/icon.svg" />
+<link rel="stylesheet" href="/iav2/iav2.css" />
+</head>
+<body data-page="comp" data-chrome="tabs">
+<main class="page">
+
+  <p class="small" style="margin:0 0 8px;"><a href="/iav2/comp.html" class="muted">&larr; All competitions</a></p>
+
+  <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+    <div style="flex:1; min-width: 260px;">
+      <h1>Big Chip Open 2026</h1>
+      <p class="muted" style="margin: 4px 0 0;">PG · Open distance · Open · 22–23 Feb 2026</p>
+    </div>
+    <button type="button" class="btn outline need-admin" data-toast="Competition settings dialog (same as Corryong — mock)">&#9881; Settings</button>
+  </div>
+
+  <nav class="anchorbar" aria-label="Sections">
+    <a href="#tasks">Tasks</a><a href="#scores">Scores</a><a href="#pilots">Pilots</a><a href="#activity">Activity</a><a href="#admins">Admins</a>
+  </nav>
+
+  <div class="hero">
+    <div class="kicker">Latest task · Sun 23 Feb 2026</div>
+    <h2>Task 2 — open distance from Jil Jil Farm</h2>
+    <div class="facts">Tow launch · 5 km take-off cylinder · fly as far as you can (distance measured from cylinder exit)</div>
+    <div class="actions">
+      <a class="btn" href="/iav2/task.html">Task details</a>
+      <button type="button" class="btn outline" data-toast="big-chip-t2.xctsk downloaded (mock)">Download .xctsk</button>
+      <button type="button" class="btn outline need-auth" data-toast="Submit track dialog (mock)">Submit track</button>
+      <button type="button" class="btn outline only-out" data-signin>Sign in to submit your track</button>
+      <a class="btn outline" href="/iav2/replay.html">3D replay</a>
+    </div>
+  </div>
+
+  <section class="block" id="tasks">
+    <div class="head"><h2>All tasks</h2><div class="spacer"></div><button type="button" class="btn sm need-admin" data-toast="New task dialog (mock)">New task</button></div>
+    <table class="tbl">
+      <tbody>
+        <tr class="click" data-href="/iav2/task.html"><td>Sat 22 Feb</td><td><strong>Task 1</strong> — downwind NE <span class="badge">Task set</span></td><td class="num"><a href="/iav2/replay.html" class="muted">3D replay</a></td></tr>
+        <tr class="click" data-href="/iav2/task.html"><td>Sun 23 Feb</td><td><strong>Task 2</strong> — downwind SE <span class="badge">Task set</span></td><td class="num"><a href="/iav2/replay.html" class="muted">3D replay</a></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="block" id="scores">
+    <div class="head"><h2>Scores</h2><div class="spacer"></div><button type="button" class="btn sm outline" data-toast="scores.csv downloaded (mock)">Export CSV</button></div>
+    <div class="freshness"><span class="dot"></span> Scores computed 23 Feb 2026, 19:10 AEDT</div>
+    <p class="muted small" style="margin-top:-4px;">Open distance: no time, leading or arrival points — distance from the launch-cylinder exit is everything. Flights that never leave the cylinder score 0.</p>
+    <table class="tbl">
+      <thead><tr><th>#</th><th>Pilot</th><th class="num">T1 km</th><th class="num">T2 km</th><th class="num">Total pts</th></tr></thead>
+      <tbody>
+        <tr class="click" data-href="/iav2/pilot-score.html"><td>1</td><td><a href="/iav2/pilot-score.html">Mia Kowalski</a></td><td class="num">142.7</td><td class="num">118.3</td><td class="num"><strong>1893</strong></td></tr>
+        <tr class="click" data-href="/iav2/pilot-score.html"><td>2</td><td><a href="/iav2/pilot-score.html">Noah Berg</a></td><td class="num">128.4</td><td class="num">124.9</td><td class="num"><strong>1841</strong></td></tr>
+        <tr class="click" data-href="/iav2/pilot-score.html"><td>3</td><td><a href="/iav2/pilot-score.html">Olive Martin</a></td><td class="num">96.2</td><td class="num">104.0</td><td class="num"><strong>1455</strong></td></tr>
+        <tr class="click" data-href="/iav2/pilot-score.html"><td>4</td><td><a href="/iav2/pilot-score.html">Priya Shah</a></td><td class="num">71.5</td><td class="num">0.0</td><td class="num"><strong>520</strong></td></tr>
+      </tbody>
+    </table>
+    <p class="muted small" style="margin-top: 10px;">Questions about a score? <a href="#admins">Ask the comp admins</a>.</p>
+  </section>
+
+  <section class="block" id="pilots">
+    <div class="head"><h2>Pilots (50)</h2><div class="spacer"></div><button type="button" class="btn sm outline need-admin" data-toast="Pilot editor dialog (same as Corryong — mock)">Edit</button></div>
+    <p class="muted">Mia Kowalski, Noah Berg, Olive Martin, Priya Shah, and 46 more…</p>
+  </section>
+
+  <section class="block" id="activity">
+    <div class="head"><h2>Activity</h2></div>
+    <table class="tbl"><tbody>
+      <tr><td class="muted" style="white-space:nowrap;">23 Feb 19:08</td><td>Sam Fletcher uploaded 12 tracks for Task 2</td></tr>
+      <tr><td class="muted" style="white-space:nowrap;">23 Feb 08:30</td><td>Sam Fletcher created Task 2 (Sun 23 Feb)</td></tr>
+    </tbody></table>
+  </section>
+
+  <section class="block" id="admins">
+    <div class="head"><h2>Admins</h2></div>
+    <table class="tbl"><tbody>
+      <tr><td>Sam Fletcher</td><td class="muted">sam.fletcher@example.com</td></tr>
+    </tbody></table>
+  </section>
+
+</main>
+<script src="/iav2/iav2.js"></script>
+</body>
+</html>

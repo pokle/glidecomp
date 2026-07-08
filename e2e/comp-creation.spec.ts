@@ -51,12 +51,12 @@ test("dev login, onboarding, create competition and task", async ({ page }) => {
   // picks up the new username)
   await page.waitForURL(`**/u/${username}`);
 
-  // Step 4: Navigate to competitions page. The "New Competition" button
-  // renders once the signed-in user resolves; Playwright's click auto-waits.
+  // Step 4: Navigate to competitions page. The "Start a new competition"
+  // button renders once the signed-in user resolves; click auto-waits.
   await page.goto("/comp");
 
   // Step 5: Create a competition
-  await page.getByRole("button", { name: "New Competition" }).click();
+  await page.getByRole("button", { name: "Start a new competition" }).click();
   const createDialog = page.getByRole("dialog");
   await createDialog.getByLabel("Name").fill("E2E Test Competition");
   // Category defaults to HG — no change needed. Mark as test competition.

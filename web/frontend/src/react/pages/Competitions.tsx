@@ -22,8 +22,13 @@ import { Input } from "@/react/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/react/ui/radio-group";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
-import { useUser } from "../lib/user";
-import { formatDate, categoryLabel } from "../lib/format";
+import { signInWithGoogle, useUser } from "../lib/user";
+import {
+  formatDate,
+  formatTaskDateRange,
+  categoryLabel,
+  scoringFormatLabel,
+} from "../lib/format";
 
 interface Comp {
   comp_id: string;
@@ -31,12 +36,15 @@ interface Comp {
   category: string;
   creation_date: string;
   pilot_classes: string[];
+  scoring_format?: string;
   is_admin: boolean;
   test: boolean;
+  first_task_date: string | null;
+  last_task_date: string | null;
 }
 
 export function Competitions() {
-  const { user } = useUser();
+  const { user, previewRole } = useUser();
   const navigate = useNavigate();
   const [comps, setComps] = useState<Comp[] | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -59,44 +67,70 @@ export function Competitions() {
     })();
   }, []);
 
+  // The API returns test comps to their admins; when a superadmin previews a
+  // lower role, hide them like the API would for that role.
+  const visibleComps =
+    comps === null
+      ? null
+      : previewRole === "out" || previewRole === "pilot"
+        ? comps.filter((c) => !c.test)
+        : comps;
+
   return (
     <section>
-      <h1 className="text-2xl font-bold">Competitions</h1>
-      <p className="text-muted-foreground">Manage and score your competitions</p>
-      {user ? (
-        <Button type="button" className="mt-4" onClick={() => setCreateOpen(true)}>
-          New Competition
-        </Button>
-      ) : null}
+      <div className="flex justify-end">
+        {user ? (
+          <Button type="button" onClick={() => setCreateOpen(true)}>
+            Start a new competition
+          </Button>
+        ) : (
+          <Button type="button" variant="outline" onClick={() => void signInWithGoogle()}>
+            Sign in to start a competition
+          </Button>
+        )}
+      </div>
 
       {loadError ? (
         <p role="alert" className="mt-4">
           Failed to load competitions. Please reload the page.
         </p>
-      ) : comps === null ? (
+      ) : visibleComps === null ? (
         <p role="status" className="mt-4 text-muted-foreground">
           Loading competitions…
         </p>
-      ) : comps.length === 0 ? (
+      ) : visibleComps.length === 0 ? (
         <p className="mt-4 text-muted-foreground">No competitions found</p>
       ) : (
-        <ul className="mt-4 divide-y rounded-lg border">
-          {comps.map((comp) => (
-            <li
-              key={comp.comp_id}
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2"
-            >
-              <Link to={`/comp/${comp.comp_id}`} className="font-medium underline underline-offset-4">
-                {comp.name}
+        <ul className="mt-4 space-y-2.5">
+          {visibleComps.map((comp) => (
+            <li key={comp.comp_id}>
+              <Link
+                to={`/comp/${comp.comp_id}`}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-4 py-3 transition-colors hover:bg-muted"
+              >
+                <span>
+                  <span className="block font-semibold">
+                    {comp.name}
+                    {comp.test ? (
+                      <span className="ml-2 inline-flex items-center rounded-full border px-2 py-0.5 align-middle text-xs font-medium text-muted-foreground">
+                        Test
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="block text-sm text-muted-foreground">
+                    {[
+                      categoryLabel(comp.category),
+                      scoringFormatLabel(comp.scoring_format),
+                      comp.pilot_classes.join(", "),
+                    ].join(" · ")}
+                  </span>
+                </span>
+                <span className="ml-auto text-sm whitespace-nowrap text-muted-foreground">
+                  {comp.first_task_date && comp.last_task_date
+                    ? formatTaskDateRange(comp.first_task_date, comp.last_task_date)
+                    : `created ${formatDate(comp.creation_date)}`}
+                </span>
               </Link>
-              <span className="text-sm text-muted-foreground">{categoryLabel(comp.category)}</span>
-              {comp.test ? <span className="text-sm text-muted-foreground"> Test</span> : null}
-              <span className="text-sm text-muted-foreground">
-                {comp.pilot_classes.join(", ")}
-              </span>
-              <span className="ml-auto text-sm text-muted-foreground">
-                {formatDate(comp.creation_date)}
-              </span>
             </li>
           ))}
         </ul>

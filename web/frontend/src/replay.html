@@ -162,6 +162,19 @@
     <button id="menuToggle" aria-label="Open controls" aria-expanded="false" aria-controls="menuPanel"
       class="absolute right-3 top-3 z-50 grid place-items-center w-12 h-12 rounded-full panel text-xl leading-none shadow-xl hover:bg-slate-700/50 transition-colors">☰</button>
 
+    <!-- Way back into the app for shared/direct links (IA v2 #277): real
+         breadcrumb links, centered top so the tool's own controls keep the
+         corners. main.ts appends "› comp › task" once it knows the names. -->
+    <nav id="crumbs" aria-label="Breadcrumb"
+      class="absolute left-1/2 top-3 z-40 flex h-9 max-w-[calc(100vw-140px)] items-center gap-1.5 panel rounded-full px-4 text-sm text-slate-200 whitespace-nowrap shadow-xl">
+      <a href="/" class="shrink-0 font-semibold hover:underline underline-offset-4">GlideComp</a>
+    </nav>
+    <style>
+      /* centered without fighting Tailwind's translate utilities in this static chrome */
+      #crumbs { transform: translateX(-50%); }
+      #crumbs a { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    </style>
+
     <!-- the one scrolling control panel: View · Pilots · Gaggles -->
     <aside id="menuPanel" aria-label="Controls"
       class="fixed right-0 top-0 z-40 h-full w-80 max-w-[90vw] panel overflow-y-auto overscroll-contain shadow-2xl flex flex-col">

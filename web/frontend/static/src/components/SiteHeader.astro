@@ -1,0 +1,30 @@
+---
+/**
+ * Global header tabs for the static pages — the same nav the SPA Shell
+ * renders (IA v2 #277: tabs on every page). Static markup, no auth state:
+ * signing in happens on the home page or in the SPA. min-h-[60px] matches
+ * the SPA header's height (set by its h-9 Sign in button) so the chrome
+ * doesn't jump when crossing between static and SPA pages.
+ */
+interface Props {
+  /** Which tab to underline, if any. */
+  active?: "home" | "comp" | "flights";
+}
+const { active } = Astro.props;
+
+const tab = (isActive: boolean) =>
+  `text-sm font-medium transition-colors hover:text-foreground ${
+    isActive ? "text-foreground underline underline-offset-8" : "text-muted-foreground"
+  }`;
+---
+
+<header class="border-b">
+  <nav
+    aria-label="Main"
+    class="mx-auto flex min-h-[60px] w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3"
+  >
+    <a href="/" class="font-brand text-base font-bold">GlideComp</a>
+    <a href="/comp" class={tab(active === "comp")}>Competitions</a>
+    <a href="/u/me" class={tab(active === "flights")}>My Flights</a>
+  </nav>
+</header>

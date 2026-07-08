@@ -45,6 +45,48 @@ function bundleUrl(): string {
     : '/api/comp/sample-3dvis';
 }
 
+/**
+ * Fill the top-center breadcrumb with "› comp › task" links once the names
+ * are known (one public comp-detail fetch). Sample mode (?comp/?task absent)
+ * keeps the bare GlideComp crumb. Fire-and-forget: a failed fetch just
+ * leaves the crumb short — never blocks the viewer.
+ */
+async function populateBreadcrumbs(): Promise<void> {
+  const q = new URLSearchParams(location.search);
+  const comp = q.get('comp');
+  const task = q.get('task');
+  const nav = document.getElementById('crumbs');
+  if (!comp || !task || !nav) return;
+  try {
+    const res = await fetch(`/api/comp/${encodeURIComponent(comp)}`);
+    if (!res.ok) return;
+    const detail = (await res.json()) as {
+      name: string;
+      tasks?: Array<{ task_id: string; name: string }>;
+    };
+    const crumbs: Array<{ label: string; href: string }> = [
+      { label: detail.name, href: `/comp/${encodeURIComponent(comp)}` },
+    ];
+    const taskName = detail.tasks?.find((t) => t.task_id === task)?.name;
+    if (taskName) {
+      crumbs.push({
+        label: taskName,
+        href: `/comp/${encodeURIComponent(comp)}/task/${encodeURIComponent(task)}`,
+      });
+    }
+    for (const c of crumbs) {
+      nav.appendChild(document.createTextNode('›'));
+      const a = document.createElement('a');
+      a.href = c.href;
+      a.textContent = c.label;
+      a.className = 'max-w-40 truncate hover:underline underline-offset-4';
+      nav.appendChild(a);
+    }
+  } catch {
+    // Offline / API hiccup — the GlideComp crumb alone still gets them home.
+  }
+}
+
 const $ = <T = HTMLElement>(id: string): T =>
   document.getElementById(id) as unknown as T;
 
@@ -144,6 +186,8 @@ async function main(): Promise<void> {
   const overlay = $('overlay');
   const overlayText = $('overlayText');
   const container = $('viewer');
+
+  void populateBreadcrumbs();
 
   // Declared before the viewer so its callbacks (which fire from the rAF loop)
   // can never hit the temporal dead zone.

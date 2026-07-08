@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Corryong Cup 2026 — GlideComp (IA v2 mockup)</title>
+<link rel="icon" href="/icon.svg" />
+<link rel="stylesheet" href="/iav2/iav2.css" />
+</head>
+<body data-page="comp" data-chrome="tabs">
+<main class="page">
+
+  <p class="small" style="margin:0 0 8px;"><a href="/iav2/comp.html" class="muted">&larr; All competitions</a></p>
+
+  <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+    <div style="flex:1; min-width: 260px;">
+      <h1>Corryong Cup 2026</h1>
+      <p class="muted" style="margin: 4px 0 0;">HG · GAP · Open, Floater · 10–16 Jan 2026</p>
+    </div>
+    <button type="button" class="btn outline need-admin" data-open="dlg-compsettings">&#9881; Settings</button>
+  </div>
+
+  <nav class="anchorbar" aria-label="Sections">
+    <a href="#task-today">Today's task</a>
+    <a href="#tasks">All tasks</a>
+    <a href="#scores">Scores</a>
+    <a href="#pilots">Pilots</a>
+    <a href="#activity">Activity</a>
+    <a href="#admins">Admins</a>
+  </nav>
+
+  <div class="warnbox need-admin">
+    <strong>Task warnings:</strong> Task 3 has no pilots assigned to class <em>Floater</em>.
+  </div>
+
+  <!-- ===================== Today's task hero ===================== -->
+  <div class="hero" id="task-today">
+    <div class="kicker">Today's task · Mon 12 Jan 2026</div>
+    <h2>Task 3 — Corryong &rarr; Khancoban &rarr; Goal at Welaregang</h2>
+    <div class="facts">62.4 km · 5 turnpoints · Start gate 13:00 AEDT · Open &amp; Floater</div>
+    <div class="actions">
+      <a class="btn" href="/iav2/task.html">Task details</a>
+      <button type="button" class="btn outline" data-toast="corryong-cup-2026-task-3.xctsk downloaded (mock)">Download .xctsk</button>
+      <button type="button" class="btn outline need-auth" data-open="dlg-submit">Submit track</button>
+      <button type="button" class="btn outline only-out" data-signin>Sign in to submit your track</button>
+      <a class="btn outline" href="/iav2/replay.html">3D replay</a>
+      <button type="button" class="btn outline need-admin" data-open="dlg-route">Edit route&hellip;</button>
+    </div>
+  </div>
+
+  <!-- ===================== All tasks ===================== -->
+  <section class="block" id="tasks">
+    <div class="head">
+      <h2>All tasks</h2>
+      <div class="spacer"></div>
+      <button type="button" class="btn sm need-admin" data-open="dlg-newtask">New task</button>
+    </div>
+    <table class="tbl">
+      <thead><tr><th>Date</th><th>Task</th><th>Classes</th><th></th></tr></thead>
+      <tbody>
+        <tr class="click" data-href="/iav2/task.html">
+          <td>Sat 10 Jan</td>
+          <td><strong>Task 1</strong> · 48.1 km <span class="badge">Task set</span></td>
+          <td>Open, Floater</td>
+          <td class="num"><a href="/iav2/replay.html" class="muted">3D replay</a></td>
+        </tr>
+        <tr class="click" data-href="/iav2/task.html">
+          <td>Sun 11 Jan</td>
+          <td><strong>Task 2</strong> · 55.0 km <span class="badge">Task set</span></td>
+          <td>Open, Floater</td>
+          <td class="num"><a href="/iav2/replay.html" class="muted">3D replay</a></td>
+        </tr>
+        <tr class="click" data-href="/iav2/task.html">
+          <td>Mon 12 Jan</td>
+          <td><strong>Task 3</strong> · 62.4 km <span class="badge">Task set</span> <span class="badge">Today</span></td>
+          <td>Open, Floater</td>
+          <td class="num"><a href="/iav2/replay.html" class="muted">3D replay</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===================== Scores ===================== -->
+  <section class="block" id="scores">
+    <div class="head">
+      <h2>Scores</h2>
+      <div class="spacer"></div>
+      <button type="button" class="btn sm outline" data-toast="scores.csv downloaded (mock)">Export CSV</button>
+    </div>
+    <div class="freshness"><span class="dot"></span> Scores computed 12 Jan 2026, 18:42 AEDT</div>
+
+    <div class="tabbar" data-scope="scores" role="tablist">
+      <button type="button" data-tab="open" aria-selected="true">Open</button>
+      <button type="button" data-tab="floater" aria-selected="false">Floater</button>
+      <button type="button" data-tab="top3" aria-selected="false">Top 3 per task &amp; class</button>
+      <button type="button" data-tab="teams" aria-selected="false">Teams</button>
+      <button type="button" data-tab="bytask" aria-selected="false">Results by task</button>
+    </div>
+
+    <div class="tabpanel active" data-scope="scores" data-panel="open">
+      <table class="tbl">
+        <thead><tr><th>#</th><th>Pilot</th><th class="num">T1</th><th class="num">T2</th><th class="num">T3</th><th class="num">Total</th></tr></thead>
+        <tbody>
+          <tr class="click" data-href="/iav2/pilot-score.html"><td>1</td><td>Asha Patel</td><td class="num"><a href="/iav2/pilot-score.html">934</a></td><td class="num"><a href="/iav2/pilot-score.html">1000</a></td><td class="num"><a href="/iav2/pilot-score.html">987</a></td><td class="num"><strong>2921</strong></td></tr>
+          <tr class="click" data-href="/iav2/pilot-score.html"><td>2</td><td>Ben Carrigan</td><td class="num"><a href="/iav2/pilot-score.html">1000</a></td><td class="num"><a href="/iav2/pilot-score.html">871</a></td><td class="num"><a href="/iav2/pilot-score.html">902</a></td><td class="num"><strong>2773</strong></td></tr>
+          <tr class="click" data-href="/iav2/pilot-score.html"><td>3</td><td>Chris Nguyen</td><td class="num"><a href="/iav2/pilot-score.html">812</a></td><td class="num"><a href="/iav2/pilot-score.html">905</a></td><td class="num"><a href="/iav2/pilot-score.html">861</a></td><td class="num"><strong>2578</strong></td></tr>
+          <tr class="click" data-href="/iav2/pilot-score.html"><td>4</td><td>Dana Rossi</td><td class="num"><a href="/iav2/pilot-score.html">744</a></td><td class="num"><a href="/iav2/pilot-score.html">698</a></td><td class="num"><a href="/iav2/pilot-score.html">815</a></td><td class="num"><strong>2257</strong></td></tr>
+          <tr class="click" data-href="/iav2/pilot-score.html"><td>5</td><td>Emi Tanaka</td><td class="num"><a href="/iav2/pilot-score.html">651</a></td><td class="num"><a href="/iav2/pilot-score.html">720</a></td><td class="num"><a href="/iav2/pilot-score.html">704</a></td><td class="num"><strong>2075</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tabpanel" data-scope="scores" data-panel="floater">
+      <table class="tbl">
+        <thead><tr><th>#</th><th>Pilot</th><th class="num">T1</th><th class="num">T2</th><th class="num">T3</th><th class="num">Total</th></tr></thead>
+        <tbody>
+          <tr class="click" data-href="/iav2/pilot-score.html"><td>1</td><td>Finn O'Brien</td><td class="num"><a href="/iav2/pilot-score.html">1000</a></td><td class="num"><a href="/iav2/pilot-score.html">951</a></td><td class="num"><a href="/iav2/pilot-score.html">988</a></td><td class="num"><strong>2939</strong></td></tr>
+          <tr class="click" data-href="/iav2/pilot-score.html"><td>2</td><td>Grace Liu</td><td class="num"><a href="/iav2/pilot-score.html">903</a></td><td class="num"><a href="/iav2/pilot-score.html">1000</a></td><td class="num"><a href="/iav2/pilot-score.html">870</a></td><td class="num"><strong>2773</strong></td></tr>
+          <tr class="click" data-href="/iav2/pilot-score.html"><td>3</td><td>Hugo Weiss</td><td class="num"><a href="/iav2/pilot-score.html">781</a></td><td class="num"><a href="/iav2/pilot-score.html">804</a></td><td class="num"><a href="/iav2/pilot-score.html">799</a></td><td class="num"><strong>2384</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tabpanel" data-scope="scores" data-panel="top3">
+      <div class="grid2">
+        <div>
+          <h3 style="font-size: 14px;">Task 3 · Open</h3>
+          <table class="tbl"><tbody>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>1</td><td>Asha Patel</td><td class="num">987</td></tr>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>2</td><td>Ben Carrigan</td><td class="num">902</td></tr>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>3</td><td>Chris Nguyen</td><td class="num">861</td></tr>
+          </tbody></table>
+        </div>
+        <div>
+          <h3 style="font-size: 14px;">Task 3 · Floater</h3>
+          <table class="tbl"><tbody>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>1</td><td>Finn O'Brien</td><td class="num">988</td></tr>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>2</td><td>Grace Liu</td><td class="num">870</td></tr>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>3</td><td>Hugo Weiss</td><td class="num">799</td></tr>
+          </tbody></table>
+        </div>
+        <div>
+          <h3 style="font-size: 14px;">Task 2 · Open</h3>
+          <table class="tbl"><tbody>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>1</td><td>Asha Patel</td><td class="num">1000</td></tr>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>2</td><td>Chris Nguyen</td><td class="num">905</td></tr>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>3</td><td>Ben Carrigan</td><td class="num">871</td></tr>
+          </tbody></table>
+        </div>
+        <div>
+          <h3 style="font-size: 14px;">Task 2 · Floater</h3>
+          <table class="tbl"><tbody>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>1</td><td>Grace Liu</td><td class="num">1000</td></tr>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>2</td><td>Finn O'Brien</td><td class="num">951</td></tr>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>3</td><td>Hugo Weiss</td><td class="num">804</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabpanel" data-scope="scores" data-panel="teams">
+      <table class="tbl">
+        <thead><tr><th>#</th><th>Team</th><th class="num">Total</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Corryong Crew</td><td class="num"><strong>5694</strong></td></tr>
+          <tr><td>2</td><td>Bright Flyers</td><td class="num"><strong>5157</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tabpanel" data-scope="scores" data-panel="bytask">
+      <label class="field" style="margin-top:0;">Task</label>
+      <select class="input" style="max-width: 22rem;" data-taskpicker>
+        <option value="t3" selected>Task 3 — Mon 12 Jan (today)</option>
+        <option value="t2">Task 2 — Sun 11 Jan</option>
+        <option value="t1">Task 1 — Sat 10 Jan</option>
+      </select>
+
+      <div data-taskresult="t3" style="margin-top: 16px;">
+        <h3 style="font-size: 14px;">Task 3 · Open</h3>
+        <table class="tbl">
+          <thead><tr><th>#</th><th>Pilot</th><th class="num">Dist km</th><th class="num">Dist pts</th><th class="num">Time pts</th><th class="num">Lead pts</th><th class="num">Arr pts</th><th class="num">Total</th></tr></thead>
+          <tbody>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>1</td><td><a href="/iav2/pilot-score.html">Asha Patel</a></td><td class="num">62.4</td><td class="num">431</td><td class="num">389</td><td class="num">112</td><td class="num">55</td><td class="num"><strong>987</strong></td></tr>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>2</td><td><a href="/iav2/pilot-score.html">Ben Carrigan</a></td><td class="num">62.4</td><td class="num">431</td><td class="num">341</td><td class="num">86</td><td class="num">44</td><td class="num"><strong>902</strong></td></tr>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>3</td><td><a href="/iav2/pilot-score.html">Chris Nguyen</a></td><td class="num">62.4</td><td class="num">431</td><td class="num">322</td><td class="num">75</td><td class="num">33</td><td class="num"><strong>861</strong></td></tr>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>4</td><td><a href="/iav2/pilot-score.html">Dana Rossi</a></td><td class="num">58.9</td><td class="num">407</td><td class="num">318</td><td class="num">90</td><td class="num">0</td><td class="num"><strong>815</strong></td></tr>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>5</td><td><a href="/iav2/pilot-score.html">Emi Tanaka</a></td><td class="num">51.2</td><td class="num">354</td><td class="num">290</td><td class="num">60</td><td class="num">0</td><td class="num"><strong>704</strong></td></tr>
+          </tbody>
+        </table>
+        <h3 style="font-size: 14px; margin-top: 20px;">Task 3 · Floater</h3>
+        <table class="tbl">
+          <thead><tr><th>#</th><th>Pilot</th><th class="num">Dist km</th><th class="num">Dist pts</th><th class="num">Time pts</th><th class="num">Lead pts</th><th class="num">Arr pts</th><th class="num">Total</th></tr></thead>
+          <tbody>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>1</td><td><a href="/iav2/pilot-score.html">Finn O'Brien</a></td><td class="num">62.4</td><td class="num">440</td><td class="num">396</td><td class="num">100</td><td class="num">52</td><td class="num"><strong>988</strong></td></tr>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>2</td><td><a href="/iav2/pilot-score.html">Grace Liu</a></td><td class="num">57.3</td><td class="num">404</td><td class="num">350</td><td class="num">80</td><td class="num">36</td><td class="num"><strong>870</strong></td></tr>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>3</td><td><a href="/iav2/pilot-score.html">Hugo Weiss</a></td><td class="num">52.0</td><td class="num">367</td><td class="num">331</td><td class="num">71</td><td class="num">30</td><td class="num"><strong>799</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div data-taskresult="t2" style="display:none; margin-top: 16px;">
+        <h3 style="font-size: 14px;">Task 2 · Open</h3>
+        <table class="tbl">
+          <thead><tr><th>#</th><th>Pilot</th><th class="num">Dist km</th><th class="num">Total</th></tr></thead>
+          <tbody>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>1</td><td>Asha Patel</td><td class="num">55.0</td><td class="num"><strong>1000</strong></td></tr>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>2</td><td>Chris Nguyen</td><td class="num">55.0</td><td class="num"><strong>905</strong></td></tr>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>3</td><td>Ben Carrigan</td><td class="num">55.0</td><td class="num"><strong>871</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div data-taskresult="t1" style="display:none; margin-top: 16px;">
+        <h3 style="font-size: 14px;">Task 1 · Open</h3>
+        <table class="tbl">
+          <thead><tr><th>#</th><th>Pilot</th><th class="num">Dist km</th><th class="num">Total</th></tr></thead>
+          <tbody>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>1</td><td>Ben Carrigan</td><td class="num">48.1</td><td class="num"><strong>1000</strong></td></tr>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>2</td><td>Asha Patel</td><td class="num">48.1</td><td class="num"><strong>934</strong></td></tr>
+            <tr class="click" data-href="/iav2/pilot-score.html"><td>3</td><td>Chris Nguyen</td><td class="num">45.6</td><td class="num"><strong>812</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <p class="muted small" style="margin-top: 14px;">
+      Click any score for a step-by-step explanation.
+      Questions about a score? <a href="#admins">Ask the comp admins</a>.
+    </p>
+  </section>
+
+  <!-- ===================== Pilots ===================== -->
+  <section class="block" id="pilots">
+    <div class="head">
+      <h2>Pilots (8)</h2>
+      <div class="spacer"></div>
+      <button type="button" class="btn sm outline need-admin" data-open="dlg-pilots">Edit</button>
+    </div>
+    <table class="tbl">
+      <thead><tr><th>Name</th><th>Account</th><th>CIVL</th><th>Class</th><th>Team</th></tr></thead>
+      <tbody>
+        <tr><td>Asha Patel</td><td><a href="/iav2/flights.html">@asha</a></td><td>46102</td><td>Open</td><td>Corryong Crew</td></tr>
+        <tr><td>Ben Carrigan</td><td>—</td><td>46388</td><td>Open</td><td>Bright Flyers</td></tr>
+        <tr><td>Chris Nguyen</td><td>—</td><td>45990</td><td>Open</td><td>Corryong Crew</td></tr>
+        <tr><td>Dana Rossi</td><td>—</td><td>46811</td><td>Open</td><td>Bright Flyers</td></tr>
+        <tr><td>Emi Tanaka</td><td>—</td><td>46402</td><td>Open</td><td>—</td></tr>
+        <tr><td>Finn O'Brien</td><td>—</td><td>46754</td><td>Floater</td><td>Corryong Crew</td></tr>
+        <tr><td>Grace Liu</td><td>—</td><td>46203</td><td>Floater</td><td>Bright Flyers</td></tr>
+        <tr><td>Hugo Weiss</td><td>—</td><td>46577</td><td>Floater</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===================== Activity ===================== -->
+  <section class="block" id="activity">
+    <div class="head"><h2>Activity</h2></div>
+    <div class="tabbar" data-scope="activity" role="tablist">
+      <button type="button" data-tab="all" aria-selected="true">All</button>
+      <button type="button" data-tab="tasks" aria-selected="false">Tasks</button>
+      <button type="button" data-tab="pilots" aria-selected="false">Pilots</button>
+      <button type="button" data-tab="tracks" aria-selected="false">Tracks</button>
+      <button type="button" data-tab="settings" aria-selected="false">Settings</button>
+    </div>
+    <div class="tabpanel active" data-scope="activity" data-panel="all">
+      <table class="tbl">
+        <tbody>
+          <tr><td class="muted" style="white-space:nowrap;">12 Jan 18:41</td><td>Jane Meadows uploaded a track for Asha Patel on Task 3</td></tr>
+          <tr><td class="muted" style="white-space:nowrap;">12 Jan 18:39</td><td>Jane Meadows applied a 2% penalty to Dana Rossi on Task 3 — "airspace infringement near Khancoban"</td></tr>
+          <tr><td class="muted" style="white-space:nowrap;">12 Jan 09:12</td><td>Jane Meadows changed Task 3 start gate from 12:30 to 13:00</td></tr>
+          <tr><td class="muted" style="white-space:nowrap;">11 Jan 19:02</td><td>Tushar Pokle created Task 3 (Mon 12 Jan)</td></tr>
+          <tr><td class="muted" style="white-space:nowrap;">10 Jan 08:44</td><td>Jane Meadows set pilot classes to Open, Floater</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top: 10px;"><button type="button" class="btn sm outline" data-toast="Loaded 20 more activity rows (mock)">Load more</button></p>
+    </div>
+    <div class="tabpanel" data-scope="activity" data-panel="tasks"><p class="muted">3 task changes (mock).</p></div>
+    <div class="tabpanel" data-scope="activity" data-panel="pilots"><p class="muted">2 pilot changes (mock).</p></div>
+    <div class="tabpanel" data-scope="activity" data-panel="tracks"><p class="muted">14 track events (mock).</p></div>
+    <div class="tabpanel" data-scope="activity" data-panel="settings"><p class="muted">1 settings change (mock).</p></div>
+  </section>
+
+  <!-- ===================== Admins ===================== -->
+  <section class="block" id="admins">
+    <div class="head"><h2>Admins</h2></div>
+    <table class="tbl">
+      <tbody>
+        <tr><td>Tushar Pokle</td><td class="muted">tushar.pokle@example.com</td></tr>
+        <tr><td>Jane Meadows</td><td class="muted">jane.meadows@example.com</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+</main>
+
+<!-- ===================== Dialogs ===================== -->
+
+<dialog id="dlg-submit">
+  <div class="dhead"><h3>Submit track — Task 3</h3><button type="button" class="xclose" data-close>&times;</button></div>
+  <div class="dbody">
+    <label class="field">Pilot</label>
+    <select class="input">
+      <option selected>Myself (Asha Patel)</option>
+      <option class="need-admin">On behalf of: Ben Carrigan</option>
+      <option class="need-admin">On behalf of: Chris Nguyen</option>
+      <option class="need-admin">On behalf of: Dana Rossi</option>
+    </select>
+    <p class="muted small need-admin" style="margin: 4px 0 0;">As a comp admin you can upload on behalf of any pilot.</p>
+    <label class="field">IGC track log</label>
+    <input class="input" type="file" accept=".igc" />
+  </div>
+  <div class="dfoot">
+    <button type="button" class="btn outline" data-close>Cancel</button>
+    <button type="button" class="btn" data-toast="Track uploaded — scores will refresh shortly (mock)">Upload</button>
+  </div>
+</dialog>
+
+<dialog id="dlg-newtask">
+  <div class="dhead"><h3>New task</h3><button type="button" class="xclose" data-close>&times;</button></div>
+  <div class="dbody">
+    <label class="field">Name</label>
+    <input class="input" value="Task 4" />
+    <label class="field">Date</label>
+    <input class="input" type="date" value="2026-01-13" />
+    <p class="muted small" style="margin: 4px 0 0;">Pre-filled with today — add the day's task in two clicks.</p>
+    <label class="field">Pilot classes</label>
+    <div class="checkline" style="margin-top: 4px; gap: 16px;">
+      <label><input type="checkbox" checked /> Open</label>
+      <label><input type="checkbox" checked /> Floater</label>
+    </div>
+  </div>
+  <div class="dfoot">
+    <button type="button" class="btn outline" data-close>Cancel</button>
+    <button type="button" class="btn" data-toast="Task 4 created — now define its route (mock)">Create task</button>
+  </div>
+</dialog>
+
+<dialog id="dlg-compsettings" class="wide">
+  <div class="dhead"><h3>Competition settings</h3><button type="button" class="xclose" data-close>&times;</button></div>
+  <div class="dbody">
+    <div class="grid2">
+      <div>
+        <label class="field">Name</label>
+        <input class="input" value="Corryong Cup 2026" />
+        <label class="field">Category</label>
+        <select class="input"><option selected>Hang gliding</option><option>Paragliding</option></select>
+        <label class="field">Pilot classes</label>
+        <input class="input" value="Open, Floater" />
+        <label class="field">Timezone</label>
+        <input class="input" value="Australia/Sydney (AEDT)" />
+        <label class="field">Close date</label>
+        <input class="input" type="date" value="2026-01-16" />
+      </div>
+      <div>
+        <label class="field">Scoring format</label>
+        <select class="input"><option selected>GAP</option><option>Open distance</option></select>
+        <label class="field">Nominal distance (km)</label>
+        <input class="input" value="40" />
+        <label class="field">Nominal time (min)</label>
+        <input class="input" value="90" />
+        <label class="field">Minimum distance (km)</label>
+        <input class="input" value="5" />
+        <label class="field">Leading points formula</label>
+        <select class="input"><option selected>PWC 2023</option><option>GAP 2020</option></select>
+      </div>
+    </div>
+    <label class="checkline"><input type="checkbox" checked /> Anyone in the comp can upload tracks for other pilots (open IGC upload)</label>
+    <label class="checkline"><input type="checkbox" /> Test competition (only visible to admins)</label>
+    <label class="field">Admin emails</label>
+    <input class="input" value="tushar.pokle@example.com, jane.meadows@example.com" />
+    <p class="muted small">Admins must already have a GlideComp account. <a href="/iav2/static.html?p=Scoring">How GAP scoring works</a></p>
+    <hr style="border: 0; border-top: 1px solid var(--border); margin: 18px 0;" />
+    <p class="small" style="margin: 0;"><strong>Danger zone.</strong></p>
+    <p style="margin: 8px 0 0;"><button type="button" class="btn sm destructive" data-toast="Competition deleted (mock — it wasn't, relax)">Delete competition&hellip;</button></p>
+  </div>
+  <div class="dfoot">
+    <button type="button" class="btn outline" data-close>Cancel</button>
+    <button type="button" class="btn" data-toast="Competition settings saved — change audited, scores marked stale (mock)">Save</button>
+  </div>
+</dialog>
+
+<dialog id="dlg-pilots" class="wide">
+  <div class="dhead"><h3>Edit pilots</h3><button type="button" class="xclose" data-close>&times;</button></div>
+  <div class="dbody">
+    <div style="display:flex; gap: 8px; margin-bottom: 12px;">
+      <button type="button" class="btn sm outline" data-toast="Row added (mock)">Add pilot</button>
+      <button type="button" class="btn sm outline" data-toast="Paste from a spreadsheet (mock)">Import CSV</button>
+      <button type="button" class="btn sm outline" data-toast="pilots.csv downloaded (mock)">Export CSV</button>
+    </div>
+    <table class="tbl">
+      <thead><tr><th>Name</th><th>CIVL</th><th>Class</th><th>Team</th><th></th></tr></thead>
+      <tbody>
+        <tr><td><input class="input" value="Asha Patel" /></td><td><input class="input" value="46102" style="width:6rem;" /></td><td><select class="input"><option selected>Open</option><option>Floater</option></select></td><td><input class="input" value="Corryong Crew" /></td><td><button type="button" class="btn sm ghost" data-toast="Pilot removed (mock)">&times;</button></td></tr>
+        <tr><td><input class="input" value="Ben Carrigan" /></td><td><input class="input" value="46388" style="width:6rem;" /></td><td><select class="input"><option selected>Open</option><option>Floater</option></select></td><td><input class="input" value="Bright Flyers" /></td><td><button type="button" class="btn sm ghost" data-toast="Pilot removed (mock)">&times;</button></td></tr>
+        <tr><td><input class="input" value="Finn O'Brien" /></td><td><input class="input" value="46754" style="width:6rem;" /></td><td><select class="input"><option>Open</option><option selected>Floater</option></select></td><td><input class="input" value="Corryong Crew" /></td><td><button type="button" class="btn sm ghost" data-toast="Pilot removed (mock)">&times;</button></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="dfoot">
+    <button type="button" class="btn outline" data-close>Cancel</button>
+    <button type="button" class="btn" data-toast="Pilot roster saved — change audited, scores marked stale (mock)">Save</button>
+  </div>
+</dialog>
+
+<dialog id="dlg-route" class="wide">
+  <div class="dhead"><h3>Edit route — Task 3</h3><button type="button" class="xclose" data-close>&times;</button></div>
+  <div class="dbody">
+    <div style="display:flex; gap: 8px; margin-bottom: 12px;">
+      <button type="button" class="btn sm outline" data-toast="Choose a .xctsk file (mock)">Import .xctsk</button>
+      <button type="button" class="btn sm outline" data-toast="Enter an XContest task code (mock)">Import XContest</button>
+      <button type="button" class="btn sm outline" data-toast="corryong-cup-2026-task-3.xctsk downloaded (mock)">Export .xctsk</button>
+    </div>
+    <table class="tbl">
+      <thead><tr><th>#</th><th>Type</th><th>Name</th><th class="num">Radius m</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><select class="input"><option selected>Takeoff</option><option>SSS</option><option>Turnpoint</option><option>ESS</option><option>Goal</option></select></td><td><input class="input" value="Corryong Launch" /></td><td><input class="input num" value="400" style="width: 6rem;" /></td><td><button type="button" class="btn sm ghost" data-toast="Turnpoint removed (mock)">&times;</button></td></tr>
+        <tr><td>2</td><td><select class="input"><option>Takeoff</option><option selected>SSS</option><option>Turnpoint</option><option>ESS</option><option>Goal</option></select></td><td><input class="input" value="Start cylinder" /></td><td><input class="input num" value="5000" style="width: 6rem;" /></td><td><button type="button" class="btn sm ghost" data-toast="Turnpoint removed (mock)">&times;</button></td></tr>
+        <tr><td>3</td><td><select class="input"><option>Takeoff</option><option>SSS</option><option selected>Turnpoint</option><option>ESS</option><option>Goal</option></select></td><td><input class="input" value="Khancoban" /></td><td><input class="input num" value="1000" style="width: 6rem;" /></td><td><button type="button" class="btn sm ghost" data-toast="Turnpoint removed (mock)">&times;</button></td></tr>
+        <tr><td>4</td><td><select class="input"><option>Takeoff</option><option>SSS</option><option>Turnpoint</option><option selected>ESS</option><option>Goal</option></select></td><td><input class="input" value="Welaregang ESS" /></td><td><input class="input num" value="2000" style="width: 6rem;" /></td><td><button type="button" class="btn sm ghost" data-toast="Turnpoint removed (mock)">&times;</button></td></tr>
+        <tr><td>5</td><td><select class="input"><option>Takeoff</option><option>SSS</option><option>Turnpoint</option><option>ESS</option><option selected>Goal</option></select></td><td><input class="input" value="Welaregang Goal" /></td><td><input class="input num" value="400" style="width: 6rem;" /></td><td><button type="button" class="btn sm ghost" data-toast="Turnpoint removed (mock)">&times;</button></td></tr>
+      </tbody>
+    </table>
+    <p style="margin: 12px 0 0;"><button type="button" class="btn sm outline" data-toast="Turnpoint added (mock)">Add turnpoint</button></p>
+    <p class="muted small">Start gate 13:00 AEDT · total 62.4 km. Saving audits the change and marks scores stale.</p>
+  </div>
+  <div class="dfoot">
+    <button type="button" class="btn outline" data-close>Cancel</button>
+    <button type="button" class="btn" data-toast="Route saved — change audited, scores marked stale (mock)">Save route</button>
+  </div>
+</dialog>
+
+<script src="/iav2/iav2.js"></script>
+</body>
+</html>

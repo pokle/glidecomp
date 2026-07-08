@@ -48,24 +48,11 @@ interface ApiKey {
 }
 
 export function Settings() {
-  const { user, loading } = useUser();
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const { user, loading, isSuperAdmin, previewRole } = useUser();
 
   useEffect(() => {
     document.title = "GlideComp - Settings";
-    if (!user) return;
-    // Cheap check (no DB query); the actual admin pages fetch on navigation.
-    (async () => {
-      try {
-        const res = await fetch("/api/admin/whoami", { credentials: "include" });
-        if (!res.ok) return;
-        const data = (await res.json()) as { is_super_admin: boolean };
-        setIsSuperAdmin(data.is_super_admin);
-      } catch {
-        /* not signed in / network error — leave the section hidden */
-      }
-    })();
-  }, [user]);
+  }, []);
 
   if (loading) return <p role="status">Loading…</p>;
 
@@ -86,7 +73,7 @@ export function Settings() {
       <h1 className="text-2xl font-bold">Settings</h1>
       <ProfileSection />
       <ApiKeysSection />
-      {isSuperAdmin ? <SuperadminSection /> : null}
+      {isSuperAdmin && previewRole === "actual" ? <SuperadminSection /> : null}
       <DangerZoneSection />
     </section>
   );

@@ -34,6 +34,20 @@ export function categoryLabel(cat: string): string {
   return cat === "hg" ? "HG" : "PG";
 }
 
+/**
+ * Compact range over bare YYYY-MM-DD task dates: "10–16 Jan 2026",
+ * "28 Jan – 2 Feb 2026", or a single date when first === last.
+ */
+export function formatTaskDateRange(first: string, last: string): string {
+  const short: Intl.DateTimeFormatOptions = { year: "numeric", month: "short", day: "numeric" };
+  if (first === last) return formatTaskDate(first, short);
+  return `${formatTaskDate(first, { month: "short", day: "numeric" })} – ${formatTaskDate(last, short)}`;
+}
+
+export function scoringFormatLabel(format: string | undefined): string {
+  return format === "open_distance" ? "Open distance" : "GAP";
+}
+
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

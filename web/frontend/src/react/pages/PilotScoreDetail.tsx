@@ -15,7 +15,7 @@
  * IGC is fetched separately, only to draw the track on the map.
  */
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import {
   explainGapScore,
   explainOpenDistanceScore,
@@ -37,6 +37,7 @@ import { gunzipResponse } from "../../analysis/storage";
 import type { OpenDistanceLine } from "../../analysis/map-provider";
 import { formatTaskDate } from "../lib/format";
 import { formatTimeInZone, zoneNameWithOffset } from "../lib/time";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 import { Timestamp } from "../components/Timestamp";
 import type {
   ClassScore,
@@ -359,18 +360,22 @@ export function PilotScoreDetail() {
 
   if (!compId || !taskId || !pilotId) return null;
 
-  const backLink = (
-    <p className="text-sm">
-      <Link className="underline underline-offset-4" to={`/comp/${compId}/task/${taskId}`}>
-        ← Back to task
-      </Link>
-    </p>
+  // Generic labels until the data arrives; the links work either way.
+  const ready = state.kind === "ready" ? state.data : null;
+  const breadcrumbs = (
+    <Breadcrumbs
+      items={[
+        { label: "Competitions", to: "/comp" },
+        { label: ready?.comp.name ?? "Competition", to: `/comp/${compId}` },
+        { label: ready?.task.name ?? "Task", to: `/comp/${compId}/task/${taskId}` },
+      ]}
+    />
   );
 
   if (state.kind === "loading") {
     return (
       <div>
-        {backLink}
+        {breadcrumbs}
         <p className="mt-4 text-muted-foreground">Loading score details...</p>
       </div>
     );
@@ -379,7 +384,7 @@ export function PilotScoreDetail() {
   if (state.kind === "error") {
     return (
       <div>
-        {backLink}
+        {breadcrumbs}
         <p className="mt-4 text-muted-foreground">{state.message}</p>
       </div>
     );
@@ -397,7 +402,7 @@ export function PilotScoreDetail() {
 
   return (
     <div>
-      {backLink}
+      {breadcrumbs}
       <header className="mt-2">
         <h1 className="text-xl font-bold">{entry.pilot_name}</h1>
         <p className="text-sm text-muted-foreground">

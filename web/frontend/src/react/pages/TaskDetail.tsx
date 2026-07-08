@@ -6,7 +6,7 @@
  * gates, goal, and .xctsk / XContest import-export (#270).
  */
 import { useEffect, useId, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import type { XCTask } from "@glidecomp/engine";
 import { Button } from "@/react/ui/button";
 import {
@@ -30,32 +30,36 @@ import {
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
-import { useUser } from "../lib/user";
+import { useAdminView, useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
+import { Breadcrumbs } from "../components/Breadcrumbs";
+import { SectionHeader } from "../components/SectionHeader";
+import { downloadXctskFile } from "../comp/download-xctsk";
 import { CheckboxField } from "../comp/fields";
 import { PilotStatusSection } from "../comp/PilotStatusSection";
 import { ScoresSection } from "../comp/ScoresSection";
 import { TrackSection } from "../comp/TrackSection";
 import { RouteEditorDialog } from "../comp/RouteEditorDialog";
 import { startConfigSummary } from "../comp/route-editor";
+import { useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 import {
   fetchWithRetry,
   isPastCloseDate,
   type CompDetailData,
-  type PilotListEntry,
   type TaskDetailData,
 } from "../comp/types";
 
 export function TaskDetail() {
   const { compId, taskId } = useParams<{ compId: string; taskId: string }>();
   const { user } = useUser();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [task, setTask] = useState<TaskDetailData | null>(null);
   const [comp, setComp] = useState<CompDetailData | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [scoresRefresh, setScoresRefresh] = useState(0);
   const [replayAvailable, setReplayAvailable] = useState(false);
-  const [canUploadOnBehalf, setCanUploadOnBehalf] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [routeOpen, setRouteOpen] = useState(false);
 
@@ -104,40 +108,29 @@ export function TaskDetail() {
     };
   }, [compId, taskId, refresh]);
 
-  const isAdmin = user != null && comp != null && comp.admins.some((a) => a.email === user.email);
+  const isAdmin = useAdminView(
+    user != null && comp != null && comp.admins.some((a) => a.email === user.email)
+  );
 
-  // Determine if the current user can upload on behalf. Admins always can;
-  // registered pilots can when comp.open_igc_upload is enabled. Registration
-  // is checked by matching the user's email against a comp_pilot's
-  // linked_email.
+  // Deep link from the comp hero's "Edit route…" button: open the route
+  // editor once the task has loaded and the admin check has resolved.
   useEffect(() => {
-    if (isAdmin) {
-      setCanUploadOnBehalf(true);
-      return;
+    if (location.hash === "#edit-route" && isAdmin && task) setRouteOpen(true);
+  }, [location.hash, isAdmin, task]);
+
+  // Closing the editor drops the #edit-route hash so a reload doesn't reopen it.
+  const closeRouteEditor = () => {
+    setRouteOpen(false);
+    if (location.hash === "#edit-route") {
+      navigate(location.pathname + location.search, { replace: true });
     }
-    if (!user || !comp?.open_igc_upload || !compId) {
-      setCanUploadOnBehalf(false);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const pilotsRes = await api.api.comp[":comp_id"].pilot.$get({
-          param: { comp_id: compId },
-        });
-        if (!pilotsRes.ok || cancelled) return;
-        const pilotsData = (await pilotsRes.json()) as { pilots: PilotListEntry[] };
-        if (!cancelled) {
-          setCanUploadOnBehalf(pilotsData.pilots.some((p) => p.linked_email === user.email));
-        }
-      } catch {
-        // Non-critical — default to admin-only
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, comp, isAdmin, compId]);
+  };
+
+  const canUploadOnBehalf = useCanUploadOnBehalf(
+    compId ?? "",
+    Boolean(comp?.open_igc_upload),
+    isAdmin
+  );
 
   if (notFound || !compId || !taskId) {
     return (
@@ -162,55 +155,81 @@ export function TaskDetail() {
 
   return (
     <div>
-      <nav className="text-sm">
-        <Link className="underline underline-offset-4" to="/comp">
-          Competitions
-        </Link>{" "}
-        ›{" "}
-        <Link className="underline underline-offset-4" to={`/comp/${compId}`}>
-          {comp?.name ?? "Back to competition"}
-        </Link>
-      </nav>
+      <Breadcrumbs
+        items={[
+          { label: "Competitions", to: "/comp" },
+          { label: comp?.name ?? "Competition", to: `/comp/${compId}` },
+        ]}
+      />
 
-      <h1 className="mt-2 text-2xl font-bold">{task.name}</h1>
-      <p className="text-sm text-muted-foreground">
-        <span>
-          {formatTaskDate(task.task_date, {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
-        </span>{" "}
-        <span>{task.xctsk ? "Task defined" : "No task defined"}</span>
-      </p>
-      <ul className="mt-1 text-sm text-muted-foreground">
-        {task.pilot_classes.map((cls) => (
-          <li key={cls}>{cls}</li>
-        ))}
-      </ul>
-      {replayAvailable ? (
-        <p className="mt-2 text-sm">
-          <a
-            className="underline underline-offset-4"
-            href={`/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}`}
-            title="Open the 3D flight replay for this task"
+      {/* Header row mirrors CompDetail: title/meta left, admin Settings top right. */}
+      <div className="mt-2 flex flex-wrap items-start gap-x-4 gap-y-2">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold">{task.name}</h1>
+          <p className="text-sm text-muted-foreground">
+            <span>
+              {formatTaskDate(task.task_date, {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+            </span>{" "}
+            <span>{task.xctsk ? "Task defined" : "No task defined"}</span>
+          </p>
+          <ul className="mt-1 text-sm text-muted-foreground">
+            {task.pilot_classes.map((cls) => (
+              <li key={cls}>{cls}</li>
+            ))}
+          </ul>
+        </div>
+        {isAdmin && comp ? (
+          <Button type="button" variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+            Settings
+          </Button>
+        ) : null}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {task.xctsk ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            title="Download the task file for your flight instrument"
+            onClick={() => downloadXctskFile(task.name, task.xctsk!)}
+          >
+            Download .xctsk
+          </Button>
+        ) : null}
+        {task.xctsk ? (
+          <Button nativeButton={false}
+            variant="outline"
+            size="sm"
+            render={
+              <a
+                href={`/analysis.html?compId=${encodeURIComponent(compId)}&taskId=${encodeURIComponent(taskId)}`}
+                title="Open this task on the analysis map"
+              />
+            }
+          >
+            View on map
+          </Button>
+        ) : null}
+        {replayAvailable ? (
+          <Button nativeButton={false}
+            variant="outline"
+            size="sm"
+            render={
+              <a
+                href={`/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}`}
+                title="Open the 3D flight replay for this task"
+              />
+            }
           >
             3D replay
-          </a>
-        </p>
-      ) : null}
-      {isAdmin && comp ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="mt-2"
-          onClick={() => setEditOpen(true)}
-        >
-          Settings
-        </Button>
-      ) : null}
+          </Button>
+        ) : null}
+      </div>
 
       <TurnpointsSection
         xctsk={task.xctsk}
@@ -274,9 +293,9 @@ export function TaskDetail() {
           xctsk={task.xctsk}
           openDistance={comp.scoring_format === "open_distance"}
           timezone={comp.timezone ?? null}
-          onClose={() => setRouteOpen(false)}
+          onClose={closeRouteEditor}
           onSaved={() => {
-            setRouteOpen(false);
+            closeRouteEditor();
             setRefresh((n) => n + 1);
             setScoresRefresh((n) => n + 1);
           }}
@@ -308,7 +327,16 @@ function TurnpointsSection({
   if (!xctsk && !isAdmin) return null;
   return (
     <section>
-      <h2 className="mt-8 text-lg font-bold">Turnpoints</h2>
+      <SectionHeader
+        title="Turnpoints"
+        action={
+          isAdmin ? (
+            <Button type="button" variant="outline" size="sm" onClick={onEditRoute}>
+              {xctsk && xctsk.turnpoints.length > 0 ? "Edit route…" : "Create route…"}
+            </Button>
+          ) : null
+        }
+      />
       {xctsk && xctsk.turnpoints.length > 0 ? (
         <Table className="mt-2">
           <TableHeader>
@@ -337,13 +365,6 @@ function TurnpointsSection({
         <p className="mt-2 text-sm text-muted-foreground">
           {startConfigSummary(xctsk.sss, { timeZone: timezone, taskDate })}
         </p>
-      ) : null}
-      {isAdmin ? (
-        <div className="mt-2 flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={onEditRoute}>
-            {xctsk && xctsk.turnpoints.length > 0 ? "Edit route…" : "Create route…"}
-          </Button>
-        </div>
       ) : null}
     </section>
   );
