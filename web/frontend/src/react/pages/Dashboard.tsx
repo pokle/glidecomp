@@ -161,14 +161,25 @@ export function Dashboard() {
         value={tab}
         onValueChange={(value) => setTab(value as "tracks" | "tasks")}
       >
-        <TabsList>
-          <TabsTrigger value="tracks">
-            Tracks {tracks.length > 0 ? `(${tracks.length})` : ""}
-          </TabsTrigger>
-          <TabsTrigger value="tasks">
-            Tasks {tasks.length > 0 ? `(${tasks.length})` : ""}
-          </TabsTrigger>
-        </TabsList>
+        {/* No page header here, so the add-files action rides the tab row,
+            right-aligned like the section actions on the comp/task pages. */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <TabsList>
+            <TabsTrigger value="tracks">
+              Tracks {tracks.length > 0 ? `(${tracks.length})` : ""}
+            </TabsTrigger>
+            <TabsTrigger value="tasks">
+              Tasks {tasks.length > 0 ? `(${tasks.length})` : ""}
+            </TabsTrigger>
+          </TabsList>
+          <div className="ml-auto">
+            {tab === "tracks" ? (
+              <AddFilesButton accept=".igc" label="Add .igc track log" onFiles={handleFiles} />
+            ) : (
+              <AddFilesButton accept=".xctsk" label="Add .xctsk task" onFiles={handleFiles} />
+            )}
+          </div>
+        </div>
 
         <TabsContent value="tracks">
           {tracks.length === 0 ? (
@@ -240,7 +251,9 @@ export function Dashboard() {
               ))}
             </ul>
           )}
-          <AddFilesButton accept=".igc" label="Add .igc track log" onFiles={handleFiles} />
+          <p className="mt-3 text-sm text-muted-foreground">
+            You can also drag and drop .igc files anywhere on this page.
+          </p>
         </TabsContent>
 
         <TabsContent value="tasks">
@@ -314,7 +327,9 @@ export function Dashboard() {
               ))}
             </ul>
           )}
-          <AddFilesButton accept=".xctsk" label="Add .xctsk task" onFiles={handleFiles} />
+          <p className="mt-3 text-sm text-muted-foreground">
+            You can also drag and drop .xctsk files anywhere on this page.
+          </p>
         </TabsContent>
       </Tabs>
 
@@ -333,7 +348,7 @@ export function Dashboard() {
   );
 }
 
-/** "Add …" button below the list, with the drag-and-drop hint beside it. */
+/** "Add …" button on the tab row; the drag-and-drop hint lives below each list. */
 function AddFilesButton({
   accept,
   label,
@@ -345,7 +360,7 @@ function AddFilesButton({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-3">
+    <>
       <input
         ref={inputRef}
         type="file"
@@ -362,10 +377,7 @@ function AddFilesButton({
       <Button type="button" onClick={() => inputRef.current?.click()}>
         {label}
       </Button>
-      <span className="text-sm text-muted-foreground">
-        …or drag and drop {accept} files anywhere on this page
-      </span>
-    </div>
+    </>
   );
 }
 
