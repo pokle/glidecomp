@@ -87,28 +87,29 @@ export function TrackSection({
 
   return (
     <section>
-      <h2 className="mt-8 text-lg font-bold">
-        Tracks{" "}
-        <span className="text-sm font-normal text-muted-foreground">
-          {tracks.length} track{tracks.length !== 1 ? "s" : ""}
-        </span>
-        {isClosed ? (
-          <span className="text-sm font-normal text-muted-foreground"> (Closed)</span>
-        ) : null}
+      {/* Header row: the section's main action sits top right, like the
+          Settings / Edit route buttons. */}
+      <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <h2 className="min-w-0 flex-1 text-lg font-bold">
+          Tracks{" "}
+          <span className="text-sm font-normal text-muted-foreground">
+            {tracks.length} track{tracks.length !== 1 ? "s" : ""}
+          </span>
+          {isClosed ? (
+            <span className="text-sm font-normal text-muted-foreground"> (Closed)</span>
+          ) : null}
+        </h2>
         {isAuthenticated && !isClosed ? (
-          <>
-            {" "}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setUploadOpen(true)}
-            >
-              Submit track
-            </Button>
-          </>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setUploadOpen(true)}
+          >
+            Submit track
+          </Button>
         ) : null}
-      </h2>
+      </div>
 
       {tracks.length === 0 ? (
         <p className="mt-2 text-muted-foreground">No tracks uploaded yet</p>
