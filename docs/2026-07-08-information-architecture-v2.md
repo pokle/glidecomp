@@ -95,8 +95,11 @@ Maximum depth anywhere: 3. No page exists whose only purpose is navigation
 About · Scoring · Privacy & Terms · GitHub · YouTube · build sha.
 
 **Exempt from tabs/footer** (full-screen tools + focused flows):
-- `/analysis.html` and `/replay` — instead each gains a small persistent
-  **"← GlideComp"** link (today they have *no* way back at all).
+- `/analysis.html` and `/replay` — instead each carries a **top-center
+  breadcrumb bar** (`GlideComp › comp › task` when task-scoped, bare
+  `GlideComp` otherwise). Real links, so a shared link opened in a fresh
+  tab — where the browser back button is useless — still leads into the
+  app; centered because both tools keep their controls in the corners.
 - `/onboarding` — stays chrome-free as today.
 
 ## 4. Page-by-page
@@ -222,7 +225,7 @@ Link list updated to: Competitions, My Flights, How scoring works, Home.
 | Task page | Reordered (route → tracks → status → scores); gains Download .xctsk |
 | `/scores` | 301 → `/comp/:id#scores` |
 | My Flights | #277 changes (list first, confirm on remove, add-button + hint, storage last) |
-| Analysis, replay | Gain "← GlideComp" back link |
+| Analysis, replay | Gain a top-center breadcrumb bar (GlideComp › comp › task) |
 
 Explicitly **not** changing: any permission or API behaviour, the comp/task
 settings dialogs, route editor, penalties, pilot editor, pilot status rules,
@@ -266,11 +269,47 @@ typing. Cheap, offline-generatable, purely presentational.
 1. Hero fallback when a comp has multiple classes flying *different* tasks
    on the same day (Corryong scores as open + floater): show two hero cards,
    or one hero per class tab? Suggest: one hero listing both tasks for today.
+   *(Resolved in implementation: one hero listing every task on that date.)*
 2. Should "Results by task" default to today's/latest task (matching the
-   hero) rather than task 1? Suggest: yes.
+   hero) rather than task 1? Suggest: yes. *(Resolved: defaults to the hero
+   task.)*
 3. Does the comp hub need in-page section anchors in the header (Tasks ·
    Scores · Pilots · Activity) once everything is inline? Suggest: yes on
-   mobile, where the page gets long.
+   mobile, where the page gets long. *(Resolved: anchor bar on all sizes.)*
 4. `/scores` 301 vs keeping it as an SPA power view — this doc says retire;
    confirm nothing links to it externally that needs preserving beyond the
-   redirect.
+   redirect. *(Implemented as a client redirect to `/comp/:id#scores`.)*
+
+## 10. Design language settled during the polish round (implemented)
+
+Conventions that emerged while implementing this IA, now encoded as
+components so future work stays consistent:
+
+- **Section actions sit right-aligned on the section header row** —
+  `SectionHeader` (`src/react/components/SectionHeader.tsx`): title owns the
+  left edge (scan column), the section's manage action sits top right.
+  Applied to comp/task Settings, Tasks → New Task, Turnpoints → Edit route…,
+  Pilots → Edit, Tracks → Submit track, and My Flights' add-file buttons
+  (which ride the tab-switcher row, as that page has no section headers).
+  Inline CTA clusters (the hero's action row) are content, not section
+  management — they stay left-aligned.
+- **Breadcrumbs are parents-only** — `Breadcrumbs`
+  (`src/react/components/Breadcrumbs.tsx`): the current page is never a
+  crumb because the H1 directly below is the current-page marker (GOV.UK
+  "up links" style). Same label for the same destination everywhere
+  ("Competitions"). The pilot score page carries the full
+  `Competitions › comp › task` trail; the full-screen tools carry the
+  top-center bar described in §3.
+- **One Submit track dialog everywhere** (`comp/SubmitTrackDialog.tsx`):
+  every Submit track button opens the same dialog; the "Submitting for" row
+  is always visible (locked to "Myself" for plain pilots, registered-pilot
+  dropdown for admins/open-upload comps), and choosing an IGC surfaces the
+  pilot name from the file header, auto-selecting a unique match — visibly,
+  so the user can correct it.
+- **Print**: every major comp-page section (`#tasks #scores #pilots
+  #activity #admins`) starts a fresh page (`break-before-page`) so a printed
+  comp page works as briefing handouts.
+- **Chrome details**: SPA and static headers share a 60px min-height (no
+  jump crossing between them); the static footer clears the viewport-fixed
+  hills background; the hero's "Edit route…" deep-links to the task page
+  with `#edit-route`, which opens the route editor and clears on close.
