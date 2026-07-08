@@ -211,7 +211,8 @@ function CompDetailView({
         />
       ) : null}
 
-      <section id="tasks" className="scroll-mt-4">
+      {/* break-before-page: when printing, each major section starts a fresh page. */}
+      <section id="tasks" className="scroll-mt-4 break-before-page">
         <h2 className="mt-8 text-lg font-bold">
           Tasks
           {isAdmin ? (
@@ -238,7 +239,7 @@ function CompDetailView({
         defaultTaskId={hero?.tasks.find((t) => t.has_xctsk)?.task_id ?? null}
       />
 
-      <div id="pilots" className="scroll-mt-4">
+      <div id="pilots" className="scroll-mt-4 break-before-page">
         <PilotsSection
           compId={compId}
           compName={comp.name}
@@ -247,11 +248,11 @@ function CompDetailView({
         />
       </div>
 
-      <div id="activity" className="scroll-mt-4">
+      <div id="activity" className="scroll-mt-4 break-before-page">
         <ActivitySection compId={compId} />
       </div>
 
-      <section id="admins" className="scroll-mt-4">
+      <section id="admins" className="scroll-mt-4 break-before-page">
         <h2 className="mt-8 text-lg font-bold">Admins</h2>
         <ul className="mt-2 space-y-1 text-sm">
           {comp.admins.map((admin) => (
