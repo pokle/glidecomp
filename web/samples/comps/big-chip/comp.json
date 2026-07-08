@@ -4,6 +4,7 @@
   "comp_name": "Big Chip (Sample)",
   "category": "hg",
   "scoring_format": "open_distance",
+  "filename_id_field": "civl_id",
   "classes": [
     "open"
   ],
