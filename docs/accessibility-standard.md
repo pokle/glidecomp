@@ -304,8 +304,10 @@ they're closed deliberately rather than rediscovered:
    `Base.astro`.
 2. **No `prefers-reduced-motion` handling** anywhere (§4.4) — cover page
    transitions and the 3D replay camera.
-3. **`aria-current="page"` on the active nav tab** (§6) — the active tab is
-   visual-only (underline) today.
+3. **`aria-current="page"` on the active nav tab, static pages only** (§6) —
+   the SPA gets it free from React Router's `NavLink` (`Shell.tsx`), but the
+   static Astro header (`SiteHeader.astro`) marks the active tab with an
+   underline only.
 4. **Map/replay keyboard parity + text alternatives** (§4.1, §7) — audit needed;
    drag/pointer-only interactions likely fail.
 5. **Live-region coverage** for toasts and the SubmitTrackDialog auto-detect
