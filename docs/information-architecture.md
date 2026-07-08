@@ -1,5 +1,10 @@
 # Information Architecture Plan
 
+> **Superseded** by [Information Architecture v2](2026-07-08-information-architecture-v2.md)
+> (July 2026, implemented): the comp page became the hub, scores moved inline,
+> and navigation collapsed around it. This document is kept for the history and
+> for the principles v2 carried forward (§7 there).
+
 Date: 2026-04-05
 
 ## Current Problems
