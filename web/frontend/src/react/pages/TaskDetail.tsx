@@ -191,23 +191,33 @@ export function TaskDetail() {
         </Link>
       </nav>
 
-      <h1 className="mt-2 text-2xl font-bold">{task.name}</h1>
-      <p className="text-sm text-muted-foreground">
-        <span>
-          {formatTaskDate(task.task_date, {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
-        </span>{" "}
-        <span>{task.xctsk ? "Task defined" : "No task defined"}</span>
-      </p>
-      <ul className="mt-1 text-sm text-muted-foreground">
-        {task.pilot_classes.map((cls) => (
-          <li key={cls}>{cls}</li>
-        ))}
-      </ul>
+      {/* Header row mirrors CompDetail: title/meta left, admin Settings top right. */}
+      <div className="mt-2 flex flex-wrap items-start gap-x-4 gap-y-2">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold">{task.name}</h1>
+          <p className="text-sm text-muted-foreground">
+            <span>
+              {formatTaskDate(task.task_date, {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+            </span>{" "}
+            <span>{task.xctsk ? "Task defined" : "No task defined"}</span>
+          </p>
+          <ul className="mt-1 text-sm text-muted-foreground">
+            {task.pilot_classes.map((cls) => (
+              <li key={cls}>{cls}</li>
+            ))}
+          </ul>
+        </div>
+        {isAdmin && comp ? (
+          <Button type="button" variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+            Settings
+          </Button>
+        ) : null}
+      </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {task.xctsk ? (
           <Button
@@ -246,11 +256,6 @@ export function TaskDetail() {
             }
           >
             3D replay
-          </Button>
-        ) : null}
-        {isAdmin && comp ? (
-          <Button type="button" variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-            Settings
           </Button>
         ) : null}
       </div>
