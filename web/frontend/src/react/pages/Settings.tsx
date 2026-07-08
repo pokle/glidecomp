@@ -76,8 +76,8 @@ export function Settings() {
   return (
     <section className="mx-auto flex max-w-3xl flex-col gap-6">
       <h1 className="text-2xl font-bold">Settings</h1>
-      <AppearanceSection />
       <ProfileSection />
+      <AppearanceSection />
       <ApiKeysSection />
       {isSuperAdmin && previewRole === "actual" ? <SuperadminSection /> : null}
       <DangerZoneSection />
