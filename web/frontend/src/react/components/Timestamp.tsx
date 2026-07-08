@@ -9,7 +9,7 @@
  * Use this everywhere an absolute instant is shown (e.g. "Scores computed …")
  * so the format and the click-to-switch affordance stay consistent.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/react/lib/utils";
 import { buildZoneCycle } from "../lib/time";
 
@@ -25,8 +25,12 @@ export function Timestamp({
   className?: string;
 }) {
   const [index, setIndex] = useState(0);
+  // The viewer's local zone is only knowable in the browser; add it after
+  // mount so the server and first client render agree (no hydration mismatch).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const date = new Date(value);
-  const choices = buildZoneCycle(date, compTimezone);
+  const choices = buildZoneCycle(date, compTimezone, mounted);
   if (choices.length === 0) return null;
 
   const current = choices[index % choices.length];

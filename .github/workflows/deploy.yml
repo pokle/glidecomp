@@ -215,6 +215,39 @@ jobs:
           if [ "$fail" = "0" ]; then echo "Good — SPA routes serve ${EXPECTED_SHA}"; fi
           exit $fail
 
+      - name: Smoke test — SSR public pages render content (no JS)
+        run: |
+          DEPLOY_URL="${{ steps.pages-deploy.outputs.deployment-url }}"
+          fail=0
+
+          # robots.txt + the dynamic sitemap must be served.
+          for path in /robots.txt /sitemap.xml; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "${DEPLOY_URL}${path}")
+            echo "${path} -> ${code}"
+            [ "$code" = "200" ] || { echo "::error::${path} returned ${code}"; fail=1; }
+          done
+
+          # The defining SSR property: a public comp's name is present in the
+          # server HTML of /comp AND its hub — with no JavaScript run.
+          NAME=$(curl -s "${DEPLOY_URL}/api/comp" | jq -r '[.comps[] | select(.test==false)][0].name // empty')
+          CID=$(curl -s "${DEPLOY_URL}/api/comp" | jq -r '[.comps[] | select(.test==false)][0].comp_id // empty')
+          if [ -z "$NAME" ] || [ -z "$CID" ]; then
+            echo "::warning::No public comp to verify SSR content against — skipping"
+          else
+            echo "Verifying SSR content for '${NAME}' (${CID})"
+            if curl -s "${DEPLOY_URL}/comp" | grep -qF "$NAME"; then
+              echo "Good — /comp server-renders the comp list"
+            else
+              echo "::error::/comp HTML did not contain '${NAME}' — SSR not rendering content"; fail=1
+            fi
+            if curl -s "${DEPLOY_URL}/comp/${CID}" | grep -qF "$NAME"; then
+              echo "Good — /comp/${CID} server-renders the comp hub"
+            else
+              echo "::error::/comp/${CID} HTML did not contain '${NAME}' — hub SSR broken"; fail=1
+            fi
+          fi
+          exit $fail
+
       - name: Smoke test — verify dev-login is NOT accessible
         run: |
           DEPLOY_URL="${{ steps.pages-deploy.outputs.deployment-url }}"

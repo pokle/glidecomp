@@ -14,6 +14,9 @@ interface Props {
 }
 
 const { title, description, active } = Astro.props;
+const metaDescription =
+  description ??
+  "GlideComp analyses hang gliding and paragliding competition tracks: tasks, GAP scoring, and per-pilot score explanations.";
 ---
 
 <!doctype html>
@@ -23,7 +26,12 @@ const { title, description, active } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="/icon.svg" />
     <title>{title}</title>
-    {description && <meta name="description" content={description} />}
+    <meta name="description" content={metaDescription} />
+    <meta property="og:site_name" content="GlideComp" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={metaDescription} />
+    <meta name="twitter:card" content="summary" />
     <script is:inline>
       // Follow the OS colour scheme via a `.dark` class on <html>, matching the
       // SPA. Inline + in <head> so it runs before paint (no flash).

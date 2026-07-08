@@ -1,0 +1,11 @@
+# GlideComp — public competition pages are crawlable; auth-gated and API
+# surfaces are not.
+User-agent: *
+Allow: /
+Disallow: /u/
+Disallow: /settings
+Disallow: /onboarding
+Disallow: /admin/
+Disallow: /api/
+
+Sitemap: https://glidecomp.com/sitemap.xml
