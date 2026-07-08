@@ -8,7 +8,8 @@
  * Loads the full Corryong Cup 2026 competition — all three tasks and every
  * pilot track — as a single comp. Each task lives in its own source directory
  * (web/samples/comps/corryong-cup-2026-t{1,2,3}); a pilot who flew several
- * tasks gets one comp_pilot row (keyed by CIVL id) with a task_track per task.
+ * tasks gets one comp_pilot row (keyed by their federation id, see
+ * `filename_id_field` below) with a task_track per task.
  *
  * Idempotent: the comp is identified by name (SAMPLE_COMP_NAME). On a rerun the
  * existing comp's tasks / pilots / tracks (D1) and IGC objects (R2) are wiped
@@ -127,11 +128,11 @@ function q(v: string | number | null): string {
 
 // --- read the sample source ------------------------------------------------
 
-/** Pull a CIVL-ish id out of `lamb_18239_050126.igc` → `18239`, else null. */
-function civlFromFilename(file: string): string | null {
+/** Pull the pilot's federation id out of `lamb_18239_050126.igc` → `18239`, else null. */
+function idFromFilename(file: string): string | null {
   // Drop the trailing _DDMMYY date stamp first so it can't be mistaken for an
   // id when the real one is too short to match (e.g. `rigg_0_050125.igc`,
-  // whose CIVL id "0" means none — without this the pilot got a different
+  // whose id "0" means none — without this the pilot got a different
   // fake id per task date and split into one comp_pilot row per task).
   const parts = basename(file, '.igc').replace(/_\d{6}$/, '').split('_');
   return parts.find((p) => /^\d{3,}$/.test(p)) ?? null;
@@ -139,7 +140,7 @@ function civlFromFilename(file: string): string | null {
 
 interface SamplePilot {
   name: string;
-  civl: string | null;
+  id: string | null;
   gz: Buffer;
   fileSize: number;
 }
@@ -169,6 +170,14 @@ interface CompManifest {
   comp_name?: string;
   category?: string;
   scoring_format?: 'gap' | 'open_distance';
+  /**
+   * Which comp_pilot column the numeric id embedded in the IGC filenames
+   * (`lamb_18239_050126.igc`) belongs to. AirScore's exports for the bundled
+   * Australian comps stamp the pilot's SAFA member number there, so 'safa_id'
+   * is the default; the synthetic Big Chip comp names its files by its
+   * fabricated CIVL ids and sets 'civl_id'.
+   */
+  filename_id_field?: 'safa_id' | 'civl_id';
 }
 
 /**
@@ -197,7 +206,7 @@ function readTask(spec: TaskSpec, tzOut: { value?: string }): SampleTask {
     if (igc.fixes.length === 0) continue;
     const name = (igc.header.pilot || basename(file, '.igc')).replace(/\s+/g, ' ').trim();
     const gz = gzipSync(Buffer.from(text, 'utf-8'), { level: 9 });
-    pilots.push({ name, civl: civlFromFilename(file), gz, fileSize: gz.byteLength });
+    pilots.push({ name, id: idFromFilename(file), gz, fileSize: gz.byteLength });
   }
 
   return { ...spec, xctsk, pilots };
@@ -211,8 +220,8 @@ function readTask(spec: TaskSpec, tzOut: { value?: string }): SampleTask {
  * two classes (e.g. floater one day, open the next) gets one comp_pilot row per
  * class; within a class, all their tasks share a single row.
  */
-function pilotKey(pilotClass: string, civl: string | null, name: string): string {
-  return `${pilotClass} ${civl ? `civl:${civl}` : `name:${name}`}`;
+function pilotKey(pilotClass: string, id: string | null, name: string): string {
+  return `${pilotClass} ${id ? `id:${id}` : `name:${name}`}`;
 }
 
 /** "open" → "Open", so task names read "Task 1 (Open)". */
@@ -233,9 +242,14 @@ function main(): void {
   const compName = manifest.comp_name ?? SAMPLE_COMP_NAME;
   const category = manifest.category ?? 'hg';
   const scoringFormat = manifest.scoring_format ?? 'gap';
+  // The numeric id in each IGC filename is a SAFA member number for the bundled
+  // Australian AirScore comps; Big Chip overrides this to 'civl_id'. Map it to
+  // the matching comp_pilot column.
+  const idField = manifest.filename_id_field ?? 'safa_id';
+  const idColumn = `registered_pilot_${idField}`;
   console.log(`Seeding "${compName}" (${SLUG}) into ${where}…`);
   console.log(`  classes: ${manifest.classes.join(', ')}`);
-  console.log(`  category: ${category}, scoring: ${scoringFormat}`);
+  console.log(`  category: ${category}, scoring: ${scoringFormat}, filename id: ${idField}`);
 
   // Read every task, sharing one resolved timezone across the comp.
   const tzOut: { value?: string } = {};
@@ -247,14 +261,14 @@ function main(): void {
   }
   console.log(`  timezone ${tzOut.value ?? 'unresolved'}`);
 
-  // One comp_pilot row per (class, pilot). First-seen name/civl wins within a key.
-  interface RegPilot { name: string; civl: string | null; pilotClass: string }
+  // One comp_pilot row per (class, pilot). First-seen name/id wins within a key.
+  interface RegPilot { name: string; id: string | null; pilotClass: string }
   const registry = new Map<string, RegPilot>();
   for (const t of tasks) {
     for (const p of t.pilots) {
-      const key = pilotKey(t.pilotClass, p.civl, p.name);
+      const key = pilotKey(t.pilotClass, p.id, p.name);
       if (!registry.has(key)) {
-        registry.set(key, { name: p.name, civl: p.civl, pilotClass: t.pilotClass });
+        registry.set(key, { name: p.name, id: p.id, pilotClass: t.pilotClass });
       }
     }
   }
@@ -308,20 +322,20 @@ function main(): void {
     registrations
       .map(
         (p) =>
-          `INSERT INTO comp_pilot (comp_id, registered_pilot_name, registered_pilot_civl_id, pilot_class)
-           VALUES (${compId}, ${q(p.name)}, ${q(p.civl)}, ${q(p.pilotClass)});`,
+          `INSERT INTO comp_pilot (comp_id, registered_pilot_name, ${idColumn}, pilot_class)
+           VALUES (${compId}, ${q(p.name)}, ${q(p.id)}, ${q(p.pilotClass)});`,
       )
       .join('\n'),
   );
   const cpRows = rows(
-    `SELECT comp_pilot_id, registered_pilot_name, registered_pilot_civl_id, pilot_class
+    `SELECT comp_pilot_id, registered_pilot_name, ${idColumn} AS id, pilot_class
        FROM comp_pilot WHERE comp_id = ${compId};`,
   );
-  // Re-derive the same (class, civl-or-name) key from the read-back rows.
+  // Re-derive the same (class, id-or-name) key from the read-back rows.
   const cpByKey = new Map(
     cpRows.map((r) => {
-      const civl = r.registered_pilot_civl_id ? String(r.registered_pilot_civl_id) : null;
-      const key = pilotKey(String(r.pilot_class), civl, String(r.registered_pilot_name));
+      const id = r.id ? String(r.id) : null;
+      const key = pilotKey(String(r.pilot_class), id, String(r.registered_pilot_name));
       return [key, Number(r.comp_pilot_id)];
     }),
   );
@@ -348,7 +362,7 @@ function main(): void {
     const trackInserts: string[] = [];
     let n = 0;
     for (const p of t.pilots) {
-      const compPilotId = cpByKey.get(pilotKey(t.pilotClass, p.civl, p.name));
+      const compPilotId = cpByKey.get(pilotKey(t.pilotClass, p.id, p.name));
       if (compPilotId === undefined) continue;
       const key = `c/${compId}/t/${taskId}/${compPilotId}.igc`;
       const gzFile = join(tmpDir, `${taskId}-${compPilotId}.igc.gz`);

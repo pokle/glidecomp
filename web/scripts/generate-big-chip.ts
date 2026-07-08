@@ -431,6 +431,9 @@ function main(): void {
     comp_name: 'Big Chip (Sample)',
     category: 'hg',
     scoring_format: 'open_distance',
+    // Big Chip's IGC filenames carry its fabricated CIVL ids, not SAFA numbers
+    // (the default the seed script assumes for the real AirScore comps).
+    filename_id_field: 'civl_id',
     classes: ['open'],
     location: LAUNCH,
     synthetic: true,
