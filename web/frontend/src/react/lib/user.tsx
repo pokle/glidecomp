@@ -1,17 +1,68 @@
 /**
  * Current-user context: one getCurrentUser() fetch per page load, shared by
  * the nav and every page (mirrors what initNav() returned in the vanilla app).
+ *
+ * Also hosts the superadmin "Preview as" support: a site super admin can view
+ * the app as a signed-out visitor, a plain pilot, or a comp admin without
+ * changing their real session. Presentation-only — the API still authenticates
+ * the real superadmin, so nothing here grants or removes any actual access.
  */
 import { createContext, useContext, useEffect, useState } from "react";
 import { authClient, getCurrentUser, type AuthUser } from "../../auth/client";
 
+/**
+ * "actual" is no preview (render the real role). "admin" renders comp-admin
+ * controls on every comp (the API lets a superadmin act on any comp, so the
+ * buttons work); "pilot" hides them everywhere; "out" presents the user as
+ * signed out.
+ */
+export type PreviewRole = "actual" | "admin" | "pilot" | "out";
+
+const PREVIEW_KEY = "glidecomp:preview-role";
+
+function readPreviewRole(): PreviewRole {
+  try {
+    const v = sessionStorage.getItem(PREVIEW_KEY);
+    return v === "admin" || v === "pilot" || v === "out" ? v : "actual";
+  } catch {
+    return "actual";
+  }
+}
+
+function writePreviewRole(role: PreviewRole) {
+  try {
+    if (role === "actual") sessionStorage.removeItem(PREVIEW_KEY);
+    else sessionStorage.setItem(PREVIEW_KEY, role);
+  } catch {
+    // Session storage unavailable — preview just won't persist.
+  }
+}
+
 interface UserState {
+  /** The user as presented (null while previewing "signed out"). */
   user: AuthUser | null;
   /** True until the /api/auth/me round trip settles. */
   loading: boolean;
+  /**
+   * True when a signed-out view is only a preview — pages that normally
+   * redirect straight into OAuth should show their sign-in prompt instead.
+   */
+  previewingSignedOut: boolean;
+  /** Active preview role ("actual" = none). */
+  previewRole: PreviewRole;
+  /** True for real site super admins — reveals the "Preview as" pill. */
+  isSuperAdmin: boolean;
+  setPreviewRole: (role: PreviewRole) => void;
 }
 
-const UserContext = createContext<UserState>({ user: null, loading: true });
+const UserContext = createContext<UserState>({
+  user: null,
+  loading: true,
+  previewingSignedOut: false,
+  previewRole: "actual",
+  isSuperAdmin: false,
+  setPreviewRole: () => {},
+});
 
 /**
  * One /api/auth/me round trip per page load, shared across StrictMode's
@@ -25,26 +76,81 @@ function fetchCurrentUserOnce(): Promise<AuthUser | null> {
   return mePromise;
 }
 
+/** One whoami round trip per page load, only made once a user is known. */
+let whoamiPromise: Promise<boolean> | null = null;
+function fetchIsSuperAdminOnce(): Promise<boolean> {
+  whoamiPromise ??= fetch("/api/admin/whoami", { credentials: "include" })
+    .then((res) => (res.ok ? res.json() : { is_super_admin: false }))
+    .then((data) => (data as { is_super_admin?: boolean }).is_super_admin === true)
+    .catch(() => false);
+  return whoamiPromise;
+}
+
 export function useUser(): UserState {
   return useContext(UserContext);
 }
 
+/**
+ * Applies the preview role to a real comp-admin check. Call it wherever the
+ * UI decides whether to show admin controls.
+ */
+export function useAdminView(realIsAdmin: boolean): boolean {
+  const { previewRole, isSuperAdmin } = useUser();
+  if (!isSuperAdmin || previewRole === "actual") return realIsAdmin;
+  return previewRole === "admin";
+}
+
 export function signInWithGoogle() {
-  return authClient.signIn.social({ provider: "google", callbackURL: "/u/me" });
+  // While a superadmin previews a signed-out/pilot view, "Sign in" means
+  // "back to my real self", not a second OAuth round trip.
+  if (readPreviewRole() !== "actual") {
+    writePreviewRole("actual");
+    window.location.reload();
+    return Promise.resolve();
+  }
+  return authClient.signIn.social({ provider: "google", callbackURL: "/comp" });
 }
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<UserState>({ user: null, loading: true });
+  const [me, setMe] = useState<{ user: AuthUser | null; loading: boolean }>({
+    user: null,
+    loading: true,
+  });
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [previewRole, setPreviewRoleState] = useState<PreviewRole>(readPreviewRole);
 
   useEffect(() => {
     let cancelled = false;
     fetchCurrentUserOnce().then((user) => {
-      if (!cancelled) setState({ user, loading: false });
+      if (cancelled) return;
+      setMe({ user, loading: false });
+      if (user) {
+        fetchIsSuperAdminOnce().then((isSuper) => {
+          if (!cancelled) setIsSuperAdmin(isSuper);
+        });
+      }
     });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  function setPreviewRole(role: PreviewRole) {
+    writePreviewRole(role);
+    setPreviewRoleState(role);
+  }
+
+  // The preview only ever *reduces* what a real superadmin sees; for
+  // everyone else it is inert (and the pill that sets it never renders).
+  const previewing = isSuperAdmin && previewRole !== "actual";
+  const state: UserState = {
+    user: previewing && previewRole === "out" ? null : me.user,
+    loading: me.loading,
+    previewingSignedOut: previewing && previewRole === "out",
+    previewRole: previewing ? previewRole : "actual",
+    isSuperAdmin,
+    setPreviewRole,
+  };
 
   return <UserContext.Provider value={state}>{children}</UserContext.Provider>;
 }

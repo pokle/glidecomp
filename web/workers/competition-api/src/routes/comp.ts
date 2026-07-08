@@ -289,6 +289,22 @@ export const compRoutes = new Hono<HonoEnv>()
         .all();
     }
 
+    // Task date range per comp — the list shows when a comp *runs* (first
+    // task to last task), not when its row was created.
+    const taskDates = await c.env.DB.prepare(
+      `SELECT comp_id, MIN(task_date) AS first_task_date, MAX(task_date) AS last_task_date
+       FROM task GROUP BY comp_id`
+    ).all();
+    const datesByComp = new Map(
+      taskDates.results.map((r) => [
+        r.comp_id as number,
+        {
+          first_task_date: r.first_task_date as string,
+          last_task_date: r.last_task_date as string,
+        },
+      ])
+    );
+
     // Merge: admin comps first, then public (deduped). A super admin
     // administers every comp, so mark the public ones as admin too.
     const superAdmin = isSuperAdmin(user);
@@ -304,6 +320,8 @@ export const compRoutes = new Hono<HonoEnv>()
         test: !!(r.test as number),
         open_igc_upload: !!(r.open_igc_upload as number),
         pilot_statuses: parsePilotStatuses(r.pilot_statuses),
+        first_task_date: datesByComp.get(r.comp_id as number)?.first_task_date ?? null,
+        last_task_date: datesByComp.get(r.comp_id as number)?.last_task_date ?? null,
       })),
       ...publicComps.results
         .filter((r) => !adminIds.has(r.comp_id as number))
@@ -315,6 +333,8 @@ export const compRoutes = new Hono<HonoEnv>()
           test: !!(r.test as number),
           open_igc_upload: !!(r.open_igc_upload as number),
           pilot_statuses: parsePilotStatuses(r.pilot_statuses),
+          first_task_date: datesByComp.get(r.comp_id as number)?.first_task_date ?? null,
+          last_task_date: datesByComp.get(r.comp_id as number)?.last_task_date ?? null,
         })),
     ];
 

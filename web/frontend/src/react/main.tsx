@@ -43,10 +43,10 @@ function NotFound() {
       </p>
       <ul className="flex flex-col gap-2 text-sm">
         {/* Home and Scoring are static (Astro) pages — full navigation. */}
-        <li><a href="/" className={linkClass}>Home</a></li>
         <li><Link to="/comp" className={linkClass}>Competitions</Link></li>
         <li><Link to="/u/me" className={linkClass}>My Flights</Link></li>
         <li><a href="/scoring" className={linkClass}>How scoring works</a></li>
+        <li><a href="/" className={linkClass}>Home</a></li>
       </ul>
     </main>
   );

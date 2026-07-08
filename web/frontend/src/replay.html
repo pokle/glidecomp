@@ -162,6 +162,12 @@
     <button id="menuToggle" aria-label="Open controls" aria-expanded="false" aria-controls="menuPanel"
       class="absolute right-3 top-3 z-50 grid place-items-center w-12 h-12 rounded-full panel text-xl leading-none shadow-xl hover:bg-slate-700/50 transition-colors">☰</button>
 
+    <!-- Back to the app — this full-screen tool has no other way home (IA v2 #277) -->
+    <a href="/" title="Back to GlideComp"
+      class="absolute left-3 top-3 z-50 flex items-center panel rounded-full h-12 px-4 text-sm text-slate-200 shadow-xl hover:bg-slate-700/50 transition-colors">
+      ← GlideComp
+    </a>
+
     <!-- the one scrolling control panel: View · Pilots · Gaggles -->
     <aside id="menuPanel" aria-label="Controls"
       class="fixed right-0 top-0 z-40 h-full w-80 max-w-[90vw] panel overflow-y-auto overscroll-contain shadow-2xl flex flex-col">

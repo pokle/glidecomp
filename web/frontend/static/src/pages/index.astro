@@ -35,6 +35,21 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         </a>
       </p>
 
+      <p class="text-sm">
+        GlideComp scores hanggliding and paragliding competitions and explains every point:
+        upload IGC track logs, define tasks, and get GAP or open-distance scores with a
+        step-by-step explanation any pilot can follow. Competitions and their scores are
+        public — no account needed to follow along.
+      </p>
+
+      <!-- The main job for visitors who aren't signing in: find a competition. -->
+      <a
+        href="/comp"
+        class="inline-flex items-center justify-center self-start rounded-lg border border-transparent bg-primary px-4 py-2.5 text-base font-medium whitespace-nowrap text-primary-foreground transition-all select-none hover:bg-primary/80"
+      >
+        Browse competitions →
+      </a>
+
       <img
         src={`${base}/glidecomp-screenshot.png`}
         alt="GlideComp analysis interface showing a map with flight tracks and waypoints"

@@ -30,6 +30,7 @@ export function ScoresSection({
   refresh,
   timezone,
   onReplayAvailable,
+  embedded = false,
 }: {
   compId: string;
   taskId: string;
@@ -39,6 +40,8 @@ export function ScoresSection({
   timezone: string | null;
   /** Reports whether the task has scored tracks (reveals the 3D replay link). */
   onReplayAvailable: (available: boolean) => void;
+  /** Rendered inside the comp page's Scores tabs — skip the section heading. */
+  embedded?: boolean;
 }) {
   const [state, setState] = useState<ScoresState>({ kind: "loading" });
 
@@ -78,20 +81,22 @@ export function ScoresSection({
 
   return (
     <section>
-      <h2 className="mt-8 text-lg font-bold">
-        Scores
-        {state.kind === "loaded" ? (
-          <>
-            {" "}
-            <Link
-              className="text-sm font-normal underline underline-offset-4"
-              to={`/scores?comp_id=${encodeURIComponent(compId)}`}
-            >
-              Full competition scores →
-            </Link>
-          </>
-        ) : null}
-      </h2>
+      {!embedded ? (
+        <h2 className="mt-8 text-lg font-bold">
+          Scores
+          {state.kind === "loaded" ? (
+            <>
+              {" "}
+              <Link
+                className="text-sm font-normal underline underline-offset-4"
+                to={`/comp/${encodeURIComponent(compId)}#scores`}
+              >
+                Full competition scores →
+              </Link>
+            </>
+          ) : null}
+        </h2>
+      ) : null}
       {state.kind === "loading" ? (
         <p className="mt-2 text-muted-foreground">Loading scores...</p>
       ) : null}

@@ -30,8 +30,9 @@ import {
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
-import { useUser } from "../lib/user";
+import { useAdminView, useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
+import { downloadXctskFile } from "../comp/download-xctsk";
 import { CheckboxField } from "../comp/fields";
 import { PilotStatusSection } from "../comp/PilotStatusSection";
 import { ScoresSection } from "../comp/ScoresSection";
@@ -104,7 +105,9 @@ export function TaskDetail() {
     };
   }, [compId, taskId, refresh]);
 
-  const isAdmin = user != null && comp != null && comp.admins.some((a) => a.email === user.email);
+  const isAdmin = useAdminView(
+    user != null && comp != null && comp.admins.some((a) => a.email === user.email)
+  );
 
   // Determine if the current user can upload on behalf. Admins always can;
   // registered pilots can when comp.open_igc_upload is enabled. Registration
@@ -189,28 +192,52 @@ export function TaskDetail() {
           <li key={cls}>{cls}</li>
         ))}
       </ul>
-      {replayAvailable ? (
-        <p className="mt-2 text-sm">
-          <a
-            className="underline underline-offset-4"
-            href={`/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}`}
-            title="Open the 3D flight replay for this task"
+      <div className="mt-3 flex flex-wrap gap-2">
+        {task.xctsk ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            title="Download the task file for your flight instrument"
+            onClick={() => downloadXctskFile(task.name, task.xctsk!)}
+          >
+            Download .xctsk
+          </Button>
+        ) : null}
+        {task.xctsk ? (
+          <Button nativeButton={false}
+            variant="outline"
+            size="sm"
+            render={
+              <a
+                href={`/analysis.html?compId=${encodeURIComponent(compId)}&taskId=${encodeURIComponent(taskId)}`}
+                title="Open this task on the analysis map"
+              />
+            }
+          >
+            View on map
+          </Button>
+        ) : null}
+        {replayAvailable ? (
+          <Button nativeButton={false}
+            variant="outline"
+            size="sm"
+            render={
+              <a
+                href={`/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}`}
+                title="Open the 3D flight replay for this task"
+              />
+            }
           >
             3D replay
-          </a>
-        </p>
-      ) : null}
-      {isAdmin && comp ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="mt-2"
-          onClick={() => setEditOpen(true)}
-        >
-          Settings
-        </Button>
-      ) : null}
+          </Button>
+        ) : null}
+        {isAdmin && comp ? (
+          <Button type="button" variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+            Settings
+          </Button>
+        ) : null}
+      </div>
 
       <TurnpointsSection
         xctsk={task.xctsk}

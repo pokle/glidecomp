@@ -28,7 +28,7 @@ const MAX_USER_BYTES = 200 * 1024 * 1024;
 
 export function Dashboard() {
   const { username } = useParams<{ username: string }>();
-  const { user, loading } = useUser();
+  const { user, loading, previewingSignedOut } = useUser();
   const navigate = useNavigate();
   const confirm = useConfirm();
 
@@ -45,12 +45,13 @@ export function Dashboard() {
   }, []);
 
   // Auth guards mirror the vanilla dashboard: anonymous → sign-in redirect,
-  // no username → onboarding, /u/me → the user's own page.
+  // no username → onboarding, /u/me → the user's own page. A superadmin
+  // previewing the signed-out view gets the sign-in card instead of OAuth.
   useEffect(() => {
-    document.title = "GlideComp - Dashboard";
+    document.title = "GlideComp - My Flights";
     if (loading) return;
     if (!user) {
-      signInWithGoogle();
+      if (!previewingSignedOut) signInWithGoogle();
       return;
     }
     if (!user.username) {
@@ -66,7 +67,7 @@ export function Dashboard() {
       await refreshLists();
       setReady(true);
     })();
-  }, [user, loading, username, navigate, refreshLists]);
+  }, [user, loading, previewingSignedOut, username, navigate, refreshLists]);
 
   const handleFiles = useCallback(
     async (files: FileList | File[]) => {
@@ -136,24 +137,29 @@ export function Dashboard() {
     };
   }, [ready, handleFiles]);
 
+  if (!user && previewingSignedOut) {
+    return (
+      <section className="mx-auto max-w-md rounded-xl border px-6 py-10 text-center">
+        <h1 className="text-xl font-bold">Sign in to see your flights</h1>
+        <p className="mt-2 text-muted-foreground">
+          Your IGC track logs and tasks live in your account.
+        </p>
+        <Button type="button" className="mt-4" onClick={() => void signInWithGoogle()}>
+          Sign in with Google
+        </Button>
+      </section>
+    );
+  }
+
   if (!ready) return <p role="status">Loading…</p>;
 
   return (
     <section>
-      <h1 className="text-2xl font-bold">My Flights</h1>
-      <p className="text-muted-foreground">Upload and manage your IGC tracks and tasks</p>
-
-      <p role="status" aria-live="polite" className="mt-4 rounded-lg border bg-muted/50 px-3 py-2 text-sm">
-        <strong>Heads up.</strong> Files you upload here are visible to anyone with a link. Share
-        the link to your flight if you want others to see it.
-      </p>
-
-      <StorageUsage tracks={tracks} tasks={tasks} />
+      <NearQuotaWarning tracks={tracks} tasks={tasks} />
 
       <Tabs
         value={tab}
         onValueChange={(value) => setTab(value as "tracks" | "tasks")}
-        className="mt-6"
       >
         <TabsList>
           <TabsTrigger value="tracks">
@@ -165,7 +171,6 @@ export function Dashboard() {
         </TabsList>
 
         <TabsContent value="tracks">
-          <UploadZone accept=".igc" hint=".igc" onFiles={handleFiles} />
           {tracks.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
               <p className="font-medium">No flight tracks yet</p>
@@ -188,6 +193,16 @@ export function Dashboard() {
                     {relativeTime(track.lastAccessedAt)}
                   </span>
                   <span className="ml-auto flex gap-2">
+                    <Button nativeButton={false}
+                      variant="outline"
+                      size="sm"
+                      title="View on the analysis map"
+                      render={
+                        <a href={`/analysis.html?storedTrack=${encodeURIComponent(track.id)}`} />
+                      }
+                    >
+                      View
+                    </Button>
                     <Button
                       type="button"
                       variant="outline"
@@ -207,6 +222,13 @@ export function Dashboard() {
                       size="sm"
                       title="Remove track"
                       onClick={async () => {
+                        const ok = await confirm({
+                          title: "Remove this flight?",
+                          message: `${track.name} will be deleted from your storage. Tracks already submitted to a competition stay with the competition.`,
+                          confirmLabel: "Remove",
+                          destructive: true,
+                        });
+                        if (!ok) return;
                         await storage.deleteTrack(track.id);
                         await refreshLists();
                       }}
@@ -218,10 +240,10 @@ export function Dashboard() {
               ))}
             </ul>
           )}
+          <AddFilesButton accept=".igc" label="Add .igc track log" onFiles={handleFiles} />
         </TabsContent>
 
         <TabsContent value="tasks">
-          <UploadZone accept=".xctsk" hint=".xctsk" onFiles={handleFiles} />
           {tasks.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
               <p className="font-medium">No competition tasks yet</p>
@@ -245,6 +267,16 @@ export function Dashboard() {
                     {relativeTime(task.lastAccessedAt)}
                   </span>
                   <span className="ml-auto flex gap-2">
+                    <Button nativeButton={false}
+                      variant="outline"
+                      size="sm"
+                      title="View on the analysis map"
+                      render={
+                        <a href={`/analysis.html?storedTask=${encodeURIComponent(task.id)}`} />
+                      }
+                    >
+                      View
+                    </Button>
                     <Button
                       type="button"
                       variant="outline"
@@ -264,6 +296,13 @@ export function Dashboard() {
                       size="sm"
                       title="Remove task"
                       onClick={async () => {
+                        const ok = await confirm({
+                          title: "Remove this task?",
+                          message: `${task.name} will be deleted from your storage.`,
+                          confirmLabel: "Remove",
+                          destructive: true,
+                        });
+                        if (!ok) return;
                         await storage.deleteTask(task.id);
                         await refreshLists();
                       }}
@@ -275,8 +314,11 @@ export function Dashboard() {
               ))}
             </ul>
           )}
+          <AddFilesButton accept=".xctsk" label="Add .xctsk task" onFiles={handleFiles} />
         </TabsContent>
       </Tabs>
+
+      <StorageSection tracks={tracks} tasks={tasks} />
 
       {dragOver ? (
         <div
@@ -291,24 +333,25 @@ export function Dashboard() {
   );
 }
 
-function UploadZone({
+/** "Add …" button below the list, with the drag-and-drop hint beside it. */
+function AddFilesButton({
   accept,
-  hint,
+  label,
   onFiles,
 }: {
   accept: string;
-  hint: string;
+  label: string;
   onFiles: (files: FileList) => Promise<void>;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
-    <label className="mt-3 block cursor-pointer rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground transition-colors select-none hover:bg-muted hover:text-foreground">
+    <div className="mt-4 flex flex-wrap items-center gap-3">
       <input
         ref={inputRef}
         type="file"
         accept={accept}
         multiple
-        className="sr-only"
+        hidden
         onChange={async (e) => {
           if (e.target.files?.length) {
             await onFiles(e.target.files);
@@ -316,33 +359,72 @@ function UploadZone({
           }
         }}
       />
-      Drop <strong>{hint}</strong> files here or click to browse
-    </label>
+      <Button type="button" onClick={() => inputRef.current?.click()}>
+        {label}
+      </Button>
+      <span className="text-sm text-muted-foreground">
+        …or drag and drop {accept} files anywhere on this page
+      </span>
+    </div>
   );
 }
 
-function StorageUsage({ tracks, tasks }: { tracks: StoredTrack[]; tasks: StoredTask[] }) {
-  if (tracks.length === 0 && tasks.length === 0) return null;
-
+function storageFraction(tracks: StoredTrack[], tasks: StoredTask[]) {
   const usedBytes = tracks.reduce((sum, t) => sum + (t.fileSize ?? t.content?.length ?? 0), 0);
+  return {
+    usedBytes,
+    fraction: Math.max(
+      usedBytes / MAX_USER_BYTES,
+      tracks.length / MAX_USER_TRACKS,
+      tasks.length / MAX_USER_TASKS
+    ),
+  };
+}
+
+/**
+ * The Storage section lives at the bottom of the page; this banner surfaces
+ * at the top once usage passes 80% so uploads don't fail by surprise.
+ */
+function NearQuotaWarning({ tracks, tasks }: { tracks: StoredTrack[]; tasks: StoredTask[] }) {
+  const { fraction } = storageFraction(tracks, tasks);
+  if (fraction < 0.8) return null;
+  return (
+    <p
+      role="status"
+      className="mb-4 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm"
+    >
+      <strong>Storage almost full</strong> — {Math.round(fraction * 100)}% used. Remove old
+      flights below or new uploads will fail.
+    </p>
+  );
+}
+
+function StorageSection({ tracks, tasks }: { tracks: StoredTrack[]; tasks: StoredTask[] }) {
+  const { usedBytes, fraction } = storageFraction(tracks, tasks);
   const usedMB = usedBytes / (1024 * 1024);
   const limitMB = MAX_USER_BYTES / (1024 * 1024);
   // The byte quota is the one users hit in practice; counts only matter
   // near their (high) limits, so mention them only when relevant.
-  const fraction = Math.max(
-    usedBytes / MAX_USER_BYTES,
-    tracks.length / MAX_USER_TRACKS,
-    tasks.length / MAX_USER_TASKS
-  );
   const parts = [`${usedMB < 10 ? usedMB.toFixed(1) : Math.round(usedMB)} of ${limitMB} MB`];
   if (tracks.length / MAX_USER_TRACKS >= 0.8)
     parts.push(`${tracks.length} of ${MAX_USER_TRACKS} tracks`);
   if (tasks.length / MAX_USER_TASKS >= 0.8) parts.push(`${tasks.length} of ${MAX_USER_TASKS} tasks`);
 
   return (
-    <Progress value={Math.min(100, Math.max(1, fraction * 100))} className="mt-4 max-w-60">
-      <ProgressLabel>Storage</ProgressLabel>
-      <ProgressValue className="ml-auto">{() => parts.join(" · ")}</ProgressValue>
-    </Progress>
+    <section className="mt-10">
+      <h2 className="text-lg font-bold">Storage</h2>
+      {tracks.length > 0 || tasks.length > 0 ? (
+        <Progress value={Math.min(100, Math.max(1, fraction * 100))} className="mt-2 max-w-60">
+          <ProgressLabel className="sr-only">Storage</ProgressLabel>
+          <ProgressValue className="ml-auto">{() => parts.join(" · ")}</ProgressValue>
+        </Progress>
+      ) : (
+        <p className="mt-2 text-sm text-muted-foreground">Nothing stored yet.</p>
+      )}
+      <p className="mt-3 text-sm text-muted-foreground">
+        <strong>Heads up.</strong> Files you upload here are visible to anyone with a link. Share
+        the link to your flight if you want others to see it.
+      </p>
+    </section>
   );
 }

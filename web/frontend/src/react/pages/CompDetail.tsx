@@ -1,10 +1,12 @@
 /**
- * Competition detail page — React port of the comp view in comp-detail.ts.
- * Mutations that used to window.location.reload() instead bump a refresh
- * counter that re-runs the comp fetch.
+ * Competition detail page — the comp "hub" (IA v2 #277): a pilot bookmarks
+ * this one URL and every job is served here or one click away. Today's-task
+ * hero first, then tasks, inline competition scores, pilots, activity,
+ * admins. Mutations that used to window.location.reload() instead bump a
+ * refresh counter that re-runs the comp fetch.
  */
 import { useEffect, useId, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { Button } from "@/react/ui/button";
 import {
   Dialog,
@@ -18,12 +20,19 @@ import { Field, FieldLabel, FieldLegend, FieldSet } from "@/react/ui/field";
 import { Input } from "@/react/ui/input";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
-import { useUser } from "../lib/user";
-import { categoryLabel, formatTaskDate } from "../lib/format";
+import { signInWithGoogle, useAdminView, useUser } from "../lib/user";
+import {
+  categoryLabel,
+  formatTaskDate,
+  formatTaskDateRange,
+  scoringFormatLabel,
+} from "../lib/format";
 import { ActivitySection } from "../comp/ActivitySection";
+import { CompScoresSection } from "../comp/CompScoresSection";
 import { PilotsSection } from "../comp/PilotsSection";
 import { SettingsDialog } from "../comp/SettingsDialog";
 import { CheckboxField } from "../comp/fields";
+import { downloadTaskXctsk } from "../comp/download-xctsk";
 import {
   compressIgc,
   fetchWithRetry,
@@ -34,12 +43,20 @@ import {
 
 export function CompDetail() {
   const { compId } = useParams<{ compId: string }>();
-  const { user } = useUser();
+  const { user, loading } = useUser();
+  const location = useLocation();
   const [comp, setComp] = useState<CompDetailData | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Deep links like /comp/:id#scores (the old /scores page redirects there):
+  // scroll once the sections exist.
+  useEffect(() => {
+    if (!comp || !location.hash) return;
+    document.getElementById(location.hash.slice(1))?.scrollIntoView();
+  }, [comp, location.hash]);
 
   useEffect(() => {
     if (!compId) {
@@ -89,9 +106,59 @@ export function CompDetail() {
     );
   }
 
-  const isAdmin = user != null && comp.admins.some((a) => a.email === user.email);
+  return (
+    <CompDetailView
+      compId={compId}
+      comp={comp}
+      user={user}
+      loading={loading}
+      createOpen={createOpen}
+      setCreateOpen={setCreateOpen}
+      settingsOpen={settingsOpen}
+      setSettingsOpen={setSettingsOpen}
+      setRefresh={setRefresh}
+    />
+  );
+}
+
+function CompDetailView({
+  compId,
+  comp,
+  user,
+  loading,
+  createOpen,
+  setCreateOpen,
+  settingsOpen,
+  setSettingsOpen,
+  setRefresh,
+}: {
+  compId: string;
+  comp: CompDetailData;
+  user: ReturnType<typeof useUser>["user"];
+  loading: boolean;
+  createOpen: boolean;
+  setCreateOpen: (open: boolean) => void;
+  settingsOpen: boolean;
+  setSettingsOpen: (open: boolean) => void;
+  setRefresh: React.Dispatch<React.SetStateAction<number>>;
+}) {
+  const isAdmin = useAdminView(
+    user != null && comp.admins.some((a) => a.email === user.email)
+  );
   const compClosed = isPastCloseDate(comp.close_date);
   const canSubmitTrack = user != null && !compClosed;
+
+  const facts = [
+    categoryLabel(comp.category),
+    scoringFormatLabel(comp.scoring_format),
+    comp.pilot_classes.join(", "),
+  ];
+  const taskDates = comp.tasks.map((t) => t.task_date).sort();
+  if (taskDates.length > 0) {
+    facts.push(formatTaskDateRange(taskDates[0], taskDates[taskDates.length - 1]));
+  }
+
+  const hero = pickHeroTasks(comp.tasks, comp.timezone);
 
   return (
     <div>
@@ -101,36 +168,50 @@ export function CompDetail() {
         </Link>
       </nav>
 
-      <h1 className="mt-2 text-2xl font-bold">{comp.name}</h1>
-      <p className="text-sm text-muted-foreground">
-        <span>{categoryLabel(comp.category)}</span>
-        {comp.test ? <span> Test</span> : null} <span>{comp.pilot_classes.join(", ")}</span>
-      </p>
-      {comp.tasks.some((t) => t.has_xctsk) ? (
-        <p className="mt-2 text-sm">
-          <Link
-            className="underline underline-offset-4"
-            to={`/scores?comp_id=${encodeURIComponent(compId)}`}
+      <div className="mt-2 flex flex-wrap items-start gap-x-4 gap-y-2">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold">{comp.name}</h1>
+          <p className="text-sm text-muted-foreground">
+            {facts.join(" · ")}
+            {comp.test ? " · Test" : null}
+          </p>
+        </div>
+        {isAdmin ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setSettingsOpen(true)}
           >
-            View scores →
-          </Link>
-        </p>
-      ) : null}
-      {isAdmin ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="mt-2"
-          onClick={() => setSettingsOpen(true)}
-        >
-          Settings
-        </Button>
-      ) : null}
+            Settings
+          </Button>
+        ) : null}
+      </div>
+
+      <nav
+        aria-label="Sections"
+        className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground"
+      >
+        <a href="#tasks" className="hover:text-foreground hover:underline underline-offset-4">Tasks</a>
+        <a href="#scores" className="hover:text-foreground hover:underline underline-offset-4">Scores</a>
+        <a href="#pilots" className="hover:text-foreground hover:underline underline-offset-4">Pilots</a>
+        <a href="#activity" className="hover:text-foreground hover:underline underline-offset-4">Activity</a>
+        <a href="#admins" className="hover:text-foreground hover:underline underline-offset-4">Admins</a>
+      </nav>
 
       <ClassWarnings warnings={comp.class_coverage_warnings} tasks={comp.tasks} />
 
-      <section>
+      {hero ? (
+        <TaskHero
+          hero={hero}
+          compId={compId}
+          canSubmitTrack={canSubmitTrack}
+          signedOut={!user && !loading}
+          isAdmin={isAdmin}
+        />
+      ) : null}
+
+      <section id="tasks" className="scroll-mt-4">
         <h2 className="mt-8 text-lg font-bold">
           Tasks
           {isAdmin ? (
@@ -150,16 +231,27 @@ export function CompDetail() {
         <TasksList tasks={comp.tasks} compId={compId} canSubmitTrack={canSubmitTrack} />
       </section>
 
-      <PilotsSection
+      <CompScoresSection
         compId={compId}
-        compName={comp.name}
-        compClasses={comp.pilot_classes}
-        isAdmin={isAdmin}
+        timezone={comp.timezone}
+        tasks={comp.tasks}
+        defaultTaskId={hero?.tasks.find((t) => t.has_xctsk)?.task_id ?? null}
       />
 
-      <ActivitySection compId={compId} />
+      <div id="pilots" className="scroll-mt-4">
+        <PilotsSection
+          compId={compId}
+          compName={comp.name}
+          compClasses={comp.pilot_classes}
+          isAdmin={isAdmin}
+        />
+      </div>
 
-      <section>
+      <div id="activity" className="scroll-mt-4">
+        <ActivitySection compId={compId} />
+      </div>
+
+      <section id="admins" className="scroll-mt-4">
         <h2 className="mt-8 text-lg font-bold">Admins</h2>
         <ul className="mt-2 space-y-1 text-sm">
           {comp.admins.map((admin) => (
@@ -193,6 +285,126 @@ export function CompDetail() {
           }}
         />
       ) : null}
+    </div>
+  );
+}
+
+interface HeroPick {
+  label: string;
+  date: string;
+  tasks: TaskSummary[];
+}
+
+/**
+ * The hero shows the task a pilot needs *right now*: today's task in the
+ * comp's timezone, else the next upcoming one, else the most recent. A day
+ * can hold several tasks (classes flying different tasks) — show them all.
+ */
+function pickHeroTasks(tasks: TaskSummary[], timezone: string | null): HeroPick | null {
+  if (tasks.length === 0) return null;
+  // en-CA formats as YYYY-MM-DD, matching task_date.
+  let today: string;
+  try {
+    today = new Intl.DateTimeFormat("en-CA", {
+      ...(timezone ? { timeZone: timezone } : {}),
+    }).format(new Date());
+  } catch {
+    today = new Intl.DateTimeFormat("en-CA").format(new Date());
+  }
+  const dates = [...new Set(tasks.map((t) => t.task_date))].sort();
+  const date = dates.includes(today)
+    ? today
+    : (dates.find((d) => d > today) ?? dates[dates.length - 1]);
+  const label =
+    date === today ? "Today's task" : date > today ? "Next task" : "Latest task";
+  return { label, date, tasks: tasks.filter((t) => t.task_date === date) };
+}
+
+function TaskHero({
+  hero,
+  compId,
+  canSubmitTrack,
+  signedOut,
+  isAdmin,
+}: {
+  hero: HeroPick;
+  compId: string;
+  canSubmitTrack: boolean;
+  signedOut: boolean;
+  isAdmin: boolean;
+}) {
+  return (
+    <div className="mt-6 rounded-xl border bg-gradient-to-br from-muted to-card p-5">
+      <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+        {hero.label} · {formatTaskDate(hero.date)}
+      </p>
+      {hero.tasks.map((task) => (
+        <div key={task.task_id} className="mt-2 first:mt-1">
+          <h2 className="text-xl font-bold">
+            {task.name}{" "}
+            <span className="text-sm font-normal text-muted-foreground">
+              {task.pilot_classes.join(", ")}
+              {!task.has_xctsk ? " · route not set yet" : null}
+            </span>
+          </h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button nativeButton={false} size="sm" render={<Link to={`/comp/${compId}/task/${task.task_id}`} />}>
+              Task details
+            </Button>
+            {task.has_xctsk ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                title="Download the task file for your flight instrument"
+                onClick={async () => {
+                  try {
+                    await downloadTaskXctsk(compId, task.task_id, task.name);
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Download failed");
+                  }
+                }}
+              >
+                Download .xctsk
+              </Button>
+            ) : null}
+            {canSubmitTrack ? (
+              <SubmitTrackButton compId={compId} taskId={task.task_id} />
+            ) : null}
+            {signedOut ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void signInWithGoogle()}
+              >
+                Sign in to submit your track
+              </Button>
+            ) : null}
+            <Button nativeButton={false}
+              variant="outline"
+              size="sm"
+              render={
+                <a
+                  href={`/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(task.task_id)}`}
+                  title="Open the 3D flight replay for this task"
+                />
+              }
+            >
+              3D replay
+            </Button>
+            {isAdmin ? (
+              <Button nativeButton={false}
+                variant="ghost"
+                size="sm"
+                render={<Link to={`/comp/${compId}/task/${task.task_id}`} />}
+              >
+                Edit route…
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
