@@ -166,14 +166,21 @@ jobs:
           # that send SPA routes elsewhere — e.g. the /app.html -> /app outage
           # where every SPA route 308-redirected to a "Page not found". Running
           # this on the PR preview means such a regression fails the PR, not prod.
-          for route in /comp /u/me /scores; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "${DEPLOY_URL}${route}")
-            echo "${route} -> ${code}"
-            if [ "$code" != "200" ]; then
-              echo "::error::${route} returned HTTP ${code} (expected 200 — SPA route not serving the app shell)"
-              fail=1
-            fi
-          done
+          # Retry with backoff: /comp is now served by the SSR Pages Function,
+          # which can propagate to the edge a few seconds after the static
+          # assets, so a just-finished deploy may transiently 404 it.
+          check_route() {
+            local route="$1" code=""
+            for attempt in $(seq 1 10); do
+              code=$(curl -s -o /dev/null -w '%{http_code}' "${DEPLOY_URL}${route}")
+              if [ "$code" = "200" ]; then echo "${route} -> ${code}"; return 0; fi
+              echo "${route} -> ${code} (attempt ${attempt}/10, retrying in 3s…)"
+              sleep 3
+            done
+            echo "::error::${route} returned HTTP ${code} after retries (expected 200 — route not serving the app shell)"
+            return 1
+          }
+          for route in /comp /u/me /scores; do check_route "$route" || fail=1; done
 
           # Version check via the build-time <meta name="git-sha"> in the shell.
           DEPLOYED_SHA=$(curl -s "${DEPLOY_URL}/comp" | grep -oP '<meta name="git-sha" content="\K[a-f0-9]+' | head -1)
