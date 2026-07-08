@@ -24,6 +24,7 @@ import {
 } from "@/react/ui/dialog";
 import { Field, FieldLabel, FieldLegend, FieldSet } from "@/react/ui/field";
 import { Input } from "@/react/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/react/ui/radio-group";
 import {
   Table,
   TableBody,
@@ -38,6 +39,7 @@ import { storage } from "../../analysis/storage";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { signInWithGoogle, useUser } from "../lib/user";
+import { type ThemePreference, useTheme } from "../lib/theme";
 
 interface ApiKey {
   id: string;
@@ -58,12 +60,15 @@ export function Settings() {
 
   if (!user) {
     return (
-      <section>
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">Sign in to manage your account</p>
-        <Button type="button" className="mt-4" onClick={() => signInWithGoogle()}>
-          Sign in with Google
-        </Button>
+      <section className="mx-auto flex max-w-3xl flex-col gap-6">
+        <div>
+          <h1 className="text-2xl font-bold">Settings</h1>
+          <p className="text-muted-foreground">Sign in to manage your account</p>
+          <Button type="button" className="mt-4" onClick={() => signInWithGoogle()}>
+            Sign in with Google
+          </Button>
+        </div>
+        <AppearanceSection />
       </section>
     );
   }
@@ -71,11 +76,61 @@ export function Settings() {
   return (
     <section className="mx-auto flex max-w-3xl flex-col gap-6">
       <h1 className="text-2xl font-bold">Settings</h1>
+      <AppearanceSection />
       <ProfileSection />
       <ApiKeysSection />
       {isSuperAdmin && previewRole === "actual" ? <SuperadminSection /> : null}
       <DangerZoneSection />
     </section>
+  );
+}
+
+// Device-local colour-scheme preference (persisted in localStorage, not the
+// account) — applied immediately via ../lib/theme.
+const THEME_OPTIONS: { value: ThemePreference; label: string; description: string }[] = [
+  { value: "light", label: "Light", description: "Always use the light theme" },
+  { value: "dark", label: "Dark", description: "Always use the dark theme" },
+  { value: "auto", label: "Auto", description: "Follow your device settings" },
+];
+
+function AppearanceSection() {
+  const [theme, setTheme] = useTheme();
+  const idBase = useId();
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Appearance</CardTitle>
+        <CardDescription>
+          Choose how GlideComp looks on this device.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <RadioGroup
+          value={theme}
+          onValueChange={(value) => setTheme(value as ThemePreference)}
+          aria-label="Theme"
+          className="gap-3"
+        >
+          {THEME_OPTIONS.map((option) => {
+            const id = `${idBase}-${option.value}`;
+            return (
+              <label
+                key={option.value}
+                htmlFor={id}
+                className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 has-[[data-checked]]:border-primary has-[[data-checked]]:bg-accent/50"
+              >
+                <RadioGroupItem id={id} value={option.value} />
+                <div className="grid gap-0.5">
+                  <span className="text-sm font-medium leading-none">{option.label}</span>
+                  <span className="text-sm text-muted-foreground">{option.description}</span>
+                </div>
+              </label>
+            );
+          })}
+        </RadioGroup>
+      </CardContent>
+    </Card>
   );
 }
 

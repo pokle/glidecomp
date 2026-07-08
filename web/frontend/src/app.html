@@ -16,6 +16,18 @@
 
   <!-- All styling (including the Base UI quick-start rules) lives in
        src/react/globals.css, imported by the app entry. -->
+
+  <!-- Apply the Light/Dark/Auto preference before paint to avoid a flash.
+       Mirrors src/react/lib/theme.ts (localStorage `glidecomp-theme`). -->
+  <script>
+    (function () {
+      var pref = localStorage.getItem("glidecomp-theme");
+      if (pref !== "light" && pref !== "dark" && pref !== "auto") pref = "auto";
+      var dark = pref === "dark" ||
+        (pref === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.classList.toggle("dark", dark);
+    })();
+  </script>
 </head>
 
 <body>
