@@ -14,6 +14,7 @@ import { StrictMode } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import "./globals.css";
 import { BrowserRouter } from "react-router-dom";
+import { initTheme } from "./lib/theme";
 import { AppToaster } from "./lib/toast";
 import { InitialDataProvider, type InitialData } from "./lib/initial-data";
 import { AppProviders, AppRoutes } from "./routes";
@@ -24,14 +25,9 @@ declare global {
   }
 }
 
-// shadcn theming keys dark mode off a `.dark` class on <html>; follow the
-// OS preference (matching the previous prefers-color-scheme behaviour).
-const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
-function syncDarkClass() {
-  document.documentElement.classList.toggle("dark", darkQuery.matches);
-}
-syncDarkClass();
-darkQuery.addEventListener("change", syncDarkClass);
+// shadcn theming keys dark mode off a `.dark` class on <html>; apply the user's
+// Light/Dark/Auto preference (Auto follows the OS). See ./lib/theme.
+initTheme();
 
 const initialData = window.__SSR_DATA__ ?? null;
 
