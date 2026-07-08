@@ -27,6 +27,7 @@ import {
   formatTaskDateRange,
   scoringFormatLabel,
 } from "../lib/format";
+import { SectionHeader } from "../components/SectionHeader";
 import { ActivitySection } from "../comp/ActivitySection";
 import { CompScoresSection } from "../comp/CompScoresSection";
 import { PilotsSection } from "../comp/PilotsSection";
@@ -215,11 +216,10 @@ function CompDetailView({
 
       {/* break-before-page: when printing, each major section starts a fresh page. */}
       <section id="tasks" className="scroll-mt-4 break-before-page">
-        <h2 className="mt-8 text-lg font-bold">
-          Tasks
-          {isAdmin ? (
-            <>
-              {" "}
+        <SectionHeader
+          title="Tasks"
+          action={
+            isAdmin ? (
               <Button
                 type="button"
                 variant="outline"
@@ -228,9 +228,9 @@ function CompDetailView({
               >
                 New Task
               </Button>
-            </>
-          ) : null}
-        </h2>
+            ) : null
+          }
+        />
         <TasksList
           tasks={comp.tasks}
           compId={compId}

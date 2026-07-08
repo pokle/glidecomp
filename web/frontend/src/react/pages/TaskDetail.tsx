@@ -32,6 +32,7 @@ import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { useAdminView, useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
+import { SectionHeader } from "../components/SectionHeader";
 import { downloadXctskFile } from "../comp/download-xctsk";
 import { CheckboxField } from "../comp/fields";
 import { PilotStatusSection } from "../comp/PilotStatusSection";
@@ -328,16 +329,16 @@ function TurnpointsSection({
   if (!xctsk && !isAdmin) return null;
   return (
     <section>
-      {/* Route editing is a setting: header row with the action top right,
-          like the comp/task Settings buttons. */}
-      <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-2">
-        <h2 className="min-w-0 flex-1 text-lg font-bold">Turnpoints</h2>
-        {isAdmin ? (
-          <Button type="button" variant="outline" size="sm" onClick={onEditRoute}>
-            {xctsk && xctsk.turnpoints.length > 0 ? "Edit route…" : "Create route…"}
-          </Button>
-        ) : null}
-      </div>
+      <SectionHeader
+        title="Turnpoints"
+        action={
+          isAdmin ? (
+            <Button type="button" variant="outline" size="sm" onClick={onEditRoute}>
+              {xctsk && xctsk.turnpoints.length > 0 ? "Edit route…" : "Create route…"}
+            </Button>
+          ) : null
+        }
+      />
       {xctsk && xctsk.turnpoints.length > 0 ? (
         <Table className="mt-2">
           <TableHeader>

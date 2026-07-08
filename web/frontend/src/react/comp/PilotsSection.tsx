@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
 import { Button } from "@/react/ui/button";
+import { SectionHeader } from "../components/SectionHeader";
 import {
   Dialog,
   DialogClose,
@@ -83,23 +84,21 @@ export function PilotsSection({
 
   return (
     <section>
-      {/* Roster editing is a setting: header row with the action top right,
-          like the comp/task Settings buttons. */}
-      <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-2">
-        <h2 className="min-w-0 flex-1 text-lg font-bold">
-          Pilots {pilots && pilots.length > 0 ? `(${pilots.length})` : ""}
-        </h2>
-        {isAdmin ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setEditOpen(true)}
-          >
-            Edit
-          </Button>
-        ) : null}
-      </div>
+      <SectionHeader
+        title={<>Pilots {pilots && pilots.length > 0 ? `(${pilots.length})` : ""}</>}
+        action={
+          isAdmin ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setEditOpen(true)}
+            >
+              Edit
+            </Button>
+          ) : null
+        }
+      />
 
       {loadError ? (
         <p className="mt-2 text-muted-foreground">Could not load pilots</p>
