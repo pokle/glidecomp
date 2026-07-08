@@ -32,6 +32,7 @@ import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { useAdminView, useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 import { SectionHeader } from "../components/SectionHeader";
 import { downloadXctskFile } from "../comp/download-xctsk";
 import { CheckboxField } from "../comp/fields";
@@ -154,15 +155,12 @@ export function TaskDetail() {
 
   return (
     <div>
-      <nav className="text-sm">
-        <Link className="underline underline-offset-4" to="/comp">
-          Competitions
-        </Link>{" "}
-        ›{" "}
-        <Link className="underline underline-offset-4" to={`/comp/${compId}`}>
-          {comp?.name ?? "Back to competition"}
-        </Link>
-      </nav>
+      <Breadcrumbs
+        items={[
+          { label: "Competitions", to: "/comp" },
+          { label: comp?.name ?? "Competition", to: `/comp/${compId}` },
+        ]}
+      />
 
       {/* Header row mirrors CompDetail: title/meta left, admin Settings top right. */}
       <div className="mt-2 flex flex-wrap items-start gap-x-4 gap-y-2">

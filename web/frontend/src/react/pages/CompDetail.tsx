@@ -27,6 +27,7 @@ import {
   formatTaskDateRange,
   scoringFormatLabel,
 } from "../lib/format";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 import { SectionHeader } from "../components/SectionHeader";
 import { ActivitySection } from "../comp/ActivitySection";
 import { CompScoresSection } from "../comp/CompScoresSection";
@@ -164,11 +165,7 @@ function CompDetailView({
 
   return (
     <div>
-      <nav className="text-sm">
-        <Link className="underline underline-offset-4" to="/comp">
-          All Competitions
-        </Link>
-      </nav>
+      <Breadcrumbs items={[{ label: "Competitions", to: "/comp" }]} />
 
       <div className="mt-2 flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
