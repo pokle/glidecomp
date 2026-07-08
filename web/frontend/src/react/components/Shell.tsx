@@ -9,6 +9,7 @@ import { Button } from "@/react/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -38,7 +39,7 @@ export function Shell() {
       <header className="border-b">
         <nav
           aria-label="Main"
-          className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3"
+          className="mx-auto flex min-h-[60px] w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3"
         >
           {/* Home is a static (Astro) page, so use a full navigation. */}
           <a href="/" className="font-brand text-base font-bold">
@@ -139,20 +140,23 @@ function UserMenu({ name }: { name: string }) {
         {initials}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel className="max-w-56 truncate font-normal text-muted-foreground">
-          {name}
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => navigate("/settings")}>Settings</DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={async () => {
-            await signOut();
-            navigate("/");
-            window.location.reload();
-          }}
-        >
-          Sign out
-        </DropdownMenuItem>
+        {/* Base UI's GroupLabel throws without a surrounding Group. */}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="max-w-56 truncate font-normal text-muted-foreground">
+            {name}
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => navigate("/settings")}>Settings</DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={async () => {
+              await signOut();
+              navigate("/");
+              window.location.reload();
+            }}
+          >
+            Sign out
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

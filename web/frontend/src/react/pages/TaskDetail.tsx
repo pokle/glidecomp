@@ -6,7 +6,7 @@
  * gates, goal, and .xctsk / XContest import-export (#270).
  */
 import { useEffect, useId, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import type { XCTask } from "@glidecomp/engine";
 import { Button } from "@/react/ui/button";
 import {
@@ -50,6 +50,8 @@ import {
 export function TaskDetail() {
   const { compId, taskId } = useParams<{ compId: string; taskId: string }>();
   const { user } = useUser();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [task, setTask] = useState<TaskDetailData | null>(null);
   const [comp, setComp] = useState<CompDetailData | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -108,6 +110,20 @@ export function TaskDetail() {
   const isAdmin = useAdminView(
     user != null && comp != null && comp.admins.some((a) => a.email === user.email)
   );
+
+  // Deep link from the comp hero's "Edit route…" button: open the route
+  // editor once the task has loaded and the admin check has resolved.
+  useEffect(() => {
+    if (location.hash === "#edit-route" && isAdmin && task) setRouteOpen(true);
+  }, [location.hash, isAdmin, task]);
+
+  // Closing the editor drops the #edit-route hash so a reload doesn't reopen it.
+  const closeRouteEditor = () => {
+    setRouteOpen(false);
+    if (location.hash === "#edit-route") {
+      navigate(location.pathname + location.search, { replace: true });
+    }
+  };
 
   // Determine if the current user can upload on behalf. Admins always can;
   // registered pilots can when comp.open_igc_upload is enabled. Registration
@@ -301,9 +317,9 @@ export function TaskDetail() {
           xctsk={task.xctsk}
           openDistance={comp.scoring_format === "open_distance"}
           timezone={comp.timezone ?? null}
-          onClose={() => setRouteOpen(false)}
+          onClose={closeRouteEditor}
           onSaved={() => {
-            setRouteOpen(false);
+            closeRouteEditor();
             setRefresh((n) => n + 1);
             setScoresRefresh((n) => n + 1);
           }}

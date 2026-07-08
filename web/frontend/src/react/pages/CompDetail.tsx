@@ -397,7 +397,7 @@ function TaskHero({
               <Button nativeButton={false}
                 variant="ghost"
                 size="sm"
-                render={<Link to={`/comp/${compId}/task/${task.task_id}`} />}
+                render={<Link to={`/comp/${compId}/task/${task.task_id}#edit-route`} />}
               >
                 Edit route…
               </Button>
@@ -483,11 +483,15 @@ function TasksList({
   }
 
   return (
-    <div className="mt-2 space-y-4">
+    <div className="mt-3 space-y-5">
       {[...byDate.entries()].map(([date, dateTasks]) => (
         <div key={date}>
-          <h3 className="font-semibold">{formatTaskDate(date)}</h3>
-          <ul className="mt-1 space-y-1 text-sm">
+          {/* Same label treatment as the hero: the date is a group heading,
+              the indented rows underneath are the tasks. */}
+          <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+            {formatTaskDate(date)}
+          </h3>
+          <ul className="mt-1.5 space-y-1.5 pl-4 text-sm">
             {dateTasks.map((task) => (
               <li key={task.task_id} className="flex flex-wrap items-center gap-2">
                 <Link

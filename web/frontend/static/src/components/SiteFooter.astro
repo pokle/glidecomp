@@ -6,7 +6,9 @@
  */
 ---
 
-<footer class="mt-8 flex flex-wrap gap-x-4 gap-y-1 border-t pt-4 text-sm text-muted-foreground">
+<!-- mb-20: .bg-hills is viewport-fixed, so at max scroll the footer would sit
+     right on the hills graphic; the bottom margin lets it scroll clear. -->
+<footer class="mt-8 mb-20 flex flex-wrap gap-x-4 gap-y-1 border-t pt-4 text-sm text-muted-foreground">
   <a href="/about" class="underline">About</a>
   <a href="/scoring" class="underline">Scoring</a>
   <a href="/legal" class="underline">Privacy &amp; Terms</a>

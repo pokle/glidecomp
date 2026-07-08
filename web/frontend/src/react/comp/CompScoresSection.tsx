@@ -87,7 +87,7 @@ export function CompScoresSection({
   }, [compId]);
 
   return (
-    <section id="scores" className="scroll-mt-4">
+    <section id="scores" className="scroll-mt-4 break-before-page">
       <h2 className="mt-8 text-lg font-bold">Scores</h2>
       {state.kind === "loading" ? (
         <p className="mt-2 text-muted-foreground">Loading scores…</p>
