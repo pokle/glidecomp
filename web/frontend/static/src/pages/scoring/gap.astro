@@ -681,11 +681,11 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               <h3 class="text-base font-semibold mb-1">Smaller details</h3>
               <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2">
                 <li>
-                  <strong>Cylinder tolerance (§8.1):</strong> GlideComp applies the percentage
-                  tolerance (default 0.5%, the Cat 2 maximum) as an outward expansion of the
-                  cylinder only. The spec's 5&nbsp;m absolute minimum tolerance and the inner
-                  tolerance band are not applied, so very small cylinders are judged slightly more
-                  strictly than the spec allows.
+                  <strong>Cylinder tolerance default (§8.1):</strong> GlideComp applies the full
+                  spec tolerance band — a percentage plus a 5&nbsp;m absolute minimum, extending
+                  outward for cylinders you enter and inward for the start you exit. The default
+                  percentage is 0.5% (the Cat&nbsp;2 maximum), used for every competition rather
+                  than auto-selecting 0.1% for Cat&nbsp;1 events; it is configurable per task.
                 </li>
                 <li>
                   <strong>Rounding (§11, §12.4):</strong> GlideComp rounds each pilot's total to
