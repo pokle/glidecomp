@@ -12,6 +12,7 @@ import {
   createMapProvider,
   type MapProvider,
   type OpenDistanceLine,
+  type BestProgressRoute,
 } from "../../analysis/map-provider";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "leaflet/dist/leaflet.css";
@@ -28,6 +29,7 @@ export default function ScoreDetailMap({
   events,
   focus,
   openDistanceLine,
+  bestProgressRoute,
 }: {
   task: XCTask | null;
   fixes: IGCFix[] | null;
@@ -35,6 +37,8 @@ export default function ScoreDetailMap({
   focus: MapFocus | null;
   /** The scored open-distance line (exit → furthest), when applicable. */
   openDistanceLine?: OpenDistanceLine | null;
+  /** A landed-out pilot's routed distance-to-goal line, when applicable. */
+  bestProgressRoute?: BestProgressRoute | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [provider, setProvider] = useState<MapProvider | null>(null);
@@ -117,6 +121,14 @@ export default function ScoreDetailMap({
       if (!destroyedRef.current) provider.clearOpenDistanceLines?.();
     };
   }, [provider, openDistanceLine]);
+
+  useEffect(() => {
+    if (!provider || !bestProgressRoute) return;
+    provider.setBestProgressRoute?.(bestProgressRoute);
+    return () => {
+      if (!destroyedRef.current) provider.clearBestProgressRoute?.();
+    };
+  }, [provider, bestProgressRoute]);
 
   useEffect(() => {
     if (!provider || !focus) return;
