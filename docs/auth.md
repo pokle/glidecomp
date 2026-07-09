@@ -29,9 +29,9 @@ Browser                    Cloudflare
 3. Browser redirects to Google consent screen
 4. Google redirects back to /api/auth/callback/google
 5. Better Auth creates/updates user + session in D1, sets session cookie
-6. Browser redirects to /u/me (callbackURL) which loads the React SPA dashboard
-7. The dashboard route detects the session:
-   - Has username? → show dashboard
+6. Browser redirects to /comp (callbackURL) which loads the React SPA competitions page
+7. The SPA detects the session:
+   - Has username? → show competitions
    - No username?  → redirect to /onboarding
 8. User picks a username on onboarding page
 9. POST /api/auth/set-username → redirect to /u/{username}/
