@@ -2,10 +2,17 @@
 /**
  * Link to a section of the FAI Sporting Code Section 7F (2024 edition) PDF.
  *
- * The PDF has no named anchors, so we deep-link to the page where each
- * referenced section begins using the standard `#page=N` PDF open parameter
- * (honoured by Chrome's built-in viewer and most browsers). The page numbers
- * below are the physical PDF pages of the 1st May 2024 edition.
+ * The PDF has no named destinations, but its bookmark/outline tree gives an
+ * explicit `/XYZ` destination (page + vertical position) for every section —
+ * the same spot the PDF's own table-of-contents links jump to. We reproduce
+ * that with the Adobe "PDF Open Parameters" fragment
+ * `#page=N&view=FitH,<top>`: fit the page width to the window and scroll so
+ * the section heading sits at the top of the view. Chrome's built-in viewer
+ * and Acrobat honour it; viewers that don't (e.g. Firefox's pdf.js) ignore
+ * the `view` part and still land on the right page via `page=N`.
+ *
+ * The `top` values are the destinations' y-coordinates (PDF user space, from
+ * the page bottom) taken from the 1st May 2024 edition's outline.
  *
  * Usage:
  *   <SpecRef section="11.2" />                 → renders "§11.2" as a link
@@ -23,41 +30,43 @@ interface Props {
 const S7F_PDF =
   "https://www.fai.org/sites/default/files/civl/documents/sporting_code_s7_f_-_xc_scoring_2024.pdf";
 
-/** Physical PDF page where each referenced section heading begins. */
-const SPEC_PAGES: Record<string, number> = {
-  "2": 9, // The GAP Philosophy
-  "4.2": 14, // Distance (WGS84 / FAI sphere)
-  "5": 15, // Competition Parameters
-  "6": 17, // Task Setting
-  "6.2.3": 20, // Definition of goal
-  "6.3.3": 21, // Race to goal (start gates)
-  "6.4.2": 22, // Task distances
-  "7": 24, // Flying a task
-  "8": 25, // Task evaluation
-  "8.1": 25, // Cylinder tolerance
-  "8.3": 25, // Reaching a cylinder
-  "8.3.1": 26, // Start time
-  "8.4": 26, // Reaching (validating) a line
-  "8.5.2": 27, // Goal line
-  "9": 29, // Task Validity
-  "9.1": 29, // Launch Validity
-  "10": 31, // Points Allocation
-  "11": 33, // Pilot score
-  "11.1": 33, // Distance points
-  "11.1.1": 33, // Difficulty calculation
-  "11.2": 34, // Time points
-  "11.3": 35, // Leading points
-  "11.3.1": 36, // Leading coefficient
-  "11.4": 38, // Arrival points
-  "12.1": 40, // ESS but not goal
-  "12.2": 40, // Early start
-  "12.3": 41, // Stopped tasks
-  "12.4": 42, // Penalties
+/** [physical PDF page, /XYZ top coordinate] for each referenced section. */
+const SPEC_DESTS: Record<string, [page: number, top: number]> = {
+  "2": [9, 782], // The GAP Philosophy
+  "4.2": [14, 667], // Distance (WGS84 / FAI sphere)
+  "5": [15, 782], // Competition Parameters
+  "6": [17, 782], // Task Setting
+  "6.2.3": [20, 622], // Definition of goal
+  "6.3.3": [21, 215], // Race to goal (start gates)
+  "6.4.2": [22, 383], // Task distances
+  "7": [24, 782], // Flying a task
+  "8": [25, 782], // Task evaluation
+  "8.1": [25, 712], // Cylinder tolerance
+  "8.3": [25, 267], // Reaching a cylinder
+  "8.3.1": [26, 322], // Start time
+  "8.4": [26, 152], // Reaching (validating) a line
+  "8.5.2": [27, 328], // Goal line
+  "9": [29, 782], // Task Validity
+  "9.1": [29, 681], // Launch Validity
+  "10": [31, 782], // Points Allocation
+  "11": [33, 782], // Pilot score
+  "11.1": [33, 678], // Distance points
+  "11.1.1": [33, 394], // Difficulty calculation
+  "11.2": [34, 247], // Time points
+  "11.3": [35, 266], // Leading points
+  "11.3.1": [36, 535], // Leading coefficient
+  "11.4": [38, 201], // Arrival points
+  "12.1": [40, 743], // ESS but not goal
+  "12.2": [40, 451], // Early start
+  "12.3": [41, 782], // Stopped tasks
+  "12.4": [42, 251], // Penalties
 };
 
 const { section, label, class: extraClass = "" } = Astro.props;
-const page = SPEC_PAGES[section];
-const href = page ? `${S7F_PDF}#page=${page}` : S7F_PDF;
+const dest = SPEC_DESTS[section];
+const href = dest
+  ? `${S7F_PDF}#page=${dest[0]}&view=FitH,${dest[1]}`
+  : S7F_PDF;
 ---
 
 <a
