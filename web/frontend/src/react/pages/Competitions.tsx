@@ -29,29 +29,25 @@ import {
   categoryLabel,
   scoringFormatLabel,
 } from "../lib/format";
+import { useInitialData } from "../lib/initial-data";
+import type { CompListEntry, CompetitionsLoaderData } from "../loaders";
 
-interface Comp {
-  comp_id: string;
-  name: string;
-  category: string;
-  creation_date: string;
-  pilot_classes: string[];
-  scoring_format?: string;
-  is_admin: boolean;
-  test: boolean;
-  first_task_date: string | null;
-  last_task_date: string | null;
-}
+type Comp = CompListEntry;
 
 export function Competitions() {
   const { user, previewRole } = useUser();
   const navigate = useNavigate();
-  const [comps, setComps] = useState<Comp[] | null>(null);
+  // SSR: seed from the server loader so the list is in the first paint and the
+  // client hydrates the same markup. Client boot / SPA navigations start null.
+  const initial = useInitialData<CompetitionsLoaderData>();
+  const [comps, setComps] = useState<Comp[] | null>(initial?.comps ?? null);
   const [loadError, setLoadError] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
     document.title = "GlideComp - Competitions";
+    // Already seeded from SSR — skip the redundant initial fetch.
+    if (initial) return;
     (async () => {
       try {
         const res = await api.api.comp.$get();
@@ -65,6 +61,9 @@ export function Competitions() {
         setLoadError(true);
       }
     })();
+    // Seeding is a first-render concern; re-running on `initial` identity is
+    // unnecessary (it never changes for a given mount).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // The API returns test comps to their admins; when a superadmin previews a

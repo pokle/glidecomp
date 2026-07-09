@@ -3,7 +3,7 @@
  * Columns are conditional exactly as in the vanilla renderer; open distance
  * omits goal, distance-points and validity (the score is metres flown).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Table,
@@ -31,6 +31,7 @@ export function ScoresSection({
   timezone,
   onReplayAvailable,
   embedded = false,
+  initialScore,
 }: {
   compId: string;
   taskId: string;
@@ -42,10 +43,21 @@ export function ScoresSection({
   onReplayAvailable: (available: boolean) => void;
   /** Rendered inside the comp page's Scores tabs — skip the section heading. */
   embedded?: boolean;
+  /** SSR-seeded task score so the table is in the first paint (task page). */
+  initialScore?: TaskScoreData;
 }) {
-  const [state, setState] = useState<ScoresState>({ kind: "loading" });
+  const [state, setState] = useState<ScoresState>(
+    initialScore ? { kind: "loaded", data: initialScore, etag: null } : { kind: "loading" }
+  );
+  const seededRef = useRef(initialScore != null);
 
   useEffect(() => {
+    // Seeded from SSR — surface the replay link from the seed, skip the fetch.
+    if (seededRef.current) {
+      seededRef.current = false;
+      onReplayAvailable(initialScore!.classes.some((cls) => cls.pilots.length > 0));
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {

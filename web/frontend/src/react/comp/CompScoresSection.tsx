@@ -5,7 +5,7 @@
  * scores-views module; the "Results by task" tab reuses the task page's
  * ScoresSection one task at a time.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/react/ui/button";
 import {
@@ -22,22 +22,13 @@ import {
   buildClassGroups,
   computeTop3Rows,
   type ClassStanding,
-  type TaskInfo,
 } from "../../scores-views";
 import { ScoreFreshness } from "./ScoreFreshness";
 import { ScoresSection } from "./ScoresSection";
 import { formatScore, formatTaskDate, ordinal } from "../lib/format";
 import type { TaskSummary } from "./types";
-
-interface CompScores {
-  comp_id: string;
-  tasks: TaskInfo[];
-  standings: ClassStanding[];
-  /** Oldest constituent task compute; null when no tasks are scored yet. */
-  computed_at: string | null;
-  /** True when any task's scores have a re-score in flight or pending. */
-  stale: boolean;
-}
+// Single source of truth for the /scores response shape, shared with the loader.
+import type { CompScores } from "../loaders";
 
 function scoreDetailHref(compId: string, taskId: string, pilotId: string): string {
   return `/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/pilot/${encodeURIComponent(pilotId)}`;
@@ -48,6 +39,8 @@ export function CompScoresSection({
   timezone,
   tasks,
   defaultTaskId,
+  initialScores,
+  initialScoresEtag,
 }: {
   compId: string;
   timezone: string | null;
@@ -55,14 +48,29 @@ export function CompScoresSection({
   tasks: TaskSummary[];
   /** Task pre-selected in "Results by task" (the hero task). */
   defaultTaskId: string | null;
+  /** SSR-seeded scores so they appear in the first paint (server HTML). */
+  initialScores?: CompScores;
+  initialScoresEtag?: string | null;
 }) {
   const [state, setState] = useState<
     | { kind: "loading" }
     | { kind: "unavailable" }
     | { kind: "ready"; scores: CompScores; etag: string | null }
-  >({ kind: "loading" });
+  >(
+    initialScores
+      ? { kind: "ready", scores: initialScores, etag: initialScoresEtag ?? null }
+      : { kind: "loading" }
+  );
+  // Freshness is handled by ScoreFreshness's polling, so — like before — we
+  // fetch once per compId. When seeded from SSR, that first fetch is already
+  // satisfied; skip it so the first render stays identical to the server.
+  const seededRef = useRef(initialScores != null);
 
   useEffect(() => {
+    if (seededRef.current) {
+      seededRef.current = false;
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {

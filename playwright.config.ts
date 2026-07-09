@@ -2,6 +2,10 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
+  // ssr.spec.ts needs the built output served through the real Pages runtime
+  // (wrangler pages dev), not this config's SPA dev server — it has its own
+  // config (playwright.ssr.config.ts, run via `bun run test:e2e:ssr`).
+  testIgnore: ["**/ssr.spec.ts"],
   timeout: 60_000,
   retries: process.env.CI ? 1 : 0,
   // Force sequential runs in CI. With 2 workers, the comp-creation +

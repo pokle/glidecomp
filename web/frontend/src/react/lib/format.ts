@@ -1,5 +1,14 @@
 /** Shared formatting helpers ported from the vanilla pages. */
 
+/**
+ * Fixed locale for date formatting. These helpers render on both the SSR
+ * server (workerd) and the browser; a `undefined` locale resolves differently
+ * in each runtime and would cause hydration mismatches. Pinning en-GB keeps
+ * the "12 Jan 2026" day-month-year style the UI already used and makes the
+ * output deterministic across server and client.
+ */
+const DATE_LOCALE = "en-GB";
+
 export function relativeTime(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
   if (seconds < 60) return "just now";
@@ -15,23 +24,43 @@ export function relativeTime(timestamp: number): string {
 }
 
 export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
+  // Pin the zone too: this formats an instant (with a time component), so a
+  // runtime-local zone would render a different calendar day server vs client
+  // for timestamps near midnight UTC — a hydration mismatch. UTC is fine for
+  // the "created …" fallback this drives.
+  return new Date(iso).toLocaleDateString(DATE_LOCALE, {
     year: "numeric",
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   });
 }
 
 /** Task dates are bare YYYY-MM-DD; anchor to local midnight before formatting. */
 export function formatTaskDate(date: string, opts?: Intl.DateTimeFormatOptions): string {
   return new Date(date + "T00:00:00").toLocaleDateString(
-    undefined,
+    DATE_LOCALE,
     opts ?? { weekday: "short", year: "numeric", month: "short", day: "numeric" }
   );
 }
 
 export function categoryLabel(cat: string): string {
   return cat === "hg" ? "HG" : "PG";
+}
+
+/**
+ * "Today" as a bare YYYY-MM-DD string in the given IANA zone (or the runtime
+ * local zone when null). Used to pick the today's-task hero; computed once on
+ * the SSR server and passed to the client so the selection is deterministic
+ * across the hydration boundary (see loadCompDetail / pickHeroTasks).
+ */
+export function todayInZone(timezone: string | null, now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone ?? undefined,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
 }
 
 /**
