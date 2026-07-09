@@ -3,6 +3,7 @@ import { oAuthProxy } from "better-auth/plugins";
 import { apiKey } from "@better-auth/api-key";
 import { Kysely } from "kysely";
 import { D1Dialect } from "kysely-d1";
+import { API_KEY_RATE_LIMIT } from "./rate-limit";
 
 export function isLocalDev(env: { BETTER_AUTH_URL: string }): boolean {
   try {
@@ -41,8 +42,8 @@ export function createAuth(env: AuthEnv) {
         enableSessionForAPIKeys: true,
         rateLimit: {
           enabled: true,
-          timeWindow: 60_000,
-          maxRequests: 60,
+          timeWindow: API_KEY_RATE_LIMIT.timeWindowMs,
+          maxRequests: API_KEY_RATE_LIMIT.maxRequests,
         },
       }) as unknown as BetterAuthPlugin,
       ...(isLocalDev(env)

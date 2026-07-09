@@ -386,7 +386,16 @@ function ApiKeysSection() {
       <CardHeader>
         <CardTitle>API keys</CardTitle>
         <CardDescription>
-          Grant scoring agents programmatic access to your account.
+          Grant scoring agents programmatic access to your account. See the{" "}
+          <a
+            href="https://github.com/pokle/glidecomp/blob/master/docs/api.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-4 hover:text-foreground"
+          >
+            API documentation
+          </a>{" "}
+          for endpoints, examples, and rate limits.
         </CardDescription>
       </CardHeader>
       <CardContent>
