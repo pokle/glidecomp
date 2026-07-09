@@ -41,9 +41,11 @@ administers a competition, its key can perform admin actions on that comp.
 
 ### Object IDs
 
-`comp_id`, `task_id`, and `comp_pilot_id` in URLs are short opaque strings (e.g.
-`Ux7Kp2`), **not** raw numbers. Always take them from a list/detail response and
-pass them back verbatim. An unrecognisable ID returns `400 {"error":"Invalid comp_id"}`.
+`comp_id`, `task_id`, and `comp_pilot_id` in URLs are short opaque strings of
+lowercase letters (e.g. `compa`), **not** raw numbers. The `compa` / `taska` /
+`pilota` values in the examples below are placeholders — take the real ones from
+a list/detail response and pass them back verbatim. An unrecognisable ID returns
+`400 {"error":"Invalid comp_id"}`.
 
 ## Rate limiting
 
@@ -80,7 +82,7 @@ key, competitions you administer are merged in with `"is_admin": true`.
 {
   "comps": [
     {
-      "comp_id": "Ux7Kp2",
+      "comp_id": "compa",
       "name": "Corryong Cup 2026",
       "category": "paragliding",
       "scoring_format": "gap",
@@ -96,7 +98,7 @@ key, competitions you administer are merged in with `"is_admin": true`.
 ### Get one competition
 
 ```bash
-curl https://glidecomp.com/api/comp/Ux7Kp2
+curl https://glidecomp.com/api/comp/compa
 ```
 
 Returns the competition plus its list of tasks (`tasks[]`, each with `task_id`,
@@ -105,26 +107,28 @@ Returns the competition plus its list of tasks (`tasks[]`, each with `task_id`,
 ### Get a task
 
 ```bash
-curl https://glidecomp.com/api/comp/Ux7Kp2/task/9fBqLm
+curl https://glidecomp.com/api/comp/compa/task/taska
 ```
 
 Returns task metadata and `xctsk` — the full XCTrack task definition (turnpoints,
 start, goal), or `null` if none is set yet.
 
-### Competition standings
+### Competition scores
 
 Aggregate results across all tasks, grouped by pilot class:
 
 ```bash
-curl https://glidecomp.com/api/comp/Ux7Kp2/scores
+curl https://glidecomp.com/api/comp/compa/scores
 ```
+
+This can take several seconds to compute if it isn't cached.
 
 ### Task scores
 
 Scored results for a single task:
 
 ```bash
-curl https://glidecomp.com/api/comp/Ux7Kp2/task/9fBqLm/score
+curl https://glidecomp.com/api/comp/compa/task/taska/score
 ```
 
 Both score endpoints return `computed_at` and a `stale` flag, and carry an
@@ -132,7 +136,7 @@ Both score endpoints return `computed_at` and a `stale` flag, and carry an
 
 ```bash
 curl -H 'If-None-Match: "abc123"' \
-  https://glidecomp.com/api/comp/Ux7Kp2/task/9fBqLm/score
+  https://glidecomp.com/api/comp/compa/task/taska/score
 # -> 304 Not Modified while unchanged; 200 with the new body once it updates
 ```
 
@@ -141,7 +145,7 @@ A task with no task definition yet returns `422`.
 ### List tracks on a task
 
 ```bash
-curl https://glidecomp.com/api/comp/Ux7Kp2/task/9fBqLm/igc
+curl https://glidecomp.com/api/comp/compa/task/taska/igc
 ```
 
 Returns one entry per submitted track (`comp_pilot_id`, `pilot_name`,
@@ -150,7 +154,7 @@ Returns one entry per submitted track (`comp_pilot_id`, `pilot_name`,
 ### Registered pilots
 
 ```bash
-curl https://glidecomp.com/api/comp/Ux7Kp2/pilot
+curl https://glidecomp.com/api/comp/compa/pilot
 ```
 
 Returns pilots registered in the comp. Personal contact fields (email, phone)
@@ -169,7 +173,7 @@ gzip -c flight.igc | \
   curl -X POST \
     -H "x-api-key: glc_XXXXXXXX..." \
     --data-binary @- \
-    https://glidecomp.com/api/comp/Ux7Kp2/task/9fBqLm/igc
+    https://glidecomp.com/api/comp/compa/task/taska/igc
 ```
 
 On success you get `201 Created` (or `200` if it replaced an existing track for
@@ -183,7 +187,7 @@ gzip -c flight.igc | \
   curl -X POST \
     -H "x-api-key: glc_XXXXXXXX..." \
     --data-binary @- \
-    https://glidecomp.com/api/comp/Ux7Kp2/task/9fBqLm/igc/PILOT_ID
+    https://glidecomp.com/api/comp/compa/task/taska/igc/pilota
 ```
 
 This is allowed only if your key belongs to a comp admin, or to a registered
@@ -192,7 +196,7 @@ pilot when the comp has open track upload enabled — otherwise `403`.
 You can download any track back out (raw IGC) from a public comp:
 
 ```bash
-curl -OJ https://glidecomp.com/api/comp/Ux7Kp2/task/9fBqLm/igc/PILOT_ID/download
+curl -OJ https://glidecomp.com/api/comp/compa/task/taska/igc/pilota/download
 ```
 
 ## Errors

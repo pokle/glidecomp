@@ -25,11 +25,12 @@ const SAMPLE_XCTSK = resolve(
   "web/samples/comps/corryong-cup-2026-open-t1/task.xctsk"
 );
 
-// Placeholder IDs the doc uses in its example URLs / key header.
+// Placeholder IDs the doc uses in its example URLs / key header. These mirror
+// the sqids format (lowercase letters); keep them in sync with docs/api.md.
 const PLACEHOLDER = {
-  comp: "Ux7Kp2",
-  task: "9fBqLm",
-  pilot: "PILOT_ID",
+  comp: "compa",
+  task: "taska",
+  pilot: "pilota",
   key: "glc_XXXXXXXX...",
   host: "https://glidecomp.com",
   igcFile: "flight.igc",
