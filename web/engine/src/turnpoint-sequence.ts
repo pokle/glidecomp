@@ -20,6 +20,20 @@ import { getSSSIndex, getEffectiveSSSIndex, getESSIndex, getEffectiveESSIndex, g
 import { calculateOptimizedTaskLine } from './task-optimizer';
 import { resolveStartGates, gateIndexForCrossing } from './time-gates';
 
+/**
+ * Default cylinder tolerance as a fraction of the radius. 0.5% is the Cat 2
+ * maximum (FAI S7F §8.1); Cat 1 uses 0.1%. Kept as the default for club
+ * scoring — a task can override it via {@link XCTask.cylinderTolerance}.
+ */
+export const DEFAULT_CYLINDER_TOLERANCE = 0.005;
+
+/**
+ * Absolute minimum cylinder tolerance in metres (FAI S7F §8.1). The tolerance
+ * band is at least ±5 m, so small cylinders (where the percentage is tiny —
+ * 0.5% of a 400 m turnpoint is only 2 m) still get the full spec allowance.
+ */
+export const MIN_CYLINDER_TOLERANCE_M = 5;
+
 // ---------------------------------------------------------------------------
 // Raw crossing detection
 // ---------------------------------------------------------------------------
@@ -56,6 +70,14 @@ export interface CylinderCrossing {
 
   /** Distance from the crossing point to the cylinder center (meters) */
   distanceToCenter: number;
+
+  /**
+   * True when the crossing counts only because of the cylinder tolerance band
+   * (FAI S7F §8.1): the track came within the tolerance of the cylinder edge
+   * but the two straddling fixes never physically crossed the nominal radius.
+   * Lets the UI explain a near-miss that was credited by tolerance.
+   */
+  toleranceCredited: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,6 +126,14 @@ export interface TurnpointReaching {
    * Helps the UI explain: "3 crossings detected, this one was selected because..."
    */
   candidateCount: number;
+
+  /**
+   * True when this reaching was credited by the cylinder tolerance band
+   * (FAI S7F §8.1) rather than a physical crossing of the nominal radius.
+   * Copied from the underlying {@link CylinderCrossing}. Absent for the
+   * no-crossing 'track_start' anchor.
+   */
+  toleranceCredited?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -328,9 +358,18 @@ export function detectCylinderCrossings(
 
   const crossings: CylinderCrossing[] = [];
 
-  // CIVL GAP cylinder tolerance: expand radius for crossing detection.
-  // Default 0.5% (Cat 2 maximum) to compensate for distance calculation differences.
-  const tolerance = task.cylinderTolerance ?? 0.005;
+  // CIVL GAP cylinder tolerance (FAI S7F §8.1): a band of a percentage plus a
+  // 5 m absolute minimum, applied when deciding whether a pilot reached a
+  // cylinder, to absorb distance-measurement differences between flight
+  // recorders and scoring programs. Default 0.5% (Cat 2 maximum).
+  const tolerance = task.cylinderTolerance ?? DEFAULT_CYLINDER_TOLERANCE;
+
+  // The start cylinder is the one place the *inner* edge of the band matters:
+  // a pilot leaving an EXIT start is credited once they cross the inner radius
+  // outward (§8.2/§8.3). Every other cylinder (turnpoints, ESS, goal — and an
+  // ENTER start) is an entry, credited at the outer edge.
+  const sssIdx = getSSSIndex(task);
+  const startIsExit = sssIdx >= 0 && task.sss?.direction === 'EXIT';
 
   const DEG = Math.PI / 180;
 
@@ -338,7 +377,16 @@ export function detectCylinderCrossings(
     const tp = task.turnpoints[tpIdx];
     const centerLat = tp.waypoint.lat;
     const centerLon = tp.waypoint.lon;
-    const radius = tp.radius * (1 + tolerance);
+    // Tolerance band (§8.1): outerRadius = max(r×(1+tol), r+5),
+    // innerRadius = min(r×(1−tol), r−5). Entry cylinders detect against the
+    // outer edge; the EXIT start detects against the inner edge so the pilot
+    // is credited with leaving a touch early rather than a touch late.
+    const outerRadius = Math.max(tp.radius * (1 + tolerance), tp.radius + MIN_CYLINDER_TOLERANCE_M);
+    const innerRadius = Math.max(0, Math.min(tp.radius * (1 - tolerance), tp.radius - MIN_CYLINDER_TOLERANCE_M));
+    const detectRadius = tpIdx === sssIdx && startIsExit ? innerRadius : outerRadius;
+    // Bounding box uses the outer radius (always ≥ detectRadius) to stay
+    // conservative regardless of which edge we detect against.
+    const radius = outerRadius;
 
     // Conservative lat/lon bounding box around the cylinder. Any point inside
     // the cylinder is guaranteed to fall inside this box, so a fix outside the
@@ -357,7 +405,7 @@ export function detectCylinderCrossings(
       if (dLat > latDelta || dLat < -latDelta) return false;
       const dLon = lon - centerLon;
       if (dLon > lonDelta || dLon < -lonDelta) return false;
-      return andoyerDistance(lat, lon, centerLat, centerLon) <= radius;
+      return andoyerDistance(lat, lon, centerLat, centerLon) <= detectRadius;
     };
 
     let prevInside = isInside(fixes[0].latitude, fixes[0].longitude);
@@ -380,8 +428,12 @@ export function detectCylinderCrossings(
 
         // Interpolate to the nominal radius (without tolerance)
         const nominalRadius = tp.radius;
-        let t = (prevDist - nominalRadius) / (prevDist - currDist);
-        t = Math.max(0, Math.min(1, t));
+        const tRaw = (prevDist - nominalRadius) / (prevDist - currDist);
+        const t = Math.max(0, Math.min(1, tRaw));
+        // When the nominal radius does not lie between the two fixes (tRaw
+        // clamped), the pair only reached the tolerance band, not the nominal
+        // cylinder — a tolerance-credited near-miss (§8.1).
+        const toleranceCredited = tRaw < 0 || tRaw > 1;
 
         const crossingLat = prevFix.latitude + t * (currFix.latitude - prevFix.latitude);
         const crossingLon = prevFix.longitude + t * (currFix.longitude - prevFix.longitude);
@@ -404,6 +456,7 @@ export function detectCylinderCrossings(
           altitude: crossingAlt,
           direction,
           distanceToCenter,
+          toleranceCredited,
         });
       }
 
@@ -441,6 +494,7 @@ function buildForwardPath(
     altitude: sssCrossing.altitude,
     selectionReason: startSelectionReason,
     candidateCount: crossingsByTP.get(sssIdx)?.length ?? 0,
+    toleranceCredited: sssCrossing.toleranceCredited,
   });
 
   let prevReachingTime = sssCrossing.time.getTime();
@@ -483,6 +537,7 @@ function buildForwardPath(
       altitude: validCrossing.altitude,
       selectionReason: isESS ? 'first_crossing' : 'first_after_previous',
       candidateCount: tpCrossings.length,
+      toleranceCredited: validCrossing.toleranceCredited,
     });
 
     prevReachingTime = validCrossing.time.getTime();
@@ -713,6 +768,7 @@ export function resolveTurnpointSequence(
           first.latitude, first.longitude,
           startTP.waypoint.lat, startTP.waypoint.lon,
         ),
+        toleranceCredited: false,
       }];
       startSelectionReason = 'track_start';
     }
