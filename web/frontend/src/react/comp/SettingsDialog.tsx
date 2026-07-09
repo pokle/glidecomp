@@ -23,12 +23,7 @@ import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { CheckboxField, SearchableSelect, SimpleSelect } from "./fields";
-import {
-  slugifyStatusKey,
-  type CompDetailData,
-  type PilotStatusConfig,
-  type ScoringFormat,
-} from "./types";
+import { type CompDetailData, type ScoringFormat } from "./types";
 
 /**
  * Timezone dropdown options: "auto" plus every zone the runtime knows.
@@ -45,15 +40,6 @@ function timezoneOptions(current: string | null) {
     { value: "auto", label: "Auto — derive from the task location" },
     ...zones.map((z) => ({ value: z, label: z })),
   ];
-}
-
-interface StatusRowState {
-  /** Stable React key for the row. */
-  id: number;
-  /** Original status key ("" for rows added in this dialog session). */
-  key: string;
-  label: string;
-  on_track_upload: PilotStatusConfig["on_track_upload"];
 }
 
 export function SettingsDialog({
@@ -128,11 +114,6 @@ export function SettingsDialog({
   const [jtgFactor, setJtgFactor] = useState(String(gp.jumpTheGunFactor ?? 2));
   const [jtgMax, setJtgMax] = useState(String(gp.jumpTheGunMaxSeconds ?? 300));
 
-  const nextStatusId = useRef(0);
-  const [statuses, setStatuses] = useState<StatusRowState[]>(() =>
-    (comp.pilot_statuses ?? []).map((s) => ({ id: nextStatusId.current++, ...s }))
-  );
-
   const [saving, setSaving] = useState(false);
 
   // Live class list for the default-class dropdown.
@@ -143,10 +124,6 @@ export function SettingsDialog({
   // Mirror the vanilla <select>: when the chosen default disappears from the
   // class list, fall back to the first option.
   const effectiveDefault = classes.includes(defaultClass) ? defaultClass : (classes[0] ?? "");
-
-  function updateStatus(id: number, patch: Partial<StatusRowState>) {
-    setStatuses((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-  }
 
   async function deleteComp() {
     const confirmed = await confirm({
@@ -210,28 +187,6 @@ export function SettingsDialog({
       jumpTheGunMaxSeconds: parseField(jtgMax, 300),
     };
 
-    // Collect status rows: skip blank labels; preserve existing keys (so the
-    // server sees an update, not a remove+add pair), derive new ones from
-    // the label.
-    const pilotStatuses: PilotStatusConfig[] = [];
-    for (const s of statuses) {
-      const label = s.label.trim();
-      if (!label) continue;
-      const key = s.key || slugifyStatusKey(label);
-      if (!key) continue;
-      pilotStatuses.push({ key, label, on_track_upload: s.on_track_upload });
-    }
-    // Guard against duplicate keys — can happen if an admin types a new
-    // label that slugifies to the same key as an existing row.
-    const keySeen = new Set<string>();
-    for (const s of pilotStatuses) {
-      if (keySeen.has(s.key)) {
-        toast.warning(`Duplicate status key "${s.key}" — rename one of the rows`);
-        return;
-      }
-      keySeen.add(s.key);
-    }
-
     setSaving(true);
     try {
       const res = await api.api.comp[":comp_id"].$patch({
@@ -246,7 +201,6 @@ export function SettingsDialog({
           timezone: timezone === "auto" ? null : timezone,
           open_igc_upload: openUpload,
           admin_emails: adminEmails,
-          pilot_statuses: pilotStatuses,
           gap_params: gapParams,
           scoring_format: scoringFormat,
         },
@@ -576,66 +530,6 @@ export function SettingsDialog({
             />
             <FieldDescription>Comma-separated. At least one required.</FieldDescription>
           </Field>
-
-          <div>
-            <h3 className="text-sm font-medium">Pilot Statuses</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Statuses pilots can be marked with per task (e.g. "safely landed", "DNF"). The
-              "on track upload" knob decides whether uploading a track clears the status
-              (useful for DNF) or leaves it alone (useful for "safely landed", which is
-              implied by a track).
-            </p>
-            <ul className="mt-2 flex flex-col gap-2">
-              {statuses.map((s) => (
-                <li key={s.id} className="flex flex-wrap items-center gap-2">
-                  <Input
-                    className="w-auto flex-1"
-                    placeholder="e.g. Safely landed"
-                    maxLength={128}
-                    aria-label="Status label"
-                    value={s.label}
-                    onChange={(e) => updateStatus(s.id, { label: e.target.value })}
-                  />{" "}
-                  <SimpleSelect
-                    value={s.on_track_upload}
-                    onChange={(v) =>
-                      updateStatus(s.id, {
-                        on_track_upload: v as PilotStatusConfig["on_track_upload"],
-                      })
-                    }
-                    options={[
-                      { value: "none", label: "Keep" },
-                      { value: "clear", label: "Clear" },
-                      { value: "set", label: "Set" },
-                    ]}
-                    ariaLabel="On track upload"
-                  />{" "}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setStatuses((prev) => prev.filter((x) => x.id !== s.id))}
-                  >
-                    Remove
-                  </Button>
-                </li>
-              ))}
-            </ul>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-2"
-              onClick={() =>
-                setStatuses((prev) => [
-                  ...prev,
-                  { id: nextStatusId.current++, key: "", label: "", on_track_upload: "none" },
-                ])
-              }
-            >
-              + Add status
-            </Button>
-          </div>
 
           <DialogFooter>
             <Button

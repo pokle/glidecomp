@@ -12,11 +12,20 @@ import type {
 /** How a competition's tasks are scored (see competition-api migration 0009). */
 export type ScoringFormat = "gap" | "open_distance";
 
-export interface PilotStatusConfig {
-  key: string;
-  label: string;
-  on_track_upload: "none" | "clear" | "set";
-}
+/**
+ * The fixed pilot status vocabulary (FAI Sporting Code S7F §9.1), mirrored
+ * from the competition-api (web/workers/competition-api/src/pilot-statuses.ts).
+ * It is NOT admin-configurable. "Present" is the default — the absence of a
+ * stored status — so selecting it clears the pilot's row (a DELETE). The
+ * other three are the stored keys; the UI always shows the full English
+ * label, never the TLA.
+ */
+export const PILOT_STATUS_OPTIONS: ReadonlyArray<{ key: string; label: string }> = [
+  { key: "", label: "Present" },
+  { key: "absent", label: "Absent" },
+  { key: "dnf", label: "Did Not Fly" },
+  { key: "landed", label: "Landed" },
+];
 
 /**
  * The stored comp gap_params allow a null nominalDistance ("auto: 70% of
@@ -44,7 +53,6 @@ export interface CompDetailData {
    */
   timezone: string | null;
   open_igc_upload: boolean;
-  pilot_statuses: PilotStatusConfig[];
   tasks: TaskSummary[];
   admins: Array<{ email: string; name: string }>;
   pilot_count: number;
@@ -234,19 +242,6 @@ export function isPastCloseDate(closeDate: string | null): boolean {
   return (
     closeDate != null && closeDate !== "" && new Date() > new Date(closeDate + "T23:59:59")
   );
-}
-
-/**
- * Slugify a human label into a stable ASCII key for pilot_statuses.
- * Matches the validator regex: lowercase letters/digits/underscores.
- */
-export function slugifyStatusKey(label: string): string {
-  return label
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 64);
 }
 
 /** Relative time for audit entries, switching to a plain date after 30 days. */

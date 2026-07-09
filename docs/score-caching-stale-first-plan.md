@@ -340,11 +340,16 @@ deliberate deltas:
   handlers are multi-statement already, like `audit()`). The invariant that
   matters is ordering: bump strictly AFTER the write, so a concurrent
   revalidation can never capture a rev that predates data it then reads.
-- **pilot-status.ts has no hook.** Pilot statuses are roll-call metadata —
-  `computeTaskScore` never reads `task_pilot_status` — so status edits
-  don't (and mustn't) re-score. Penalties live in `igc.ts`'s PATCH route,
-  which is hooked. If statuses ever become scoring inputs (DNF/DSQ
-  handling), add the helper beside their `audit()` calls then.
+- **pilot-status.ts is hooked (statuses feed launch validity).** A pilot's
+  status is a scoring input: non-absent pilots count as "present" and
+  pilots marked Did Not Fly raise the launch-validity denominator without
+  raising the flying count (FAI S7F §9.1). `computeTaskScore` reads
+  `task_pilot_status` per class, and `computeScoreStateKey` folds the
+  statuses into the ETag (bumped to `score:v6`). So the status routes call
+  `bumpAndRevalidateScores(c, [taskId])` after each PUT/DELETE; a note-only
+  PATCH carries no scoring meaning and doesn't bump. Track upload sets
+  Landed inside the same request that already bumps, so no extra bump is
+  needed there.
 - **Revalidation also releases the lock on no-op runs** (row already fresh,
   or the guarded write was filtered because a newer result landed first) —
   otherwise a redundant trigger would sit on the lease for its full 120 s

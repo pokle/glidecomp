@@ -69,76 +69,34 @@ afterEach(async () => {
   await clearCompData();
 });
 
-// ── Default comp config ─────────────────────────────────────────────────────
+// ── Fixed vocabulary ────────────────────────────────────────────────────────
 
-describe("comp default pilot_statuses", () => {
-  test("new comp exposes the default safely_landed + dnf statuses", async () => {
+describe("fixed pilot status vocabulary", () => {
+  test("comp response no longer exposes a configurable pilot_statuses list", async () => {
     const compId = await createComp();
     const res = await authRequest("GET", `/api/comp/${compId}`);
-    const data = (await res.json()) as {
-      pilot_statuses: Array<{ key: string; label: string; on_track_upload: string }>;
-    };
-    expect(data.pilot_statuses).toEqual([
-      { key: "safely_landed", label: "Safely landed", on_track_upload: "none" },
-      { key: "dnf", label: "DNF", on_track_upload: "clear" },
-    ]);
+    const data = (await res.json()) as Record<string, unknown>;
+    expect(data.pilot_statuses).toBeUndefined();
   });
-});
 
-// ── PATCH comp settings: pilot_statuses ─────────────────────────────────────
-
-describe("PATCH /api/comp/:comp_id (pilot_statuses)", () => {
-  test("admin can replace the status set", async () => {
+  test("attempting to configure pilot_statuses via PATCH is ignored (field dropped)", async () => {
     const compId = await createComp();
     const res = await authRequest("PATCH", `/api/comp/${compId}`, {
       admin_emails: ["pilot@test.com"],
-      pilot_statuses: [
-        { key: "landed_ok", label: "Landed OK", on_track_upload: "none" },
-        { key: "dnf", label: "Did Not Fly", on_track_upload: "clear" },
-        { key: "withdrawn", label: "Withdrawn", on_track_upload: "none" },
-      ],
+      pilot_statuses: [{ key: "withdrawn", label: "Withdrawn", on_track_upload: "none" }],
     });
+    // The unknown field is stripped by the schema; the request still succeeds
+    // but no status config is stored (there is no column for it).
     expect(res.status).toBe(200);
-    const data = (await res.json()) as { pilot_statuses: unknown[] };
-    expect(data.pilot_statuses).toHaveLength(3);
-
-    // Audit entries: 1 add ("landed_ok"), 1 update ("dnf" label), 1 add ("withdrawn"), 1 remove ("safely_landed")
-    const rows = await env.DB.prepare(
-      "SELECT description FROM audit_log WHERE comp_id = (SELECT comp_id FROM comp) AND subject_type = 'comp'"
-    ).all<{ description: string }>();
-    const descriptions = rows.results.map((r) => r.description);
-    expect(descriptions.some((d) => d.includes("Added pilot status") && d.includes("landed_ok"))).toBe(true);
-    expect(descriptions.some((d) => d.includes("Updated pilot status") && d.includes("dnf"))).toBe(true);
-    expect(descriptions.some((d) => d.includes("Added pilot status") && d.includes("withdrawn"))).toBe(true);
-    expect(descriptions.some((d) => d.includes("Removed pilot status") && d.includes("safely_landed"))).toBe(true);
-  });
-
-  test("rejects duplicate status keys", async () => {
-    const compId = await createComp();
-    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
-      admin_emails: ["pilot@test.com"],
-      pilot_statuses: [
-        { key: "dup", label: "A", on_track_upload: "none" },
-        { key: "dup", label: "B", on_track_upload: "clear" },
-      ],
-    });
-    expect(res.status).toBe(400);
-  });
-
-  test("rejects invalid on_track_upload value", async () => {
-    const compId = await createComp();
-    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
-      admin_emails: ["pilot@test.com"],
-      pilot_statuses: [{ key: "x", label: "X", on_track_upload: "bogus" }],
-    });
-    expect(res.status).toBe(400);
+    const data = (await res.json()) as Record<string, unknown>;
+    expect(data.pilot_statuses).toBeUndefined();
   });
 });
 
 // ── PUT pilot status ────────────────────────────────────────────────────────
 
 describe("PUT /api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id", () => {
-  test("admin can set a status for a pilot", async () => {
+  test("admin can mark a pilot Absent with the full English label", async () => {
     const compId = await createComp();
     const taskId = await createTask(compId);
     const compPilotId = await registerPilot(compId);
@@ -146,19 +104,39 @@ describe("PUT /api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id", () 
     const res = await authRequest(
       "PUT",
       `/api/comp/${compId}/task/${taskId}/pilot-status/${compPilotId}`,
-      { status_key: "safely_landed", note: "Radioed in from LZ3" }
+      { status_key: "absent", note: "Not at launch" }
     );
     expect(res.status).toBe(200);
     const data = (await res.json()) as Record<string, unknown>;
-    expect(data.status_key).toBe("safely_landed");
-    expect(data.status_label).toBe("Safely landed");
-    expect(data.note).toBe("Radioed in from LZ3");
+    expect(data.status_key).toBe("absent");
+    expect(data.status_label).toBe("Absent");
+    expect(data.note).toBe("Not at launch");
 
-    // Audit entry should describe the set
     const audit = await env.DB.prepare(
       "SELECT description FROM audit_log WHERE subject_type = 'pilot'"
     ).all<{ description: string }>();
-    expect(audit.results.some((r) => r.description.includes("Set status") && r.description.includes("Safely landed"))).toBe(true);
+    // Audit uses the full English label, never the TLA.
+    expect(
+      audit.results.some(
+        (r) => r.description.includes("Set status") && r.description.includes("Absent")
+      )
+    ).toBe(true);
+  });
+
+  test("Did Not Fly resolves to its full English label", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+    const compPilotId = await registerPilot(compId);
+
+    const res = await authRequest(
+      "PUT",
+      `/api/comp/${compId}/task/${taskId}/pilot-status/${compPilotId}`,
+      { status_key: "dnf" }
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as Record<string, unknown>;
+    expect(data.status_key).toBe("dnf");
+    expect(data.status_label).toBe("Did Not Fly");
   });
 
   test("changing status replaces the previous one (mutually exclusive)", async () => {
@@ -174,24 +152,24 @@ describe("PUT /api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id", () 
     await authRequest(
       "PUT",
       `/api/comp/${compId}/task/${taskId}/pilot-status/${compPilotId}`,
-      { status_key: "safely_landed" }
+      { status_key: "absent" }
     );
 
     const rows = await env.DB.prepare(
       "SELECT * FROM task_pilot_status WHERE task_id = (SELECT task_id FROM task)"
     ).all();
     expect(rows.results).toHaveLength(1);
-    expect(rows.results[0].status_key).toBe("safely_landed");
+    expect(rows.results[0].status_key).toBe("absent");
   });
 
-  test("rejects unknown status_key", async () => {
+  test("rejects a status key outside the fixed set", async () => {
     const compId = await createComp();
     const taskId = await createTask(compId);
     const compPilotId = await registerPilot(compId);
     const res = await authRequest(
       "PUT",
       `/api/comp/${compId}/task/${taskId}/pilot-status/${compPilotId}`,
-      { status_key: "bogus_key" }
+      { status_key: "safely_landed" }
     );
     expect(res.status).toBe(400);
   });
@@ -203,7 +181,7 @@ describe("PUT /api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id", () 
     const res = await request(
       "PUT",
       `/api/comp/${compId}/task/${taskId}/pilot-status/${compPilotId}`,
-      { body: { status_key: "safely_landed" } }
+      { body: { status_key: "absent" } }
     );
     expect(res.status).toBe(401);
   });
@@ -218,7 +196,7 @@ describe("PUT /api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id", () 
       "PUT",
       `/api/comp/${compId}/task/${taskId}/pilot-status/${compPilotId}`,
       {
-        body: { status_key: "safely_landed", note: "I'm safe" },
+        body: { status_key: "dnf", note: "Weather looked bad" },
         user: "user-3",
       }
     );
@@ -247,7 +225,7 @@ describe("PUT /api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id", () 
       "PUT",
       `/api/comp/${compId}/task/${taskId}/pilot-status/${targetCompPilotId}`,
       {
-        body: { status_key: "safely_landed" },
+        body: { status_key: "absent" },
         user: "user-2",
       }
     );
@@ -280,7 +258,7 @@ describe("PUT /api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id", () 
       "PUT",
       `/api/comp/${compId}/task/${taskId}/pilot-status/${targetCompPilotId}`,
       {
-        body: { status_key: "safely_landed" },
+        body: { status_key: "absent" },
         user: "user-2",
       }
     );
@@ -329,7 +307,7 @@ describe("PATCH pilot-status (edit note)", () => {
 // ── DELETE pilot status ─────────────────────────────────────────────────────
 
 describe("DELETE pilot-status", () => {
-  test("admin can clear a status", async () => {
+  test("admin can clear a status (back to Present)", async () => {
     const compId = await createComp();
     const taskId = await createTask(compId);
     const compPilotId = await registerPilot(compId);
@@ -349,13 +327,22 @@ describe("DELETE pilot-status", () => {
       "SELECT * FROM task_pilot_status"
     ).all();
     expect(rows.results).toHaveLength(0);
+
+    const audit = await env.DB.prepare(
+      "SELECT description FROM audit_log WHERE subject_type = 'pilot'"
+    ).all<{ description: string }>();
+    expect(
+      audit.results.some(
+        (r) => r.description.includes("Cleared status") && r.description.includes("Present")
+      )
+    ).toBe(true);
   });
 });
 
 // ── GET pilot status list ───────────────────────────────────────────────────
 
 describe("GET pilot-status", () => {
-  test("lists all statuses for a task with labels resolved", async () => {
+  test("lists all statuses for a task with full English labels", async () => {
     const compId = await createComp();
     const taskId = await createTask(compId);
     const cp1 = await registerPilot(compId, {
@@ -368,7 +355,7 @@ describe("GET pilot-status", () => {
     await authRequest(
       "PUT",
       `/api/comp/${compId}/task/${taskId}/pilot-status/${cp1}`,
-      { status_key: "safely_landed" }
+      { status_key: "landed" }
     );
     await authRequest(
       "PUT",
@@ -387,23 +374,23 @@ describe("GET pilot-status", () => {
     };
     expect(data.statuses).toHaveLength(2);
     const alice = data.statuses.find((s) => s.pilot_name === "Alice")!;
-    expect(alice.status_key).toBe("safely_landed");
-    expect(alice.status_label).toBe("Safely landed");
+    expect(alice.status_key).toBe("landed");
+    expect(alice.status_label).toBe("Landed");
     const bob = data.statuses.find((s) => s.pilot_name === "Bob")!;
     expect(bob.status_key).toBe("dnf");
-    expect(bob.status_label).toBe("DNF");
+    expect(bob.status_label).toBe("Did Not Fly");
     expect(bob.note).toBe("Flu");
   });
 });
 
 // ── Track upload hook ───────────────────────────────────────────────────────
 
-describe("track upload clears DNF status", () => {
-  test("default config: DNF is cleared when a track is uploaded", async () => {
+describe("uploading a track marks the pilot Landed", () => {
+  test("a prior Did Not Fly is overridden by Landed on upload", async () => {
     const compId = await createComp();
     const taskId = await createTask(compId);
 
-    // Register user-3 (linked) then mark as DNF
+    // Register user-3 (linked) then mark as Did Not Fly
     const compPilotId = await registerLinkedUser3Pilot(compId);
     await authRequest(
       "PUT",
@@ -419,36 +406,31 @@ describe("track upload clears DNF status", () => {
     );
     expect(res.status).toBe(201);
 
-    // DNF should be gone
+    // Status is now Landed (note cleared)
     const rows = await env.DB.prepare(
-      "SELECT * FROM task_pilot_status WHERE task_id = (SELECT task_id FROM task)"
-    ).all();
-    expect(rows.results).toHaveLength(0);
+      "SELECT status_key, note FROM task_pilot_status WHERE task_id = (SELECT task_id FROM task)"
+    ).all<{ status_key: string; note: string | null }>();
+    expect(rows.results).toHaveLength(1);
+    expect(rows.results[0].status_key).toBe("landed");
+    expect(rows.results[0].note).toBeNull();
 
-    // Audit log should mention the automatic clear
+    // Audit log records the automatic Landed set.
     const audit = await env.DB.prepare(
       "SELECT description FROM audit_log"
     ).all<{ description: string }>();
     expect(
       audit.results.some(
         (r) =>
-          r.description.includes("Cleared status") &&
-          r.description.includes("DNF") &&
+          r.description.includes('Set status "Landed"') &&
           r.description.includes("track was uploaded")
       )
     ).toBe(true);
   });
 
-  test("safely_landed is preserved when a track is uploaded", async () => {
+  test("a pilot with no prior status becomes Landed on upload", async () => {
     const compId = await createComp();
     const taskId = await createTask(compId);
-
     const compPilotId = await registerLinkedUser3Pilot(compId);
-    await authRequest(
-      "PUT",
-      `/api/comp/${compId}/task/${taskId}/pilot-status/${compPilotId}`,
-      { status_key: "safely_landed" }
-    );
 
     const res = await uploadRequest(
       `/api/comp/${compId}/task/${taskId}/igc`,
@@ -458,42 +440,40 @@ describe("track upload clears DNF status", () => {
     expect(res.status).toBe(201);
 
     const rows = await env.DB.prepare(
-      "SELECT status_key FROM task_pilot_status"
+      "SELECT status_key FROM task_pilot_status WHERE comp_pilot_id = (SELECT comp_pilot_id FROM comp_pilot LIMIT 1)"
     ).all<{ status_key: string }>();
     expect(rows.results).toHaveLength(1);
-    expect(rows.results[0].status_key).toBe("safely_landed");
+    expect(rows.results[0].status_key).toBe("landed");
+    expect(compPilotId).toBeTruthy();
   });
+});
 
-  test("custom clear-on-upload status is also cleared", async () => {
+// ── Launch validity: a status change is a scoring input ──────────────────────
+
+describe("status changes mark scores stale", () => {
+  test("marking a pilot Did Not Fly bumps the task's score inputs", async () => {
     const compId = await createComp();
     const taskId = await createTask(compId);
+    const compPilotId = await registerPilot(compId);
 
-    // Reconfigure with a custom status that clears on upload
-    await authRequest("PATCH", `/api/comp/${compId}`, {
-      admin_emails: ["pilot@test.com"],
-      pilot_statuses: [
-        { key: "dnf", label: "DNF", on_track_upload: "clear" },
-        { key: "forgot_tracker", label: "Forgot tracker", on_track_upload: "clear" },
-      ],
-    });
+    // Read the current inputs_rev (may be absent until first bump).
+    const before = await env.DB.prepare(
+      "SELECT inputs_rev FROM task_scores WHERE task_id = (SELECT task_id FROM task)"
+    ).first<{ inputs_rev: number }>();
 
-    const compPilotId = await registerLinkedUser3Pilot(compId);
-    await authRequest(
+    const res = await authRequest(
       "PUT",
       `/api/comp/${compId}/task/${taskId}/pilot-status/${compPilotId}`,
-      { status_key: "forgot_tracker" }
+      { status_key: "dnf" }
     );
+    expect(res.status).toBe(200);
 
-    const res = await uploadRequest(
-      `/api/comp/${compId}/task/${taskId}/igc`,
-      fakeIgcPayload(),
-      { user: "user-3" }
-    );
-    expect(res.status).toBe(201);
-
-    const rows = await env.DB.prepare(
-      "SELECT * FROM task_pilot_status"
-    ).all();
-    expect(rows.results).toHaveLength(0);
+    const after = await env.DB.prepare(
+      "SELECT inputs_rev FROM task_scores WHERE task_id = (SELECT task_id FROM task)"
+    ).first<{ inputs_rev: number }>();
+    // A placeholder row now exists (inputs bumped) even though the task had
+    // never been scored before.
+    expect(after).not.toBeNull();
+    expect(after!.inputs_rev).toBeGreaterThan(before?.inputs_rev ?? 0);
   });
 });

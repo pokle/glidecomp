@@ -124,14 +124,13 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       // Verify comp exists and check close_date
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, close_date, default_pilot_class, pilot_statuses FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, close_date, default_pilot_class FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
         .first<{
           comp_id: number;
           close_date: string | null;
           default_pilot_class: string;
-          pilot_statuses: string;
         }>();
 
       if (!comp) {
@@ -286,8 +285,7 @@ export const igcRoutes = new Hono<HonoEnv>()
           compId,
           taskId,
           compPilotId,
-          user.name,
-          comp.pilot_statuses
+          user.name
         );
 
         return c.json({
@@ -333,8 +331,7 @@ export const igcRoutes = new Hono<HonoEnv>()
         compId,
         taskId,
         compPilotId,
-        user.name,
-        comp.pilot_statuses
+        user.name
       );
 
       return c.json(
@@ -367,14 +364,13 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       // Look up the comp once — need open_igc_upload to gate authorisation
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, close_date, open_igc_upload, pilot_statuses FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, close_date, open_igc_upload FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
         .first<{
           comp_id: number;
           close_date: string | null;
           open_igc_upload: number;
-          pilot_statuses: string;
         }>();
       if (!comp) return c.json({ error: "Competition not found" }, 404);
 
@@ -536,8 +532,7 @@ export const igcRoutes = new Hono<HonoEnv>()
           compId,
           taskId,
           compPilotId,
-          targetPilotName,
-          comp.pilot_statuses
+          targetPilotName
         );
 
         return c.json({
@@ -582,8 +577,7 @@ export const igcRoutes = new Hono<HonoEnv>()
         compId,
         taskId,
         compPilotId,
-        targetPilotName,
-        comp.pilot_statuses
+        targetPilotName
       );
 
       return c.json(

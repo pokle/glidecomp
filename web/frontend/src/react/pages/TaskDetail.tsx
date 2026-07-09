@@ -260,12 +260,11 @@ export function TaskDetail() {
       />
 
       {/* Pilot status (safety roll call) — skipped when comp data failed to
-          load because we have no status config. */}
+          load because we can't resolve permissions without it. */}
       {comp ? (
         <PilotStatusSection
           compId={compId}
           taskId={taskId}
-          statusConfig={comp.pilot_statuses ?? []}
           user={user}
           isAdmin={isAdmin}
           openIgcUpload={comp.open_igc_upload}
