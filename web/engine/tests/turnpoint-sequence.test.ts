@@ -673,6 +673,47 @@ describe('resolveTurnpointSequence', () => {
       expect(result.sequence[3].taskIndex).toBe(3);
     });
 
+    it('S8b: ESS and goal are the same cylinder — single entry makes goal', () => {
+      // Race-to-goal where the speed section ends AT goal: ESS and goal are
+      // the identical cylinder (same centre and radius). A pilot who enters
+      // once and lands inside (no exit) crosses that boundary a single time,
+      // which emits one crossing per task index at the IDENTICAL timestamp.
+      // Regression for pilots reported "landed out" despite reaching goal.
+      const task = createTask([
+        { name: 'SSS', lat: 47.0, lon: 11.0, radius: 1000, type: 'SSS' },
+        { name: 'TP1', lat: 47.0, lon: 11.13, radius: 400 },
+        { name: 'KHANCO', lat: 47.0, lon: 11.26, radius: 1000, type: 'ESS' },
+        { name: 'KHANCO', lat: 47.0, lon: 11.26, radius: 1000 },
+      ]);
+
+      // Fly out of SSS, through TP1, then into the ESS/goal cylinder and STAY
+      // there (land in goal) — a single enter crossing, no exit.
+      const fixes = createTrackThroughCylinders(
+        [
+          { lat: 47.0, lon: 11.0, radius: 1000 },
+          { lat: 47.0, lon: 11.13, radius: 400 },
+        ],
+      );
+      let t = fixes[fixes.length - 1].time.getTime() / 60000 + 1;
+      // Approach KHANCO from the west and settle at its centre without leaving.
+      fixes.push(createFix(t, 47.0, 11.24)); t += 1;   // outside KHANCO
+      fixes.push(createFix(t, 47.0, 11.255)); t += 1;  // inside (enter)
+      fixes.push(createFix(t, 47.0, 11.26)); t += 1;   // centre — landed in goal
+
+      const result = resolveTurnpointSequence(task, fixes);
+
+      expect(result.madeGoal).toBe(true);
+      expect(result.essReaching).not.toBeNull();
+      expect(result.sequence).toHaveLength(4);
+      // ESS (index 2) and goal (index 3) share the one boundary crossing time.
+      expect(result.sequence[3].taskIndex).toBe(3);
+      expect(result.sequence[3].time.getTime()).toBe(
+        result.sequence[2].time.getTime()
+      );
+      // Full task distance is credited to a goal pilot.
+      expect(result.flownDistance).toBeCloseTo(result.taskDistance, 5);
+    });
+
     it('S9: later TP inside SSS cylinder — spurious SSS crossings', () => {
       // SSS has 3000m radius, TP2 is 740m from SSS center (inside SSS)
       const task = createTask([
