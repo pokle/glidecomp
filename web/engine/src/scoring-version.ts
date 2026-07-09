@@ -25,7 +25,11 @@
 //     at the identical timestamp; the forward-path search now accepts a
 //     co-located turnpoint at that same time instead of requiring a strictly
 //     later crossing, which had reported goal pilots as "landed out".
-export const SCORING_ENGINE_VERSION = 3;
+// v4: pilot totals rounded to one decimal place (S7F §11) instead of whole
+//     points, with the rounding done after penalties (§12.4). The engine
+//     total keeps the 0.1 precision through the jump-the-gun penalty; the
+//     backend re-rounds after the scorekeeper's absolute penalty.
+export const SCORING_ENGINE_VERSION = 4;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -33,4 +37,4 @@ export const SCORING_ENGINE_VERSION = 3;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "7b8ce1b7e887f7efdc7731abe88e036970081d5298207eed4a2465395da46adc";
+  "fa51d240e8d52c48a4aa896b84344f1c26718febe0d07348fdc092ecde0ab360";
