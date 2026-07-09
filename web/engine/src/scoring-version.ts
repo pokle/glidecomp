@@ -19,7 +19,13 @@
 //     from the start gate taken, drop pre-gate start crossings, anchor the
 //     leading-coefficient clock at the first gate, and apply the §12.2
 //     early-start rules (PG launch→SSS, HG jump-the-gun penalty).
-export const SCORING_ENGINE_VERSION = 2;
+// v3: goal detection when ESS and goal are the same cylinder — a pilot who
+//     enters the shared ESS/goal cylinder once (and lands inside) now makes
+//     goal. The single boundary crossing emits one crossing per task index
+//     at the identical timestamp; the forward-path search now accepts a
+//     co-located turnpoint at that same time instead of requiring a strictly
+//     later crossing, which had reported goal pilots as "landed out".
+export const SCORING_ENGINE_VERSION = 3;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -27,4 +33,4 @@ export const SCORING_ENGINE_VERSION = 2;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "cfe81121a63d3cdf8748820e0357faec19e91cf33ec55c475aae6b83b7dc576c";
+  "7b8ce1b7e887f7efdc7731abe88e036970081d5298207eed4a2465395da46adc";

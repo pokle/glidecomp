@@ -1,5 +1,6 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, test } from "vitest";
+import { SCORING_ENGINE_VERSION } from "@glidecomp/engine";
 import { clearCompData, createComp, createTask, request } from "./helpers";
 import { decodeId } from "../src/sqids";
 
@@ -44,7 +45,11 @@ async function seedScoreRow(overrides: {
   )
     .bind(
       taskId,
-      overrides.engine_version ?? 2,
+      // Default to the running engine version so a seeded row reads as
+      // computed by the current engine — otherwise a version bump makes the
+      // row stale-by-version and revalidation recomputes it (changing
+      // computed_rev), which is not what these cache tests are exercising.
+      overrides.engine_version ?? SCORING_ENGINE_VERSION,
       overrides.inputs_rev ?? 0,
       overrides.computed_rev ?? 0
     )

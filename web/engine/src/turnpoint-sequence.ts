@@ -450,10 +450,21 @@ function buildForwardPath(
     const tpCrossings = crossingsByTP.get(tpIdx) ?? [];
     const isESS = tpIdx === essIdx;
 
-    // Find first crossing after previous reaching time
+    // Find first crossing at or after the previous reaching time.
+    //
+    // The comparison is >= (not >) so a turnpoint co-located with the
+    // previous one is credited from the same physical boundary crossing.
+    // The common case is the speed section ending at goal: ESS and goal are
+    // the *same* cylinder (same centre and radius), so a single entry emits
+    // two crossings — one per task index — carrying the identical
+    // interpolated timestamp. A strict > would drop the goal crossing and
+    // report a pilot who reached ESS as "landed out" (unless they happened
+    // to exit and re-enter). A genuinely tighter co-located cylinder still
+    // produces a strictly-later crossing (you reach the wider ring first),
+    // so >= never over-credits: it only rescues the identical-cylinder case.
     let validCrossing: CylinderCrossing | null = null;
     for (const crossing of tpCrossings) {
-      if (crossing.time.getTime() > prevReachingTime) {
+      if (crossing.time.getTime() >= prevReachingTime) {
         validCrossing = crossing;
         break;
       }
