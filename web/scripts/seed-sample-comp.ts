@@ -372,6 +372,15 @@ function main(): void {
         `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name)
          VALUES (${taskId}, ${compPilotId}, ${q(key)}, ${q(now)}, ${p.fileSize}, ${q(p.name)});`,
       );
+      // A pilot with a track took off and landed, so mark them "Landed" — the
+      // same status a real upload sets (applyStatusOnTrackUpload). The direct
+      // insert bypasses that hook, so without this the roll call would show
+      // every seeded pilot as "Present" (as if nobody took off). Registered
+      // pilots with no track for this task keep the Present default (no row).
+      trackInserts.push(
+        `INSERT INTO task_pilot_status (comp_id, task_id, comp_pilot_id, status_key, note, set_by_user_id, set_by_name, set_at)
+         VALUES (${compId}, ${taskId}, ${compPilotId}, 'landed', NULL, NULL, 'Sample data', ${q(now)});`,
+      );
       n++;
     }
     exec(trackInserts.join('\n'));
