@@ -210,8 +210,16 @@ function km(meters: number, decimals = 1): string {
 }
 
 function pts(points: number): string {
+  return `${fmtPoints(points)} pts`;
+}
+
+/**
+ * Format a point value at the spec's one-decimal precision (S7F §11), dropping
+ * a trailing ".0" so whole scores read as whole numbers.
+ */
+function fmtPoints(points: number): string {
   const rounded = Math.round(points * 10) / 10;
-  return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)} pts`;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
 function pct(fraction: number): string {
@@ -663,27 +671,27 @@ function buildTotalSection(entry: ScoreEntryInput): ScoreExplanationSection {
     entry.leading_points,
     entry.arrival_points,
   ];
-  const sum = Math.round(components.reduce((a, b) => a + b, 0));
   const parts = components
     .filter((c, i) => c > 0 || i < 2) // always show distance + time, others only when earned
     .map((c) => c.toFixed(1))
     .join(' + ');
+  // FAI S7F §11 rounds the total to one decimal place; §12.4 does that
+  // rounding *after* penalties, so the penalties sit inside the round().
   const jtg = entry.jump_the_gun_penalty ?? 0;
-  let detail: string;
-  if (jtg === 0 && entry.penalty_points === 0) {
-    detail = `round(${parts}) = ${entry.total_score}`;
-  } else {
-    const steps = [`round(${parts}) = ${sum}`];
-    if (jtg !== 0) {
-      steps.push(`− ${jtg} jump-the-gun (never below the minimum-distance score)`);
-    }
-    if (entry.penalty_points !== 0) {
-      steps.push(
-        `${entry.penalty_points > 0 ? '−' : '+'} ${Math.abs(entry.penalty_points)} penalty (scores never go below 0)`,
-      );
-    }
-    detail = `${steps.join(' ')} = ${entry.total_score}`;
+  const penaltySteps: string[] = [];
+  if (jtg !== 0) {
+    penaltySteps.push(`− ${jtg} jump-the-gun (never below the minimum-distance score)`);
   }
+  if (entry.penalty_points !== 0) {
+    penaltySteps.push(
+      `${entry.penalty_points > 0 ? '−' : '+'} ${Math.abs(entry.penalty_points)} penalty (scores never go below 0)`,
+    );
+  }
+  const total = fmtPoints(entry.total_score);
+  const detail =
+    penaltySteps.length === 0
+      ? `round(${parts}, 1 dp) = ${total}`
+      : `round(${parts} ${penaltySteps.join(' ')}, 1 dp) = ${total}`;
   return {
     id: 'total',
     title: 'Total',
@@ -692,7 +700,7 @@ function buildTotalSection(entry: ScoreEntryInput): ScoreExplanationSection {
       {
         id: 'total-sum',
         text: 'Distance + time + leading + arrival, minus penalties',
-        value: `${entry.total_score} pts`,
+        value: `${total} pts`,
         detail,
       },
     ],

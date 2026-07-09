@@ -449,13 +449,17 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         <h2 class="text-2xl font-bold mb-4">Your Total Score</h2>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            Your total score for a task is simply the sum of your four component scores, rounded
-            to the nearest whole number:
+            Your total score for a task is the sum of your four component scores. Following the
+            spec (S7F §11), it is rounded to <strong>one decimal place</strong> — and any
+            penalties are subtracted <em>before</em> that rounding (§12.4), so the rounding is
+            always the last step:
           </p>
-          <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Total} = \text{round}(\text{Distance Pts} + \text{Time Pts} + \text{Leading Pts} + \text{Arrival Pts})`)}></p>
+          <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Total} = \text{round}_{0.1}\!\left(\text{Distance} + \text{Time} + \text{Leading} + \text{Arrival} - \text{Penalties}\right)`)}></p>
           <p class="text-muted-foreground">
-            Pilots are ranked by total score (highest first). In case of a tie, the pilot with
-            the greater flown distance is ranked higher.
+            A pilot's score can never go below zero, no matter how large the penalty. Pilots are
+            ranked by this total (highest first); in case of a tie, the pilot with the greater
+            flown distance is ranked higher. The scoreboard displays these totals as whole
+            points, but the underlying one-decimal value is what drives ranking and tie-breaks.
           </p>
 
           <div class="ml-2">
@@ -684,9 +688,11 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   strictly than the spec allows.
                 </li>
                 <li>
-                  <strong>Rounding (§11):</strong> the 2024 spec rounds each pilot's total to one
-                  decimal place; GlideComp rounds totals to whole points (as most scoring software
-                  displays them). Component points are kept to 0.1.
+                  <strong>Rounding (§11, §12.4):</strong> GlideComp rounds each pilot's total to
+                  one decimal place, after subtracting any penalties, exactly as the 2024 spec
+                  requires. Component points are likewise kept to 0.1. The scoreboard displays
+                  totals as whole points for readability, but ranking and tie-breaks use the
+                  one-decimal value.
                 </li>
                 <li>
                   <strong>Optional leading/arrival points:</strong> the spec always allocates

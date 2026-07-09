@@ -165,24 +165,25 @@ describe('Corryong Cup 2026 Task 1 — integration', () => {
     // gate (S7F §8.3.1/§8.7) — these totals track AirScore's published
     // results (Holtkamp 907, Burkitt 890 there; ±1–2 pts here from the
     // different launch-validity denominator and difficulty residuals).
-    { name: 'Jon Durand',        rank: 1,  total: 1000, distPts: 485.6, timePts: 514.4, madeGoal: true },
-    { name: 'Rohan Holtkamp',    rank: 2,  total: 906,  distPts: 485.6, timePts: 420.1, madeGoal: true },
-    { name: 'Peter  Burkitt',    rank: 3,  total: 888,  distPts: 485.6, timePts: 402.4, madeGoal: true },
+    // Totals are rounded to one decimal place per S7F §11.
+    { name: 'Jon Durand',        rank: 1,  total: 1000,  distPts: 485.6, timePts: 514.4, madeGoal: true },
+    { name: 'Rohan Holtkamp',    rank: 2,  total: 905.6, distPts: 485.6, timePts: 420.1, madeGoal: true },
+    { name: 'Peter  Burkitt',    rank: 3,  total: 888,   distPts: 485.6, timePts: 402.4, madeGoal: true },
 
     // Mid-pack — goal finishers
-    { name: 'Glen Mcfarlane',    rank: 5,  total: 671,  distPts: 485.6, timePts: 185.2, madeGoal: true },
-    { name: 'Todd Wisewould',    rank: 10, total: 546,  distPts: 485.6, timePts: 60.0,  madeGoal: true },
-    { name: 'Craig Taylor',      rank: 12, total: 486,  distPts: 485.6, timePts: 0,     madeGoal: true },
+    { name: 'Glen Mcfarlane',    rank: 5,  total: 670.7, distPts: 485.6, timePts: 185.2, madeGoal: true },
+    { name: 'Todd Wisewould',    rank: 10, total: 545.5, distPts: 485.6, timePts: 60.0,  madeGoal: true },
+    { name: 'Craig Taylor',      rank: 12, total: 485.6, distPts: 485.6, timePts: 0,     madeGoal: true },
 
     // First non-goal pilot (distance points now include the HG difficulty half)
-    { name: 'Rich Reinauer',     rank: 13, total: 480,  distPts: 479.7, timePts: 0, madeGoal: false },
+    { name: 'Rich Reinauer',     rank: 13, total: 479.7, distPts: 479.7, timePts: 0, madeGoal: false },
 
     // Mid-pack — non-goal
-    { name: 'Steve Blenkinsop',  rank: 17, total: 359,  distPts: 358.8, timePts: 0, madeGoal: false },
-    { name: 'Neale Halsall',     rank: 22, total: 237,  distPts: 237.4, timePts: 0, madeGoal: false },
+    { name: 'Steve Blenkinsop',  rank: 17, total: 358.8, distPts: 358.8, timePts: 0, madeGoal: false },
+    { name: 'Neale Halsall',     rank: 22, total: 237.4, distPts: 237.4, timePts: 0, madeGoal: false },
 
     // Trailing — at minimum distance floor (tied at rank 30)
-    { name: 'Ivo van der Leeden', rank: 30, total: 42, distPts: 41.8, timePts: 0, madeGoal: false },
+    { name: 'Ivo van der Leeden', rank: 30, total: 41.8, distPts: 41.8, timePts: 0, madeGoal: false },
   ];
 
   for (const snap of snapshots) {
