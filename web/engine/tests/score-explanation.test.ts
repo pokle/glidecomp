@@ -51,6 +51,7 @@ function crossing(
   taskIndex: number,
   minutes: number,
   direction: 'enter' | 'exit',
+  toleranceCredited = false,
 ): CylinderCrossing {
   return {
     taskIndex,
@@ -61,6 +62,7 @@ function crossing(
     direction,
     altitude: 1500,
     distanceToCenter: 2000,
+    toleranceCredited,
   };
 }
 
@@ -69,6 +71,7 @@ function reaching(
   minutes: number,
   selectionReason: TurnpointReaching['selectionReason'],
   candidateCount = 1,
+  toleranceCredited = false,
 ): TurnpointReaching {
   return {
     taskIndex,
@@ -79,6 +82,7 @@ function reaching(
     altitude: 1500,
     selectionReason,
     candidateCount,
+    toleranceCredited,
   };
 }
 
@@ -216,6 +220,30 @@ describe('explainGapScore — flight narrative', () => {
     expect(goal!.anchor!.kind).toBe('goal');
 
     expect(explanation.headline).toBe('Made goal in 1:10:00 — 781 points');
+  });
+
+  it('flags a turnpoint credited by the cylinder tolerance band (§8.1)', () => {
+    const sss = reaching(1, 30, 'last_before_next');
+    // TP reached only via the tolerance band (near-miss graze).
+    const tpA = reaching(2, 60, 'first_after_previous', 1, true);
+    const result: TurnpointSequenceResult = {
+      ...makeReentryResult(),
+      crossings: [{ ...crossing(1, 30, 'exit'), time: sss.time }, crossing(2, 60, 'enter', true)],
+      sequence: [sss, tpA, reaching(3, 100, 'first_crossing'), reaching(4, 105, 'first_after_previous')],
+      sssReaching: sss,
+    };
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result,
+      entry: makeGoalEntry(),
+      classContext: makeClassContext(),
+      params: { scoring: 'PG' },
+    });
+    const flight = section(explanation, 'flight');
+    const tp = flight.items.find((i) => i.id === 'reaching-2');
+    expect(tp).toBeDefined();
+    expect(tp!.detail).toContain('§8.1');
+    expect(tp!.detail).toContain('tolerance');
   });
 
   it('explains a landed-out pilot with the best-progress point', () => {

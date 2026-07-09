@@ -29,7 +29,13 @@
 //     points, with the rounding done after penalties (§12.4). The engine
 //     total keeps the 0.1 precision through the jump-the-gun penalty; the
 //     backend re-rounds after the scorekeeper's absolute penalty.
-export const SCORING_ENGINE_VERSION = 4;
+// v5: cylinder tolerance band (S7F §8.1) — crossing detection now applies the
+//     full tolerance band (percentage OR a 5 m absolute minimum, whichever is
+//     larger) and extends it inward for the EXIT start as well as outward for
+//     entry cylinders, instead of an outward-only percentage expansion. Small
+//     cylinders get the 5 m floor and EXIT starts are credited at the inner
+//     edge; near-misses credited by the band are flagged for explanation.
+export const SCORING_ENGINE_VERSION = 5;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -37,4 +43,4 @@ export const SCORING_ENGINE_VERSION = 4;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "fa51d240e8d52c48a4aa896b84344f1c26718febe0d07348fdc092ecde0ab360";
+  "9e9dec7315d5fb5a0ce0661c39919ce32cef414b2d9d62a0f835414d293a9a65";

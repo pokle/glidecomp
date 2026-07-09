@@ -277,6 +277,13 @@ function reachingAnchor(
 const MAX_START_CROSSINGS_LISTED = 12;
 
 /**
+ * Shown when a crossing was credited by the cylinder tolerance band rather
+ * than a physical crossing of the nominal radius (FAI S7F §8.1).
+ */
+const TOLERANCE_NOTE =
+  'Credited by the cylinder tolerance band (FAI S7F §8.1) — the track came within tolerance of the cylinder edge but did not physically cross the nominal radius.';
+
+/**
  * Build the flight-narrative section: what the pilot flew, in task order,
  * with the reason each crossing was (or wasn't) the one that scored.
  */
@@ -332,6 +339,7 @@ function buildFlightSection(
             ? `${c.direction === 'enter' ? 'Entered' : 'Exited'} the start cylinder — this is the scored start`
             : `${c.direction === 'enter' ? 'Entered' : 'Exited'} the start cylinder`,
           value: fmt(c.time),
+          detail: c.toleranceCredited ? TOLERANCE_NOTE : undefined,
           emphasis: scored ? 'normal' : 'muted',
           anchor: {
             kind: scored ? 'start' : 'start_candidate',
@@ -362,6 +370,8 @@ function buildFlightSection(
         id: 'start',
         text: `Started${startName ? ` at ${startName}` : ''}`,
         value: fmt(sss.time),
+        detail: sss.toleranceCredited ? TOLERANCE_NOTE : undefined,
+        emphasis: sss.toleranceCredited ? 'muted' : undefined,
         anchor: reachingAnchor(sss, 'start'),
       });
     }
@@ -401,6 +411,9 @@ function buildFlightSection(
     let detail: string | undefined;
     if (reaching.candidateCount > 1) {
       detail = `First of ${reaching.candidateCount} crossings — once a turnpoint is reached, later crossings don't matter.`;
+    }
+    if (reaching.toleranceCredited) {
+      detail = `${detail ? `${detail} ` : ''}${TOLERANCE_NOTE}`;
     }
     if (isESS) {
       const t = entry.speed_section_time ?? result.speedSectionTime;
