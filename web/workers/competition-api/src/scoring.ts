@@ -313,12 +313,18 @@ function buildClassScore(
 ): ClassScore {
   const withPenalties = result.pilotScores.map((ps) => {
     const pilot = pilotMeta.get(ps.trackFile)!;
+    // FAI S7F §12.4: apply the scorekeeper's absolute penalty, then round to
+    // one decimal place (rounding is done after penalties), floored at zero
+    // (the lowest score a pilot can attain is 0). ps.totalScore is already the
+    // §11 one-decimal total; re-rounding keeps the final clean when the
+    // penalty itself carries more precision.
+    const penalised = ps.totalScore - pilot.penalty_points;
     return {
       pilotScore: ps,
       comp_pilot_id: pilot.comp_pilot_id,
       penalty_points: pilot.penalty_points,
       penalty_reason: pilot.penalty_reason,
-      finalScore: Math.max(0, ps.totalScore - pilot.penalty_points),
+      finalScore: Math.max(0, Math.round(penalised * 10) / 10),
     };
   });
 
