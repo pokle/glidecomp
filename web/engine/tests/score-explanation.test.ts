@@ -290,8 +290,20 @@ describe('explainGapScore — flight narrative', () => {
     const bp = flight.items.find((i) => i.id === 'best-progress');
     expect(bp).toBeDefined();
     expect(bp!.text).toContain('18.0 km short');
+    expect(bp!.text).toContain('best distance made good along the task');
     expect(bp!.detail).toContain('42.0 km');
+    // Names the next un-reached turnpoint (last reached = 2, so next is ESS)
+    // and makes clear the marker is the closest point to it, not to goal.
+    expect(bp!.detail).toContain('next turnpoint, ESS (ESSWP)');
+    expect(bp!.detail).toContain('not the point nearest goal');
     expect(bp!.anchor!.kind).toBe('best_progress');
+    // The anchor carries the routed distance-to-goal polyline: the
+    // best-progress point, then each un-reached turnpoint's tag point to goal.
+    // Task has 5 turnpoints (goal idx 4); last reached is 2, so the un-reached
+    // tail is indices 3 and 4 → 2 tag points + the best-progress point = 3.
+    expect(bp!.anchor!.path).toBeDefined();
+    expect(bp!.anchor!.path!.length).toBe(3);
+    expect(bp!.anchor!.path![0]).toEqual({ latitude: -36.3, longitude: 147.3 });
 
     const time = section(explanation, 'time');
     expect(time.items[0].id).toBe('no-time-points');

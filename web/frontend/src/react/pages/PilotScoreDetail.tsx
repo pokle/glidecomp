@@ -34,7 +34,7 @@ import {
 } from "@glidecomp/engine";
 import { api } from "../../comp/api";
 import { gunzipResponse } from "../../analysis/storage";
-import type { OpenDistanceLine } from "../../analysis/map-provider";
+import type { BestProgressRoute, OpenDistanceLine } from "../../analysis/map-provider";
 import { formatTaskDate } from "../lib/format";
 import { formatTimeInZone, zoneNameWithOffset } from "../lib/time";
 import { Breadcrumbs } from "../components/Breadcrumbs";
@@ -69,6 +69,8 @@ interface DetailData {
   /** Marker events for every anchored explanation item, keyed by item id. */
   eventsByItem: Map<string, FlightEvent>;
   openDistanceLine: OpenDistanceLine | null;
+  /** A landed-out pilot's routed distance-to-goal line, when applicable. */
+  bestProgressRoute: BestProgressRoute | null;
   /** When the published score this narrative explains was computed. */
   scoreComputedAt: string;
   /** True when a re-score is in flight — the narrative may soon change. */
@@ -133,6 +135,30 @@ function anchoredEvents(
     }
   }
   return events;
+}
+
+/**
+ * Pull the landed-out routed distance-to-goal line off the best-progress
+ * anchor (the engine attaches the polyline there), pairing it with the
+ * remaining distance the engine measured for the label.
+ */
+function deriveBestProgressRoute(
+  explanation: ScoreExplanation,
+  distanceToGoal: number,
+): BestProgressRoute | null {
+  for (const section of explanation.sections) {
+    for (const item of section.items) {
+      const path =
+        item.anchor?.kind === "best_progress" ? item.anchor.path : undefined;
+      if (path && path.length >= 2) {
+        return {
+          coords: path.map((p) => ({ lat: p.latitude, lon: p.longitude })),
+          distanceToGoal,
+        };
+      }
+    }
+  }
+  return null;
 }
 
 async function loadDetail(
@@ -233,6 +259,7 @@ function buildDetailData(
       explanation,
       mapTask: task.xctsk,
       eventsByItem: anchoredEvents(explanation),
+      bestProgressRoute: null,
       openDistanceLine: geometry
         ? {
             pilotName: entry.pilot_name,
@@ -282,6 +309,10 @@ function buildDetailData(
     explanation,
     mapTask: scoringTask,
     eventsByItem: anchoredEvents(explanation),
+    bestProgressRoute: deriveBestProgressRoute(
+      explanation,
+      result.bestProgress?.distanceToGoal ?? 0,
+    ),
     openDistanceLine: null,
     scoreComputedAt: score.computed_at,
     scoreStale: score.stale,
@@ -500,6 +531,7 @@ export function PilotScoreDetail() {
                 events={markerEvents}
                 focus={focus}
                 openDistanceLine={data.openDistanceLine}
+                bestProgressRoute={data.bestProgressRoute}
               />
             </Suspense>
             {/* Styled like the providers' own controls (white regardless of
