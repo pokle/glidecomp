@@ -201,15 +201,19 @@ The scoring software must ensure that cylinder crossings are evaluated independe
 
 ### 3. Tolerance Band and Near-Misses
 
-CIVL GAP applies a tolerance to cylinder crossings:
+CIVL GAP applies a tolerance band to cylinder crossings (FAI S7F §8.1), a percentage plus a **5 m absolute minimum**:
 - **Cat 1 events:** 0.1% of radius
 - **Cat 2 events:** up to 0.5% of radius
+- `outerRadius = max(radius × (1 + tol), radius + 5 m)`
+- `innerRadius = min(radius × (1 − tol), radius − 5 m)`
+
+The band extends both outward and inward. Entry cylinders (turnpoints, ESS, goal) are credited at the **outer** edge; a start you EXIT is credited at the **inner** edge, so a pilot leaving the start is credited a touch early rather than a touch late (§8.2/§8.3). The 5 m minimum matters for small cylinders — 0.5% of a 400 m turnpoint is only 2 m.
 
 A crossing is valid if:
-- A single tracklog point falls inside the cylinder (within tolerance), OR
+- A single tracklog point falls inside the tolerance band, OR
 - Two consecutive tracklog points lie on opposite sides of the cylinder boundary
 
-This means a pilot who just barely touches the tolerance band is considered to have reached the turnpoint. The scoring algorithm must apply tolerance *before* evaluating crossings.
+This means a pilot who just barely touches the tolerance band is considered to have reached the turnpoint. The scoring algorithm must apply tolerance *before* evaluating crossings. GlideComp implements this in `detectCylinderCrossings` (`web/engine/src/turnpoint-sequence.ts`) and flags such near-misses as `toleranceCredited` so the per-pilot score explanation can call them out.
 
 ### 4. GPS Recording Interval
 

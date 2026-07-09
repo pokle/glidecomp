@@ -285,6 +285,133 @@ describe('detectCylinderCrossings', () => {
       expect(c.distanceToCenter).toBeCloseTo(1000, -2); // within 100m
     }
   });
+
+  it('genuine crossings are not flagged as tolerance-credited', () => {
+    const task = threePointTask();
+    const track = createTrackThroughCylinders([
+      { lat: 47.0, lon: 11.0, radius: 1000 },
+    ]);
+    const crossings = detectCylinderCrossings(task, track).filter(c => c.taskIndex === 0);
+    expect(crossings.length).toBeGreaterThan(0);
+    // The synthetic track straddles the boundary cleanly (±200 m), so every
+    // crossing physically passes through the nominal radius.
+    expect(crossings.every(c => c.toleranceCredited === false)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: cylinder tolerance band (FAI S7F §8.1)
+// ---------------------------------------------------------------------------
+
+describe('cylinder tolerance band (§8.1)', () => {
+  it('applies the 5 m absolute minimum for small cylinders', () => {
+    // Entry turnpoint, 400 m radius. Cat-1 percentage (0.1%) is only 0.4 m,
+    // but the spec's 5 m floor extends the outer edge to 405 m.
+    const task = createTask([
+      { name: 'SSS', lat: 47.0, lon: 11.0, radius: 1000, type: 'SSS' },
+      { name: 'ESS', lat: 47.02, lon: 11.0, radius: 400, type: 'ESS' },
+    ]);
+    task.cylinderTolerance = 0.001; // 0.1% → 0.4 m band; 5 m floor dominates
+    const c = task.turnpoints[1].waypoint;
+    // Closest approach 403 m: outside the 400.4 m percentage band, inside the
+    // 405 m floor band. Only the 5 m minimum credits this crossing.
+    const p1 = destinationPoint(c.lat, c.lon, 410, 0);
+    const p2 = destinationPoint(c.lat, c.lon, 403, 0);
+    const p3 = destinationPoint(c.lat, c.lon, 410, 0);
+    const fixes = [
+      createFix(0, p1.lat, p1.lon),
+      createFix(1, p2.lat, p2.lon),
+      createFix(2, p3.lat, p3.lon),
+    ];
+    const crossings = detectCylinderCrossings(task, fixes).filter(c => c.taskIndex === 1);
+    expect(crossings.length).toBeGreaterThanOrEqual(1);
+    // The pilot never reached the nominal 400 m radius — credited by tolerance.
+    expect(crossings.every(c => c.toleranceCredited)).toBe(true);
+  });
+
+  it('does not credit a near-miss outside the 5 m band', () => {
+    const task = createTask([
+      { name: 'SSS', lat: 47.0, lon: 11.0, radius: 1000, type: 'SSS' },
+      { name: 'ESS', lat: 47.02, lon: 11.0, radius: 400, type: 'ESS' },
+    ]);
+    task.cylinderTolerance = 0.001;
+    const c = task.turnpoints[1].waypoint;
+    // Closest approach 407 m: outside even the 405 m floor band → no crossing.
+    const p1 = destinationPoint(c.lat, c.lon, 420, 0);
+    const p2 = destinationPoint(c.lat, c.lon, 407, 0);
+    const fixes = [createFix(0, p1.lat, p1.lon), createFix(1, p2.lat, p2.lon)];
+    const crossings = detectCylinderCrossings(task, fixes).filter(c => c.taskIndex === 1);
+    expect(crossings).toHaveLength(0);
+  });
+
+  it('credits an EXIT start at the inner edge of the band', () => {
+    // Large EXIT start (5000 m): 0.5% → inner edge at 4975 m. A pilot who
+    // crosses 4975 m outward has left the start, even though they have not yet
+    // reached the nominal 5000 m radius.
+    const task = createTask(
+      [
+        { name: 'SSS', lat: 47.0, lon: 11.0, radius: 5000, type: 'SSS' },
+        { name: 'ESS', lat: 47.1, lon: 11.0, radius: 400, type: 'ESS' },
+      ],
+      { direction: 'EXIT' },
+    );
+    const c = task.turnpoints[0].waypoint;
+    const p1 = destinationPoint(c.lat, c.lon, 4970, 0); // inside inner edge
+    const p2 = destinationPoint(c.lat, c.lon, 4980, 0); // outside inner, inside nominal
+    const fixes = [createFix(0, p1.lat, p1.lon), createFix(1, p2.lat, p2.lon)];
+    const crossings = detectCylinderCrossings(task, fixes).filter(c => c.taskIndex === 0);
+    const exit = crossings.find(c => c.direction === 'exit');
+    expect(exit).toBeDefined();
+    expect(exit!.toleranceCredited).toBe(true);
+  });
+
+  it('an ENTER start (outer edge) does not count the same inner near-exit', () => {
+    // Same geometry, but an ENTER start detects against the outer edge
+    // (5025 m). Both fixes (4970, 4980) are inside 5025 m, so no exit is seen.
+    const task = createTask(
+      [
+        { name: 'SSS', lat: 47.0, lon: 11.0, radius: 5000, type: 'SSS' },
+        { name: 'ESS', lat: 47.1, lon: 11.0, radius: 400, type: 'ESS' },
+      ],
+      { direction: 'ENTER' },
+    );
+    const c = task.turnpoints[0].waypoint;
+    const p1 = destinationPoint(c.lat, c.lon, 4970, 0);
+    const p2 = destinationPoint(c.lat, c.lon, 4980, 0);
+    const fixes = [createFix(0, p1.lat, p1.lon), createFix(1, p2.lat, p2.lon)];
+    const crossings = detectCylinderCrossings(task, fixes).filter(c => c.taskIndex === 0);
+    expect(crossings.find(c => c.direction === 'exit')).toBeUndefined();
+  });
+
+  it('propagates tolerance credit onto the resolved reaching', () => {
+    // Exit the start cleanly, then graze the small ESS/goal within the 5 m
+    // band — the ESS reaching should carry toleranceCredited and count as goal.
+    const task = createTask(
+      [
+        { name: 'SSS', lat: 47.0, lon: 11.0, radius: 1000, type: 'SSS' },
+        { name: 'ESS', lat: 47.02, lon: 11.0, radius: 400, type: 'ESS' },
+      ],
+      { direction: 'EXIT' },
+    );
+    const sss = task.turnpoints[0].waypoint;
+    const ess = task.turnpoints[1].waypoint;
+    const startCenter = destinationPoint(sss.lat, sss.lon, 0, 0);
+    const startExit = destinationPoint(sss.lat, sss.lon, 1100, 0); // clean exit
+    const essGrazeIn = destinationPoint(ess.lat, ess.lon, 403, 180); // within 5 m band
+    const essGrazeOut = destinationPoint(ess.lat, ess.lon, 410, 180);
+    const fixes = [
+      createFix(0, startCenter.lat, startCenter.lon),
+      createFix(1, startExit.lat, startExit.lon),
+      createFix(2, essGrazeIn.lat, essGrazeIn.lon),
+      createFix(3, essGrazeOut.lat, essGrazeOut.lon),
+    ];
+    const result = resolveTurnpointSequence(task, fixes);
+    expect(result.sssReaching).not.toBeNull();
+    expect(result.sssReaching!.toleranceCredited).toBe(false); // clean exit
+    expect(result.essReaching).not.toBeNull();
+    expect(result.essReaching!.toleranceCredited).toBe(true); // near-miss graze
+    expect(result.madeGoal).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

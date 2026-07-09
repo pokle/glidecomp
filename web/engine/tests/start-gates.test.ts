@@ -343,7 +343,7 @@ describe('early-start scoring (§12.2)', () => {
     const minDistanceFraction = baseParams.minimumDistance / 16000;
     const expectedFloor = result.availablePoints.distance * minDistanceFraction;
     expect(early.earlyStartOutcome).toBe('hg_penalty');
-    expect(early.totalScore).toBe(Math.round(expectedFloor));
+    expect(early.totalScore).toBe(Math.round(expectedFloor * 10) / 10);
     expect(early.totalScore).toBeGreaterThan(0);
   });
 
