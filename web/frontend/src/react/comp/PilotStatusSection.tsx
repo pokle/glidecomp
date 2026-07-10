@@ -168,6 +168,14 @@ function StatusRow({
   }
 
   async function saveStatusChange(newKey: string) {
+    // "Landed" is derived from an active flight record (a track or a manual
+    // flight), no longer hand-set (issue #306). The option only reflects
+    // current state; re-selecting it is a no-op. (This section is superseded
+    // by the unified task table.)
+    if (newKey === "landed") {
+      setSelectedKey(newKey);
+      return;
+    }
     setSelectedKey(newKey);
     setIndicator("saving…");
     try {
@@ -193,7 +201,7 @@ function StatusRow({
           // newKey is non-empty here (the "" → Present case took the DELETE
           // branch above); it is one of the fixed stored status keys.
           json: {
-            status_key: newKey as "absent" | "dnf" | "landed",
+            status_key: newKey as "absent" | "dnf",
             note: note || null,
           },
         });

@@ -20,6 +20,7 @@ import {
   type TurnpointSequenceResultJSON,
 } from "@glidecomp/engine";
 import { encodeId } from "./sqids";
+import { manualFlightToScoringData } from "./manual-flight-store";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -105,7 +106,7 @@ export async function computeScoreStateKey(
               tt.comp_pilot_id, cp.registered_pilot_name, cp.pilot_class
        FROM task_track tt
        JOIN comp_pilot cp ON cp.comp_pilot_id = tt.comp_pilot_id
-       WHERE tt.task_id = ? ORDER BY tt.task_track_id`
+       WHERE tt.task_id = ? AND tt.active = 1 ORDER BY tt.task_track_id`
     )
     .bind(taskId)
     .all<{
@@ -114,6 +115,29 @@ export async function computeScoreStateKey(
       penalty_points: number;
       comp_pilot_id: number;
       registered_pilot_name: string;
+      pilot_class: string;
+    }>();
+
+  // Manual flights (issue #306) are scoring inputs too: an active manual flight
+  // is scored as numFlying and its made-good depends on its inputs + the route.
+  // Hash the geometric inputs + made_goal/duration so recording, editing, or
+  // superseding one invalidates the served body. Only active rows count.
+  const manualFlights = await db
+    .prepare(
+      `SELECT mf.comp_pilot_id, mf.last_reached_tp_index, mf.landing_lat,
+              mf.landing_lon, mf.made_goal, mf.duration_seconds, cp.pilot_class
+       FROM task_manual_flight mf
+       JOIN comp_pilot cp ON cp.comp_pilot_id = mf.comp_pilot_id
+       WHERE mf.task_id = ? AND mf.active = 1 ORDER BY mf.comp_pilot_id`
+    )
+    .bind(taskId)
+    .all<{
+      comp_pilot_id: number;
+      last_reached_tp_index: number;
+      landing_lat: number;
+      landing_lon: number;
+      made_goal: number;
+      duration_seconds: number | null;
       pilot_class: string;
     }>();
 
@@ -147,6 +171,10 @@ export async function computeScoreStateKey(
     ...statuses.results.map(
       (s) => `st:${s.comp_pilot_id}:${s.status_key}:${s.pilot_class}`
     ),
+    ...manualFlights.results.map(
+      (m) =>
+        `mf:${m.comp_pilot_id}:${m.last_reached_tp_index}:${m.landing_lat}:${m.landing_lon}:${m.made_goal}:${m.duration_seconds ?? ""}:${m.pilot_class}`
+    ),
   ].join("|");
 
   const hashBuffer = await crypto.subtle.digest(
@@ -160,7 +188,8 @@ export async function computeScoreStateKey(
 
   // v5: added scoring_format to the hashed state (open-distance support).
   // v6: added per-task pilot statuses (they now feed launch validity).
-  return `score:v6:${taskId}:${hex}`;
+  // v7: only active tracks count; added active manual flights (issue #306).
+  return `score:v7:${taskId}:${hex}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -442,7 +471,9 @@ export async function computeTaskScore(
   const leadingFormula = gapParams.leadingFormula ?? DEFAULT_GAP_PARAMETERS.leadingFormula;
   const scoringTask = taskForDistanceOrigin(xcTask, distanceOrigin);
 
-  // Load all tracks joined with pilot info, grouped by class
+  // Load all active tracks joined with pilot info, grouped by class. A
+  // superseded track (active = 0 — e.g. a pilot later marked DNF, or replaced
+  // by a manual flight) is retained but NOT scored (issue #306).
   const tracks = await db
     .prepare(
       `SELECT tt.task_track_id, tt.comp_pilot_id, tt.igc_filename, tt.uploaded_at,
@@ -451,7 +482,7 @@ export async function computeTaskScore(
               cp.pilot_class
        FROM task_track tt
        JOIN comp_pilot cp ON tt.comp_pilot_id = cp.comp_pilot_id
-       WHERE tt.task_id = ?
+       WHERE tt.task_id = ? AND tt.active = 1
        ORDER BY tt.task_track_id`
     )
     .bind(taskId)
@@ -491,6 +522,13 @@ export async function computeTaskScore(
            SELECT 1 FROM task_track tt
            WHERE tt.task_id = tps.task_id
              AND tt.comp_pilot_id = tps.comp_pilot_id
+             AND tt.active = 1
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM task_manual_flight mf
+           WHERE mf.task_id = tps.task_id
+             AND mf.comp_pilot_id = tps.comp_pilot_id
+             AND mf.active = 1
          )
        GROUP BY cp.pilot_class`
     )
@@ -734,6 +772,53 @@ export async function computeTaskScore(
   await saveTrackAnalyses(db, analysisWrites);
 
   const analyzedPilots = analyzed.filter((p): p is AnalyzedPilot => p !== null);
+
+  // Manual flights (issue #306): track-less pilots recorded by an admin.
+  // Their made-good is cheap to compute (no R2 fetch, no tracklog scan), so
+  // build the synthetic scoring inputs inline against the same scoring task —
+  // recomputed live so a later route edit rescales them. Only active rows in
+  // scored classes count; they score as numFlying like any tracked pilot.
+  const offset = xcTask.turnpoints.length - scoringTask.turnpoints.length;
+  const manualRows = await db
+    .prepare(
+      `SELECT mf.comp_pilot_id, mf.last_reached_tp_index, mf.landing_lat,
+              mf.landing_lon, mf.duration_seconds,
+              cp.registered_pilot_name AS pilot_name, cp.pilot_class
+       FROM task_manual_flight mf
+       JOIN comp_pilot cp ON cp.comp_pilot_id = mf.comp_pilot_id
+       WHERE mf.task_id = ? AND mf.active = 1`
+    )
+    .bind(taskId)
+    .all<{
+      comp_pilot_id: number;
+      last_reached_tp_index: number;
+      landing_lat: number;
+      landing_lon: number;
+      duration_seconds: number | null;
+      pilot_name: string;
+      pilot_class: string;
+    }>();
+  for (const m of manualRows.results) {
+    if (!scoredClasses.has(m.pilot_class)) continue;
+    analyzedPilots.push({
+      flight: manualFlightToScoringData(
+        scoringTask,
+        offset,
+        m.pilot_name,
+        m.comp_pilot_id,
+        {
+          lastReachedTpIndex: m.last_reached_tp_index,
+          landingLat: m.landing_lat,
+          landingLon: m.landing_lon,
+          durationSeconds: m.duration_seconds,
+        }
+      ),
+      comp_pilot_id: m.comp_pilot_id,
+      pilot_class: m.pilot_class,
+      penalty_points: 0,
+      penalty_reason: null,
+    });
+  }
 
   // Score each class separately
   const classScores: ClassScore[] = [];

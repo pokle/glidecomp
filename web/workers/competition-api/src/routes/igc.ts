@@ -11,6 +11,10 @@ import { bumpAndRevalidateScores } from "../score-store";
 import { linkExistingRegistrations } from "../pilot-linker";
 import { applyStatusOnTrackUpload } from "./pilot-status";
 import {
+  supersedeActiveManualFlights,
+  markLandedFromEvidence,
+} from "../manual-flight-store";
+import {
   validateAndDecompressIgc,
   IgcValidationException,
 } from "../igc-validation";
@@ -257,7 +261,7 @@ export const igcRoutes = new Hono<HonoEnv>()
         await c.env.DB.prepare(
           `UPDATE task_track
            SET igc_filename = ?, uploaded_at = ?, file_size = ?, igc_pilot_name = ?,
-               uploaded_by_user_id = ?, uploaded_by_name = ?
+               uploaded_by_user_id = ?, uploaded_by_name = ?, active = 1
            WHERE task_track_id = ?`
         )
           .bind(
@@ -504,7 +508,7 @@ export const igcRoutes = new Hono<HonoEnv>()
         await c.env.DB.prepare(
           `UPDATE task_track
            SET igc_filename = ?, uploaded_at = ?, file_size = ?, igc_pilot_name = ?,
-               uploaded_by_user_id = ?, uploaded_by_name = ?
+               uploaded_by_user_id = ?, uploaded_by_name = ?, active = 1
            WHERE task_track_id = ?`
         )
           .bind(
@@ -858,6 +862,70 @@ export const igcRoutes = new Hono<HonoEnv>()
         subject_id: track.task_track_id,
         subject_name: track.registered_pilot_name,
         description: `Deleted IGC for ${track.registered_pilot_name}`,
+      });
+
+      return c.json({ success: true });
+    }
+  )
+
+  // ── POST /api/comp/:comp_id/task/:task_id/igc/:comp_pilot_id/restore ──
+  // Reactivate a pilot's superseded track (e.g. after they were marked DNF,
+  // which deactivated it). Makes the track the active evidence again,
+  // supersedes any active manual flight, and resolves the outcome to Landed.
+  // Admin-only — this overrides a status an admin set.
+  .post(
+    "/api/comp/:comp_id/task/:task_id/igc/:comp_pilot_id/restore",
+    requireAuth,
+    sqidsMiddleware,
+    requireCompAdmin,
+    async (c) => {
+      const compId = c.var.ids.comp_id!;
+      const taskId = c.var.ids.task_id!;
+      const compPilotId = c.var.ids.comp_pilot_id!;
+      const user = c.var.user;
+
+      const track = await c.env.DB.prepare(
+        `SELECT tt.task_track_id, tt.active, cp.registered_pilot_name
+         FROM task_track tt
+         JOIN task t ON tt.task_id = t.task_id
+         JOIN comp_pilot cp ON tt.comp_pilot_id = cp.comp_pilot_id
+         WHERE tt.task_id = ? AND tt.comp_pilot_id = ? AND t.comp_id = ?`
+      )
+        .bind(taskId, compPilotId, compId)
+        .first<{
+          task_track_id: number;
+          active: number;
+          registered_pilot_name: string;
+        }>();
+
+      if (!track) {
+        return c.json({ error: "Track not found" }, 404);
+      }
+      if (track.active) {
+        return c.json({ error: "Track is already active" }, 400);
+      }
+
+      const manualSuperseded = await supersedeActiveManualFlights(
+        c.env.DB,
+        taskId,
+        compPilotId
+      );
+      await c.env.DB.prepare(
+        `UPDATE task_track SET active = 1 WHERE task_track_id = ?`
+      )
+        .bind(track.task_track_id)
+        .run();
+      await markLandedFromEvidence(c.env.DB, user, compId, taskId, compPilotId);
+
+      await bumpAndRevalidateScores(c, [taskId]);
+      const supersededNote = manualSuperseded
+        ? " (superseded their manual flight)"
+        : "";
+      await audit(c.env.DB, c.var.user, compId, {
+        subject_type: "track",
+        subject_id: track.task_track_id,
+        subject_name: track.registered_pilot_name,
+        description: `Restored track for ${track.registered_pilot_name} (back to Landed)${supersededNote}`,
       });
 
       return c.json({ success: true });
