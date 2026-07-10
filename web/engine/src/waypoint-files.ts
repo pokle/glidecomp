@@ -17,7 +17,13 @@
 import { parseWaypointsCSV, type WaypointRecord } from './waypoints';
 
 /** The waypoint file formats we can read. */
-export type WaypointFileFormat = 'ozi-wpt' | 'seeyou-cup' | 'csv';
+export type WaypointFileFormat =
+  | 'ozi-wpt'
+  | 'garmin-wpt'
+  | 'seeyou-cup'
+  | 'gpx'
+  | 'kml'
+  | 'csv';
 
 export interface ParsedWaypointFile {
   format: WaypointFileFormat;
@@ -180,16 +186,164 @@ export function parseWaypointsCUP(content: string): WaypointRecord[] {
 }
 
 /**
- * Detect a waypoint file's format from its contents (and optional filename)
- * and parse it. Recognises OziExplorer .wpt, SeeYou .cup, and generic CSV —
- * the three formats competition organisers hand out — normalising all to
+ * Parse one decimal-degrees-plus-hemisphere token, e.g. `35.8525118956°S` or
+ * `142.7814859414°E`. The degree symbol is often mojibake (a file saved as
+ * Latin-1 then read as UTF-8 turns `°` into U+FFFD), so we key off the
+ * trailing hemisphere letter and strip everything non-numeric from the rest.
+ */
+function parseDecimalHemiCoord(token: string): number | null {
+  const hemi = token.trim().match(/([NSEWnsew])\s*$/)?.[1]?.toUpperCase();
+  const num = parseFloat(token.replace(/[^0-9.+-]/g, ''));
+  if (!Number.isFinite(num)) return null;
+  return hemi === 'S' || hemi === 'W' ? -Math.abs(num) : num;
+}
+
+/**
+ * Parse a Garmin / PCX5-style `.wpt` file (a different, older `.wpt` than
+ * OziExplorer's). Header lines like `G  WGS 84` and `U  1`, then one
+ * whitespace-delimited `W` record per waypoint:
+ *   `W  CURY A 35.8525S 142.7815E 27-MAR-62 00:00:00 0.000000 CURY`
+ * The two coordinate tokens are the ones carrying a hemisphere letter; the
+ * rest (symbol class, date, time, altitude, description) sit around them.
+ */
+export function parseWaypointsPCX5(content: string): WaypointRecord[] {
+  const out: WaypointRecord[] = [];
+  for (const line of content.split(/\r?\n/)) {
+    if (!/^W\s/.test(line)) continue;
+    const t = line.trim().split(/\s+/);
+    if (t.length < 5) continue;
+    // Coordinate tokens = those with a digit AND a trailing hemisphere letter
+    // (names like "SLKE" end in E but have no digit; "400" has no hemisphere).
+    const coordIdx: number[] = [];
+    for (let i = 2; i < t.length; i++) {
+      if (/\d/.test(t[i]) && /[NSEWnsew]$/.test(t[i])) coordIdx.push(i);
+    }
+    if (coordIdx.length < 2) continue;
+    const lat = parseDecimalHemiCoord(t[coordIdx[0]]);
+    const lon = parseDecimalHemiCoord(t[coordIdx[1]]);
+    if (lat === null || lon === null) continue;
+    // Altitude is the first plain number after the coordinates, if present.
+    let altitude = 0;
+    for (let i = coordIdx[1] + 1; i < t.length; i++) {
+      if (/^[+-]?\d+(\.\d+)?$/.test(t[i])) {
+        altitude = Math.round(parseFloat(t[i]));
+        break;
+      }
+    }
+    out.push({
+      name: t[1] || `WP${out.length + 1}`,
+      latitude: lat,
+      longitude: lon,
+      description: t[1] || '',
+      radius: 400,
+      altitude,
+    });
+  }
+  return out;
+}
+
+/** Minimal XML entity decode for names/descriptions in GPX/KML. */
+function decodeXmlEntities(s: string): string {
+  return s
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;|&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+const firstTag = (body: string, tag: string): string | undefined => {
+  const m = body.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`, 'i'));
+  return m ? decodeXmlEntities(m[1].trim()) : undefined;
+};
+
+/**
+ * Parse a GPX 1.1 waypoint file: one `<wpt lat="…" lon="…">` per point with
+ * `<name>`, optional `<ele>` (metres) and `<desc>`. Regex-based (no DOM) so
+ * it stays dependency-free and SSR-safe. Attribute order is not assumed.
+ */
+export function parseWaypointsGPX(content: string): WaypointRecord[] {
+  const out: WaypointRecord[] = [];
+  for (const m of content.matchAll(/<wpt\b([^>]*)>([\s\S]*?)<\/wpt>/gi)) {
+    const attrs = m[1];
+    const lat = parseFloat(attrs.match(/\blat\s*=\s*"([^"]+)"/i)?.[1] ?? '');
+    const lon = parseFloat(attrs.match(/\blon\s*=\s*"([^"]+)"/i)?.[1] ?? '');
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    const name = firstTag(m[2], 'name') || `WP${out.length + 1}`;
+    const ele = parseFloat(firstTag(m[2], 'ele') ?? '');
+    out.push({
+      name,
+      latitude: lat,
+      longitude: lon,
+      description: firstTag(m[2], 'desc') ?? '',
+      radius: 400,
+      altitude: Number.isFinite(ele) ? Math.round(ele) : 0,
+    });
+  }
+  return out;
+}
+
+/**
+ * Parse a KML waypoint file: each `<Placemark>` with a `<Point>` becomes a
+ * waypoint. KML coordinates are `lon,lat,alt`. We read only the Point's
+ * coordinates (ignoring any LookAt/Camera view the placemark also carries).
+ */
+export function parseWaypointsKML(content: string): WaypointRecord[] {
+  const out: WaypointRecord[] = [];
+  for (const m of content.matchAll(/<Placemark\b[^>]*>([\s\S]*?)<\/Placemark>/gi)) {
+    const body = m[1];
+    const point = body.match(/<Point\b[^>]*>([\s\S]*?)<\/Point>/i);
+    if (!point) continue;
+    const coords = point[1].match(/<coordinates>([\s\S]*?)<\/coordinates>/i);
+    if (!coords) continue;
+    const parts = coords[1].trim().split(/\s*,\s*/);
+    const lon = parseFloat(parts[0]);
+    const lat = parseFloat(parts[1]);
+    const alt = parseFloat(parts[2] ?? '');
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    out.push({
+      name: firstTag(body, 'name') || `WP${out.length + 1}`,
+      latitude: lat,
+      longitude: lon,
+      description: '',
+      radius: 400,
+      altitude: Number.isFinite(alt) ? Math.round(alt) : 0,
+    });
+  }
+  return out;
+}
+
+/**
+ * Detect a waypoint file's format from its **contents** (with the filename as
+ * a hint) and parse it. Content wins over extension because the same `.wpt`
+ * extension covers two unrelated formats (OziExplorer and Garmin/PCX5) and
+ * files are routinely renamed. Recognises OziExplorer `.wpt`, Garmin/PCX5
+ * `.wpt`, SeeYou `.cup`, GPX, KML and generic CSV, normalising all to
  * WaypointRecord. Throws nothing; an unrecognised file yields no waypoints.
  */
 export function parseWaypointFile(content: string, filename?: string): ParsedWaypointFile {
   const firstLine = (content.split(/\r?\n/, 1)[0] ?? '').toLowerCase();
   const ext = (filename?.split('.').pop() ?? '').toLowerCase();
 
-  if (firstLine.includes('oziexplorer') || ext === 'wpt') {
+  // XML formats — detect by root/element regardless of extension.
+  if (/^\s*</.test(content)) {
+    if (/<gpx\b|<wpt\b/i.test(content)) {
+      return { format: 'gpx', waypoints: parseWaypointsGPX(content) };
+    }
+    if (/<kml\b|<Placemark\b/i.test(content)) {
+      return { format: 'kml', waypoints: parseWaypointsKML(content) };
+    }
+  }
+
+  if (firstLine.includes('oziexplorer')) {
+    return { format: 'ozi-wpt', waypoints: parseWaypointsWPT(content) };
+  }
+  // Garmin/PCX5: a `G  <datum>` header line plus whitespace `W` records.
+  if (/^G\s/m.test(content) && /^W\s/m.test(content)) {
+    return { format: 'garmin-wpt', waypoints: parseWaypointsPCX5(content) };
+  }
+  // An unlabelled .wpt that reached here is the OziExplorer CSV variant.
+  if (ext === 'wpt') {
     return { format: 'ozi-wpt', waypoints: parseWaypointsWPT(content) };
   }
 

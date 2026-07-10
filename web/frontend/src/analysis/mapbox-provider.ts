@@ -2870,6 +2870,14 @@ export function createMapBoxProvider(
           updateGeoJSONSource(map, 'waypoints', []);
         },
 
+        fitToWaypoints() {
+          if (waypointsData.length === 0) return;
+          map.resize();
+          const bounds = new mapboxgl.LngLatBounds();
+          for (const w of waypointsData) bounds.extend([w.lon, w.lat]);
+          map.fitBounds(bounds, { padding: 40, duration: 800, maxZoom: 12 });
+        },
+
         onWaypointClick(callback: (waypoint: MapWaypoint) => void) {
           waypointsClickCallback = callback;
         },

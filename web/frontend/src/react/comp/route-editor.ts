@@ -53,6 +53,32 @@ export function parseCoords(text: string): { lat: number; lon: number } | null {
   return { lat, lon };
 }
 
+/** Quote a CSV field only when it needs it (comma, quote or newline). */
+function csvField(value: string): string {
+  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+/**
+ * Serialize turnpoints to the competition waypoint CSV format
+ * (`Name,Latitude,Longitude,Description,Proximity Distance,Altitude`) — the
+ * shape parseWaypointsCSV reads back. Proximity Distance is the cylinder
+ * radius; Altitude is the waypoint's altSmoothed (0 when unknown).
+ */
+export function turnpointsToCSV(turnpoints: Turnpoint[]): string {
+  const header = "Name,Latitude,Longitude,Description,Proximity Distance,Altitude";
+  const rows = turnpoints.map((tp) =>
+    [
+      csvField(tp.waypoint.name),
+      tp.waypoint.lat.toFixed(6),
+      tp.waypoint.lon.toFixed(6),
+      csvField(tp.waypoint.description ?? ""),
+      String(tp.radius),
+      String(Math.round(tp.waypoint.altSmoothed ?? 0)),
+    ].join(",")
+  );
+  return [header, ...rows].join("\n") + "\n";
+}
+
 export function turnpointToRow(tp: Turnpoint, id: number): RouteRow {
   return {
     id,

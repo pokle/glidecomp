@@ -165,6 +165,10 @@ export interface MapProvider {
     /** Clear all pickable waypoint markers */
     clearWaypoints?(): void;
 
+    /** Fit the view to the currently-set waypoint markers (used after loading
+     *  a waypoint file so the whole set is visible). No-op if none are set. */
+    fitToWaypoints?(): void;
+
     /** Register callback for when the user clicks a pickable waypoint marker */
     onWaypointClick?(callback: (waypoint: MapWaypoint) => void): void;
 

@@ -109,6 +109,7 @@ Loaded from a competition waypoint file (`.wpt` / `.cup` / `.csv`) so the route 
 - **Marker labels** (`waypoint-labels` layer): the waypoint name, text size 11, offset `[0, 1.1]`, top anchor, colour `#475569`, white halo 1.5px. Shown only at **zoom ≥ 10** (Mapbox) so a whole regional database doesn't clutter when zoomed out. Leaflet shows the name as a hover tooltip instead.
 - **Picking (select mode = `view`)**: a map tap picks the **nearest** loaded waypoint within a **44 px** tolerance (a finger width — no exact aim at the small marker, which is what made picking impossible on touch) and fires `onWaypointClick(waypoint)`. A tap with no waypoint inside the tolerance does nothing (you can't accidentally drop a point). Both providers compute the nearest by projecting each waypoint to screen space; the dedicated per-marker click handler is gone (Leaflet markers are non-interactive for clicks, `bubblingPointerEvents: true`, so taps reach the map handler).
 - **Placing a new point (`add-waypoint` mode)**: a tap reports its ground coordinates via `onMapClick(lat, lon)` — the editor opens a dialog to name it, set an altitude, and adjust the coordinates before adding. Crosshair cursor.
+- **Fit on load**: `fitToWaypoints()` fits the view to the whole set (40 px padding, `maxZoom` 12 so a single point doesn't zoom to the max). The editor calls it whenever a file is loaded, so all the waypoints come into view.
 
 ## Open Distance Line
 

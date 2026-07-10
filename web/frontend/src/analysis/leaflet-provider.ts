@@ -1108,6 +1108,15 @@ export function createLeafletProvider(
         waypointsGroup.clearLayers();
       },
 
+      fitToWaypoints() {
+        if (waypointsData.length === 0) return;
+        const first = waypointsData[0];
+        const bounds = new LatLngBounds([first.lat, first.lon], [first.lat, first.lon]);
+        for (const w of waypointsData) bounds.extend([w.lat, w.lon]);
+        map.invalidateSize({ animate: false });
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 12, animate: true });
+      },
+
       onWaypointClick(callback: (waypoint: MapWaypoint) => void) {
         waypointsClickCallback = callback;
       },

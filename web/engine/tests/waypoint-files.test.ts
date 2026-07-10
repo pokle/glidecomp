@@ -2,6 +2,9 @@ import { describe, it, expect } from 'bun:test';
 import {
   parseWaypointsWPT,
   parseWaypointsCUP,
+  parseWaypointsPCX5,
+  parseWaypointsGPX,
+  parseWaypointsKML,
   parseWaypointFile,
   parseCoordinateValue,
 } from '../src/waypoint-files';
@@ -140,5 +143,93 @@ describe('parseWaypointFile (autodetect)', () => {
   });
   it('yields no waypoints for an unrecognised file rather than throwing', () => {
     expect(parseWaypointFile('not a waypoint file at all').waypoints).toEqual([]);
+  });
+});
+
+// The "Big K" waypoint DB, exported to five formats — CURY is the shared
+// anchor: every format must decode it to the same decimals.
+const CURY = { lat: -35.852512, lon: 142.781486 };
+
+// Garmin/PCX5. The degree glyph is written as U+FFFD here to mimic the real
+// file, which is Latin-1 `°` read back as UTF-8 mojibake.
+const GARMIN_WPT = `G  WGS 84
+U  1
+W  CURY A 35.8525118956�S 142.7814859414�E 27-MAR-62 00:00:00 0.000000 CURY
+W  SLKE A 35.5125579453�S 142.8492165641�E 27-MAR-62 00:00:00 0.000000 SLKE
+W  400 A 32.5001152098�S 144.7471449922�E 27-MAR-62 00:00:00 0.000000 400`;
+
+const GPX = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Flyskyhy">
+<wpt lat="-35.852512" lon="142.781486"><ele>0</ele><name>CURY</name><desc>CURY</desc></wpt>
+<wpt lat="-35.512558" lon="142.849217"><ele>123</ele><name>SLKE</name><desc>SLKE</desc></wpt>
+</gpx>`;
+
+const KML = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+<name>BIK WAYPOINTS.kmz</name>
+<Placemark>
+  <name>CURY</name>
+  <LookAt><longitude>142.78972</longitude><latitude>-35.85311</latitude></LookAt>
+  <Point><coordinates>142.7814859413839,-35.85251189560726,0</coordinates></Point>
+</Placemark>
+<Placemark>
+  <name>SLKE</name>
+  <Point><coordinates>142.8492165641371,-35.51255794531249,50</coordinates></Point>
+</Placemark>
+</Document></kml>`;
+
+describe('parseWaypointsPCX5 (Garmin/PCX5 .wpt)', () => {
+  it('parses whitespace records with mojibake degree glyphs', () => {
+    const wps = parseWaypointsPCX5(GARMIN_WPT);
+    expect(wps).toHaveLength(3);
+    const cury = byName(wps, 'CURY');
+    expect(cury.latitude).toBeCloseTo(CURY.lat, 6);
+    expect(cury.longitude).toBeCloseTo(CURY.lon, 6);
+  });
+  it('handles a purely numeric waypoint name ("400")', () => {
+    // "400" has no hemisphere letter, so it must not be mistaken for a coord.
+    const four = byName(parseWaypointsPCX5(GARMIN_WPT), '400');
+    expect(four.latitude).toBeCloseTo(-32.5001152, 5);
+  });
+});
+
+describe('parseWaypointsGPX', () => {
+  it('reads lat/lon attributes, name and elevation', () => {
+    const wps = parseWaypointsGPX(GPX);
+    expect(wps).toHaveLength(2);
+    expect(byName(wps, 'CURY').latitude).toBeCloseTo(CURY.lat, 6);
+    expect(byName(wps, 'SLKE').altitude).toBe(123);
+  });
+});
+
+describe('parseWaypointsKML', () => {
+  it('reads Point coordinates as lon,lat,alt and ignores LookAt', () => {
+    const wps = parseWaypointsKML(KML);
+    expect(wps).toHaveLength(2);
+    const cury = byName(wps, 'CURY');
+    expect(cury.latitude).toBeCloseTo(CURY.lat, 5);
+    expect(cury.longitude).toBeCloseTo(CURY.lon, 5);
+    expect(byName(wps, 'SLKE').altitude).toBe(50);
+  });
+});
+
+describe('parseWaypointFile detects every Big K format', () => {
+  const cases: [string, string | undefined, string][] = [
+    ['garmin-wpt', 'bigk.wpt', GARMIN_WPT],
+    ['gpx', 'bigk.gpx', GPX],
+    ['kml', 'bigk.kml', KML],
+  ];
+  for (const [fmt, name, content] of cases) {
+    it(`detects ${fmt}`, () => {
+      const r = parseWaypointFile(content, name);
+      expect(r.format).toBe(fmt);
+      expect(byName(r.waypoints, 'CURY').latitude).toBeCloseTo(CURY.lat, 5);
+    });
+  }
+
+  it('distinguishes the two .wpt variants by content', () => {
+    // OziExplorer .wpt and Garmin .wpt share the extension; content decides.
+    expect(parseWaypointFile(OZI_WPT, "x.wpt").format).toBe("ozi-wpt");
+    expect(parseWaypointFile(GARMIN_WPT, "x.wpt").format).toBe("garmin-wpt");
   });
 });

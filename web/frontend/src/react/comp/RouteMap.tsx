@@ -114,6 +114,8 @@ export default function RouteMap({
   useEffect(() => {
     if (!provider) return;
     provider.setWaypoints?.(waypoints);
+    // Loading a file (waypoints becomes non-empty) zooms/pans to show them all.
+    if (waypoints.length > 0) provider.fitToWaypoints?.();
     return () => {
       if (!destroyedRef.current) provider.clearWaypoints?.();
     };

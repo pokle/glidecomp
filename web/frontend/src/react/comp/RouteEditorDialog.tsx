@@ -49,6 +49,7 @@ import {
   formatCoords,
   gateToHHMM,
   parseCoords,
+  turnpointsToCSV,
   turnpointToRow,
   xctskForPatch,
   TYPE_LABELS,
@@ -582,6 +583,42 @@ export function RouteEditorDialog({
     );
   }
 
+  /** Export the turnpoints as a competition waypoint CSV file. */
+  function exportCsv() {
+    const table = tableRef.current;
+    if (!table) return;
+    const result = buildRoute(table.getData() as RouteRow[], { openDistance });
+    if (result.turnpoints.length === 0) {
+      toast.error("Add some turnpoints with valid coordinates first");
+      return;
+    }
+    downloadFile(
+      `${slugify(taskName)}-waypoints.csv`,
+      turnpointsToCSV(result.turnpoints),
+      "text/csv"
+    );
+  }
+
+  /** Empty the turnpoint grid (start the route over). */
+  async function clearTurnpoints() {
+    const table = tableRef.current;
+    if (!table) return;
+    const hasRows = (table.getData() as RouteRow[]).some(
+      (r) => String(r.name).trim() !== "" || String(r.coords).trim() !== ""
+    );
+    if (hasRows) {
+      const ok = await confirm({
+        title: "Clear all turnpoints?",
+        message:
+          "This removes every turnpoint from the editor. Loaded waypoints stay on the map, and nothing is saved until you press Save.",
+        confirmLabel: "Clear",
+      });
+      if (!ok) return;
+    }
+    await table.setData([]);
+    recompute();
+  }
+
   async function save() {
     const task = assembleTask();
     if (!task) return;
@@ -689,7 +726,7 @@ export function RouteEditorDialog({
               <input
                 ref={waypointInputRef}
                 type="file"
-                accept=".wpt,.cup,.csv,.txt"
+                accept=".wpt,.cup,.csv,.txt,.gpx,.kml"
                 hidden
                 onChange={(e) => void loadWaypointFile(e.currentTarget)}
               />
@@ -753,6 +790,15 @@ export function RouteEditorDialog({
                 onClick={addTurnpoint}
               >
                 Add turnpoint
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!gridReady}
+                onClick={() => void clearTurnpoints()}
+              >
+                Clear turnpoints
               </Button>
               {totalKm !== null ? (
                 <span className="text-sm text-muted-foreground">
@@ -979,6 +1025,15 @@ export function RouteEditorDialog({
               onClick={exportFile}
             >
               Export .xctsk
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!gridReady}
+              onClick={exportCsv}
+            >
+              Export .csv
             </Button>
           </div>
           <DialogClose render={<Button type="button" variant="outline" />}>

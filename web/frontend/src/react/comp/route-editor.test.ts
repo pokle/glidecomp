@@ -8,6 +8,7 @@ import {
   gateToHHMM,
   parseCoords,
   startConfigSummary,
+  turnpointsToCSV,
   turnpointToRow,
   xctskForPatch,
   type RouteRow,
@@ -248,5 +249,33 @@ describe("xctskForPatch", () => {
       sss: { type: "RACE", direction: "EXIT" },
       goal: { type: "LINE", deadline: "23:00:00Z" },
     });
+  });
+});
+
+describe("turnpointsToCSV", () => {
+  const tps: Turnpoint[] = [
+    { type: "TAKEOFF", radius: 400, waypoint: { name: "CORRY", lat: -36.185, lon: 147.8914, altSmoothed: 955 } },
+    { radius: 5000, waypoint: { name: "ELLIOT", lat: -36.185833, lon: 147.976667 } },
+  ];
+
+  it("writes the competition waypoint CSV header + rows", () => {
+    const csv = turnpointsToCSV(tps).trim().split("\n");
+    expect(csv[0]).toBe("Name,Latitude,Longitude,Description,Proximity Distance,Altitude");
+    expect(csv[1]).toBe("CORRY,-36.185000,147.891400,,400,955");
+    expect(csv[2]).toBe("ELLIOT,-36.185833,147.976667,,5000,0");
+  });
+
+  it("round-trips back through parseWaypointsCSV to the same coordinates", async () => {
+    const { parseWaypointsCSV } = await import("@glidecomp/engine");
+    const parsed = parseWaypointsCSV(turnpointsToCSV(tps));
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0]).toMatchObject({ name: "CORRY", latitude: -36.185, longitude: 147.8914, radius: 400, altitude: 955 });
+  });
+
+  it("quotes names containing a comma", () => {
+    const csv = turnpointsToCSV([
+      { radius: 400, waypoint: { name: "Hill, North", lat: -36, lon: 147 } },
+    ]);
+    expect(csv).toContain('"Hill, North",-36.000000,147.000000,,400,0');
   });
 });
