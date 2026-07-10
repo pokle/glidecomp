@@ -58,4 +58,47 @@ describe("POST /api/auth/delete-account R2 cleanup", () => {
     const res = await request("POST", "/api/auth/delete-account", { cookie });
     expect(res.status).toBe(200);
   });
+
+  // Regression for #303: task_track, audit_log and task_pilot_status reference
+  // "user" WITHOUT ON DELETE CASCADE, so a user who had left any of those rows
+  // used to hit `FOREIGN KEY constraint failed`. They must be de-linked (the
+  // denormalized name kept), not deleted, so the audit trail survives.
+  test("de-links non-cascading references instead of failing", async () => {
+    const cookie = await loginAs("delete-audit@test.com");
+    const { id: userId } = await getMe(cookie);
+
+    // audit_log is the simplest of the three to reproduce — it needs only a
+    // comp row. Seed one audit entry attributed to this user.
+    const comp = await env.glidecomp_auth
+      .prepare(
+        `INSERT INTO comp (name, creation_date, category) VALUES ('Regression Cup', '2026-01-01', 'pg') RETURNING comp_id`
+      )
+      .first<{ comp_id: number }>();
+    await env.glidecomp_auth
+      .prepare(
+        `INSERT INTO audit_log (comp_id, timestamp, actor_user_id, actor_name, subject_type, description)
+         VALUES (?, '2026-01-02T00:00:00Z', ?, 'Audit User', 'comp', 'did a thing')`
+      )
+      .bind(comp!.comp_id, userId)
+      .run();
+
+    const res = await request("POST", "/api/auth/delete-account", { cookie });
+    expect(res.status).toBe(200);
+
+    // User row gone…
+    const user = await env.glidecomp_auth
+      .prepare('SELECT 1 FROM "user" WHERE id = ?')
+      .bind(userId)
+      .first();
+    expect(user).toBeNull();
+
+    // …but the audit entry survives, de-linked, with its name preserved.
+    const audit = await env.glidecomp_auth
+      .prepare("SELECT actor_user_id, actor_name FROM audit_log WHERE comp_id = ?")
+      .bind(comp!.comp_id)
+      .first<{ actor_user_id: string | null; actor_name: string }>();
+    expect(audit).not.toBeNull();
+    expect(audit!.actor_user_id).toBeNull();
+    expect(audit!.actor_name).toBe("Audit User");
+  });
 });

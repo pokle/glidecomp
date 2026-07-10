@@ -4,6 +4,7 @@
  * live in a right-aligned user menu instead of a Settings tab + footer
  * sign-out. Site super admins also get the floating "Preview as" pill.
  */
+import { useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Button } from "@/react/ui/button";
 import {
@@ -31,8 +32,19 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 export function Shell() {
   const { user, loading } = useUser();
+  const navigate = useNavigate();
   useScrollRestoration();
   const flightsHref = user?.username ? `/u/${user.username}` : "/u/me";
+
+  // A signed-in user with no username hasn't finished onboarding. Onboarding
+  // is mandatory, so send them there from *anywhere* under this Shell — not
+  // just My Flights — otherwise a fresh sign-in (which lands on /comp) sails
+  // past it. Onboarding renders outside this Shell, so there's no redirect
+  // loop, and it bounces already-onboarded users straight back out.
+  useEffect(() => {
+    if (loading) return;
+    if (user && !user.username) navigate("/onboarding", { replace: true });
+  }, [user, loading, navigate]);
 
   return (
     <div className="flex min-h-dvh flex-col">
