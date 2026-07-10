@@ -150,10 +150,15 @@ export function createMapBoxProvider(
       let cachedSequenceResult: TurnpointSequenceResult | null = null;
       let cachedOptimizedPath: { lat: number; lon: number }[] | null = null;
 
+      // Pickable waypoint markers (task route editor); replayed on style reload
+      type MapWaypoint = import('./map-provider').MapWaypoint;
+      let waypointsData: MapWaypoint[] = [];
+
       // Click callbacks (mutable refs — registered once, updated via setter)
       let trackClickCallback: ((fixIndex: number) => void) | null = null;
       let turnpointClickCallback: ((turnpointIndex: number) => void) | null = null;
       let mapClickCallback: ((lat: number, lon: number) => void) | null = null;
+      let waypointsClickCallback: ((waypoint: MapWaypoint) => void) | null = null;
 
       // Annotation layer (created after map loads)
       let annotationLayer: MapAnnotationLayer | null = null;
@@ -435,6 +440,8 @@ export function createMapBoxProvider(
       function addCustomLayers(): void {
         // Remove existing custom layers to ensure correct ordering
         const customLayers = [
+          'waypoint-labels',
+          'waypoints',
           'multi-track-name-labels',
           'open-distance-labels',
           'open-distance-line',
@@ -476,7 +483,7 @@ export function createMapBoxProvider(
         }
 
         // Other sources with default simplification
-        const sourcesToAdd = ['task-line', 'task-points', 'task-cylinders', 'task-segment-labels', 'highlight-segment', 'speed-fastest-segment', 'open-distance-lines', 'best-progress-route', 'multi-track-names'];
+        const sourcesToAdd = ['task-line', 'task-points', 'task-cylinders', 'task-segment-labels', 'highlight-segment', 'speed-fastest-segment', 'open-distance-lines', 'best-progress-route', 'multi-track-names', 'waypoints'];
         for (const sourceId of sourcesToAdd) {
           if (!map.getSource(sourceId)) {
             map.addSource(sourceId, {
@@ -729,6 +736,41 @@ export function createMapBoxProvider(
           },
         });
 
+        // 7b. Pickable waypoint markers (task route editor) — loaded from a
+        // waypoint file, drawn as secondary slate dots the user can click to
+        // add as turnpoints. Labels appear only when zoomed in, to avoid
+        // clutter when a whole regional database is on screen.
+        map.addLayer({
+          id: 'waypoints',
+          type: 'circle',
+          source: 'waypoints',
+          paint: {
+            'circle-radius': 5,
+            'circle-color': '#64748b',
+            'circle-stroke-width': 1.5,
+            'circle-stroke-color': '#ffffff',
+            'circle-opacity': 0.9,
+          },
+        });
+        map.addLayer({
+          id: 'waypoint-labels',
+          type: 'symbol',
+          source: 'waypoints',
+          minzoom: 10,
+          layout: {
+            'text-field': ['get', 'name'],
+            'text-size': 11,
+            'text-offset': [0, 1.1],
+            'text-anchor': 'top',
+            'text-allow-overlap': false,
+          },
+          paint: {
+            'text-color': '#475569',
+            'text-halo-color': '#ffffff',
+            'text-halo-width': 1.5,
+          },
+        });
+
         // 8. Task segment distance labels
         map.addLayer({
           id: 'task-segment-labels',
@@ -859,6 +901,9 @@ export function createMapBoxProvider(
         if (bestProgressRouteData) {
           renderer.setBestProgressRoute?.(bestProgressRouteData);
         }
+        if (waypointsData.length > 0) {
+          renderer.setWaypoints?.(waypointsData);
+        }
         updateTrackRendering();
       }
 
@@ -911,11 +956,17 @@ export function createMapBoxProvider(
       let isHoveringInteractive = false;
 
       function syncCursor(): void {
+        // A pickable waypoint under the pointer always wins — even in
+        // add-waypoint mode, so it reads as "click this point, not the ground".
+        if (isHoveringInteractive) {
+          map.getCanvas().style.cursor = 'pointer';
+          return;
+        }
         if (interactionMode !== 'view') {
           map.getCanvas().style.cursor = 'crosshair';
           return;
         }
-        map.getCanvas().style.cursor = isHoveringInteractive ? 'pointer' : '';
+        map.getCanvas().style.cursor = '';
       }
       class MenuButtonControl implements mapboxgl.IControl {
         private container: HTMLElement | null = null;
@@ -1264,11 +1315,32 @@ export function createMapBoxProvider(
           syncCursor();
         });
 
-        // Global map click handler (for add-waypoint mode)
+        // Pickable waypoint markers (route editor) — clickable in every mode
+        // so a waypoint can be picked while add-waypoint (map-click) mode is on.
+        map.on('click', 'waypoints', (e) => {
+          if (!waypointsClickCallback || !e.features || e.features.length === 0) return;
+          const id = e.features[0].properties?.id;
+          const wp = waypointsData.find((w) => w.id === id);
+          if (wp) waypointsClickCallback(wp);
+        });
+        map.on('mouseenter', 'waypoints', () => {
+          isHoveringInteractive = true;
+          syncCursor();
+        });
+        map.on('mouseleave', 'waypoints', () => {
+          isHoveringInteractive = false;
+          syncCursor();
+        });
+
+        // Global map click handler (for add-waypoint mode). A click that lands
+        // on a waypoint marker is a pick, not a ground drop — suppress it here.
         map.on('click', (e: mapboxgl.MapMouseEvent) => {
-          if (interactionMode !== 'view' && mapClickCallback) {
-            mapClickCallback(e.lngLat.lat, e.lngLat.lng);
+          if (interactionMode === 'view' || !mapClickCallback) return;
+          if (map.getLayer('waypoints')) {
+            const hit = map.queryRenderedFeatures(e.point, { layers: ['waypoints'] });
+            if (hit.length > 0) return;
           }
+          mapClickCallback(e.lngLat.lat, e.lngLat.lng);
         });
 
         // Create annotation overlay
@@ -2329,7 +2401,7 @@ export function createMapBoxProvider(
           clearGliderMarker();
         },
 
-        async setTask(task: XCTask) {
+        async setTask(task: XCTask, options?: { fit?: boolean }) {
           currentTask = task;
           cachedSequenceResult = null;
           cachedOptimizedPath = null;
@@ -2405,8 +2477,10 @@ export function createMapBoxProvider(
 
           updateGeoJSONSource(map, 'task-cylinders', cylinderFeatures);
 
-          // If no track is loaded, fit to task bounds (re-measure first — see setTrack)
-          if (currentFixes.length === 0) {
+          // If no track is loaded, fit to task bounds (re-measure first — see
+          // setTrack). Callers editing the task live pass fit:false so picks
+          // and coordinate edits don't re-zoom the map out from under them.
+          if ((options?.fit ?? true) && currentFixes.length === 0) {
             map.resize();
             const bounds = new mapboxgl.LngLatBounds();
             for (const tp of task.turnpoints) {
@@ -2777,6 +2851,28 @@ export function createMapBoxProvider(
           interactionMode = mode;
           isHoveringInteractive = false;
           syncCursor();
+        },
+
+        setWaypoints(waypoints: MapWaypoint[]) {
+          waypointsData = waypoints;
+          updateGeoJSONSource(
+            map,
+            'waypoints',
+            waypoints.map((w) => ({
+              type: 'Feature' as const,
+              geometry: { type: 'Point' as const, coordinates: [w.lon, w.lat] },
+              properties: { id: w.id, name: w.name },
+            })),
+          );
+        },
+
+        clearWaypoints() {
+          waypointsData = [];
+          updateGeoJSONSource(map, 'waypoints', []);
+        },
+
+        onWaypointClick(callback: (waypoint: MapWaypoint) => void) {
+          waypointsClickCallback = callback;
         },
 
         getAnnotationLayer() {

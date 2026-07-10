@@ -230,6 +230,7 @@ export function createLeafletProvider(
     const highlightGroup = new LayerGroup();
     const speedOverlayGroup = new LayerGroup();  // speed overlay (separate from highlight)
     const bestProgressRouteGroup = new LayerGroup();  // landout distance-to-goal line
+    const waypointsGroup = new LayerGroup();  // pickable waypoint markers (route editor)
 
     // Add default groups to map
     trackGroup.addTo(map);
@@ -238,6 +239,7 @@ export function createLeafletProvider(
     highlightGroup.addTo(map);
     speedOverlayGroup.addTo(map);
     bestProgressRouteGroup.addTo(map);
+    waypointsGroup.addTo(map);
 
     // Feature state
     let isTaskVisible = true;
@@ -254,9 +256,23 @@ export function createLeafletProvider(
     // Callbacks
     let trackClickCallback: ((fixIndex: number) => void) | null = null;
     let turnpointClickCallback: ((turnpointIndex: number) => void) | null = null;
+    let mapClickCallback: ((lat: number, lon: number) => void) | null = null;
+    type MapWaypoint = import('./map-provider').MapWaypoint;
+    type MapInteractionMode = import('./map-provider').MapInteractionMode;
+    let waypointsClickCallback: ((waypoint: MapWaypoint) => void) | null = null;
+    let interactionMode: MapInteractionMode = 'view';
 
     // Turnpoint data for click handling
     let turnpointMarkers: { marker: CircleMarker; index: number }[] = [];
+
+    // Global map click → fires only in add-waypoint mode (route editor ground
+    // drop). Waypoint markers set bubblingPointerEvents:false, so picking a
+    // waypoint doesn't also drop a ground point here.
+    map.on('click', (e: LeafletMouseEvent) => {
+      if (interactionMode !== 'view' && mapClickCallback) {
+        mapClickCallback(e.latlng.lat, e.latlng.lng);
+      }
+    });
 
     // ── Map state persistence ──────────────────────────────────────────────
 
@@ -612,7 +628,7 @@ export function createLeafletProvider(
         trackGroup.clearLayers();
       },
 
-      async setTask(task: XCTask) {
+      async setTask(task: XCTask, options?: { fit?: boolean }) {
         currentTask = task;
         cachedSequenceResult = null;
         cachedOptimizedPath = null;
@@ -746,8 +762,10 @@ export function createLeafletProvider(
           );
         }
 
-        // Fit to task bounds if no track loaded (re-measure first — see setTrack)
-        if (currentFixes.length === 0) {
+        // Fit to task bounds if no track loaded (re-measure first — see
+        // setTrack). The route editor passes fit:false so live edits don't
+        // re-zoom the view.
+        if ((options?.fit ?? true) && currentFixes.length === 0) {
           const bounds = new LatLngBounds(
             [task.turnpoints[0].waypoint.lat, task.turnpoints[0].waypoint.lon],
             [task.turnpoints[0].waypoint.lat, task.turnpoints[0].waypoint.lon]
@@ -1034,6 +1052,42 @@ export function createLeafletProvider(
 
       onTurnpointClick(callback: (turnpointIndex: number) => void) {
         turnpointClickCallback = callback;
+      },
+
+      onMapClick(callback: (lat: number, lon: number) => void) {
+        mapClickCallback = callback;
+      },
+
+      setInteractionMode(mode: MapInteractionMode) {
+        interactionMode = mode;
+        // Crosshair over bare ground in add-waypoint mode; interactive layers
+        // (waypoint dots) keep their own pointer cursor on hover via Leaflet.
+        container.style.cursor = mode === 'view' ? '' : 'crosshair';
+      },
+
+      setWaypoints(waypoints: MapWaypoint[]) {
+        waypointsGroup.clearLayers();
+        for (const wp of waypoints) {
+          const dot = new CircleMarker([wp.lat, wp.lon], {
+            radius: 5,
+            color: '#ffffff',
+            weight: 1.5,
+            fillColor: '#64748b',
+            fillOpacity: 0.9,
+            bubblingPointerEvents: false, // a pick must not also drop a ground point
+          });
+          dot.bindTooltip(wp.name, { direction: 'top', offset: [0, -6] });
+          dot.on('click', () => waypointsClickCallback?.(wp));
+          waypointsGroup.addLayer(dot);
+        }
+      },
+
+      clearWaypoints() {
+        waypointsGroup.clearLayers();
+      },
+
+      onWaypointClick(callback: (waypoint: MapWaypoint) => void) {
+        waypointsClickCallback = callback;
       },
 
       panToTurnpoint(turnpointIndex: number) {

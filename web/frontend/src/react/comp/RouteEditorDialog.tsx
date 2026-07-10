@@ -11,16 +11,19 @@
  * code, and exported to a .xctsk file. Saving PATCHes the task's xctsk
  * (the server validates strictly and audit-logs the change).
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
 import {
   getOptimizedSegmentDistances,
+  parseWaypointFile,
   parseXCTaskAsync,
   toXctskJSON,
   type GoalConfig,
   type SSSConfig,
+  type WaypointRecord,
   type XCTask,
 } from "@glidecomp/engine";
+import type { MapWaypoint } from "../../analysis/map-provider";
 import { Button } from "@/react/ui/button";
 import {
   Dialog,
@@ -43,12 +46,17 @@ import {
   addMinutes,
   buildRoute,
   editableGates,
+  formatCoords,
   gateToHHMM,
   turnpointToRow,
   xctskForPatch,
   TYPE_LABELS,
   type RouteRow,
 } from "./route-editor";
+
+// Lazy so the map libraries (mapbox/leaflet) and their CSS load only when the
+// editor opens and never enter the SSR'd task-detail bundle.
+const RouteMap = lazy(() => import("./RouteMap"));
 
 const NEW_ROW_RADIUS = 400;
 
@@ -102,6 +110,16 @@ export function RouteEditorDialog({
   const [hasSSSTurnpoint, setHasSSSTurnpoint] = useState(
     xctsk?.turnpoints.some((tp) => tp.type === "SSS") ?? false
   );
+  // Live task fed to the map (cylinders + optimised route line), kept in sync
+  // with the grid by recompute(). Seeded from the loaded task on first render.
+  const [mapTask, setMapTask] = useState<XCTask | null>(xctsk);
+  // Waypoints loaded from a file, shown on the map as pickable markers.
+  const [waypointRecords, setWaypointRecords] = useState<WaypointRecord[]>([]);
+  const [waypointSource, setWaypointSource] = useState<string | null>(null);
+  // When on, clicking bare map drops a free point (crosshair); markers are
+  // pickable either way.
+  const [pickMode, setPickMode] = useState(false);
+  const waypointInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [xcontestCode, setXcontestCode] = useState("");
   const [xcontestLoading, setXcontestLoading] = useState(false);
@@ -158,6 +176,18 @@ export function RouteEditorDialog({
     setErrors(result.errors);
     setWarnings(result.warnings);
     setHasSSSTurnpoint(result.turnpoints.some((tp) => tp.type === "SSS"));
+
+    // Feed the map the turnpoints parsed so far — cylinders and the optimised
+    // line update live as rows are edited, added, reordered or picked.
+    setMapTask(
+      result.turnpoints.length > 0
+        ? {
+            taskType: baseRef.current?.taskType || "CLASSIC",
+            version: baseRef.current?.version ?? 1,
+            turnpoints: result.turnpoints,
+          }
+        : null
+    );
 
     const legByRowId = new Map<number, number>();
     if (result.geometryComplete && result.turnpoints.length >= 2) {
@@ -329,6 +359,72 @@ export function RouteEditorDialog({
 
   function addTurnpoint() {
     void tableRef.current?.addRow(newRow());
+  }
+
+  // Loaded waypoints as map markers (index is the marker id, resolved back to
+  // the record on pick so radius/altitude carry across).
+  const mapWaypoints: MapWaypoint[] = useMemo(
+    () =>
+      waypointRecords.map((w, i) => ({
+        id: String(i),
+        name: w.name,
+        lat: w.latitude,
+        lon: w.longitude,
+      })),
+    [waypointRecords]
+  );
+
+  /** Append a turnpoint from a picked waypoint marker (rowAdded → recompute). */
+  const pickWaypoint = useCallback(
+    (wp: MapWaypoint) => {
+      const rec = waypointRecords[Number(wp.id)];
+      wpCounterRef.current++;
+      void tableRef.current?.addRow({
+        id: ++rowIdRef.current,
+        name: wp.name,
+        type: "",
+        coords: formatCoords(wp.lat, wp.lon),
+        radius: rec && rec.radius > 0 ? rec.radius : NEW_ROW_RADIUS,
+        altitude: rec && rec.altitude ? rec.altitude : "",
+        leg: null,
+      } satisfies RouteRow);
+    },
+    [waypointRecords]
+  );
+
+  /** Append a turnpoint dropped on bare map (pick mode). */
+  const pickGroundPoint = useCallback((lat: number, lon: number) => {
+    wpCounterRef.current++;
+    void tableRef.current?.addRow({
+      id: ++rowIdRef.current,
+      name: `WP ${wpCounterRef.current}`,
+      type: "",
+      coords: formatCoords(lat, lon),
+      radius: NEW_ROW_RADIUS,
+      altitude: "",
+      leg: null,
+    } satisfies RouteRow);
+  }, []);
+
+  /** Load a waypoint file (.wpt/.cup/.csv) into pickable map markers. */
+  async function loadWaypointFile(input: HTMLInputElement) {
+    const file = input.files?.[0];
+    input.value = ""; // allow re-selecting the same file
+    if (!file) return;
+    try {
+      const { waypoints } = parseWaypointFile(await file.text(), file.name);
+      if (waypoints.length === 0) {
+        toast.error(`No waypoints found in ${file.name}`);
+        return;
+      }
+      setWaypointRecords(waypoints);
+      setWaypointSource(file.name);
+      toast.success(
+        `Loaded ${waypoints.length} waypoint${waypoints.length === 1 ? "" : "s"} from ${file.name}`
+      );
+    } catch {
+      toast.error(`Could not read ${file.name} as a waypoint file`);
+    }
   }
 
   /** Load a parsed task into the editor (grid + panels + base fields). */
@@ -541,27 +637,102 @@ export function RouteEditorDialog({
           </p>
         ) : null}
 
-        <div
-          ref={gridRef}
-          id="route-grid"
-          className="h-[280px] shrink-0 rounded border border-border"
-        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* Map — floats at the top on narrow screens, sits on the right on
+              wide ones (same pattern as the score-explainer map). */}
+          <div className="order-1 flex flex-col gap-2 lg:order-2 lg:sticky lg:top-0 lg:self-start">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant={pickMode ? "default" : "outline"}
+                size="sm"
+                aria-pressed={pickMode}
+                onClick={() => setPickMode((p) => !p)}
+              >
+                {pickMode ? "Picking on map…" : "Pick on map"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => waypointInputRef.current?.click()}
+              >
+                Load waypoints
+              </Button>
+              <input
+                ref={waypointInputRef}
+                type="file"
+                accept=".wpt,.cup,.csv,.txt"
+                hidden
+                onChange={(e) => void loadWaypointFile(e.currentTarget)}
+              />
+              {waypointSource ? (
+                <span className="text-sm text-muted-foreground">
+                  {waypointRecords.length} from {waypointSource}
+                  <button
+                    type="button"
+                    className="ml-1.5 underline hover:text-foreground"
+                    onClick={() => {
+                      setWaypointRecords([]);
+                      setWaypointSource(null);
+                    }}
+                  >
+                    clear
+                  </button>
+                </span>
+              ) : null}
+            </div>
+            <div className="h-64 overflow-hidden rounded border border-border sm:h-72 lg:h-[440px]">
+              <Suspense
+                fallback={
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                    Loading map…
+                  </div>
+                }
+              >
+                {gridReady ? (
+                  <RouteMap
+                    task={mapTask}
+                    waypoints={mapWaypoints}
+                    pickMode={pickMode}
+                    onWaypointPick={pickWaypoint}
+                    onMapPick={pickGroundPoint}
+                  />
+                ) : null}
+              </Suspense>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Click a waypoint to add it as a turnpoint.{" "}
+              {pickMode
+                ? "Click bare map to drop a free point."
+                : "Turn on “Pick on map” to drop a point anywhere."}
+            </p>
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!gridReady}
-            onClick={addTurnpoint}
-          >
-            Add turnpoint
-          </Button>
-          {totalKm !== null ? (
-            <span className="text-sm text-muted-foreground">
-              Optimized total: {totalKm.toFixed(1)} km
-            </span>
-          ) : null}
+          {/* Editable turnpoint grid */}
+          <div className="order-2 flex min-w-0 flex-col gap-2 lg:order-1">
+            <div
+              ref={gridRef}
+              id="route-grid"
+              className="h-[320px] shrink-0 rounded border border-border"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!gridReady}
+                onClick={addTurnpoint}
+              >
+                Add turnpoint
+              </Button>
+              {totalKm !== null ? (
+                <span className="text-sm text-muted-foreground">
+                  Optimized total: {totalKm.toFixed(1)} km
+                </span>
+              ) : null}
+            </div>
+          </div>
         </div>
 
         {shownErrors.length > 0 ? (
