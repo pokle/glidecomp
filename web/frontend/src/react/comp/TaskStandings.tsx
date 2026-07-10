@@ -37,6 +37,7 @@ import { SimpleSelect } from "./fields";
 import { ScoreFreshness } from "./ScoreFreshness";
 import { SubmitTrackDialog } from "./SubmitTrackDialog";
 import { ManualFlightDialog } from "./ManualFlightDialog";
+import { compressIgc } from "./types";
 import type {
   ClassScore,
   DistanceOriginValue,
@@ -315,7 +316,6 @@ export function TaskStandings({
           mounted={mounted}
           isAdmin={isAdmin}
           isClosed={isClosed}
-          canUploadOnBehalf={canUploadOnBehalf}
           distanceOrigin={distanceOrigin}
           taskXctsk={taskXctsk}
           roster={roster}
@@ -349,7 +349,6 @@ function ClassStandings({
   mounted,
   isAdmin,
   isClosed,
-  canUploadOnBehalf,
   distanceOrigin,
   taskXctsk,
   roster,
@@ -370,7 +369,6 @@ function ClassStandings({
   mounted: boolean;
   isAdmin: boolean;
   isClosed: boolean;
-  canUploadOnBehalf: boolean;
   distanceOrigin: DistanceOriginValue;
   taskXctsk: XCTask | null;
   roster: PilotListEntry[];
@@ -463,7 +461,6 @@ function ClassStandings({
               greyed={greyed}
               showManage={showManage}
               isClosed={isClosed}
-              canUploadOnBehalf={canUploadOnBehalf}
               distanceOrigin={distanceOrigin}
               taskXctsk={taskXctsk}
               statuses={statuses}
@@ -485,7 +482,6 @@ function ClassStandings({
               greyed={greyed}
               showManage={showManage}
               isClosed={isClosed}
-              canUploadOnBehalf={canUploadOnBehalf}
               distanceOrigin={distanceOrigin}
               taskXctsk={taskXctsk}
               statuses={statuses}
@@ -534,7 +530,6 @@ function StandingsRow({
   greyed,
   showManage,
   isClosed,
-  canUploadOnBehalf,
   distanceOrigin,
   taskXctsk,
   statuses,
@@ -548,7 +543,6 @@ function StandingsRow({
   greyed: boolean;
   showManage: boolean;
   isClosed: boolean;
-  canUploadOnBehalf: boolean;
   distanceOrigin: DistanceOriginValue;
   taskXctsk: XCTask | null;
   statuses: Map<string, PilotStatusEntry>;
@@ -597,7 +591,6 @@ function StandingsRow({
             compId={compId}
             taskId={taskId}
             isClosed={isClosed}
-            canUploadOnBehalf={canUploadOnBehalf}
             distanceOrigin={distanceOrigin}
             taskXctsk={taskXctsk}
             statuses={statuses}
@@ -616,7 +609,6 @@ function RowManage({
   compId,
   taskId,
   isClosed,
-  canUploadOnBehalf,
   distanceOrigin,
   taskXctsk,
   statuses,
@@ -626,15 +618,52 @@ function RowManage({
   compId: string;
   taskId: string;
   isClosed: boolean;
-  canUploadOnBehalf: boolean;
   distanceOrigin: DistanceOriginValue;
   taskXctsk: XCTask | null;
   statuses: Map<string, PilotStatusEntry>;
   onMutated: () => void;
 }) {
-  const [uploadOpen, setUploadOpen] = useState(false);
   const [recordOpen, setRecordOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // The pilot is already known from the row, so the Track button skips the
+  // pilot-picker dialog and uploads straight to this pilot's IGC endpoint.
+  async function uploadTrackFile() {
+    const file = fileInputRef.current?.files?.[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".igc")) {
+      toast.error("Please choose an IGC file");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File too large (max 5MB)");
+      return;
+    }
+    setBusy(true);
+    try {
+      const compressed = await compressIgc(file);
+      const res = await fetch(
+        `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(row.compPilotId)}`,
+        { method: "POST", credentials: "include", body: compressed }
+      );
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(err.error || "Upload failed");
+        return;
+      }
+      const data = (await res.json()) as { replaced?: boolean };
+      toast.success(
+        data.replaced ? `Track replaced for ${row.name}` : `Track uploaded for ${row.name}`
+      );
+      onMutated();
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setBusy(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
 
   // The status the admin controls directly: Present (clear) / Absent / DNF.
   // Landed is derived from evidence and never hand-set.
@@ -700,9 +729,24 @@ function RowManage({
         ariaLabel={`Status for ${row.name}`}
       />
       {!isClosed ? (
-        <Button type="button" variant="outline" size="sm" onClick={() => setUploadOpen(true)}>
-          Track
-        </Button>
+        <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".igc"
+            className="hidden"
+            onChange={() => void uploadTrackFile()}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Track
+          </Button>
+        </>
       ) : null}
       {!isClosed && gapTask ? (
         <Button type="button" variant="outline" size="sm" onClick={() => setRecordOpen(true)}>
@@ -722,18 +766,6 @@ function RowManage({
         </Button>
       ) : null}
 
-      {uploadOpen ? (
-        <SubmitTrackDialog
-          compId={compId}
-          taskId={taskId}
-          canUploadOnBehalf={canUploadOnBehalf}
-          onClose={() => setUploadOpen(false)}
-          onUploaded={() => {
-            setUploadOpen(false);
-            onMutated();
-          }}
-        />
-      ) : null}
       {recordOpen && taskXctsk ? (
         <ManualFlightDialog
           compId={compId}

@@ -28,6 +28,7 @@ import { Input } from "@/react/ui/input";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { SimpleSelect } from "./fields";
+import { parseCoords, formatCoords } from "./route-editor";
 import type { DistanceOriginValue } from "./types";
 import type { ManualFlightEntry } from "./types";
 
@@ -41,12 +42,6 @@ function turnpointLabel(task: XCTask, i: number): string {
   if (tp.type === "TAKEOFF") return `Take-off — ${name}`;
   if (tp.type === "ESS") return `ESS — ${name}`;
   return `${i + 1}. ${name}`;
-}
-
-function parseCoord(v: string): number | null {
-  if (v.trim() === "") return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
 }
 
 export function ManualFlightDialog({
@@ -74,8 +69,7 @@ export function ManualFlightDialog({
   onSaved: () => void;
 }) {
   const tpId = useId();
-  const latId = useId();
-  const lonId = useId();
+  const coordsId = useId();
   const durationId = useId();
 
   const goalIdx = task.turnpoints.length - 1;
@@ -88,8 +82,11 @@ export function ManualFlightDialog({
   const [lastIdx, setLastIdx] = useState<number>(
     existing ? existing.last_reached_tp_index : startIdx
   );
-  const [lat, setLat] = useState(existing ? String(existing.landing_lat) : "");
-  const [lon, setLon] = useState(existing ? String(existing.landing_lon) : "");
+  // A single "lat, lon" field — the format Google Maps copies to the clipboard,
+  // and the same one the route editor uses (a map picker can fill it later).
+  const [coords, setCoords] = useState(
+    existing ? formatCoords(existing.landing_lat, existing.landing_lon) : ""
+  );
   // Minutes:seconds is fiddly — collect whole minutes, the common granularity.
   const [durationMin, setDurationMin] = useState(
     existing?.duration_seconds != null ? String(Math.round(existing.duration_seconds / 60)) : ""
@@ -106,20 +103,17 @@ export function ManualFlightDialog({
   );
   const offset = task.turnpoints.length - scoringTask.turnpoints.length;
 
-  const latNum = parseCoord(lat);
-  const lonNum = parseCoord(lon);
-  const coordsValid =
-    latNum !== null && lonNum !== null &&
-    latNum >= -90 && latNum <= 90 && lonNum >= -180 && lonNum <= 180;
+  const landing = parseCoords(coords);
+  const coordsValid = landing !== null;
 
   const madeGood = useMemo(() => {
-    if (!coordsValid) return null;
-    return distanceMadeGoodTo(scoringTask, lastIdx - offset, { lat: latNum!, lon: lonNum! });
-  }, [scoringTask, offset, lastIdx, latNum, lonNum, coordsValid]);
+    if (!landing) return null;
+    return distanceMadeGoodTo(scoringTask, lastIdx - offset, landing);
+  }, [scoringTask, offset, lastIdx, landing]);
 
   async function save() {
-    if (!coordsValid) {
-      toast.warning("Enter a valid landing latitude and longitude");
+    if (!landing) {
+      toast.warning('Enter the landing point as "latitude, longitude"');
       return;
     }
     const durationSeconds =
@@ -139,8 +133,8 @@ export function ManualFlightDialog({
         param: { comp_id: compId, task_id: taskId, comp_pilot_id: compPilotId },
         json: {
           last_reached_tp_index: lastIdx,
-          landing_lat: latNum!,
-          landing_lon: lonNum!,
+          landing_lat: landing.lat,
+          landing_lon: landing.lon,
           duration_seconds: durationSeconds,
         },
       });
@@ -191,28 +185,18 @@ export function ManualFlightDialog({
             </FieldDescription>
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field>
-              <FieldLabel htmlFor={latId}>Landing latitude</FieldLabel>
-              <Input
-                id={latId}
-                inputMode="decimal"
-                placeholder="-36.1234"
-                value={lat}
-                onChange={(e) => setLat(e.target.value)}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor={lonId}>Landing longitude</FieldLabel>
-              <Input
-                id={lonId}
-                inputMode="decimal"
-                placeholder="147.1234"
-                value={lon}
-                onChange={(e) => setLon(e.target.value)}
-              />
-            </Field>
-          </div>
+          <Field>
+            <FieldLabel htmlFor={coordsId}>Landing point</FieldLabel>
+            <Input
+              id={coordsId}
+              placeholder="-36.550979, 147.890395"
+              value={coords}
+              onChange={(e) => setCoords(e.target.value)}
+            />
+            <FieldDescription>
+              Latitude, longitude — paste straight from Google Maps.
+            </FieldDescription>
+          </Field>
 
           {madeGoal ? (
             <Field>
