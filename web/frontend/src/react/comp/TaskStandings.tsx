@@ -591,6 +591,7 @@ function StandingsRow({
             compId={compId}
             taskId={taskId}
             isClosed={isClosed}
+            isOpenDistance={isOpenDistance}
             distanceOrigin={distanceOrigin}
             taskXctsk={taskXctsk}
             statuses={statuses}
@@ -609,6 +610,7 @@ function RowManage({
   compId,
   taskId,
   isClosed,
+  isOpenDistance,
   distanceOrigin,
   taskXctsk,
   statuses,
@@ -618,6 +620,7 @@ function RowManage({
   compId: string;
   taskId: string;
   isClosed: boolean;
+  isOpenDistance: boolean;
   distanceOrigin: DistanceOriginValue;
   taskXctsk: XCTask | null;
   statuses: Map<string, PilotStatusEntry>;
@@ -713,7 +716,9 @@ function RowManage({
     }
   }
 
-  const gapTask = taskXctsk && taskXctsk.turnpoints.length > 0;
+  // A manual flight needs a route to measure against (GAP course or take-off
+  // cylinder). Both formats define at least one turnpoint.
+  const hasRoute = taskXctsk && taskXctsk.turnpoints.length > 0;
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -749,7 +754,7 @@ function RowManage({
           </Button>
         </>
       ) : null}
-      {!isClosed && gapTask ? (
+      {!isClosed && hasRoute ? (
         <Button
           type="button"
           variant="outline"
@@ -781,6 +786,7 @@ function RowManage({
           pilotName={row.name}
           task={taskXctsk}
           distanceOrigin={distanceOrigin}
+          openDistance={isOpenDistance}
           existing={row.activeManual}
           onClose={() => setRecordOpen(false)}
           onSaved={() => {

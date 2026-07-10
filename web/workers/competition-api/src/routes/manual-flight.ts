@@ -10,7 +10,7 @@ import { bumpAndRevalidateScores } from "../score-store";
 import { authorizeStatusMutation } from "./pilot-status";
 import {
   scoringContext,
-  computeManualMadeGood,
+  computeManualDistance,
   supersedeActiveTrack,
   supersedeActiveManualFlights,
   markLandedFromEvidence,
@@ -65,20 +65,21 @@ function formatKm(metres: number): string {
   return `${(metres / 1000).toFixed(1)} km`;
 }
 
-/** Load task xctsk + comp gap_params, verifying the task belongs to the comp. */
+/** Load task xctsk + comp gap_params + scoring_format, verifying the task
+ * belongs to the comp. */
 async function loadScoringTask(
   db: D1Database,
   compId: number,
   taskId: number
-): Promise<{ xctsk: string | null; gap_params: string | null } | null> {
+): Promise<{ xctsk: string | null; gap_params: string | null; scoring_format: string | null } | null> {
   return db
     .prepare(
-      `SELECT t.xctsk, c.gap_params
+      `SELECT t.xctsk, c.gap_params, c.scoring_format
        FROM task t JOIN comp c ON c.comp_id = t.comp_id
        WHERE t.task_id = ? AND t.comp_id = ?`
     )
     .bind(taskId, compId)
-    .first<{ xctsk: string | null; gap_params: string | null }>();
+    .first<{ xctsk: string | null; gap_params: string | null; scoring_format: string | null }>();
 }
 
 /** The turnpoint's display name for an audit line ("Goal", or the waypoint
@@ -237,12 +238,12 @@ export const manualFlightRoutes = new Hono<HonoEnv>()
       );
       if (authErr) return c.json({ error: authErr.error }, authErr.status);
 
-      // Compute made-good against the task geometry.
-      const { xcTask, scoringTask, offset } = scoringContext(
-        taskRow.xctsk,
-        taskRow.gap_params
-      );
-      if (body.last_reached_tp_index >= xcTask.turnpoints.length) {
+      // Compute made-good against the task geometry, by scoring format. Open
+      // distance ignores turnpoints (measured from the take-off exit); GAP
+      // measures along the course from the last reached turnpoint.
+      const isOpenDistance = taskRow.scoring_format === "open_distance";
+      const { xcTask } = scoringContext(taskRow.xctsk, taskRow.gap_params);
+      if (!isOpenDistance && body.last_reached_tp_index >= xcTask.turnpoints.length) {
         return c.json(
           { error: "last_reached_tp_index is beyond the task's turnpoints" },
           400
@@ -254,13 +255,13 @@ export const manualFlightRoutes = new Hono<HonoEnv>()
         landingLon: body.landing_lon,
         durationSeconds: body.duration_seconds ?? null,
       };
-      const { madeGood, madeGoal } = computeManualMadeGood(
-        xcTask,
-        scoringTask,
-        offset,
+      const { madeGood, madeGoal } = computeManualDistance(
+        taskRow.xctsk,
+        taskRow.gap_params,
+        taskRow.scoring_format,
         flightInput
       );
-      // A duration is only meaningful in goal.
+      // A duration is only meaningful in goal (GAP only).
       const durationSeconds = madeGoal ? flightInput.durationSeconds : null;
 
       // Supersede any prior active manual flight (retained) so the partial
@@ -299,15 +300,20 @@ export const manualFlightRoutes = new Hono<HonoEnv>()
       // Scoring input changed — bump right after the write, beside audit().
       await bumpAndRevalidateScores(c, [taskId]);
 
-      const tpName = turnpointName(taskRow.xctsk, body.last_reached_tp_index, madeGoal);
       const supersededNote = hadTrack ? "; superseded their track" : "";
+      // Open distance has no turnpoints — describe the distance from take-off;
+      // GAP names the last turnpoint reached.
+      const reachedNote = isOpenDistance
+        ? "open distance"
+        : `reached ${turnpointName(taskRow.xctsk, body.last_reached_tp_index, madeGoal)}, ${formatKm(madeGood)} made good${madeGoal ? " (in goal)" : ""}`;
+      const description = isOpenDistance
+        ? `Recorded manual flight for ${cp.registered_pilot_name}: ${formatKm(madeGood)} ${reachedNote}${supersededNote}`
+        : `Recorded manual flight for ${cp.registered_pilot_name}: ${reachedNote}${supersededNote}`;
       await audit(c.env.DB, user, compId, {
         subject_type: "track",
         subject_id: manualFlightId,
         subject_name: cp.registered_pilot_name,
-        description:
-          `Recorded manual flight for ${cp.registered_pilot_name}: reached ${tpName}, ` +
-          `${formatKm(madeGood)} made good${madeGoal ? " (in goal)" : ""}${supersededNote}`,
+        description,
       });
 
       const row = await c.env.DB.prepare(
@@ -444,17 +450,18 @@ export const manualFlightRoutes = new Hono<HonoEnv>()
       if (!target) return c.json({ error: "Manual flight not found" }, 404);
 
       // Recompute made-good against the current route (it may have changed
-      // since the record was captured).
-      const { xcTask, scoringTask, offset } = scoringContext(
+      // since the record was captured), by scoring format.
+      const { madeGood, madeGoal } = computeManualDistance(
         taskRow.xctsk,
-        taskRow.gap_params
+        taskRow.gap_params,
+        taskRow.scoring_format,
+        {
+          lastReachedTpIndex: target.last_reached_tp_index,
+          landingLat: target.landing_lat,
+          landingLon: target.landing_lon,
+          durationSeconds: target.duration_seconds,
+        }
       );
-      const { madeGood, madeGoal } = computeManualMadeGood(xcTask, scoringTask, offset, {
-        lastReachedTpIndex: target.last_reached_tp_index,
-        landingLat: target.landing_lat,
-        landingLon: target.landing_lon,
-        durationSeconds: target.duration_seconds,
-      });
 
       // Supersede all evidence, then activate the target (order keeps the
       // partial unique index satisfied).

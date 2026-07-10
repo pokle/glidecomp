@@ -9,6 +9,7 @@ import {
   toFlightScoringData,
   taskForDistanceOrigin,
   manualFlightGeometry,
+  manualOpenDistanceGeometry,
   computeLeadingAggregate,
   calculateOptimizedTaskDistance,
   DEFAULT_GAP_PARAMETERS,
@@ -21,7 +22,7 @@ import {
   type TurnpointSequenceResultJSON,
 } from "@glidecomp/engine";
 import { encodeId } from "./sqids";
-import { manualFlightToScoringData } from "./manual-flight-store";
+import { manualFlightToScoringData, manualFlightKey } from "./manual-flight-store";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -621,6 +622,45 @@ export async function computeTaskScore(
       (p): p is AnalyzedOpenPilot => p !== null
     );
 
+    // Manual flights (issue #306) on an open-distance task: the made-good is
+    // the straight-line distance from the take-off cylinder edge to the landing
+    // point. Cheap to compute (no R2 / tracklog), inline and uncached; only
+    // active rows in scored classes, scored as numFlying.
+    const odManualRows = await db
+      .prepare(
+        `SELECT mf.comp_pilot_id, mf.landing_lat, mf.landing_lon,
+                cp.registered_pilot_name AS pilot_name, cp.pilot_class
+         FROM task_manual_flight mf
+         JOIN comp_pilot cp ON cp.comp_pilot_id = mf.comp_pilot_id
+         WHERE mf.task_id = ? AND mf.active = 1`
+      )
+      .bind(taskId)
+      .all<{
+        comp_pilot_id: number;
+        landing_lat: number;
+        landing_lon: number;
+        pilot_name: string;
+        pilot_class: string;
+      }>();
+    for (const m of odManualRows.results) {
+      if (!scoredClasses.has(m.pilot_class)) continue;
+      const od = manualOpenDistanceGeometry(xcTask, {
+        lat: m.landing_lat,
+        lon: m.landing_lon,
+      });
+      analyzedPilots.push({
+        flight: {
+          pilotName: m.pilot_name,
+          trackFile: manualFlightKey(m.comp_pilot_id),
+          distance: od.distance,
+        },
+        comp_pilot_id: m.comp_pilot_id,
+        pilot_class: m.pilot_class,
+        penalty_points: 0,
+        penalty_reason: null,
+      });
+    }
+
     const classScores: ClassScore[] = [];
     for (const pilotClass of scoredClasses) {
       const classPilots = analyzedPilots.filter((p) => p.pilot_class === pilotClass);
@@ -910,8 +950,9 @@ export interface PilotAnalysisResponse {
 export interface OpenDistanceAnchorPoint {
   latitude: number;
   longitude: number;
-  time_ms: number;
-  altitude: number;
+  /** Null for a manual flight (no tracklog → no fix time / altitude). */
+  time_ms: number | null;
+  altitude: number | null;
 }
 
 /** The cacheable (comp-pilot-independent) part of {@link PilotAnalysisResponse}. */
@@ -970,14 +1011,35 @@ export async function computePilotAnalysis(
         landing_lat: number;
         landing_lon: number;
       }>();
-    if (!manual || taskRow.scoring_format === "open_distance") return null;
+    if (!manual) return null;
+    const xcTask = parseXCTask(taskRow.xctsk);
+
+    // Open distance: the made-good is measured from the take-off cylinder edge
+    // to the landing point. Return the same open_distance line a track does, so
+    // the score-details page reuses the open-distance rendering.
+    if (taskRow.scoring_format === "open_distance") {
+      const od = manualOpenDistanceGeometry(xcTask, {
+        lat: manual.landing_lat,
+        lon: manual.landing_lon,
+      });
+      return {
+        comp_pilot_id: encodeId(alphabet, compPilotId),
+        scoring_format: "open_distance",
+        turnpoint_result: null,
+        manual_flight: null,
+        open_distance: {
+          distance: od.distance,
+          origin: { latitude: od.origin.lat, longitude: od.origin.lon, time_ms: null, altitude: null },
+          furthest: { latitude: od.landing.lat, longitude: od.landing.lon, time_ms: null, altitude: null },
+        },
+      };
+    }
 
     const gapParams: Partial<GAPParameters> = taskRow.gap_params
       ? JSON.parse(taskRow.gap_params)
       : {};
     const distanceOrigin =
       gapParams.distanceOrigin ?? DEFAULT_GAP_PARAMETERS.distanceOrigin;
-    const xcTask = parseXCTask(taskRow.xctsk);
     const scoringTask = taskForDistanceOrigin(xcTask, distanceOrigin);
     const offset = xcTask.turnpoints.length - scoringTask.turnpoints.length;
     const scoringIndex = manual.last_reached_tp_index - offset;

@@ -238,18 +238,22 @@ function buildDetailData(
           }
         : null;
     assertAnalysisMatchesScore(Math.round(od?.distance ?? 0), entry.flown_distance);
+    // A manual open-distance flight has no fix times — the endpoints carry null
+    // time_ms. Detect that to adjust the wording and omit times.
+    const manual = od?.origin != null && od.origin.time_ms == null;
     const explanation = explainOpenDistanceScore({
       task: task.xctsk,
       geometry,
       anchorInfo: {
         origin: od?.origin
-          ? { timeMs: od.origin.time_ms, altitude: od.origin.altitude }
+          ? { timeMs: od.origin.time_ms ?? undefined, altitude: od.origin.altitude ?? undefined }
           : undefined,
         furthest: od?.furthest
-          ? { timeMs: od.furthest.time_ms, altitude: od.furthest.altitude }
+          ? { timeMs: od.furthest.time_ms ?? undefined, altitude: od.furthest.altitude ?? undefined }
           : undefined,
       },
       entry,
+      manual,
       formatTime: narrativeTimeFormatter(comp.timezone),
     });
     return {

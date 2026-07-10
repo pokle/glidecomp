@@ -209,6 +209,13 @@ export interface ExplainOpenDistanceInput {
     'flown_distance' | 'penalty_points' | 'penalty_reason' | 'total_score'
   >;
   formatTime?: (d: Date) => string;
+  /**
+   * True for a manual flight (issue #306): a track-less pilot whose landing
+   * point was recorded by an official. The scored line is measured from the
+   * take-off cylinder edge (toward the landing) rather than a real exit
+   * crossing, so the wording is adjusted and no fix times are shown.
+   */
+  manual?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -903,7 +910,9 @@ export function explainOpenDistanceScore(
       input.anchorInfo?.furthest?.altitude ?? furthestFix?.gnssAltitude;
     items.push({
       id: 'origin',
-      text: `Left the ${km(launchRadius)} launch cylinder — the scored distance starts here (the last outward crossing counts).`,
+      text: input.manual
+        ? `Take-off cylinder exit — the scored distance starts at the ${km(launchRadius)} take-off cylinder edge, toward the landing point.`
+        : `Left the ${km(launchRadius)} launch cylinder — the scored distance starts here (the last outward crossing counts).`,
       value: originTimeMs !== undefined ? fmt(new Date(originTimeMs)) : undefined,
       anchor: {
         kind: 'origin',
@@ -915,7 +924,9 @@ export function explainOpenDistanceScore(
     });
     items.push({
       id: 'furthest',
-      text: 'Furthest point reached after the exit — the scored distance ends here.',
+      text: input.manual
+        ? 'Recorded landing point — the scored distance ends here.'
+        : 'Furthest point reached after the exit — the scored distance ends here.',
       value: furthestTimeMs !== undefined ? fmt(new Date(furthestTimeMs)) : undefined,
       anchor: {
         kind: 'furthest',

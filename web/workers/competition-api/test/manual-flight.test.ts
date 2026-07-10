@@ -544,3 +544,70 @@ describe("pilot analysis for a manual flight", () => {
     expect(data.manual_flight!.route_to_goal).toHaveLength(0);
   });
 });
+
+// ── Open-distance manual flights ─────────────────────────────────────────────
+
+/** A single take-off cylinder — the open-distance task shape. */
+const OD_TASK_XCTSK = {
+  taskType: "CLASSIC",
+  version: 1,
+  earthModel: "WGS84",
+  turnpoints: [
+    { type: "TAKEOFF", radius: 5000, waypoint: { name: "Launch", lat: 0, lon: 0.0 } },
+  ],
+};
+
+describe("open-distance manual flights", () => {
+  test("scored as open distance from the take-off exit, and shown on the pilot page", async () => {
+    const compId = await createComp({ category: "pg", scoring_format: "open_distance" });
+    const taskId = await createTask(compId, {
+      xctsk: OD_TASK_XCTSK,
+      pilot_classes: ["open"],
+    });
+    const cp = await registerPilot(compId, "Downwind Dan");
+
+    // The open-distance dialog sends last_reached_tp_index: 0 and no duration.
+    const put = await authRequest(
+      "PUT",
+      `/api/comp/${compId}/task/${taskId}/manual-flight/${cp}`,
+      { last_reached_tp_index: 0, landing_lat: 0, landing_lon: 0.2 }
+    );
+    expect(put.status).toBe(200);
+    const created = (await put.json()) as { computed_distance: number; made_goal: boolean };
+    // ~22 km east of the 5 km cylinder → ~17 km open distance.
+    expect(created.computed_distance).toBeGreaterThan(15000);
+    expect(created.made_goal).toBe(false);
+
+    // Scores: the manual flight is scored as open distance (numFlying).
+    const scores = await getFreshScores(`/api/comp/${compId}/task/${taskId}/score`);
+    const open = scores.classes.find((c) => c.pilot_class === "open")!;
+    expect(open.pilots).toHaveLength(1);
+    expect(open.pilots[0].pilot_name).toBe("Downwind Dan");
+    expect(open.pilots[0].flown_distance).toBeGreaterThan(15000);
+
+    // Analysis: the open-distance line (take-off exit → landing), no turnpoints,
+    // no fix times.
+    const analysisRes = await request(
+      "GET",
+      `/api/comp/${compId}/task/${taskId}/pilot/${cp}/analysis`
+    );
+    expect(analysisRes.status).toBe(200);
+    const analysis = (await analysisRes.json()) as {
+      scoring_format: string;
+      turnpoint_result: unknown;
+      manual_flight: unknown;
+      open_distance: {
+        distance: number;
+        origin: { latitude: number; longitude: number; time_ms: number | null } | null;
+        furthest: { latitude: number; longitude: number; time_ms: number | null } | null;
+      } | null;
+    };
+    expect(analysis.scoring_format).toBe("open_distance");
+    expect(analysis.turnpoint_result).toBeNull();
+    expect(analysis.manual_flight).toBeNull();
+    expect(analysis.open_distance!.distance).toBeGreaterThan(15000);
+    // Endpoints present but time-less (no tracklog).
+    expect(analysis.open_distance!.origin!.time_ms).toBeNull();
+    expect(analysis.open_distance!.furthest!.latitude).toBe(0);
+  });
+});

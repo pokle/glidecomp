@@ -23,6 +23,7 @@ import {
   taskForDistanceOrigin,
   distanceMadeGoodTo,
   manualFlightScoringData,
+  manualOpenDistanceGeometry,
   getGoalIndex,
   DEFAULT_GAP_PARAMETERS,
   type XCTask,
@@ -93,6 +94,30 @@ export function computeManualMadeGood(
   });
   const madeGoal = input.lastReachedTpIndex >= getGoalIndex(xcTask);
   return { madeGood, madeGoal };
+}
+
+/**
+ * Compute a manual flight's stored made-good distance for either scoring
+ * format. GAP measures made-good along the optimised course from the last
+ * reached turnpoint; open distance measures the straight line from the take-off
+ * cylinder edge to the landing point (no turnpoints / goal). Returns the
+ * distance plus whether the pilot is in goal (always false for open distance).
+ */
+export function computeManualDistance(
+  xctsk: string,
+  gapParamsJson: string | null,
+  scoringFormat: string | null,
+  input: ManualFlightInput
+): { madeGood: number; madeGoal: boolean } {
+  const { xcTask, scoringTask, offset } = scoringContext(xctsk, gapParamsJson);
+  if (scoringFormat === "open_distance") {
+    const od = manualOpenDistanceGeometry(xcTask, {
+      lat: input.landingLat,
+      lon: input.landingLon,
+    });
+    return { madeGood: od.distance, madeGoal: false };
+  }
+  return computeManualMadeGood(xcTask, scoringTask, offset, input);
 }
 
 /** Build the synthetic scoring input for one manual flight, mapped into the

@@ -26,7 +26,7 @@
 import type { XCTask } from './xctsk-parser';
 import { getGoalIndex } from './xctsk-parser';
 import { calculateOptimizedTaskLine } from './task-optimizer';
-import { andoyerDistance } from './geo';
+import { andoyerDistance, calculateBearingRadians, destinationPoint } from './geo';
 import type { FlightScoringData } from './gap-scoring';
 
 /**
@@ -242,4 +242,56 @@ export function manualFlightScoringData(
     sssTimeMs: null,
     essTimeMs: null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Open distance
+// ---------------------------------------------------------------------------
+
+/**
+ * The made-good geometry of a manual flight on an OPEN-DISTANCE task.
+ *
+ * Open distance has no turnpoints, goal, or speed section — the score is the
+ * straight-line distance from the take-off cylinder exit to the furthest point
+ * reached (see open-distance-scoring.ts). A track-less pilot supplies only the
+ * landing (furthest) point, so the made-good is the straight-line distance from
+ * the take-off cylinder *edge* toward that point: `dist(landing, take-off) −
+ * radius`, floored at 0 (0 = never left the cylinder). The origin is the point
+ * on the cylinder edge on the bearing to the landing — the exit that yields
+ * this distance — so the UI can draw the same exit→furthest line a track does.
+ */
+export interface ManualOpenDistanceGeometry {
+  /** Open distance in metres (0 = never left the take-off cylinder). */
+  distance: number;
+  /** The take-off cylinder exit point (on the edge, toward the landing). */
+  origin: { lat: number; lon: number };
+  /** The landing / furthest point. */
+  landing: { lat: number; lon: number };
+}
+
+/**
+ * Compute a manual open-distance flight's geometry from the landing point.
+ *
+ * @param task - The open-distance task (turnpoint 0 is the take-off cylinder).
+ * @param point - The landing / furthest point.
+ */
+export function manualOpenDistanceGeometry(
+  task: XCTask,
+  point: { lat: number; lon: number },
+): ManualOpenDistanceGeometry {
+  const takeoff = task.turnpoints[0];
+  const landing = { lat: point.lat, lon: point.lon };
+  if (!takeoff) return { distance: 0, origin: landing, landing };
+
+  const center = { lat: takeoff.waypoint.lat, lon: takeoff.waypoint.lon };
+  const toLanding = andoyerDistance(center.lat, center.lon, point.lat, point.lon);
+  const distance = Math.max(0, toLanding - takeoff.radius);
+
+  // The exit that maximises the distance is on the cylinder edge, on the
+  // bearing from the take-off centre to the landing point. When the landing is
+  // inside the cylinder the bearing is still well-defined; distance is 0.
+  const bearing = calculateBearingRadians(center.lat, center.lon, point.lat, point.lon);
+  const edge = destinationPoint(center.lat, center.lon, takeoff.radius, bearing);
+
+  return { distance, origin: { lat: edge.lat, lon: edge.lon }, landing };
 }

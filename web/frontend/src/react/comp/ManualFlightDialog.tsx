@@ -2,18 +2,26 @@
  * Record a manual flight for a track-less pilot (issue #306, FAI S7F §8.4).
  *
  * Pre-scoped to one pilot (unlike SubmitTrackDialog, which picks the pilot
- * inside). The admin picks the last turnpoint the pilot legally reached and
- * enters the landing point; the made-good distance is computed live by the
- * SAME engine helper the server scores with (distanceMadeGoodTo), so the
- * number shown before saving is the number that will be scored. When the last
- * turnpoint is Goal, a finish-time field appears to enable time/speed points.
+ * inside). The made-good distance is computed live by the SAME engine helpers
+ * the server scores with, so the number shown before saving is the number that
+ * will be scored.
+ *
+ * The form differs by scoring format — they are fundamentally different models:
+ * - GAP: pick the last turnpoint reached + the landing point; a finish-time
+ *   field appears when the last turnpoint is Goal (for time/speed points).
+ * - Open distance: just the landing point — the score is the straight-line
+ *   distance from the take-off cylinder exit, with no turnpoints or finish time.
  *
  * This is the accessible, non-map path required by docs/accessibility-standard.md
- * (numeric lat/lon). A map picker is a planned follow-up.
+ * (a "lat, lon" field). A map picker is a planned follow-up.
  */
 import { useId, useMemo, useState } from "react";
 import type { XCTask } from "@glidecomp/engine";
-import { taskForDistanceOrigin, distanceMadeGoodTo } from "@glidecomp/engine";
+import {
+  taskForDistanceOrigin,
+  distanceMadeGoodTo,
+  manualOpenDistanceGeometry,
+} from "@glidecomp/engine";
 import { Button } from "@/react/ui/button";
 import {
   Dialog,
@@ -51,6 +59,7 @@ export function ManualFlightDialog({
   pilotName,
   task,
   distanceOrigin,
+  openDistance,
   existing,
   onClose,
   onSaved,
@@ -63,6 +72,8 @@ export function ManualFlightDialog({
   task: XCTask;
   /** Comp distance origin — mirrors the server so the preview matches the score. */
   distanceOrigin: DistanceOriginValue;
+  /** True for an open-distance comp — swaps to the take-off-exit distance form. */
+  openDistance: boolean;
   /** Prefill for editing an existing manual flight. */
   existing?: ManualFlightEntry | null;
   onClose: () => void;
@@ -93,10 +104,12 @@ export function ManualFlightDialog({
   );
   const [saving, setSaving] = useState(false);
 
-  const madeGoal = lastIdx === goalIdx;
+  // GAP only: in goal when the last reached turnpoint is the goal.
+  const madeGoal = !openDistance && lastIdx === goalIdx;
 
-  // Live made-good, computed exactly as the server does: trim the task to the
-  // distance origin, map the full-task index into that frame, then measure.
+  // Live made-good, computed exactly as the server does. GAP trims the task to
+  // the distance origin and measures along the course from the last turnpoint;
+  // open distance measures the straight line from the take-off cylinder exit.
   const scoringTask = useMemo(
     () => taskForDistanceOrigin(task, distanceOrigin),
     [task, distanceOrigin]
@@ -108,8 +121,10 @@ export function ManualFlightDialog({
 
   const madeGood = useMemo(() => {
     if (!landing) return null;
-    return distanceMadeGoodTo(scoringTask, lastIdx - offset, landing);
-  }, [scoringTask, offset, lastIdx, landing]);
+    return openDistance
+      ? manualOpenDistanceGeometry(task, landing).distance
+      : distanceMadeGoodTo(scoringTask, lastIdx - offset, landing);
+  }, [openDistance, task, scoringTask, offset, lastIdx, landing]);
 
   async function save() {
     if (!landing) {
@@ -132,10 +147,12 @@ export function ManualFlightDialog({
       ].$put({
         param: { comp_id: compId, task_id: taskId, comp_pilot_id: compPilotId },
         json: {
-          last_reached_tp_index: lastIdx,
+          // Open distance has no turnpoints or finish time — the server ignores
+          // the index and computes distance from the take-off exit.
+          last_reached_tp_index: openDistance ? 0 : lastIdx,
           landing_lat: landing.lat,
           landing_lon: landing.lon,
-          duration_seconds: durationSeconds,
+          duration_seconds: openDistance ? null : durationSeconds,
         },
       });
       if (!res.ok) {
@@ -159,8 +176,10 @@ export function ManualFlightDialog({
           <DialogTitle>Record manual flight</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          {pilotName} — for a pilot who flew but has no tracklog. Scored from the
-          last turnpoint they reached and where they landed.
+          {pilotName} — for a pilot who flew but has no tracklog.{" "}
+          {openDistance
+            ? "Scored as open distance from the take-off cylinder to where they landed."
+            : "Scored from the last turnpoint they reached and where they landed."}
         </p>
         <form
           className="flex flex-col gap-4"
@@ -169,21 +188,23 @@ export function ManualFlightDialog({
             void save();
           }}
         >
-          <Field>
-            <FieldLabel htmlFor={tpId}>Last turnpoint reached</FieldLabel>
-            <SimpleSelect
-              value={String(lastIdx)}
-              onChange={(v) => setLastIdx(Number(v))}
-              options={task.turnpoints.map((_, i) => ({
-                value: String(i),
-                label: turnpointLabel(task, i),
-              }))}
-              ariaLabel="Last turnpoint reached"
-            />
-            <FieldDescription>
-              The furthest turnpoint the pilot legally tagged, in order.
-            </FieldDescription>
-          </Field>
+          {!openDistance ? (
+            <Field>
+              <FieldLabel htmlFor={tpId}>Last turnpoint reached</FieldLabel>
+              <SimpleSelect
+                value={String(lastIdx)}
+                onChange={(v) => setLastIdx(Number(v))}
+                options={task.turnpoints.map((_, i) => ({
+                  value: String(i),
+                  label: turnpointLabel(task, i),
+                }))}
+                ariaLabel="Last turnpoint reached"
+              />
+              <FieldDescription>
+                The furthest turnpoint the pilot legally tagged, in order.
+              </FieldDescription>
+            </Field>
+          ) : null}
 
           <Field>
             <FieldLabel htmlFor={coordsId}>Landing point</FieldLabel>
@@ -221,13 +242,13 @@ export function ManualFlightDialog({
             {madeGood !== null ? (
               <>
                 <span className="font-medium">
-                  {(madeGood / 1000).toFixed(1)} km made good
+                  {(madeGood / 1000).toFixed(1)} km {openDistance ? "open distance" : "made good"}
                 </span>
                 {madeGoal ? <span className="text-muted-foreground"> · in goal</span> : null}
               </>
             ) : (
               <span className="text-muted-foreground">
-                Enter a landing point to see the made-good distance.
+                Enter a landing point to see the {openDistance ? "open distance" : "made-good distance"}.
               </span>
             )}
           </div>

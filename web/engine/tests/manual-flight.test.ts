@@ -386,3 +386,35 @@ describe('explainManualFlightScore', () => {
     expect(findAnchorPath(explanation)).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// manualOpenDistanceGeometry (open-distance manual flights)
+// ---------------------------------------------------------------------------
+
+import { manualOpenDistanceGeometry } from '../src/manual-flight';
+import { andoyerDistance } from '../src/geo';
+
+describe('manualOpenDistanceGeometry', () => {
+  // A single take-off cylinder — the open-distance task shape.
+  const OD_TASK = createTask([
+    { name: 'Launch', lat: 0, lon: 0, radius: 5000, type: 'TAKEOFF' },
+  ]);
+
+  it('measures the straight line from the take-off cylinder edge to the landing', () => {
+    const landing = { lat: 0, lon: 0.1 }; // ~11.1 km east of the centre
+    const geom = manualOpenDistanceGeometry(OD_TASK, landing);
+
+    const toCentre = andoyerDistance(0, 0, landing.lat, landing.lon);
+    // distance = (centre→landing) − radius.
+    expect(geom.distance).toBeCloseTo(toCentre - 5000, 0);
+    expect(geom.landing).toEqual(landing);
+    // Origin is on the cylinder edge (5 km from the centre), east toward landing.
+    expect(andoyerDistance(0, 0, geom.origin.lat, geom.origin.lon)).toBeCloseTo(5000, 0);
+    expect(geom.origin.lon).toBeGreaterThan(0);
+  });
+
+  it('scores 0 when the landing is inside the take-off cylinder', () => {
+    const geom = manualOpenDistanceGeometry(OD_TASK, { lat: 0, lon: 0.01 }); // ~1.1 km
+    expect(geom.distance).toBe(0);
+  });
+});

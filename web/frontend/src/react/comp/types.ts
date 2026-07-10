@@ -163,12 +163,13 @@ export interface TaskScoreData {
   stale: boolean;
 }
 
-/** One endpoint of the scored open-distance line, with fix time/altitude. */
+/** One endpoint of the scored open-distance line, with fix time/altitude.
+ * time_ms / altitude are null for a manual flight (no tracklog). */
 export interface OpenDistanceAnchorPointData {
   latitude: number;
   longitude: number;
-  time_ms: number;
-  altitude: number;
+  time_ms: number | null;
+  altitude: number | null;
 }
 
 /**
