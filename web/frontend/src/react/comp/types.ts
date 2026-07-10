@@ -12,20 +12,9 @@ import type {
 /** How a competition's tasks are scored (see competition-api migration 0009). */
 export type ScoringFormat = "gap" | "open_distance";
 
-/**
- * The fixed pilot status vocabulary (FAI Sporting Code S7F §9.1), mirrored
- * from the competition-api (web/workers/competition-api/src/pilot-statuses.ts).
- * It is NOT admin-configurable. "Present" is the default — the absence of a
- * stored status — so selecting it clears the pilot's row (a DELETE). The
- * other three are the stored keys; the UI always shows the full English
- * label, never the TLA.
- */
-export const PILOT_STATUS_OPTIONS: ReadonlyArray<{ key: string; label: string }> = [
-  { key: "", label: "Present" },
-  { key: "absent", label: "Absent" },
-  { key: "dnf", label: "Did Not Fly" },
-  { key: "landed", label: "Landed" },
-];
+/** Where scored distance begins (GAPParameters.distanceOrigin). Mirrors the
+ * engine's DistanceOrigin; kept local so the UI needn't re-export it. */
+export type DistanceOriginValue = "takeoff" | "start";
 
 /**
  * The stored comp gap_params allow a null nominalDistance ("auto: 70% of
@@ -99,6 +88,29 @@ export interface TrackInfo {
   uploaded_by_name: string | null;
   /** True when the uploader is someone other than the pilot the track belongs to. */
   uploaded_on_behalf: boolean;
+  /** False when superseded (DNF/Absent/Present or a manual flight) — retained,
+   * not scored, restorable (issue #306). */
+  active: boolean;
+}
+
+/**
+ * A manual flight report for a track-less pilot (issue #306) —
+ * GET /api/comp/:comp_id/task/:task_id/manual-flight. `computed_distance`
+ * is the engine's made-good in metres.
+ */
+export interface ManualFlightEntry {
+  task_manual_flight_id: string;
+  comp_pilot_id: string;
+  pilot_name?: string;
+  last_reached_tp_index: number;
+  landing_lat: number;
+  landing_lon: number;
+  made_goal: boolean;
+  duration_seconds: number | null;
+  computed_distance: number;
+  active: boolean;
+  set_by_name: string;
+  set_at: string;
 }
 
 export interface PilotScoreEntry {

@@ -644,6 +644,7 @@ export const igcRoutes = new Hono<HonoEnv>()
         `SELECT tt.task_track_id, tt.comp_pilot_id, tt.igc_filename,
                 tt.uploaded_at, tt.file_size, tt.penalty_points, tt.penalty_reason,
                 tt.igc_pilot_name, tt.uploaded_by_user_id, tt.uploaded_by_name,
+                tt.active,
                 cp.registered_pilot_name as pilot_name,
                 cp.pilot_class
          FROM task_track tt
@@ -663,6 +664,7 @@ export const igcRoutes = new Hono<HonoEnv>()
           igc_pilot_name: string | null;
           uploaded_by_user_id: string | null;
           uploaded_by_name: string | null;
+          active: number;
           pilot_name: string;
           pilot_class: string;
         }>();
@@ -679,6 +681,9 @@ export const igcRoutes = new Hono<HonoEnv>()
           penalty_points: t.penalty_points,
           penalty_reason: t.penalty_reason,
           uploaded_by_name: t.uploaded_by_name,
+          /** False when superseded by DNF/Absent/Present or a manual flight
+           * (retained, not scored, restorable). */
+          active: !!t.active,
           /**
            * True when an IGC was uploaded by someone other than the pilot
            * it belongs to. Computed server-side so the UI can just show
