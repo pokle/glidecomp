@@ -117,6 +117,21 @@ export async function computeScoreStateKey(
       pilot_class: string;
     }>();
 
+  // Pilot statuses feed launch validity now (non-absent = present, FAI S7F
+  // §9.1), so a status change must alter the served body's identity. Hash the
+  // per-task statuses with the pilot's class (the count that matters is
+  // per-class). Absent/DNF pilots typically have no track, so this is the
+  // only place they enter the key.
+  const statuses = await db
+    .prepare(
+      `SELECT tps.comp_pilot_id, tps.status_key, cp.pilot_class
+       FROM task_pilot_status tps
+       JOIN comp_pilot cp ON cp.comp_pilot_id = tps.comp_pilot_id
+       WHERE tps.task_id = ? ORDER BY tps.comp_pilot_id`
+    )
+    .bind(taskId)
+    .all<{ comp_pilot_id: number; status_key: string; pilot_class: string }>();
+
   const stateString = [
     // Engine generation: rolls every scoring cache key when scoring
     // behaviour changes (see engine scoring-version.ts), so a cached score
@@ -128,6 +143,9 @@ export async function computeScoreStateKey(
     ...tracks.results.map(
       (t) =>
         `${t.task_track_id}:${t.uploaded_at}:${t.penalty_points}:${t.comp_pilot_id}:${t.registered_pilot_name}:${t.pilot_class}`
+    ),
+    ...statuses.results.map(
+      (s) => `st:${s.comp_pilot_id}:${s.status_key}:${s.pilot_class}`
     ),
   ].join("|");
 
@@ -141,7 +159,8 @@ export async function computeScoreStateKey(
     .slice(0, 16);
 
   // v5: added scoring_format to the hashed state (open-distance support).
-  return `score:v5:${taskId}:${hex}`;
+  // v6: added per-task pilot statuses (they now feed launch validity).
+  return `score:v6:${taskId}:${hex}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -456,6 +475,29 @@ export async function computeTaskScore(
   const scoredClasses = new Set(taskClasses.results.map((r) => r.pilot_class));
   const scoredTracks = tracks.results.filter((t) => scoredClasses.has(t.pilot_class));
 
+  // Launch validity (FAI S7F §9.1): "pilots present" = pilots who took off
+  // (have a track = numFlying) + pilots present who did not fly ("Did Not
+  // Fly"). Absent and Present-default pilots without a track are excluded, so
+  // numPresent per class = numFlying + numDNF. Count DNF pilots WITHOUT a
+  // track — a pilot with a track already counts as flying and never carries a
+  // DNF status (uploading a track sets them to Landed).
+  const dnfRows = await db
+    .prepare(
+      `SELECT cp.pilot_class, COUNT(*) AS n
+       FROM task_pilot_status tps
+       JOIN comp_pilot cp ON cp.comp_pilot_id = tps.comp_pilot_id
+       WHERE tps.task_id = ? AND tps.status_key = 'dnf'
+         AND NOT EXISTS (
+           SELECT 1 FROM task_track tt
+           WHERE tt.task_id = tps.task_id
+             AND tt.comp_pilot_id = tps.comp_pilot_id
+         )
+       GROUP BY cp.pilot_class`
+    )
+    .bind(taskId)
+    .all<{ pilot_class: string; n: number }>();
+  const dnfByClass = new Map(dnfRows.results.map((r) => [r.pilot_class, r.n]));
+
   // Open distance: score each pilot on how far they flew from the take-off
   // exit. Each pilot's open distance is field-independent, so — like the GAP
   // path — it is stored per track in track_analysis and reused across
@@ -547,7 +589,12 @@ export async function computeTaskScore(
         classScores.push(emptyClassScore(pilotClass));
         continue;
       }
-      const result = scoreOpenDistanceFlights(classPilots.map((p) => p.flight));
+      const numPresent =
+        classPilots.length + (dnfByClass.get(pilotClass) ?? 0);
+      const result = scoreOpenDistanceFlights(
+        classPilots.map((p) => p.flight),
+        numPresent
+      );
       const pilotMeta = new Map(
         classPilots.map((p) => [
           p.flight.trackFile,
@@ -701,10 +748,13 @@ export async function computeTaskScore(
       continue;
     }
 
+    const numPresent =
+      classPilots.length + (dnfByClass.get(pilotClass) ?? 0);
     const result = scoreFlights(
       scoringTask,
       classPilots.map((p) => p.flight),
-      gapParams
+      gapParams,
+      numPresent
     );
     const pilotMeta = new Map(
       classPilots.map((p) => [

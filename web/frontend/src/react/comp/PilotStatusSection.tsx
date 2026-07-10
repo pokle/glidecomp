@@ -9,19 +9,18 @@ import { Input } from "@/react/ui/input";
 import type { AuthUser } from "../../auth/client";
 import { api } from "../../comp/api";
 import { SimpleSelect } from "./fields";
-import type { PilotListEntry, PilotStatusConfig, PilotStatusEntry } from "./types";
+import { PILOT_STATUS_OPTIONS } from "./types";
+import type { PilotListEntry, PilotStatusEntry } from "./types";
 
 export function PilotStatusSection({
   compId,
   taskId,
-  statusConfig,
   user,
   isAdmin,
   openIgcUpload,
 }: {
   compId: string;
   taskId: string;
-  statusConfig: PilotStatusConfig[];
   user: AuthUser | null;
   isAdmin: boolean;
   openIgcUpload: boolean;
@@ -33,7 +32,6 @@ export function PilotStatusSection({
   const [marked, setMarked] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (statusConfig.length === 0) return;
     let cancelled = false;
     (async () => {
       try {
@@ -73,10 +71,10 @@ export function PilotStatusSection({
     return () => {
       cancelled = true;
     };
-  }, [compId, taskId, statusConfig.length]);
+  }, [compId, taskId]);
 
-  // No statuses configured, or data unavailable — leave the section hidden.
-  if (statusConfig.length === 0 || pilots === null) return null;
+  // Data unavailable (comp/pilots failed to load) — leave the section hidden.
+  if (pilots === null) return null;
 
   const hint =
     marked.size === 0 ? `${pilots.length} pilots` : `${marked.size} of ${pilots.length} marked`;
@@ -87,8 +85,9 @@ export function PilotStatusSection({
         Pilot Status <span className="text-sm font-normal text-muted-foreground">{hint}</span>
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Change a status to save instantly. Safety roll call — especially useful before tracks
-        are uploaded.
+        Every pilot is <strong>Present</strong> by default. Mark <strong>Absent</strong> or{" "}
+        <strong>Did Not Fly</strong> as needed — uploading a track marks a pilot{" "}
+        <strong>Landed</strong>. Changes save instantly and feed launch validity.
       </p>
       {pilots.length === 0 ? (
         <p className="mt-2 text-muted-foreground">No pilots registered yet</p>
@@ -101,7 +100,6 @@ export function PilotStatusSection({
               taskId={taskId}
               pilot={pilot}
               initial={initialByPilot.get(pilot.comp_pilot_id) ?? null}
-              statusConfig={statusConfig}
               user={user}
               isAdmin={isAdmin}
               openIgcUpload={openIgcUpload}
@@ -132,7 +130,6 @@ function StatusRow({
   taskId,
   pilot,
   initial,
-  statusConfig,
   user,
   isAdmin,
   openIgcUpload,
@@ -142,7 +139,6 @@ function StatusRow({
   taskId: string;
   pilot: PilotListEntry;
   initial: PilotStatusEntry | null;
-  statusConfig: PilotStatusConfig[];
   user: AuthUser | null;
   isAdmin: boolean;
   openIgcUpload: boolean;
@@ -194,7 +190,12 @@ function StatusRow({
           ":comp_pilot_id"
         ].$put({
           param: { comp_id: compId, task_id: taskId, comp_pilot_id: pilot.comp_pilot_id },
-          json: { status_key: newKey, note: note || null },
+          // newKey is non-empty here (the "" → Present case took the DELETE
+          // branch above); it is one of the fixed stored status keys.
+          json: {
+            status_key: newKey as "absent" | "dnf" | "landed",
+            note: note || null,
+          },
         });
         if (!res.ok) throw new Error(`${res.status}`);
         const data = (await res.json()) as PilotStatusEntry;
@@ -241,10 +242,7 @@ function StatusRow({
       <SimpleSelect
         value={selectedKey}
         onChange={(v) => void saveStatusChange(v)}
-        options={[
-          { value: "", label: "— no status —" },
-          ...statusConfig.map((s) => ({ value: s.key, label: s.label })),
-        ]}
+        options={PILOT_STATUS_OPTIONS.map((s) => ({ value: s.key, label: s.label }))}
         disabled={!canEdit}
         ariaLabel={`Status for ${pilot.name}`}
       />{" "}

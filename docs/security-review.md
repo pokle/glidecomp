@@ -673,7 +673,7 @@ The existing auth-api test suite (`bun run --filter auth-api test`) exercises Be
 ### Re-checked but no change
 
 - **SEC-15 class — PII on `optionalAuth` routes.** Walked every `optionalAuth` site and confirmed the SELECT columns are PII-free for unauthenticated callers:
-  - `comp.ts:145` (GET `/api/comp`) — `comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, open_igc_upload, pilot_statuses` ∪ admin's own comps (no email/phone/user-id fields).
+  - `comp.ts:145` (GET `/api/comp`) — `comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, open_igc_upload` ∪ admin's own comps (no email/phone/user-id fields).
   - `comp.ts:210` (GET `/api/comp/:comp_id`) — same fields plus `admins: { email, name }` from `comp_admin JOIN "user"`. SEC-03 still tracks the admin-email portion; nothing else newly leaks.
   - `task.ts:125` (GET `/api/comp/:comp_id/task/:task_id`) — `task_id, comp_id, name, task_date, creation_date, xctsk, pilot_classes, track_count`. No user join.
   - `igc.ts:605` (GET task-track list) — selects `uploaded_by_user_id` but never echoes it; response carries `uploaded_by_name` and the boolean `uploaded_on_behalf` only.

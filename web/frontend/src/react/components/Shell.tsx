@@ -20,7 +20,13 @@ import {
 import { Separator } from "@/react/ui/separator";
 import { cn } from "@/react/lib/utils";
 import { signOut } from "../../auth/client";
-import { signInWithGoogle, useUser, type PreviewRole } from "../lib/user";
+import {
+  DEV_SIGN_IN_ENABLED,
+  signInAsDev,
+  signInWithGoogle,
+  useUser,
+  type PreviewRole,
+} from "../lib/user";
 import { useScrollRestoration } from "../lib/scroll-restoration";
 
 declare const __GIT_SHA__: string;
@@ -68,9 +74,20 @@ export function Shell() {
             {user ? (
               <UserMenu name={user.name ?? user.email ?? "Account"} />
             ) : !loading ? (
-              <Button type="button" onClick={() => void signInWithGoogle()}>
-                Sign in
-              </Button>
+              <div className="flex items-center gap-2">
+                {DEV_SIGN_IN_ENABLED ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void signInAsDev()}
+                  >
+                    Sign in (dev)
+                  </Button>
+                ) : null}
+                <Button type="button" onClick={() => void signInWithGoogle()}>
+                  Sign in
+                </Button>
+              </div>
             ) : null}
           </div>
         </nav>

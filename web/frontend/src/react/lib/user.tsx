@@ -111,6 +111,40 @@ export function signInWithGoogle() {
   return authClient.signIn.social({ provider: "google", callbackURL: "/comp" });
 }
 
+/**
+ * True only in a local dev build (Vite replaces `import.meta.env.DEV` with a
+ * static boolean at build time — `false` in the production and SSR bundles).
+ * The dev sign-in button is gated on this so it never renders in production,
+ * and the endpoint it calls (`/api/auth/dev-login`) 404s there regardless.
+ */
+export const DEV_SIGN_IN_ENABLED = import.meta.env.DEV;
+
+/**
+ * Dev/test-only sign-in that skips Google OAuth — the same path the e2e
+ * tests use. Calls the auth worker's `/api/auth/dev-login` (enabled only when
+ * `BETTER_AUTH_URL` is localhost) to mint a real session for a fixed account,
+ * then reloads into the app. The default identity matches the repo's
+ * super-admin allowlist (`SUPER_ADMIN_EMAILS`) so the dev session has admin
+ * rights, which is what local testing usually needs.
+ */
+export async function signInAsDev(
+  name = "Tushar Pokle",
+  email = "tushar.pokle@gmail.com"
+): Promise<void> {
+  writePreviewRole("actual");
+  const res = await fetch("/api/auth/dev-login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ name, email }),
+  });
+  if (!res.ok) {
+    console.error("dev sign-in failed", res.status, await res.text().catch(() => ""));
+    return;
+  }
+  window.location.href = "/comp";
+}
+
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [me, setMe] = useState<{ user: AuthUser | null; loading: boolean }>({
     user: null,

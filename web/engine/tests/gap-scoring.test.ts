@@ -631,6 +631,34 @@ describe('scoreTask', () => {
     expect(result.stats.bestDistance).toBeGreaterThan(0);
   });
 
+  it('honours an explicit numPresent > numFlying (launch validity < 1)', () => {
+    // One pilot flew, but many were present and did not fly (DNF). Launch
+    // validity must drop below 1 (FAI S7F §9.1) instead of defaulting to
+    // numPresent = numFlying.
+    const fixes = createTrackThroughCylinders(standardWaypoints);
+    const pilots: PilotFlight[] = [
+      { pilotName: 'Alice', trackFile: 'alice.igc', fixes },
+    ];
+
+    const flew = scoreTask(standardTask, pilots, {
+      nominalDistance: 10000,
+      nominalTime: 600,
+    });
+    const withDnf = scoreTask(
+      standardTask,
+      pilots,
+      { nominalDistance: 10000, nominalTime: 600 },
+      10, // 1 flying + 9 present-but-DNF
+    );
+
+    expect(withDnf.stats.numFlying).toBe(1);
+    expect(withDnf.stats.numPresent).toBe(10);
+    expect(withDnf.taskValidity.launch).toBeLessThan(flew.taskValidity.launch);
+    expect(withDnf.taskValidity.launch).toBeGreaterThan(0);
+    // Devaluing the task lowers everyone's available points.
+    expect(withDnf.availablePoints.total).toBeLessThan(flew.availablePoints.total);
+  });
+
   it('handles zero pilots gracefully', () => {
     const result = scoreTask(standardTask, [], { nominalDistance: 10000 });
     expect(result.pilotScores).toHaveLength(0);

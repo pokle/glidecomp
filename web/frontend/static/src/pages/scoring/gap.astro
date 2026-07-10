@@ -155,7 +155,10 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 Reduced when fewer pilots launch than expected. If almost everyone flies (above
                 the "nominal launch" threshold, typically 96%), launch validity is 1.0. If half
                 the field stays on the ground, it drops significantly. This prevents a task where
-                only a few pilots launched from being worth too much.
+                only a few pilots launched from being worth too much. "Pilots present" are those
+                not marked <strong>Absent</strong> — pilots who flew (uploaded a track) plus those
+                present who <strong>Did Not Fly</strong>; organisers set these on each task's pilot
+                roll call.
               </p>
             </div>
             <div>
@@ -694,16 +697,6 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 measures landed-out pilots' best distance up to the deadline. GlideComp parses the
                 goal deadline from the task file but scores the whole track regardless of time — a
                 pilot tagging a turnpoint after the deadline would still be credited.
-              </p>
-            </div>
-            <div>
-              <h3 class="text-base font-semibold mb-1">Launch validity is effectively always 1.0 (<SpecRef section="9.1" />)</h3>
-              <p class="text-muted-foreground">
-                The spec counts "pilots present" (including those who chose not to fly — DNFs) so
-                a day when much of the field stays on launch is devalued. GlideComp scores from
-                uploaded tracks and currently treats every scored pilot as having flown, so the
-                launch-validity term never drops below 1. Distance and time validity are
-                unaffected and fully implemented.
               </p>
             </div>
             <div>
