@@ -52,7 +52,10 @@ export interface XCTask {
 
   /**
    * Cylinder tolerance as a fraction (e.g. 0.005 = 0.5%).
-   * Applied to turnpoint radii when checking cylinder crossings.
+   * Applied to turnpoint radii when checking cylinder crossings (FAI S7F §8.1).
+   * The tolerance band is the percentage OR a 5 m absolute minimum, whichever
+   * is larger — see MIN_CYLINDER_TOLERANCE_M in turnpoint-sequence.ts — and
+   * extends both outward (entry cylinders) and inward (the EXIT start).
    * CIVL GAP: 0.001 (0.1%) for Cat 1, up to 0.005 (0.5%) for Cat 2.
    * Default: 0.005 (0.5%) — the Cat 2 maximum.
    */

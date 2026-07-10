@@ -33,6 +33,7 @@ import type { GAPParameters } from './gap-scoring';
 import { DEFAULT_GAP_PARAMETERS, calculateSpeedFraction } from './gap-scoring';
 import type { OpenDistanceGeometry } from './open-distance-scoring';
 import type { IGCFix } from './igc-parser';
+import { calculateOptimizedTaskLine } from './task-optimizer';
 
 // ---------------------------------------------------------------------------
 // Output types
@@ -58,6 +59,14 @@ export interface ExplanationAnchor {
   altitude?: number;
   /** Epoch milliseconds, when known (JSON-safe). */
   timeMs?: number;
+  /**
+   * An optional routed polyline the UI can draw for this anchor. For a
+   * landed-out pilot's `best_progress` point this is the remaining task
+   * route — from that point, through each un-reached turnpoint's optimal
+   * tag point, to goal — so the "measured along the task" / "X km short"
+   * wording is visible on the map rather than implied by a lone pin.
+   */
+  path?: Array<{ latitude: number; longitude: number }>;
 }
 
 /** One explainable fact or step in the calculation. */
@@ -210,8 +219,16 @@ function km(meters: number, decimals = 1): string {
 }
 
 function pts(points: number): string {
+  return `${fmtPoints(points)} pts`;
+}
+
+/**
+ * Format a point value at the spec's one-decimal precision (S7F §11), dropping
+ * a trailing ".0" so whole scores read as whole numbers.
+ */
+function fmtPoints(points: number): string {
   const rounded = Math.round(points * 10) / 10;
-  return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)} pts`;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
 function pct(fraction: number): string {
@@ -269,6 +286,13 @@ function reachingAnchor(
 const MAX_START_CROSSINGS_LISTED = 12;
 
 /**
+ * Shown when a crossing was credited by the cylinder tolerance band rather
+ * than a physical crossing of the nominal radius (FAI S7F §8.1).
+ */
+const TOLERANCE_NOTE =
+  'Credited by the cylinder tolerance band (FAI S7F §8.1) — the track came within tolerance of the cylinder edge but did not physically cross the nominal radius.';
+
+/**
  * Build the flight-narrative section: what the pilot flew, in task order,
  * with the reason each crossing was (or wasn't) the one that scored.
  */
@@ -324,6 +348,7 @@ function buildFlightSection(
             ? `${c.direction === 'enter' ? 'Entered' : 'Exited'} the start cylinder — this is the scored start`
             : `${c.direction === 'enter' ? 'Entered' : 'Exited'} the start cylinder`,
           value: fmt(c.time),
+          detail: c.toleranceCredited ? TOLERANCE_NOTE : undefined,
           emphasis: scored ? 'normal' : 'muted',
           anchor: {
             kind: scored ? 'start' : 'start_candidate',
@@ -354,6 +379,8 @@ function buildFlightSection(
         id: 'start',
         text: `Started${startName ? ` at ${startName}` : ''}`,
         value: fmt(sss.time),
+        detail: sss.toleranceCredited ? TOLERANCE_NOTE : undefined,
+        emphasis: sss.toleranceCredited ? 'muted' : undefined,
         anchor: reachingAnchor(sss, 'start'),
       });
     }
@@ -394,6 +421,9 @@ function buildFlightSection(
     if (reaching.candidateCount > 1) {
       detail = `First of ${reaching.candidateCount} crossings — once a turnpoint is reached, later crossings don't matter.`;
     }
+    if (reaching.toleranceCredited) {
+      detail = `${detail ? `${detail} ` : ''}${TOLERANCE_NOTE}`;
+    }
     if (isESS) {
       const t = entry.speed_section_time ?? result.speedSectionTime;
       if (t !== null) {
@@ -419,16 +449,40 @@ function buildFlightSection(
       text: 'Completed the task — full task distance is credited.',
     });
   } else if (result.bestProgress) {
+    // The marked point is where the flight made the most distance along the
+    // task route — i.e. where the track came closest to the *next* un-reached
+    // turnpoint (routed on toward goal), not the point nearest goal in a
+    // straight line. Name that turnpoint so the map marker makes sense.
+    const nextIdx = result.lastTurnpointReached + 1;
+    const nextIsGoal = nextIdx === getGoalIndex(task);
+    const nextName = turnpointName(task, nextIdx);
+    const nextDesc = `${turnpointLabel(task, nextIdx)}${nextName ? ` (${nextName})` : ''}`;
+    // The remaining routed line: from the best-progress point, through each
+    // un-reached turnpoint's optimal tag point, to goal. calculateOptimizedTaskLine
+    // returns one tag point per turnpoint, index-aligned to task.turnpoints, so
+    // slice(nextIdx) is exactly the un-reached tail (next TP … goal).
+    const remainingTags = calculateOptimizedTaskLine(task).slice(nextIdx);
+    const path: Array<{ latitude: number; longitude: number }> = [
+      {
+        latitude: result.bestProgress.latitude,
+        longitude: result.bestProgress.longitude,
+      },
+      ...remainingTags.map((p) => ({ latitude: p.lat, longitude: p.lon })),
+    ];
     items.push({
       id: 'best-progress',
-      text: `Landed out — closest approach to goal was ${km(result.bestProgress.distanceToGoal)} short`,
+      text: `Landed out — best distance made good along the task, ${km(result.bestProgress.distanceToGoal)} short of goal`,
       value: fmt(result.bestProgress.time),
-      detail: `Scored distance is measured along the task to this point: ${km(entry.flown_distance)}.`,
+      detail: nextIsGoal
+        ? `The marked point is where the track came closest to goal${nextName ? ` (${nextName})` : ''}. Scored distance is measured along the task to this point: ${km(entry.flown_distance)}.`
+        : `The marked point is where the track came closest to the next turnpoint, ${nextDesc} — not the point nearest goal. Distance is measured along the task route from here, on through the remaining turnpoints to goal, so the scored distance is ${km(entry.flown_distance)}.`,
       anchor: {
         kind: 'best_progress',
         latitude: result.bestProgress.latitude,
         longitude: result.bestProgress.longitude,
         timeMs: result.bestProgress.time.getTime(),
+        // Only a genuine multi-point line is worth drawing.
+        path: path.length >= 2 ? path : undefined,
       },
     });
   }
@@ -663,27 +717,27 @@ function buildTotalSection(entry: ScoreEntryInput): ScoreExplanationSection {
     entry.leading_points,
     entry.arrival_points,
   ];
-  const sum = Math.round(components.reduce((a, b) => a + b, 0));
   const parts = components
     .filter((c, i) => c > 0 || i < 2) // always show distance + time, others only when earned
     .map((c) => c.toFixed(1))
     .join(' + ');
+  // FAI S7F §11 rounds the total to one decimal place; §12.4 does that
+  // rounding *after* penalties, so the penalties sit inside the round().
   const jtg = entry.jump_the_gun_penalty ?? 0;
-  let detail: string;
-  if (jtg === 0 && entry.penalty_points === 0) {
-    detail = `round(${parts}) = ${entry.total_score}`;
-  } else {
-    const steps = [`round(${parts}) = ${sum}`];
-    if (jtg !== 0) {
-      steps.push(`− ${jtg} jump-the-gun (never below the minimum-distance score)`);
-    }
-    if (entry.penalty_points !== 0) {
-      steps.push(
-        `${entry.penalty_points > 0 ? '−' : '+'} ${Math.abs(entry.penalty_points)} penalty (scores never go below 0)`,
-      );
-    }
-    detail = `${steps.join(' ')} = ${entry.total_score}`;
+  const penaltySteps: string[] = [];
+  if (jtg !== 0) {
+    penaltySteps.push(`− ${jtg} jump-the-gun (never below the minimum-distance score)`);
   }
+  if (entry.penalty_points !== 0) {
+    penaltySteps.push(
+      `${entry.penalty_points > 0 ? '−' : '+'} ${Math.abs(entry.penalty_points)} penalty (scores never go below 0)`,
+    );
+  }
+  const total = fmtPoints(entry.total_score);
+  const detail =
+    penaltySteps.length === 0
+      ? `round(${parts}, 1 dp) = ${total}`
+      : `round(${parts} ${penaltySteps.join(' ')}, 1 dp) = ${total}`;
   return {
     id: 'total',
     title: 'Total',
@@ -692,7 +746,7 @@ function buildTotalSection(entry: ScoreEntryInput): ScoreExplanationSection {
       {
         id: 'total-sum',
         text: 'Distance + time + leading + arrival, minus penalties',
-        value: `${entry.total_score} pts`,
+        value: `${total} pts`,
         detail,
       },
     ],

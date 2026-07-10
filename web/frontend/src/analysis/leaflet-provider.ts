@@ -17,8 +17,9 @@ import {
   calculateBearing, andoyerDistance, destinationPoint, calculateBearingRadians,
   type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult,
 } from '@glidecomp/engine';
-import type { MapProvider } from './map-provider';
+import type { MapProvider, BestProgressRoute } from './map-provider';
 import { config } from './config';
+import { formatDistance } from './units-browser';
 import {
   MAP_FONT_FAMILY, GLIDE_LABEL_TEXT_SHADOW, GLIDE_LABEL_SPARSE_MIN_ZOOM, GLIDE_LABEL_SPEED_MIN_ZOOM,
   TRACK_OUTLINE_COLOR, HIGHLIGHT_COLOR, TASK_COLOR,
@@ -228,6 +229,7 @@ export function createLeafletProvider(
     const eventMarkersGroup = new LayerGroup();
     const highlightGroup = new LayerGroup();
     const speedOverlayGroup = new LayerGroup();  // speed overlay (separate from highlight)
+    const bestProgressRouteGroup = new LayerGroup();  // landout distance-to-goal line
 
     // Add default groups to map
     trackGroup.addTo(map);
@@ -235,6 +237,7 @@ export function createLeafletProvider(
     eventMarkersGroup.addTo(map);
     highlightGroup.addTo(map);
     speedOverlayGroup.addTo(map);
+    bestProgressRouteGroup.addTo(map);
 
     // Feature state
     let isTaskVisible = true;
@@ -763,6 +766,46 @@ export function createLeafletProvider(
         cachedOptimizedPath = null;
         taskGroup.clearLayers();
         turnpointMarkers = [];
+      },
+
+      setBestProgressRoute(route: BestProgressRoute) {
+        bestProgressRouteGroup.clearLayers();
+        if (route.coords.length < 2) return;
+        const latlngs: LatLngExpression[] = route.coords.map((c) => [c.lat, c.lon]);
+        // Solid amber, distinct from the dashed indigo task line it parallels.
+        bestProgressRouteGroup.addLayer(
+          new Polyline(latlngs, {
+            color: '#f59e0b',
+            weight: 3,
+            opacity: 0.9,
+            interactive: false,
+          })
+        );
+        // Distance label at the route midpoint (DivIcon marker — Leaflet 2.0's
+        // Polyline has no permanent tooltip, and this matches the task labels).
+        const mid = route.coords[Math.floor(route.coords.length / 2)];
+        const label = `${formatDistance(route.distanceToGoal, { decimals: 1 }).withUnit} short of goal`;
+        const labelIcon = new DivIcon({
+          html: `<div style="
+            font-family: ${MAP_FONT_FAMILY};
+            font-size: 13px;
+            font-weight: 600;
+            color: #b45309;
+            white-space: nowrap;
+            text-shadow: -1px -1px 2px white, 1px -1px 2px white, -1px 1px 2px white, 1px 1px 2px white, 0 0 4px white;
+            text-align: center;
+          ">${label}</div>`,
+          className: '',
+          iconSize: [0, 0],
+          iconAnchor: [0, 12],
+        });
+        bestProgressRouteGroup.addLayer(
+          new Marker([mid.lat, mid.lon], { icon: labelIcon, interactive: false })
+        );
+      },
+
+      clearBestProgressRoute() {
+        bestProgressRouteGroup.clearLayers();
       },
 
       setEvents(events: FlightEvent[]) {

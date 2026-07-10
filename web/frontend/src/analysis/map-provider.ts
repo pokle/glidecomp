@@ -29,6 +29,19 @@ export interface OpenDistanceLine {
 }
 
 /**
+ * A landed-out pilot's routed "distance to goal" line: the best-progress
+ * point, through each un-reached turnpoint's optimal tag point, to goal.
+ * Drawn so the "measured along the task / X km short of goal" wording is
+ * visible on the map rather than implied by a lone pin.
+ */
+export interface BestProgressRoute {
+    /** Ordered polyline vertices: [best-progress point, …tag points, goal]. */
+    coords: { lat: number; lon: number }[];
+    /** Remaining routed distance to goal in metres (drawn as the line's label). */
+    distanceToGoal: number;
+}
+
+/**
  * Interaction mode for the map. Controls which click/hover handlers are active.
  * - 'view': default mode — track clicks, turnpoint clicks, hover cursors all active
  * - 'add-waypoint': task editor map-click mode — crosshair cursor, all other clicks suppressed
@@ -159,6 +172,16 @@ export interface MapProvider {
 
     /** Clear all open-distance lines */
     clearOpenDistanceLines?(): void;
+
+    // ── Best-progress (landout) route support ──
+
+    /** Draw a landed-out pilot's routed distance-to-goal line (best-progress
+     *  point → un-reached turnpoints → goal), labelled with the remaining
+     *  distance. Replaces any previously drawn route. */
+    setBestProgressRoute?(route: BestProgressRoute): void;
+
+    /** Clear the best-progress route line */
+    clearBestProgressRoute?(): void;
 }
 
 /** Options shared by both provider factories. */

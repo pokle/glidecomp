@@ -9,7 +9,7 @@
 import * as mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
 import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult, type PilotScore } from '@glidecomp/engine';
-import type { MapProvider, LoadedTrack, OpenDistanceLine } from './map-provider';
+import type { MapProvider, LoadedTrack, OpenDistanceLine, BestProgressRoute } from './map-provider';
 import { config } from './config';
 import {
   MAP_FONT_FAMILY, GLIDE_LABEL_TEXT_SHADOW, GLIDE_LABEL_SPARSE_MIN_ZOOM, GLIDE_LABEL_SPEED_MIN_ZOOM,
@@ -128,6 +128,8 @@ export function createMapBoxProvider(
       let multiTrackScores: PilotScore[] = [];
       // Open-distance scored lines (take-off exit → furthest fix, per pilot)
       let openDistanceLineData: OpenDistanceLine[] = [];
+      // Landed-out routed distance-to-goal line (best-progress → TPs → goal)
+      let bestProgressRouteData: BestProgressRoute | null = null;
       let multiTrackClickCallback: ((trackIndex: number, fixIndex: number) => void) | null = null;
       let isMultiTrackMode = false;
       // 3D multi-track state
@@ -474,7 +476,7 @@ export function createMapBoxProvider(
         }
 
         // Other sources with default simplification
-        const sourcesToAdd = ['task-line', 'task-points', 'task-cylinders', 'task-segment-labels', 'highlight-segment', 'speed-fastest-segment', 'open-distance-lines', 'multi-track-names'];
+        const sourcesToAdd = ['task-line', 'task-points', 'task-cylinders', 'task-segment-labels', 'highlight-segment', 'speed-fastest-segment', 'open-distance-lines', 'best-progress-route', 'multi-track-names'];
         for (const sourceId of sourcesToAdd) {
           if (!map.getSource(sourceId)) {
             map.addSource(sourceId, {
@@ -782,6 +784,42 @@ export function createMapBoxProvider(
           },
         });
 
+        // 9c. Landed-out routed distance-to-goal line (best-progress point →
+        // un-reached turnpoints → goal). Solid amber so it reads as distinct
+        // from the dashed indigo task line it runs alongside.
+        map.addLayer({
+          id: 'best-progress-route-line',
+          type: 'line',
+          source: 'best-progress-route',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round',
+          },
+          paint: {
+            'line-color': '#f59e0b',
+            'line-width': 2.5,
+            'line-opacity': 0.9,
+          },
+        });
+
+        // 9d. Remaining-distance label riding along the best-progress route
+        map.addLayer({
+          id: 'best-progress-route-label',
+          type: 'symbol',
+          source: 'best-progress-route',
+          layout: {
+            'symbol-placement': 'line-center',
+            'text-field': ['get', 'label'],
+            'text-size': 15,
+            'text-offset': [0, -0.8],
+          },
+          paint: {
+            'text-color': '#b45309',
+            'text-halo-color': '#ffffff',
+            'text-halo-width': 2,
+          },
+        });
+
         // 10. Pilot name at each track's landing point (multi-track mode) so
         // tracks are attributable when the whole field is on screen
         map.addLayer({
@@ -817,6 +855,9 @@ export function createMapBoxProvider(
         }
         if (openDistanceLineData.length > 0) {
           renderer.setOpenDistanceLines?.(openDistanceLineData);
+        }
+        if (bestProgressRouteData) {
+          renderer.setBestProgressRoute?.(bestProgressRouteData);
         }
         updateTrackRendering();
       }
@@ -2857,6 +2898,30 @@ export function createMapBoxProvider(
         clearOpenDistanceLines() {
           openDistanceLineData = [];
           updateGeoJSONSource(map, 'open-distance-lines', []);
+        },
+
+        setBestProgressRoute(route: BestProgressRoute) {
+          bestProgressRouteData = route;
+          if (route.coords.length < 2) {
+            updateGeoJSONSource(map, 'best-progress-route', []);
+            return;
+          }
+          const label = `${formatDistance(route.distanceToGoal, { decimals: 1 }).withUnit} short of goal`;
+          updateGeoJSONSource(map, 'best-progress-route', [
+            {
+              type: 'Feature' as const,
+              properties: { label },
+              geometry: {
+                type: 'LineString' as const,
+                coordinates: route.coords.map((c) => [c.lon, c.lat]),
+              },
+            },
+          ]);
+        },
+
+        clearBestProgressRoute() {
+          bestProgressRouteData = null;
+          updateGeoJSONSource(map, 'best-progress-route', []);
         },
 
         onMultiTrackClick(callback: (trackIndex: number, fixIndex: number) => void) {

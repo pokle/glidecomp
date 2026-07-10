@@ -21,6 +21,16 @@ import { resolveStartGates } from './time-gates';
 import { andoyerDistance } from './geo';
 import { maxBy, minBy } from './array-utils';
 
+/**
+ * Round a point value to one decimal place — the precision the FAI Sporting
+ * Code S7F §11 specifies for a pilot's task total (and §12.4: the rounding is
+ * done *after* penalties). Used for the total; component points are likewise
+ * kept to 0.1 for presentation.
+ */
+function roundToTenth(x: number): number {
+  return Math.round(x * 10) / 10;
+}
+
 // ---------------------------------------------------------------------------
 // Competition parameters
 // ---------------------------------------------------------------------------
@@ -184,7 +194,13 @@ export interface PilotScore {
   leadingPoints: number;
   /** Arrival component score (HG only, 0 for PG) */
   arrivalPoints: number;
-  /** Sum of all point components, rounded */
+  /**
+   * Sum of all point components, rounded to one decimal place (FAI S7F §11).
+   * Any jump-the-gun penalty (§12.2) is applied before this rounding; the
+   * scorekeeper's absolute penalty (§12.4) is applied downstream in the
+   * backend, which re-rounds after subtracting it. Ranking and tie-breaks use
+   * this spec-rounded value — the UI may still display it as whole points.
+   */
   totalScore: number;
   /** Rank position (1-based) */
   rank: number;
@@ -1302,8 +1318,13 @@ export function scoreFlights(
     const jtgPenalty = outcome === 'hg_penalty' && f.earlyStartSeconds
       ? f.earlyStartSeconds / fullParams.jumpTheGunFactor
       : 0;
+    // FAI S7F §11: the total is the component sum rounded to one decimal
+    // place; §12.4: rounding is done after penalties, so the jump-the-gun
+    // penalty (§12.2) is subtracted before rounding (floored at the
+    // minimum-distance score, not zero). The scorekeeper's absolute penalty
+    // (§12.4) is applied later in the backend, which re-rounds after it.
     const rawTotal = distPts + timePts + leadPts + arrPts;
-    const total = Math.round(
+    const total = roundToTenth(
       jtgPenalty > 0 ? Math.max(rawTotal - jtgPenalty, scoreForMinDistance) : rawTotal,
     );
 

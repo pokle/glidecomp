@@ -9,6 +9,7 @@
 import Base from "../../layouts/Base.astro";
 import BackLink from "../../components/BackLink.astro";
 import SiteFooter from "../../components/SiteFooter.astro";
+import SpecRef from "../../components/SpecRef.astro";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 
@@ -53,7 +54,10 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
 
       {/* What is GAP? */}
       <section id="what-is-gap" class="mb-14">
-        <h2 class="text-2xl font-bold mb-4">What is GAP?</h2>
+        <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
+          <h2 class="text-2xl font-bold">What is GAP?</h2>
+          <SpecRef section="2" label="FAI S7F §2" class="text-xs font-medium text-muted-foreground shrink-0" />
+        </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
             GAP is the scoring system used at most paragliding (PG) and hang gliding (HG)
@@ -81,7 +85,10 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
 
       {/* How a Task Works */}
       <section id="how-a-task-works" class="mb-14">
-        <h2 class="text-2xl font-bold mb-4">How a Task Works</h2>
+        <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
+          <h2 class="text-2xl font-bold">How a Task Works</h2>
+          <SpecRef section="6" label="FAI S7F §6" class="text-xs font-medium text-muted-foreground shrink-0" />
+        </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
             If you've never flown a competition task before, here's how it works:
@@ -126,7 +133,10 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
 
       {/* Task Validity */}
       <section id="task-validity" class="mb-14">
-        <h2 class="text-2xl font-bold mb-4">Task Validity</h2>
+        <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
+          <h2 class="text-2xl font-bold">Task Validity</h2>
+          <SpecRef section="9" label="FAI S7F §9" class="text-xs font-medium text-muted-foreground shrink-0" />
+        </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
             Not every task day deserves a full 1000 points. If conditions were poor and most
@@ -182,7 +192,10 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
 
       {/* The Four Scoring Components */}
       <section id="scoring-components" class="mb-14">
-        <h2 class="text-2xl font-bold mb-4">The Four Scoring Components</h2>
+        <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
+          <h2 class="text-2xl font-bold">The Four Scoring Components</h2>
+          <SpecRef section="10" label="FAI S7F §10" class="text-xs font-medium text-muted-foreground shrink-0" />
+        </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
             The available points are divided among four categories. The split depends on how many
@@ -223,7 +236,10 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
 
       {/* Distance Points */}
       <section id="distance-points" class="mb-14">
-        <h2 class="text-2xl font-bold mb-4">Distance Points</h2>
+        <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
+          <h2 class="text-2xl font-bold">Distance Points</h2>
+          <SpecRef section="11.1" label="FAI S7F §11.1" class="text-xs font-medium text-muted-foreground shrink-0" />
+        </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
             Every pilot who launches receives distance points, making this the "bread and butter"
@@ -257,8 +273,8 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </span>
             </h3>
             <p class="text-muted-foreground">
-              In hang gliding, distance points are split into two halves (per the FAI rules, S7F
-              §11.1.1):
+              In hang gliding, distance points are split into two halves (per the FAI rules,
+              <SpecRef section="11.1.1" label="S7F §11.1.1" />):
             </p>
             <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Distance Points} = \left( \tfrac{1}{2}\,\text{Linear} + \tfrac{1}{2}\,\text{Difficulty} \right) \times \text{Available Distance Points}`)}></p>
             <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2 mt-2">
@@ -322,7 +338,10 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
 
       {/* Time Points */}
       <section id="time-points" class="mb-14">
-        <h2 class="text-2xl font-bold mb-4">Time Points</h2>
+        <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
+          <h2 class="text-2xl font-bold">Time Points</h2>
+          <SpecRef section="11.2" label="FAI S7F §11.2" class="text-xs font-medium text-muted-foreground shrink-0" />
+        </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
             Time points reward pilots who completed the speed section quickly. The key rules:
@@ -359,7 +378,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
           <p class="text-muted-foreground">
             One thing to be aware of: in a race-to-goal task with start gates, your clock runs
             from the <strong>start gate</strong> you took — the last gate at or before your
-            start-cylinder crossing — not from the crossing itself (§8.3.1). Cross at 13:49 with
+            start-cylinder crossing — not from the crossing itself (<SpecRef section="8.3.1" />). Cross at 13:49 with
             gates at 13:30/13:50 and your clock has been running since 13:30. Elapsed-time tasks
             are timed from your actual crossing. GlideComp scores both per the spec, and the
             per-pilot score analysis shows which gate you took alongside your crossing time.
@@ -369,7 +388,10 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
 
       {/* Leading Points */}
       <section id="leading-points" class="mb-14">
-        <h2 class="text-2xl font-bold mb-4">Leading Points</h2>
+        <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
+          <h2 class="text-2xl font-bold">Leading Points</h2>
+          <SpecRef section="11.3" label="FAI S7F §11.3" class="text-xs font-medium text-muted-foreground shrink-0" />
+        </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
             Leading points (sometimes called "departure points") reward pilots who take the risk
@@ -428,7 +450,10 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
 
       {/* Arrival Points */}
       <section id="arrival-points" class="mb-14">
-        <h2 class="text-2xl font-bold mb-4">Arrival Points</h2>
+        <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
+          <h2 class="text-2xl font-bold">Arrival Points</h2>
+          <SpecRef section="11.4" label="FAI S7F §11.4" class="text-xs font-medium text-muted-foreground shrink-0" />
+        </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
             <strong>Hang gliding only.</strong> Arrival points reward pilots based on their order
@@ -449,16 +474,23 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
 
       {/* Your Total Score */}
       <section id="total-score" class="mb-14">
-        <h2 class="text-2xl font-bold mb-4">Your Total Score</h2>
+        <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
+          <h2 class="text-2xl font-bold">Your Total Score</h2>
+          <SpecRef section="11" label="FAI S7F §11" class="text-xs font-medium text-muted-foreground shrink-0" />
+        </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            Your total score for a task is simply the sum of your four component scores, rounded
-            to the nearest whole number:
+            Your total score for a task is the sum of your four component scores. Following the
+            spec (<SpecRef section="11" label="S7F §11" />), it is rounded to <strong>one decimal place</strong> — and any
+            penalties are subtracted <em>before</em> that rounding (<SpecRef section="12.4" />), so the rounding is
+            always the last step:
           </p>
-          <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Total} = \text{round}(\text{Distance Pts} + \text{Time Pts} + \text{Leading Pts} + \text{Arrival Pts})`)}></p>
+          <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Total} = \text{round}_{0.1}\!\left(\text{Distance} + \text{Time} + \text{Leading} + \text{Arrival} - \text{Penalties}\right)`)}></p>
           <p class="text-muted-foreground">
-            Pilots are ranked by total score (highest first). In case of a tie, the pilot with
-            the greater flown distance is ranked higher.
+            A pilot's score can never go below zero, no matter how large the penalty. Pilots are
+            ranked by this total (highest first); in case of a tie, the pilot with the greater
+            flown distance is ranked higher. The scoreboard displays these totals as whole
+            points, but the underlying one-decimal value is what drives ranking and tie-breaks.
           </p>
 
           <div class="ml-2">
@@ -529,31 +561,31 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   <td class="py-2">Implemented</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Penalties — absolute points (S7F §12.4)</td>
+                  <td class="py-2 pr-4">Penalties — absolute points (<SpecRef section="12.4" label="S7F §12.4" />)</td>
                   <td class="py-2">Implemented (entered by the scorekeeper, audit-logged)</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Penalties — percentage (§12.4)</td>
+                  <td class="py-2 pr-4">Penalties — percentage (<SpecRef section="12.4" />)</td>
                   <td class="py-2">Not implemented</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Early starts &amp; jump-the-gun (§12.2)</td>
+                  <td class="py-2 pr-4">Early starts &amp; jump-the-gun (<SpecRef section="12.2" />)</td>
                   <td class="py-2">Implemented — PG scored launch→start; HG 1 pt per X s early (X, Y configurable, defaults 2/300)</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Start gates / race start times (§6.3.3, §8.3.1)</td>
-                  <td class="py-2">Implemented — start snapped to the last gate ≤ crossing; LC clock from the first gate (§11.3.1)</td>
+                  <td class="py-2 pr-4">Start gates / race start times (<SpecRef section="6.3.3" />, <SpecRef section="8.3.1" />)</td>
+                  <td class="py-2">Implemented — start snapped to the last gate ≤ crossing; LC clock from the first gate (<SpecRef section="11.3.1" />)</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Goal lines (§6.2.3, §8.5.2)</td>
+                  <td class="py-2 pr-4">Goal lines (<SpecRef section="6.2.3" />, <SpecRef section="8.5.2" />)</td>
                   <td class="py-2">Partial — scored as a cylinder</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Task deadline enforcement (§8.3)</td>
+                  <td class="py-2 pr-4">Task deadline enforcement (<SpecRef section="8.3" />)</td>
                   <td class="py-2">Not implemented</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Stopped tasks (weather calldowns, §12.3)</td>
+                  <td class="py-2 pr-4">Stopped tasks (weather calldowns, <SpecRef section="12.3" />)</td>
                   <td class="py-2">Not implemented</td>
                 </tr>
                 <tr class="border-b border-border/50">
@@ -589,18 +621,19 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             We compared the GlideComp scoring engine line-by-line against the FAI Sporting Code
             Section 7F (2024 edition). Beyond the unimplemented features listed above, these are
             the places where GlideComp's behaviour differs from the letter of the spec. Section
-            numbers (§) refer to the 2024 edition.
+            numbers (§) refer to the 2024 edition and link to the relevant page of the
+            <SpecRef section="0" label="official PDF" />.
           </p>
 
           <div class="space-y-4 ml-2">
             <div>
-              <h3 class="text-base font-semibold mb-1">Start gates: placeholder midnight gates are ignored (§6.3.3)</h3>
+              <h3 class="text-base font-semibold mb-1">Start gates: placeholder midnight gates are ignored (<SpecRef section="6.3.3" />)</h3>
               <p class="text-muted-foreground">
                 GlideComp scores race-to-goal start gates per the spec: each pilot's start time is
-                the last gate at or before their start-cylinder crossing (§8.3.1), crossings
-                before the first gate cannot validate a start (§8.3), early starts follow the
-                §12.2 rules (paragliders scored launch→start; hang gliders get the jump-the-gun
-                penalty), and the leading-coefficient clock runs from the first gate (§11.3.1).
+                the last gate at or before their start-cylinder crossing (<SpecRef section="8.3.1" />), crossings
+                before the first gate cannot validate a start (<SpecRef section="8.3" />), early starts follow the
+                <SpecRef section="12.2" label="§12.2" /> rules (paragliders scored launch→start; hang gliders get the jump-the-gun
+                penalty), and the leading-coefficient clock runs from the first gate (<SpecRef section="11.3.1" />).
                 One pragmatic deviation: a race task whose <em>only</em> gate is exactly 00:00:00
                 UTC is treated as having no gates and timed as elapsed time — some tools write
                 that lone midnight gate as a placeholder to satisfy the file format's
@@ -608,7 +641,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </p>
             </div>
             <div>
-              <h3 class="text-base font-semibold mb-1">Hang gliding: no penalty for reaching ESS but not goal (§12.1)</h3>
+              <h3 class="text-base font-semibold mb-1">Hang gliding: no penalty for reaching ESS but not goal (<SpecRef section="12.1" />)</h3>
               <p class="text-muted-foreground">
                 The spec docks pilots who cross ESS but fail to reach goal: paragliders lose all
                 time points, and hang glider pilots keep only 80% (by default) of their time and
@@ -620,7 +653,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </p>
             </div>
             <div>
-              <h3 class="text-base font-semibold mb-1">Paragliding leading weight uses the GAP2020 formula (§10)</h3>
+              <h3 class="text-base font-semibold mb-1">Paragliding leading weight uses the GAP2020 formula (<SpecRef section="10" />)</h3>
               <p class="text-muted-foreground">
                 The 2024 spec derives the PG leading weight from a per-task
                 <em>LeadingTimeRatio</em> parameter (default 26% of the non-distance weight, and
@@ -632,7 +665,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </p>
             </div>
             <div>
-              <h3 class="text-base font-semibold mb-1">One leading/time formula variant for both sports (§11.2, §11.3.1)</h3>
+              <h3 class="text-base font-semibold mb-1">One leading/time formula variant for both sports (<SpecRef section="11.2" />, <SpecRef section="11.3.1" />)</h3>
               <p class="text-muted-foreground">
                 The 2024 spec pairs hang gliding with the classic squared-distance leading
                 coefficient and paragliding with the weighted-area one, both with the 5/6
@@ -646,7 +679,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </p>
             </div>
             <div>
-              <h3 class="text-base font-semibold mb-1">Goal lines are scored as cylinders (§6.2.3, §8.5.2)</h3>
+              <h3 class="text-base font-semibold mb-1">Goal lines are scored as cylinders (<SpecRef section="6.2.3" />, <SpecRef section="8.5.2" />)</h3>
               <p class="text-muted-foreground">
                 The spec defines a goal line with a semi-circular control zone behind it, crossed
                 in the direction of the last leg. GlideComp reads line goals from the task file
@@ -654,11 +687,11 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 permissive than the spec (a pilot passing "in front of" the line inside that
                 radius is counted), though for typical straight-in finishes the result is the
                 same. Line-type intermediate control zones and the 120&nbsp;km/h two-fix line
-                validation rule (§8.4) are likewise not implemented.
+                validation rule (<SpecRef section="8.4" />) are likewise not implemented.
               </p>
             </div>
             <div>
-              <h3 class="text-base font-semibold mb-1">Task deadline is not enforced (§8.3)</h3>
+              <h3 class="text-base font-semibold mb-1">Task deadline is not enforced (<SpecRef section="8.3" />)</h3>
               <p class="text-muted-foreground">
                 The spec only counts turnpoint crossings recorded before the task deadline, and
                 measures landed-out pilots' best distance up to the deadline. GlideComp parses the
@@ -670,16 +703,18 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               <h3 class="text-base font-semibold mb-1">Smaller details</h3>
               <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2">
                 <li>
-                  <strong>Cylinder tolerance (§8.1):</strong> GlideComp applies the percentage
-                  tolerance (default 0.5%, the Cat 2 maximum) as an outward expansion of the
-                  cylinder only. The spec's 5&nbsp;m absolute minimum tolerance and the inner
-                  tolerance band are not applied, so very small cylinders are judged slightly more
-                  strictly than the spec allows.
+                  <strong>Cylinder tolerance default (<SpecRef section="8.1" />):</strong> GlideComp applies the full
+                  spec tolerance band — a percentage plus a 5&nbsp;m absolute minimum, extending
+                  outward for cylinders you enter and inward for the start you exit. The default
+                  percentage is 0.5% (the Cat&nbsp;2 maximum), used for every competition rather
+                  than auto-selecting 0.1% for Cat&nbsp;1 events; it is configurable per task.
                 </li>
                 <li>
-                  <strong>Rounding (§11):</strong> the 2024 spec rounds each pilot's total to one
-                  decimal place; GlideComp rounds totals to whole points (as most scoring software
-                  displays them). Component points are kept to 0.1.
+                  <strong>Rounding (<SpecRef section="11" />, <SpecRef section="12.4" />):</strong> GlideComp rounds each pilot's total to
+                  one decimal place, after subtracting any penalties, exactly as the 2024 spec
+                  requires. Component points are likewise kept to 0.1. The scoreboard displays
+                  totals as whole points for readability, but ranking and tie-breaks use the
+                  one-decimal value.
                 </li>
                 <li>
                   <strong>Optional leading/arrival points:</strong> the spec always allocates
@@ -690,13 +725,13 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 <li>
                   <strong>Distance origin:</strong> the optional
                   <a href="#distance-origin" class="underline hover:text-foreground">"start cylinder" distance origin</a>
-                  deliberately deviates from the spec's launch-to-goal task distance (§6.4.2) to
+                  deliberately deviates from the spec's launch-to-goal task distance (<SpecRef section="6.4.2" />) to
                   match some national (e.g. HGFA/SAFA) rule wording. The default "take-off"
                   setting follows the spec.
                 </li>
                 <li>
                   <strong>Distance precision:</strong> distances are computed on the WGS84
-                  ellipsoid as the spec requires (§4.2), but the optimized route isn't
+                  ellipsoid as the spec requires (<SpecRef section="4.2" />), but the optimized route isn't
                   bit-identical to other tools such as
                   <a href="https://airscore.org" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">AirScore</a>,
                   so landed-out pilots' point values can differ slightly. This affects absolute

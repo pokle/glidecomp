@@ -4,7 +4,9 @@
  * live in a right-aligned user menu instead of a Settings tab + footer
  * sign-out. Site super admins also get the floating "Preview as" pill.
  */
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { EyeIcon, XIcon } from "lucide-react";
 import { Button } from "@/react/ui/button";
 import {
   DropdownMenu,
@@ -31,8 +33,19 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 export function Shell() {
   const { user, loading } = useUser();
+  const navigate = useNavigate();
   useScrollRestoration();
   const flightsHref = user?.username ? `/u/${user.username}` : "/u/me";
+
+  // A signed-in user with no username hasn't finished onboarding. Onboarding
+  // is mandatory, so send them there from *anywhere* under this Shell — not
+  // just My Flights — otherwise a fresh sign-in (which lands on /comp) sails
+  // past it. Onboarding renders outside this Shell, so there's no redirect
+  // loop, and it bounces already-onboarded users straight back out.
+  useEffect(() => {
+    if (loading) return;
+    if (user && !user.username) navigate("/onboarding", { replace: true });
+  }, [user, loading, navigate]);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -173,16 +186,42 @@ const PREVIEW_ROLES: Array<{ role: PreviewRole; label: string }> = [
  * Floating role switcher for site super admins: presentation-only preview of
  * the signed-out / pilot / comp-admin experience (the API still sees the real
  * superadmin session throughout).
+ *
+ * Minimised to a small pill in the bottom-right corner so it doesn't obscure
+ * the page; click to expand the role switcher, click again (or ✕) to collapse.
  */
 function PreviewAsPill() {
   const { isSuperAdmin, previewRole, setPreviewRole } = useUser();
+  const [open, setOpen] = useState(false);
   if (!isSuperAdmin) return null;
+
+  const active = PREVIEW_ROLES.find(({ role }) => role === previewRole);
+  const previewing = previewRole !== "actual";
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        aria-label={`Preview as${active ? `: ${active.label}` : ""}. Click to change.`}
+        onClick={() => setOpen(true)}
+        className={cn(
+          "fixed right-3 bottom-3 z-50 flex items-center gap-1.5 rounded-full border py-1 pr-3 pl-2.5 text-xs font-medium shadow-lg",
+          previewing
+            ? "bg-primary text-primary-foreground"
+            : "bg-card text-muted-foreground hover:text-foreground"
+        )}
+      >
+        <EyeIcon className="size-3.5" aria-hidden="true" />
+        <span className="whitespace-nowrap">{previewing ? active?.label : "Preview as"}</span>
+      </button>
+    );
+  }
 
   return (
     <div
       role="group"
       aria-label="Preview as"
-      className="fixed bottom-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-full border bg-card py-1 pr-1.5 pl-3.5 text-xs shadow-lg"
+      className="fixed right-3 bottom-3 z-50 flex items-center gap-1 rounded-full border bg-card py-1 pr-1.5 pl-3.5 text-xs shadow-lg"
     >
       <span className="mr-1 whitespace-nowrap text-muted-foreground">Preview as</span>
       {PREVIEW_ROLES.map(({ role, label }) => (
@@ -201,6 +240,14 @@ function PreviewAsPill() {
           {label}
         </button>
       ))}
+      <button
+        type="button"
+        aria-label="Minimise preview switcher"
+        onClick={() => setOpen(false)}
+        className="ml-0.5 rounded-full p-1 text-muted-foreground hover:text-foreground"
+      >
+        <XIcon className="size-3.5" aria-hidden="true" />
+      </button>
     </div>
   );
 }
