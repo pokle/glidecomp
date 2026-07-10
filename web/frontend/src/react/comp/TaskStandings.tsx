@@ -743,14 +743,21 @@ function RowManage({
             size="sm"
             disabled={busy}
             onClick={() => fileInputRef.current?.click()}
+            title={`Upload ${row.name}'s GPS track (IGC file)`}
           >
-            Track
+            {row.evidence === "track" ? "Replace track" : "Upload track"}
           </Button>
         </>
       ) : null}
       {!isClosed && gapTask ? (
-        <Button type="button" variant="outline" size="sm" onClick={() => setRecordOpen(true)}>
-          {row.evidence === "manual" ? "Edit flight" : "Record flight"}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setRecordOpen(true)}
+          title={`Record a manual flight for ${row.name} — for a pilot with no tracklog`}
+        >
+          {row.evidence === "manual" ? "Edit manual flight" : "Add manual flight"}
         </Button>
       ) : null}
       {row.supersededTrack && row.evidence !== "track" && !isClosed ? (
