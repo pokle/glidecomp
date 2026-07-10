@@ -153,6 +153,9 @@ export function createMapBoxProvider(
       // Pickable waypoint markers (task route editor); replayed on style reload
       type MapWaypoint = import('./map-provider').MapWaypoint;
       let waypointsData: MapWaypoint[] = [];
+      // A tap this many screen px from a waypoint still picks it — sized for a
+      // finger, so exact aim at the small marker is never required on touch.
+      const WAYPOINT_TAP_TOLERANCE_PX = 44;
 
       // Click callbacks (mutable refs — registered once, updated via setter)
       let trackClickCallback: ((fixIndex: number) => void) | null = null;
@@ -1315,32 +1318,28 @@ export function createMapBoxProvider(
           syncCursor();
         });
 
-        // Pickable waypoint markers (route editor) — clickable in every mode
-        // so a waypoint can be picked while add-waypoint (map-click) mode is on.
-        map.on('click', 'waypoints', (e) => {
-          if (!waypointsClickCallback || !e.features || e.features.length === 0) return;
-          const id = e.features[0].properties?.id;
-          const wp = waypointsData.find((w) => w.id === id);
-          if (wp) waypointsClickCallback(wp);
-        });
-        map.on('mouseenter', 'waypoints', () => {
-          isHoveringInteractive = true;
-          syncCursor();
-        });
-        map.on('mouseleave', 'waypoints', () => {
-          isHoveringInteractive = false;
-          syncCursor();
-        });
-
-        // Global map click handler (for add-waypoint mode). A click that lands
-        // on a waypoint marker is a pick, not a ground drop — suppress it here.
+        // Route editor picking. In select mode (view) a tap picks the NEAREST
+        // loaded waypoint within a finger-friendly tolerance — aiming exactly at
+        // the small marker isn't needed, which is what made picking impossible on
+        // touch. In add-waypoint mode a tap instead reports the ground point so
+        // the editor can place a brand-new waypoint there.
         map.on('click', (e: mapboxgl.MapMouseEvent) => {
-          if (interactionMode === 'view' || !mapClickCallback) return;
-          if (map.getLayer('waypoints')) {
-            const hit = map.queryRenderedFeatures(e.point, { layers: ['waypoints'] });
-            if (hit.length > 0) return;
+          if (interactionMode === 'add-waypoint') {
+            mapClickCallback?.(e.lngLat.lat, e.lngLat.lng);
+            return;
           }
-          mapClickCallback(e.lngLat.lat, e.lngLat.lng);
+          if (!waypointsClickCallback || waypointsData.length === 0) return;
+          let best: MapWaypoint | null = null;
+          let bestDist = WAYPOINT_TAP_TOLERANCE_PX;
+          for (const w of waypointsData) {
+            const p = map.project([w.lon, w.lat]);
+            const d = Math.hypot(p.x - e.point.x, p.y - e.point.y);
+            if (d <= bestDist) {
+              bestDist = d;
+              best = w;
+            }
+          }
+          if (best) waypointsClickCallback(best);
         });
 
         // Create annotation overlay

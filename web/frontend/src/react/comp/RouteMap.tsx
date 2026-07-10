@@ -25,7 +25,7 @@ import "leaflet/dist/leaflet.css";
 export default function RouteMap({
   task,
   waypoints,
-  pickMode,
+  addMode,
   onWaypointPick,
   onMapPick,
 }: {
@@ -33,8 +33,12 @@ export default function RouteMap({
   task: XCTask | null;
   /** Loaded waypoints, drawn as pickable markers. */
   waypoints: MapWaypoint[];
-  /** When true, clicking bare ground drops a free point (crosshair cursor). */
-  pickMode: boolean;
+  /**
+   * When false (default): a tap picks the nearest loaded waypoint within a
+   * finger-friendly tolerance. When true: a tap reports its ground point via
+   * onMapPick so the editor can place a brand-new waypoint (crosshair cursor).
+   */
+  addMode: boolean;
   onWaypointPick: (waypoint: MapWaypoint) => void;
   onMapPick: (lat: number, lon: number) => void;
 }) {
@@ -117,8 +121,8 @@ export default function RouteMap({
 
   useEffect(() => {
     if (!provider) return;
-    provider.setInteractionMode?.(pickMode ? "add-waypoint" : "view");
-  }, [provider, pickMode]);
+    provider.setInteractionMode?.(addMode ? "add-waypoint" : "view");
+  }, [provider, addMode]);
 
   // Keep the map painted correctly as the responsive layout resizes it.
   useEffect(() => {

@@ -261,17 +261,36 @@ export function createLeafletProvider(
     type MapInteractionMode = import('./map-provider').MapInteractionMode;
     let waypointsClickCallback: ((waypoint: MapWaypoint) => void) | null = null;
     let interactionMode: MapInteractionMode = 'view';
+    let waypointsData: MapWaypoint[] = [];
+    // A tap this many screen px from a waypoint still picks it — sized for a
+    // finger, so exact aim at the small marker is never required on touch.
+    const WAYPOINT_TAP_TOLERANCE_PX = 44;
 
     // Turnpoint data for click handling
     let turnpointMarkers: { marker: CircleMarker; index: number }[] = [];
 
-    // Global map click → fires only in add-waypoint mode (route editor ground
-    // drop). Waypoint markers set bubblingPointerEvents:false, so picking a
-    // waypoint doesn't also drop a ground point here.
+    // Route editor picking. In select mode (view) a tap picks the NEAREST
+    // loaded waypoint within a finger-friendly tolerance (touch-friendly — no
+    // exact aim needed); in add-waypoint mode a tap reports the ground point so
+    // the editor can place a brand-new waypoint there.
     map.on('click', (e: LeafletMouseEvent) => {
-      if (interactionMode !== 'view' && mapClickCallback) {
-        mapClickCallback(e.latlng.lat, e.latlng.lng);
+      if (interactionMode !== 'view') {
+        mapClickCallback?.(e.latlng.lat, e.latlng.lng);
+        return;
       }
+      if (!waypointsClickCallback || waypointsData.length === 0) return;
+      const pt = e.containerPoint;
+      let best: MapWaypoint | null = null;
+      let bestDist = WAYPOINT_TAP_TOLERANCE_PX;
+      for (const w of waypointsData) {
+        const p = map.latLngToContainerPoint([w.lat, w.lon]);
+        const d = Math.hypot(p.x - pt.x, p.y - pt.y);
+        if (d <= bestDist) {
+          bestDist = d;
+          best = w;
+        }
+      }
+      if (best) waypointsClickCallback(best);
     });
 
     // ── Map state persistence ──────────────────────────────────────────────
@@ -1066,6 +1085,7 @@ export function createLeafletProvider(
       },
 
       setWaypoints(waypoints: MapWaypoint[]) {
+        waypointsData = waypoints;
         waypointsGroup.clearLayers();
         for (const wp of waypoints) {
           const dot = new CircleMarker([wp.lat, wp.lon], {
@@ -1074,15 +1094,17 @@ export function createLeafletProvider(
             weight: 1.5,
             fillColor: '#64748b',
             fillOpacity: 0.9,
-            bubblingPointerEvents: false, // a pick must not also drop a ground point
+            // No click handler and bubbling on: a tap (even dead-on a marker)
+            // reaches the map handler, which picks the nearest within tolerance.
+            bubblingPointerEvents: true,
           });
           dot.bindTooltip(wp.name, { direction: 'top', offset: [0, -6] });
-          dot.on('click', () => waypointsClickCallback?.(wp));
           waypointsGroup.addLayer(dot);
         }
       },
 
       clearWaypoints() {
+        waypointsData = [];
         waypointsGroup.clearLayers();
       },
 

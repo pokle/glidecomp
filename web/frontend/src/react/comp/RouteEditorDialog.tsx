@@ -48,6 +48,7 @@ import {
   editableGates,
   formatCoords,
   gateToHHMM,
+  parseCoords,
   turnpointToRow,
   xctskForPatch,
   TYPE_LABELS,
@@ -116,9 +117,14 @@ export function RouteEditorDialog({
   // Waypoints loaded from a file, shown on the map as pickable markers.
   const [waypointRecords, setWaypointRecords] = useState<WaypointRecord[]>([]);
   const [waypointSource, setWaypointSource] = useState<string | null>(null);
-  // When on, clicking bare map drops a free point (crosshair); markers are
-  // pickable either way.
-  const [pickMode, setPickMode] = useState(false);
+  // When on, the next map tap places a brand-new waypoint (opens the dialog
+  // below). When off (default), a tap picks the nearest loaded waypoint.
+  const [addMode, setAddMode] = useState(false);
+  // New-waypoint dialog: the tapped point + the form fields it seeds.
+  const [newPoint, setNewPoint] = useState<{ lat: number; lon: number } | null>(null);
+  const [newName, setNewName] = useState("");
+  const [newCoords, setNewCoords] = useState("");
+  const [newAltitude, setNewAltitude] = useState("");
   const waypointInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [xcontestCode, setXcontestCode] = useState("");
@@ -392,19 +398,39 @@ export function RouteEditorDialog({
     [waypointRecords]
   );
 
-  /** Append a turnpoint dropped on bare map (pick mode). */
-  const pickGroundPoint = useCallback((lat: number, lon: number) => {
-    wpCounterRef.current++;
+  /**
+   * A tap on bare map in add mode: open the new-waypoint dialog seeded with the
+   * tapped coordinates (name/altitude entered there, coordinates editable), and
+   * leave add mode so the next tap picks waypoints again.
+   */
+  const beginNewPoint = useCallback((lat: number, lon: number) => {
+    setNewPoint({ lat, lon });
+    setNewName("");
+    setNewCoords(formatCoords(lat, lon));
+    setNewAltitude("");
+    setAddMode(false);
+  }, []);
+
+  /** Commit the new-waypoint dialog as a turnpoint row. */
+  function addNewPoint() {
+    const coords = parseCoords(newCoords);
+    if (!coords) {
+      toast.error('Enter coordinates as "lat, lon" decimal degrees');
+      return;
+    }
+    const altText = newAltitude.trim();
+    const alt = Number(altText);
     void tableRef.current?.addRow({
       id: ++rowIdRef.current,
-      name: `WP ${wpCounterRef.current}`,
+      name: newName.trim() || "Waypoint",
       type: "",
-      coords: formatCoords(lat, lon),
+      coords: formatCoords(coords.lat, coords.lon),
       radius: NEW_ROW_RADIUS,
-      altitude: "",
+      altitude: altText !== "" && Number.isFinite(alt) ? alt : "",
       leg: null,
     } satisfies RouteRow);
-  }, []);
+    setNewPoint(null);
+  }
 
   /** Load a waypoint file (.wpt/.cup/.csv) into pickable map markers. */
   async function loadWaypointFile(input: HTMLInputElement) {
@@ -612,6 +638,7 @@ export function RouteEditorDialog({
   const extraErrors = errors.length - shownErrors.length;
 
   return (
+    <>
     <Dialog
       open
       onOpenChange={(open) => {
@@ -644,12 +671,12 @@ export function RouteEditorDialog({
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
-                variant={pickMode ? "default" : "outline"}
+                variant={addMode ? "default" : "outline"}
                 size="sm"
-                aria-pressed={pickMode}
-                onClick={() => setPickMode((p) => !p)}
+                aria-pressed={addMode}
+                onClick={() => setAddMode((a) => !a)}
               >
-                {pickMode ? "Picking on map…" : "Pick on map"}
+                {addMode ? "Tap the map to place…" : "Add waypoint"}
               </Button>
               <Button
                 type="button"
@@ -694,18 +721,19 @@ export function RouteEditorDialog({
                   <RouteMap
                     task={mapTask}
                     waypoints={mapWaypoints}
-                    pickMode={pickMode}
+                    addMode={addMode}
                     onWaypointPick={pickWaypoint}
-                    onMapPick={pickGroundPoint}
+                    onMapPick={beginNewPoint}
                   />
                 ) : null}
               </Suspense>
             </div>
             <p className="text-xs text-muted-foreground">
-              Click a waypoint to add it as a turnpoint.{" "}
-              {pickMode
-                ? "Click bare map to drop a free point."
-                : "Turn on “Pick on map” to drop a point anywhere."}
+              {addMode
+                ? "Tap anywhere on the map to place a new waypoint."
+                : waypointRecords.length > 0
+                  ? "Tap near a waypoint to add it as a turnpoint. Use Add waypoint to place a point that isn’t in the file."
+                  : "Load a waypoint file to tap turnpoints onto the route, or use Add waypoint to place one anywhere."}
             </p>
           </div>
 
@@ -966,5 +994,60 @@ export function RouteEditorDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* New-waypoint dialog: opened by tapping the map in add mode. */}
+    <Dialog open={newPoint !== null} onOpenChange={(open) => { if (!open) setNewPoint(null); }}>
+      <DialogContent className="flex flex-col gap-3 sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>New waypoint</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Placed from your tap on the map. Name it, add an altitude if you know
+          it, and adjust the coordinates if needed.
+        </p>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">Name</span>
+          <Input
+            autoFocus
+            placeholder="Waypoint name"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">Coordinates (lat, lon)</span>
+          <Input
+            value={newCoords}
+            spellCheck={false}
+            onChange={(e) => setNewCoords(e.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">
+            Altitude (m) <span className="text-muted-foreground">— optional</span>
+          </span>
+          <Input
+            type="number"
+            inputMode="numeric"
+            placeholder="e.g. 935"
+            value={newAltitude}
+            onChange={(e) => setNewAltitude(e.target.value)}
+          />
+        </label>
+        <DialogFooter>
+          <DialogClose render={<Button type="button" variant="outline" />}>
+            Cancel
+          </DialogClose>
+          <Button
+            type="button"
+            disabled={newName.trim() === "" || parseCoords(newCoords) === null}
+            onClick={addNewPoint}
+          >
+            Add waypoint
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

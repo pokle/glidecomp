@@ -107,7 +107,8 @@ Loaded from a competition waypoint file (`.wpt` / `.cup` / `.csv`) so the route 
 
 - **Marker dots** (`waypoints` layer): circle radius 5, fill slate `#64748b` opacity 0.9, 1.5px white stroke — deliberately secondary to the type-coloured turnpoint dots (radius 6) so a loaded database reads as "available to pick", not "part of the route".
 - **Marker labels** (`waypoint-labels` layer): the waypoint name, text size 11, offset `[0, 1.1]`, top anchor, colour `#475569`, white halo 1.5px. Shown only at **zoom ≥ 10** (Mapbox) so a whole regional database doesn't clutter when zoomed out. Leaflet shows the name as a hover tooltip instead.
-- **Interactions**: click a marker → `onWaypointClick(waypoint)` with the picked `MapWaypoint`. Markers stay clickable in **every** interaction mode (including `add-waypoint`), and a click that lands on a marker is a pick, **not** a ground drop — the global map-click handler suppresses it (Mapbox `queryRenderedFeatures`; Leaflet `bubblingMouseEvents: false`). Hover → pointer cursor, which wins over the `add-waypoint` crosshair.
+- **Picking (select mode = `view`)**: a map tap picks the **nearest** loaded waypoint within a **44 px** tolerance (a finger width — no exact aim at the small marker, which is what made picking impossible on touch) and fires `onWaypointClick(waypoint)`. A tap with no waypoint inside the tolerance does nothing (you can't accidentally drop a point). Both providers compute the nearest by projecting each waypoint to screen space; the dedicated per-marker click handler is gone (Leaflet markers are non-interactive for clicks, `bubblingPointerEvents: true`, so taps reach the map handler).
+- **Placing a new point (`add-waypoint` mode)**: a tap reports its ground coordinates via `onMapClick(lat, lon)` — the editor opens a dialog to name it, set an altitude, and adjust the coordinates before adding. Crosshair cursor.
 
 ## Open Distance Line
 
