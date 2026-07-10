@@ -7,6 +7,7 @@ import {
   parseWaypointsKML,
   parseWaypointFile,
   parseCoordinateValue,
+  type WaypointFileFormat,
 } from '../src/waypoint-files';
 import { type WaypointRecord } from '../src/waypoints';
 
@@ -214,7 +215,7 @@ describe('parseWaypointsKML', () => {
 });
 
 describe('parseWaypointFile detects every Big K format', () => {
-  const cases: [string, string | undefined, string][] = [
+  const cases: [WaypointFileFormat, string | undefined, string][] = [
     ['garmin-wpt', 'bigk.wpt', GARMIN_WPT],
     ['gpx', 'bigk.gpx', GPX],
     ['kml', 'bigk.kml', KML],
