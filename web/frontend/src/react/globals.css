@@ -138,6 +138,17 @@
     position: relative;
   }
 
+  /* The map renders its own tiles/theme and is not part of the app's light/dark
+     colour scheme. Pin its root elements to the light scheme with an explicit
+     dark text colour so overlay chrome that inherits `color` — most visibly the
+     popup callouts, whose background is a fixed white — stays legible instead of
+     turning white-on-white when the surrounding app is in dark mode. */
+  .mapboxgl-map,
+  .leaflet-container {
+    color-scheme: light;
+    color: #1a1a1a;
+  }
+
   /* SVG Background based on https://www.svgbackgrounds.com/set/free-svg-backgrounds-and-patterns/
      Scoped to .bg-hills — Safari's background-attachment:fixed on body breaks
      pointer events for position:absolute children (e.g. map controls). */
