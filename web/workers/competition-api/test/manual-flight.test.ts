@@ -482,3 +482,65 @@ describe("manual flights feed scoring", () => {
     expect(goalie.total_score).toBeGreaterThan(lander.total_score);
   });
 });
+
+// ── Score-details analysis for a manual flight ───────────────────────────────
+
+describe("pilot analysis for a manual flight", () => {
+  test("returns the made-good geometry (landing + routed line to goal)", async () => {
+    const compId = await createComp({ category: "pg" });
+    const taskId = await createTask(compId, { xctsk: TASK_XCTSK, pilot_classes: ["open"] });
+    const cp = await registerPilot(compId);
+
+    await authRequest("PUT", `/api/comp/${compId}/task/${taskId}/manual-flight/${cp}`, {
+      last_reached_tp_index: 1, landing_lat: 0, landing_lon: 0.15,
+    });
+
+    const res = await request(
+      "GET",
+      `/api/comp/${compId}/task/${taskId}/pilot/${cp}/analysis`
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      turnpoint_result: unknown;
+      open_distance: unknown;
+      manual_flight: {
+        made_good: number;
+        distance_to_goal: number;
+        made_goal: boolean;
+        route_to_goal: unknown[];
+        landing: { lat: number; lon: number };
+      } | null;
+    };
+    // A manual flight carries no tracklog turnpoint result — the made-good
+    // geometry instead.
+    expect(data.turnpoint_result).toBeNull();
+    expect(data.open_distance).toBeNull();
+    expect(data.manual_flight).not.toBeNull();
+    expect(data.manual_flight!.made_good).toBeGreaterThan(0);
+    expect(data.manual_flight!.made_goal).toBe(false);
+    // [landing, …tag points…, goal] — the routed line the map draws.
+    expect(data.manual_flight!.route_to_goal.length).toBeGreaterThanOrEqual(2);
+    expect(data.manual_flight!.landing).toEqual({ lat: 0, lon: 0.15 });
+  });
+
+  test("credits full distance and no route in goal", async () => {
+    const compId = await createComp({ category: "pg" });
+    const taskId = await createTask(compId, { xctsk: TASK_XCTSK, pilot_classes: ["open"] });
+    const cp = await registerPilot(compId);
+
+    await authRequest("PUT", `/api/comp/${compId}/task/${taskId}/manual-flight/${cp}`, {
+      last_reached_tp_index: 3, landing_lat: 0, landing_lon: 0.3, duration_seconds: 3600,
+    });
+
+    const res = await request(
+      "GET",
+      `/api/comp/${compId}/task/${taskId}/pilot/${cp}/analysis`
+    );
+    const data = (await res.json()) as {
+      manual_flight: { made_goal: boolean; distance_to_goal: number; route_to_goal: unknown[] } | null;
+    };
+    expect(data.manual_flight!.made_goal).toBe(true);
+    expect(data.manual_flight!.distance_to_goal).toBe(0);
+    expect(data.manual_flight!.route_to_goal).toHaveLength(0);
+  });
+});

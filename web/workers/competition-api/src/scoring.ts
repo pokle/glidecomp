@@ -8,6 +8,7 @@ import {
   openDistanceGeometryForFlight,
   toFlightScoringData,
   taskForDistanceOrigin,
+  manualFlightGeometry,
   computeLeadingAggregate,
   calculateOptimizedTaskDistance,
   DEFAULT_GAP_PARAMETERS,
@@ -890,6 +891,20 @@ export interface PilotAnalysisResponse {
     origin: OpenDistanceAnchorPoint | null;
     furthest: OpenDistanceAnchorPoint | null;
   } | null;
+  /**
+   * Manual flight geometry for a track-less pilot (issue #306): the landing
+   * point and the routed made-good line to goal, so the score-details page
+   * shows the same evidence as a landed-out track. All indices are in the
+   * scoring (distance-origin-trimmed) frame. Null for tracked pilots.
+   */
+  manual_flight: {
+    last_reached_tp_index: number;
+    landing: { lat: number; lon: number };
+    made_good: number;
+    distance_to_goal: number;
+    made_goal: boolean;
+    route_to_goal: Array<{ lat: number; lon: number }>;
+  } | null;
 }
 
 export interface OpenDistanceAnchorPoint {
@@ -935,11 +950,56 @@ export async function computePilotAnalysis(
     .prepare(
       `SELECT task_track_id, igc_filename, uploaded_at
        FROM task_track
-       WHERE task_id = ? AND comp_pilot_id = ?`
+       WHERE task_id = ? AND comp_pilot_id = ? AND active = 1`
     )
     .bind(taskId, compPilotId)
     .first<{ task_track_id: number; igc_filename: string; uploaded_at: string }>();
-  if (!track) return null;
+  if (!track) {
+    // No active track — the pilot may have a manual flight (issue #306).
+    // Manual flights are a GAP made-good concept, so only for GAP tasks; the
+    // geometry is cheap (no R2 / tracklog), so compute it inline, uncached.
+    const manual = await db
+      .prepare(
+        `SELECT last_reached_tp_index, landing_lat, landing_lon
+         FROM task_manual_flight
+         WHERE task_id = ? AND comp_pilot_id = ? AND active = 1`
+      )
+      .bind(taskId, compPilotId)
+      .first<{
+        last_reached_tp_index: number;
+        landing_lat: number;
+        landing_lon: number;
+      }>();
+    if (!manual || taskRow.scoring_format === "open_distance") return null;
+
+    const gapParams: Partial<GAPParameters> = taskRow.gap_params
+      ? JSON.parse(taskRow.gap_params)
+      : {};
+    const distanceOrigin =
+      gapParams.distanceOrigin ?? DEFAULT_GAP_PARAMETERS.distanceOrigin;
+    const xcTask = parseXCTask(taskRow.xctsk);
+    const scoringTask = taskForDistanceOrigin(xcTask, distanceOrigin);
+    const offset = xcTask.turnpoints.length - scoringTask.turnpoints.length;
+    const scoringIndex = manual.last_reached_tp_index - offset;
+    const geom = manualFlightGeometry(scoringTask, scoringIndex, {
+      lat: manual.landing_lat,
+      lon: manual.landing_lon,
+    });
+    return {
+      comp_pilot_id: encodeId(alphabet, compPilotId),
+      scoring_format: "gap",
+      turnpoint_result: null,
+      open_distance: null,
+      manual_flight: {
+        last_reached_tp_index: scoringIndex,
+        landing: { lat: manual.landing_lat, lon: manual.landing_lon },
+        made_good: geom.madeGood,
+        distance_to_goal: geom.distanceToGoal,
+        made_goal: geom.madeGoal,
+        route_to_goal: geom.routeToGoal,
+      },
+    };
+  }
 
   const scoringFormat: "gap" | "open_distance" =
     taskRow.scoring_format === "open_distance" ? "open_distance" : "gap";
@@ -1035,5 +1095,6 @@ export async function computePilotAnalysis(
     comp_pilot_id: encodeId(alphabet, compPilotId),
     scoring_format: scoringFormat,
     ...payload,
+    manual_flight: null,
   };
 }

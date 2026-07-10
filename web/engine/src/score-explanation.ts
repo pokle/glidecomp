@@ -32,6 +32,7 @@ import type {
 import type { GAPParameters } from './gap-scoring';
 import { DEFAULT_GAP_PARAMETERS, calculateSpeedFraction } from './gap-scoring';
 import type { OpenDistanceGeometry } from './open-distance-scoring';
+import type { ManualFlightGeometry } from './manual-flight';
 import type { IGCFix } from './igc-parser';
 import { calculateOptimizedTaskLine } from './task-optimizer';
 
@@ -967,4 +968,177 @@ export function explainOpenDistanceScore(
       : `Never left the launch cylinder — ${entry.total_score} points`;
 
   return { format: 'open_distance', headline, sections };
+}
+
+// ---------------------------------------------------------------------------
+// Manual flight explanation
+// ---------------------------------------------------------------------------
+
+export interface ExplainManualFlightInput {
+  /**
+   * The scoring task (already trimmed for the distance origin) — the same
+   * frame as `geometry.lastReachedIndex`, so turnpoint labels line up.
+   */
+  task: XCTask;
+  /** The made-good geometry from {@link ManualFlightGeometry}. */
+  geometry: ManualFlightGeometry;
+  /** The published score being explained. */
+  entry: ScoreEntryInput;
+  /** The class the pilot was scored in. */
+  classContext: ClassContextInput;
+  /** The comp's GAP parameters (defaults applied for missing fields). */
+  params?: Partial<GAPParameters>;
+}
+
+/**
+ * The flight-narrative section for a manual flight — no tracklog, so it states
+ * the last turnpoint reached and the landing point, and attaches the routed
+ * "distance to goal" line to the landing anchor (kind `best_progress`) exactly
+ * as a landed-out track does, so the map shows the same evidence.
+ */
+function buildManualFlightSection(
+  task: XCTask,
+  geometry: ManualFlightGeometry,
+  entry: ScoreEntryInput,
+): ScoreExplanationSection {
+  const items: ScoreExplanationItem[] = [
+    {
+      id: 'manual-flight',
+      text: 'Manual flight — recorded by an official for a pilot with no tracklog (FAI S7F §8.4). The distance is computed from the last turnpoint reached and the landing point, exactly as a real track at the same place would score.',
+      emphasis: 'muted',
+    },
+    {
+      id: 'manual-last-tp',
+      text: (() => {
+        const label = turnpointLabel(task, geometry.lastReachedIndex);
+        const name = turnpointName(task, geometry.lastReachedIndex);
+        return `Last turnpoint reached: ${label}${name ? ` — ${name}` : ''}`;
+      })(),
+    },
+  ];
+
+  if (geometry.madeGoal) {
+    items.push({
+      id: 'made-goal',
+      text: 'Recorded in goal — full task distance is credited.',
+    });
+    items.push({
+      id: 'landing',
+      text: 'Recorded landing point',
+      anchor: {
+        kind: 'goal',
+        latitude: geometry.landing.lat,
+        longitude: geometry.landing.lon,
+      },
+    });
+  } else {
+    const nextIdx = geometry.lastReachedIndex + 1;
+    const nextIsGoal = nextIdx === getGoalIndex(task);
+    const nextName = turnpointName(task, nextIdx);
+    const nextDesc = `${turnpointLabel(task, nextIdx)}${nextName ? ` (${nextName})` : ''}`;
+    const path = geometry.routeToGoal.map((p) => ({
+      latitude: p.lat,
+      longitude: p.lon,
+    }));
+    items.push({
+      id: 'best-progress',
+      text: `Recorded landing point — ${km(geometry.distanceToGoal)} short of goal along the task route`,
+      detail: nextIsGoal
+        ? `Distance is measured along the task from the landing point to goal, so the scored distance is ${km(entry.flown_distance)}.`
+        : `Distance is measured along the task from the landing point, through the next turnpoint ${nextDesc} and on to goal, so the scored distance is ${km(entry.flown_distance)}.`,
+      anchor: {
+        kind: 'best_progress',
+        latitude: geometry.landing.lat,
+        longitude: geometry.landing.lon,
+        // Only a genuine multi-point line is worth drawing.
+        path: path.length >= 2 ? path : undefined,
+      },
+    });
+  }
+
+  return {
+    id: 'flight',
+    title: 'The flight',
+    summary: 'A manual flight report — no tracklog.',
+    items,
+  };
+}
+
+/**
+ * Explain a manual-flight-scored pilot's result (FAI S7F §8.4). The narrative
+ * states the last turnpoint reached and the landing point (with the routed
+ * distance-to-goal line on the map); the point-component sections reuse the
+ * same GAP builders, driven by the authoritative published score entry, so the
+ * numbers always match the scoreboard.
+ */
+export function explainManualFlightScore(
+  input: ExplainManualFlightInput,
+): ScoreExplanation {
+  const { task, geometry, entry, classContext } = input;
+  const params: GAPParameters = { ...DEFAULT_GAP_PARAMETERS, ...input.params };
+
+  // The point-component builders read only a few fields off a turnpoint result
+  // (flownDistance for the minimum-distance caveat; startGate / sssReaching for
+  // the gated-race note, both absent for a manual flight). Feed them a synthetic
+  // result so a manual flight reuses the exact same points prose as a track.
+  const synthResult: TurnpointSequenceResult = {
+    crossings: [],
+    sequence: [],
+    sssReaching: null,
+    essReaching: null,
+    madeGoal: geometry.madeGoal,
+    lastTurnpointReached: geometry.lastReachedIndex,
+    bestProgress: null,
+    taskDistance: geometry.madeGood + geometry.distanceToGoal,
+    flownDistance: geometry.madeGood,
+    legs: [],
+    speedSectionTime: entry.speed_section_time ?? null,
+  };
+
+  const sections: ScoreExplanationSection[] = [
+    buildManualFlightSection(task, geometry, entry),
+    buildValiditySection(classContext),
+    buildDistanceSection(entry, classContext, synthResult, params),
+    buildTimeSection(entry, classContext, params, synthResult, defaultFormatTime),
+  ];
+
+  if (classContext.available_points.leading > 0 || entry.leading_points > 0) {
+    sections.push({
+      id: 'leading',
+      title: 'Leading points',
+      points: entry.leading_points,
+      items: [
+        {
+          id: 'leading',
+          text: 'Leading points reward flying out front during the speed section. A manual flight has no tracklog to measure leading from, so it earns none.',
+          value: pts(entry.leading_points),
+        },
+      ],
+    });
+  }
+
+  if (classContext.available_points.arrival > 0 || entry.arrival_points > 0) {
+    sections.push({
+      id: 'arrival',
+      title: 'Arrival points',
+      points: entry.arrival_points,
+      items: [
+        {
+          id: 'arrival',
+          text: 'Arrival points reward crossing the end of the speed section early relative to the other pilots who reached it.',
+          value: pts(entry.arrival_points),
+        },
+      ],
+    });
+  }
+
+  const penalty = buildPenaltySection(entry, params.jumpTheGunFactor);
+  if (penalty) sections.push(penalty);
+  sections.push(buildTotalSection(entry));
+
+  const headline = geometry.madeGoal
+    ? `Manual flight — made goal — ${fmtPoints(entry.total_score)} points`
+    : `Manual flight — ${km(entry.flown_distance)} made good — ${fmtPoints(entry.total_score)} points`;
+
+  return { format: 'gap', headline, sections };
 }

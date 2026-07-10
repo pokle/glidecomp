@@ -64,41 +64,70 @@ export interface ManualFlight {
 }
 
 /**
- * Distance made good toward goal from an arbitrary landing point, given the
- * last turnpoint the pilot legally reached.
+ * The made-good geometry of a manual flight — the scored distance AND the
+ * routed line the UI draws, so a track-less pilot's score-details page can
+ * show the landing point and the remaining route to goal exactly like a
+ * landed-out tracked pilot's best-progress line.
+ */
+export interface ManualFlightGeometry {
+  /** Scored distance made good in metres (floored at the banked distance). */
+  madeGood: number;
+  /** Remaining routed distance from the landing point to goal in metres
+   * (0 when in goal). Drawn as the routed line's label. */
+  distanceToGoal: number;
+  /** Whether the pilot reached goal (last reached turnpoint is the goal). */
+  madeGoal: boolean;
+  /** The landing point. */
+  landing: { lat: number; lon: number };
+  /**
+   * Routed polyline for the map: [landing, next-TP tag point, …tag points…,
+   * goal tag point] — the same "from here, through each un-reached turnpoint,
+   * to goal" line drawn for a landed-out track. Empty when in goal (nothing
+   * remains) or when there is no scored start.
+   */
+  routeToGoal: { lat: number; lon: number }[];
+  /** Index of the last reached turnpoint (as passed in). */
+  lastReachedIndex: number;
+}
+
+/**
+ * Compute the full made-good geometry of a manual flight.
  *
- * Mirrors the CIVL GAP flown-distance rule for a single point:
- *
- *   madeGood = taskDistance − remaining(point, from lastReachedIndex)
- *
+ * The scored distance mirrors the CIVL GAP flown-distance rule for a single
+ * point: `madeGood = taskDistance − remaining(point, from lastReachedIndex)`,
  * where `remaining` routes from the landing point to the next un-reached
  * turnpoint's optimal tag point, then along the optimised legs to goal — the
  * exact routing `computeBestProgress` uses per fix (an intermediate turnpoint
  * is measured to its tag point; the goal cylinder to its nearest edge).
  *
  * Turnpoint order is respected two ways:
- * - The result is floored at the optimised distance already banked by
- *   reaching `lastReachedIndex` — reaching a turnpoint can never score less
- *   than getting there, however far back the pilot then landed.
+ * - `madeGood` is floored at the optimised distance already banked by reaching
+ *   `lastReachedIndex` — reaching a turnpoint can never score less than getting
+ *   there, however far back the pilot then landed.
  * - A landing point beyond the next turnpoint is measured by closest approach
- *   to that turnpoint, never credited past it (you can't claim only TP1 yet
- *   bank distance past TP2).
+ *   to that turnpoint, never credited past it.
  *
  * @param task - The scoring task (already trimmed for the distance origin).
- * @param lastReachedIndex - Position in `task.turnpoints[]` of the last
- *   reached turnpoint. < 0 → no start (0 m); ≥ goal → in goal (task distance).
+ * @param lastReachedIndex - Position in `task.turnpoints[]` of the last reached
+ *   turnpoint. < 0 → no start; ≥ goal → in goal.
  * @param point - The landing point.
- * @returns Made-good distance in metres, in `[0, taskDistance]`.
  */
-export function distanceMadeGoodTo(
+export function manualFlightGeometry(
   task: XCTask,
   lastReachedIndex: number,
   point: { lat: number; lon: number },
-): number {
+): ManualFlightGeometry {
   const optimizedLine = calculateOptimizedTaskLine(task);
-  if (optimizedLine.length < 2) return 0;
-
   const goalIdx = getGoalIndex(task);
+  const base: ManualFlightGeometry = {
+    madeGood: 0,
+    distanceToGoal: 0,
+    madeGoal: false,
+    landing: { lat: point.lat, lon: point.lon },
+    routeToGoal: [],
+    lastReachedIndex,
+  };
+  if (optimizedLine.length < 2) return base;
 
   // Cumulative optimised distance from the origin to each turnpoint's tag
   // point. cum[i] is the along-course distance banked by reaching turnpoint i.
@@ -114,17 +143,12 @@ export function distanceMadeGoodTo(
   // Clamp the anchor into range: below the origin means no scored start;
   // at or past goal means the pilot is in goal (full task distance).
   const anchor = Math.min(lastReachedIndex, goalIdx);
-  if (anchor < 0) return 0;
-  if (anchor >= goalIdx) return taskDistance;
+  if (anchor < 0) return { ...base, distanceToGoal: taskDistance };
+  if (anchor >= goalIdx) {
+    return { ...base, madeGood: taskDistance, madeGoal: true };
+  }
 
-  // Distance already banked by reaching the anchor turnpoint — the floor.
-  const bankedToAnchor = cum[anchor];
-
-  // Remaining distance from the landing point to goal, routed through the next
-  // un-reached turnpoint. Identical to computeBestProgress for a single fix:
-  // measure to an intermediate turnpoint's optimal tag point (so the onward
-  // route stays continuous with the optimised legs), or to the goal cylinder's
-  // nearest edge when the next turnpoint is goal.
+  const bankedToAnchor = cum[anchor]; // the floor
   const nextIdx = anchor + 1;
   const nextIsGoal = nextIdx >= goalIdx;
   const nextTP = task.turnpoints[nextIdx];
@@ -136,12 +160,46 @@ export function distanceMadeGoodTo(
         point.lat, point.lon,
         optimizedLine[nextIdx].lat, optimizedLine[nextIdx].lon,
       );
-  // Optimised legs from the next turnpoint onward to goal.
   const interTPDistance = taskDistance - cum[nextIdx];
-  const remaining = distToNextTP + interTPDistance;
+  const distanceToGoal = distToNextTP + interTPDistance;
+  const madeGoodFromPoint = taskDistance - distanceToGoal;
+  const madeGood = Math.min(taskDistance, Math.max(bankedToAnchor, madeGoodFromPoint));
 
-  const madeGoodFromPoint = taskDistance - remaining;
-  return Math.min(taskDistance, Math.max(bankedToAnchor, madeGoodFromPoint));
+  // The drawn line: from the landing point, through each un-reached turnpoint's
+  // optimal tag point, to the goal tag — same convention as the tracked
+  // best-progress route (calculateOptimizedTaskLine.slice(nextIdx)).
+  const routeToGoal = [
+    { lat: point.lat, lon: point.lon },
+    ...optimizedLine.slice(nextIdx).map((p) => ({ lat: p.lat, lon: p.lon })),
+  ];
+
+  return {
+    madeGood,
+    distanceToGoal,
+    madeGoal: false,
+    landing: { lat: point.lat, lon: point.lon },
+    routeToGoal,
+    lastReachedIndex,
+  };
+}
+
+/**
+ * Distance made good toward goal from an arbitrary landing point, given the
+ * last turnpoint the pilot legally reached. Thin wrapper over
+ * {@link manualFlightGeometry} — see it for the routing and floor rules.
+ *
+ * @param task - The scoring task (already trimmed for the distance origin).
+ * @param lastReachedIndex - Position in `task.turnpoints[]` of the last
+ *   reached turnpoint. < 0 → no start (0 m); ≥ goal → in goal (task distance).
+ * @param point - The landing point.
+ * @returns Made-good distance in metres, in `[0, taskDistance]`.
+ */
+export function distanceMadeGoodTo(
+  task: XCTask,
+  lastReachedIndex: number,
+  point: { lat: number; lon: number },
+): number {
+  return manualFlightGeometry(task, lastReachedIndex, point).madeGood;
 }
 
 /**

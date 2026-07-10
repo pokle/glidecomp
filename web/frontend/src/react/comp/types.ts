@@ -186,6 +186,16 @@ export interface PilotAnalysisData {
     origin: OpenDistanceAnchorPointData | null;
     furthest: OpenDistanceAnchorPointData | null;
   } | null;
+  /** Manual flight geometry for a track-less pilot (issue #306); indices in
+   * the scoring (distance-origin-trimmed) frame. Null for tracked pilots. */
+  manual_flight: {
+    last_reached_tp_index: number;
+    landing: { lat: number; lon: number };
+    made_good: number;
+    distance_to_goal: number;
+    made_goal: boolean;
+    route_to_goal: Array<{ lat: number; lon: number }>;
+  } | null;
 }
 
 export interface AuditEntry {

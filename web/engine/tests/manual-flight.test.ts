@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'bun:test';
 import {
   distanceMadeGoodTo,
+  manualFlightGeometry,
   manualFlightScoringData,
   type ManualFlight,
 } from '../src/manual-flight';
+import { explainManualFlightScore } from '../src/score-explanation';
+import type { ScoreEntryInput, ClassContextInput } from '../src/score-explanation';
 import { resolveTurnpointSequence } from '../src/turnpoint-sequence';
 import {
   scoreFlights,
@@ -280,5 +283,106 @@ describe('manualFlightScoringData', () => {
     expect(m.flownDistance).toBeCloseTo(t.flownDistance, 0);
     expect(m.distancePoints).toBeCloseTo(t.distancePoints, 1);
     expect(m.totalScore).toBeCloseTo(t.totalScore, 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// manualFlightGeometry + explainManualFlightScore (score-details evidence)
+// ---------------------------------------------------------------------------
+
+describe('manualFlightGeometry', () => {
+  it('returns a routed line from the landing point through to goal for a land-out', () => {
+    const landing = { lat: 0, lon: 0.15 };
+    const geom = manualFlightGeometry(TASK, 1, landing);
+
+    expect(geom.madeGoal).toBe(false);
+    expect(geom.distanceToGoal).toBeGreaterThan(0);
+    expect(geom.madeGood).toBeCloseTo(distanceMadeGoodTo(TASK, 1, landing), 6);
+    // [landing, TP2 tag, GOAL tag] — the drawn route.
+    expect(geom.routeToGoal.length).toBeGreaterThanOrEqual(2);
+    expect(geom.routeToGoal[0]).toEqual(landing);
+    // made-good + remaining ≈ task distance for a forward land-out.
+    expect(geom.madeGood + geom.distanceToGoal).toBeCloseTo(TASK_DISTANCE, 0);
+  });
+
+  it('has no remaining route in goal', () => {
+    const geom = manualFlightGeometry(TASK, GOAL_IDX, { lat: 0, lon: 0.3 });
+    expect(geom.madeGoal).toBe(true);
+    expect(geom.distanceToGoal).toBe(0);
+    expect(geom.routeToGoal).toHaveLength(0);
+    expect(geom.madeGood).toBeCloseTo(TASK_DISTANCE, 3);
+  });
+});
+
+describe('explainManualFlightScore', () => {
+  const entry: ScoreEntryInput = {
+    made_goal: false,
+    reached_ess: false,
+    flown_distance: 15000,
+    speed_section_time: null,
+    distance_points: 300,
+    distance_linear_points: 300,
+    distance_difficulty_points: 0,
+    time_points: 0,
+    leading_points: 0,
+    arrival_points: 0,
+    penalty_points: 0,
+    penalty_reason: null,
+    total_score: 300,
+  };
+  const classContext: ClassContextInput = {
+    task_validity: { launch: 1, distance: 0.8, time: 0.7, task: 0.56 },
+    available_points: { distance: 500, time: 300, leading: 0, arrival: 0, total: 800 },
+    pilots: [
+      { flown_distance: 15000, speed_section_time: null, made_goal: false, reached_ess: false },
+    ],
+  };
+
+  function findAnchorPath(explanation: ReturnType<typeof explainManualFlightScore>) {
+    for (const section of explanation.sections) {
+      for (const item of section.items) {
+        if (item.anchor?.kind === 'best_progress') return item.anchor.path;
+      }
+    }
+    return undefined;
+  }
+
+  it('attaches the routed made-good line to a best_progress anchor', () => {
+    const geometry = manualFlightGeometry(TASK, 1, { lat: 0, lon: 0.15 });
+    const explanation = explainManualFlightScore({ task: TASK, geometry, entry, classContext });
+
+    expect(explanation.format).toBe('gap');
+    expect(explanation.headline).toContain('Manual flight');
+    // The landing anchor carries the same routed polyline a landed-out track
+    // draws — so the score-details map shows the identical evidence.
+    const path = findAnchorPath(explanation);
+    expect(path && path.length).toBeGreaterThanOrEqual(2);
+    expect(path![0]).toEqual({ latitude: 0, longitude: 0.15 });
+
+    // Reuses the shared point sections, driven by the published entry.
+    const distance = explanation.sections.find((s) => s.id === 'distance');
+    expect(distance?.points).toBe(300);
+    expect(explanation.sections.some((s) => s.id === 'total')).toBe(true);
+  });
+
+  it('credits full distance and draws no line in goal', () => {
+    const goalEntry: ScoreEntryInput = {
+      ...entry,
+      made_goal: true,
+      reached_ess: true,
+      flown_distance: 33000,
+      speed_section_time: 3600,
+      time_points: 200,
+      total_score: 700,
+    };
+    const geometry = manualFlightGeometry(TASK, GOAL_IDX, { lat: 0, lon: 0.3 });
+    const explanation = explainManualFlightScore({
+      task: TASK,
+      geometry,
+      entry: goalEntry,
+      classContext,
+    });
+    expect(explanation.headline).toContain('made goal');
+    expect(findAnchorPath(explanation)).toBeUndefined();
   });
 });
