@@ -38,8 +38,11 @@ test("dev login, onboarding, create competition and task", async ({ page }) => {
     }
   }
 
-  // Step 2: Navigate to onboarding (new user has no username)
-  await page.goto("/onboarding");
+  // Step 2: A brand-new user (no username yet) who lands anywhere in the app
+  // must be pushed through onboarding first (#303). Sign-in drops them on
+  // /comp; the Shell's onboarding gate should redirect them to /onboarding.
+  await page.goto("/comp");
+  await page.waitForURL("**/onboarding");
 
   // Step 3: Complete onboarding. The full-name field is pre-filled from the
   // auth user; assertion doubles as the "page is interactive" sync point.
