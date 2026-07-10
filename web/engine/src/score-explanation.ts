@@ -33,6 +33,7 @@ import type { GAPParameters } from './gap-scoring';
 import { DEFAULT_GAP_PARAMETERS, calculateSpeedFraction } from './gap-scoring';
 import type { OpenDistanceGeometry } from './open-distance-scoring';
 import type { IGCFix } from './igc-parser';
+import { calculateOptimizedTaskLine } from './task-optimizer';
 
 // ---------------------------------------------------------------------------
 // Output types
@@ -58,6 +59,14 @@ export interface ExplanationAnchor {
   altitude?: number;
   /** Epoch milliseconds, when known (JSON-safe). */
   timeMs?: number;
+  /**
+   * An optional routed polyline the UI can draw for this anchor. For a
+   * landed-out pilot's `best_progress` point this is the remaining task
+   * route — from that point, through each un-reached turnpoint's optimal
+   * tag point, to goal — so the "measured along the task" / "X km short"
+   * wording is visible on the map rather than implied by a lone pin.
+   */
+  path?: Array<{ latitude: number; longitude: number }>;
 }
 
 /** One explainable fact or step in the calculation. */
@@ -440,16 +449,40 @@ function buildFlightSection(
       text: 'Completed the task — full task distance is credited.',
     });
   } else if (result.bestProgress) {
+    // The marked point is where the flight made the most distance along the
+    // task route — i.e. where the track came closest to the *next* un-reached
+    // turnpoint (routed on toward goal), not the point nearest goal in a
+    // straight line. Name that turnpoint so the map marker makes sense.
+    const nextIdx = result.lastTurnpointReached + 1;
+    const nextIsGoal = nextIdx === getGoalIndex(task);
+    const nextName = turnpointName(task, nextIdx);
+    const nextDesc = `${turnpointLabel(task, nextIdx)}${nextName ? ` (${nextName})` : ''}`;
+    // The remaining routed line: from the best-progress point, through each
+    // un-reached turnpoint's optimal tag point, to goal. calculateOptimizedTaskLine
+    // returns one tag point per turnpoint, index-aligned to task.turnpoints, so
+    // slice(nextIdx) is exactly the un-reached tail (next TP … goal).
+    const remainingTags = calculateOptimizedTaskLine(task).slice(nextIdx);
+    const path: Array<{ latitude: number; longitude: number }> = [
+      {
+        latitude: result.bestProgress.latitude,
+        longitude: result.bestProgress.longitude,
+      },
+      ...remainingTags.map((p) => ({ latitude: p.lat, longitude: p.lon })),
+    ];
     items.push({
       id: 'best-progress',
-      text: `Landed out — closest approach to goal was ${km(result.bestProgress.distanceToGoal)} short`,
+      text: `Landed out — best distance made good along the task, ${km(result.bestProgress.distanceToGoal)} short of goal`,
       value: fmt(result.bestProgress.time),
-      detail: `Scored distance is measured along the task to this point: ${km(entry.flown_distance)}.`,
+      detail: nextIsGoal
+        ? `The marked point is where the track came closest to goal${nextName ? ` (${nextName})` : ''}. Scored distance is measured along the task to this point: ${km(entry.flown_distance)}.`
+        : `The marked point is where the track came closest to the next turnpoint, ${nextDesc} — not the point nearest goal. Distance is measured along the task route from here, on through the remaining turnpoints to goal, so the scored distance is ${km(entry.flown_distance)}.`,
       anchor: {
         kind: 'best_progress',
         latitude: result.bestProgress.latitude,
         longitude: result.bestProgress.longitude,
         timeMs: result.bestProgress.time.getTime(),
+        // Only a genuine multi-point line is worth drawing.
+        path: path.length >= 2 ? path : undefined,
       },
     });
   }
