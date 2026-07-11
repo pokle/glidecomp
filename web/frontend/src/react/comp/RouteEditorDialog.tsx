@@ -11,7 +11,7 @@
  * code, and exported to a .xctsk file. Saving PATCHes the task's xctsk
  * (the server validates strictly and audit-logs the change).
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
 import {
   getOptimizedSegmentDistances,
@@ -19,8 +19,10 @@ import {
   toXctskJSON,
   type GoalConfig,
   type SSSConfig,
+  type WaypointFileRecord,
   type XCTask,
 } from "@glidecomp/engine";
+import type { MapWaypoint } from "../../analysis/map-provider";
 import { Button } from "@/react/ui/button";
 import {
   Dialog,
@@ -43,12 +45,18 @@ import {
   addMinutes,
   buildRoute,
   editableGates,
+  formatCoords,
   gateToHHMM,
+  turnpointsToCSV,
   turnpointToRow,
   xctskForPatch,
   TYPE_LABELS,
   type RouteRow,
 } from "./route-editor";
+
+// Lazy so the map libraries (mapbox/leaflet) and their CSS load only when the
+// editor opens and never enter the SSR'd task-detail bundle.
+const RouteMap = lazy(() => import("./RouteMap"));
 
 const NEW_ROW_RADIUS = 400;
 
@@ -102,6 +110,17 @@ export function RouteEditorDialog({
   const [hasSSSTurnpoint, setHasSSSTurnpoint] = useState(
     xctsk?.turnpoints.some((tp) => tp.type === "SSS") ?? false
   );
+  // Live task fed to the map (cylinders + optimised route line), kept in sync
+  // with the grid by recompute(). Seeded from the loaded task on first render.
+  const [mapTask, setMapTask] = useState<XCTask | null>(xctsk);
+  // The competition's shared waypoints (loaded once on open), shown on the map
+  // and in a searchable list. Turnpoints are picked from this set only — the
+  // task copies each waypoint's details in, so it can't be changed after the
+  // fact by editing the competition waypoints.
+  const [waypointRecords, setWaypointRecords] = useState<WaypointFileRecord[]>([]);
+  const [wpLoading, setWpLoading] = useState(true);
+  const [wpSearch, setWpSearch] = useState("");
+  const [wpFitNonce, setWpFitNonce] = useState(0);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [xcontestCode, setXcontestCode] = useState("");
   const [xcontestLoading, setXcontestLoading] = useState(false);
@@ -114,7 +133,31 @@ export function RouteEditorDialog({
   // Row ids must be unique for Tabulator's index-based updates; never reuse.
   const rowIdRef = useRef(0);
   const nextRowId = () => ++rowIdRef.current;
-  const wpCounterRef = useRef(xctsk?.turnpoints.length ?? 0);
+
+  // Load the competition's waypoints once, to pick turnpoints from.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await api.api.comp[":comp_id"].waypoints.$get({
+          param: { comp_id: compId },
+        });
+        if (cancelled) return;
+        const data = res.ok
+          ? ((await res.json()) as unknown as { waypoints: WaypointFileRecord[] })
+          : { waypoints: [] };
+        setWaypointRecords(data.waypoints);
+        setWpFitNonce((n) => n + 1);
+      } catch {
+        /* leave the list empty; the empty-state points at the waypoints page */
+      } finally {
+        if (!cancelled) setWpLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [compId]);
 
   // Start (SSS) panel state
   const [sssType, setSssType] = useState<SSSConfig["type"]>(xctsk?.sss?.type ?? "RACE");
@@ -136,19 +179,6 @@ export function RouteEditorDialog({
     return hhmm ? toDisplayTime(hhmm) : "";
   });
 
-  function newRow(): RouteRow {
-    wpCounterRef.current++;
-    return {
-      id: nextRowId(),
-      name: `WP ${wpCounterRef.current}`,
-      type: "",
-      coords: "",
-      radius: NEW_ROW_RADIUS,
-      altitude: "",
-      leg: null,
-    };
-  }
-
   /** Re-validate and recompute optimized leg/total distances from the grid. */
   const recompute = useCallback(() => {
     const table = tableRef.current;
@@ -158,6 +188,18 @@ export function RouteEditorDialog({
     setErrors(result.errors);
     setWarnings(result.warnings);
     setHasSSSTurnpoint(result.turnpoints.some((tp) => tp.type === "SSS"));
+
+    // Feed the map the turnpoints parsed so far — cylinders and the optimised
+    // line update live as rows are edited, added, reordered or picked.
+    setMapTask(
+      result.turnpoints.length > 0
+        ? {
+            taskType: baseRef.current?.taskType || "CLASSIC",
+            version: baseRef.current?.version ?? 1,
+            turnpoints: result.turnpoints,
+          }
+        : null
+    );
 
     const legByRowId = new Map<number, number>();
     if (result.geometryComplete && result.turnpoints.length >= 2) {
@@ -234,10 +276,6 @@ export function RouteEditorDialog({
    * editable fields, the computed leg distance, and a remove button.
    */
   function gridColumns(): ColumnDefinition[] {
-    const insertAbove = (cell: CellComponent) => {
-      const t = tableRef.current;
-      if (t) void t.addRow(newRow(), true, cell.getRow());
-    };
     return [
       {
         title: "",
@@ -254,21 +292,17 @@ export function RouteEditorDialog({
         width: 44,
         hozAlign: "right",
       },
+      // Code / Name / Coordinates / Alt are copied from the competition
+      // waypoint and shown read-only; the task's task-specific fields (Type,
+      // Radius) stay editable.
       {
-        title: "",
-        width: 36,
-        hozAlign: "center",
-        formatter: () =>
-          '<span class="text-muted-foreground cursor-pointer" title="Insert turnpoint above">＋</span>',
-        cellClick: (_e: UIEvent, cell: CellComponent) => insertAbove(cell),
+        title: "Code",
+        field: "name",
+        minWidth: 90,
       },
       {
         title: "Name",
-        field: "name",
-        editor: "input",
-        // Select the existing value on edit so typing replaces it (matches
-        // spreadsheet behaviour; without this, mobile taps append text).
-        editorParams: { selectContents: true },
+        field: "description",
         minWidth: 130,
       },
       {
@@ -284,8 +318,6 @@ export function RouteEditorDialog({
       {
         title: "Coordinates (lat, lon)",
         field: "coords",
-        editor: "input",
-        editorParams: { selectContents: true },
         minWidth: 190,
       },
       {
@@ -299,8 +331,6 @@ export function RouteEditorDialog({
       {
         title: "Alt (m)",
         field: "altitude",
-        editor: "number",
-        editorParams: { selectContents: true, min: -1000, max: 30000 },
         hozAlign: "right",
         minWidth: 80,
       },
@@ -327,9 +357,55 @@ export function RouteEditorDialog({
     ];
   }
 
-  function addTurnpoint() {
-    void tableRef.current?.addRow(newRow());
-  }
+  // Competition waypoints as map markers (index is the marker id, resolved
+  // back to the record on pick so all details carry across).
+  const mapWaypoints: MapWaypoint[] = useMemo(
+    () =>
+      waypointRecords.map((w, i) => ({
+        id: String(i),
+        code: w.code,
+        name: w.name,
+        lat: w.latitude,
+        lon: w.longitude,
+      })),
+    [waypointRecords]
+  );
+
+  // Filtered list for the searchable picker (by code or name).
+  const filteredWaypoints = useMemo(() => {
+    const q = wpSearch.trim().toLowerCase();
+    if (!q) return waypointRecords;
+    return waypointRecords.filter(
+      (w) => w.code.toLowerCase().includes(q) || w.name.toLowerCase().includes(q)
+    );
+  }, [waypointRecords, wpSearch]);
+
+  /**
+   * Append a turnpoint by COPYING a competition waypoint's details (code, long
+   * name, coordinates, radius, altitude) into the task — so a later edit to
+   * the competition waypoint never changes this task.
+   */
+  const addTurnpointFromRecord = useCallback((rec: WaypointFileRecord) => {
+    void tableRef.current?.addRow({
+      id: ++rowIdRef.current,
+      name: rec.code,
+      description: rec.name !== rec.code ? rec.name : "",
+      type: "",
+      coords: formatCoords(rec.latitude, rec.longitude),
+      radius: rec.radius > 0 ? rec.radius : NEW_ROW_RADIUS,
+      altitude: rec.altitude ? rec.altitude : "",
+      leg: null,
+    } satisfies RouteRow);
+  }, []);
+
+  /** Pick from the map: the nearest marker, resolved to its record by id. */
+  const pickWaypoint = useCallback(
+    (wp: MapWaypoint) => {
+      const rec = waypointRecords[Number(wp.id)];
+      if (rec) addTurnpointFromRecord(rec);
+    },
+    [waypointRecords, addTurnpointFromRecord]
+  );
 
   /** Load a parsed task into the editor (grid + panels + base fields). */
   async function loadTask(task: XCTask, sourceLabel: string) {
@@ -348,7 +424,6 @@ export function RouteEditorDialog({
     }
     baseRef.current = task;
     await table.setData(task.turnpoints.map((tp) => turnpointToRow(tp, nextRowId())));
-    wpCounterRef.current = task.turnpoints.length;
     setSssType(task.sss?.type ?? "RACE");
     setDirection(task.sss?.direction ?? "EXIT");
     setGates(editableGates(task.sss).map(toDisplayTime));
@@ -460,6 +535,42 @@ export function RouteEditorDialog({
     );
   }
 
+  /** Export the turnpoints as a competition waypoint CSV file. */
+  function exportCsv() {
+    const table = tableRef.current;
+    if (!table) return;
+    const result = buildRoute(table.getData() as RouteRow[], { openDistance });
+    if (result.turnpoints.length === 0) {
+      toast.error("Add some turnpoints with valid coordinates first");
+      return;
+    }
+    downloadFile(
+      `${slugify(taskName)}-waypoints.csv`,
+      turnpointsToCSV(result.turnpoints),
+      "text/csv"
+    );
+  }
+
+  /** Empty the turnpoint grid (start the route over). */
+  async function clearTurnpoints() {
+    const table = tableRef.current;
+    if (!table) return;
+    const hasRows = (table.getData() as RouteRow[]).some(
+      (r) => String(r.name).trim() !== "" || String(r.coords).trim() !== ""
+    );
+    if (hasRows) {
+      const ok = await confirm({
+        title: "Clear all turnpoints?",
+        message:
+          "This removes every turnpoint from the editor. Loaded waypoints stay on the map, and nothing is saved until you press Save.",
+        confirmLabel: "Clear",
+      });
+      if (!ok) return;
+    }
+    await table.setData([]);
+    recompute();
+  }
+
   async function save() {
     const task = assembleTask();
     if (!task) return;
@@ -541,27 +652,104 @@ export function RouteEditorDialog({
           </p>
         ) : null}
 
-        <div
-          ref={gridRef}
-          id="route-grid"
-          className="h-[280px] shrink-0 rounded border border-border"
-        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* Map + waypoint picker — floats at the top on narrow screens, sits
+              on the right on wide ones (same pattern as the score-explainer). */}
+          <div className="order-1 flex flex-col gap-2 lg:order-2 lg:sticky lg:top-0 lg:self-start">
+            <div className="h-64 overflow-hidden rounded border border-border sm:h-72 lg:h-[360px]">
+              <Suspense
+                fallback={
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                    Loading map…
+                  </div>
+                }
+              >
+                {gridReady ? (
+                  <RouteMap
+                    task={mapTask}
+                    waypoints={mapWaypoints}
+                    addMode={false}
+                    fitNonce={wpFitNonce}
+                    onWaypointPick={pickWaypoint}
+                    onMapPick={() => {}}
+                  />
+                ) : null}
+              </Suspense>
+            </div>
+            {/* Searchable list of the competition's waypoints to pick from. */}
+            {wpLoading ? (
+              <p className="text-xs text-muted-foreground">Loading competition waypoints…</p>
+            ) : waypointRecords.length === 0 ? (
+              <p className="rounded border border-dashed border-border p-3 text-xs text-muted-foreground">
+                This competition has no waypoints yet.{" "}
+                <a
+                  href={`/comp/${compId}/waypoints`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline hover:text-foreground"
+                >
+                  Add waypoints to the competition
+                </a>{" "}
+                first, then pick them here.
+              </p>
+            ) : (
+              <>
+                <Input
+                  className="h-8"
+                  placeholder={`Search ${waypointRecords.length} waypoints…`}
+                  aria-label="Search competition waypoints"
+                  value={wpSearch}
+                  onChange={(e) => setWpSearch(e.target.value)}
+                />
+                <div className="max-h-40 overflow-y-auto rounded border border-border">
+                  {filteredWaypoints.slice(0, 200).map((w, i) => (
+                    <button
+                      key={`${w.code}-${i}`}
+                      type="button"
+                      className="flex w-full items-baseline gap-2 px-2 py-1 text-left text-sm hover:bg-accent"
+                      onClick={() => addTurnpointFromRecord(w)}
+                    >
+                      <span className="font-medium">{w.code}</span>
+                      {w.name !== w.code ? (
+                        <span className="truncate text-muted-foreground">{w.name}</span>
+                      ) : null}
+                    </button>
+                  ))}
+                  {filteredWaypoints.length === 0 ? (
+                    <p className="px-2 py-1.5 text-sm text-muted-foreground">No matches</p>
+                  ) : null}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Click a waypoint (or tap it on the map) to add it as a turnpoint.
+                </p>
+              </>
+            )}
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!gridReady}
-            onClick={addTurnpoint}
-          >
-            Add turnpoint
-          </Button>
-          {totalKm !== null ? (
-            <span className="text-sm text-muted-foreground">
-              Optimized total: {totalKm.toFixed(1)} km
-            </span>
-          ) : null}
+          {/* Editable turnpoint grid */}
+          <div className="order-2 flex min-w-0 flex-col gap-2 lg:order-1">
+            <div
+              ref={gridRef}
+              id="route-grid"
+              className="h-[320px] shrink-0 rounded border border-border"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!gridReady}
+                onClick={() => void clearTurnpoints()}
+              >
+                Clear turnpoints
+              </Button>
+              {totalKm !== null ? (
+                <span className="text-sm text-muted-foreground">
+                  Optimized total: {totalKm.toFixed(1)} km
+                </span>
+              ) : null}
+            </div>
+          </div>
         </div>
 
         {shownErrors.length > 0 ? (
@@ -780,6 +968,15 @@ export function RouteEditorDialog({
               onClick={exportFile}
             >
               Export .xctsk
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!gridReady}
+              onClick={exportCsv}
+            >
+              Export .csv
             </Button>
           </div>
           <DialogClose render={<Button type="button" variant="outline" />}>

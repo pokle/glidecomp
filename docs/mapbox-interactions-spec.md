@@ -101,6 +101,16 @@ When multiple tracks are loaded (competition mode), single-track layers are hidd
 
 - **Fit bounds** — if no track loaded, map fits to task turnpoint bounds with 50px padding, 1s animation
 
+## Pickable Waypoint Markers (task route editor)
+
+Loaded from a competition waypoint file (`.wpt` / `.cup` / `.csv`) so the route editor can show turnpoints on the map and let the user pick them. Set via `setWaypoints(waypoints)` / cleared via `clearWaypoints()`; each `MapWaypoint` carries `{ id, name, lat, lon }`. Re-applied on style reload (Mapbox `restoreData()`).
+
+- **Marker dots** (`waypoints` layer): circle radius 5, fill slate `#64748b` opacity 0.9, 1.5px white stroke — deliberately secondary to the type-coloured turnpoint dots (radius 6) so a loaded database reads as "available to pick", not "part of the route".
+- **Marker labels** (`waypoint-labels` layer): the waypoint name, text size 11, offset `[0, 1.1]`, top anchor, colour `#475569`, white halo 1.5px. Shown only at **zoom ≥ 10** (Mapbox) so a whole regional database doesn't clutter when zoomed out. Leaflet shows the name as a hover tooltip instead.
+- **Picking (select mode = `view`)**: a map tap picks the **nearest** loaded waypoint within a **44 px** tolerance (a finger width — no exact aim at the small marker, which is what made picking impossible on touch) and fires `onWaypointClick(waypoint)`. A tap with no waypoint inside the tolerance does nothing (you can't accidentally drop a point). Both providers compute the nearest by projecting each waypoint to screen space; the dedicated per-marker click handler is gone (Leaflet markers are non-interactive for clicks, `bubblingPointerEvents: true`, so taps reach the map handler).
+- **Placing a new point (`add-waypoint` mode)**: a tap reports its ground coordinates via `onMapClick(lat, lon)` — the editor opens a dialog to name it, set an altitude, and adjust the coordinates before adding. Crosshair cursor.
+- **Fit on load**: `fitToWaypoints()` fits the view to the whole set (40 px padding, `maxZoom` 12 so a single point doesn't zoom to the max). The editor calls it whenever a file is loaded, so all the waypoints come into view.
+
 ## Open Distance Line
 
 Shown for open-distance tasks (single TAKEOFF turnpoint): one line per visible pilot from the point they exit the take-off cylinder to the furthest fix they reached — the geometry of the scored distance.
@@ -224,13 +234,15 @@ When enabled via the "Show Track Metrics" command palette option, displays glide
 8. `speed-fastest-segment` — red overlay for fastest speed segment
 9. `task-points` — turnpoint dots
 10. `task-labels` — turnpoint name labels
-11. `task-segment-labels` — leg distance labels
-12. `open-distance-line` — dashed scored open-distance line per pilot
-13. `open-distance-labels` — distance label along each open-distance line
-14. `multi-track-name-labels` — pilot name at each track's landing point
-15. `annotation-strokes-layer` — committed annotation strokes
-16. `annotation-live-layer` — in-progress annotation stroke preview
-17. `threebox-layer` — 3D custom rendering layer (Threebox)
+11. `waypoints` — pickable waypoint marker dots (route editor)
+12. `waypoint-labels` — pickable waypoint name labels (route editor, zoom ≥ 10)
+13. `task-segment-labels` — leg distance labels
+14. `open-distance-line` — dashed scored open-distance line per pilot
+15. `open-distance-labels` — distance label along each open-distance line
+16. `multi-track-name-labels` — pilot name at each track's landing point
+17. `annotation-strokes-layer` — committed annotation strokes
+18. `annotation-live-layer` — in-progress annotation stroke preview
+19. `threebox-layer` — 3D custom rendering layer (Threebox)
 
 ## 3D Drone Follow Camera
 

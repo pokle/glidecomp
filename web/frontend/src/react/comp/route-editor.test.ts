@@ -8,6 +8,7 @@ import {
   gateToHHMM,
   parseCoords,
   startConfigSummary,
+  turnpointsToCSV,
   turnpointToRow,
   xctskForPatch,
   type RouteRow,
@@ -17,6 +18,7 @@ function row(overrides: Partial<RouteRow> = {}): RouteRow {
   return {
     id: overrides.id ?? 1,
     name: "Mt Emu",
+    description: "",
     type: "",
     coords: "-36.550979, 147.890395",
     radius: 400,
@@ -62,11 +64,12 @@ describe("turnpointToRow", () => {
     const tp: Turnpoint = {
       type: "SSS",
       radius: 2000,
-      waypoint: { name: "Start", lat: -36.5, lon: 147.9, altSmoothed: 680 },
+      waypoint: { name: "STRT", description: "Start Hill", lat: -36.5, lon: 147.9, altSmoothed: 680 },
     };
     expect(turnpointToRow(tp, 7)).toEqual({
       id: 7,
-      name: "Start",
+      name: "STRT",
+      description: "Start Hill",
       type: "SSS",
       coords: "-36.500000, 147.900000",
       radius: 2000,
@@ -99,9 +102,25 @@ describe("buildRoute", () => {
     expect("type" in result.turnpoints[2]).toBe(false);
   });
 
+  it("keeps the long name as the waypoint description, separate from the code", () => {
+    const result = buildRoute(
+      [row({ id: 1, name: "A01", description: "Bordano Landing" })],
+      { openDistance: false }
+    );
+    expect(result.turnpoints[0].waypoint.name).toBe("A01");
+    expect(result.turnpoints[0].waypoint.description).toBe("Bordano Landing");
+  });
+
+  it("omits the description when it only repeats the code", () => {
+    const result = buildRoute([row({ id: 1, name: "CURY", description: "CURY" })], {
+      openDistance: false,
+    });
+    expect("description" in result.turnpoints[0].waypoint).toBe(false);
+  });
+
   it("skips entirely blank rows (a stray inserted row can't block a save)", () => {
     const result = buildRoute(
-      [row({ id: 1 }), { id: 2, name: "", type: "", coords: "", radius: 400, altitude: "", leg: null }],
+      [row({ id: 1 }), { id: 2, name: "", description: "", type: "", coords: "", radius: 400, altitude: "", leg: null }],
       { openDistance: false }
     );
     expect(result.errors).toEqual([]);
@@ -248,5 +267,33 @@ describe("xctskForPatch", () => {
       sss: { type: "RACE", direction: "EXIT" },
       goal: { type: "LINE", deadline: "23:00:00Z" },
     });
+  });
+});
+
+describe("turnpointsToCSV", () => {
+  const tps: Turnpoint[] = [
+    { type: "TAKEOFF", radius: 400, waypoint: { name: "CORRY", lat: -36.185, lon: 147.8914, altSmoothed: 955 } },
+    { radius: 5000, waypoint: { name: "ELLIOT", lat: -36.185833, lon: 147.976667 } },
+  ];
+
+  it("writes the competition waypoint CSV header + rows", () => {
+    const csv = turnpointsToCSV(tps).trim().split("\n");
+    expect(csv[0]).toBe("Name,Latitude,Longitude,Description,Proximity Distance,Altitude");
+    expect(csv[1]).toBe("CORRY,-36.185000,147.891400,,400,955");
+    expect(csv[2]).toBe("ELLIOT,-36.185833,147.976667,,5000,0");
+  });
+
+  it("round-trips back through parseWaypointsCSV to the same coordinates", async () => {
+    const { parseWaypointsCSV } = await import("@glidecomp/engine");
+    const parsed = parseWaypointsCSV(turnpointsToCSV(tps));
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0]).toMatchObject({ name: "CORRY", latitude: -36.185, longitude: 147.8914, radius: 400, altitude: 955 });
+  });
+
+  it("quotes names containing a comma", () => {
+    const csv = turnpointsToCSV([
+      { radius: 400, waypoint: { name: "Hill, North", lat: -36, lon: 147 } },
+    ]);
+    expect(csv).toContain('"Hill, North",-36.000000,147.000000,,400,0');
   });
 });

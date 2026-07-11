@@ -230,6 +230,7 @@ export function createLeafletProvider(
     const highlightGroup = new LayerGroup();
     const speedOverlayGroup = new LayerGroup();  // speed overlay (separate from highlight)
     const bestProgressRouteGroup = new LayerGroup();  // landout distance-to-goal line
+    const waypointsGroup = new LayerGroup();  // pickable waypoint markers (route editor)
 
     // Add default groups to map
     trackGroup.addTo(map);
@@ -238,6 +239,7 @@ export function createLeafletProvider(
     highlightGroup.addTo(map);
     speedOverlayGroup.addTo(map);
     bestProgressRouteGroup.addTo(map);
+    waypointsGroup.addTo(map);
 
     // Feature state
     let isTaskVisible = true;
@@ -254,9 +256,42 @@ export function createLeafletProvider(
     // Callbacks
     let trackClickCallback: ((fixIndex: number) => void) | null = null;
     let turnpointClickCallback: ((turnpointIndex: number) => void) | null = null;
+    let mapClickCallback: ((lat: number, lon: number) => void) | null = null;
+    type MapWaypoint = import('./map-provider').MapWaypoint;
+    type MapInteractionMode = import('./map-provider').MapInteractionMode;
+    let waypointsClickCallback: ((waypoint: MapWaypoint) => void) | null = null;
+    let interactionMode: MapInteractionMode = 'view';
+    let waypointsData: MapWaypoint[] = [];
+    // A tap this many screen px from a waypoint still picks it — sized for a
+    // finger, so exact aim at the small marker is never required on touch.
+    const WAYPOINT_TAP_TOLERANCE_PX = 44;
 
     // Turnpoint data for click handling
     let turnpointMarkers: { marker: CircleMarker; index: number }[] = [];
+
+    // Route editor picking. In select mode (view) a tap picks the NEAREST
+    // loaded waypoint within a finger-friendly tolerance (touch-friendly — no
+    // exact aim needed); in add-waypoint mode a tap reports the ground point so
+    // the editor can place a brand-new waypoint there.
+    map.on('click', (e: LeafletMouseEvent) => {
+      if (interactionMode !== 'view') {
+        mapClickCallback?.(e.latlng.lat, e.latlng.lng);
+        return;
+      }
+      if (!waypointsClickCallback || waypointsData.length === 0) return;
+      const pt = e.containerPoint;
+      let best: MapWaypoint | null = null;
+      let bestDist = WAYPOINT_TAP_TOLERANCE_PX;
+      for (const w of waypointsData) {
+        const p = map.latLngToContainerPoint([w.lat, w.lon]);
+        const d = Math.hypot(p.x - pt.x, p.y - pt.y);
+        if (d <= bestDist) {
+          bestDist = d;
+          best = w;
+        }
+      }
+      if (best) waypointsClickCallback(best);
+    });
 
     // ── Map state persistence ──────────────────────────────────────────────
 
@@ -612,7 +647,7 @@ export function createLeafletProvider(
         trackGroup.clearLayers();
       },
 
-      async setTask(task: XCTask) {
+      async setTask(task: XCTask, options?: { fit?: boolean }) {
         currentTask = task;
         cachedSequenceResult = null;
         cachedOptimizedPath = null;
@@ -746,8 +781,10 @@ export function createLeafletProvider(
           );
         }
 
-        // Fit to task bounds if no track loaded (re-measure first — see setTrack)
-        if (currentFixes.length === 0) {
+        // Fit to task bounds if no track loaded (re-measure first — see
+        // setTrack). The route editor passes fit:false so live edits don't
+        // re-zoom the view.
+        if ((options?.fit ?? true) && currentFixes.length === 0) {
           const bounds = new LatLngBounds(
             [task.turnpoints[0].waypoint.lat, task.turnpoints[0].waypoint.lon],
             [task.turnpoints[0].waypoint.lat, task.turnpoints[0].waypoint.lon]
@@ -1034,6 +1071,55 @@ export function createLeafletProvider(
 
       onTurnpointClick(callback: (turnpointIndex: number) => void) {
         turnpointClickCallback = callback;
+      },
+
+      onMapClick(callback: (lat: number, lon: number) => void) {
+        mapClickCallback = callback;
+      },
+
+      setInteractionMode(mode: MapInteractionMode) {
+        interactionMode = mode;
+        // Crosshair over bare ground in add-waypoint mode; interactive layers
+        // (waypoint dots) keep their own pointer cursor on hover via Leaflet.
+        container.style.cursor = mode === 'view' ? '' : 'crosshair';
+      },
+
+      setWaypoints(waypoints: MapWaypoint[]) {
+        waypointsData = waypoints;
+        waypointsGroup.clearLayers();
+        for (const wp of waypoints) {
+          const dot = new CircleMarker([wp.lat, wp.lon], {
+            radius: 5,
+            color: '#ffffff',
+            weight: 1.5,
+            fillColor: '#64748b',
+            fillOpacity: 0.9,
+            // No click handler and bubbling on: a tap (even dead-on a marker)
+            // reaches the map handler, which picks the nearest within tolerance.
+            bubblingPointerEvents: true,
+          });
+          const label = wp.code === wp.name ? wp.code : `${wp.code} — ${wp.name}`;
+          dot.bindTooltip(label, { direction: 'top', offset: [0, -6] });
+          waypointsGroup.addLayer(dot);
+        }
+      },
+
+      clearWaypoints() {
+        waypointsData = [];
+        waypointsGroup.clearLayers();
+      },
+
+      fitToWaypoints() {
+        if (waypointsData.length === 0) return;
+        const first = waypointsData[0];
+        const bounds = new LatLngBounds([first.lat, first.lon], [first.lat, first.lon]);
+        for (const w of waypointsData) bounds.extend([w.lat, w.lon]);
+        map.invalidateSize({ animate: false });
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 12, animate: true });
+      },
+
+      onWaypointClick(callback: (waypoint: MapWaypoint) => void) {
+        waypointsClickCallback = callback;
       },
 
       panToTurnpoint(turnpointIndex: number) {

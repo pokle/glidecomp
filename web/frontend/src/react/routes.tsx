@@ -15,6 +15,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { Onboarding } from "./pages/Onboarding";
 import { Competitions } from "./pages/Competitions";
 import { CompDetail } from "./pages/CompDetail";
+import { CompWaypoints } from "./pages/CompWaypoints";
 import { TaskDetail } from "./pages/TaskDetail";
 import { PilotScoreDetail } from "./pages/PilotScoreDetail";
 import { Scores } from "./pages/Scores";
@@ -65,6 +66,7 @@ export function AppRoutes() {
         <Route path="/u/:username" element={<Dashboard />} />
         <Route path="/comp" element={<Competitions />} />
         <Route path="/comp/:compId" element={<CompDetail />} />
+        <Route path="/comp/:compId/waypoints" element={<CompWaypoints />} />
         <Route path="/comp/:compId/task/:taskId" element={<TaskDetail />} />
         <Route
           path="/comp/:compId/task/:taskId/pilot/:pilotId"

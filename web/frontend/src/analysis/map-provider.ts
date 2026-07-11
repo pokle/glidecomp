@@ -49,6 +49,22 @@ export interface BestProgressRoute {
 export type MapInteractionMode = 'view' | 'add-waypoint';
 
 /**
+ * A pickable waypoint marker for the task route editor. Loaded from a
+ * competition waypoint file and drawn as a small clickable dot the user can
+ * pick to add as a turnpoint. `id` is opaque to the provider — it's echoed
+ * back through onWaypointClick so the caller can resolve the source record.
+ */
+export interface MapWaypoint {
+    id: string;
+    /** Short code shown as the marker label (e.g. "A01"). */
+    code: string;
+    /** Long descriptive name shown on hover (e.g. "BORDANO LANDING"). */
+    name: string;
+    lat: number;
+    lon: number;
+}
+
+/**
  * Bounds in degrees
  */
 export interface MapBounds {
@@ -68,8 +84,10 @@ export interface MapProvider {
     /** Clear the flight track from the map */
     clearTrack(): void;
 
-    /** Render task turnpoints and cylinders */
-    setTask(task: XCTask): Promise<void>;
+    /** Render task turnpoints and cylinders. By default fits the view to the
+     *  task when no track is loaded; pass `{ fit: false }` to leave the current
+     *  view alone (the route editor uses this so live edits don't re-zoom). */
+    setTask(task: XCTask, options?: { fit?: boolean }): Promise<void>;
 
     /** Clear the task from the map */
     clearTask(): void;
@@ -139,6 +157,23 @@ export interface MapProvider {
 
     /** Set the active interaction mode (controls which click/hover handlers fire) */
     setInteractionMode?(mode: MapInteractionMode): void;
+
+    // ── Editable waypoint markers (task route editor) ──
+
+    /** Draw pickable waypoint markers (loaded from a waypoint file). Replaces
+     *  any previously drawn set. Markers stay clickable in every interaction
+     *  mode so they can be picked while add-waypoint (map-click) mode is on. */
+    setWaypoints?(waypoints: MapWaypoint[]): void;
+
+    /** Clear all pickable waypoint markers */
+    clearWaypoints?(): void;
+
+    /** Fit the view to the currently-set waypoint markers (used after loading
+     *  a waypoint file so the whole set is visible). No-op if none are set. */
+    fitToWaypoints?(): void;
+
+    /** Register callback for when the user clicks a pickable waypoint marker */
+    onWaypointClick?(callback: (waypoint: MapWaypoint) => void): void;
 
     /** Pulse/glow the panel toggle button to draw attention (e.g. after flight load) */
     highlightPanelToggle?(): void;
