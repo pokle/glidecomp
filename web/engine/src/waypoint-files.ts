@@ -2,20 +2,40 @@
  * Multi-format waypoint file parsing.
  *
  * Competitions publish their turnpoint database in whatever the local
- * toolchain exports. We read the three formats organisers actually hand out:
- * OziExplorer .wpt, SeeYou .cup, and plain CSV. All normalise to the same
- * WaypointRecord (from ./waypoints) so the route editor can drop them onto
- * the map as pickable points. Coordinates come in two flavours — decimal
- * degrees, or the DDMM.mmm + hemisphere form CUP/Ozi use — and
- * parseCoordinateValue reads both.
+ * toolchain exports. We read the formats organisers hand out — OziExplorer
+ * and Garmin/PCX5/CompeGPS .wpt, SeeYou .cup, FS $FormatGEO/$FormatUTM, GPX,
+ * KML and plain CSV — normalising each to a WaypointFileRecord for the route
+ * editor to drop onto the map as pickable points.
+ *
+ * Every format carries two identifiers: a short **code** (e.g. "A01", "CURY")
+ * and a longer **name** (e.g. "BORDANO LANDING"). We keep them separate —
+ * they're shown separately and must survive a round-trip back to a file — so
+ * `code` and `name` are distinct fields (`name` falls back to `code` when a
+ * format has only one). Coordinates arrive as decimal degrees, DDMM.mmm +
+ * hemisphere, DMS, or UTM; each parser normalises to signed decimal degrees.
  *
  * This module is deliberately separate from ./waypoints: it is NOT part of
  * the scoring import closure (see scoring-version.test.ts), so adding file
  * formats here never forces a scoring-engine version bump. It's pure
- * string→number parsing; never hand-roll geo maths here.
+ * string→number parsing; never hand-roll geo maths here (UTM lives in ./utm).
  */
 import { parseWaypointsCSV, type WaypointRecord } from './waypoints';
 import { utmToLatLon } from './utm';
+
+/**
+ * A waypoint parsed from a file. `code` is the short identifier and `name`
+ * the long descriptive name; they are kept separate so both can be shown and
+ * re-exported. (Distinct from waypoints.ts's WaypointRecord, the CSV DB record
+ * used to enrich IGC tasks.)
+ */
+export interface WaypointFileRecord {
+  code: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  altitude: number;
+  radius: number;
+}
 
 /** The waypoint file formats we can read. */
 export type WaypointFileFormat =
@@ -30,7 +50,7 @@ export type WaypointFileFormat =
 
 export interface ParsedWaypointFile {
   format: WaypointFileFormat;
-  waypoints: WaypointRecord[];
+  waypoints: WaypointFileRecord[];
 }
 
 /**
@@ -110,9 +130,9 @@ function parseElevationValue(raw: string): number {
  * 10 = description/long name, 13 = proximity radius (m), 14 = elevation (m).
  * The short code in field 1 is the fallback name when field 10 is blank.
  */
-export function parseWaypointsWPT(content: string): WaypointRecord[] {
+export function parseWaypointsWPT(content: string): WaypointFileRecord[] {
   const lines = content.split(/\r?\n/);
-  const waypoints: WaypointRecord[] = [];
+  const waypoints: WaypointFileRecord[] = [];
   // Header is 4 fixed lines (magic, datum, Reserved 2, Reserved 3).
   for (let i = 4; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -122,15 +142,15 @@ export function parseWaypointsWPT(content: string): WaypointRecord[] {
     const latitude = parseFloat(f[2]);
     const longitude = parseFloat(f[3]);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
-    const description = (f[10] ?? '').trim();
-    const code = (f[1] ?? '').trim();
+    const longName = (f[10] ?? '').trim(); // field 10 is the descriptive name
+    const code = (f[1] ?? '').trim() || `WP${f[0]}`;
     const radius = f.length > 13 ? parseInt(f[13], 10) : NaN;
     const altitude = f.length > 14 ? parseInt(f[14], 10) : NaN;
     waypoints.push({
-      name: description || code || `WP${f[0]}`,
+      code,
+      name: longName || code,
       latitude,
       longitude,
-      description,
       radius: Number.isFinite(radius) && radius > 0 ? radius : 400,
       altitude: Number.isFinite(altitude) ? altitude : 0,
     });
@@ -145,12 +165,13 @@ export function parseWaypointsWPT(content: string): WaypointRecord[] {
  * form. CUP files end their waypoint block with a `-----Related Tasks-----`
  * marker, so parsing stops at the first all-dashes line.
  */
-function parseWaypointTable(content: string): WaypointRecord[] {
+function parseWaypointTable(content: string): WaypointFileRecord[] {
   const lines = content.split(/\r?\n/).filter((l) => l.trim() !== '');
   if (lines.length < 2) return [];
   const header = splitCsvLine(lines[0]).map((h) => h.toLowerCase().replace(/"/g, '').trim());
   const findCol = (...names: string[]) => header.findIndex((h) => names.includes(h));
   const iName = findCol('name', 'title');
+  const iCode = findCol('code');
   const iLat = findCol('lat', 'latitude');
   const iLon = findCol('lon', 'longitude', 'long');
   const iDesc = findCol('desc', 'description');
@@ -158,7 +179,7 @@ function parseWaypointTable(content: string): WaypointRecord[] {
   const iRadius = findCol('radius', 'proximity distance', 'proximity');
   if (iLat < 0 || iLon < 0) return [];
 
-  const waypoints: WaypointRecord[] = [];
+  const waypoints: WaypointFileRecord[] = [];
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
     if (line.startsWith('-----')) break; // CUP related-tasks section
@@ -167,15 +188,28 @@ function parseWaypointTable(content: string): WaypointRecord[] {
     const latitude = parseCoordinateValue(f[iLat] ?? '');
     const longitude = parseCoordinateValue(f[iLon] ?? '');
     if (latitude === null || longitude === null) continue;
-    const name = (iName >= 0 ? f[iName] : '').replace(/"/g, '').trim();
-    const description = iDesc >= 0 ? (f[iDesc] ?? '').replace(/"/g, '').trim() : '';
+    const cell = (idx: number) => (idx >= 0 ? (f[idx] ?? '').replace(/"/g, '').trim() : '');
+    const nameCell = cell(iName);
+    // SeeYou .cup has a dedicated `code` column (short id) with the long name
+    // in `name`; a generic CSV has no code column, so its "Name" column is the
+    // short code and "Description" the long name.
+    let code: string;
+    let longName: string;
+    if (iCode >= 0) {
+      code = cell(iCode) || nameCell;
+      longName = nameCell || code;
+    } else {
+      code = nameCell;
+      longName = cell(iDesc) || nameCell;
+    }
+    if (!code) code = `WP${i}`;
     const radius = iRadius >= 0 ? parseInt(f[iRadius], 10) : NaN;
     const altitude = iElev >= 0 ? parseElevationValue(f[iElev] ?? '') : 0;
     waypoints.push({
-      name: name || `WP${i}`,
+      code,
+      name: longName || code,
       latitude,
       longitude,
-      description,
       radius: Number.isFinite(radius) && radius > 0 ? radius : 400,
       altitude,
     });
@@ -184,7 +218,7 @@ function parseWaypointTable(content: string): WaypointRecord[] {
 }
 
 /** Parse a SeeYou .cup waypoint file (comma table with DDMM.mmm coords). */
-export function parseWaypointsCUP(content: string): WaypointRecord[] {
+export function parseWaypointsCUP(content: string): WaypointFileRecord[] {
   return parseWaypointTable(content);
 }
 
@@ -209,8 +243,8 @@ function parseDecimalHemiCoord(token: string): number | null {
  * The two coordinate tokens are the ones carrying a hemisphere letter; the
  * rest (symbol class, date, time, altitude, description) sit around them.
  */
-export function parseWaypointsPCX5(content: string): WaypointRecord[] {
-  const out: WaypointRecord[] = [];
+export function parseWaypointsPCX5(content: string): WaypointFileRecord[] {
+  const out: WaypointFileRecord[] = [];
   for (const line of content.split(/\r?\n/)) {
     if (!/^W\s/.test(line)) continue;
     const t = line.trim().split(/\s+/);
@@ -226,7 +260,7 @@ export function parseWaypointsPCX5(content: string): WaypointRecord[] {
     const lon = parseDecimalHemiCoord(t[coordIdx[1]]);
     if (lat === null || lon === null) continue;
     // Altitude is the first plain number after the coordinates; anything after
-    // that is the long description (CompeGPS carries "BORDANO LANDING" etc.).
+    // that is the long name (CompeGPS carries "BORDANO LANDING" etc.).
     let altitude = 0;
     let altIdx = -1;
     for (let i = coordIdx[1] + 1; i < t.length; i++) {
@@ -236,13 +270,13 @@ export function parseWaypointsPCX5(content: string): WaypointRecord[] {
         break;
       }
     }
-    const description =
-      altIdx >= 0 && altIdx + 1 < t.length ? t.slice(altIdx + 1).join(' ') : t[1] || '';
+    const code = t[1] || `WP${out.length + 1}`;
+    const longName = altIdx >= 0 && altIdx + 1 < t.length ? t.slice(altIdx + 1).join(' ') : '';
     out.push({
-      name: t[1] || `WP${out.length + 1}`,
+      code,
+      name: longName || code,
       latitude: lat,
       longitude: lon,
-      description,
       radius: 400,
       altitude,
     });
@@ -267,23 +301,25 @@ const firstTag = (body: string, tag: string): string | undefined => {
 
 /**
  * Parse a GPX 1.1 waypoint file: one `<wpt lat="…" lon="…">` per point with
- * `<name>`, optional `<ele>` (metres) and `<desc>`. Regex-based (no DOM) so
- * it stays dependency-free and SSR-safe. Attribute order is not assumed.
+ * `<name>` (the short code), optional `<ele>` (metres) and `<desc>`/`<cmt>`
+ * (the long name). Regex-based (no DOM) so it stays dependency-free and
+ * SSR-safe. Attribute order is not assumed.
  */
-export function parseWaypointsGPX(content: string): WaypointRecord[] {
-  const out: WaypointRecord[] = [];
+export function parseWaypointsGPX(content: string): WaypointFileRecord[] {
+  const out: WaypointFileRecord[] = [];
   for (const m of content.matchAll(/<wpt\b([^>]*)>([\s\S]*?)<\/wpt>/gi)) {
     const attrs = m[1];
     const lat = parseFloat(attrs.match(/\blat\s*=\s*"([^"]+)"/i)?.[1] ?? '');
     const lon = parseFloat(attrs.match(/\blon\s*=\s*"([^"]+)"/i)?.[1] ?? '');
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
-    const name = firstTag(m[2], 'name') || `WP${out.length + 1}`;
+    const code = firstTag(m[2], 'name') || `WP${out.length + 1}`;
+    const longName = firstTag(m[2], 'desc') || firstTag(m[2], 'cmt') || code;
     const ele = parseFloat(firstTag(m[2], 'ele') ?? '');
     out.push({
-      name,
+      code,
+      name: longName,
       latitude: lat,
       longitude: lon,
-      description: firstTag(m[2], 'desc') ?? '',
       radius: 400,
       altitude: Number.isFinite(ele) ? Math.round(ele) : 0,
     });
@@ -293,11 +329,12 @@ export function parseWaypointsGPX(content: string): WaypointRecord[] {
 
 /**
  * Parse a KML waypoint file: each `<Placemark>` with a `<Point>` becomes a
- * waypoint. KML coordinates are `lon,lat,alt`. We read only the Point's
- * coordinates (ignoring any LookAt/Camera view the placemark also carries).
+ * waypoint — `<name>` is the short code, `<description>` the long name. KML
+ * coordinates are `lon,lat,alt`. We read only the Point's coordinates
+ * (ignoring any LookAt/Camera view the placemark also carries).
  */
-export function parseWaypointsKML(content: string): WaypointRecord[] {
-  const out: WaypointRecord[] = [];
+export function parseWaypointsKML(content: string): WaypointFileRecord[] {
+  const out: WaypointFileRecord[] = [];
   for (const m of content.matchAll(/<Placemark\b[^>]*>([\s\S]*?)<\/Placemark>/gi)) {
     const body = m[1];
     const point = body.match(/<Point\b[^>]*>([\s\S]*?)<\/Point>/i);
@@ -309,11 +346,12 @@ export function parseWaypointsKML(content: string): WaypointRecord[] {
     const lat = parseFloat(parts[1]);
     const alt = parseFloat(parts[2] ?? '');
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    const code = firstTag(body, 'name') || `WP${out.length + 1}`;
     out.push({
-      name: firstTag(body, 'name') || `WP${out.length + 1}`,
+      code,
+      name: firstTag(body, 'description') || code,
       latitude: lat,
       longitude: lon,
-      description: '',
       radius: 400,
       altitude: Number.isFinite(alt) ? Math.round(alt) : 0,
     });
@@ -337,8 +375,8 @@ function dmsToDegrees(hemi: string, d: string, m: string, s: string): number | n
  * (degrees-minutes-seconds with hemisphere letters). Everything after the
  * altitude is the long name.
  */
-export function parseWaypointsFsGeo(content: string): WaypointRecord[] {
-  const out: WaypointRecord[] = [];
+export function parseWaypointsFsGeo(content: string): WaypointFileRecord[] {
+  const out: WaypointFileRecord[] = [];
   for (const line of content.split(/\r?\n/)) {
     const l = line.trim();
     if (!l || l.startsWith('$') || l.startsWith('#') || l.startsWith('*')) continue;
@@ -355,11 +393,13 @@ export function parseWaypointsFsGeo(content: string): WaypointRecord[] {
       altitude = Math.round(parseFloat(t[iLon + 4]));
       descStart = iLon + 5;
     }
+    const code = t.slice(0, iLat).join(' ') || `WP${out.length + 1}`;
+    const longName = t.slice(descStart).join(' ');
     out.push({
-      name: t.slice(0, iLat).join(' ') || `WP${out.length + 1}`,
+      code,
+      name: longName || code,
       latitude: lat,
       longitude: lon,
-      description: t.slice(descStart).join(' '),
       radius: 400,
       altitude,
     });
@@ -373,8 +413,8 @@ export function parseWaypointsFsGeo(content: string): WaypointRecord[] {
  * e.g. `A01   33T   0354663   5130093   225   BORDANO LANDING`. The grid
  * reference is converted to WGS84 lat/lon via geo.ts's utmToLatLon.
  */
-export function parseWaypointsUTM(content: string): WaypointRecord[] {
-  const out: WaypointRecord[] = [];
+export function parseWaypointsUTM(content: string): WaypointFileRecord[] {
+  const out: WaypointFileRecord[] = [];
   for (const line of content.split(/\r?\n/)) {
     const l = line.trim();
     if (!l || l.startsWith('$') || l.startsWith('#') || l.startsWith('*')) continue;
@@ -394,11 +434,13 @@ export function parseWaypointsUTM(content: string): WaypointRecord[] {
       altitude = Math.round(parseFloat(t[iZone + 3]));
       descStart = iZone + 4;
     }
+    const code = t.slice(0, iZone).join(' ') || `WP${out.length + 1}`;
+    const longName = t.slice(descStart).join(' ');
     out.push({
-      name: t.slice(0, iZone).join(' ') || `WP${out.length + 1}`,
+      code,
+      name: longName || code,
       latitude: lat,
       longitude: lon,
-      description: t.slice(descStart).join(' '),
       radius: 400,
       altitude,
     });
@@ -461,5 +503,15 @@ export function parseWaypointFile(content: string, filename?: string): ParsedWay
   // parser for the exact 6-column shape it was written for.
   const table = parseWaypointTable(content);
   if (table.length > 0) return { format: 'csv', waypoints: table };
-  return { format: 'csv', waypoints: parseWaypointsCSV(content) };
+  // Legacy WaypointRecord → WaypointFileRecord: its Name is the short code,
+  // its Description the long name.
+  const legacy = parseWaypointsCSV(content).map((w): WaypointFileRecord => ({
+    code: w.name,
+    name: w.description || w.name,
+    latitude: w.latitude,
+    longitude: w.longitude,
+    altitude: w.altitude,
+    radius: w.radius,
+  }));
+  return { format: 'csv', waypoints: legacy };
 }

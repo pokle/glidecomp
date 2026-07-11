@@ -761,7 +761,7 @@ export function createMapBoxProvider(
           source: 'waypoints',
           minzoom: 10,
           layout: {
-            'text-field': ['get', 'name'],
+            'text-field': ['get', 'code'],
             'text-size': 11,
             'text-offset': [0, 1.1],
             'text-anchor': 'top',
@@ -2860,7 +2860,7 @@ export function createMapBoxProvider(
             waypoints.map((w) => ({
               type: 'Feature' as const,
               geometry: { type: 'Point' as const, coordinates: [w.lon, w.lat] },
-              properties: { id: w.id, name: w.name },
+              properties: { id: w.id, code: w.code, name: w.name },
             })),
           );
         },

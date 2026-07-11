@@ -1098,7 +1098,8 @@ export function createLeafletProvider(
             // reaches the map handler, which picks the nearest within tolerance.
             bubblingPointerEvents: true,
           });
-          dot.bindTooltip(wp.name, { direction: 'top', offset: [0, -6] });
+          const label = wp.code === wp.name ? wp.code : `${wp.code} — ${wp.name}`;
+          dot.bindTooltip(label, { direction: 'top', offset: [0, -6] });
           waypointsGroup.addLayer(dot);
         }
       },

@@ -15,7 +15,11 @@ import { utcToZonedHHMM, zoneNameWithOffset } from "../lib/time";
 export interface RouteRow {
   /** Tabulator index field — unique per row, never reused within a dialog. */
   id: number;
+  /** Short code / turnpoint name (e.g. "A01"). */
   name: string;
+  /** Long descriptive name (e.g. "BORDANO LANDING"); kept separate from the
+   *  code so both survive a round-trip to a waypoint file. */
+  description: string;
   /** "" = plain turnpoint. */
   type: "" | TurnpointType;
   /** Google Maps format: "lat, lon" decimal degrees. */
@@ -83,6 +87,7 @@ export function turnpointToRow(tp: Turnpoint, id: number): RouteRow {
   return {
     id,
     name: tp.waypoint.name,
+    description: tp.waypoint.description ?? "",
     type: tp.type ?? "",
     coords: formatCoords(tp.waypoint.lat, tp.waypoint.lon),
     radius: tp.radius,
@@ -180,11 +185,14 @@ export function buildRoute(
     }
 
     if (coords) {
+      // Keep the long name only when it adds something beyond the code.
+      const description = String(row.description ?? "").trim();
       turnpoints.push({
         ...(row.type ? { type: row.type } : {}),
         radius: Number.isFinite(radius) ? radius : 0,
         waypoint: {
           name: name || "unnamed",
+          ...(description && description !== name ? { description } : {}),
           lat: coords.lat,
           lon: coords.lon,
           ...(altitude !== undefined ? { altSmoothed: altitude } : {}),

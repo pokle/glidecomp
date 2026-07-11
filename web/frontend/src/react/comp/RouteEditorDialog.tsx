@@ -20,7 +20,7 @@ import {
   toXctskJSON,
   type GoalConfig,
   type SSSConfig,
-  type WaypointRecord,
+  type WaypointFileRecord,
   type XCTask,
 } from "@glidecomp/engine";
 import type { MapWaypoint } from "../../analysis/map-provider";
@@ -116,7 +116,7 @@ export function RouteEditorDialog({
   // with the grid by recompute(). Seeded from the loaded task on first render.
   const [mapTask, setMapTask] = useState<XCTask | null>(xctsk);
   // Waypoints loaded from a file, shown on the map as pickable markers.
-  const [waypointRecords, setWaypointRecords] = useState<WaypointRecord[]>([]);
+  const [waypointRecords, setWaypointRecords] = useState<WaypointFileRecord[]>([]);
   const [waypointSource, setWaypointSource] = useState<string | null>(null);
   // When on, the next map tap places a brand-new waypoint (opens the dialog
   // below). When off (default), a tap picks the nearest loaded waypoint.
@@ -124,6 +124,7 @@ export function RouteEditorDialog({
   // New-waypoint dialog: the tapped point + the form fields it seeds.
   const [newPoint, setNewPoint] = useState<{ lat: number; lon: number } | null>(null);
   const [newName, setNewName] = useState("");
+  const [newDescription, setNewDescription] = useState("");
   const [newCoords, setNewCoords] = useState("");
   const [newAltitude, setNewAltitude] = useState("");
   const waypointInputRef = useRef<HTMLInputElement>(null);
@@ -166,6 +167,7 @@ export function RouteEditorDialog({
     return {
       id: nextRowId(),
       name: `WP ${wpCounterRef.current}`,
+      description: "",
       type: "",
       coords: "",
       radius: NEW_ROW_RADIUS,
@@ -300,13 +302,20 @@ export function RouteEditorDialog({
         cellClick: (_e: UIEvent, cell: CellComponent) => insertAbove(cell),
       },
       {
-        title: "Name",
+        title: "Code",
         field: "name",
         editor: "input",
         // Select the existing value on edit so typing replaces it (matches
         // spreadsheet behaviour; without this, mobile taps append text).
         editorParams: { selectContents: true },
-        minWidth: 130,
+        minWidth: 110,
+      },
+      {
+        title: "Name",
+        field: "description",
+        editor: "input",
+        editorParams: { selectContents: true },
+        minWidth: 140,
       },
       {
         title: "Type",
@@ -374,6 +383,7 @@ export function RouteEditorDialog({
     () =>
       waypointRecords.map((w, i) => ({
         id: String(i),
+        code: w.code,
         name: w.name,
         lat: w.latitude,
         lon: w.longitude,
@@ -381,14 +391,17 @@ export function RouteEditorDialog({
     [waypointRecords]
   );
 
-  /** Append a turnpoint from a picked waypoint marker (rowAdded → recompute). */
+  /** Append a turnpoint from a picked waypoint marker (rowAdded → recompute).
+   *  The short code becomes the turnpoint name; the long name is kept as the
+   *  description so both survive save/export. */
   const pickWaypoint = useCallback(
     (wp: MapWaypoint) => {
       const rec = waypointRecords[Number(wp.id)];
       wpCounterRef.current++;
       void tableRef.current?.addRow({
         id: ++rowIdRef.current,
-        name: wp.name,
+        name: wp.code,
+        description: rec && rec.name !== rec.code ? rec.name : "",
         type: "",
         coords: formatCoords(wp.lat, wp.lon),
         radius: rec && rec.radius > 0 ? rec.radius : NEW_ROW_RADIUS,
@@ -407,6 +420,7 @@ export function RouteEditorDialog({
   const beginNewPoint = useCallback((lat: number, lon: number) => {
     setNewPoint({ lat, lon });
     setNewName("");
+    setNewDescription("");
     setNewCoords(formatCoords(lat, lon));
     setNewAltitude("");
     setAddMode(false);
@@ -424,6 +438,7 @@ export function RouteEditorDialog({
     void tableRef.current?.addRow({
       id: ++rowIdRef.current,
       name: newName.trim() || "Waypoint",
+      description: newDescription.trim(),
       type: "",
       coords: formatCoords(coords.lat, coords.lon),
       radius: NEW_ROW_RADIUS,
@@ -1057,16 +1072,26 @@ export function RouteEditorDialog({
           <DialogTitle>New waypoint</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Placed from your tap on the map. Name it, add an altitude if you know
-          it, and adjust the coordinates if needed.
+          Placed from your tap on the map. Give it a code, optionally a longer
+          name and an altitude, and adjust the coordinates if needed.
         </p>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Name</span>
+          <span className="font-medium">Code</span>
           <Input
             autoFocus
-            placeholder="Waypoint name"
+            placeholder="e.g. A01"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">
+            Name <span className="text-muted-foreground">— optional</span>
+          </span>
+          <Input
+            placeholder="e.g. Bordano Landing"
+            value={newDescription}
+            onChange={(e) => setNewDescription(e.target.value)}
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">

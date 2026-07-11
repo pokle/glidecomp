@@ -18,6 +18,7 @@ function row(overrides: Partial<RouteRow> = {}): RouteRow {
   return {
     id: overrides.id ?? 1,
     name: "Mt Emu",
+    description: "",
     type: "",
     coords: "-36.550979, 147.890395",
     radius: 400,
@@ -63,11 +64,12 @@ describe("turnpointToRow", () => {
     const tp: Turnpoint = {
       type: "SSS",
       radius: 2000,
-      waypoint: { name: "Start", lat: -36.5, lon: 147.9, altSmoothed: 680 },
+      waypoint: { name: "STRT", description: "Start Hill", lat: -36.5, lon: 147.9, altSmoothed: 680 },
     };
     expect(turnpointToRow(tp, 7)).toEqual({
       id: 7,
-      name: "Start",
+      name: "STRT",
+      description: "Start Hill",
       type: "SSS",
       coords: "-36.500000, 147.900000",
       radius: 2000,
@@ -100,9 +102,25 @@ describe("buildRoute", () => {
     expect("type" in result.turnpoints[2]).toBe(false);
   });
 
+  it("keeps the long name as the waypoint description, separate from the code", () => {
+    const result = buildRoute(
+      [row({ id: 1, name: "A01", description: "Bordano Landing" })],
+      { openDistance: false }
+    );
+    expect(result.turnpoints[0].waypoint.name).toBe("A01");
+    expect(result.turnpoints[0].waypoint.description).toBe("Bordano Landing");
+  });
+
+  it("omits the description when it only repeats the code", () => {
+    const result = buildRoute([row({ id: 1, name: "CURY", description: "CURY" })], {
+      openDistance: false,
+    });
+    expect("description" in result.turnpoints[0].waypoint).toBe(false);
+  });
+
   it("skips entirely blank rows (a stray inserted row can't block a save)", () => {
     const result = buildRoute(
-      [row({ id: 1 }), { id: 2, name: "", type: "", coords: "", radius: 400, altitude: "", leg: null }],
+      [row({ id: 1 }), { id: 2, name: "", description: "", type: "", coords: "", radius: 400, altitude: "", leg: null }],
       { openDistance: false }
     );
     expect(result.errors).toEqual([]);

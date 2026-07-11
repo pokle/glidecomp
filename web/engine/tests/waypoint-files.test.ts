@@ -12,8 +12,8 @@ import {
   parseWaypointFile,
   parseCoordinateValue,
   type WaypointFileFormat,
+  type WaypointFileRecord,
 } from '../src/waypoint-files';
-import { type WaypointRecord } from '../src/waypoints';
 
 // Real Corryong turnpoints, one per format. CORRY and ELLIOT are the anchors
 // checked across formats: every format must decode to the same decimal
@@ -57,10 +57,11 @@ CORRY,-36.185000,147.891400,Corryong Airport,1000,954
 ELLIOT,-36.185833,147.976667,,5000,3067
 `;
 
-function byName(list: { name: string }[], name: string): WaypointRecord {
-  const wp = list.find((w) => w.name === name);
-  if (!wp) throw new Error(`waypoint ${name} not found`);
-  return wp as WaypointRecord;
+// Look up by the short code (or long name) — tests reference points by code.
+function byName(list: WaypointFileRecord[], id: string): WaypointFileRecord {
+  const wp = list.find((w) => w.code === id || w.name === id);
+  if (!wp) throw new Error(`waypoint ${id} not found`);
+  return wp;
 }
 
 describe('parseCoordinateValue', () => {
@@ -266,7 +267,8 @@ describe('parseWaypointsFsGeo (FS $FormatGEO, DMS)', () => {
     expect(a01.latitude).toBeCloseTo(A01.lat, 4);
     expect(a01.longitude).toBeCloseTo(A01.lon, 4);
     expect(a01.altitude).toBe(225);
-    expect(a01.description).toBe('BORDANO LANDING [A]');
+    expect(a01.code).toBe('A01');
+    expect(a01.name).toBe('BORDANO LANDING [A]');
   });
 });
 
@@ -287,7 +289,8 @@ describe('parseWaypointsPCX5 with CompeGPS extras', () => {
     expect(wps).toHaveLength(2); // the two `w Airport,...` lines are ignored
     const a01 = byName(wps, 'A01');
     expect(a01.latitude).toBeCloseTo(A01.lat, 4);
-    expect(a01.description).toBe('BORDANO LANDING');
+    expect(a01.code).toBe('A01');
+    expect(a01.name).toBe('BORDANO LANDING');
   });
 });
 
@@ -326,12 +329,13 @@ describe('all seven hg-worlds reference files parse', () => {
       if (!existsSync(path)) return; // reference data not present in this checkout
       const { waypoints } = parseWaypointFile(readFileSync(path, 'utf8'), f);
       expect(waypoints.length).toBe(183);
-      // A01 is named by code in most formats, by long name in OZI/SeeYou —
-      // match on coordinates instead, which every format must agree on.
+      // Every format carries the same short code and long name for A01 (FS's
+      // GEO/UTM exports append a " [A]" class tag, which we keep verbatim).
       const a01 = waypoints.find(
         (w) => Math.abs(w.latitude - A01.lat) < 1e-3 && Math.abs(w.longitude - A01.lon) < 1e-3
       );
-      expect(a01).toBeDefined();
+      expect(a01?.code).toBe('A01');
+      expect(a01?.name).toContain('BORDANO LANDING');
     });
   }
 });

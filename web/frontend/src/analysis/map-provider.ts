@@ -56,6 +56,9 @@ export type MapInteractionMode = 'view' | 'add-waypoint';
  */
 export interface MapWaypoint {
     id: string;
+    /** Short code shown as the marker label (e.g. "A01"). */
+    code: string;
+    /** Long descriptive name shown on hover (e.g. "BORDANO LANDING"). */
     name: string;
     lat: number;
     lon: number;
