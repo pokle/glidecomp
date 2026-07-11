@@ -26,6 +26,7 @@ export default function RouteMap({
   task,
   waypoints,
   addMode,
+  fitNonce,
   onWaypointPick,
   onMapPick,
 }: {
@@ -39,6 +40,12 @@ export default function RouteMap({
    * onMapPick so the editor can place a brand-new waypoint (crosshair cursor).
    */
   addMode: boolean;
+  /**
+   * Bump this to fit the view to the current waypoints (e.g. after loading a
+   * file). Fitting is NOT tied to every `waypoints` change, so editing a
+   * coordinate doesn't re-zoom the map out from under the user.
+   */
+  fitNonce?: number;
   onWaypointPick: (waypoint: MapWaypoint) => void;
   onMapPick: (lat: number, lon: number) => void;
 }) {
@@ -114,12 +121,21 @@ export default function RouteMap({
   useEffect(() => {
     if (!provider) return;
     provider.setWaypoints?.(waypoints);
-    // Loading a file (waypoints becomes non-empty) zooms/pans to show them all.
-    if (waypoints.length > 0) provider.fitToWaypoints?.();
     return () => {
       if (!destroyedRef.current) provider.clearWaypoints?.();
     };
   }, [provider, waypoints]);
+
+  // Fit to the waypoints only when the caller bumps fitNonce (e.g. after a
+  // load), so editing a coordinate doesn't re-zoom the map.
+  const lastFitNonce = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!provider || waypoints.length === 0) return;
+    if (fitNonce !== lastFitNonce.current) {
+      lastFitNonce.current = fitNonce;
+      provider.fitToWaypoints?.();
+    }
+  }, [provider, fitNonce, waypoints]);
 
   useEffect(() => {
     if (!provider) return;

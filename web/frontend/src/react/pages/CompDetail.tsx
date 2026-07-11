@@ -220,6 +220,7 @@ function CompDetailView({
         <a href="#tasks" className="hover:text-foreground hover:underline underline-offset-4">Tasks</a>
         <a href="#scores" className="hover:text-foreground hover:underline underline-offset-4">Scores</a>
         <a href="#pilots" className="hover:text-foreground hover:underline underline-offset-4">Pilots</a>
+        <Link to={`/comp/${compId}/waypoints`} className="hover:text-foreground hover:underline underline-offset-4">Waypoints</Link>
         <a href="#activity" className="hover:text-foreground hover:underline underline-offset-4">Activity</a>
         <a href="#admins" className="hover:text-foreground hover:underline underline-offset-4">Admins</a>
       </nav>

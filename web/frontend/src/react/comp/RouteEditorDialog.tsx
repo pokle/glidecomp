@@ -15,7 +15,6 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
 import {
   getOptimizedSegmentDistances,
-  parseWaypointFile,
   parseXCTaskAsync,
   toXctskJSON,
   type GoalConfig,
@@ -48,7 +47,6 @@ import {
   editableGates,
   formatCoords,
   gateToHHMM,
-  parseCoords,
   turnpointsToCSV,
   turnpointToRow,
   xctskForPatch,
@@ -115,19 +113,14 @@ export function RouteEditorDialog({
   // Live task fed to the map (cylinders + optimised route line), kept in sync
   // with the grid by recompute(). Seeded from the loaded task on first render.
   const [mapTask, setMapTask] = useState<XCTask | null>(xctsk);
-  // Waypoints loaded from a file, shown on the map as pickable markers.
+  // The competition's shared waypoints (loaded once on open), shown on the map
+  // and in a searchable list. Turnpoints are picked from this set only — the
+  // task copies each waypoint's details in, so it can't be changed after the
+  // fact by editing the competition waypoints.
   const [waypointRecords, setWaypointRecords] = useState<WaypointFileRecord[]>([]);
-  const [waypointSource, setWaypointSource] = useState<string | null>(null);
-  // When on, the next map tap places a brand-new waypoint (opens the dialog
-  // below). When off (default), a tap picks the nearest loaded waypoint.
-  const [addMode, setAddMode] = useState(false);
-  // New-waypoint dialog: the tapped point + the form fields it seeds.
-  const [newPoint, setNewPoint] = useState<{ lat: number; lon: number } | null>(null);
-  const [newName, setNewName] = useState("");
-  const [newDescription, setNewDescription] = useState("");
-  const [newCoords, setNewCoords] = useState("");
-  const [newAltitude, setNewAltitude] = useState("");
-  const waypointInputRef = useRef<HTMLInputElement>(null);
+  const [wpLoading, setWpLoading] = useState(true);
+  const [wpSearch, setWpSearch] = useState("");
+  const [wpFitNonce, setWpFitNonce] = useState(0);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [xcontestCode, setXcontestCode] = useState("");
   const [xcontestLoading, setXcontestLoading] = useState(false);
@@ -140,7 +133,31 @@ export function RouteEditorDialog({
   // Row ids must be unique for Tabulator's index-based updates; never reuse.
   const rowIdRef = useRef(0);
   const nextRowId = () => ++rowIdRef.current;
-  const wpCounterRef = useRef(xctsk?.turnpoints.length ?? 0);
+
+  // Load the competition's waypoints once, to pick turnpoints from.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await api.api.comp[":comp_id"].waypoints.$get({
+          param: { comp_id: compId },
+        });
+        if (cancelled) return;
+        const data = res.ok
+          ? ((await res.json()) as unknown as { waypoints: WaypointFileRecord[] })
+          : { waypoints: [] };
+        setWaypointRecords(data.waypoints);
+        setWpFitNonce((n) => n + 1);
+      } catch {
+        /* leave the list empty; the empty-state points at the waypoints page */
+      } finally {
+        if (!cancelled) setWpLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [compId]);
 
   // Start (SSS) panel state
   const [sssType, setSssType] = useState<SSSConfig["type"]>(xctsk?.sss?.type ?? "RACE");
@@ -161,20 +178,6 @@ export function RouteEditorDialog({
     const hhmm = xctsk?.goal?.deadline ? gateToHHMM(xctsk.goal.deadline) : null;
     return hhmm ? toDisplayTime(hhmm) : "";
   });
-
-  function newRow(): RouteRow {
-    wpCounterRef.current++;
-    return {
-      id: nextRowId(),
-      name: `WP ${wpCounterRef.current}`,
-      description: "",
-      type: "",
-      coords: "",
-      radius: NEW_ROW_RADIUS,
-      altitude: "",
-      leg: null,
-    };
-  }
 
   /** Re-validate and recompute optimized leg/total distances from the grid. */
   const recompute = useCallback(() => {
@@ -273,10 +276,6 @@ export function RouteEditorDialog({
    * editable fields, the computed leg distance, and a remove button.
    */
   function gridColumns(): ColumnDefinition[] {
-    const insertAbove = (cell: CellComponent) => {
-      const t = tableRef.current;
-      if (t) void t.addRow(newRow(), true, cell.getRow());
-    };
     return [
       {
         title: "",
@@ -293,29 +292,18 @@ export function RouteEditorDialog({
         width: 44,
         hozAlign: "right",
       },
-      {
-        title: "",
-        width: 36,
-        hozAlign: "center",
-        formatter: () =>
-          '<span class="text-muted-foreground cursor-pointer" title="Insert turnpoint above">＋</span>',
-        cellClick: (_e: UIEvent, cell: CellComponent) => insertAbove(cell),
-      },
+      // Code / Name / Coordinates / Alt are copied from the competition
+      // waypoint and shown read-only; the task's task-specific fields (Type,
+      // Radius) stay editable.
       {
         title: "Code",
         field: "name",
-        editor: "input",
-        // Select the existing value on edit so typing replaces it (matches
-        // spreadsheet behaviour; without this, mobile taps append text).
-        editorParams: { selectContents: true },
-        minWidth: 110,
+        minWidth: 90,
       },
       {
         title: "Name",
         field: "description",
-        editor: "input",
-        editorParams: { selectContents: true },
-        minWidth: 140,
+        minWidth: 130,
       },
       {
         title: "Type",
@@ -330,8 +318,6 @@ export function RouteEditorDialog({
       {
         title: "Coordinates (lat, lon)",
         field: "coords",
-        editor: "input",
-        editorParams: { selectContents: true },
         minWidth: 190,
       },
       {
@@ -345,8 +331,6 @@ export function RouteEditorDialog({
       {
         title: "Alt (m)",
         field: "altitude",
-        editor: "number",
-        editorParams: { selectContents: true, min: -1000, max: 30000 },
         hozAlign: "right",
         minWidth: 80,
       },
@@ -373,12 +357,8 @@ export function RouteEditorDialog({
     ];
   }
 
-  function addTurnpoint() {
-    void tableRef.current?.addRow(newRow());
-  }
-
-  // Loaded waypoints as map markers (index is the marker id, resolved back to
-  // the record on pick so radius/altitude carry across).
+  // Competition waypoints as map markers (index is the marker id, resolved
+  // back to the record on pick so all details carry across).
   const mapWaypoints: MapWaypoint[] = useMemo(
     () =>
       waypointRecords.map((w, i) => ({
@@ -391,83 +371,41 @@ export function RouteEditorDialog({
     [waypointRecords]
   );
 
-  /** Append a turnpoint from a picked waypoint marker (rowAdded → recompute).
-   *  The short code becomes the turnpoint name; the long name is kept as the
-   *  description so both survive save/export. */
+  // Filtered list for the searchable picker (by code or name).
+  const filteredWaypoints = useMemo(() => {
+    const q = wpSearch.trim().toLowerCase();
+    if (!q) return waypointRecords;
+    return waypointRecords.filter(
+      (w) => w.code.toLowerCase().includes(q) || w.name.toLowerCase().includes(q)
+    );
+  }, [waypointRecords, wpSearch]);
+
+  /**
+   * Append a turnpoint by COPYING a competition waypoint's details (code, long
+   * name, coordinates, radius, altitude) into the task — so a later edit to
+   * the competition waypoint never changes this task.
+   */
+  const addTurnpointFromRecord = useCallback((rec: WaypointFileRecord) => {
+    void tableRef.current?.addRow({
+      id: ++rowIdRef.current,
+      name: rec.code,
+      description: rec.name !== rec.code ? rec.name : "",
+      type: "",
+      coords: formatCoords(rec.latitude, rec.longitude),
+      radius: rec.radius > 0 ? rec.radius : NEW_ROW_RADIUS,
+      altitude: rec.altitude ? rec.altitude : "",
+      leg: null,
+    } satisfies RouteRow);
+  }, []);
+
+  /** Pick from the map: the nearest marker, resolved to its record by id. */
   const pickWaypoint = useCallback(
     (wp: MapWaypoint) => {
       const rec = waypointRecords[Number(wp.id)];
-      wpCounterRef.current++;
-      void tableRef.current?.addRow({
-        id: ++rowIdRef.current,
-        name: wp.code,
-        description: rec && rec.name !== rec.code ? rec.name : "",
-        type: "",
-        coords: formatCoords(wp.lat, wp.lon),
-        radius: rec && rec.radius > 0 ? rec.radius : NEW_ROW_RADIUS,
-        altitude: rec && rec.altitude ? rec.altitude : "",
-        leg: null,
-      } satisfies RouteRow);
+      if (rec) addTurnpointFromRecord(rec);
     },
-    [waypointRecords]
+    [waypointRecords, addTurnpointFromRecord]
   );
-
-  /**
-   * A tap on bare map in add mode: open the new-waypoint dialog seeded with the
-   * tapped coordinates (name/altitude entered there, coordinates editable), and
-   * leave add mode so the next tap picks waypoints again.
-   */
-  const beginNewPoint = useCallback((lat: number, lon: number) => {
-    setNewPoint({ lat, lon });
-    setNewName("");
-    setNewDescription("");
-    setNewCoords(formatCoords(lat, lon));
-    setNewAltitude("");
-    setAddMode(false);
-  }, []);
-
-  /** Commit the new-waypoint dialog as a turnpoint row. */
-  function addNewPoint() {
-    const coords = parseCoords(newCoords);
-    if (!coords) {
-      toast.error('Enter coordinates as "lat, lon" decimal degrees');
-      return;
-    }
-    const altText = newAltitude.trim();
-    const alt = Number(altText);
-    void tableRef.current?.addRow({
-      id: ++rowIdRef.current,
-      name: newName.trim() || "Waypoint",
-      description: newDescription.trim(),
-      type: "",
-      coords: formatCoords(coords.lat, coords.lon),
-      radius: NEW_ROW_RADIUS,
-      altitude: altText !== "" && Number.isFinite(alt) ? alt : "",
-      leg: null,
-    } satisfies RouteRow);
-    setNewPoint(null);
-  }
-
-  /** Load a waypoint file (.wpt/.cup/.csv) into pickable map markers. */
-  async function loadWaypointFile(input: HTMLInputElement) {
-    const file = input.files?.[0];
-    input.value = ""; // allow re-selecting the same file
-    if (!file) return;
-    try {
-      const { waypoints } = parseWaypointFile(await file.text(), file.name);
-      if (waypoints.length === 0) {
-        toast.error(`No waypoints found in ${file.name}`);
-        return;
-      }
-      setWaypointRecords(waypoints);
-      setWaypointSource(file.name);
-      toast.success(
-        `Loaded ${waypoints.length} waypoint${waypoints.length === 1 ? "" : "s"} from ${file.name}`
-      );
-    } catch {
-      toast.error(`Could not read ${file.name} as a waypoint file`);
-    }
-  }
 
   /** Load a parsed task into the editor (grid + panels + base fields). */
   async function loadTask(task: XCTask, sourceLabel: string) {
@@ -486,7 +424,6 @@ export function RouteEditorDialog({
     }
     baseRef.current = task;
     await table.setData(task.turnpoints.map((tp) => turnpointToRow(tp, nextRowId())));
-    wpCounterRef.current = task.turnpoints.length;
     setSssType(task.sss?.type ?? "RACE");
     setDirection(task.sss?.direction ?? "EXIT");
     setGates(editableGates(task.sss).map(toDisplayTime));
@@ -690,7 +627,6 @@ export function RouteEditorDialog({
   const extraErrors = errors.length - shownErrors.length;
 
   return (
-    <>
     <Dialog
       open
       onOpenChange={(open) => {
@@ -717,51 +653,10 @@ export function RouteEditorDialog({
         ) : null}
 
         <div className="grid gap-4 lg:grid-cols-2">
-          {/* Map — floats at the top on narrow screens, sits on the right on
-              wide ones (same pattern as the score-explainer map). */}
+          {/* Map + waypoint picker — floats at the top on narrow screens, sits
+              on the right on wide ones (same pattern as the score-explainer). */}
           <div className="order-1 flex flex-col gap-2 lg:order-2 lg:sticky lg:top-0 lg:self-start">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant={addMode ? "default" : "outline"}
-                size="sm"
-                aria-pressed={addMode}
-                onClick={() => setAddMode((a) => !a)}
-              >
-                {addMode ? "Tap the map to place…" : "Add waypoint"}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => waypointInputRef.current?.click()}
-              >
-                Load waypoints
-              </Button>
-              <input
-                ref={waypointInputRef}
-                type="file"
-                accept=".wpt,.cup,.csv,.txt,.gpx,.kml"
-                hidden
-                onChange={(e) => void loadWaypointFile(e.currentTarget)}
-              />
-              {waypointSource ? (
-                <span className="text-sm text-muted-foreground">
-                  {waypointRecords.length} from {waypointSource}
-                  <button
-                    type="button"
-                    className="ml-1.5 underline hover:text-foreground"
-                    onClick={() => {
-                      setWaypointRecords([]);
-                      setWaypointSource(null);
-                    }}
-                  >
-                    clear
-                  </button>
-                </span>
-              ) : null}
-            </div>
-            <div className="h-64 overflow-hidden rounded border border-border sm:h-72 lg:h-[440px]">
+            <div className="h-64 overflow-hidden rounded border border-border sm:h-72 lg:h-[360px]">
               <Suspense
                 fallback={
                   <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -773,20 +668,62 @@ export function RouteEditorDialog({
                   <RouteMap
                     task={mapTask}
                     waypoints={mapWaypoints}
-                    addMode={addMode}
+                    addMode={false}
+                    fitNonce={wpFitNonce}
                     onWaypointPick={pickWaypoint}
-                    onMapPick={beginNewPoint}
+                    onMapPick={() => {}}
                   />
                 ) : null}
               </Suspense>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {addMode
-                ? "Tap anywhere on the map to place a new waypoint."
-                : waypointRecords.length > 0
-                  ? "Tap near a waypoint to add it as a turnpoint. Use Add waypoint to place a point that isn’t in the file."
-                  : "Load a waypoint file to tap turnpoints onto the route, or use Add waypoint to place one anywhere."}
-            </p>
+            {/* Searchable list of the competition's waypoints to pick from. */}
+            {wpLoading ? (
+              <p className="text-xs text-muted-foreground">Loading competition waypoints…</p>
+            ) : waypointRecords.length === 0 ? (
+              <p className="rounded border border-dashed border-border p-3 text-xs text-muted-foreground">
+                This competition has no waypoints yet.{" "}
+                <a
+                  href={`/comp/${compId}/waypoints`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline hover:text-foreground"
+                >
+                  Add waypoints to the competition
+                </a>{" "}
+                first, then pick them here.
+              </p>
+            ) : (
+              <>
+                <Input
+                  className="h-8"
+                  placeholder={`Search ${waypointRecords.length} waypoints…`}
+                  aria-label="Search competition waypoints"
+                  value={wpSearch}
+                  onChange={(e) => setWpSearch(e.target.value)}
+                />
+                <div className="max-h-40 overflow-y-auto rounded border border-border">
+                  {filteredWaypoints.slice(0, 200).map((w, i) => (
+                    <button
+                      key={`${w.code}-${i}`}
+                      type="button"
+                      className="flex w-full items-baseline gap-2 px-2 py-1 text-left text-sm hover:bg-accent"
+                      onClick={() => addTurnpointFromRecord(w)}
+                    >
+                      <span className="font-medium">{w.code}</span>
+                      {w.name !== w.code ? (
+                        <span className="truncate text-muted-foreground">{w.name}</span>
+                      ) : null}
+                    </button>
+                  ))}
+                  {filteredWaypoints.length === 0 ? (
+                    <p className="px-2 py-1.5 text-sm text-muted-foreground">No matches</p>
+                  ) : null}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Click a waypoint (or tap it on the map) to add it as a turnpoint.
+                </p>
+              </>
+            )}
           </div>
 
           {/* Editable turnpoint grid */}
@@ -797,15 +734,6 @@ export function RouteEditorDialog({
               className="h-[320px] shrink-0 rounded border border-border"
             />
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!gridReady}
-                onClick={addTurnpoint}
-              >
-                Add turnpoint
-              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -1064,70 +992,5 @@ export function RouteEditorDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-
-    {/* New-waypoint dialog: opened by tapping the map in add mode. */}
-    <Dialog open={newPoint !== null} onOpenChange={(open) => { if (!open) setNewPoint(null); }}>
-      <DialogContent className="flex flex-col gap-3 sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>New waypoint</DialogTitle>
-        </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          Placed from your tap on the map. Give it a code, optionally a longer
-          name and an altitude, and adjust the coordinates if needed.
-        </p>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Code</span>
-          <Input
-            autoFocus
-            placeholder="e.g. A01"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">
-            Name <span className="text-muted-foreground">— optional</span>
-          </span>
-          <Input
-            placeholder="e.g. Bordano Landing"
-            value={newDescription}
-            onChange={(e) => setNewDescription(e.target.value)}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Coordinates (lat, lon)</span>
-          <Input
-            value={newCoords}
-            spellCheck={false}
-            onChange={(e) => setNewCoords(e.target.value)}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">
-            Altitude (m) <span className="text-muted-foreground">— optional</span>
-          </span>
-          <Input
-            type="number"
-            inputMode="numeric"
-            placeholder="e.g. 935"
-            value={newAltitude}
-            onChange={(e) => setNewAltitude(e.target.value)}
-          />
-        </label>
-        <DialogFooter>
-          <DialogClose render={<Button type="button" variant="outline" />}>
-            Cancel
-          </DialogClose>
-          <Button
-            type="button"
-            disabled={newName.trim() === "" || parseCoords(newCoords) === null}
-            onClick={addNewPoint}
-          >
-            Add waypoint
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-    </>
   );
 }
