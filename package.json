@@ -20,6 +20,7 @@
     "dev:workers": "[ -d node_modules ] || bun install; bun run db:migrate && concurrently --kill-others-on-fail -n auth,comp,airscore -c blue,green,yellow 'bun run dev:auth' 'bun run dev:comp' 'bun run dev:airscore'",
     "db:migrate": "CI=true wrangler --config web/workers/auth-api/wrangler.toml d1 migrations apply taskscore-auth --local --persist-to web/.wrangler/state",
     "kill-dev": "bash web/scripts/kill-dev.sh",
+    "kill-state": "bash web/scripts/kill-state.sh",
     "dev:airscore": "bun run --filter airscore-api dev",
     "dev:frontend": "bun run --filter '@glidecomp/frontend' dev",
     "build": "bun run --filter '@glidecomp/frontend' build",
