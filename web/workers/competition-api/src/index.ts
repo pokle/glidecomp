@@ -5,6 +5,7 @@ import { MAX_BODY_BYTES } from "./igc-validation";
 import type { Env, AuthUser } from "./env";
 import { compRoutes } from "./routes/comp";
 import { taskRoutes } from "./routes/task";
+import { waypointsRoutes } from "./routes/waypoints";
 import { igcRoutes } from "./routes/igc";
 import { pilotRoutes } from "./routes/pilot";
 import { pilotStatusRoutes } from "./routes/pilot-status";
@@ -92,6 +93,7 @@ const routes = app
   .route("/", manualFlightRoutes)
   .route("/", compRoutes)
   .route("/", taskRoutes)
+  .route("/", waypointsRoutes)
   .route("/", scoreRoutes)
   .route("/", auditRoutes)
   .route("/", userFilesRoutes)

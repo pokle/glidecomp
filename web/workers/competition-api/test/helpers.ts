@@ -94,6 +94,7 @@ export async function clearCompData(): Promise<void> {
     env.DB.prepare("DELETE FROM task"),
     env.DB.prepare("DELETE FROM comp_pilot"),
     env.DB.prepare("DELETE FROM comp_admin"),
+    env.DB.prepare("DELETE FROM comp_waypoints"),
     env.DB.prepare("DELETE FROM comp"),
     env.DB.prepare("DELETE FROM pilot"),
     // Re-seed test users: the Cloudflare vitest pool uses per-test storage
