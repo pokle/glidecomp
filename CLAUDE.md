@@ -24,6 +24,8 @@ If `node_modules/` is missing or a dependency can't be resolved, run `bun instal
 
 **Production:** https://glidecomp.com
 
+**Branch preview deploys:** every branch gets a Cloudflare Pages branch-alias URL: `https://<slug>.glidecomp.pages.dev`, where `<slug>` is the branch name lowercased, non-alphanumerics replaced with `-`, and truncated to 28 chars (e.g. `claude/map-point-picker-routes-s5iyhx` → `claude-map-point-picker-rout`). The alias always tracks the branch's latest commit. **When you open or push to a PR, always include this branch preview URL in the PR body and show it in the chat.**
+
 **Updating bundled data:**
 - **Sample competition:** the bundled Corryong Cup 2026 comp lives under `web/samples/comps/`, one folder per task (`corryong-cup-2026-<class>-t<N>`) plus a `corryong-cup-2026/` meta folder (`comp.json` manifest + region `waypoints.wpt`/`.json`). AirScore scores the event as two comps — **open** and **floater** — flying different tasks per day; here they become one comp with two pilot classes (a pilot who flew both, e.g. CIVL 46402, gets one `comp_pilot` row per class).
   - **Re-download from source:** `bun web/scripts/download-airscore-comp.ts corryong-cup-2026` — idempotent, politely rate-limited (`REQUEST_DELAY_MS`, default 3500ms). Rebuilds every task folder + waypoints from xc.highcloud.net; a folder with a `.curated` marker (e.g. `corryong-cup-2026-open-t1`, the AirScore-parity fixture) is left untouched. Add new comps to the `COMPS` registry in that script.
