@@ -12,7 +12,13 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { parseWaypointFile, type WaypointFileRecord } from "@glidecomp/engine";
+import {
+  parseWaypointFile,
+  encodeXctskQR,
+  WAYPOINT_EXPORT_FORMATS,
+  XCTSK_QR_MAX_BYTES,
+  type WaypointFileRecord,
+} from "@glidecomp/engine";
 import type { MapWaypoint } from "../../analysis/map-provider";
 import { Button } from "@/react/ui/button";
 import { Input } from "@/react/ui/input";
@@ -24,14 +30,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/react/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/react/ui/dropdown-menu";
 import { api } from "../../comp/api";
+import { downloadFile } from "../lib/format";
+import { slugify } from "../comp/csv";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { useAdminView, useUser } from "../lib/user";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { formatCoords, parseCoords } from "../comp/route-editor";
+import { DownloadIcon, QrCodeIcon, ChevronDownIcon } from "lucide-react";
 
 const RouteMap = lazy(() => import("../comp/RouteMap"));
+const WaypointQR = lazy(() => import("../comp/WaypointQR"));
 
 /** One editable row. Coordinates are edited as text (Google "lat, lon"). */
 interface WpRow {
@@ -86,6 +103,7 @@ export function CompWaypoints() {
   const [notFound, setNotFound] = useState(false);
   const [addMode, setAddMode] = useState(false);
   const [fitNonce, setFitNonce] = useState(0);
+  const [showQR, setShowQR] = useState(false);
 
   // New-waypoint dialog (from map tap or the Add button).
   const [adding, setAdding] = useState(false);
@@ -138,7 +156,31 @@ export function CompWaypoints() {
   // Current records + validity, derived from the rows.
   const records = useMemo(() => rows.map(fromRow), [rows]);
   const invalidCount = records.filter((r) => r === null).length;
-  const dirty = serialize(records.filter(Boolean) as WaypointFileRecord[]) !== savedJson;
+  const validRecords = useMemo(
+    () => records.filter((r): r is WaypointFileRecord => r !== null),
+    [records]
+  );
+  const dirty = serialize(validRecords) !== savedJson;
+
+  // XCTrack QR payload for the current valid set, and whether it fits one QR.
+  const xctsk = useMemo(
+    () => (validRecords.length ? encodeXctskQR(validRecords) : ""),
+    [validRecords]
+  );
+  const qrTooBig = useMemo(
+    () => (xctsk ? new TextEncoder().encode(xctsk).length > XCTSK_QR_MAX_BYTES : false),
+    [xctsk]
+  );
+
+  function downloadWaypoints(format: (typeof WAYPOINT_EXPORT_FORMATS)[number]) {
+    if (!validRecords.length) return;
+    const base = slugify(compName || "competition");
+    downloadFile(
+      `${base}-waypoints.${format.extension}`,
+      format.serialize(validRecords),
+      format.mimeType
+    );
+  }
 
   // Map markers from the rows with valid coordinates.
   const mapWaypoints: MapWaypoint[] = useMemo(
@@ -296,6 +338,77 @@ export function CompWaypoints() {
           ? "Upload a file (OziExplorer, SeeYou, CompeGPS, FS, GPX, KML or CSV), edit details, or add points from the map."
           : null}
       </p>
+
+      {/* Pilot download + QR (issue #312 stage 2) — visible to everyone. */}
+      {!loading && validRecords.length > 0 ? (
+        <div className="mb-6 rounded-lg border border-border bg-muted/30 p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-semibold">Get these waypoints on your device</h2>
+              <p className="text-xs text-muted-foreground">
+                Download a file for your instrument, or scan the QR into your flight app
+                (XCTrack, Flyskyhy and most others).
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button type="button" variant="outline" size="sm" aria-label="Download waypoints" />
+                  }
+                >
+                  <DownloadIcon className="size-4" aria-hidden />
+                  Download
+                  <ChevronDownIcon className="size-4 opacity-60" aria-hidden />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuGroup>
+                    {WAYPOINT_EXPORT_FORMATS.map((fmt) => (
+                      <DropdownMenuItem key={fmt.id} onClick={() => downloadWaypoints(fmt)}>
+                        {fmt.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button
+                type="button"
+                variant={showQR ? "default" : "outline"}
+                size="sm"
+                aria-pressed={showQR}
+                disabled={qrTooBig}
+                onClick={() => setShowQR((s) => !s)}
+              >
+                <QrCodeIcon className="size-4" aria-hidden />
+                {showQR ? "Hide QR" : "QR code"}
+              </Button>
+            </div>
+          </div>
+          {qrTooBig ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Too many waypoints ({validRecords.length}) to fit in a single QR code — download a
+              file instead.
+            </p>
+          ) : null}
+          {showQR && !qrTooBig ? (
+            <div className="mt-4 flex flex-col items-center gap-2">
+              <Suspense
+                fallback={
+                  <div className="flex size-[280px] items-center justify-center text-sm text-muted-foreground">
+                    Generating QR…
+                  </div>
+                }
+              >
+                <WaypointQR value={xctsk} />
+              </Suspense>
+              <p className="text-center text-xs text-muted-foreground">
+                Scan with XCTrack, Flyskyhy or any app that reads XCTSK task QRs · {validRecords.length}{" "}
+                waypoint{validRecords.length === 1 ? "" : "s"}
+              </p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading waypoints…</p>
