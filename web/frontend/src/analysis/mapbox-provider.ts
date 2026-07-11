@@ -2893,6 +2893,30 @@ export function createMapBoxProvider(
             },
           }));
           updateGeoJSONSource(map, 'open-distance-lines', features);
+
+          // With no track loaded (a manual open-distance flight — an
+          // open-distance task has a single take-off waypoint, so setTask's
+          // task-bounds fit collapsed to that one point and zoomed all the way
+          // in). Fit to the scored line so the whole flight is visible, and
+          // include the take-off cylinder so its extent isn't cut off.
+          if (currentFixes.length === 0 && lines.length > 0) {
+            map.resize();
+            const bounds = new mapboxgl.LngLatBounds();
+            for (const line of lines) {
+              bounds.extend([line.origin.lon, line.origin.lat]);
+              bounds.extend([line.end.lon, line.end.lat]);
+            }
+            const takeoff = currentTask?.turnpoints[0];
+            if (takeoff) {
+              const latD = takeoff.radius / 111_320;
+              const lonD =
+                takeoff.radius /
+                (111_320 * Math.cos((takeoff.waypoint.lat * Math.PI) / 180));
+              bounds.extend([takeoff.waypoint.lon - lonD, takeoff.waypoint.lat - latD]);
+              bounds.extend([takeoff.waypoint.lon + lonD, takeoff.waypoint.lat + latD]);
+            }
+            map.fitBounds(bounds, { padding: 50, duration: 1000 });
+          }
         },
 
         clearOpenDistanceLines() {

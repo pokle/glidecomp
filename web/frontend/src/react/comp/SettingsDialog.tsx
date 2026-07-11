@@ -335,8 +335,8 @@ export function SettingsDialog({
           <CheckboxField
             checked={openUpload}
             onChange={setOpenUpload}
-            label="Allow registered pilots to upload IGC files for each other"
-            hint="Admins can always upload regardless of this setting."
+            label="Let registered pilots record flights and statuses for each other"
+            hint="Covers uploading IGC tracks, recording manual flights, and setting pilot statuses (Absent / Did Not Fly). Admins can always do these regardless of this setting."
           />
 
           <div>
