@@ -244,6 +244,8 @@ export function TaskDetail() {
         xctsk={task.xctsk}
         taskName={task.name}
         taskDate={task.task_date}
+        compId={compId}
+        taskId={taskId}
         timezone={comp?.timezone ?? null}
         isAdmin={isAdmin}
         onEditRoute={() => setRouteOpen(true)}
@@ -313,6 +315,8 @@ function TurnpointsSection({
   xctsk,
   taskName,
   taskDate,
+  compId,
+  taskId,
   timezone,
   isAdmin,
   onEditRoute,
@@ -320,6 +324,8 @@ function TurnpointsSection({
   xctsk: XCTask | null;
   taskName: string;
   taskDate: string;
+  compId: string;
+  taskId: string;
   /** Comp-local IANA zone; gate times in the summary show comp-local when set. */
   timezone: string | null;
   isAdmin: boolean;
@@ -387,9 +393,12 @@ function TurnpointsSection({
           <WaypointDeviceExport
             records={records}
             baseName={taskName}
+            noun="turnpoint"
             title="Get this task on your device"
             subtitle="Open or download the turnpoints for your instrument, or scan the QR into your flight app (XCTrack, Flyskyhy, SeeYou Navigator and most others)."
-            noun="turnpoint"
+            hostedUrl={(fmt, swap) =>
+              `/api/comp/${compId}/task/${taskId}/waypoints/${fmt}${swap ? "?swap=1" : ""}`
+            }
           />
         </div>
       ) : null}

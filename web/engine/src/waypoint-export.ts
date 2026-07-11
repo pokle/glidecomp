@@ -282,17 +282,56 @@ export function swapCodeName(waypoints: WaypointFileRecord[]): WaypointFileRecor
   return waypoints.map((w) => ({ ...w, code: w.name || w.code, name: w.code }));
 }
 
-/** All downloadable file formats, in the order the UI offers them. */
+/**
+ * All downloadable file formats, in the order the UI offers them. The MIME
+ * types double as the `Content-Type` when the file is served for "open in your
+ * flight app": the app-registered document types (GPX/KML) route straight to
+ * the app, while the extension-only formats (.cup/.wpt) use
+ * `application/octet-stream` so the OS keys off the filename extension rather
+ * than mislabelling them as plain text (which only offers generic text apps).
+ */
 export const WAYPOINT_EXPORT_FORMATS: WaypointExportFormat[] = [
-  { id: 'seeyou-cup', label: 'SeeYou (.cup)', extension: 'cup', mimeType: 'text/plain;charset=utf-8', serialize: toSeeYouCup },
+  { id: 'seeyou-cup', label: 'SeeYou (.cup)', extension: 'cup', mimeType: 'application/octet-stream', serialize: toSeeYouCup },
   { id: 'gpx', label: 'GPX (.gpx)', extension: 'gpx', mimeType: 'application/gpx+xml', serialize: toGPX },
-  { id: 'compegps', label: 'CompeGPS / Garmin (.wpt)', extension: 'wpt', mimeType: 'text/plain;charset=utf-8', serialize: toCompeGPS },
-  { id: 'ozi', label: 'OziExplorer (.wpt)', extension: 'wpt', mimeType: 'text/plain;charset=utf-8', serialize: toOziExplorer },
-  { id: 'fs-geo', label: 'FS GEO (.wpt)', extension: 'wpt', mimeType: 'text/plain;charset=utf-8', serialize: toFsGeo },
-  { id: 'fs-utm', label: 'FS UTM (.wpt)', extension: 'wpt', mimeType: 'text/plain;charset=utf-8', serialize: toFsUtm },
+  { id: 'compegps', label: 'CompeGPS / Garmin (.wpt)', extension: 'wpt', mimeType: 'application/octet-stream', serialize: toCompeGPS },
+  { id: 'ozi', label: 'OziExplorer (.wpt)', extension: 'wpt', mimeType: 'application/octet-stream', serialize: toOziExplorer },
+  { id: 'fs-geo', label: 'FS GEO (.wpt)', extension: 'wpt', mimeType: 'application/octet-stream', serialize: toFsGeo },
+  { id: 'fs-utm', label: 'FS UTM (.wpt)', extension: 'wpt', mimeType: 'application/octet-stream', serialize: toFsUtm },
   { id: 'kml', label: 'Google Earth (.kml)', extension: 'kml', mimeType: 'application/vnd.google-earth.kml+xml', serialize: toKML },
   { id: 'csv', label: 'CSV (.csv)', extension: 'csv', mimeType: 'text/csv;charset=utf-8', serialize: toCSV },
 ];
+
+/** Look up an export format by its id. */
+export function getWaypointExportFormat(id: string): WaypointExportFormat | undefined {
+  return WAYPOINT_EXPORT_FORMATS.find((f) => f.id === id);
+}
+
+/**
+ * Map an xctsk task's turnpoints to exportable waypoint records — the short
+ * code from the waypoint name, the long name from its description, plus the
+ * cylinder radius. Shared by the task page and the server's file route so both
+ * produce identical output. Structurally typed to avoid dragging the xctsk
+ * parser into this module's (deliberately scoring-free) import graph.
+ */
+export function xctaskTurnpointsToRecords(
+  turnpoints:
+    | {
+        radius: number;
+        waypoint: { name: string; description?: string; lat: number; lon: number; altSmoothed?: number };
+      }[]
+    | null
+    | undefined
+): WaypointFileRecord[] {
+  if (!turnpoints) return [];
+  return turnpoints.map((tp) => ({
+    code: tp.waypoint.name,
+    name: tp.waypoint.description || tp.waypoint.name,
+    latitude: tp.waypoint.lat,
+    longitude: tp.waypoint.lon,
+    altitude: tp.waypoint.altSmoothed ?? 0,
+    radius: tp.radius,
+  }));
+}
 
 // ---------------------------------------------------------------------------
 // XCTrack QR encoding

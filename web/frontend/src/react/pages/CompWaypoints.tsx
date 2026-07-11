@@ -305,7 +305,14 @@ export function CompWaypoints() {
       {/* Pilot download + QR (issue #312 stage 2) — visible to everyone. */}
       {!loading && validRecords.length > 0 ? (
         <div className="mb-6">
-          <WaypointDeviceExport records={validRecords} baseName={compName} noun="waypoint" />
+          <WaypointDeviceExport
+            records={validRecords}
+            baseName={compName}
+            noun="waypoint"
+            hostedUrl={(fmt, swap) =>
+              `/api/comp/${compId}/waypoints/${fmt}${swap ? "?swap=1" : ""}`
+            }
+          />
         </div>
       ) : null}
 
