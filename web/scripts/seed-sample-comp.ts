@@ -25,13 +25,22 @@
  * pilot class (AirScore runs "open" and "floater" as separate comps flying
  * different tasks per day; here they become one comp with two classes). A pilot
  * who flew in both classes gets one comp_pilot row per class.
+ *
+ * Performance: a comp has hundreds of tracks, and shelling out to `wrangler`
+ * once per D1 statement / R2 object meant hundreds of ~1s CLI cold-starts (a
+ * full local seed took minutes). Instead the local path drives storage through
+ * a single in-process Miniflare — the exact version wrangler bundles, pointed
+ * at the same `web/.wrangler/state/v3/{d1,r2}` files `bun run dev` reads — so
+ * every write is an in-memory call and the whole seed is one process boot. The
+ * `--remote` path still uses the wrangler CLI (it must hit real Cloudflare) but
+ * fans the independent R2 uploads out concurrently instead of one at a time.
  */
 
-import { readFileSync, readdirSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve, join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { gzipSync } from 'node:zlib';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseIGC } from '@glidecomp/engine';
 import { timezoneForXctsk } from '@glidecomp/engine/timezone';
@@ -42,18 +51,136 @@ const COMPS_ROOT = join(REPO_ROOT, 'web/samples/comps');
 // Which downloaded comp to seed (matches a folder under COMPS_ROOT). The
 // `--remote` flag and the slug can appear in any arg order.
 const SLUG = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'corryong-cup-2026';
-const DB_NAME = 'taskscore-auth';
-const R2_BUCKET = 'glidecomp';
 const PERSIST = 'web/.wrangler/state';
 // Resolve all bindings (D1 + R2) from the competition-api worker config.
-const CONFIG = ['--config', 'web/workers/competition-api/wrangler.toml'];
+const WRANGLER_CONFIG_PATH = 'web/workers/competition-api/wrangler.toml';
+const CONFIG = ['--config', WRANGLER_CONFIG_PATH];
 
 const REMOTE = process.argv.includes('--remote');
 // Local commands target the same persisted state the dev workers use; remote
 // targets the real Cloudflare D1 + R2.
 const TARGET = REMOTE ? ['--remote'] : ['--local', '--persist-to', PERSIST];
 
-// --- wrangler helpers ------------------------------------------------------
+// Independent R2 uploads/deletes are fanned out this many at a time. In-process
+// (local) Miniflare serialises them internally; for the remote wrangler CLI it
+// caps how many uploader subprocesses run at once.
+const R2_CONCURRENCY = 8;
+
+// --- worker config (single source of truth for the storage bindings) -------
+
+/**
+ * Pull a string value out of a `[[header]]` table in the worker's wrangler.toml
+ * (e.g. the D1 `database_id` or the R2 `bucket_name`). Miniflare keys the local
+ * D1 sqlite file by the *database_id*, not the name, so the in-process store
+ * must read the very same id wrangler/`bun run dev` use — hardcoding would
+ * silently write to a different file than the app reads.
+ */
+const WRANGLER_TOML = readFileSync(join(REPO_ROOT, WRANGLER_CONFIG_PATH), 'utf-8');
+function tomlValue(header: string, key: string): string {
+  const block = WRANGLER_TOML.match(new RegExp(`\\[\\[${header}\\]\\]([\\s\\S]*?)(?=\\n\\[|$)`))?.[1] ?? '';
+  const m = block.match(new RegExp(`${key}\\s*=\\s*"([^"]+)"`));
+  if (!m) throw new Error(`wrangler.toml: [[${header}]] ${key} not found`);
+  return m[1];
+}
+const D1_BINDING = tomlValue('d1_databases', 'binding');
+const D1_DATABASE_ID = tomlValue('d1_databases', 'database_id');
+const DB_NAME = tomlValue('d1_databases', 'database_name');
+const R2_BINDING = tomlValue('r2_buckets', 'binding');
+const R2_BUCKET = tomlValue('r2_buckets', 'bucket_name');
+
+// --- storage store (local: in-process Miniflare; remote: wrangler CLI) ------
+
+/**
+ * The subset of storage operations the seed needs. `exec` takes either a single
+ * SQL statement or a list of them run as one atomic batch (values are already
+ * inlined via `q()`, so nothing is parameterised); R2 bodies are passed as
+ * gzipped bytes, and each backend decides how to persist them.
+ */
+interface SeedStore {
+  exec(statements: string | string[]): Promise<void>;
+  rows(sql: string): Promise<Record<string, unknown>[]>;
+  r2Put(key: string, body: Buffer): Promise<void>;
+  r2Delete(key: string): Promise<void>;
+  dispose(): Promise<void>;
+}
+
+/** Run `fn` over `items` with at most `concurrency` in flight at once. */
+async function mapPool<T>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (next < items.length) {
+      await fn(items[next++]);
+    }
+  });
+  await Promise.all(workers);
+}
+
+// -- local backend: one in-process Miniflare, no subprocess per operation -----
+
+type MiniflareInstance = {
+  getD1Database(name: string): Promise<D1Database>;
+  getR2Bucket(name: string): Promise<R2Bucket>;
+  dispose(): Promise<void>;
+};
+type MiniflareCtor = new (opts: Record<string, unknown>) => MiniflareInstance;
+
+async function createLocalStore(): Promise<SeedStore> {
+  // Import the *exact* Miniflare wrangler bundles (resolved through wrangler's
+  // own dependency tree), so its persisted D1/R2 on-disk format matches byte
+  // for byte what `bun run dev` reads back. A version-skewed copy writes a
+  // durable-object sqlite schema wrangler then refuses to open.
+  const wranglerEntry = Bun.resolveSync('wrangler', REPO_ROOT);
+  const miniflareEntry = Bun.resolveSync('miniflare', wranglerEntry.replace(/\/dist\/.*$/, ''));
+  const { Miniflare } = (await import(miniflareEntry)) as { Miniflare: MiniflareCtor };
+
+  const persistRoot = join(REPO_ROOT, PERSIST);
+  const mf = new Miniflare({
+    modules: true,
+    script: 'export default {};',
+    // D1 is keyed by database_id; R2 by bucket name — both taken from the
+    // worker's wrangler.toml so we hit the same files the dev workers use.
+    d1Databases: { [D1_BINDING]: D1_DATABASE_ID },
+    r2Buckets: { [R2_BINDING]: R2_BUCKET },
+    d1Persist: join(persistRoot, 'v3/d1'),
+    r2Persist: join(persistRoot, 'v3/r2'),
+  });
+  const db = await mf.getD1Database(D1_BINDING);
+  const bucket = await mf.getR2Bucket(R2_BINDING);
+
+  return {
+    async exec(statements) {
+      // D1's prepare() takes a single statement; strip a trailing `;` (safe —
+      // inner `;` inside the quoted xctsk/IGC literals is untouched) and run the
+      // whole set as one atomic batch.
+      const list = (Array.isArray(statements) ? statements : [statements])
+        .map((s) => s.trim().replace(/;\s*$/, ''))
+        .filter(Boolean);
+      if (list.length === 0) return;
+      await db.batch(list.map((s) => db.prepare(s)));
+    },
+    async rows(sql) {
+      const res = await db.prepare(sql).all();
+      return (res.results ?? []) as Record<string, unknown>[];
+    },
+    async r2Put(key, body) {
+      await bucket.put(key, body, {
+        httpMetadata: { contentType: 'application/octet-stream', contentEncoding: 'gzip' },
+      });
+    },
+    async r2Delete(key) {
+      await bucket.delete(key);
+    },
+    async dispose() {
+      await mf.dispose();
+    },
+  };
+}
+
+// -- remote backend: wrangler CLI against real Cloudflare D1 + R2 -------------
 
 function wrangler(args: string[]): string {
   const res = spawnSync('bunx', ['wrangler', ...args], {
@@ -65,6 +192,21 @@ function wrangler(args: string[]): string {
     throw new Error(`wrangler ${args.join(' ')} failed:\n${res.stderr || res.stdout}`);
   }
   return res.stdout;
+}
+
+/** Async wrangler invocation, so independent R2 calls can run concurrently. */
+function wranglerAsync(args: string[]): Promise<void> {
+  return new Promise((res, rej) => {
+    const child = spawn('bunx', ['wrangler', ...args], { cwd: REPO_ROOT });
+    let stderr = '';
+    let stdout = '';
+    child.stdout?.on('data', (d) => (stdout += d));
+    child.stderr?.on('data', (d) => (stderr += d));
+    child.on('error', rej);
+    child.on('close', (code) =>
+      code === 0 ? res() : rej(new Error(`wrangler ${args.join(' ')} failed:\n${stderr || stdout}`)),
+    );
+  });
 }
 
 /**
@@ -80,43 +222,45 @@ function parseWranglerJson(out: string): Array<{ results: Record<string, unknown
   return JSON.parse(out.slice(start));
 }
 
-/**
- * Run write SQL (one or more statements) via --file, so large/batched bodies
- * (the xctsk blob, 32-row pilot/track inserts) aren't capped by the shell
- * argument length. The result is intentionally not read back: on `--remote` the
- * --file path returns only an execution summary (not result rows), which is
- * exactly why reads must use --command instead.
- */
-function exec(sql: string): void {
-  const tmp = join(mkdtempSync(join(tmpdir(), 'seed-')), 'q.sql');
-  writeFileSync(tmp, sql);
-  wrangler(['d1', 'execute', DB_NAME, ...CONFIG, ...TARGET, '--json', '--file', tmp]);
-}
-
-/**
- * Run a single read query and return its rows. Uses --command (not --file)
- * because `--remote --file` returns an execution summary rather than the result
- * set; --command returns the actual rows in both local and remote modes.
- */
-function rows(sql: string): Record<string, unknown>[] {
-  const out = wrangler(['d1', 'execute', DB_NAME, ...CONFIG, ...TARGET, '--json', '--command', sql]);
-  return parseWranglerJson(out)[0]?.results ?? [];
-}
-
-function r2Put(key: string, file: string): void {
-  wrangler([
-    'r2', 'object', 'put', `${R2_BUCKET}/${key}`,
-    '--file', file, '--content-type', 'application/octet-stream',
-    '--content-encoding', 'gzip', ...CONFIG, ...TARGET,
-  ]);
-}
-
-function r2Delete(key: string): void {
-  try {
-    wrangler(['r2', 'object', 'delete', `${R2_BUCKET}/${key}`, ...CONFIG, ...TARGET]);
-  } catch {
-    /* object may not exist — fine */
-  }
+function createRemoteStore(): SeedStore {
+  // One scratch dir for the SQL/R2 payload temp files this backend feeds to the
+  // CLI (bodies via --file dodge the shell argument-length cap).
+  const scratch = mkdtempSync(join(tmpdir(), 'seed-'));
+  let seq = 0;
+  return {
+    async exec(statements) {
+      const sql = (Array.isArray(statements) ? statements : [statements]).join('\n');
+      if (!sql.trim()) return;
+      const tmp = join(scratch, `q${seq++}.sql`);
+      writeFileSync(tmp, sql);
+      // The result is intentionally not read back: --remote --file returns only
+      // an execution summary (not result rows), which is why reads use --command.
+      wrangler(['d1', 'execute', DB_NAME, ...CONFIG, ...TARGET, '--json', '--file', tmp]);
+    },
+    async rows(sql) {
+      const out = wrangler(['d1', 'execute', DB_NAME, ...CONFIG, ...TARGET, '--json', '--command', sql]);
+      return parseWranglerJson(out)[0]?.results ?? [];
+    },
+    async r2Put(key, body) {
+      const tmp = join(scratch, `o${seq++}.gz`);
+      writeFileSync(tmp, body);
+      await wranglerAsync([
+        'r2', 'object', 'put', `${R2_BUCKET}/${key}`,
+        '--file', tmp, '--content-type', 'application/octet-stream',
+        '--content-encoding', 'gzip', ...CONFIG, ...TARGET,
+      ]);
+    },
+    async r2Delete(key) {
+      try {
+        await wranglerAsync(['r2', 'object', 'delete', `${R2_BUCKET}/${key}`, ...CONFIG, ...TARGET]);
+      } catch {
+        /* object may not exist — fine */
+      }
+    },
+    async dispose() {
+      rmSync(scratch, { recursive: true, force: true });
+    },
+  };
 }
 
 /** Single-quote a value for SQL, escaping embedded quotes. NULL passes through. */
@@ -234,8 +378,17 @@ function loadManifest(): CompManifest {
   return JSON.parse(readFileSync(path, 'utf-8')) as CompManifest;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const where = REMOTE ? 'REMOTE (production)' : `local (${PERSIST})`;
+  const store = REMOTE ? createRemoteStore() : await createLocalStore();
+  try {
+    await seed(store, where);
+  } finally {
+    await store.dispose();
+  }
+}
+
+async function seed(store: SeedStore, where: string): Promise<void> {
   const manifest = loadManifest();
   // The comp's D1 name, category and scoring format come from the manifest when
   // present (Big Chip), else fall back to the historical Corryong defaults.
@@ -282,52 +435,48 @@ function main(): void {
   const defaultClass = manifest.classes[0];
 
   // 1) Find or create the comp (stable comp_id across reruns).
-  const existing = rows(`SELECT comp_id FROM comp WHERE name = ${q(compName)};`);
+  const existing = await store.rows(`SELECT comp_id FROM comp WHERE name = ${q(compName)};`);
   let compId: number;
   if (existing.length > 0) {
     compId = Number(existing[0].comp_id);
     console.log(`  reusing comp_id ${compId} — wiping its tasks/pilots/tracks`);
     // Delete R2 objects for the comp's tracks first (need the keys from D1).
-    const oldKeys = rows(
+    const oldKeys = await store.rows(
       `SELECT tt.igc_filename AS k FROM task_track tt
        JOIN task t ON tt.task_id = t.task_id WHERE t.comp_id = ${compId};`,
     );
-    for (const r of oldKeys) r2Delete(String(r.k));
-    exec(
-      [
-        `DELETE FROM task_track WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
-        `DELETE FROM task_pilot_status WHERE comp_id = ${compId};`,
-        `DELETE FROM task_class WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
-        `DELETE FROM task WHERE comp_id = ${compId};`,
-        `DELETE FROM comp_pilot WHERE comp_id = ${compId};`,
-        `DELETE FROM audit_log WHERE comp_id = ${compId};`,
-        `UPDATE comp SET category=${q(category)}, test=0, scoring_format=${q(scoringFormat)},
-           pilot_classes=${q(classesJson)},
-           default_pilot_class=${q(defaultClass)},
-           timezone=${q(tzOut.value ?? null)} WHERE comp_id = ${compId};`,
-      ].join('\n'),
-    );
+    await mapPool(oldKeys, R2_CONCURRENCY, (r) => store.r2Delete(String(r.k)));
+    await store.exec([
+      `DELETE FROM task_track WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
+      `DELETE FROM task_pilot_status WHERE comp_id = ${compId};`,
+      `DELETE FROM task_class WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
+      `DELETE FROM task WHERE comp_id = ${compId};`,
+      `DELETE FROM comp_pilot WHERE comp_id = ${compId};`,
+      `DELETE FROM audit_log WHERE comp_id = ${compId};`,
+      `UPDATE comp SET category=${q(category)}, test=0, scoring_format=${q(scoringFormat)},
+         pilot_classes=${q(classesJson)},
+         default_pilot_class=${q(defaultClass)},
+         timezone=${q(tzOut.value ?? null)} WHERE comp_id = ${compId};`,
+    ]);
   } else {
-    exec(
+    await store.exec(
       `INSERT INTO comp (name, creation_date, category, test, scoring_format, pilot_classes, default_pilot_class, timezone)
        VALUES (${q(compName)}, ${q(today)}, ${q(category)}, 0, ${q(scoringFormat)}, ${q(classesJson)}, ${q(defaultClass)}, ${q(tzOut.value ?? null)});`,
     );
-    compId = Number(rows(`SELECT comp_id FROM comp WHERE name = ${q(compName)};`)[0].comp_id);
+    compId = Number((await store.rows(`SELECT comp_id FROM comp WHERE name = ${q(compName)};`))[0].comp_id);
     console.log(`  created comp_id ${compId}`);
   }
 
   // 2) comp_pilot rows (one per registration), then read back ids by our key.
   const registrations = [...registry.values()];
-  exec(
-    registrations
-      .map(
-        (p) =>
-          `INSERT INTO comp_pilot (comp_id, registered_pilot_name, ${idColumn}, pilot_class)
-           VALUES (${compId}, ${q(p.name)}, ${q(p.id)}, ${q(p.pilotClass)});`,
-      )
-      .join('\n'),
+  await store.exec(
+    registrations.map(
+      (p) =>
+        `INSERT INTO comp_pilot (comp_id, registered_pilot_name, ${idColumn}, pilot_class)
+         VALUES (${compId}, ${q(p.name)}, ${q(p.id)}, ${q(p.pilotClass)});`,
+    ),
   );
-  const cpRows = rows(
+  const cpRows = await store.rows(
     `SELECT comp_pilot_id, registered_pilot_name, ${idColumn} AS id, pilot_class
        FROM comp_pilot WHERE comp_id = ${compId};`,
   );
@@ -344,49 +493,48 @@ function main(): void {
   //    to R2 and insert its task_track row (linked to the class's comp_pilot).
   //    Open and floater "Task 1" share a date but are distinct rows, named by
   //    class so the app's task list disambiguates them.
-  const tmpDir = mkdtempSync(join(tmpdir(), 'seed-igc-'));
   const now = new Date().toISOString();
   let totalTracks = 0;
   const taskSummaries: string[] = [];
   for (const t of tasks) {
     const taskName = `${t.name} (${classLabel(t.pilotClass)})`;
-    exec(
+    await store.exec(
       `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk)
        VALUES (${compId}, ${q(taskName)}, ${q(t.date)}, ${q(today)}, ${q(t.xctsk)});`,
     );
     const taskId = Number(
-      rows(`SELECT task_id FROM task WHERE comp_id = ${compId} AND name = ${q(taskName)};`)[0].task_id,
+      (await store.rows(`SELECT task_id FROM task WHERE comp_id = ${compId} AND name = ${q(taskName)};`))[0]
+        .task_id,
     );
-    exec(`INSERT INTO task_class (task_id, pilot_class) VALUES (${taskId}, ${q(t.pilotClass)});`);
+    await store.exec(`INSERT INTO task_class (task_id, pilot_class) VALUES (${taskId}, ${q(t.pilotClass)});`);
 
+    // Resolve every pilot that has a comp_pilot row into its R2 object + its two
+    // D1 rows, then upload the objects concurrently and insert the rows in one
+    // batch. (A pilot with a track took off and landed, so we mark them "Landed"
+    // — the same status a real upload sets via applyStatusOnTrackUpload; the
+    // direct insert bypasses that hook, so without it the roll call would show
+    // every seeded pilot "Present". Pilots with no track keep the default.)
+    const uploads: Array<{ key: string; gz: Buffer }> = [];
     const trackInserts: string[] = [];
-    let n = 0;
     for (const p of t.pilots) {
       const compPilotId = cpByKey.get(pilotKey(t.pilotClass, p.id, p.name));
       if (compPilotId === undefined) continue;
       const key = `c/${compId}/t/${taskId}/${compPilotId}.igc`;
-      const gzFile = join(tmpDir, `${taskId}-${compPilotId}.igc.gz`);
-      writeFileSync(gzFile, p.gz);
-      r2Put(key, gzFile);
+      uploads.push({ key, gz: p.gz });
       trackInserts.push(
         `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name)
          VALUES (${taskId}, ${compPilotId}, ${q(key)}, ${q(now)}, ${p.fileSize}, ${q(p.name)});`,
       );
-      // A pilot with a track took off and landed, so mark them "Landed" — the
-      // same status a real upload sets (applyStatusOnTrackUpload). The direct
-      // insert bypasses that hook, so without this the roll call would show
-      // every seeded pilot as "Present" (as if nobody took off). Registered
-      // pilots with no track for this task keep the Present default (no row).
       trackInserts.push(
         `INSERT INTO task_pilot_status (comp_id, task_id, comp_pilot_id, status_key, note, set_by_user_id, set_by_name, set_at)
          VALUES (${compId}, ${taskId}, ${compPilotId}, 'landed', NULL, NULL, 'Sample data', ${q(now)});`,
       );
-      n++;
     }
-    exec(trackInserts.join('\n'));
-    totalTracks += n;
-    taskSummaries.push(`${taskName} (task_id=${taskId}, ${n} tracks)`);
-    console.log(`  seeded ${taskName}: task_id=${taskId}, ${n} tracks`);
+    await mapPool(uploads, R2_CONCURRENCY, (u) => store.r2Put(u.key, u.gz));
+    await store.exec(trackInserts);
+    totalTracks += uploads.length;
+    taskSummaries.push(`${taskName} (task_id=${taskId}, ${uploads.length} tracks)`);
+    console.log(`  seeded ${taskName}: task_id=${taskId}, ${uploads.length} tracks`);
   }
 
   console.log(`\nDone. comp_id=${compId} — ${tasks.length} tasks, ${totalTracks} tracks total`);
@@ -396,4 +544,7 @@ function main(): void {
   if (!REMOTE) console.log('  (local state — start dev servers with `bun run dev`)');
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
