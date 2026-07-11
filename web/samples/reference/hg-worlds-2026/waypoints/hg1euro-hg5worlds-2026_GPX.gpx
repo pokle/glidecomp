@@ -1,0 +1,1503 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1"
+     creator="GpsDump 5.48"
+     version="1.1"
+     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+  <metadata>
+    <link href="http://www.gethome.no/stein.sorensen/">
+      <text>GPS dump for www.flightlog.org</text>
+    </link>
+    <time>2026-05-27T21:23:07Z</time>
+    <bounds minlat="45.666656" minlon="11.816136" maxlat="47.074325" maxlon="14.086108"/>
+  </metadata>
+  <wpt lat="46.308828" lon="13.112500">
+    <ele>225.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A01</name>
+    <cmt>BORDANO LANDING</cmt>
+    <desc>BORDANO LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.253917" lon="13.141342">
+    <ele>198.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A02</name>
+    <cmt>ORVENCO LANDING</cmt>
+    <desc>ORVENCO LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.225328" lon="13.227492">
+    <ele>275.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A03</name>
+    <cmt>PALUZ LANDING</cmt>
+    <desc>PALUZ LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.317322" lon="13.059156">
+    <ele>200.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A04</name>
+    <cmt>ALESSO LANDING</cmt>
+    <desc>ALESSO LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.235100" lon="13.070767">
+    <ele>175.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A05</name>
+    <cmt>RIVOLI LANDING</cmt>
+    <desc>RIVOLI LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.404494" lon="12.884492">
+    <ele>373.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A06</name>
+    <cmt>ENEMONZO LANDING</cmt>
+    <desc>ENEMONZO LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.524322" lon="13.003989">
+    <ele>557.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A07</name>
+    <cmt>CERCIVENTO LANDING</cmt>
+    <desc>CERCIVENTO LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.205822" lon="12.818653">
+    <ele>273.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A08</name>
+    <cmt>MEDUNO LANDING</cmt>
+    <desc>MEDUNO LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.391156" lon="12.672000">
+    <ele>737.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A10</name>
+    <cmt>FORNI DI SOTTO LANDING</cmt>
+    <desc>FORNI DI SOTTO LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.466178" lon="12.682339">
+    <ele>1392.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A11</name>
+    <cmt>SAURIS LANDING</cmt>
+    <desc>SAURIS LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.057489" lon="12.548328">
+    <ele>166.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A12</name>
+    <cmt>AVIANO LANDING</cmt>
+    <desc>AVIANO LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.819272" lon="12.768806">
+    <ele>681.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A13</name>
+    <cmt>LIENZ LANDING</cmt>
+    <desc>LIENZ LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.799058" lon="12.877611">
+    <ele>639.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A14</name>
+    <cmt>FLUGPLATZ LIENZ LANDING</cmt>
+    <desc>FLUGPLATZ LIENZ LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.580597" lon="13.629747">
+    <ele>550.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A15</name>
+    <cmt>FLUGPLATZ NOTSCH LANDING</cmt>
+    <desc>FLUGPLATZ NOTSCH LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="45.908000" lon="13.598325">
+    <ele>56.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A16</name>
+    <cmt>GORIZIA LANDING</cmt>
+    <desc>GORIZIA LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.746561" lon="13.192003">
+    <ele>593.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A17</name>
+    <cmt>GREIFENBURG LANDING</cmt>
+    <desc>GREIFENBURG LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.068436" lon="13.368600">
+    <ele>108.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A19</name>
+    <cmt>PREMARIACCO LANDING</cmt>
+    <desc>PREMARIACCO LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="45.947175" lon="13.712867">
+    <ele>64.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A20</name>
+    <cmt>LIJAK LANDING</cmt>
+    <desc>LIJAK LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.197206" lon="13.696653">
+    <ele>164.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A21</name>
+    <cmt>CAMP LANDING</cmt>
+    <desc>CAMP LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.241106" lon="13.582489">
+    <ele>214.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A22</name>
+    <cmt>KOBARID LANDING</cmt>
+    <desc>KOBARID LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.185000" lon="13.722206">
+    <ele>159.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A24</name>
+    <cmt>TOLMIN LANDING</cmt>
+    <desc>TOLMIN LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="45.868328" lon="13.934711">
+    <ele>100.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A25</name>
+    <cmt>LOGANJA LANDING</cmt>
+    <desc>LOGANJA LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.285278" lon="13.884997">
+    <ele>527.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A28</name>
+    <cmt>BOHINJ LANDING</cmt>
+    <desc>BOHINJ LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.044358" lon="13.789617">
+    <ele>583.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A29</name>
+    <cmt>CEPOVAN LANDING</cmt>
+    <desc>CEPOVAN LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.745036" lon="12.451239">
+    <ele>1077.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>A30</name>
+    <cmt>SILLIAN LANDING</cmt>
+    <desc>SILLIAN LANDING</desc>
+    <sym>Dot</sym>
+    <type>Airport</type>
+  </wpt>
+  <wpt lat="46.273825" lon="13.175656">
+    <ele>1125.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>D01</name>
+    <cmt>CUARNAN TAKEOFF</cmt>
+    <desc>CUARNAN TAKEOFF</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.330156" lon="13.101494">
+    <ele>1142.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>D02</name>
+    <cmt>SAN SIMEONE TAKEOFF</cmt>
+    <desc>SAN SIMEONE TAKEOFF</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.230494" lon="12.806656">
+    <ele>944.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>D03</name>
+    <cmt>MEDUNO TAKEOFF</cmt>
+    <desc>MEDUNO TAKEOFF</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.546989" lon="12.926000">
+    <ele>1889.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>D05</name>
+    <cmt>VALSECCA TAKEOFF</cmt>
+    <desc>VALSECCA TAKEOFF</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.772500" lon="13.149444">
+    <ele>1722.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>D06</name>
+    <cmt>EMBERGER ALM TAKEOFF</cmt>
+    <desc>EMBERGER ALM TAKEOFF</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.097492" lon="12.544492">
+    <ele>1167.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>D07</name>
+    <cmt>AVIANO EAST TAKEOFF</cmt>
+    <desc>AVIANO EAST TAKEOFF</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.225714" lon="13.262778">
+    <ele>673.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>D08</name>
+    <cmt>BERNADIA TAKEOFF</cmt>
+    <desc>BERNADIA TAKEOFF</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="45.963331" lon="13.723611">
+    <ele>523.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>D09</name>
+    <cmt>LIJAK TAKEOFF</cmt>
+    <desc>LIJAK TAKEOFF</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="45.886664" lon="13.958889">
+    <ele>791.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>D12</name>
+    <cmt>KOVK TAKEOFF</cmt>
+    <desc>KOVK TAKEOFF</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.283153" lon="12.968153">
+    <ele>1389.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H01</name>
+    <cmt>MT FLAGEL</cmt>
+    <desc>MT FLAGEL</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.300494" lon="13.084500">
+    <ele>1008.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H02</name>
+    <cmt>MT BRANCOT</cmt>
+    <desc>MT BRANCOT</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.291656" lon="13.208325">
+    <ele>1055.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H03</name>
+    <cmt>MT CHIAMPON EAST</cmt>
+    <desc>MT CHIAMPON EAST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.291656" lon="13.291656">
+    <ele>1376.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H04</name>
+    <cmt>MT MALI VARH</cmt>
+    <desc>MT MALI VARH</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.282494" lon="13.111828">
+    <ele>199.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H05</name>
+    <cmt>ALDI GEMONA</cmt>
+    <desc>ALDI GEMONA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.242328" lon="12.921494">
+    <ele>1111.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H06</name>
+    <cmt>MT PALA</cmt>
+    <desc>MT PALA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.274650" lon="12.996325">
+    <ele>1429.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H07</name>
+    <cmt>MT CUAR</cmt>
+    <desc>MT CUAR</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.245631" lon="12.997853">
+    <ele>750.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H08</name>
+    <cmt>MONTEPRAT</cmt>
+    <desc>MONTEPRAT</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.244989" lon="13.198656">
+    <ele>684.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H09</name>
+    <cmt>MT FAET</cmt>
+    <desc>MT FAET</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.268067" lon="13.289161">
+    <ele>609.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H10</name>
+    <cmt>ZAIAMA FOREST</cmt>
+    <desc>ZAIAMA FOREST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.203825" lon="12.741328">
+    <ele>589.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H11</name>
+    <cmt>MON DI MENS</cmt>
+    <desc>MON DI MENS</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.208325" lon="12.875000">
+    <ele>480.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H12</name>
+    <cmt>COL MANZON</cmt>
+    <desc>COL MANZON</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.208325" lon="12.958325">
+    <ele>150.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H13</name>
+    <cmt>FLAGOGNA</cmt>
+    <desc>FLAGOGNA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.208325" lon="13.041656">
+    <ele>156.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H14</name>
+    <cmt>CIMANO</cmt>
+    <desc>CIMANO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.208325" lon="13.125000">
+    <ele>198.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H15</name>
+    <cmt>BUJA</cmt>
+    <desc>BUJA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.208325" lon="13.208325">
+    <ele>212.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H16</name>
+    <cmt>TARCENTO</cmt>
+    <desc>TARCENTO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.208325" lon="13.375000">
+    <ele>634.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H17</name>
+    <cmt>SUBIT FOREST</cmt>
+    <desc>SUBIT FOREST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.165500" lon="12.817822">
+    <ele>253.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H18</name>
+    <cmt>SEQUALS HILL</cmt>
+    <desc>SEQUALS HILL</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.166656" lon="12.916656">
+    <ele>157.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H19</name>
+    <cmt>VALERIANO</cmt>
+    <desc>VALERIANO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.166656" lon="13.000000">
+    <ele>218.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H20</name>
+    <cmt>SAN DANIELE</cmt>
+    <desc>SAN DANIELE</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.203000" lon="13.083325">
+    <ele>168.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H21</name>
+    <cmt>ANDREUZZA</cmt>
+    <desc>ANDREUZZA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.166656" lon="13.166656">
+    <ele>158.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H22</name>
+    <cmt>ARA</cmt>
+    <desc>ARA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.166656" lon="13.250000">
+    <ele>167.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H23</name>
+    <cmt>ZOMPITTA</cmt>
+    <desc>ZOMPITTA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.166656" lon="13.333325">
+    <ele>242.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H24</name>
+    <cmt>RACCHIUSO</cmt>
+    <desc>RACCHIUSO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.168156" lon="13.409000">
+    <ele>950.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H25</name>
+    <cmt>PEDROSA FOREST</cmt>
+    <desc>PEDROSA FOREST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.120247" lon="12.899661">
+    <ele>137.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H26</name>
+    <cmt>SPILIMBERGO</cmt>
+    <desc>SPILIMBERGO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.140114" lon="13.035275">
+    <ele>207.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H27</name>
+    <cmt>ARCANO CASTLE</cmt>
+    <desc>ARCANO CASTLE</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.168742" lon="13.092525">
+    <ele>162.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H28</name>
+    <cmt>SANT'ELISEO</cmt>
+    <desc>SANT'ELISEO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.125000" lon="13.125000">
+    <ele>251.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H29</name>
+    <cmt>MORUZZO</cmt>
+    <desc>MORUZZO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.125000" lon="13.208325">
+    <ele>137.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H30</name>
+    <cmt>TAVAGNACCO</cmt>
+    <desc>TAVAGNACCO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.125000" lon="13.291656">
+    <ele>136.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H31</name>
+    <cmt>POVOLETTO</cmt>
+    <desc>POVOLETTO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.125000" lon="13.375000">
+    <ele>125.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H32</name>
+    <cmt>CAMPEGLIO</cmt>
+    <desc>CAMPEGLIO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.125000" lon="13.458325">
+    <ele>381.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H33</name>
+    <cmt>CIVIDALE FOREST</cmt>
+    <desc>CIVIDALE FOREST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.277828" lon="13.378325">
+    <ele>976.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H34</name>
+    <cmt>MT MAGGIORE</cmt>
+    <desc>MT MAGGIORE</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.270328" lon="12.876653">
+    <ele>1312.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H35</name>
+    <cmt>MT TAIET</cmt>
+    <desc>MT TAIET</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.291656" lon="12.791656">
+    <ele>348.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H36</name>
+    <cmt>TRAMONTI</cmt>
+    <desc>TRAMONTI</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.296828" lon="13.154153">
+    <ele>1020.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H37</name>
+    <cmt>MT CHIAMPON WEST</cmt>
+    <desc>MT CHIAMPON WEST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.235325" lon="13.145825">
+    <ele>199.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H38</name>
+    <cmt>ARTEGNA</cmt>
+    <desc>ARTEGNA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.208325" lon="13.291656">
+    <ele>243.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H39</name>
+    <cmt>NIMIS EAST</cmt>
+    <desc>NIMIS EAST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.083325" lon="12.833325">
+    <ele>126.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H40</name>
+    <cmt>BARBEANO WEST</cmt>
+    <desc>BARBEANO WEST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="45.800278" lon="13.750831">
+    <ele>245.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H42</name>
+    <cmt>VOLCI</cmt>
+    <desc>VOLCI</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="45.708261" lon="13.867272">
+    <ele>368.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H43</name>
+    <cmt>SEZANA</cmt>
+    <desc>SEZANA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.083325" lon="13.166656">
+    <ele>119.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H44</name>
+    <cmt>UDINE WEST</cmt>
+    <desc>UDINE WEST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.265000" lon="13.261328">
+    <ele>325.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H46</name>
+    <cmt>VEDRONZA</cmt>
+    <desc>VEDRONZA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.273825" lon="13.031489">
+    <ele>1125.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H48</name>
+    <cmt>MT COVRIA</cmt>
+    <desc>MT COVRIA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.179153" lon="13.028828">
+    <ele>181.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H49</name>
+    <cmt>SAN TOMASO</cmt>
+    <desc>SAN TOMASO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.083325" lon="13.333325">
+    <ele>105.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H50</name>
+    <cmt>REMANZACCO</cmt>
+    <desc>REMANZACCO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.083325" lon="13.416656">
+    <ele>122.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H51</name>
+    <cmt>CIVIDALE SOUTH</cmt>
+    <desc>CIVIDALE SOUTH</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.085994" lon="13.517328">
+    <ele>653.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H52</name>
+    <cmt>MT PLAGNAVA</cmt>
+    <desc>MT PLAGNAVA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.250228" lon="13.097978">
+    <ele>182.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H53</name>
+    <cmt>CASELLO GEMONA A23</cmt>
+    <desc>CASELLO GEMONA A23</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.173650" lon="12.548017">
+    <ele>681.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H54</name>
+    <cmt>BARCIS SOUTH</cmt>
+    <desc>BARCIS SOUTH</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.180836" lon="12.407383">
+    <ele>886.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H55</name>
+    <cmt>FUNES ALPAGO</cmt>
+    <desc>FUNES ALPAGO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="45.999825" lon="13.654328">
+    <ele>656.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H56</name>
+    <cmt>SVETOGORSKE</cmt>
+    <desc>SVETOGORSKE</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.063656" lon="13.559653">
+    <ele>800.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H57</name>
+    <cmt>M. KORADA</cmt>
+    <desc>M. KORADA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.000000" lon="13.500000">
+    <ele>87.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H58</name>
+    <cmt>NEBOLA</cmt>
+    <desc>NEBOLA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.262403" lon="13.081147">
+    <ele>275.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H59</name>
+    <cmt>OSOPPO HILL</cmt>
+    <desc>OSOPPO HILL</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.017464" lon="13.391644">
+    <ele>86.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H60</name>
+    <cmt>OLEIS</cmt>
+    <desc>OLEIS</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.018064" lon="13.212603">
+    <ele>78.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H62</name>
+    <cmt>ZUGLIANO</cmt>
+    <desc>ZUGLIANO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.022589" lon="13.033472">
+    <ele>76.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H63</name>
+    <cmt>PANTIANICCO</cmt>
+    <desc>PANTIANICCO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.083325" lon="13.000000">
+    <ele>120.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H65</name>
+    <cmt>CISTERNA</cmt>
+    <desc>CISTERNA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.020864" lon="12.874431">
+    <ele>66.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H66</name>
+    <cmt>SAN MARTINO</cmt>
+    <desc>SAN MARTINO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.782753" lon="12.284642">
+    <ele>2633.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H74</name>
+    <cmt>MT PFANNHORN</cmt>
+    <desc>MT PFANNHORN</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.738886" lon="11.958053">
+    <ele>2265.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H75</name>
+    <cmt>PLAN DE CORONES</cmt>
+    <desc>PLAN DE CORONES</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.981386" lon="13.177500">
+    <ele>1184.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H79</name>
+    <cmt>MALLNITZ</cmt>
+    <desc>MALLNITZ</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.758889" lon="13.458058">
+    <ele>2105.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H81</name>
+    <cmt>GOLDECK</cmt>
+    <desc>GOLDECK</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.790275" lon="13.396108">
+    <ele>1622.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H82</name>
+    <cmt>WEISSWANDE</cmt>
+    <desc>WEISSWANDE</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.860189" lon="11.816136">
+    <ele>2393.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H91</name>
+    <cmt>MT TERNER</cmt>
+    <desc>MT TERNER</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="45.701667" lon="14.086108">
+    <ele>755.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H92</name>
+    <cmt>VOLCE FOREST</cmt>
+    <desc>VOLCE FOREST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="45.810281" lon="13.998331">
+    <ele>951.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H93</name>
+    <cmt>SENTVISKA</cmt>
+    <desc>SENTVISKA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="45.756211" lon="13.943522">
+    <ele>412.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H94</name>
+    <cmt>GRIZE</cmt>
+    <desc>GRIZE</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="45.946597" lon="13.605903">
+    <ele>57.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H95</name>
+    <cmt>GORIZIA</cmt>
+    <desc>GORIZIA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="45.798336" lon="13.896114">
+    <ele>525.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H96</name>
+    <cmt>SELO</cmt>
+    <desc>SELO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="45.887781" lon="13.702500">
+    <ele>123.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>H98</name>
+    <cmt>PREVACINA WEST</cmt>
+    <desc>PREVACINA WEST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.549989" lon="12.779825">
+    <ele>2179.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N01</name>
+    <cmt>MT PLEROS</cmt>
+    <desc>MT PLEROS</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.557656" lon="13.045825">
+    <ele>1738.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N02</name>
+    <cmt>MT PAULARO</cmt>
+    <desc>MT PAULARO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.552989" lon="13.173153">
+    <ele>1886.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N03</name>
+    <cmt>MT PIZZUL</cmt>
+    <desc>MT PIZZUL</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.532150" lon="13.362000">
+    <ele>1952.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N04</name>
+    <cmt>MT SCINAUZ</cmt>
+    <desc>MT SCINAUZ</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.500000" lon="12.666656">
+    <ele>1588.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N05</name>
+    <cmt>MT RIODA NORTH</cmt>
+    <desc>MT RIODA NORTH</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.500000" lon="13.083325">
+    <ele>1303.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N06</name>
+    <cmt>MT TERSADIA</cmt>
+    <desc>MT TERSADIA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.500000" lon="13.166656">
+    <ele>1266.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N07</name>
+    <cmt>MT FLOP NORTH</cmt>
+    <desc>MT FLOP NORTH</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.469994" lon="13.038656">
+    <ele>824.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N10</name>
+    <cmt>CABIA</cmt>
+    <desc>CABIA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.478000" lon="12.970489">
+    <ele>1743.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N11</name>
+    <cmt>MT DAUDA</cmt>
+    <desc>MT DAUDA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.458325" lon="13.125000">
+    <ele>1709.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N12</name>
+    <cmt>MT PALE LARIS</cmt>
+    <desc>MT PALE LARIS</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.416656" lon="12.583325">
+    <ele>872.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N14</name>
+    <cmt>FORNI DI SOPRA</cmt>
+    <desc>FORNI DI SOPRA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.427500" lon="12.756500">
+    <ele>1729.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N15</name>
+    <cmt>MT NAULENI</cmt>
+    <desc>MT NAULENI</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.416656" lon="13.166656">
+    <ele>762.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N16</name>
+    <cmt>MT CESARIIS</cmt>
+    <desc>MT CESARIIS</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.375000" lon="12.875000">
+    <ele>1074.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N17</name>
+    <cmt>PREONE VALLEY</cmt>
+    <desc>PREONE VALLEY</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.375000" lon="13.116653">
+    <ele>262.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N18</name>
+    <cmt>AMARO EAST</cmt>
+    <desc>AMARO EAST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.375000" lon="13.208325">
+    <ele>1053.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N19</name>
+    <cmt>TIP SALVOTIS</cmt>
+    <desc>TIP SALVOTIS</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.329000" lon="12.843328">
+    <ele>1652.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N20</name>
+    <cmt>MT SCIARA</cmt>
+    <desc>MT SCIARA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.333325" lon="12.916656">
+    <ele>1292.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N21</name>
+    <cmt>MT DREA</cmt>
+    <desc>MT DREA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.337494" lon="12.993153">
+    <ele>845.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N22</name>
+    <cmt>MT PICIAT</cmt>
+    <desc>MT PICIAT</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.353153" lon="13.174825">
+    <ele>1703.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N23</name>
+    <cmt>MT CERVADA</cmt>
+    <desc>MT CERVADA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.329000" lon="13.279153">
+    <ele>1710.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N24</name>
+    <cmt>MUSI NORTH</cmt>
+    <desc>MUSI NORTH</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.375000" lon="13.291656">
+    <ele>450.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N25</name>
+    <cmt>SAN GIORGIO</cmt>
+    <desc>SAN GIORGIO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.416656" lon="13.083325">
+    <ele>963.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N26</name>
+    <cmt>MT AMARIANA NORTH</cmt>
+    <desc>MT AMARIANA NORTH</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.417828" lon="13.239656">
+    <ele>1853.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N27</name>
+    <cmt>MT PISIMONI</cmt>
+    <desc>MT PISIMONI</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.416656" lon="13.416656">
+    <ele>1558.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N29</name>
+    <cmt>MONTASIO WEST</cmt>
+    <desc>MONTASIO WEST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.333325" lon="13.333325">
+    <ele>1041.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N30</name>
+    <cmt>CARNIZZA EAST</cmt>
+    <desc>CARNIZZA EAST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.359328" lon="13.438325">
+    <ele>2562.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N31</name>
+    <cmt>MT KANIN</cmt>
+    <desc>MT KANIN</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.539489" lon="13.568825">
+    <ele>1723.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N32</name>
+    <cmt>MT CAPIN</cmt>
+    <desc>MT CAPIN</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.695372" lon="12.987642">
+    <ele>831.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N35</name>
+    <cmt>LAAS</cmt>
+    <desc>LAAS</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.979667" lon="12.597581">
+    <ele>2721.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N36</name>
+    <cmt>MT ROTENKOGEL</cmt>
+    <desc>MT ROTENKOGEL</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="47.074325" lon="12.693500">
+    <ele>3671.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N37</name>
+    <cmt>MT GROSSGLOCKNER</cmt>
+    <desc>MT GROSSGLOCKNER</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.170994" lon="13.852492">
+    <ele>1087.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N38</name>
+    <cmt>MT KOTEL</cmt>
+    <desc>MT KOTEL</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.157825" lon="13.763500">
+    <ele>665.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N39</name>
+    <cmt>MODREJ SENICA</cmt>
+    <desc>MODREJ SENICA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.166656" lon="13.666656">
+    <ele>703.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N40</name>
+    <cmt>MT JEZA</cmt>
+    <desc>MT JEZA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.166656" lon="13.583325">
+    <ele>668.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N41</name>
+    <cmt>CANALAZ CHESTNUT</cmt>
+    <desc>CANALAZ CHESTNUT</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.125000" lon="13.541656">
+    <ele>342.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N42</name>
+    <cmt>MERSO FOREST</cmt>
+    <desc>MERSO FOREST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.166656" lon="13.500000">
+    <ele>488.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N43</name>
+    <cmt>BRISCHIS FOREST</cmt>
+    <desc>BRISCHIS FOREST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.189322" lon="13.795153">
+    <ele>1431.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N44</name>
+    <cmt>MT KOBILJA</cmt>
+    <desc>MT KOBILJA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.195500" lon="13.619992">
+    <ele>1207.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N45</name>
+    <cmt>MT KUK</cmt>
+    <desc>MT KUK</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.212150" lon="13.529500">
+    <ele>1625.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N46</name>
+    <cmt>MT MATAJUR</cmt>
+    <desc>MT MATAJUR</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.238989" lon="13.749828">
+    <ele>1448.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N48</name>
+    <cmt>MT GRUSNICA</cmt>
+    <desc>MT GRUSNICA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.266325" lon="13.659150">
+    <ele>2212.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N49</name>
+    <cmt>MT KRN</cmt>
+    <desc>MT KRN</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.250000" lon="13.500000">
+    <ele>271.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N50</name>
+    <cmt>CREDA WEST</cmt>
+    <desc>CREDA WEST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.261128" lon="13.372075">
+    <ele>722.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N51</name>
+    <cmt>GRAN MONTE HUT</cmt>
+    <desc>GRAN MONTE HUT</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.264656" lon="13.603825">
+    <ele>505.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N52</name>
+    <cmt>JEZERCA</cmt>
+    <desc>JEZERCA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.297656" lon="13.557153">
+    <ele>1627.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N53</name>
+    <cmt>MT KRASJI WEST</cmt>
+    <desc>MT KRASJI WEST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.278653" lon="13.453328">
+    <ele>1616.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N54</name>
+    <cmt>MT STOL</cmt>
+    <desc>MT STOL</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.238156" lon="13.812653">
+    <ele>1873.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N55</name>
+    <cmt>MT VOGEL</cmt>
+    <desc>MT VOGEL</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.379156" lon="13.834156">
+    <ele>2546.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N56</name>
+    <cmt>MT TRIGLAV</cmt>
+    <desc>MT TRIGLAV</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.353000" lon="13.625500">
+    <ele>1638.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>N57</name>
+    <cmt>MT SPICICA</cmt>
+    <desc>MT SPICICA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="45.951828" lon="12.397000">
+    <ele>64.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W01</name>
+    <cmt>CORDIGNANO</cmt>
+    <desc>CORDIGNANO</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.041656" lon="12.458325">
+    <ele>930.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W03</name>
+    <cmt>POLCENIGO SLOPES</cmt>
+    <desc>POLCENIGO SLOPES</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.083325" lon="12.583325">
+    <ele>195.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W04</name>
+    <cmt>AVIANO NORTH</cmt>
+    <desc>AVIANO NORTH</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.125000" lon="12.458325">
+    <ele>1353.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W05</name>
+    <cmt>TAMBRE SLOPES</cmt>
+    <desc>TAMBRE SLOPES</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.125000" lon="12.625000">
+    <ele>286.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W07</name>
+    <cmt>GIAIS NORTH EAST</cmt>
+    <desc>GIAIS NORTH EAST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.125067" lon="12.695044">
+    <ele>230.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W08</name>
+    <cmt>CELLINA RIVER</cmt>
+    <desc>CELLINA RIVER</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.125097" lon="12.789069">
+    <ele>173.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W09</name>
+    <cmt>ARBA SOUTH</cmt>
+    <desc>ARBA SOUTH</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.156500" lon="12.596989">
+    <ele>1501.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W10</name>
+    <cmt>PALA D'ALTEI</cmt>
+    <desc>PALA D'ALTEI</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.182994" lon="12.676994">
+    <ele>1032.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W11</name>
+    <cmt>MT JOUF</cmt>
+    <desc>MT JOUF</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.166656" lon="12.750000">
+    <ele>229.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W12</name>
+    <cmt>MANIAGO EST</cmt>
+    <desc>MANIAGO EST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.074325" lon="12.705328">
+    <ele>171.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W13</name>
+    <cmt>SAN FOCA NORTH</cmt>
+    <desc>SAN FOCA NORTH</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.213306" lon="12.628694">
+    <ele>527.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W14</name>
+    <cmt>MT RAUT WEST</cmt>
+    <desc>MT RAUT WEST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.239328" lon="12.730492">
+    <ele>1040.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W15</name>
+    <cmt>MT ROSSA</cmt>
+    <desc>MT ROSSA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.250000" lon="12.500000">
+    <ele>1281.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W16</name>
+    <cmt>CLAUT SOUTH</cmt>
+    <desc>CLAUT SOUTH</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.316489" lon="12.712653">
+    <ele>1860.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W17</name>
+    <cmt>MT FRASCOLA</cmt>
+    <desc>MT FRASCOLA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.500000" lon="14.000000">
+    <ele>1069.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W18</name>
+    <cmt>MT BABA NORTH</cmt>
+    <desc>MT BABA NORTH</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.166656" lon="14.000000">
+    <ele>1201.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W20</name>
+    <cmt>DAVSKI FOREST</cmt>
+    <desc>DAVSKI FOREST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.500000" lon="13.750000">
+    <ele>1058.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W22</name>
+    <cmt>PODKOREN</cmt>
+    <desc>PODKOREN</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.083325" lon="13.833325">
+    <ele>263.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W23</name>
+    <cmt>DOLENJA FOREST</cmt>
+    <desc>DOLENJA FOREST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="45.833325" lon="13.250000">
+    <ele>2.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W24</name>
+    <cmt>TORVISCOSA</cmt>
+    <desc>TORVISCOSA</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="45.833325" lon="13.000000">
+    <ele>6.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W25</name>
+    <cmt>LATISANA NORTH</cmt>
+    <desc>LATISANA NORTH</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="45.833325" lon="12.750000">
+    <ele>9.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W26</name>
+    <cmt>CINTO WEST</cmt>
+    <desc>CINTO WEST</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="45.836300" lon="12.412958">
+    <ele>21.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W27</name>
+    <cmt>VISNA'</cmt>
+    <desc>VISNA'</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="46.510325" lon="12.517828">
+    <ele>2299.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W29</name>
+    <cmt>MT CRISSIN</cmt>
+    <desc>MT CRISSIN</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="45.666656" lon="12.750000">
+    <ele>0.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W30</name>
+    <cmt>ERACLEA NORTH</cmt>
+    <desc>ERACLEA NORTH</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="45.833325" lon="14.000000">
+    <ele>807.0</ele>
+    <time>2026-05-27T21:22:47</time>
+    <name>W31</name>
+    <cmt>VELIKO SLEME</cmt>
+    <desc>VELIKO SLEME</desc>
+    <sym>Dot</sym>
+  </wpt>
+</gpx>
