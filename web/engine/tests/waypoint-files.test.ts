@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'bun:test';
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   parseWaypointsWPT,
   parseWaypointsCUP,
   parseWaypointsPCX5,
   parseWaypointsGPX,
   parseWaypointsKML,
+  parseWaypointsFsGeo,
+  parseWaypointsUTM,
   parseWaypointFile,
   parseCoordinateValue,
   type WaypointFileFormat,
@@ -233,4 +237,101 @@ describe('parseWaypointFile detects every Big K format', () => {
     expect(parseWaypointFile(OZI_WPT, "x.wpt").format).toBe("ozi-wpt");
     expect(parseWaypointFile(GARMIN_WPT, "x.wpt").format).toBe("garmin-wpt");
   });
+});
+
+// The hg-worlds-2026 DB, exported to more formats. A01 (BORDANO LANDING) is
+// the shared anchor at 46.30883 N, 13.11250 E, 225 m.
+const A01 = { lat: 46.30883, lon: 13.1125, alt: 225 };
+
+const FS_GEO = `$FormatGEO
+A01       N 46 18 31.78    E 013 06 45.00   225  BORDANO LANDING [A]
+A11       N 46 27 58.24    E 012 40 56.42  1392  SAURIS LANDING [A]`;
+
+const FS_UTM = `$FormatUTM
+A01       33T   0354663   5130093   225  BORDANO LANDING [A]
+A11       33T   0322054   5148455  1392  SAURIS LANDING [A]`;
+
+const COMPEGPS = `G  WGS 84
+U  1
+W  A01 A 46.3088278°N 13.1125000°E 2-JAN-2023 14:30:23 225.000000 BORDANO LANDING
+w Airport,,,,,,,,,
+W  A11 A 46.4661800°N 12.6823400°E 2-JAN-2023 14:30:23 1392.000000 SAURIS LANDING
+w Airport,,,,,,,,,`;
+
+describe('parseWaypointsFsGeo (FS $FormatGEO, DMS)', () => {
+  it('decodes degrees-minutes-seconds and the long name', () => {
+    const wps = parseWaypointsFsGeo(FS_GEO);
+    expect(wps).toHaveLength(2);
+    const a01 = byName(wps, 'A01');
+    expect(a01.latitude).toBeCloseTo(A01.lat, 4);
+    expect(a01.longitude).toBeCloseTo(A01.lon, 4);
+    expect(a01.altitude).toBe(225);
+    expect(a01.description).toBe('BORDANO LANDING [A]');
+  });
+});
+
+describe('parseWaypointsUTM (FS $FormatUTM)', () => {
+  it('converts the grid reference to lat/lon', () => {
+    const wps = parseWaypointsUTM(FS_UTM);
+    expect(wps).toHaveLength(2);
+    const a01 = byName(wps, 'A01');
+    expect(a01.latitude).toBeCloseTo(A01.lat, 4);
+    expect(a01.longitude).toBeCloseTo(A01.lon, 4);
+    expect(a01.altitude).toBe(225);
+  });
+});
+
+describe('parseWaypointsPCX5 with CompeGPS extras', () => {
+  it('skips lowercase w comment lines and keeps the long description', () => {
+    const wps = parseWaypointsPCX5(COMPEGPS);
+    expect(wps).toHaveLength(2); // the two `w Airport,...` lines are ignored
+    const a01 = byName(wps, 'A01');
+    expect(a01.latitude).toBeCloseTo(A01.lat, 4);
+    expect(a01.description).toBe('BORDANO LANDING');
+  });
+});
+
+describe('parseWaypointFile detects FS/UTM/CompeGPS', () => {
+  it('detects $FormatGEO and $FormatUTM and CompeGPS G/W', () => {
+    expect(parseWaypointFile(FS_GEO, 'x.wpt').format).toBe('fs-geo');
+    expect(parseWaypointFile(FS_UTM, 'x.WPT').format).toBe('utm');
+    expect(parseWaypointFile(COMPEGPS, 'x.wpt').format).toBe('garmin-wpt');
+  });
+});
+
+// Integration: the seven real hg-worlds reference exports must all parse to
+// the same waypoint database (183 points, A01 at the shared coordinates).
+describe('all seven hg-worlds reference files parse', () => {
+  const dir = join(
+    import.meta.dir,
+    '..',
+    '..',
+    'samples',
+    'reference',
+    'hg-worlds-2026',
+    'waypoints'
+  );
+  const files = [
+    'hg1euro-hg5worlds-2026_CompeGPS.wpt',
+    'hg1euro-hg5worlds-2026_FS.wpt',
+    'hg1euro-hg5worlds-2026_GPX.gpx',
+    'hg1euro-hg5worlds-2026_GoogleEarth.KML',
+    'hg1euro-hg5worlds-2026_OZI.wpt',
+    'hg1euro-hg5worlds-2026_SeeYou.cup',
+    'hg1euro-hg5worlds-2026_UTM.WPT',
+  ];
+  for (const f of files) {
+    it(`${f} → 183 waypoints with A01 at the shared coordinates`, () => {
+      const path = join(dir, f);
+      if (!existsSync(path)) return; // reference data not present in this checkout
+      const { waypoints } = parseWaypointFile(readFileSync(path, 'utf8'), f);
+      expect(waypoints.length).toBe(183);
+      // A01 is named by code in most formats, by long name in OZI/SeeYou —
+      // match on coordinates instead, which every format must agree on.
+      const a01 = waypoints.find(
+        (w) => Math.abs(w.latitude - A01.lat) < 1e-3 && Math.abs(w.longitude - A01.lon) < 1e-3
+      );
+      expect(a01).toBeDefined();
+    });
+  }
 });

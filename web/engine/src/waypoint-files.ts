@@ -15,11 +15,14 @@
  * string→number parsing; never hand-roll geo maths here.
  */
 import { parseWaypointsCSV, type WaypointRecord } from './waypoints';
+import { utmToLatLon } from './utm';
 
 /** The waypoint file formats we can read. */
 export type WaypointFileFormat =
   | 'ozi-wpt'
   | 'garmin-wpt'
+  | 'fs-geo'
+  | 'utm'
   | 'seeyou-cup'
   | 'gpx'
   | 'kml'
@@ -222,19 +225,24 @@ export function parseWaypointsPCX5(content: string): WaypointRecord[] {
     const lat = parseDecimalHemiCoord(t[coordIdx[0]]);
     const lon = parseDecimalHemiCoord(t[coordIdx[1]]);
     if (lat === null || lon === null) continue;
-    // Altitude is the first plain number after the coordinates, if present.
+    // Altitude is the first plain number after the coordinates; anything after
+    // that is the long description (CompeGPS carries "BORDANO LANDING" etc.).
     let altitude = 0;
+    let altIdx = -1;
     for (let i = coordIdx[1] + 1; i < t.length; i++) {
       if (/^[+-]?\d+(\.\d+)?$/.test(t[i])) {
         altitude = Math.round(parseFloat(t[i]));
+        altIdx = i;
         break;
       }
     }
+    const description =
+      altIdx >= 0 && altIdx + 1 < t.length ? t.slice(altIdx + 1).join(' ') : t[1] || '';
     out.push({
       name: t[1] || `WP${out.length + 1}`,
       latitude: lat,
       longitude: lon,
-      description: t[1] || '',
+      description,
       radius: 400,
       altitude,
     });
@@ -313,6 +321,91 @@ export function parseWaypointsKML(content: string): WaypointRecord[] {
   return out;
 }
 
+/** Degrees/minutes/seconds → signed decimal degrees. */
+function dmsToDegrees(hemi: string, d: string, m: string, s: string): number | null {
+  const deg = parseFloat(d);
+  const min = parseFloat(m);
+  const sec = parseFloat(s);
+  if (!Number.isFinite(deg) || !Number.isFinite(min) || !Number.isFinite(sec)) return null;
+  const v = deg + min / 60 + sec / 3600;
+  return /^[SW]$/i.test(hemi) ? -v : v;
+}
+
+/**
+ * Parse an FS `$FormatGEO` waypoint file: fixed columns of
+ *   `NAME   N dd mm ss.ss   E ddd mm ss.ss   alt   description`
+ * (degrees-minutes-seconds with hemisphere letters). Everything after the
+ * altitude is the long name.
+ */
+export function parseWaypointsFsGeo(content: string): WaypointRecord[] {
+  const out: WaypointRecord[] = [];
+  for (const line of content.split(/\r?\n/)) {
+    const l = line.trim();
+    if (!l || l.startsWith('$') || l.startsWith('#') || l.startsWith('*')) continue;
+    const t = l.split(/\s+/);
+    const iLat = t.findIndex((x) => /^[NS]$/i.test(x));
+    const iLon = t.findIndex((x, k) => k > iLat && /^[EW]$/i.test(x));
+    if (iLat < 1 || iLon < 0 || iLon + 3 >= t.length) continue;
+    const lat = dmsToDegrees(t[iLat], t[iLat + 1], t[iLat + 2], t[iLat + 3]);
+    const lon = dmsToDegrees(t[iLon], t[iLon + 1], t[iLon + 2], t[iLon + 3]);
+    if (lat === null || lon === null) continue;
+    let altitude = 0;
+    let descStart = iLon + 4;
+    if (/^[+-]?\d+(\.\d+)?$/.test(t[iLon + 4] ?? '')) {
+      altitude = Math.round(parseFloat(t[iLon + 4]));
+      descStart = iLon + 5;
+    }
+    out.push({
+      name: t.slice(0, iLat).join(' ') || `WP${out.length + 1}`,
+      latitude: lat,
+      longitude: lon,
+      description: t.slice(descStart).join(' '),
+      radius: 400,
+      altitude,
+    });
+  }
+  return out;
+}
+
+/**
+ * Parse an FS `$FormatUTM` waypoint file: fixed columns of
+ *   `NAME   <zone><band>   easting   northing   alt   description`
+ * e.g. `A01   33T   0354663   5130093   225   BORDANO LANDING`. The grid
+ * reference is converted to WGS84 lat/lon via geo.ts's utmToLatLon.
+ */
+export function parseWaypointsUTM(content: string): WaypointRecord[] {
+  const out: WaypointRecord[] = [];
+  for (const line of content.split(/\r?\n/)) {
+    const l = line.trim();
+    if (!l || l.startsWith('$') || l.startsWith('#') || l.startsWith('*')) continue;
+    const t = l.split(/\s+/);
+    const iZone = t.findIndex((x) => /^\d{1,2}[C-HJ-NP-Xc-hj-np-x]$/.test(x));
+    if (iZone < 1 || iZone + 2 >= t.length) continue;
+    const zone = parseInt(t[iZone], 10);
+    const band = t[iZone].slice(-1).toUpperCase();
+    const easting = parseFloat(t[iZone + 1]);
+    const northing = parseFloat(t[iZone + 2]);
+    if (!Number.isFinite(zone) || !Number.isFinite(easting) || !Number.isFinite(northing)) continue;
+    // Band letters N–X are the northern hemisphere, C–M the southern.
+    const { lat, lon } = utmToLatLon(zone, band >= 'N', easting, northing);
+    let altitude = 0;
+    let descStart = iZone + 3;
+    if (/^[+-]?\d+(\.\d+)?$/.test(t[iZone + 3] ?? '')) {
+      altitude = Math.round(parseFloat(t[iZone + 3]));
+      descStart = iZone + 4;
+    }
+    out.push({
+      name: t.slice(0, iZone).join(' ') || `WP${out.length + 1}`,
+      latitude: lat,
+      longitude: lon,
+      description: t.slice(descStart).join(' '),
+      radius: 400,
+      altitude,
+    });
+  }
+  return out;
+}
+
 /**
  * Detect a waypoint file's format from its **contents** (with the filename as
  * a hint) and parse it. Content wins over extension because the same `.wpt`
@@ -338,7 +431,15 @@ export function parseWaypointFile(content: string, filename?: string): ParsedWay
   if (firstLine.includes('oziexplorer')) {
     return { format: 'ozi-wpt', waypoints: parseWaypointsWPT(content) };
   }
-  // Garmin/PCX5: a `G  <datum>` header line plus whitespace `W` records.
+  // FS exports declare their coordinate format on the first line.
+  if (/^\$FormatGEO\b/im.test(content)) {
+    return { format: 'fs-geo', waypoints: parseWaypointsFsGeo(content) };
+  }
+  if (/^\$FormatUTM\b/im.test(content)) {
+    return { format: 'utm', waypoints: parseWaypointsUTM(content) };
+  }
+  // Garmin/PCX5/CompeGPS: a `G  <datum>` header line plus whitespace `W`
+  // records (CompeGPS adds lowercase `w` comment lines, which we skip).
   if (/^G\s/m.test(content) && /^W\s/m.test(content)) {
     return { format: 'garmin-wpt', waypoints: parseWaypointsPCX5(content) };
   }
