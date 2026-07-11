@@ -388,7 +388,7 @@ function TurnpointsSection({
             records={records}
             baseName={taskName}
             title="Get this task on your device"
-            subtitle="Download the turnpoints for your instrument, or scan the QR into your flight app (XCTrack, Flyskyhy and most others)."
+            subtitle="Open or download the turnpoints for your instrument, or scan the QR into your flight app (XCTrack, Flyskyhy, SeeYou Navigator and most others)."
             noun="turnpoint"
           />
         </div>

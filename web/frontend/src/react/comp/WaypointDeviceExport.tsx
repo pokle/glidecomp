@@ -11,7 +11,7 @@
  * qrcode.react) is lazy-loaded to stay out of the SSR/main entry bundle, and
  * nothing here touches window/document at module scope.
  */
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   encodeXctskQR,
   swapCodeName,
@@ -30,7 +30,7 @@ import {
 } from "@/react/ui/dropdown-menu";
 import { downloadFile } from "../lib/format";
 import { slugify } from "./csv";
-import { DownloadIcon, QrCodeIcon, ChevronDownIcon } from "lucide-react";
+import { DownloadIcon, QrCodeIcon, ChevronDownIcon, Share2Icon } from "lucide-react";
 
 const WaypointQR = lazy(() => import("./WaypointQR"));
 
@@ -38,7 +38,7 @@ export function WaypointDeviceExport({
   records,
   baseName,
   title = "Get these waypoints on your device",
-  subtitle = "Download a file for your instrument, or scan the QR into your flight app (XCTrack, Flyskyhy and most others).",
+  subtitle = "Open or download a file for your instrument, or scan the QR into your flight app (XCTrack, Flyskyhy, SeeYou Navigator and most others).",
   noun = "waypoint",
 }: {
   records: WaypointFileRecord[];
@@ -51,6 +51,12 @@ export function WaypointDeviceExport({
 }) {
   const [showQR, setShowQR] = useState(false);
   const [swap, setSwap] = useState(false);
+  // Can this browser hand a file to the OS share sheet (mobile)? Detected on the
+  // client only — reading `navigator` during render would break the SSR task page.
+  const [canShareFiles, setCanShareFiles] = useState(false);
+  useEffect(() => {
+    setCanShareFiles(typeof navigator !== "undefined" && typeof navigator.canShare === "function");
+  }, []);
 
   const exported = useMemo(() => (swap ? swapCodeName(records) : records), [swap, records]);
   const xctsk = useMemo(() => (exported.length ? encodeXctskQR(exported) : ""), [exported]);
@@ -59,13 +65,27 @@ export function WaypointDeviceExport({
     [xctsk]
   );
 
-  function download(format: (typeof WAYPOINT_EXPORT_FORMATS)[number]) {
+  async function openOrDownload(format: (typeof WAYPOINT_EXPORT_FORMATS)[number]) {
     if (!exported.length) return;
-    downloadFile(
-      `${slugify(baseName || "competition")}-waypoints.${format.extension}`,
-      format.serialize(exported),
-      format.mimeType
-    );
+    const filename = `${slugify(baseName || "competition")}-waypoints.${format.extension}`;
+    const content = format.serialize(exported);
+    // On mobile, offer the file to the OS share sheet so it can open straight
+    // into a flight app (XCTrack, Flyskyhy, SeeYou Navigator…) rather than only
+    // saving. Desktop / unsupported browsers fall through to a plain download.
+    if (typeof navigator !== "undefined" && typeof navigator.canShare === "function") {
+      try {
+        const file = new File([content], filename, { type: format.mimeType });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: filename });
+          return;
+        }
+      } catch (err) {
+        // The user dismissed the sheet — don't also download behind their back.
+        if ((err as { name?: string })?.name === "AbortError") return;
+        // Anything else (share not actually supported for this file) → download.
+      }
+    }
+    downloadFile(filename, content, format.mimeType);
   }
 
   if (!records.length) return null;
@@ -80,16 +100,27 @@ export function WaypointDeviceExport({
         <div className="flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger
-              render={<Button type="button" variant="outline" size="sm" aria-label="Download waypoints" />}
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-label={canShareFiles ? "Open waypoints in an app" : "Download waypoints"}
+                />
+              }
             >
-              <DownloadIcon className="size-4" aria-hidden />
-              Download
+              {canShareFiles ? (
+                <Share2Icon className="size-4" aria-hidden />
+              ) : (
+                <DownloadIcon className="size-4" aria-hidden />
+              )}
+              {canShareFiles ? "Open / save" : "Download"}
               <ChevronDownIcon className="size-4 opacity-60" aria-hidden />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuGroup>
                 {WAYPOINT_EXPORT_FORMATS.map((fmt) => (
-                  <DropdownMenuItem key={fmt.id} onClick={() => download(fmt)}>
+                  <DropdownMenuItem key={fmt.id} onClick={() => void openOrDownload(fmt)}>
                     {fmt.label}
                   </DropdownMenuItem>
                 ))}
