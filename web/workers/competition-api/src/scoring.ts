@@ -8,6 +8,8 @@ import {
   openDistanceGeometryForFlight,
   toFlightScoringData,
   taskForDistanceOrigin,
+  manualFlightGeometry,
+  manualOpenDistanceGeometry,
   computeLeadingAggregate,
   calculateOptimizedTaskDistance,
   DEFAULT_GAP_PARAMETERS,
@@ -20,6 +22,7 @@ import {
   type TurnpointSequenceResultJSON,
 } from "@glidecomp/engine";
 import { encodeId } from "./sqids";
+import { manualFlightToScoringData, manualFlightKey } from "./manual-flight-store";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -105,7 +108,7 @@ export async function computeScoreStateKey(
               tt.comp_pilot_id, cp.registered_pilot_name, cp.pilot_class
        FROM task_track tt
        JOIN comp_pilot cp ON cp.comp_pilot_id = tt.comp_pilot_id
-       WHERE tt.task_id = ? ORDER BY tt.task_track_id`
+       WHERE tt.task_id = ? AND tt.active = 1 ORDER BY tt.task_track_id`
     )
     .bind(taskId)
     .all<{
@@ -114,6 +117,29 @@ export async function computeScoreStateKey(
       penalty_points: number;
       comp_pilot_id: number;
       registered_pilot_name: string;
+      pilot_class: string;
+    }>();
+
+  // Manual flights (issue #306) are scoring inputs too: an active manual flight
+  // is scored as numFlying and its made-good depends on its inputs + the route.
+  // Hash the geometric inputs + made_goal/duration so recording, editing, or
+  // superseding one invalidates the served body. Only active rows count.
+  const manualFlights = await db
+    .prepare(
+      `SELECT mf.comp_pilot_id, mf.last_reached_tp_index, mf.landing_lat,
+              mf.landing_lon, mf.made_goal, mf.duration_seconds, cp.pilot_class
+       FROM task_manual_flight mf
+       JOIN comp_pilot cp ON cp.comp_pilot_id = mf.comp_pilot_id
+       WHERE mf.task_id = ? AND mf.active = 1 ORDER BY mf.comp_pilot_id`
+    )
+    .bind(taskId)
+    .all<{
+      comp_pilot_id: number;
+      last_reached_tp_index: number;
+      landing_lat: number;
+      landing_lon: number;
+      made_goal: number;
+      duration_seconds: number | null;
       pilot_class: string;
     }>();
 
@@ -147,6 +173,10 @@ export async function computeScoreStateKey(
     ...statuses.results.map(
       (s) => `st:${s.comp_pilot_id}:${s.status_key}:${s.pilot_class}`
     ),
+    ...manualFlights.results.map(
+      (m) =>
+        `mf:${m.comp_pilot_id}:${m.last_reached_tp_index}:${m.landing_lat}:${m.landing_lon}:${m.made_goal}:${m.duration_seconds ?? ""}:${m.pilot_class}`
+    ),
   ].join("|");
 
   const hashBuffer = await crypto.subtle.digest(
@@ -160,7 +190,8 @@ export async function computeScoreStateKey(
 
   // v5: added scoring_format to the hashed state (open-distance support).
   // v6: added per-task pilot statuses (they now feed launch validity).
-  return `score:v6:${taskId}:${hex}`;
+  // v7: only active tracks count; added active manual flights (issue #306).
+  return `score:v7:${taskId}:${hex}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -442,7 +473,9 @@ export async function computeTaskScore(
   const leadingFormula = gapParams.leadingFormula ?? DEFAULT_GAP_PARAMETERS.leadingFormula;
   const scoringTask = taskForDistanceOrigin(xcTask, distanceOrigin);
 
-  // Load all tracks joined with pilot info, grouped by class
+  // Load all active tracks joined with pilot info, grouped by class. A
+  // superseded track (active = 0 — e.g. a pilot later marked DNF, or replaced
+  // by a manual flight) is retained but NOT scored (issue #306).
   const tracks = await db
     .prepare(
       `SELECT tt.task_track_id, tt.comp_pilot_id, tt.igc_filename, tt.uploaded_at,
@@ -451,7 +484,7 @@ export async function computeTaskScore(
               cp.pilot_class
        FROM task_track tt
        JOIN comp_pilot cp ON tt.comp_pilot_id = cp.comp_pilot_id
-       WHERE tt.task_id = ?
+       WHERE tt.task_id = ? AND tt.active = 1
        ORDER BY tt.task_track_id`
     )
     .bind(taskId)
@@ -491,6 +524,13 @@ export async function computeTaskScore(
            SELECT 1 FROM task_track tt
            WHERE tt.task_id = tps.task_id
              AND tt.comp_pilot_id = tps.comp_pilot_id
+             AND tt.active = 1
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM task_manual_flight mf
+           WHERE mf.task_id = tps.task_id
+             AND mf.comp_pilot_id = tps.comp_pilot_id
+             AND mf.active = 1
          )
        GROUP BY cp.pilot_class`
     )
@@ -581,6 +621,45 @@ export async function computeTaskScore(
     const analyzedPilots = analyzed.filter(
       (p): p is AnalyzedOpenPilot => p !== null
     );
+
+    // Manual flights (issue #306) on an open-distance task: the made-good is
+    // the straight-line distance from the take-off cylinder edge to the landing
+    // point. Cheap to compute (no R2 / tracklog), inline and uncached; only
+    // active rows in scored classes, scored as numFlying.
+    const odManualRows = await db
+      .prepare(
+        `SELECT mf.comp_pilot_id, mf.landing_lat, mf.landing_lon,
+                cp.registered_pilot_name AS pilot_name, cp.pilot_class
+         FROM task_manual_flight mf
+         JOIN comp_pilot cp ON cp.comp_pilot_id = mf.comp_pilot_id
+         WHERE mf.task_id = ? AND mf.active = 1`
+      )
+      .bind(taskId)
+      .all<{
+        comp_pilot_id: number;
+        landing_lat: number;
+        landing_lon: number;
+        pilot_name: string;
+        pilot_class: string;
+      }>();
+    for (const m of odManualRows.results) {
+      if (!scoredClasses.has(m.pilot_class)) continue;
+      const od = manualOpenDistanceGeometry(xcTask, {
+        lat: m.landing_lat,
+        lon: m.landing_lon,
+      });
+      analyzedPilots.push({
+        flight: {
+          pilotName: m.pilot_name,
+          trackFile: manualFlightKey(m.comp_pilot_id),
+          distance: od.distance,
+        },
+        comp_pilot_id: m.comp_pilot_id,
+        pilot_class: m.pilot_class,
+        penalty_points: 0,
+        penalty_reason: null,
+      });
+    }
 
     const classScores: ClassScore[] = [];
     for (const pilotClass of scoredClasses) {
@@ -735,6 +814,53 @@ export async function computeTaskScore(
 
   const analyzedPilots = analyzed.filter((p): p is AnalyzedPilot => p !== null);
 
+  // Manual flights (issue #306): track-less pilots recorded by an admin.
+  // Their made-good is cheap to compute (no R2 fetch, no tracklog scan), so
+  // build the synthetic scoring inputs inline against the same scoring task —
+  // recomputed live so a later route edit rescales them. Only active rows in
+  // scored classes count; they score as numFlying like any tracked pilot.
+  const offset = xcTask.turnpoints.length - scoringTask.turnpoints.length;
+  const manualRows = await db
+    .prepare(
+      `SELECT mf.comp_pilot_id, mf.last_reached_tp_index, mf.landing_lat,
+              mf.landing_lon, mf.duration_seconds,
+              cp.registered_pilot_name AS pilot_name, cp.pilot_class
+       FROM task_manual_flight mf
+       JOIN comp_pilot cp ON cp.comp_pilot_id = mf.comp_pilot_id
+       WHERE mf.task_id = ? AND mf.active = 1`
+    )
+    .bind(taskId)
+    .all<{
+      comp_pilot_id: number;
+      last_reached_tp_index: number;
+      landing_lat: number;
+      landing_lon: number;
+      duration_seconds: number | null;
+      pilot_name: string;
+      pilot_class: string;
+    }>();
+  for (const m of manualRows.results) {
+    if (!scoredClasses.has(m.pilot_class)) continue;
+    analyzedPilots.push({
+      flight: manualFlightToScoringData(
+        scoringTask,
+        offset,
+        m.pilot_name,
+        m.comp_pilot_id,
+        {
+          lastReachedTpIndex: m.last_reached_tp_index,
+          landingLat: m.landing_lat,
+          landingLon: m.landing_lon,
+          durationSeconds: m.duration_seconds,
+        }
+      ),
+      comp_pilot_id: m.comp_pilot_id,
+      pilot_class: m.pilot_class,
+      penalty_points: 0,
+      penalty_reason: null,
+    });
+  }
+
   // Score each class separately
   const classScores: ClassScore[] = [];
 
@@ -805,13 +931,28 @@ export interface PilotAnalysisResponse {
     origin: OpenDistanceAnchorPoint | null;
     furthest: OpenDistanceAnchorPoint | null;
   } | null;
+  /**
+   * Manual flight geometry for a track-less pilot (issue #306): the landing
+   * point and the routed made-good line to goal, so the score-details page
+   * shows the same evidence as a landed-out track. All indices are in the
+   * scoring (distance-origin-trimmed) frame. Null for tracked pilots.
+   */
+  manual_flight: {
+    last_reached_tp_index: number;
+    landing: { lat: number; lon: number };
+    made_good: number;
+    distance_to_goal: number;
+    made_goal: boolean;
+    route_to_goal: Array<{ lat: number; lon: number }>;
+  } | null;
 }
 
 export interface OpenDistanceAnchorPoint {
   latitude: number;
   longitude: number;
-  time_ms: number;
-  altitude: number;
+  /** Null for a manual flight (no tracklog → no fix time / altitude). */
+  time_ms: number | null;
+  altitude: number | null;
 }
 
 /** The cacheable (comp-pilot-independent) part of {@link PilotAnalysisResponse}. */
@@ -850,11 +991,77 @@ export async function computePilotAnalysis(
     .prepare(
       `SELECT task_track_id, igc_filename, uploaded_at
        FROM task_track
-       WHERE task_id = ? AND comp_pilot_id = ?`
+       WHERE task_id = ? AND comp_pilot_id = ? AND active = 1`
     )
     .bind(taskId, compPilotId)
     .first<{ task_track_id: number; igc_filename: string; uploaded_at: string }>();
-  if (!track) return null;
+  if (!track) {
+    // No active track — the pilot may have a manual flight (issue #306).
+    // Manual flights are a GAP made-good concept, so only for GAP tasks; the
+    // geometry is cheap (no R2 / tracklog), so compute it inline, uncached.
+    const manual = await db
+      .prepare(
+        `SELECT last_reached_tp_index, landing_lat, landing_lon
+         FROM task_manual_flight
+         WHERE task_id = ? AND comp_pilot_id = ? AND active = 1`
+      )
+      .bind(taskId, compPilotId)
+      .first<{
+        last_reached_tp_index: number;
+        landing_lat: number;
+        landing_lon: number;
+      }>();
+    if (!manual) return null;
+    const xcTask = parseXCTask(taskRow.xctsk);
+
+    // Open distance: the made-good is measured from the take-off cylinder edge
+    // to the landing point. Return the same open_distance line a track does, so
+    // the score-details page reuses the open-distance rendering.
+    if (taskRow.scoring_format === "open_distance") {
+      const od = manualOpenDistanceGeometry(xcTask, {
+        lat: manual.landing_lat,
+        lon: manual.landing_lon,
+      });
+      return {
+        comp_pilot_id: encodeId(alphabet, compPilotId),
+        scoring_format: "open_distance",
+        turnpoint_result: null,
+        manual_flight: null,
+        open_distance: {
+          distance: od.distance,
+          origin: { latitude: od.origin.lat, longitude: od.origin.lon, time_ms: null, altitude: null },
+          furthest: { latitude: od.landing.lat, longitude: od.landing.lon, time_ms: null, altitude: null },
+        },
+      };
+    }
+
+    const gapParams: Partial<GAPParameters> = taskRow.gap_params
+      ? JSON.parse(taskRow.gap_params)
+      : {};
+    const distanceOrigin =
+      gapParams.distanceOrigin ?? DEFAULT_GAP_PARAMETERS.distanceOrigin;
+    const scoringTask = taskForDistanceOrigin(xcTask, distanceOrigin);
+    const offset = xcTask.turnpoints.length - scoringTask.turnpoints.length;
+    const scoringIndex = manual.last_reached_tp_index - offset;
+    const geom = manualFlightGeometry(scoringTask, scoringIndex, {
+      lat: manual.landing_lat,
+      lon: manual.landing_lon,
+    });
+    return {
+      comp_pilot_id: encodeId(alphabet, compPilotId),
+      scoring_format: "gap",
+      turnpoint_result: null,
+      open_distance: null,
+      manual_flight: {
+        last_reached_tp_index: scoringIndex,
+        landing: { lat: manual.landing_lat, lon: manual.landing_lon },
+        made_good: geom.madeGood,
+        distance_to_goal: geom.distanceToGoal,
+        made_goal: geom.madeGoal,
+        route_to_goal: geom.routeToGoal,
+      },
+    };
+  }
 
   const scoringFormat: "gap" | "open_distance" =
     taskRow.scoring_format === "open_distance" ? "open_distance" : "gap";
@@ -950,5 +1157,6 @@ export async function computePilotAnalysis(
     comp_pilot_id: encodeId(alphabet, compPilotId),
     scoring_format: scoringFormat,
     ...payload,
+    manual_flight: null,
   };
 }

@@ -12,6 +12,11 @@ import {
 import { audit, describeChange } from "../audit";
 import { pilotStatusLabel } from "../pilot-statuses";
 import { bumpAndRevalidateScores } from "../score-store";
+import {
+  supersedeActiveTrack,
+  supersedeActiveManualFlights,
+  markLandedFromEvidence,
+} from "../manual-flight-store";
 
 type Variables = {
   user: AuthUser;
@@ -64,7 +69,7 @@ function serializeStatus(
  *
  * Returns null on success, or an error tuple to return.
  */
-async function authorizeStatusMutation(
+export async function authorizeStatusMutation(
   db: D1Database,
   compId: number,
   targetCompPilotId: number,
@@ -260,6 +265,17 @@ export const pilotStatusRoutes = new Hono<HonoEnv>()
           .run();
       }
 
+      // Setting Absent or DNF means the pilot did not record a scored flight:
+      // supersede any active track OR manual flight (kept, not scored). This is
+      // the fix for the bug where marking DNF left a still-scoring track on
+      // disk — scoring now reads only active records (issue #306).
+      const trackSuperseded = await supersedeActiveTrack(c.env.DB, taskId, compPilotId);
+      const manualSuperseded = await supersedeActiveManualFlights(
+        c.env.DB,
+        taskId,
+        compPilotId
+      );
+
       // A pilot's status is a scoring input: non-absent pilots count toward
       // launch validity's "pilots present" (FAI S7F §9.1). Bump right after
       // the write, beside audit().
@@ -285,6 +301,10 @@ export const pilotStatusRoutes = new Hono<HonoEnv>()
         );
       } else {
         description = `Re-confirmed status for ${cp.registered_pilot_name} as "${newLabel}"`;
+      }
+      if (trackSuperseded || manualSuperseded) {
+        const what = trackSuperseded ? "track" : "manual flight";
+        description += ` (superseded their ${what}, no longer scored)`;
       }
 
       await audit(c.env.DB, user, compId, {
@@ -454,14 +474,28 @@ export const pilotStatusRoutes = new Hono<HonoEnv>()
         .bind(taskId, compPilotId)
         .run();
 
+      // Explicitly returning a pilot to Present supersedes any active flight
+      // record (a Landed pilot's track/manual): Present means "no scored
+      // flight". Retained, not deleted, so it can be restored (issue #306).
+      const trackSuperseded = await supersedeActiveTrack(c.env.DB, taskId, compPilotId);
+      const manualSuperseded = await supersedeActiveManualFlights(
+        c.env.DB,
+        taskId,
+        compPilotId
+      );
+
       // Clearing a status changes who counts as present — bump scores.
       await bumpAndRevalidateScores(c, [taskId]);
 
+      const supersededNote =
+        trackSuperseded || manualSuperseded
+          ? ` (superseded their ${trackSuperseded ? "track" : "manual flight"}, no longer scored)`
+          : "";
       await audit(c.env.DB, user, compId, {
         subject_type: "pilot",
         subject_id: compPilotId,
         subject_name: cp.registered_pilot_name,
-        description: `Cleared status "${pilotStatusLabel(prev.status_key)}" for ${cp.registered_pilot_name} (back to Present)`,
+        description: `Cleared status "${pilotStatusLabel(prev.status_key)}" for ${cp.registered_pilot_name} (back to Present)${supersededNote}`,
       });
 
       return c.json({ success: true });
@@ -470,13 +504,16 @@ export const pilotStatusRoutes = new Hono<HonoEnv>()
 
 /**
  * Track-upload hook. Called by igc.ts after a successful IGC insert or
- * replace: a pilot with a track has flown, so their status becomes Landed
- * (overriding any prior Present/Absent/Did-Not-Fly). Idempotent — if the
- * pilot is already Landed nothing changes and no audit noise is emitted.
+ * replace: a pilot with a track has flown (the track is the active evidence),
+ * so their outcome becomes Landed (overriding any prior Present/Absent/DNF).
+ * Evidence is a track XOR a manual flight, so this also supersedes any active
+ * manual flight for the pilot (retained, not scored). Idempotent — if the
+ * pilot is already Landed with a track and nothing to supersede, no audit
+ * noise is emitted.
  *
- * The surrounding upload already bumps the task's scores, and this write
- * commits before that bump's deferred revalidation runs, so the recompute
- * sees the Landed state — no separate bump needed here.
+ * The surrounding upload already bumps the task's scores, and these writes
+ * commit before that bump's deferred revalidation runs, so the recompute sees
+ * the reconciled state — no separate bump needed here.
  *
  * Exported so igc.ts can call it without re-implementing the logic.
  */
@@ -488,41 +525,19 @@ export async function applyStatusOnTrackUpload(
   compPilotId: number,
   pilotName: string
 ): Promise<void> {
-  const current = await db
-    .prepare(
-      `SELECT status_key FROM task_pilot_status
-       WHERE task_id = ? AND comp_pilot_id = ?`
-    )
-    .bind(taskId, compPilotId)
-    .first<{ status_key: string }>();
+  // A track is now the active evidence — supersede any active manual flight.
+  const manualSuperseded = await supersedeActiveManualFlights(db, taskId, compPilotId);
+  const prevKey = await markLandedFromEvidence(db, user, compId, taskId, compPilotId);
 
-  if (current?.status_key === "landed") return; // already Landed — nothing to do
-
-  const now = new Date().toISOString();
-  if (current) {
-    await db
-      .prepare(
-        `UPDATE task_pilot_status
-         SET status_key = 'landed', note = NULL, set_by_user_id = ?, set_by_name = ?, set_at = ?
-         WHERE task_id = ? AND comp_pilot_id = ?`
-      )
-      .bind(user.id, user.name, now, taskId, compPilotId)
-      .run();
-  } else {
-    await db
-      .prepare(
-        `INSERT INTO task_pilot_status
-           (comp_id, task_id, comp_pilot_id, status_key, note, set_by_user_id, set_by_name, set_at)
-         VALUES (?, ?, ?, 'landed', NULL, ?, ?, ?)`
-      )
-      .bind(compId, taskId, compPilotId, user.id, user.name, now)
-      .run();
-  }
+  // Nothing changed (already Landed via a track, no manual to supersede).
+  if (prevKey === "landed" && !manualSuperseded) return;
 
   await audit(db, user, compId, {
     subject_type: "pilot",
     subject_id: compPilotId,
     subject_name: pilotName,
-    description: `Set status "Landed" for ${pilotName} because a track was uploaded`,
+    description: manualSuperseded
+      ? `Set status "Landed" for ${pilotName} because a track was uploaded (superseded their manual flight)`
+      : `Set status "Landed" for ${pilotName} because a track was uploaded`,
   });
 }

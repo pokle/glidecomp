@@ -19,6 +19,7 @@ import { useParams } from "react-router-dom";
 import {
   explainGapScore,
   explainOpenDistanceScore,
+  explainManualFlightScore,
   parseIGC,
   reviveTurnpointSequenceResult,
   taskForDistanceOrigin,
@@ -237,18 +238,22 @@ function buildDetailData(
           }
         : null;
     assertAnalysisMatchesScore(Math.round(od?.distance ?? 0), entry.flown_distance);
+    // A manual open-distance flight has no fix times — the endpoints carry null
+    // time_ms. Detect that to adjust the wording and omit times.
+    const manual = od?.origin != null && od.origin.time_ms == null;
     const explanation = explainOpenDistanceScore({
       task: task.xctsk,
       geometry,
       anchorInfo: {
         origin: od?.origin
-          ? { timeMs: od.origin.time_ms, altitude: od.origin.altitude }
+          ? { timeMs: od.origin.time_ms ?? undefined, altitude: od.origin.altitude ?? undefined }
           : undefined,
         furthest: od?.furthest
-          ? { timeMs: od.furthest.time_ms, altitude: od.furthest.altitude }
+          ? { timeMs: od.furthest.time_ms ?? undefined, altitude: od.furthest.altitude ?? undefined }
           : undefined,
       },
       entry,
+      manual,
       formatTime: narrativeTimeFormatter(comp.timezone),
     });
     return {
@@ -268,6 +273,54 @@ function buildDetailData(
             distance: geometry.distance,
           }
         : null,
+      scoreComputedAt: score.computed_at,
+      scoreStale: score.stale,
+    };
+  }
+
+  // Manual flight (issue #306): a track-less pilot scored from the last
+  // turnpoint reached + landing point. No tracklog to narrate — the engine
+  // explains the made-good, and attaches the routed distance-to-goal line to
+  // the landing anchor so the map shows the same evidence as a landed-out
+  // track. Same distance-origin trim as the scorer used.
+  if (analysis.manual_flight) {
+    const mf = analysis.manual_flight;
+    const { nominalDistance, ...gapRest } = comp.gap_params ?? {};
+    const params: Partial<GAPParameters> =
+      nominalDistance != null ? { ...gapRest, nominalDistance } : gapRest;
+    const scoringTask = taskForDistanceOrigin(
+      task.xctsk,
+      params.distanceOrigin ?? "takeoff",
+    );
+    const explanation = explainManualFlightScore({
+      task: scoringTask,
+      geometry: {
+        madeGood: mf.made_good,
+        distanceToGoal: mf.distance_to_goal,
+        madeGoal: mf.made_goal,
+        landing: mf.landing,
+        routeToGoal: mf.route_to_goal,
+        lastReachedIndex: mf.last_reached_tp_index,
+      },
+      entry,
+      classContext: cls,
+      params,
+    });
+    const minimumDistance = params.minimumDistance ?? 5000;
+    assertAnalysisMatchesScore(
+      Math.max(mf.made_good, minimumDistance),
+      entry.flown_distance,
+    );
+    return {
+      comp,
+      task,
+      entry,
+      pilotClass: cls.pilot_class,
+      explanation,
+      mapTask: scoringTask,
+      eventsByItem: anchoredEvents(explanation),
+      bestProgressRoute: deriveBestProgressRoute(explanation, mf.distance_to_goal),
+      openDistanceLine: null,
       scoreComputedAt: score.computed_at,
       scoreStale: score.stale,
     };

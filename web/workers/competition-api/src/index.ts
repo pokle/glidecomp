@@ -8,6 +8,7 @@ import { taskRoutes } from "./routes/task";
 import { igcRoutes } from "./routes/igc";
 import { pilotRoutes } from "./routes/pilot";
 import { pilotStatusRoutes } from "./routes/pilot-status";
+import { manualFlightRoutes } from "./routes/manual-flight";
 import { scoreRoutes } from "./routes/score";
 import { auditRoutes } from "./routes/audit";
 import { userFilesRoutes } from "./routes/user-files";
@@ -88,6 +89,7 @@ const routes = app
   .route("/", visualizationRoutes)
   .route("/", pilotRoutes)
   .route("/", pilotStatusRoutes)
+  .route("/", manualFlightRoutes)
   .route("/", compRoutes)
   .route("/", taskRoutes)
   .route("/", scoreRoutes)

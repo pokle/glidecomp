@@ -130,8 +130,8 @@ export async function bumpScoreInputs(
 }
 
 /** Task IDs whose scores a change to these pilots can affect: the tasks
- * where they have tracks. Query BEFORE deleting pilots — the cascade
- * removes the very task_track rows this looks at. */
+ * where they have a track OR a manual flight (issue #306). Query BEFORE
+ * deleting pilots — the cascade removes the very rows this looks at. */
 export async function taskIdsForPilots(
   db: D1Database,
   compPilotIds: number[]
@@ -140,10 +140,11 @@ export async function taskIdsForPilots(
   const placeholders = compPilotIds.map(() => "?").join(", ");
   const rows = await db
     .prepare(
-      `SELECT DISTINCT task_id FROM task_track
-       WHERE comp_pilot_id IN (${placeholders})`
+      `SELECT task_id FROM task_track WHERE comp_pilot_id IN (${placeholders})
+       UNION
+       SELECT task_id FROM task_manual_flight WHERE comp_pilot_id IN (${placeholders})`
     )
-    .bind(...compPilotIds)
+    .bind(...compPilotIds, ...compPilotIds)
     .all<{ task_id: number }>();
   return rows.results.map((r) => r.task_id);
 }

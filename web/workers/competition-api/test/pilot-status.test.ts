@@ -352,10 +352,12 @@ describe("GET pilot-status", () => {
       registered_pilot_name: "Bob",
     });
 
-    await authRequest(
-      "PUT",
-      `/api/comp/${compId}/task/${taskId}/pilot-status/${cp1}`,
-      { status_key: "landed" }
+    // "Landed" is derived from an active flight record, not hand-picked:
+    // uploading a track for Alice resolves her outcome to Landed.
+    await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc/${cp1}`,
+      fakeIgcPayload(),
+      { user: "user-1" }
     );
     await authRequest(
       "PUT",

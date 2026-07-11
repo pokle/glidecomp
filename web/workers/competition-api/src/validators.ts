@@ -112,14 +112,32 @@ export const updateCompSchema = z.object({
 
 // ── Pilot status (per-task) validators ──
 //
-// The status vocabulary is fixed (see pilot-statuses.ts): the three
-// non-default keys admins can assign. "Present" is the absence of a row, so
-// it isn't a value here — clearing a pilot's status (a DELETE) makes them
-// Present again.
+// Admins/pilots may hand-pick only the two "did not fly" outcomes. "Present"
+// is the absence of a row (a DELETE returns a pilot to it). "Landed" is NOT
+// hand-picked — it is DERIVED from an active flight record (a track or a
+// manual flight); see manual-flight-store.ts. Accepting `landed` here would
+// let an admin claim a landing with no scored evidence, which is exactly what
+// manual flights replace (issue #306).
 export const upsertPilotStatusSchema = z.object({
-  status_key: z.enum(["absent", "dnf", "landed"]),
+  status_key: z.enum(["absent", "dnf"]),
   note: z.string().max(MAX_TEXT).nullable().optional(),
 });
+
+// ── Manual flight (per-task, per-pilot) validators ──
+//
+// A manual flight scores a track-less pilot from the last turnpoint they
+// legally reached plus where they landed (FAI S7F §8.4). last_reached_tp_index
+// is an index into the FULL task turnpoints[] (Start/SSS … Goal); the server
+// computes the made-good distance via the engine. duration_seconds is the
+// speed-section time, only meaningful when the pilot is in goal.
+export const upsertManualFlightSchema = z
+  .object({
+    last_reached_tp_index: z.number().int().min(0).max(49),
+    landing_lat: z.number().min(-90).max(90),
+    landing_lon: z.number().min(-180).max(180),
+    duration_seconds: z.number().int().min(0).max(86400).nullable().optional(),
+  })
+  .strict();
 
 export const updatePilotStatusNoteSchema = z.object({
   note: z.string().max(MAX_TEXT).nullable(),

@@ -36,9 +36,7 @@ import { Breadcrumbs } from "../components/Breadcrumbs";
 import { SectionHeader } from "../components/SectionHeader";
 import { downloadXctskFile } from "../comp/download-xctsk";
 import { CheckboxField } from "../comp/fields";
-import { PilotStatusSection } from "../comp/PilotStatusSection";
-import { ScoresSection } from "../comp/ScoresSection";
-import { TrackSection } from "../comp/TrackSection";
+import { TaskStandings } from "../comp/TaskStandings";
 import { RouteEditorDialog } from "../comp/RouteEditorDialog";
 import { startConfigSummary } from "../comp/route-editor";
 import { useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
@@ -249,33 +247,22 @@ export function TaskDetail() {
         onEditRoute={() => setRouteOpen(true)}
       />
 
-      <TrackSection
+      {/* Unified standings: ranked scorers + per-class did-not-score tail,
+          with per-pilot admin actions (track upload, manual flight, status,
+          restore). Replaces the old Scores + Pilot Status + Tracks sections
+          (issue #306). */}
+      <TaskStandings
         compId={compId}
         taskId={taskId}
-        isAuthenticated={user != null}
         isAdmin={isAdmin}
+        isAuthenticated={user != null}
         isClosed={isClosed}
         canUploadOnBehalf={canUploadOnBehalf}
-        onTracksChanged={() => setScoresRefresh((n) => n + 1)}
-      />
-
-      {/* Pilot status (safety roll call) — skipped when comp data failed to
-          load because we can't resolve permissions without it. */}
-      {comp ? (
-        <PilotStatusSection
-          compId={compId}
-          taskId={taskId}
-          user={user}
-          isAdmin={isAdmin}
-          openIgcUpload={comp.open_igc_upload}
-        />
-      ) : null}
-
-      <ScoresSection
-        compId={compId}
-        taskId={taskId}
-        refresh={scoresRefresh}
+        scoringFormat={comp?.scoring_format === "open_distance" ? "open_distance" : "gap"}
+        distanceOrigin={comp?.gap_params?.distanceOrigin ?? "takeoff"}
         timezone={comp?.timezone ?? null}
+        taskXctsk={task.xctsk}
+        refresh={scoresRefresh}
         onReplayAvailable={setReplayAvailable}
         initialScore={initial && refresh === 0 ? (initial.score ?? undefined) : undefined}
       />
