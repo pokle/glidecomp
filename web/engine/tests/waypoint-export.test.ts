@@ -11,6 +11,7 @@ import {
   WAYPOINT_EXPORT_FORMATS,
   encodeTurnpointZ,
   encodeXctskQR,
+  swapCodeName,
 } from '../src/waypoint-export';
 import { parseWaypointFile, type WaypointFileRecord } from '../src/waypoint-files';
 import { latLonToUtm, utmToLatLon } from '../src/utm';
@@ -110,6 +111,37 @@ describe('XCTrack QR encoding matches real app output', () => {
     const data = JSON.parse(encodeXctskQR([bigara, brad]).slice('XCTSK:'.length));
     expect(data.t[0]).toEqual({ n: 'BIGARA', d: 'BIGARA', z: '_jmf[rvi|EkR?' });
     expect(data.t[1]).toEqual({ n: 'BRADGP', d: 'Bradneys', z: '}mfg[`nx{E_\\?' });
+  });
+});
+
+describe('swapCodeName flips the identifier fields for both files and the QR', () => {
+  const one: WaypointFileRecord[] = [
+    { code: 'CORRY', name: 'CORRY Airport', latitude: -36.185, longitude: 147.8914, altitude: 291, radius: 1000 },
+  ];
+
+  it('swaps code and name on each record', () => {
+    const [s] = swapCodeName(one);
+    expect(s.code).toBe('CORRY Airport');
+    expect(s.name).toBe('CORRY');
+    // Coordinates and the rest are untouched.
+    expect(s.latitude).toBe(-36.185);
+    expect(s.radius).toBe(1000);
+  });
+
+  it('flips the XCTSK n/d fields when applied before encoding', () => {
+    const normal = JSON.parse(encodeXctskQR(one).slice('XCTSK:'.length));
+    const swapped = JSON.parse(encodeXctskQR(swapCodeName(one)).slice('XCTSK:'.length));
+    expect(normal.t[0]).toMatchObject({ n: 'CORRY', d: 'CORRY Airport' });
+    expect(swapped.t[0]).toMatchObject({ n: 'CORRY Airport', d: 'CORRY' });
+    // The position payload is identical — only the labels move.
+    expect(swapped.t[0].z).toBe(normal.t[0].z);
+  });
+
+  it('is a no-op for records whose code and name already match', () => {
+    const same: WaypointFileRecord[] = [
+      { code: 'CUDG', name: 'CUDG', latitude: -36.19228, longitude: 147.77022, altitude: 325, radius: 400 },
+    ];
+    expect(swapCodeName(same)[0]).toMatchObject({ code: 'CUDG', name: 'CUDG' });
   });
 });
 

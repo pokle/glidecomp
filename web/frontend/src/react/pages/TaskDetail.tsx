@@ -5,9 +5,9 @@
  * route editor dialog (comp/RouteEditorDialog) covering turnpoints, start
  * gates, goal, and .xctsk / XContest import-export (#270).
  */
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import type { XCTask } from "@glidecomp/engine";
+import type { XCTask, WaypointFileRecord } from "@glidecomp/engine";
 import { Button } from "@/react/ui/button";
 import {
   Dialog,
@@ -38,6 +38,7 @@ import { downloadXctskFile } from "../comp/download-xctsk";
 import { CheckboxField } from "../comp/fields";
 import { TaskStandings } from "../comp/TaskStandings";
 import { RouteEditorDialog } from "../comp/RouteEditorDialog";
+import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
 import { startConfigSummary } from "../comp/route-editor";
 import { useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 import {
@@ -241,6 +242,7 @@ export function TaskDetail() {
 
       <TurnpointsSection
         xctsk={task.xctsk}
+        taskName={task.name}
         taskDate={task.task_date}
         timezone={comp?.timezone ?? null}
         isAdmin={isAdmin}
@@ -309,18 +311,35 @@ export function TaskDetail() {
  */
 function TurnpointsSection({
   xctsk,
+  taskName,
   taskDate,
   timezone,
   isAdmin,
   onEditRoute,
 }: {
   xctsk: XCTask | null;
+  taskName: string;
   taskDate: string;
   /** Comp-local IANA zone; gate times in the summary show comp-local when set. */
   timezone: string | null;
   isAdmin: boolean;
   onEditRoute: () => void;
 }) {
+  // The task's turnpoints as exportable records (short code, long name, coords,
+  // cylinder radius) for the "download / QR to your device" panel.
+  const records: WaypointFileRecord[] = useMemo(
+    () =>
+      (xctsk?.turnpoints ?? []).map((tp) => ({
+        code: tp.waypoint.name,
+        name: tp.waypoint.description || tp.waypoint.name,
+        latitude: tp.waypoint.lat,
+        longitude: tp.waypoint.lon,
+        altitude: tp.waypoint.altSmoothed ?? 0,
+        radius: tp.radius,
+      })),
+    [xctsk]
+  );
+
   if (!xctsk && !isAdmin) return null;
   return (
     <section>
@@ -362,6 +381,17 @@ function TurnpointsSection({
         <p className="mt-2 text-sm text-muted-foreground">
           {startConfigSummary(xctsk.sss, { timeZone: timezone, taskDate })}
         </p>
+      ) : null}
+      {records.length > 0 ? (
+        <div className="mt-4">
+          <WaypointDeviceExport
+            records={records}
+            baseName={taskName}
+            title="Get this task on your device"
+            subtitle="Download the turnpoints for your instrument, or scan the QR into your flight app (XCTrack, Flyskyhy and most others)."
+            noun="turnpoint"
+          />
+        </div>
       ) : null}
     </section>
   );

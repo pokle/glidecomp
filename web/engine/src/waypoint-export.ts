@@ -271,6 +271,17 @@ export function toCSV(waypoints: WaypointFileRecord[]): string {
   return lines.join('\r\n') + '\r\n';
 }
 
+/**
+ * Swap each record's short `code` and long `name`. Devices disagree on which
+ * identifier they show as the waypoint's label — some key off the short code,
+ * others the descriptive name — so the UI offers this as a toggle that applies
+ * uniformly to every download format and the QR (it flips the CUP/CSV code/name
+ * columns and the XCTSK `n`/`d` fields alike).
+ */
+export function swapCodeName(waypoints: WaypointFileRecord[]): WaypointFileRecord[] {
+  return waypoints.map((w) => ({ ...w, code: w.name || w.code, name: w.code }));
+}
+
 /** All downloadable file formats, in the order the UI offers them. */
 export const WAYPOINT_EXPORT_FORMATS: WaypointExportFormat[] = [
   { id: 'seeyou-cup', label: 'SeeYou (.cup)', extension: 'cup', mimeType: 'text/plain;charset=utf-8', serialize: toSeeYouCup },

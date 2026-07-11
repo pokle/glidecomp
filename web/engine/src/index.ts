@@ -8,7 +8,7 @@ export { parseXCTask, parseXCTaskAsync, toXctskJSON, igcTaskToXCTask, calculateN
 export { calculateOptimizedTaskLine, calculateOptimizedTaskDistance, getOptimizedSegmentDistances } from './task-optimizer';
 export { parseWaypointsCSV, findWaypoint, findWaypointByName, findWaypointByCoordinates, type WaypointRecord } from './waypoints';
 export { parseWaypointsWPT, parseWaypointsCUP, parseWaypointsPCX5, parseWaypointsGPX, parseWaypointsKML, parseWaypointsFsGeo, parseWaypointsUTM, parseWaypointFile, parseCoordinateValue, type WaypointFileFormat, type WaypointFileRecord, type ParsedWaypointFile } from './waypoint-files';
-export { toSeeYouCup, toGPX, toKML, toCompeGPS, toOziExplorer, toFsGeo, toFsUtm, toCSV, WAYPOINT_EXPORT_FORMATS, encodeTurnpointZ, encodeXctskQR, XCTSK_QR_MAX_BYTES, type WaypointExportFormat } from './waypoint-export';
+export { toSeeYouCup, toGPX, toKML, toCompeGPS, toOziExplorer, toFsGeo, toFsUtm, toCSV, WAYPOINT_EXPORT_FORMATS, encodeTurnpointZ, encodeXctskQR, swapCodeName, XCTSK_QR_MAX_BYTES, type WaypointExportFormat } from './waypoint-export';
 export { andoyerDistance, calculateBearing, calculateBearingRadians, calculateTrackDistance, destinationPoint, getBoundingBox, isInsideCylinder, getCirclePoints } from './geo';
 export { utmToLatLon } from './utm';
 export { formatUnit, formatSpeed, formatAltitude, formatAltitudeChange, formatDistance, formatClimbRate, formatRadius, getUnitLabel, getCurrentUnit, getSegmentLengthMeters, type FormattedValue, type UnitPreferences, type SpeedUnit, type AltitudeUnit, type DistanceUnit, type ClimbRateUnit } from './units';
