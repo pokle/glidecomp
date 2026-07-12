@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { parseXCTask, getSSSIndex, getESSIndex, calculateNominalTaskDistance, igcTaskToXCTask, isValidTask, toXctskJSON } from '../src/xctsk-parser';
+import { encodeTurnpointZ } from '../src/waypoint-export';
 import type { IGCTask } from '../src/igc-parser';
 
 describe('XCTSK Parser', () => {
@@ -370,15 +371,19 @@ describe('XCTSK Parser', () => {
   });
 
   describe('parseXCTask v2 polyline-encoded coordinates', () => {
-    it('should decode polyline-encoded turnpoint coordinates', () => {
-      // Encode lat=47.0, lon=11.0, alt=500 using Google Polyline Algorithm:
-      // lat=4700000 -> encoded, lon=1100000 -> encoded, alt=500 -> encoded
-      // We'll use explicit lat/lon to verify the polyline path is exercised,
-      // then check a task that uses 'z' field
+    // The `z` tuple order is (longitude, latitude, altitude, radius) per the
+    // XCTrack spec: https://xctrack.org/Competition_Interfaces.html
+    // ("The turnpoint coordinates are 4 numbers (longitude, latitude,
+    // altitude, radius) compressed using Google's polyline algorithm").
+    // Fixture strings below were produced by encodeTurnpointZ, which is
+    // byte-verified against real competition QRs.
+
+    it('should decode a spec-order z tuple to exact coordinates (Alps)', () => {
+      // lon=11.0, lat=47.0, alt=1000, radius=400
       const taskJson = JSON.stringify({
         taskType: 'CLASSIC',
         t: [
-          { n: 'Encoded TP', z: 'o}~rH_seaA_seaA' },
+          { n: 'Encoded TP', z: '_mcbA_uz}Go}@_X' },
         ],
       });
 
@@ -387,23 +392,86 @@ describe('XCTSK Parser', () => {
       expect(task.version).toBe(2);
       expect(task.turnpoints).toHaveLength(1);
       expect(task.turnpoints[0].waypoint.name).toBe('Encoded TP');
-      // The polyline decodes to some coordinates - just verify they're numbers
-      expect(typeof task.turnpoints[0].waypoint.lat).toBe('number');
-      expect(typeof task.turnpoints[0].waypoint.lon).toBe('number');
+      expect(task.turnpoints[0].waypoint.lat).toBeCloseTo(47.0, 5);
+      expect(task.turnpoints[0].waypoint.lon).toBeCloseTo(11.0, 5);
+      expect(task.turnpoints[0].waypoint.altSmoothed).toBe(1000);
+      expect(task.turnpoints[0].radius).toBe(400);
+    });
+
+    it('should decode southern-hemisphere coordinates and pass validation (Corryong)', () => {
+      // lon=147.9025, lat=-36.1983, alt=640, radius=2000. With the historic
+      // lat/lon swap, lat would decode as 147.9 and the task would be
+      // rejected as invalid — so this also guards the value order.
+      const taskJson = JSON.stringify({
+        taskType: 'CLASSIC',
+        t: [
+          { n: 'Corryong', z: 'seve[j~|{E_g@_|B' },
+        ],
+      });
+
+      const task = parseXCTask(taskJson);
+
+      expect(task.turnpoints[0].waypoint.lat).toBeCloseTo(-36.1983, 5);
+      expect(task.turnpoints[0].waypoint.lon).toBeCloseTo(147.9025, 5);
+      expect(task.turnpoints[0].waypoint.altSmoothed).toBe(640);
+      expect(task.turnpoints[0].radius).toBe(2000);
+      expect(isValidTask(task)).toBe(true);
+    });
+
+    it('should round-trip through the QR encoder (encodeTurnpointZ)', () => {
+      const points = [
+        { latitude: 47.12345, longitude: 11.54321, altitude: 1234, radius: 400 },
+        { latitude: -36.53, longitude: 147.16, altitude: 640, radius: 1000 },
+        { latitude: -43.5, longitude: -72.25, altitude: 0, radius: 21000 },
+      ];
+      const taskJson = JSON.stringify({
+        taskType: 'CLASSIC',
+        t: points.map((p, i) => ({
+          n: `TP${i + 1}`,
+          z: encodeTurnpointZ({ code: `TP${i + 1}`, name: `TP${i + 1}`, ...p }),
+        })),
+      });
+
+      const task = parseXCTask(taskJson);
+
+      expect(task.turnpoints).toHaveLength(points.length);
+      points.forEach((p, i) => {
+        // Polyline coordinates are stored ×1e5, so round-tripping is exact
+        // to 5 decimal places (~1m).
+        expect(task.turnpoints[i].waypoint.lat).toBeCloseTo(p.latitude, 5);
+        expect(task.turnpoints[i].waypoint.lon).toBeCloseTo(p.longitude, 5);
+        expect(task.turnpoints[i].radius).toBe(p.radius);
+      });
+    });
+
+    it('should fall back to the default radius when z encodes radius 0', () => {
+      // lon=11.54321, lat=47.12345, alt=0, radius=0
+      const taskJson = JSON.stringify({
+        taskType: 'CLASSIC',
+        t: [
+          { n: 'TP', z: 'apmeAqxr~G??' },
+        ],
+      });
+
+      const task = parseXCTask(taskJson);
+
+      expect(task.turnpoints[0].waypoint.lat).toBeCloseTo(47.12345, 5);
+      expect(task.turnpoints[0].waypoint.lon).toBeCloseTo(11.54321, 5);
+      expect(task.turnpoints[0].radius).toBe(400);
     });
 
     it('should prefer explicit lat/lon over polyline when both present', () => {
       const taskJson = JSON.stringify({
         taskType: 'CLASSIC',
         t: [
-          { n: 'TP', z: 'o}~rH_seaA_seaA', lat: 47.0, lon: 11.0, r: 500 },
+          { n: 'TP', z: '_mcbA_uz}Go}@_X', lat: 47.5, lon: 11.5, r: 500 },
         ],
       });
 
       const task = parseXCTask(taskJson);
 
-      expect(task.turnpoints[0].waypoint.lat).toBe(47.0);
-      expect(task.turnpoints[0].waypoint.lon).toBe(11.0);
+      expect(task.turnpoints[0].waypoint.lat).toBe(47.5);
+      expect(task.turnpoints[0].waypoint.lon).toBe(11.5);
       expect(task.turnpoints[0].radius).toBe(500);
     });
   });

@@ -40,6 +40,13 @@ test at `tests/xctsk-parser.test.ts:373-393` only asserts the decoded values "ar
 (While fixing: the "Google Polyline Algorithm" delta-accumulation comment is wrong — each
 turnpoint `z` is a standalone 4-value tuple, no cross-tuple deltas.)
 
+**Fixed 2026-07-12** — verified against the XCTrack spec
+(https://xctrack.org/Competition_Interfaces.html: "The turnpoint coordinates are 4 numbers
+(longitude, latitude, altitude, radius) compressed using Google's polyline algorithm") and
+twpayne/go-xctrack. `decodePolyline` now reads (lon, lat, alt, radius) as standalone values;
+scoring engine bumped to v6; tests assert exact coordinates (Alps + southern-hemisphere) and
+encoder round-trips.
+
 ### 1.3 [C] Modern `HFDTEDATE:` header unrecognized → flight date becomes "today"
 `src/igc-parser.ts:273, 307`.
 

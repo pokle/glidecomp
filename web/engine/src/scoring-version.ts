@@ -35,7 +35,13 @@
 //     entry cylinders, instead of an outward-only percentage expansion. Small
 //     cylinders get the 5 m floor and EXIT starts are credited at the inner
 //     edge; near-misses credited by the band are flagged for explanation.
-export const SCORING_ENGINE_VERSION = 5;
+// v6: xctsk v2 QR `z` decoding — the polyline tuple is read in the spec's
+//     (longitude, latitude, altitude, radius) order instead of latitude-first
+//     (https://xctrack.org/Competition_Interfaces.html), and each value is
+//     decoded standalone (no delta accumulation). Tasks imported from compact
+//     QR payloads without explicit lat/lon fields previously had their
+//     coordinates transposed.
+export const SCORING_ENGINE_VERSION = 6;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -43,4 +49,4 @@ export const SCORING_ENGINE_VERSION = 5;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "9e9dec7315d5fb5a0ce0661c39919ce32cef414b2d9d62a0f835414d293a9a65";
+  "3d53539090457836a980401b87a513c4c62fb4e190e11f7de403c012b17db794";
