@@ -10,6 +10,12 @@ import { sanitizeText } from './sanitize';
 import type { IGCTask, IGCTaskPoint } from './igc-parser';
 import { findWaypoint, type WaypointRecord } from './waypoints';
 
+/**
+ * Default turnpoint radius in meters, used when a task or IGC declaration
+ * doesn't specify one (400m is the paragliding standard).
+ */
+const DEFAULT_TURNPOINT_RADIUS = 400;
+
 export interface Waypoint {
   name: string;
   description?: string;
@@ -130,7 +136,10 @@ function parseV1(data: Record<string, unknown>): XCTask {
         if (wp) {
           turnpoints.push({
             type: tpObj.type as TurnpointType | undefined,
-            radius: (tpObj.radius as number) || 400,
+            // Preserve an explicit radius of 0 (real waypoint QRs use it) —
+            // radius is a scoring input, so only a missing/non-numeric value
+            // falls back to the default.
+            radius: typeof tpObj.radius === 'number' ? tpObj.radius : DEFAULT_TURNPOINT_RADIUS,
             waypoint: {
               name: sanitizeText((wp.name as string) || 'Unnamed'),
               description: wp.description ? sanitizeText(wp.description as string) : undefined,
@@ -198,7 +207,7 @@ function parseV2(data: Record<string, unknown>): XCTask {
         // Decode encoded coordinates
         let lat = 0;
         let lon = 0;
-        let radius = 400;
+        let radius = DEFAULT_TURNPOINT_RADIUS;
         let alt = 0;
 
         if (typeof tpObj.z === 'string') {
@@ -527,12 +536,6 @@ export function getIntermediateTurnpoints(task: XCTask): Turnpoint[] {
 export function getGoalIndex(task: XCTask): number {
   return task.turnpoints.length - 1;
 }
-
-/**
- * Default turnpoint radius in meters.
- * IGC files don't specify radius, so we use 400m (standard for paragliding).
- */
-const DEFAULT_TURNPOINT_RADIUS = 400;
 
 /**
  * Options for converting IGC task to XCTask.

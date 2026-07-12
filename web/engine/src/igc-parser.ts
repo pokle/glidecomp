@@ -149,26 +149,28 @@ function parseDate(dateStr: string): Date {
  *         DDMMmmmN/S - Latitude (degrees, minutes, decimal minutes, N/S)
  *         DDDMMmmmE/W - Longitude (degrees, minutes, decimal minutes, E/W)
  *         V - Fix validity (A=3D, V=2D/invalid)
- *         PPPPP - Pressure altitude (meters)
- *         GGGGG - GNSS altitude (meters)
+ *         PPPPP - Pressure altitude (meters, may be negative: "-0012")
+ *         GGGGG - GNSS altitude (meters, may be negative)
+ *
+ * Every field is validated before parsing — a single corrupted B record
+ * (truncated line, binary garbage, non-digit fields) would otherwise feed
+ * NaN coordinates or an Invalid Date into every downstream distance/climb
+ * computation.
  */
-function parseBRecord(line: string, baseMidnightMs: number, dayOffset: number = 0): IGCFix | null {
-  if (line.length < 35) return null;
+const B_RECORD_RE =
+  /^B(\d{6})(\d{7}[NS])(\d{8}[EW])([AV])(-\d{4}|\d{5})(-\d{4}|\d{5})/;
 
-  const time = parseTime(line.substring(1, 7), baseMidnightMs, dayOffset);
-  const latitude = parseLatitude(line.substring(7, 15));
-  const longitude = parseLongitude(line.substring(15, 24));
-  const valid = line.charAt(24) === 'A';
-  const pressureAltitude = parseInt(line.substring(25, 30), 10);
-  const gnssAltitude = parseInt(line.substring(30, 35), 10);
+function parseBRecord(line: string, baseMidnightMs: number, dayOffset: number = 0): IGCFix | null {
+  const m = B_RECORD_RE.exec(line);
+  if (!m) return null;
 
   return {
-    time,
-    latitude,
-    longitude,
-    pressureAltitude,
-    gnssAltitude,
-    valid,
+    time: parseTime(m[1], baseMidnightMs, dayOffset),
+    latitude: parseLatitude(m[2]),
+    longitude: parseLongitude(m[3]),
+    valid: m[4] === 'A',
+    pressureAltitude: parseInt(m[5], 10),
+    gnssAltitude: parseInt(m[6], 10),
   };
 }
 
@@ -252,7 +254,8 @@ function parseERecord(line: string, baseMidnightMs: number, dayOffset: number = 
 
 /**
  * H record field definitions: [3-letter code, header property name].
- * Each field matches both the "F"-prefixed (e.g. FPLT) and bare (e.g. PLT) forms.
+ * Each field matches the source-prefixed (FPLT/OPLT/PPLT — the IGC spec
+ * allows source char F, O, or P) and bare (PLT) forms.
  */
 const H_RECORD_FIELDS: [string, keyof Omit<IGCHeader, 'date'>][] = [
   ['PLT', 'pilot'],
@@ -268,20 +271,20 @@ const H_RECORD_FIELDS: [string, keyof Omit<IGCHeader, 'date'>][] = [
 function parseHRecord(line: string, header: IGCHeader): void {
   const content = line.substring(1);
 
-  // HFDTE / HDTE - Date (special case: value is not colon-delimited).
+  // H[FOP]DTE / HDTE - Date (special case: value is not colon-delimited).
   // Also accept the post-2015 long form HFDTEDATE:150124,01
-  if (content.startsWith('FDTE') || content.startsWith('DTE')) {
-    const dateMatch = content.match(/(?:FDTE|DTE)(?:DATE)?[:\s]*(\d{6})/);
+  if (/^[FOP]?DTE/.test(content)) {
+    const dateMatch = content.match(/^[FOP]?DTE(?:DATE)?[:\s]*(\d{6})/);
     if (dateMatch) {
       header.date = parseDate(dateMatch[1]);
     }
     return;
   }
 
-  // All other header fields follow the same pattern: CODE[...]:value
+  // All other header fields follow the same pattern: [source]CODE[...]:value
   for (const [code, field] of H_RECORD_FIELDS) {
-    if (content.startsWith(`F${code}`) || content.startsWith(code)) {
-      const match = content.match(new RegExp(`(?:F${code}|${code})[^:]*:(.+)`));
+    if (new RegExp(`^[FOP]?${code}`).test(content)) {
+      const match = content.match(new RegExp(`^[FOP]?${code}[^:]*:(.+)`));
       if (match) {
         header[field] = sanitizeText(match[1].trim());
       }
@@ -305,7 +308,7 @@ export function parseIGC(content: string): IGCFile {
   // First pass: get the date from header
   for (const line of lines) {
     if (line.startsWith('H')) {
-      const dateMatch = line.match(/(?:HFDTE|HDTE)(?:DATE)?[:\s]*(\d{6})/);
+      const dateMatch = line.match(/^H[FOP]?DTE(?:DATE)?[:\s]*(\d{6})/);
       if (dateMatch) {
         baseDate = parseDate(dateMatch[1]);
         header.date = baseDate;

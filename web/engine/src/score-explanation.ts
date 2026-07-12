@@ -534,6 +534,25 @@ function buildFlightSection(
   };
 }
 
+/**
+ * The `1000 × launch × distance × time` equation for the points on offer.
+ * The engine multiplies the full-precision validities, but the equation
+ * shows them at 2 decimal places — only print "=" when the displayed
+ * figures actually multiply to the displayed total.
+ */
+function availableTotalDetail(
+  v: ClassContextInput['task_validity'],
+  total: number,
+): string {
+  const factors = [v.launch, v.distance, v.time].map((f) => f.toFixed(2));
+  const product = 1000 * factors.reduce((p, f) => p * Number(f), 1);
+  const reconciles = Math.round(product * 10) === Math.round(total * 10);
+  const equation = `1000 × ${factors.join(' × ')}`;
+  return reconciles
+    ? `${equation} = ${fmtPoints(total)}`
+    : `${equation} ≈ ${fmtPoints(total)} — the validity factors are shown rounded to 2 decimal places; the points on offer come from their full precision.`;
+}
+
 function buildValiditySection(
   classContext: ClassContextInput,
 ): ScoreExplanationSection {
@@ -559,7 +578,7 @@ function buildValiditySection(
       id: 'available-total',
       text: 'Points on offer for the day',
       value: pts(ap.total),
-      detail: `1000 × ${v.launch.toFixed(2)} × ${v.distance.toFixed(2)} × ${v.time.toFixed(2)} = ${Math.round(ap.total)}`,
+      detail: availableTotalDetail(v, ap.total),
     },
     {
       id: 'available-split',
@@ -767,18 +786,42 @@ function buildTotalSection(entry: ScoreEntryInput): ScoreExplanationSection {
   const jtg = entry.jump_the_gun_penalty ?? 0;
   const penaltySteps: string[] = [];
   if (jtg !== 0) {
-    penaltySteps.push(`− ${jtg} jump-the-gun (never below the minimum-distance score)`);
+    penaltySteps.push(`− ${jtg} jump-the-gun`);
   }
   if (entry.penalty_points !== 0) {
     penaltySteps.push(
-      `${entry.penalty_points > 0 ? '−' : '+'} ${Math.abs(entry.penalty_points)} penalty (scores never go below 0)`,
+      `${entry.penalty_points > 0 ? '−' : '+'} ${Math.abs(entry.penalty_points)} penalty`,
     );
   }
+  const equation = [parts, ...penaltySteps].join(' ');
   const total = fmtPoints(entry.total_score);
-  const detail =
-    penaltySteps.length === 0
-      ? `round(${parts}, 1 dp) = ${total}`
-      : `round(${parts} ${penaltySteps.join(' ')}, 1 dp) = ${total}`;
+  // What the printed figures come to, in tenths (exact in integer space).
+  // The published components are rounded to 0.1 while the engine rounds the
+  // total from their *unrounded* sum, so the two can drift apart by up to
+  // ~0.2 pts — and when a floor engaged (§12.2 minimum-distance score,
+  // §12.4 zero) the printed arithmetic isn't the operation performed at
+  // all. Never print "=" between figures that don't equate.
+  const evaluatedTenths = Math.round(
+    (components.reduce((s, c) => s + c, 0) - jtg - entry.penalty_points) * 10,
+  );
+  const totalTenths = Math.round(entry.total_score * 10);
+  const evaluated =
+    evaluatedTenths < 0
+      ? `−${fmtPoints(-evaluatedTenths / 10)}`
+      : fmtPoints(evaluatedTenths / 10);
+  let detail: string;
+  if (evaluatedTenths === totalTenths) {
+    detail = `round(${equation}, 1 dp) = ${total}`;
+  } else if (entry.penalty_points > 0 && totalTenths === 0 && evaluatedTenths < 0) {
+    // §12.4 zero floor: the penalty took the score below zero.
+    detail = `${equation} would come to ${evaluated}, but scores never go below 0 (FAI S7F §12.4) — so the total is 0.`;
+  } else if (jtg > 0 && totalTenths - evaluatedTenths > 3) {
+    // §12.2 floor: more than display-rounding drift above the printed sum
+    // means the jump-the-gun deduction was floored.
+    detail = `${equation} would come to ${evaluated}, but the jump-the-gun penalty never drops a pilot below the minimum-distance score (FAI S7F §12.2) — so the total is ${total}.`;
+  } else {
+    detail = `${equation} ≈ ${total} — the points above are shown rounded to 0.1; the total is rounded from their exact sum.`;
+  }
   return {
     id: 'total',
     title: 'Total',

@@ -118,6 +118,10 @@ the same divergence.)
   off by up to 0.2; and when the §12.2 jump-the-gun floor engages, the printed equation is not
   the operation performed. Same class of issue in `buildValiditySection` (2-dp factors vs
   rounded product, L531).
+  **Fixed 2026-07-12** ([#329](https://github.com/pokle/glidecomp/pull/329)) — the equations
+  are checked against the published figures before printing: exact `=` only when they equate,
+  `≈` plus a display-rounding note when they drift, and a narrative of the actual floor
+  operation (§12.2 minimum-distance / §12.4 zero) when a floor engaged. Scores unchanged.
 - **[C] Scored start crossing can be hidden behind the 12-crossing listing cap** —
   `src/score-explanation.ts:294, 349-374`. Only `slice(0, 12)` crossings can carry the "this
   is the scored start" tag, but the scored start is usually one of the *last* crossings for a
@@ -158,17 +162,28 @@ the same divergence.)
   `src/igc-parser.ts:155-173`. Only `line.length < 35` is checked; a single corrupted B record
   poisons downstream distance/climb math with NaN. `parseCRecord` (L220) already validates
   with `/^\d{7}[NS]$/` — B records deserve the same.
+  **Fixed 2026-07-12** (engine v10) — every B-record field is now regex-validated (time,
+  lat/lon with hemisphere, `[AV]` validity, altitudes incl. negative `-0012` form) before
+  parsing; corrupted records are dropped. Regression tests cover six corruption shapes and
+  below-sea-level altitudes.
 - **[C] v1 turnpoint `radius: 0` coerced to 400** — `src/xctsk-parser.ts:146` uses
   `(tpObj.radius as number) || 400` while the v2 path (L231) and the encoder
   (`waypoint-export.ts:397`, "real waypoint QRs use radius 0") preserve 0. Radius is a scoring
   input. Use a `typeof` check and the existing `DEFAULT_TURNPOINT_RADIUS` constant.
+  **Fixed 2026-07-12** (engine v10) — `typeof` check preserves 0; `DEFAULT_TURNPOINT_RADIUS`
+  hoisted to the top of the module and used by both the v1 and v2 paths.
 - **[C] `HP`/`HO` H-records dropped (pilot name lost)** — `src/igc-parser.ts:268-290` matches
   only `HF<code>`/bare `<code>`; the IGC spec allows source char `F|O|P`. Match `[FOP]?`.
+  **Fixed 2026-07-12** (engine v10) — header fields and both date regexes (incl. the
+  first-pass scan, now anchored) accept `[FOP]?`; tests cover `HPPLT`/`HOGTY`/`HPCID` and
+  `HPDTE`.
 - **[C] Fuzzy waypoint-name containment false-positives on short/empty names** —
   `src/waypoints.ts:109-113`. `"anything".includes('')` is true, so an empty-named DB row
   matches every query, and 1-2 char names match almost anything; a false match silently
   substitutes the wrong radius/altitude into the task. Require a minimum name length or
   word-boundary containment.
+  **Fixed 2026-07-12** (engine v10) — the containment fallback requires a 3+ char DB name;
+  exact and normalized matches on short names still work. Regression tests added.
 
 ### Event detection
 - **[C] `Infinity` glide ratio reaches user-facing text and JSON** —
@@ -176,23 +191,34 @@ the same divergence.)
   `glideRatio: Infinity` → description `"Glide start (L/D Infinity)"`, and `JSON.stringify`
   turns `Infinity` into `null` across worker/cache boundaries. `glide-speed.ts:176-180`
   correctly uses `undefined` for the same case — align the conventions.
+  **Fixed 2026-07-12** ([#328](https://github.com/pokle/glidecomp/pull/328)) — `glideRatio`
+  is `undefined` on altitude gain; description reads "Glide start (altitude gained)";
+  `extractSinks` skips ratio-less glides.
 - **[C] `detectLanding` uses a seconds threshold as a fix-index bound** —
   `src/event-detector.ts:588`: `for (i = fixes.length - 2; i >= config.landingTimeWindow; i--)`
   treats 30 (seconds) as an index, silently assuming 1 Hz logging. At a 5-10 s interval, a
   landing inside the first 30 fixes (150-300 s of flight) returns no landing at all. The bound
   is redundant — the `windowStartIndex === i` guard already handles track start; loop to
   `i >= 1`.
+  **Fixed 2026-07-12** ([#328](https://github.com/pokle/glidecomp/pull/328)) — loops to
+  `i >= 1`; regression test at 10 s logging.
 - **[P] Takeoff can fire from two isolated GPS speed spikes while grounded** —
   `src/event-detector.ts:499-502, 546-549, 567-578`. Criterion is 1-of-3 where one criterion
   is a single fix-pair speed >5 m/s, and `verifyFlightSustained` also passes on any single
   fix-pair spike. Since every downstream detector slices at `takeoffIndex`, a false-early
   takeoff feeds ground noise into everything. (Also: the verify loop `j < endIdx - 1` never
   speed-checks the window's final interval.)
+  **Fixed 2026-07-12** ([#328](https://github.com/pokle/glidecomp/pull/328)) — verification
+  now requires two consecutive fast intervals whose combined displacement is also fast (an
+  out-and-back spike has near-zero net displacement); the loop covers the final interval.
 - **[C] Thermal entry/exit events carry the thermal centroid as coordinates** —
   `src/event-detector.ts:827-829, 843-845`; consumed at `src/segment-extractors.ts:143-147`.
   Entry markers are drawn mid-thermal (a drifting thermal displaces them hundreds of metres);
   in `extractClimbs`, `startLat/startLon === endLat/endLon` for every climb. If intentional,
   document; otherwise use the real start/end fixes like glide events do.
+  **Fixed 2026-07-12** ([#328](https://github.com/pokle/glidecomp/pull/328)) — decided
+  (Tushar): entry/exit events sit on the track's boundary fixes like glide events; the
+  centroid stays available as `ThermalSegment.location`. Regression test added.
 
 ### Packaging / infra
 - **[C] Replay legend scores mapped back to pilots by display name** —

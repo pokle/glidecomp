@@ -86,6 +86,27 @@ TEST,-36.0,147.0,Test,invalid,100`;
       const wp = findWaypointByName(waypoints, 'NONEXISTENT');
       expect(wp).toBeUndefined();
     });
+
+    it('should find by containment for names of 3+ characters', () => {
+      // e.g. an IGC declaration like "HALFWY01" containing the DB name
+      const wp = findWaypointByName(waypoints, 'HALFWY01');
+      expect(wp?.name).toBe('HALFWY');
+    });
+
+    it('should not containment-match empty or 1-2 char waypoint names', () => {
+      // "anything".includes('') is true — an empty-named DB row must not
+      // match every query, and 1-2 char names match almost anything.
+      const withShortNames: WaypointRecord[] = [
+        { name: '', latitude: -36.0, longitude: 147.0, description: '', radius: 9999, altitude: 0 },
+        { name: 'EL', latitude: -36.1, longitude: 147.1, description: '', radius: 8888, altitude: 0 },
+      ];
+
+      expect(findWaypointByName(withShortNames, 'NONEXISTENT')).toBeUndefined();
+      expect(findWaypointByName(withShortNames, 'TURN ELLIOT')).toBeUndefined();
+
+      // Exact matches on short names still work
+      expect(findWaypointByName(withShortNames, 'EL')?.radius).toBe(8888);
+    });
   });
 
   describe('findWaypointByCoordinates', () => {

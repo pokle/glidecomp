@@ -130,7 +130,7 @@ function makeGoalEntry(): ScoreEntryInput {
     arrival_points: 0,
     penalty_points: 0,
     penalty_reason: null,
-    total_score: 781,
+    total_score: 780.5,
   };
 }
 
@@ -260,7 +260,7 @@ describe('explainGapScore — flight narrative', () => {
     expect(goal!.text).toContain('Goal');
     expect(goal!.anchor!.kind).toBe('goal');
 
-    expect(explanation.headline).toBe('Made goal in 1:10:00 — 781 points');
+    expect(explanation.headline).toBe('Made goal in 1:10:00 — 780.5 points');
   });
 
   it('flags a turnpoint credited by the cylinder tolerance band (§8.1)', () => {
@@ -516,7 +516,7 @@ describe('explainGapScore — point components', () => {
         ...makeGoalEntry(),
         penalty_points: 50,
         penalty_reason: 'Airspace infringement',
-        total_score: 731,
+        total_score: 730.5,
       },
       classContext: makeClassContext(),
     });
@@ -525,7 +525,81 @@ describe('explainGapScore — point components', () => {
     expect(penalty.items[0].value).toBe('−50 pts');
     const total = section(penalised, 'total');
     expect(total.items[0].detail).toContain('− 50 penalty');
-    expect(total.items[0].detail).toContain('= 731');
+    expect(total.items[0].detail).toContain('= 730.5');
+  });
+
+  // The published components are rounded to 0.1 but the engine rounds the
+  // total from their unrounded sum, so the printed figures can drift apart —
+  // the equation must never claim "=" between figures that don't equate.
+  it('marks the total equation as approximate when display rounding drifts from the total', () => {
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      // Components shown sum to 780.5, but the exact sum rounded to 780.6.
+      entry: { ...makeGoalEntry(), total_score: 780.6 },
+      classContext: makeClassContext(),
+    });
+    const total = section(explanation, 'total');
+    expect(total.items[0].detail).toContain('400.0 + 380.5 ≈ 780.6');
+    expect(total.items[0].detail).toContain('rounded');
+    expect(total.items[0].detail).not.toContain('=');
+  });
+
+  it('narrates the §12.2 minimum-distance floor instead of printing false arithmetic', () => {
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        distance_points: 100,
+        distance_linear_points: 100,
+        time_points: 0,
+        early_start_seconds: 180,
+        early_start_outcome: 'hg_penalty',
+        jump_the_gun_penalty: 90,
+        total_score: 62.5, // the minimum-distance score, > 100 − 90
+      },
+      classContext: makeClassContext(),
+      params: { scoring: 'HG' },
+    });
+    const total = section(explanation, 'total');
+    expect(total.items[0].detail).toContain('100.0 + 0.0 − 90 jump-the-gun would come to 10');
+    expect(total.items[0].detail).toContain('minimum-distance score (FAI S7F §12.2)');
+    expect(total.items[0].detail).toContain('the total is 62.5');
+  });
+
+  it('narrates the §12.4 zero floor when a penalty takes the score below 0', () => {
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        penalty_points: 900,
+        penalty_reason: 'Cloud flying',
+        total_score: 0,
+      },
+      classContext: makeClassContext(),
+    });
+    const total = section(explanation, 'total');
+    expect(total.items[0].detail).toContain('400.0 + 380.5 − 900 penalty would come to −119.5');
+    expect(total.items[0].detail).toContain('scores never go below 0 (FAI S7F §12.4)');
+  });
+
+  it('marks the validity equation as approximate when the 2-dp factors do not multiply to the total', () => {
+    const ctx = makeClassContext();
+    ctx.task_validity = { launch: 0.9876, distance: 0.8, time: 1, task: 0.79008 };
+    ctx.available_points = { ...ctx.available_points, total: 790.08 };
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: makeGoalEntry(),
+      classContext: ctx,
+    });
+    const item = section(explanation, 'validity').items.find(
+      (i) => i.id === 'available-total',
+    );
+    expect(item!.detail).toContain('1000 × 0.99 × 0.80 × 1.00 ≈ 790.1');
+    expect(item!.detail).toContain('full precision');
   });
 
   it('omits leading/arrival sections when those components are off', () => {
@@ -703,7 +777,7 @@ describe('explainGapScore — start gates & early starts', () => {
       early_start_seconds: 120,
       early_start_outcome: 'hg_penalty',
       jump_the_gun_penalty: 60,
-      total_score: 720,
+      total_score: 720.5,
     };
     const x = explainGapScore({
       task: makeTask(), result, entry, classContext: makeClassContext(),

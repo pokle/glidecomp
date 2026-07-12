@@ -67,7 +67,18 @@
 //     mid-flight return through the launch cylinder erased all prior
 //     distance. The open-distance geometry origin is now a derived edge
 //     point with no fix index/time.
-// v10: two-step tolerance-band penetrations anchor to the nominal radius —
+// v10: parsing hardening (2026-07-12 review §2 Parsing). (a) B records are
+//     field-validated before parsing — a corrupted record previously fed NaN
+//     coordinates / an Invalid Date into the fixes array, poisoning distance
+//     and climb math. (b) xctsk v1 turnpoints with an explicit radius of 0
+//     keep it instead of being coerced to 400 m (radius is a scoring input;
+//     v2 and the encoder already preserved 0). (c) HP/HO H-records are
+//     recognized (IGC source char F|O|P), so pilot names recorded as
+//     HPPLT/HOPLT are no longer dropped. (d) fuzzy waypoint-name containment
+//     requires a 3+ char DB name — an empty or 1-2 char name matched almost
+//     any query and substituted the wrong radius/altitude into IGC-declared
+//     tasks.
+// v11: two-step tolerance-band penetrations anchor to the nominal radius —
 //     when the fix pair that crosses the detection edge (outer band edge, or
 //     inner for an EXIT start) doesn't straddle the nominal radius, the
 //     crossing now anchors to the fix pair within the band episode that
@@ -75,7 +86,7 @@
 //     crossing as tolerance-credited. Reaching times/positions shift by up
 //     to one fix interval; toleranceCredited is only set when the pilot
 //     genuinely never crossed the nominal radius.
-export const SCORING_ENGINE_VERSION = 10;
+export const SCORING_ENGINE_VERSION = 11;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -83,4 +94,4 @@ export const SCORING_ENGINE_VERSION = 10;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "66cc86746fabb449e075dce4686fd4b2e0e9b202d5116f5a387919d127eb0e88";
+  "11bd78db943d7d4c1c7547c6ab1b6c8cc2454db574c22e8b6f2e23ad745a4826";
