@@ -1,305 +1,173 @@
-# Preview Environment Plan
+# Per-Branch Preview Environments
 
-**Status: proposed — not yet implemented.** (2026-07-05)
+**Status: implemented** (2026-07-12; superseding the 2026-07-05 shared-preview
+proposal — see "History" at the bottom).
 
-A fixed, isolated **preview** backend (workers + D1 + R2 + KV) that every branch
-deploy binds to, so "deploy a preview" becomes "push a branch": CI deploys the
-branch to a public per-branch URL that works from any device, backed by real
-Cloudflare infrastructure, with production code, routes, and data untouchable.
+Every non-master branch push deploys a **fully isolated, per-branch stack**:
+its own D1 database, R2 bucket, and auth/competition workers, seeded with the
+bundled sample comps, fronted by the branch's Pages preview at a stable URL
+that works from any device:
 
-## Problem
+```
+https://<slug>.glidecomp.pages.dev        slug = branch name lowercased,
+                                          non-alphanumerics → '-', 28 chars max
+```
 
-- Each worker has a single fixed `name` in its `wrangler.toml`, so `wrangler
-  deploy` from any branch **overwrites the production worker**. The configs also
-  hard-code production routes (`glidecomp.com/api/...`) and production data
-  bindings (D1 `taskscore-auth`, R2 `glidecomp`), so even a renamed worker would
-  still touch production data.
-- `branch-deploy.yml` already gives every non-master branch a public Pages
-  preview URL (`<branch>.glidecomp.pages.dev`, posted as a PR comment) — but it
-  deploys **only the frontend**. Branch previews run against whatever the Pages
-  *Preview* environment service bindings point at today: the production workers
-  and production database.
-- `wrangler dev` gives full local isolation but only on `localhost`. Tunneling a
-  dev server out of a Claude Code cloud session was tested (2026-07-05) and is
-  not possible: the sandbox egress is a TLS-re-terminating HTTPS proxy on port
-  443 only. cloudflared needs QUIC/TCP 7844 (blocked), SSH-over-443 tunnels
-  (pinggy) are killed because the tunneled bytes aren't TLS, and the proxy
-  policy explicitly rules out WebSocket upgrades and cert-pinned clients
-  (ngrok). Deploying previews is the supported path; `api.cloudflare.com` is
-  reachable and wrangler works from cloud sessions (with `NODE_USE_ENV_PROXY=1`).
+The three requirements this design serves:
 
-## Key mechanism
+1. **Environment isolation** — a preview can never read or write production.
+   Preview workers live on `workers.dev` only (no `glidecomp.com` routes), and
+   the Pages *Preview* environment's service bindings point at a 503-only
+   `preview-blackhole` worker, so even an accidental binding call fails loudly
+   instead of touching production (the pre-2026-07 behaviour, where branch
+   previews called the production workers and mutated the production DB, is
+   structurally impossible now).
+2. **Branch isolation** — concurrent long-running branches (e.g. several
+   Claude Code sessions) each get their own database, bucket, and workers;
+   one branch's schema migrations or test data never affect another's.
+3. **Simple URL** — the existing Pages branch alias is the one URL to open on
+   any phone/tablet/desktop; the per-branch backend hides behind it.
 
-Cloudflare Pages has exactly two runtime environments: **Production**
-(deployments where `--branch` equals the production branch, `master`) and
-**Preview** (every other branch). Service bindings are configured per
-environment. The existing `wrangler pages deploy --branch=<branch>` command in
-`branch-deploy.yml` therefore already lands in the Preview environment — no new
-selection logic is needed. The work is to give Preview its own backend and point
-the Preview bindings at it.
+## Anatomy of a stack
 
-Naming convention: each worker gains a `[env.preview]` section, which wrangler
-deploys as `<name>-preview` (`competition-api-preview`, `auth-api-preview`,
-`airscore-api-preview`). Preview data resources are suffixed the same way.
-
-| Resource | Production | Preview |
+| Piece | Name | Notes |
 | --- | --- | --- |
-| Workers | `competition-api`, `auth-api`, `airscore-api` | same + `-preview` suffix |
-| Routes | `glidecomp.com/api/...` | none (`workers_dev = true` only) |
-| D1 | `taskscore-auth` | `taskscore-auth-preview` (new) |
-| R2 | `glidecomp` | `glidecomp-preview` (new) |
-| KV (3dvis replay-bundle cache; scores moved to D1) | `dcf6eb84…` | `fc7d966c…` (existing `preview_id`, reused) |
-| KV (airscore cache) | `587aa703…` | `824da107…` (existing `preview_id`, reused) |
-| Frontend | `glidecomp.com` (Pages Production) | `<branch>.glidecomp.pages.dev` (Pages Preview) |
+| D1 database | `glidecomp-pv-<slug>` | auth + competition tables, migrated + seeded |
+| R2 bucket | `glidecomp-pv-<slug>` | IGC track objects |
+| Auth worker | `auth-api-pv-<slug>` | `workers.dev` only; `BETTER_AUTH_URL` = the branch alias URL; `ENABLE_TEST_LOGIN=1` |
+| Competition worker | `competition-api-pv-<slug>` | `workers.dev` only; service-binds the branch auth worker + shared airscore |
+| Frontend | `https://<slug>.glidecomp.pages.dev` | ordinary Pages branch preview |
 
-The two KV namespaces already have `preview_id` twins (created for `wrangler dev`
-remote previews, currently unused in deploys) — the preview env reuses them
-instead of creating new ones.
+Shared across all stacks (branch-agnostic, read-only, never destroyed):
+`airscore-api-preview` (cache of xc.highcloud.net, using the existing
+`preview_id` KV twin), `preview-blackhole`, and the scores/3dvis preview KV
+namespace (safe to share: its cache key hashes each track's seed-time
+`uploaded_at`, so branches can't collide).
 
-## Step 1 — one-time: create preview resources
+## How a branch reaches *its* backend
+
+Cloudflare Pages has exactly two runtime environments (Production, Preview),
+and the Preview environment's service bindings are **one fixed set shared by
+every branch** — bindings cannot route per branch. What *is* per-branch is the
+Functions bundle: each `wrangler pages deploy` carries its own copy of
+`functions/`. So:
+
+- `web/scripts/preview/deploy-stack.ts` writes
+  **`functions/lib/preview-backends.ts`** (committed state: `null`) with the
+  branch workers' public URLs before the Pages deploy.
+- The API proxy Functions (`functions/api/*`), the SSR Function
+  (`functions/comp/[[path]].ts`) and the sitemap check that module: non-null →
+  `fetch()` the branch worker by URL (headers/cookies/body pass through, same
+  as the binding); null (production, local) → service binding, zero-cost.
+- The Preview environment's bindings (root `wrangler.toml`
+  `[[env.preview.services]]`) point at `preview-blackhole`, which only ever
+  answers 503 — the guarantee behind requirement 1.
+
+The workers.dev hop adds ~50–150 ms per API call versus a service binding.
+Fine for previews; production is unaffected.
+
+## CI flow (`.github/workflows/branch-deploy.yml`)
+
+On every push to a non-master branch, after tests:
+
+1. `bun web/scripts/preview/deploy-stack.ts <branch>` — idempotently ensures
+   the D1 database + R2 bucket exist, generates `wrangler.preview.json`
+   configs (from the checked-in TOMLs — names/bindings swapped, vars and
+   compatibility settings copied, **no routes**), deploys the shared workers
+   then the branch workers, ensures a per-stack `BETTER_AUTH_SECRET`
+   (generated once, so sessions survive redeploys), applies D1 migrations,
+   and writes `preview-backends.ts`.
+2. Seeds the sample comps (Corryong Cup + Big Chip) — only when the database
+   was just created, or on demand via **`[reseed]` in the commit message**
+   (the seed is idempotent per comp and leaves other comps on the stack
+   alone).
+3. Builds the frontend with `VITE_ENABLE_TEST_LOGIN=1` (shows the dev sign-in
+   button) and runs `wrangler pages deploy --branch=<branch>`.
+4. Smoke-tests: SPA routes + git-sha, `/api/comp` answers 200 through the
+   branch worker (a 503 would mean the blackholed binding was hit), and
+   dev-login **works** (the inverse of production's smoke test in
+   `deploy.yml`, which still asserts dev-login is blocked).
+5. Posts/updates the PR comment with the branch alias URL.
+
+Deploys are serialized per branch (`concurrency: preview-deploy-<branch>`);
+different branches deploy independently — that's the point.
+
+A note on schema migrations: each branch migrates only its own database, so a
+migration branch no longer poisons anyone else. Production migrations still
+first run in CI e2e (local D1) and on every preview stack before `deploy.yml`
+applies them to production.
+
+## Auth on previews
+
+Google OAuth cannot work per-branch (a per-branch hostname can't be a
+registered redirect URI), so preview stacks use the **dev-login flow**:
+`ENABLE_TEST_LOGIN=1` on the branch auth worker enables email/password +
+`POST /api/auth/dev-login` (`isTestLoginEnabled()` in
+`web/workers/auth-api/src/auth.ts`), and preview frontend builds show the
+"Sign in (dev)" button. The default identity matches `SUPER_ADMIN_EMAILS`, so
+the tester has admin rights on the throwaway stack. The `oAuthProxy` plugin is
+omitted whenever test-login is on, so a preview sign-in can never bounce
+through the production auth worker.
+
+Accepted trade-off: anyone who discovers a preview URL can sign in to that
+branch's **throwaway, sample-seeded** database. Production is untouched by
+design, and `deploy.yml`'s smoke test still fails the deploy if dev-login ever
+answers on glidecomp.com. If prod-like OAuth on previews is ever wanted, the
+path is a stable extra redirect URI (e.g. a fixed preview auth worker) plus a
+configurable `oAuthProxy.productionURL` — deliberately not built yet.
+
+## Lifecycle & free-tier budget
+
+`.github/workflows/preview-cleanup.yml` destroys a branch's stack on **branch
+delete** and **PR close**, and a **weekly sweep** (also `workflow_dispatch`)
+removes stacks whose branch no longer exists. Manual controls:
 
 ```sh
-bunx wrangler d1 create taskscore-auth-preview     # note the database_id for step 2
-bunx wrangler r2 bucket create glidecomp-preview
-
-# after step 2's config lands:
-cd web/workers/auth-api
-bunx wrangler d1 migrations apply taskscore-auth-preview --env preview --remote
-
-# secrets (auth-api-preview) — see "Auth on previews" for which values
-bunx wrangler secret put GOOGLE_CLIENT_ID --env preview
-bunx wrangler secret put GOOGLE_CLIENT_SECRET --env preview
-bunx wrangler secret put BETTER_AUTH_SECRET --env preview
+bun run preview:deploy <branch-name>     # create/update a stack (needs CF creds)
+bun run preview:destroy -- --branch <branch-name>
+gh workflow run preview-cleanup.yml      # sweep now
 ```
 
-All within the free tier (10 D1 databases, 100 workers, 10 GB R2).
+The free plan allows **10 D1 databases** per account; production uses one, so
+roughly **8 concurrent preview branches** fit. `deploy-stack.ts` fails with an
+actionable message when the quota is hit (destroy a stale stack or upgrade to
+Workers Paid, which lifts the cap to 50k). Workers (~2/branch), R2 buckets and
+KV are nowhere near their limits.
 
-## Step 2 — worker `wrangler.toml` `[env.preview]` blocks
+## One-time setup
 
-Wrangler gotcha that shapes all three files: **named environments inherit
-almost nothing** — bindings, vars, and routes must all be redeclared per env.
-That non-inheritance is also the safety property: no `[[routes]]` in
-`[env.preview]` means a preview deploy *cannot* attach to `glidecomp.com`.
+- `CLOUDFLARE_API_TOKEN` (repo secret) needs, on top of the existing
+  Workers/Pages/D1 permissions: **Workers R2 Storage: Edit** (bucket + object
+  lifecycle) — regenerate the token if preview deploys fail on R2 calls.
+- The `delete`/`schedule` triggers of `preview-cleanup.yml` only fire once the
+  workflow file exists on `master` (i.e. after this lands).
+- Existing branch previews deployed *before* this change bound to the
+  production workers; once the Preview environment bindings flip to
+  `preview-blackhole` their API calls return 503. Intentional — re-push the
+  branch to give it a proper stack.
 
-`web/workers/competition-api/wrangler.toml` (the fullest example):
+## Config drift rule (part of "done")
 
-```toml
-[env.preview]                      # deploys as "competition-api-preview"
-workers_dev = true                 # → competition-api-preview.<account>.workers.dev
-
-[env.preview.placement]
-mode = "smart"                     # keep parity with production
-
-[[env.preview.d1_databases]]
-binding = "DB"
-database_name = "taskscore-auth-preview"
-database_id = "<from step 1>"
-migrations_dir = "../../db/migrations"
-
-[[env.preview.r2_buckets]]
-binding = "R2"
-bucket_name = "glidecomp-preview"
-
-[[env.preview.services]]
-binding = "AUTH_API"
-service = "auth-api-preview"
-
-[[env.preview.services]]
-binding = "AIRSCORE_API"
-service = "airscore-api-preview"
-
-[env.preview.vars]
-SQIDS_ALPHABET = "abcdefghijklmnopqrstuvwxyz"
-
-[[env.preview.kv_namespaces]]
-binding = "glidecomp_scores_cache"
-id = "fc7d966cba2c40fdb52c83c7a88c217e"   # the existing preview_id namespace
-```
-
-`auth-api/wrangler.toml`: same pattern — D1 binding `glidecomp_auth` →
-`taskscore-auth-preview`, R2 → `glidecomp-preview`, no routes, and
-`[env.preview.vars]` `BETTER_AUTH_URL` per the auth decision below.
-
-`airscore-api/wrangler.toml`: KV → `824da1077c3b4299af9caab8a7d62ae3`, copy the
-`AIRSCORE_BASE_URL`/TTL vars, no routes. (The frontend never calls
-`/api/airscore/*` directly — only competition-api does, via its service binding —
-so no Pages proxy function is needed for it.)
-
-**Config-drift rule (part of "done" for future changes):** any new binding,
-var, or secret added to a worker's top-level config must be added to its
-`[env.preview]` section in the same change, and new secrets set for both
-workers. Otherwise preview silently diverges and stops being a trustworthy
+The preview worker configs are *generated* by
+`web/scripts/preview/lib.ts` (`generateStackConfigs`) — vars, compatibility
+settings and KV preview ids are copied from the checked-in `wrangler.toml`s
+automatically. When you add a **new kind** of binding (queue, DO, extra KV,
+extra secret) to a worker, teach the generator about it in the same change,
+and if the auth worker gains a secret, set it in `deploy-stack.ts` alongside
+`BETTER_AUTH_SECRET`. Otherwise previews silently stop being a trustworthy
 rehearsal of production.
 
-## Step 3 — point Pages Preview at the preview workers
+## History
 
-The Pages project's service bindings live in the **root `wrangler.toml`**
-(`name = "glidecomp"`, `pages_build_output_dir`), and deploys go through
-`wrangler pages deploy`, so this is a code change, not a dashboard task. Pages
-configs support exactly two named environments; top-level values apply to both
-unless overridden:
-
-```toml
-# root wrangler.toml — append:
-[[env.preview.services]]
-binding = "AUTH_API"
-service = "auth-api-preview"
-
-[[env.preview.services]]
-binding = "COMPETITION_API"
-service = "competition-api-preview"
-```
-
-Verify after the first deploy (dashboard → Pages → glidecomp → Settings →
-Bindings, per environment) that Production still binds `auth-api` /
-`competition-api` and Preview binds the `-preview` pair. If wrangler's Pages
-env-override behaviour surprises us here, the fallback is setting the Preview
-bindings once in the dashboard — same result, just not code-managed.
-
-## Step 4 — seed preview data
-
-`web/scripts/seed-sample-comp.ts` hard-codes `DB_NAME = 'taskscore-auth'` and
-targets local state or `--remote` (production). Add a `--preview` flag that:
-
-- passes `--env preview` (with the existing `--config
-  web/workers/competition-api/wrangler.toml`) to wrangler commands so R2/D1
-  resolve to the preview bindings, and
-- swaps `DB_NAME` to `taskscore-auth-preview` for the `d1` commands.
-
-Then `bun run seed:sample --preview` (and `--preview big-chip`) populates the
-preview stack with the bundled comps so previews have data to render.
-
-## Step 5 — CI: extend `branch-deploy.yml`
-
-Mirror the worker steps from `deploy.yml`'s deploy job, targeting preview,
-before the existing Pages deploy step. Order matters: workers first (service
-bindings require the target workers to exist), Pages last.
-
-```yaml
-  deploy:
-    name: Deploy Preview
-    needs: test
-    concurrency:                 # all branches share one preview backend;
-      group: preview-deploy      # don't interleave two branch deploys
-      cancel-in-progress: true
-    steps:
-      # ... existing checkout/setup/build steps unchanged ...
-
-      - name: Deploy AirScore API Worker (preview)
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: web/workers/airscore-api
-          command: deploy --env preview
-
-      - name: Apply D1 Migrations (preview)
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: web/workers/auth-api
-          command: d1 migrations apply taskscore-auth-preview --env preview --remote
-
-      - name: Deploy Auth API Worker (preview)
-        # ... command: deploy --env preview
-
-      - name: Deploy Competition API Worker (preview)
-        # ... command: deploy --env preview
-
-      # existing "Deploy to Cloudflare Pages (Branch Preview)" step unchanged
-```
-
-Same secrets, same action, same trigger as today. The existing smoke tests
-(`data-git-sha` match, dev-login blocked) run against the preview URL unchanged.
-A nice side effect: schema migrations now hit the preview D1 on every branch
-push **before** they ever reach production — a free canary.
-
-Optional additions:
-- `workflow_dispatch:` trigger for manual re-deploys of the preview backend.
-- A paths filter to skip worker deploys when only the frontend changed —
-  probably not worth it; worker deploys are fast and idempotent.
-
-Also add convenience scripts to `package.json` (`deploy:preview`,
-`deploy:preview:auth`, …) mirroring the production `deploy:*` scripts with
-`--env preview`, for deploying preview outside CI.
-
-## Auth on previews — decision needed
-
-Current facts:
-- `trustedOrigins` already includes `https://*.glidecomp.pages.dev`, so preview
-  origins are accepted.
-- `dev-login` is gated by `isLocalDev()` (hostname of `BETTER_AUTH_URL` ==
-  `localhost`), so it stays off in preview as long as `BETTER_AUTH_URL` isn't
-  localhost. The "dev-login must be blocked" smoke test keeps passing.
-- The `oAuthProxy` plugin (productionURL `https://glidecomp.com`) is what makes
-  Google sign-in work on `*.pages.dev` previews **today** — but only because
-  previews currently share the production database. The proxy routes the OAuth
-  callback through the production auth worker, which creates the session in
-  *its* D1. Once preview has its own D1, that session is invisible to preview.
-
-Options, in order of preference:
-
-1. **Stable preview callback (recommended).** `auth-api-preview` gets a stable
-   public URL for free: `auth-api-preview.<account>.workers.dev`. Set the
-   preview env's `BETTER_AUTH_URL` to that URL, make the `oAuthProxy`
-   `productionURL` configurable via env (defaulting to
-   `https://glidecomp.com`) and point preview's at the same workers.dev URL,
-   then register `https://auth-api-preview.<account>.workers.dev/api/auth/callback/google`
-   as an additional redirect URI on the existing Google OAuth client. Sign-in
-   from any `*.pages.dev` preview proxies through the stable preview callback
-   and lands sessions in the preview D1. Small code change in
-   `web/workers/auth-api/src/auth.ts`; secrets can then reuse the production
-   `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`.
-2. **Preview test-login.** Add an explicit `ENABLE_TEST_LOGIN` var set only in
-   `[env.preview.vars]`, allowing dev-login-style sign-in on preview. Zero
-   Google configuration, but preview URLs are public, so anyone who finds one
-   can create accounts in the preview DB — throwaway data, but it weakens the
-   "dev-login is never deployed" invariant and needs a deliberate carve-out in
-   the smoke test. Acceptable as a stopgap, not the end state.
-3. **No auth on previews.** Browse-only previews (public pages render; sign-in
-   fails). Simplest, and may be fine for "look at this UI on my phone" — could
-   ship first and add option 1 later.
-
-## Rollout order
-
-Sequencing matters because the Pages Preview binding flip is the switch:
-
-1. Land steps 2 & 4 (worker `[env.preview]` blocks, seed flag) on a branch.
-2. Create resources + secrets (step 1), deploy the three preview workers
-   manually (`bun run deploy:preview`), apply migrations, seed data.
-3. Verify the preview workers directly on their `workers.dev` URLs.
-4. Land step 3 (root wrangler.toml Preview bindings) + step 5 (CI). From the
-   next branch push, previews are fully isolated. Flipping bindings before the
-   preview workers exist would break previews — hence the ordering.
-5. Verify end to end: push a branch, wait for the PR comment URL, check `/comp`
-   renders the seeded comp on a phone, confirm the `data-git-sha` smoke test
-   passed, and confirm production deployments list is untouched
-   (`bun run deployments`).
-
-## Caveats
-
-- **Shared preview backend, last push wins.** All branches share the one
-  preview worker set + D1. Pushing branch B replaces branch A's backend while
-  A's frontend preview URL still exists (frontends are per-branch and
-  immutable; the backend is a single moving target). Right trade-off for a
-  small team; revisit per-branch workers only if it actually bites.
-- **Schema-migration branches** poison the shared preview D1 for other branches
-  until merged (migrations apply on every branch push). If that hurts, the
-  escape hatch is a throwaway D1 for that branch — manual, deliberate.
-- **Preview D1/R2 accumulate junk.** Fine by design; reseed with
-  `bun run seed:sample --preview` or drop/recreate the database when needed.
-- **Config drift** between top-level and `[env.preview]` blocks is the main
-  ongoing tax — see the rule in step 2.
-- **Audit logging** applies on preview exactly as production (same code path);
-  preview audit logs are throwaway along with the rest of the preview data.
-
-## Relationship to "deploy a preview" from Claude Code cloud sessions
-
-With this plan, a cloud session deploys a preview by **pushing the branch** —
-CI does the rest and the URL arrives in the PR comment. No Cloudflare
-credentials in the Claude environment, and the test gate applies to previews.
-If direct deploys from a session are ever wanted (skip CI latency), it works:
-add a `CLOUDFLARE_API_TOKEN` secret and `NODE_USE_ENV_PROXY=1` to the Claude
-Code environment and run the same `deploy --env preview` commands. Both paths
-end at the same fixed preview environment.
+The 2026-07-05 proposal (one *shared* preview backend for all branches, via
+`[env.preview]` blocks) fixed environment isolation but not branch isolation:
+all branches would share one database, so concurrent sessions and migration
+branches would trample each other. It was superseded by this per-branch design
+before implementation. Two of its mechanisms were kept: the preview KV
+`preview_id` twins, and the "previews must be structurally unable to touch
+production" framing (now enforced by the blackhole bindings + generated
+route-less configs). Tunnelling a local dev server out of a Claude Code cloud
+session remains impossible for anonymous tunnels (egress is TLS-only on 443;
+cloudflared needs port 7844) — though an authenticated ngrok over the
+session's CONNECT proxy is untested but plausible; deploying a real stack is
+the supported path either way.

@@ -1,0 +1,10 @@
+# Safety target for the Pages *Preview* environment's service bindings.
+# Branch previews reach their per-branch workers by URL (see
+# functions/lib/preview-backends.ts); the Preview environment's AUTH_API /
+# COMPETITION_API bindings point HERE instead of at the production workers, so
+# any code path that accidentally uses a binding on a preview fails loudly with
+# a 503 rather than silently reading or writing production data.
+name = "preview-blackhole"
+main = "src/index.ts"
+compatibility_date = "2025-03-10"
+workers_dev = false

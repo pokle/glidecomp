@@ -19,6 +19,10 @@
  * Usage:
  *   bun run seed:sample            # local dev state (web/.wrangler/state)
  *   bun run seed:sample --remote   # production D1 + R2 (needs wrangler auth)
+ *   bun run seed:sample --remote --config <wrangler config>
+ *                                  # any other stack, e.g. a per-branch preview
+ *                                  # (web/workers/competition-api/wrangler.preview.json,
+ *                                  # written by web/scripts/preview/deploy-stack.ts)
  *
  * Source: the comp folders written by download-airscore-comp.ts, described by
  * web/samples/comps/<slug>/comp.json. That manifest lists every task with its
@@ -48,12 +52,24 @@ import { SAMPLE_COMP_NAME } from '../workers/competition-api/src/sample';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const COMPS_ROOT = join(REPO_ROOT, 'web/samples/comps');
+const ARGS = process.argv.slice(2);
+// `--config <path>` targets a different competition-api config (e.g. a
+// per-branch preview stack's generated wrangler.preview.json); its value must
+// not be mistaken for the comp slug below.
+const CONFIG_FLAG_INDEX = ARGS.indexOf('--config');
 // Which downloaded comp to seed (matches a folder under COMPS_ROOT). The
-// `--remote` flag and the slug can appear in any arg order.
-const SLUG = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'corryong-cup-2026';
+// flags and the slug can appear in any arg order.
+const SLUG =
+  ARGS.find(
+    (a, i) => !a.startsWith('--') && (CONFIG_FLAG_INDEX === -1 || i !== CONFIG_FLAG_INDEX + 1),
+  ) ?? 'corryong-cup-2026';
 const PERSIST = 'web/.wrangler/state';
 // Resolve all bindings (D1 + R2) from the competition-api worker config.
-const WRANGLER_CONFIG_PATH = 'web/workers/competition-api/wrangler.toml';
+const WRANGLER_CONFIG_PATH =
+  CONFIG_FLAG_INDEX !== -1
+    ? ARGS[CONFIG_FLAG_INDEX + 1]
+    : 'web/workers/competition-api/wrangler.toml';
+if (!WRANGLER_CONFIG_PATH) throw new Error('--config needs a path argument');
 const CONFIG = ['--config', WRANGLER_CONFIG_PATH];
 
 const REMOTE = process.argv.includes('--remote');
@@ -69,24 +85,32 @@ const R2_CONCURRENCY = 8;
 // --- worker config (single source of truth for the storage bindings) -------
 
 /**
- * Pull a string value out of a `[[header]]` table in the worker's wrangler.toml
- * (e.g. the D1 `database_id` or the R2 `bucket_name`). Miniflare keys the local
- * D1 sqlite file by the *database_id*, not the name, so the in-process store
- * must read the very same id wrangler/`bun run dev` use — hardcoding would
- * silently write to a different file than the app reads.
+ * Read the D1/R2 bindings from the worker config. Miniflare keys the local D1
+ * sqlite file by the *database_id*, not the name, so the in-process store must
+ * read the very same id wrangler/`bun run dev` use — hardcoding would silently
+ * write to a different file than the app reads. The checked-in config is TOML;
+ * generated preview configs are JSON — both parse to the same five values.
  */
-const WRANGLER_TOML = readFileSync(join(REPO_ROOT, WRANGLER_CONFIG_PATH), 'utf-8');
+const WRANGLER_CONFIG = readFileSync(resolve(REPO_ROOT, WRANGLER_CONFIG_PATH), 'utf-8');
 function tomlValue(header: string, key: string): string {
-  const block = WRANGLER_TOML.match(new RegExp(`\\[\\[${header}\\]\\]([\\s\\S]*?)(?=\\n\\[|$)`))?.[1] ?? '';
+  const block =
+    WRANGLER_CONFIG.match(new RegExp(`\\[\\[${header}\\]\\]([\\s\\S]*?)(?=\\n\\[|$)`))?.[1] ?? '';
   const m = block.match(new RegExp(`${key}\\s*=\\s*"([^"]+)"`));
   if (!m) throw new Error(`wrangler.toml: [[${header}]] ${key} not found`);
   return m[1];
 }
-const D1_BINDING = tomlValue('d1_databases', 'binding');
-const D1_DATABASE_ID = tomlValue('d1_databases', 'database_id');
-const DB_NAME = tomlValue('d1_databases', 'database_name');
-const R2_BINDING = tomlValue('r2_buckets', 'binding');
-const R2_BUCKET = tomlValue('r2_buckets', 'bucket_name');
+function configValue(header: string, key: string): string {
+  if (!WRANGLER_CONFIG_PATH.endsWith('.json')) return tomlValue(header, key);
+  const cfg = JSON.parse(WRANGLER_CONFIG) as Record<string, Array<Record<string, string>>>;
+  const value = cfg[header]?.[0]?.[key];
+  if (!value) throw new Error(`${WRANGLER_CONFIG_PATH}: ${header}[0].${key} not found`);
+  return value;
+}
+const D1_BINDING = configValue('d1_databases', 'binding');
+const D1_DATABASE_ID = configValue('d1_databases', 'database_id');
+const DB_NAME = configValue('d1_databases', 'database_name');
+const R2_BINDING = configValue('r2_buckets', 'binding');
+const R2_BUCKET = configValue('r2_buckets', 'bucket_name');
 
 // --- storage store (local: in-process Miniflare; remote: wrangler CLI) ------
 
@@ -379,7 +403,7 @@ function loadManifest(): CompManifest {
 }
 
 async function main(): Promise<void> {
-  const where = REMOTE ? 'REMOTE (production)' : `local (${PERSIST})`;
+  const where = REMOTE ? `REMOTE (D1 "${DB_NAME}", R2 "${R2_BUCKET}")` : `local (${PERSIST})`;
   const store = REMOTE ? createRemoteStore() : await createLocalStore();
   try {
     await seed(store, where);

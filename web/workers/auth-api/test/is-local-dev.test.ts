@@ -7,7 +7,7 @@
 // would need a second vitest project.
 
 import { describe, expect, test } from "vitest";
-import { isLocalDev } from "../src/auth";
+import { isLocalDev, isTestLoginEnabled } from "../src/auth";
 
 describe("isLocalDev (SEC-07)", () => {
   test.each([
@@ -30,4 +30,28 @@ describe("isLocalDev (SEC-07)", () => {
   ])("false for %s", (url) => {
     expect(isLocalDev({ BETTER_AUTH_URL: url })).toBe(false);
   });
+});
+
+describe("isTestLoginEnabled (preview stacks)", () => {
+  test("true in local dev regardless of the var", () => {
+    expect(isTestLoginEnabled({ BETTER_AUTH_URL: "http://localhost:3000" })).toBe(true);
+  });
+
+  test("true on a preview stack (ENABLE_TEST_LOGIN=1)", () => {
+    expect(
+      isTestLoginEnabled({
+        BETTER_AUTH_URL: "https://my-branch.glidecomp.pages.dev",
+        ENABLE_TEST_LOGIN: "1",
+      })
+    ).toBe(true);
+  });
+
+  test.each([undefined, "", "0", "true", "yes"])(
+    "false in production for ENABLE_TEST_LOGIN=%s (only the literal '1' enables it)",
+    (value) => {
+      expect(
+        isTestLoginEnabled({ BETTER_AUTH_URL: "https://glidecomp.com", ENABLE_TEST_LOGIN: value })
+      ).toBe(false);
+    }
+  );
 });

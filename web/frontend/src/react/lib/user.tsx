@@ -112,20 +112,24 @@ export function signInWithGoogle() {
 }
 
 /**
- * True only in a local dev build (Vite replaces `import.meta.env.DEV` with a
- * static boolean at build time — `false` in the production and SSR bundles).
- * The dev sign-in button is gated on this so it never renders in production,
- * and the endpoint it calls (`/api/auth/dev-login`) 404s there regardless.
+ * True in a local dev build (Vite replaces `import.meta.env.DEV` with a static
+ * boolean at build time) and in branch-preview builds, where CI sets
+ * `VITE_ENABLE_TEST_LOGIN=1` (per-branch preview stacks sign in via dev-login
+ * instead of Google — see docs/preview-environment-plan.md). Production builds
+ * set neither, so the dev sign-in button never renders there, and the endpoint
+ * it calls (`/api/auth/dev-login`) 404s there regardless.
  */
-export const DEV_SIGN_IN_ENABLED = import.meta.env.DEV;
+export const DEV_SIGN_IN_ENABLED =
+  import.meta.env.DEV || import.meta.env.VITE_ENABLE_TEST_LOGIN === "1";
 
 /**
  * Dev/test-only sign-in that skips Google OAuth — the same path the e2e
- * tests use. Calls the auth worker's `/api/auth/dev-login` (enabled only when
- * `BETTER_AUTH_URL` is localhost) to mint a real session for a fixed account,
- * then reloads into the app. The default identity matches the repo's
- * super-admin allowlist (`SUPER_ADMIN_EMAILS`) so the dev session has admin
- * rights, which is what local testing usually needs.
+ * tests use. Calls the auth worker's `/api/auth/dev-login` (enabled when
+ * `BETTER_AUTH_URL` is localhost, or on preview stacks via
+ * `ENABLE_TEST_LOGIN`) to mint a real session for a fixed account, then
+ * reloads into the app. The default identity matches the repo's super-admin
+ * allowlist (`SUPER_ADMIN_EMAILS`) so the dev session has admin rights, which
+ * is what local testing usually needs.
  */
 export async function signInAsDev(
   name = "Tushar Pokle",

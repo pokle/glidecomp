@@ -1,0 +1,55 @@
+name: Preview Cleanup
+
+# Tear down per-branch preview stacks (D1 database, R2 bucket, workers — see
+# web/scripts/preview/lib.ts) when their branch goes away:
+#   - branch delete / PR close  → destroy that branch's stack immediately
+#   - weekly sweep + manual run → destroy any stack whose branch no longer
+#     exists (delete webhooks can be missed; renames leave no event)
+# Cleanup matters doubly on the free plan: D1 allows 10 databases per account,
+# so stale stacks eventually block new preview deploys.
+
+on:
+  delete:
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: '17 3 * * 1' # weekly, Monday 03:17 UTC
+  workflow_dispatch:
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  cleanup:
+    name: Destroy stale preview stacks
+    runs-on: ubuntu-latest
+    # `delete` also fires for tags; only branches have stacks.
+    if: github.event_name != 'delete' || github.event.ref_type == 'branch'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      # The preview scripts use only the Cloudflare REST API + node built-ins —
+      # no bun install needed.
+
+      - name: Destroy stack for deleted branch
+        if: github.event_name == 'delete'
+        run: bun web/scripts/preview/destroy-stack.ts --branch "${{ github.event.ref }}"
+
+      - name: Destroy stack for closed PR branch
+        if: github.event_name == 'pull_request'
+        run: bun web/scripts/preview/destroy-stack.ts --branch "${{ github.event.pull_request.head.ref }}"
+
+      - name: Sweep stacks with no live branch
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/branches" --paginate --jq '.[].name' \
+            | bun web/scripts/preview/sweep-stacks.ts

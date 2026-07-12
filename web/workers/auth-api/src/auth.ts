@@ -13,6 +13,21 @@ export function isLocalDev(env: { BETTER_AUTH_URL: string }): boolean {
   }
 }
 
+/**
+ * Whether the email/password test-login path (and the /api/auth/dev-login
+ * endpoint) is available: always in local dev, and on per-branch preview
+ * stacks, whose generated config sets ENABLE_TEST_LOGIN=1 (previews can't use
+ * Google OAuth — a per-branch hostname can't be a registered redirect URI, and
+ * preview data is throwaway by design). Production sets neither, and the
+ * deploy workflow's smoke test asserts dev-login stays blocked there.
+ */
+export function isTestLoginEnabled(env: {
+  BETTER_AUTH_URL: string;
+  ENABLE_TEST_LOGIN?: string;
+}): boolean {
+  return isLocalDev(env) || env.ENABLE_TEST_LOGIN === "1";
+}
+
 export type AuthEnv = {
   glidecomp_auth: D1Database;
   R2: R2Bucket;
@@ -20,6 +35,8 @@ export type AuthEnv = {
   GOOGLE_CLIENT_SECRET: string;
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL: string;
+  /** "1" only on preview stacks — see isTestLoginEnabled. */
+  ENABLE_TEST_LOGIN?: string;
 };
 
 export function createAuth(env: AuthEnv) {
@@ -46,7 +63,11 @@ export function createAuth(env: AuthEnv) {
           maxRequests: API_KEY_RATE_LIMIT.maxRequests,
         },
       }) as unknown as BetterAuthPlugin,
-      ...(isLocalDev(env)
+      // The oAuthProxy routes Google callbacks through production; test-login
+      // deployments (local dev, preview stacks) have no working Google client,
+      // so the proxy is omitted there — it must never bounce a preview
+      // sign-in through the production auth worker.
+      ...(isTestLoginEnabled(env)
         ? []
         : [
             oAuthProxy({
@@ -54,8 +75,9 @@ export function createAuth(env: AuthEnv) {
             }),
           ]),
     ],
-    // Enable email/password auth in dev only (for dev-login endpoint)
-    ...(isLocalDev(env)
+    // Email/password auth exists only for the dev-login endpoint (local dev
+    // and preview stacks) — never in production.
+    ...(isTestLoginEnabled(env)
       ? { emailAndPassword: { enabled: true, minPasswordLength: 1 } }
       : {}),
     socialProviders: {

@@ -33,6 +33,8 @@
     "typecheck:comp": "bun run --filter competition-api typecheck",
     "deploy:all": "bun run deploy && bun run deploy:worker && bun run deploy:comp",
     "deployments": "wrangler pages deployment list --project-name=glidecomp --json | jq .",
+    "preview:deploy": "bun web/scripts/preview/deploy-stack.ts",
+    "preview:destroy": "bun web/scripts/preview/destroy-stack.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:engine": "tsc --noEmit -p web/engine/tsconfig.json",
     "typecheck:worker": "bun run --filter airscore-api typecheck",

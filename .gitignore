@@ -11,6 +11,9 @@ dist/
 .wrangler/
 web/frontend/public/js/
 
+# Generated per-branch preview worker configs (web/scripts/preview/)
+wrangler.preview.json
+
 # Environment files
 .env
 .env.local

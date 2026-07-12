@@ -23,6 +23,7 @@ import {
   NotFoundError,
   type FetchFn,
 } from "../../web/frontend/src/react/loaders";
+import { previewBackends } from "../lib/preview-backends";
 
 interface Env {
   COMPETITION_API: Fetcher;
@@ -167,8 +168,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // Forward the cookie so the API answers exactly as it would for this visitor
   // (admins see their test comps; everyone else gets the public view / 404).
+  // Branch previews go to the branch's own worker by URL instead of the
+  // service binding — see functions/lib/preview-backends.ts.
   const fetcher: FetchFn = (p, init) =>
-    env.COMPETITION_API.fetch(new Request(`https://comp.internal${p}`, mergeCookie(init, cookie)));
+    previewBackends
+      ? fetch(new Request(`${previewBackends.compApiUrl}${p}`, mergeCookie(init, cookie)))
+      : env.COMPETITION_API.fetch(new Request(`https://comp.internal${p}`, mergeCookie(init, cookie)));
 
   let rendered: Rendered;
   try {

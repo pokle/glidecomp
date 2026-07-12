@@ -5,6 +5,8 @@
  * included (the anonymous list omits them). Short edge cache so new comps and
  * tasks show up within the hour without hammering the API.
  */
+import { previewBackends } from "./lib/preview-backends";
+
 interface Env {
   COMPETITION_API: Fetcher;
 }
@@ -29,8 +31,12 @@ interface ClassStanding {
 
 export const onRequest: PagesFunction<Env> = async (context) => {
   const origin = new URL(context.request.url).origin;
+  // Branch previews reach their per-branch worker by URL — see
+  // functions/lib/preview-backends.ts.
   const api = (path: string) =>
-    context.env.COMPETITION_API.fetch(new Request(`https://comp.internal${path}`));
+    previewBackends
+      ? fetch(`${previewBackends.compApiUrl}${path}`)
+      : context.env.COMPETITION_API.fetch(new Request(`https://comp.internal${path}`));
 
   const urls: Array<{ loc: string; lastmod?: string }> = [{ loc: `${origin}/comp` }];
 

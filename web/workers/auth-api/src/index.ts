@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { bodyLimit } from "hono/body-limit";
 import { APIError } from "better-auth/api";
-import { createAuth, isLocalDev, type AuthEnv } from "./auth";
+import { createAuth, isTestLoginEnabled, type AuthEnv } from "./auth";
 import { mountPreferencesRoutes } from "./routes/preferences";
 
 const app = new Hono<{ Bindings: AuthEnv }>();
@@ -227,9 +227,11 @@ app.post("/api/auth/delete-account", async (c) => {
   return c.json({ success: true });
 });
 
-// POST /api/auth/dev-login — dev/test-only: create session without OAuth
+// POST /api/auth/dev-login — dev/test-only: create session without OAuth.
+// Available in local dev and on per-branch preview stacks (ENABLE_TEST_LOGIN),
+// never in production — the deploy workflow smoke-tests that.
 app.post("/api/auth/dev-login", async (c) => {
-  if (!isLocalDev(c.env)) {
+  if (!isTestLoginEnabled(c.env)) {
     return c.notFound();
   }
 

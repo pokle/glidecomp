@@ -85,6 +85,11 @@ jobs:
     name: Deploy Preview
     runs-on: ubuntu-latest
     needs: test
+    # One deploy at a time per branch (stacks are per-branch, so different
+    # branches never contend); a newer push supersedes an in-flight deploy.
+    concurrency:
+      group: preview-deploy-${{ github.ref_name }}
+      cancel-in-progress: true
     permissions:
       contents: read
       deployments: write
@@ -106,17 +111,47 @@ jobs:
 
       - name: Validate required secrets
         run: |
-          if [ -z "$VITE_MAPBOX_TOKEN" ]; then
-            echo "Error: VITE_MAPBOX_TOKEN is not set"
-            exit 1
-          fi
+          fail=0
+          for var in VITE_MAPBOX_TOKEN CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            if [ -z "${!var}" ]; then echo "Error: $var is not set"; fail=1; fi
+          done
+          exit $fail
         env:
           VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # Provision (idempotently) and deploy this branch's isolated backend:
+      # D1 database, R2 bucket, auth + competition workers on workers.dev.
+      # Also writes functions/lib/preview-backends.ts so the Pages Functions
+      # bundle deployed below routes to this branch's workers instead of the
+      # (blackholed) preview service bindings.
+      - name: Deploy preview backend stack
+        id: stack
+        run: bun web/scripts/preview/deploy-stack.ts "${{ github.ref_name }}"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # Seed the sample comps into a fresh stack (or on request: include
+      # "[reseed]" in the commit message to wipe the samples back to pristine —
+      # other comps created on the stack are left alone either way).
+      - name: Seed sample competitions
+        if: steps.stack.outputs.d1_created == 'true' || contains(github.event.head_commit.message, '[reseed]')
+        run: |
+          bun web/scripts/seed-sample-comp.ts --remote --config "${{ steps.stack.outputs.comp_config }}"
+          bun web/scripts/seed-sample-comp.ts big-chip --remote --config "${{ steps.stack.outputs.comp_config }}"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Build
         run: bun run build
         env:
           VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
+          # Show the test sign-in button on previews (pairs with the stack's
+          # ENABLE_TEST_LOGIN — Google OAuth can't run on per-branch hostnames).
+          VITE_ENABLE_TEST_LOGIN: "1"
 
       - name: Deploy to Cloudflare Pages (Branch Preview)
         id: deploy
@@ -130,11 +165,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          PREVIEW_URL="${{ steps.deploy.outputs.deployment-url }}"
+          PREVIEW_URL="${{ steps.stack.outputs.alias_url }}"
+          DEPLOYMENT_URL="${{ steps.deploy.outputs.deployment-url }}"
 
           echo "## Preview Deployment" >> $GITHUB_STEP_SUMMARY
           echo "Branch: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "Preview URL: ${PREVIEW_URL}" >> $GITHUB_STEP_SUMMARY
+          echo "Preview URL: ${PREVIEW_URL} (this commit: ${DEPLOYMENT_URL})" >> $GITHUB_STEP_SUMMARY
+          echo "Isolated backend: D1/R2 \`glidecomp-pv-${{ steps.stack.outputs.slug }}\`" >> $GITHUB_STEP_SUMMARY
 
           # Post preview URL as a PR comment (if a PR exists for this branch)
           PR_NUMBER=$(gh pr view "${{ github.ref_name }}" --repo "${{ github.repository }}" --json number --jq '.number' 2>/dev/null || true)
@@ -143,6 +180,7 @@ jobs:
             COMMENT_BODY="${COMMENT_MARKER}
           **Preview Deployment**
           ${PREVIEW_URL}
+          Isolated per-branch stack (own D1 + R2 + workers, seeded with the sample comps) — sign in with the \"Sign in (dev)\" button. Add \`[reseed]\` to a commit message to reset the sample data.
           _Commit: ${{ github.sha }}_"
 
             # Delete previous preview comment if it exists, then post a new one
@@ -210,17 +248,33 @@ jobs:
           if [ "$fail" = "0" ]; then echo "Good — SPA routes serve ${EXPECTED_SHA}"; fi
           exit $fail
 
-      - name: Smoke test — verify dev-login is NOT accessible
+      # The preview stack signs in via dev-login by design (ENABLE_TEST_LOGIN
+      # on the branch's own auth worker + throwaway per-branch DB). Production
+      # keeps the opposite assertion in deploy.yml: dev-login must 404 there.
+      # A successful login here also proves the whole preview chain end to
+      # end: Pages Function → branch worker URL → branch D1.
+      - name: Smoke test — preview backend is isolated and test-login works
         run: |
           DEPLOY_URL="${{ steps.deploy.outputs.deployment-url }}"
           echo "Testing against: ${DEPLOY_URL}"
+          fail=0
+
+          # The comp list must come from the branch worker (not the blackholed
+          # service binding, which answers 503).
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' "${DEPLOY_URL}/api/comp")
+          echo "GET /api/comp returned HTTP $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::/api/comp returned $STATUS — preview backend routing is broken (503 = request hit the blackholed service binding)"
+            fail=1
+          fi
+
           STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
             -X POST "${DEPLOY_URL}/api/auth/dev-login" \
             -H 'Content-Type: application/json' \
             -d '{"name":"smoke","email":"smoke@test.local"}')
           echo "POST /api/auth/dev-login returned HTTP $STATUS"
-          if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
-            echo "::error::CRITICAL: dev-login endpoint is accessible at ${DEPLOY_URL}!"
-            exit 1
+          if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 300 ]; then
+            echo "::error::dev-login failed on the preview stack (expected 2xx, got $STATUS) — ENABLE_TEST_LOGIN or the auth worker deploy is broken"
+            fail=1
           fi
-          echo "Good — dev-login is blocked"
+          exit $fail

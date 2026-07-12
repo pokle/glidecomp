@@ -13,3 +13,18 @@ service = "auth-api"
 [[services]]
 binding = "COMPETITION_API"
 service = "competition-api"
+
+# Preview environment (every non-master branch deploy): the bindings point at a
+# 503-only blackhole worker, NOT the production workers. Branch previews reach
+# their own per-branch workers by URL via the generated
+# functions/lib/preview-backends.ts (Pages preview bindings are one fixed set
+# for ALL branches, so they can't route per-branch); the blackhole guarantees
+# that any code path still using a binding on a preview fails loudly instead of
+# silently reading or writing production data.
+[[env.preview.services]]
+binding = "AUTH_API"
+service = "preview-blackhole"
+
+[[env.preview.services]]
+binding = "COMPETITION_API"
+service = "preview-blackhole"
