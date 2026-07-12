@@ -13,6 +13,9 @@ Legend: **[C]** = confirmed by direct code read / runtime repro during the revie
 ## 1. High-severity bugs (silent wrong results on the scoring path)
 
 ### 1.1 [C] Turnpoint nested inside a larger following cylinder → finisher scored landed-out
+
+Status: Fixed in #321
+
 `src/turnpoint-sequence.ts:503-528` (`buildForwardPath`), rooted in the crossing-only design of
 `detectCylinderCrossings`.
 
@@ -28,6 +31,9 @@ intermittent. The `>=` comment at L509-518 covers only the identical co-located-
 No test covers a TP nested inside the following cylinder.
 
 ### 1.2 [C] v2 XCTSK polyline decoder swaps latitude and longitude
+
+Status: Fixed in #322
+
 `src/xctsk-parser.ts:100-111` (decoder) vs `src/waypoint-export.ts:395-406` (encoder).
 
 `decodePolyline` assigns the first decoded value to **lat**, second to **lon** — but the real
@@ -48,6 +54,9 @@ scoring engine bumped to v6; tests assert exact coordinates (Alps + southern-hem
 encoder round-trips.
 
 ### 1.3 [C] Modern `HFDTEDATE:` header unrecognized → flight date becomes "today"
+
+Status: Fixed in #323
+
 `src/igc-parser.ts:273, 307`.
 
 Both date regexes (`/(?:HFDTE|HDTE)[:\s]*(\d{6})/`) require digits immediately after the tag;
@@ -58,6 +67,9 @@ file parses differently each day). Fix: `(?:FDTE|DTE)(?:DATE)?[:\s]*(\d{6})`. Te
 the short form.
 
 ### 1.4 [C] 3D-replay legend scored with hardcoded 70 km nominal distance (dead fallback)
+
+Status: Fixed in #324
+
 `src/track-pack-pipeline.ts:83-86`.
 
 ```ts
