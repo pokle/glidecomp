@@ -24,6 +24,7 @@ export interface GlideData {
   distance: number;
   duration: number;
   averageSpeed: number;
+  /** L/D ratio; 0 when the pilot gained altitude (consumers display this as ∞) */
   glideRatio: number;
   altitudeLost: number;
   startLat: number;
@@ -167,8 +168,9 @@ export function extractSinks(events: FlightEvent[], maxGlideRatioForSink?: numbe
     if (event.type !== 'glide_start' || !event.segment || !event.details) continue;
 
     const details = event.details as GlideEventDetails | undefined;
-    const glideRatio = details?.glideRatio ?? 0;
-    if (glideRatio > MAX_GLIDE_RATIO_FOR_SINK) continue;
+    // An undefined ratio means the pilot gained altitude — never a sink
+    const glideRatio = details?.glideRatio;
+    if (glideRatio === undefined || glideRatio > MAX_GLIDE_RATIO_FOR_SINK) continue;
 
     const endEvent = findEndEvent(event, events, 'glide_end');
     if (!endEvent) continue;
