@@ -34,7 +34,7 @@ import { CompScoresSection } from "../comp/CompScoresSection";
 import { PilotsSection } from "../comp/PilotsSection";
 import { SettingsDialog } from "../comp/SettingsDialog";
 import { CheckboxField } from "../comp/fields";
-import { downloadTaskXctsk } from "../comp/download-xctsk";
+import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 import {
   fetchWithRetry,
@@ -398,21 +398,7 @@ function TaskHero({
               Task details
             </Button>
             {task.has_xctsk ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                title="Download the task file for your flight instrument"
-                onClick={async () => {
-                  try {
-                    await downloadTaskXctsk(compId, task.task_id, task.name);
-                  } catch (err) {
-                    toast.error(err instanceof Error ? err.message : "Download failed");
-                  }
-                }}
-              >
-                Download .xctsk
-              </Button>
+              <TaskExportButtons compId={compId} taskId={task.task_id} taskName={task.name} />
             ) : null}
             {canSubmitTrack ? (
               <SubmitTrackButton

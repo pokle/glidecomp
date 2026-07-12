@@ -7,7 +7,7 @@
  */
 import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { xctaskTurnpointsToRecords, type XCTask, type WaypointFileRecord } from "@glidecomp/engine";
+import { xctaskTurnpointsToRecords, type XCTask } from "@glidecomp/engine";
 import { Button } from "@/react/ui/button";
 import {
   Dialog,
@@ -34,11 +34,10 @@ import { useAdminView, useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { SectionHeader } from "../components/SectionHeader";
-import { downloadXctskFile } from "../comp/download-xctsk";
+import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { CheckboxField } from "../comp/fields";
 import { TaskStandings } from "../comp/TaskStandings";
 import { RouteEditorDialog } from "../comp/RouteEditorDialog";
-import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
 import { startConfigSummary } from "../comp/route-editor";
 import { useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 import {
@@ -200,15 +199,12 @@ export function TaskDetail() {
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {task.xctsk ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            title="Download the task file for your flight instrument"
-            onClick={() => downloadXctskFile(task.name, task.xctsk!)}
-          >
-            Download .xctsk
-          </Button>
+          <TaskExportButtons
+            compId={compId}
+            taskId={taskId}
+            taskName={task.name}
+            records={xctaskTurnpointsToRecords(task.xctsk.turnpoints)}
+          />
         ) : null}
         {task.xctsk ? (
           <Button nativeButton={false}
@@ -242,10 +238,7 @@ export function TaskDetail() {
 
       <TurnpointsSection
         xctsk={task.xctsk}
-        taskName={task.name}
         taskDate={task.task_date}
-        compId={compId}
-        taskId={taskId}
         timezone={comp?.timezone ?? null}
         isAdmin={isAdmin}
         onEditRoute={() => setRouteOpen(true)}
@@ -313,32 +306,18 @@ export function TaskDetail() {
  */
 function TurnpointsSection({
   xctsk,
-  taskName,
   taskDate,
-  compId,
-  taskId,
   timezone,
   isAdmin,
   onEditRoute,
 }: {
   xctsk: XCTask | null;
-  taskName: string;
   taskDate: string;
-  compId: string;
-  taskId: string;
   /** Comp-local IANA zone; gate times in the summary show comp-local when set. */
   timezone: string | null;
   isAdmin: boolean;
   onEditRoute: () => void;
 }) {
-  // The task's turnpoints as exportable records (short code, long name, coords,
-  // cylinder radius) for the "download / QR to your device" panel — via the
-  // shared engine helper so the client and the server file route stay identical.
-  const records: WaypointFileRecord[] = useMemo(
-    () => xctaskTurnpointsToRecords(xctsk?.turnpoints),
-    [xctsk]
-  );
-
   if (!xctsk && !isAdmin) return null;
   return (
     <section>
@@ -380,20 +359,6 @@ function TurnpointsSection({
         <p className="mt-2 text-sm text-muted-foreground">
           {startConfigSummary(xctsk.sss, { timeZone: timezone, taskDate })}
         </p>
-      ) : null}
-      {records.length > 0 ? (
-        <div className="mt-4">
-          <WaypointDeviceExport
-            records={records}
-            baseName={taskName}
-            noun="turnpoint"
-            title="Get this task on your device"
-            subtitle="Open or download the turnpoints for your instrument, or scan the QR into your flight app (XCTrack, Flyskyhy, SeeYou Navigator and most others)."
-            hostedUrl={(fmt, swap) =>
-              `/api/comp/${compId}/task/${taskId}/waypoints/${fmt}${swap ? "?swap=1" : ""}`
-            }
-          />
-        </div>
       ) : null}
     </section>
   );

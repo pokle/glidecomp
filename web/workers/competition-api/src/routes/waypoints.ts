@@ -3,8 +3,10 @@ import { z } from "zod";
 import {
   getWaypointExportFormat,
   swapCodeName,
+  toXctskJSON,
   xctaskTurnpointsToRecords,
   type WaypointFileRecord,
+  type XCTask,
 } from "@glidecomp/engine";
 import type { Env, AuthUser } from "../env";
 import { sqidsMiddleware } from "../middleware/sqids";
@@ -155,7 +157,10 @@ export const waypointsRoutes = new Hono<HonoEnv>()
       const compId = c.var.ids.comp_id!;
       const taskId = c.var.ids.task_id!;
       const formatId = c.req.param("format");
-      if (!getWaypointExportFormat(formatId)) return c.json({ error: "Unknown format" }, 404);
+      // "xctsk" is the native XCTrack task file, not a waypoint export format.
+      if (formatId !== "xctsk" && !getWaypointExportFormat(formatId)) {
+        return c.json({ error: "Unknown format" }, 404);
+      }
 
       const comp = await loadVisibleComp(c, compId);
       if (comp instanceof Response) return comp;
@@ -167,9 +172,18 @@ export const waypointsRoutes = new Hono<HonoEnv>()
         .first<{ name: string; xctsk: string | null }>();
       if (!task) return c.json({ error: "Not found" }, 404);
 
-      const xctsk = task.xctsk
-        ? (JSON.parse(task.xctsk) as { turnpoints?: Parameters<typeof xctaskTurnpointsToRecords>[0] })
-        : null;
+      const xctsk = task.xctsk ? (JSON.parse(task.xctsk) as XCTask) : null;
+
+      // Native task file — serve the canonical .xctsk that XCTrack imports.
+      if (formatId === "xctsk") {
+        if (!xctsk) return c.json({ error: "No route defined" }, 404);
+        return c.body(JSON.stringify(toXctskJSON(xctsk)), 200, {
+          "Content-Type": "application/xctsk",
+          "Content-Disposition": `inline; filename="${slugify(task.name)}.xctsk"`,
+          "Cache-Control": "no-store",
+        });
+      }
+
       const records = xctaskTurnpointsToRecords(xctsk?.turnpoints);
       return fileResponse(c, records, formatId, c.req.query("swap") === "1", task.name, "turnpoints");
     }
