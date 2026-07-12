@@ -1356,6 +1356,49 @@ describe('resolveTurnpointSequence', () => {
       expect(result.speedSectionTime).not.toBeNull(); // whole course is the speed section
     });
   });
+
+  describe('turnpoint nested inside a larger following cylinder (code-review 2026-07-12 §1.1)', () => {
+    // KNOWN BUG (it.failing): reaching is presence-based per GAP/FS — any fix
+    // inside a cylinder at/after the previous turnpoint's reaching counts —
+    // but the sequencer only credits boundary crossings with
+    // time >= prevReachingTime. When the previous turnpoint's cylinder lies
+    // entirely inside a larger following cylinder (here a big ESS/goal ring
+    // around a small final TP), the pilot's only crossing of the big cylinder
+    // happens BEFORE they tag the nested TP inside it. If they then fly to
+    // goal without ever exiting the big cylinder, that crossing is rejected
+    // and a finisher is scored landed-out. Flip it.failing → it when fixed.
+    it.failing('credits ESS/goal tagged from inside after a TP nested within it', () => {
+      const task = createTask([
+        { name: 'START', lat: 47.0, lon: 11.0, radius: 1000, type: 'SSS' },
+        { name: 'TP1', lat: 47.1, lon: 11.0, radius: 400 },
+        // Goal = ESS, a 3 km cylinder that fully contains TP1's cylinder
+        // (centres ~1112 m apart; 1112 + 400 < 3000).
+        { name: 'GOAL', lat: 47.11, lon: 11.0, radius: 3000, type: 'ESS' },
+      ]);
+
+      // Straight line north along lon 11.0, one fix per minute.
+      const track = [
+        createFix(0, 47.0, 11.0), //   launch, inside the EXIT start
+        createFix(1, 47.02, 11.0), //  start exited (boundary at ~1000 m)
+        createFix(2, 47.05, 11.0),
+        createFix(3, 47.075, 11.0), // still outside goal cylinder (~3891 m out)
+        createFix(4, 47.09, 11.0), //  entered goal cylinder (~2223 m), outside TP1 (~1112 m)
+        createFix(5, 47.1, 11.0), //   TP1 centre — TP1 tagged INSIDE the goal cylinder
+        createFix(6, 47.107, 11.0), // left TP1 (~778 m), still inside goal (~334 m)
+        createFix(7, 47.11, 11.0), //  goal centre
+        createFix(8, 47.11, 11.0), //  lands in goal — never exits the goal cylinder
+      ];
+
+      const result = resolveTurnpointSequence(task, track);
+
+      // The nested TP is credited (this part already works)...
+      expect(result.sequence.map(r => r.taskIndex)).toContain(1);
+      // ...and the pilot then reached goal without leaving its cylinder,
+      // so ESS/goal must be credited: this is a finisher, not a land-out.
+      expect(result.essReaching).not.toBeNull();
+      expect(result.madeGoal).toBe(true);
+    });
+  });
 });
 
 describe('reviveTurnpointSequenceResult', () => {
