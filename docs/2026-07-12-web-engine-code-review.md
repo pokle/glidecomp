@@ -299,6 +299,24 @@ Specific missing cases that would have caught the bugs above:
 
 ## 6. Maintainability / assistant-DX
 
+- **The offline 3dvis mirror is dead weight; the packer itself is live.** Usage map, verified
+  by grep: the replay page always fetches the Worker endpoints
+  (`/api/comp/.../3dvis` / `/api/comp/sample-3dvis`, built in
+  `web/frontend/src/replay/main.ts:44-45`), and the Worker packs on demand via
+  `packTracksFromIgc` (`web/workers/competition-api/src/visualization.ts:170`) — so
+  `track-packer.ts`/`track-pack-pipeline.ts` are production code, not a demo leftover. What
+  *is* left over from the homepage-demo era is the static mirror:
+  `web/frontend/public/replay-offline/` (manifest.json + ~3 MB `tracks.bin.gz`, last
+  regenerated at `8cae48d`) is referenced by nothing — not the replay entry, the service
+  worker, Astro, or `_redirects` — yet ships in `dist/` on every Pages deploy. It exists only
+  to be written by `web/engine/cli/build-3dvis.ts` (`bun run build-3dvis`).
+  Cleanup: delete `public/replay-offline/`, drop the `build-3dvis` CLI + package script (or
+  keep the CLI as a pipeline-exercising tool with a gitignored default output), and update
+  `docs/3d-flight-replay-notes.md` + the CLAUDE.md sample-data section, which still describe
+  the mirror as live architecture. This also removes the dead `buildPalette` question for the
+  CLI path — but note the packer's zero-test-coverage gap (§5) stays fully relevant, since the
+  packer is load-bearing via the Worker.
+
 - **`web/engine` has no README.** One paragraph covering: module map, the pure-TS/no-DOM/no-
   Node constraint (and that `tsconfig "types": []` + `"lib": ["ES2022"]` enforces it — a
   deliberate structural guard worth documenting), how tests run (bun-native from the repo
