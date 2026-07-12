@@ -317,6 +317,30 @@ describe("GET /api/comp/:comp_id", () => {
       expect(task.missing_ess).toBe(false);
     }
   });
+
+  test("returns setup-guide signals: waypoint_count and settings_reviewed", async () => {
+    const compId = await createComp();
+
+    // Fresh comp: no waypoints, settings never saved.
+    let res = await authRequest("GET", `/api/comp/${compId}`);
+    let data = (await res.json()) as {
+      waypoint_count: number;
+      settings_reviewed: boolean;
+    };
+    expect(data.waypoint_count).toBe(0);
+    expect(data.settings_reviewed).toBe(false);
+
+    await authRequest("PUT", `/api/comp/${compId}/waypoints`, {
+      waypoints: [
+        { code: "A01", name: "Launch", latitude: -36.5, longitude: 147.0, altitude: 500, radius: 400 },
+        { code: "A02", name: "Goal", latitude: -36.6, longitude: 147.1, altitude: 200, radius: 1000 },
+      ],
+    });
+
+    res = await authRequest("GET", `/api/comp/${compId}`);
+    data = (await res.json()) as typeof data;
+    expect(data.waypoint_count).toBe(2);
+  });
 });
 
 // ── PATCH /api/comp/:comp_id ────────────────────────────────────────────────
@@ -335,6 +359,19 @@ describe("PATCH /api/comp/:comp_id", () => {
     // Verify in D1
     const row = await env.DB.prepare("SELECT name FROM comp").first();
     expect(row!.name).toBe("Updated");
+  });
+
+  test("any settings save flips settings_reviewed (setup guide)", async () => {
+    const compId = await createComp();
+
+    // Even a PATCH that changes nothing counts as a review.
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {});
+    expect(res.status).toBe(200);
+
+    const detail = (await (
+      await authRequest("GET", `/api/comp/${compId}`)
+    ).json()) as { settings_reviewed: boolean };
+    expect(detail.settings_reviewed).toBe(true);
   });
 
   test("updates category", async () => {

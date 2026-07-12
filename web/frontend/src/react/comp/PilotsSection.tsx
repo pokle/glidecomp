@@ -9,7 +9,7 @@
  * POST /api/comp/:comp_id/pilot/bulk.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
 import { Button } from "@/react/ui/button";
 import { SectionHeader } from "../components/SectionHeader";
@@ -51,15 +51,36 @@ export function PilotsSection({
   compName,
   compClasses,
   isAdmin,
+  onPilotsChanged,
 }: {
   compId: string;
   compName: string;
   compClasses: string[];
   isAdmin: boolean;
+  /** Called after a successful pilots save so the parent can refetch data
+   * that depends on the roster (e.g. the setup guide's pilot_count). */
+  onPilotsChanged?: () => void;
 }) {
   const [pilots, setPilots] = useState<CompPilot[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Deep link from the setup guide's "Add pilots" step: open the edit dialog
+  // once the admin check has resolved (same hash pattern as the task page's
+  // #edit-route). Also gives admins a shareable link to the pilots editor.
+  useEffect(() => {
+    if (location.hash === "#edit-pilots" && isAdmin) setEditOpen(true);
+  }, [location.hash, isAdmin]);
+
+  // Closing the editor drops the hash so a reload doesn't reopen it.
+  const closeEditor = () => {
+    setEditOpen(false);
+    if (location.hash === "#edit-pilots") {
+      navigate(location.pathname + location.search, { replace: true });
+    }
+  };
 
   const loadPilots = useCallback(async () => {
     try {
@@ -106,8 +127,18 @@ export function PilotsSection({
         <p className="mt-2 text-muted-foreground">Loading pilots…</p>
       ) : pilots.length === 0 ? (
         <div className="mt-2 text-muted-foreground">
-          <p>No pilots registered yet</p>
-          <p>Pilots auto-register when they upload an IGC, or use Import CSV</p>
+          <p>No pilots registered yet — pilots appear here when the organizers add them or when they submit a track.</p>
+          {isAdmin ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              onClick={() => setEditOpen(true)}
+            >
+              Add pilots
+            </Button>
+          ) : null}
         </div>
       ) : (
         <Table className="mt-2">
@@ -153,10 +184,11 @@ export function PilotsSection({
           compName={compName}
           compClasses={compClasses}
           pilots={pilots}
-          onClose={() => setEditOpen(false)}
+          onClose={closeEditor}
           onSaved={async () => {
-            setEditOpen(false);
+            closeEditor();
             await loadPilots();
+            onPilotsChanged?.();
           }}
         />
       ) : null}

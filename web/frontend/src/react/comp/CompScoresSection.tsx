@@ -41,6 +41,7 @@ export function CompScoresSection({
   defaultTaskId,
   initialScores,
   initialScoresEtag,
+  isAdmin = false,
 }: {
   compId: string;
   timezone: string | null;
@@ -51,6 +52,8 @@ export function CompScoresSection({
   /** SSR-seeded scores so they appear in the first paint (server HTML). */
   initialScores?: CompScores;
   initialScoresEtag?: string | null;
+  /** Admins get an actionable empty state (false during SSR/first paint). */
+  isAdmin?: boolean;
 }) {
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -100,7 +103,7 @@ export function CompScoresSection({
       {state.kind === "loading" ? (
         <p className="mt-2 text-muted-foreground">Loading scores…</p>
       ) : state.kind === "unavailable" ? (
-        <p className="mt-2 text-muted-foreground">Scores not available yet.</p>
+        <ScoresEmptyState isAdmin={isAdmin} />
       ) : (
         <>
           <ScoreFreshness
@@ -111,7 +114,7 @@ export function CompScoresSection({
             pollUrl={`/api/comp/${encodeURIComponent(compId)}/scores`}
           />
           {state.scores.standings.length === 0 ? (
-            <p className="mt-2 text-muted-foreground">No scored tasks yet.</p>
+            <ScoresEmptyState isAdmin={isAdmin} />
           ) : (
             <>
               <ScoresViews
@@ -133,6 +136,28 @@ export function CompScoresSection({
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * Role-aware empty state: visitors learn why there's nothing here; admins
+ * are pointed at the action that produces scores. isAdmin resolves after
+ * hydration, so SSR always renders the visitor sentence.
+ */
+function ScoresEmptyState({ isAdmin }: { isAdmin: boolean }) {
+  return (
+    <div className="mt-2 text-muted-foreground">
+      <p>No scores yet — they appear automatically once pilots submit tracks for a task.</p>
+      {isAdmin ? (
+        <p className="mt-1">
+          Set a{" "}
+          <a href="#tasks" className="underline underline-offset-4">
+            task's route
+          </a>{" "}
+          and submit tracks to see scores here.
+        </p>
+      ) : null}
+    </div>
   );
 }
 

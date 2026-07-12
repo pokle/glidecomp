@@ -75,8 +75,24 @@ test("dev login, onboarding, create competition and task", async ({ page }) => {
     "E2E Test Competition"
   );
 
-  // Step 6: Create a task
-  await page.getByRole("button", { name: "New Task" }).click();
+  // Step 5b: The admin-only setup guide shows on a fresh comp with step 1
+  // ("Create the competition") pre-checked.
+  const guide = page.getByRole("region", { name: "Set up your competition" });
+  await expect(guide).toBeVisible();
+  await expect(guide).toContainText("1 of 5 steps");
+
+  // Saving settings (defaults untouched) counts as reviewing them; the
+  // refreshed comp payload ticks step 2 over.
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Save", exact: true })
+    .click();
+  await expect(guide).toContainText("2 of 5 steps");
+
+  // Step 6: Create a task. Two "New Task" buttons exist on an empty comp
+  // (section header + the empty-state CTA in the section body).
+  await page.getByRole("button", { name: "New Task" }).first().click();
   const taskDialog = page.getByRole("dialog");
   await taskDialog.getByLabel("Name").fill("Day 1 - Ridge Run");
   await taskDialog.getByLabel("Date").fill("2026-04-15");
@@ -84,8 +100,18 @@ test("dev login, onboarding, create competition and task", async ({ page }) => {
   await taskDialog.getByRole("button", { name: "Create" }).click();
 
   // A successful create closes the dialog and re-fetches the comp; the task
-  // link assertion polls until the refreshed task list renders.
+  // link assertion polls until the refreshed task list renders. Scoped to
+  // the Tasks section — the setup guide's "Set the route for…" link also
+  // carries the task name.
   await expect(
-    page.getByRole("link", { name: /Day 1 - Ridge Run/ })
+    page.locator("#tasks").getByRole("link", { name: /Day 1 - Ridge Run/ })
   ).toBeVisible();
+
+  // A task without a route keeps step 5 active but adapts it to point at
+  // the new task's route editor.
+  await expect(guide).toContainText("Set the route for Day 1 - Ridge Run");
+
+  // "Hide guide" dismisses the card (persisted per-comp in localStorage).
+  await guide.getByRole("button", { name: "Hide guide" }).click();
+  await expect(guide).toBeHidden();
 });
