@@ -176,23 +176,33 @@ the same divergence.)
   `glideRatio: Infinity` → description `"Glide start (L/D Infinity)"`, and `JSON.stringify`
   turns `Infinity` into `null` across worker/cache boundaries. `glide-speed.ts:176-180`
   correctly uses `undefined` for the same case — align the conventions.
+  **Fixed 2026-07-12** ([#328](https://github.com/pokle/glidecomp/pull/328)) — `glideRatio`
+  is `undefined` on altitude gain; description reads "Glide start (altitude gained)";
+  `extractSinks` skips ratio-less glides.
 - **[C] `detectLanding` uses a seconds threshold as a fix-index bound** —
   `src/event-detector.ts:588`: `for (i = fixes.length - 2; i >= config.landingTimeWindow; i--)`
   treats 30 (seconds) as an index, silently assuming 1 Hz logging. At a 5-10 s interval, a
   landing inside the first 30 fixes (150-300 s of flight) returns no landing at all. The bound
   is redundant — the `windowStartIndex === i` guard already handles track start; loop to
   `i >= 1`.
+  **Fixed 2026-07-12** ([#328](https://github.com/pokle/glidecomp/pull/328)) — loops to
+  `i >= 1`; regression test at 10 s logging.
 - **[P] Takeoff can fire from two isolated GPS speed spikes while grounded** —
   `src/event-detector.ts:499-502, 546-549, 567-578`. Criterion is 1-of-3 where one criterion
   is a single fix-pair speed >5 m/s, and `verifyFlightSustained` also passes on any single
   fix-pair spike. Since every downstream detector slices at `takeoffIndex`, a false-early
   takeoff feeds ground noise into everything. (Also: the verify loop `j < endIdx - 1` never
   speed-checks the window's final interval.)
+  **Fixed 2026-07-12** ([#328](https://github.com/pokle/glidecomp/pull/328)) — verification
+  now requires two consecutive fast intervals whose combined displacement is also fast (an
+  out-and-back spike has near-zero net displacement); the loop covers the final interval.
 - **[C] Thermal entry/exit events carry the thermal centroid as coordinates** —
   `src/event-detector.ts:827-829, 843-845`; consumed at `src/segment-extractors.ts:143-147`.
   Entry markers are drawn mid-thermal (a drifting thermal displaces them hundreds of metres);
   in `extractClimbs`, `startLat/startLon === endLat/endLon` for every climb. If intentional,
   document; otherwise use the real start/end fixes like glide events do.
+  **Fixed 2026-07-12** ([#328](https://github.com/pokle/glidecomp/pull/328)) — events sit on
+  the boundary fixes; the centroid stays available as `ThermalSegment.location`.
 
 ### Packaging / infra
 - **[C] Replay legend scores mapped back to pilots by display name** —
