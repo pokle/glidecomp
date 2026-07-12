@@ -3,12 +3,18 @@
  *
  * Scores an "open distance" task: every pilot launches from the same spot
  * (a single TAKEOFF turnpoint) and flies as far as they can — there is no
- * goal and no speed section. A pilot's score is simply the metres of open
- * distance achieved: the straight-line (WGS84) distance from the point the
- * pilot exits the take-off cylinder to the single furthest fix they reached.
+ * goal and no speed section. The take-off cylinder exists only to define
+ * where scored distance begins: a pilot's score is the metres of open
+ * distance achieved — the straight-line (WGS84) distance from the take-off
+ * cylinder *edge* to the furthest fix they reached, i.e. the furthest fix's
+ * distance from the cylinder centre minus the radius. Where (or how many
+ * times) the pilot crossed the cylinder boundary is irrelevant; a pilot
+ * whose every fix stays inside the cylinder never left it and scores 0.
  *
  * This is the classic free-flight "open distance" format, as opposed to the
- * CIVL GAP race-to-goal / elapsed-time scoring in gap-scoring.ts.
+ * CIVL GAP race-to-goal / elapsed-time scoring in gap-scoring.ts. It is the
+ * same measurement {@link manualOpenDistanceGeometry} applies to a track-less
+ * pilot's landing point.
  *
  * The result reuses the GAP {@link TaskScoreResult} shape so the competition
  * API can map pilots to scores identically for both formats. GAP-only fields
@@ -17,8 +23,8 @@
  */
 
 import type { XCTask } from './xctsk-parser';
-import { detectCylinderCrossings, type TurnpointSequenceResult } from './turnpoint-sequence';
-import { andoyerDistance, isInsideCylinder } from './geo';
+import type { TurnpointSequenceResult } from './turnpoint-sequence';
+import { andoyerDistance, calculateBearingRadians, destinationPoint } from './geo';
 import {
   DEFAULT_GAP_PARAMETERS,
   type PilotFlight,
@@ -26,79 +32,6 @@ import {
   type TaskScoreResult,
   type TaskStats,
 } from './gap-scoring';
-
-/**
- * The take-off origin for one pilot: the interpolated point at which the
- * pilot leaves the take-off cylinder, plus the fix index from which distance
- * is measured.
- */
-interface OpenDistanceOrigin {
-  latitude: number;
-  longitude: number;
-  /** Measure distance over fixes at or after this index. */
-  fromFixIndex: number;
-}
-
-/**
- * Resolve the take-off exit origin for one flight.
- *
- * Origin = the pilot's *last* outward crossing of the take-off cylinder
- * (turnpoint index 0). Using the last exit — rather than the first — is
- * robust to GPS jitter and to pilots who bounce in and out of the cylinder
- * near launch before committing to the flight; it is the point at which they
- * definitively leave to go on task.
- *
- * When no take-off exit is detected there are two distinct cases:
- * - The pilot started *inside* the cylinder and never crossed out — they
- *   never left launch, so there is no scored distance (returns null → 0 m).
- * - The pilot's track began *outside* the cylinder (e.g. the logger started
- *   after launch): there is no boundary point to measure from, so the first
- *   fix is used as the origin and the flight still scores.
- *
- * A flight with no fixes, or a task with no turnpoints, has no origin (null).
- */
-function resolveTakeoffExit(
-  task: XCTask,
-  fixes: PilotFlight['fixes'],
-): OpenDistanceOrigin | null {
-  const takeoff = task.turnpoints[0];
-  if (fixes.length === 0 || !takeoff) return null;
-
-  // detectCylinderCrossings returns crossings sorted by time; the take-off is
-  // turnpoint 0, and each 'exit' crossing carries the interpolated boundary
-  // point. The last such crossing is the definitive departure.
-  const crossings = detectCylinderCrossings(task, fixes);
-  let lastExit: (typeof crossings)[number] | null = null;
-  for (const crossing of crossings) {
-    if (crossing.taskIndex === 0 && crossing.direction === 'exit') {
-      lastExit = crossing;
-    }
-  }
-
-  if (lastExit) {
-    return {
-      latitude: lastExit.latitude,
-      longitude: lastExit.longitude,
-      fromFixIndex: lastExit.fixIndex,
-    };
-  }
-
-  // No exit crossing. If the first fix is inside the take-off cylinder the
-  // pilot never left (any departure would have produced an exit crossing), so
-  // there is no scored distance. Otherwise the track started airborne outside
-  // the cylinder — fall back to the first fix as the origin.
-  const startedInside = isInsideCylinder(
-    fixes[0].latitude, fixes[0].longitude,
-    takeoff.waypoint.lat, takeoff.waypoint.lon, takeoff.radius,
-  );
-  if (startedInside) return null;
-
-  return {
-    latitude: fixes[0].latitude,
-    longitude: fixes[0].longitude,
-    fromFixIndex: 0,
-  };
-}
 
 /**
  * Whether a task is an open-distance task: a single TAKEOFF turnpoint (the
@@ -113,21 +46,25 @@ export function isOpenDistanceTask(task: XCTask): boolean {
 
 /**
  * The two endpoints of one flight's scored open-distance line, plus the
- * distance between them. `origin` is the take-off cylinder exit (or the first
- * fix when the track started outside the cylinder); `furthest` is the fix the
- * scored distance is measured to.
+ * distance between them. `origin` is the point on the take-off cylinder edge
+ * on the bearing to the furthest fix — the start of the scored line. It is a
+ * derived point, not a track fix (which is why it carries no fix index);
+ * `furthest` is the fix the scored distance is measured to.
  */
 export interface OpenDistanceGeometry {
-  origin: { latitude: number; longitude: number; fixIndex: number };
+  origin: { latitude: number; longitude: number };
   furthest: { latitude: number; longitude: number; fixIndex: number };
   /** Straight-line distance origin → furthest, metres. */
   distance: number;
 }
 
 /**
- * Resolve the scored open-distance geometry for one flight: the take-off exit
- * origin and the furthest fix reached at or after it. Returns null for a
- * pilot who never leaves the take-off cylinder (scored 0, nothing to draw).
+ * Resolve the scored open-distance geometry for one flight: the furthest fix
+ * from the take-off cylinder centre, and the point on the cylinder edge toward
+ * it that the scored distance is measured from. Boundary crossings play no
+ * part — a mid-flight return through the launch cylinder changes nothing.
+ * Returns null for a pilot who never leaves the take-off cylinder (every fix
+ * inside it; scored 0, nothing to draw).
  *
  * This is the explainable/drawable form of {@link openDistanceForFlight} —
  * same origin and distance, but keeping both endpoints so the UI can render
@@ -137,40 +74,47 @@ export function openDistanceGeometryForFlight(
   task: XCTask,
   pilot: PilotFlight,
 ): OpenDistanceGeometry | null {
-  const origin = resolveTakeoffExit(task, pilot.fixes);
-  if (!origin) return null;
+  const takeoff = task.turnpoints[0];
+  if (pilot.fixes.length === 0 || !takeoff) return null;
+  const center = takeoff.waypoint;
 
-  let furthest = 0;
-  let furthestIndex = origin.fromFixIndex;
-  for (let i = origin.fromFixIndex; i < pilot.fixes.length; i++) {
+  let furthestFromCenter = 0;
+  let furthestIndex = 0;
+  for (let i = 0; i < pilot.fixes.length; i++) {
     const fix = pilot.fixes[i];
-    const d = andoyerDistance(origin.latitude, origin.longitude, fix.latitude, fix.longitude);
-    if (d > furthest) {
-      furthest = d;
+    const d = andoyerDistance(center.lat, center.lon, fix.latitude, fix.longitude);
+    if (d > furthestFromCenter) {
+      furthestFromCenter = d;
       furthestIndex = i;
     }
   }
 
+  const distance = furthestFromCenter - takeoff.radius;
+  if (distance <= 0) return null; // never left the take-off cylinder
+
   const furthestFix = pilot.fixes[furthestIndex];
+  const bearing = calculateBearingRadians(
+    center.lat, center.lon,
+    furthestFix.latitude, furthestFix.longitude,
+  );
+  const edge = destinationPoint(center.lat, center.lon, takeoff.radius, bearing);
+
   return {
-    origin: {
-      latitude: origin.latitude,
-      longitude: origin.longitude,
-      fixIndex: origin.fromFixIndex,
-    },
+    origin: { latitude: edge.lat, longitude: edge.lon },
     furthest: {
       latitude: furthestFix.latitude,
       longitude: furthestFix.longitude,
       fixIndex: furthestIndex,
     },
-    distance: furthest,
+    distance,
   };
 }
 
 /**
- * Open distance (metres) for one flight: the furthest straight-line distance
- * from the take-off exit origin to any fix flown at or after that exit.
- * Returns 0 for a pilot who never leaves the take-off cylinder.
+ * Open distance (metres) for one flight: the furthest fix's distance from the
+ * take-off cylinder centre minus the cylinder radius — how far beyond the
+ * cylinder edge the pilot got. Returns 0 for a pilot who never leaves the
+ * take-off cylinder.
  *
  * This is the field-independent, cacheable per-track unit — it depends only on
  * the pilot's own track and the take-off, so the backend caches it per track
@@ -210,7 +154,7 @@ function openDistanceTurnpointResult(distance: number): TurnpointSequenceResult 
 export interface OpenDistanceFlightData {
   pilotName: string;
   trackFile: string;
-  /** Open distance flown in metres (take-off exit → furthest fix). */
+  /** Open distance flown in metres (take-off cylinder edge → furthest fix). */
   distance: number;
 }
 
@@ -295,7 +239,7 @@ export function scoreOpenDistanceFlights(
  *
  * @param task    The task — its first turnpoint is the take-off. Additional
  *                turnpoints (if any) are ignored; distance is always open
- *                distance from the take-off exit.
+ *                distance from the take-off cylinder edge.
  * @param pilots  Parsed flights to score.
  * @param numPresent Optional count of pilots present (for stats only).
  */

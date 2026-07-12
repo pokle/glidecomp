@@ -192,7 +192,7 @@ export interface ExplainOpenDistanceInput {
   task: XCTask;
   /** The scored geometry, or null when the flight could not be scored. */
   geometry: OpenDistanceGeometry | null;
-  /** The pilot's fixes — used to timestamp the origin/furthest anchors. */
+  /** The pilot's fixes — used to timestamp the furthest anchor. */
   fixes?: IGCFix[];
   /**
    * Anchor time/altitude supplied directly (e.g. from the competition API's
@@ -211,9 +211,9 @@ export interface ExplainOpenDistanceInput {
   formatTime?: (d: Date) => string;
   /**
    * True for a manual flight (issue #306): a track-less pilot whose landing
-   * point was recorded by an official. The scored line is measured from the
-   * take-off cylinder edge (toward the landing) rather than a real exit
-   * crossing, so the wording is adjusted and no fix times are shown.
+   * point was recorded by an official. The scored line is the same
+   * cylinder-edge measurement a track gets, but the endpoint is the recorded
+   * landing, so the wording is adjusted and no fix times are shown.
    */
   manual?: boolean;
 }
@@ -346,10 +346,38 @@ function buildFlightSection(
         text: `Crossed the start cylinder boundary ${startCrossings.length} times. The scored start is the latest crossing from which the flight still makes its best run along the course — re-starting supersedes an earlier start, while simply flying back through the cylinder later in the task changes nothing.`,
         emphasis: 'muted',
       });
-      const listed = startCrossings.slice(0, MAX_START_CROSSINGS_LISTED);
-      for (let i = 0; i < listed.length; i++) {
-        const c = listed[i];
-        const scored = c.time.getTime() === sss.time.getTime();
+      // The scored start is usually one of the LAST crossings for a pilot
+      // who milled around the start cylinder — exactly the case this
+      // narrative exists for — so it must never fall behind the listing cap.
+      // Take the latest crossing matching the scored time (re-starts
+      // supersede), list the first crossings up to the cap, and when the
+      // scored one lies beyond it, elide the middle instead.
+      let scoredIdx = -1;
+      for (let i = startCrossings.length - 1; i >= 0; i--) {
+        if (startCrossings[i].time.getTime() === sss.time.getTime()) {
+          scoredIdx = i;
+          break;
+        }
+      }
+      const listIndices: number[] = [];
+      if (scoredIdx < MAX_START_CROSSINGS_LISTED) {
+        const n = Math.min(startCrossings.length, MAX_START_CROSSINGS_LISTED);
+        for (let i = 0; i < n; i++) listIndices.push(i);
+      } else {
+        for (let i = 0; i < MAX_START_CROSSINGS_LISTED - 1; i++) listIndices.push(i);
+        listIndices.push(scoredIdx);
+      }
+      let prevListed = -1;
+      for (const i of listIndices) {
+        if (i > prevListed + 1) {
+          items.push({
+            id: `start-crossings-elided-${prevListed + 1}`,
+            text: `…${i - prevListed - 1} more crossings…`,
+            emphasis: 'muted',
+          });
+        }
+        const c = startCrossings[i];
+        const scored = i === scoredIdx;
         items.push({
           id: `start-crossing-${i}`,
           text: scored
@@ -366,11 +394,12 @@ function buildFlightSection(
             timeMs: c.time.getTime(),
           },
         });
+        prevListed = i;
       }
-      if (startCrossings.length > listed.length) {
+      if (prevListed < startCrossings.length - 1) {
         items.push({
           id: 'start-crossings-more',
-          text: `…and ${startCrossings.length - listed.length} more crossings`,
+          text: `…and ${startCrossings.length - prevListed - 1} more crossings`,
           emphasis: 'muted',
         });
       }
@@ -560,10 +589,12 @@ function buildDistanceSection(
 ): ScoreExplanationSection {
   const ap = classContext.available_points;
   const best = Math.max(...classContext.pilots.map((p) => p.flown_distance), 0);
-  const useDifficulty =
-    params.scoring === 'HG' &&
-    params.useDistanceDifficulty &&
-    entry.distance_difficulty_points > 0;
+  // Mirror scoreFlights' predicate exactly — the engine applies the linear/
+  // difficulty split for every HG pilot when useDistanceDifficulty is on,
+  // including one whose difficulty half is legitimately 0. Gating on the
+  // point value would drop such a pilot into the pure-linear branch, whose
+  // printed equation omits the 0.5 factor the engine actually applied.
+  const useDifficulty = params.scoring === 'HG' && params.useDistanceDifficulty;
 
   const items: ScoreExplanationItem[] = [];
 
@@ -881,8 +912,8 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
 
 /**
  * Explain an open-distance-scored pilot's result: where the scored line
- * starts (the last exit of the launch cylinder), where it ends (the
- * furthest fix), and how that becomes the score.
+ * starts (the launch cylinder edge, toward the furthest point), where it
+ * ends (the furthest fix), and how that becomes the score.
  */
 export function explainOpenDistanceScore(
   input: ExplainOpenDistanceInput,
@@ -896,16 +927,16 @@ export function explainOpenDistanceScore(
   if (!geometry || entry.flown_distance <= 0) {
     items.push({
       id: 'no-exit',
-      text: `The flight never left the ${km(launchRadius)} launch cylinder — open distance is measured from the cylinder exit, so the flight scores 0.`,
+      text: `The flight never left the ${km(launchRadius)} launch cylinder — open distance is measured from the cylinder edge, so the flight scores 0.`,
       emphasis: 'warning',
     });
   } else {
-    const originFix = fixes?.[geometry.origin.fixIndex];
     const furthestFix = fixes?.[geometry.furthest.fixIndex];
-    const originTimeMs =
-      input.anchorInfo?.origin?.timeMs ?? originFix?.time.getTime();
-    const originAltitude =
-      input.anchorInfo?.origin?.altitude ?? originFix?.gnssAltitude;
+    // The origin is the cylinder edge toward the furthest point — a derived
+    // point, not a track fix, so it carries no time/altitude of its own
+    // (anchorInfo may still supply them for older cached analyses).
+    const originTimeMs = input.anchorInfo?.origin?.timeMs;
+    const originAltitude = input.anchorInfo?.origin?.altitude;
     const furthestTimeMs =
       input.anchorInfo?.furthest?.timeMs ?? furthestFix?.time.getTime();
     const furthestAltitude =
@@ -914,7 +945,7 @@ export function explainOpenDistanceScore(
       id: 'origin',
       text: input.manual
         ? `Take-off cylinder exit — the scored distance starts at the ${km(launchRadius)} take-off cylinder edge, toward the landing point.`
-        : `Left the ${km(launchRadius)} launch cylinder — the scored distance starts here (the last outward crossing counts).`,
+        : `The scored distance starts at the ${km(launchRadius)} launch cylinder edge, toward the furthest point — leaving the cylinder starts the score; where it was crossed (or crossed again later) doesn't matter.`,
       value: originTimeMs !== undefined ? fmt(new Date(originTimeMs)) : undefined,
       anchor: {
         kind: 'origin',
@@ -928,7 +959,7 @@ export function explainOpenDistanceScore(
       id: 'furthest',
       text: input.manual
         ? 'Recorded landing point — the scored distance ends here.'
-        : 'Furthest point reached after the exit — the scored distance ends here.',
+        : 'Furthest point reached from launch — the scored distance ends here.',
       value: furthestTimeMs !== undefined ? fmt(new Date(furthestTimeMs)) : undefined,
       anchor: {
         kind: 'furthest',
@@ -950,7 +981,7 @@ export function explainOpenDistanceScore(
     {
       id: 'flight',
       title: 'The flight',
-      summary: 'Open distance: fly as far as possible from the launch cylinder exit.',
+      summary: 'Open distance: fly as far as possible from the launch cylinder edge.',
       items,
     },
   ];

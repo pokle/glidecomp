@@ -1716,7 +1716,7 @@ async function init(): Promise<void> {
 
   /**
    * Draw each visible pilot's scored open-distance line on the map (take-off
-   * cylinder exit → furthest fix, annotated with the distance), or clear the
+   * cylinder edge → furthest fix, annotated with the distance), or clear the
    * lines when not in open-distance mode. Pilots who never left the take-off
    * cylinder have nothing to draw.
    */
