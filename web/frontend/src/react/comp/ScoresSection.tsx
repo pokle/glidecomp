@@ -270,7 +270,10 @@ function ScoreClassTable({
         </p>
       ) : (
         <p className="mt-2 text-sm text-muted-foreground">
-          Task validity: {(v.task * 100).toFixed(0)}% · Available: {Math.round(ap.total)} pts
+          {/* Two decimals (trimmed) so a 99.93% day doesn't read as a
+              contradictory "100% · 999 pts". */}
+          Task validity: {Number((v.task * 100).toFixed(2))}% · Available:{" "}
+          {Number(ap.total.toFixed(1))} pts
           (dist {Math.round(ap.distance)}, time {Math.round(ap.time)}, lead{" "}
           {Math.round(ap.leading)})
         </p>

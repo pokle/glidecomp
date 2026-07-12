@@ -585,7 +585,10 @@ describe('explainGapScore — point components', () => {
     expect(total.items[0].detail).toContain('scores never go below 0 (FAI S7F §12.4)');
   });
 
-  it('marks the validity equation as approximate when the 2-dp factors do not multiply to the total', () => {
+  // The engine's total is exactly 1000 × launch × distance × time, so the
+  // equation must print the factors precisely enough to visibly multiply to
+  // the total — never "1000 × 1.00 × 1.00 × 1.00 ≈ 999.3".
+  it('adds factor decimals until the validity equation reconciles', () => {
     const ctx = makeClassContext();
     ctx.task_validity = { launch: 0.9876, distance: 0.8, time: 1, task: 0.79008 };
     ctx.available_points = { ...ctx.available_points, total: 790.08 };
@@ -595,10 +598,53 @@ describe('explainGapScore — point components', () => {
       entry: makeGoalEntry(),
       classContext: ctx,
     });
+    const validity = section(explanation, 'validity');
+    const item = validity.items.find((i) => i.id === 'available-total');
+    expect(item!.detail).toBe('1000 × 0.9876 × 0.80 × 1.00 = 790.1');
+    // The factor rows show the same precision as the equation.
+    const launch = validity.items.find((i) => i.id === 'launch-validity');
+    expect(launch!.value).toBe('98.76%');
+  });
+
+  // The real-world report: a 0.9993 distance validity used to print as
+  // "100%" on every row while the points on offer said 999.3.
+  it('never prints a 100% validity alongside a sub-1000 points-on-offer', () => {
+    const ctx = makeClassContext();
+    ctx.task_validity = { launch: 1, distance: 0.9993, time: 1, task: 0.9993 };
+    ctx.available_points = { ...ctx.available_points, total: 999.3 };
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: makeGoalEntry(),
+      classContext: ctx,
+    });
+    const validity = section(explanation, 'validity');
+    expect(validity.summary).toContain('99.93%');
+    expect(validity.summary).toContain('999.3 of 1000');
+    const distance = validity.items.find((i) => i.id === 'distance-validity');
+    expect(distance!.value).toBe('99.93%');
+    const launch = validity.items.find((i) => i.id === 'launch-validity');
+    expect(launch!.value).toBe('100%');
+    const item = validity.items.find((i) => i.id === 'available-total');
+    expect(item!.detail).toBe('1000 × 1.00 × 0.9993 × 1.00 = 999.3');
+  });
+
+  // Only reachable when the stored total disagrees with the stored
+  // validities (inconsistent API data) — the equation must not claim "=".
+  it('falls back to ≈ when no precision reconciles the factors with the total', () => {
+    const ctx = makeClassContext();
+    ctx.task_validity = { launch: 0.9876, distance: 0.8, time: 1, task: 0.79008 };
+    ctx.available_points = { ...ctx.available_points, total: 791.2 };
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: makeGoalEntry(),
+      classContext: ctx,
+    });
     const item = section(explanation, 'validity').items.find(
       (i) => i.id === 'available-total',
     );
-    expect(item!.detail).toContain('1000 × 0.99 × 0.80 × 1.00 ≈ 790.1');
+    expect(item!.detail).toContain('≈ 791.2');
     expect(item!.detail).toContain('full precision');
   });
 

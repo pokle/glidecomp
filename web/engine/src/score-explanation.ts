@@ -239,10 +239,6 @@ function fmtPoints(points: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
-function pct(fraction: number): string {
-  return `${(fraction * 100).toFixed(0)}%`;
-}
-
 // Floors like the scores tables do, so the same time never differs by a second.
 function duration(seconds: number): string {
   const s = Math.floor(seconds);
@@ -535,22 +531,70 @@ function buildFlightSection(
 }
 
 /**
- * The `1000 × launch × distance × time` equation for the points on offer.
- * The engine multiplies the full-precision validities, but the equation
- * shows them at 2 decimal places — only print "=" when the displayed
- * figures actually multiply to the displayed total.
+ * The engine computes the points on offer as `1000 × launch × distance ×
+ * time` at full precision, so the printed equation can always be made to
+ * reconcile — the only question is how many decimal places the factors
+ * need. Start at the 2 the GAP spec prints validities at and add decimals
+ * until the displayed figures multiply to the displayed total; 5 always
+ * suffices (worst-case rounding error 1000 × 3 × 0.5e-5 ≈ 0.015 pt, under
+ * the 0.05 pt display step).
  */
+const VALIDITY_MIN_DECIMALS = 2;
+const VALIDITY_MAX_DECIMALS = 5;
+
+function validityFactorDecimals(
+  v: ClassContextInput['task_validity'],
+  total: number,
+): number {
+  for (let d = VALIDITY_MIN_DECIMALS; d < VALIDITY_MAX_DECIMALS; d++) {
+    const product = [v.launch, v.distance, v.time].reduce(
+      (p, f) => p * Number(f.toFixed(d)),
+      1000,
+    );
+    if (Math.round(product * 10) === Math.round(total * 10)) return d;
+  }
+  return VALIDITY_MAX_DECIMALS;
+}
+
+/** Trim trailing zeros from a fixed-decimal string, keeping at least `min` decimals. */
+function trimZeros(s: string, min: number): string {
+  const dot = s.indexOf('.');
+  if (dot === -1) return s;
+  let end = s.length;
+  while (end - dot - 1 > min && s[end - 1] === '0') end--;
+  if (end - dot - 1 === 0) end--;
+  return s.slice(0, end);
+}
+
+/** A validity factor at the section's precision, e.g. 0.9993 → "0.9993", 1 → "1.00". */
+function fmtValidityFactor(f: number, decimals: number): string {
+  return trimZeros(f.toFixed(decimals), VALIDITY_MIN_DECIMALS);
+}
+
+/**
+ * A validity as a percentage at the section's precision, so a 0.9993 day
+ * reads 99.93% rather than a misleading 100%.
+ */
+function pctValidity(fraction: number, decimals: number): string {
+  const percentDecimals = Math.max(0, decimals - 2);
+  return `${trimZeros((fraction * 100).toFixed(percentDecimals), 0)}%`;
+}
+
+/** The `1000 × launch × distance × time` equation for the points on offer. */
 function availableTotalDetail(
   v: ClassContextInput['task_validity'],
   total: number,
+  decimals: number,
 ): string {
-  const factors = [v.launch, v.distance, v.time].map((f) => f.toFixed(2));
-  const product = 1000 * factors.reduce((p, f) => p * Number(f), 1);
+  const factors = [v.launch, v.distance, v.time].map((f) =>
+    fmtValidityFactor(f, decimals),
+  );
+  const product = factors.reduce((p, f) => p * Number(f), 1000);
   const reconciles = Math.round(product * 10) === Math.round(total * 10);
   const equation = `1000 × ${factors.join(' × ')}`;
   return reconciles
     ? `${equation} = ${fmtPoints(total)}`
-    : `${equation} ≈ ${fmtPoints(total)} — the validity factors are shown rounded to 2 decimal places; the points on offer come from their full precision.`;
+    : `${equation} ≈ ${fmtPoints(total)} — the validity factors are shown rounded to ${decimals} decimal places; the points on offer come from their full precision.`;
 }
 
 function buildValiditySection(
@@ -558,27 +602,30 @@ function buildValiditySection(
 ): ScoreExplanationSection {
   const v = classContext.task_validity;
   const ap = classContext.available_points;
+  // One precision for the whole section, so the three factor rows, the task
+  // validity in the summary and the equation all visibly agree.
+  const decimals = validityFactorDecimals(v, ap.total);
   const items: ScoreExplanationItem[] = [
     {
       id: 'launch-validity',
       text: 'Launch validity — did enough registered pilots launch?',
-      value: pct(v.launch),
+      value: pctValidity(v.launch, decimals),
     },
     {
       id: 'distance-validity',
       text: 'Distance validity — did the field fly far enough relative to the nominal distance?',
-      value: pct(v.distance),
+      value: pctValidity(v.distance, decimals),
     },
     {
       id: 'time-validity',
       text: 'Time validity — was the winning time long enough relative to the nominal time?',
-      value: pct(v.time),
+      value: pctValidity(v.time, decimals),
     },
     {
       id: 'available-total',
       text: 'Points on offer for the day',
       value: pts(ap.total),
-      detail: availableTotalDetail(v, ap.total),
+      detail: availableTotalDetail(v, ap.total, decimals),
     },
     {
       id: 'available-split',
@@ -595,7 +642,7 @@ function buildValiditySection(
   return {
     id: 'validity',
     title: 'Day quality — points on offer',
-    summary: `Task validity ${pct(v.task)} of a perfect day, so ${Math.round(ap.total)} of 1000 points were available.`,
+    summary: `Task validity ${pctValidity(v.task, decimals)} of a perfect day, so ${fmtPoints(ap.total)} of 1000 points were available.`,
     items,
   };
 }
