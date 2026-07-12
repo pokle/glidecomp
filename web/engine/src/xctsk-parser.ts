@@ -63,11 +63,9 @@ export interface XCTask {
 }
 
 /**
- * Decode polyline-encoded coordinates (Google Polyline Algorithm)
- * Used in xctsk v2 format for compact representation
- */
-/**
- * Decode a single polyline-encoded integer from the string at the given index.
+ * Decode a single polyline-encoded integer from the string at the given index
+ * (the per-value varint encoding of the Google Polyline Algorithm,
+ * https://developers.google.com/maps/documentation/utilities/polylinealgorithm).
  * Returns [decoded_value, new_index].
  */
 function decodePolylineValue(encoded: string, index: number): [number, number] {
@@ -85,47 +83,36 @@ function decodePolylineValue(encoded: string, index: number): [number, number] {
 }
 
 /**
- * Decode polyline-encoded turnpoint data.
- * The xctsk v2 spec encodes 4 values per turnpoint: lat, lon, altitude, radius.
- * Returns [lat, lon, altitude, radius] (coordinates at 1e5 precision).
+ * Decode a turnpoint's compact `z` string from the xctsk v2 QR-code format.
+ *
+ * Per the XCTrack spec (https://xctrack.org/Competition_Interfaces.html) the
+ * tuple is "4 numbers (longitude, latitude, altitude, radius) compressed using
+ * Google's polyline algorithm" — **longitude comes first**. Only the per-value
+ * varint encoding of that algorithm is used: each turnpoint carries its own
+ * standalone 4-value `z` tuple, so there is no delta accumulation between
+ * values or turnpoints. Both facts are confirmed by independent
+ * implementations (e.g. twpayne/go-xctrack `qrcodetask.go`) and by this repo's
+ * encoder `encodeTurnpointZ` in waypoint-export.ts, which is byte-verified
+ * against real competition QRs.
+ *
+ * Longitude/latitude are scaled ×1e5 in the encoding; altitude and radius are
+ * plain metres. Returns [lat, lon, altitude, radius] in degrees/metres, or []
+ * for an empty string.
  */
 function decodePolyline(encoded: string): number[] {
-  const result: number[] = [];
+  const values: number[] = [];
   let index = 0;
-  let lat = 0;
-  let lon = 0;
-  let alt = 0;
-  let radius = 0;
 
-  while (index < encoded.length) {
-    let delta: number;
-
-    [delta, index] = decodePolylineValue(encoded, index);
-    lat += delta;
-
-    if (index >= encoded.length) {
-      result.push(lat / 1e5, lon / 1e5, alt, radius);
-      break;
-    }
-    [delta, index] = decodePolylineValue(encoded, index);
-    lon += delta;
-
-    // Decode altitude (if present)
-    if (index < encoded.length) {
-      [delta, index] = decodePolylineValue(encoded, index);
-      alt += delta;
-    }
-
-    // Decode radius (if present — xctsk v2 spec encodes 4 values)
-    if (index < encoded.length) {
-      [delta, index] = decodePolylineValue(encoded, index);
-      radius += delta;
-    }
-
-    result.push(lat / 1e5, lon / 1e5, alt, radius);
+  while (index < encoded.length && values.length < 4) {
+    let value: number;
+    [value, index] = decodePolylineValue(encoded, index);
+    values.push(value);
   }
 
-  return result;
+  if (values.length === 0) return [];
+
+  const [lon = 0, lat = 0, alt = 0, radius = 0] = values;
+  return [lat / 1e5, lon / 1e5, alt, radius];
 }
 
 /**
@@ -215,7 +202,8 @@ function parseV2(data: Record<string, unknown>): XCTask {
         let alt = 0;
 
         if (typeof tpObj.z === 'string') {
-          // Polyline encoded: lat, lon, altitude, radius (4 values per spec)
+          // Polyline encoded as lon, lat, altitude, radius per the XCTrack
+          // spec; decodePolyline returns [lat, lon, altitude, radius].
           const decoded = decodePolyline(tpObj.z);
           if (decoded.length >= 2) {
             lat = decoded[0];
