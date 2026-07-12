@@ -158,17 +158,28 @@ the same divergence.)
   `src/igc-parser.ts:155-173`. Only `line.length < 35` is checked; a single corrupted B record
   poisons downstream distance/climb math with NaN. `parseCRecord` (L220) already validates
   with `/^\d{7}[NS]$/` — B records deserve the same.
+  **Fixed 2026-07-12** (engine v10) — every B-record field is now regex-validated (time,
+  lat/lon with hemisphere, `[AV]` validity, altitudes incl. negative `-0012` form) before
+  parsing; corrupted records are dropped. Regression tests cover six corruption shapes and
+  below-sea-level altitudes.
 - **[C] v1 turnpoint `radius: 0` coerced to 400** — `src/xctsk-parser.ts:146` uses
   `(tpObj.radius as number) || 400` while the v2 path (L231) and the encoder
   (`waypoint-export.ts:397`, "real waypoint QRs use radius 0") preserve 0. Radius is a scoring
   input. Use a `typeof` check and the existing `DEFAULT_TURNPOINT_RADIUS` constant.
+  **Fixed 2026-07-12** (engine v10) — `typeof` check preserves 0; `DEFAULT_TURNPOINT_RADIUS`
+  hoisted to the top of the module and used by both the v1 and v2 paths.
 - **[C] `HP`/`HO` H-records dropped (pilot name lost)** — `src/igc-parser.ts:268-290` matches
   only `HF<code>`/bare `<code>`; the IGC spec allows source char `F|O|P`. Match `[FOP]?`.
+  **Fixed 2026-07-12** (engine v10) — header fields and both date regexes (incl. the
+  first-pass scan, now anchored) accept `[FOP]?`; tests cover `HPPLT`/`HOGTY`/`HPCID` and
+  `HPDTE`.
 - **[C] Fuzzy waypoint-name containment false-positives on short/empty names** —
   `src/waypoints.ts:109-113`. `"anything".includes('')` is true, so an empty-named DB row
   matches every query, and 1-2 char names match almost anything; a false match silently
   substitutes the wrong radius/altitude into the task. Require a minimum name length or
   word-boundary containment.
+  **Fixed 2026-07-12** (engine v10) — the containment fallback requires a 3+ char DB name;
+  exact and normalized matches on short names still work. Regression tests added.
 
 ### Event detection
 - **[C] `Infinity` glide ratio reaches user-facing text and JSON** —

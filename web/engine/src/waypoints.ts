@@ -105,11 +105,17 @@ export function findWaypointByName(waypoints: WaypointRecord[], name: string): W
   if (normalized) return normalized;
 
   // Try if waypoint name is contained in the search name
-  // e.g., "TURN HALFWY" contains "HALFWY"
-  const contained = waypoints.find(wp =>
-    upperName.includes(wp.name.toUpperCase()) ||
-    normalizedName.includes(wp.name.toUpperCase())
-  );
+  // e.g., "TURN HALFWY" contains "HALFWY". Only for DB names of 3+ chars:
+  // "anything".includes('') is true, so an empty-named row would match every
+  // query, and 1-2 char names match almost anything — silently substituting
+  // the wrong radius/altitude into the task.
+  const contained = waypoints.find(wp => {
+    const wpName = wp.name.toUpperCase();
+    return (
+      wpName.length >= 3 &&
+      (upperName.includes(wpName) || normalizedName.includes(wpName))
+    );
+  });
   if (contained) return contained;
 
   return undefined;

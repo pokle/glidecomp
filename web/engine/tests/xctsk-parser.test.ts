@@ -40,6 +40,23 @@ describe('XCTSK Parser', () => {
       expect(task.turnpoints[2].type).toBe('ESS');
     });
 
+    it('should preserve an explicit radius of 0 and default only a missing radius', () => {
+      const taskJson = JSON.stringify({
+        taskType: 'CLASSIC',
+        version: 1,
+        turnpoints: [
+          // Real waypoint QRs use radius 0 — it must not be coerced to 400
+          { radius: 0, waypoint: { name: 'ZeroRadius', lat: 47.0, lon: 11.0 } },
+          { waypoint: { name: 'NoRadius', lat: 47.5, lon: 11.5 } },
+        ]
+      });
+
+      const task = parseXCTask(taskJson);
+
+      expect(task.turnpoints[0].radius).toBe(0);
+      expect(task.turnpoints[1].radius).toBe(400);
+    });
+
     it('should parse task with SSS and goal configuration', () => {
       const taskJson = JSON.stringify({
         taskType: 'CLASSIC',

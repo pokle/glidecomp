@@ -67,7 +67,18 @@
 //     mid-flight return through the launch cylinder erased all prior
 //     distance. The open-distance geometry origin is now a derived edge
 //     point with no fix index/time.
-export const SCORING_ENGINE_VERSION = 9;
+// v10: parsing hardening (2026-07-12 review §2 Parsing). (a) B records are
+//     field-validated before parsing — a corrupted record previously fed NaN
+//     coordinates / an Invalid Date into the fixes array, poisoning distance
+//     and climb math. (b) xctsk v1 turnpoints with an explicit radius of 0
+//     keep it instead of being coerced to 400 m (radius is a scoring input;
+//     v2 and the encoder already preserved 0). (c) HP/HO H-records are
+//     recognized (IGC source char F|O|P), so pilot names recorded as
+//     HPPLT/HOPLT are no longer dropped. (d) fuzzy waypoint-name containment
+//     requires a 3+ char DB name — an empty or 1-2 char name matched almost
+//     any query and substituted the wrong radius/altitude into IGC-declared
+//     tasks.
+export const SCORING_ENGINE_VERSION = 10;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -75,4 +86,4 @@ export const SCORING_ENGINE_VERSION = 9;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "fab3ff781f6463ff05594fa6ce78a3e4b4eeccccda8e4fe374f607c45fc8da85";
+  "cbc00331ce3509acf1c8692acd12193e5f2c280162f12ce4d399041219df12b4";
