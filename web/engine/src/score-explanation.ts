@@ -556,6 +556,61 @@ function validityFactorDecimals(
   return VALIDITY_MAX_DECIMALS;
 }
 
+/**
+ * Every equation the explainer prints states an identity the engine computed
+ * at full precision, so the printed figures can always be made to visibly
+ * reconcile — the only question is how many decimals they need. Find the
+ * fewest decimals in [min, max] at which the display-rounded figures
+ * (`evaluate`) match the printed result at the 0.1-pt step; when even `max`
+ * doesn't reconcile (inconsistent stored data), the caller prints "≈".
+ */
+function reconcileDecimals(
+  min: number,
+  max: number,
+  target: number,
+  evaluate: (decimals: number) => number,
+): { decimals: number; reconciles: boolean } {
+  for (let d = min; d <= max; d++) {
+    if (Math.round(evaluate(d) * 10) === Math.round(target * 10)) {
+      return { decimals: d, reconciles: true };
+    }
+  }
+  return { decimals: min, reconciles: false };
+}
+
+/**
+ * Available-points figure + factor decimals that make a component equation
+ * reconcile. Tries the 0.1-step available first; when the full-precision
+ * product sits on a rounding boundary (e.g. 59.951 printing as 60 while
+ * factor × 514.4 lands at 59.947), retries with the available at 2 dp.
+ */
+function reconcileWithAvailable(
+  available: number,
+  minDecimals: number,
+  maxDecimals: number,
+  target: number,
+  evaluate: (decimals: number, availableShown: number) => number,
+): { availStr: string; decimals: number; reconciles: boolean } {
+  for (const availStr of [fmtPoints(available), trimZeros(available.toFixed(2), 1)]) {
+    const shown = Number(availStr);
+    const r = reconcileDecimals(minDecimals, maxDecimals, target, (d) =>
+      evaluate(d, shown),
+    );
+    if (r.reconciles) return { availStr, ...r };
+  }
+  return { availStr: fmtPoints(available), decimals: minDecimals, reconciles: false };
+}
+
+/** A km figure at the given precision, as the number the reader sees. */
+function kmNum(meters: number, decimals: number): number {
+  return Number((meters / 1000).toFixed(decimals));
+}
+
+/** A km figure for an equation, trailing zeros trimmed to at least 1 dp. */
+function kmEq(meters: number, decimals: number): string {
+  return `${trimZeros((meters / 1000).toFixed(decimals), 1)} km`;
+}
+
 /** Trim trailing zeros from a fixed-decimal string, keeping at least `min` decimals. */
 function trimZeros(s: string, min: number): string {
   const dot = s.indexOf('.');
@@ -630,11 +685,13 @@ function buildValiditySection(
     {
       id: 'available-split',
       text: 'Split between the components by the goal ratio',
+      // 0.1 precision like the total above, so the split visibly sums to it
+      // ("distance 855.9 · time 143.4" for a 999.3 day, not "856 · 144").
       detail: [
-        `distance ${Math.round(ap.distance)}`,
-        `time ${Math.round(ap.time)}`,
-        ...(ap.leading > 0 ? [`leading ${Math.round(ap.leading)}`] : []),
-        ...(ap.arrival > 0 ? [`arrival ${Math.round(ap.arrival)}`] : []),
+        `distance ${fmtPoints(ap.distance)}`,
+        `time ${fmtPoints(ap.time)}`,
+        ...(ap.leading > 0 ? [`leading ${fmtPoints(ap.leading)}`] : []),
+        ...(ap.arrival > 0 ? [`arrival ${fmtPoints(ap.arrival)}`] : []),
       ].join(' · '),
       emphasis: 'muted',
     },
@@ -704,11 +761,22 @@ function buildDistanceSection(
       value: pts(entry.distance_points),
     });
   } else if (useDifficulty) {
+    // The engine computed linear = 0.5 × (flown ÷ best) × available at full
+    // precision; print the km figures precisely enough that the equation
+    // visibly multiplies out (4 decimals nearly always suffices).
+    const { availStr, decimals, reconciles } = reconcileWithAvailable(
+      ap.distance, 1, 5, entry.distance_linear_points,
+      (d, avail) => 0.5 * (kmNum(entry.flown_distance, d) / kmNum(best, d)) * avail,
+    );
     items.push({
       id: 'distance-linear',
       text: 'Linear half — half the available points scale with your share of the best distance',
       value: pts(entry.distance_linear_points),
-      detail: `0.5 × (${km(entry.flown_distance)} ÷ ${km(best)}) × ${Math.round(ap.distance)} = ${entry.distance_linear_points.toFixed(1)}`,
+      detail: `0.5 × (${kmEq(entry.flown_distance, decimals)} ÷ ${kmEq(best, decimals)}) × ${availStr} ${
+        reconciles
+          ? `= ${fmtPoints(entry.distance_linear_points)}`
+          : `≈ ${fmtPoints(entry.distance_linear_points)} — the figures are shown rounded; the points come from their full precision.`
+      }`,
     });
     items.push({
       id: 'distance-difficulty',
@@ -718,11 +786,19 @@ function buildDistanceSection(
         'The difficulty curve is built from where the whole field landed out (FAI S7F §11.1.1).',
     });
   } else {
+    const { availStr, decimals, reconciles } = reconcileWithAvailable(
+      ap.distance, 1, 5, entry.distance_points,
+      (d, avail) => (kmNum(entry.flown_distance, d) / kmNum(best, d)) * avail,
+    );
     items.push({
       id: 'distance-formula',
       text: 'Distance points scale linearly with your share of the best distance',
       value: pts(entry.distance_points),
-      detail: `(${km(entry.flown_distance)} ÷ ${km(best)}) × ${Math.round(ap.distance)} available = ${entry.distance_points.toFixed(1)}`,
+      detail: `(${kmEq(entry.flown_distance, decimals)} ÷ ${kmEq(best, decimals)}) × ${availStr} available ${
+        reconciles
+          ? `= ${fmtPoints(entry.distance_points)}`
+          : `≈ ${fmtPoints(entry.distance_points)} — the figures are shown rounded; the points come from their full precision.`
+      }`,
     });
   }
 
@@ -800,11 +876,22 @@ function buildTimeSection(
     } else {
       const exponentLabel =
         params.leadingFormula === 'classic' ? '2⁄3' : '5⁄6';
+      // time points = speed fraction × available, exactly — print the
+      // fraction with enough decimals that the multiplication visibly
+      // holds at the 0.1-pt step.
+      const { availStr, decimals, reconciles } = reconcileWithAvailable(
+        ap.time, 3, 6, entry.time_points,
+        (d, avail) => Number(sf.toFixed(d)) * avail,
+      );
       items.push({
         id: 'time-formula',
         text: 'Time points fall off with the gap to the fastest time',
         value: pts(entry.time_points),
-        detail: `speed fraction = max(0, 1 − ((T − Tbest) ÷ √Tbest)^${exponentLabel}) = ${sf.toFixed(3)}; × ${Math.round(ap.time)} available = ${entry.time_points.toFixed(1)} (times in hours)`,
+        detail: `speed fraction = max(0, 1 − ((T − Tbest) ÷ √Tbest)^${exponentLabel}) = ${trimZeros(sf.toFixed(decimals), 3)}; × ${availStr} available ${
+          reconciles
+            ? `= ${fmtPoints(entry.time_points)}`
+            : `≈ ${fmtPoints(entry.time_points)} — the figures are shown rounded; the points come from their full precision`
+        } (times in hours)`,
       });
     }
   }
@@ -824,16 +911,17 @@ function buildTotalSection(entry: ScoreEntryInput): ScoreExplanationSection {
     entry.leading_points,
     entry.arrival_points,
   ];
-  const parts = components
+  const shownComponents = components
     .filter((c, i) => c > 0 || i < 2) // always show distance + time, others only when earned
-    .map((c) => c.toFixed(1))
-    .join(' + ');
+    .map((c) => Number(c.toFixed(1)));
+  const parts = shownComponents.map((c) => c.toFixed(1)).join(' + ');
   // FAI S7F §11 rounds the total to one decimal place; §12.4 does that
   // rounding *after* penalties, so the penalties sit inside the round().
   const jtg = entry.jump_the_gun_penalty ?? 0;
+  const jtgShown = Number(fmtPoints(jtg));
   const penaltySteps: string[] = [];
   if (jtg !== 0) {
-    penaltySteps.push(`− ${jtg} jump-the-gun`);
+    penaltySteps.push(`− ${fmtPoints(jtg)} jump-the-gun`);
   }
   if (entry.penalty_points !== 0) {
     penaltySteps.push(
@@ -843,13 +931,13 @@ function buildTotalSection(entry: ScoreEntryInput): ScoreExplanationSection {
   const equation = [parts, ...penaltySteps].join(' ');
   const total = fmtPoints(entry.total_score);
   // What the printed figures come to, in tenths (exact in integer space).
-  // The published components are rounded to 0.1 while the engine rounds the
-  // total from their *unrounded* sum, so the two can drift apart by up to
-  // ~0.2 pts — and when a floor engaged (§12.2 minimum-distance score,
-  // §12.4 zero) the printed arithmetic isn't the operation performed at
-  // all. Never print "=" between figures that don't equate.
+  // Evaluate from the figures the reader sees, not the engine's full
+  // precision: hidden components that each round down while their exact sum
+  // rounds up would otherwise print an "=" between figures that don't
+  // equate. And when a floor engaged (§12.2 minimum-distance score, §12.4
+  // zero) the printed arithmetic isn't the operation performed at all.
   const evaluatedTenths = Math.round(
-    (components.reduce((s, c) => s + c, 0) - jtg - entry.penalty_points) * 10,
+    (shownComponents.reduce((s, c) => s + c, 0) - jtgShown - entry.penalty_points) * 10,
   );
   const totalTenths = Math.round(entry.total_score * 10);
   const evaluated =
@@ -898,11 +986,18 @@ function buildPenaltySection(
   const items: ScoreExplanationItem[] = [];
   if (jtg > 0) {
     const secs = entry.early_start_seconds ?? 0;
+    // The penalty is exactly secondsEarly ÷ factor — print the seconds with
+    // enough decimals that the division visibly holds (73.6 s ÷ 2 = 36.8,
+    // never a contradictory "74 s ÷ 2 = 36.8").
+    const { decimals, reconciles } = reconcileDecimals(
+      0, 2, jtg,
+      (d) => Number(secs.toFixed(d)) / jumpTheGunFactor,
+    );
     items.push({
       id: 'jump-the-gun',
       text: `Jump the gun (FAI S7F §12.2): started ${duration(secs)} before the first start gate. The complete flight is scored, with 1 penalty point per ${jumpTheGunFactor} seconds early; the total never drops below the minimum-distance score.`,
-      value: `−${jtg} pts`,
-      detail: `${Math.round(secs)} s early ÷ ${jumpTheGunFactor} s per point = ${jtg} points`,
+      value: `−${fmtPoints(jtg)} pts`,
+      detail: `${trimZeros(secs.toFixed(decimals), 0)} s early ÷ ${jumpTheGunFactor} s per point ${reconciles ? '=' : '≈'} ${fmtPoints(jtg)} points`,
       emphasis: 'warning',
     });
   }

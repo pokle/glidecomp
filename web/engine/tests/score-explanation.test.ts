@@ -7,6 +7,7 @@ import {
   type ClassContextInput,
   type ScoreExplanation,
 } from '../src/score-explanation';
+import { calculateSpeedFraction } from '../src/gap-scoring';
 import type {
   TurnpointSequenceResult,
   CylinderCrossing,
@@ -627,6 +628,107 @@ describe('explainGapScore — point components', () => {
     expect(launch!.value).toBe('100%');
     const item = validity.items.find((i) => i.id === 'available-total');
     expect(item!.detail).toBe('1000 × 1.00 × 0.9993 × 1.00 = 999.3');
+  });
+
+  // Distance points = (flown ÷ best) × available exactly — the printed km
+  // figures must carry enough decimals for the printed equation to hold.
+  it('adds km decimals until the linear-distance equation reconciles', () => {
+    const flown = 76_923;
+    const best = 78_812;
+    const ctx = makeClassContext();
+    ctx.pilots[0].flown_distance = best;
+    ctx.available_points = { ...ctx.available_points, distance: 486 };
+    const linear = 0.5 * (flown / best) * 486; // 237.176…
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        made_goal: false,
+        flown_distance: flown,
+        distance_points: linear,
+        distance_linear_points: linear,
+        distance_difficulty_points: 0,
+      },
+      classContext: ctx,
+      params: { scoring: 'HG', useDistanceDifficulty: true },
+    });
+    const item = section(explanation, 'distance').items.find(
+      (i) => i.id === 'distance-linear',
+    );
+    // 1-dp km figures give 237.1; 2 dp reconcile with the printed 237.2.
+    expect(item!.detail).toBe('0.5 × (76.92 km ÷ 78.81 km) × 486 = 237.2');
+  });
+
+  // Time points = speed fraction × available exactly — the printed fraction
+  // must multiply out to the printed points.
+  it('prints a speed fraction precise enough to multiply out to the time points', () => {
+    const ctx = makeClassContext();
+    const sf = calculateSpeedFraction(70 * 60, 65 * 60, 5 / 6);
+    const timePoints = sf * ctx.available_points.time;
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: { ...makeGoalEntry(), time_points: timePoints },
+      classContext: ctx,
+      params: { scoring: 'PG' },
+    });
+    const item = section(explanation, 'time').items.find(
+      (i) => i.id === 'time-formula',
+    );
+    expect(item!.detail).not.toContain('≈');
+    const m = item!.detail!.match(
+      /= (\d+\.\d+); × ([\d.]+) available = ([\d.]+)/,
+    );
+    expect(m).not.toBeNull();
+    // The digits the reader sees really do multiply to the printed points.
+    expect(Math.round(Number(m![1]) * Number(m![2]) * 10)).toBe(
+      Math.round(Number(m![3]) * 10),
+    );
+  });
+
+  it('prints the jump-the-gun seconds precisely enough that the division holds', () => {
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        early_start_seconds: 73.6,
+        early_start_outcome: 'hg_penalty',
+        jump_the_gun_penalty: 36.8,
+        total_score: 743.7,
+      },
+      classContext: makeClassContext(),
+      params: { scoring: 'HG' },
+    });
+    const jtg = section(explanation, 'penalty').items.find(
+      (i) => i.id === 'jump-the-gun',
+    );
+    // Never "74 s early ÷ 2 = 36.8".
+    expect(jtg!.detail).toBe('73.6 s early ÷ 2 s per point = 36.8 points');
+    expect(jtg!.value).toBe('−36.8 pts');
+  });
+
+  it('shows the available-points split at 0.1 so it sums to the total', () => {
+    const ctx = makeClassContext();
+    ctx.task_validity = { launch: 1, distance: 0.9993, time: 1, task: 0.9993 };
+    ctx.available_points = {
+      distance: 855.94,
+      time: 143.39,
+      leading: 0,
+      arrival: 0,
+      total: 999.33,
+    };
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: makeGoalEntry(),
+      classContext: ctx,
+    });
+    const split = section(explanation, 'validity').items.find(
+      (i) => i.id === 'available-split',
+    );
+    expect(split!.detail).toBe('distance 855.9 · time 143.4');
   });
 
   // Only reachable when the stored total disagrees with the stored
