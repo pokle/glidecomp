@@ -168,11 +168,11 @@ describe('Corryong Cup 2026 Task 1 — integration', () => {
     // Totals are rounded to one decimal place per S7F §11.
     { name: 'Jon Durand',        rank: 1,  total: 1000,  distPts: 485.6, timePts: 514.4, madeGoal: true },
     { name: 'Rohan Holtkamp',    rank: 2,  total: 905.6, distPts: 485.6, timePts: 420.1, madeGoal: true },
-    { name: 'Peter  Burkitt',    rank: 3,  total: 887.9, distPts: 485.6, timePts: 402.4, madeGoal: true },
+    { name: 'Peter  Burkitt',    rank: 3,  total: 888,   distPts: 485.6, timePts: 402.4, madeGoal: true },
 
     // Mid-pack — goal finishers
     { name: 'Glen Mcfarlane',    rank: 5,  total: 670.7, distPts: 485.6, timePts: 185.2, madeGoal: true },
-    { name: 'Todd Wisewould',    rank: 10, total: 545.5, distPts: 485.6, timePts: 59.9,  madeGoal: true },
+    { name: 'Todd Wisewould',    rank: 10, total: 545.5, distPts: 485.6, timePts: 60,    madeGoal: true },
     { name: 'Craig Taylor',      rank: 12, total: 485.6, distPts: 485.6, timePts: 0,     madeGoal: true },
 
     // First non-goal pilot (distance points now include the HG difficulty half)

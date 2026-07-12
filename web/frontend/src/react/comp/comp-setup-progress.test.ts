@@ -35,6 +35,7 @@ function task(overrides: Partial<TaskSummary> = {}): TaskSummary {
     pilot_classes: ["open"],
     missing_sss: false,
     missing_ess: false,
+    line_goal: false,
     ...overrides,
   };
 }

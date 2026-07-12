@@ -16,8 +16,8 @@ import { createFix, type IGCFix } from './test-helpers';
 //
 // A single TAKEOFF turnpoint at (LAT, LON) with a 1000 m cylinder. Fixes are
 // placed due east of it at a known number of metres, so a pilot's furthest
-// open distance is easy to reason about: distance from the ~1000 m exit point
-// to the furthest eastward fix.
+// open distance is easy to reason about: the furthest eastward fix's distance
+// from the centre, minus the 1000 m radius (measured from the cylinder edge).
 // ---------------------------------------------------------------------------
 
 const LAT = -36;
@@ -46,13 +46,13 @@ function flight(name: string, fixes: IGCFix[]): PilotFlight {
 }
 
 describe('scoreOpenDistance', () => {
-  it('scores open distance from the take-off exit, not the centre', () => {
+  it('scores open distance from the take-off cylinder edge, not the centre', () => {
     // Start at the centre, cross out through the 1000 m boundary, fly to 50 km.
     const pilot = flight('far', [fixEast(0, 0), fixEast(60, 2000), fixEast(120, 50000)]);
     const result = scoreOpenDistance(TASK, [pilot]);
     const ps = result.pilotScores[0];
 
-    // Measured from the exit (~1000 m east), so ~49 km — NOT the full 50 km.
+    // Measured from the cylinder edge (~1000 m east), so ~49 km — NOT the full 50 km.
     expect(ps.flownDistance).toBeGreaterThan(48800);
     expect(ps.flownDistance).toBeLessThan(49200);
     // Score is the distance in whole metres.
@@ -104,14 +104,32 @@ describe('scoreOpenDistance', () => {
     expect(result.pilotScores[0].totalScore).toBe(0);
   });
 
-  it('falls back to the first fix when the track starts already outside the cylinder', () => {
-    // Logger started airborne at 3 km east (no take-off crossing), flew to 30 km.
+  it('still measures from the cylinder edge when the track starts already outside it', () => {
+    // Logger started airborne at 3 km east (no take-off crossing), flew to
+    // 30 km. Being outside the cylinder proves the pilot left it; the score
+    // is still edge → furthest, ~29 km.
     const pilot = flight('airborne', [fixEast(0, 3000), fixEast(60, 30000)]);
     const result = scoreOpenDistance(TASK, [pilot]);
     const ps = result.pilotScores[0];
-    // ~27 km from the first fix (3 km) to the furthest fix (30 km).
-    expect(ps.flownDistance).toBeGreaterThan(26800);
-    expect(ps.flownDistance).toBeLessThan(27200);
+    expect(ps.flownDistance).toBeGreaterThan(28800);
+    expect(ps.flownDistance).toBeLessThan(29200);
+  });
+
+  it('ignores a mid-flight return through the launch cylinder (re-entries do not matter)', () => {
+    // Out to 80 km, drift back THROUGH the launch cylinder, land 2 km east.
+    // The cylinder only gates that the pilot left; the score stays edge →
+    // furthest (~79 km) — a later re-entry/exit must not re-anchor it.
+    const pilot = flight('reentry', [
+      fixEast(0, 0),
+      fixEast(60, 2000), // out through the boundary
+      fixEast(3600, 80000), // furthest
+      fixEast(7000, 500), // back inside the cylinder
+      fixEast(7200, 2000), // out again, lands nearby
+    ]);
+    const result = scoreOpenDistance(TASK, [pilot]);
+    const ps = result.pilotScores[0];
+    expect(ps.flownDistance).toBeGreaterThan(78800);
+    expect(ps.flownDistance).toBeLessThan(79200);
   });
 
   it('returns an empty result for no pilots', () => {
@@ -122,7 +140,7 @@ describe('scoreOpenDistance', () => {
 });
 
 describe('openDistanceGeometryForFlight', () => {
-  it('returns the take-off exit origin and the furthest fix', () => {
+  it('returns the cylinder-edge origin and the furthest fix', () => {
     const pilot = flight('outandback', [
       fixEast(0, 0),
       fixEast(60, 2000),
@@ -131,7 +149,8 @@ describe('openDistanceGeometryForFlight', () => {
     ]);
     const geom = openDistanceGeometryForFlight(TASK, pilot)!;
 
-    // Origin sits on the 1000 m cylinder boundary, due east of the centre.
+    // Origin sits on the 1000 m cylinder boundary, due east of the centre
+    // (on the bearing to the furthest fix).
     const originFromCentre = destinationPoint(LAT, LON, TAKEOFF_RADIUS, EAST);
     expect(geom.origin.latitude).toBeCloseTo(originFromCentre.lat, 3);
     expect(geom.origin.longitude).toBeCloseTo(originFromCentre.lon, 3);
@@ -147,11 +166,12 @@ describe('openDistanceGeometryForFlight', () => {
     expect(geom.distance).toBeLessThan(39200);
   });
 
-  it('uses the first fix as origin when the track starts outside the cylinder', () => {
+  it('anchors the origin to the cylinder edge even when the track starts outside it', () => {
     const pilot = flight('airborne', [fixEast(0, 3000), fixEast(60, 30000)]);
     const geom = openDistanceGeometryForFlight(TASK, pilot)!;
-    expect(geom.origin.fixIndex).toBe(0);
-    expect(geom.origin.latitude).toBeCloseTo(pilot.fixes[0].latitude, 6);
+    const edge = destinationPoint(LAT, LON, TAKEOFF_RADIUS, EAST);
+    expect(geom.origin.latitude).toBeCloseTo(edge.lat, 3);
+    expect(geom.origin.longitude).toBeCloseTo(edge.lon, 3);
     expect(geom.furthest.fixIndex).toBe(1);
   });
 
@@ -185,7 +205,7 @@ describe('isOpenDistanceTask', () => {
 });
 
 describe('openDistanceForFlight + scoreOpenDistanceFlights (cacheable split)', () => {
-  it('openDistanceForFlight returns the furthest distance from the take-off exit', () => {
+  it('openDistanceForFlight returns the furthest distance from the cylinder edge', () => {
     const pilot = flight('far', [fixEast(0, 0), fixEast(60, 2000), fixEast(120, 50000)]);
     const d = openDistanceForFlight(TASK, pilot);
     expect(d).toBeGreaterThan(48800);

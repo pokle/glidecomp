@@ -60,6 +60,44 @@ B1230004728234S01152432WA0123401567
       expect(fix.longitude).toBeCloseTo(-11.8739, 3);
     });
 
+    it('should reject corrupted B records instead of producing NaN fixes', () => {
+      const igcContent = `HFDTE010125
+B1230004728234N01152432EA0123401567
+BGARBAGE
+B12x0004728234N01152432EA0123401567
+B1230014728x34N01152432EA0123401567
+B1230024728234N01152432EA01234015
+B1230034728234N01152432EX0123401567
+B1230044728234N01152432EA01234ABCDE
+B1230054728234X01152432EA0123401567
+B1230064728300N01152500EA0125001600
+`;
+
+      const result = parseIGC(igcContent);
+
+      // Only the first and last records are well-formed
+      expect(result.fixes).toHaveLength(2);
+      for (const fix of result.fixes) {
+        expect(Number.isFinite(fix.latitude)).toBe(true);
+        expect(Number.isFinite(fix.longitude)).toBe(true);
+        expect(Number.isFinite(fix.pressureAltitude)).toBe(true);
+        expect(Number.isFinite(fix.gnssAltitude)).toBe(true);
+        expect(Number.isNaN(fix.time.getTime())).toBe(false);
+      }
+    });
+
+    it('should parse negative altitudes (below sea level)', () => {
+      const igcContent = `HFDTE010125
+B1230004728234N01152432EA-001200987
+`;
+
+      const result = parseIGC(igcContent);
+
+      expect(result.fixes).toHaveLength(1);
+      expect(result.fixes[0].pressureAltitude).toBe(-12);
+      expect(result.fixes[0].gnssAltitude).toBe(987);
+    });
+
     it('should parse invalid fixes (V flag)', () => {
       const igcContent = `HFDTE010125
 B1230004728234N01152432EV0123401567
@@ -78,6 +116,24 @@ B1230004728234N01152432EV0123401567
 
       expect(result2024.header.date?.getUTCFullYear()).toBe(2024);
       expect(result1999.header.date?.getUTCFullYear()).toBe(1999);
+    });
+
+    it('should parse the post-2015 long-form HFDTEDATE header', () => {
+      const igcContent = `HFDTEDATE:150124,01
+B1230004728234N01152432EA0123401567
+B1230014728300N01152500EA0125001600
+`;
+
+      const result = parseIGC(igcContent);
+
+      expect(result.header.date).toBeDefined();
+      expect(result.header.date?.getUTCDate()).toBe(15);
+      expect(result.header.date?.getUTCMonth()).toBe(0); // January (0-indexed)
+      expect(result.header.date?.getUTCFullYear()).toBe(2024);
+      // Fixes must be stamped with the header date, not "today"
+      expect(result.fixes[0].time.getUTCDate()).toBe(15);
+      expect(result.fixes[0].time.getUTCMonth()).toBe(0);
+      expect(result.fixes[0].time.getUTCFullYear()).toBe(2024);
     });
 
     it('should parse E records (events)', () => {
@@ -127,6 +183,33 @@ HFCCL:Sport
       expect(result.header.gliderId).toBe('12345');
       expect(result.header.competitionId).toBe('AB');
       expect(result.header.competitionClass).toBe('Sport');
+    });
+
+    it('should parse H records with O and P source chars (HP/HO)', () => {
+      // The IGC spec allows source char F (flight recorder), O (observer),
+      // or P (pilot) — pilot-entered headers commonly use HP.
+      const igcContent = `HFDTE150124
+HPPLTPILOTINCHARGE:Paula Pilot
+HOGTYGLIDERTYPE:Ozone Zeno 2
+HPCIDCOMPETITIONID:42
+`;
+
+      const result = parseIGC(igcContent);
+
+      expect(result.header.pilot).toBe('Paula Pilot');
+      expect(result.header.gliderType).toBe('Ozone Zeno 2');
+      expect(result.header.competitionId).toBe('42');
+    });
+
+    it('should parse the date from HP/HO date headers', () => {
+      const result = parseIGC(`HPDTE150124
+B1230004728234N01152432EA0123401567
+`);
+
+      expect(result.header.date?.getUTCFullYear()).toBe(2024);
+      expect(result.header.date?.getUTCMonth()).toBe(0);
+      expect(result.header.date?.getUTCDate()).toBe(15);
+      expect(result.fixes[0].time.getUTCDate()).toBe(15);
     });
 
     it('should sanitize HTML in pilot name and other headers', () => {

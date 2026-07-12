@@ -1331,6 +1331,14 @@ async function init(): Promise<void> {
 
   function applyTask(task: XCTask): void {
     state.task = task;
+    // Goal lines have no scoring geometry yet (issue #330) — the engine
+    // scores every goal as a cylinder. Warn instead of degrading silently.
+    if (task.goal?.type === 'LINE') {
+      showStatus(
+        'This task has a goal line, which scoring does not support yet — the goal is scored as a cylinder, so distances and times near goal may be off by up to the goal radius.',
+        'warning'
+      );
+    }
     updateDownloadTaskVisibility();
     mapRenderer?.setTask(task);
     analysisPanel?.setTask(task);
@@ -1716,7 +1724,7 @@ async function init(): Promise<void> {
 
   /**
    * Draw each visible pilot's scored open-distance line on the map (take-off
-   * cylinder exit → furthest fix, annotated with the distance), or clear the
+   * cylinder edge → furthest fix, annotated with the distance), or clear the
    * lines when not in open-distance mode. Pilots who never left the take-off
    * cylinder have nothing to draw.
    */

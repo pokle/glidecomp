@@ -56,7 +56,8 @@ export interface ThermalEventDetails {
 
 export interface GlideEventDetails {
   distance: number;
-  glideRatio: number;
+  /** L/D ratio; undefined when the pilot gained altitude over the glide (no meaningful ratio) */
+  glideRatio?: number;
   duration?: number;
   averageSpeed: number;
   altitudeLost?: number;
@@ -141,7 +142,8 @@ export interface GlideSegment extends TrackSegment {
   startAltitude: number;
   endAltitude: number;
   distance: number;
-  glideRatio: number;
+  /** L/D ratio; undefined when the pilot gained altitude over the glide (no meaningful ratio) */
+  glideRatio?: number;
   duration: number;
 }
 
@@ -302,7 +304,10 @@ function buildGlideSegment(fixes: IGCFix[], startIdx: number, endIdx: number, mi
     startAltitude: fixes[startIdx].gnssAltitude,
     endAltitude: fixes[endIdx].gnssAltitude,
     distance: totalDist,
-    glideRatio: altLoss > 0 ? totalDist / altLoss : Infinity,
+    // undefined (not Infinity) when altitude was gained: Infinity survives into
+    // display text and becomes null through JSON.stringify across worker/cache
+    // boundaries — matches the glide-speed.ts convention
+    glideRatio: altLoss > 0 ? totalDist / altLoss : undefined,
     duration,
   };
 }
@@ -543,9 +548,18 @@ function verifyFlightSustained(
     return true;
   }
 
-  for (let j = startIdx; j < endIdx - 1; j++) {
-    const speed = calculateGroundSpeed(fixes[j], fixes[j + 1]);
-    if (speed > config.minGroundSpeed) return true;
+  // Sustained ground speed: require two consecutive fast intervals whose
+  // combined displacement is also fast. A single-fix GPS spike while grounded
+  // produces two fast intervals (out and back) but near-zero net displacement,
+  // so it cannot pass; real flight moves through both intervals.
+  for (let j = startIdx; j + 2 <= endIdx; j++) {
+    if (
+      calculateGroundSpeed(fixes[j], fixes[j + 1]) > config.minGroundSpeed &&
+      calculateGroundSpeed(fixes[j + 1], fixes[j + 2]) > config.minGroundSpeed &&
+      calculateGroundSpeed(fixes[j], fixes[j + 2]) > config.minGroundSpeed
+    ) {
+      return true;
+    }
   }
 
   return false;
@@ -585,7 +599,11 @@ function detectTakeoff(fixes: IGCFix[], config: TakeoffLandingConfig): { index: 
  * Returns the fix index of landing, or -1 if not found.
  */
 function detectLanding(fixes: IGCFix[], config: TakeoffLandingConfig): { index: number } | null {
-  for (let i = fixes.length - 2; i >= config.landingTimeWindow; i--) {
+  // Loop to index 1, not landingTimeWindow: that threshold is in seconds, not
+  // fixes, so using it as an index bound assumes 1 Hz logging and can miss a
+  // landing early in a low-rate track. The windowStartIndex === i guard below
+  // already skips candidates without a full lookback window.
+  for (let i = fixes.length - 2; i >= 1; i--) {
     const windowStartIndex = findFixIndexAtTime(fixes, i, -config.landingTimeWindow);
     if (windowStartIndex === i) continue;
 
@@ -821,12 +839,15 @@ export function detectFlightEvents(
     const adjustedStartIndex = thermal.startIndex + indexOffset;
     const adjustedEndIndex = thermal.endIndex + indexOffset;
 
+    // Entry/exit events sit on the track's boundary fixes (like glide events)
+    // so the markers land where the pilot actually entered and left the climb;
+    // the thermal's mean position stays available as ThermalSegment.location.
     allEvents.push({
       id: `thermal-entry-${adjustedStartIndex}`,
       type: 'thermal_entry',
       time: fixes[adjustedStartIndex].time,
-      latitude: thermal.location.lat,
-      longitude: thermal.location.lon,
+      latitude: fixes[adjustedStartIndex].latitude,
+      longitude: fixes[adjustedStartIndex].longitude,
       altitude: thermal.startAltitude,
       description: `Thermal entry (${thermal.avgClimbRate > 0 ? '+' : ''}${thermal.avgClimbRate.toFixed(1)}m/s avg)`,
       details: {
@@ -841,8 +862,8 @@ export function detectFlightEvents(
       id: `thermal-exit-${adjustedEndIndex}`,
       type: 'thermal_exit',
       time: fixes[adjustedEndIndex].time,
-      latitude: thermal.location.lat,
-      longitude: thermal.location.lon,
+      latitude: fixes[adjustedEndIndex].latitude,
+      longitude: fixes[adjustedEndIndex].longitude,
       altitude: thermal.endAltitude,
       description: `Thermal exit (${(thermal.endAltitude - thermal.startAltitude) > 0 ? '+' : ''}${(thermal.endAltitude - thermal.startAltitude).toFixed(0)}m gained)`,
       details: {
@@ -872,7 +893,9 @@ export function detectFlightEvents(
       latitude: fixes[adjustedStartIndex].latitude,
       longitude: fixes[adjustedStartIndex].longitude,
       altitude: glide.startAltitude,
-      description: `Glide start (L/D ${glide.glideRatio.toFixed(0)})`,
+      description: glide.glideRatio !== undefined
+        ? `Glide start (L/D ${glide.glideRatio.toFixed(0)})`
+        : 'Glide start (altitude gained)',
       details: {
         distance: glide.distance,
         glideRatio: glide.glideRatio,

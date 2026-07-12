@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 933 551" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13">
+<rect width="933" height="551" rx="8" fill="#f8fafc" stroke="#d0d7de"/>
+<text x="24" y="30" font-size="16" font-weight="600" fill="#1f2328">The bug — turnpoint nested inside a larger following cylinder</text>
+<text x="24" y="50" fill="#57606a">TP1’s 400 m cylinder sits entirely inside the 3 km ESS/goal cylinder. The pilot’s ONLY goal-boundary crossing (t₁) happens before TP1 is tagged (t₂).</text>
+<g transform="translate(875.259047619056, 30)" stroke="#57606a" fill="#57606a"><line x1="0" y1="0" x2="26" y2="0" stroke-width="1.5"/><path d="M 26 0 l -7 -4 l 0 8 z" stroke="none"/><text x="32" y="4" stroke="none" font-size="12">N</text></g>
+<circle cx="103.5" cy="259.4" r="47.6" fill="#8b949e" fill-opacity="0.10" stroke="#8b949e" stroke-width="2" stroke-dasharray="6 5"/>
+<circle cx="103.5" cy="259.4" r="2.5" fill="#8b949e"/>
+<text x="103.5" y="203.8" text-anchor="middle" font-weight="600" fill="#8b949e">START (exit, 1 km)</text>
+<circle cx="633.6" cy="259.4" r="19.0" fill="#316dca" fill-opacity="0.10" stroke="#316dca" stroke-width="2"/>
+<circle cx="633.6" cy="259.4" r="2.5" fill="#316dca"/>
+<text x="633.6" y="232.4" text-anchor="middle" font-weight="600" fill="#316dca"></text>
+<circle cx="686.6" cy="259.4" r="142.9" fill="#d4761a" fill-opacity="0.10" stroke="#d4761a" stroke-width="2"/>
+<circle cx="686.6" cy="259.4" r="2.5" fill="#d4761a"/>
+<text x="686.6" y="108.6" text-anchor="middle" font-weight="600" fill="#d4761a">ESS / GOAL (3 km)</text>
+<path d="M 103.5 259.4 L 209.5 259.4 L 368.6 259.4 L 501.1 259.4 L 580.6 259.4 L 633.6 259.4 L 670.7 259.4 L 686.6 259.4" fill="none" stroke="#1f2328" stroke-width="2.25" stroke-linejoin="round"/>
+<path d="M -6 -4.5 L 6 0 L -6 4.5 z" fill="#1f2328" transform="translate(156.5, 259.4) rotate(0.0)"/>
+<path d="M -6 -4.5 L 6 0 L -6 4.5 z" fill="#1f2328" transform="translate(289.0, 259.4) rotate(0.0)"/>
+<path d="M -6 -4.5 L 6 0 L -6 4.5 z" fill="#1f2328" transform="translate(434.8, 259.4) rotate(0.0)"/>
+<path d="M -6 -4.5 L 6 0 L -6 4.5 z" fill="#1f2328" transform="translate(540.8, 259.4) rotate(0.0)"/>
+<path d="M -6 -4.5 L 6 0 L -6 4.5 z" fill="#1f2328" transform="translate(607.1, 259.4) rotate(0.0)"/>
+<circle cx="103.5" cy="259.4" r="3" fill="#57606a"/>
+<circle cx="209.5" cy="259.4" r="3" fill="#57606a"/>
+<circle cx="368.6" cy="259.4" r="3" fill="#57606a"/>
+<circle cx="501.1" cy="259.4" r="3" fill="#57606a"/>
+<circle cx="580.6" cy="259.4" r="3" fill="#57606a"/>
+<circle cx="633.6" cy="259.4" r="3" fill="#57606a"/>
+<circle cx="670.7" cy="259.4" r="3" fill="#57606a"/>
+<circle cx="686.6" cy="259.4" r="3" fill="#57606a"/>
+<g transform="translate(686.6, 259.4)"><circle r="6.5" fill="none" stroke="#1f2328" stroke-width="2"/><circle r="2" fill="#1f2328"/></g>
+<g transform="translate(151.1, 259.4)"><circle r="7" fill="none" stroke="#57606a" stroke-width="2.5"/><circle r="2" fill="#57606a"/></g>
+<text x="151.1" y="287.4" text-anchor="middle" font-weight="600" fill="#57606a">start</text>
+<g transform="translate(543.8, 259.4)"><circle r="7" fill="none" stroke="#d4761a" stroke-width="2.5"/><circle r="2" fill="#d4761a"/></g>
+<text x="529.8" y="225.4" text-anchor="end" font-weight="600" fill="#d4761a">t₁ — enters goal cylinder</text>
+<text x="529.8" y="241.4" text-anchor="end" font-weight="600" fill="#d4761a">(the only crossing)</text>
+<g transform="translate(614.6, 259.4)"><circle r="7" fill="none" stroke="#316dca" stroke-width="2.5"/><circle r="2" fill="#316dca"/></g>
+<text x="614.6" y="299.4" text-anchor="middle" font-weight="600" fill="#316dca">t₂ — tags TP1 (400 m),</text>
+<text x="614.6" y="315.4" text-anchor="middle" font-weight="600" fill="#316dca">already inside goal</text>
+<rect x="24.0" y="442.9" width="430.6" height="78" rx="6" fill="#cf222e" fill-opacity="0.08" stroke="#cf222e"/>
+<text x="36.0" y="464.9" font-weight="600" fill="#cf222e">Before the fix ✗</text>
+<text x="36.0" y="484.9" fill="#1f2328">ESS/goal needs a crossing at t ≥ t₂, but its only</text>
+<text x="36.0" y="501.9" fill="#1f2328">crossing is t₁ &lt; t₂ → finisher scored LANDED OUT.</text>
+<rect x="478.6" y="442.9" width="430.6" height="78" rx="6" fill="#1a7f37" fill-opacity="0.08" stroke="#1a7f37"/>
+<text x="490.6" y="464.9" font-weight="600" fill="#1a7f37">After the fix ✓</text>
+<text x="490.6" y="484.9" fill="#1f2328">Pilot is already inside the goal cylinder at t₂,</text>
+<text x="490.6" y="501.9" fill="#1f2328">so ESS/goal is credited at t₂ → made goal.</text>
+</svg>

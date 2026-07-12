@@ -192,7 +192,7 @@ export interface ExplainOpenDistanceInput {
   task: XCTask;
   /** The scored geometry, or null when the flight could not be scored. */
   geometry: OpenDistanceGeometry | null;
-  /** The pilot's fixes — used to timestamp the origin/furthest anchors. */
+  /** The pilot's fixes — used to timestamp the furthest anchor. */
   fixes?: IGCFix[];
   /**
    * Anchor time/altitude supplied directly (e.g. from the competition API's
@@ -211,9 +211,9 @@ export interface ExplainOpenDistanceInput {
   formatTime?: (d: Date) => string;
   /**
    * True for a manual flight (issue #306): a track-less pilot whose landing
-   * point was recorded by an official. The scored line is measured from the
-   * take-off cylinder edge (toward the landing) rather than a real exit
-   * crossing, so the wording is adjusted and no fix times are shown.
+   * point was recorded by an official. The scored line is the same
+   * cylinder-edge measurement a track gets, but the endpoint is the recorded
+   * landing, so the wording is adjusted and no fix times are shown.
    */
   manual?: boolean;
 }
@@ -237,10 +237,6 @@ function pts(points: number): string {
 function fmtPoints(points: number): string {
   const rounded = Math.round(points * 10) / 10;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
-}
-
-function pct(fraction: number): string {
-  return `${(fraction * 100).toFixed(0)}%`;
 }
 
 // Floors like the scores tables do, so the same time never differs by a second.
@@ -346,10 +342,38 @@ function buildFlightSection(
         text: `Crossed the start cylinder boundary ${startCrossings.length} times. The scored start is the latest crossing from which the flight still makes its best run along the course — re-starting supersedes an earlier start, while simply flying back through the cylinder later in the task changes nothing.`,
         emphasis: 'muted',
       });
-      const listed = startCrossings.slice(0, MAX_START_CROSSINGS_LISTED);
-      for (let i = 0; i < listed.length; i++) {
-        const c = listed[i];
-        const scored = c.time.getTime() === sss.time.getTime();
+      // The scored start is usually one of the LAST crossings for a pilot
+      // who milled around the start cylinder — exactly the case this
+      // narrative exists for — so it must never fall behind the listing cap.
+      // Take the latest crossing matching the scored time (re-starts
+      // supersede), list the first crossings up to the cap, and when the
+      // scored one lies beyond it, elide the middle instead.
+      let scoredIdx = -1;
+      for (let i = startCrossings.length - 1; i >= 0; i--) {
+        if (startCrossings[i].time.getTime() === sss.time.getTime()) {
+          scoredIdx = i;
+          break;
+        }
+      }
+      const listIndices: number[] = [];
+      if (scoredIdx < MAX_START_CROSSINGS_LISTED) {
+        const n = Math.min(startCrossings.length, MAX_START_CROSSINGS_LISTED);
+        for (let i = 0; i < n; i++) listIndices.push(i);
+      } else {
+        for (let i = 0; i < MAX_START_CROSSINGS_LISTED - 1; i++) listIndices.push(i);
+        listIndices.push(scoredIdx);
+      }
+      let prevListed = -1;
+      for (const i of listIndices) {
+        if (i > prevListed + 1) {
+          items.push({
+            id: `start-crossings-elided-${prevListed + 1}`,
+            text: `…${i - prevListed - 1} more crossings…`,
+            emphasis: 'muted',
+          });
+        }
+        const c = startCrossings[i];
+        const scored = i === scoredIdx;
         items.push({
           id: `start-crossing-${i}`,
           text: scored
@@ -366,11 +390,12 @@ function buildFlightSection(
             timeMs: c.time.getTime(),
           },
         });
+        prevListed = i;
       }
-      if (startCrossings.length > listed.length) {
+      if (prevListed < startCrossings.length - 1) {
         items.push({
           id: 'start-crossings-more',
-          text: `…and ${startCrossings.length - listed.length} more crossings`,
+          text: `…and ${startCrossings.length - prevListed - 1} more crossings`,
           emphasis: 'muted',
         });
       }
@@ -426,7 +451,9 @@ function buildFlightSection(
     const isGoal = reaching.taskIndex === getGoalIndex(task);
 
     let detail: string | undefined;
-    if (reaching.candidateCount > 1) {
+    if (reaching.selectionReason === 'already_inside') {
+      detail = 'Already inside this cylinder when the previous turnpoint was reached — credited at that same moment, no extra crossing needed.';
+    } else if (reaching.candidateCount > 1) {
       detail = `First of ${reaching.candidateCount} crossings — once a turnpoint is reached, later crossings don't matter.`;
     }
     if (reaching.toleranceCredited) {
@@ -503,41 +530,168 @@ function buildFlightSection(
   };
 }
 
+/**
+ * The engine computes the points on offer as `1000 × launch × distance ×
+ * time` at full precision, so the printed equation can always be made to
+ * reconcile — the only question is how many decimal places the factors
+ * need. Start at the 2 the GAP spec prints validities at and add decimals
+ * until the displayed figures multiply to the displayed total; 5 always
+ * suffices (worst-case rounding error 1000 × 3 × 0.5e-5 ≈ 0.015 pt, under
+ * the 0.05 pt display step).
+ */
+const VALIDITY_MIN_DECIMALS = 2;
+const VALIDITY_MAX_DECIMALS = 5;
+
+function validityFactorDecimals(
+  v: ClassContextInput['task_validity'],
+  total: number,
+): number {
+  for (let d = VALIDITY_MIN_DECIMALS; d < VALIDITY_MAX_DECIMALS; d++) {
+    const product = [v.launch, v.distance, v.time].reduce(
+      (p, f) => p * Number(f.toFixed(d)),
+      1000,
+    );
+    if (Math.round(product * 10) === Math.round(total * 10)) return d;
+  }
+  return VALIDITY_MAX_DECIMALS;
+}
+
+/**
+ * Every equation the explainer prints states an identity the engine computed
+ * at full precision, so the printed figures can always be made to visibly
+ * reconcile — the only question is how many decimals they need. Find the
+ * fewest decimals in [min, max] at which the display-rounded figures
+ * (`evaluate`) match the printed result at the 0.1-pt step; when even `max`
+ * doesn't reconcile (inconsistent stored data), the caller prints "≈".
+ */
+function reconcileDecimals(
+  min: number,
+  max: number,
+  target: number,
+  evaluate: (decimals: number) => number,
+): { decimals: number; reconciles: boolean } {
+  for (let d = min; d <= max; d++) {
+    if (Math.round(evaluate(d) * 10) === Math.round(target * 10)) {
+      return { decimals: d, reconciles: true };
+    }
+  }
+  return { decimals: min, reconciles: false };
+}
+
+/**
+ * Available-points figure + factor decimals that make a component equation
+ * reconcile. Tries the 0.1-step available first; when the full-precision
+ * product sits on a rounding boundary (e.g. 59.951 printing as 60 while
+ * factor × 514.4 lands at 59.947), retries with the available at 2 dp.
+ */
+function reconcileWithAvailable(
+  available: number,
+  minDecimals: number,
+  maxDecimals: number,
+  target: number,
+  evaluate: (decimals: number, availableShown: number) => number,
+): { availStr: string; decimals: number; reconciles: boolean } {
+  for (const availStr of [fmtPoints(available), trimZeros(available.toFixed(2), 1)]) {
+    const shown = Number(availStr);
+    const r = reconcileDecimals(minDecimals, maxDecimals, target, (d) =>
+      evaluate(d, shown),
+    );
+    if (r.reconciles) return { availStr, ...r };
+  }
+  return { availStr: fmtPoints(available), decimals: minDecimals, reconciles: false };
+}
+
+/** A km figure at the given precision, as the number the reader sees. */
+function kmNum(meters: number, decimals: number): number {
+  return Number((meters / 1000).toFixed(decimals));
+}
+
+/** A km figure for an equation, trailing zeros trimmed to at least 1 dp. */
+function kmEq(meters: number, decimals: number): string {
+  return `${trimZeros((meters / 1000).toFixed(decimals), 1)} km`;
+}
+
+/** Trim trailing zeros from a fixed-decimal string, keeping at least `min` decimals. */
+function trimZeros(s: string, min: number): string {
+  const dot = s.indexOf('.');
+  if (dot === -1) return s;
+  let end = s.length;
+  while (end - dot - 1 > min && s[end - 1] === '0') end--;
+  if (end - dot - 1 === 0) end--;
+  return s.slice(0, end);
+}
+
+/** A validity factor at the section's precision, e.g. 0.9993 → "0.9993", 1 → "1.00". */
+function fmtValidityFactor(f: number, decimals: number): string {
+  return trimZeros(f.toFixed(decimals), VALIDITY_MIN_DECIMALS);
+}
+
+/**
+ * A validity as a percentage at the section's precision, so a 0.9993 day
+ * reads 99.93% rather than a misleading 100%.
+ */
+function pctValidity(fraction: number, decimals: number): string {
+  const percentDecimals = Math.max(0, decimals - 2);
+  return `${trimZeros((fraction * 100).toFixed(percentDecimals), 0)}%`;
+}
+
+/** The `1000 × launch × distance × time` equation for the points on offer. */
+function availableTotalDetail(
+  v: ClassContextInput['task_validity'],
+  total: number,
+  decimals: number,
+): string {
+  const factors = [v.launch, v.distance, v.time].map((f) =>
+    fmtValidityFactor(f, decimals),
+  );
+  const product = factors.reduce((p, f) => p * Number(f), 1000);
+  const reconciles = Math.round(product * 10) === Math.round(total * 10);
+  const equation = `1000 × ${factors.join(' × ')}`;
+  return reconciles
+    ? `${equation} = ${fmtPoints(total)}`
+    : `${equation} ≈ ${fmtPoints(total)} — the validity factors are shown rounded to ${decimals} decimal places; the points on offer come from their full precision.`;
+}
+
 function buildValiditySection(
   classContext: ClassContextInput,
 ): ScoreExplanationSection {
   const v = classContext.task_validity;
   const ap = classContext.available_points;
+  // One precision for the whole section, so the three factor rows, the task
+  // validity in the summary and the equation all visibly agree.
+  const decimals = validityFactorDecimals(v, ap.total);
   const items: ScoreExplanationItem[] = [
     {
       id: 'launch-validity',
       text: 'Launch validity — did enough registered pilots launch?',
-      value: pct(v.launch),
+      value: pctValidity(v.launch, decimals),
     },
     {
       id: 'distance-validity',
       text: 'Distance validity — did the field fly far enough relative to the nominal distance?',
-      value: pct(v.distance),
+      value: pctValidity(v.distance, decimals),
     },
     {
       id: 'time-validity',
       text: 'Time validity — was the winning time long enough relative to the nominal time?',
-      value: pct(v.time),
+      value: pctValidity(v.time, decimals),
     },
     {
       id: 'available-total',
       text: 'Points on offer for the day',
       value: pts(ap.total),
-      detail: `1000 × ${v.launch.toFixed(2)} × ${v.distance.toFixed(2)} × ${v.time.toFixed(2)} = ${Math.round(ap.total)}`,
+      detail: availableTotalDetail(v, ap.total, decimals),
     },
     {
       id: 'available-split',
       text: 'Split between the components by the goal ratio',
+      // 0.1 precision like the total above, so the split visibly sums to it
+      // ("distance 855.9 · time 143.4" for a 999.3 day, not "856 · 144").
       detail: [
-        `distance ${Math.round(ap.distance)}`,
-        `time ${Math.round(ap.time)}`,
-        ...(ap.leading > 0 ? [`leading ${Math.round(ap.leading)}`] : []),
-        ...(ap.arrival > 0 ? [`arrival ${Math.round(ap.arrival)}`] : []),
+        `distance ${fmtPoints(ap.distance)}`,
+        `time ${fmtPoints(ap.time)}`,
+        ...(ap.leading > 0 ? [`leading ${fmtPoints(ap.leading)}`] : []),
+        ...(ap.arrival > 0 ? [`arrival ${fmtPoints(ap.arrival)}`] : []),
       ].join(' · '),
       emphasis: 'muted',
     },
@@ -545,7 +699,7 @@ function buildValiditySection(
   return {
     id: 'validity',
     title: 'Day quality — points on offer',
-    summary: `Task validity ${pct(v.task)} of a perfect day, so ${Math.round(ap.total)} of 1000 points were available.`,
+    summary: `Task validity ${pctValidity(v.task, decimals)} of a perfect day, so ${fmtPoints(ap.total)} of 1000 points were available.`,
     items,
   };
 }
@@ -558,10 +712,12 @@ function buildDistanceSection(
 ): ScoreExplanationSection {
   const ap = classContext.available_points;
   const best = Math.max(...classContext.pilots.map((p) => p.flown_distance), 0);
-  const useDifficulty =
-    params.scoring === 'HG' &&
-    params.useDistanceDifficulty &&
-    entry.distance_difficulty_points > 0;
+  // Mirror scoreFlights' predicate exactly — the engine applies the linear/
+  // difficulty split for every HG pilot when useDistanceDifficulty is on,
+  // including one whose difficulty half is legitimately 0. Gating on the
+  // point value would drop such a pilot into the pure-linear branch, whose
+  // printed equation omits the 0.5 factor the engine actually applied.
+  const useDifficulty = params.scoring === 'HG' && params.useDistanceDifficulty;
 
   const items: ScoreExplanationItem[] = [];
 
@@ -605,11 +761,22 @@ function buildDistanceSection(
       value: pts(entry.distance_points),
     });
   } else if (useDifficulty) {
+    // The engine computed linear = 0.5 × (flown ÷ best) × available at full
+    // precision; print the km figures precisely enough that the equation
+    // visibly multiplies out (4 decimals nearly always suffices).
+    const { availStr, decimals, reconciles } = reconcileWithAvailable(
+      ap.distance, 1, 5, entry.distance_linear_points,
+      (d, avail) => 0.5 * (kmNum(entry.flown_distance, d) / kmNum(best, d)) * avail,
+    );
     items.push({
       id: 'distance-linear',
       text: 'Linear half — half the available points scale with your share of the best distance',
       value: pts(entry.distance_linear_points),
-      detail: `0.5 × (${km(entry.flown_distance)} ÷ ${km(best)}) × ${Math.round(ap.distance)} = ${entry.distance_linear_points.toFixed(1)}`,
+      detail: `0.5 × (${kmEq(entry.flown_distance, decimals)} ÷ ${kmEq(best, decimals)}) × ${availStr} ${
+        reconciles
+          ? `= ${fmtPoints(entry.distance_linear_points)}`
+          : `≈ ${fmtPoints(entry.distance_linear_points)} — the figures are shown rounded; the points come from their full precision.`
+      }`,
     });
     items.push({
       id: 'distance-difficulty',
@@ -619,11 +786,19 @@ function buildDistanceSection(
         'The difficulty curve is built from where the whole field landed out (FAI S7F §11.1.1).',
     });
   } else {
+    const { availStr, decimals, reconciles } = reconcileWithAvailable(
+      ap.distance, 1, 5, entry.distance_points,
+      (d, avail) => (kmNum(entry.flown_distance, d) / kmNum(best, d)) * avail,
+    );
     items.push({
       id: 'distance-formula',
       text: 'Distance points scale linearly with your share of the best distance',
       value: pts(entry.distance_points),
-      detail: `(${km(entry.flown_distance)} ÷ ${km(best)}) × ${Math.round(ap.distance)} available = ${entry.distance_points.toFixed(1)}`,
+      detail: `(${kmEq(entry.flown_distance, decimals)} ÷ ${kmEq(best, decimals)}) × ${availStr} available ${
+        reconciles
+          ? `= ${fmtPoints(entry.distance_points)}`
+          : `≈ ${fmtPoints(entry.distance_points)} — the figures are shown rounded; the points come from their full precision.`
+      }`,
     });
   }
 
@@ -701,11 +876,22 @@ function buildTimeSection(
     } else {
       const exponentLabel =
         params.leadingFormula === 'classic' ? '2⁄3' : '5⁄6';
+      // time points = speed fraction × available, exactly — print the
+      // fraction with enough decimals that the multiplication visibly
+      // holds at the 0.1-pt step.
+      const { availStr, decimals, reconciles } = reconcileWithAvailable(
+        ap.time, 3, 6, entry.time_points,
+        (d, avail) => Number(sf.toFixed(d)) * avail,
+      );
       items.push({
         id: 'time-formula',
         text: 'Time points fall off with the gap to the fastest time',
         value: pts(entry.time_points),
-        detail: `speed fraction = max(0, 1 − ((T − Tbest) ÷ √Tbest)^${exponentLabel}) = ${sf.toFixed(3)}; × ${Math.round(ap.time)} available = ${entry.time_points.toFixed(1)} (times in hours)`,
+        detail: `speed fraction = max(0, 1 − ((T − Tbest) ÷ √Tbest)^${exponentLabel}) = ${trimZeros(sf.toFixed(decimals), 3)}; × ${availStr} available ${
+          reconciles
+            ? `= ${fmtPoints(entry.time_points)}`
+            : `≈ ${fmtPoints(entry.time_points)} — the figures are shown rounded; the points come from their full precision`
+        } (times in hours)`,
       });
     }
   }
@@ -725,27 +911,52 @@ function buildTotalSection(entry: ScoreEntryInput): ScoreExplanationSection {
     entry.leading_points,
     entry.arrival_points,
   ];
-  const parts = components
+  const shownComponents = components
     .filter((c, i) => c > 0 || i < 2) // always show distance + time, others only when earned
-    .map((c) => c.toFixed(1))
-    .join(' + ');
+    .map((c) => Number(c.toFixed(1)));
+  const parts = shownComponents.map((c) => c.toFixed(1)).join(' + ');
   // FAI S7F §11 rounds the total to one decimal place; §12.4 does that
   // rounding *after* penalties, so the penalties sit inside the round().
   const jtg = entry.jump_the_gun_penalty ?? 0;
+  const jtgShown = Number(fmtPoints(jtg));
   const penaltySteps: string[] = [];
   if (jtg !== 0) {
-    penaltySteps.push(`− ${jtg} jump-the-gun (never below the minimum-distance score)`);
+    penaltySteps.push(`− ${fmtPoints(jtg)} jump-the-gun`);
   }
   if (entry.penalty_points !== 0) {
     penaltySteps.push(
-      `${entry.penalty_points > 0 ? '−' : '+'} ${Math.abs(entry.penalty_points)} penalty (scores never go below 0)`,
+      `${entry.penalty_points > 0 ? '−' : '+'} ${Math.abs(entry.penalty_points)} penalty`,
     );
   }
+  const equation = [parts, ...penaltySteps].join(' ');
   const total = fmtPoints(entry.total_score);
-  const detail =
-    penaltySteps.length === 0
-      ? `round(${parts}, 1 dp) = ${total}`
-      : `round(${parts} ${penaltySteps.join(' ')}, 1 dp) = ${total}`;
+  // What the printed figures come to, in tenths (exact in integer space).
+  // Evaluate from the figures the reader sees, not the engine's full
+  // precision: hidden components that each round down while their exact sum
+  // rounds up would otherwise print an "=" between figures that don't
+  // equate. And when a floor engaged (§12.2 minimum-distance score, §12.4
+  // zero) the printed arithmetic isn't the operation performed at all.
+  const evaluatedTenths = Math.round(
+    (shownComponents.reduce((s, c) => s + c, 0) - jtgShown - entry.penalty_points) * 10,
+  );
+  const totalTenths = Math.round(entry.total_score * 10);
+  const evaluated =
+    evaluatedTenths < 0
+      ? `−${fmtPoints(-evaluatedTenths / 10)}`
+      : fmtPoints(evaluatedTenths / 10);
+  let detail: string;
+  if (evaluatedTenths === totalTenths) {
+    detail = `round(${equation}, 1 dp) = ${total}`;
+  } else if (entry.penalty_points > 0 && totalTenths === 0 && evaluatedTenths < 0) {
+    // §12.4 zero floor: the penalty took the score below zero.
+    detail = `${equation} would come to ${evaluated}, but scores never go below 0 (FAI S7F §12.4) — so the total is 0.`;
+  } else if (jtg > 0 && totalTenths - evaluatedTenths > 3) {
+    // §12.2 floor: more than display-rounding drift above the printed sum
+    // means the jump-the-gun deduction was floored.
+    detail = `${equation} would come to ${evaluated}, but the jump-the-gun penalty never drops a pilot below the minimum-distance score (FAI S7F §12.2) — so the total is ${total}.`;
+  } else {
+    detail = `${equation} ≈ ${total} — the points above are shown rounded to 0.1; the total is rounded from their exact sum.`;
+  }
   return {
     id: 'total',
     title: 'Total',
@@ -775,11 +986,18 @@ function buildPenaltySection(
   const items: ScoreExplanationItem[] = [];
   if (jtg > 0) {
     const secs = entry.early_start_seconds ?? 0;
+    // The penalty is exactly secondsEarly ÷ factor — print the seconds with
+    // enough decimals that the division visibly holds (73.6 s ÷ 2 = 36.8,
+    // never a contradictory "74 s ÷ 2 = 36.8").
+    const { decimals, reconciles } = reconcileDecimals(
+      0, 2, jtg,
+      (d) => Number(secs.toFixed(d)) / jumpTheGunFactor,
+    );
     items.push({
       id: 'jump-the-gun',
       text: `Jump the gun (FAI S7F §12.2): started ${duration(secs)} before the first start gate. The complete flight is scored, with 1 penalty point per ${jumpTheGunFactor} seconds early; the total never drops below the minimum-distance score.`,
-      value: `−${jtg} pts`,
-      detail: `${Math.round(secs)} s early ÷ ${jumpTheGunFactor} s per point = ${jtg} points`,
+      value: `−${fmtPoints(jtg)} pts`,
+      detail: `${trimZeros(secs.toFixed(decimals), 0)} s early ÷ ${jumpTheGunFactor} s per point ${reconciles ? '=' : '≈'} ${fmtPoints(jtg)} points`,
       emphasis: 'warning',
     });
   }
@@ -879,8 +1097,8 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
 
 /**
  * Explain an open-distance-scored pilot's result: where the scored line
- * starts (the last exit of the launch cylinder), where it ends (the
- * furthest fix), and how that becomes the score.
+ * starts (the launch cylinder edge, toward the furthest point), where it
+ * ends (the furthest fix), and how that becomes the score.
  */
 export function explainOpenDistanceScore(
   input: ExplainOpenDistanceInput,
@@ -894,16 +1112,16 @@ export function explainOpenDistanceScore(
   if (!geometry || entry.flown_distance <= 0) {
     items.push({
       id: 'no-exit',
-      text: `The flight never left the ${km(launchRadius)} launch cylinder — open distance is measured from the cylinder exit, so the flight scores 0.`,
+      text: `The flight never left the ${km(launchRadius)} launch cylinder — open distance is measured from the cylinder edge, so the flight scores 0.`,
       emphasis: 'warning',
     });
   } else {
-    const originFix = fixes?.[geometry.origin.fixIndex];
     const furthestFix = fixes?.[geometry.furthest.fixIndex];
-    const originTimeMs =
-      input.anchorInfo?.origin?.timeMs ?? originFix?.time.getTime();
-    const originAltitude =
-      input.anchorInfo?.origin?.altitude ?? originFix?.gnssAltitude;
+    // The origin is the cylinder edge toward the furthest point — a derived
+    // point, not a track fix, so it carries no time/altitude of its own
+    // (anchorInfo may still supply them for older cached analyses).
+    const originTimeMs = input.anchorInfo?.origin?.timeMs;
+    const originAltitude = input.anchorInfo?.origin?.altitude;
     const furthestTimeMs =
       input.anchorInfo?.furthest?.timeMs ?? furthestFix?.time.getTime();
     const furthestAltitude =
@@ -912,7 +1130,7 @@ export function explainOpenDistanceScore(
       id: 'origin',
       text: input.manual
         ? `Take-off cylinder exit — the scored distance starts at the ${km(launchRadius)} take-off cylinder edge, toward the landing point.`
-        : `Left the ${km(launchRadius)} launch cylinder — the scored distance starts here (the last outward crossing counts).`,
+        : `The scored distance starts at the ${km(launchRadius)} launch cylinder edge, toward the furthest point — leaving the cylinder starts the score; where it was crossed (or crossed again later) doesn't matter.`,
       value: originTimeMs !== undefined ? fmt(new Date(originTimeMs)) : undefined,
       anchor: {
         kind: 'origin',
@@ -926,7 +1144,7 @@ export function explainOpenDistanceScore(
       id: 'furthest',
       text: input.manual
         ? 'Recorded landing point — the scored distance ends here.'
-        : 'Furthest point reached after the exit — the scored distance ends here.',
+        : 'Furthest point reached from launch — the scored distance ends here.',
       value: furthestTimeMs !== undefined ? fmt(new Date(furthestTimeMs)) : undefined,
       anchor: {
         kind: 'furthest',
@@ -948,7 +1166,7 @@ export function explainOpenDistanceScore(
     {
       id: 'flight',
       title: 'The flight',
-      summary: 'Open distance: fly as far as possible from the launch cylinder exit.',
+      summary: 'Open distance: fly as far as possible from the launch cylinder edge.',
       items,
     },
   ];

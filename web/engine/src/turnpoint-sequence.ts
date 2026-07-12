@@ -34,6 +34,15 @@ export const DEFAULT_CYLINDER_TOLERANCE = 0.005;
  */
 export const MIN_CYLINDER_TOLERANCE_M = 5;
 
+/**
+ * Outer edge of a cylinder's tolerance band (§8.1): the radius at which an
+ * entry cylinder is credited. Shared by crossing detection and the
+ * presence-based reaching check so both use the same notion of "inside".
+ */
+function outerDetectionRadius(radius: number, tolerance: number): number {
+  return Math.max(radius * (1 + tolerance), radius + MIN_CYLINDER_TOLERANCE_M);
+}
+
 // ---------------------------------------------------------------------------
 // Raw crossing detection
 // ---------------------------------------------------------------------------
@@ -74,7 +83,7 @@ export interface CylinderCrossing {
   /**
    * True when the crossing counts only because of the cylinder tolerance band
    * (FAI S7F §8.1): the track came within the tolerance of the cylinder edge
-   * but the two straddling fixes never physically crossed the nominal radius.
+   * but never physically crossed the nominal radius during this band episode.
    * Lets the UI explain a near-miss that was credited by tolerance.
    */
   toleranceCredited: boolean;
@@ -116,10 +125,13 @@ export interface TurnpointReaching {
    * - 'last_before_next': SSS rule — last crossing before continuing to next TP
    * - 'first_after_previous': Standard rule — first crossing after previous TP reached
    * - 'first_crossing': ESS rule — always first crossing, no re-tries
+   * - 'already_inside': Presence rule — the pilot was already inside this
+   *   cylinder when the previous turnpoint was reached (nested or overlapping
+   *   cylinders), so it is credited at that same moment with no crossing
    * - 'track_start': No-SSS fallback only — the track began outside the first
    *   turnpoint's cylinder with no crossing, so the first fix anchors the start
    */
-  selectionReason: 'last_before_next' | 'first_after_previous' | 'first_crossing' | 'track_start';
+  selectionReason: 'last_before_next' | 'first_after_previous' | 'first_crossing' | 'already_inside' | 'track_start';
 
   /**
    * How many candidate crossings existed for this task position.
@@ -381,7 +393,7 @@ export function detectCylinderCrossings(
     // innerRadius = min(r×(1−tol), r−5). Entry cylinders detect against the
     // outer edge; the EXIT start detects against the inner edge so the pilot
     // is credited with leaving a touch early rather than a touch late.
-    const outerRadius = Math.max(tp.radius * (1 + tolerance), tp.radius + MIN_CYLINDER_TOLERANCE_M);
+    const outerRadius = outerDetectionRadius(tp.radius, tolerance);
     const innerRadius = Math.max(0, Math.min(tp.radius * (1 - tolerance), tp.radius - MIN_CYLINDER_TOLERANCE_M));
     const detectRadius = tpIdx === sssIdx && startIsExit ? innerRadius : outerRadius;
     // Bounding box uses the outer radius (always ≥ detectRadius) to stay
@@ -408,7 +420,23 @@ export function detectCylinderCrossings(
       return andoyerDistance(lat, lon, centerLat, centerLon) <= detectRadius;
     };
 
+    const distToCenter = (fix: IGCFix): number =>
+      andoyerDistance(fix.latitude, fix.longitude, centerLat, centerLon);
+
+    // Does the straight segment d0→d1 (distances to center) pass through the
+    // nominal radius in this crossing's radial direction? Entering means the
+    // distance falls through the radius; exiting means it rises through it.
+    const nominalRadius = tp.radius;
+    const crossesNominal = (d0: number, d1: number, direction: 'enter' | 'exit'): boolean =>
+      direction === 'enter'
+        ? d0 > nominalRadius && d1 <= nominalRadius
+        : d0 < nominalRadius && d1 >= nominalRadius;
+
     let prevInside = isInside(fixes[0].latitude, fixes[0].longitude);
+    // First fix index of the current same-side run of the detection-edge
+    // state machine. Bounds the backward scan below: fixes
+    // [lastFlipFixIdx .. fixIdx-1] are all on the prevInside side.
+    let lastFlipFixIdx = 0;
 
     for (let fixIdx = 1; fixIdx < fixes.length; fixIdx++) {
       const currInside = isInside(fixes[fixIdx].latitude, fixes[fixIdx].longitude);
@@ -419,28 +447,71 @@ export function detectCylinderCrossings(
         const direction: 'enter' | 'exit' = currInside ? 'enter' : 'exit';
 
         // Interpolate crossing point between the two fixes
-        const prevDist = andoyerDistance(
-          prevFix.latitude, prevFix.longitude, centerLat, centerLon
-        );
-        const currDist = andoyerDistance(
-          currFix.latitude, currFix.longitude, centerLat, centerLon
-        );
+        const prevDist = distToCenter(prevFix);
+        const currDist = distToCenter(currFix);
 
         // Interpolate to the nominal radius (without tolerance)
-        const nominalRadius = tp.radius;
         const tRaw = (prevDist - nominalRadius) / (prevDist - currDist);
-        const t = Math.max(0, Math.min(1, tRaw));
-        // When the nominal radius does not lie between the two fixes (tRaw
-        // clamped), the pair only reached the tolerance band, not the nominal
-        // cylinder — a tolerance-credited near-miss (§8.1).
-        const toleranceCredited = tRaw < 0 || tRaw > 1;
 
-        const crossingLat = prevFix.latitude + t * (currFix.latitude - prevFix.latitude);
-        const crossingLon = prevFix.longitude + t * (currFix.longitude - prevFix.longitude);
-        const crossingAlt = prevFix.gnssAltitude + t * (currFix.gnssAltitude - prevFix.gnssAltitude);
+        // The detection edge (outer band edge, or inner for an EXIT start)
+        // differs from the nominal radius, so the pair that crosses the
+        // detection edge doesn't necessarily straddle the nominal radius —
+        // the pilot may cross it a few fixes earlier or later while inside
+        // the tolerance band. Anchor the crossing to the fix pair that
+        // physically straddles the nominal radius:
+        //  - tRaw in [0,1]: this pair — the common single-step case.
+        //  - tRaw > 1: the nominal radius lies further along the flight
+        //    path; scan forward while the detection-edge state holds.
+        //  - tRaw < 0: it was crossed earlier in this band episode; scan
+        //    backward to the previous state flip.
+        // Only when no pair in the band episode straddles the nominal
+        // radius did the pilot merely reach the tolerance band — a
+        // tolerance-credited near-miss (§8.1) anchored at the clamped edge.
+        let anchorPrev = prevFix;
+        let anchorCurr = currFix;
+        let anchorFixIndex = fixIdx;
+        let t = Math.max(0, Math.min(1, tRaw));
+        let toleranceCredited = tRaw < 0 || tRaw > 1;
 
-        const prevTime = prevFix.time.getTime();
-        const currTime = currFix.time.getTime();
+        if (tRaw > 1) {
+          let d0 = currDist;
+          for (let j = fixIdx; j + 1 < fixes.length; j++) {
+            // Stop at the next detection-edge flip — that boundary belongs
+            // to the next crossing.
+            if ((d0 <= detectRadius) !== currInside) break;
+            const d1 = distToCenter(fixes[j + 1]);
+            if (crossesNominal(d0, d1, direction)) {
+              anchorPrev = fixes[j];
+              anchorCurr = fixes[j + 1];
+              anchorFixIndex = j + 1;
+              t = (d0 - nominalRadius) / (d0 - d1);
+              toleranceCredited = false;
+              break;
+            }
+            d0 = d1;
+          }
+        } else if (tRaw < 0) {
+          let d1 = prevDist;
+          for (let j = fixIdx - 1; j > lastFlipFixIdx; j--) {
+            const d0 = distToCenter(fixes[j - 1]);
+            if (crossesNominal(d0, d1, direction)) {
+              anchorPrev = fixes[j - 1];
+              anchorCurr = fixes[j];
+              anchorFixIndex = j;
+              t = (d0 - nominalRadius) / (d0 - d1);
+              toleranceCredited = false;
+              break;
+            }
+            d1 = d0;
+          }
+        }
+
+        const crossingLat = anchorPrev.latitude + t * (anchorCurr.latitude - anchorPrev.latitude);
+        const crossingLon = anchorPrev.longitude + t * (anchorCurr.longitude - anchorPrev.longitude);
+        const crossingAlt = anchorPrev.gnssAltitude + t * (anchorCurr.gnssAltitude - anchorPrev.gnssAltitude);
+
+        const prevTime = anchorPrev.time.getTime();
+        const currTime = anchorCurr.time.getTime();
         const crossingTime = new Date(prevTime + t * (currTime - prevTime));
 
         const distanceToCenter = andoyerDistance(
@@ -449,7 +520,7 @@ export function detectCylinderCrossings(
 
         crossings.push({
           taskIndex: tpIdx,
-          fixIndex: fixIdx,
+          fixIndex: anchorFixIndex,
           time: crossingTime,
           latitude: crossingLat,
           longitude: crossingLon,
@@ -458,6 +529,8 @@ export function detectCylinderCrossings(
           distanceToCenter,
           toleranceCredited,
         });
+
+        lastFlipFixIdx = fixIdx;
       }
 
       prevInside = currInside;
@@ -472,7 +545,18 @@ export function detectCylinderCrossings(
 
 /**
  * Build a forward path from an SSS crossing through subsequent turnpoints.
- * For each TP after SSS, find the first crossing with time > previous reaching time.
+ *
+ * Reaching a turnpoint is presence-based (FAI S7F §8 / FS semantics): the
+ * pilot must be inside the cylinder at or after the previous reaching. For
+ * each TP after SSS that means either the first boundary crossing at/after
+ * the previous reaching time, or — when the pilot is already inside the
+ * cylinder at that moment (its cylinder nests or overlaps the previous
+ * one) — the previous reaching moment itself.
+ *
+ * @param startedInsideTP - Per task index: whether the track's FIRST fix lay
+ *   inside that cylinder's outer tolerance edge. Only consulted for a
+ *   cylinder with no crossing before the previous reaching (the pilot's
+ *   inside/outside state never toggled, so it is the state at track start).
  */
 function buildForwardPath(
   sssCrossing: CylinderCrossing,
@@ -480,6 +564,7 @@ function buildForwardPath(
   sssIdx: number,
   essIdx: number,
   goalIdx: number,
+  startedInsideTP: boolean[],
   startSelectionReason: TurnpointReaching['selectionReason'] = 'last_before_next',
 ): TurnpointReaching[] {
   const sequence: TurnpointReaching[] = [];
@@ -504,6 +589,44 @@ function buildForwardPath(
     const tpCrossings = crossingsByTP.get(tpIdx) ?? [];
     const isESS = tpIdx === essIdx;
 
+    // Presence-based reaching: if the pilot is already inside this cylinder
+    // at the moment the previous turnpoint is reached, the turnpoint is
+    // reached at that same moment — no boundary crossing required. This is
+    // the nested-cylinder case (e.g. a small final TP inside a big ESS/goal
+    // ring): the only crossing of the big cylinder happens BEFORE the nested
+    // TP is tagged, and a pilot who then flies to goal without ever exiting
+    // would otherwise be scored landed-out. Crossings toggle the pilot's
+    // inside/outside state, so the state at the previous reaching is given
+    // by the last crossing strictly before it — or, when no crossing
+    // precedes it, by where the track began. A crossing exactly AT the
+    // previous reaching time is left to the crossing search below, so the
+    // identical co-located ESS/goal cylinder keeps its 'first_crossing'
+    // reaching from the shared boundary crossing.
+    let lastCrossingBefore: CylinderCrossing | null = null;
+    for (const crossing of tpCrossings) {
+      if (crossing.time.getTime() >= prevReachingTime) break;
+      lastCrossingBefore = crossing;
+    }
+    const insideAtPrevReaching = lastCrossingBefore
+      ? lastCrossingBefore.direction === 'enter'
+      : startedInsideTP[tpIdx];
+
+    if (insideAtPrevReaching) {
+      const prev = sequence[sequence.length - 1];
+      sequence.push({
+        taskIndex: tpIdx,
+        fixIndex: prev.fixIndex,
+        time: prev.time,
+        latitude: prev.latitude,
+        longitude: prev.longitude,
+        altitude: prev.altitude,
+        selectionReason: 'already_inside',
+        candidateCount: tpCrossings.length,
+        toleranceCredited: lastCrossingBefore?.toleranceCredited ?? false,
+      });
+      continue; // reached at the same moment — prevReachingTime unchanged
+    }
+
     // Find first crossing at or after the previous reaching time.
     //
     // The comparison is >= (not >) so a turnpoint co-located with the
@@ -512,10 +635,10 @@ function buildForwardPath(
     // the *same* cylinder (same centre and radius), so a single entry emits
     // two crossings — one per task index — carrying the identical
     // interpolated timestamp. A strict > would drop the goal crossing and
-    // report a pilot who reached ESS as "landed out" (unless they happened
-    // to exit and re-enter). A genuinely tighter co-located cylinder still
-    // produces a strictly-later crossing (you reach the wider ring first),
-    // so >= never over-credits: it only rescues the identical-cylinder case.
+    // report a pilot who reached ESS as "landed out". A genuinely tighter
+    // co-located cylinder still produces a strictly-later crossing (you
+    // reach the wider ring first), so >= never over-credits: it only
+    // rescues the identical-cylinder case.
     let validCrossing: CylinderCrossing | null = null;
     for (const crossing of tpCrossings) {
       if (crossing.time.getTime() >= prevReachingTime) {
@@ -645,7 +768,10 @@ function computeBestProgress(
  *    (§8.3 — a start can't validate before the gate opens); when every
  *    crossing is pre-gate, resolve from them anyway and report earlyStart
  * 3. For SSS: use last valid crossing before continuing to next TP
- * 4. For other TPs: use first valid crossing after previous TP reached
+ * 4. For other TPs (ESS and goal included): use first valid crossing after
+ *    previous TP reached — or, when the pilot is already inside the cylinder
+ *    at the previous reaching (nested/overlapping cylinders), credit it at
+ *    that same moment (presence-based reaching, §8)
  * 5. For ESS: always first crossing (no re-tries)
  * 6. For multi-gate/elapsed-time: iterate SSS crossings, keep best path
  *    (most TPs reached, then most flown distance, then latest SSS)
@@ -697,6 +823,21 @@ export function resolveTurnpointSequence(
     distance: dist,
     completed: false,
   }));
+
+  // Where the track began relative to each cylinder's outer tolerance edge.
+  // Feeds the presence-based reaching check in buildForwardPath for the
+  // cylinder-never-crossed case (e.g. a goal cylinder so large the whole
+  // flight stays inside it). Post-SSS turnpoints are all entry-credited at
+  // the outer edge, and the check is never consulted for the SSS itself, so
+  // the outer radius is the right edge for every index used.
+  const tolerance = task.cylinderTolerance ?? DEFAULT_CYLINDER_TOLERANCE;
+  const startedInsideTP = task.turnpoints.map(tp =>
+    fixes.length > 0 &&
+    andoyerDistance(
+      fixes[0].latitude, fixes[0].longitude,
+      tp.waypoint.lat, tp.waypoint.lon,
+    ) <= outerDetectionRadius(tp.radius, tolerance)
+  );
 
   // Group crossings by taskIndex
   const crossingsByTP = new Map<number, CylinderCrossing[]>();
@@ -805,7 +946,7 @@ export function resolveTurnpointSequence(
   for (let i = sssCrossings.length - 1; i >= 0; i--) {
     const sssCrossing = sssCrossings[i];
     const candidateSequence = buildForwardPath(
-      sssCrossing, crossingsByTP, sssIdx, essIdx, goalIdx, startSelectionReason
+      sssCrossing, crossingsByTP, sssIdx, essIdx, goalIdx, startedInsideTP, startSelectionReason
     );
 
     const tpsReached = candidateSequence.length;

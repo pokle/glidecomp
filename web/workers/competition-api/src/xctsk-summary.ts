@@ -64,6 +64,17 @@ export function speedSectionTypeWarnings(
 }
 
 /**
+ * True when the task declares a LINE goal. The scoring engine has no
+ * goal-line geometry yet — it scores every goal as a cylinder — so the UI
+ * warns organizers that a LINE-goal task will score against the cylinder
+ * (optimized distance short by up to the goal radius, arrival anchored to
+ * the cylinder edge) rather than degrading silently. Tracked in issue #330.
+ */
+export function hasLineGoal(xctskJson: string | null): boolean {
+  return safeParse(xctskJson)?.goal?.type === "LINE";
+}
+
+/**
  * Short summary of a task's current state. Used when the task route is
  * being set for the first time. Example: "7 turnpoints, race, goal cylinder".
  */

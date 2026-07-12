@@ -761,6 +761,18 @@ export function computeLeadingAggregate(
   const pilotSSSSec = pilotSSSTime / 1000;
   const endTime = pilotESSTime ?? Infinity;
 
+  // §11.3.1/§12.2: in a gated race the leading clock starts at the first
+  // gate. An early ("jump the gun") starter's own SSS crossing precedes it,
+  // so once combineLeadingCoefficient rebases the sum to the gate their
+  // pre-gate progress would contribute NEGATIVE time — driving their LC
+  // below every honest leader's and, at LC ≤ 0, zeroing the whole field's
+  // leading points. Clamp each fix's time at the first gate so pre-gate
+  // progress counts as happening at gate-open. Gates resolve from the task
+  // alone (the pilot's own crossing just anchors them on the right day), so
+  // this stays field-independent and cacheable.
+  const gates = resolveStartGates(task, pilotSSSTime);
+  const clockStartMs = gates ? gates[0] : -Infinity;
+
   let prevBestKm = ssKm; // best_dist_to_ess ratchet, starts at full SS length
   let weightedTimeSum = 0;
   let weightedDeltaSum = 0;
@@ -792,8 +804,10 @@ export function computeLeadingAggregate(
       // AirScore appends this fix's distance to the ratchet window, then
       // weights the interval by this ("next") fix's time.
       const curBestKm = Math.min(prevDistKm, ssKm, prevBestKm);
-      const localTimeSec = tms / 1000 - pilotSSSSec;
       if (formula === 'classic') {
+        // classic is referenced to the pilot's own start and never rebased,
+        // so its times are non-negative as-is — no gate clamp.
+        const localTimeSec = tms / 1000 - pilotSSSSec;
         classicSum += lcContribution('classic', prevBestKm, curBestKm, localTimeSec, ssKm);
       } else if (prevBestKm > curBestKm) {
         // weighted: split w·Δbest·time into (Σ w·Δbest·time) and (Σ w·Δbest)
@@ -801,7 +815,7 @@ export function computeLeadingAggregate(
         const w = leadWeight(curBestKm / ssKm);
         if (w !== 0) {
           const delta = w * (prevBestKm - curBestKm);
-          weightedTimeSum += delta * localTimeSec;
+          weightedTimeSum += delta * (Math.max(tms, clockStartMs) / 1000 - pilotSSSSec);
           weightedDeltaSum += delta;
         }
       }
@@ -918,15 +932,23 @@ export function calculateLeadingCoefficient(
  * LeadingPoints = LeadingFactor × available — exactly AirScore's
  * `pilot_leadout` (gap.py / pwc.py). The pilot with the best (minimum)
  * LC scores full points; others fall off with the 2/3-power curve.
+ *
+ * "No valid LC in the field" is signalled by a non-finite minLC (pilots
+ * without a valid LC already carry Infinity themselves) — NOT by minLC ≤ 0.
+ * A genuinely non-positive minLC is a degenerate input (the LC pipeline
+ * produces positive coefficients); the √LCmin normalization is undefined
+ * there, so the pilot(s) holding the minimum still take full points and
+ * everyone else takes none, rather than zeroing the whole field.
  */
 export function calculateLeadingPoints(
   pilotLC: number,
   minLC: number,
   availableLeadingPoints: number,
 ): number {
-  if (!isFinite(pilotLC) || !isFinite(minLC) || minLC <= 0) return 0;
+  if (!isFinite(pilotLC) || !isFinite(minLC)) return 0;
   const lcDiff = pilotLC - minLC;
   if (lcDiff <= 0) return availableLeadingPoints;
+  if (minLC <= 0) return 0; // degenerate normalization — see docblock
   // ((LCp − LCmin) / √LCmin)^(2/3) === cbrt((LCp − LCmin)² / LCmin)
   const factor = Math.max(0, 1 - Math.cbrt((lcDiff * lcDiff) / minLC));
   return factor * availableLeadingPoints;
@@ -1199,8 +1221,10 @@ export function scoreFlights(
   };
 
   // Step 5: Calculate leading coefficients (skip when disabled — expensive tracklog scan)
+  // Infinity = "no valid LC in the field" (calculateLeadingPoints then awards
+  // no leading points to anyone).
   let leadingCoefficients: number[];
-  let minLC = 0;
+  let minLC = Infinity;
 
   if (fullParams.useLeading) {
     const allSSSTimes = effFlights
@@ -1247,7 +1271,7 @@ export function scoreFlights(
     });
 
     const finiteLCs = leadingCoefficients.filter(lc => isFinite(lc));
-    minLC = finiteLCs.length > 0 ? minBy(finiteLCs, lc => lc) : 0;
+    if (finiteLCs.length > 0) minLC = minBy(finiteLCs, lc => lc);
   } else {
     leadingCoefficients = flights.map(() => Infinity);
   }

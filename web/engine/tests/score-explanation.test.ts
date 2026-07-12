@@ -7,6 +7,7 @@ import {
   type ClassContextInput,
   type ScoreExplanation,
 } from '../src/score-explanation';
+import { calculateSpeedFraction } from '../src/gap-scoring';
 import type {
   TurnpointSequenceResult,
   CylinderCrossing,
@@ -130,7 +131,7 @@ function makeGoalEntry(): ScoreEntryInput {
     arrival_points: 0,
     penalty_points: 0,
     penalty_reason: null,
-    total_score: 781,
+    total_score: 780.5,
   };
 }
 
@@ -195,6 +196,47 @@ describe('explainGapScore — flight narrative', () => {
     }
   });
 
+  it('always lists the scored start, eliding the middle, when it lies beyond the crossing cap', () => {
+    // 20 boundary crossings; the scored start is the LAST one — the classic
+    // "milled around the start cylinder" case the narrative exists for. It
+    // must never disappear behind the listing cap.
+    const sss = reaching(1, 60, 'last_before_next', 10);
+    const startCrossings: CylinderCrossing[] = [];
+    for (let i = 0; i < 19; i++) {
+      startCrossings.push(crossing(1, 10 + i, i % 2 === 0 ? 'exit' : 'enter'));
+    }
+    startCrossings.push({ ...crossing(1, 60, 'exit'), time: sss.time });
+    const base = makeReentryResult();
+    const result: TurnpointSequenceResult = {
+      ...base,
+      crossings: [...startCrossings, crossing(2, 70, 'enter'), crossing(3, 100, 'enter'), crossing(4, 105, 'enter')],
+      sssReaching: sss,
+      sequence: [sss, ...base.sequence.slice(1)],
+    };
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result,
+      entry: makeGoalEntry(),
+      classContext: makeClassContext(),
+      params: { scoring: 'PG' },
+    });
+
+    const flight = section(explanation, 'flight');
+    const crossItems = flight.items.filter((i) => i.id.startsWith('start-crossing-'));
+    // The first 11 crossings plus the scored (20th) one.
+    expect(crossItems).toHaveLength(12);
+    const scored = crossItems.filter((c) => c.text.includes('scored start'));
+    expect(scored).toHaveLength(1);
+    expect(scored[0].anchor!.kind).toBe('start');
+    expect(scored[0].anchor!.timeMs).toBe(at(60).getTime());
+    // The middle crossings are elided rather than the scored start dropped.
+    const elided = flight.items.find((i) => i.id.startsWith('start-crossings-elided-'));
+    expect(elided).toBeDefined();
+    expect(elided!.text).toContain('8 more crossings');
+    // Nothing after the scored (final) crossing, so no trailing summary.
+    expect(flight.items.find((i) => i.id === 'start-crossings-more')).toBeUndefined();
+  });
+
   it('lists turnpoints, ESS with speed-section time, and goal in task order', () => {
     const explanation = explainGapScore({
       task: makeTask(),
@@ -219,7 +261,7 @@ describe('explainGapScore — flight narrative', () => {
     expect(goal!.text).toContain('Goal');
     expect(goal!.anchor!.kind).toBe('goal');
 
-    expect(explanation.headline).toBe('Made goal in 1:10:00 — 781 points');
+    expect(explanation.headline).toBe('Made goal in 1:10:00 — 780.5 points');
   });
 
   it('flags a turnpoint credited by the cylinder tolerance band (§8.1)', () => {
@@ -372,6 +414,34 @@ describe('explainGapScore — point components', () => {
     expect(dist.items.find((i) => i.id === 'distance-difficulty')!.value).toBe('110 pts');
   });
 
+  it('keeps the 0.5 linear factor for an HG pilot whose difficulty half is 0', () => {
+    // The engine applies the linear/difficulty split to every HG pilot when
+    // useDistanceDifficulty is on — a difficulty half of exactly 0 is
+    // legitimate. The explanation must not fall back to the pure-linear
+    // equation, which omits the 0.5 factor the engine actually applied.
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        made_goal: false,
+        distance_points: 140,
+        distance_linear_points: 140,
+        distance_difficulty_points: 0,
+        flown_distance: 42_000,
+      },
+      classContext: makeClassContext(),
+      params: { scoring: 'HG', useDistanceDifficulty: true },
+    });
+    const dist = section(explanation, 'distance');
+    const linear = dist.items.find((i) => i.id === 'distance-linear');
+    expect(linear).toBeDefined();
+    expect(linear!.detail).toContain('0.5 × (42.0 km ÷ 60.0 km)');
+    expect(dist.items.find((i) => i.id === 'distance-difficulty')!.value).toBe('0 pts');
+    // The pure-linear equation (no 0.5 factor) must not be shown.
+    expect(dist.items.find((i) => i.id === 'distance-formula')).toBeUndefined();
+  });
+
   it('notes the minimum-distance floor when the pilot flew less', () => {
     const explanation = explainGapScore({
       task: makeTask(),
@@ -447,7 +517,7 @@ describe('explainGapScore — point components', () => {
         ...makeGoalEntry(),
         penalty_points: 50,
         penalty_reason: 'Airspace infringement',
-        total_score: 731,
+        total_score: 730.5,
       },
       classContext: makeClassContext(),
     });
@@ -456,7 +526,228 @@ describe('explainGapScore — point components', () => {
     expect(penalty.items[0].value).toBe('−50 pts');
     const total = section(penalised, 'total');
     expect(total.items[0].detail).toContain('− 50 penalty');
-    expect(total.items[0].detail).toContain('= 731');
+    expect(total.items[0].detail).toContain('= 730.5');
+  });
+
+  // The published components are rounded to 0.1 but the engine rounds the
+  // total from their unrounded sum, so the printed figures can drift apart —
+  // the equation must never claim "=" between figures that don't equate.
+  it('marks the total equation as approximate when display rounding drifts from the total', () => {
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      // Components shown sum to 780.5, but the exact sum rounded to 780.6.
+      entry: { ...makeGoalEntry(), total_score: 780.6 },
+      classContext: makeClassContext(),
+    });
+    const total = section(explanation, 'total');
+    expect(total.items[0].detail).toContain('400.0 + 380.5 ≈ 780.6');
+    expect(total.items[0].detail).toContain('rounded');
+    expect(total.items[0].detail).not.toContain('=');
+  });
+
+  it('narrates the §12.2 minimum-distance floor instead of printing false arithmetic', () => {
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        distance_points: 100,
+        distance_linear_points: 100,
+        time_points: 0,
+        early_start_seconds: 180,
+        early_start_outcome: 'hg_penalty',
+        jump_the_gun_penalty: 90,
+        total_score: 62.5, // the minimum-distance score, > 100 − 90
+      },
+      classContext: makeClassContext(),
+      params: { scoring: 'HG' },
+    });
+    const total = section(explanation, 'total');
+    expect(total.items[0].detail).toContain('100.0 + 0.0 − 90 jump-the-gun would come to 10');
+    expect(total.items[0].detail).toContain('minimum-distance score (FAI S7F §12.2)');
+    expect(total.items[0].detail).toContain('the total is 62.5');
+  });
+
+  it('narrates the §12.4 zero floor when a penalty takes the score below 0', () => {
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        penalty_points: 900,
+        penalty_reason: 'Cloud flying',
+        total_score: 0,
+      },
+      classContext: makeClassContext(),
+    });
+    const total = section(explanation, 'total');
+    expect(total.items[0].detail).toContain('400.0 + 380.5 − 900 penalty would come to −119.5');
+    expect(total.items[0].detail).toContain('scores never go below 0 (FAI S7F §12.4)');
+  });
+
+  // The engine's total is exactly 1000 × launch × distance × time, so the
+  // equation must print the factors precisely enough to visibly multiply to
+  // the total — never "1000 × 1.00 × 1.00 × 1.00 ≈ 999.3".
+  it('adds factor decimals until the validity equation reconciles', () => {
+    const ctx = makeClassContext();
+    ctx.task_validity = { launch: 0.9876, distance: 0.8, time: 1, task: 0.79008 };
+    ctx.available_points = { ...ctx.available_points, total: 790.08 };
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: makeGoalEntry(),
+      classContext: ctx,
+    });
+    const validity = section(explanation, 'validity');
+    const item = validity.items.find((i) => i.id === 'available-total');
+    expect(item!.detail).toBe('1000 × 0.9876 × 0.80 × 1.00 = 790.1');
+    // The factor rows show the same precision as the equation.
+    const launch = validity.items.find((i) => i.id === 'launch-validity');
+    expect(launch!.value).toBe('98.76%');
+  });
+
+  // The real-world report: a 0.9993 distance validity used to print as
+  // "100%" on every row while the points on offer said 999.3.
+  it('never prints a 100% validity alongside a sub-1000 points-on-offer', () => {
+    const ctx = makeClassContext();
+    ctx.task_validity = { launch: 1, distance: 0.9993, time: 1, task: 0.9993 };
+    ctx.available_points = { ...ctx.available_points, total: 999.3 };
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: makeGoalEntry(),
+      classContext: ctx,
+    });
+    const validity = section(explanation, 'validity');
+    expect(validity.summary).toContain('99.93%');
+    expect(validity.summary).toContain('999.3 of 1000');
+    const distance = validity.items.find((i) => i.id === 'distance-validity');
+    expect(distance!.value).toBe('99.93%');
+    const launch = validity.items.find((i) => i.id === 'launch-validity');
+    expect(launch!.value).toBe('100%');
+    const item = validity.items.find((i) => i.id === 'available-total');
+    expect(item!.detail).toBe('1000 × 1.00 × 0.9993 × 1.00 = 999.3');
+  });
+
+  // Distance points = (flown ÷ best) × available exactly — the printed km
+  // figures must carry enough decimals for the printed equation to hold.
+  it('adds km decimals until the linear-distance equation reconciles', () => {
+    const flown = 76_923;
+    const best = 78_812;
+    const ctx = makeClassContext();
+    ctx.pilots[0].flown_distance = best;
+    ctx.available_points = { ...ctx.available_points, distance: 486 };
+    const linear = 0.5 * (flown / best) * 486; // 237.176…
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        made_goal: false,
+        flown_distance: flown,
+        distance_points: linear,
+        distance_linear_points: linear,
+        distance_difficulty_points: 0,
+      },
+      classContext: ctx,
+      params: { scoring: 'HG', useDistanceDifficulty: true },
+    });
+    const item = section(explanation, 'distance').items.find(
+      (i) => i.id === 'distance-linear',
+    );
+    // 1-dp km figures give 237.1; 2 dp reconcile with the printed 237.2.
+    expect(item!.detail).toBe('0.5 × (76.92 km ÷ 78.81 km) × 486 = 237.2');
+  });
+
+  // Time points = speed fraction × available exactly — the printed fraction
+  // must multiply out to the printed points.
+  it('prints a speed fraction precise enough to multiply out to the time points', () => {
+    const ctx = makeClassContext();
+    const sf = calculateSpeedFraction(70 * 60, 65 * 60, 5 / 6);
+    const timePoints = sf * ctx.available_points.time;
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: { ...makeGoalEntry(), time_points: timePoints },
+      classContext: ctx,
+      params: { scoring: 'PG' },
+    });
+    const item = section(explanation, 'time').items.find(
+      (i) => i.id === 'time-formula',
+    );
+    expect(item!.detail).not.toContain('≈');
+    const m = item!.detail!.match(
+      /= (\d+\.\d+); × ([\d.]+) available = ([\d.]+)/,
+    );
+    expect(m).not.toBeNull();
+    // The digits the reader sees really do multiply to the printed points.
+    expect(Math.round(Number(m![1]) * Number(m![2]) * 10)).toBe(
+      Math.round(Number(m![3]) * 10),
+    );
+  });
+
+  it('prints the jump-the-gun seconds precisely enough that the division holds', () => {
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        early_start_seconds: 73.6,
+        early_start_outcome: 'hg_penalty',
+        jump_the_gun_penalty: 36.8,
+        total_score: 743.7,
+      },
+      classContext: makeClassContext(),
+      params: { scoring: 'HG' },
+    });
+    const jtg = section(explanation, 'penalty').items.find(
+      (i) => i.id === 'jump-the-gun',
+    );
+    // Never "74 s early ÷ 2 = 36.8".
+    expect(jtg!.detail).toBe('73.6 s early ÷ 2 s per point = 36.8 points');
+    expect(jtg!.value).toBe('−36.8 pts');
+  });
+
+  it('shows the available-points split at 0.1 so it sums to the total', () => {
+    const ctx = makeClassContext();
+    ctx.task_validity = { launch: 1, distance: 0.9993, time: 1, task: 0.9993 };
+    ctx.available_points = {
+      distance: 855.94,
+      time: 143.39,
+      leading: 0,
+      arrival: 0,
+      total: 999.33,
+    };
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: makeGoalEntry(),
+      classContext: ctx,
+    });
+    const split = section(explanation, 'validity').items.find(
+      (i) => i.id === 'available-split',
+    );
+    expect(split!.detail).toBe('distance 855.9 · time 143.4');
+  });
+
+  // Only reachable when the stored total disagrees with the stored
+  // validities (inconsistent API data) — the equation must not claim "=".
+  it('falls back to ≈ when no precision reconciles the factors with the total', () => {
+    const ctx = makeClassContext();
+    ctx.task_validity = { launch: 0.9876, distance: 0.8, time: 1, task: 0.79008 };
+    ctx.available_points = { ...ctx.available_points, total: 791.2 };
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: makeGoalEntry(),
+      classContext: ctx,
+    });
+    const item = section(explanation, 'validity').items.find(
+      (i) => i.id === 'available-total',
+    );
+    expect(item!.detail).toContain('≈ 791.2');
+    expect(item!.detail).toContain('full precision');
   });
 
   it('omits leading/arrival sections when those components are off', () => {
@@ -508,12 +799,12 @@ describe('explainOpenDistanceScore', () => {
     valid: true,
   });
 
-  it('anchors the origin (cylinder exit) and furthest point with times', () => {
+  it('anchors the origin (cylinder edge) and furthest point', () => {
     const fixes = [fix(0, -35.98, 142.92), fix(10, -35.94, 142.97), fix(120, -35.6, 143.4)];
     const explanation = explainOpenDistanceScore({
       task: odTask,
       geometry: {
-        origin: { latitude: -35.94, longitude: 142.97, fixIndex: 1 },
+        origin: { latitude: -35.94, longitude: 142.97 },
         furthest: { latitude: -35.6, longitude: 143.4, fixIndex: 2 },
         distance: 52_341,
       },
@@ -528,11 +819,14 @@ describe('explainOpenDistanceScore', () => {
 
     const flight = section(explanation, 'flight');
     const origin = flight.items.find((i) => i.id === 'origin');
-    expect(origin!.text).toContain('5.0 km launch cylinder');
+    expect(origin!.text).toContain('5.0 km launch cylinder edge');
     expect(origin!.anchor!.kind).toBe('origin');
-    expect(origin!.anchor!.timeMs).toBe(at(10).getTime());
+    // The origin is a derived edge point, not a track fix — no time.
+    expect(origin!.anchor!.timeMs).toBeUndefined();
+    expect(origin!.value).toBeUndefined();
     const furthest = flight.items.find((i) => i.id === 'furthest');
     expect(furthest!.anchor!.kind).toBe('furthest');
+    expect(furthest!.anchor!.timeMs).toBe(at(120).getTime());
     expect(flight.items.find((i) => i.id === 'distance')!.value).toBe('52.3 km');
     expect(section(explanation, 'total').items[0].detail).toBe('52341 m flown = 52341 points');
     expect(explanation.headline).toBe('Flew 52.3 km open distance — 52341 points');
@@ -569,7 +863,7 @@ describe('explainOpenDistanceScore — anchorInfo (no fixes at hand)', () => {
     const explanation = explainOpenDistanceScore({
       task: odTask,
       geometry: {
-        origin: { latitude: -35.94, longitude: 142.97, fixIndex: 1 },
+        origin: { latitude: -35.94, longitude: 142.97 },
         furthest: { latitude: -35.6, longitude: 143.4, fixIndex: 2 },
         distance: 52_341,
       },
@@ -631,7 +925,7 @@ describe('explainGapScore — start gates & early starts', () => {
       early_start_seconds: 120,
       early_start_outcome: 'hg_penalty',
       jump_the_gun_penalty: 60,
-      total_score: 720,
+      total_score: 720.5,
     };
     const x = explainGapScore({
       task: makeTask(), result, entry, classContext: makeClassContext(),

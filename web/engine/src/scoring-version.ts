@@ -35,7 +35,58 @@
 //     entry cylinders, instead of an outward-only percentage expansion. Small
 //     cylinders get the 5 m floor and EXIT starts are credited at the inner
 //     edge; near-misses credited by the band are flagged for explanation.
-export const SCORING_ENGINE_VERSION = 5;
+// v6: xctsk v2 QR `z` decoding — the polyline tuple is read in the spec's
+//     (longitude, latitude, altitude, radius) order instead of latitude-first
+//     (https://xctrack.org/Competition_Interfaces.html), and each value is
+//     decoded standalone (no delta accumulation). Tasks imported from compact
+//     QR payloads without explicit lat/lon fields previously had their
+//     coordinates transposed.
+// v7: presence-based turnpoint reaching (S7F §8 / FS semantics) — a pilot who
+//     is already inside a cylinder when the previous turnpoint is reached is
+//     credited at that same moment ('already_inside'), instead of requiring a
+//     boundary crossing at or after it. Fixes a turnpoint nested inside a
+//     larger following cylinder (e.g. a big ESS/goal ring around the final
+//     TP): a finisher who tagged the nested TP from inside and never exited
+//     was scored landed-out, and an exit/re-entry after the nested TP was
+//     credited late, inflating the speed-section time.
+// v8: post-2015 HFDTEDATE long-form header parsing — the modern
+//     `HFDTEDATE:150124,01` date header is now recognized. Previously it
+//     failed both date regexes, leaving header.date undefined so every fix
+//     was stamped with the parse-day's date (non-deterministic), corrupting
+//     start gates, task-date checks, and timezone display for such files.
+// v9: (a) weighted leading coefficient clamps per-fix times at the first
+//     start gate — an HG jump-the-gun starter's pre-gate progress previously
+//     contributed negative time once rebased to the gate, letting one early
+//     starter undercut every honest leader and (at LC ≤ 0) zero the whole
+//     field's leading points; "no valid LC in the field" is now signalled by
+//     a non-finite minimum LC instead of conflating it with minLC ≤ 0.
+//     (b) open distance is measured from the take-off cylinder EDGE to the
+//     furthest fix (furthest distance from the centre minus the radius),
+//     matching the manual-flight measurement — the cylinder only gates that
+//     the pilot left; previously the origin was the LAST boundary exit, so a
+//     mid-flight return through the launch cylinder erased all prior
+//     distance. The open-distance geometry origin is now a derived edge
+//     point with no fix index/time.
+// v10: parsing hardening (2026-07-12 review §2 Parsing). (a) B records are
+//     field-validated before parsing — a corrupted record previously fed NaN
+//     coordinates / an Invalid Date into the fixes array, poisoning distance
+//     and climb math. (b) xctsk v1 turnpoints with an explicit radius of 0
+//     keep it instead of being coerced to 400 m (radius is a scoring input;
+//     v2 and the encoder already preserved 0). (c) HP/HO H-records are
+//     recognized (IGC source char F|O|P), so pilot names recorded as
+//     HPPLT/HOPLT are no longer dropped. (d) fuzzy waypoint-name containment
+//     requires a 3+ char DB name — an empty or 1-2 char name matched almost
+//     any query and substituted the wrong radius/altitude into IGC-declared
+//     tasks.
+// v11: two-step tolerance-band penetrations anchor to the nominal radius —
+//     when the fix pair that crosses the detection edge (outer band edge, or
+//     inner for an EXIT start) doesn't straddle the nominal radius, the
+//     crossing now anchors to the fix pair within the band episode that
+//     does, instead of clamping to the band-edge fix and mislabelling the
+//     crossing as tolerance-credited. Reaching times/positions shift by up
+//     to one fix interval; toleranceCredited is only set when the pilot
+//     genuinely never crossed the nominal radius.
+export const SCORING_ENGINE_VERSION = 11;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -43,4 +94,4 @@ export const SCORING_ENGINE_VERSION = 5;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "9e9dec7315d5fb5a0ce0661c39919ce32cef414b2d9d62a0f835414d293a9a65";
+  "11bd78db943d7d4c1c7547c6ab1b6c8cc2454db574c22e8b6f2e23ad745a4826";

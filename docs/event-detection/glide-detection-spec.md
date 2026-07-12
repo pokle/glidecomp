@@ -47,7 +47,7 @@ For each accepted glide:
 | `startIndex` / `endIndex` | Fix indices defining the segment |
 | `startAltitude` / `endAltitude` | GNSS altitude at boundary fixes |
 | `distance` | Sum of WGS84 ellipsoid distances (Andoyer-Lambert) between consecutive fixes (path distance, not straight line) |
-| `glideRatio` | `distance / altitudeLoss` where `altitudeLoss = startAltitude - endAltitude`. Set to `Infinity` if the pilot gained altitude or stayed level. |
+| `glideRatio` | `distance / altitudeLoss` where `altitudeLoss = startAltitude - endAltitude`. Set to `undefined` if the pilot gained altitude or stayed level (`Infinity` would leak into display text and become `null` through `JSON.stringify`). |
 | `duration` | Time from start to end fix (seconds) |
 
 ### Event Generation
@@ -131,9 +131,9 @@ If no thermals are detected (e.g., a sled ride), `prevEnd` remains at 0 and the 
 
 ### Ascending Glides
 
-If the pilot gains altitude during a "glide" (flying through lift without circling), `altitudeLoss` is zero or negative, and `glideRatio` is set to `Infinity`. These segments:
-- Appear in the Glides tab with "∞:1" displayed for L/D
-- Never appear in the Sinks tab (since `Infinity > 5`)
+If the pilot gains altitude during a "glide" (flying through lift without circling), `altitudeLoss` is zero or negative, and `glideRatio` is `undefined`. These segments:
+- Appear in the Glides tab with "∞:1" displayed for L/D (`extractGlides` maps the missing ratio to `0`, which the panel renders as ∞)
+- Never appear in the Sinks tab (`extractSinks` skips glides without a ratio)
 - Have valid distance and duration stats
 
 ### Short Gaps Between Thermals
