@@ -426,7 +426,9 @@ function buildFlightSection(
     const isGoal = reaching.taskIndex === getGoalIndex(task);
 
     let detail: string | undefined;
-    if (reaching.candidateCount > 1) {
+    if (reaching.selectionReason === 'already_inside') {
+      detail = 'Already inside this cylinder when the previous turnpoint was reached — credited at that same moment, no extra crossing needed.';
+    } else if (reaching.candidateCount > 1) {
       detail = `First of ${reaching.candidateCount} crossings — once a turnpoint is reached, later crossings don't matter.`;
     }
     if (reaching.toleranceCredited) {

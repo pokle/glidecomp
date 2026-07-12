@@ -35,7 +35,15 @@
 //     entry cylinders, instead of an outward-only percentage expansion. Small
 //     cylinders get the 5 m floor and EXIT starts are credited at the inner
 //     edge; near-misses credited by the band are flagged for explanation.
-export const SCORING_ENGINE_VERSION = 5;
+// v6: presence-based turnpoint reaching (S7F §8 / FS semantics) — a pilot who
+//     is already inside a cylinder when the previous turnpoint is reached is
+//     credited at that same moment ('already_inside'), instead of requiring a
+//     boundary crossing at or after it. Fixes a turnpoint nested inside a
+//     larger following cylinder (e.g. a big ESS/goal ring around the final
+//     TP): a finisher who tagged the nested TP from inside and never exited
+//     was scored landed-out, and an exit/re-entry after the nested TP was
+//     credited late, inflating the speed-section time.
+export const SCORING_ENGINE_VERSION = 6;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -43,4 +51,4 @@ export const SCORING_ENGINE_VERSION = 5;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "9e9dec7315d5fb5a0ce0661c39919ce32cef414b2d9d62a0f835414d293a9a65";
+  "83c601748e601062dc1052e4ab00bc2415d443b95a17686e6089fef9af039479";
