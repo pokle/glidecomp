@@ -74,6 +74,66 @@ describe('waypoint file serializers round-trip through the parsers', () => {
   });
 });
 
+describe('serializers survive swapped / awkward identifiers', () => {
+  // After a code/name swap the multi-word long name lands in `code`.
+  const SWAPPED = swapCodeName(SET); // e.g. code "CORRY Airport"
+
+  it('quoted / XML formats round-trip a multi-word swapped code exactly', () => {
+    const quoted: [(w: WaypointFileRecord[]) => string, string][] = [
+      [toSeeYouCup, 'wp.cup'],
+      [toCSV, 'wp.csv'],
+      [toGPX, 'wp.gpx'],
+      [toKML, 'wp.kml'],
+    ];
+    for (const [serialize, filename] of quoted) {
+      const { waypoints } = parseWaypointFile(serialize(SWAPPED), filename);
+      const corry = waypoints.find((w) => w.name === 'CORRY');
+      expect(corry?.code).toBe('CORRY Airport');
+    }
+  });
+
+  it('CompeGPS keeps a multi-word code as one token (no silent truncation)', () => {
+    const { waypoints } = parseWaypointFile(toCompeGPS(SWAPPED), 'wp.wpt');
+    const corry = waypoints[0];
+    expect(corry.code).toBe('CORRY-Airport'); // hyphenated, not truncated to "CORRY"
+    expect(corry.latitude).toBeCloseTo(-36.185, 3);
+    expect(corry.altitude).toBe(291);
+  });
+
+  it('OziExplorer stays column-aligned when a name contains a comma', () => {
+    const withComma: WaypointFileRecord[] = [
+      { code: 'MTB', name: 'Mt Beauty, VIC', latitude: -36.74, longitude: 147.17, altitude: 1200, radius: 700 },
+    ];
+    const { waypoints } = parseWaypointFile(toOziExplorer(withComma), 'wp.wpt');
+    // The comma must not shift the radius/elevation into the wrong slots.
+    expect(waypoints[0].radius).toBe(700);
+    expect(waypoints[0].altitude).toBe(1200);
+    expect(waypoints[0].code).toBe('MTB');
+  });
+
+  it('fractional altitude does not produce malformed CUP elevation', () => {
+    const frac: WaypointFileRecord[] = [
+      { code: 'X', name: 'X', latitude: -36, longitude: 147, altitude: 291.5, radius: 400 },
+    ];
+    const cup = toSeeYouCup(frac);
+    expect(cup).toContain('292.0m'); // rounded, single decimal
+    expect(cup).not.toMatch(/\d+\.\d+\.\d/); // never "291.5.0m"
+    const { waypoints } = parseWaypointFile(cup, 'wp.cup');
+    expect(waypoints[0].altitude).toBe(292);
+  });
+
+  it('packDDM carries 59.9995 minutes up to the next degree', () => {
+    // -35.99999 → 35°59.9994'S, which rounds to 60.000 without a carry guard.
+    const near: WaypointFileRecord[] = [
+      { code: 'N', name: 'N', latitude: -35.9999999, longitude: 147.5, altitude: 0, radius: 400 },
+    ];
+    const cup = toSeeYouCup(near);
+    expect(cup).not.toContain('60.000'); // carried to 36°00.000'
+    const { waypoints } = parseWaypointFile(cup, 'wp.cup');
+    expect(waypoints[0].latitude).toBeCloseTo(-36, 3);
+  });
+});
+
 describe('XCTrack QR encoding matches real app output', () => {
   // The exact `z` strings decoded from a real Flyskyhy competition QR — the
   // encoder must reproduce them byte-for-byte so pilots' apps import correctly.

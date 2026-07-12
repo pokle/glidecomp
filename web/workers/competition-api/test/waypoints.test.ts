@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { authRequest, clearCompData, createComp, request } from "./helpers";
+import { authRequest, clearCompData, createComp, createTask, request } from "./helpers";
 
 const WP = [
   { code: "A01", name: "Bordano Landing", latitude: 46.308828, longitude: 13.1125, altitude: 225, radius: 400 },
@@ -74,5 +74,92 @@ describe("competition waypoints", () => {
     expect((await request("GET", `/api/comp/${compId}/waypoints`)).status).toBe(404);
     const asAdmin = await request("GET", `/api/comp/${compId}/waypoints`, { user: "user-1" });
     expect(asAdmin.status).toBe(200);
+  });
+
+  test("rejects control characters in code/name (would corrupt line formats)", async () => {
+    const compId = await createComp();
+    const res = await authRequest("PUT", `/api/comp/${compId}/waypoints`, {
+      waypoints: [{ ...WP[0], code: "A01\nB02" }],
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("waypoint file downloads", () => {
+  beforeEach(clearCompData);
+  afterEach(clearCompData);
+
+  test("serves the comp waypoints as an openable file with the right headers", async () => {
+    const compId = await createComp();
+    await authRequest("PUT", `/api/comp/${compId}/waypoints`, { waypoints: WP });
+
+    const gpx = await request("GET", `/api/comp/${compId}/waypoints/gpx`);
+    expect(gpx.status).toBe(200);
+    expect(gpx.headers.get("content-type")).toBe("application/gpx+xml");
+    expect(gpx.headers.get("content-disposition")).toContain('filename="test-comp-waypoints.gpx"');
+    const body = await gpx.text();
+    expect(body).toContain("<gpx");
+    expect(body).toContain("A01");
+  });
+
+  test("?swap=1 flips the code/name columns", async () => {
+    const compId = await createComp();
+    await authRequest("PUT", `/api/comp/${compId}/waypoints`, { waypoints: WP });
+
+    const normal = await (await request("GET", `/api/comp/${compId}/waypoints/seeyou-cup`)).text();
+    const swapped = await (
+      await request("GET", `/api/comp/${compId}/waypoints/seeyou-cup?swap=1`)
+    ).text();
+    expect(normal).toContain('"Bordano Landing",A01');
+    expect(swapped).toContain('"A01",Bordano Landing');
+  });
+
+  test("unknown format is a 404", async () => {
+    const compId = await createComp();
+    await authRequest("PUT", `/api/comp/${compId}/waypoints`, { waypoints: WP });
+    expect((await request("GET", `/api/comp/${compId}/waypoints/nope`)).status).toBe(404);
+  });
+
+  test("hidden test comps gate the waypoints file (404 anon, 200 admin)", async () => {
+    const compId = await createComp({ test: true });
+    await authRequest("PUT", `/api/comp/${compId}/waypoints`, { waypoints: WP });
+    expect((await request("GET", `/api/comp/${compId}/waypoints/gpx`)).status).toBe(404);
+    expect(
+      (await request("GET", `/api/comp/${compId}/waypoints/gpx`, { user: "user-1" })).status
+    ).toBe(200);
+  });
+
+  test("serves a task's turnpoints as a file", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+    await authRequest("PATCH", `/api/comp/${compId}/task/${taskId}`, {
+      xctsk: {
+        taskType: "CLASSIC",
+        version: 1,
+        turnpoints: [{ type: "SSS", radius: 1000, waypoint: { name: "START", lat: -37, lon: 144 } }],
+      },
+    });
+    const res = await request("GET", `/api/comp/${compId}/task/${taskId}/waypoints/gpx`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/gpx+xml");
+    expect(res.headers.get("content-disposition")).toContain("turnpoints.gpx");
+    expect(await res.text()).toContain("START");
+  });
+
+  test("hidden test comps gate the task file (404 anon, 200 admin)", async () => {
+    const compId = await createComp({ test: true });
+    const taskId = await createTask(compId);
+    await authRequest("PATCH", `/api/comp/${compId}/task/${taskId}`, {
+      xctsk: {
+        taskType: "CLASSIC",
+        version: 1,
+        turnpoints: [{ type: "SSS", radius: 1000, waypoint: { name: "START", lat: -37, lon: 144 } }],
+      },
+    });
+    expect((await request("GET", `/api/comp/${compId}/task/${taskId}/waypoints/gpx`)).status).toBe(404);
+    expect(
+      (await request("GET", `/api/comp/${compId}/task/${taskId}/waypoints/gpx`, { user: "user-1" }))
+        .status
+    ).toBe(200);
   });
 });

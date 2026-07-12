@@ -54,8 +54,13 @@ function lonHemi(lon: number): string {
  */
 function packDDM(value: number, degDigits: number, hemi: string): string {
   const abs = Math.abs(value);
-  const deg = Math.floor(abs);
-  const min = (abs - deg) * 60;
+  let deg = Math.floor(abs);
+  let min = (abs - deg) * 60;
+  // Guard against minutes rounding up to 60.000 (e.g. 36.9999999°).
+  if (Number(min.toFixed(3)) >= 60) {
+    min = 0;
+    deg += 1;
+  }
   const degStr = String(deg).padStart(degDigits, '0');
   const minStr = min.toFixed(3).padStart(6, '0'); // MM.mmm
   return `${degStr}${minStr}${hemi}`;
@@ -98,6 +103,31 @@ function csvField(s: string): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+/** Altitude as whole metres — the file formats all carry integer elevation. */
+function altMeters(w: WaypointFileRecord): number {
+  return Math.round(Number.isFinite(w.altitude) ? w.altitude : 0);
+}
+
+/** Radius in metres, defaulting to 400 only when absent/non-finite (0 is kept). */
+function radiusMeters(w: WaypointFileRecord): number {
+  return Number.isFinite(w.radius) ? w.radius : 400;
+}
+
+/**
+ * Collapse internal whitespace to `-` so an identifier survives as a single
+ * token in the whitespace-delimited formats (CompeGPS/PCX5, FS GEO/UTM), where
+ * a multi-word code — e.g. a swapped long name like "CORRY Airport" — would
+ * otherwise be silently truncated to its first word by those readers.
+ */
+function singleToken(s: string): string {
+  return s.trim().replace(/\s+/g, '-');
+}
+
+/** Replace commas with spaces for OziExplorer's unquoted comma-delimited fields. */
+function noComma(s: string): string {
+  return s.replace(/,/g, ' ');
+}
+
 // ---------------------------------------------------------------------------
 // Serializers
 // ---------------------------------------------------------------------------
@@ -115,7 +145,7 @@ export function toSeeYouCup(waypoints: WaypointFileRecord[]): string {
         '',
         lat,
         lon,
-        `${w.altitude || 0}.0m`,
+        `${altMeters(w)}.0m`,
         '1',
         '',
         '',
@@ -133,7 +163,7 @@ export function toGPX(waypoints: WaypointFileRecord[]): string {
     .map((w) => {
       const parts = [
         `  <wpt lat="${dec(w.latitude)}" lon="${dec(w.longitude)}">`,
-        `    <ele>${w.altitude || 0}</ele>`,
+        `    <ele>${altMeters(w)}</ele>`,
         `    <name>${xmlEscape(w.code)}</name>`,
         `    <cmt>${xmlEscape(w.name || w.code)}</cmt>`,
         `    <desc>${xmlEscape(w.name || w.code)}</desc>`,
@@ -162,7 +192,7 @@ export function toKML(waypoints: WaypointFileRecord[]): string {
         `        <name>${xmlEscape(w.code)}</name>`,
         `        <description>${xmlEscape(w.name || w.code)}</description>`,
         '        <Point>',
-        `          <coordinates>${dec(w.longitude)},${dec(w.latitude)},${w.altitude || 0}</coordinates>`,
+        `          <coordinates>${dec(w.longitude)},${dec(w.latitude)},${altMeters(w)}</coordinates>`,
         '        </Point>',
         '      </Placemark>',
       ].join('\n')
@@ -183,9 +213,10 @@ export function toCompeGPS(waypoints: WaypointFileRecord[]): string {
   for (const w of waypoints) {
     const lat = `${Math.abs(w.latitude).toFixed(7)}${latHemi(w.latitude)}`;
     const lon = `${Math.abs(w.longitude).toFixed(7)}${lonHemi(w.longitude)}`;
-    const alt = (w.altitude || 0).toFixed(6);
-    // W  <code> A <lat> <lon> <date> <time> <alt> <long name>
-    lines.push(`W  ${w.code} A ${lat} ${lon} 01-JAN-00 00:00:00 ${alt} ${w.name || w.code}`);
+    const alt = altMeters(w).toFixed(6);
+    // W  <code> A <lat> <lon> <date> <time> <alt> <long name>. The code is a
+    // single whitespace-delimited token, so collapse any spaces in it.
+    lines.push(`W  ${singleToken(w.code)} A ${lat} ${lon} 01-JAN-00 00:00:00 ${alt} ${w.name || w.code}`);
   }
   return lines.join('\r\n') + '\r\n';
 }
@@ -198,7 +229,9 @@ export function toOziExplorer(waypoints: WaypointFileRecord[]): string {
     lines.push(
       [
         i + 1,
-        w.code,
+        // Ozi records are unquoted comma-delimited, so a comma in the code or
+        // name would shift every later column — substitute spaces for commas.
+        noComma(w.code),
         w.latitude.toFixed(6),
         w.longitude.toFixed(6),
         '',
@@ -207,11 +240,11 @@ export function toOziExplorer(waypoints: WaypointFileRecord[]): string {
         '3',
         '0',
         '65535',
-        w.name || w.code,
+        noComma(w.name || w.code),
         '0',
         '0',
-        String(w.radius || 0),
-        String(w.altitude || 0),
+        String(radiusMeters(w)),
+        String(altMeters(w)),
         '6',
         '0',
         '17',
@@ -227,11 +260,11 @@ export function toFsGeo(waypoints: WaypointFileRecord[]): string {
   for (const w of waypoints) {
     const la = toDMS(w.latitude, 2);
     const lo = toDMS(w.longitude, 3);
-    const code = w.code.padEnd(9);
+    const code = singleToken(w.code).padEnd(9);
     lines.push(
       `${code} ${latHemi(w.latitude)} ${la.d} ${la.m} ${la.s}    ` +
         `${lonHemi(w.longitude)} ${lo.d} ${lo.m} ${lo.s}   ` +
-        `${String(w.altitude || 0).padStart(4)}  ${w.name || w.code}`
+        `${String(altMeters(w)).padStart(4)}  ${w.name || w.code}`
     );
   }
   return lines.join('\r\n') + '\r\n';
@@ -242,12 +275,12 @@ export function toFsUtm(waypoints: WaypointFileRecord[]): string {
   const lines = ['$FormatUTM'];
   for (const w of waypoints) {
     const utm = latLonToUtm(w.latitude, w.longitude);
-    const code = w.code.padEnd(9);
+    const code = singleToken(w.code).padEnd(9);
     const east = String(Math.round(utm.easting)).padStart(7, '0');
     const north = String(Math.round(utm.northing)).padStart(7, '0');
     lines.push(
       `${code} ${utm.zone}${utm.band}   ${east}   ${north}   ` +
-        `${String(w.altitude || 0).padStart(3)}  ${w.name || w.code}`
+        `${String(altMeters(w)).padStart(3)}  ${w.name || w.code}`
     );
   }
   return lines.join('\r\n') + '\r\n';
@@ -263,8 +296,8 @@ export function toCSV(waypoints: WaypointFileRecord[]): string {
         csvField(w.name || w.code),
         w.latitude.toFixed(6),
         w.longitude.toFixed(6),
-        String(w.altitude || 0),
-        String(w.radius || 400),
+        String(altMeters(w)),
+        String(radiusMeters(w)),
       ].join(',')
     );
   }

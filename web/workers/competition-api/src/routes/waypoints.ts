@@ -24,6 +24,30 @@ function slugify(name: string): string {
 }
 
 /**
+ * Load a comp, applying the public-visibility rule: a missing comp, or a hidden
+ * `test` comp viewed by a non-admin, is treated as not-found. Returns the comp
+ * row on success or a 404 `Response` to return directly — so every waypoints
+ * endpoint gates identically instead of hand-copying the check.
+ */
+async function loadVisibleComp(
+  c: {
+    env: Env;
+    var: { user: AuthUser | null };
+    json: (body: unknown, status: 404) => Response;
+  },
+  compId: number
+): Promise<{ name: string } | Response> {
+  const comp = await c.env.DB.prepare("SELECT test, name FROM comp WHERE comp_id = ?")
+    .bind(compId)
+    .first<{ test: number; name: string }>();
+  if (!comp) return c.json({ error: "Not found" }, 404);
+  if (comp.test && (!c.var.user || !(await isCompAdmin(c.env.DB, compId, c.var.user)))) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  return { name: comp.name };
+}
+
+/**
  * Serve a waypoint set as a downloadable file. `inline` disposition (not
  * `attachment`) so a phone hands the file straight to a flight app (XCTrack,
  * Flyskyhy, SeeYou Navigator) instead of only saving it; the extension in the
@@ -62,9 +86,14 @@ type HonoEnv = { Bindings: Env; Variables: Variables };
 const MAX_WAYPOINTS = 5000;
 const MAX_TEXT = 128;
 
+// No control characters in the identifiers: a newline or tab in code/name
+// would corrupt every line- and whitespace-delimited export format at the
+// source, so reject them on write rather than sanitising on every read.
+const noControlChars = z.string().regex(/^[^\p{Cc}]*$/u, "no control characters");
+
 const waypointSchema = z.object({
-  code: z.string().min(1).max(MAX_TEXT),
-  name: z.string().max(MAX_TEXT),
+  code: noControlChars.min(1).max(MAX_TEXT),
+  name: noControlChars.max(MAX_TEXT),
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
   altitude: z.number().min(-2000).max(30000),
@@ -84,16 +113,8 @@ export const waypointsRoutes = new Hono<HonoEnv>()
   // ── GET — the comp's waypoints (public, minus hidden test comps) ──
   .get("/api/comp/:comp_id/waypoints", optionalAuth, sqidsMiddleware, async (c) => {
     const compId = c.var.ids.comp_id!;
-    const comp = await c.env.DB.prepare("SELECT comp_id, test FROM comp WHERE comp_id = ?")
-      .bind(compId)
-      .first<{ comp_id: number; test: number }>();
-    if (!comp) return c.json({ error: "Not found" }, 404);
-    if (comp.test) {
-      // Hidden test comps 404 for everyone but their admins (mirrors task GET).
-      if (!c.var.user || !(await isCompAdmin(c.env.DB, compId, c.var.user))) {
-        return c.json({ error: "Not found" }, 404);
-      }
-    }
+    const comp = await loadVisibleComp(c, compId);
+    if (comp instanceof Response) return comp;
 
     const row = await c.env.DB.prepare(
       "SELECT waypoints, updated_at FROM comp_waypoints WHERE comp_id = ?"
@@ -115,13 +136,8 @@ export const waypointsRoutes = new Hono<HonoEnv>()
     const formatId = c.req.param("format");
     if (!getWaypointExportFormat(formatId)) return c.json({ error: "Unknown format" }, 404);
 
-    const comp = await c.env.DB.prepare("SELECT test, name FROM comp WHERE comp_id = ?")
-      .bind(compId)
-      .first<{ test: number; name: string }>();
-    if (!comp) return c.json({ error: "Not found" }, 404);
-    if (comp.test && (!c.var.user || !(await isCompAdmin(c.env.DB, compId, c.var.user)))) {
-      return c.json({ error: "Not found" }, 404);
-    }
+    const comp = await loadVisibleComp(c, compId);
+    if (comp instanceof Response) return comp;
 
     const row = await c.env.DB.prepare("SELECT waypoints FROM comp_waypoints WHERE comp_id = ?")
       .bind(compId)
@@ -141,13 +157,8 @@ export const waypointsRoutes = new Hono<HonoEnv>()
       const formatId = c.req.param("format");
       if (!getWaypointExportFormat(formatId)) return c.json({ error: "Unknown format" }, 404);
 
-      const comp = await c.env.DB.prepare("SELECT test FROM comp WHERE comp_id = ?")
-        .bind(compId)
-        .first<{ test: number }>();
-      if (!comp) return c.json({ error: "Not found" }, 404);
-      if (comp.test && (!c.var.user || !(await isCompAdmin(c.env.DB, compId, c.var.user)))) {
-        return c.json({ error: "Not found" }, 404);
-      }
+      const comp = await loadVisibleComp(c, compId);
+      if (comp instanceof Response) return comp;
 
       const task = await c.env.DB.prepare(
         "SELECT name, xctsk FROM task WHERE task_id = ? AND comp_id = ?"

@@ -7,7 +7,7 @@
  */
 import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import type { XCTask, WaypointFileRecord } from "@glidecomp/engine";
+import { xctaskTurnpointsToRecords, type XCTask, type WaypointFileRecord } from "@glidecomp/engine";
 import { Button } from "@/react/ui/button";
 import {
   Dialog,
@@ -332,17 +332,10 @@ function TurnpointsSection({
   onEditRoute: () => void;
 }) {
   // The task's turnpoints as exportable records (short code, long name, coords,
-  // cylinder radius) for the "download / QR to your device" panel.
+  // cylinder radius) for the "download / QR to your device" panel — via the
+  // shared engine helper so the client and the server file route stay identical.
   const records: WaypointFileRecord[] = useMemo(
-    () =>
-      (xctsk?.turnpoints ?? []).map((tp) => ({
-        code: tp.waypoint.name,
-        name: tp.waypoint.description || tp.waypoint.name,
-        latitude: tp.waypoint.lat,
-        longitude: tp.waypoint.lon,
-        altitude: tp.waypoint.altSmoothed ?? 0,
-        radius: tp.radius,
-      })),
+    () => xctaskTurnpointsToRecords(xctsk?.turnpoints),
     [xctsk]
   );
 
