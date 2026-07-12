@@ -201,10 +201,9 @@ the same divergence.)
   Entry markers are drawn mid-thermal (a drifting thermal displaces them hundreds of metres);
   in `extractClimbs`, `startLat/startLon === endLat/endLon` for every climb. If intentional,
   document; otherwise use the real start/end fixes like glide events do.
-  **Resolved 2026-07-12** ([#328](https://github.com/pokle/glidecomp/pull/328)) — intentional
-  (Tushar): markers point at the thermal itself, so both events keep the centroid. Documented
-  in the thermal spec and pinned by a regression test; boundary fixes remain reachable via
-  `segment.startIndex`/`endIndex`.
+  **Fixed 2026-07-12** ([#328](https://github.com/pokle/glidecomp/pull/328)) — decided
+  (Tushar): entry/exit events sit on the track's boundary fixes like glide events; the
+  centroid stays available as `ThermalSegment.location`. Regression test added.
 
 ### Packaging / infra
 - **[C] Replay legend scores mapped back to pilots by display name** —

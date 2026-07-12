@@ -157,9 +157,7 @@ describe('Takeoff rejection of isolated GPS spikes', () => {
 });
 
 describe('Thermal entry/exit event coordinates', () => {
-  // Intentional (Tushar, 2026-07-12): both events carry the thermal centroid
-  // so markers point at the thermal itself, not the trigger fixes.
-  it('places entry/exit events at the thermal centroid', () => {
+  it('places entry/exit events on the boundary fixes, not the thermal centroid', () => {
     const fixes: IGCFix[] = [];
 
     // Takeoff
@@ -189,20 +187,15 @@ describe('Thermal entry/exit event coordinates', () => {
     expect(entry).toBeDefined();
     expect(exit).toBeDefined();
 
-    // Entry and exit share the centroid position
-    expect(entry!.latitude).toBe(exit!.latitude);
-    expect(entry!.longitude).toBe(exit!.longitude);
+    const entryFix = fixes[entry!.segment!.startIndex];
+    expect(entry!.latitude).toBe(entryFix.latitude);
+    expect(entry!.longitude).toBe(entryFix.longitude);
 
-    // The centroid is the mean of the segment's fixes
-    const { startIndex, endIndex } = entry!.segment!;
-    let sumLat = 0;
-    let sumLon = 0;
-    for (let i = startIndex; i <= endIndex; i++) {
-      sumLat += fixes[i].latitude;
-      sumLon += fixes[i].longitude;
-    }
-    const count = endIndex - startIndex + 1;
-    expect(entry!.latitude).toBeCloseTo(sumLat / count, 10);
-    expect(entry!.longitude).toBeCloseTo(sumLon / count, 10);
+    const exitFix = fixes[exit!.segment!.endIndex];
+    expect(exit!.latitude).toBe(exitFix.latitude);
+    expect(exit!.longitude).toBe(exitFix.longitude);
+
+    // With drift, entry and exit are genuinely different places
+    expect(entry!.latitude).not.toBe(exit!.latitude);
   });
 });

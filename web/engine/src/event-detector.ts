@@ -839,17 +839,15 @@ export function detectFlightEvents(
     const adjustedStartIndex = thermal.startIndex + indexOffset;
     const adjustedEndIndex = thermal.endIndex + indexOffset;
 
-    // Intentional: entry/exit events are both placed at the thermal's centroid
-    // (mean of all fixes) so markers point at the thermal itself, not at the
-    // fixes where climb detection happened to trigger. This differs from glide
-    // events, which sit on their boundary fixes. The boundary fixes remain
-    // reachable via segment.startIndex/endIndex.
+    // Entry/exit events sit on the track's boundary fixes (like glide events)
+    // so the markers land where the pilot actually entered and left the climb;
+    // the thermal's mean position stays available as ThermalSegment.location.
     allEvents.push({
       id: `thermal-entry-${adjustedStartIndex}`,
       type: 'thermal_entry',
       time: fixes[adjustedStartIndex].time,
-      latitude: thermal.location.lat,
-      longitude: thermal.location.lon,
+      latitude: fixes[adjustedStartIndex].latitude,
+      longitude: fixes[adjustedStartIndex].longitude,
       altitude: thermal.startAltitude,
       description: `Thermal entry (${thermal.avgClimbRate > 0 ? '+' : ''}${thermal.avgClimbRate.toFixed(1)}m/s avg)`,
       details: {
@@ -864,8 +862,8 @@ export function detectFlightEvents(
       id: `thermal-exit-${adjustedEndIndex}`,
       type: 'thermal_exit',
       time: fixes[adjustedEndIndex].time,
-      latitude: thermal.location.lat,
-      longitude: thermal.location.lon,
+      latitude: fixes[adjustedEndIndex].latitude,
+      longitude: fixes[adjustedEndIndex].longitude,
       altitude: thermal.endAltitude,
       description: `Thermal exit (${(thermal.endAltitude - thermal.startAltitude) > 0 ? '+' : ''}${(thermal.endAltitude - thermal.startAltitude).toFixed(0)}m gained)`,
       details: {
