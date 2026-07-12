@@ -2,7 +2,7 @@
 
 *2026-07-12 — companion to finding §1.1 of
 [the web/engine code review](../2026-07-12-web-engine-code-review.md); shipped as
-scoring engine v6.*
+scoring engine v7.*
 
 GAP/FS semantics for "reaching" a turnpoint are **presence-based**: a pilot has
 reached a turnpoint once there is any track fix inside its cylinder (tolerance
@@ -66,7 +66,7 @@ still credited by the crossing search (`first_crossing`), exactly as before
 ## Where things live
 
 - Fix: `buildForwardPath` in `web/engine/src/turnpoint-sequence.ts` (presence
-  check + `'already_inside'` selection reason), scoring engine bumped to v6 in
+  check + `'already_inside'` selection reason), scoring engine bumped to v7 in
   `web/engine/src/scoring-version.ts`.
 - Tests: "turnpoint nested inside a larger following cylinder" describe block
   in `web/engine/tests/turnpoint-sequence.test.ts` — one test per case above.
