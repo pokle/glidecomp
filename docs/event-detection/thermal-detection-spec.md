@@ -119,6 +119,12 @@ For each accepted thermal, the algorithm computes:
 | `duration` | Time from start to end fix (seconds) |
 | `location` | Centroid: mean lat/lon of all fixes in the segment |
 
+The `thermal_entry` and `thermal_exit` events are positioned at the segment's
+boundary fixes (like glide events), not at the centroid — a drifting thermal
+would otherwise displace the markers hundreds of metres from where the pilot
+actually entered or left the climb. The centroid remains available as
+`ThermalSegment.location` for consumers that want the thermal's mean position.
+
 ## Downstream: Glide Detection
 
 Glides are defined as the segments **between** thermals. See `glide-detection-spec.md` (in this directory) for the full algorithm, including sink classification, map visualization, and known limitations.
