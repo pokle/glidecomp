@@ -1,11 +1,78 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import {
+  getWaypointExportFormat,
+  swapCodeName,
+  toXctskJSON,
+  xctaskTurnpointsToRecords,
+  type WaypointFileRecord,
+  type XCTask,
+} from "@glidecomp/engine";
 import type { Env, AuthUser } from "../env";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
 import { validated } from "../validators";
 import { audit } from "../audit";
+
+/** Filename-safe slug from a comp/task name (mirrors the frontend's slugify). */
+function slugify(name: string): string {
+  return (
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "competition"
+  );
+}
+
+/**
+ * Load a comp, applying the public-visibility rule: a missing comp, or a hidden
+ * `test` comp viewed by a non-admin, is treated as not-found. Returns the comp
+ * row on success or a 404 `Response` to return directly — so every waypoints
+ * endpoint gates identically instead of hand-copying the check.
+ */
+async function loadVisibleComp(
+  c: {
+    env: Env;
+    var: { user: AuthUser | null };
+    json: (body: unknown, status: 404) => Response;
+  },
+  compId: number
+): Promise<{ name: string } | Response> {
+  const comp = await c.env.DB.prepare("SELECT test, name FROM comp WHERE comp_id = ?")
+    .bind(compId)
+    .first<{ test: number; name: string }>();
+  if (!comp) return c.json({ error: "Not found" }, 404);
+  if (comp.test && (!c.var.user || !(await isCompAdmin(c.env.DB, compId, c.var.user)))) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  return { name: comp.name };
+}
+
+/**
+ * Serve a waypoint set as a downloadable file. `inline` disposition (not
+ * `attachment`) so a phone hands the file straight to a flight app (XCTrack,
+ * Flyskyhy, SeeYou Navigator) instead of only saving it; the extension in the
+ * filename plus the format's Content-Type drive which app the OS offers.
+ */
+function fileResponse(
+  c: { body: (data: string, status: 200, headers: Record<string, string>) => Response },
+  records: WaypointFileRecord[],
+  formatId: string,
+  swap: boolean,
+  baseName: string,
+  suffix: string
+): Response {
+  const format = getWaypointExportFormat(formatId);
+  if (!format) throw new Error("unknown format");
+  const out = swap ? swapCodeName(records) : records;
+  const filename = `${slugify(baseName)}-${suffix}.${format.extension}`;
+  return c.body(format.serialize(out), 200, {
+    "Content-Type": format.mimeType,
+    "Content-Disposition": `inline; filename="${filename}"`,
+    "Cache-Control": "no-store",
+  });
+}
 
 type Variables = {
   user: AuthUser;
@@ -21,9 +88,14 @@ type HonoEnv = { Bindings: Env; Variables: Variables };
 const MAX_WAYPOINTS = 5000;
 const MAX_TEXT = 128;
 
+// No control characters in the identifiers: a newline or tab in code/name
+// would corrupt every line- and whitespace-delimited export format at the
+// source, so reject them on write rather than sanitising on every read.
+const noControlChars = z.string().regex(/^[^\p{Cc}]*$/u, "no control characters");
+
 const waypointSchema = z.object({
-  code: z.string().min(1).max(MAX_TEXT),
-  name: z.string().max(MAX_TEXT),
+  code: noControlChars.min(1).max(MAX_TEXT),
+  name: noControlChars.max(MAX_TEXT),
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
   altitude: z.number().min(-2000).max(30000),
@@ -43,16 +115,8 @@ export const waypointsRoutes = new Hono<HonoEnv>()
   // ── GET — the comp's waypoints (public, minus hidden test comps) ──
   .get("/api/comp/:comp_id/waypoints", optionalAuth, sqidsMiddleware, async (c) => {
     const compId = c.var.ids.comp_id!;
-    const comp = await c.env.DB.prepare("SELECT comp_id, test FROM comp WHERE comp_id = ?")
-      .bind(compId)
-      .first<{ comp_id: number; test: number }>();
-    if (!comp) return c.json({ error: "Not found" }, 404);
-    if (comp.test) {
-      // Hidden test comps 404 for everyone but their admins (mirrors task GET).
-      if (!c.var.user || !(await isCompAdmin(c.env.DB, compId, c.var.user))) {
-        return c.json({ error: "Not found" }, 404);
-      }
-    }
+    const comp = await loadVisibleComp(c, compId);
+    if (comp instanceof Response) return comp;
 
     const row = await c.env.DB.prepare(
       "SELECT waypoints, updated_at FROM comp_waypoints WHERE comp_id = ?"
@@ -65,6 +129,65 @@ export const waypointsRoutes = new Hono<HonoEnv>()
       updated_at: row?.updated_at ?? null,
     });
   })
+
+  // ── GET file — the comp's waypoints serialized for a flight instrument ──
+  // (public, minus hidden test comps). `:format` is an export-format id; the
+  // response is an openable file so a phone can hand it to a flight app.
+  .get("/api/comp/:comp_id/waypoints/:format", optionalAuth, sqidsMiddleware, async (c) => {
+    const compId = c.var.ids.comp_id!;
+    const formatId = c.req.param("format");
+    if (!getWaypointExportFormat(formatId)) return c.json({ error: "Unknown format" }, 404);
+
+    const comp = await loadVisibleComp(c, compId);
+    if (comp instanceof Response) return comp;
+
+    const row = await c.env.DB.prepare("SELECT waypoints FROM comp_waypoints WHERE comp_id = ?")
+      .bind(compId)
+      .first<{ waypoints: string }>();
+    const records = row ? (JSON.parse(row.waypoints) as WaypointFileRecord[]) : [];
+    return fileResponse(c, records, formatId, c.req.query("swap") === "1", comp.name, "waypoints");
+  })
+
+  // ── GET file — a task's turnpoints serialized for a flight instrument ──
+  .get(
+    "/api/comp/:comp_id/task/:task_id/waypoints/:format",
+    optionalAuth,
+    sqidsMiddleware,
+    async (c) => {
+      const compId = c.var.ids.comp_id!;
+      const taskId = c.var.ids.task_id!;
+      const formatId = c.req.param("format");
+      // "xctsk" is the native XCTrack task file, not a waypoint export format.
+      if (formatId !== "xctsk" && !getWaypointExportFormat(formatId)) {
+        return c.json({ error: "Unknown format" }, 404);
+      }
+
+      const comp = await loadVisibleComp(c, compId);
+      if (comp instanceof Response) return comp;
+
+      const task = await c.env.DB.prepare(
+        "SELECT name, xctsk FROM task WHERE task_id = ? AND comp_id = ?"
+      )
+        .bind(taskId, compId)
+        .first<{ name: string; xctsk: string | null }>();
+      if (!task) return c.json({ error: "Not found" }, 404);
+
+      const xctsk = task.xctsk ? (JSON.parse(task.xctsk) as XCTask) : null;
+
+      // Native task file — serve the canonical .xctsk that XCTrack imports.
+      if (formatId === "xctsk") {
+        if (!xctsk) return c.json({ error: "No route defined" }, 404);
+        return c.body(JSON.stringify(toXctskJSON(xctsk)), 200, {
+          "Content-Type": "application/xctsk",
+          "Content-Disposition": `inline; filename="${slugify(task.name)}.xctsk"`,
+          "Cache-Control": "no-store",
+        });
+      }
+
+      const records = xctaskTurnpointsToRecords(xctsk?.turnpoints);
+      return fileResponse(c, records, formatId, c.req.query("swap") === "1", task.name, "turnpoints");
+    }
+  )
 
   // ── PUT — replace the comp's waypoints (admin only) ──
   .put(

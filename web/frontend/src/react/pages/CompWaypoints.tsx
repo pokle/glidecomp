@@ -30,6 +30,7 @@ import { useConfirm } from "../lib/confirm";
 import { useAdminView, useUser } from "../lib/user";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { formatCoords, parseCoords } from "../comp/route-editor";
+import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
 
 const RouteMap = lazy(() => import("../comp/RouteMap"));
 
@@ -138,7 +139,11 @@ export function CompWaypoints() {
   // Current records + validity, derived from the rows.
   const records = useMemo(() => rows.map(fromRow), [rows]);
   const invalidCount = records.filter((r) => r === null).length;
-  const dirty = serialize(records.filter(Boolean) as WaypointFileRecord[]) !== savedJson;
+  const validRecords = useMemo(
+    () => records.filter((r): r is WaypointFileRecord => r !== null),
+    [records]
+  );
+  const dirty = serialize(validRecords) !== savedJson;
 
   // Map markers from the rows with valid coordinates.
   const mapWaypoints: MapWaypoint[] = useMemo(
@@ -296,6 +301,20 @@ export function CompWaypoints() {
           ? "Upload a file (OziExplorer, SeeYou, CompeGPS, FS, GPX, KML or CSV), edit details, or add points from the map."
           : null}
       </p>
+
+      {/* Pilot download + QR (issue #312 stage 2) — visible to everyone. */}
+      {!loading && validRecords.length > 0 ? (
+        <div className="mb-6">
+          <WaypointDeviceExport
+            records={validRecords}
+            baseName={compName}
+            noun="waypoint"
+            hostedUrl={(fmt, swap) =>
+              `/api/comp/${compId}/waypoints/${fmt}${swap ? "?swap=1" : ""}`
+            }
+          />
+        </div>
+      ) : null}
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading waypoints…</p>

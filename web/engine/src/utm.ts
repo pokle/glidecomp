@@ -75,3 +75,79 @@ export function utmToLatLon(
     lon: longOrigin + (lonRad * 180) / Math.PI,
   };
 }
+
+/** A WGS84 UTM grid reference. */
+export interface UtmRef {
+  /** UTM zone number (1–60). */
+  zone: number;
+  /** MGRS latitude band letter (C–X). */
+  band: string;
+  /** Metres east, including the 500 km false easting. */
+  easting: number;
+  /** Metres north (with the 10 000 km false northing in the south). */
+  northing: number;
+  /** True for the northern hemisphere. */
+  isNorthern: boolean;
+}
+
+/** MGRS latitude band letter for a given latitude (C at −80°… X at 84°). */
+function latitudeBand(lat: number): string {
+  const letters = 'CDEFGHJKLMNPQRSTUVWX';
+  if (lat >= 84) return 'X';
+  if (lat < -80) return 'C';
+  return letters[Math.floor((lat + 80) / 8)] ?? 'Z';
+}
+
+/**
+ * Convert a WGS84 latitude/longitude (degrees) to a UTM grid reference — the
+ * forward of {@link utmToLatLon} (standard forward Transverse Mercator, Snyder
+ * / USGS series). Used only to write `$FormatUTM` waypoint files. Norway/
+ * Svalbard zone exceptions are not applied (irrelevant for waypoint export).
+ */
+export function latLonToUtm(lat: number, lon: number): UtmRef {
+  const a = WGS84_A;
+  const eccSquared = WGS84_F * (2 - WGS84_F);
+  const k0 = 0.9996;
+  const eccPrimeSquared = eccSquared / (1 - eccSquared);
+
+  const zone = Math.min(60, Math.max(1, Math.floor((lon + 180) / 6) + 1));
+  const longOrigin = (zone - 1) * 6 - 180 + 3; // zone's central meridian
+  const latRad = (lat * Math.PI) / 180;
+  const lonRad = (lon * Math.PI) / 180;
+  const longOriginRad = (longOrigin * Math.PI) / 180;
+
+  const sinLat = Math.sin(latRad);
+  const cosLat = Math.cos(latRad);
+  const tanLat = Math.tan(latRad);
+  const N = a / Math.sqrt(1 - eccSquared * sinLat ** 2);
+  const T = tanLat ** 2;
+  const C = eccPrimeSquared * cosLat ** 2;
+  const A = cosLat * (lonRad - longOriginRad);
+  const M =
+    a *
+    ((1 - eccSquared / 4 - (3 * eccSquared ** 2) / 64 - (5 * eccSquared ** 3) / 256) * latRad -
+      ((3 * eccSquared) / 8 + (3 * eccSquared ** 2) / 32 + (45 * eccSquared ** 3) / 1024) *
+        Math.sin(2 * latRad) +
+      ((15 * eccSquared ** 2) / 256 + (45 * eccSquared ** 3) / 1024) * Math.sin(4 * latRad) -
+      ((35 * eccSquared ** 3) / 3072) * Math.sin(6 * latRad));
+
+  const easting =
+    k0 *
+      N *
+      (A +
+        ((1 - T + C) * A ** 3) / 6 +
+        ((5 - 18 * T + T ** 2 + 72 * C - 58 * eccPrimeSquared) * A ** 5) / 120) +
+    500000.0;
+  let northing =
+    k0 *
+    (M +
+      N *
+        tanLat *
+        (A ** 2 / 2 +
+          ((5 - T + 9 * C + 4 * C ** 2) * A ** 4) / 24 +
+          ((61 - 58 * T + T ** 2 + 600 * C - 330 * eccPrimeSquared) * A ** 6) / 720));
+  const isNorthern = lat >= 0;
+  if (!isNorthern) northing += 10000000.0; // false northing in the south
+
+  return { zone, band: latitudeBand(lat), easting, northing, isNorthern };
+}
