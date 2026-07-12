@@ -81,7 +81,12 @@ export function packTracksFromIgc(input: PackFromIgcInput): PackedTracks {
   if (task) {
     try {
       const params: Partial<GAPParameters> = { ...DEFAULT_GAP_PARAMETERS, ...(input.gapParams ?? {}) };
-      if (params.nominalDistance === undefined) {
+      // Mirror the official scoring path (competition-api scoring.ts): default
+      // nominalDistance to 70% of task distance whenever the *stored* params
+      // didn't set it. Checking `params` after merging defaults never fires
+      // because DEFAULT_GAP_PARAMETERS.nominalDistance is 70 km, so gate on the
+      // raw input instead.
+      if (!input.gapParams?.nominalDistance) {
         params.nominalDistance = calculateOptimizedTaskDistance(task) * 0.7;
       }
       const result = scoreTask(task, flights, params);
