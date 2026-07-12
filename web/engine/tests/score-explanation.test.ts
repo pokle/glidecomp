@@ -195,6 +195,47 @@ describe('explainGapScore — flight narrative', () => {
     }
   });
 
+  it('always lists the scored start, eliding the middle, when it lies beyond the crossing cap', () => {
+    // 20 boundary crossings; the scored start is the LAST one — the classic
+    // "milled around the start cylinder" case the narrative exists for. It
+    // must never disappear behind the listing cap.
+    const sss = reaching(1, 60, 'last_before_next', 10);
+    const startCrossings: CylinderCrossing[] = [];
+    for (let i = 0; i < 19; i++) {
+      startCrossings.push(crossing(1, 10 + i, i % 2 === 0 ? 'exit' : 'enter'));
+    }
+    startCrossings.push({ ...crossing(1, 60, 'exit'), time: sss.time });
+    const base = makeReentryResult();
+    const result: TurnpointSequenceResult = {
+      ...base,
+      crossings: [...startCrossings, crossing(2, 70, 'enter'), crossing(3, 100, 'enter'), crossing(4, 105, 'enter')],
+      sssReaching: sss,
+      sequence: [sss, ...base.sequence.slice(1)],
+    };
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result,
+      entry: makeGoalEntry(),
+      classContext: makeClassContext(),
+      params: { scoring: 'PG' },
+    });
+
+    const flight = section(explanation, 'flight');
+    const crossItems = flight.items.filter((i) => i.id.startsWith('start-crossing-'));
+    // The first 11 crossings plus the scored (20th) one.
+    expect(crossItems).toHaveLength(12);
+    const scored = crossItems.filter((c) => c.text.includes('scored start'));
+    expect(scored).toHaveLength(1);
+    expect(scored[0].anchor!.kind).toBe('start');
+    expect(scored[0].anchor!.timeMs).toBe(at(60).getTime());
+    // The middle crossings are elided rather than the scored start dropped.
+    const elided = flight.items.find((i) => i.id.startsWith('start-crossings-elided-'));
+    expect(elided).toBeDefined();
+    expect(elided!.text).toContain('8 more crossings');
+    // Nothing after the scored (final) crossing, so no trailing summary.
+    expect(flight.items.find((i) => i.id === 'start-crossings-more')).toBeUndefined();
+  });
+
   it('lists turnpoints, ESS with speed-section time, and goal in task order', () => {
     const explanation = explainGapScore({
       task: makeTask(),
@@ -372,6 +413,34 @@ describe('explainGapScore — point components', () => {
     expect(dist.items.find((i) => i.id === 'distance-difficulty')!.value).toBe('110 pts');
   });
 
+  it('keeps the 0.5 linear factor for an HG pilot whose difficulty half is 0', () => {
+    // The engine applies the linear/difficulty split to every HG pilot when
+    // useDistanceDifficulty is on — a difficulty half of exactly 0 is
+    // legitimate. The explanation must not fall back to the pure-linear
+    // equation, which omits the 0.5 factor the engine actually applied.
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        made_goal: false,
+        distance_points: 140,
+        distance_linear_points: 140,
+        distance_difficulty_points: 0,
+        flown_distance: 42_000,
+      },
+      classContext: makeClassContext(),
+      params: { scoring: 'HG', useDistanceDifficulty: true },
+    });
+    const dist = section(explanation, 'distance');
+    const linear = dist.items.find((i) => i.id === 'distance-linear');
+    expect(linear).toBeDefined();
+    expect(linear!.detail).toContain('0.5 × (42.0 km ÷ 60.0 km)');
+    expect(dist.items.find((i) => i.id === 'distance-difficulty')!.value).toBe('0 pts');
+    // The pure-linear equation (no 0.5 factor) must not be shown.
+    expect(dist.items.find((i) => i.id === 'distance-formula')).toBeUndefined();
+  });
+
   it('notes the minimum-distance floor when the pilot flew less', () => {
     const explanation = explainGapScore({
       task: makeTask(),
@@ -508,12 +577,12 @@ describe('explainOpenDistanceScore', () => {
     valid: true,
   });
 
-  it('anchors the origin (cylinder exit) and furthest point with times', () => {
+  it('anchors the origin (cylinder edge) and furthest point', () => {
     const fixes = [fix(0, -35.98, 142.92), fix(10, -35.94, 142.97), fix(120, -35.6, 143.4)];
     const explanation = explainOpenDistanceScore({
       task: odTask,
       geometry: {
-        origin: { latitude: -35.94, longitude: 142.97, fixIndex: 1 },
+        origin: { latitude: -35.94, longitude: 142.97 },
         furthest: { latitude: -35.6, longitude: 143.4, fixIndex: 2 },
         distance: 52_341,
       },
@@ -528,11 +597,14 @@ describe('explainOpenDistanceScore', () => {
 
     const flight = section(explanation, 'flight');
     const origin = flight.items.find((i) => i.id === 'origin');
-    expect(origin!.text).toContain('5.0 km launch cylinder');
+    expect(origin!.text).toContain('5.0 km launch cylinder edge');
     expect(origin!.anchor!.kind).toBe('origin');
-    expect(origin!.anchor!.timeMs).toBe(at(10).getTime());
+    // The origin is a derived edge point, not a track fix — no time.
+    expect(origin!.anchor!.timeMs).toBeUndefined();
+    expect(origin!.value).toBeUndefined();
     const furthest = flight.items.find((i) => i.id === 'furthest');
     expect(furthest!.anchor!.kind).toBe('furthest');
+    expect(furthest!.anchor!.timeMs).toBe(at(120).getTime());
     expect(flight.items.find((i) => i.id === 'distance')!.value).toBe('52.3 km');
     expect(section(explanation, 'total').items[0].detail).toBe('52341 m flown = 52341 points');
     expect(explanation.headline).toBe('Flew 52.3 km open distance — 52341 points');
@@ -569,7 +641,7 @@ describe('explainOpenDistanceScore — anchorInfo (no fixes at hand)', () => {
     const explanation = explainOpenDistanceScore({
       task: odTask,
       geometry: {
-        origin: { latitude: -35.94, longitude: 142.97, fixIndex: 1 },
+        origin: { latitude: -35.94, longitude: 142.97 },
         furthest: { latitude: -35.6, longitude: 143.4, fixIndex: 2 },
         distance: 52_341,
       },

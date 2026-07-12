@@ -227,7 +227,6 @@ function buildDetailData(
             origin: {
               latitude: od.origin.latitude,
               longitude: od.origin.longitude,
-              fixIndex: -1,
             },
             furthest: {
               latitude: od.furthest.latitude,
@@ -238,9 +237,10 @@ function buildDetailData(
           }
         : null;
     assertAnalysisMatchesScore(Math.round(od?.distance ?? 0), entry.flown_distance);
-    // A manual open-distance flight has no fix times — the endpoints carry null
-    // time_ms. Detect that to adjust the wording and omit times.
-    const manual = od?.origin != null && od.origin.time_ms == null;
+    // A manual open-distance flight has no fix times — its furthest point (the
+    // recorded landing) carries null time_ms. A tracked flight always has a
+    // real fix time there (the origin is a derived edge point either way).
+    const manual = od?.furthest != null && od.furthest.time_ms == null;
     const explanation = explainOpenDistanceScore({
       task: task.xctsk,
       geometry,

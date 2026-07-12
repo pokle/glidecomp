@@ -1112,22 +1112,26 @@ export async function computePilotAnalysis(
         trackFile: track.igc_filename,
         fixes: igc.fixes,
       });
-      const anchor = (p: { latitude: number; longitude: number; fixIndex: number }) => {
-        const fix = igc.fixes[p.fixIndex];
-        return {
-          latitude: p.latitude,
-          longitude: p.longitude,
-          time_ms: fix.time.getTime(),
-          altitude: fix.gnssAltitude,
-        };
-      };
+      const furthestFix = geometry ? igc.fixes[geometry.furthest.fixIndex] : null;
       payload = {
         turnpoint_result: null,
         open_distance: geometry
           ? {
               distance: geometry.distance,
-              origin: anchor(geometry.origin),
-              furthest: anchor(geometry.furthest),
+              // The origin is the cylinder edge toward the furthest fix — a
+              // derived point, not a track fix, so it has no time/altitude.
+              origin: {
+                latitude: geometry.origin.latitude,
+                longitude: geometry.origin.longitude,
+                time_ms: null,
+                altitude: null,
+              },
+              furthest: {
+                latitude: geometry.furthest.latitude,
+                longitude: geometry.furthest.longitude,
+                time_ms: furthestFix!.time.getTime(),
+                altitude: furthestFix!.gnssAltitude,
+              },
             }
           : { distance: 0, origin: null, furthest: null },
       };
