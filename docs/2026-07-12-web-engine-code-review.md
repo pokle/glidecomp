@@ -118,6 +118,10 @@ the same divergence.)
   off by up to 0.2; and when the §12.2 jump-the-gun floor engages, the printed equation is not
   the operation performed. Same class of issue in `buildValiditySection` (2-dp factors vs
   rounded product, L531).
+  **Fixed 2026-07-12** ([#329](https://github.com/pokle/glidecomp/pull/329)) — the equations
+  are checked against the published figures before printing: exact `=` only when they equate,
+  `≈` plus a display-rounding note when they drift, and a narrative of the actual floor
+  operation (§12.2 minimum-distance / §12.4 zero) when a floor engaged. Scores unchanged.
 - **[C] Scored start crossing can be hidden behind the 12-crossing listing cap** —
   `src/score-explanation.ts:294, 349-374`. Only `slice(0, 12)` crossings can carry the "this
   is the scored start" tag, but the scored start is usually one of the *last* crossings for a
