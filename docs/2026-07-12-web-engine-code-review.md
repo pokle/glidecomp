@@ -97,6 +97,9 @@ the same divergence.)
   `(d ÷ best) × available = pts` while the engine computed `0.5 × (d/best) × available`
   (`gap-scoring.ts:559`). The published equation is arithmetically false by 2×. Gate on
   `params.useDistanceDifficulty && scoring === 'HG'` instead of the point value.
+  **Fixed 2026-07-12** ([#326](https://github.com/pokle/glidecomp/pull/326)) — the gate now
+  mirrors `scoreFlights`' predicate exactly; regression test pins the 0.5 equation for a
+  0-difficulty HG pilot.
 - **[C] One HG jump-the-gun starter can zero the whole field's leading points** —
   `src/gap-scoring.ts:861-863, 927, 1226-1229`. `hg_penalty` pilots keep their leading
   aggregate; `shiftSec = pilotSSS − taskFirstSSS` is negative for a pre-gate starter, so
@@ -104,6 +107,11 @@ the same divergence.)
   leader, in the extreme going ≤ 0 — at which point `calculateLeadingPoints`'s
   `minLC <= 0 → return 0` guard deletes leading points for **every** pilot. Clamp per-fix
   contributions at the first gate, and separate "no valid LC in field" from "minLC ≤ 0".
+  **Fixed 2026-07-12** ([#326](https://github.com/pokle/glidecomp/pull/326), engine v9) —
+  `computeLeadingAggregate` clamps each fix's time at the first gate (§11.3.1; gates resolve
+  from the task alone, so the aggregate stays cacheable), and "no valid LC in field" is now a
+  non-finite minLC (degenerate minLC ≤ 0 awards the minimum-holder full points instead of
+  zeroing everyone). AirScore parity unchanged; whole-field regression test added.
 - **[P] Total-score equations don't always reconcile** — `src/score-explanation.ts:721-748`
   vs `gap-scoring.ts:1326-1343`. Components are rounded to 0.1 independently but the total is
   rounded from the unrounded sum, so the printed `round(a + b + c + d, 1dp) = total` can be
@@ -115,6 +123,8 @@ the same divergence.)
   is the scored start" tag, but the scored start is usually one of the *last* crossings for a
   pilot who milled around the start cylinder — exactly the case the narrative exists for.
   Always include the scored crossing in the listing.
+  **Fixed 2026-07-12** ([#326](https://github.com/pokle/glidecomp/pull/326)) — the scored
+  crossing is always listed; the middle crossings are elided (`…N more crossings…`) instead.
 - **[C] Open distance: mid-flight re-entry of the launch cylinder erases all prior distance** —
   `src/open-distance-scoring.ts:44-49, 70-84, 144-152`. Origin = *last* exit of the take-off
   cylinder over the whole flight, and the furthest-fix search starts at that exit. A pilot who
@@ -122,6 +132,12 @@ the same divergence.)
   a few km. If last-exit is intentional policy it should be bounded (e.g. exits within N
   minutes of the first) — and the docstring, which frames it as launch-jitter robustness,
   corrected either way.
+  **Fixed 2026-07-12** ([#326](https://github.com/pokle/glidecomp/pull/326), engine v9) —
+  policy decided (Tushar): re-entries do not matter; the cylinder only gates that the pilot
+  left, and distance is measured from the cylinder *edge* to the furthest point
+  (`dist(centre, furthest fix) − radius`, clamped at 0). Matches the manual-flight
+  measurement, needs no crossing detection, and makes the geometry origin a derived edge
+  point (no fix index/time). Re-entry regression test added.
 
 ### Geometry
 - **[C] `goal.type: 'LINE'` is parsed but never consumed — goal lines score as cylinders** —
@@ -387,6 +403,7 @@ contract fuzz-pinned by `parser-robustness.test.ts`.
 3. §1.4 + name-keyed legend map + Z-doc fix + a `track-packer` roundtrip test; add
    `web/engine/cli` to root tsconfig include.
 4. §2 scoring/explanation items (0.5 factor, early-starter leading, scored-start listing,
-   open-distance re-anchor policy decision).
+   open-distance re-anchor policy decision). **Done in #326** (the §2 [P] total-rounding
+   item remains open).
 5. Perf items §4.1-4.3 (measurable client-side wins), then the low/quality backlog
    opportunistically.
