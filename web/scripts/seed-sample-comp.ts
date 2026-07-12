@@ -42,7 +42,12 @@ import { tmpdir } from 'node:os';
 import { gzipSync } from 'node:zlib';
 import { spawnSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parseIGC } from '@glidecomp/engine';
+import {
+  parseIGC,
+  parseXCTask,
+  xctaskTurnpointsToRecords,
+  type WaypointFileRecord,
+} from '@glidecomp/engine';
 import { timezoneForXctsk } from '@glidecomp/engine/timezone';
 import { SAMPLE_COMP_NAME } from '../workers/competition-api/src/sample';
 
@@ -373,6 +378,24 @@ function classLabel(pilotClass: string): string {
   return pilotClass.charAt(0).toUpperCase() + pilotClass.slice(1);
 }
 
+/**
+ * Build the comp's waypoint database as the union of every task's turnpoints.
+ * A comp waypoint set is a database of named points that tasks pick from, so
+ * we key by the waypoint `code` and keep the first occurrence — the same
+ * point (e.g. a shared take-off cylinder) recurring across tasks collapses to
+ * one row rather than appearing once per task.
+ */
+function unionTaskWaypoints(tasks: SampleTask[]): WaypointFileRecord[] {
+  const byCode = new Map<string, WaypointFileRecord>();
+  for (const t of tasks) {
+    const records = xctaskTurnpointsToRecords(parseXCTask(t.xctsk).turnpoints);
+    for (const r of records) {
+      if (!byCode.has(r.code)) byCode.set(r.code, r);
+    }
+  }
+  return [...byCode.values()];
+}
+
 function loadManifest(): CompManifest {
   const path = join(COMPS_ROOT, SLUG, 'comp.json');
   return JSON.parse(readFileSync(path, 'utf-8')) as CompManifest;
@@ -430,7 +453,8 @@ async function seed(store: SeedStore, where: string): Promise<void> {
     .join(', ');
   console.log(`  ${registry.size} pilot registrations (${perClass})`);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date().toISOString();
+  const today = now.slice(0, 10);
   const classesJson = JSON.stringify(manifest.classes);
   const defaultClass = manifest.classes[0];
 
@@ -452,6 +476,7 @@ async function seed(store: SeedStore, where: string): Promise<void> {
       `DELETE FROM task_class WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
       `DELETE FROM task WHERE comp_id = ${compId};`,
       `DELETE FROM comp_pilot WHERE comp_id = ${compId};`,
+      `DELETE FROM comp_waypoints WHERE comp_id = ${compId};`,
       `DELETE FROM audit_log WHERE comp_id = ${compId};`,
       `UPDATE comp SET category=${q(category)}, test=0, scoring_format=${q(scoringFormat)},
          pilot_classes=${q(classesJson)},
@@ -466,6 +491,18 @@ async function seed(store: SeedStore, where: string): Promise<void> {
     compId = Number((await store.rows(`SELECT comp_id FROM comp WHERE name = ${q(compName)};`))[0].comp_id);
     console.log(`  created comp_id ${compId}`);
   }
+
+  // 1b) Comp waypoint database — the union of every task's turnpoints, so the
+  //     route editor can pick from the points the tasks already use. Not a
+  //     scoring input (tasks froze their own turnpoints), so no score bump.
+  //     The reseed wipe above cleared any stale row; upsert covers new comps.
+  const waypoints = unionTaskWaypoints(tasks);
+  await store.exec(
+    `INSERT INTO comp_waypoints (comp_id, waypoints, updated_at)
+     VALUES (${compId}, ${q(JSON.stringify(waypoints))}, ${q(now)})
+     ON CONFLICT(comp_id) DO UPDATE SET waypoints = excluded.waypoints, updated_at = excluded.updated_at;`,
+  );
+  console.log(`  seeded ${waypoints.length} competition waypoints (union of task turnpoints)`);
 
   // 2) comp_pilot rows (one per registration), then read back ids by our key.
   const registrations = [...registry.values()];
@@ -493,7 +530,6 @@ async function seed(store: SeedStore, where: string): Promise<void> {
   //    to R2 and insert its task_track row (linked to the class's comp_pilot).
   //    Open and floater "Task 1" share a date but are distinct rows, named by
   //    class so the app's task list disambiguates them.
-  const now = new Date().toISOString();
   let totalTracks = 0;
   const taskSummaries: string[] = [];
   for (const t of tasks) {
