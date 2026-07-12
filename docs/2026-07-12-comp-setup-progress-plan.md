@@ -1,6 +1,6 @@
 # Competition setup guide — progress bar for not-yet-set-up comps
 
-*2026-07-12. Status: proposal.*
+*2026-07-12. Status: Accepted.*
 
 ## 1. Problem
 
@@ -47,7 +47,7 @@ where you do it, so the guide doubles as navigation while it's visible.
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Set up your competition                        2 of 5 steps │
-│ ▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░                                 │
+│ ▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░                                │
 │ ✓ Create the competition                                    │
 │ ✓ Review settings                                           │
 │ ● Add waypoints            → opens /comp/:id/waypoints      │
@@ -62,7 +62,10 @@ it disappears on the next data refresh, with no persisted "done" bit to
 migrate or get stale. A "Hide guide" link (for organizers who deliberately
 skip a step, e.g. a comp run without shared waypoints) sets a
 per-comp `localStorage` key — client-only state for a client-only
-component, no API surface. Non-admins never see the guide.
+component, no API surface. Non-admins never see the guide. 
+
+Important: Some of the steps can be performed out of order - e.g. you can
+add pilots before waypoints or reviewing the settings.
 
 ### 2.2 Step completion signals
 
@@ -286,14 +289,12 @@ Each phase ships independently.
   where they are (`ClassWarnings`, task-list pills) — the guide tracks
   existence, not validity.
 
-## 9. Open questions
+## 9. Questions and answers
 
 1. Should the guide also appear on the `/comp/:id/waypoints` page (a
-   slimmer variant), so an organizer mid-flow keeps their bearings? Lean
-   no for v1 — the Waypoints page links back to the comp hub.
-2. Is "waypoints" genuinely required for every comp format (an
-   open-distance comp could define tasks without a shared waypoint file)?
-   If organizers routinely skip it, consider marking step 3 "optional" in
-   the label rather than adding skip state.
-3. Counts on nav links change the SSR'd public markup — confirm no SEO
-   snapshot/test depends on the exact link text.
+   slimmer variant), so an organizer mid-flow keeps their bearings?
+   - No.
+2. Is "waypoints" genuinely required for every comp format?
+   - Yes. Even the Open Distance format requires a single waypoint for the launch.
+3. Counts on nav links change the SSR'd public markup.
+   - Confirm no SEO snapshot/test depends on the exact link text.
