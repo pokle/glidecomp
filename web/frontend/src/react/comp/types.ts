@@ -62,6 +62,8 @@ export interface TaskSummary {
   missing_sss: boolean;
   /** GAP task defined without an ESS-typed turnpoint (speed section falls back to goal). */
   missing_ess: boolean;
+  /** GAP task with a LINE goal — not supported by scoring yet, scored as a cylinder (issue #330). */
+  line_goal: boolean;
 }
 
 export interface TaskDetailData {

@@ -329,6 +329,100 @@ describe('cylinder tolerance band (§8.1)', () => {
     expect(crossings.every(c => c.toleranceCredited)).toBe(true);
   });
 
+  it('a two-step entry through the band is not flagged tolerance-credited', () => {
+    // Entry TP, 400 m radius, 0.1% tolerance → 5 m floor → outer edge 405 m.
+    // The pilot crosses the outer edge and the nominal radius with two
+    // separate fix pairs: 410 → 402 (band entry) → 398 (nominal penetration).
+    // The crossing must anchor to the actual nominal-radius crossing, not be
+    // mislabelled a tolerance-credited near-miss.
+    const task = createTask([
+      { name: 'SSS', lat: 47.0, lon: 11.0, radius: 1000, type: 'SSS' },
+      { name: 'ESS', lat: 47.02, lon: 11.0, radius: 400, type: 'ESS' },
+    ]);
+    task.cylinderTolerance = 0.001;
+    const c = task.turnpoints[1].waypoint;
+    const p1 = destinationPoint(c.lat, c.lon, 410, 0);
+    const p2 = destinationPoint(c.lat, c.lon, 402, 0); // in band, outside nominal
+    const p3 = destinationPoint(c.lat, c.lon, 398, 0); // inside nominal
+    const fixes = [
+      createFix(0, p1.lat, p1.lon),
+      createFix(1, p2.lat, p2.lon),
+      createFix(2, p3.lat, p3.lon),
+    ];
+    const crossings = detectCylinderCrossings(task, fixes).filter(x => x.taskIndex === 1);
+    expect(crossings).toHaveLength(1);
+    const enter = crossings[0];
+    expect(enter.direction).toBe('enter');
+    expect(enter.toleranceCredited).toBe(false);
+    // Anchored to the 402 → 398 pair at the nominal radius, not the band edge
+    expect(enter.fixIndex).toBe(2);
+    expect(enter.distanceToCenter).toBeCloseTo(400, 0);
+    expect(enter.time.getTime()).toBeGreaterThan(fixes[1].time.getTime());
+    expect(enter.time.getTime()).toBeLessThan(fixes[2].time.getTime());
+  });
+
+  it('a two-step exit through the band is not flagged tolerance-credited', () => {
+    // Mirror case: the pilot leaves the nominal radius (398 → 402) one fix
+    // before leaving the outer band edge (402 → 410). The exit crossing must
+    // anchor to the earlier nominal-radius crossing.
+    const task = createTask([
+      { name: 'SSS', lat: 47.0, lon: 11.0, radius: 1000, type: 'SSS' },
+      { name: 'ESS', lat: 47.02, lon: 11.0, radius: 400, type: 'ESS' },
+    ]);
+    task.cylinderTolerance = 0.001;
+    const c = task.turnpoints[1].waypoint;
+    const p1 = destinationPoint(c.lat, c.lon, 410, 0);
+    const p2 = destinationPoint(c.lat, c.lon, 398, 0); // clean entry
+    const p3 = destinationPoint(c.lat, c.lon, 402, 0); // in band, outside nominal
+    const p4 = destinationPoint(c.lat, c.lon, 410, 0); // out of the band
+    const fixes = [
+      createFix(0, p1.lat, p1.lon),
+      createFix(1, p2.lat, p2.lon),
+      createFix(2, p3.lat, p3.lon),
+      createFix(3, p4.lat, p4.lon),
+    ];
+    const crossings = detectCylinderCrossings(task, fixes).filter(x => x.taskIndex === 1);
+    expect(crossings).toHaveLength(2);
+    const [enter, exit] = crossings;
+    expect(enter.direction).toBe('enter');
+    expect(enter.toleranceCredited).toBe(false);
+    expect(exit.direction).toBe('exit');
+    expect(exit.toleranceCredited).toBe(false);
+    // Anchored to the 398 → 402 pair at the nominal radius
+    expect(exit.fixIndex).toBe(2);
+    expect(exit.distanceToCenter).toBeCloseTo(400, 0);
+    expect(exit.time.getTime()).toBeGreaterThan(fixes[1].time.getTime());
+    expect(exit.time.getTime()).toBeLessThan(fixes[2].time.getTime());
+  });
+
+  it('a two-step EXIT-start departure is not flagged tolerance-credited', () => {
+    // EXIT start, 5000 m radius, 0.5% → inner detection edge 4975 m. The
+    // pilot crosses the inner edge (4970 → 4980) and the nominal radius
+    // (4980 → 5010) with separate fix pairs.
+    const task = createTask(
+      [
+        { name: 'SSS', lat: 47.0, lon: 11.0, radius: 5000, type: 'SSS' },
+        { name: 'ESS', lat: 47.1, lon: 11.0, radius: 400, type: 'ESS' },
+      ],
+      { direction: 'EXIT' },
+    );
+    const c = task.turnpoints[0].waypoint;
+    const p1 = destinationPoint(c.lat, c.lon, 4970, 0);
+    const p2 = destinationPoint(c.lat, c.lon, 4980, 0); // past inner edge, inside nominal
+    const p3 = destinationPoint(c.lat, c.lon, 5010, 0); // outside nominal
+    const fixes = [
+      createFix(0, p1.lat, p1.lon),
+      createFix(1, p2.lat, p2.lon),
+      createFix(2, p3.lat, p3.lon),
+    ];
+    const crossings = detectCylinderCrossings(task, fixes).filter(x => x.taskIndex === 0);
+    const exit = crossings.find(x => x.direction === 'exit');
+    expect(exit).toBeDefined();
+    expect(exit!.toleranceCredited).toBe(false);
+    expect(exit!.fixIndex).toBe(2);
+    expect(exit!.distanceToCenter).toBeCloseTo(5000, 0);
+  });
+
   it('does not credit a near-miss outside the 5 m band', () => {
     const task = createTask([
       { name: 'SSS', lat: 47.0, lon: 11.0, radius: 1000, type: 'SSS' },

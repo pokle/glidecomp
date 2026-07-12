@@ -78,7 +78,15 @@
 //     requires a 3+ char DB name — an empty or 1-2 char name matched almost
 //     any query and substituted the wrong radius/altitude into IGC-declared
 //     tasks.
-export const SCORING_ENGINE_VERSION = 10;
+// v11: two-step tolerance-band penetrations anchor to the nominal radius —
+//     when the fix pair that crosses the detection edge (outer band edge, or
+//     inner for an EXIT start) doesn't straddle the nominal radius, the
+//     crossing now anchors to the fix pair within the band episode that
+//     does, instead of clamping to the band-edge fix and mislabelling the
+//     crossing as tolerance-credited. Reaching times/positions shift by up
+//     to one fix interval; toleranceCredited is only set when the pilot
+//     genuinely never crossed the nominal radius.
+export const SCORING_ENGINE_VERSION = 11;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -86,4 +94,4 @@ export const SCORING_ENGINE_VERSION = 10;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "cbc00331ce3509acf1c8692acd12193e5f2c280162f12ce4d399041219df12b4";
+  "11bd78db943d7d4c1c7547c6ab1b6c8cc2454db574c22e8b6f2e23ad745a4826";

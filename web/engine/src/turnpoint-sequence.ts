@@ -83,7 +83,7 @@ export interface CylinderCrossing {
   /**
    * True when the crossing counts only because of the cylinder tolerance band
    * (FAI S7F §8.1): the track came within the tolerance of the cylinder edge
-   * but the two straddling fixes never physically crossed the nominal radius.
+   * but never physically crossed the nominal radius during this band episode.
    * Lets the UI explain a near-miss that was credited by tolerance.
    */
   toleranceCredited: boolean;
@@ -420,7 +420,23 @@ export function detectCylinderCrossings(
       return andoyerDistance(lat, lon, centerLat, centerLon) <= detectRadius;
     };
 
+    const distToCenter = (fix: IGCFix): number =>
+      andoyerDistance(fix.latitude, fix.longitude, centerLat, centerLon);
+
+    // Does the straight segment d0→d1 (distances to center) pass through the
+    // nominal radius in this crossing's radial direction? Entering means the
+    // distance falls through the radius; exiting means it rises through it.
+    const nominalRadius = tp.radius;
+    const crossesNominal = (d0: number, d1: number, direction: 'enter' | 'exit'): boolean =>
+      direction === 'enter'
+        ? d0 > nominalRadius && d1 <= nominalRadius
+        : d0 < nominalRadius && d1 >= nominalRadius;
+
     let prevInside = isInside(fixes[0].latitude, fixes[0].longitude);
+    // First fix index of the current same-side run of the detection-edge
+    // state machine. Bounds the backward scan below: fixes
+    // [lastFlipFixIdx .. fixIdx-1] are all on the prevInside side.
+    let lastFlipFixIdx = 0;
 
     for (let fixIdx = 1; fixIdx < fixes.length; fixIdx++) {
       const currInside = isInside(fixes[fixIdx].latitude, fixes[fixIdx].longitude);
@@ -431,28 +447,71 @@ export function detectCylinderCrossings(
         const direction: 'enter' | 'exit' = currInside ? 'enter' : 'exit';
 
         // Interpolate crossing point between the two fixes
-        const prevDist = andoyerDistance(
-          prevFix.latitude, prevFix.longitude, centerLat, centerLon
-        );
-        const currDist = andoyerDistance(
-          currFix.latitude, currFix.longitude, centerLat, centerLon
-        );
+        const prevDist = distToCenter(prevFix);
+        const currDist = distToCenter(currFix);
 
         // Interpolate to the nominal radius (without tolerance)
-        const nominalRadius = tp.radius;
         const tRaw = (prevDist - nominalRadius) / (prevDist - currDist);
-        const t = Math.max(0, Math.min(1, tRaw));
-        // When the nominal radius does not lie between the two fixes (tRaw
-        // clamped), the pair only reached the tolerance band, not the nominal
-        // cylinder — a tolerance-credited near-miss (§8.1).
-        const toleranceCredited = tRaw < 0 || tRaw > 1;
 
-        const crossingLat = prevFix.latitude + t * (currFix.latitude - prevFix.latitude);
-        const crossingLon = prevFix.longitude + t * (currFix.longitude - prevFix.longitude);
-        const crossingAlt = prevFix.gnssAltitude + t * (currFix.gnssAltitude - prevFix.gnssAltitude);
+        // The detection edge (outer band edge, or inner for an EXIT start)
+        // differs from the nominal radius, so the pair that crosses the
+        // detection edge doesn't necessarily straddle the nominal radius —
+        // the pilot may cross it a few fixes earlier or later while inside
+        // the tolerance band. Anchor the crossing to the fix pair that
+        // physically straddles the nominal radius:
+        //  - tRaw in [0,1]: this pair — the common single-step case.
+        //  - tRaw > 1: the nominal radius lies further along the flight
+        //    path; scan forward while the detection-edge state holds.
+        //  - tRaw < 0: it was crossed earlier in this band episode; scan
+        //    backward to the previous state flip.
+        // Only when no pair in the band episode straddles the nominal
+        // radius did the pilot merely reach the tolerance band — a
+        // tolerance-credited near-miss (§8.1) anchored at the clamped edge.
+        let anchorPrev = prevFix;
+        let anchorCurr = currFix;
+        let anchorFixIndex = fixIdx;
+        let t = Math.max(0, Math.min(1, tRaw));
+        let toleranceCredited = tRaw < 0 || tRaw > 1;
 
-        const prevTime = prevFix.time.getTime();
-        const currTime = currFix.time.getTime();
+        if (tRaw > 1) {
+          let d0 = currDist;
+          for (let j = fixIdx; j + 1 < fixes.length; j++) {
+            // Stop at the next detection-edge flip — that boundary belongs
+            // to the next crossing.
+            if ((d0 <= detectRadius) !== currInside) break;
+            const d1 = distToCenter(fixes[j + 1]);
+            if (crossesNominal(d0, d1, direction)) {
+              anchorPrev = fixes[j];
+              anchorCurr = fixes[j + 1];
+              anchorFixIndex = j + 1;
+              t = (d0 - nominalRadius) / (d0 - d1);
+              toleranceCredited = false;
+              break;
+            }
+            d0 = d1;
+          }
+        } else if (tRaw < 0) {
+          let d1 = prevDist;
+          for (let j = fixIdx - 1; j > lastFlipFixIdx; j--) {
+            const d0 = distToCenter(fixes[j - 1]);
+            if (crossesNominal(d0, d1, direction)) {
+              anchorPrev = fixes[j - 1];
+              anchorCurr = fixes[j];
+              anchorFixIndex = j;
+              t = (d0 - nominalRadius) / (d0 - d1);
+              toleranceCredited = false;
+              break;
+            }
+            d1 = d0;
+          }
+        }
+
+        const crossingLat = anchorPrev.latitude + t * (anchorCurr.latitude - anchorPrev.latitude);
+        const crossingLon = anchorPrev.longitude + t * (anchorCurr.longitude - anchorPrev.longitude);
+        const crossingAlt = anchorPrev.gnssAltitude + t * (anchorCurr.gnssAltitude - anchorPrev.gnssAltitude);
+
+        const prevTime = anchorPrev.time.getTime();
+        const currTime = anchorCurr.time.getTime();
         const crossingTime = new Date(prevTime + t * (currTime - prevTime));
 
         const distanceToCenter = andoyerDistance(
@@ -461,7 +520,7 @@ export function detectCylinderCrossings(
 
         crossings.push({
           taskIndex: tpIdx,
-          fixIndex: fixIdx,
+          fixIndex: anchorFixIndex,
           time: crossingTime,
           latitude: crossingLat,
           longitude: crossingLon,
@@ -470,6 +529,8 @@ export function detectCylinderCrossings(
           distanceToCenter,
           toleranceCredited,
         });
+
+        lastFlipFixIdx = fixIdx;
       }
 
       prevInside = currInside;
