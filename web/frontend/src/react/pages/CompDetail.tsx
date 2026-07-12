@@ -31,6 +31,7 @@ import { Breadcrumbs } from "../components/Breadcrumbs";
 import { SectionHeader } from "../components/SectionHeader";
 import { ActivitySection } from "../comp/ActivitySection";
 import { CompScoresSection } from "../comp/CompScoresSection";
+import { CompSetupProgress } from "../comp/CompSetupProgress";
 import { PilotsSection } from "../comp/PilotsSection";
 import { SettingsDialog } from "../comp/SettingsDialog";
 import { CheckboxField } from "../comp/fields";
@@ -213,17 +214,31 @@ function CompDetailView({
         ) : null}
       </div>
 
+      {/* Counts double as honest signage: "Tasks (0)" says don't bother
+          scrolling; on a populated comp they're at-a-glance facts. Scores and
+          Activity stay uncounted (no cheap or meaningful number). */}
       <nav
         aria-label="Sections"
         className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground"
       >
-        <a href="#tasks" className="hover:text-foreground hover:underline underline-offset-4">Tasks</a>
+        <a href="#tasks" className="hover:text-foreground hover:underline underline-offset-4">Tasks ({comp.tasks.length})</a>
         <a href="#scores" className="hover:text-foreground hover:underline underline-offset-4">Scores</a>
-        <a href="#pilots" className="hover:text-foreground hover:underline underline-offset-4">Pilots</a>
-        <Link to={`/comp/${compId}/waypoints`} className="hover:text-foreground hover:underline underline-offset-4">Waypoints</Link>
+        <a href="#pilots" className="hover:text-foreground hover:underline underline-offset-4">Pilots ({comp.pilot_count})</a>
+        <Link to={`/comp/${compId}/waypoints`} className="hover:text-foreground hover:underline underline-offset-4">Waypoints ({comp.waypoint_count})</Link>
         <a href="#activity" className="hover:text-foreground hover:underline underline-offset-4">Activity</a>
-        <a href="#admins" className="hover:text-foreground hover:underline underline-offset-4">Admins</a>
+        <a href="#admins" className="hover:text-foreground hover:underline underline-offset-4">Admins ({comp.admins.length})</a>
       </nav>
+
+      {/* Admin-only, so absent from SSR markup and the first client paint —
+          it pops in after auth resolves, like the Settings button. */}
+      {isAdmin ? (
+        <CompSetupProgress
+          compId={compId}
+          comp={comp}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onCreateTask={() => setCreateOpen(true)}
+        />
+      ) : null}
 
       <ClassWarnings warnings={comp.class_coverage_warnings} tasks={comp.tasks} />
 
@@ -260,6 +275,8 @@ function CompDetailView({
           compId={compId}
           canSubmitTrack={canSubmitTrack}
           canUploadOnBehalf={canUploadOnBehalf}
+          isAdmin={isAdmin}
+          onCreateTask={() => setCreateOpen(true)}
         />
       </section>
 
@@ -270,6 +287,7 @@ function CompDetailView({
         defaultTaskId={hero?.tasks.find((t) => t.has_xctsk)?.task_id ?? null}
         initialScores={initialScores}
         initialScoresEtag={initialScoresEtag}
+        isAdmin={isAdmin}
       />
 
       <div id="pilots" className="scroll-mt-4 break-before-page">
@@ -278,6 +296,7 @@ function CompDetailView({
           compName={comp.name}
           compClasses={comp.pilot_classes}
           isAdmin={isAdmin}
+          onPilotsChanged={() => setRefresh((n) => n + 1)}
         />
       </div>
 
@@ -509,14 +528,35 @@ function TasksList({
   compId,
   canSubmitTrack,
   canUploadOnBehalf,
+  isAdmin,
+  onCreateTask,
 }: {
   tasks: TaskSummary[];
   compId: string;
   canSubmitTrack: boolean;
   canUploadOnBehalf: boolean;
+  isAdmin: boolean;
+  onCreateTask: () => void;
 }) {
   if (tasks.length === 0) {
-    return <p className="text-muted-foreground">No tasks yet</p>;
+    // Role-aware empty state: visitors get an explanation, admins also get
+    // the section's CTA in the body (not just the header corner).
+    return (
+      <div className="mt-2 text-muted-foreground">
+        <p>The organizers haven't published any tasks yet.</p>
+        {isAdmin ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            onClick={onCreateTask}
+          >
+            New Task
+          </Button>
+        ) : null}
+      </div>
+    );
   }
 
   // Group tasks by date (insertion order preserved, as in the vanilla page)

@@ -45,6 +45,11 @@ export interface CompDetailData {
   tasks: TaskSummary[];
   admins: Array<{ email: string; name: string }>;
   pilot_count: number;
+  /** Size of the comp's shared waypoint set (0 when none uploaded yet). */
+  waypoint_count: number;
+  /** True once an admin has saved the comp's settings at least once
+   * (setup-guide signal; existing comps are grandfathered as reviewed). */
+  settings_reviewed: boolean;
   class_coverage_warnings: Array<{
     date: string;
     missing_classes?: string[];

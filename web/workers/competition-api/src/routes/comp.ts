@@ -320,7 +320,7 @@ export const compRoutes = new Hono<HonoEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, timezone, open_igc_upload
+        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, timezone, open_igc_upload, settings_reviewed
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -392,6 +392,14 @@ export const compRoutes = new Hono<HonoEnv>()
         .bind(compId)
         .first<{ cnt: number }>();
 
+      // Waypoint count (setup-guide signal + nav count) — the set is one JSON
+      // array per comp, so its length is the count. Absent row → 0.
+      const waypointCount = await c.env.DB.prepare(
+        "SELECT json_array_length(waypoints) AS n FROM comp_waypoints WHERE comp_id = ?"
+      )
+        .bind(compId)
+        .first<{ n: number }>();
+
       // Compute class coverage warnings
       const pilotClasses = JSON.parse(comp.pilot_classes as string) as string[];
       const classCoverageWarnings = computeClassCoverageWarnings(
@@ -433,6 +441,8 @@ export const compRoutes = new Hono<HonoEnv>()
           };
         }),
         pilot_count: pilotCount?.cnt ?? 0,
+        waypoint_count: waypointCount?.n ?? 0,
+        settings_reviewed: !!(comp.settings_reviewed as number),
         class_coverage_warnings: classCoverageWarnings,
       });
     }
@@ -505,8 +515,11 @@ export const compRoutes = new Hono<HonoEnv>()
         }
       }
 
-      // Build dynamic UPDATE
-      const updates: string[] = [];
+      // Build dynamic UPDATE. Any successful settings save counts as
+      // "settings reviewed" for the setup guide — including a Save that keeps
+      // every default — so the flag is set unconditionally. Presentational
+      // only: no audit entry, no score bump.
+      const updates: string[] = ["settings_reviewed = 1"];
       const values: unknown[] = [];
 
       if (body.name !== undefined) {
