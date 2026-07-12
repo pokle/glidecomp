@@ -119,11 +119,14 @@ For each accepted thermal, the algorithm computes:
 | `duration` | Time from start to end fix (seconds) |
 | `location` | Centroid: mean lat/lon of all fixes in the segment |
 
-The `thermal_entry` and `thermal_exit` events are positioned at the segment's
-boundary fixes (like glide events), not at the centroid — a drifting thermal
-would otherwise displace the markers hundreds of metres from where the pilot
-actually entered or left the climb. The centroid remains available as
-`ThermalSegment.location` for consumers that want the thermal's mean position.
+**Intentional:** both the `thermal_entry` and `thermal_exit` events carry the
+centroid as their coordinates, so markers point at the thermal itself rather
+than at the fixes where climb detection happened to trigger. This differs from
+glide events, which sit on their boundary fixes. Consequences to be aware of:
+a drifting thermal's centroid can sit hundreds of metres from the actual entry
+or exit fix, and `extractClimbs` yields `startLat/startLon === endLat/endLon`
+for every climb. The boundary fixes remain reachable via
+`segment.startIndex`/`endIndex`.
 
 ## Downstream: Glide Detection
 
