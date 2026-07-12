@@ -49,7 +49,12 @@
 //     TP): a finisher who tagged the nested TP from inside and never exited
 //     was scored landed-out, and an exit/re-entry after the nested TP was
 //     credited late, inflating the speed-section time.
-export const SCORING_ENGINE_VERSION = 7;
+// v8: post-2015 HFDTEDATE long-form header parsing — the modern
+//     `HFDTEDATE:150124,01` date header is now recognized. Previously it
+//     failed both date regexes, leaving header.date undefined so every fix
+//     was stamped with the parse-day's date (non-deterministic), corrupting
+//     start gates, task-date checks, and timezone display for such files.
+export const SCORING_ENGINE_VERSION = 8;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -57,4 +62,4 @@ export const SCORING_ENGINE_VERSION = 7;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "932d667209d4bc7f748e76730c510e5c9be73541786186693a91f19bece2f294";
+  "94bef4e997b09bdadf3dac0aff3a0879be125e8490ce18692194f77252270380";
