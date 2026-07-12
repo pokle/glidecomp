@@ -41,7 +41,15 @@
 //     decoded standalone (no delta accumulation). Tasks imported from compact
 //     QR payloads without explicit lat/lon fields previously had their
 //     coordinates transposed.
-export const SCORING_ENGINE_VERSION = 6;
+// v7: presence-based turnpoint reaching (S7F §8 / FS semantics) — a pilot who
+//     is already inside a cylinder when the previous turnpoint is reached is
+//     credited at that same moment ('already_inside'), instead of requiring a
+//     boundary crossing at or after it. Fixes a turnpoint nested inside a
+//     larger following cylinder (e.g. a big ESS/goal ring around the final
+//     TP): a finisher who tagged the nested TP from inside and never exited
+//     was scored landed-out, and an exit/re-entry after the nested TP was
+//     credited late, inflating the speed-section time.
+export const SCORING_ENGINE_VERSION = 7;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -49,4 +57,4 @@ export const SCORING_ENGINE_VERSION = 6;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "3d53539090457836a980401b87a513c4c62fb4e190e11f7de403c012b17db794";
+  "932d667209d4bc7f748e76730c510e5c9be73541786186693a91f19bece2f294";

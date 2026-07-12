@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 933 449" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13">
+<rect width="933" height="449" rx="8" fill="#f8fafc" stroke="#d0d7de"/>
+<text x="24" y="30" font-size="16" font-weight="600" fill="#1f2328">No over-credit — a goal cylinder visited BEFORE the turnpoint stays uncounted</text>
+<text x="24" y="50" fill="#57606a">The pilot clips the goal cylinder on the way out (enter t₁, exit t₂), then tags TP1 from outside</text>
+<text x="24" y="67" fill="#57606a">it and lands without returning. The last crossing before t₃ is an EXIT → outside → no credit.</text>
+<g transform="translate(875.259047619056, 30)" stroke="#57606a" fill="#57606a"><line x1="0" y1="0" x2="26" y2="0" stroke-width="1.5"/><path d="M 26 0 l -7 -4 l 0 8 z" stroke="none"/><text x="32" y="4" stroke="none" font-size="12">N</text></g>
+<circle cx="103.5" cy="205.0" r="47.6" fill="#8b949e" fill-opacity="0.10" stroke="#8b949e" stroke-width="2" stroke-dasharray="6 5"/>
+<circle cx="103.5" cy="205.0" r="2.5" fill="#8b949e"/>
+<text x="103.5" y="149.4" text-anchor="middle" font-weight="600" fill="#8b949e">START (exit, 1 km)</text>
+<circle cx="633.6" cy="205.0" r="19.0" fill="#316dca" fill-opacity="0.10" stroke="#316dca" stroke-width="2"/>
+<circle cx="633.6" cy="205.0" r="2.5" fill="#316dca"/>
+<text x="633.6" y="239.0" text-anchor="middle" font-weight="600" fill="#316dca"></text>
+<circle cx="686.6" cy="205.0" r="47.6" fill="#d4761a" fill-opacity="0.10" stroke="#d4761a" stroke-width="2"/>
+<circle cx="686.6" cy="205.0" r="2.5" fill="#d4761a"/>
+<text x="744.6" y="143.0" text-anchor="start" font-weight="600" fill="#d4761a">ESS / GOAL (1 km)</text>
+<path d="M 103.5 168.9 L 368.6 168.9 L 580.6 168.9 L 686.6 168.9 L 792.6 168.9 L 792.6 277.2 L 633.6 277.2 L 633.6 205.0 L 580.6 205.0" fill="none" stroke="#1f2328" stroke-width="2.25" stroke-linejoin="round"/>
+<path d="M -6 -4.5 L 6 0 L -6 4.5 z" fill="#1f2328" transform="translate(236.0, 168.9) rotate(0.0)"/>
+<path d="M -6 -4.5 L 6 0 L -6 4.5 z" fill="#1f2328" transform="translate(474.6, 168.9) rotate(0.0)"/>
+<path d="M -6 -4.5 L 6 0 L -6 4.5 z" fill="#1f2328" transform="translate(633.6, 168.9) rotate(0.0)"/>
+<path d="M -6 -4.5 L 6 0 L -6 4.5 z" fill="#1f2328" transform="translate(739.6, 168.9) rotate(0.0)"/>
+<path d="M -6 -4.5 L 6 0 L -6 4.5 z" fill="#1f2328" transform="translate(792.6, 223.1) rotate(90.0)"/>
+<path d="M -6 -4.5 L 6 0 L -6 4.5 z" fill="#1f2328" transform="translate(713.1, 277.2) rotate(180.0)"/>
+<path d="M -6 -4.5 L 6 0 L -6 4.5 z" fill="#1f2328" transform="translate(633.6, 241.1) rotate(-90.0)"/>
+<path d="M -6 -4.5 L 6 0 L -6 4.5 z" fill="#1f2328" transform="translate(607.1, 205.0) rotate(180.0)"/>
+<circle cx="103.5" cy="168.9" r="3" fill="#57606a"/>
+<circle cx="368.6" cy="168.9" r="3" fill="#57606a"/>
+<circle cx="580.6" cy="168.9" r="3" fill="#57606a"/>
+<circle cx="686.6" cy="168.9" r="3" fill="#57606a"/>
+<circle cx="792.6" cy="168.9" r="3" fill="#57606a"/>
+<circle cx="792.6" cy="277.2" r="3" fill="#57606a"/>
+<circle cx="633.6" cy="277.2" r="3" fill="#57606a"/>
+<circle cx="633.6" cy="205.0" r="3" fill="#57606a"/>
+<circle cx="580.6" cy="205.0" r="3" fill="#57606a"/>
+<g transform="translate(580.6, 205.0)"><circle r="6.5" fill="none" stroke="#1f2328" stroke-width="2"/><circle r="2" fill="#1f2328"/></g>
+<g transform="translate(655.6, 168.9)"><circle r="7" fill="none" stroke="#d4761a" stroke-width="2.5"/><circle r="2" fill="#d4761a"/></g>
+<text x="641.6" y="152.9" text-anchor="end" font-weight="600" fill="#d4761a">t₁ enter</text>
+<g transform="translate(717.7, 168.9)"><circle r="7" fill="none" stroke="#d4761a" stroke-width="2.5"/><circle r="2" fill="#d4761a"/></g>
+<text x="729.7" y="196.9" text-anchor="start" font-weight="600" fill="#d4761a">t₂ exit</text>
+<g transform="translate(633.6, 224.0)"><circle r="7" fill="none" stroke="#316dca" stroke-width="2.5"/><circle r="2" fill="#316dca"/></g>
+<text x="573.6" y="270.0" text-anchor="middle" font-weight="600" fill="#316dca">t₃ tags TP1 — outside goal</text>
+<rect x="24.0" y="340.8" width="885.3" height="78" rx="6" fill="#1a7f37" fill-opacity="0.08" stroke="#1a7f37"/>
+<text x="36.0" y="362.8" font-weight="600" fill="#1a7f37">Before AND after the fix ✓</text>
+<text x="36.0" y="382.8" fill="#1f2328">Presence is checked AT the previous reaching (t₃): the last goal crossing before t₃ is the exit at t₂,</text>
+<text x="36.0" y="399.8" fill="#1f2328">so the pilot is outside — and no crossing follows t₃. Correctly scored landed out; earlier visits never count.</text>
+</svg>

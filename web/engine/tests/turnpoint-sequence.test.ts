@@ -1356,6 +1356,126 @@ describe('resolveTurnpointSequence', () => {
       expect(result.speedSectionTime).not.toBeNull(); // whole course is the speed section
     });
   });
+
+  describe('turnpoint nested inside a larger following cylinder (code-review 2026-07-12 §1.1)', () => {
+    // Reaching is presence-based per GAP/FS: any fix inside a cylinder
+    // at/after the previous turnpoint's reaching counts. When the previous
+    // turnpoint's cylinder lies inside a larger following cylinder (here a
+    // big ESS/goal ring around a small final TP), the pilot's only crossing
+    // of the big cylinder happens BEFORE they tag the nested TP inside it —
+    // the big cylinder must be credited at the nested TP's reaching moment,
+    // not denied for lack of a later crossing.
+
+    // Task: START → small TP1 → 3 km ESS/goal cylinder that fully contains
+    // TP1's cylinder (centres ~1112 m apart; 1112 + 400 < 3000).
+    const nestedGoalTask = () => createTask([
+      { name: 'START', lat: 47.0, lon: 11.0, radius: 1000, type: 'SSS' },
+      { name: 'TP1', lat: 47.1, lon: 11.0, radius: 400 },
+      { name: 'GOAL', lat: 47.11, lon: 11.0, radius: 3000, type: 'ESS' },
+    ]);
+
+    // Straight line north along lon 11.0, one fix per minute.
+    const inboundFixes = () => [
+      createFix(0, 47.0, 11.0), //   launch, inside the EXIT start
+      createFix(1, 47.02, 11.0), //  start exited (boundary at ~1000 m)
+      createFix(2, 47.05, 11.0),
+      createFix(3, 47.075, 11.0), // still outside goal cylinder (~3891 m out)
+      createFix(4, 47.09, 11.0), //  entered goal cylinder (~2223 m), outside TP1 (~1112 m)
+      createFix(5, 47.1, 11.0), //   TP1 centre — TP1 tagged INSIDE the goal cylinder
+      createFix(6, 47.107, 11.0), // left TP1 (~778 m), still inside goal (~334 m)
+      createFix(7, 47.11, 11.0), //  goal centre
+    ];
+
+    it('credits ESS/goal tagged from inside after a TP nested within it', () => {
+      const track = [
+        ...inboundFixes(),
+        createFix(8, 47.11, 11.0), // lands in goal — never exits the goal cylinder
+      ];
+
+      const result = resolveTurnpointSequence(nestedGoalTask(), track);
+
+      // The nested TP is credited...
+      expect(result.sequence.map(r => r.taskIndex)).toEqual([0, 1, 2]);
+      // ...and the pilot reached goal without leaving its cylinder, so
+      // ESS/goal is credited at the moment TP1 was tagged (presence rule).
+      expect(result.essReaching).not.toBeNull();
+      expect(result.essReaching!.selectionReason).toBe('already_inside');
+      expect(result.essReaching!.time.getTime()).toBe(result.sequence[1].time.getTime());
+      expect(result.madeGoal).toBe(true);
+      expect(result.flownDistance).toBe(result.taskDistance);
+      expect(result.speedSectionTime).not.toBeNull();
+    });
+
+    it('an exit and re-entry after the nested TP does not delay the reaching', () => {
+      const track = [
+        ...inboundFixes(),
+        createFix(8, 47.15, 11.0), // exits the goal cylinder to the north (~4448 m)
+        createFix(9, 47.11, 11.0), // re-enters and lands at goal centre
+      ];
+
+      const result = resolveTurnpointSequence(nestedGoalTask(), track);
+
+      // Presence at the TP1 reaching wins over the later re-entry crossing:
+      // the pilot was inside the goal cylinder when TP1 was tagged.
+      expect(result.madeGoal).toBe(true);
+      expect(result.essReaching!.selectionReason).toBe('already_inside');
+      expect(result.essReaching!.time.getTime()).toBe(result.sequence[1].time.getTime());
+    });
+
+    it('credits a goal cylinder so large the whole flight stays inside it', () => {
+      // 20 km goal cylinder centred between launch and TP1: the track never
+      // crosses its boundary at all, so presence falls back to where the
+      // track began.
+      const task = createTask([
+        { name: 'START', lat: 47.0, lon: 11.0, radius: 1000, type: 'SSS' },
+        { name: 'TP1', lat: 47.1, lon: 11.0, radius: 400 },
+        { name: 'GOAL', lat: 47.05, lon: 11.0, radius: 20000, type: 'ESS' },
+      ]);
+      const track = [
+        createFix(0, 47.0, 11.0),
+        createFix(1, 47.02, 11.0),
+        createFix(2, 47.05, 11.0),
+        createFix(3, 47.09, 11.0),
+        createFix(4, 47.1, 11.0), // TP1 centre; lands here
+      ];
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.crossings.filter(c => c.taskIndex === 2)).toHaveLength(0);
+      expect(result.madeGoal).toBe(true);
+      expect(result.essReaching!.selectionReason).toBe('already_inside');
+      expect(result.essReaching!.time.getTime()).toBe(result.sequence[1].time.getTime());
+    });
+
+    it('does not credit a goal cylinder the pilot had already left (no over-credit)', () => {
+      // Goal only partially overlaps TP1 and the pilot clips it BEFORE
+      // tagging TP1, then tags TP1 outside it and lands without returning:
+      // the pre-TP1 visit must not count — still a land-out.
+      const task = createTask([
+        { name: 'START', lat: 47.0, lon: 11.0, radius: 1000, type: 'SSS' },
+        { name: 'TP1', lat: 47.1, lon: 11.0, radius: 400 },
+        { name: 'GOAL', lat: 47.11, lon: 11.0, radius: 1000, type: 'ESS' },
+      ]);
+      const track = [
+        createFix(0, 47.0, 11.01), //  launch inside the EXIT start (~757 m)
+        createFix(1, 47.05, 11.01), // start exited
+        createFix(2, 47.09, 11.01), // outside goal (~2349 m)
+        createFix(3, 47.11, 11.01), // inside goal (~757 m) — clipped before TP1
+        createFix(4, 47.13, 11.01), // outside goal again (~2349 m)
+        createFix(5, 47.13, 10.98), // detour west, clear of the goal cylinder
+        createFix(6, 47.1, 10.98), //  west of TP1 (~1513 m), outside goal
+        createFix(7, 47.1, 11.0), //   TP1 centre — outside goal (~1112 m)
+        createFix(8, 47.09, 11.0), //  lands south, never re-enters goal
+      ];
+
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.sequence.map(r => r.taskIndex)).toEqual([0, 1]);
+      expect(result.lastTurnpointReached).toBe(1);
+      expect(result.essReaching).toBeNull();
+      expect(result.madeGoal).toBe(false);
+    });
+  });
 });
 
 describe('reviveTurnpointSequenceResult', () => {
