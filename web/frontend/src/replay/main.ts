@@ -278,23 +278,79 @@ async function main(): Promise<void> {
 
   // --- playback controls ---
   $('playPause').addEventListener('click', () => viewer.togglePlay());
-  $<HTMLSelectElement>('speed').addEventListener('change', (e) => {
-    viewer.setSpeed(Number((e.target as HTMLSelectElement).value));
-  });
-  // Space toggles play/pause — unless a form control has focus (space there
-  // means "activate that control", e.g. re-clicking a focused button).
+  const speedSel = $<HTMLSelectElement>('speed');
+  speedSel.addEventListener('change', () => viewer.setSpeed(Number(speedSel.value)));
+
+  // --- keyboard shortcuts (documented in the ⌨ popover) ---
+  const ARROW_STEP_S = 30; // track seconds per ←/→ press; ⇧ makes it ×10 (5 min)
+
+  /** Move the playback-speed <select> one step and apply it (↓ slower, ↑ faster). */
+  function stepSpeed(dir: 1 | -1): void {
+    const next = speedSel.selectedIndex + dir;
+    if (next < 0 || next >= speedSel.options.length) return;
+    speedSel.selectedIndex = next;
+    viewer.setSpeed(Number(speedSel.value));
+  }
+
   document.addEventListener('keydown', (e) => {
-    if (e.code !== 'Space') return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return; // browser/system chords stay theirs
     const t = e.target as HTMLElement;
+    // Inputs/selects own their keys (arrows move sliders and selects); on a
+    // focused button only Space is theirs (it re-clicks the button).
     if (
       t instanceof HTMLInputElement ||
       t instanceof HTMLSelectElement ||
       t instanceof HTMLTextAreaElement ||
-      t instanceof HTMLButtonElement
+      (e.key === ' ' && t instanceof HTMLButtonElement)
     )
       return;
-    e.preventDefault(); // don't scroll the page
-    viewer.togglePlay();
+    switch (e.key) {
+      case ' ':
+        e.preventDefault(); // don't scroll the page
+        viewer.togglePlay();
+        break;
+      case 'ArrowLeft':
+      case 'ArrowRight': {
+        e.preventDefault();
+        const dir = e.key === 'ArrowRight' ? 1 : -1;
+        // setTime clamps to [0, duration]
+        viewer.setTime(viewer.currentTime + dir * ARROW_STEP_S * (e.shiftKey ? 10 : 1));
+        break;
+      }
+      case 'ArrowUp':
+      case 'ArrowDown':
+        e.preventDefault();
+        stepSpeed(e.key === 'ArrowUp' ? 1 : -1);
+        break;
+      case 'Home':
+        e.preventDefault();
+        viewer.setTime(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        viewer.setTime(duration);
+        break;
+    }
+  });
+
+  // ⌨ button toggles the shortcuts popover; Esc and click-outside close it.
+  const kbdToggle = $('kbdToggle');
+  const kbdPanel = $('kbdPanel');
+  const setKbdOpen = (open: boolean): void => {
+    kbdPanel.classList.toggle('hidden', !open);
+    kbdToggle.setAttribute('aria-expanded', String(open));
+  };
+  kbdToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setKbdOpen(kbdPanel.classList.contains('hidden'));
+  });
+  document.addEventListener('click', (e) => {
+    if (!kbdPanel.classList.contains('hidden') && !kbdPanel.contains(e.target as Node)) {
+      setKbdOpen(false);
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') setKbdOpen(false);
   });
 
   // --- view controls ---
@@ -500,11 +556,15 @@ async function main(): Promise<void> {
   /**
    * Canvas click: on a cone, follow that pilot (click the followed one again
    * to stop); away from every cone, toggle play/pause — unless the click is
-   * dismissing the open control drawer, which shouldn't also start playback.
+   * dismissing the open control drawer or shortcuts popover, which shouldn't
+   * also start playback.
    */
   function onPickPilot(i: number): void {
     if (i < 0) {
-      if (!$('menuPanel').classList.contains('open')) viewer.togglePlay();
+      const panelOpen =
+        $('menuPanel').classList.contains('open') ||
+        !$('kbdPanel').classList.contains('hidden');
+      if (!panelOpen) viewer.togglePlay();
       return;
     }
     if (i === followIdx) clearFollow();

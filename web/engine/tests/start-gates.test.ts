@@ -18,7 +18,7 @@ import {
   reviveTurnpointSequenceResult,
   type TurnpointSequenceResultJSON,
 } from '../src/turnpoint-sequence';
-import { scoreFlights, type FlightScoringData } from '../src/gap-scoring';
+import { scoreTask, scoreFlights, type FlightScoringData, type PilotFlight } from '../src/gap-scoring';
 import { getOptimizedSegmentDistances } from '../src/task-optimizer';
 import { destinationPoint, calculateBearingRadians } from '../src/geo';
 import type { XCTask, SSSConfig } from '../src/xctsk-parser';
@@ -357,5 +357,68 @@ describe('early-start scoring (§12.2)', () => {
     expect(a.jumpTheGunPenalty).toBe(25); // 100 ÷ 4
     expect(b.earlyStartOutcome).toBe('hg_penalty'); // 500 < Y=600
     expect(b.jumpTheGunPenalty).toBe(125);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Jump-the-gun starters and the leading coefficient (§11.3.1 + §12.2)
+// ---------------------------------------------------------------------------
+
+describe('early starter leading coefficient (§11.3.1)', () => {
+  /**
+   * An HG pilot who jumps the gun at ~10:20 and covers most of the speed
+   * section BEFORE the 10:30 gate, then trickles into the ESS after it.
+   * Progress fixes every minute make the pre-gate progress visible to the
+   * leading-coefficient scan.
+   */
+  function earlyLeaderFlight(): IGCFix[] {
+    const bearingN = calculateBearingRadians(
+      SSS_CENTER.lat, SSS_CENTER.lon, ESS_CENTER.lat, ESS_CENTER.lon,
+    );
+    const fixes: IGCFix[] = [createFix(0, SSS_CENTER.lat, SSS_CENTER.lon)];
+    const inside = destinationPoint(SSS_CENTER.lat, SSS_CENTER.lon, SSS_RADIUS - 200, bearingN);
+    fixes.push(createFix(19 * 60, inside.lat, inside.lon));
+    // Exit ~10:20, run from 2.2 km to 8.5 km out before the 10:30 gate…
+    for (let min = 20; min <= 29; min++) {
+      const p = destinationPoint(
+        SSS_CENTER.lat, SSS_CENTER.lon, SSS_RADIUS + 200 + (min - 20) * 700, bearingN,
+      );
+      fixes.push(createFix(min * 60, p.lat, p.lon));
+    }
+    // …then dawdle across the ESS boundary (9 km out) after the gate.
+    for (let min = 31; min <= 40; min++) {
+      const p = destinationPoint(
+        SSS_CENTER.lat, SSS_CENTER.lon, 8500 + (min - 30) * 70, bearingN,
+      );
+      fixes.push(createFix(min * 60, p.lat, p.lon));
+    }
+    return fixes;
+  }
+
+  it('one jump-the-gun starter cannot zero the whole field\'s leading points', () => {
+    const pilots: PilotFlight[] = [
+      { pilotName: 'Early', trackFile: 'early.igc', fixes: earlyLeaderFlight() },
+      { pilotName: 'Honest', trackFile: 'honest.igc', fixes: flightExitingAt(40) },
+    ];
+    const result = scoreTask(gatedTask(), pilots, {
+      scoring: 'HG', useLeading: true, useDistanceDifficulty: false,
+      nominalDistance: 8000, minimumDistance: 1000, nominalTime: 600,
+      // Keep the ~10-min-early start inside the §12.2 limit so the complete
+      // flight (and its leading aggregate) stays scored.
+      jumpTheGunMaxSeconds: 900,
+    });
+
+    const early = result.pilotScores.find(p => p.trackFile === 'early.igc')!;
+    const honest = result.pilotScores.find(p => p.trackFile === 'honest.igc')!;
+    expect(early.earlyStartOutcome).toBe('hg_penalty');
+    expect(result.availablePoints.leading).toBeGreaterThan(0);
+
+    // Pre-gate progress is clamped to the gate: it must never contribute
+    // negative time, which previously drove the early starter's LC ≤ 0 and
+    // — via the minLC ≤ 0 guard — deleted leading points for EVERY pilot.
+    expect(early.leadingCoefficient).toBeGreaterThan(0);
+    expect(honest.leadingCoefficient).toBeGreaterThan(0);
+    const bestLeading = Math.max(...result.pilotScores.map(p => p.leadingPoints));
+    expect(bestLeading).toBeGreaterThan(0);
   });
 });

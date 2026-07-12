@@ -5,9 +5,9 @@
  * route editor dialog (comp/RouteEditorDialog) covering turnpoints, start
  * gates, goal, and .xctsk / XContest import-export (#270).
  */
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import type { XCTask } from "@glidecomp/engine";
+import { xctaskTurnpointsToRecords, type XCTask } from "@glidecomp/engine";
 import { Button } from "@/react/ui/button";
 import {
   Dialog,
@@ -34,7 +34,7 @@ import { useAdminView, useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { SectionHeader } from "../components/SectionHeader";
-import { downloadXctskFile } from "../comp/download-xctsk";
+import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { CheckboxField } from "../comp/fields";
 import { TaskStandings } from "../comp/TaskStandings";
 import { RouteEditorDialog } from "../comp/RouteEditorDialog";
@@ -199,15 +199,12 @@ export function TaskDetail() {
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {task.xctsk ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            title="Download the task file for your flight instrument"
-            onClick={() => downloadXctskFile(task.name, task.xctsk!)}
-          >
-            Download .xctsk
-          </Button>
+          <TaskExportButtons
+            compId={compId}
+            taskId={taskId}
+            taskName={task.name}
+            records={xctaskTurnpointsToRecords(task.xctsk.turnpoints)}
+          />
         ) : null}
         {task.xctsk ? (
           <Button nativeButton={false}

@@ -453,6 +453,16 @@ describe('calculateLeadingPoints', () => {
     // The previous (buggy) /sqrt(minLC) form gave a negative LF → 0 here.
     expect(calculateLeadingPoints(10, 8, 1000)).toBeCloseTo(206.3, 0);
   });
+
+  it('signals "no valid LC in the field" via a non-finite minLC, not minLC ≤ 0', () => {
+    // No valid LC anywhere: every pilot carries Infinity → nobody scores.
+    expect(calculateLeadingPoints(Infinity, Infinity, 200)).toBe(0);
+    // Degenerate minLC ≤ 0: the √LCmin normalization is undefined, so the
+    // pilot(s) holding the minimum still take full points and everyone else
+    // takes none — the whole field must NOT be zeroed.
+    expect(calculateLeadingPoints(0, 0, 200)).toBe(200);
+    expect(calculateLeadingPoints(5, 0, 200)).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

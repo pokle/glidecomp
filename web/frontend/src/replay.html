@@ -45,6 +45,14 @@
     #scrubber::-webkit-slider-runnable-track { height: 6px; }
     #scrubber::-webkit-slider-thumb { margin-top: -5px; }
     .panel { background: rgba(15, 23, 42, 0.82); backdrop-filter: blur(8px); border: 1px solid rgba(148, 163, 184, 0.18); }
+    /* key caps in the shortcuts popover */
+    kbd {
+      display: inline-grid; place-items: center; min-width: 1.4rem; height: 1.25rem;
+      padding: 0 0.3rem; border-radius: 0.25rem; font: 600 10px/1 ui-monospace, monospace;
+      background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.4);
+      border-bottom-width: 2px;
+    }
+    html.light kbd { background: rgba(15, 23, 42, 0.06); border-color: rgba(15, 23, 42, 0.3); }
 
     /* Light theme — this page is standalone, so rather than duplicating a
        light class next to every dark slate utility in the markup, remap the
@@ -397,6 +405,37 @@
 
     <!-- bottom: timeline -->
     <div class="absolute inset-x-3 bottom-3 z-20 rounded-lg panel px-4 py-3 shadow-xl">
+      <!-- keyboard shortcuts popover (toggled by the ⌨ button; main.ts wires it) -->
+      <div id="kbdPanel" aria-label="Keyboard shortcuts"
+        class="absolute bottom-full right-0 mb-2 hidden w-72 rounded-lg panel px-4 py-3 text-xs shadow-xl">
+        <div class="mb-2 text-[11px] uppercase tracking-wide text-lime-400 font-semibold">Keyboard shortcuts</div>
+        <dl class="space-y-1.5 text-slate-300">
+          <div class="flex items-center justify-between gap-4">
+            <dt>Play / pause</dt>
+            <dd class="shrink-0"><kbd>Space</kbd></dd>
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <dt>Step back / forward 30 s</dt>
+            <dd class="shrink-0"><kbd>←</kbd> <kbd>→</kbd></dd>
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <dt>Step 5 min</dt>
+            <dd class="shrink-0"><kbd>⇧</kbd> + <kbd>←</kbd> <kbd>→</kbd></dd>
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <dt>Jump to start / end</dt>
+            <dd class="shrink-0"><kbd>Home</kbd> <kbd>End</kbd></dd>
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <dt>Playback slower / faster</dt>
+            <dd class="shrink-0"><kbd>↓</kbd> <kbd>↑</kbd></dd>
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <dt>Close panels</dt>
+            <dd class="shrink-0"><kbd>Esc</kbd></dd>
+          </div>
+        </dl>
+      </div>
       <!-- gaggle ribbon, inset to line up with the scrubber track (desktop only) -->
       <div class="mb-2 hidden md:block" style="margin-left: 144px; margin-right: 76px;">
         <div id="gaggleRibbon" class="relative"></div>
@@ -418,6 +457,10 @@
           <option value="60">60×</option>
           <option value="240">240×</option>
         </select>
+        <!-- shortcuts only matter with a physical keyboard — hidden on phones -->
+        <button id="kbdToggle" aria-label="Keyboard shortcuts" aria-expanded="false" aria-controls="kbdPanel"
+          class="hidden md:grid shrink-0 place-items-center w-8 h-8 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 text-base leading-none transition-colors"
+          title="Keyboard shortcuts">&#x2328;&#xFE0E;</button>
       </div>
     </div>
 

@@ -80,6 +80,24 @@ B1230004728234N01152432EV0123401567
       expect(result1999.header.date?.getUTCFullYear()).toBe(1999);
     });
 
+    it('should parse the post-2015 long-form HFDTEDATE header', () => {
+      const igcContent = `HFDTEDATE:150124,01
+B1230004728234N01152432EA0123401567
+B1230014728300N01152500EA0125001600
+`;
+
+      const result = parseIGC(igcContent);
+
+      expect(result.header.date).toBeDefined();
+      expect(result.header.date?.getUTCDate()).toBe(15);
+      expect(result.header.date?.getUTCMonth()).toBe(0); // January (0-indexed)
+      expect(result.header.date?.getUTCFullYear()).toBe(2024);
+      // Fixes must be stamped with the header date, not "today"
+      expect(result.fixes[0].time.getUTCDate()).toBe(15);
+      expect(result.fixes[0].time.getUTCMonth()).toBe(0);
+      expect(result.fixes[0].time.getUTCFullYear()).toBe(2024);
+    });
+
     it('should parse E records (events)', () => {
       const igcContent = `HFDTE010125
 B1230004728234N01152432EA0123401567

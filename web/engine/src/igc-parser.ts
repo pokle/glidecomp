@@ -268,9 +268,10 @@ const H_RECORD_FIELDS: [string, keyof Omit<IGCHeader, 'date'>][] = [
 function parseHRecord(line: string, header: IGCHeader): void {
   const content = line.substring(1);
 
-  // HFDTE / HDTE - Date (special case: value is not colon-delimited)
+  // HFDTE / HDTE - Date (special case: value is not colon-delimited).
+  // Also accept the post-2015 long form HFDTEDATE:150124,01
   if (content.startsWith('FDTE') || content.startsWith('DTE')) {
-    const dateMatch = content.match(/(?:FDTE|DTE)[:\s]*(\d{6})/);
+    const dateMatch = content.match(/(?:FDTE|DTE)(?:DATE)?[:\s]*(\d{6})/);
     if (dateMatch) {
       header.date = parseDate(dateMatch[1]);
     }
@@ -304,7 +305,7 @@ export function parseIGC(content: string): IGCFile {
   // First pass: get the date from header
   for (const line of lines) {
     if (line.startsWith('H')) {
-      const dateMatch = line.match(/(?:HFDTE|HDTE)[:\s]*(\d{6})/);
+      const dateMatch = line.match(/(?:HFDTE|HDTE)(?:DATE)?[:\s]*(\d{6})/);
       if (dateMatch) {
         baseDate = parseDate(dateMatch[1]);
         header.date = baseDate;
