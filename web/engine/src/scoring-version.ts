@@ -67,7 +67,15 @@
 //     mid-flight return through the launch cylinder erased all prior
 //     distance. The open-distance geometry origin is now a derived edge
 //     point with no fix index/time.
-export const SCORING_ENGINE_VERSION = 9;
+// v10: two-step tolerance-band penetrations anchor to the nominal radius —
+//     when the fix pair that crosses the detection edge (outer band edge, or
+//     inner for an EXIT start) doesn't straddle the nominal radius, the
+//     crossing now anchors to the fix pair within the band episode that
+//     does, instead of clamping to the band-edge fix and mislabelling the
+//     crossing as tolerance-credited. Reaching times/positions shift by up
+//     to one fix interval; toleranceCredited is only set when the pilot
+//     genuinely never crossed the nominal radius.
+export const SCORING_ENGINE_VERSION = 10;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -75,4 +83,4 @@ export const SCORING_ENGINE_VERSION = 9;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "fab3ff781f6463ff05594fa6ce78a3e4b4eeccccda8e4fe374f607c45fc8da85";
+  "66cc86746fabb449e075dce4686fd4b2e0e9b202d5116f5a387919d127eb0e88";

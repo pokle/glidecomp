@@ -7,7 +7,7 @@ import { isCompAdmin, isSuperAdmin } from "../super-admin";
 import { createCompSchema, updateCompSchema, validated } from "../validators";
 import { audit, describeChange } from "../audit";
 import { bumpAndRevalidateScores, taskIdsForComp } from "../score-store";
-import { speedSectionTypeWarnings } from "../xctsk-summary";
+import { speedSectionTypeWarnings, hasLineGoal } from "../xctsk-summary";
 import { DEFAULT_GAP_PARAMETERS, type GAPParameters } from "@glidecomp/engine";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
 
@@ -413,12 +413,13 @@ export const compRoutes = new Hono<HonoEnv>()
         admins: adminList,
         is_admin: isAdmin,
         tasks: tasks.results.map((t) => {
-          // Speed-section type warnings only apply to GAP race tasks —
-          // open-distance tasks are a single TAKEOFF and never carry them.
-          const speedSection =
-            ((comp.scoring_format as string) ?? "gap") === "gap"
-              ? speedSectionTypeWarnings(t.xctsk as string | null)
-              : { missing_sss: false, missing_ess: false };
+          // Task-definition warnings only apply to GAP race tasks —
+          // open-distance tasks are a single TAKEOFF with no speed section
+          // or goal.
+          const isGap = ((comp.scoring_format as string) ?? "gap") === "gap";
+          const speedSection = isGap
+            ? speedSectionTypeWarnings(t.xctsk as string | null)
+            : { missing_sss: false, missing_ess: false };
           return {
             task_id: encodeId(alphabet, t.task_id as number),
             name: t.name,
@@ -428,6 +429,7 @@ export const compRoutes = new Hono<HonoEnv>()
             pilot_classes: taskClasses[t.task_id as number] ?? [],
             missing_sss: speedSection.missing_sss,
             missing_ess: speedSection.missing_ess,
+            line_goal: isGap && hasLineGoal(t.xctsk as string | null),
           };
         }),
         pilot_count: pilotCount?.cnt ?? 0,

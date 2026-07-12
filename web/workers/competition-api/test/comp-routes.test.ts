@@ -310,12 +310,37 @@ describe("GET /api/comp/:comp_id", () => {
     const res = await authRequest("GET", `/api/comp/${compId}`);
     expect(res.status).toBe(200);
     const data = (await res.json()) as {
-      tasks: Array<{ name: string; missing_sss: boolean; missing_ess: boolean }>;
+      tasks: Array<{ name: string; missing_sss: boolean; missing_ess: boolean; line_goal: boolean }>;
     };
     for (const task of data.tasks) {
       expect(task.missing_sss).toBe(false);
       expect(task.missing_ess).toBe(false);
+      expect(task.line_goal).toBe(false);
     }
+  });
+
+  test("flags a task with a LINE goal (unsupported by scoring)", async () => {
+    const compId = await createComp({ name: "Line Goal Comp" });
+    const taskId = await createTask(compId);
+
+    await authRequest("PATCH", `/api/comp/${compId}/task/${taskId}`, {
+      xctsk: {
+        taskType: "CLASSIC",
+        version: 1,
+        turnpoints: [
+          { type: "SSS", radius: 1000, waypoint: { name: "Start", lat: -37.0, lon: 144.0 } },
+          { type: "ESS", radius: 400, waypoint: { name: "Goal", lat: -37.1, lon: 144.1 } },
+        ],
+        goal: { type: "LINE" },
+      },
+    });
+
+    const res = await authRequest("GET", `/api/comp/${compId}`);
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      tasks: Array<{ line_goal: boolean }>;
+    };
+    expect(data.tasks[0].line_goal).toBe(true);
   });
 });
 
