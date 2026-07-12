@@ -2,6 +2,69 @@
 
 This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
 
+## 2026-07-12
+
+### Security Vulnerabilities Fixed
+
+None. `bun audit` reported 0 vulnerabilities before and after this cycle. All upgrades this week are routine maintenance bumps, not security-forced.
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **wrangler** | 4.107.0 | 4.110.0 | root, frontend, auth-api, competition-api, airscore-api | 4.108.0: static Pages deploys delegate to Workers static assets, cache options for WorkerEntrypoint exports, declarative DO `exports` map. 4.109.0: `listDurableObjectIds()` in test harness, `WorkflowInstance.terminate({ rollback: true })`, `wrangler turnstile widget` commands. 4.110.0: npm dependency metadata in Worker uploads, dynamic retry delays for Workflow steps. workerd → 1.20260708.1. Requires Node ≥22.0.0 (CI installs Node 22 — no bump needed). No breaking changes. |
+| **@cloudflare/vitest-pool-workers** | 0.18.0 | 0.18.4 | auth-api, competition-api | 0.18.1: `reset()` clears rate-limiter binding state. 0.18.3: `listDurableObjectIds()` for persisted DO instances. 0.18.4: dynamic retry delays for Workflow steps. Bundles wrangler 4.110.0 + miniflare (aligned). Peer dep vitest ^4.1.0. |
+| **hono** | 4.12.27 | 4.12.29 | frontend, auth-api, competition-api (+ root override) | Bug fixes only. 4.12.28: case-insensitive Content-Type matching, circular dependency fix, Bun WebSocket subprotocol fix. 4.12.29: client header merging fix, Lambda@Edge binary encoding, trie-router wildcard matching after regexp parameters. No security fixes, no breaking changes. |
+| **vitest** | 4.1.9 | 4.1.10 | frontend, auth-api, competition-api | Patch: filesystem access checks in browser builtins, encoded URI resolution in dep optimizer. Backported from v5 beta. |
+| **mapbox-gl** | 3.25.0 | 3.26.0 | root, frontend | Minor breaking: removes incorrect `transition`/`interpolated` flags from `camera-projection` style property (not used in this codebase — verified via grep). TypeScript declarations now self-contained. Performance: terrain raycasting, landmark rendering. Bug fixes: elevated lines, vertex buffers, multilinestring labels. |
+| **lucide-react** | 1.23.0 | 1.24.0 | frontend | New icons (`circle-euro-sign`, `server-plus`), `dot` icon centered, `option` icon redesigned. No breaking changes. |
+| **@types/three** | 0.185.0 | 0.185.1 | frontend | Type definition patch. |
+| **@types/node** | 25.9.4 | 25.9.5 | root | Type definition patch. |
+| **@types/tabulator-tables** | 6.3.5 | 6.3.6 | frontend | Type definition patch. |
+| **concurrently** | 9.2.3 | 9.2.4 | root | Patch bump within `^9`. |
+
+### Code Changes Required
+
+None. All upgrades are drop-in replacements with no API changes affecting our usage. The mapbox-gl 3.26.0 breaking change (`camera-projection` transition/interpolated flags removed) was verified as unused in this repo via grep.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| @cloudflare/workers-types | 4.20260702.1 | 5.20260712.1 | **Major (5.x).** No newer 4.x release available. Stay within `^4` per convention; evaluate 5.x in a focused PR. |
+| typescript | 6.0.3 | 7.0.2 | **Major.** Compiler rewritten in Go; `strict` on by default, `target` defaults to current ES (ES5 dropped), `module` defaults to `esnext`, `node`/`node10`/`classic` module resolution removed, `baseUrl` removed. Needs a focused migration PR. |
+| zod | 3.25.76 | 4.4.3 | Major. Still blocked by `@hono/zod-validator` (honojs/middleware#1148). |
+| @hono/zod-validator | 0.7.6 | 0.8.0 | 0.8.0 requires zod 4. Stay on 0.7.6 until zod 4 migration. |
+| vite | 7.3.6 | 8.1.4 | Major. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. |
+| @vitejs/plugin-react | 5.2.0 | 6.0.3 | Major. Defer to a focused PR (pairs with the Vite 8 evaluation). |
+| astro | 6.4.8 | 7.0.7 | **Major.** New Rust compiler enforces strict HTML (unclosed tags error), whitespace follows JSX rules, default Markdown processor changed to Satteri. Needs focused evaluation. |
+| @astrojs/mdx | 6.0.3 | 7.0.2 | Major. Pairs with Astro 7 upgrade. |
+| kysely | 0.28.17 | 0.29.3 | Pre-1.0 minor bump (equivalent to major). Defer to a focused PR. |
+| jsdom | 25.0.1 | 29.1.1 | Major version jump. Defer to a focused PR. |
+| katex | 0.17.0 | 0.17.0 | Already at latest within range. |
+| concurrently | 9.2.4 | 10.0.3 | Major. ESM-only, drops `--name-separator`. Low priority — defer. |
+| @types/node | 25.9.5 | 26.1.1 | Major. Stay on 25.x for now. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+
+### Verification
+
+- `bun run typecheck:all` — all 5 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api).
+- `bun run test:all` — 671 root/engine tests + 57 auth-api (6 todo) + 350 competition-api all pass. Competition-api reports "6 errors" (unhandled rejections from the deliberate `controller.error()` in the `decompressed_too_large` igc-validation test); pre-existing, not a dependency regression. Overall exit 0.
+- `bun run test:e2e` — 7/7 chromium specs pass (api-doc, comp-creation, 5 user-files-upload tests). Clean run, no flakes.
+- `bun audit` — 0 vulnerabilities.
+
+### Lessons / Notes for Future Sessions
+
+- **`mcp-api` worker remains removed.** 3 workers (airscore-api, auth-api, competition-api); 5 workspace typechecks. The `qs`, `fast-uri`, `ip-address` overrides originally added for `@modelcontextprotocol/sdk` are still in place — a future focused cleanup should verify whether any remaining dep pulls those packages.
+- **`@cloudflare/workers-types` 5.x is the only available major.** No new 4.x releases were published this week. The `dist-tags` show only `latest: 5.20260712.1` — there's no `4.x` dist-tag. If the project wants to stay on 4.x, it has reached the end of that line; evaluate 5.x soon.
+- **`@cloudflare/vitest-pool-workers` 0.18.4 bundles wrangler 4.110.0.** Continue upgrading these two together.
+- **wrangler 4.110.0 still requires Node ≥22.0.0.** CI's `setup-node@v4` with `node-version: 22` remains sufficient.
+- **TypeScript 7.0 is a major rewrite (Go compiler).** Defaults change significantly (`strict: true`, `target: esnext`, removed `node10` resolution, removed `baseUrl`). The migration will likely require tsconfig changes across all workspaces. Plan a focused PR — don't roll it into a routine upgrade.
+- **Astro 7.0 enforces strict HTML via a Rust compiler.** Unclosed tags and malformed attributes that were silently fixed in Astro 6 now error. The default Markdown processor changed from remark/rehype to Satteri. Needs evaluation against the static pages in `web/frontend/static/`.
+- **Pre-installed Playwright browsers are still rev 1194 in this environment** while `@playwright/test` 1.61.1 pins rev 1228. Fix: `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell`. This is an environment provisioning mismatch, not a dependency issue.
+- **`esbuild`, `qs`, `ws`, `hono`, `fast-uri`, `ip-address` overrides remain in place.** `bun audit` is clean. Keep overrides load-bearing until upstreams ship patched versions natively.
+
 ## 2026-07-05
 
 ### Security Vulnerabilities Fixed
