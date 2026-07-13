@@ -102,6 +102,16 @@ export interface CylinderCrossing {
    * Lets the UI explain a near-miss that was credited by tolerance.
    */
   toleranceCredited: boolean;
+
+  /**
+   * Goal-LINE tasks only: true when this goal crossing was detected on the
+   * control semicircle's arc rather than on the goal line itself — a fix in
+   * the semicircle behind the line counts as goal (S7F §6.3.1), which
+   * rescues a line crossing that fell between two fixes or a tracklog gap
+   * at the line. Lets the UI explain why goal was credited without a line
+   * crossing. Absent for cylinder turnpoints and for line crossings.
+   */
+  goalSemicircleCredited?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,6 +171,13 @@ export interface TurnpointReaching {
    * no-crossing 'track_start' anchor.
    */
   toleranceCredited?: boolean;
+
+  /**
+   * Goal-LINE tasks only: this goal reaching was credited by a fix in the
+   * control semicircle behind the line, not a line crossing. Copied from
+   * the underlying {@link CylinderCrossing} — see it for the rule.
+   */
+  goalSemicircleCredited?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -610,7 +627,8 @@ function detectGoalLineCrossings(
     anchorCurr: IGCFix,
     fixIndex: number,
     t: number,
-    direction: 'enter' | 'exit'
+    direction: 'enter' | 'exit',
+    viaSemicircleArc = false
   ): void => {
     const lat = anchorPrev.latitude + t * (anchorCurr.latitude - anchorPrev.latitude);
     const lon = anchorPrev.longitude + t * (anchorCurr.longitude - anchorPrev.longitude);
@@ -626,6 +644,7 @@ function detectGoalLineCrossings(
       direction,
       distanceToCenter: andoyerDistance(lat, lon, centerLat, centerLon),
       toleranceCredited: false,
+      ...(viaSemicircleArc ? { goalSemicircleCredited: true } : {}),
     });
   };
 
@@ -670,7 +689,7 @@ function detectGoalLineCrossings(
     } else if (prevInside !== currInside) {
       // Entered or left through the semicircle's arc (no line intersection).
       const t = goalSemicircleBoundaryFraction(goalLine, from, to);
-      push(p0, p1, fixIdx, t, currInside ? 'enter' : 'exit');
+      push(p0, p1, fixIdx, t, currInside ? 'enter' : 'exit', true);
     }
 
     prevInside = currInside;
@@ -757,6 +776,9 @@ function buildForwardPath(
         selectionReason: 'already_inside',
         candidateCount: tpCrossings.length,
         toleranceCredited: lastCrossingBefore?.toleranceCredited ?? false,
+        ...(lastCrossingBefore?.goalSemicircleCredited
+          ? { goalSemicircleCredited: true }
+          : {}),
       });
       continue; // reached at the same moment — prevReachingTime unchanged
     }
@@ -795,6 +817,9 @@ function buildForwardPath(
       selectionReason: isESS ? 'first_crossing' : 'first_after_previous',
       candidateCount: tpCrossings.length,
       toleranceCredited: validCrossing.toleranceCredited,
+      ...(validCrossing.goalSemicircleCredited
+        ? { goalSemicircleCredited: true }
+        : {}),
     });
 
     prevReachingTime = validCrossing.time.getTime();

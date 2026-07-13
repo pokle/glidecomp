@@ -19,7 +19,9 @@ import {
 import {
   detectCylinderCrossings,
   resolveTurnpointSequence,
+  type TurnpointSequenceResult,
 } from '../src/turnpoint-sequence';
+import { explainGapScore, type ScoreEntryInput, type ClassContextInput } from '../src/score-explanation';
 import { calculateOptimizedTaskDistance, calculateOptimizedTaskLine } from '../src/task-optimizer';
 import { manualFlightGeometry } from '../src/manual-flight';
 import { packTracks } from '../src/track-packer';
@@ -338,6 +340,85 @@ describe('manual flight against a LINE goal', () => {
       lineGoalTask('CYLINDER'), 1, { lat: landing.lat, lon: landing.lon }
     );
     expect(geoCyl.distanceToGoal).toBeCloseTo(800, 0); // 200 m cylinder edge
+  });
+});
+
+describe('score explanation with a LINE goal', () => {
+  function entryFor(result: TurnpointSequenceResult): ScoreEntryInput {
+    return {
+      made_goal: result.madeGoal,
+      reached_ess: result.essReaching !== null,
+      flown_distance: result.flownDistance,
+      speed_section_time: result.speedSectionTime,
+      distance_points: 400,
+      distance_linear_points: 400,
+      distance_difficulty_points: 0,
+      time_points: result.madeGoal ? 300 : 0,
+      leading_points: 0,
+      arrival_points: 0,
+      penalty_points: 0,
+      penalty_reason: null,
+      total_score: result.madeGoal ? 700 : 400,
+    };
+  }
+
+  function classContext(): ClassContextInput {
+    return {
+      task_validity: { launch: 1, distance: 1, time: 1, task: 1 },
+      available_points: { distance: 500, time: 500, leading: 0, arrival: 0, total: 1000 },
+      pilots: [
+        { flown_distance: 25_000, speed_section_time: 3600, made_goal: true, reached_ess: true },
+      ],
+    };
+  }
+
+  function goalItem(result: TurnpointSequenceResult) {
+    const explanation = explainGapScore({
+      task: lineGoalTask(),
+      result,
+      entry: entryFor(result),
+      classContext: classContext(),
+      params: { scoring: 'PG' },
+    });
+    const flight = explanation.sections.find((s) => s.id === 'flight')!;
+    return { flight, goal: flight.items.find((i) => i.id === 'reaching-2') };
+  }
+
+  it('explains a line crossing as crossing the goal line', () => {
+    const result = resolveTurnpointSequence(lineGoalTask(), eastboundTrack(47.0, 10.95, 11.31));
+    const { goal } = goalItem(result);
+    expect(goal).toBeDefined();
+    expect(goal!.detail).toContain('Crossed the 400 m goal line');
+    expect(goal!.detail).toContain('perpendicular to the final leg');
+  });
+
+  it('explains a semicircle-credited goal (no line crossing in the tracklog)', () => {
+    const inSemi = destinationPoint(GOAL.lat, GOAL.lon, 100, Math.PI / 2);
+    const fixes: IGCFix[] = [
+      ...eastboundTrack(47.0, 10.95, 11.2),
+      createFix(30 * 60, 47.02, 11.28),
+      createFix(32 * 60, inSemi.lat, inSemi.lon),
+    ];
+    const result = resolveTurnpointSequence(lineGoalTask(), fixes);
+    expect(result.madeGoal).toBe(true);
+    const goalReaching = result.sequence[result.sequence.length - 1];
+    expect(goalReaching.goalSemicircleCredited).toBe(true);
+    const { goal } = goalItem(result);
+    expect(goal!.detail).toContain('control semicircle');
+    expect(goal!.detail).toContain('counts as goal');
+  });
+
+  it('describes a land-out as closest to the goal line', () => {
+    const oneKmShort = destinationPoint(GOAL.lat, GOAL.lon, 1000, -Math.PI / 2);
+    const fixes: IGCFix[] = [
+      ...eastboundTrack(47.0, 10.95, 11.24),
+      createFix(31 * 60, oneKmShort.lat, oneKmShort.lon),
+    ];
+    const result = resolveTurnpointSequence(lineGoalTask(), fixes);
+    const { flight } = goalItem(result);
+    const bestProgress = flight.items.find((i) => i.id === 'best-progress');
+    expect(bestProgress).toBeDefined();
+    expect(bestProgress!.detail).toContain('closest to the goal line');
   });
 });
 

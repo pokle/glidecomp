@@ -93,8 +93,10 @@
 //     Goal is achieved by a track segment crossing the line or a fix inside
 //     the semicircle; the optimised route ends at the closest point on the
 //     line; land-out remaining distance is measured to the nearest point on
-//     the line. Cylinder goals and tasks where no line can be constructed
-//     (single turnpoint, zero radius) are unchanged.
+//     the line. Goal crossings credited by a semicircle fix (no line
+//     crossing in the tracklog) are flagged goalSemicircleCredited so the
+//     score explanation can say why. Cylinder goals and tasks where no line
+//     can be constructed (single turnpoint, zero radius) are unchanged.
 export const SCORING_ENGINE_VERSION = 12;
 
 /**
@@ -103,4 +105,4 @@ export const SCORING_ENGINE_VERSION = 12;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "762719ef8081c30bdd33e652413e804fcc0fa66622c2a8ed9660c7ac851140d6";
+  "e1c7fcc9569fb205be26e4d1b37c891c0ac08f71e2cec90e733c85d332475eec";
