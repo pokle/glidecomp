@@ -7,8 +7,10 @@
  * and save. Non-admins see a read-only list. The set is stored per-comp
  * (JSON blob) via GET/PUT /api/comp/:id/waypoints.
  *
- * The map (mapbox/leaflet) is lazy so it stays out of the SSR bundle; this
- * page is never server-rendered (the SSR function serves the SPA shell for it).
+ * The read-only content (heading, table, download links) is server-rendered
+ * via loadCompWaypoints so the page has real content for crawlers; the map
+ * (mapbox/leaflet) stays lazy behind Suspense so it never enters the SSR
+ * bundle — the server streams its "Loading map…" fallback instead.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -31,6 +33,8 @@ import { useAdminView, useUser } from "../lib/user";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { formatCoords, parseCoords, suggestWaypointCode } from "../comp/route-editor";
 import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
+import { useInitialData } from "../lib/initial-data";
+import type { CompWaypointsLoaderData } from "../loaders";
 
 const RouteMap = lazy(() => import("../comp/RouteMap"));
 
@@ -78,11 +82,19 @@ export function CompWaypoints() {
   const { user } = useUser();
   const confirm = useConfirm();
 
-  const [compName, setCompName] = useState<string>("");
-  const [realIsAdmin, setRealIsAdmin] = useState(false);
-  const [rows, setRows] = useState<WpRow[]>([]);
-  const [savedJson, setSavedJson] = useState<string>("[]");
-  const [loading, setLoading] = useState(true);
+  // SSR seed (null on client boot / SPA navigations, where the effect below
+  // fetches instead). Seeding the same states the fetch would set makes the
+  // first client render match the server markup exactly.
+  const initial = useInitialData<CompWaypointsLoaderData>();
+  const [compName, setCompName] = useState<string>(initial?.comp.name ?? "");
+  const [realIsAdmin, setRealIsAdmin] = useState(!!initial?.comp.is_admin);
+  const [rows, setRows] = useState<WpRow[]>(() =>
+    initial ? initial.waypoints.map(toRow) : []
+  );
+  const [savedJson, setSavedJson] = useState<string>(() =>
+    initial ? serialize(initial.waypoints) : "[]"
+  );
+  const [loading, setLoading] = useState(!initial);
   const [saving, setSaving] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [addMode, setAddMode] = useState(false);
@@ -100,6 +112,9 @@ export function CompWaypoints() {
 
   useEffect(() => {
     if (!compId) return;
+    // Seeded from SSR — skip the fetch. The seed is retired on any client-side
+    // navigation (see lib/initial-data.tsx), so a return visit fetches fresh.
+    if (initial) return;
     let cancelled = false;
     void (async () => {
       setLoading(true);
@@ -134,7 +149,7 @@ export function CompWaypoints() {
     return () => {
       cancelled = true;
     };
-  }, [compId, user]);
+  }, [compId, user, initial]);
 
   // Current records + validity, derived from the rows.
   const records = useMemo(() => rows.map(fromRow), [rows]);

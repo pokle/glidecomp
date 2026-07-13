@@ -1,5 +1,5 @@
 /**
- * Server entry for the four public SSR routes. Built as a separate Vite SSR
+ * Server entry for the public SSR routes. Built as a separate Vite SSR
  * bundle (vite.ssr.config.ts → dist-ssr/) and imported by the Pages Function
  * functions/comp/[[path]].ts, which runs the route loader, calls render() with
  * the URL + loader data, and splices the streamed markup into the /app shell.

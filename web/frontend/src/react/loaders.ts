@@ -1,5 +1,5 @@
 /**
- * Route loaders for the four public SSR routes. Each is parameterized by a
+ * Route loaders for the public SSR routes. Each is parameterized by a
  * `FetchFn` so the same code runs on the server (over the COMPETITION_API
  * service binding, forwarding the visitor's cookie) and in the browser
  * (window.fetch with credentials). Loaders fetch raw string paths — not the
@@ -15,6 +15,7 @@ import type {
   TaskScoreData,
   PilotAnalysisData,
 } from "./comp/types";
+import type { WaypointFileRecord } from "@glidecomp/engine";
 import type { ClassStanding, TaskInfo } from "../scores-views";
 import { todayInZone } from "./lib/format";
 
@@ -100,6 +101,30 @@ export async function loadCompDetail(
   // Compute the hero's "today" here (needs the comp's own timezone) so it is a
   // single value baked into the SSR HTML and reused by the client on hydration.
   return { comp, scores, scoresEtag, today: todayInZone(comp.timezone) };
+}
+
+// ── /comp/:compId/waypoints ──────────────────────────────────────────────────
+
+export interface CompWaypointsLoaderData {
+  /** GET /api/comp/:id — the API adds a server-computed `is_admin` flag. */
+  comp: CompDetailData & { is_admin?: boolean };
+  waypoints: WaypointFileRecord[];
+}
+
+export async function loadCompWaypoints(
+  f: FetchFn,
+  compId: string
+): Promise<CompWaypointsLoaderData> {
+  const cid = encodeURIComponent(compId);
+  const [comp, wpRes] = await Promise.all([
+    getJson<CompDetailData & { is_admin?: boolean }>(f, `/api/comp/${cid}`),
+    f(`/api/comp/${cid}/waypoints`),
+  ]);
+  // The waypoint set is non-critical: a failed fetch renders the empty state.
+  const waypoints = wpRes.ok
+    ? ((await wpRes.json()) as { waypoints: WaypointFileRecord[] }).waypoints
+    : [];
+  return { comp, waypoints };
 }
 
 // ── /comp/:compId/task/:taskId ───────────────────────────────────────────────
