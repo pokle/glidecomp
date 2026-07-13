@@ -917,11 +917,10 @@ export function RouteEditorDialog({
                 </span>
               </div>
               {goalType === "LINE" ? (
-                <p className="mt-2 text-sm text-amber-500" role="alert">
-                  Goal lines aren&apos;t supported by scoring yet — this task
-                  will be scored with a cylinder goal of the last turnpoint&apos;s
-                  radius, so distances and arrival times may be off by up to
-                  that radius.
+                <p className="mt-2 text-sm text-muted-foreground">
+                  The goal line is centred on the last turnpoint, perpendicular
+                  to the final leg, and extends the turnpoint&apos;s radius to
+                  each side (total length 2 × radius).
                 </p>
               ) : null}
             </section>
