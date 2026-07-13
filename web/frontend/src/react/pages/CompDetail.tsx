@@ -5,7 +5,7 @@
  * admins. Mutations that used to window.location.reload() instead bump a
  * refresh counter that re-runs the comp fetch.
  */
-import { useEffect, useId, useState } from "react";
+import { Fragment, useEffect, useId, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { Button } from "@/react/ui/button";
 import {
@@ -383,6 +383,20 @@ function pickHeroTasks(
   return { label, date, tasks: tasks.filter((t) => t.task_date === date) };
 }
 
+/**
+ * Hero button order is role-based (issue: task buttons role order):
+ *  - Comp/Super Admin: Edit route…, Task details, Submit track, Share task, QR code, 3D replay
+ *  - Pilots (signed in, non-admin): QR code, Share task, Submit track, Task details, 3D replay
+ *  - Unauthenticated / can't submit: QR code, Share task, Task details, 3D replay
+ * Whichever button ends up first is the primary (filled) button; a slot that's
+ * hidden for this task (e.g. no route set yet) is skipped, promoting the next one.
+ */
+interface HeroSlot {
+  key: string;
+  visible: boolean;
+  render: (primary: boolean) => React.ReactNode;
+}
+
 function TaskHero({
   hero,
   compId,
@@ -403,41 +417,67 @@ function TaskHero({
       <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
         {hero.label} · {formatTaskDate(hero.date)}
       </p>
-      {hero.tasks.map((task) => (
-        <div key={task.task_id} className="mt-2 first:mt-1">
-          <h2 className="text-xl font-bold">
-            {task.name}{" "}
-            <span className="text-sm font-normal text-muted-foreground">
-              {task.pilot_classes.join(", ")}
-              {!task.has_xctsk ? " · route not set yet" : null}
-            </span>
-          </h2>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button nativeButton={false} size="sm" render={<Link to={`/comp/${compId}/task/${task.task_id}`} />}>
+      {hero.tasks.map((task) => {
+        const taskDetailsSlot: HeroSlot = {
+          key: "task-details",
+          visible: true,
+          render: (primary) => (
+            <Button
+              nativeButton={false}
+              variant={primary ? "default" : "outline"}
+              size="sm"
+              render={<Link to={`/comp/${compId}/task/${task.task_id}`} />}
+            >
               Task details
             </Button>
-            {task.has_xctsk ? (
-              <TaskExportButtons compId={compId} taskId={task.task_id} taskName={task.name} />
-            ) : null}
-            {canSubmitTrack ? (
-              <SubmitTrackButton
-                compId={compId}
-                taskId={task.task_id}
-                canUploadOnBehalf={canUploadOnBehalf}
-              />
-            ) : null}
-            {signedOut ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void signInWithGoogle()}
-              >
-                Sign in to submit your track
-              </Button>
-            ) : null}
-            <Button nativeButton={false}
-              variant="outline"
+          ),
+        };
+        const editRouteSlot: HeroSlot = {
+          key: "edit-route",
+          visible: isAdmin,
+          render: (primary) => (
+            <Button
+              nativeButton={false}
+              variant={primary ? "default" : "ghost"}
+              size="sm"
+              render={<Link to={`/comp/${compId}/task/${task.task_id}#edit-route`} />}
+            >
+              Edit route…
+            </Button>
+          ),
+        };
+        const submitTrackSlot: HeroSlot = {
+          key: "submit-track",
+          visible: canSubmitTrack,
+          render: (primary) => (
+            <SubmitTrackButton
+              compId={compId}
+              taskId={task.task_id}
+              canUploadOnBehalf={canUploadOnBehalf}
+              primary={primary}
+            />
+          ),
+        };
+        const exportSlot = (qrFirst: boolean): HeroSlot => ({
+          key: "export",
+          visible: task.has_xctsk,
+          render: (primary) => (
+            <TaskExportButtons
+              compId={compId}
+              taskId={task.task_id}
+              taskName={task.name}
+              qrFirst={qrFirst}
+              primary={primary ? (qrFirst ? "qr" : "share") : undefined}
+            />
+          ),
+        });
+        const replaySlot: HeroSlot = {
+          key: "replay",
+          visible: true,
+          render: (primary) => (
+            <Button
+              nativeButton={false}
+              variant={primary ? "default" : "outline"}
               size="sm"
               render={
                 <a
@@ -448,18 +488,51 @@ function TaskHero({
             >
               3D replay
             </Button>
-            {isAdmin ? (
-              <Button nativeButton={false}
-                variant="ghost"
-                size="sm"
-                render={<Link to={`/comp/${compId}/task/${task.task_id}#edit-route`} />}
-              >
-                Edit route…
-              </Button>
-            ) : null}
+          ),
+        };
+        const signInSlot: HeroSlot = {
+          key: "sign-in",
+          visible: signedOut,
+          render: () => (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void signInWithGoogle()}
+            >
+              Sign in to submit your track
+            </Button>
+          ),
+        };
+
+        const slots: HeroSlot[] = isAdmin
+          ? [editRouteSlot, taskDetailsSlot, submitTrackSlot, exportSlot(false), replaySlot]
+          : canSubmitTrack
+            ? [exportSlot(true), submitTrackSlot, taskDetailsSlot, replaySlot]
+            : [exportSlot(true), taskDetailsSlot, replaySlot, signInSlot];
+
+        let primaryAssigned = false;
+        const buttons = slots
+          .filter((slot) => slot.visible)
+          .map((slot) => {
+            const primary = !primaryAssigned;
+            primaryAssigned = true;
+            return <Fragment key={slot.key}>{slot.render(primary)}</Fragment>;
+          });
+
+        return (
+          <div key={task.task_id} className="mt-2 first:mt-1">
+            <h2 className="text-xl font-bold">
+              {task.name}{" "}
+              <span className="text-sm font-normal text-muted-foreground">
+                {task.pilot_classes.join(", ")}
+                {!task.has_xctsk ? " · route not set yet" : null}
+              </span>
+            </h2>
+            <div className="mt-3 flex flex-wrap gap-2">{buttons}</div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -646,16 +719,24 @@ function SubmitTrackButton({
   compId,
   taskId,
   canUploadOnBehalf,
+  primary = false,
 }: {
   compId: string;
   taskId: string;
   canUploadOnBehalf: boolean;
+  /** Render as the primary action (role-based button order). */
+  primary?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button
+        type="button"
+        variant={primary ? "default" : "outline"}
+        size="sm"
+        onClick={() => setOpen(true)}
+      >
         Submit track
       </Button>
       {open ? (
