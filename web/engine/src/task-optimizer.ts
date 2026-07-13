@@ -16,6 +16,7 @@ import {
 } from './geo';
 
 import type { XCTask, Turnpoint } from './xctsk-parser';
+import { computeGoalLine, goalLinePointAt, type GoalLine } from './goal-line';
 
 /**
  * Effective radius of the first turnpoint for optimization.
@@ -87,6 +88,53 @@ function findOptimalCirclePoint(
 }
 
 /**
+ * Closest point on a goal line to a given point — the optimal "tag" of a
+ * LINE goal (S7F §6.3.1): the task ends where the shortest route meets the
+ * line. Golden-section search over the position along the line; distance to
+ * a geodesic segment is unimodal, so this converges like the circle search.
+ */
+function findOptimalGoalLinePoint(
+  prevLat: number,
+  prevLon: number,
+  goalLine: GoalLine
+): { lat: number; lon: number } {
+  const cost = (t: number): number => {
+    const point = goalLinePointAt(goalLine, t);
+    return andoyerDistance(prevLat, prevLon, point.lat, point.lon);
+  };
+
+  const phi = (1 + Math.sqrt(5)) / 2;
+  const resphi = 2 - phi;
+
+  let a = 0;
+  let b = 1;
+  const tol = 1e-7;
+
+  let x1 = a + resphi * (b - a);
+  let x2 = b - resphi * (b - a);
+  let f1 = cost(x1);
+  let f2 = cost(x2);
+
+  while (Math.abs(b - a) > tol) {
+    if (f1 < f2) {
+      b = x2;
+      x2 = x1;
+      f2 = f1;
+      x1 = a + resphi * (b - a);
+      f1 = cost(x1);
+    } else {
+      a = x1;
+      x1 = x2;
+      f1 = f2;
+      x2 = b - resphi * (b - a);
+      f2 = cost(x2);
+    }
+  }
+
+  return goalLinePointAt(goalLine, (a + b) / 2);
+}
+
+/**
  * Run a single forward pass of the optimization, producing one touching
  * point per turnpoint cylinder.
  *
@@ -97,7 +145,8 @@ function findOptimalCirclePoint(
  */
 function optimizePass(
   task: XCTask,
-  previousPath: { lat: number; lon: number }[] | null
+  previousPath: { lat: number; lon: number }[] | null,
+  goalLine: GoalLine | null
 ): { lat: number; lon: number }[] {
   const path: { lat: number; lon: number }[] = [];
   const n = task.turnpoints.length;
@@ -116,13 +165,19 @@ function optimizePass(
       );
       path.push(destinationPoint(tp.waypoint.lat, tp.waypoint.lon, firstTurnpointRadius(tp), bearing));
     } else if (i === n - 1) {
-      // Last turnpoint: entry point nearest to previous optimized point
+      // Last turnpoint: nearest point on the goal — the cylinder entry point
+      // toward the previous optimized point, or for a LINE goal the closest
+      // point on the line segment.
       const prevPoint = path[path.length - 1];
-      const bearing = calculateBearingRadians(
-        prevPoint.lat, prevPoint.lon,
-        tp.waypoint.lat, tp.waypoint.lon
-      );
-      path.push(destinationPoint(tp.waypoint.lat, tp.waypoint.lon, tp.radius, bearing + Math.PI));
+      if (goalLine) {
+        path.push(findOptimalGoalLinePoint(prevPoint.lat, prevPoint.lon, goalLine));
+      } else {
+        const bearing = calculateBearingRadians(
+          prevPoint.lat, prevPoint.lon,
+          tp.waypoint.lat, tp.waypoint.lon
+        );
+        path.push(destinationPoint(tp.waypoint.lat, tp.waypoint.lon, tp.radius, bearing + Math.PI));
+      }
     } else {
       // Intermediate: minimize distance through this cylinder
       const prevPoint = path[path.length - 1];
@@ -172,6 +227,8 @@ export function calculateOptimizedTaskLine(task: XCTask): { lat: number; lon: nu
     return [{ lat: task.turnpoints[0].waypoint.lat, lon: task.turnpoints[0].waypoint.lon }];
   }
 
+  const goalLine = computeGoalLine(task);
+
   if (task.turnpoints.length === 2) {
     const tp1 = task.turnpoints[0];
     const tp2 = task.turnpoints[1];
@@ -179,20 +236,23 @@ export function calculateOptimizedTaskLine(task: XCTask): { lat: number; lon: nu
       tp1.waypoint.lat, tp1.waypoint.lon,
       tp2.waypoint.lat, tp2.waypoint.lon
     );
+    const start = destinationPoint(tp1.waypoint.lat, tp1.waypoint.lon, firstTurnpointRadius(tp1), bearing);
     return [
-      destinationPoint(tp1.waypoint.lat, tp1.waypoint.lon, firstTurnpointRadius(tp1), bearing),
-      destinationPoint(tp2.waypoint.lat, tp2.waypoint.lon, tp2.radius, bearing + Math.PI)
+      start,
+      goalLine
+        ? findOptimalGoalLinePoint(start.lat, start.lon, goalLine)
+        : destinationPoint(tp2.waypoint.lat, tp2.waypoint.lon, tp2.radius, bearing + Math.PI)
     ];
   }
 
   // First pass: no previous path to reference
-  let path = optimizePass(task, null);
+  let path = optimizePass(task, null, goalLine);
   let prevDistance = pathDistance(path);
 
   // Iterate until convergence (< 1m change) or max iterations
   const maxIterations = task.turnpoints.length * 10;
   for (let iter = 0; iter < maxIterations; iter++) {
-    const newPath = optimizePass(task, path);
+    const newPath = optimizePass(task, path, goalLine);
     const newDistance = pathDistance(newPath);
 
     if (prevDistance - newDistance < 1.0) break;

@@ -86,7 +86,16 @@
 //     crossing as tolerance-credited. Reaching times/positions shift by up
 //     to one fix interval; toleranceCredited is only set when the pilot
 //     genuinely never crossed the nominal radius.
-export const SCORING_ENGINE_VERSION = 11;
+// v12: goal LINE scoring (S7F §6.3.1) — a task whose goal is configured as
+//     `goal.type: 'LINE'` is now scored against a goal line perpendicular to
+//     the final leg (length = 2 × the goal turnpoint's radius) with its
+//     control semicircle behind it, instead of being treated as a cylinder.
+//     Goal is achieved by a track segment crossing the line or a fix inside
+//     the semicircle; the optimised route ends at the closest point on the
+//     line; land-out remaining distance is measured to the nearest point on
+//     the line. Cylinder goals and tasks where no line can be constructed
+//     (single turnpoint, zero radius) are unchanged.
+export const SCORING_ENGINE_VERSION = 12;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -94,4 +103,4 @@ export const SCORING_ENGINE_VERSION = 11;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "11bd78db943d7d4c1c7547c6ab1b6c8cc2454db574c22e8b6f2e23ad745a4826";
+  "762719ef8081c30bdd33e652413e804fcc0fa66622c2a8ed9660c7ac851140d6";

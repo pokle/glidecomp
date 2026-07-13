@@ -18,6 +18,15 @@ import type { IGCFix } from './igc-parser';
 import { andoyerDistance, isInsideCylinder } from './geo';
 import { getSSSIndex, getEffectiveSSSIndex, getESSIndex, getEffectiveESSIndex, getGoalIndex } from './xctsk-parser';
 import { calculateOptimizedTaskLine } from './task-optimizer';
+import {
+  computeGoalLine,
+  distanceToGoalLine,
+  goalLineCrossingFraction,
+  goalSemicircleBoundaryFraction,
+  isForwardGoalCrossing,
+  isInGoalSemicircle,
+  type GoalLine,
+} from './goal-line';
 import { resolveStartGates, gateIndexForCrossing } from './time-gates';
 
 /**
@@ -54,6 +63,12 @@ function outerDetectionRadius(radius: number, tolerance: number): number {
  * cylinder boundary. Crossings are tracked per task position (index into
  * XCTask.turnpoints[]), NOT per waypoint — the same waypoint appearing
  * at two task positions produces independent crossings.
+ *
+ * For a task with a goal LINE (S7F §6.3.1), crossings of the goal task
+ * position use the same shape: the boundary is the goal line + its control
+ * semicircle instead of a circle, `distanceToCenter` is measured to the
+ * goal waypoint (the line's midpoint), and 'enter'/'exit' mean crossing
+ * into/out of the region beyond the line.
  */
 export interface CylinderCrossing {
   /** Index into XCTask.turnpoints[] (task position, not waypoint identity) */
@@ -383,9 +398,19 @@ export function detectCylinderCrossings(
   const sssIdx = getSSSIndex(task);
   const startIsExit = sssIdx >= 0 && task.sss?.direction === 'EXIT';
 
+  // Goal line (S7F §6.3.1): when the task's goal is a LINE, the goal task
+  // position is detected against the line + control semicircle instead of a
+  // cylinder. Null means cylinder goal — the loop below handles it as before.
+  const goalLine = computeGoalLine(task);
+  const goalIdx = getGoalIndex(task);
+
   const DEG = Math.PI / 180;
 
   for (let tpIdx = 0; tpIdx < task.turnpoints.length; tpIdx++) {
+    if (goalLine && tpIdx === goalIdx) {
+      detectGoalLineCrossings(goalLine, fixes, tpIdx, crossings);
+      continue;
+    }
     const tp = task.turnpoints[tpIdx];
     const centerLat = tp.waypoint.lat;
     const centerLon = tp.waypoint.lon;
@@ -541,6 +566,115 @@ export function detectCylinderCrossings(
   crossings.sort((a, b) => a.time.getTime() - b.time.getTime());
 
   return crossings;
+}
+
+/**
+ * Detect goal-line crossings (S7F §6.3.1) for the goal task position and
+ * append them to `out`.
+ *
+ * The pilot is "inside" goal when in the control semicircle behind the line
+ * ({@link isInGoalSemicircle}); a track segment that intersects the line
+ * itself is a crossing even when neither fix lands in the semicircle (a
+ * fast crossing near an endpoint can leave no fix inside). To keep the
+ * enter/exit alternation consistent with the semicircle state — which the
+ * presence-based reaching logic relies on — such a through-crossing emits an
+ * 'enter' and an 'exit' at the same interpolated instant.
+ *
+ * No tolerance band applies: the §8.1 band is defined for cylinders; the
+ * goal line is exact geometry (its semicircle already absorbs the
+ * fast-crossing case), so `toleranceCredited` is always false here.
+ */
+function detectGoalLineCrossings(
+  goalLine: GoalLine,
+  fixes: IGCFix[],
+  taskIndex: number,
+  out: CylinderCrossing[]
+): void {
+  if (fixes.length < 2) return;
+
+  const centerLat = goalLine.center.lat;
+  const centerLon = goalLine.center.lon;
+
+  // Conservative bounding box around the line + semicircle (everything lies
+  // within halfWidth of the centre). A fix pair whose own bbox doesn't
+  // overlap it can't produce a crossing — skips the frame math for the vast
+  // majority of the track. Same margin scheme as the cylinder loop.
+  const DEG = Math.PI / 180;
+  const reach = goalLine.halfWidth;
+  const latDelta = (reach / 110540) * 1.01;
+  const cosLat = Math.cos((Math.abs(centerLat) + latDelta) * DEG);
+  const lonDelta = (reach / (111000 * Math.max(cosLat, 1e-6))) * 1.01;
+
+  const push = (
+    anchorPrev: IGCFix,
+    anchorCurr: IGCFix,
+    fixIndex: number,
+    t: number,
+    direction: 'enter' | 'exit'
+  ): void => {
+    const lat = anchorPrev.latitude + t * (anchorCurr.latitude - anchorPrev.latitude);
+    const lon = anchorPrev.longitude + t * (anchorCurr.longitude - anchorPrev.longitude);
+    const alt = anchorPrev.gnssAltitude + t * (anchorCurr.gnssAltitude - anchorPrev.gnssAltitude);
+    const prevTime = anchorPrev.time.getTime();
+    out.push({
+      taskIndex,
+      fixIndex,
+      time: new Date(prevTime + t * (anchorCurr.time.getTime() - prevTime)),
+      latitude: lat,
+      longitude: lon,
+      altitude: alt,
+      direction,
+      distanceToCenter: andoyerDistance(lat, lon, centerLat, centerLon),
+      toleranceCredited: false,
+    });
+  };
+
+  let prevInside = isInGoalSemicircle(goalLine, fixes[0].latitude, fixes[0].longitude);
+
+  for (let fixIdx = 1; fixIdx < fixes.length; fixIdx++) {
+    const p0 = fixes[fixIdx - 1];
+    const p1 = fixes[fixIdx];
+
+    // Bbox rejection: segment bbox vs goal-region bbox.
+    const minLat = Math.min(p0.latitude, p1.latitude);
+    const maxLat = Math.max(p0.latitude, p1.latitude);
+    const minLon = Math.min(p0.longitude, p1.longitude);
+    const maxLon = Math.max(p0.longitude, p1.longitude);
+    if (
+      minLat > centerLat + latDelta || maxLat < centerLat - latDelta ||
+      minLon > centerLon + lonDelta || maxLon < centerLon - lonDelta
+    ) {
+      // Both endpoints (and the whole segment) are outside the region, so
+      // the pilot is outside the semicircle at p1 too.
+      prevInside = false;
+      continue;
+    }
+
+    const from = { lat: p0.latitude, lon: p0.longitude };
+    const to = { lat: p1.latitude, lon: p1.longitude };
+    const currInside = isInGoalSemicircle(goalLine, to.lat, to.lon);
+    const lineT = goalLineCrossingFraction(goalLine, from, to);
+
+    if (lineT !== null) {
+      if (prevInside !== currInside) {
+        // Crossing the line into (or back out of) the semicircle.
+        push(p0, p1, fixIdx, lineT, currInside ? 'enter' : 'exit');
+      } else {
+        // Crossed the line but neither fix is in the semicircle (e.g. a fast
+        // pass near an endpoint): an instantaneous enter+exit pair keeps the
+        // crossing on record without corrupting the inside/outside state.
+        const direction = isForwardGoalCrossing(goalLine, from, to);
+        push(p0, p1, fixIdx, lineT, direction ? 'enter' : 'exit');
+        push(p0, p1, fixIdx, lineT, direction ? 'exit' : 'enter');
+      }
+    } else if (prevInside !== currInside) {
+      // Entered or left through the semicircle's arc (no line intersection).
+      const t = goalSemicircleBoundaryFraction(goalLine, from, to);
+      push(p0, p1, fixIdx, t, currInside ? 'enter' : 'exit');
+    }
+
+    prevInside = currInside;
+  }
 }
 
 /**
@@ -716,6 +850,7 @@ function computeBestProgress(
   remainingTPs: Array<{ lat: number; lon: number; radius: number }>,
   remainingLegDistances: number[],
   nextTagPoint: { lat: number; lon: number } | null,
+  goalLine: GoalLine | null,
 ): BestProgress | null {
   // Sum of optimized leg distances between remaining TPs (TP[1]→TP[2]→...→Goal)
   let interTPDistance = 0;
@@ -734,11 +869,15 @@ function computeBestProgress(
     // turnpoint we measure to its optimal tag point, so the remaining route
     // stays continuous with the onward optimized legs (avoids the small
     // over-credit of measuring to the nearest edge then jumping to the
-    // optimal tag). The goal cylinder has no onward leg, so the pilot only
-    // needs to reach it — use the nearest edge there.
+    // optimal tag). The goal has no onward leg, so the pilot only needs to
+    // reach it — use the nearest edge of the cylinder, or the nearest point
+    // on the goal line for a LINE goal (goalLine is only non-null when the
+    // next un-reached turnpoint IS the goal).
     const distToNextTP = nextTagPoint
       ? andoyerDistance(fix.latitude, fix.longitude, nextTagPoint.lat, nextTagPoint.lon)
-      : Math.max(0, andoyerDistance(fix.latitude, fix.longitude, nextTP.lat, nextTP.lon) - nextTP.radius);
+      : goalLine
+        ? distanceToGoalLine(goalLine, fix.latitude, fix.longitude)
+        : Math.max(0, andoyerDistance(fix.latitude, fix.longitude, nextTP.lat, nextTP.lon) - nextTP.radius);
     // Total remaining = distance to next TP + optimized path from there to goal
     const distToGoal = distToNextTP + interTPDistance;
 
@@ -815,6 +954,9 @@ export function resolveTurnpointSequence(
   const essIdx = getEffectiveESSIndex(task);
   const essIsFallback = explicitESSIdx < 0 && essIdx >= 0;
   const goalIdx = getGoalIndex(task);
+  // Non-null when the task ends at a goal LINE (S7F §6.3.1): reaching and
+  // remaining-distance for the goal position use line geometry.
+  const goalLine = computeGoalLine(task);
 
   // Build legs with default completed = false
   const legs: LegDistance[] = segmentDistances.map((dist, i) => ({
@@ -831,13 +973,17 @@ export function resolveTurnpointSequence(
   // the outer edge, and the check is never consulted for the SSS itself, so
   // the outer radius is the right edge for every index used.
   const tolerance = task.cylinderTolerance ?? DEFAULT_CYLINDER_TOLERANCE;
-  const startedInsideTP = task.turnpoints.map(tp =>
-    fixes.length > 0 &&
-    andoyerDistance(
+  const startedInsideTP = task.turnpoints.map((tp, tpIdx) => {
+    if (fixes.length === 0) return false;
+    // A LINE goal has no interior; "inside" is the control semicircle.
+    if (goalLine && tpIdx === goalIdx) {
+      return isInGoalSemicircle(goalLine, fixes[0].latitude, fixes[0].longitude);
+    }
+    return andoyerDistance(
       fixes[0].latitude, fixes[0].longitude,
       tp.waypoint.lat, tp.waypoint.lon,
-    ) <= outerDetectionRadius(tp.radius, tolerance)
-  );
+    ) <= outerDetectionRadius(tp.radius, tolerance);
+  });
 
   // Group crossings by taskIndex
   const crossingsByTP = new Map<number, CylinderCrossing[]>();
@@ -963,7 +1109,7 @@ export function resolveTurnpointSequence(
       const nextIdx = lastReaching.taskIndex + 1;
       const nextTag = nextIdx < goalIdx ? optimizedLine[nextIdx] : null;
       const progress = computeBestProgress(
-        fixes, lastReaching.time.getTime(), remainingTPs, remainingLegDistances, nextTag
+        fixes, lastReaching.time.getTime(), remainingTPs, remainingLegDistances, nextTag, goalLine
       );
       candidateFlownDist = progress
         ? taskDistance - progress.distanceToGoal
@@ -1020,7 +1166,7 @@ export function resolveTurnpointSequence(
     const nextIdx = lastReaching.taskIndex + 1;
     const nextTag = nextIdx < goalIdx ? optimizedLine[nextIdx] : null;
     bestProgress = computeBestProgress(
-      fixes, lastReaching.time.getTime(), remainingTPs, remainingLegDistances, nextTag
+      fixes, lastReaching.time.getTime(), remainingTPs, remainingLegDistances, nextTag, goalLine
     );
     flownDistance = bestProgress
       ? taskDistance - bestProgress.distanceToGoal

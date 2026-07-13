@@ -26,6 +26,7 @@
 import type { XCTask } from './xctsk-parser';
 import { getGoalIndex } from './xctsk-parser';
 import { calculateOptimizedTaskLine } from './task-optimizer';
+import { computeGoalLine, distanceToGoalLine } from './goal-line';
 import { andoyerDistance, calculateBearingRadians, destinationPoint } from './geo';
 import type { FlightScoringData } from './gap-scoring';
 
@@ -98,7 +99,8 @@ export interface ManualFlightGeometry {
  * where `remaining` routes from the landing point to the next un-reached
  * turnpoint's optimal tag point, then along the optimised legs to goal — the
  * exact routing `computeBestProgress` uses per fix (an intermediate turnpoint
- * is measured to its tag point; the goal cylinder to its nearest edge).
+ * is measured to its tag point; the goal to its nearest cylinder edge, or to
+ * the nearest point on the goal line for a LINE goal).
  *
  * Turnpoint order is respected two ways:
  * - `madeGood` is floored at the optimised distance already banked by reaching
@@ -152,10 +154,15 @@ export function manualFlightGeometry(
   const nextIdx = anchor + 1;
   const nextIsGoal = nextIdx >= goalIdx;
   const nextTP = task.turnpoints[nextIdx];
+  // Same goal measurement as computeBestProgress: nearest edge of the goal
+  // cylinder, or the nearest point on the goal line for a LINE goal.
+  const goalLine = nextIsGoal ? computeGoalLine(task) : null;
   const distToNextTP = nextIsGoal
-    ? Math.max(0, andoyerDistance(
-        point.lat, point.lon, nextTP.waypoint.lat, nextTP.waypoint.lon,
-      ) - nextTP.radius)
+    ? goalLine
+      ? distanceToGoalLine(goalLine, point.lat, point.lon)
+      : Math.max(0, andoyerDistance(
+          point.lat, point.lon, nextTP.waypoint.lat, nextTP.waypoint.lon,
+        ) - nextTP.radius)
     : andoyerDistance(
         point.lat, point.lon,
         optimizedLine[nextIdx].lat, optimizedLine[nextIdx].lon,
