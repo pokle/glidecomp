@@ -8,7 +8,7 @@
 
 import * as mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
-import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult, type PilotScore } from '@glidecomp/engine';
+import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, computeGoalLine, goalSemicirclePoints, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult, type PilotScore } from '@glidecomp/engine';
 import type { MapProvider, MapPickDetails, LoadedTrack, OpenDistanceLine, BestProgressRoute } from './map-provider';
 import { config } from './config';
 import {
@@ -516,6 +516,7 @@ export function createMapBoxProvider(
           'speed-fastest-segment',
           'track-line',
           'track-line-outline',
+          'task-goal-line',
           'task-cylinders-stroke',
           'task-cylinders-fill',
           'task-line-arrows',
@@ -547,7 +548,7 @@ export function createMapBoxProvider(
         }
 
         // Other sources with default simplification
-        const sourcesToAdd = ['task-line', 'task-points', 'task-cylinders', 'task-segment-labels', 'highlight-segment', 'speed-fastest-segment', 'open-distance-lines', 'best-progress-route', 'multi-track-names', 'waypoints'];
+        const sourcesToAdd = ['task-line', 'task-points', 'task-cylinders', 'task-goal-line', 'task-segment-labels', 'highlight-segment', 'speed-fastest-segment', 'open-distance-lines', 'best-progress-route', 'multi-track-names', 'waypoints'];
         for (const sourceId of sourcesToAdd) {
           if (!map.getSource(sourceId)) {
             map.addSource(sourceId, {
@@ -643,6 +644,23 @@ export function createMapBoxProvider(
             ],
             'line-width': 2,
             'line-opacity': 0.8,
+          },
+        });
+
+        // 3b. Goal line (LINE goals only): the line the pilot must cross,
+        // drawn heavier than a cylinder stroke; its control semicircle is a
+        // regular task-cylinders feature behind it.
+        map.addLayer({
+          id: 'task-goal-line',
+          type: 'line',
+          source: 'task-goal-line',
+          layout: {
+            'line-cap': 'round',
+          },
+          paint: {
+            'line-color': '#a855f7',
+            'line-width': 4,
+            'line-opacity': 0.9,
           },
         });
 
@@ -2336,6 +2354,7 @@ export function createMapBoxProvider(
             'task-line-arrows',
             'task-cylinders-fill',
             'task-cylinders-stroke',
+            'task-goal-line',
             'task-points',
             'task-labels',
             'task-segment-labels',
@@ -2476,6 +2495,7 @@ export function createMapBoxProvider(
             updateGeoJSONSource(map, 'task-line', []);
             updateGeoJSONSource(map, 'task-points', []);
             updateGeoJSONSource(map, 'task-cylinders', []);
+            updateGeoJSONSource(map, 'task-goal-line', []);
             updateGeoJSONSource(map, 'task-segment-labels', []);
             return;
           }
@@ -2526,7 +2546,10 @@ export function createMapBoxProvider(
 
           updateGeoJSONSource(map, 'task-points', pointFeatures);
 
-          // Create cylinder polygons
+          // Create cylinder polygons. A LINE goal replaces the last
+          // turnpoint's circle with its control semicircle (the half-disc
+          // behind the line) and draws the line itself on task-goal-line.
+          const goalLine = computeGoalLine(task);
           const cylinderFeatures = task.turnpoints.map((tp, idx) => ({
             type: 'Feature' as const,
             properties: {
@@ -2534,14 +2557,40 @@ export function createMapBoxProvider(
               type: tp.type || '',
               radius: tp.radius,
             },
-            geometry: createCirclePolygon(
-              tp.waypoint.lon,
-              tp.waypoint.lat,
-              tp.radius
-            ),
+            geometry:
+              goalLine && idx === task.turnpoints.length - 1
+                ? {
+                    type: 'Polygon' as const,
+                    coordinates: [
+                      goalSemicirclePoints(goalLine).map((p) => [p.lon, p.lat]),
+                    ],
+                  }
+                : createCirclePolygon(
+                    tp.waypoint.lon,
+                    tp.waypoint.lat,
+                    tp.radius
+                  ),
           }));
 
           updateGeoJSONSource(map, 'task-cylinders', cylinderFeatures);
+
+          updateGeoJSONSource(
+            map,
+            'task-goal-line',
+            goalLine
+              ? [{
+                  type: 'Feature' as const,
+                  properties: {},
+                  geometry: {
+                    type: 'LineString' as const,
+                    coordinates: [
+                      [goalLine.end1.lon, goalLine.end1.lat],
+                      [goalLine.end2.lon, goalLine.end2.lat],
+                    ],
+                  },
+                }]
+              : []
+          );
 
           // If no track is loaded, fit to task bounds (re-measure first — see
           // setTrack). Callers editing the task live pass fit:false so picks
@@ -2563,6 +2612,7 @@ export function createMapBoxProvider(
           updateGeoJSONSource(map, 'task-line', []);
           updateGeoJSONSource(map, 'task-points', []);
           updateGeoJSONSource(map, 'task-cylinders', []);
+          updateGeoJSONSource(map, 'task-goal-line', []);
           updateGeoJSONSource(map, 'task-segment-labels', []);
         },
 

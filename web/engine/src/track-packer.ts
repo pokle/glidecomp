@@ -24,6 +24,7 @@
 
 import type { XCTask } from './xctsk-parser';
 import { calculateOptimizedTaskLine } from './task-optimizer';
+import { computeGoalLine } from './goal-line';
 
 /** Floats stored per vertex in `tracks.bin`: [x, y, z, tRel]. */
 export const FLOATS_PER_VERTEX = 4;
@@ -129,6 +130,14 @@ export interface TrackManifest {
      * same line the 2D analysis view draws. Absent for 0/1-turnpoint tasks.
      */
     optimizedPath?: { x: number; z: number }[];
+    /**
+     * Present when the task ends at a goal LINE (S7F §6.3.1) instead of a
+     * cylinder: the line's endpoints in ENU metres, perpendicular to the
+     * final leg and centred on the last turnpoint. The viewer draws the
+     * goal as this line (with its control semicircle behind it) rather
+     * than the last turnpoint's cylinder.
+     */
+    goalLine?: { x1: number; z1: number; x2: number; z2: number };
   };
 }
 
@@ -293,7 +302,18 @@ export function packTracks(input: PackInput): PackedTracks {
     const opt = calculateOptimizedTaskLine(input.task);
     const optimizedPath =
       opt.length >= 2 ? opt.map((p) => ({ x: projX(p.lon), z: projZ(p.lat) })) : undefined;
-    task = { turnpoints, optimizedPath };
+    // Goal line endpoints (when the goal is a LINE), projected like the rest
+    // of the task so the viewer needs no lat/lon geometry at runtime.
+    const gl = computeGoalLine(input.task);
+    const goalLine = gl
+      ? {
+          x1: projX(gl.end1.lon),
+          z1: projZ(gl.end1.lat),
+          x2: projX(gl.end2.lon),
+          z2: projZ(gl.end2.lat),
+        }
+      : undefined;
+    task = { turnpoints, optimizedPath, goalLine };
   }
 
   const manifest: TrackManifest = {

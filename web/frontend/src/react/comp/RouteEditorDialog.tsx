@@ -189,6 +189,12 @@ export function RouteEditorDialog({
     setWarnings(result.warnings);
     setHasSSSTurnpoint(result.turnpoints.some((tp) => tp.type === "SSS"));
 
+    // The goal config shapes the preview and the distances: a LINE goal is
+    // drawn as the goal line + control semicircle, and the optimised route
+    // ends on the line instead of the cylinder edge. Open-distance comps
+    // hide the goal panel, so carry whatever the loaded task had.
+    const goal = openDistance ? baseRef.current?.goal : { type: goalType };
+
     // Feed the map the turnpoints parsed so far — cylinders and the optimised
     // line update live as rows are edited, added, reordered or picked.
     setMapTask(
@@ -197,6 +203,7 @@ export function RouteEditorDialog({
             taskType: baseRef.current?.taskType || "CLASSIC",
             version: baseRef.current?.version ?? 1,
             turnpoints: result.turnpoints,
+            ...(goal ? { goal } : {}),
           }
         : null
     );
@@ -207,6 +214,7 @@ export function RouteEditorDialog({
         taskType: baseRef.current?.taskType || "CLASSIC",
         version: baseRef.current?.version ?? 1,
         turnpoints: result.turnpoints,
+        ...(goal ? { goal } : {}),
       };
       const legs = getOptimizedSegmentDistances(task);
       setTotalKm(legs.reduce((sum, d) => sum + d, 0) / 1000);
@@ -223,7 +231,7 @@ export function RouteEditorDialog({
         rows.map((r) => ({ id: r.id, leg: legByRowId.get(r.id) ?? null }))
       );
     }
-  }, [openDistance]);
+  }, [openDistance, goalType]);
 
   useEffect(() => {
     let cancelled = false;
@@ -270,6 +278,14 @@ export function RouteEditorDialog({
     // The dialog mounts with a fixed xctsk; the grid owns the data from there.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The map preview and leg distances depend on the goal type (a LINE goal
+  // draws as a line + semicircle and shifts the final leg), not just on the
+  // grid rows — re-render them when the selector changes. `recompute` is
+  // recreated on goalType changes, so it is the effect's real dependency.
+  useEffect(() => {
+    if (gridReady) recompute();
+  }, [gridReady, recompute]);
 
   /**
    * Column set: drag handle, row number, per-row insert-above, then the
@@ -917,11 +933,10 @@ export function RouteEditorDialog({
                 </span>
               </div>
               {goalType === "LINE" ? (
-                <p className="mt-2 text-sm text-amber-500" role="alert">
-                  Goal lines aren&apos;t supported by scoring yet — this task
-                  will be scored with a cylinder goal of the last turnpoint&apos;s
-                  radius, so distances and arrival times may be off by up to
-                  that radius.
+                <p className="mt-2 text-sm text-muted-foreground">
+                  The goal line is centred on the last turnpoint, perpendicular
+                  to the final leg, and extends the turnpoint&apos;s radius to
+                  each side (total length 2 × radius).
                 </p>
               ) : null}
             </section>

@@ -243,6 +243,41 @@ export function calculateTrackDistance(
 }
 
 /**
+ * Project a point into a local east/north tangent frame around a reference
+ * point, in metres. Uses an equirectangular approximation with the WGS84
+ * metres-per-degree series at the reference latitude — sub-metre accurate
+ * within a few kilometres of the reference. Intended for local intersection
+ * tests (e.g. a track segment against a goal line), NOT for long-range
+ * distances — use {@link andoyerDistance} for those.
+ *
+ * @param refLat - Reference (origin) latitude in degrees
+ * @param refLon - Reference (origin) longitude in degrees
+ * @param lat - Latitude of the point to project (degrees)
+ * @param lon - Longitude of the point to project (degrees)
+ * @returns Offsets from the reference in metres: `east` (+E) and `north` (+N)
+ */
+export function localEastNorth(
+  refLat: number,
+  refLon: number,
+  lat: number,
+  lon: number
+): { east: number; north: number } {
+  const refLatRad = (refLat * Math.PI) / 180;
+  // WGS84 series expansion for metres per degree at the reference latitude
+  // (same formula as the track packer's projection; good to sub-metre over
+  // a competition-task area).
+  const mPerDegLat =
+    111132.92 - 559.82 * Math.cos(2 * refLatRad) + 1.175 * Math.cos(4 * refLatRad);
+  const mPerDegLon =
+    111412.84 * Math.cos(refLatRad) - 93.5 * Math.cos(3 * refLatRad) +
+    0.118 * Math.cos(5 * refLatRad);
+  return {
+    east: (lon - refLon) * mPerDegLon,
+    north: (lat - refLat) * mPerDegLat,
+  };
+}
+
+/**
  * Check if a point is inside a cylinder.
  *
  * @param lat - Latitude of point to check

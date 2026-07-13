@@ -343,7 +343,7 @@ describe("GET /api/comp/:comp_id", () => {
     expect(data.waypoint_count).toBe(2);
   });
 
-  test("flags a task with a LINE goal (unsupported by scoring)", async () => {
+  test("flags a task with a LINE goal (informational badge)", async () => {
     const compId = await createComp({ name: "Line Goal Comp" });
     const taskId = await createTask(compId);
 

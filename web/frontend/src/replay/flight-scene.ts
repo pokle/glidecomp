@@ -293,6 +293,13 @@ export class FlightScene {
           ? this.light ? 0xdc2626 : 0xf87171
           : this.regularTurnpointColor;
 
+      // A LINE goal (manifest.task.goalLine) renders as a vertical gate on
+      // the line instead of the cylinder ring + drum.
+      if (isGoal && task.goalLine) {
+        this.buildGoalLine(task.goalLine, tp, color);
+        return;
+      }
+
       const ringPts: THREE.Vector3[] = [];
       const segs = 72;
       for (let i = 0; i <= segs; i++) {
@@ -339,6 +346,107 @@ export class FlightScene {
       }
     });
     this.applyWallScale();
+  }
+
+  /**
+   * A LINE goal (S7F §6.3.1), drawn as a gate instead of a cylinder: the goal
+   * line on the ground with a translucent vertical wall standing on it (the
+   * surface pilots fly through), plus the control-semicircle outline behind
+   * the line — the same geometry the scorer credits, so what the viewer sees
+   * is exactly what was measured. The wall joins `cylinderWalls` so the
+   * vertical-scale control stretches it with the cylinder drums.
+   */
+  private buildGoalLine(
+    goalLine: { x1: number; z1: number; x2: number; z2: number },
+    tp: { name: string; radius: number; x: number; z: number },
+    color: number,
+  ): void {
+    const { x1, z1, x2, z2 } = goalLine;
+    const midX = (x1 + x2) / 2;
+    const midZ = (z1 + z2) / 2;
+    const dx = x2 - x1;
+    const dz = z2 - z1;
+    const length = Math.hypot(dx, dz);
+    if (length === 0) return;
+
+    // The line on the ground.
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(x1, 0, z1),
+        new THREE.Vector3(x2, 0, z2),
+      ]),
+      new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95, depthTest: false }),
+    );
+    line.frustumCulled = false;
+    this.group.add(line);
+
+    // Control semicircle behind the line (radius = half the line length), on
+    // the side away from the previous distinct turnpoint — the course arrives
+    // from that turnpoint and crosses onward through the line.
+    const turnpoints = this.tracks.manifest.task?.turnpoints ?? [];
+    let prev: { x: number; z: number } | null = null;
+    for (let i = turnpoints.length - 2; i >= 0; i--) {
+      if (turnpoints[i].x !== tp.x || turnpoints[i].z !== tp.z) {
+        prev = turnpoints[i];
+        break;
+      }
+    }
+    if (prev) {
+      // Perpendicular to the line, oriented away from the previous turnpoint.
+      let nx = -dz / length;
+      let nz = dx / length;
+      if (nx * (tp.x - prev.x) + nz * (tp.z - prev.z) < 0) {
+        nx = -nx;
+        nz = -nz;
+      }
+      const lx = dx / length;
+      const lz = dz / length;
+      const r = length / 2;
+      const arcPts: THREE.Vector3[] = [];
+      const segs = 36;
+      for (let i = 0; i <= segs; i++) {
+        const a = (i / segs) * Math.PI - Math.PI / 2; // -90°..+90° around the normal
+        const along = Math.sin(a) * r; // along the line
+        const beyond = Math.cos(a) * r; // past the line
+        arcPts.push(new THREE.Vector3(
+          midX + lx * along + nx * beyond,
+          0,
+          midZ + lz * along + nz * beyond,
+        ));
+      }
+      const arc = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(arcPts),
+        new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.45, depthTest: false }),
+      );
+      arc.frustumCulled = false;
+      this.group.add(arc);
+    }
+
+    // Vertical wall standing on the line — the gate pilots fly through.
+    const wall = new THREE.Mesh(
+      new THREE.PlaneGeometry(length, WALL_HEIGHT),
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: this.light ? 0.14 : 0.16,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    wall.position.set(midX, WALL_HEIGHT / 2, midZ);
+    // PlaneGeometry's width runs along local +X; rotate about Y so it lies
+    // along the line's ENU direction (x east, z south).
+    wall.rotation.y = -Math.atan2(dz, dx);
+    wall.frustumCulled = false;
+    this.cylinderWalls.push(wall);
+    this.group.add(wall);
+
+    if (tp.name) {
+      const label = makeGroundLabel(tp.name, Math.min(tp.radius * 1.5, this.extentXZ * 0.11), this.light);
+      label.position.set(tp.x, 0, tp.z);
+      label.renderOrder = 5;
+      this.group.add(label);
+    }
   }
 
   /**

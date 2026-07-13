@@ -15,6 +15,7 @@ import {
   getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters,
   calculateOptimizedTaskLine, getOptimizedSegmentDistances,
   calculateBearing, andoyerDistance, destinationPoint, calculateBearingRadians,
+  computeGoalLine, goalSemicirclePoints,
   type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult,
 } from '@glidecomp/engine';
 import type { MapProvider, BestProgressRoute } from './map-provider';
@@ -699,24 +700,55 @@ export function createLeafletProvider(
           }
         }
 
+        // A LINE goal (S7F §6.3.1) replaces the last turnpoint's circle with
+        // the goal line itself plus its control semicircle behind the line.
+        const goalLine = computeGoalLine(task);
+
         // Cylinders, turnpoint dots, and labels
         for (let idx = 0; idx < task.turnpoints.length; idx++) {
           const tp = task.turnpoints[idx];
           const color = getTurnpointColor(tp.type || '');
           const latlng: [number, number] = [tp.waypoint.lat, tp.waypoint.lon];
 
-          // Cylinder polygon
-          const circlePoly = createCirclePolygonLatLng(tp.waypoint.lat, tp.waypoint.lon, tp.radius);
-          taskGroup.addLayer(
-            new Polygon(circlePoly, {
-              color,
-              fillColor: color,
-              fillOpacity: 0.15,
-              weight: 2,
-              opacity: 0.8,
-              interactive: false,
-            })
-          );
+          if (goalLine && idx === task.turnpoints.length - 1) {
+            // Control semicircle, styled like a cylinder
+            taskGroup.addLayer(
+              new Polygon(
+                goalSemicirclePoints(goalLine).map((p): [number, number] => [p.lat, p.lon]),
+                {
+                  color,
+                  fillColor: color,
+                  fillOpacity: 0.15,
+                  weight: 2,
+                  opacity: 0.8,
+                  interactive: false,
+                }
+              )
+            );
+            // The goal line itself, heavier than a cylinder stroke
+            taskGroup.addLayer(
+              new Polyline(
+                [
+                  [goalLine.end1.lat, goalLine.end1.lon],
+                  [goalLine.end2.lat, goalLine.end2.lon],
+                ],
+                { color, weight: 4, opacity: 0.9, interactive: false }
+              )
+            );
+          } else {
+            // Cylinder polygon
+            const circlePoly = createCirclePolygonLatLng(tp.waypoint.lat, tp.waypoint.lon, tp.radius);
+            taskGroup.addLayer(
+              new Polygon(circlePoly, {
+                color,
+                fillColor: color,
+                fillOpacity: 0.15,
+                weight: 2,
+                opacity: 0.8,
+                interactive: false,
+              })
+            );
+          }
 
           // Turnpoint dot
           const dot = new CircleMarker(latlng, {
