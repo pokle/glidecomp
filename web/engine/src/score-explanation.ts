@@ -35,6 +35,7 @@ import type { OpenDistanceGeometry } from './open-distance-scoring';
 import type { ManualFlightGeometry } from './manual-flight';
 import type { IGCFix } from './igc-parser';
 import { calculateOptimizedTaskLine } from './task-optimizer';
+import { computeGoalLine } from './goal-line';
 
 // ---------------------------------------------------------------------------
 // Output types
@@ -449,12 +450,29 @@ function buildFlightSection(
     const name = turnpointName(task, reaching.taskIndex);
     const isESS = reaching.taskIndex === essIdx;
     const isGoal = reaching.taskIndex === getGoalIndex(task);
+    // Non-null when this task ends at a goal LINE (S7F §6.3.1) — the goal
+    // reaching is then a line crossing (or a semicircle fix), not a
+    // cylinder entry, and the wording must say so.
+    const goalLine = isGoal ? computeGoalLine(task) : null;
 
     let detail: string | undefined;
     if (reaching.selectionReason === 'already_inside') {
-      detail = 'Already inside this cylinder when the previous turnpoint was reached — credited at that same moment, no extra crossing needed.';
+      detail = goalLine
+        ? 'Already inside the control semicircle behind the goal line when the previous turnpoint was reached — credited at that same moment, no extra crossing needed.'
+        : 'Already inside this cylinder when the previous turnpoint was reached — credited at that same moment, no extra crossing needed.';
     } else if (reaching.candidateCount > 1) {
       detail = `First of ${reaching.candidateCount} crossings — once a turnpoint is reached, later crossings don't matter.`;
+    }
+    if (goalLine) {
+      // Say what the goal geometry was and how this reaching satisfied it —
+      // the line itself, or a fix in the control semicircle behind it.
+      const lineDesc = `the ${Math.round(goalLine.halfWidth * 2)} m goal line, perpendicular to the final leg (S7F §6.3.1)`;
+      const goalNote = reaching.goalSemicircleCredited
+        ? `Recorded in the control semicircle behind ${lineDesc} — a fix in the semicircle counts as goal even when the line crossing itself falls between tracklog fixes.`
+        : reaching.selectionReason === 'already_inside'
+          ? `Goal is ${lineDesc}.`
+          : `Crossed ${lineDesc}.`;
+      detail = `${goalNote}${detail ? ` ${detail}` : ''}`;
     }
     if (reaching.toleranceCredited) {
       detail = `${detail ? `${detail} ` : ''}${TOLERANCE_NOTE}`;
@@ -490,6 +508,7 @@ function buildFlightSection(
     // straight line. Name that turnpoint so the map marker makes sense.
     const nextIdx = result.lastTurnpointReached + 1;
     const nextIsGoal = nextIdx === getGoalIndex(task);
+    const goalIsLine = nextIsGoal && computeGoalLine(task) !== null;
     const nextName = turnpointName(task, nextIdx);
     const nextDesc = `${turnpointLabel(task, nextIdx)}${nextName ? ` (${nextName})` : ''}`;
     // The remaining routed line: from the best-progress point, through each
@@ -509,7 +528,7 @@ function buildFlightSection(
       text: `Landed out — best distance made good along the task, ${km(result.bestProgress.distanceToGoal)} short of goal`,
       value: fmt(result.bestProgress.time),
       detail: nextIsGoal
-        ? `The marked point is where the track came closest to goal${nextName ? ` (${nextName})` : ''}. Scored distance is measured along the task to this point: ${km(entry.flown_distance)}.`
+        ? `The marked point is where the track came closest to ${goalIsLine ? 'the goal line' : 'goal'}${nextName ? ` (${nextName})` : ''}. Scored distance is measured along the task to this point: ${km(entry.flown_distance)}.`
         : `The marked point is where the track came closest to the next turnpoint, ${nextDesc} — not the point nearest goal. Distance is measured along the task route from here, on through the remaining turnpoints to goal, so the scored distance is ${km(entry.flown_distance)}.`,
       anchor: {
         kind: 'best_progress',

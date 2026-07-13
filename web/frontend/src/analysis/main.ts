@@ -1331,14 +1331,6 @@ async function init(): Promise<void> {
 
   function applyTask(task: XCTask): void {
     state.task = task;
-    // Goal lines have no scoring geometry yet (issue #330) — the engine
-    // scores every goal as a cylinder. Warn instead of degrading silently.
-    if (task.goal?.type === 'LINE') {
-      showStatus(
-        'This task has a goal line, which scoring does not support yet — the goal is scored as a cylinder, so distances and times near goal may be off by up to the goal radius.',
-        'warning'
-      );
-    }
     updateDownloadTaskVisibility();
     mapRenderer?.setTask(task);
     analysisPanel?.setTask(task);

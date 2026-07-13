@@ -546,8 +546,8 @@ function ClassWarnings({
 }) {
   // Task-setup warnings: GAP tasks defined without SSS/ESS turnpoint types
   // still score via engine fallbacks, but it's almost always a mistake.
-  // LINE goals aren't implemented by scoring at all (issue #330) — they
-  // silently score as cylinders, so that also warrants a warning.
+  // (LINE goals are scored natively against the goal line, so they get an
+  // informational badge on the task list rather than a warning here.)
   const setupWarnings = tasks
     .map((t) => {
       const parts: string[] = [];
@@ -556,11 +556,6 @@ function ClassWarnings({
       }
       if (t.missing_ess) {
         parts.push("no ESS turnpoint — the speed section ends at goal");
-      }
-      if (t.line_goal) {
-        parts.push(
-          "goal line is not supported by scoring yet — the goal is scored as a cylinder, so distances and arrival times may be off by up to the goal radius"
-        );
       }
       return parts.length > 0 ? { name: t.name, text: parts.join("; ") } : null;
     })
@@ -678,8 +673,8 @@ function TasksList({
                   ) : null}{" "}
                   {task.line_goal ? (
                     <span
-                      className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-500"
-                      title="Goal lines aren't scored yet — see Task Warnings above"
+                      className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary"
+                      title="This task ends at a goal line perpendicular to the final leg"
                     >
                       Goal line
                     </span>
