@@ -256,7 +256,9 @@ export function createLeafletProvider(
     // Callbacks
     let trackClickCallback: ((fixIndex: number) => void) | null = null;
     let turnpointClickCallback: ((turnpointIndex: number) => void) | null = null;
-    let mapClickCallback: ((lat: number, lon: number) => void) | null = null;
+    // Leaflet has no terrain or label-tile data, so the callback's optional
+    // details parameter (see MapProvider.onMapClick) is never passed here.
+    let mapClickCallback: ((lat: number, lon: number, details?: import('./map-provider').MapPickDetails) => void) | null = null;
     type MapWaypoint = import('./map-provider').MapWaypoint;
     type MapInteractionMode = import('./map-provider').MapInteractionMode;
     let waypointsClickCallback: ((waypoint: MapWaypoint) => void) | null = null;
@@ -1073,7 +1075,7 @@ export function createLeafletProvider(
         turnpointClickCallback = callback;
       },
 
-      onMapClick(callback: (lat: number, lon: number) => void) {
+      onMapClick(callback: (lat: number, lon: number, details?: import('./map-provider').MapPickDetails) => void) {
         mapClickCallback = callback;
       },
 

@@ -62,6 +62,43 @@ function csvField(value: string): string {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
+/** Feature-kind words that don't identify the place ("Mount Bogong" → BOGONG). */
+const GENERIC_NAME_WORDS = new Set([
+  "THE", "MOUNT", "MT", "MOUNTAIN", "PEAK", "HILL", "LAKE", "RIVER", "CREEK",
+  "AIRPORT", "AIRFIELD", "AIRSTRIP",
+]);
+
+/** Longest code we suggest — fits the stricter waypoint file formats. */
+const MAX_SUGGESTED_CODE_LENGTH = 6;
+
+/**
+ * Suggest a short waypoint code from a place name: the first word that isn't
+ * a generic feature-kind word, ASCII-uppercased and truncated ("Mount Bogong"
+ * → "BOGONG", "West Peak" → "WEST"). When the code is already taken a numeric
+ * suffix disambiguates ("BOGONG" → "BOGON2"). Returns "" for unusable names.
+ */
+export function suggestWaypointCode(name: string, taken: Iterable<string> = []): string {
+  const words = name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // strip diacritics: "Céüse" → "CEUSE"
+    .toUpperCase()
+    .split(/[^A-Z0-9]+/)
+    .filter((w) => w.length > 0);
+  if (words.length === 0) return "";
+  const significant = words.find((w) => !GENERIC_NAME_WORDS.has(w));
+  // All-generic names ("The Peak") fall back to the last word — the kind word
+  // still beats the article.
+  const base = (significant ?? words[words.length - 1]).slice(0, MAX_SUGGESTED_CODE_LENGTH);
+  const takenSet = new Set([...taken].map((c) => c.trim().toUpperCase()));
+  if (!takenSet.has(base)) return base;
+  for (let n = 2; n < 100; n++) {
+    const suffix = String(n);
+    const candidate = base.slice(0, MAX_SUGGESTED_CODE_LENGTH - suffix.length) + suffix;
+    if (!takenSet.has(candidate)) return candidate;
+  }
+  return base;
+}
+
 /**
  * Serialize turnpoints to the competition waypoint CSV format
  * (`Name,Latitude,Longitude,Description,Proximity Distance,Altitude`) — the

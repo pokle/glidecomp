@@ -8,6 +8,7 @@ import {
   gateToHHMM,
   parseCoords,
   startConfigSummary,
+  suggestWaypointCode,
   turnpointsToCSV,
   turnpointToRow,
   xctskForPatch,
@@ -295,5 +296,37 @@ describe("turnpointsToCSV", () => {
       { radius: 400, waypoint: { name: "Hill, North", lat: -36, lon: 147 } },
     ]);
     expect(csv).toContain('"Hill, North",-36.000000,147.000000,,400,0');
+  });
+});
+
+describe("suggestWaypointCode", () => {
+  it("uses the first non-generic word, uppercased", () => {
+    expect(suggestWaypointCode("Mount Bogong")).toBe("BOGONG");
+    expect(suggestWaypointCode("West Peak")).toBe("WEST");
+    expect(suggestWaypointCode("Tawonga South")).toBe("TAWONG");
+  });
+
+  it("falls back to the generic word when nothing else remains", () => {
+    expect(suggestWaypointCode("The Peak")).toBe("PEAK");
+  });
+
+  it("strips diacritics and punctuation", () => {
+    expect(suggestWaypointCode("Pic de Céüse")).toBe("PIC");
+    expect(suggestWaypointCode("St. Jean-Montclar")).toBe("ST");
+  });
+
+  it("truncates long words to six characters", () => {
+    expect(suggestWaypointCode("Porepunkah Airfield")).toBe("POREPU");
+  });
+
+  it("disambiguates against taken codes, case-insensitively", () => {
+    expect(suggestWaypointCode("Mount Bogong", ["bogong"])).toBe("BOGON2");
+    expect(suggestWaypointCode("Mount Bogong", ["BOGONG", "BOGON2"])).toBe("BOGON3");
+  });
+
+  it("returns empty for unusable names", () => {
+    expect(suggestWaypointCode("")).toBe("");
+    expect(suggestWaypointCode("   ")).toBe("");
+    expect(suggestWaypointCode("—")).toBe("");
   });
 });

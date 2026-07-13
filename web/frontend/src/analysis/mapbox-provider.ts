@@ -9,7 +9,7 @@
 import * as mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
 import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult, type PilotScore } from '@glidecomp/engine';
-import type { MapProvider, LoadedTrack, OpenDistanceLine, BestProgressRoute } from './map-provider';
+import type { MapProvider, MapPickDetails, LoadedTrack, OpenDistanceLine, BestProgressRoute } from './map-provider';
 import { config } from './config';
 import {
   MAP_FONT_FAMILY, GLIDE_LABEL_TEXT_SHADOW, GLIDE_LABEL_SPARSE_MIN_ZOOM, GLIDE_LABEL_SPEED_MIN_ZOOM,
@@ -52,6 +52,67 @@ function updateGeoJSONSource(
     type: 'FeatureCollection',
     features,
   });
+}
+
+// How far (screen px) from an add-waypoint tap to look for a named label —
+// slightly wider than the 44px waypoint-pick tolerance since labels render
+// offset from the feature they name.
+const PLACE_NAME_SEARCH_RADIUS_PX = 56;
+
+// Mapbox Streets v8 source layers that carry useful point names, for the
+// classic styles (satellite/streets/light/dark). Filtering by source layer
+// instead of style layer id keeps this working across styles, whose layer
+// ids differ.
+const PLACE_NAME_SOURCE_LAYERS = new Set([
+  'natural_label', // peaks, ridges, water bodies
+  'poi_label', // parks, landmarks
+  'place_label', // settlements, localities
+  'airport_label',
+]);
+
+/**
+ * Name of the nearest labelled point feature rendered around a screen point,
+ * from the already-loaded map data (no network request). Best-effort by
+ * design: only finds labels the current style renders at the current zoom.
+ *
+ * A label feature comes in one of two shapes depending on the style's engine:
+ * classic styles return vector-tile features whose `sourceLayer` names a
+ * streets-v8 label layer; Mapbox-Standard-based styles (the default Outdoors
+ * style) return featureset results with NO source/sourceLayer at all, e.g.
+ * `{ name, class: 'landform', group: 'natural-point' }` for a peak. Features
+ * from our own GeoJSON layers (waypoint markers, tracks) always carry their
+ * source id, so requiring "no source" excludes them on the Standard path.
+ */
+function findNearbyPlaceName(map: mapboxgl.Map, point: { x: number; y: number }): string | undefined {
+  const r = PLACE_NAME_SEARCH_RADIUS_PX;
+  let features: mapboxgl.GeoJSONFeature[];
+  try {
+    features = map.queryRenderedFeatures([
+      [point.x - r, point.y - r],
+      [point.x + r, point.y + r],
+    ]);
+  } catch {
+    return undefined;
+  }
+  let bestName: string | undefined;
+  let bestDist = Infinity;
+  for (const f of features) {
+    // Line/area labels (rivers, ridgelines) have no single "here" — skip them.
+    if (f.geometry.type !== 'Point') continue;
+    const name = f.properties?.name;
+    if (typeof name !== 'string' || name.length === 0) continue;
+    const isStyleLabel = f.sourceLayer
+      ? PLACE_NAME_SOURCE_LAYERS.has(f.sourceLayer)
+      : !f.source;
+    if (!isStyleLabel) continue;
+    const p = map.project(f.geometry.coordinates as [number, number]);
+    const d = Math.hypot(p.x - point.x, p.y - point.y);
+    if (d < bestDist) {
+      bestDist = d;
+      bestName = name;
+    }
+  }
+  return bestName;
 }
 
 /**
@@ -160,7 +221,7 @@ export function createMapBoxProvider(
       // Click callbacks (mutable refs — registered once, updated via setter)
       let trackClickCallback: ((fixIndex: number) => void) | null = null;
       let turnpointClickCallback: ((turnpointIndex: number) => void) | null = null;
-      let mapClickCallback: ((lat: number, lon: number) => void) | null = null;
+      let mapClickCallback: ((lat: number, lon: number, details?: MapPickDetails) => void) | null = null;
       let waypointsClickCallback: ((waypoint: MapWaypoint) => void) | null = null;
 
       // Annotation layer (created after map loads)
@@ -1325,7 +1386,13 @@ export function createMapBoxProvider(
         // the editor can place a brand-new waypoint there.
         map.on('click', (e: mapboxgl.MapMouseEvent) => {
           if (interactionMode === 'add-waypoint') {
-            mapClickCallback?.(e.lngLat.lat, e.lngLat.lng);
+            // Ground elevation from the terrain DEM (metres AMSL, un-exaggerated).
+            // Null when the DEM tile isn't loaded — report undefined, never 0.
+            const elevation = map.queryTerrainElevation(e.lngLat, { exaggerated: false });
+            mapClickCallback?.(e.lngLat.lat, e.lngLat.lng, {
+              elevation: elevation ?? undefined,
+              placeName: findNearbyPlaceName(map, e.point),
+            });
             return;
           }
           if (!waypointsClickCallback || waypointsData.length === 0) return;
@@ -2842,7 +2909,7 @@ export function createMapBoxProvider(
           }
         },
 
-        onMapClick(callback: (lat: number, lon: number) => void) {
+        onMapClick(callback: (lat: number, lon: number, details?: MapPickDetails) => void) {
           mapClickCallback = callback;
         },
 

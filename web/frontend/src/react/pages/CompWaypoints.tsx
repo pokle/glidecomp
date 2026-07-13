@@ -13,7 +13,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { parseWaypointFile, type WaypointFileRecord } from "@glidecomp/engine";
-import type { MapWaypoint } from "../../analysis/map-provider";
+import type { MapPickDetails, MapWaypoint } from "../../analysis/map-provider";
 import { Button } from "@/react/ui/button";
 import { Input } from "@/react/ui/input";
 import {
@@ -29,7 +29,7 @@ import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { useAdminView, useUser } from "../lib/user";
 import { Breadcrumbs } from "../components/Breadcrumbs";
-import { formatCoords, parseCoords } from "../comp/route-editor";
+import { formatCoords, parseCoords, suggestWaypointCode } from "../comp/route-editor";
 import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
 
 const RouteMap = lazy(() => import("../comp/RouteMap"));
@@ -189,14 +189,28 @@ export function CompWaypoints() {
     }
   }
 
-  const openAdd = useCallback((coords = "") => {
-    setNewCode("");
-    setNewName("");
-    setNewCoords(coords);
-    setNewAltitude("");
-    setAdding(true);
-    setAddMode(false);
-  }, []);
+  // Everything the map can tell us about the tapped point pre-fills the
+  // dialog (still fully editable): terrain elevation → altitude, nearest
+  // rendered label → name, and a short code derived from that name. All
+  // blank on the Leaflet fallback, which reports no details.
+  const openAdd = useCallback(
+    (coords = "", details?: MapPickDetails) => {
+      const placeName = details?.placeName ?? "";
+      setNewCode(
+        placeName
+          ? suggestWaypointCode(placeName, rows.map((r) => r.code))
+          : ""
+      );
+      setNewName(placeName);
+      setNewCoords(coords);
+      setNewAltitude(
+        details?.elevation !== undefined ? String(Math.round(details.elevation)) : ""
+      );
+      setAdding(true);
+      setAddMode(false);
+    },
+    [rows]
+  );
 
   function addWaypoint() {
     const coords = parseCoords(newCoords);
@@ -336,7 +350,7 @@ export function CompWaypoints() {
                   addMode={addMode}
                   fitNonce={fitNonce}
                   onWaypointPick={() => {}}
-                  onMapPick={(lat, lon) => openAdd(formatCoords(lat, lon))}
+                  onMapPick={(lat, lon, details) => openAdd(formatCoords(lat, lon), details)}
                 />
               </Suspense>
             </div>

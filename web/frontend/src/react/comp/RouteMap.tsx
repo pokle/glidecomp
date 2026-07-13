@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import type { XCTask } from "@glidecomp/engine";
 import {
   createMapProvider,
+  type MapPickDetails,
   type MapProvider,
   type MapWaypoint,
 } from "../../analysis/map-provider";
@@ -47,7 +48,9 @@ export default function RouteMap({
    */
   fitNonce?: number;
   onWaypointPick: (waypoint: MapWaypoint) => void;
-  onMapPick: (lat: number, lon: number) => void;
+  /** Ground pick. `details` carries best-effort extras from the Mapbox data
+   *  (ground elevation, nearby place name); undefined on the Leaflet fallback. */
+  onMapPick: (lat: number, lon: number, details?: MapPickDetails) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [provider, setProvider] = useState<MapProvider | null>(null);
@@ -83,7 +86,7 @@ export default function RouteMap({
         }
         created = p;
         p.onWaypointClick?.((wp) => onWaypointPickRef.current(wp));
-        p.onMapClick?.((lat, lon) => onMapPickRef.current(lat, lon));
+        p.onMapClick?.((lat, lon, details) => onMapPickRef.current(lat, lon, details));
         setProvider(p);
       })
       .catch((err) => {
