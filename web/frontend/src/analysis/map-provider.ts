@@ -65,6 +65,20 @@ export interface MapWaypoint {
 }
 
 /**
+ * Extra context a provider can attach to an add-waypoint map pick, when its
+ * data source offers it. Everything is best-effort: the Mapbox provider fills
+ * what it can from the terrain DEM and the rendered label tiles; the Leaflet
+ * provider has neither and passes no details at all.
+ */
+export interface MapPickDetails {
+    /** Ground elevation in metres AMSL at the picked point (terrain DEM). */
+    elevation?: number;
+    /** Name of the nearest labelled feature (peak, locality, POI) on screen
+     *  near the pick, e.g. "Mount Bogong". */
+    placeName?: string;
+}
+
+/**
  * Bounds in degrees
  */
 export interface MapBounds {
@@ -152,8 +166,10 @@ export interface MapProvider {
     /** Register callback for panel toggle button click (native map control) */
     onPanelToggleClick?(callback: () => void): void;
 
-    /** Register callback for map click (used by task editor to add waypoints) */
-    onMapClick?(callback: (lat: number, lon: number) => void): void;
+    /** Register callback for map click (used by task editor to add waypoints).
+     *  `details` carries best-effort extra context (ground elevation, nearby
+     *  place name) — see MapPickDetails; undefined when none is available. */
+    onMapClick?(callback: (lat: number, lon: number, details?: MapPickDetails) => void): void;
 
     /** Set the active interaction mode (controls which click/hover handlers fire) */
     setInteractionMode?(mode: MapInteractionMode): void;
