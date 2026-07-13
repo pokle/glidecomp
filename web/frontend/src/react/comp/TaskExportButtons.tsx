@@ -49,6 +49,8 @@ export function TaskExportButtons({
   taskName,
   records,
   size = "sm",
+  qrFirst = false,
+  primary,
 }: {
   compId: string;
   taskId: string;
@@ -56,6 +58,10 @@ export function TaskExportButtons({
   /** Turnpoints if already loaded (task page); fetched on demand otherwise. */
   records?: WaypointFileRecord[];
   size?: "sm" | "default";
+  /** Show the QR code button before Share task (role-based button order). */
+  qrFirst?: boolean;
+  /** Which of the two buttons is the primary action (role-based button order). */
+  primary?: "share" | "qr";
 }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [swap, setSwap] = useState(false);
@@ -104,22 +110,45 @@ export function TaskExportButtons({
     setQrValue(encodeXctskQR(recs));
   }
 
+  const shareButton = (
+    <Button
+      key="share"
+      type="button"
+      variant={primary === "share" ? "default" : "outline"}
+      size={size}
+      onClick={() => setShareOpen(true)}
+    >
+      <Share2Icon className="size-4" aria-hidden />
+      Share task
+    </Button>
+  );
+  const qrButton = (
+    <Button
+      key="qr"
+      type="button"
+      variant={primary === "qr" ? "default" : "outline"}
+      size={size}
+      disabled={qrLoading}
+      onClick={() => void showQR()}
+    >
+      <QrCodeIcon className="size-4" aria-hidden />
+      QR code
+    </Button>
+  );
+
   return (
     <>
-      <Button type="button" variant="outline" size={size} onClick={() => setShareOpen(true)}>
-        <Share2Icon className="size-4" aria-hidden />
-        Share task
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size={size}
-        disabled={qrLoading}
-        onClick={() => void showQR()}
-      >
-        <QrCodeIcon className="size-4" aria-hidden />
-        QR code
-      </Button>
+      {qrFirst ? (
+        <>
+          {qrButton}
+          {shareButton}
+        </>
+      ) : (
+        <>
+          {shareButton}
+          {qrButton}
+        </>
+      )}
 
       <Dialog open={shareOpen} onOpenChange={setShareOpen}>
         <DialogContent className="flex flex-col gap-3 sm:max-w-sm">
