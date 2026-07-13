@@ -174,8 +174,12 @@ export default defineConfig({
           const isSpaRoute =
             !path.includes('.') &&
             (path.startsWith('/u/') ||
+              // All /comp* routes serve the shell, mirroring production where
+              // _routes.json hands /comp* to the Pages Function (SSR with an
+              // SPA-shell fallback). Covers every comp sub-route registered in
+              // src/react/routes.tsx (waypoints, task, pilot, ...).
               path === '/comp' ||
-              /^\/comp\/[a-z0-9]+(\/|\/task\/[a-z0-9]+(\/|\/pilot\/[a-z0-9]+\/?)?)?$/.test(path) ||
+              path.startsWith('/comp/') ||
               path === '/scores' ||
               /^\/(profile|settings|onboarding)\/?$/.test(path) ||
               /^\/admin\/(users|cache)\/?$/.test(path));
