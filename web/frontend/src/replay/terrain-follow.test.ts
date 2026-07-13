@@ -7,11 +7,12 @@
  * handlers — made touch pan/orbit impossible while following a pilot.
  */
 
-import { describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it, vi } from 'vitest';
 import type { MarkerSample } from './flight-scene';
 
-mock.module('mapbox-gl', () => ({}));
-mock.module('mapbox-gl/dist/mapbox-gl.css', () => ({}));
+// mapbox-gl can't run headless; stub it so terrain-backend imports under jsdom.
+// (The CSS side-effect import is handled by vitest's default empty-CSS resolver.)
+vi.mock('mapbox-gl', () => ({}));
 
 const { TerrainBackend } = await import('./terrain-backend');
 

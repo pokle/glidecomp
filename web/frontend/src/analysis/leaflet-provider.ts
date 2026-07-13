@@ -1164,6 +1164,10 @@ export function createLeafletProvider(
         map.panTo([tp.waypoint.lat, tp.waypoint.lon], { animate: true, duration: 1 });
       },
 
+      panTo(lat: number, lon: number, minZoom = 13) {
+        map.setView([lat, lon], Math.max(map.getZoom(), minZoom), { animate: true, duration: 1 });
+      },
+
       showTrackPointHUD(fixIndex: number) {
         const data = buildTrackPointHUDData(currentFixes, currentEvents, fixIndex, getNextTurnpointContext);
         if (!data) return;

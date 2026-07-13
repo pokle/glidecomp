@@ -99,6 +99,44 @@ export function suggestWaypointCode(name: string, taken: Iterable<string> = []):
   return base;
 }
 
+// ---------------------------------------------------------------------------
+// Snap to peak (issue #341)
+// ---------------------------------------------------------------------------
+
+/**
+ * A peak tap must be this close on the ground (metres) to auto-snap — a sanity
+ * cap so a peak that the screen-space guard alone would allow (zoomed out, 44 px
+ * spans kilometres) doesn't drag the point far from where the finger landed.
+ * The provider owns the pixel half of the rule (`PEAK_AUTO_SNAP_RADIUS_PX`);
+ * both guards must pass to auto-snap.
+ */
+export const AUTO_SNAP_MAX_DISTANCE_M = 300;
+
+/**
+ * Whether a nearby peak should be snapped automatically or only offered.
+ * Auto only when the tap was tight on the summit both on screen (the provider's
+ * `withinTapPx`) and on the ground (within {@link AUTO_SNAP_MAX_DISTANCE_M});
+ * otherwise it's an opt-in offer, so doing nothing means no snap.
+ */
+export function peakSnapMode(peak: {
+  distanceM: number;
+  withinTapPx: boolean;
+}): "auto" | "offer" {
+  return peak.withinTapPx && peak.distanceM <= AUTO_SNAP_MAX_DISTANCE_M
+    ? "auto"
+    : "offer";
+}
+
+/**
+ * Human-readable tap→peak distance for the snap status row: metres (rounded to
+ * the nearest 10, matching the imprecision) up to 1 km, kilometres to one
+ * decimal beyond. E.g. 123 → "120 m", 650 → "650 m", 2130 → "2.1 km".
+ */
+export function formatSnapDistance(metres: number): string {
+  if (metres < 1000) return `${Math.round(metres / 10) * 10} m`;
+  return `${(metres / 1000).toFixed(1)} km`;
+}
+
 /**
  * Serialize turnpoints to the competition waypoint CSV format
  * (`Name,Latitude,Longitude,Description,Proximity Distance,Altitude`) — the

@@ -76,6 +76,31 @@ export interface MapPickDetails {
     /** Name of the nearest labelled feature (peak, locality, POI) on screen
      *  near the pick, e.g. "Mount Bogong". */
     placeName?: string;
+    /** Nearest peak (`natural-point`/landform) label to the tap, when one falls
+     *  inside the label-search box — the snap-to-peak candidate. The dialog
+     *  decides whether to auto-snap or only offer it (see the metre threshold in
+     *  route-editor's `peakSnapMode`). Absent when no peak is close. */
+    peak?: PickedPeak;
+}
+
+/** A peak label found near an add-waypoint tap — the snap-to-peak candidate. */
+export interface PickedPeak {
+    /** The peak's label text, e.g. "Mount Bogong". */
+    name: string;
+    /** Summit node coordinates (the label's Point geometry). */
+    lat: number;
+    lon: number;
+    /** Ground distance from the tapped point to the summit node, metres. */
+    distanceM: number;
+    /** Summit elevation, metres AMSL — surveyed `elevation_m` when the style
+     *  carries it, else re-queried from the terrain DEM at the summit; absent
+     *  when neither is available. */
+    elevation?: number;
+    /** Whether the summit label sat within the finger-width auto-snap pixel
+     *  tolerance of the tap. One of the two auto-snap guards (the other is the
+     *  ground-distance cap, applied in the dialog); a screen-space fact only the
+     *  provider can measure. */
+    withinTapPx: boolean;
 }
 
 /**
@@ -153,6 +178,11 @@ export interface MapProvider {
 
     /** Pan to a turnpoint center without changing zoom */
     panToTurnpoint?(turnpointIndex: number): void;
+
+    /** Fly the view to a bare coordinate — used to locate a waypoint from the
+     *  editor's table. Zooms in to at least `minZoom` so the point is legible,
+     *  but never zooms further out than the current level. */
+    panTo?(lat: number, lon: number, minZoom?: number): void;
 
     /** Show a HUD overlay with metrics for a non-glide track point */
     showTrackPointHUD?(fixIndex: number): void;

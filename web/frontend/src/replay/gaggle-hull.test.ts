@@ -1,6 +1,6 @@
 // Copyright (c) 2026, Tushar Pokle.  All rights reserved.
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { convexHullXZ, roundedHullOutline, type Pt } from './gaggle-hull';
 
 const p = (x: number, z: number): Pt => ({ x, z });
