@@ -90,6 +90,10 @@ export interface ColumnDef {
 export const COLUMNS: ColumnDef[] = [
   { key: "name", header: "name", aliases: ["pilot_name", "full_name"] },
   { key: "email", header: "email" },
+  { key: "glider", header: "glider" },
+  { key: "pilot_class", header: "class", aliases: ["pilot_class"] },
+  { key: "team_name", header: "team", aliases: ["team_name"] },
+  { key: "driver_contact", header: "driver", aliases: ["driver_contact"] },
   { key: "civl_id", header: "civl_id", aliases: ["civl", "civlid"] },
   { key: "safa_id", header: "safa_id", aliases: ["safa"] },
   { key: "ushpa_id", header: "ushpa_id", aliases: ["ushpa"] },
@@ -97,10 +101,6 @@ export const COLUMNS: ColumnDef[] = [
   { key: "dhv_id", header: "dhv_id", aliases: ["dhv"] },
   { key: "ffvl_id", header: "ffvl_id", aliases: ["ffvl"] },
   { key: "fai_id", header: "fai_id", aliases: ["fai"] },
-  { key: "pilot_class", header: "class", aliases: ["pilot_class"] },
-  { key: "team_name", header: "team", aliases: ["team_name"] },
-  { key: "driver_contact", header: "driver", aliases: ["driver_contact"] },
-  { key: "glider", header: "glider" },
 ];
 
 /** Maximum pilots per comp — mirrors MAX_PILOTS_PER_COMP on the server. */
@@ -248,8 +248,12 @@ export function csvEscape(value: string | number | null | undefined): string {
 
 /**
  * Parse CSV or TSV with header row. Handles quoted fields, doubled-quote
- * escaping, and both comma and tab separators (auto-detected from the header).
- * Unknown columns are ignored (no error); missing columns → null.
+ * escaping, a UTF-8 BOM (Excel prepends one), and comma / tab / semicolon
+ * separators (auto-detected from the header; semicolon is what Excel writes
+ * in many European locales). Header matching is case-insensitive, column
+ * order is free, and unknown columns are ignored (no error); missing
+ * columns → null. Only "name" is a required column — if "class" is absent
+ * or blank it defaults to the comp's class when there is exactly one.
  *
  * Rows with a missing or invalid class are still returned (the class select
  * is the easiest place to fix them) with an error noting the problem; rows
@@ -259,7 +263,7 @@ export function parseImportedCsv(
   text: string,
   compClasses: string[]
 ): { rows: ParsedRow[]; errors: string[] } {
-  const trimmed = text.trim();
+  const trimmed = text.replace(/^\uFEFF/, "").trim();
   if (!trimmed) {
     return { rows: [], errors: ["No data provided"] };
   }
@@ -268,9 +272,10 @@ export function parseImportedCsv(
     return { rows: [], errors: ["No data provided"] };
   }
 
-  // Auto-detect separator from header row
+  // Auto-detect separator: whichever of tab / semicolon / comma appears most
+  // in the header row (comma on a tie or when none appear).
   const headerLine = lines[0];
-  const sep = headerLine.includes("\t") ? "\t" : ",";
+  const sep = detectSeparator(headerLine);
   const headerCells = parseCsvLine(headerLine, sep).map((h) => h.trim().toLowerCase());
 
   // Build header → ParsedRow-key map using COLUMNS aliases
@@ -285,23 +290,28 @@ export function parseImportedCsv(
   const columnKeys: (ColumnDef["key"] | null)[] = headerCells.map((h) => keyOf.get(h) ?? null);
 
   if (!columnKeys.includes("name")) {
-    return { rows: [], errors: ['CSV must contain a "name" column'] };
-  }
-  if (!columnKeys.includes("pilot_class")) {
-    return { rows: [], errors: ['CSV must contain a "class" column'] };
+    return {
+      rows: [],
+      errors: ['CSV must contain a "name" column (all other columns are optional)'],
+    };
   }
 
   const rows: ParsedRow[] = [];
   const errors: string[] = [];
   for (let i = 1; i < lines.length; i++) {
     const cells = parseCsvLine(lines[i], sep);
-    const row = emptyRow([]);
+    // emptyRow(compClasses) pre-fills the class when the comp has exactly
+    // one, so a CSV without a class column still imports cleanly there.
+    const row = emptyRow(compClasses);
     for (let c = 0; c < cells.length && c < columnKeys.length; c++) {
       const key = columnKeys[c];
       if (!key) continue;
       const value = cells[c].trim();
-      if (key === "name" || key === "pilot_class") {
-        (row as unknown as Record<string, unknown>)[key] = value;
+      if (key === "name") {
+        row.name = value;
+      } else if (key === "pilot_class") {
+        // A blank class cell keeps the single-class default.
+        if (value) row.pilot_class = value;
       } else {
         (row as unknown as Record<string, unknown>)[key] = value || null;
       }
@@ -321,6 +331,20 @@ export function parseImportedCsv(
   }
 
   return { rows, errors };
+}
+
+/** Pick the separator (tab / semicolon / comma) that appears most in the header. */
+function detectSeparator(headerLine: string): string {
+  let best = ",";
+  let bestCount = 0;
+  for (const sep of ["\t", ";", ","]) {
+    const count = headerLine.split(sep).length - 1;
+    if (count > bestCount) {
+      best = sep;
+      bestCount = count;
+    }
+  }
+  return best;
 }
 
 /** Split text into CSV lines, respecting quoted newlines. */

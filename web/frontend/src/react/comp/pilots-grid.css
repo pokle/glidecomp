@@ -68,6 +68,29 @@
   white-space: normal;
 }
 
+/* Rich empty-state hint (see EMPTY_GRID_PLACEHOLDER in PilotsSection.tsx) */
+#pilots-grid.tabulator .tabulator-placeholder .pilots-empty-hint {
+  max-width: 44rem;
+  padding: 1rem 1.25rem;
+  text-align: left;
+  font-weight: normal;
+  line-height: 1.5;
+}
+
+#pilots-grid.tabulator .tabulator-placeholder .pilots-empty-hint strong {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+#pilots-grid.tabulator .tabulator-placeholder .pilots-empty-hint ul {
+  margin-top: 0.75rem;
+  padding-left: 1.25rem;
+  list-style: disc;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 /* The class-column list editor renders in a popup inside the dialog */
 #pilots-edit-dialog .tabulator-popup-container {
   background: var(--popover);
