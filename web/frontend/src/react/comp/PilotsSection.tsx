@@ -197,6 +197,25 @@ export function PilotsSection({
 }
 
 /**
+ * Empty-grid placeholder (Tabulator renders `placeholder` strings as HTML).
+ * First-time admins land here with no pilots, so it carries the onboarding:
+ * which columns are required, what a CSV import expects, why the email
+ * matters, and how to get a fillable template. Static markup only — never
+ * interpolate user or comp data into it.
+ */
+const EMPTY_GRID_PLACEHOLDER = `
+  <div class="pilots-empty-hint">
+    <p><strong>No pilots yet.</strong> Use <strong>Add row</strong> to type pilots in, <strong>Import CSV</strong> to load a spreadsheet, or <strong>Add test pilots</strong> to try things out with dummy data.</p>
+    <ul>
+      <li>Only <strong>name</strong> and <strong>class</strong> are required — every other column, including all the sporting-body IDs, is optional.</li>
+      <li>CSV imports need a header row naming the columns (${COLUMNS.map((c) => c.header).join(", ")}). Column order and capitalisation don't matter, and unrecognised columns are ignored.</li>
+      <li>Pilots are matched to the IGC tracks they upload by <strong>email</strong> — enter the address each pilot signs in to GlideComp with (e.g. their Gmail address).</li>
+      <li>Tip: <strong>Export CSV</strong> now to download a blank template you can fill in with your favourite spreadsheet (Excel, Numbers, Google Sheets…).</li>
+    </ul>
+  </div>
+`;
+
+/**
  * Tabulator column definitions: a frozen remove button, then one editable
  * column per CSV column. The class column is a list editor limited to the
  * comp's classes; the name column is frozen so horizontal scrolling never
@@ -280,7 +299,7 @@ function EditPilotsDialog({
         columns: gridColumns(compClasses),
         layout: "fitDataStretch",
         height: "100%",
-        placeholder: "No pilots yet — use Add row, or Import CSV",
+        placeholder: EMPTY_GRID_PLACEHOLDER,
         // Editor popups (class list) must render inside the modal dialog,
         // otherwise the dialog paints over them.
         popupContainer: "#pilots-edit-dialog",
@@ -306,6 +325,35 @@ function EditPilotsDialog({
 
   function addRow() {
     void tableRef.current?.addRow(emptyRow(compClasses));
+  }
+
+  /**
+   * Append 3 dummy pilots so a new admin can try scoring without typing a
+   * real roster. Numbering continues from the highest existing test dummy
+   * (each click adds 3 more); classes cycle so multi-class comps get
+   * coverage. Never touches existing rows.
+   */
+  function addTestPilots() {
+    const table = tableRef.current;
+    if (!table) return;
+    let maxN = 0;
+    for (const row of table.getData() as ParsedRow[]) {
+      const m =
+        /^testdummy(\d+)@example\.com$/i.exec(row.email ?? "") ??
+        /^test dummy (\d+)$/i.exec(row.name ?? "");
+      if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
+    }
+    const rows: ParsedRow[] = [];
+    for (let i = 1; i <= 3; i++) {
+      const n = maxN + i;
+      rows.push({
+        ...emptyRow(compClasses),
+        name: `Test Dummy ${n}`,
+        email: `testdummy${n}@example.com`,
+        pilot_class: compClasses[(n - 1) % compClasses.length] ?? "",
+      });
+    }
+    void table.addRow(rows);
   }
 
   async function importCsv(input: HTMLInputElement) {
@@ -420,7 +468,7 @@ function EditPilotsDialog({
         </p>
 
         <DialogFooter>
-          <div className="flex gap-2 sm:mr-auto">
+          <div className="flex flex-wrap gap-2 sm:mr-auto">
             <Button
               type="button"
               variant="outline"
@@ -429,6 +477,16 @@ function EditPilotsDialog({
               onClick={addRow}
             >
               Add row
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!gridReady}
+              onClick={addTestPilots}
+              title="Add 3 dummy pilots (Test Dummy 1, testdummy1@example.com, …) to try the system"
+            >
+              Add test pilots
             </Button>
             <Button
               type="button"
