@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   loadCompetitions,
   loadCompDetail,
+  loadCompWaypoints,
   loadTaskDetail,
   loadPilotScoreDetail,
   NotFoundError,
@@ -86,6 +87,39 @@ describe("loadCompDetail", () => {
       "/api/comp/zzz/scores": { status: 400 },
     });
     await expect(loadCompDetail(fetch, "zzz")).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+describe("loadCompWaypoints", () => {
+  it("fetches comp + waypoints in parallel", async () => {
+    const wp = { code: "A01", name: "Launch", latitude: -36.1, longitude: 147.9, altitude: 1050, radius: 400 };
+    const { fetch, calls } = fakeFetch({
+      "/api/comp/abc": { body: { comp_id: "abc", name: "Corryong", is_admin: false } },
+      "/api/comp/abc/waypoints": { body: { waypoints: [wp], updated_at: "2026-01-01T00:00:00Z" } },
+    });
+    const data = await loadCompWaypoints(fetch, "abc");
+    expect(calls).toContain("/api/comp/abc");
+    expect(calls).toContain("/api/comp/abc/waypoints");
+    expect(data.comp.name).toBe("Corryong");
+    expect(data.waypoints).toEqual([wp]);
+  });
+
+  it("tolerates a failed waypoints fetch (empty set), still returns the comp", async () => {
+    const { fetch } = fakeFetch({
+      "/api/comp/abc": { body: { comp_id: "abc", name: "Corryong" } },
+      "/api/comp/abc/waypoints": { status: 503 },
+    });
+    const data = await loadCompWaypoints(fetch, "abc");
+    expect(data.comp.name).toBe("Corryong");
+    expect(data.waypoints).toEqual([]);
+  });
+
+  it("throws NotFoundError when the comp is 404 (missing / hidden test comp)", async () => {
+    const { fetch } = fakeFetch({
+      "/api/comp/abc": { status: 404 },
+      "/api/comp/abc/waypoints": { body: { waypoints: [] } },
+    });
+    await expect(loadCompWaypoints(fetch, "abc")).rejects.toBeInstanceOf(NotFoundError);
   });
 });
 

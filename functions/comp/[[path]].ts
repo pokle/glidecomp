@@ -1,11 +1,11 @@
 /**
- * SSR for the four public competition routes. Matches the incoming path, runs
+ * SSR for the public competition routes. Matches the incoming path, runs
  * the matching route loader over the COMPETITION_API service binding (forwarding
  * the visitor's cookie so admins get their `test` comps), renders the same React
  * pages the SPA uses into the /app shell, and injects per-route <head> tags plus
  * `window.__SSR_DATA__` for the client to hydrate from.
  *
- * Safety net: anything that isn't one of the four routes, or any loader error,
+ * Safety net: anything that isn't one of the SSR routes, or any loader error,
  * falls back to the unmodified SPA shell — SSR can never make a page less
  * available than the pure client-rendered version. Upstream 404s (including
  * anonymous `test` comps) render the shell with a 404 status + noindex.
@@ -18,6 +18,7 @@ import { render } from "../../web/frontend/dist-ssr/entry-server.js";
 import {
   loadCompetitions,
   loadCompDetail,
+  loadCompWaypoints,
   loadTaskDetail,
   loadPilotScoreDetail,
   NotFoundError,
@@ -103,6 +104,30 @@ const ROUTES: Array<{
     },
   },
   {
+    pattern: /^\/comp\/([^/]+)\/waypoints\/?$/,
+    async run(f, m, origin) {
+      const compId = decodeURIComponent(m[1]);
+      const data = await loadCompWaypoints(f, compId);
+      const n = data.waypoints.length;
+      return {
+        data,
+        head: {
+          title: `Waypoints — ${data.comp.name} — GlideComp`,
+          description: `The ${n} shared waypoint${n === 1 ? "" : "s"} for ${data.comp.name}: codes, names and coordinates, with downloads for flight instruments.`,
+          extra:
+            canonical(`${origin}/comp/${compId}/waypoints`) +
+            jsonLd(
+              breadcrumb(origin, [
+                ["Competitions", "/comp"],
+                [data.comp.name, `/comp/${compId}`],
+                ["Waypoints", `/comp/${compId}/waypoints`],
+              ])
+            ),
+        },
+      };
+    },
+  },
+  {
     pattern: /^\/comp\/([^/]+)\/task\/([^/]+)\/?$/,
     async run(f, m, origin) {
       const compId = decodeURIComponent(m[1]);
@@ -162,7 +187,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const cookie = request.headers.get("Cookie");
 
   const match = ROUTES.map((r) => ({ r, m: path.match(r.pattern) })).find((x) => x.m);
-  // Not one of the four SSR routes → serve the SPA shell unchanged (today's behavior).
+  // Not one of the SSR routes → serve the SPA shell unchanged (today's behavior).
   if (!match || !match.m) return fetchShell(env, url);
 
   // Forward the cookie so the API answers exactly as it would for this visitor

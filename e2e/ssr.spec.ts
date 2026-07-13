@@ -82,6 +82,24 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(html.toLowerCase()).toMatch(/turnpoint|start|goal/);
   });
 
+  test("waypoints page lists the comp's shared waypoints", async ({ request }) => {
+    const { compId, compName } = await discover(request);
+    const wpRes = await request.get(`/api/comp/${compId}/waypoints`);
+    expect(wpRes.ok()).toBeTruthy();
+    const { waypoints } = (await wpRes.json()) as {
+      waypoints: Array<{ code: string; name: string }>;
+    };
+    test.skip(waypoints.length === 0, "sample comp has no waypoints seeded");
+    const res = await request.get(`/comp/${compId}/waypoints`);
+    expect(res.ok()).toBeTruthy();
+    const html = await res.text();
+    // The table content is in the raw server HTML.
+    expect(html).toContain(waypoints[0].code);
+    expect(html).toContain(`<title>Waypoints — ${compName} — GlideComp</title>`);
+    // The map stays client-only — its Suspense fallback is what the server streams.
+    expect(html).not.toContain("mapboxgl-canvas");
+  });
+
   test("pilot narrative page shows the explanation, but not the map", async ({ request }) => {
     const { compId, taskId, pilotId, pilotName } = await discover(request);
     const res = await request.get(`/comp/${compId}/task/${taskId}/pilot/${pilotId}`);
@@ -113,7 +131,7 @@ test.describe("SSR — isolation and fallback", () => {
 });
 
 test.describe("SSR — hydration is clean (real browser)", () => {
-  for (const path of ["/comp", ":compHub", ":task", ":pilot"] as const) {
+  for (const path of ["/comp", ":compHub", ":waypoints", ":task", ":pilot"] as const) {
     test(`no hydration mismatch on ${path}`, async ({ page, request }) => {
       const d = await discover(request);
       const url =
@@ -121,9 +139,11 @@ test.describe("SSR — hydration is clean (real browser)", () => {
           ? "/comp"
           : path === ":compHub"
             ? `/comp/${d.compId}`
-            : path === ":task"
-              ? `/comp/${d.compId}/task/${d.taskId}`
-              : `/comp/${d.compId}/task/${d.taskId}/pilot/${d.pilotId}`;
+            : path === ":waypoints"
+              ? `/comp/${d.compId}/waypoints`
+              : path === ":task"
+                ? `/comp/${d.compId}/task/${d.taskId}`
+                : `/comp/${d.compId}/task/${d.taskId}/pilot/${d.pilotId}`;
 
       const hydrationErrors: string[] = [];
       page.on("console", (msg) => {
