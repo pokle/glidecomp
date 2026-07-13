@@ -28,6 +28,7 @@ export default function RouteMap({
   waypoints,
   addMode,
   fitNonce,
+  focus,
   onWaypointPick,
   onMapPick,
 }: {
@@ -47,6 +48,12 @@ export default function RouteMap({
    * coordinate doesn't re-zoom the map out from under the user.
    */
   fitNonce?: number;
+  /**
+   * Fly the map to a waypoint's coordinates (from a table-row click). `key`
+   * changes on every request so clicking the same row re-centres after the
+   * user has panned away; the coordinates themselves don't retrigger.
+   */
+  focus?: { lat: number; lon: number; key: number } | null;
   onWaypointPick: (waypoint: MapWaypoint) => void;
   /** Ground pick. `details` carries best-effort extras from the Mapbox data
    *  (ground elevation, nearby place name); undefined on the Leaflet fallback. */
@@ -144,6 +151,15 @@ export default function RouteMap({
     if (!provider) return;
     provider.setInteractionMode?.(addMode ? "add-waypoint" : "view");
   }, [provider, addMode]);
+
+  // Fly to a waypoint when a table row asks to (keyed so repeat clicks re-centre).
+  const lastFocusKey = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!provider || !focus) return;
+    if (focus.key === lastFocusKey.current) return;
+    lastFocusKey.current = focus.key;
+    provider.panTo?.(focus.lat, focus.lon);
+  }, [provider, focus]);
 
   // Keep the map painted correctly as the responsive layout resizes it.
   useEffect(() => {

@@ -14,8 +14,9 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { MapPinIcon } from "lucide-react";
 import { parseWaypointFile, type WaypointFileRecord } from "@glidecomp/engine";
-import type { MapPickDetails, MapWaypoint } from "../../analysis/map-provider";
+import type { MapPickDetails, MapWaypoint, PickedPeak } from "../../analysis/map-provider";
 import { Button } from "@/react/ui/button";
 import { Input } from "@/react/ui/input";
 import {
@@ -31,7 +32,13 @@ import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { useAdminView, useUser } from "../lib/user";
 import { Breadcrumbs } from "../components/Breadcrumbs";
-import { formatCoords, parseCoords, suggestWaypointCode } from "../comp/route-editor";
+import {
+  formatCoords,
+  formatSnapDistance,
+  parseCoords,
+  peakSnapMode,
+  suggestWaypointCode,
+} from "../comp/route-editor";
 import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
 import { useInitialData } from "../lib/initial-data";
 import type { CompWaypointsLoaderData } from "../loaders";
@@ -99,6 +106,9 @@ export function CompWaypoints() {
   const [notFound, setNotFound] = useState(false);
   const [addMode, setAddMode] = useState(false);
   const [fitNonce, setFitNonce] = useState(0);
+  // Fly-to-waypoint request from a table row click (see `locate`).
+  const [focus, setFocus] = useState<{ lat: number; lon: number; key: number } | null>(null);
+  const focusSeq = useRef(0);
 
   // New-waypoint dialog (from map tap or the Add button).
   const [adding, setAdding] = useState(false);
@@ -106,6 +116,12 @@ export function CompWaypoints() {
   const [newName, setNewName] = useState("");
   const [newCoords, setNewCoords] = useState("");
   const [newAltitude, setNewAltitude] = useState("");
+  // Snap-to-peak: the candidate peak near the tap (null when none), whether the
+  // coords currently reflect it, and the raw tap to revert to.
+  const [newPeak, setNewPeak] = useState<PickedPeak | null>(null);
+  const [snapped, setSnapped] = useState(false);
+  const [tapCoords, setTapCoords] = useState("");
+  const [tapAltitude, setTapAltitude] = useState("");
 
   const fileRef = useRef<HTMLInputElement>(null);
   const isAdmin = useAdminView(realIsAdmin);
@@ -176,6 +192,13 @@ export function CompWaypoints() {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   const removeRow = (id: number) => setRows((prev) => prev.filter((r) => r.id !== id));
 
+  // Fly the map to a row's coordinates (bumping the key so a repeat click on the
+  // same row re-centres). No-op when the row's coordinates aren't yet valid.
+  const locate = (r: WpRow) => {
+    const c = parseCoords(r.coords);
+    if (c) setFocus({ lat: c.lat, lon: c.lon, key: ++focusSeq.current });
+  };
+
   async function loadFile(input: HTMLInputElement) {
     const file = input.files?.[0];
     input.value = "";
@@ -208,24 +231,60 @@ export function CompWaypoints() {
   // dialog (still fully editable): terrain elevation → altitude, nearest
   // rendered label → name, and a short code derived from that name. All
   // blank on the Leaflet fallback, which reports no details.
+  //
+  // When a peak is near the tap we snap-to-peak: a tight tap silently adopts
+  // the summit coordinates/elevation (revertible), a looser one only offers it
+  // (see the status row under the Coordinates field). Both are decided by
+  // peakSnapMode; nothing is committed until Add either way.
   const openAdd = useCallback(
     (coords = "", details?: MapPickDetails) => {
       const placeName = details?.placeName ?? "";
+      const tapAlt =
+        details?.elevation !== undefined ? String(Math.round(details.elevation)) : "";
+      const peak = details?.peak ?? null;
       setNewCode(
         placeName
           ? suggestWaypointCode(placeName, rows.map((r) => r.code))
           : ""
       );
       setNewName(placeName);
-      setNewCoords(coords);
-      setNewAltitude(
-        details?.elevation !== undefined ? String(Math.round(details.elevation)) : ""
-      );
+      setTapCoords(coords);
+      setTapAltitude(tapAlt);
+      setNewPeak(peak);
+
+      if (peak && peakSnapMode(peak) === "auto") {
+        setNewCoords(formatCoords(peak.lat, peak.lon));
+        setNewAltitude(
+          peak.elevation !== undefined ? String(Math.round(peak.elevation)) : tapAlt
+        );
+        setSnapped(true);
+      } else {
+        setNewCoords(coords);
+        setNewAltitude(tapAlt);
+        setSnapped(false);
+      }
       setAdding(true);
       setAddMode(false);
     },
     [rows]
   );
+
+  // Apply the offered peak (offer → snapped), or revert to the raw tap
+  // (snapped → offer). The coordinates field stays a plain input, so a manual
+  // edit or a later table edit still wins; these only reset its value.
+  function applySnap() {
+    if (!newPeak) return;
+    setNewCoords(formatCoords(newPeak.lat, newPeak.lon));
+    if (newPeak.elevation !== undefined) {
+      setNewAltitude(String(Math.round(newPeak.elevation)));
+    }
+    setSnapped(true);
+  }
+  function revertToTap() {
+    setNewCoords(tapCoords);
+    setNewAltitude(tapAltitude);
+    setSnapped(false);
+  }
 
   function addWaypoint() {
     const coords = parseCoords(newCoords);
@@ -364,6 +423,7 @@ export function CompWaypoints() {
                   waypoints={mapWaypoints}
                   addMode={addMode}
                   fitNonce={fitNonce}
+                  focus={focus}
                   onWaypointPick={() => {}}
                   onMapPick={(lat, lon, details) => openAdd(formatCoords(lat, lon), details)}
                 />
@@ -402,6 +462,7 @@ export function CompWaypoints() {
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
                     <tr>
+                      <th className="w-8" />
                       <th className="px-2 py-2 font-medium">Code</th>
                       <th className="px-2 py-2 font-medium">Name</th>
                       <th className="px-2 py-2 font-medium">Coordinates</th>
@@ -415,6 +476,18 @@ export function CompWaypoints() {
                       const valid = parseCoords(r.coords) !== null;
                       return (
                         <tr key={r.id} className="border-t border-border">
+                          <td className="px-1 text-center">
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                              title={valid ? `Show ${r.code || "waypoint"} on the map` : "Enter valid coordinates first"}
+                              aria-label={`Show ${r.code || "waypoint"} on the map`}
+                              disabled={!valid}
+                              onClick={() => locate(r)}
+                            >
+                              <MapPinIcon className="size-4" aria-hidden="true" />
+                            </button>
+                          </td>
                           {isAdmin ? (
                             <>
                               <td className="p-1">
@@ -492,6 +565,39 @@ export function CompWaypoints() {
               onChange={(e) => setNewCoords(e.target.value)}
             />
           </label>
+          {newPeak && (
+            <p
+              className="-mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground"
+              aria-live="polite"
+            >
+              <span aria-hidden="true">⛰</span>
+              {snapped ? (
+                <span>
+                  Snapped to{" "}
+                  <span className="font-medium text-foreground">{newPeak.name}</span>{" "}
+                  summit — {formatSnapDistance(newPeak.distanceM)} from your tap ·{" "}
+                  <button
+                    type="button"
+                    className="font-medium underline underline-offset-2 hover:text-foreground"
+                    onClick={revertToTap}
+                  >
+                    Use tapped point
+                  </button>
+                </span>
+              ) : (
+                <span>
+                  <button
+                    type="button"
+                    className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+                    onClick={applySnap}
+                  >
+                    Snap to {newPeak.name} summit
+                  </button>{" "}
+                  ({formatSnapDistance(newPeak.distanceM)} away)
+                </span>
+              )}
+            </p>
+          )}
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Altitude (m) <span className="text-muted-foreground">— optional</span></span>
             <Input type="number" inputMode="numeric" value={newAltitude} onChange={(e) => setNewAltitude(e.target.value)} />

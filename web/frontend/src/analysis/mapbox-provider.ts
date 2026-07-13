@@ -8,7 +8,7 @@
 
 import * as mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
-import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, computeGoalLine, goalSemicirclePoints, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult, type PilotScore } from '@glidecomp/engine';
+import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, computeGoalLine, goalSemicirclePoints, andoyerDistance, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult, type PilotScore } from '@glidecomp/engine';
 import type { MapProvider, MapPickDetails, LoadedTrack, OpenDistanceLine, BestProgressRoute } from './map-provider';
 import { config } from './config';
 import {
@@ -59,6 +59,13 @@ function updateGeoJSONSource(
 // offset from the feature they name.
 const PLACE_NAME_SEARCH_RADIUS_PX = 56;
 
+// A peak label this tight (screen px) to the tap is close enough to auto-snap
+// to — the same finger-width constant as waypoint picking. This is the
+// screen-space half of the auto-snap rule; the metre cap (route-editor's
+// AUTO_SNAP_MAX_DISTANCE_M) is the other half, and both must pass. Peaks that
+// fall in the wider label-search box but fail this become opt-in offers.
+const PEAK_AUTO_SNAP_RADIUS_PX = 44;
+
 // Mapbox Streets v8 source layers that carry useful point names, for the
 // classic styles (satellite/streets/light/dark). Filtering by source layer
 // instead of style layer id keeps this working across styles, whose layer
@@ -71,9 +78,32 @@ const PLACE_NAME_SOURCE_LAYERS = new Set([
 ]);
 
 /**
- * Name of the nearest labelled point feature rendered around a screen point,
- * from the already-loaded map data (no network request). Best-effort by
- * design: only finds labels the current style renders at the current zoom.
+ * Whether a rendered label feature is a peak (the only feature we snap to).
+ * A label comes in one of two shapes depending on the style's engine: classic
+ * styles carry a `natural_label` source layer whose `class` distinguishes peaks
+ * (`landform`) from water/wetland/glacier; Mapbox-Standard-based styles (the
+ * default Outdoors style) return featuresets with no source layer but a
+ * `group` of `natural-point` for summit nodes.
+ */
+function isPeakLabel(f: mapboxgl.GeoJSONFeature): boolean {
+  const props = f.properties ?? {};
+  if (props.group === 'natural-point') return true; // Standard featureset
+  if (f.sourceLayer === 'natural_label') return props.class === 'landform';
+  return false;
+}
+
+interface NearbyLabels {
+  /** Nearest named point label (peak, locality, POI) — the name suggestion. */
+  placeName?: string;
+  /** Nearest peak label — the snap-to-peak candidate. */
+  peak?: import('./map-provider').PickedPeak;
+}
+
+/**
+ * The nearest named point label and the nearest peak label rendered around a
+ * screen point, from the already-loaded map data (no network request).
+ * Best-effort by design: only finds labels the current style renders at the
+ * current zoom.
  *
  * A label feature comes in one of two shapes depending on the style's engine:
  * classic styles return vector-tile features whose `sourceLayer` names a
@@ -83,7 +113,11 @@ const PLACE_NAME_SOURCE_LAYERS = new Set([
  * from our own GeoJSON layers (waypoint markers, tracks) always carry their
  * source id, so requiring "no source" excludes them on the Standard path.
  */
-function findNearbyPlaceName(map: mapboxgl.Map, point: { x: number; y: number }): string | undefined {
+function findNearbyLabels(
+  map: mapboxgl.Map,
+  point: { x: number; y: number },
+  tap: { lat: number; lng: number },
+): NearbyLabels {
   const r = PLACE_NAME_SEARCH_RADIUS_PX;
   let features: mapboxgl.GeoJSONFeature[];
   try {
@@ -92,10 +126,12 @@ function findNearbyPlaceName(map: mapboxgl.Map, point: { x: number; y: number })
       [point.x + r, point.y + r],
     ]);
   } catch {
-    return undefined;
+    return {};
   }
   let bestName: string | undefined;
-  let bestDist = Infinity;
+  let bestNameDist = Infinity;
+  let peak: import('./map-provider').PickedPeak | undefined;
+  let bestPeakDist = Infinity;
   for (const f of features) {
     // Line/area labels (rivers, ridgelines) have no single "here" — skip them.
     if (f.geometry.type !== 'Point') continue;
@@ -105,14 +141,33 @@ function findNearbyPlaceName(map: mapboxgl.Map, point: { x: number; y: number })
       ? PLACE_NAME_SOURCE_LAYERS.has(f.sourceLayer)
       : !f.source;
     if (!isStyleLabel) continue;
-    const p = map.project(f.geometry.coordinates as [number, number]);
+    const [lon, lat] = f.geometry.coordinates as [number, number];
+    const p = map.project([lon, lat]);
     const d = Math.hypot(p.x - point.x, p.y - point.y);
-    if (d < bestDist) {
-      bestDist = d;
+    if (d < bestNameDist) {
+      bestNameDist = d;
       bestName = name;
     }
+    if (isPeakLabel(f) && d < bestPeakDist) {
+      bestPeakDist = d;
+      // Prefer the style's surveyed summit elevation (classic peak labels carry
+      // it); the Standard style doesn't, so fall back to the terrain DEM read
+      // AT the summit rather than at the tap.
+      const surveyed = Number(f.properties?.elevation_m);
+      const elevation = Number.isFinite(surveyed)
+        ? surveyed
+        : map.queryTerrainElevation([lon, lat], { exaggerated: false }) ?? undefined;
+      peak = {
+        name,
+        lat,
+        lon,
+        distanceM: andoyerDistance(tap.lat, tap.lng, lat, lon),
+        elevation: elevation ?? undefined,
+        withinTapPx: d <= PEAK_AUTO_SNAP_RADIUS_PX,
+      };
+    }
   }
-  return bestName;
+  return { placeName: bestName, peak };
 }
 
 /**
@@ -1407,9 +1462,11 @@ export function createMapBoxProvider(
             // Ground elevation from the terrain DEM (metres AMSL, un-exaggerated).
             // Null when the DEM tile isn't loaded — report undefined, never 0.
             const elevation = map.queryTerrainElevation(e.lngLat, { exaggerated: false });
+            const { placeName, peak } = findNearbyLabels(map, e.point, e.lngLat);
             mapClickCallback?.(e.lngLat.lat, e.lngLat.lng, {
               elevation: elevation ?? undefined,
-              placeName: findNearbyPlaceName(map, e.point),
+              placeName,
+              peak,
             });
             return;
           }
@@ -2894,6 +2951,14 @@ export function createMapBoxProvider(
           map.flyTo({
             center: [tp.waypoint.lon, tp.waypoint.lat],
             zoom: map.getZoom(), // Keep current zoom level
+            duration: 1000,
+          });
+        },
+
+        panTo(lat: number, lon: number, minZoom = 13) {
+          map.flyTo({
+            center: [lon, lat],
+            zoom: Math.max(map.getZoom(), minZoom),
             duration: 1000,
           });
         },

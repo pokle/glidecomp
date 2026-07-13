@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { Turnpoint } from "@glidecomp/engine";
 import {
+  AUTO_SNAP_MAX_DISTANCE_M,
   addMinutes,
   buildRoute,
   editableGates,
   formatCoords,
+  formatSnapDistance,
   gateToHHMM,
   parseCoords,
+  peakSnapMode,
   startConfigSummary,
   suggestWaypointCode,
   turnpointsToCSV,
@@ -328,5 +331,37 @@ describe("suggestWaypointCode", () => {
     expect(suggestWaypointCode("")).toBe("");
     expect(suggestWaypointCode("   ")).toBe("");
     expect(suggestWaypointCode("—")).toBe("");
+  });
+});
+
+describe("peakSnapMode", () => {
+  it("auto-snaps only when both the pixel and metre guards pass", () => {
+    expect(peakSnapMode({ withinTapPx: true, distanceM: 120 })).toBe("auto");
+    expect(peakSnapMode({ withinTapPx: true, distanceM: AUTO_SNAP_MAX_DISTANCE_M })).toBe("auto");
+  });
+
+  it("only offers when the tap was outside the pixel tolerance", () => {
+    // Zoomed way in: the summit is close in metres but the finger deliberately
+    // landed away from it on screen.
+    expect(peakSnapMode({ withinTapPx: false, distanceM: 120 })).toBe("offer");
+  });
+
+  it("only offers when the ground distance exceeds the metre cap", () => {
+    // Zoomed out: 44 px can span kilometres, so the metre cap is what stops it.
+    expect(peakSnapMode({ withinTapPx: true, distanceM: AUTO_SNAP_MAX_DISTANCE_M + 1 })).toBe("offer");
+    expect(peakSnapMode({ withinTapPx: true, distanceM: 650 })).toBe("offer");
+  });
+});
+
+describe("formatSnapDistance", () => {
+  it("rounds sub-kilometre distances to the nearest 10 m", () => {
+    expect(formatSnapDistance(123)).toBe("120 m");
+    expect(formatSnapDistance(650)).toBe("650 m");
+    expect(formatSnapDistance(4)).toBe("0 m");
+  });
+
+  it("switches to one-decimal kilometres at 1 km", () => {
+    expect(formatSnapDistance(1000)).toBe("1.0 km");
+    expect(formatSnapDistance(2130)).toBe("2.1 km");
   });
 });
