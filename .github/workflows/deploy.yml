@@ -209,15 +209,29 @@ jobs:
           for route in /comp /u/me /scores; do check_route "$route" || fail=1; done
 
           # Version check via the build-time <meta name="git-sha"> in the shell.
-          DEPLOYED_SHA=$(curl -s "${DEPLOY_URL}/comp" | grep -oP '<meta name="git-sha" content="\K[a-f0-9]+' | head -1)
-          echo "Deployed SHA: ${DEPLOYED_SHA:-<not found>}"
-          if [ -z "$DEPLOYED_SHA" ]; then
-            echo "::error::Could not read git-sha meta from ${DEPLOY_URL}/comp"
-            fail=1
-          elif [ "$DEPLOYED_SHA" != "$EXPECTED_SHA" ]; then
-            echo "::error::Deployed SHA ${DEPLOYED_SHA} does not match expected ${EXPECTED_SHA}"
-            fail=1
-          fi
+          # Same propagation race as the routes above: right after a deploy the
+          # SSR Pages Function can answer /comp with 200 before the rendered
+          # shell (and its git-sha meta) has propagated to the edge, so a single
+          # read intermittently sees no meta. Retry until it appears and matches.
+          check_sha() {
+            local deployed=""
+            for attempt in $(seq 1 10); do
+              deployed=$(curl -s "${DEPLOY_URL}/comp" | grep -oP '<meta name="git-sha" content="\K[a-f0-9]+' | head -1)
+              if [ "$deployed" = "$EXPECTED_SHA" ]; then
+                echo "Deployed SHA: ${deployed}"
+                return 0
+              fi
+              echo "Deployed SHA: ${deployed:-<not found>} (attempt ${attempt}/10, retrying in 3s…)"
+              sleep 3
+            done
+            if [ -z "$deployed" ]; then
+              echo "::error::Could not read git-sha meta from ${DEPLOY_URL}/comp after retries"
+            else
+              echo "::error::Deployed SHA ${deployed} does not match expected ${EXPECTED_SHA} after retries"
+            fi
+            return 1
+          }
+          check_sha || fail=1
 
           if [ "$fail" = "0" ]; then echo "Good — SPA routes serve ${EXPECTED_SHA}"; fi
           exit $fail
