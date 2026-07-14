@@ -2,7 +2,6 @@
 /** About page. Ported from react/pages/About.tsx. */
 import Base from "../layouts/Base.astro";
 import BackLink from "../components/BackLink.astro";
-import SiteFooter from "../components/SiteFooter.astro";
 
 // Simple "name — description" acknowledgement sections, in display order. The
 // "UI & Styling" section has a nested link so it stays inline below.
@@ -38,7 +37,7 @@ const build = [
 ---
 
 <Base title="GlideComp - About">
-  <div class="min-h-screen bg-background text-foreground p-6 bg-hills">
+  <div class="min-h-screen bg-background text-foreground p-6">
     <div class="max-w-2xl mx-auto">
       <header class="mb-10">
         <BackLink href="/" />
@@ -180,7 +179,6 @@ const build = [
         </ul>
       </section>
 
-      <SiteFooter />
     </div>
   </div>
 </Base>

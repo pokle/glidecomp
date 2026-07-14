@@ -4,8 +4,8 @@
   "description": "Competition track log analysis for hanggliding and paragliding",
   "start_url": "/analysis.html",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
+  "background_color": "#ffffff",
+  "theme_color": "#007aff",
   "icons": [
     {
       "src": "/icon.svg",

@@ -55,13 +55,15 @@ export function Shell() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="border-b">
+      {/* Always-present glass menu bar (Inscribe-style): translucent background
+          with backdrop blur, so content scrolls beneath it. */}
+      <header className="sticky top-0 z-40 border-b bg-background/70 backdrop-blur-xl backdrop-saturate-150">
         <nav
           aria-label="Main"
           className="mx-auto flex min-h-[60px] w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3"
         >
           {/* Home is a static (Astro) page, so use a full navigation. */}
-          <a href="/" className="font-brand text-base font-bold">
+          <a href="/" className="font-brand text-base font-semibold tracking-tight">
             GlideComp
           </a>
           <NavLink to="/comp" className={navLinkClass}>

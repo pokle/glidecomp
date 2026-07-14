@@ -28,14 +28,18 @@ Browser                    Cloudflare
 2. Better Auth client calls signIn.social({ provider: "google" })
 3. Browser redirects to Google consent screen
 4. Google redirects back to /api/auth/callback/google
-5. Better Auth creates/updates user + session in D1, sets session cookie
+5. Better Auth creates/updates user + session in D1, sets session cookie.
+   On user *creation* a databaseHooks.user.create.before hook (src/auth.ts)
+   auto-derives a unique username from the display name (falling back to the
+   email local-part, then "pilot") — see src/username.ts. So new users always
+   have a username; there is no manual pick-a-username step.
 6. Browser redirects to /comp (callbackURL) which loads the React SPA competitions page
-7. The SPA detects the session:
-   - Has username? → show competitions
-   - No username?  → redirect to /onboarding
-8. User picks a username on onboarding page
-9. POST /api/auth/set-username → redirect to /u/{username}/
+7. The SPA shows competitions straight away (username already set).
 ```
+
+Legacy pre-derivation accounts may still have a null username; the SPA
+redirects those to /onboarding, and POST /api/auth/set-username lets a user
+change their handle. New sign-ups skip both.
 
 ## Components
 
@@ -44,7 +48,8 @@ Browser                    Cloudflare
 | File | Purpose |
 |------|---------|
 | `src/index.ts` | Hono app with CORS, `/me`, `/set-username`, and Better Auth catch-all |
-| `src/auth.ts` | Better Auth config: Kysely D1 dialect, Google social provider, username field |
+| `src/auth.ts` | Better Auth config: Kysely D1 dialect, Google social provider, username field, auto-derive-username create hook |
+| `src/username.ts` | Slugify + derive a unique, format-valid username at sign-up |
 | `src/db/schema.sql` | D1 schema: `user`, `session`, `account`, `verification` tables |
 | `wrangler.toml` | D1 binding, route config, env vars |
 
@@ -58,7 +63,7 @@ Browser                    Cloudflare
 
 | Page | File | Purpose |
 |------|------|---------|
-| Onboarding | `react/pages/Onboarding.tsx` (route `/onboarding`) | Username picker for new users |
+| Onboarding | `react/pages/Onboarding.tsx` (route `/onboarding`) | Legacy username picker — only reached by pre-derivation accounts with a null username |
 | Dashboard | `react/pages/Dashboard.tsx` (route `/u/{username}`) | My Flights page, redirects anonymous visitors to Google sign-in |
 
 ### API Endpoints
