@@ -29,6 +29,27 @@ describe("GET /api/auth/me", () => {
   });
 });
 
+// ── Auto-derived username on sign-up ─────────────────────────────────────────
+
+describe("username is auto-derived at sign-up", () => {
+  test("a new user gets a handle derived from their name, no onboarding", async () => {
+    const cookie = await loginAs("auto-derive-1@test.local", "Ada Lovelace");
+    const res = await request("GET", "/api/auth/me", { cookie });
+    expect(res.status).toBe(200);
+    const { user } = (await res.json()) as { user: { username: string } };
+    expect(user.username).toBe("ada-lovelace");
+  });
+
+  test("a second user with the same name gets a -2 suffix", async () => {
+    // Same display name, different email → same derived base, deduped.
+    await loginAs("auto-derive-dupe-a@test.local", "Grace Hopper");
+    const cookie = await loginAs("auto-derive-dupe-b@test.local", "Grace Hopper");
+    const res = await request("GET", "/api/auth/me", { cookie });
+    const { user } = (await res.json()) as { user: { username: string } };
+    expect(user.username).toBe("grace-hopper-2");
+  });
+});
+
 // ── Body limit (SEC-06) ──────────────────────────────────────────────────────
 
 describe("body limit", () => {

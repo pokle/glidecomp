@@ -55,8 +55,10 @@ test("sign in with an emailed code (manual entry)", async ({ page }) => {
   const otp = await fetchDevOtp(page.request, email);
   await otpInput.fill(otp);
 
-  // Fresh user, no username → the Shell's onboarding gate takes over.
-  await page.waitForURL("**/onboarding");
+  // Fresh user: username is auto-derived at sign-up (no onboarding gate),
+  // so the post-sign-in redirect lands on /comp signed in.
+  await page.waitForURL("**/comp");
+  await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
 });
 
 test("sign in via the emailed deep link (#otp=…&email=…)", async ({ page }) => {
@@ -72,7 +74,8 @@ test("sign in via the emailed deep link (#otp=…&email=…)", async ({ page }) 
   // The link the email carries: code in the FRAGMENT (never sent to the
   // server); the page consumes it, strips it, and signs in unprompted.
   await page.goto(`/signin#otp=${otp}&email=${encodeURIComponent(email)}`);
-  await page.waitForURL("**/onboarding");
+  await page.waitForURL("**/comp");
+  await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
 });
 
 test("a wrong code shows an error and allows retry", async ({ page }) => {
@@ -91,7 +94,7 @@ test("a wrong code shows an error and allows retry", async ({ page }) => {
   await expect(page.getByRole("alert")).toContainText(/didn't work/);
   // Still on the code step — the right code recovers the flow.
   await otpInput.fill(otp);
-  await page.waitForURL("**/onboarding");
+  await page.waitForURL("**/comp");
 });
 
 test("send endpoint rate-limits with Retry-After", async ({ request }) => {

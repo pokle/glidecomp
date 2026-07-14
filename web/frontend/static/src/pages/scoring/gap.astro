@@ -8,7 +8,6 @@
  */
 import Base from "../../layouts/Base.astro";
 import BackLink from "../../components/BackLink.astro";
-import SiteFooter from "../../components/SiteFooter.astro";
 import SpecRef from "../../components/SpecRef.astro";
 import katex from "katex";
 import "katex/dist/katex.min.css";
@@ -18,7 +17,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
 ---
 
 <Base title="GlideComp - How GAP Scoring Works">
-  <div class="min-h-screen bg-background text-foreground p-6 bg-hills">
+  <div class="min-h-screen bg-background text-foreground p-6">
     <div class="max-w-2xl mx-auto">
       <header class="mb-10">
         <BackLink href="/scoring" label="Scoring" />
@@ -901,7 +900,6 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         </div>
       </section>
 
-      <SiteFooter />
     </div>
   </div>
 </Base>

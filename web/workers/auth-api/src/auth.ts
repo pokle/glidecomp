@@ -11,6 +11,7 @@ import {
   registerOtpEmailSend,
 } from "./rate-limit";
 import { buildOtpEmail, type EmailSendBinding } from "./otp-email";
+import { deriveUniqueUsername } from "./username";
 
 export function isLocalDev(env: { BETTER_AUTH_URL: string }): boolean {
   try {
@@ -181,6 +182,34 @@ export function createAuth(
           required: false,
           unique: true,
           input: false,
+        },
+      },
+    },
+    databaseHooks: {
+      user: {
+        create: {
+          // Auto-assign a public handle at sign-up (from Google OAuth or the
+          // dev-login flow) so nobody has to pick one by hand — this is what
+          // lets new users skip the onboarding gate. Derived from the display
+          // name, falling back to the email local-part, then "pilot".
+          before: async (user) => {
+            if (typeof user.username === "string" && user.username.length > 0) {
+              return; // already set — leave it be
+            }
+            const emailLocal =
+              typeof user.email === "string" ? user.email.split("@")[0] : "";
+            const username = await deriveUniqueUsername(
+              [typeof user.name === "string" ? user.name : "", emailLocal],
+              async (candidate) => {
+                const row = await env.glidecomp_auth
+                  .prepare('SELECT 1 FROM "user" WHERE username = ?')
+                  .bind(candidate)
+                  .first();
+                return row !== null;
+              }
+            );
+            return { data: { ...user, username } };
+          },
         },
       },
     },
