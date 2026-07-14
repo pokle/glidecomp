@@ -16,29 +16,15 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Link, useParams } from "react-router-dom";
 import { MapPinIcon } from "lucide-react";
 import { parseWaypointFile, type WaypointFileRecord } from "@glidecomp/engine";
-import type { MapPickDetails, MapWaypoint, PickedPeak } from "../../analysis/map-provider";
+import type { MapPickDetails, MapWaypoint } from "../../analysis/map-provider";
 import { Button } from "@/react/ui/button";
-import { Input } from "@/react/ui/input";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/react/ui/dialog";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { useAdminView, useUser } from "../lib/user";
 import { Breadcrumbs } from "../components/Breadcrumbs";
-import {
-  formatCoords,
-  formatSnapDistance,
-  parseCoords,
-  peakSnapMode,
-  suggestWaypointCode,
-} from "../comp/route-editor";
+import { formatCoords, parseCoords } from "../comp/route-editor";
+import { AddWaypointDialog } from "../comp/AddWaypointDialog";
 import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
 import { useInitialData } from "../lib/initial-data";
 import type { CompWaypointsLoaderData } from "../loaders";
@@ -110,18 +96,12 @@ export function CompWaypoints() {
   const [focus, setFocus] = useState<{ lat: number; lon: number; key: number } | null>(null);
   const focusSeq = useRef(0);
 
-  // New-waypoint dialog (from map tap or the Add button).
+  // New-waypoint dialog (from map tap or the Add button). The dialog itself is
+  // the shared AddWaypointDialog; here we only hold whether it's open and the
+  // seed (coordinates + map details) it opens with.
   const [adding, setAdding] = useState(false);
-  const [newCode, setNewCode] = useState("");
-  const [newName, setNewName] = useState("");
-  const [newCoords, setNewCoords] = useState("");
-  const [newAltitude, setNewAltitude] = useState("");
-  // Snap-to-peak: the candidate peak near the tap (null when none), whether the
-  // coords currently reflect it, and the raw tap to revert to.
-  const [newPeak, setNewPeak] = useState<PickedPeak | null>(null);
-  const [snapped, setSnapped] = useState(false);
-  const [tapCoords, setTapCoords] = useState("");
-  const [tapAltitude, setTapAltitude] = useState("");
+  const [seedCoords, setSeedCoords] = useState("");
+  const [seedDetails, setSeedDetails] = useState<MapPickDetails | undefined>(undefined);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const isAdmin = useAdminView(realIsAdmin);
@@ -227,83 +207,18 @@ export function CompWaypoints() {
     }
   }
 
-  // Everything the map can tell us about the tapped point pre-fills the
-  // dialog (still fully editable): terrain elevation → altitude, nearest
-  // rendered label → name, and a short code derived from that name. All
-  // blank on the Leaflet fallback, which reports no details.
-  //
-  // When a peak is near the tap we snap-to-peak: a tight tap silently adopts
-  // the summit coordinates/elevation (revertible), a looser one only offers it
-  // (see the status row under the Coordinates field). Both are decided by
-  // peakSnapMode; nothing is committed until Add either way.
-  const openAdd = useCallback(
-    (coords = "", details?: MapPickDetails) => {
-      const placeName = details?.placeName ?? "";
-      const tapAlt =
-        details?.elevation !== undefined ? String(Math.round(details.elevation)) : "";
-      const peak = details?.peak ?? null;
-      setNewCode(
-        placeName
-          ? suggestWaypointCode(placeName, rows.map((r) => r.code))
-          : ""
-      );
-      setNewName(placeName);
-      setTapCoords(coords);
-      setTapAltitude(tapAlt);
-      setNewPeak(peak);
+  // Open the shared add dialog, seeding it with the tap's coordinates and
+  // whatever the map knows about the point (elevation, place name, nearby peak).
+  const openAdd = useCallback((coords = "", details?: MapPickDetails) => {
+    setSeedCoords(coords);
+    setSeedDetails(details);
+    setAdding(true);
+    setAddMode(false);
+  }, []);
 
-      if (peak && peakSnapMode(peak) === "auto") {
-        setNewCoords(formatCoords(peak.lat, peak.lon));
-        setNewAltitude(
-          peak.elevation !== undefined ? String(Math.round(peak.elevation)) : tapAlt
-        );
-        setSnapped(true);
-      } else {
-        setNewCoords(coords);
-        setNewAltitude(tapAlt);
-        setSnapped(false);
-      }
-      setAdding(true);
-      setAddMode(false);
-    },
-    [rows]
-  );
-
-  // Apply the offered peak (offer → snapped), or revert to the raw tap
-  // (snapped → offer). The coordinates field stays a plain input, so a manual
-  // edit or a later table edit still wins; these only reset its value.
-  function applySnap() {
-    if (!newPeak) return;
-    setNewCoords(formatCoords(newPeak.lat, newPeak.lon));
-    if (newPeak.elevation !== undefined) {
-      setNewAltitude(String(Math.round(newPeak.elevation)));
-    }
-    setSnapped(true);
-  }
-  function revertToTap() {
-    setNewCoords(tapCoords);
-    setNewAltitude(tapAltitude);
-    setSnapped(false);
-  }
-
-  function addWaypoint() {
-    const coords = parseCoords(newCoords);
-    if (!coords) {
-      toast.error('Enter coordinates as "lat, lon" decimal degrees');
-      return;
-    }
-    const code = newCode.trim() || "WP";
-    setRows((prev) => [
-      ...prev,
-      {
-        id: ++rowSeq,
-        code,
-        name: newName.trim(),
-        coords: formatCoords(coords.lat, coords.lon),
-        altitude: newAltitude.trim(),
-        radius: "400",
-      },
-    ]);
+  // The dialog hands back a finished record; drop it in as a new row.
+  function addWaypoint(rec: WaypointFileRecord) {
+    setRows((prev) => [...prev, toRow(rec)]);
     setAdding(false);
   }
 
@@ -542,74 +457,15 @@ export function CompWaypoints() {
         </div>
       )}
 
-      {/* New-waypoint dialog */}
-      <Dialog open={adding} onOpenChange={(o) => { if (!o) setAdding(false); }}>
-        <DialogContent className="flex flex-col gap-3 sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Add waypoint</DialogTitle>
-          </DialogHeader>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Code</span>
-            <Input autoFocus placeholder="e.g. A01" value={newCode} onChange={(e) => setNewCode(e.target.value)} />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Name <span className="text-muted-foreground">— optional</span></span>
-            <Input placeholder="e.g. Bordano Landing" value={newName} onChange={(e) => setNewName(e.target.value)} />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Coordinates (lat, lon)</span>
-            <Input
-              placeholder="-36.185, 147.891"
-              spellCheck={false}
-              value={newCoords}
-              onChange={(e) => setNewCoords(e.target.value)}
-            />
-          </label>
-          {newPeak && (
-            <p
-              className="-mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground"
-              aria-live="polite"
-            >
-              <span aria-hidden="true">⛰</span>
-              {snapped ? (
-                <span>
-                  Snapped to{" "}
-                  <span className="font-medium text-foreground">{newPeak.name}</span>{" "}
-                  summit — {formatSnapDistance(newPeak.distanceM)} from your tap ·{" "}
-                  <button
-                    type="button"
-                    className="font-medium underline underline-offset-2 hover:text-foreground"
-                    onClick={revertToTap}
-                  >
-                    Use tapped point
-                  </button>
-                </span>
-              ) : (
-                <span>
-                  <button
-                    type="button"
-                    className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
-                    onClick={applySnap}
-                  >
-                    Snap to {newPeak.name} summit
-                  </button>{" "}
-                  ({formatSnapDistance(newPeak.distanceM)} away)
-                </span>
-              )}
-            </p>
-          )}
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Altitude (m) <span className="text-muted-foreground">— optional</span></span>
-            <Input type="number" inputMode="numeric" value={newAltitude} onChange={(e) => setNewAltitude(e.target.value)} />
-          </label>
-          <DialogFooter>
-            <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
-            <Button type="button" disabled={parseCoords(newCoords) === null} onClick={addWaypoint}>
-              Add
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* New-waypoint dialog (shared with the task route editor). */}
+      <AddWaypointDialog
+        open={adding}
+        initialCoords={seedCoords}
+        details={seedDetails}
+        takenCodes={rows.map((r) => r.code)}
+        onAdd={addWaypoint}
+        onCancel={() => setAdding(false)}
+      />
     </main>
   );
 }

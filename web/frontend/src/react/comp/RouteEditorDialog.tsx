@@ -22,7 +22,7 @@ import {
   type WaypointFileRecord,
   type XCTask,
 } from "@glidecomp/engine";
-import type { MapWaypoint } from "../../analysis/map-provider";
+import type { MapPickDetails, MapWaypoint } from "../../analysis/map-provider";
 import { Button } from "@/react/ui/button";
 import {
   Dialog,
@@ -53,6 +53,7 @@ import {
   TYPE_LABELS,
   type RouteRow,
 } from "./route-editor";
+import { AddWaypointDialog } from "./AddWaypointDialog";
 
 // Lazy so the map libraries (mapbox/leaflet) and their CSS load only when the
 // editor opens and never enter the SSR'd task-detail bundle.
@@ -121,6 +122,20 @@ export function RouteEditorDialog({
   const [wpLoading, setWpLoading] = useState(true);
   const [wpSearch, setWpSearch] = useState("");
   const [wpFitNonce, setWpFitNonce] = useState(0);
+  // Inline "add a missing waypoint" flow. The map goes into add-mode so a tap
+  // seeds the shared dialog; the new point drops straight into this route (see
+  // addNewWaypoint) and is written to the competition only when the route is
+  // saved.
+  const [addMode, setAddMode] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [addSeedCoords, setAddSeedCoords] = useState("");
+  const [addSeedDetails, setAddSeedDetails] = useState<MapPickDetails | undefined>(undefined);
+  // Waypoints created inline but not yet persisted. They show in the picker and
+  // on the map right away, but reach the competition's waypoint set only on
+  // route save — so cancelling the edit discards them cleanly (a way out if a
+  // new point was a mistake, since a picked turnpoint can't be renamed here),
+  // and a saved route never references a comp waypoint that was never stored.
+  const [pendingWaypoints, setPendingWaypoints] = useState<WaypointFileRecord[]>([]);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [xcontestCode, setXcontestCode] = useState("");
   const [xcontestLoading, setXcontestLoading] = useState(false);
@@ -423,6 +438,71 @@ export function RouteEditorDialog({
     [waypointRecords, addTurnpointFromRecord]
   );
 
+  // Open the shared add-waypoint dialog, seeded from a map tap (or blank when
+  // opened from the button). Leaving add-mode on afterwards would keep the
+  // crosshair, so turn it off.
+  const openAddPoint = useCallback((coords = "", details?: MapPickDetails) => {
+    setAddSeedCoords(coords);
+    setAddSeedDetails(details);
+    setAdding(true);
+    setAddMode(false);
+  }, []);
+
+  /**
+   * Stage a brand-new waypoint: show it in the picker/map and drop it into the
+   * route as a turnpoint now, but hold it out of the competition until the route
+   * is saved (see save → persistPendingWaypoints). Nothing hits the network here,
+   * so cancelling the edit throws the point away.
+   */
+  function addNewWaypoint(rec: WaypointFileRecord) {
+    setAdding(false);
+    setWaypointRecords((prev) => [...prev, rec]);
+    setPendingWaypoints((prev) => [...prev, rec]);
+    addTurnpointFromRecord(rec);
+    toast.success(`Added ${rec.code} to the route — saved to the competition when you save`);
+  }
+
+  /**
+   * Write the staged waypoints to the competition, on route save. Waypoints are
+   * stored as one full-replace blob (there's no append endpoint), so re-fetch
+   * the freshest set and append the pending ones — that way a waypoint added
+   * elsewhere since this dialog opened isn't clobbered. Audited server-side; not
+   * a scoring input. Returns false (with a toast) so the caller can abort the
+   * save instead of writing a route whose new waypoints failed to persist.
+   */
+  async function persistPendingWaypoints(): Promise<boolean> {
+    try {
+      // The freshest server set, falling back to the records we loaded minus the
+      // still-unsaved ones (compared by reference — pending records are the very
+      // objects pushed into waypointRecords).
+      let base = waypointRecords.filter((w) => !pendingWaypoints.includes(w));
+      try {
+        const res = await api.api.comp[":comp_id"].waypoints.$get({
+          param: { comp_id: compId },
+        });
+        if (res.ok) {
+          base = (await res.json() as unknown as { waypoints: WaypointFileRecord[] }).waypoints;
+        }
+      } catch {
+        /* fall back to the list we already loaded */
+      }
+      const put = await api.api.comp[":comp_id"].waypoints.$put({
+        param: { comp_id: compId },
+        json: { waypoints: [...base, ...pendingWaypoints] },
+      });
+      if (!put.ok) {
+        const err = (await put.json()) as { error?: string };
+        toast.error(err.error || "Failed to save the new waypoints");
+        return false;
+      }
+      setPendingWaypoints([]);
+      return true;
+    } catch {
+      toast.error("Network error saving the new waypoints. Please try again.");
+      return false;
+    }
+  }
+
   /** Load a parsed task into the editor (grid + panels + base fields). */
   async function loadTask(task: XCTask, sourceLabel: string) {
     const table = tableRef.current;
@@ -592,6 +672,12 @@ export function RouteEditorDialog({
     if (!task) return;
     setSaving(true);
     try {
+      // Persist any inline-created waypoints to the competition first, so a saved
+      // route never references a comp waypoint that isn't stored. On failure,
+      // abort — the route isn't saved and the admin can retry (pending kept).
+      const newWpCount = pendingWaypoints.length;
+      if (newWpCount > 0 && !(await persistPendingWaypoints())) return;
+
       const res = await api.api.comp[":comp_id"].task[":task_id"].$patch({
         param: { comp_id: compId, task_id: taskId },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -602,8 +688,12 @@ export function RouteEditorDialog({
         toast.error(err.error || "Failed to save the route");
         return;
       }
+      const wpNote =
+        newWpCount > 0
+          ? ` · ${newWpCount} new waypoint${newWpCount === 1 ? "" : "s"} added to the competition`
+          : "";
       toast.success(
-        `Route saved: ${task.turnpoints.length} turnpoint${task.turnpoints.length === 1 ? "" : "s"} — scores will recompute`
+        `Route saved: ${task.turnpoints.length} turnpoint${task.turnpoints.length === 1 ? "" : "s"}${wpNote} — scores will recompute`
       );
       onSaved();
     } catch {
@@ -684,29 +774,60 @@ export function RouteEditorDialog({
                   <RouteMap
                     task={mapTask}
                     waypoints={mapWaypoints}
-                    addMode={false}
+                    addMode={addMode}
                     fitNonce={wpFitNonce}
                     onWaypointPick={pickWaypoint}
-                    onMapPick={() => {}}
+                    onMapPick={(lat, lon, details) =>
+                      openAddPoint(formatCoords(lat, lon), details)
+                    }
                   />
                 ) : null}
               </Suspense>
+            </div>
+            {/* Add a missing waypoint without leaving the route editor: tap the
+                map to place it, or open a blank form. Either way it's added to
+                the route now and written to the competition when you save. */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={addMode ? "default" : "outline"}
+                aria-pressed={addMode}
+                onClick={() => setAddMode((a) => !a)}
+              >
+                {addMode ? "Tap the map to place…" : "Add from map"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => openAddPoint()}
+              >
+                New point
+              </Button>
+              {pendingWaypoints.length > 0 ? (
+                <span className="text-xs text-muted-foreground">
+                  {pendingWaypoints.length} new — saved to the competition when you save the route
+                </span>
+              ) : null}
             </div>
             {/* Searchable list of the competition's waypoints to pick from. */}
             {wpLoading ? (
               <p className="text-xs text-muted-foreground">Loading competition waypoints…</p>
             ) : waypointRecords.length === 0 ? (
               <p className="rounded border border-dashed border-border p-3 text-xs text-muted-foreground">
-                This competition has no waypoints yet.{" "}
+                This competition has no waypoints yet. Use <span className="font-medium">Add from map</span> or{" "}
+                <span className="font-medium">New point</span> above to create one — it's added to this
+                route now and saved to the competition when you save. Or{" "}
                 <a
                   href={`/comp/${compId}/waypoints`}
                   target="_blank"
                   rel="noreferrer"
                   className="underline hover:text-foreground"
                 >
-                  Add waypoints to the competition
-                </a>{" "}
-                first, then pick them here.
+                  manage all waypoints
+                </a>
+                .
               </p>
             ) : (
               <>
@@ -1013,6 +1134,17 @@ export function RouteEditorDialog({
             {saving ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
+
+        {/* Inline create — stages a new waypoint into the route; it's written to
+            the competition on save. Shared with the competition waypoints page. */}
+        <AddWaypointDialog
+          open={adding}
+          initialCoords={addSeedCoords}
+          details={addSeedDetails}
+          takenCodes={waypointRecords.map((w) => w.code)}
+          onAdd={addNewWaypoint}
+          onCancel={() => setAdding(false)}
+        />
       </DialogContent>
     </Dialog>
   );
