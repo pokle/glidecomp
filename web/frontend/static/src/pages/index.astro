@@ -19,13 +19,15 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
             Competition track log analysis for hanggliding and paragliding
           </p>
         </div>
-        <button
-          id="google-signin"
-          type="button"
+        <!-- Plain link to the SPA sign-in page (Google + email code) — keeps
+             this page zero-JS and every sign-in path funnelling through
+             /signin. -->
+        <a
+          href="/signin"
           class="inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 h-8 gap-1.5 px-2.5 bg-primary text-primary-foreground hover:bg-primary/80 cursor-pointer"
         >
-          Login with Google
-        </button>
+          Sign in
+        </a>
       </header>
 
       <p class="text-sm text-muted-foreground">
@@ -60,11 +62,3 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     </div>
   </div>
 </Base>
-
-<script>
-  // Only interactive element on the page: kick off Google OAuth via better-auth.
-  import { signInWithGoogle } from "../../../src/auth/client";
-  document
-    .getElementById("google-signin")
-    ?.addEventListener("click", () => void signInWithGoogle());
-</script>
