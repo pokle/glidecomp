@@ -248,15 +248,25 @@ export const compRoutes = new Hono<HonoEnv>()
     let adminComps: { results: Record<string, unknown>[] } = { results: [] };
 
     if (user) {
-      adminComps = await c.env.DB.prepare(
-        `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params, c.scoring_format, c.timezone, c.open_igc_upload
-         FROM comp c
-         JOIN comp_admin ca ON c.comp_id = ca.comp_id
-         WHERE ca.user_id = ?
-         ORDER BY c.creation_date DESC`
-      )
-        .bind(user.id)
-        .all();
+      // A super admin administers every competition, so surface all comps —
+      // including test comps created by any comp admin, which the public query
+      // hard-filters out. A regular admin sees only comps they hold a
+      // `comp_admin` row for.
+      adminComps = isSuperAdmin(user)
+        ? await c.env.DB.prepare(
+            `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params, c.scoring_format, c.timezone, c.open_igc_upload
+             FROM comp c
+             ORDER BY c.creation_date DESC`
+          ).all()
+        : await c.env.DB.prepare(
+            `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params, c.scoring_format, c.timezone, c.open_igc_upload
+             FROM comp c
+             JOIN comp_admin ca ON c.comp_id = ca.comp_id
+             WHERE ca.user_id = ?
+             ORDER BY c.creation_date DESC`
+          )
+            .bind(user.id)
+            .all();
     }
 
     // Task date range per comp — the list shows when a comp *runs* (first
