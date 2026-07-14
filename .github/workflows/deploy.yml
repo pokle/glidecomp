@@ -1,12 +1,15 @@
 name: Deploy
 
+# One workflow for every branch. Test + E2E + build + Pages preview deploy +
+# smoke tests run identically on every push; the master-only production steps
+# (real Worker deploys, apex D1 migrations, the apex-routed scores check) are
+# gated on `github.ref_name == 'master'`. Keeping a single definition means the
+# branch-preview and production paths can never drift — the drift that let the
+# git-sha smoke check silently rot on master while it was green on branches.
 on:
   push:
     branches:
-      - master
-  pull_request:
-    branches:
-      - master
+      - '**'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -107,10 +110,10 @@ jobs:
     name: Deploy
     runs-on: ubuntu-latest
     needs: test
-    if: github.event_name == 'push'
     permissions:
       contents: read
       deployments: write
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -140,8 +143,11 @@ jobs:
         env:
           VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
 
-      # Deploy workers before Pages — Pages service bindings require workers to exist
+      # ── Production-only: deploy the Workers before Pages (Pages service
+      # bindings require the Workers to exist). Branch previews reuse the
+      # already-deployed production Workers via their service bindings. ──
       - name: Deploy AirScore API Worker
+        if: github.ref_name == 'master'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -150,6 +156,7 @@ jobs:
           command: deploy
 
       - name: Apply D1 Migrations
+        if: github.ref_name == 'master'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -158,6 +165,7 @@ jobs:
           command: d1 migrations apply taskscore-auth --remote
 
       - name: Deploy Auth API Worker
+        if: github.ref_name == 'master'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -166,6 +174,7 @@ jobs:
           command: deploy
 
       - name: Deploy Competition API Worker
+        if: github.ref_name == 'master'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -173,158 +182,58 @@ jobs:
           workingDirectory: web/workers/competition-api
           command: deploy
 
+      # Pages deploy for every branch. `--branch=master` promotes to production
+      # (glidecomp.com); any other branch gets its preview alias.
       - name: Deploy to Cloudflare Pages
-        id: pages-deploy
+        id: deploy
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy --branch=${{ github.ref_name }}
 
-      - name: Smoke test — SPA routes serve the app shell at the right version
+      - name: Output preview URL (and comment on the PR)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          DEPLOY_URL="${{ steps.pages-deploy.outputs.deployment-url }}"
-          EXPECTED_SHA="${{ github.sha }}"
-          echo "Checking ${DEPLOY_URL} @ ${EXPECTED_SHA}"
-          fail=0
+          PREVIEW_URL="${{ steps.deploy.outputs.deployment-url }}"
 
-          # SPA routes must serve the app shell directly with HTTP 200 (no
-          # redirect). Catches _redirects / Cloudflare clean-URL regressions
-          # that send SPA routes elsewhere — e.g. the /app.html -> /app outage
-          # where every SPA route 308-redirected to a "Page not found".
-          # Retry with backoff: /comp is now served by the SSR Pages Function,
-          # which can propagate to the edge a few seconds after the static
-          # assets, so a just-finished deploy may transiently 404 it.
-          check_route() {
-            local route="$1" code=""
-            for attempt in $(seq 1 10); do
-              code=$(curl -s -o /dev/null -w '%{http_code}' "${DEPLOY_URL}${route}")
-              if [ "$code" = "200" ]; then echo "${route} -> ${code}"; return 0; fi
-              echo "${route} -> ${code} (attempt ${attempt}/10, retrying in 3s…)"
-              sleep 3
-            done
-            echo "::error::${route} returned HTTP ${code} after retries (expected 200 — route not serving the app shell)"
-            return 1
-          }
-          for route in /comp /u/me /scores; do check_route "$route" || fail=1; done
+          echo "## Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "Branch: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "URL: ${PREVIEW_URL}" >> $GITHUB_STEP_SUMMARY
 
-          # Version check via the build-time <meta name="git-sha"> in the shell.
-          # Same propagation race as the routes above: right after a deploy the
-          # SSR Pages Function can answer /comp with 200 before the rendered
-          # shell (and its git-sha meta) has propagated to the edge, so a single
-          # read intermittently sees no meta. Retry until it appears and matches.
-          check_sha() {
-            local deployed=""
-            for attempt in $(seq 1 10); do
-              deployed=$(curl -s "${DEPLOY_URL}/comp" | grep -oP '<meta name="git-sha" content="\K[a-f0-9]+' | head -1)
-              if [ "$deployed" = "$EXPECTED_SHA" ]; then
-                echo "Deployed SHA: ${deployed}"
-                return 0
-              fi
-              echo "Deployed SHA: ${deployed:-<not found>} (attempt ${attempt}/10, retrying in 3s…)"
-              sleep 3
-            done
-            if [ -z "$deployed" ]; then
-              echo "::error::Could not read git-sha meta from ${DEPLOY_URL}/comp after retries"
-            else
-              echo "::error::Deployed SHA ${deployed} does not match expected ${EXPECTED_SHA} after retries"
+          # Post the preview URL as a PR comment (if a PR exists for this branch).
+          # On master there is no PR, so this is a no-op.
+          PR_NUMBER=$(gh pr view "${{ github.ref_name }}" --repo "${{ github.repository }}" --json number --jq '.number' 2>/dev/null || true)
+          if [ -n "$PR_NUMBER" ]; then
+            COMMENT_MARKER="<!-- branch-deploy-preview -->"
+            COMMENT_BODY="${COMMENT_MARKER}
+          **Preview Deployment**
+          ${PREVIEW_URL}
+          _Commit: ${{ github.sha }}_"
+
+            # Delete previous preview comment if it exists, then post a new one
+            EXISTING_COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" --jq ".[] | select(.body | startswith(\"${COMMENT_MARKER}\")) | .id" 2>/dev/null | head -1 || true)
+            if [ -n "$EXISTING_COMMENT_ID" ]; then
+              gh api -X DELETE "repos/${{ github.repository }}/issues/comments/${EXISTING_COMMENT_ID}" 2>/dev/null || true
             fi
-            return 1
-          }
-          check_sha || fail=1
 
-          if [ "$fail" = "0" ]; then echo "Good — SPA routes serve ${EXPECTED_SHA}"; fi
-          exit $fail
+            gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body "$COMMENT_BODY"
+          fi
 
-      - name: Smoke test — SSR public pages render content (no JS)
+      # Single shared smoke suite (web/scripts/smoke-test.sh) runs against this
+      # deployment for BOTH branch previews and production, so any change to the
+      # smoke logic is validated on the PR's preview before it can reach master.
+      # The stale-first scores check targets the apex-routed competition worker
+      # (only freshly deployed on master), so it's added only for the master run.
+      - name: Smoke test — deployment serves the app correctly
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.deployment-url }}
+          EXPECTED_SHA: ${{ github.sha }}
+          IS_PROD: ${{ github.ref_name == 'master' }}
         run: |
-          DEPLOY_URL="${{ steps.pages-deploy.outputs.deployment-url }}"
-          fail=0
-
-          # robots.txt + the dynamic sitemap must be served.
-          for path in /robots.txt /sitemap.xml; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "${DEPLOY_URL}${path}")
-            echo "${path} -> ${code}"
-            [ "$code" = "200" ] || { echo "::error::${path} returned ${code}"; fail=1; }
-          done
-
-          # The defining SSR property: a public comp's name is present in the
-          # server HTML of /comp AND its hub — with no JavaScript run.
-          NAME=$(curl -s "${DEPLOY_URL}/api/comp" | jq -r '[.comps[] | select(.test==false)][0].name // empty')
-          CID=$(curl -s "${DEPLOY_URL}/api/comp" | jq -r '[.comps[] | select(.test==false)][0].comp_id // empty')
-          if [ -z "$NAME" ] || [ -z "$CID" ]; then
-            echo "::warning::No public comp to verify SSR content against — skipping"
-          else
-            echo "Verifying SSR content for '${NAME}' (${CID})"
-            if curl -s "${DEPLOY_URL}/comp" | grep -qF "$NAME"; then
-              echo "Good — /comp server-renders the comp list"
-            else
-              echo "::error::/comp HTML did not contain '${NAME}' — SSR not rendering content"; fail=1
-            fi
-            if curl -s "${DEPLOY_URL}/comp/${CID}" | grep -qF "$NAME"; then
-              echo "Good — /comp/${CID} server-renders the comp hub"
-            else
-              echo "::error::/comp/${CID} HTML did not contain '${NAME}' — hub SSR broken"; fail=1
-            fi
+          args=("$DEPLOY_URL" "$EXPECTED_SHA")
+          if [ "$IS_PROD" = "true" ]; then
+            args+=(--scores-api https://glidecomp.com)
           fi
-          exit $fail
-
-      - name: Smoke test — verify dev-login is NOT accessible
-        run: |
-          DEPLOY_URL="${{ steps.pages-deploy.outputs.deployment-url }}"
-          echo "Testing against: ${DEPLOY_URL}"
-          STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
-            -X POST "${DEPLOY_URL}/api/auth/dev-login" \
-            -H 'Content-Type: application/json' \
-            -d '{"name":"smoke","email":"smoke@test.local"}')
-          echo "POST /api/auth/dev-login returned HTTP $STATUS"
-          if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
-            echo "::error::CRITICAL: dev-login endpoint is accessible at ${DEPLOY_URL}!"
-            exit 1
-          fi
-          echo "Good — dev-login is blocked"
-
-      - name: Smoke test — scores serve stale-first from D1 with ETag/304
-        run: |
-          # The competition worker is routed on the apex domain (not the
-          # pages.dev preview), so hit production directly. The sample comp is
-          # always seeded in prod; if the list is ever empty, warn and skip
-          # rather than failing the deploy over missing sample data.
-          API="https://glidecomp.com"
-          COMP_ID=$(curl -s "${API}/api/comp" | jq -r '.comps[0].comp_id // empty')
-          if [ -z "$COMP_ID" ]; then
-            echo "::warning::No public comps found — skipping score smoke test"
-            exit 0
-          fi
-          echo "Checking comp ${COMP_ID} scores"
-          # Worker deploys propagate over a minute or two — a request landing
-          # on a not-yet-updated instance serves the previous version's
-          # headers (this bit the first stale-first deploy: an old instance
-          # answered X-Cache: HIT with no ETag). Retry until the new
-          # signature (X-Cache AND ETag) appears, then assert on it.
-          HEADERS=$(mktemp)
-          XCACHE=""; ETAG=""
-          for attempt in 1 2 3 4 5 6; do
-            curl -s -o /dev/null -D "$HEADERS" "${API}/api/comp/${COMP_ID}/scores"
-            XCACHE=$(grep -i '^x-cache:' "$HEADERS" | tr -d '\r' | awk '{print $2}')
-            ETAG=$(grep -i '^etag:' "$HEADERS" | tr -d '\r' | cut -d' ' -f2-)
-            echo "attempt ${attempt}: X-Cache: ${XCACHE:-<missing>}  ETag: ${ETAG:-<missing>}"
-            if [ -n "$XCACHE" ] && [ -n "$ETAG" ]; then break; fi
-            sleep 10
-          done
-          case "$XCACHE" in
-            HIT|HIT-STALE|MISS) ;;
-            *) echo "::error::/scores X-Cache header missing or unexpected (${XCACHE:-none})"; exit 1 ;;
-          esac
-          if [ -z "$ETAG" ]; then
-            echo "::error::/scores response has no ETag"; exit 1
-          fi
-          # A conditional re-request of unchanged scores must transfer nothing.
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' \
-            -H "If-None-Match: ${ETAG}" "${API}/api/comp/${COMP_ID}/scores")
-          echo "Conditional GET -> ${CODE}"
-          if [ "$CODE" != "304" ] && [ "$CODE" != "200" ]; then
-            echo "::error::Conditional GET returned ${CODE} (expected 304, or 200 if a re-score landed mid-check)"
-            exit 1
-          fi
-          echo "Good — scores are stale-first with working conditional requests"
+          bash web/scripts/smoke-test.sh "${args[@]}"
