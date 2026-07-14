@@ -223,7 +223,7 @@ trustedOrigins: ["https://*.glidecomp.pages.dev"],
 
 ### Branch deploys do NOT deploy workers
 
-The `branch-deploy.yml` workflow only deploys Cloudflare Pages — it does **not** deploy the auth-api or airscore-api workers. Workers are only deployed from `master` via `deploy.yml`. This prevents branches from overwriting production workers with untested code.
+The unified `deploy.yml` workflow runs on every branch, but for non-master branches it only deploys Cloudflare Pages — the Worker deploy steps (auth-api, airscore-api, competition-api) are gated on `github.ref_name == 'master'`. Workers are therefore only deployed from `master`. This prevents branches from overwriting production workers with untested code.
 
 ## Cross-worker auth verification
 

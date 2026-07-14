@@ -24,8 +24,8 @@ export default defineConfig({
     },
     // Keep a full per-step + network trace for any failed test. Lets us see
     // whether GHA flakes are races in our code or just slow infrastructure.
-    // Traces land in test-results/ — branch-deploy.yml and deploy.yml upload
-    // that path alongside playwright-report/ so they're downloadable from
+    // Traces land in test-results/ — deploy.yml's E2E job uploads that path
+    // alongside playwright-report/ so they're downloadable from
     // the Actions UI. Open one locally with `bunx playwright show-trace`.
     trace: "retain-on-failure",
   },
