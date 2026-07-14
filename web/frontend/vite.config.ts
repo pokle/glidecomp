@@ -181,7 +181,7 @@ export default defineConfig({
               path === '/comp' ||
               path.startsWith('/comp/') ||
               path === '/scores' ||
-              /^\/(profile|settings|onboarding)\/?$/.test(path) ||
+              /^\/(profile|settings|onboarding|signin)\/?$/.test(path) ||
               /^\/admin\/(users|cache)\/?$/.test(path));
           // Old static-page URLs 301 to their clean SPA/Astro routes.
           const movedTo: Record<string, string> = {

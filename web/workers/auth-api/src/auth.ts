@@ -145,9 +145,13 @@ export function createAuth(
         // Rate-limit keying. Better Auth's default is x-forwarded-for, whose
         // first entry is client-supplied (spoofable) behind Cloudflare;
         // cf-connecting-ip is set by the edge to the real client address and
-        // can't be forged through it. Tests set it per-request to isolate
-        // rate-limit buckets.
-        ipAddressHeaders: ["cf-connecting-ip"],
+        // can't be forged through it. Local dev has no real client IP —
+        // every request would share one fallback bucket and e2e runs would
+        // rate-limit each other — so tests isolate buckets by sending
+        // x-test-client-ip, trusted ONLY when isLocalDev().
+        ipAddressHeaders: isLocalDev(env)
+          ? ["x-test-client-ip", "cf-connecting-ip"]
+          : ["cf-connecting-ip"],
       },
     },
     rateLimit: {

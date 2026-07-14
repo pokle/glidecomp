@@ -20,7 +20,7 @@ import { Field, FieldLabel, FieldLegend, FieldSet } from "@/react/ui/field";
 import { Input } from "@/react/ui/input";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
-import { signInWithGoogle, useAdminView, useUser } from "../lib/user";
+import { goToSignIn, useAdminView, useUser } from "../lib/user";
 import {
   categoryLabel,
   formatTaskDate,
@@ -498,7 +498,7 @@ function TaskHero({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => void signInWithGoogle()}
+              onClick={() => goToSignIn(window.location.pathname)}
             >
               Sign in to submit your track
             </Button>

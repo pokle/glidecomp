@@ -38,7 +38,7 @@ import { deleteAccount } from "../../auth/client";
 import { storage } from "../../analysis/storage";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
-import { signInWithGoogle, useUser } from "../lib/user";
+import { goToSignIn, useUser } from "../lib/user";
 import { type ThemePreference, useTheme } from "../lib/theme";
 
 interface ApiKey {
@@ -64,8 +64,8 @@ export function Settings() {
         <div>
           <h1 className="text-2xl font-bold">Settings</h1>
           <p className="text-muted-foreground">Sign in to manage your account</p>
-          <Button type="button" className="mt-4" onClick={() => signInWithGoogle()}>
-            Sign in with Google
+          <Button type="button" className="mt-4" onClick={() => goToSignIn("/settings")}>
+            Sign in
           </Button>
         </div>
         <AppearanceSection />

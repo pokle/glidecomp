@@ -22,7 +22,7 @@ import { Input } from "@/react/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/react/ui/radio-group";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
-import { signInWithGoogle, useUser } from "../lib/user";
+import { goToSignIn, useUser } from "../lib/user";
 import {
   formatDate,
   formatTaskDateRange,
@@ -83,7 +83,7 @@ export function Competitions() {
             Start a new competition
           </Button>
         ) : (
-          <Button type="button" variant="outline" onClick={() => void signInWithGoogle()}>
+          <Button type="button" variant="outline" onClick={() => goToSignIn("/comp")}>
             Sign in to start a competition
           </Button>
         )}

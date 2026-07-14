@@ -9,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/react/ui/table";
-import { signInWithGoogle, useUser } from "../lib/user";
+import { goToSignIn, useUser } from "../lib/user";
 
 interface AdminUser {
   id: string;
@@ -40,7 +40,7 @@ export function AdminUsers() {
   useEffect(() => {
     if (userLoading) return;
     if (!user) {
-      signInWithGoogle();
+      goToSignIn(window.location.pathname);
       return;
     }
     (async () => {

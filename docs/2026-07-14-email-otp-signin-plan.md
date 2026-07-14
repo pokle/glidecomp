@@ -174,10 +174,18 @@ Three independent layers, all needed:
    `lastRequest` — Better Auth's standard schema). Keyed by IP.
 3. **Per-email send throttle** — IP limits don't stop a distributed abuser
    from bombarding one victim's inbox. In `sendVerificationOTP`, before
-   sending, check/insert a per-email counter (small D1 query against a
-   `verification`-adjacent key or the same rateLimit table with key
-   `otp-email:<email>`): max 3 sends per address per 15 minutes; silently drop
-   beyond that (don't error — no inbox-existence oracle).
+   sending, check/insert a per-email counter (an atomic upsert on the same
+   rateLimit table with key `otp-email:<email>`): max 5 sends per address per
+   15 minutes (5, not 3: with the UI's 60s resend cooldown a legitimately
+   struggling user can hit 3 in minutes); silently drop beyond that (don't
+   error — no inbox-existence oracle).
+
+Rate limits are keyed on `cf-connecting-ip` (the Better Auth default,
+`x-forwarded-for`, has a client-supplied first entry behind Cloudflare). In
+local dev there is no real client IP — everything would share one fallback
+bucket and e2e runs would 429 each other — so when `isLocalDev()` the worker
+additionally trusts an `x-test-client-ip` header, letting each test isolate
+its own bucket at the real production limits.
 
 The existing `index.ts` middleware already guarantees every 429 leaves with a
 `Retry-After` header. `docs/api.md` / `e2e/api-doc.spec.ts` only pin the
