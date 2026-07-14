@@ -13,6 +13,13 @@ migrations_dir = "../../db/migrations"
 binding = "R2"
 bucket_name = "glidecomp"
 
+# Cloudflare Email Service (Email Sending) — delivers the sign-in OTP emails.
+# Requires glidecomp.com to be verified as a sender domain in the dashboard
+# (Email Service → sender domains); sends fail with E_SENDER_NOT_VERIFIED
+# until then. Local dev never sends (auth.ts short-circuits via isLocalDev).
+[[send_email]]
+name = "EMAIL"
+
 [vars]
 BETTER_AUTH_URL = "https://glidecomp.com"
 

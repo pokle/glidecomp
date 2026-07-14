@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { bodyLimit } from "hono/body-limit";
 import { APIError } from "better-auth/api";
-import { createAuth, isLocalDev, type AuthEnv } from "./auth";
+import { createAuth, getDevOtp, isLocalDev, type AuthEnv } from "./auth";
 import { mountPreferencesRoutes } from "./routes/preferences";
 
 const app = new Hono<{ Bindings: AuthEnv }>();
@@ -262,6 +262,25 @@ app.post("/api/auth/dev-login", async (c) => {
   });
 });
 
+// GET /api/auth/dev-last-otp — dev/test-only: read back the last sign-in OTP
+// sent to an email, so local flows and the e2e suite can sign in without a
+// mailbox. Gated on isLocalDev like dev-login (404 in production; OTPs are
+// hashed at rest there, so there is nothing to read back anyway).
+app.get("/api/auth/dev-last-otp", (c) => {
+  if (!isLocalDev(c.env)) {
+    return c.notFound();
+  }
+  const email = c.req.query("email");
+  if (!email) {
+    return c.json({ error: "email query param is required" }, 400);
+  }
+  const otp = getDevOtp(email);
+  if (!otp) {
+    return c.json({ error: "No OTP recorded for this email" }, 404);
+  }
+  return c.json({ otp });
+});
+
 // API key create/list/delete are handled by the @better-auth/api-key plugin
 // via the catch-all handler below. Programmatic clients verify API keys by
 // calling GET /api/auth/me with the x-api-key header — enableSessionForAPIKeys
@@ -271,9 +290,10 @@ app.post("/api/auth/dev-login", async (c) => {
 // so /api/auth/preferences resolves here, not to better-auth's handler).
 mountPreferencesRoutes(app);
 
-// Better Auth catch-all handler
+// Better Auth catch-all handler. executionCtx lets sendVerificationOTP hand
+// the outbound email to waitUntil instead of blocking the response on it.
 app.all("/api/auth/*", async (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, c.executionCtx);
   return auth.handler(c.req.raw);
 });
 

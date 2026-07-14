@@ -38,7 +38,7 @@ import { deleteAccount } from "../../auth/client";
 import { storage } from "../../analysis/storage";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
-import { signInWithGoogle, useUser } from "../lib/user";
+import { goToSignIn, useUser } from "../lib/user";
 import { type ThemePreference, useTheme } from "../lib/theme";
 
 interface ApiKey {
@@ -64,8 +64,8 @@ export function Settings() {
         <div>
           <h1 className="text-2xl font-bold">Settings</h1>
           <p className="text-muted-foreground">Sign in to manage your account</p>
-          <Button type="button" className="mt-4" onClick={() => signInWithGoogle()}>
-            Sign in with Google
+          <Button type="button" className="mt-4" onClick={() => goToSignIn("/settings")}>
+            Sign in
           </Button>
         </div>
         <AppearanceSection />
@@ -76,12 +76,46 @@ export function Settings() {
   return (
     <section className="mx-auto flex max-w-3xl flex-col gap-6">
       <h1 className="text-2xl font-bold">Settings</h1>
+      <AccountSection />
       <ProfileSection />
       <AppearanceSection />
       <ApiKeysSection />
       {isSuperAdmin && previewRole === "actual" ? <SuperadminSection /> : null}
       <DangerZoneSection />
     </section>
+  );
+}
+
+// Read-only identity summary. The email is the account's anchor: both Google
+// OAuth and email-code sign-in resolve to the account holding this address.
+function AccountSection() {
+  const { user } = useUser();
+  if (!user) return null;
+
+  const rows = [
+    { label: "Email", value: user.email },
+    { label: "Username", value: user.username ?? "—" },
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Account</CardTitle>
+        <CardDescription>
+          You can sign in with Google or an emailed code — both use this address.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-[auto_1fr]">
+          {rows.map((row) => (
+            <div key={row.label} className="contents">
+              <dt className="text-sm text-muted-foreground">{row.label}</dt>
+              <dd className="text-sm font-medium break-all">{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </CardContent>
+    </Card>
   );
 }
 

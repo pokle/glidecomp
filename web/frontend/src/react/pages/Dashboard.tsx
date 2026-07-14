@@ -17,7 +17,7 @@ import {
 } from "../../analysis/storage";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
-import { signInWithGoogle, useUser } from "../lib/user";
+import { goToSignIn, useUser } from "../lib/user";
 import { downloadFile, relativeTime } from "../lib/format";
 
 // Mirrors the server-side limits in
@@ -51,7 +51,7 @@ export function Dashboard() {
     document.title = "GlideComp - My Flights";
     if (loading) return;
     if (!user) {
-      if (!previewingSignedOut) signInWithGoogle();
+      if (!previewingSignedOut) goToSignIn(window.location.pathname);
       return;
     }
     if (!user.username) {
@@ -144,8 +144,8 @@ export function Dashboard() {
         <p className="mt-2 text-muted-foreground">
           Your IGC track logs and tasks live in your account.
         </p>
-        <Button type="button" className="mt-4" onClick={() => void signInWithGoogle()}>
-          Sign in with Google
+        <Button type="button" className="mt-4" onClick={() => goToSignIn(window.location.pathname)}>
+          Sign in
         </Button>
       </section>
     );

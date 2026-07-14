@@ -23,7 +23,7 @@ import { signOut } from "../../auth/client";
 import {
   DEV_SIGN_IN_ENABLED,
   signInAsDev,
-  signInWithGoogle,
+  goToSignIn,
   useUser,
   type PreviewRole,
 } from "../lib/user";
@@ -86,7 +86,7 @@ export function Shell() {
                     Sign in (dev)
                   </Button>
                 ) : null}
-                <Button type="button" onClick={() => void signInWithGoogle()}>
+                <Button type="button" onClick={() => goToSignIn()}>
                   Sign in
                 </Button>
               </div>

@@ -14,6 +14,7 @@
 /profile  /app  200
 /settings  /app  200
 /onboarding  /app  200
+/signin  /app  200
 /admin/users  /app  200
 /admin/cache  /app  200
 

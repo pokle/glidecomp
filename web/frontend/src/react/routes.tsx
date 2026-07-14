@@ -13,6 +13,7 @@ import { UserProvider } from "./lib/user";
 import { Shell } from "./components/Shell";
 import { Dashboard } from "./pages/Dashboard";
 import { Onboarding } from "./pages/Onboarding";
+import { SignIn } from "./pages/SignIn";
 import { Competitions } from "./pages/Competitions";
 import { CompDetail } from "./pages/CompDetail";
 import { CompWaypoints } from "./pages/CompWaypoints";
@@ -62,6 +63,7 @@ export function AppRoutes() {
           doesn't re-trigger the cached redirect. */}
       <Route path="/app" element={<Navigate to="/u/me" replace />} />
       <Route path="/onboarding" element={<Onboarding />} />
+      <Route path="/signin" element={<SignIn />} />
       <Route element={<Shell />}>
         <Route path="/u/:username" element={<Dashboard />} />
         <Route path="/comp" element={<Competitions />} />

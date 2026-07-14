@@ -8,7 +8,7 @@
  * the real superadmin, so nothing here grants or removes any actual access.
  */
 import { createContext, useContext, useEffect, useState } from "react";
-import { authClient, getCurrentUser, type AuthUser } from "../../auth/client";
+import { getCurrentUser, type AuthUser } from "../../auth/client";
 
 /**
  * "actual" is no preview (render the real role). "admin" renders comp-admin
@@ -100,15 +100,25 @@ export function useAdminView(realIsAdmin: boolean): boolean {
   return previewRole === "admin";
 }
 
-export function signInWithGoogle() {
+/**
+ * Sign-in entry point for every "Sign in" button and auth-guard redirect:
+ * navigates to the /signin page (Google + email code) rather than straight
+ * into Google OAuth. Pass `next` (an internal path) to return the user where
+ * they started after signing in.
+ */
+export function goToSignIn(next?: string) {
   // While a superadmin previews a signed-out/pilot view, "Sign in" means
-  // "back to my real self", not a second OAuth round trip.
+  // "back to my real self", not a real sign-in round trip.
   if (readPreviewRole() !== "actual") {
     writePreviewRole("actual");
     window.location.reload();
-    return Promise.resolve();
+    return;
   }
-  return authClient.signIn.social({ provider: "google", callbackURL: "/comp" });
+  const target =
+    next && next.startsWith("/") && !next.startsWith("//")
+      ? `/signin?next=${encodeURIComponent(next)}`
+      : "/signin";
+  window.location.assign(target);
 }
 
 /**

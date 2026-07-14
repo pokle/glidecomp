@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/react/ui/button";
 import { useConfirm } from "../lib/confirm";
 import { toast } from "../lib/toast";
-import { signInWithGoogle, useUser } from "../lib/user";
+import { goToSignIn, useUser } from "../lib/user";
 
 interface NamespaceStats {
   name: string;
@@ -48,7 +48,7 @@ export function AdminCache() {
   useEffect(() => {
     if (userLoading) return;
     if (!user) {
-      signInWithGoogle();
+      goToSignIn(window.location.pathname);
       return;
     }
     let cancelled = false;

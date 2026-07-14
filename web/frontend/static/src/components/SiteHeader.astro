@@ -25,23 +25,15 @@ const tab = (isActive: boolean) =>
     <a href="/" class="font-brand text-base font-semibold tracking-tight">GlideComp</a>
     <a href="/comp" class={tab(active === "comp")}>Competitions</a>
     <a href="/u/me" class={`${tab(active === "flights")} max-sm:hidden`}>My Flights</a>
-    <a href="/scoring" class={`${tab(false)} max-sm:hidden`}>Scoring</a>
     <div class="ml-auto">
-      <button
-        id="nav-signin"
-        type="button"
+      <!-- Plain link to the SPA sign-in page (Google + email code) — keeps
+           the static chrome zero-JS and every sign-in path on /signin. -->
+      <a
+        href="/signin"
         class="inline-flex h-8 cursor-pointer items-center justify-center rounded-full bg-primary px-4 text-sm font-medium whitespace-nowrap text-primary-foreground transition-colors select-none hover:bg-primary/85"
       >
         Sign in
-      </button>
+      </a>
     </div>
   </nav>
 </header>
-
-<script>
-  // The only interactive element in the static chrome: Google OAuth via better-auth.
-  import { signInWithGoogle } from "../../../src/auth/client";
-  document
-    .getElementById("nav-signin")
-    ?.addEventListener("click", () => void signInWithGoogle());
-</script>

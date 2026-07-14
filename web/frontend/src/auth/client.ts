@@ -1,11 +1,23 @@
 import { createAuthClient } from "better-auth/client";
+import { emailOTPClient } from "better-auth/client/plugins";
 
 export const authClient = createAuthClient({
   basePath: "/api/auth",
+  plugins: [emailOTPClient()],
 });
 
-export function signInWithGoogle() {
-  return authClient.signIn.social({ provider: "google", callbackURL: "/comp" });
+export function signInWithGoogle(callbackURL = "/comp") {
+  return authClient.signIn.social({ provider: "google", callbackURL });
+}
+
+/** Email a one-time sign-in code. Returns better-auth's { data, error }. */
+export function sendSignInOtp(email: string) {
+  return authClient.emailOtp.sendVerificationOtp({ email, type: "sign-in" });
+}
+
+/** Exchange an emailed code for a session. Returns { data, error }. */
+export function signInWithOtp(email: string, otp: string) {
+  return authClient.signIn.emailOtp({ email, otp });
 }
 
 export function signOut() {

@@ -127,7 +127,8 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
           <div class="faq-answer">
             <p>
               Not to follow along — competitions, tasks and scores are public
-              pages. Submitting a track takes a quick Google sign-in, and
+              pages. Submitting a track takes a quick sign-in — with Google
+              or a one-time code emailed to you — and
               organisers can always upload tracks on a pilot's behalf.
             </p>
           </div>
@@ -517,10 +518,10 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 </style>
 
 <script>
-  // Google OAuth for the hero + CTA buttons (the nav pill has its own hook).
-  import { signInWithGoogle } from "../../../src/auth/client";
+  // Hero + CTA buttons route to the sign-in page (Google or an emailed
+  // code) rather than straight into Google OAuth.
   for (const el of document.querySelectorAll("[data-signin]")) {
-    el.addEventListener("click", () => void signInWithGoogle());
+    el.addEventListener("click", () => window.location.assign("/signin?next=/comp"));
   }
 
   // Reveal-on-scroll. The `js` class arms the initial hidden state (CSS above),
