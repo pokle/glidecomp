@@ -1093,6 +1093,14 @@ export interface FlightScoringData {
   fixes?: IGCFix[];
   /** Resolved turnpoint reachings — an alternative to leadingAggregate when useLeading is true */
   sequence?: TurnpointReaching[];
+  /**
+   * True for a track-less pilot (a manual flight, issue #306): there is no
+   * tracklog to scan, so the flight legitimately carries none of
+   * {@link leadingAggregate}/{@link fixes}/{@link sequence}. Such a pilot earns
+   * no leading points (LC = Infinity) — distinct from a tracked pilot whose
+   * leading data was mis-wired, which {@link scoreFlights} still throws on.
+   */
+  trackless?: boolean;
 }
 
 /** A scored pilot without the (heavy) transparency turnpoint result. */
@@ -1295,6 +1303,9 @@ export function scoreFlights(
       if (outcome === 'pg_launch_to_sss' || outcome === 'hg_min_distance') {
         return Infinity;
       }
+      // A track-less pilot (manual flight) has no tracklog to lead with, so it
+      // earns no leading points — before demanding leading inputs below.
+      if (f.trackless) return Infinity;
       // Prefer a precomputed aggregate (backend cache); otherwise scan the
       // tracklog now. Either way the field scalars fold in the same way.
       let agg = f.leadingAggregate;

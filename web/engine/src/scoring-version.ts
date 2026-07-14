@@ -106,7 +106,13 @@
 //     rather than HG. Comps with saved gap_params are unaffected (the stored
 //     values still win); the version bump invalidates cached scores for the
 //     null-params comps whose effective formula changed.
-export const SCORING_ENGINE_VERSION = 13;
+// v14: track-less pilots (manual flights, issue #306) earn no leading points
+//     instead of crashing the scorer. A manual flight has no tracklog, so it
+//     carries no leading aggregate/fixes/sequence; scoreFlights now treats such
+//     a flight as LC = Infinity (0 leading points) rather than throwing. Only
+//     affects leading-enabled tasks with manual flights — which the new
+//     per-category HG default (leading on) made reachable.
+export const SCORING_ENGINE_VERSION = 14;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -114,4 +120,4 @@ export const SCORING_ENGINE_VERSION = 13;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "8b2732307fa45ca98c010b435716d6555b00d38bdc8f4b3f012fdd54b78c21d1";
+  "2e2dca31289810faf4e087abe7cd962af703da27813f766a188150a2f3b9e70e";
