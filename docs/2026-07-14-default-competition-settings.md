@@ -176,13 +176,28 @@ official formula for the chosen category.
 
 ---
 
-## 5. Suggested follow-up work (not in this doc)
+## 5. Implementation status
 
-1. Replace the single `DEFAULT_GAP_PARAMETERS` with a
-   `defaultsFor(category, format)` helper so create-comp seeds the right set,
-   and fix the `useArrival` comment/value mismatch in the engine.
-2. Wrap the GAP constants in `SettingsDialog.tsx` in an Advanced disclosure +
-   disclaimer; keep them hidden entirely for open distance.
-3. Bump the base `nominalGoal` default 0.20 → 0.30.
-4. Separately, add a rescore/"scores updating" affordance so the stale-first
-   behaviour is discoverable (Tom's second point).
+Landed on this branch:
+
+1. **`defaultsFor(category, preset = 'fai')`** in `web/engine/src/gap-scoring.ts`
+   (exported from the engine) returns the official per-category FAI defaults
+   above. `DEFAULT_GAP_PARAMETERS` stays as the raw partial-param merge target;
+   its docstring now says so. The `preset` arg is where a future **Australian
+   (SAFA)** variant slots in without touching call sites.
+2. **Category-aware scoring** (`web/workers/competition-api/src/scoring.ts`): a
+   comp with no saved `gap_params` is now scored from `defaultsFor(category)`
+   instead of the HG-shaped baseline — fixing the latent bug where a PG comp
+   with null params scored as HG. Saved `gap_params` still win unchanged.
+   `SCORING_ENGINE_VERSION` bumped 12 → 13 to invalidate affected cached scores.
+3. **Advanced-settings wall** (`SettingsDialog.tsx`): the ~13 GAP constants now
+   live behind a collapsed "Advanced scoring settings" `<details>` disclosure
+   with the disclaimer from §4; a new comp's fields seed from
+   `defaultsFor(comp.category)`. Hidden entirely for open distance (unchanged).
+4. **"Review settings" is now optional** in the setup-progress guide
+   (`CompSetupProgress.tsx`): it still shows (marked *(optional)*) but no longer
+   gates the progress count or the guide's auto-hide — correct now that defaults
+   are official out of the box.
+
+Still open (separate change): a rescore / "scores updating" affordance so the
+stale-first behaviour is discoverable (Tom's second point).

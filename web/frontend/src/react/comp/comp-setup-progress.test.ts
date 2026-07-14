@@ -85,6 +85,26 @@ describe("deriveSetupSteps", () => {
     expect(taskStep.routeTaskId).toBeUndefined();
   });
 
+  it("the settings step is optional (doesn't gate completion)", () => {
+    const settings = deriveSetupSteps(comp()).find((s) => s.key === "settings")!;
+    expect(settings.optional).toBe(true);
+  });
+
+  it("all required steps can complete without reviewing settings", () => {
+    const steps = deriveSetupSteps(
+      comp({
+        settings_reviewed: false,
+        waypoint_count: 1,
+        pilot_count: 1,
+        tasks: [task({ has_xctsk: true })],
+      })
+    );
+    const required = steps.filter((s) => !s.optional);
+    expect(required.every((s) => s.complete)).toBe(true);
+    // The optional settings step remains incomplete but doesn't block.
+    expect(steps.find((s) => s.key === "settings")?.complete).toBe(false);
+  });
+
   it("all signals set → every step complete (guide hides)", () => {
     const steps = deriveSetupSteps(
       comp({

@@ -106,7 +106,14 @@ export type LeadingFormula = 'classic' | 'weighted';
 /** Where scored task distance begins — see {@link GAPParameters.distanceOrigin}. */
 export type DistanceOrigin = 'takeoff' | 'start';
 
-/** Default parameters — reasonable for a typical HG competition. */
+/**
+ * Raw engine baseline — the merge target for {@link scoreFlights} when a
+ * caller supplies only a partial parameter set. It is *not* the per-category
+ * "official" default a competition should start from: for that, use
+ * {@link defaultsFor}, which turns on the leading/arrival/difficulty terms the
+ * FAI formula actually uses for each category. Kept HG-shaped with those terms
+ * off so partial-param engine callers stay backwards-compatible.
+ */
 export const DEFAULT_GAP_PARAMETERS: GAPParameters = {
   nominalLaunch: 0.96,
   nominalDistance: 70000,
@@ -122,6 +129,43 @@ export const DEFAULT_GAP_PARAMETERS: GAPParameters = {
   jumpTheGunFactor: 2,
   jumpTheGunMaxSeconds: 300,
 };
+
+/**
+ * Scoring-defaults preset. Only the current FAI / CIVL GAP formula is
+ * implemented today; future presets (e.g. an Australian SAFA variant that
+ * runs leading/arrival off) slot in here without changing call sites.
+ */
+export type ScoringPreset = 'fai';
+
+/**
+ * The recommended default GAP parameters for a new competition of the given
+ * category, per the current FAI Sporting Code S7F / CIVL GAP formula
+ * (issue #343). These are the "official" settings a comp starts from, before
+ * any organiser override:
+ *
+ * - Leading (departure) points: on for both PG and HG — part of the S7F score.
+ * - Arrival points: on for HG, off for PG (S7F arrival applies to HG only).
+ * - Distance difficulty: on for HG, off for PG (S7F §11.1.1; PG is pure-linear).
+ * - Nominal goal 30% — the FAI / AirScore norm.
+ *
+ * `nominalDistance` keeps the engine baseline (70 km); the competition backend
+ * still auto-computes it per task (70% of the task distance) whenever a comp
+ * hasn't pinned an explicit value.
+ */
+export function defaultsFor(
+  category: 'hg' | 'pg',
+  _preset: ScoringPreset = 'fai'
+): GAPParameters {
+  const pg = category === 'pg';
+  return {
+    ...DEFAULT_GAP_PARAMETERS,
+    scoring: pg ? 'PG' : 'HG',
+    nominalGoal: 0.3,
+    useLeading: true,
+    useArrival: !pg,
+    useDistanceDifficulty: !pg,
+  };
+}
 
 /**
  * Return the task to use for distance scoring under the given origin.

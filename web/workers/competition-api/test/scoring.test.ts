@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import { describe, expect, test, beforeEach } from "vitest";
-import { parseIGC, parseXCTask, scoreTask, calculateOptimizedTaskDistance } from "@glidecomp/engine";
+import { parseIGC, parseXCTask, scoreTask, calculateOptimizedTaskDistance, defaultsFor } from "@glidecomp/engine";
 import {
   request,
   authRequest,
@@ -121,7 +121,11 @@ describe("Live Scoring", () => {
       };
     });
 
+    // A category:hg comp with no saved gap_params scores with the official
+    // per-category FAI defaults (leading + arrival on), so the engine ground
+    // truth must use the same base (issue #343).
     const engineResult = scoreTask(xcTask, enginePilots, {
+      ...defaultsFor("hg"),
       nominalDistance: taskDistance * 0.7,
     });
 
