@@ -1,13 +1,12 @@
 import { test, expect } from "@playwright/test";
 
-test("dev login, onboarding, create competition and task", async ({ page }) => {
-  // Use a short random suffix to stay within the 20-char username limit
+test("dev login, create competition and task", async ({ page }) => {
+  // Unique per run so the derived username doesn't collide across runs.
   const suffix = String(Date.now()).slice(-6);
   const testUser = {
-    name: "E2E Test Pilot",
+    name: `E2E Test Pilot ${suffix}`,
     email: `e2e-${suffix}@test.local`,
   };
-  const username = `e2e-pilot-${suffix}`;
 
   // Step 1: Dev login — POST sets session cookie
   const loginRes = await page.request.post("/api/auth/dev-login", {
@@ -38,27 +37,16 @@ test("dev login, onboarding, create competition and task", async ({ page }) => {
     }
   }
 
-  // Step 2: A brand-new user (no username yet) who lands anywhere in the app
-  // must be pushed through onboarding first (#303). Sign-in drops them on
-  // /comp; the Shell's onboarding gate should redirect them to /onboarding.
+  // Step 2: A brand-new user gets a username auto-derived at sign-up, so there
+  // is no onboarding gate to clear — landing on /comp stays on /comp instead of
+  // bouncing to /onboarding. The user-menu button rendering is the sync point
+  // that the signed-in user has resolved.
   await page.goto("/comp");
-  await page.waitForURL("**/onboarding");
+  await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/comp");
 
-  // Step 3: Complete onboarding. The full-name field is pre-filled from the
-  // auth user; assertion doubles as the "page is interactive" sync point.
-  await expect(page.getByLabel("Full name")).toHaveValue(testUser.name);
-  await page.getByLabel("Username").fill(username);
-  await page.getByRole("button", { name: "Continue" }).click();
-
-  // Should land on the user's dashboard (full page load so the user context
-  // picks up the new username)
-  await page.waitForURL(`**/u/${username}`);
-
-  // Step 4: Navigate to competitions page. The "Start a new competition"
-  // button renders once the signed-in user resolves; click auto-waits.
-  await page.goto("/comp");
-
-  // Step 5: Create a competition
+  // Step 3: Create a competition. The "Start a new competition" button renders
+  // once the signed-in user resolves; click auto-waits.
   await page.getByRole("button", { name: "Start a new competition" }).click();
   const createDialog = page.getByRole("dialog");
   await createDialog.getByLabel("Name").fill("E2E Test Competition");
@@ -75,7 +63,7 @@ test("dev login, onboarding, create competition and task", async ({ page }) => {
     "E2E Test Competition"
   );
 
-  // Step 5b: The admin-only setup guide shows on a fresh comp with step 1
+  // Step 3b: The admin-only setup guide shows on a fresh comp with step 1
   // ("Create the competition") pre-checked. The progress count is over the
   // four *required* steps — "Review settings" is optional (issue #343: new
   // comps already start from the official defaults), so it doesn't count.
@@ -94,7 +82,7 @@ test("dev login, onboarding, create competition and task", async ({ page }) => {
   await expect(guide).toContainText("Completed: Review settings");
   await expect(guide).toContainText("1 of 4 steps");
 
-  // Step 6: Create a task. Two "New Task" buttons exist on an empty comp
+  // Step 4: Create a task. Two "New Task" buttons exist on an empty comp
   // (section header + the empty-state CTA in the section body).
   await page.getByRole("button", { name: "New Task" }).first().click();
   const taskDialog = page.getByRole("dialog");

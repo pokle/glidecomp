@@ -19,21 +19,24 @@ const SAMPLE_XCTSK = resolve(
 interface TestUser {
   name: string;
   email: string;
+  /** Auto-derived at sign-up; filled in by signInAndOnboard(). */
   username: string;
 }
 
 function newTestUser(prefix: string): TestUser {
   const suffix = String(Date.now()).slice(-6) + Math.floor(Math.random() * 100);
   return {
-    name: `E2E ${prefix} Pilot`,
+    // Suffix in the name so the auto-derived username is unique per run.
+    name: `E2E ${prefix} ${suffix}`,
     email: `e2e-${prefix}-${suffix}@test.local`,
-    username: `e2e-${prefix}-${suffix}`.slice(0, 20),
+    username: "", // resolved from /api/auth/me after sign-in
   };
 }
 
 /**
- * Dev-login + onboarding so the page is parked at /u/<username> with a session
- * cookie attached. Returns once the dashboard's tracks panel has rendered —
+ * Dev-login, read the auto-derived username, and park the page at
+ * /u/<username> with a session cookie attached. Mutates `user.username` with
+ * the derived handle. Returns once the dashboard's tracks panel has rendered —
  * the file inputs only exist after storage init + the first list refresh, so
  * syncing on the empty state guarantees setInputFiles has a target.
  */
@@ -62,10 +65,17 @@ async function signInAndOnboard(
     },
   ]);
 
-  await page.goto("/onboarding");
-  await page.getByLabel("Username").fill(user.username);
-  await page.getByRole("button", { name: "Continue" }).click();
-  await page.waitForURL(`**/u/${user.username}`);
+  // Usernames are auto-assigned at sign-up now (no onboarding gate); read the
+  // one this user got so we can navigate to their dashboard and build the
+  // public-by-link URL later.
+  const meRes = await request.get("/api/auth/me");
+  const me = (await meRes.json()) as { user: { username: string } | null };
+  if (!me.user?.username) {
+    throw new Error("expected an auto-derived username after dev-login");
+  }
+  user.username = me.user.username;
+
+  await page.goto(`/u/${user.username}`);
   await expect(page.getByText("No flight tracks yet")).toBeVisible();
 }
 
