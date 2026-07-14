@@ -2,8 +2,9 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import type { Env, AuthUser } from "../env";
 import { sqidsMiddleware } from "../middleware/sqids";
-import { optionalAuth } from "../middleware/auth";
+import { optionalAuth, requireAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
+import { audit } from "../audit";
 import { encodeId } from "../sqids";
 import {
   computePilotAnalysis,
@@ -12,6 +13,7 @@ import {
   type TaskScoreResponse,
 } from "../scoring";
 import {
+  bumpAndRevalidateScores,
   computeAndStoreTaskScore,
   ifNoneMatchMatches,
   isRowStale,
@@ -19,6 +21,7 @@ import {
   readTaskScoreRowsForComp,
   rowHasResult,
   scheduleTaskRevalidation,
+  taskIdsForComp,
   toEtag,
   type StoredTaskScore,
 } from "../score-store";
@@ -391,6 +394,46 @@ export const scoreRoutes = new Hono<HonoEnv>()
         console.error("Pilot analysis failed:", err);
         return c.json({ error: "Failed to analyze track" }, 500);
       }
+    }
+  )
+
+  // ── POST /api/comp/:comp_id/rescore ── Force a full re-score (admin only)
+  //
+  // The stale-first store already recomputes automatically after any
+  // scoring-input change, so this is rarely needed — but it gives admins an
+  // explicit "recompute now" affordance (issue #343): reassurance that scores
+  // are current, or a way to recover a task whose background revalidation got
+  // wedged. It bumps every scoreable task's inputs_rev (marking them stale)
+  // and schedules revalidation, exactly as a real input change would. Scoring
+  // is deterministic, so a task whose inputs are unchanged simply recomputes
+  // to the same result — and the ScoreFreshness poll still detects the landing
+  // (the ETag folds the staleness label in), so the UI can confirm it ran.
+  .post(
+    "/api/comp/:comp_id/rescore",
+    requireAuth,
+    sqidsMiddleware,
+    requireCompAdmin,
+    async (c) => {
+      const compId = c.var.ids.comp_id!;
+
+      const comp = await c.env.DB.prepare(
+        "SELECT name FROM comp WHERE comp_id = ?"
+      )
+        .bind(compId)
+        .first<{ name: string }>();
+      if (!comp) return c.json({ error: "Not found" }, 404);
+
+      const taskIds = await taskIdsForComp(c.env.DB, compId);
+      await bumpAndRevalidateScores(c, taskIds);
+
+      await audit(c.env.DB, c.var.user, compId, {
+        subject_type: "comp",
+        subject_id: compId,
+        subject_name: comp.name,
+        description: `Triggered a manual re-score of ${taskIds.length} task${taskIds.length === 1 ? "" : "s"}`,
+      });
+
+      return c.json({ ok: true, task_count: taskIds.length });
     }
   );
 

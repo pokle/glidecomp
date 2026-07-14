@@ -5,7 +5,7 @@
  */
 import { useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { DEFAULT_GAP_PARAMETERS } from "@glidecomp/engine";
+import { defaultsFor } from "@glidecomp/engine";
 import { Button } from "@/react/ui/button";
 import {
   Dialog,
@@ -71,10 +71,12 @@ export function SettingsDialog({
     jtgMax: useId(),
   };
 
-  // GAP scoring parameters — fall back to engine defaults when unset.
+  // GAP scoring parameters — fall back to the official per-category FAI
+  // defaults when the comp hasn't saved any (issue #343), so the Advanced
+  // section always starts from the correct official values.
   // nominalDistance stays blank when unset so the scorer auto-computes
   // it per task (70% of task distance), matching historical behavior.
-  const gp = comp.gap_params ?? DEFAULT_GAP_PARAMETERS;
+  const gp = comp.gap_params ?? defaultsFor(comp.category === "pg" ? "pg" : "hg");
 
   const [name, setName] = useState(comp.name);
   const [category, setCategory] = useState<"hg" | "pg">(comp.category === "hg" ? "hg" : "pg");
@@ -93,8 +95,14 @@ export function SettingsDialog({
     comp.scoring_format ?? "gap"
   );
 
+  // Blank = "auto" (the scorer uses 70% of each task's distance). Key off the
+  // *stored* value, not the per-category default, so a comp that never pinned a
+  // nominal distance shows auto — matching the documented default and the
+  // scorer's auto behaviour.
   const [nominalDistance, setNominalDistance] = useState(
-    gp.nominalDistance != null ? String(Math.round(gp.nominalDistance / 1000)) : ""
+    comp.gap_params?.nominalDistance != null
+      ? String(Math.round(comp.gap_params.nominalDistance / 1000))
+      : ""
   );
   const [nominalTime, setNominalTime] = useState(String(Math.round(gp.nominalTime / 60)));
   const [nominalGoal, setNominalGoal] = useState(String(Math.round(gp.nominalGoal * 100)));
@@ -115,6 +123,28 @@ export function SettingsDialog({
   const [jtgMax, setJtgMax] = useState(String(gp.jumpTheGunMaxSeconds ?? 300));
 
   const [saving, setSaving] = useState(false);
+
+  /**
+   * Reset the Advanced (GAP) fields to the official CIVL GAP defaults for the
+   * currently-selected category (issue #343). Nominal distance resets to
+   * "auto" (blank). Leaves the non-scoring fields (name, classes, etc.)
+   * untouched; nothing is saved until the admin submits.
+   */
+  function resetToDefaults() {
+    const d = defaultsFor(category);
+    setNominalDistance("");
+    setNominalTime(String(Math.round(d.nominalTime / 60)));
+    setNominalGoal(String(Math.round(d.nominalGoal * 100)));
+    setNominalLaunch(String(Math.round(d.nominalLaunch * 100)));
+    setMinimumDistance(String(d.minimumDistance / 1000));
+    setUseLeading(d.useLeading);
+    setUseArrival(d.useArrival);
+    setUseDifficulty(d.useDistanceDifficulty);
+    setLeadingFormula(d.leadingFormula);
+    setDistanceOrigin(d.distanceOrigin);
+    setJtgFactor(String(d.jumpTheGunFactor));
+    setJtgMax(String(d.jumpTheGunMaxSeconds));
+  }
 
   // Live class list for the default-class dropdown.
   const classes = pilotClassesText
@@ -356,24 +386,55 @@ export function SettingsDialog({
             </p>
           </div>
 
-          {/* GAP parameters only apply to GAP scoring; hide them for open distance. */}
+          {/* GAP parameters only apply to GAP scoring; hide them for open distance.
+              They're walled off behind an Advanced disclosure (issue #343): a new
+              comp already starts from the official CIVL GAP defaults for its
+              category, so organisers should rarely need to open this. */}
           {scoringFormat !== "open_distance" ? (
-            <div className="flex flex-col gap-4">
-              <div>
-                <h3 className="text-sm font-medium">GAP Scoring Parameters</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Competition-wide scoring constants. The scoring class (HG/PG) follows the
-                  Category above.{" "}
-                  <a
-                    className="underline underline-offset-4"
-                    href="/scoring/gap"
-                    target="_blank"
-                    rel="noopener noreferrer"
+            <details className="rounded-lg border border-border bg-muted/30 open:bg-transparent [&_summary::-webkit-details-marker]:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-medium">
+                <span>Advanced scoring settings</span>
+                <span aria-hidden className="text-muted-foreground">
+                  GAP parameters
+                </span>
+              </summary>
+              <div className="flex flex-col gap-4 border-t border-border px-4 py-4">
+                <div
+                  role="note"
+                  className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-muted-foreground"
+                >
+                  <strong className="font-medium text-foreground">
+                    These are the official CIVL GAP defaults for your competition
+                    category.
+                  </strong>{" "}
+                  Changing them will make your scores differ from a standard
+                  FAI&nbsp;/&nbsp;AirScore result. Only edit these if your competition
+                  runs under local rules (e.g. SAFA) that specify different values, or
+                  you have a specific technical reason.
+                </div>
+                <div className="flex items-start justify-between gap-4">
+                  <p className="text-sm text-muted-foreground">
+                    Competition-wide scoring constants. The scoring class (HG/PG) follows the
+                    Category above.{" "}
+                    <a
+                      className="underline underline-offset-4"
+                      href={`/scoring/gap#defaults-${category}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      How does GAP scoring work?
+                    </a>
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={resetToDefaults}
                   >
-                    How does GAP scoring work?
-                  </a>
-                </p>
-              </div>
+                    Reset to defaults
+                  </Button>
+                </div>
               <Field>
                 <FieldLabel htmlFor={ids.nominalDistance}>Nominal distance (km)</FieldLabel>
                 <Input
@@ -517,7 +578,8 @@ export function SettingsDialog({
                   excludes the take-off→SSS leg.
                 </p>
               </div>
-            </div>
+              </div>
+            </details>
           ) : null}
 
           <Field>

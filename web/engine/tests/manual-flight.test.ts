@@ -256,6 +256,32 @@ describe('manualFlightScoringData', () => {
     expect(mid.totalScore).toBeGreaterThan(short.totalScore);
   });
 
+  it('scores manual flights with leading enabled: they get zero leading, not a crash', () => {
+    // A track-less pilot (manual flight) has no tracklog to lead with. With
+    // leading on (the per-category HG default, issue #343) scoreFlights must
+    // award it no leading points rather than demand a leading aggregate.
+    const tracked: PilotFlight = {
+      pilotName: 'Tracked', trackFile: 'track:t.igc',
+      fixes: landOutAfterTP1({ lat: 0, lon: 0.15 }),
+    };
+    const trackedData = toFlightScoringData(
+      tracked, resolveTurnpointSequence(TASK, tracked.fixes), true,
+    );
+    const manual = manualFlightScoringData(TASK, {
+      pilotName: 'Manual', trackFile: 'manual:m',
+      lastReachedIndex: 2, landing: { lat: 0, lon: 0.25 },
+    });
+    expect(manual.trackless).toBe(true);
+
+    const result = scoreFlights(TASK, [trackedData, manual], {
+      scoring: 'HG', useLeading: true,
+    });
+    const m = result.pilotScores.find(p => p.trackFile === 'manual:m')!;
+    expect(m.leadingPoints).toBe(0);
+    // Still scored on distance despite flying further than the tracked pilot.
+    expect(m.flownDistance).toBeGreaterThan(0);
+  });
+
   it('scores a manual flight identically to a real track at the same point/TP', () => {
     // A real tracked pilot who reached TP1 and landed out at P, alongside a
     // manual flight reporting the same last-TP and landing point. Their

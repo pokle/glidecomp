@@ -76,19 +76,23 @@ test("dev login, onboarding, create competition and task", async ({ page }) => {
   );
 
   // Step 5b: The admin-only setup guide shows on a fresh comp with step 1
-  // ("Create the competition") pre-checked.
+  // ("Create the competition") pre-checked. The progress count is over the
+  // four *required* steps — "Review settings" is optional (issue #343: new
+  // comps already start from the official defaults), so it doesn't count.
   const guide = page.getByRole("region", { name: "Set up your competition" });
   await expect(guide).toBeVisible();
-  await expect(guide).toContainText("1 of 5 steps");
+  await expect(guide).toContainText("1 of 4 steps");
 
-  // Saving settings (defaults untouched) counts as reviewing them; the
-  // refreshed comp payload ticks step 2 over.
+  // Saving settings (defaults untouched) counts as reviewing them, ticking the
+  // optional "Review settings" step over. Being optional, it doesn't move the
+  // required-step counter — the count stays "1 of 4".
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Save", exact: true })
     .click();
-  await expect(guide).toContainText("2 of 5 steps");
+  await expect(guide).toContainText("Completed: Review settings");
+  await expect(guide).toContainText("1 of 4 steps");
 
   // Step 6: Create a task. Two "New Task" buttons exist on an empty comp
   // (section header + the empty-state CTA in the section body).

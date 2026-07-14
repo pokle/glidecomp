@@ -97,7 +97,22 @@
 //     crossing in the tracklog) are flagged goalSemicircleCredited so the
 //     score explanation can say why. Cylinder goals and tasks where no line
 //     can be constructed (single turnpoint, zero radius) are unchanged.
-export const SCORING_ENGINE_VERSION = 12;
+// v13: official per-category default GAP parameters (issue #343). A comp that
+//     hasn't saved its scoring settings is now scored from defaultsFor(category)
+//     — the current FAI S7F formula: leading (departure) points on for both PG
+//     and HG, arrival on for HG, distance difficulty on for HG, nominal goal
+//     30% — instead of the raw HG-shaped engine baseline (leading/arrival off,
+//     nominal goal 20%). A PG comp with no saved params is now scored as PG
+//     rather than HG. Comps with saved gap_params are unaffected (the stored
+//     values still win); the version bump invalidates cached scores for the
+//     null-params comps whose effective formula changed.
+// v14: track-less pilots (manual flights, issue #306) earn no leading points
+//     instead of crashing the scorer. A manual flight has no tracklog, so it
+//     carries no leading aggregate/fixes/sequence; scoreFlights now treats such
+//     a flight as LC = Infinity (0 leading points) rather than throwing. Only
+//     affects leading-enabled tasks with manual flights — which the new
+//     per-category HG default (leading on) made reachable.
+export const SCORING_ENGINE_VERSION = 14;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -105,4 +120,4 @@ export const SCORING_ENGINE_VERSION = 12;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "e1c7fcc9569fb205be26e4d1b37c891c0ac08f71e2cec90e733c85d332475eec";
+  "2e2dca31289810faf4e087abe7cd962af703da27813f766a188150a2f3b9e70e";

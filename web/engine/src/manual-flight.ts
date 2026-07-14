@@ -245,9 +245,12 @@ export function manualFlightScoringData(
     // A pilot in goal necessarily crossed ESS; a land-out did not.
     reachedESS: madeGoal,
     speedSectionTime,
-    // No tracklog → no timestamps for leading / gate anchoring.
+    // No tracklog → no timestamps for leading / gate anchoring, and no
+    // leading scan is possible: mark it track-less so scoreFlights awards it
+    // no leading points instead of demanding a (nonexistent) aggregate.
     sssTimeMs: null,
     essTimeMs: null,
+    trackless: true,
   };
 }
 

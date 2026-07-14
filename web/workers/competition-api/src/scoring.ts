@@ -13,6 +13,7 @@ import {
   computeLeadingAggregate,
   calculateOptimizedTaskDistance,
   DEFAULT_GAP_PARAMETERS,
+  defaultsFor,
   SCORING_ENGINE_VERSION,
   type GAPParameters,
   type FlightScoringData,
@@ -434,7 +435,7 @@ export async function computeTaskScore(
   const taskRow = await db
     .prepare(
       `SELECT t.task_id, t.comp_id, t.task_date, t.xctsk,
-              c.gap_params, c.scoring_format
+              c.category, c.gap_params, c.scoring_format
        FROM task t
        JOIN comp c ON t.comp_id = c.comp_id
        WHERE t.task_id = ?`
@@ -444,6 +445,7 @@ export async function computeTaskScore(
       task_id: number;
       comp_id: number;
       task_date: string;
+      category: string;
       xctsk: string;
       gap_params: string | null;
       scoring_format: string | null;
@@ -455,13 +457,23 @@ export async function computeTaskScore(
     taskRow.scoring_format === "open_distance" ? "open_distance" : "gap";
 
   const xcTask = parseXCTask(taskRow.xctsk);
-  const gapParams: Partial<GAPParameters> = taskRow.gap_params
+  const storedGapParams: Partial<GAPParameters> = taskRow.gap_params
     ? JSON.parse(taskRow.gap_params)
     : {};
+  // A comp that hasn't saved its scoring settings falls back to the official
+  // per-category FAI defaults (leading/arrival/difficulty as the S7F formula
+  // uses them) rather than the raw HG-shaped engine baseline (issue #343).
+  const category = taskRow.category === "pg" ? "pg" : "hg";
+  const gapParams: Partial<GAPParameters> = {
+    ...defaultsFor(category),
+    ...storedGapParams,
+  };
 
-  // Default nominalDistance to 70% of task distance if not set. Only relevant
-  // to GAP — open distance ignores GAP parameters entirely.
-  if (scoringFormat === "gap" && !gapParams.nominalDistance) {
+  // Default nominalDistance to 70% of task distance when the comp hasn't
+  // pinned one (the per-category defaults carry the engine baseline, so key
+  // off the *stored* value's absence). Only relevant to GAP — open distance
+  // ignores GAP parameters entirely.
+  if (scoringFormat === "gap" && storedGapParams.nominalDistance == null) {
     gapParams.nominalDistance =
       calculateOptimizedTaskDistance(xcTask) * 0.7;
   }

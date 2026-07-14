@@ -46,6 +46,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
           <li><a href="#leading-points" class="hover:underline">Leading Points</a></li>
           <li><a href="#arrival-points" class="hover:underline">Arrival Points</a></li>
           <li><a href="#total-score" class="hover:underline">Your Total Score</a></li>
+          <li><a href="#defaults" class="hover:underline">Default Competition Settings</a></li>
           <li><a href="#glidecomp-notes" class="hover:underline">GlideComp Implementation Notes</a></li>
           <li><a href="#spec-differences" class="hover:underline">Differences from the Official Spec</a></li>
           <li><a href="#references" class="hover:underline">Official References</a></li>
@@ -212,11 +213,12 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             </li>
             <li>
               <strong>Leading Points</strong> — Reward pilots who led the way at the front of the
-              pack (also called "departure points"). Optional — not all competitions use them.
+              pack (also called "departure points"). On by default; a competition can switch them
+              off.
             </li>
             <li>
               <strong>Arrival Points</strong> — Reward early arrival at ESS.
-              <strong>Hang gliding only.</strong> Optional.
+              <strong>Hang gliding only</strong> — on by default for HG, and can be switched off.
             </li>
           </ul>
           <p class="text-muted-foreground">
@@ -442,8 +444,10 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
           </div>
 
           <p class="text-muted-foreground">
-            Leading points are optional and not all competitions enable them. PG competitions
-            that use leading points give them a higher weight than HG competitions.
+            Leading points are <strong>on by default</strong> for both categories (the FAI
+            formula), and a competition can switch them off. PG competitions give leading points a
+            higher weight than HG, since paragliding has no arrival term to share the non-distance
+            points with.
           </p>
         </div>
       </section>
@@ -466,8 +470,8 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             ensures even late arrivals get meaningful points.
           </p>
           <p class="text-muted-foreground">
-            Arrival points are optional and can be disabled in competition settings. They do not
-            apply to paragliding competitions.
+            Arrival points are <strong>on by default</strong> for hang gliding and can be disabled
+            in competition settings. They do not apply to paragliding competitions.
           </p>
         </div>
       </section>
@@ -509,6 +513,107 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               pilot who flew 80% of the best distance but didn't make goal would score about 456
               + 0 = 456 points (no time points without goal in PG).
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Default Competition Settings */}
+      <section id="defaults" class="mb-14 scroll-mt-20">
+        <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
+          <h2 class="text-2xl font-bold">Default Competition Settings</h2>
+          <SpecRef section="10" label="FAI S7F §10–11" class="text-xs font-medium text-muted-foreground shrink-0" />
+        </div>
+        <div class="space-y-4 text-sm leading-relaxed">
+          <p class="text-muted-foreground">
+            When you create a competition you only choose whether it's <strong>hang gliding</strong>
+            or <strong>paragliding</strong> — GlideComp then applies the official CIVL GAP defaults
+            for that category. These are the current FAI Sporting Code Section 7F values, chosen so
+            a new competition scores like a standard FAI/AirScore event without touching anything.
+            You can still change any of them under <em>Advanced scoring settings</em> in the
+            competition's Settings dialog, but you shouldn't need to unless your event runs under
+            local rules (e.g. Australia's SAFA) that specify different values.
+          </p>
+
+          <p class="text-muted-foreground">
+            Most values are shared across both categories; the differences all follow from the spec
+            treating hang gliding and paragliding differently (arrival and distance-difficulty are
+            hang-gliding-only; paragliding has no arrival term, so its leading weight is higher).
+          </p>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-border">
+                  <th class="text-left py-2 pr-4 font-semibold">Setting</th>
+                  <th class="text-left py-2 pr-4 font-semibold">Default</th>
+                  <th class="text-left py-2 font-semibold">What it means</th>
+                </tr>
+              </thead>
+              <tbody class="text-muted-foreground align-top">
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">Nominal launch</td>
+                  <td class="py-2 pr-4 whitespace-nowrap">96%</td>
+                  <td class="py-2">Launch validity is full above this fraction of pilots launching (<SpecRef section="9.1" label="§9.1" />).</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">Nominal goal</td>
+                  <td class="py-2 pr-4 whitespace-nowrap">30%</td>
+                  <td class="py-2">The share of pilots expected to make goal on a good day; shapes the distance/time/leading weight split.</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">Nominal distance</td>
+                  <td class="py-2 pr-4 whitespace-nowrap">Auto</td>
+                  <td class="py-2">The expected task distance for distance validity. Auto = 70% of each task's optimized distance; set a fixed value to pin it comp-wide.</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">Nominal time</td>
+                  <td class="py-2 pr-4 whitespace-nowrap">90 min</td>
+                  <td class="py-2">The expected "normal" winning time; a much faster winner devalues the task (time validity).</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">Minimum distance</td>
+                  <td class="py-2 pr-4 whitespace-nowrap">5 km</td>
+                  <td class="py-2">The floor a launched pilot is scored at, even if they land sooner ("bomb-out points").</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">
+                    <a href="#leading-points" class="underline hover:text-foreground">Leading points</a>
+                  </td>
+                  <td class="py-2 pr-4 whitespace-nowrap">On</td>
+                  <td class="py-2">Rewards leading at the front of the pack. On for both categories in the FAI formula (paragliding weights them higher, as it has no arrival term).</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">Leading formula</td>
+                  <td class="py-2 pr-4 whitespace-nowrap">Weighted</td>
+                  <td class="py-2">The modern GAP2020+ / current-S7F weighted-area leading coefficient (5/6 speed exponent). "Classic" selects the older GAP2016/2018 variant.</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">
+                    <a href="#distance-origin" class="underline hover:text-foreground">Distance origin</a>
+                  </td>
+                  <td class="py-2 pr-4 whitespace-nowrap">Take-off</td>
+                  <td class="py-2">Scored distance is measured from the take-off point through the start (FAI CIVL GAP / PWCA). "Start cylinder" excludes the take-off→start leg (HGFA/SAFA).</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div id="defaults-hg" class="ml-2 scroll-mt-20">
+            <h3 class="text-base font-semibold mb-1">Hang gliding (HG)</h3>
+            <ul class="list-disc list-inside text-muted-foreground space-y-1 ml-2">
+              <li><a href="#arrival-points" class="underline hover:text-foreground">Arrival points</a>: <strong>on</strong> — HG scores order of arrival at ESS (<SpecRef section="11.4" label="§11.4" />).</li>
+              <li><a href="#distance-difficulty" class="underline hover:text-foreground">Distance difficulty</a>: <strong>on</strong> — HG distance points are half linear, half difficulty (<SpecRef section="11.1.1" label="§11.1.1" />).</li>
+              <li>Jump-the-gun (early start, <SpecRef section="12.2" label="§12.2" />): 1 penalty point per <strong>2 s</strong> early, up to <strong>300 s</strong> before minimum distance only.</li>
+            </ul>
+          </div>
+
+          <div id="defaults-pg" class="ml-2 scroll-mt-20">
+            <h3 class="text-base font-semibold mb-1">Paragliding (PG)</h3>
+            <ul class="list-disc list-inside text-muted-foreground space-y-1 ml-2">
+              <li><a href="#arrival-points" class="underline hover:text-foreground">Arrival points</a>: <strong>off</strong> — paragliding has no arrival term in the spec.</li>
+              <li><a href="#distance-difficulty" class="underline hover:text-foreground">Distance difficulty</a>: <strong>off</strong> — paragliding distance is always the pure-linear proportion.</li>
+              <li>Early starts are scored launch→start (no jump-the-gun penalty; that is HG-only).</li>
+            </ul>
           </div>
         </div>
       </section>
@@ -601,8 +706,12 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
           </div>
 
           <p class="text-muted-foreground">
-            GlideComp defaults to having leading and arrival points <strong>disabled</strong>.
-            These must be explicitly enabled in the competition parameters.
+            New competitions default to the official CIVL GAP settings for their category — leading
+            points on for both, arrival and distance-difficulty on for hang gliding — so scores
+            match a standard FAI/AirScore event out of the box. See
+            <a href="#defaults" class="underline hover:text-foreground">Default Competition Settings</a>
+            for the full list; any of them can be changed under the competition's Advanced scoring
+            settings.
           </p>
           <p class="text-muted-foreground">
             The scoring engine source code is open and available on
@@ -719,8 +828,9 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 <li>
                   <strong>Optional leading/arrival points:</strong> the spec always allocates
                   leading weight (and arrival weight in hang gliding classes 1 and 5). GlideComp
-                  lets a competition switch either off — and defaults to off — which is common in
-                  club-level scoring but is itself a departure from the spec when disabled.
+                  defaults to the FAI formula (leading on for both categories, arrival on for hang
+                  gliding) but lets a competition switch either off — common in club-level scoring,
+                  though itself a departure from the spec when disabled.
                 </li>
                 <li>
                   <strong>Distance origin:</strong> the optional

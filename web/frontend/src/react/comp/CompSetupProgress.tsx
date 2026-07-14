@@ -24,6 +24,13 @@ export interface SetupStep {
   key: "create" | "settings" | "waypoints" | "pilots" | "task";
   label: string;
   complete: boolean;
+  /**
+   * A nice-to-have step that doesn't gate completion — it still shows in the
+   * checklist, but the guide's progress count and its auto-hide ignore it.
+   * "Review settings" is optional because a new comp already starts from the
+   * official CIVL GAP defaults for its category (issue #343).
+   */
+  optional?: boolean;
   /** Step-5 variant: a task exists but has no route — deep-link its editor. */
   routeTaskId?: string;
 }
@@ -51,7 +58,12 @@ export function deriveSetupSteps(comp: CompDetailData): SetupStep[] {
     // Shown pre-checked rather than omitted: the list reads as the complete
     // recipe, and "1 of 5" is honest momentum right after creation.
     { key: "create", label: "Create the competition", complete: true },
-    { key: "settings", label: "Review settings", complete: comp.settings_reviewed },
+    {
+      key: "settings",
+      label: "Review settings",
+      complete: comp.settings_reviewed,
+      optional: true,
+    },
     { key: "waypoints", label: "Add waypoints", complete: comp.waypoint_count > 0 },
     { key: "pilots", label: "Add pilots", complete: comp.pilot_count > 0 },
     taskStep,
@@ -86,10 +98,14 @@ export function CompSetupProgress({
   const [hidden, setHidden] = useState(() => readHidden(compId));
 
   const steps = deriveSetupSteps(comp);
-  const done = steps.filter((s) => s.complete).length;
-  if (hidden || done === steps.length) return null;
+  // Progress and auto-hide track the *required* steps only; optional steps
+  // (e.g. "Review settings") still render but never keep the guide open.
+  const requiredSteps = steps.filter((s) => !s.optional);
+  const done = requiredSteps.filter((s) => s.complete).length;
+  if (hidden || done === requiredSteps.length) return null;
 
-  const next = steps.find((s) => !s.complete);
+  const next =
+    steps.find((s) => !s.complete && !s.optional) ?? steps.find((s) => !s.complete);
 
   function hide() {
     try {
@@ -153,7 +169,7 @@ export function CompSetupProgress({
     <section aria-labelledby={headingId} className="mt-6">
       <Card>
         <CardContent>
-          <Progress value={Math.round((done / steps.length) * 100)}>
+          <Progress value={Math.round((done / requiredSteps.length) * 100)}>
             <ProgressLabel
               id={headingId}
               render={<h2 />}
@@ -162,7 +178,7 @@ export function CompSetupProgress({
               Set up your competition
             </ProgressLabel>
             <ProgressValue className="ml-auto">
-              {() => `${done} of ${steps.length} steps`}
+              {() => `${done} of ${requiredSteps.length} steps`}
             </ProgressValue>
           </Progress>
           <ol className="mt-3 space-y-1.5 text-sm">
@@ -181,6 +197,11 @@ export function CompSetupProgress({
                     <span className="sr-only">Completed: </span>
                   ) : null}
                   {stepControl(step)}
+                  {step.optional ? (
+                    <span className="ml-1.5 text-xs text-muted-foreground">
+                      (optional)
+                    </span>
+                  ) : null}
                 </span>
               </li>
             ))}
