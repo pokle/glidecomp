@@ -78,6 +78,29 @@ describe("super admin", () => {
     expect(seen.status).toBe(200);
   });
 
+  test("lists test comps created by any comp admin", async () => {
+    // user-1 creates a test comp; the super admin holds no comp_admin row for it.
+    const compId = await createComp({ name: "Someone Else's Test", test: true });
+
+    // Plain user: the test comp is filtered out of the list entirely.
+    const plain = await request("GET", "/api/comp", { user: "user-3" });
+    const plainComps = ((await plain.json()) as { comps: { comp_id: string }[] })
+      .comps;
+    expect(plainComps.some((cp) => cp.comp_id === compId)).toBe(false);
+
+    // Super admin: the test comp is listed, marked as admin.
+    const res = await request("GET", "/api/comp", { user: "user-super" });
+    const comps = (
+      (await res.json()) as {
+        comps: { comp_id: string; test: boolean; is_admin: boolean }[];
+      }
+    ).comps;
+    const found = comps.find((cp) => cp.comp_id === compId);
+    expect(found).toBeDefined();
+    expect(found!.test).toBe(true);
+    expect(found!.is_admin).toBe(true);
+  });
+
   test("does not leak the super admin into other users' admin list", async () => {
     const compId = await createComp({ name: "Public Comp" });
 
