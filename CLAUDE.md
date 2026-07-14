@@ -6,7 +6,7 @@ GlideComp is a web application for analyzing hanggliding/paragliding competition
 
 ## Architecture
 
-Cloudflare monorepo, free-tier focused:
+Cloudflare monorepo on the Workers Paid plan ($5/mo — includes paid-plan features like Email Sending; still cost-conscious, avoid services beyond that):
 
 - `web/engine` — pure TypeScript analysis library (IGC/XCTask parsing, event detection, GAP scoring). No DOM dependencies; all track analysis runs client-side in the browser.
 - `web/frontend` — Vite app on Cloudflare Pages. The main UI (competitions, comp/task detail, scores, dashboard, profile, settings, onboarding) is a React SPA under `src/react/` served from `src/app.html`, built with shadcn/ui components (Base UI foundation) in `src/react/ui/` and Tailwind (tokens in `src/react/globals.css`). The content pages (home `/`, `/about`, `/legal`, `/scoring`, `/scoring/gap`, `/scoring/open-distance`) are prerendered static HTML built by a small Astro app in `web/frontend/static/` — zero client JS (KaTeX on the GAP page is prerendered at build via `katex.renderToString`), reusing the SPA's `globals.css` tokens/fonts. The analysis page and 3D replay remain separate vanilla-TS Vite entries. `bun run build` runs the Vite app build, then the **SSR bundle** build (`build:ssr` → `dist-ssr/`), then the Astro build, merging all into `dist/`; `bun run dev` runs Vite + `astro dev` together and proxies the static routes (and Astro's `/_static` dev namespace) so everything is seamless on `:3000`. Most SPA routes reach `/app.html` via `public/_redirects`; the static pages are served directly.
