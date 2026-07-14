@@ -1,70 +1,550 @@
 ---
-/** Landing page. Ported from react/pages/Home.tsx. */
+/**
+ * Landing page — Apple-style marketing layout inspired by get-inscribe.com:
+ * glass nav (Base/SiteHeader), big hero with accent line, framed screenshot
+ * with a blue glow, trust strip, FAQ, CTA band, full footer (Base/SiteFooter).
+ * Screenshots live in static/public/screenshots/ (captured from the real app).
+ */
 import Base from "../layouts/Base.astro";
-import SiteFooter from "../components/SiteFooter.astro";
 
-// Screenshots live in this app's own public/ dir; prefix with BASE_URL so they
-// resolve under the /_static dev base and at the site root in production.
-// Normalise to no trailing slash so `${base}/file` is correct either way.
+// Screenshots resolve under the /_static dev base and at the site root in
+// production. Normalise to no trailing slash so `${base}/file` is correct.
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 ---
 
-<Base title="GlideComp">
-  <div class="min-h-screen bg-background text-foreground p-6 bg-hills">
-    <div class="max-w-2xl mx-auto flex flex-col gap-4">
-      <header class="flex items-start justify-between gap-4">
-        <div>
-          <h1 class="font-brand text-2xl font-bold">GlideComp</h1>
-          <p class="text-muted-foreground">
-            Competition track log analysis for hanggliding and paragliding
-          </p>
-        </div>
-        <button
-          id="google-signin"
-          type="button"
-          class="inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 h-8 gap-1.5 px-2.5 bg-primary text-primary-foreground hover:bg-primary/80 cursor-pointer"
-        >
-          Login with Google
+<Base
+  title="GlideComp — score your club comp, every point explained"
+  description="GlideComp scores hang gliding and paragliding competitions in the browser: import the task, let pilots upload IGC tracks, and publish GAP or open-distance results with a step-by-step explanation any pilot can follow."
+>
+  <!-- ===================== Hero ===================== -->
+  <section class="hero">
+    <div class="container">
+      <h1 class="hero-title fade-in">
+          Scoring a Comp?
+          <span class="accent">Easy.</span>
+      </h1>
+      <p class="hero-description fade-in" style="--delay:.05s">
+        GlideComp scores hang gliding and paragliding comps right here in
+        your browser. No software to install. Set a task, let pilots
+        upload their own IGC track logs, and get GAP or open-distance
+        standings with a step-by-step explanation any pilot can follow.
+      </p>
+      <div class="hero-cta fade-in" style="--delay:.1s">
+        <button type="button" class="button button-primary" data-signin>
+          Start a competition
         </button>
-      </header>
-
-      <p class="text-sm text-muted-foreground">
-        By signing in, you agree to our
-        <a href="/legal" class="underline underline-offset-4">
-          Privacy Policy &amp; Terms
-        </a>
+        <a class="button button-secondary" href="/comp">Browse competitions</a>
+      </div>
+      <p class="hero-note fade-in" style="--delay:.15s">
+        Free · Results are public — pilots don't need an account to follow along
       </p>
-
-      <p class="text-sm">
-        GlideComp scores hanggliding and paragliding competitions and explains every point:
-        upload IGC track logs, define tasks, and get GAP or open-distance scores with a
-        step-by-step explanation any pilot can follow. Competitions and their scores are
-        public — no account needed to follow along.
-      </p>
-
-      <!-- The main job for visitors who aren't signing in: find a competition. -->
-      <a
-        href="/comp"
-        class="inline-flex items-center justify-center self-start rounded-lg border border-transparent bg-primary px-4 py-2.5 text-base font-medium whitespace-nowrap text-primary-foreground transition-all select-none hover:bg-primary/80"
-      >
-        Browse competitions →
-      </a>
-
-      <img
-        src={`${base}/glidecomp-screenshot.png`}
-        alt="GlideComp analysis interface showing a map with flight tracks and waypoints"
-        class="rounded-lg border"
-      />
-
-      <SiteFooter />
     </div>
-  </div>
+    <div class="hero-stage fade-in" style="--delay:.2s">
+      <div class="hero-glow"></div>
+      <figure class="shot shot-hero">
+        <img
+          src={`${base}/screenshots/pilot-explain.png`}
+          alt="A pilot's score explanation in GlideComp: a plain-English timeline of start-cylinder crossings and turnpoints beside a terrain map of the flight"
+          width="2400"
+          height="1600"
+          fetchpriority="high"
+        />
+      </figure>
+    </div>
+  </section>
+
+  <!-- ===================== Trust strip ===================== -->
+  <section class="trust">
+    <div class="container">
+      <div class="trust-row">
+        <div class="trust-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>
+          <span>GAP &amp; open-distance scoring</span>
+        </div>
+        <div class="trust-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>
+          <span>IGC files from any instrument</span>
+        </div>
+        <div class="trust-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>
+          <span>XCTrack task import (.xctsk)</span>
+        </div>
+        <div class="trust-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>
+          <span>Public audit log</span>
+        </div>
+        <div class="trust-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>
+          <span>Nothing to install</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== FAQ ===================== -->
+  <section class="section-pad" id="faq">
+    <div class="container">
+      <div class="section-header fade-in">
+        <span class="eyebrow">?</span>
+        <h2>Questions?</h2>
+      </div>
+      <div class="faq-grid fade-in">
+        <div class="faq-item">
+          <button class="faq-question" type="button" aria-expanded="false">
+            <h3>What do I need to run a comp with GlideComp?</h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+          </button>
+          <div class="faq-answer">
+            <p>
+              A browser. Sign in, create the competition, add a task, and
+              share the link. Pilots upload their IGC tracks and scoring
+              happens automatically — there's no software to install and no
+              spreadsheet to maintain.
+            </p>
+          </div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" type="button" aria-expanded="false">
+            <h3>How are scores calculated?</h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+          </button>
+          <div class="faq-answer">
+            <p>
+              With the GAP formulas used in FAI competition — distance, time
+              and leading points — set to the official defaults for new
+              comps, with the advanced parameters available when you need
+              them. There's also a simpler open-distance format for club XC
+              days. The <a href="/scoring">scoring guide</a> explains both in
+              detail.
+            </p>
+          </div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" type="button" aria-expanded="false">
+            <h3>Do pilots need accounts?</h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+          </button>
+          <div class="faq-answer">
+            <p>
+              Not to follow along — competitions, tasks and scores are public
+              pages. Submitting a track takes a quick Google sign-in, and
+              organisers can always upload tracks on a pilot's behalf.
+            </p>
+          </div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" type="button" aria-expanded="false">
+            <h3>Does it work with XCTrack and my instrument?</h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+          </button>
+          <div class="faq-answer">
+            <p>
+              Yes. Tasks import and export as .xctsk, waypoints download in
+              standard formats, and pilots can scan a QR code to load the
+              task or waypoints straight into XCTrack, Flyskyhy, SeeYou
+              Navigator and most other flight apps. Any instrument that
+              produces an IGC file works for scoring.
+            </p>
+          </div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" type="button" aria-expanded="false">
+            <h3>What about penalties and score corrections?</h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+          </button>
+          <div class="faq-answer">
+            <p>
+              Apply a penalty with a reason and scores recompute immediately.
+              Every change that could move a score — penalties, re-uploads,
+              task edits — is recorded in a public audit log, so pilots never
+              have to wonder why the numbers changed.
+            </p>
+          </div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" type="button" aria-expanded="false">
+            <h3>How much does it cost?</h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+          </button>
+          <div class="faq-answer">
+            <p>
+              GlideComp is free to use. It's an open project — the source is
+              on
+              <a href="https://github.com/pokle/glidecomp" target="_blank" rel="noopener noreferrer">GitHub</a>.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== CTA ===================== -->
+  <section class="cta-section bg-soft" id="start">
+    <div class="container">
+      <div class="fade-in">
+        <h2>Ready to score your next comp?</h2>
+        <p>
+          Create a competition, import your task, and see the first scores
+          land before the retrieve gets back.
+        </p>
+        <div class="cta-buttons">
+          <button type="button" class="button button-primary button-large" data-signin>
+            Start a competition
+          </button>
+          <a class="button button-secondary button-large" href="/comp">See a sample comp</a>
+        </div>
+        <p class="cta-note">Free · Sign in with Google</p>
+      </div>
+    </div>
+  </section>
 </Base>
 
+<!-- Marketing styles for this page only (Base's globals.css provides the
+     theme tokens; everything here derives from them so dark mode works). -->
+<style is:global>
+  .container {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 28px;
+  }
+
+  /* ---- Buttons (pill) ---- */
+  .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    padding: 13px 26px;
+    font-size: 17px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    border-radius: 980px;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.18s ease, background 0.18s ease, opacity 0.18s ease;
+    font-family: inherit;
+    text-decoration: none;
+  }
+  .button-primary {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+  .button-primary:hover {
+    opacity: 0.88;
+    transform: translateY(-1px);
+  }
+  .button-primary:active {
+    transform: translateY(0);
+  }
+  .button-secondary {
+    background: color-mix(in srgb, var(--foreground) 6%, transparent);
+    color: var(--foreground);
+  }
+  .button-secondary:hover {
+    background: color-mix(in srgb, var(--foreground) 10%, transparent);
+  }
+  .button-large {
+    padding: 16px 34px;
+    font-size: 19px;
+  }
+
+  /* ---- Section scaffolding ---- */
+  .section-pad {
+    padding: 110px 0;
+  }
+  .bg-soft {
+    background: var(--secondary);
+  }
+  .section-header {
+    max-width: 760px;
+    margin: 0 auto 64px;
+    text-align: center;
+  }
+  .eyebrow {
+    display: inline-block;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--primary);
+    margin-bottom: 12px;
+  }
+  .section-header h2 {
+    font-size: clamp(34px, 5vw, 52px);
+    font-weight: 700;
+    line-height: 1.06;
+    letter-spacing: -0.03em;
+  }
+  .section-header p {
+    margin-top: 18px;
+    font-size: clamp(19px, 2.4vw, 23px);
+    line-height: 1.4;
+    color: var(--muted-foreground);
+  }
+
+  /* ---- Hero ---- */
+  .hero {
+    padding: 80px 0 0;
+    text-align: center;
+    overflow: hidden;
+  }
+  .hero-title {
+    font-size: clamp(40px, 6.4vw, 80px);
+    font-weight: 700;
+    line-height: 1.03;
+    letter-spacing: -0.035em;
+    max-width: 18ch;
+    margin: 0 auto;
+    text-wrap: balance;
+  }
+  .hero-title .accent {
+    color: var(--primary);
+  }
+  .hero-description {
+    max-width: 660px;
+    margin: 24px auto 0;
+    font-size: clamp(18px, 2.3vw, 22px);
+    line-height: 1.45;
+    color: var(--muted-foreground);
+    text-wrap: pretty;
+  }
+  .hero-cta {
+    margin-top: 34px;
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .hero-note {
+    margin-top: 18px;
+    font-size: 14px;
+    color: var(--muted-foreground);
+  }
+  .hero-stage {
+    position: relative;
+    margin: 64px auto 0;
+    width: min(980px, 92vw);
+    padding-bottom: 96px;
+  }
+  .hero-glow {
+    position: absolute;
+    inset: -12% -6% auto;
+    height: 80%;
+    background: radial-gradient(
+      60% 80% at 50% 30%,
+      color-mix(in srgb, var(--primary) 18%, transparent),
+      transparent 70%
+    );
+    filter: blur(20px);
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  /* ---- Framed screenshots ---- */
+  .shot {
+    position: relative;
+    overflow: hidden;
+    margin: 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow:
+      0 40px 90px rgba(0, 0, 0, 0.22),
+      0 8px 24px rgba(0, 0, 0, 0.12);
+  }
+  .shot img {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .shot-hero {
+    z-index: 1;
+  }
+
+  /* ---- Trust strip ---- */
+  .trust {
+    padding: 30px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .trust-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 14px 40px;
+  }
+  .trust-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--muted-foreground);
+  }
+  .trust-item svg {
+    width: 18px;
+    height: 18px;
+    color: var(--primary);
+    flex-shrink: 0;
+  }
+
+  /* ---- FAQ ---- */
+  .faq-grid {
+    max-width: 820px;
+    margin: 0 auto;
+  }
+  .faq-item {
+    border-bottom: 1px solid var(--border);
+  }
+  .faq-question {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    padding: 26px 4px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    color: inherit;
+  }
+  .faq-question h3 {
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+  .faq-question svg {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    color: var(--primary);
+    transition: transform 0.3s ease;
+  }
+  .faq-item.active .faq-question svg {
+    transform: rotate(45deg);
+  }
+  .faq-answer {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease;
+  }
+  .faq-item.active .faq-answer {
+    max-height: 420px;
+  }
+  .faq-answer p {
+    padding: 0 4px 26px;
+    color: var(--muted-foreground);
+    font-size: 17px;
+    line-height: 1.6;
+  }
+  .faq-answer a {
+    color: var(--primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* ---- CTA ---- */
+  .cta-section {
+    text-align: center;
+    padding: 110px 0;
+  }
+  .cta-section h2 {
+    font-size: clamp(34px, 5vw, 56px);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+  }
+  .cta-section p {
+    margin: 18px auto 0;
+    max-width: 600px;
+    font-size: clamp(18px, 2.3vw, 22px);
+    color: var(--muted-foreground);
+  }
+  .cta-buttons {
+    margin-top: 34px;
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .cta-section .cta-note {
+    margin-top: 20px;
+    font-size: 14px;
+  }
+
+  /* ---- Reveal-on-scroll ---- */
+  /* Only hide when JS is running (html.js is set by the script below), so
+     no-JS visitors and crawlers always see the content. */
+  html.js .fade-in {
+    opacity: 0;
+    transform: translateY(24px);
+    transition:
+      opacity 0.7s ease,
+      transform 0.7s ease;
+    transition-delay: var(--delay, 0s);
+  }
+  html.js .fade-in.in {
+    opacity: 1;
+    transform: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html.js .fade-in {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+  }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 860px) {
+    .section-pad {
+      padding: 84px 0;
+    }
+  }
+  @media (max-width: 560px) {
+    .container {
+      padding: 0 20px;
+    }
+    .hero {
+      padding-top: 56px;
+    }
+    .hero-cta .button {
+      width: 100%;
+    }
+  }
+</style>
+
 <script>
-  // Only interactive element on the page: kick off Google OAuth via better-auth.
+  // Google OAuth for the hero + CTA buttons (the nav pill has its own hook).
   import { signInWithGoogle } from "../../../src/auth/client";
-  document
-    .getElementById("google-signin")
-    ?.addEventListener("click", () => void signInWithGoogle());
+  for (const el of document.querySelectorAll("[data-signin]")) {
+    el.addEventListener("click", () => void signInWithGoogle());
+  }
+
+  // Reveal-on-scroll. The `js` class arms the initial hidden state (CSS above),
+  // so content is never hidden for no-JS visitors or crawlers.
+  document.documentElement.classList.add("js");
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("in");
+          observer.unobserve(entry.target);
+        }
+      }
+    },
+    { rootMargin: "0px 0px -8% 0px", threshold: 0.1 }
+  );
+  for (const el of document.querySelectorAll(".fade-in")) observer.observe(el);
+
+  // FAQ accordion.
+  for (const item of document.querySelectorAll(".faq-item")) {
+    const button = item.querySelector(".faq-question");
+    button?.addEventListener("click", () => {
+      const open = item.classList.toggle("active");
+      button.setAttribute("aria-expanded", String(open));
+    });
+  }
 </script>

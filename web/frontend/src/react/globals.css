@@ -1,9 +1,11 @@
 /*
  * React-app stylesheet: Tailwind v4 + shadcn/ui (Base UI foundation).
  *
- * Tokens are shadcn's "neutral" base color with the production Inter font
- * stack. Loaded by the React entry (react/main.tsx) and imported by
- * src/analysis.css so the vanilla analysis page shares the same tokens.
+ * Tokens follow the Apple design language (inspired by get-inscribe.com):
+ * white / #f5f5f7 surfaces, #1d1d1f labels, iOS system blue as the primary,
+ * hairline separators, and the SF Pro system font stack. Loaded by the React
+ * entry (react/main.tsx) and imported by src/analysis.css so the vanilla
+ * analysis page shares the same tokens.
  */
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -11,78 +13,74 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Alte Haas Grotesk — brand wordmark (hero title and header logo) */
-@font-face {
-  font-family: 'Alte Haas Grotesk';
-  src: url('/fonts/AlteHaasGroteskRegular.ttf') format('truetype');
-  font-weight: 400;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Alte Haas Grotesk';
-  src: url('/fonts/AlteHaasGroteskBold.ttf') format('truetype');
-  font-weight: 700;
-  font-display: swap;
-}
-
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.625rem;
-  /* Production (glidecomp.com) body font stack. */
+  /* Surfaces */
+  --background: #ffffff;
+  --foreground: #1d1d1f;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  /* iOS system blue */
+  --primary: #007aff;
+  --primary-foreground: #ffffff;
+  /* Apple light-gray section / grouped surfaces */
+  --secondary: #f5f5f7;
+  --secondary-foreground: #1d1d1f;
+  --muted: #f5f5f7;
+  --muted-foreground: #6e6e73;
+  --accent: #f2f2f7;
+  --accent-foreground: #1d1d1f;
+  --destructive: #ff3b30;
+  /* Hairline separators */
+  --border: rgba(0, 0, 0, 0.1);
+  --input: rgba(0, 0, 0, 0.12);
+  --ring: #007aff;
+  /* iOS system tones */
+  --chart-1: #007aff;
+  --chart-2: #34c759;
+  --chart-3: #ff9500;
+  --chart-4: #af52de;
+  --chart-5: #ff2d55;
+  --radius: 0.75rem;
+  /* Apple system font stack (SF Pro on Apple platforms). */
   --font-app:
-    "Inter",
     -apple-system,
     BlinkMacSystemFont,
-    "Segoe UI",
+    "SF Pro Display",
+    "SF Pro Text",
+    "Helvetica Neue",
+    Helvetica,
+    Arial,
     sans-serif;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
+  /* Apple dark: pure-black canvas, elevated #1c1c1e surfaces */
+  --background: #000000;
+  --foreground: #f5f5f7;
+  --card: #1c1c1e;
+  --card-foreground: #f5f5f7;
+  --popover: #1c1c1e;
+  --popover-foreground: #f5f5f7;
+  /* iOS system blue (dark variant) */
+  --primary: #0a84ff;
+  --primary-foreground: #ffffff;
+  --secondary: #1c1c1e;
+  --secondary-foreground: #f5f5f7;
+  --muted: #1c1c1e;
+  --muted-foreground: #a1a1a6;
+  --accent: #2c2c2e;
+  --accent-foreground: #f5f5f7;
+  --destructive: #ff453a;
+  --border: rgba(255, 255, 255, 0.14);
+  --input: rgba(255, 255, 255, 0.16);
+  --ring: #0a84ff;
+  --chart-1: #0a84ff;
+  --chart-2: #30d158;
+  --chart-3: #ff9f0a;
+  --chart-4: #bf5af2;
+  --chart-5: #ff375f;
 }
 
 @theme inline {
@@ -114,7 +112,9 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --font-sans: var(--font-app);
-  --font-brand: 'Alte Haas Grotesk', var(--font-app);
+  /* Brand wordmark now uses the same system stack (Inscribe-style: one face,
+     weight and tracking do the branding). */
+  --font-brand: var(--font-app);
 }
 
 @layer base {
@@ -149,13 +149,4 @@
     color: #1a1a1a;
   }
 
-  /* SVG Background based on https://www.svgbackgrounds.com/set/free-svg-backgrounds-and-patterns/
-     Scoped to .bg-hills — Safari's background-attachment:fixed on body breaks
-     pointer events for position:absolute children (e.g. map controls). */
-  .bg-hills {
-    background-color: var(--background);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900'%3E%3Cpolygon fill='%23C8D51A' points='957 765 539 900 1396 900'/%3E%3Cpolygon fill='%23A0AE11' points='957 765 872.9 900 1396 900'/%3E%3Cpolygon fill='%23BCCA17' points='-60 900 398 829 816 900'/%3E%3Cpolygon fill='%2396A00E' points='337 900 398 829 816 900'/%3E%3Cpolygon fill='%23C2CF18' points='1203 794 1552 900 876 900'/%3E%3Cpolygon fill='%238C980E' points='1203 794 1552 900 1162 900'/%3E%3Cpolygon fill='%23B4C215' points='641 839 886 900 367 900'/%3E%3Cpolygon fill='%2394A00F' points='587 900 641 839 886 900'/%3E%3Cpolygon fill='%23BAC616' points='1710 900 1401 820 1096 900'/%3E%3Cpolygon fill='%237E8A0A' points='1710 900 1401 820 1365 900'/%3E%3Cpolygon fill='%23C6D319' points='1210 900 971 836 725 900'/%3E%3Cpolygon fill='%23849010' points='943 900 1210 900 971 836'/%3E%3C/svg%3E");
-    background-attachment: fixed;
-    background-size: cover;
-  }
 }
