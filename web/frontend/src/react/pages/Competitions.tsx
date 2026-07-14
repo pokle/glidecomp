@@ -245,6 +245,18 @@ function CreateCompDialog({
                 </FieldLabel>
               </Field>
             </RadioGroup>
+            <FieldDescription>
+              Sets the official CIVL GAP scoring defaults for your category — see the{" "}
+              <a
+                href={`/scoring/gap#defaults-${category}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-4"
+              >
+                {category === "pg" ? "paragliding" : "hang gliding"} defaults
+              </a>
+              . You can fine-tune them later in the competition's Advanced settings.
+            </FieldDescription>
           </FieldSet>
 
           <Field>

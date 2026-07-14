@@ -95,8 +95,14 @@ export function SettingsDialog({
     comp.scoring_format ?? "gap"
   );
 
+  // Blank = "auto" (the scorer uses 70% of each task's distance). Key off the
+  // *stored* value, not the per-category default, so a comp that never pinned a
+  // nominal distance shows auto — matching the documented default and the
+  // scorer's auto behaviour.
   const [nominalDistance, setNominalDistance] = useState(
-    gp.nominalDistance != null ? String(Math.round(gp.nominalDistance / 1000)) : ""
+    comp.gap_params?.nominalDistance != null
+      ? String(Math.round(comp.gap_params.nominalDistance / 1000))
+      : ""
   );
   const [nominalTime, setNominalTime] = useState(String(Math.round(gp.nominalTime / 60)));
   const [nominalGoal, setNominalGoal] = useState(String(Math.round(gp.nominalGoal * 100)));
@@ -117,6 +123,28 @@ export function SettingsDialog({
   const [jtgMax, setJtgMax] = useState(String(gp.jumpTheGunMaxSeconds ?? 300));
 
   const [saving, setSaving] = useState(false);
+
+  /**
+   * Reset the Advanced (GAP) fields to the official CIVL GAP defaults for the
+   * currently-selected category (issue #343). Nominal distance resets to
+   * "auto" (blank). Leaves the non-scoring fields (name, classes, etc.)
+   * untouched; nothing is saved until the admin submits.
+   */
+  function resetToDefaults() {
+    const d = defaultsFor(category);
+    setNominalDistance("");
+    setNominalTime(String(Math.round(d.nominalTime / 60)));
+    setNominalGoal(String(Math.round(d.nominalGoal * 100)));
+    setNominalLaunch(String(Math.round(d.nominalLaunch * 100)));
+    setMinimumDistance(String(d.minimumDistance / 1000));
+    setUseLeading(d.useLeading);
+    setUseArrival(d.useArrival);
+    setUseDifficulty(d.useDistanceDifficulty);
+    setLeadingFormula(d.leadingFormula);
+    setDistanceOrigin(d.distanceOrigin);
+    setJtgFactor(String(d.jumpTheGunFactor));
+    setJtgMax(String(d.jumpTheGunMaxSeconds));
+  }
 
   // Live class list for the default-class dropdown.
   const classes = pilotClassesText
@@ -384,18 +412,29 @@ export function SettingsDialog({
                   runs under local rules (e.g. SAFA) that specify different values, or
                   you have a specific technical reason.
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Competition-wide scoring constants. The scoring class (HG/PG) follows the
-                  Category above.{" "}
-                  <a
-                    className="underline underline-offset-4"
-                    href="/scoring/gap"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                <div className="flex items-start justify-between gap-4">
+                  <p className="text-sm text-muted-foreground">
+                    Competition-wide scoring constants. The scoring class (HG/PG) follows the
+                    Category above.{" "}
+                    <a
+                      className="underline underline-offset-4"
+                      href={`/scoring/gap#defaults-${category}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      How does GAP scoring work?
+                    </a>
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={resetToDefaults}
                   >
-                    How does GAP scoring work?
-                  </a>
-                </p>
+                    Reset to defaults
+                  </Button>
+                </div>
               <Field>
                 <FieldLabel htmlFor={ids.nominalDistance}>Nominal distance (km)</FieldLabel>
                 <Input

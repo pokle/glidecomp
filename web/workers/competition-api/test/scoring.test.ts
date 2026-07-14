@@ -582,3 +582,53 @@ describe("Open distance scoring", () => {
     expect(analysesAfterSecond.results[0].payload_json).toBe(firstPayload);
   });
 });
+
+describe("Manual re-score (POST /rescore)", () => {
+  test("an admin can force a re-score of every task", async () => {
+    const taskXctsk = JSON.parse(env.SAMPLE_TASK_XCTSK);
+    const compId = await createComp({ category: "hg" });
+    const taskId = await createTask(compId, {
+      xctsk: taskXctsk,
+      pilot_classes: ["open"],
+    });
+    await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc`,
+      await compressText(sampleIgcEntries()[0][1]),
+      { user: "user-1" }
+    );
+    // Materialize a fresh row first.
+    await getFreshScores<{ stale: boolean }>(
+      `/api/comp/${compId}/task/${taskId}/score`
+    );
+
+    const res = await authRequest("POST", `/api/comp/${compId}/rescore`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; task_count: number };
+    expect(body.ok).toBe(true);
+    expect(body.task_count).toBe(1);
+
+    // The row was bumped stale and re-scored back to fresh in the background.
+    const { data } = await getFreshScores<{ stale: boolean }>(
+      `/api/comp/${compId}/task/${taskId}/score`
+    );
+    expect(data.stale).toBe(false);
+
+    // Publicly visible in the audit log.
+    const audit = await env.DB.prepare(
+      "SELECT description FROM audit_log WHERE description LIKE 'Triggered a manual re-score%'"
+    ).all<{ description: string }>();
+    expect(audit.results.length).toBe(1);
+    expect(audit.results[0].description).toContain("1 task");
+  });
+
+  test("a non-admin gets 403 and an anonymous caller 401", async () => {
+    const compId = await createComp({ category: "hg" });
+    // user-3 is not an admin of this comp.
+    const forbidden = await request("POST", `/api/comp/${compId}/rescore`, {
+      user: "user-3",
+    });
+    expect(forbidden.status).toBe(403);
+    const anon = await request("POST", `/api/comp/${compId}/rescore`);
+    expect(anon.status).toBe(401);
+  });
+});

@@ -25,6 +25,7 @@ import {
 } from "../../scores-views";
 import { ScoreFreshness } from "./ScoreFreshness";
 import { ScoresSection } from "./ScoresSection";
+import { toast } from "../lib/toast";
 import { formatScore, formatTaskDate, ordinal } from "../lib/format";
 import type { TaskSummary } from "./types";
 // Single source of truth for the /scores response shape, shared with the loader.
@@ -68,6 +69,7 @@ export function CompScoresSection({
   // fetch once per compId. When seeded from SSR, that first fetch is already
   // satisfied; skip it so the first render stays identical to the server.
   const seededRef = useRef(initialScores != null);
+  const [rescoring, setRescoring] = useState(false);
 
   useEffect(() => {
     if (seededRef.current) {
@@ -97,9 +99,55 @@ export function CompScoresSection({
     };
   }, [compId]);
 
+  /**
+   * Admin "Recompute scores" action (issue #343). POSTs the rescore trigger,
+   * then re-reads /scores so the now-stale body + ETag flow into
+   * ScoreFreshness, which polls and surfaces the "re-scoring… / finished"
+   * notice — giving the explicit rescore affordance Tom asked for.
+   */
+  async function handleRescore() {
+    setRescoring(true);
+    try {
+      const res = await fetch(`/api/comp/${encodeURIComponent(compId)}/rescore`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        toast.error("Couldn't start the re-score. Please try again.");
+        return;
+      }
+      const refreshed = await fetch(
+        `/api/comp/${encodeURIComponent(compId)}/scores`,
+        { credentials: "include" }
+      );
+      if (refreshed.ok) {
+        const scores = (await refreshed.json()) as CompScores;
+        setState({ kind: "ready", scores, etag: refreshed.headers.get("ETag") });
+      }
+      toast.success("Re-scoring started — scores will refresh shortly.");
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setRescoring(false);
+    }
+  }
+
   return (
     <section id="scores" className="scroll-mt-4 break-before-page">
-      <h2 className="mt-8 text-lg font-bold">Scores</h2>
+      <div className="mt-8 flex items-center justify-between gap-4">
+        <h2 className="text-lg font-bold">Scores</h2>
+        {isAdmin && state.kind === "ready" && state.scores.standings.length > 0 ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void handleRescore()}
+            disabled={rescoring}
+          >
+            {rescoring ? "Re-scoring…" : "Recompute scores"}
+          </Button>
+        ) : null}
+      </div>
       {state.kind === "loading" ? (
         <p className="mt-2 text-muted-foreground">Loading scores…</p>
       ) : state.kind === "unavailable" ? (

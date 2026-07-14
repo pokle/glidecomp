@@ -198,6 +198,13 @@ Landed on this branch:
    (`CompSetupProgress.tsx`): it still shows (marked *(optional)*) but no longer
    gates the progress count or the guide's auto-hide — correct now that defaults
    are official out of the box.
-
-Still open (separate change): a rescore / "scores updating" affordance so the
-stale-first behaviour is discoverable (Tom's second point).
+5. **Manual re-score affordance** (Tom's second point): admin-only
+   `POST /api/comp/:comp_id/rescore` (`routes/score.ts`) bumps every scoreable
+   task stale and revalidates (audit-logged); a **"Recompute scores"** button on
+   the comp scores page (`CompScoresSection.tsx`, admins only) triggers it and
+   drives the existing `ScoreFreshness` "re-scoring… / finished" notice.
+6. **Docs + discoverability**: the `/scoring/gap` page gained a **Default
+   Competition Settings** section (per-category `#defaults-hg` / `#defaults-pg`
+   anchors) and its stale "defaults to off" copy is corrected; the create-comp
+   dialog's category selector deep-links to those anchors; the Settings dialog's
+   Advanced section has a **Reset to defaults** button (`defaultsFor(category)`).
