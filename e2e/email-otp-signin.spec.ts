@@ -25,6 +25,27 @@ test.beforeEach(async ({ page }) => {
   await page.setExtraHTTPHeaders({ "x-test-client-ip": testIp() });
 });
 
+/**
+ * Assert the browser context holds a real session for `email`, then that the
+ * UI reflects it. The session check polls /api/auth/me: under local parallel
+ * e2e load, D1 contention can 500 a single read (the same documented race
+ * that forces workers:1 in CI), and the SPA renders one failed /me as
+ * signed-out — retrying separates "no session" from that transient failure.
+ */
+async function expectSignedIn(
+  page: import("@playwright/test").Page,
+  email: string
+) {
+  await expect(async () => {
+    const res = await page.request.get("/api/auth/me");
+    expect(res.ok()).toBe(true);
+    const { user } = (await res.json()) as { user: { email: string } | null };
+    expect(user?.email).toBe(email);
+  }).toPass({ timeout: 10_000 });
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
+}
+
 async function fetchDevOtp(
   request: import("@playwright/test").APIRequestContext,
   email: string
@@ -58,7 +79,7 @@ test("sign in with an emailed code (manual entry)", async ({ page }) => {
   // Fresh user: username is auto-derived at sign-up (no onboarding gate),
   // so the post-sign-in redirect lands on /comp signed in.
   await page.waitForURL("**/comp");
-  await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
+  await expectSignedIn(page, email);
 });
 
 test("sign in via the emailed deep link (#otp=…&email=…)", async ({ page }) => {
@@ -75,7 +96,7 @@ test("sign in via the emailed deep link (#otp=…&email=…)", async ({ page }) 
   // server); the page consumes it, strips it, and signs in unprompted.
   await page.goto(`/signin#otp=${otp}&email=${encodeURIComponent(email)}`);
   await page.waitForURL("**/comp");
-  await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
+  await expectSignedIn(page, email);
 });
 
 test("a wrong code shows an error and allows retry", async ({ page }) => {
