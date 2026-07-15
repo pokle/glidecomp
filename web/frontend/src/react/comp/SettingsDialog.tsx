@@ -263,7 +263,7 @@ export function SettingsDialog({
         <DialogHeader>
           <DialogTitle>Competition Settings</DialogTitle>
         </DialogHeader>
-        <form onSubmit={(e) => void save(e)} className="flex flex-col gap-4">
+        <form onSubmit={(e) => void save(e)} className="flex flex-col gap-6">
           <NameField value={name} onChange={setName} />
 
           <CategoryField value={category} onChange={setCategory} />
@@ -358,7 +358,7 @@ export function SettingsDialog({
                   GAP parameters
                 </span>
               </summary>
-              <div className="flex flex-col gap-4 border-t border-border px-4 py-4">
+              <div className="flex flex-col gap-6 border-t border-border px-4 py-4">
                 <div
                   role="note"
                   className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-muted-foreground"

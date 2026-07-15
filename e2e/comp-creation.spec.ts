@@ -50,9 +50,9 @@ test("dev login, create competition and task", async ({ page }) => {
   await page.getByRole("button", { name: "Start a new competition" }).click();
   const createDialog = page.getByRole("dialog");
   await createDialog.getByLabel("Name").fill("E2E Test Competition");
-  // Category defaults to HG — no change needed. Mark as test competition.
+  // Category defaults to HG — no change needed. Mark it hidden (admins only).
   await createDialog
-    .getByRole("checkbox", { name: /Test competition/ })
+    .getByRole("checkbox", { name: /Hidden/ })
     .click();
   await createDialog.getByRole("button", { name: "Create" }).click();
 

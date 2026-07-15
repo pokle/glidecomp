@@ -272,7 +272,8 @@ export function TestCompField({
     <CheckboxField
       checked={checked}
       onChange={onChange}
-      label="Test competition (only visible to admins)"
+      label="Hidden?"
+      hint="Hidden from the public and pilots — only admins can see it."
     />
   );
 }
