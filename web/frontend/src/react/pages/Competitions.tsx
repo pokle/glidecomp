@@ -211,7 +211,7 @@ function CreateCompDialog({
             onChange={setCategory}
             description={
               <>
-                Sets the official CIVL GAP scoring defaults for your category — see the{" "}
+                Sets the official CIVL GAP scoring defaults for your wing — see the{" "}
                 <a
                   href={`/scoring/gap#defaults-${category}`}
                   target="_blank"

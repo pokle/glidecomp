@@ -187,7 +187,7 @@ export function CategoryField({
   const pgId = useId();
   return (
     <FieldSet>
-      <FieldLegend variant="label">Category</FieldLegend>
+      <FieldLegend variant="label">Wing</FieldLegend>
       <RadioGroup value={value} onValueChange={(v) => onChange(v as "hg" | "pg")}>
         <Field orientation="horizontal">
           <RadioGroupItem value="hg" id={hgId} />

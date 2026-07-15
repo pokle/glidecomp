@@ -365,7 +365,7 @@ export function SettingsDialog({
                 >
                   <strong className="font-medium text-foreground">
                     These are the official CIVL GAP defaults for your competition
-                    category.
+                    wing.
                   </strong>{" "}
                   Changing them will make your scores differ from a standard
                   FAI&nbsp;/&nbsp;AirScore result. Only edit these if your competition
@@ -375,7 +375,7 @@ export function SettingsDialog({
                 <div className="flex items-start justify-between gap-4">
                   <p className="text-sm text-muted-foreground">
                     Competition-wide scoring constants. The scoring class (HG/PG) follows the
-                    Category above.{" "}
+                    Wing above.{" "}
                     <a
                       className="underline underline-offset-4"
                       href={`/scoring/gap#defaults-${category}`}
