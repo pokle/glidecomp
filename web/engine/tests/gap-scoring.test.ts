@@ -310,9 +310,26 @@ describe('calculateTimePoints', () => {
     expect(pts).toBeCloseTo(300, 1);
   });
 
-  it('HG: time points for ESS pilot even without goal', () => {
+  it('HG: ESS without goal keeps only the default 80% (S7F §12.1)', () => {
     const pts = calculateTimePoints(3600, 3600, false, true, 300, 'HG');
+    expect(pts).toBeCloseTo(240, 1);
+  });
+
+  it('HG: full time points once goal is made', () => {
+    const pts = calculateTimePoints(3600, 3600, true, true, 300, 'HG');
     expect(pts).toBeCloseTo(300, 1);
+  });
+
+  it('HG: ESS-but-not-goal factor is configurable (local regulations)', () => {
+    const half = calculateTimePoints(3600, 3600, false, true, 300, 'HG', '5/6', 0.5);
+    expect(half).toBeCloseTo(150, 1);
+    const zero = calculateTimePoints(3600, 3600, false, true, 300, 'HG', '5/6', 0);
+    expect(zero).toBe(0);
+  });
+
+  it('HG: no time points without ESS regardless of factor', () => {
+    const pts = calculateTimePoints(3600, 3600, false, false, 300, 'HG', '5/6', 1);
+    expect(pts).toBe(0);
   });
 });
 

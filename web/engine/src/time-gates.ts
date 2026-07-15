@@ -54,6 +54,54 @@ export function resolveTimeOfDayNear(
 }
 
 /**
+ * Resolve the task's goal deadline (FAI S7F §8.3.c) to an absolute epoch
+ * time, or null when the task doesn't define a parseable deadline.
+ *
+ * XCTrack carries the deadline as a time-of-day string on the goal config
+ * (`goal.deadline`, e.g. "08:00:00Z"). Crossings after the deadline don't
+ * count and landed-out distance is measured only up to it (§8.6.1, §11.1) —
+ * the enforcement lives in resolveTurnpointSequence; this just resolves the
+ * wall-clock time onto the flight's calendar day.
+ *
+ * @param referenceMs - An instant near the end of the flight (e.g. the last
+ *   fix) used to place the deadline on the right day
+ */
+export function resolveTaskDeadline(
+  task: XCTask,
+  referenceMs: number,
+): number | null {
+  const raw = task.goal?.deadline;
+  if (!raw) return null;
+  const seconds = parseTimeOfDayUTC(raw);
+  if (seconds === null) return null;
+  return resolveTimeOfDayNear(seconds, referenceMs);
+}
+
+/**
+ * Resolve the launch-window open time (`takeoff.timeOpen`, FAI S7F §8.6.1)
+ * to an absolute epoch time, or null when the task doesn't define one.
+ *
+ * A pilot must launch within the launch window; a start-cylinder crossing
+ * before the window even opens proves the pilot was already airborne before
+ * launching was allowed, so such crossings can't validate a start. (A late
+ * launch — after `timeClose` — can't be proven from crossing times alone
+ * and is not enforced; see the /scoring/gap explainer.)
+ *
+ * @param referenceMs - An instant during the flight (e.g. the first fix)
+ *   used to place the window on the right day
+ */
+export function resolveLaunchWindowOpen(
+  task: XCTask,
+  referenceMs: number,
+): number | null {
+  const raw = task.takeoff?.timeOpen;
+  if (!raw) return null;
+  const seconds = parseTimeOfDayUTC(raw);
+  if (seconds === null) return null;
+  return resolveTimeOfDayNear(seconds, referenceMs);
+}
+
+/**
  * A task's start gates as sorted absolute epoch-ms times, or null when the
  * task is not a gated race.
  *

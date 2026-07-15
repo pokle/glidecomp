@@ -113,6 +113,21 @@ export interface GAPParameters {
    * distance only.
    */
   jumpTheGunMaxSeconds: number;
+  /**
+   * Hang-gliding "ESS but not goal" (FAI S7F §12.1): the fraction of time
+   * and arrival points KEPT by a pilot who reaches the end of the speed
+   * section but fails to reach goal (reaching goal "validates" the speed
+   * section). The spec recommends 0.8 for hang gliders; local regulations
+   * may change it. Paragliding is fixed at 0 by the spec (no goal → no
+   * time points), so this setting never affects PG scoring — the engine
+   * treats PG as factor 0 regardless of the configured value.
+   *
+   * The factor also selects the "best time" source (AirScore parity, see
+   * {@link scoreFlights}): while it keeps a share of the points (factor
+   * > 0), the best time comes from all ESS pilots; at 0 it is
+   * goal-validated per §11.2.1.
+   */
+  essNotGoalFactor: number;
 }
 
 /** Leading coefficient variant — see {@link GAPParameters.leadingFormula}. */
@@ -146,6 +161,7 @@ export const DEFAULT_GAP_PARAMETERS: GAPParameters = {
   useDistanceDifficulty: true,
   jumpTheGunFactor: 2,
   jumpTheGunMaxSeconds: 300,
+  essNotGoalFactor: 0.8,
 };
 
 /**
@@ -203,6 +219,10 @@ export function defaultsFor(
     // both with the modern 5/6 time-points exponent.
     leadingFormula: pg ? 'weighted' : 'classic',
     timePointsExponent: '5/6',
+    // S7F §12.1 fixes the PG ESS-but-not-goal parameter at 0 (no goal → no
+    // time points); the HG recommended default is 0.8. The engine ignores
+    // the value for PG either way — this keeps the displayed default honest.
+    essNotGoalFactor: pg ? 0 : 0.8,
   };
 }
 
@@ -733,8 +753,11 @@ export function resolveTimePointsExponent(
 
 /**
  * Calculate time points for a single pilot.
- * PG: Only pilots who made goal get time points.
- * HG: Pilots who reached ESS get time points.
+ * PG: Only pilots who made goal get time points (S7F §12.1 fixes the
+ * ESS-but-not-goal parameter at 0 for paragliding).
+ * HG: Pilots who reached ESS get time points, but a pilot who does not go
+ * on to reach goal keeps only `essNotGoalFactor` of them (S7F §12.1,
+ * default 0.8) — reaching goal "validates" the speed section.
  */
 export function calculateTimePoints(
   pilotTime: number | null,
@@ -744,6 +767,7 @@ export function calculateTimePoints(
   availableTimePoints: number,
   scoring: 'PG' | 'HG',
   exponent: SpeedExponent = '5/6',
+  essNotGoalFactor: number = DEFAULT_GAP_PARAMETERS.essNotGoalFactor,
 ): number {
   if (bestTime === null || pilotTime === null) return 0;
 
@@ -753,7 +777,10 @@ export function calculateTimePoints(
   if (scoring === 'HG' && !reachedESS) return 0;
 
   const sf = calculateSpeedFraction(pilotTime, bestTime, speedExponentValue(exponent));
-  return sf * availableTimePoints;
+  const points = sf * availableTimePoints;
+  // §12.1: an HG pilot with ESS but no goal keeps only the configured share.
+  if (scoring === 'HG' && !madeGoal) return points * essNotGoalFactor;
+  return points;
 }
 
 // ---------------------------------------------------------------------------
@@ -1310,9 +1337,20 @@ export function scoreFlights(
   const numInGoal = effFlights.reduce((n, f) => n + (f.madeGoal ? 1 : 0), 0);
   const numReachedESS = effFlights.reduce((n, f) => n + (f.reachedESS ? 1 : 0), 0);
 
-  // Best time: fastest speed section among goal pilots (PG) or ESS pilots (HG)
+  // §12.1: the ESS-but-not-goal factor — the share of time and arrival
+  // points kept by a pilot who reaches ESS but lands before goal. The spec
+  // fixes paragliding at 0 (no goal → no time points), so PG ignores the
+  // configured value.
+  const essNotGoalFactor =
+    fullParams.scoring === 'PG' ? 0 : fullParams.essNotGoalFactor;
+
+  // Best time (§11.2.1) — matching AirScore's pilot_speed: while the
+  // ESS-but-not-goal factor keeps a share of time points (HG default 0.8),
+  // the best time is the fastest pilot to reach ESS, goal or not, so the
+  // docked pilots' speed fractions stay on the same scale; when the factor
+  // is 0 (always for PG) it is goal-validated exactly as the spec reads.
   const validTimes = effFlights
-    .filter(f => (fullParams.scoring === 'PG' ? f.madeGoal : f.reachedESS))
+    .filter(f => (essNotGoalFactor > 0 ? f.reachedESS : f.madeGoal))
     .map(f => f.speedSectionTime)
     .filter((t): t is number => t !== null && t > 0);
   const bestTime = validTimes.length > 0 ? minBy(validTimes, t => t) : null;
@@ -1465,16 +1503,20 @@ export function scoreFlights(
       f.madeGoal, f.reachedESS,
       availablePoints.time, fullParams.scoring,
       timeExponent,
+      essNotGoalFactor,
     );
 
     const leadPts = calculateLeadingPoints(
       leadingCoefficients[idx], minLC, availablePoints.leading,
     );
 
+    // Arrival order still counts every ESS pilot; §12.1 then docks an
+    // ESS-but-not-goal pilot's arrival points by the same factor as time.
     const position = essPositionMap.get(idx) ?? 0;
-    const arrPts = position > 0
+    const arrPtsFull = position > 0
       ? calculateArrivalPoints(position, numReachedESS, availablePoints.arrival)
       : 0;
+    const arrPts = f.madeGoal ? arrPtsFull : arrPtsFull * essNotGoalFactor;
 
     // Jump the gun (§12.2, HG within the limit): 1 point per
     // jumpTheGunFactor seconds early, floored at the minimum-distance score.

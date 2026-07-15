@@ -40,6 +40,7 @@
  *     --distance-origin <takeoff|start>      `distanceOrigin` (default: takeoff)
  *     --jump-the-gun-factor <n>              `jumpTheGunFactor`, HG (default: 2)
  *     --jump-the-gun-max-seconds <s>         `jumpTheGunMaxSeconds`, HG (default: 300)
+ *     --ess-not-goal-factor <ratio>          `essNotGoalFactor` 0-1, HG (default: 0.8)
  *   Output:
  *     --json                                 Output results as JSON
  */
@@ -98,7 +99,11 @@ function usage(): never {
     '                             the take-off→SSS leg)\n' +
     '  --jump-the-gun-factor <n>  `jumpTheGunFactor`, HG early-start (default: 2)\n' +
     '  --jump-the-gun-max-seconds <s>\n' +
-    '                             `jumpTheGunMaxSeconds`, HG (default: 300)\n\n' +
+    '                             `jumpTheGunMaxSeconds`, HG (default: 300)\n' +
+    '  --ess-not-goal-factor <ratio>\n' +
+    '                             `essNotGoalFactor` 0-1: share of time+arrival points\n' +
+    '                             kept on ESS without goal (S7F §12.1). HG default 0.8;\n' +
+    '                             PG is fixed at 0 by the spec and ignores it.\n\n' +
     'Output:\n' +
     '  --json                     Output results as JSON\n'
   );
@@ -159,6 +164,9 @@ for (let i = 0; i < args.length; i++) {
       break;
     case '--jump-the-gun-max-seconds':
       params.jumpTheGunMaxSeconds = Number(args[++i]);
+      break;
+    case '--ess-not-goal-factor':
+      params.essNotGoalFactor = Number(args[++i]);
       break;
     case '--use-distance-difficulty':
       params.useDistanceDifficulty = true;
@@ -418,6 +426,7 @@ if (jsonOutput) {
   if (p.scoring === 'HG') {
     console.log(`  Arrival:        ${p.useArrival ? 'on' : 'off'}`);
     console.log(`  Difficulty:     ${p.useDistanceDifficulty ? 'on' : 'off'}`);
+    console.log(`  ESS w/o goal:   keeps ${(p.essNotGoalFactor * 100).toFixed(0)}% of time+arrival (§12.1)`);
   }
   console.log(`  Nominal:        dist ${formatDist(p.nominalDistance)} / time ${Math.round(p.nominalTime / 60)} min / goal ${(p.nominalGoal * 100).toFixed(0)}% / launch ${(p.nominalLaunch * 100).toFixed(0)}%`);
   console.log(`  Min distance:   ${formatDist(p.minimumDistance)}`);

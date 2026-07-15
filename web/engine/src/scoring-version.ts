@@ -135,7 +135,30 @@
 //     1/2/5 all score under the HG profile), which touches a hashed scoring
 //     source, so the fingerprint guard requires a bump. The extra cache roll
 //     is harmless (scores recompute identically).
-// v17: sport-correct leading/time-points pairing (issue #258). The
+// v17: HG "ESS but not goal" penalty (S7F §12.1, issue #256). A hang-glider
+//     pilot who reaches ESS but lands before goal now keeps only the new
+//     per-comp essNotGoalFactor share of their time AND arrival points
+//     (default 0.8, the spec's recommended value; configurable by local
+//     regulations). Previously such a pilot kept 100% of both. PG is
+//     unchanged (the spec fixes its factor at 0 — no goal, no time points —
+//     which the engine already enforced). The factor also selects the best
+//     time source, matching AirScore's pilot_speed: factor > 0 → fastest
+//     ESS pilot (the previous HG behaviour); factor 0 (and always PG) →
+//     fastest pilot in goal per §11.2.1.
+// v18: task deadline + launch window enforcement (issue #260, S7F §8.3.c,
+//     §8.6.1, §11.1). The xctsk goal deadline is now enforced: boundary
+//     crossings after it are excluded from sequence resolution (so a
+//     turnpoint/ESS/goal tagged too late no longer counts, and the goal
+//     ratio only counts pre-deadline goals per §10), and a landed-out
+//     pilot's best distance is measured only up to the deadline. Start
+//     crossings before the launch window opens (takeoff.timeOpen) can no
+//     longer validate a start — a pre-window crossing proves the pilot was
+//     airborne before launching was allowed. Mis-set tasks are guarded: a
+//     deadline at/before the first start gate, or a window open at/after
+//     the deadline or after the first gate, is treated as unset. The result
+//     carries deadline/launchWindow transparency fields and the score
+//     explanation narrates the cutoff and each ignored crossing.
+// v19: sport-correct leading/time-points pairing (issue #258). The
 //     time-points exponent (S7F §11.2) is now an independent GAPParameters
 //     knob (timePointsExponent) instead of being implied by the
 //     leading-coefficient variant, and the per-category defaults adopt the
@@ -148,7 +171,7 @@
 //     weighted → 5/6), so their scores are unchanged. The bump invalidates
 //     cached scores for the null-/default-formula comps whose LC variant
 //     changed.
-export const SCORING_ENGINE_VERSION = 17;
+export const SCORING_ENGINE_VERSION = 19;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -156,4 +179,4 @@ export const SCORING_ENGINE_VERSION = 17;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "7888660f5dcc17543df84c321037dd049a0f697213105561557220c83ef05251";
+  "3181656330f5373a391fd7120cb52920151fa4b326305b37acc84de745d656ea";

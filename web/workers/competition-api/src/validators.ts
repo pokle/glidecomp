@@ -72,6 +72,11 @@ const gapParamsSchema = z
     // (scored launch→SSS only).
     jumpTheGunFactor: z.number().positive().max(3600).optional(),
     jumpTheGunMaxSeconds: z.number().min(0).max(86400).optional(),
+    // HG "ESS but not goal" (FAI S7F §12.1): fraction of time and arrival
+    // points KEPT by a pilot who reaches ESS but lands before goal.
+    // Optional; the scorer defaults to the spec's recommended 0.8. The spec
+    // fixes PG at 0 — the engine ignores the value for PG comps.
+    essNotGoalFactor: z.number().min(0).max(1).optional(),
   })
   .strict();
 

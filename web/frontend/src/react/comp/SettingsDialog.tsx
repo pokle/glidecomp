@@ -71,6 +71,7 @@ export function SettingsDialog({
     minimumDistance: useId(),
     jtgFactor: useId(),
     jtgMax: useId(),
+    essNotGoal: useId(),
   };
 
   // GAP scoring parameters — fall back to the official per-category FAI
@@ -129,6 +130,10 @@ export function SettingsDialog({
   );
   const [jtgFactor, setJtgFactor] = useState(String(gp.jumpTheGunFactor ?? 2));
   const [jtgMax, setJtgMax] = useState(String(gp.jumpTheGunMaxSeconds ?? 300));
+  // ESS-but-not-goal (S7F §12.1), shown as a percentage of points kept.
+  const [essNotGoal, setEssNotGoal] = useState(
+    String(Math.round((gp.essNotGoalFactor ?? 0.8) * 100))
+  );
 
   const [saving, setSaving] = useState(false);
 
@@ -153,6 +158,7 @@ export function SettingsDialog({
     setDistanceOrigin(d.distanceOrigin);
     setJtgFactor(String(d.jumpTheGunFactor));
     setJtgMax(String(d.jumpTheGunMaxSeconds));
+    setEssNotGoal(String(Math.round(d.essNotGoalFactor * 100)));
   }
 
   // Live class list for the default-class dropdown.
@@ -225,6 +231,7 @@ export function SettingsDialog({
       useDistanceDifficulty: useDifficulty,
       jumpTheGunFactor: parseField(jtgFactor, 2),
       jumpTheGunMaxSeconds: parseField(jtgMax, 300),
+      essNotGoalFactor: parseField(essNotGoal, 80) / 100,
     };
 
     setSaving(true);
@@ -495,6 +502,25 @@ export function SettingsDialog({
                 />
                 <FieldDescription>
                   Starting earlier than this scores minimum distance only. Spec default 300.
+                </FieldDescription>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={ids.essNotGoal}>
+                  ESS but not goal: points kept (%, HG)
+                </FieldLabel>
+                <Input
+                  id={ids.essNotGoal}
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={essNotGoal}
+                  onChange={(e) => setEssNotGoal(e.target.value)}
+                />
+                <FieldDescription>
+                  FAI S7F §12.1: an HG pilot who reaches ESS but lands before goal keeps
+                  this share of their time and arrival points. Spec default 80. No effect
+                  on PG (the spec fixes it at 0 — no goal, no time points).
                 </FieldDescription>
               </Field>
 

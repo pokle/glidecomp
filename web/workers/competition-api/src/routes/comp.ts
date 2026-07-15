@@ -121,6 +121,15 @@ function describeGapParamChanges(
       `Changed jump-the-gun limit from ${oJtgY} s to ${nJtgY} s early (beyond it, minimum distance)`
     );
   }
+  // ESS-but-not-goal (S7F §12.1): the share of time and arrival points an
+  // HG pilot keeps after reaching ESS but landing before goal.
+  const oEng = o.essNotGoalFactor ?? 0.8;
+  const nEng = n.essNotGoalFactor ?? 0.8;
+  if (oEng !== nEng) {
+    out.push(
+      `Changed the ESS-but-not-goal factor from ${pct(oEng)} to ${pct(nEng)} of time and arrival points kept (HG, S7F §12.1)`
+    );
+  }
   return out;
 }
 
