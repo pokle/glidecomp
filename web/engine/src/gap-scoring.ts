@@ -751,6 +751,29 @@ export function resolveTimePointsExponent(
   return params.leadingFormula === 'classic' ? '2/3' : '5/6';
 }
 
+/** Inputs to {@link calculateTimePoints} for one pilot. */
+export interface TimePointsInput {
+  /** Pilot's speed-section time in seconds, or null if ESS not reached. */
+  pilotTime: number | null;
+  /** Fastest qualifying speed-section time in the class (seconds), or null. */
+  bestTime: number | null;
+  /** Whether the pilot reached goal. */
+  madeGoal: boolean;
+  /** Whether the pilot reached the end of the speed section. */
+  reachedESS: boolean;
+  /** Time points available to the class. */
+  availableTimePoints: number;
+  /** Sport — PG requires goal, HG requires ESS, to earn any time points. */
+  scoring: 'PG' | 'HG';
+  /** Time-points exponent (S7F §11.2). Defaults to '5/6' (current spec). */
+  exponent?: SpeedExponent;
+  /**
+   * §12.1 share of time points an HG pilot keeps when they reach ESS but not
+   * goal. Defaults to the engine baseline (0.8). PG is fixed at 0 by the spec.
+   */
+  essNotGoalFactor?: number;
+}
+
 /**
  * Calculate time points for a single pilot.
  * PG: Only pilots who made goal get time points (S7F §12.1 fixes the
@@ -759,16 +782,16 @@ export function resolveTimePointsExponent(
  * on to reach goal keeps only `essNotGoalFactor` of them (S7F §12.1,
  * default 0.8) — reaching goal "validates" the speed section.
  */
-export function calculateTimePoints(
-  pilotTime: number | null,
-  bestTime: number | null,
-  madeGoal: boolean,
-  reachedESS: boolean,
-  availableTimePoints: number,
-  scoring: 'PG' | 'HG',
-  exponent: SpeedExponent = '5/6',
-  essNotGoalFactor: number = DEFAULT_GAP_PARAMETERS.essNotGoalFactor,
-): number {
+export function calculateTimePoints({
+  pilotTime,
+  bestTime,
+  madeGoal,
+  reachedESS,
+  availableTimePoints,
+  scoring,
+  exponent = '5/6',
+  essNotGoalFactor = DEFAULT_GAP_PARAMETERS.essNotGoalFactor,
+}: TimePointsInput): number {
   if (bestTime === null || pilotTime === null) return 0;
 
   // PG: must make goal to get time points
@@ -1498,13 +1521,16 @@ export function scoreFlights(
         })();
     const distPts = distScore.total;
 
-    const timePts = calculateTimePoints(
-      f.speedSectionTime, bestTime,
-      f.madeGoal, f.reachedESS,
-      availablePoints.time, fullParams.scoring,
-      timeExponent,
+    const timePts = calculateTimePoints({
+      pilotTime: f.speedSectionTime,
+      bestTime,
+      madeGoal: f.madeGoal,
+      reachedESS: f.reachedESS,
+      availableTimePoints: availablePoints.time,
+      scoring: fullParams.scoring,
+      exponent: timeExponent,
       essNotGoalFactor,
-    );
+    });
 
     const leadPts = calculateLeadingPoints(
       leadingCoefficients[idx], minLC, availablePoints.leading,

@@ -179,4 +179,4 @@ export const SCORING_ENGINE_VERSION = 19;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "3181656330f5373a391fd7120cb52920151fa4b326305b37acc84de745d656ea";
+  "4c15fdc66abd36b39d2f8141688d43155b5ae3fa286c038effd18ac16768a193";
