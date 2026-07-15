@@ -1,0 +1,83 @@
+{
+  "taskType": "CLASSIC",
+  "version": 1,
+  "earthModel": "WGS84",
+  "turnpoints": [
+    {
+      "type": "TAKEOFF",
+      "radius": 400,
+      "waypoint": {
+        "name": "KOSCI",
+        "description": "Mount Kosciuszko",
+        "lat": -36.455825,
+        "lon": 148.263502,
+        "altSmoothed": 2228
+      }
+    },
+    {
+      "type": "SSS",
+      "radius": 1000,
+      "waypoint": {
+        "name": "KOSCI",
+        "description": "Mount Kosciuszko",
+        "lat": -36.455825,
+        "lon": 148.263502,
+        "altSmoothed": 2228
+      }
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "name": "TOWNSD",
+        "description": "Mount Townsend",
+        "lat": -36.425,
+        "lon": 148.245,
+        "altSmoothed": 2209
+      }
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "name": "BLULAK",
+        "description": "Blue Lake",
+        "lat": -36.4083,
+        "lon": 148.2917,
+        "altSmoothed": 1890
+      }
+    },
+    {
+      "type": "ESS",
+      "radius": 1000,
+      "waypoint": {
+        "name": "RAMSHD",
+        "description": "Rams Head",
+        "lat": -36.5083,
+        "lon": 148.2967,
+        "altSmoothed": 2190
+      }
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "name": "THREDB",
+        "description": "Thredbo Top",
+        "lat": -36.501,
+        "lon": 148.302,
+        "altSmoothed": 1930
+      }
+    }
+  ],
+  "sss": {
+    "type": "RACE",
+    "direction": "EXIT",
+    "timeGates": [
+      "03:00:00",
+      "03:15:00",
+      "03:30:00",
+      "03:45:00"
+    ]
+  },
+  "goal": {
+    "type": "CYLINDER"
+  }
+}

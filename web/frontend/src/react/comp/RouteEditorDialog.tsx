@@ -14,6 +14,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
 import {
+  computeTurnpointDirections,
   getOptimizedSegmentDistances,
   parseXCTaskAsync,
   toXctskJSON,
@@ -224,11 +225,15 @@ export function RouteEditorDialog({
     );
 
     const legByRowId = new Map<number, number>();
+    const dirByRowId = new Map<number, RouteRow["dir"]>();
     if (result.geometryComplete && result.turnpoints.length >= 2) {
       const task: XCTask = {
         taskType: baseRef.current?.taskType || "CLASSIC",
         version: baseRef.current?.version ?? 1,
         turnpoints: result.turnpoints,
+        // The SSS panel's direction feeds the per-turnpoint direction
+        // inference, so flipping it updates the Dir column live.
+        ...(openDistance ? {} : { sss: { type: sssType, direction } }),
         ...(goal ? { goal } : {}),
       };
       const legs = getOptimizedSegmentDistances(task);
@@ -238,15 +243,29 @@ export function RouteEditorDialog({
         const rowId = result.rowIds[i + 1];
         if (rowId !== undefined) legByRowId.set(rowId, d);
       });
+      // Directions are derived, not chosen: a cylinder that contains the
+      // previous route point is an exit cylinder (reached by flying out of
+      // it). Recomputed on every edit so enlarging a radius that flips a
+      // turnpoint to Exit is visible before saving.
+      computeTurnpointDirections(task).forEach((d, i) => {
+        const rowId = result.rowIds[i];
+        if (rowId !== undefined) {
+          dirByRowId.set(rowId, result.turnpoints[i].type === "TAKEOFF" ? null : d);
+        }
+      });
     } else {
       setTotalKm(null);
     }
     if (rows.length > 0) {
       void table.updateData(
-        rows.map((r) => ({ id: r.id, leg: legByRowId.get(r.id) ?? null }))
+        rows.map((r) => ({
+          id: r.id,
+          leg: legByRowId.get(r.id) ?? null,
+          dir: dirByRowId.get(r.id) ?? null,
+        }))
       );
     }
-  }, [openDistance, goalType]);
+  }, [openDistance, goalType, sssType, direction]);
 
   useEffect(() => {
     let cancelled = false;
@@ -359,6 +378,22 @@ export function RouteEditorDialog({
         hozAlign: "right",
         minWidth: 90,
       },
+      // Read-only, derived live by recompute(): which way the cylinder is
+      // crossed. Not editable — direction is a consequence of the geometry,
+      // and showing it flip as radii/order change is what catches mis-set
+      // tasks before they're saved.
+      {
+        title: "Dir",
+        field: "dir",
+        minWidth: 70,
+        formatter: (cell) => {
+          const v = cell.getValue() as RouteRow["dir"];
+          if (!v) return '<span class="text-muted-foreground">—</span>';
+          return v === "exit"
+            ? '<span class="rounded-full border px-2 py-0.5 text-xs font-medium" title="Exit cylinder — reached by flying out of it">Exit</span>'
+            : '<span class="text-muted-foreground">Enter</span>';
+        },
+      },
       {
         title: "Alt (m)",
         field: "altitude",
@@ -426,6 +461,7 @@ export function RouteEditorDialog({
       radius: rec.radius > 0 ? rec.radius : NEW_ROW_RADIUS,
       altitude: rec.altitude ? rec.altitude : "",
       leg: null,
+      dir: null,
     } satisfies RouteRow);
   }, []);
 
@@ -741,7 +777,7 @@ export function RouteEditorDialog({
     >
       <DialogContent
         id="route-edit-dialog"
-        className="flex max-h-[90vh] flex-col overflow-y-auto sm:max-w-5xl"
+        className="flex h-[96vh] max-h-[96vh] w-[96vw] max-w-[96vw] flex-col overflow-y-auto sm:max-w-[96vw]"
       >
         <DialogHeader>
           <DialogTitle>Edit route</DialogTitle>
@@ -758,11 +794,13 @@ export function RouteEditorDialog({
           </p>
         ) : null}
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:h-[62vh] lg:grid-cols-2">
           {/* Map + waypoint picker — floats at the top on narrow screens, sits
-              on the right on wide ones (same pattern as the score-explainer). */}
-          <div className="order-1 flex flex-col gap-2 lg:order-2 lg:sticky lg:top-0 lg:self-start">
-            <div className="h-64 overflow-hidden rounded border border-border sm:h-72 lg:h-[360px]">
+              on the right on wide ones (same pattern as the score-explainer).
+              On wide screens the column is a full-height flex box so the map
+              fills the space left by the buttons and picker below it. */}
+          <div className="order-1 flex min-h-0 flex-col gap-2 lg:order-2">
+            <div className="h-64 overflow-hidden rounded border border-border sm:h-72 lg:h-auto lg:min-h-0 lg:flex-1">
               <Suspense
                 fallback={
                   <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -863,12 +901,15 @@ export function RouteEditorDialog({
             )}
           </div>
 
-          {/* Editable turnpoint grid */}
-          <div className="order-2 flex min-w-0 flex-col gap-2 lg:order-1">
+          {/* Editable turnpoint grid — on wide screens it flexes to fill the
+              column height left by the buttons and footnote below it, so those
+              always have room (a fixed grid height equal to the row would push
+              them out and overlap the next section). */}
+          <div className="order-2 flex min-h-0 min-w-0 flex-col gap-2 lg:order-1">
             <div
               ref={gridRef}
               id="route-grid"
-              className="h-[320px] shrink-0 rounded border border-border"
+              className="h-[320px] shrink-0 rounded border border-border lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink"
             />
             <div className="flex flex-wrap items-center gap-2">
               <Button
@@ -886,6 +927,11 @@ export function RouteEditorDialog({
                 </span>
               ) : null}
             </div>
+            <p className="text-xs text-muted-foreground">
+              Directions are derived from the route geometry — a cylinder that
+              contains the previous route point is an exit cylinder, reached by
+              flying out of it.
+            </p>
           </div>
         </div>
 

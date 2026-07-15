@@ -16,6 +16,7 @@ import {
 } from './geo';
 
 import type { XCTask, Turnpoint } from './xctsk-parser';
+import { getSSSIndex } from './xctsk-parser';
 import { computeGoalLine, goalLinePointAt, type GoalLine } from './goal-line';
 
 /**
@@ -335,4 +336,66 @@ export function getOptimizedSegmentDistances(task: XCTask): number[] {
   }
 
   return distances;
+}
+
+/** Which way a pilot must cross a turnpoint cylinder's boundary. */
+export type TurnpointDirection = 'enter' | 'exit';
+
+/**
+ * Infer each turnpoint's crossing direction from the task geometry.
+ *
+ * A cylinder's direction is not a free choice — it is forced by which side
+ * of the boundary the route arrives on. A turnpoint whose cylinder contains
+ * the previous turnpoint's optimized tag point is an EXIT cylinder: the
+ * route reaches its boundary from inside, so the pilot must fly out of it
+ * (the concentric out-and-return task is the common case). Every other
+ * turnpoint is an ENTER cylinder.
+ *
+ * The previous *tag point* is the right reference, not the previous centre:
+ * with concentric shrinking cylinders (a 3 km ESS ring around a 400 m goal)
+ * the previous centre lies inside the goal cylinder but the tag point sits
+ * on the ESS ring, outside it — and the goal is indeed entered. The tag
+ * point's distance from the centre is also stable when the optimizer's
+ * bearing choice is arbitrary (perfectly concentric tasks), so the
+ * inference doesn't wobble with tie-breaking.
+ *
+ * Two positions use conventions instead of inference:
+ * - The SSS keeps its declared direction (`task.sss.direction`) — pilots
+ *   cross the start cylinder both ways while waiting for the gate, and the
+ *   declaration says which crossings arm the start.
+ * - The goal (last turnpoint) is always ENTER: it is a destination, not a
+ *   gate — presence inside finishes the task even when the previous
+ *   turnpoint is nested inside the goal ring.
+ *
+ * A tag point exactly on the boundary (co-located identical cylinders)
+ * counts as ENTER, which preserves the shared-crossing crediting for a
+ * co-located ESS/goal pair.
+ *
+ * @param task - The competition task
+ * @param optimizedLine - Optional precomputed result of
+ *   {@link calculateOptimizedTaskLine} for the same task, to avoid
+ *   recomputing it
+ */
+export function computeTurnpointDirections(
+  task: XCTask,
+  optimizedLine?: { lat: number; lon: number }[],
+): TurnpointDirection[] {
+  const n = task.turnpoints.length;
+  if (n === 0) return [];
+  const line = optimizedLine ?? calculateOptimizedTaskLine(task);
+  const sssIdx = getSSSIndex(task);
+
+  return task.turnpoints.map((tp, i) => {
+    if (i === sssIdx) {
+      return task.sss?.direction === 'EXIT' ? 'exit' : 'enter';
+    }
+    if (i === 0 || i === n - 1) return 'enter';
+    const prevTag = line[i - 1];
+    if (!prevTag) return 'enter';
+    const prevTagToCenter = andoyerDistance(
+      prevTag.lat, prevTag.lon,
+      tp.waypoint.lat, tp.waypoint.lon,
+    );
+    return prevTagToCenter < tp.radius ? 'exit' : 'enter';
+  });
 }

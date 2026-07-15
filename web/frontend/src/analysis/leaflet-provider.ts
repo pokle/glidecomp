@@ -26,7 +26,7 @@ import {
   TRACK_OUTLINE_COLOR, HIGHLIGHT_COLOR, TASK_COLOR,
   getTurnpointColor, KEY_EVENT_TYPES, getAltitudeColorNormalized,
   findNearestFixIndex, createGlideLegend, showGlideLegend,
-  createCirclePolygonLatLng,
+  createCirclePolygonLatLng, exitTurnpointArrowFeatures,
   createTrackPointHUD, updateTrackPointHUD, hideTrackPointHUD as sharedHideTrackPointHUD,
   CROSSHAIR_MAP_SVG,
   buildTrackPointHUDData, buildNextTurnpointContext, ensureTurnpointCache,
@@ -788,6 +788,26 @@ export function createLeafletProvider(
 
           taskGroup.addLayer(dot);
           turnpointMarkers.push({ marker: dot, index: idx });
+        }
+
+        // Outward arrowheads marking exit turnpoints (crossed flying
+        // out) — the same notation as the mapbox provider; see
+        // exitTurnpointArrowFeatures / mapbox-interactions-spec.md.
+        for (const f of exitTurnpointArrowFeatures(task, optimizedPath)) {
+          const ring = (f.geometry as GeoJSON.Polygon).coordinates[0];
+          taskGroup.addLayer(
+            new Polygon(
+              ring.map(([lon, lat]) => [lat, lon] as [number, number]),
+              {
+                color: '#a855f7',
+                fillColor: '#a855f7',
+                fillOpacity: 0.9,
+                weight: 1,
+                opacity: 0.9,
+                interactive: false,
+              }
+            )
+          );
         }
 
         // Segment distance labels

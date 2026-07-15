@@ -17,7 +17,7 @@ import type { XCTask } from './xctsk-parser';
 import type { IGCFix } from './igc-parser';
 import { andoyerDistance, isInsideCylinder } from './geo';
 import { getSSSIndex, getEffectiveSSSIndex, getESSIndex, getEffectiveESSIndex, getGoalIndex } from './xctsk-parser';
-import { calculateOptimizedTaskLine } from './task-optimizer';
+import { calculateOptimizedTaskLine, computeTurnpointDirections, type TurnpointDirection } from './task-optimizer';
 import {
   computeGoalLine,
   distanceToGoalLine,
@@ -50,6 +50,16 @@ export const MIN_CYLINDER_TOLERANCE_M = 5;
  */
 function outerDetectionRadius(radius: number, tolerance: number): number {
   return Math.max(radius * (1 + tolerance), radius + MIN_CYLINDER_TOLERANCE_M);
+}
+
+/**
+ * Inner edge of a cylinder's tolerance band (§8.1): the radius at which an
+ * EXIT cylinder is credited — the pilot leaving is credited a touch early
+ * rather than a touch late. Applies to the EXIT start and to inferred exit
+ * turnpoints (see {@link computeTurnpointDirections}).
+ */
+function innerDetectionRadius(radius: number, tolerance: number): number {
+  return Math.max(0, Math.min(radius * (1 - tolerance), radius - MIN_CYLINDER_TOLERANCE_M));
 }
 
 // ---------------------------------------------------------------------------
@@ -151,12 +161,17 @@ export interface TurnpointReaching {
    * - 'first_after_previous': Standard rule — first crossing after previous TP reached
    * - 'first_crossing': ESS rule — always first crossing, no re-tries
    * - 'already_inside': Presence rule — the pilot was already inside this
-   *   cylinder when the previous turnpoint was reached (nested or overlapping
-   *   cylinders), so it is credited at that same moment with no crossing
+   *   ENTER cylinder when the previous turnpoint was reached (nested or
+   *   overlapping cylinders), so it is credited at that same moment with no
+   *   crossing
+   * - 'already_outside': Presence rule for an EXIT cylinder — the pilot was
+   *   already outside it when the previous turnpoint was reached (they tagged
+   *   the previous turnpoint beyond this cylinder's boundary), so it is
+   *   credited at that same moment with no crossing
    * - 'track_start': No-SSS fallback only — the track began outside the first
    *   turnpoint's cylinder with no crossing, so the first fix anchors the start
    */
-  selectionReason: 'last_before_next' | 'first_after_previous' | 'first_crossing' | 'already_inside' | 'track_start';
+  selectionReason: 'last_before_next' | 'first_after_previous' | 'first_crossing' | 'already_inside' | 'already_outside' | 'track_start';
 
   /**
    * How many candidate crossings existed for this task position.
@@ -392,11 +407,15 @@ export interface TurnpointSequenceResult {
  *
  * @param task - The competition task definition
  * @param fixes - The pilot's GPS tracklog
+ * @param directions - Optional precomputed per-turnpoint directions
+ *   ({@link computeTurnpointDirections}) to avoid recomputing the optimized
+ *   route; computed from the task when omitted
  * @returns All crossings sorted by time
  */
 export function detectCylinderCrossings(
   task: XCTask,
-  fixes: IGCFix[]
+  fixes: IGCFix[],
+  directions?: TurnpointDirection[]
 ): CylinderCrossing[] {
   if (fixes.length < 2) return [];
 
@@ -408,12 +427,12 @@ export function detectCylinderCrossings(
   // recorders and scoring programs. Default 0.5% (Cat 2 maximum).
   const tolerance = task.cylinderTolerance ?? DEFAULT_CYLINDER_TOLERANCE;
 
-  // The start cylinder is the one place the *inner* edge of the band matters:
-  // a pilot leaving an EXIT start is credited once they cross the inner radius
-  // outward (§8.2/§8.3). Every other cylinder (turnpoints, ESS, goal — and an
-  // ENTER start) is an entry, credited at the outer edge.
-  const sssIdx = getSSSIndex(task);
-  const startIsExit = sssIdx >= 0 && task.sss?.direction === 'EXIT';
+  // EXIT cylinders are the one place the *inner* edge of the band matters: a
+  // pilot leaving an EXIT start is credited once they cross the inner radius
+  // outward (§8.2/§8.3), and an inferred exit turnpoint (a cylinder the route
+  // reaches from inside — see computeTurnpointDirections) is credited at the
+  // same edge. Every entry cylinder is credited at the outer edge.
+  const dirs = directions ?? computeTurnpointDirections(task);
 
   // Goal line (S7F §6.3.1): when the task's goal is a LINE, the goal task
   // position is detected against the line + control semicircle instead of a
@@ -433,11 +452,12 @@ export function detectCylinderCrossings(
     const centerLon = tp.waypoint.lon;
     // Tolerance band (§8.1): outerRadius = max(r×(1+tol), r+5),
     // innerRadius = min(r×(1−tol), r−5). Entry cylinders detect against the
-    // outer edge; the EXIT start detects against the inner edge so the pilot
-    // is credited with leaving a touch early rather than a touch late.
+    // outer edge; EXIT cylinders (the EXIT start and inferred exit
+    // turnpoints) detect against the inner edge so the pilot is credited
+    // with leaving a touch early rather than a touch late.
     const outerRadius = outerDetectionRadius(tp.radius, tolerance);
-    const innerRadius = Math.max(0, Math.min(tp.radius * (1 - tolerance), tp.radius - MIN_CYLINDER_TOLERANCE_M));
-    const detectRadius = tpIdx === sssIdx && startIsExit ? innerRadius : outerRadius;
+    const innerRadius = innerDetectionRadius(tp.radius, tolerance);
+    const detectRadius = dirs[tpIdx] === 'exit' ? innerRadius : outerRadius;
     // Bounding box uses the outer radius (always ≥ detectRadius) to stay
     // conservative regardless of which edge we detect against.
     const radius = outerRadius;
@@ -699,17 +719,22 @@ function detectGoalLineCrossings(
 /**
  * Build a forward path from an SSS crossing through subsequent turnpoints.
  *
- * Reaching a turnpoint is presence-based (FAI S7F §8 / FS semantics): the
- * pilot must be inside the cylinder at or after the previous reaching. For
- * each TP after SSS that means either the first boundary crossing at/after
- * the previous reaching time, or — when the pilot is already inside the
- * cylinder at that moment (its cylinder nests or overlaps the previous
- * one) — the previous reaching moment itself.
+ * Reaching a turnpoint is presence-based (FAI S7F §8 / FS semantics), on the
+ * side of the boundary the turnpoint's direction requires: an ENTER cylinder
+ * needs the pilot inside it at or after the previous reaching, an EXIT
+ * cylinder (one the route arrives at from inside — see
+ * {@link computeTurnpointDirections}) needs them outside it. For each TP
+ * after SSS that means either the first qualifying boundary crossing
+ * at/after the previous reaching time, or — when the pilot is already on
+ * the required side at that moment — the previous reaching moment itself.
  *
  * @param startedInsideTP - Per task index: whether the track's FIRST fix lay
- *   inside that cylinder's outer tolerance edge. Only consulted for a
- *   cylinder with no crossing before the previous reaching (the pilot's
- *   inside/outside state never toggled, so it is the state at track start).
+ *   inside that cylinder's detection edge (outer for ENTER cylinders, inner
+ *   for EXIT). Only consulted for a cylinder with no crossing before the
+ *   previous reaching (the pilot's inside/outside state never toggled, so it
+ *   is the state at track start).
+ * @param directions - Per task index: the required crossing direction
+ *   ({@link computeTurnpointDirections}).
  */
 function buildForwardPath(
   sssCrossing: CylinderCrossing,
@@ -718,6 +743,7 @@ function buildForwardPath(
   essIdx: number,
   goalIdx: number,
   startedInsideTP: boolean[],
+  directions: TurnpointDirection[],
   startSelectionReason: TurnpointReaching['selectionReason'] = 'last_before_next',
 ): TurnpointReaching[] {
   const sequence: TurnpointReaching[] = [];
@@ -741,19 +767,23 @@ function buildForwardPath(
   for (let tpIdx = sssIdx + 1; tpIdx <= goalIdx; tpIdx++) {
     const tpCrossings = crossingsByTP.get(tpIdx) ?? [];
     const isESS = tpIdx === essIdx;
+    const isExit = directions[tpIdx] === 'exit';
 
-    // Presence-based reaching: if the pilot is already inside this cylinder
-    // at the moment the previous turnpoint is reached, the turnpoint is
-    // reached at that same moment — no boundary crossing required. This is
+    // Presence-based reaching: if the pilot is already on the required side
+    // of this cylinder's boundary at the moment the previous turnpoint is
+    // reached, the turnpoint is reached at that same moment — no boundary
+    // crossing required. For an ENTER cylinder the required side is inside:
     // the nested-cylinder case (e.g. a small final TP inside a big ESS/goal
-    // ring): the only crossing of the big cylinder happens BEFORE the nested
-    // TP is tagged, and a pilot who then flies to goal without ever exiting
-    // would otherwise be scored landed-out. Crossings toggle the pilot's
-    // inside/outside state, so the state at the previous reaching is given
-    // by the last crossing strictly before it — or, when no crossing
-    // precedes it, by where the track began. A crossing exactly AT the
-    // previous reaching time is left to the crossing search below, so the
-    // identical co-located ESS/goal cylinder keeps its 'first_crossing'
+    // ring), where the only crossing of the big cylinder happens BEFORE the
+    // nested TP is tagged, and a pilot who then flies to goal without ever
+    // exiting would otherwise be scored landed-out. For an EXIT cylinder the
+    // required side is outside: a pilot who tagged the previous turnpoint
+    // beyond this cylinder's boundary has already satisfied it. Crossings
+    // toggle the pilot's inside/outside state, so the state at the previous
+    // reaching is given by the last crossing strictly before it — or, when
+    // no crossing precedes it, by where the track began. A crossing exactly
+    // AT the previous reaching time is left to the crossing search below, so
+    // the identical co-located ESS/goal cylinder keeps its 'first_crossing'
     // reaching from the shared boundary crossing.
     let lastCrossingBefore: CylinderCrossing | null = null;
     for (const crossing of tpCrossings) {
@@ -763,8 +793,11 @@ function buildForwardPath(
     const insideAtPrevReaching = lastCrossingBefore
       ? lastCrossingBefore.direction === 'enter'
       : startedInsideTP[tpIdx];
+    const satisfiedAtPrevReaching = isExit
+      ? !insideAtPrevReaching
+      : insideAtPrevReaching;
 
-    if (insideAtPrevReaching) {
+    if (satisfiedAtPrevReaching) {
       const prev = sequence[sequence.length - 1];
       sequence.push({
         taskIndex: tpIdx,
@@ -773,7 +806,7 @@ function buildForwardPath(
         latitude: prev.latitude,
         longitude: prev.longitude,
         altitude: prev.altitude,
-        selectionReason: 'already_inside',
+        selectionReason: isExit ? 'already_outside' : 'already_inside',
         candidateCount: tpCrossings.length,
         toleranceCredited: lastCrossingBefore?.toleranceCredited ?? false,
         ...(lastCrossingBefore?.goalSemicircleCredited
@@ -783,7 +816,10 @@ function buildForwardPath(
       continue; // reached at the same moment — prevReachingTime unchanged
     }
 
-    // Find first crossing at or after the previous reaching time.
+    // Find first qualifying crossing at or after the previous reaching time.
+    // For an EXIT cylinder only outward crossings qualify — the pilot is
+    // inside and must leave; an ENTER cylinder accepts the first crossing
+    // (the pilot is outside, so it is necessarily inward).
     //
     // The comparison is >= (not >) so a turnpoint co-located with the
     // previous one is credited from the same physical boundary crossing.
@@ -797,7 +833,7 @@ function buildForwardPath(
     // rescues the identical-cylinder case.
     let validCrossing: CylinderCrossing | null = null;
     for (const crossing of tpCrossings) {
-      if (crossing.time.getTime() >= prevReachingTime) {
+      if (crossing.time.getTime() >= prevReachingTime && (!isExit || crossing.direction === 'exit')) {
         validCrossing = crossing;
         break;
       }
@@ -855,6 +891,31 @@ function buildRemainingPath(
 }
 
 /**
+ * How the distance from a fix to the next un-reached turnpoint is measured
+ * by {@link computeBestProgress}:
+ * - 'tag': to the optimizer's tag point on the cylinder — keeps the
+ *   remaining route continuous with the onward optimized legs (and matches
+ *   AirScore's flown distances closely). The default for an intermediate
+ *   ENTER turnpoint.
+ * - 'edge': to the cylinder's nearest boundary point from outside. Used for
+ *   a cylinder goal (no onward leg — the pilot only needs to reach it) and
+ *   for the ENTER turnpoint right after a reached EXIT cylinder: the
+ *   pilot's outbound bearing through the exit was their own choice, and on
+ *   a rotationally symmetric task the tag bearing is arbitrary, so pinning
+ *   the return to the tag would under-credit any pilot who flew a
+ *   different bearing.
+ * - 'exit-boundary': to the cylinder's nearest boundary point from inside
+ *   (radius − distance-to-centre) — the next un-reached turnpoint is an
+ *   EXIT cylinder the pilot has yet to leave.
+ * - 'goal-line': to the nearest point on a LINE goal (S7F §6.3.1).
+ */
+type NextTPMeasure =
+  | { kind: 'tag'; point: { lat: number; lon: number } }
+  | { kind: 'edge' }
+  | { kind: 'exit-boundary' }
+  | { kind: 'goal-line'; line: GoalLine };
+
+/**
  * Compute best progress for a non-goal pilot.
  * Scans all fixes after the last reaching time to find the point
  * with minimum remaining distance to goal.
@@ -868,14 +929,15 @@ function buildRemainingPath(
  *   this is a single-element array and degenerates to straight-line.
  * @param remainingLegDistances - Optimized distances between consecutive
  *   remaining TPs (length = remainingTPs.length - 1).
+ * @param nextMeasure - How to measure the fix→next-turnpoint distance
+ *   (see {@link NextTPMeasure}).
  */
 function computeBestProgress(
   fixes: IGCFix[],
   lastReachingTime: number,
   remainingTPs: Array<{ lat: number; lon: number; radius: number }>,
   remainingLegDistances: number[],
-  nextTagPoint: { lat: number; lon: number } | null,
-  goalLine: GoalLine | null,
+  nextMeasure: NextTPMeasure,
 ): BestProgress | null {
   // Sum of optimized leg distances between remaining TPs (TP[1]→TP[2]→...→Goal)
   let interTPDistance = 0;
@@ -890,19 +952,20 @@ function computeBestProgress(
     const fix = fixes[i];
     if (fix.time.getTime() <= lastReachingTime) continue;
 
-    // Distance to the next un-reached turnpoint. For an intermediate
-    // turnpoint we measure to its optimal tag point, so the remaining route
-    // stays continuous with the onward optimized legs (avoids the small
-    // over-credit of measuring to the nearest edge then jumping to the
-    // optimal tag). The goal has no onward leg, so the pilot only needs to
-    // reach it — use the nearest edge of the cylinder, or the nearest point
-    // on the goal line for a LINE goal (goalLine is only non-null when the
-    // next un-reached turnpoint IS the goal).
-    const distToNextTP = nextTagPoint
-      ? andoyerDistance(fix.latitude, fix.longitude, nextTagPoint.lat, nextTagPoint.lon)
-      : goalLine
-        ? distanceToGoalLine(goalLine, fix.latitude, fix.longitude)
-        : Math.max(0, andoyerDistance(fix.latitude, fix.longitude, nextTP.lat, nextTP.lon) - nextTP.radius);
+    // Distance to the next un-reached turnpoint — see NextTPMeasure for
+    // which measurement applies and why. Measuring to a tag point avoids
+    // the small over-credit of reaching the nearest edge then jumping to
+    // the optimal tag; the edge measurements handle the cases where the
+    // tag point is the wrong reference (goal, exit cylinders, and the
+    // return leg after one).
+    const distToNextTP =
+      nextMeasure.kind === 'tag'
+        ? andoyerDistance(fix.latitude, fix.longitude, nextMeasure.point.lat, nextMeasure.point.lon)
+        : nextMeasure.kind === 'exit-boundary'
+          ? Math.max(0, nextTP.radius - andoyerDistance(fix.latitude, fix.longitude, nextTP.lat, nextTP.lon))
+          : nextMeasure.kind === 'goal-line'
+            ? distanceToGoalLine(nextMeasure.line, fix.latitude, fix.longitude)
+            : Math.max(0, andoyerDistance(fix.latitude, fix.longitude, nextTP.lat, nextTP.lon) - nextTP.radius);
     // Total remaining = distance to next TP + optimized path from there to goal
     const distToGoal = distToNextTP + interTPDistance;
 
@@ -933,9 +996,11 @@ function computeBestProgress(
  *    crossing is pre-gate, resolve from them anyway and report earlyStart
  * 3. For SSS: use last valid crossing before continuing to next TP
  * 4. For other TPs (ESS and goal included): use first valid crossing after
- *    previous TP reached — or, when the pilot is already inside the cylinder
- *    at the previous reaching (nested/overlapping cylinders), credit it at
- *    that same moment (presence-based reaching, §8)
+ *    previous TP reached — outward for an EXIT cylinder (one the route
+ *    arrives at from inside, see computeTurnpointDirections) — or, when the
+ *    pilot is already on the required side of the boundary at the previous
+ *    reaching (nested/overlapping cylinders), credit it at that same moment
+ *    (presence-based reaching, §8)
  * 5. For ESS: always first crossing (no re-tries)
  * 6. For multi-gate/elapsed-time: iterate SSS crossings, keep best path
  *    (most TPs reached, then most flown distance, then latest SSS)
@@ -951,12 +1016,15 @@ export function resolveTurnpointSequence(
   task: XCTask,
   fixes: IGCFix[]
 ): TurnpointSequenceResult {
-  const allCrossings = detectCylinderCrossings(task, fixes);
   // Optimized task line (one tag point per turnpoint), computed once. The
   // tag points feed best-progress so a pilot's remaining distance to goal
   // is measured to each cylinder's optimal tag — consistent with the leg
-  // distances — rather than its nearest edge.
+  // distances — rather than its nearest edge. It also determines each
+  // turnpoint's crossing direction: a cylinder containing the previous tag
+  // point is an EXIT cylinder, reached by flying out of it.
   const optimizedLine = calculateOptimizedTaskLine(task);
+  const directions = computeTurnpointDirections(task, optimizedLine);
+  const allCrossings = detectCylinderCrossings(task, fixes, directions);
   const segmentDistances: number[] = [];
   for (let i = 1; i < optimizedLine.length; i++) {
     segmentDistances.push(andoyerDistance(
@@ -991,12 +1059,12 @@ export function resolveTurnpointSequence(
     completed: false,
   }));
 
-  // Where the track began relative to each cylinder's outer tolerance edge.
+  // Where the track began relative to each cylinder's detection edge.
   // Feeds the presence-based reaching check in buildForwardPath for the
   // cylinder-never-crossed case (e.g. a goal cylinder so large the whole
-  // flight stays inside it). Post-SSS turnpoints are all entry-credited at
-  // the outer edge, and the check is never consulted for the SSS itself, so
-  // the outer radius is the right edge for every index used.
+  // flight stays inside it). The edge matches crossing detection: outer for
+  // ENTER cylinders, inner for EXIT cylinders — so the state machine and
+  // the track-start state always agree on which side of the band a fix is.
   const tolerance = task.cylinderTolerance ?? DEFAULT_CYLINDER_TOLERANCE;
   const startedInsideTP = task.turnpoints.map((tp, tpIdx) => {
     if (fixes.length === 0) return false;
@@ -1004,10 +1072,13 @@ export function resolveTurnpointSequence(
     if (goalLine && tpIdx === goalIdx) {
       return isInGoalSemicircle(goalLine, fixes[0].latitude, fixes[0].longitude);
     }
+    const edge = directions[tpIdx] === 'exit'
+      ? innerDetectionRadius(tp.radius, tolerance)
+      : outerDetectionRadius(tp.radius, tolerance);
     return andoyerDistance(
       fixes[0].latitude, fixes[0].longitude,
       tp.waypoint.lat, tp.waypoint.lon,
-    ) <= outerDetectionRadius(tp.radius, tolerance);
+    ) <= edge;
   });
 
   // Group crossings by taskIndex
@@ -1108,6 +1179,24 @@ export function resolveTurnpointSequence(
     };
   }
 
+  // How best-progress measures the fix→next-turnpoint distance for a pilot
+  // whose last reached turnpoint is lastReachedIdx — see NextTPMeasure.
+  // The nearest-edge rule after an exit cylinder applies only to INFERRED
+  // exit turnpoints, not the declared-EXIT start: after a normal exit start
+  // the onward route is asymmetric and well-determined, and measuring to
+  // the tag point there is what matches AirScore's flown distances.
+  const nextMeasureFor = (lastReachedIdx: number): NextTPMeasure => {
+    const nextIdx = lastReachedIdx + 1;
+    if (directions[nextIdx] === 'exit') return { kind: 'exit-boundary' };
+    if (nextIdx >= goalIdx) {
+      return goalLine ? { kind: 'goal-line', line: goalLine } : { kind: 'edge' };
+    }
+    if (directions[lastReachedIdx] === 'exit' && lastReachedIdx !== sssIdx) {
+      return { kind: 'edge' };
+    }
+    return { kind: 'tag', point: optimizedLine[nextIdx] };
+  };
+
   // Iterate SSS crossings backwards, try each, keep best path
   let bestSequence: TurnpointReaching[] | null = null;
   let bestTPs = 0;
@@ -1117,7 +1206,7 @@ export function resolveTurnpointSequence(
   for (let i = sssCrossings.length - 1; i >= 0; i--) {
     const sssCrossing = sssCrossings[i];
     const candidateSequence = buildForwardPath(
-      sssCrossing, crossingsByTP, sssIdx, essIdx, goalIdx, startedInsideTP, startSelectionReason
+      sssCrossing, crossingsByTP, sssIdx, essIdx, goalIdx, startedInsideTP, directions, startSelectionReason
     );
 
     const tpsReached = candidateSequence.length;
@@ -1131,10 +1220,9 @@ export function resolveTurnpointSequence(
       const lastReaching = candidateSequence[tpsReached - 1];
       const { remainingTPs, remainingLegDistances } =
         buildRemainingPath(task, lastReaching.taskIndex, segmentDistances);
-      const nextIdx = lastReaching.taskIndex + 1;
-      const nextTag = nextIdx < goalIdx ? optimizedLine[nextIdx] : null;
       const progress = computeBestProgress(
-        fixes, lastReaching.time.getTime(), remainingTPs, remainingLegDistances, nextTag, goalLine
+        fixes, lastReaching.time.getTime(), remainingTPs, remainingLegDistances,
+        nextMeasureFor(lastReaching.taskIndex)
       );
       candidateFlownDist = progress
         ? taskDistance - progress.distanceToGoal
@@ -1188,10 +1276,9 @@ export function resolveTurnpointSequence(
     const lastReaching = sequence[sequence.length - 1];
     const { remainingTPs, remainingLegDistances } =
       buildRemainingPath(task, lastReaching.taskIndex, segmentDistances);
-    const nextIdx = lastReaching.taskIndex + 1;
-    const nextTag = nextIdx < goalIdx ? optimizedLine[nextIdx] : null;
     bestProgress = computeBestProgress(
-      fixes, lastReaching.time.getTime(), remainingTPs, remainingLegDistances, nextTag, goalLine
+      fixes, lastReaching.time.getTime(), remainingTPs, remainingLegDistances,
+      nextMeasureFor(lastReaching.taskIndex)
     );
     flownDistance = bestProgress
       ? taskDistance - bestProgress.distanceToGoal

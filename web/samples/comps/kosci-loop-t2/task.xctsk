@@ -1,0 +1,83 @@
+{
+  "taskType": "CLASSIC",
+  "version": 1,
+  "earthModel": "WGS84",
+  "turnpoints": [
+    {
+      "type": "TAKEOFF",
+      "radius": 400,
+      "waypoint": {
+        "name": "KOSCI",
+        "description": "Mount Kosciuszko",
+        "lat": -36.455825,
+        "lon": 148.263502,
+        "altSmoothed": 2228
+      }
+    },
+    {
+      "type": "SSS",
+      "radius": 1500,
+      "waypoint": {
+        "name": "KOSCI",
+        "description": "Mount Kosciuszko",
+        "lat": -36.455825,
+        "lon": 148.263502,
+        "altSmoothed": 2228
+      }
+    },
+    {
+      "radius": 5000,
+      "waypoint": {
+        "name": "KOSCI",
+        "description": "Mount Kosciuszko",
+        "lat": -36.455825,
+        "lon": 148.263502,
+        "altSmoothed": 2228
+      }
+    },
+    {
+      "radius": 11000,
+      "waypoint": {
+        "name": "KOSCI",
+        "description": "Mount Kosciuszko",
+        "lat": -36.455825,
+        "lon": 148.263502,
+        "altSmoothed": 2228
+      }
+    },
+    {
+      "type": "ESS",
+      "radius": 3000,
+      "waypoint": {
+        "name": "KOSCI",
+        "description": "Mount Kosciuszko",
+        "lat": -36.455825,
+        "lon": 148.263502,
+        "altSmoothed": 2228
+      }
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "name": "KOSCI",
+        "description": "Mount Kosciuszko",
+        "lat": -36.455825,
+        "lon": 148.263502,
+        "altSmoothed": 2228
+      }
+    }
+  ],
+  "sss": {
+    "type": "RACE",
+    "direction": "EXIT",
+    "timeGates": [
+      "03:00:00",
+      "03:15:00",
+      "03:30:00",
+      "03:45:00"
+    ]
+  },
+  "goal": {
+    "type": "CYLINDER"
+  }
+}

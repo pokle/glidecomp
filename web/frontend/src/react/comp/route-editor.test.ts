@@ -28,6 +28,7 @@ function row(overrides: Partial<RouteRow> = {}): RouteRow {
     radius: 400,
     altitude: "",
     leg: null,
+    dir: null,
     ...overrides,
   };
 }
@@ -79,6 +80,7 @@ describe("turnpointToRow", () => {
       radius: 2000,
       altitude: 680,
       leg: null,
+      dir: null,
     });
   });
 });
@@ -124,7 +126,7 @@ describe("buildRoute", () => {
 
   it("skips entirely blank rows (a stray inserted row can't block a save)", () => {
     const result = buildRoute(
-      [row({ id: 1 }), { id: 2, name: "", description: "", type: "", coords: "", radius: 400, altitude: "", leg: null }],
+      [row({ id: 1 }), { id: 2, name: "", description: "", type: "", coords: "", radius: 400, altitude: "", leg: null, dir: null }],
       { openDistance: false }
     );
     expect(result.errors).toEqual([]);

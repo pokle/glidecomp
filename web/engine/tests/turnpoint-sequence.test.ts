@@ -7,6 +7,7 @@ import type { CylinderCrossing } from '../src/turnpoint-sequence';
 import {
   calculateOptimizedTaskDistance,
   getOptimizedSegmentDistances,
+  computeTurnpointDirections,
 } from '../src/task-optimizer';
 import { isInsideCylinder, andoyerDistance, calculateBearingRadians, destinationPoint } from '../src/geo';
 import type { XCTask, Turnpoint, SSSConfig, GoalConfig } from '../src/xctsk-parser';
@@ -1568,6 +1569,167 @@ describe('resolveTurnpointSequence', () => {
       expect(result.lastTurnpointReached).toBe(1);
       expect(result.essReaching).toBeNull();
       expect(result.madeGoal).toBe(false);
+    });
+  });
+
+  describe('exit turnpoints (issue #347)', () => {
+    // The concentric out-and-return: every cylinder shares one centre.
+    // Pilots must fly OUT of the 10 km turnpoint ring — its direction is
+    // inferred as 'exit' because the route reaches it from inside (the
+    // previous tag point sits on the 2 km SSS ring).
+    const CENTRE = { lat: 47.0, lon: 11.0 };
+    const concentricTask = () => createTask([
+      { name: 'LAUNCH', lat: CENTRE.lat, lon: CENTRE.lon, radius: 400, type: 'TAKEOFF' },
+      { name: 'START', lat: CENTRE.lat, lon: CENTRE.lon, radius: 2000, type: 'SSS' },
+      { name: 'RING', lat: CENTRE.lat, lon: CENTRE.lon, radius: 10000 },
+      { name: 'ESS', lat: CENTRE.lat, lon: CENTRE.lon, radius: 3000, type: 'ESS' },
+      { name: 'GOAL', lat: CENTRE.lat, lon: CENTRE.lon, radius: 400 },
+    ]);
+
+    // One fix per minute, due north of the centre at the given distances.
+    const northFixes = (metres: number[]): IGCFix[] =>
+      metres.map((m, min) => {
+        const p = destinationPoint(CENTRE.lat, CENTRE.lon, m, 0);
+        return createFix(min, p.lat, p.lon);
+      });
+
+    const outAndReturn = northFixes([
+      0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000, // out
+      10000, 9000, 8000, 7000, 6000, 5000, 4000, 3000, 2000, 1000, 0, // home
+    ]);
+
+    it('infers directions from the geometry: exit for a ring reached from inside', () => {
+      expect(computeTurnpointDirections(concentricTask())).toEqual([
+        'enter', // takeoff
+        'exit', // SSS: declared
+        'exit', // 10 km ring: previous tag point (2 km SSS ring) is inside it
+        'enter', // ESS: previous tag point (10 km ring) is outside it
+        'enter', // goal
+      ]);
+    });
+
+    it('keeps a declared ENTER start and a nested goal as enter', () => {
+      const enterStart = createTask([
+        { name: 'START', lat: 47.0, lon: 11.0, radius: 2000, type: 'SSS' },
+        { name: 'TP1', lat: 47.1, lon: 11.0, radius: 400 },
+        { name: 'GOAL', lat: 47.11, lon: 11.0, radius: 1000, type: 'ESS' },
+      ], { direction: 'ENTER' });
+      expect(computeTurnpointDirections(enterStart)[0]).toBe('enter');
+
+      // A goal ring that fully contains the previous turnpoint would infer
+      // as exit by geometry — but goal is a destination, always enter.
+      const nestedGoal = createTask([
+        { name: 'START', lat: 47.0, lon: 11.0, radius: 1000, type: 'SSS' },
+        { name: 'TP1', lat: 47.1, lon: 11.0, radius: 400 },
+        { name: 'GOAL', lat: 47.11, lon: 11.0, radius: 3000, type: 'ESS' },
+      ]);
+      expect(computeTurnpointDirections(nestedGoal)[2]).toBe('enter');
+    });
+
+    it('credits the exit ring at the outward crossing, not at the start', () => {
+      const result = resolveTurnpointSequence(concentricTask(), outAndReturn);
+
+      expect(result.sequence.map(r => r.taskIndex)).toEqual([1, 2, 3, 4]);
+      expect(result.sequence.map(r => r.selectionReason)).toEqual([
+        'last_before_next', 'first_after_previous', 'first_crossing', 'first_after_previous',
+      ]);
+
+      const base = outAndReturn[0].time.getTime();
+      const ring = result.sequence[1];
+      // Outbound crossing of the 10 km ring happens at ~minute 10 — NOT at
+      // the start moment (the pre-fix bug credited it 'already_inside').
+      expect(Math.abs(ring.time.getTime() - (base + 10 * 60_000))).toBeLessThan(60_000);
+      // ESS is the 3 km re-entry on the way home (~minute 19).
+      expect(Math.abs(result.essReaching!.time.getTime() - (base + 19 * 60_000))).toBeLessThan(60_000);
+      // The speed section is a real race time, not ~0.
+      expect(result.speedSectionTime!).toBeGreaterThan(15 * 60);
+      expect(result.madeGoal).toBe(true);
+      expect(result.flownDistance).toBe(result.taskDistance);
+    });
+
+    it('does not credit the exit ring to a pilot who never flew out of it', () => {
+      const landsInside = northFixes([0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 7000, 7000]);
+      const result = resolveTurnpointSequence(concentricTask(), landsInside);
+
+      expect(result.sequence.map(r => r.taskIndex)).toEqual([1]);
+      expect(result.lastTurnpointReached).toBe(1);
+      expect(result.essReaching).toBeNull();
+      expect(result.speedSectionTime).toBeNull();
+
+      // Remaining distance routes out to the ring, then along the optimized
+      // legs home: (10 km − 7 km) + ring→ESS + ESS→goal.
+      const expected = 3000 + result.legs[2].distance + result.legs[3].distance;
+      expect(Math.abs(result.bestProgress!.distanceToGoal - expected)).toBeLessThan(100);
+    });
+
+    it('measures a pilot who exited the ring to the nearest ESS edge, not an arbitrary tag point', () => {
+      // On a rotationally symmetric task the optimizer's tag bearing is
+      // arbitrary — a pilot who flew north must not be under-credited for
+      // not flying toward wherever the tag happened to land.
+      const exitsNoReturn = northFixes([
+        0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000, 11000, 11000,
+      ]);
+      const result = resolveTurnpointSequence(concentricTask(), exitsNoReturn);
+
+      expect(result.sequence.map(r => r.taskIndex)).toEqual([1, 2]);
+      expect(result.essReaching).toBeNull();
+
+      // Remaining distance is minimised right at the ring exit (10 km out,
+      // the closest the pilot ever is to the ESS after the ring):
+      // (10 km − 3 km ESS radius) + ESS→goal leg. Measured to the nearest
+      // ESS edge — the tag-point measurement would have added up to an ESS
+      // diameter for a pilot flying a different bearing than the tag.
+      const expected = 7000 + result.legs[3].distance;
+      expect(Math.abs(result.bestProgress!.distanceToGoal - expected)).toBeLessThan(150);
+    });
+
+    it("credits 'already_outside' when the pilot tagged the start beyond the exit cylinder", () => {
+      // The RING (3.5 km around a point 2 km north of the start centre)
+      // contains the start's northbound tag point, so it infers as exit —
+      // but this pilot leaves the start SOUTHBOUND, already outside the
+      // ring, then detours east around the start cylinder and flies to
+      // goal without ever touching the ring's boundary.
+      const task = createTask([
+        { name: 'START', lat: 47.0, lon: 11.0, radius: 2000, type: 'SSS' },
+        { name: 'RING', lat: 47.018, lon: 11.0, radius: 3500 },
+        { name: 'ESS', lat: 47.09, lon: 11.0, radius: 1000, type: 'ESS' },
+        { name: 'GOAL', lat: 47.09, lon: 11.0, radius: 400 },
+      ]);
+      expect(computeTurnpointDirections(task)[1]).toBe('exit');
+
+      const track = [
+        createFix(0, 47.0, 11.0), //    start centre
+        createFix(1, 46.985, 11.0), //  1.7 km south, still inside the start
+        createFix(2, 46.975, 11.0), //  2.8 km south — start exited, 4.8 km from RING centre
+        createFix(3, 46.975, 11.05), // detour east, clear of the start cylinder
+        createFix(4, 47.02, 11.05), //  north, ~3.8 km east of the RING centre
+        createFix(5, 47.06, 11.05),
+        createFix(6, 47.085, 11.01), // inside ESS (~940 m from its centre)
+        createFix(7, 47.09, 11.0), //   goal centre
+      ];
+      const result = resolveTurnpointSequence(task, track);
+
+      expect(result.sequence.map(r => r.taskIndex)).toEqual([0, 1, 2, 3]);
+      const ring = result.sequence[1];
+      expect(ring.selectionReason).toBe('already_outside');
+      expect(ring.time.getTime()).toBe(result.sssReaching!.time.getTime());
+      expect(result.madeGoal).toBe(true);
+    });
+
+    it('credits an exit ring from the inner tolerance band (§8.1)', () => {
+      // Nominal ring radius 10 000 m, inner band edge 9 950 m: a pilot who
+      // turns around at 9 980 m crossed the band but not the nominal
+      // radius — credited, flagged as tolerance-credited.
+      const shortOfRing = northFixes([
+        0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 9980, // just inside nominal
+        9000, 8000, 7000, 6000, 5000, 4000, 3000, 2000, 1000, 0, // home
+      ]);
+      const result = resolveTurnpointSequence(concentricTask(), shortOfRing);
+
+      const ring = result.sequence.find(r => r.taskIndex === 2);
+      expect(ring).toBeDefined();
+      expect(ring!.toleranceCredited).toBe(true);
+      expect(result.madeGoal).toBe(true);
     });
   });
 });

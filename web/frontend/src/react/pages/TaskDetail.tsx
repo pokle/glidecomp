@@ -7,7 +7,8 @@
  */
 import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { xctaskTurnpointsToRecords, type XCTask } from "@glidecomp/engine";
+import { computeTurnpointDirections, xctaskTurnpointsToRecords, type XCTask } from "@glidecomp/engine";
+import { Badge } from "@/react/ui/badge";
 import { Button } from "@/react/ui/button";
 import {
   Dialog,
@@ -300,6 +301,49 @@ export function TaskDetail() {
 }
 
 /**
+ * The read-only turnpoint table, with each cylinder's crossing direction.
+ * Directions are derived from the route geometry by the engine — the same
+ * inference the scorer uses — so what pilots read here can never disagree
+ * with how the task is scored. Exit is the unusual case (a cylinder the
+ * route reaches from inside, crossed flying out), so it gets a badge.
+ */
+function TurnpointsTable({ xctsk }: { xctsk: XCTask }) {
+  const directions = useMemo(() => computeTurnpointDirections(xctsk), [xctsk]);
+  return (
+    <Table className="mt-2">
+      <TableHeader>
+        <TableRow>
+          <TableHead>#</TableHead>
+          <TableHead>Name</TableHead>
+          <TableHead>Radius</TableHead>
+          <TableHead>Type</TableHead>
+          <TableHead>Direction</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {xctsk.turnpoints.map((tp, i) => (
+          <TableRow key={i}>
+            <TableCell>{i + 1}</TableCell>
+            <TableCell>{tp.waypoint.name}</TableCell>
+            <TableCell>{tp.radius} m</TableCell>
+            <TableCell>{tp.type ?? "—"}</TableCell>
+            <TableCell>
+              {tp.type === "TAKEOFF" ? (
+                <span className="text-muted-foreground">—</span>
+              ) : directions[i] === "exit" ? (
+                <Badge variant="outline">Exit</Badge>
+              ) : (
+                <span className="text-muted-foreground">Enter</span>
+              )}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+/**
  * Turnpoint listing. Read-only for everyone; admins get an Edit route
  * button that opens the full route editor dialog (turnpoints, start
  * gates, goal, .xctsk / XContest import-export).
@@ -332,26 +376,7 @@ function TurnpointsSection({
         }
       />
       {xctsk && xctsk.turnpoints.length > 0 ? (
-        <Table className="mt-2">
-          <TableHeader>
-            <TableRow>
-              <TableHead>#</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Radius</TableHead>
-              <TableHead>Type</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {xctsk.turnpoints.map((tp, i) => (
-              <TableRow key={i}>
-                <TableCell>{i + 1}</TableCell>
-                <TableCell>{tp.waypoint.name}</TableCell>
-                <TableCell>{tp.radius} m</TableCell>
-                <TableCell>{tp.type ?? "—"}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <TurnpointsTable xctsk={xctsk} />
       ) : (
         <p className="mt-2 text-muted-foreground">No route defined yet</p>
       )}
