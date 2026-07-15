@@ -135,7 +135,17 @@
 //     1/2/5 all score under the HG profile), which touches a hashed scoring
 //     source, so the fingerprint guard requires a bump. The extra cache roll
 //     is harmless (scores recompute identically).
-// v17: task deadline + launch window enforcement (issue #260, S7F §8.3.c,
+// v17: HG "ESS but not goal" penalty (S7F §12.1, issue #256). A hang-glider
+//     pilot who reaches ESS but lands before goal now keeps only the new
+//     per-comp essNotGoalFactor share of their time AND arrival points
+//     (default 0.8, the spec's recommended value; configurable by local
+//     regulations). Previously such a pilot kept 100% of both. PG is
+//     unchanged (the spec fixes its factor at 0 — no goal, no time points —
+//     which the engine already enforced). The factor also selects the best
+//     time source, matching AirScore's pilot_speed: factor > 0 → fastest
+//     ESS pilot (the previous HG behaviour); factor 0 (and always PG) →
+//     fastest pilot in goal per §11.2.1.
+// v18: task deadline + launch window enforcement (issue #260, S7F §8.3.c,
 //     §8.6.1, §11.1). The xctsk goal deadline is now enforced: boundary
 //     crossings after it are excluded from sequence resolution (so a
 //     turnpoint/ESS/goal tagged too late no longer counts, and the goal
@@ -148,7 +158,7 @@
 //     the deadline or after the first gate, is treated as unset. The result
 //     carries deadline/launchWindow transparency fields and the score
 //     explanation narrates the cutoff and each ignored crossing.
-export const SCORING_ENGINE_VERSION = 17;
+export const SCORING_ENGINE_VERSION = 18;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -156,4 +166,4 @@ export const SCORING_ENGINE_VERSION = 17;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "e55d899778e34bb675dc5e3bef7761cd185be1db9f06bbaf46591bd7cadf5157";
+  "9e5153b2159e4b8e011298875e145cfc71e9eaf0eb0566ccb0848297f4785865";

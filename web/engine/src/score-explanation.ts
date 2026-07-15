@@ -921,12 +921,26 @@ function buildTimeSection(
   const ap = classContext.available_points;
   const items: ScoreExplanationItem[] = [];
 
-  // Mirrors calculateTimePoints: PG requires goal, HG requires ESS.
+  // Mirrors calculateTimePoints / scoreFlights: PG requires goal (the spec
+  // fixes its ESS-but-not-goal factor at 0); HG requires ESS, and a pilot
+  // who lands before goal keeps only the essNotGoalFactor share (§12.1).
+  const essNotGoalFactor =
+    params.scoring === 'PG' ? 0 : params.essNotGoalFactor;
   const qualifies =
-    params.scoring === 'PG' ? entry.made_goal : entry.reached_ess;
+    params.scoring === 'PG'
+      ? entry.made_goal
+      : entry.reached_ess && (entry.made_goal || essNotGoalFactor > 0);
+  // §12.1 reduction applies: the pilot earns time points, docked below.
+  const essReduction =
+    params.scoring === 'HG' &&
+    entry.reached_ess &&
+    !entry.made_goal &&
+    essNotGoalFactor > 0;
 
+  // Best time — same source scoreFlights used: goal-validated when the
+  // factor is 0 (always for PG, §11.2.1), otherwise the fastest ESS pilot.
   const bestTimes = classContext.pilots
-    .filter((p) => (params.scoring === 'PG' ? p.made_goal : p.reached_ess))
+    .filter((p) => (essNotGoalFactor > 0 ? p.reached_ess : p.made_goal))
     .map((p) => p.speed_section_time)
     .filter((t): t is number => t !== null && t > 0);
   const bestTime = bestTimes.length > 0 ? Math.min(...bestTimes) : null;
@@ -937,7 +951,9 @@ function buildTimeSection(
       text:
         params.scoring === 'PG'
           ? 'Time points are only awarded to pilots who complete the task.'
-          : 'Time points are only awarded to pilots who reach the end of the speed section.',
+          : entry.reached_ess && !entry.made_goal && essNotGoalFactor === 0
+            ? 'Reached the end of the speed section but not goal — this competition scores that at 0% of time and arrival points (FAI S7F §12.1).'
+            : 'Time points are only awarded to pilots who reach the end of the speed section.',
       emphasis: 'muted',
     });
   } else {
@@ -964,31 +980,57 @@ function buildTimeSection(
     });
     items.push({
       id: 'best-time',
-      text: 'Fastest time in class',
+      text:
+        essNotGoalFactor > 0
+          ? 'Fastest time in class'
+          : 'Fastest time in class (among pilots who made goal)',
       value: duration(bestTime),
       emphasis: 'muted',
     });
+    // §12.1 reduction, stated before the formula so its ×factor is explained.
+    if (essReduction) {
+      items.push({
+        id: 'ess-not-goal',
+        text: `Reached the end of the speed section but landed before goal — reaching goal "validates" the speed section, so only ${trimZeros((essNotGoalFactor * 100).toFixed(1), 0)}% of time and arrival points are kept (FAI S7F §12.1).`,
+        emphasis: 'warning',
+      });
+    }
+    // The ×factor the engine applied (1 when no reduction) — folded into the
+    // printed equations so they reconcile with the published points.
+    const factor = essReduction ? essNotGoalFactor : 1;
+    const factorEq = essReduction
+      ? ` × ${trimZeros(essNotGoalFactor.toFixed(2), 1)} (ESS but not goal, §12.1)`
+      : '';
     if (entry.speed_section_time <= bestTime) {
+      const { availStr, reconciles } = reconcileWithAvailable(
+        ap.time, 0, 0, entry.time_points,
+        (_d, avail) => avail * factor,
+      );
       items.push({
         id: 'time-formula',
-        text: 'Fastest through the speed section — full available time points.',
+        text: essReduction
+          ? 'Fastest through the speed section — full available time points, before the goal-validation reduction'
+          : 'Fastest through the speed section — full available time points.',
         value: pts(entry.time_points),
+        detail: essReduction
+          ? `${availStr} available${factorEq} ${reconciles ? '=' : '≈'} ${fmtPoints(entry.time_points)}`
+          : undefined,
       });
     } else {
       const exponentLabel =
         params.leadingFormula === 'classic' ? '2⁄3' : '5⁄6';
-      // time points = speed fraction × available, exactly — print the
-      // fraction with enough decimals that the multiplication visibly
-      // holds at the 0.1-pt step.
+      // time points = speed fraction × available (× the §12.1 factor),
+      // exactly — print the fraction with enough decimals that the
+      // multiplication visibly holds at the 0.1-pt step.
       const { availStr, decimals, reconciles } = reconcileWithAvailable(
         ap.time, 3, 6, entry.time_points,
-        (d, avail) => Number(sf.toFixed(d)) * avail,
+        (d, avail) => Number(sf.toFixed(d)) * avail * factor,
       );
       items.push({
         id: 'time-formula',
         text: 'Time points fall off with the gap to the fastest time',
         value: pts(entry.time_points),
-        detail: `speed fraction = max(0, 1 − ((T − Tbest) ÷ √Tbest)^${exponentLabel}) = ${trimZeros(sf.toFixed(decimals), 3)}; × ${availStr} available ${
+        detail: `speed fraction = max(0, 1 − ((T − Tbest) ÷ √Tbest)^${exponentLabel}) = ${trimZeros(sf.toFixed(decimals), 3)}; × ${availStr} available${factorEq} ${
           reconciles
             ? `= ${fmtPoints(entry.time_points)}`
             : `≈ ${fmtPoints(entry.time_points)} — the figures are shown rounded; the points come from their full precision`
@@ -1003,6 +1045,32 @@ function buildTimeSection(
     points: entry.time_points,
     items,
   };
+}
+
+/**
+ * The §12.1 "ESS but not goal" caveat for the arrival section: an HG pilot
+ * who reaches ESS but lands before goal keeps only the competition's
+ * essNotGoalFactor share of their arrival points (same factor as time).
+ */
+function buildArrivalEssNotGoalItems(
+  entry: Pick<ScoreEntryInput, 'made_goal' | 'reached_ess'>,
+  params: GAPParameters,
+): ScoreExplanationItem[] {
+  if (
+    params.scoring !== 'HG' ||
+    !entry.reached_ess ||
+    entry.made_goal ||
+    params.essNotGoalFactor >= 1
+  ) {
+    return [];
+  }
+  return [
+    {
+      id: 'arrival-ess-not-goal',
+      text: `Reached the end of the speed section but landed before goal — only ${trimZeros((params.essNotGoalFactor * 100).toFixed(1), 0)}% of arrival points are kept, the same reduction as time points (FAI S7F §12.1).`,
+      emphasis: 'warning',
+    },
+  ];
 }
 
 function buildTotalSection(entry: ScoreEntryInput): ScoreExplanationSection {
@@ -1166,6 +1234,7 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
           text: 'Arrival points reward crossing the end of the speed section early relative to the other pilots who reached it.',
           value: pts(entry.arrival_points),
         },
+        ...buildArrivalEssNotGoalItems(entry, params),
       ],
     });
   }
@@ -1458,6 +1527,7 @@ export function explainManualFlightScore(
           text: 'Arrival points reward crossing the end of the speed section early relative to the other pilots who reached it.',
           value: pts(entry.arrival_points),
         },
+        ...buildArrivalEssNotGoalItems(entry, params),
       ],
     });
   }

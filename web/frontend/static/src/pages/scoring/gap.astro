@@ -350,11 +350,16 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
           <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2">
             <li>
               <strong>Paragliding:</strong> You must <strong>make goal</strong> to receive any
-              time points.
+              time points (<SpecRef section="12.1" label="§12.1" /> — this discourages high-speed
+              final glides low to the ground).
             </li>
             <li>
               <strong>Hang gliding:</strong> You must <strong>reach ESS</strong> to receive time
-              points.
+              points — and reaching goal <em>validates</em> them: a pilot who crosses ESS but
+              lands before goal keeps only <strong>80%</strong> of their time and arrival points
+              by default (<SpecRef section="12.1" label="§12.1" />; the share is configurable per
+              competition under Advanced scoring settings). Distance and leading points are
+              unaffected.
             </li>
           </ul>
           <p class="text-muted-foreground">
@@ -369,6 +374,13 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             (in hours). Competitions scored with the older <em>classic</em> formula
             (GAP2016/2018-era) use a 2/3 exponent instead of 5/6, which gives a slightly more
             generous curve.
+          </p>
+          <p class="text-muted-foreground">
+            The best time is the fastest pilot in goal for paragliding (<SpecRef section="11.2" label="§11.2.1" />).
+            For hang gliding — matching AirScore — it is the fastest pilot to reach ESS whenever
+            the ESS-but-not-goal share above keeps part of the time points (the default), so the
+            docked pilots' speed fractions stay on the same scale; if a competition sets that
+            share to 0%, the best time is taken from goal pilots exactly as the spec reads.
           </p>
           <p class="text-muted-foreground">
             This creates a generous curve: pilots close to the fastest time get nearly full points,
@@ -603,6 +615,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               <li><a href="#arrival-points" class="underline hover:text-foreground">Arrival points</a>: <strong>on</strong> — HG scores order of arrival at ESS (<SpecRef section="11.4" label="§11.4" />).</li>
               <li><a href="#distance-difficulty" class="underline hover:text-foreground">Distance difficulty</a>: <strong>on</strong> — HG distance points are half linear, half difficulty (<SpecRef section="11.1.1" label="§11.1.1" />).</li>
               <li>Jump-the-gun (early start, <SpecRef section="12.2" label="§12.2" />): 1 penalty point per <strong>2 s</strong> early, up to <strong>300 s</strong> before minimum distance only.</li>
+              <li>ESS but not goal (<SpecRef section="12.1" label="§12.1" />): keeps <strong>80%</strong> of time and arrival points — the spec's recommended default, overridable by local regulations.</li>
             </ul>
           </div>
 
@@ -612,6 +625,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               <li><a href="#arrival-points" class="underline hover:text-foreground">Arrival points</a>: <strong>off</strong> — paragliding has no arrival term in the spec.</li>
               <li><a href="#distance-difficulty" class="underline hover:text-foreground">Distance difficulty</a>: <strong>off</strong> — paragliding distance is always the pure-linear proportion.</li>
               <li>Early starts are scored launch→start (no jump-the-gun penalty; that is HG-only).</li>
+              <li>ESS but not goal (<SpecRef section="12.1" label="§12.1" />): <strong>0%</strong> — no goal, no time points. Fixed by the spec (it discourages high-speed final glides low to the ground) and not configurable for paragliding.</li>
             </ul>
           </div>
         </div>
@@ -675,6 +689,10 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Early starts &amp; jump-the-gun (<SpecRef section="12.2" />)</td>
                   <td class="py-2">Implemented — PG scored launch→start; HG 1 pt per X s early (X, Y configurable, defaults 2/300)</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">ESS but not goal (<SpecRef section="12.1" />)</td>
+                  <td class="py-2">Implemented — PG keeps 0% of time points; HG keeps 80% of time and arrival points (configurable)</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Start gates / race start times (<SpecRef section="6.3.3" />, <SpecRef section="8.3.1" />)</td>
@@ -757,15 +775,18 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </p>
             </div>
             <div>
-              <h3 class="text-base font-semibold mb-1">Hang gliding: no penalty for reaching ESS but not goal (<SpecRef section="12.1" />)</h3>
+              <h3 class="text-base font-semibold mb-1">Hang gliding "best time" follows AirScore, not the letter of §11.2.1 (<SpecRef section="11.2" />, <SpecRef section="12.1" />)</h3>
               <p class="text-muted-foreground">
-                The spec docks pilots who cross ESS but fail to reach goal: paragliders lose all
-                time points, and hang glider pilots keep only 80% (by default) of their time and
-                arrival points. GlideComp applies the paragliding rule correctly (no goal, no time
-                points) but pays hang glider pilots their <strong>full</strong> time and arrival
-                points once they reach ESS. Relatedly, the spec takes "best time" from the fastest
-                pilot <em>who also reached goal</em>; GlideComp's hang-gliding best time is the
-                fastest pilot to reach ESS, whether or not they made goal.
+                The ESS-but-not-goal rule itself is implemented per <SpecRef section="12.1" label="§12.1" />:
+                paragliders lose all time points without goal, and hang glider pilots keep 80% of
+                their time and arrival points by default (configurable per competition). However,
+                §11.2.1 defines "best time" as the fastest pilot <em>who also reached goal</em>,
+                and GlideComp instead mirrors AirScore's implementation: while the
+                ESS-but-not-goal share keeps part of the time points (the HG default), the best
+                time is the fastest pilot to reach ESS, goal or not — so the docked pilots' speed
+                fractions are measured on the same scale as everyone else's. When the share is
+                set to 0% (always the case for paragliding), the best time is goal-validated
+                exactly as the spec reads.
               </p>
             </div>
             <div>
