@@ -20,6 +20,8 @@ import {
   scoreFlights,
   toFlightScoringData,
   taskForDistanceOrigin,
+  resolveCompGapParams,
+  S7F2024_PG_DEFAULT_SINCE_MS,
   DEFAULT_GAP_PARAMETERS,
   type GAPParameters,
   type PilotFlight,
@@ -301,18 +303,56 @@ describe('calculateSpeedFraction', () => {
 
 describe('calculateTimePoints', () => {
   it('PG: no time points if goal not made', () => {
-    const pts = calculateTimePoints(3600, 3600, false, true, 300, 'PG');
+    const pts = calculateTimePoints({
+      pilotTime: 3600, bestTime: 3600, madeGoal: false, reachedESS: true,
+      availableTimePoints: 300, scoring: 'PG',
+    });
     expect(pts).toBe(0);
   });
 
   it('PG: full time points for fastest pilot in goal', () => {
-    const pts = calculateTimePoints(3600, 3600, true, true, 300, 'PG');
+    const pts = calculateTimePoints({
+      pilotTime: 3600, bestTime: 3600, madeGoal: true, reachedESS: true,
+      availableTimePoints: 300, scoring: 'PG',
+    });
     expect(pts).toBeCloseTo(300, 1);
   });
 
-  it('HG: time points for ESS pilot even without goal', () => {
-    const pts = calculateTimePoints(3600, 3600, false, true, 300, 'HG');
+  it('HG: ESS without goal keeps only the default 80% (S7F §12.1)', () => {
+    const pts = calculateTimePoints({
+      pilotTime: 3600, bestTime: 3600, madeGoal: false, reachedESS: true,
+      availableTimePoints: 300, scoring: 'HG',
+    });
+    expect(pts).toBeCloseTo(240, 1);
+  });
+
+  it('HG: full time points once goal is made', () => {
+    const pts = calculateTimePoints({
+      pilotTime: 3600, bestTime: 3600, madeGoal: true, reachedESS: true,
+      availableTimePoints: 300, scoring: 'HG',
+    });
     expect(pts).toBeCloseTo(300, 1);
+  });
+
+  it('HG: ESS-but-not-goal factor is configurable (local regulations)', () => {
+    const half = calculateTimePoints({
+      pilotTime: 3600, bestTime: 3600, madeGoal: false, reachedESS: true,
+      availableTimePoints: 300, scoring: 'HG', essNotGoalFactor: 0.5,
+    });
+    expect(half).toBeCloseTo(150, 1);
+    const zero = calculateTimePoints({
+      pilotTime: 3600, bestTime: 3600, madeGoal: false, reachedESS: true,
+      availableTimePoints: 300, scoring: 'HG', essNotGoalFactor: 0,
+    });
+    expect(zero).toBe(0);
+  });
+
+  it('HG: no time points without ESS regardless of factor', () => {
+    const pts = calculateTimePoints({
+      pilotTime: 3600, bestTime: 3600, madeGoal: false, reachedESS: false,
+      availableTimePoints: 300, scoring: 'HG', essNotGoalFactor: 1,
+    });
+    expect(pts).toBe(0);
   });
 });
 
@@ -976,6 +1016,39 @@ describe('calculateWeights — S7F 2024 leading formula (issue #257)', () => {
     expect(s7f.leading).toBeCloseTo(gap.leading, 10);
     expect(s7f.time).toBeCloseTo(gap.time, 10);
     expect(s7f.arrival).toBeCloseTo(gap.arrival, 10);
+  });
+});
+
+describe('resolveCompGapParams — date-based PG leading-weight default (issue #257)', () => {
+  const before = S7F2024_PG_DEFAULT_SINCE_MS - 1;
+  const onCutoff = S7F2024_PG_DEFAULT_SINCE_MS;
+  const after = S7F2024_PG_DEFAULT_SINCE_MS + 24 * 3600 * 1000;
+
+  it('a new PG comp (created on/after the cutoff) defaults to s7f2024', () => {
+    expect(resolveCompGapParams('pg', null, onCutoff).leadingWeightFormula).toBe('s7f2024');
+    expect(resolveCompGapParams('pg', null, after).leadingWeightFormula).toBe('s7f2024');
+  });
+
+  it('a PG comp created before the cutoff keeps gap2020 (AirScore parity)', () => {
+    expect(resolveCompGapParams('pg', null, before).leadingWeightFormula).toBe('gap2020');
+  });
+
+  it('omitting the creation date keeps the gap2020 baseline (e.g. the CLI)', () => {
+    expect(resolveCompGapParams('pg', null).leadingWeightFormula).toBe('gap2020');
+    expect(resolveCompGapParams('pg', {}).leadingWeightFormula).toBe('gap2020');
+  });
+
+  it('an explicitly saved leadingWeightFormula always wins over the date default', () => {
+    expect(
+      resolveCompGapParams('pg', { leadingWeightFormula: 'gap2020' }, after).leadingWeightFormula
+    ).toBe('gap2020');
+    expect(
+      resolveCompGapParams('pg', { leadingWeightFormula: 's7f2024' }, before).leadingWeightFormula
+    ).toBe('s7f2024');
+  });
+
+  it('hang gliding is never switched to s7f2024 by the date default', () => {
+    expect(resolveCompGapParams('hg', null, after).leadingWeightFormula).toBe('gap2020');
   });
 });
 

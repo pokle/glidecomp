@@ -350,11 +350,16 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
           <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2">
             <li>
               <strong>Paragliding:</strong> You must <strong>make goal</strong> to receive any
-              time points.
+              time points (<SpecRef section="12.1" label="§12.1" /> — this discourages high-speed
+              final glides low to the ground).
             </li>
             <li>
               <strong>Hang gliding:</strong> You must <strong>reach ESS</strong> to receive time
-              points.
+              points — and reaching goal <em>validates</em> them: a pilot who crosses ESS but
+              lands before goal keeps only <strong>80%</strong> of their time and arrival points
+              by default (<SpecRef section="12.1" label="§12.1" />; the share is configurable per
+              competition under Advanced scoring settings). Distance and leading points are
+              unaffected.
             </li>
           </ul>
           <p class="text-muted-foreground">
@@ -366,9 +371,19 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
           <p class="text-muted-foreground">
             Where <Fragment set:html={km(String.raw`\Delta t`)} /> is the difference between your time and the best
             time (in hours), and <Fragment set:html={km(String.raw`t_{\text{best}}`)} /> is the fastest pilot's time
-            (in hours). Competitions scored with the older <em>classic</em> formula
-            (GAP2016/2018-era) use a 2/3 exponent instead of 5/6, which gives a slightly more
-            generous curve.
+            (in hours). The <strong>5/6</strong> exponent is the current FAI S7F value and the
+            default for both sports. A competition can instead select the older
+            <strong>2/3</strong> exponent (the GAP2016/2018 curve), which is slightly more
+            generous — it's a per-competition setting, chosen independently of the
+            <a href="#leading-points" class="underline hover:text-foreground">leading-coefficient variant</a>.
+            The per-pilot score analysis names the exponent that was applied.
+          </p>
+          <p class="text-muted-foreground">
+            The best time is the fastest pilot in goal for paragliding (<SpecRef section="11.2" label="§11.2.1" />).
+            For hang gliding — matching AirScore — it is the fastest pilot to reach ESS whenever
+            the ESS-but-not-goal share above keeps part of the time points (the default), so the
+            docked pilots' speed fractions stay on the same scale; if a competition sets that
+            share to 0%, the best time is taken from goal pilots exactly as the spec reads.
           </p>
           <p class="text-muted-foreground">
             This creates a generous curve: pilots close to the fastest time get nearly full points,
@@ -413,15 +428,17 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 along the course, from the start gate opening) plotted over time. A "ratchet"
                 mechanism means your distance only counts when it's decreasing (flying toward
                 ESS) — flying away doesn't reset your progress. This matches the CIVL GAP /
-                AirScore leading coefficient; competitions can pick the modern <em>weighted</em>
-                variant (GAP2020+) or the older <em>classic</em> variant in settings.
+                AirScore leading coefficient.
               </p>
               <p class="text-muted-foreground">
-                In the 2024 FAI spec the two variants are sport-specific — hang gliding uses the
-                classic squared-distance area, paragliding the weighted area. GlideComp instead
-                applies whichever variant the competition selects to either sport (default:
-                weighted) — see
-                <a href="#spec-differences" class="underline hover:text-foreground">Differences from the Official Spec</a>.
+                The 2024 FAI spec defines two LC variants, one per sport (<SpecRef section="11.3.1" />):
+                <strong>hang gliding</strong> uses the <em>classic</em> squared-distance area, and
+                <strong>paragliding</strong> uses the <em>weighted</em> area (the middle of the
+                course counts for more). GlideComp defaults each sport to its spec variant, and a
+                competition can override the choice in settings — independently of the
+                <a href="#time-points" class="underline hover:text-foreground">time-points exponent</a>,
+                so any combination is expressible. The per-pilot score analysis names the variant
+                that was applied.
               </p>
               <p class="text-muted-foreground">
                 A <strong>lower</strong> LC means you spent more time at the front. The pilot
@@ -455,21 +472,23 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             </h3>
             <p class="text-muted-foreground">
               How the day's non-distance points split between <em>leading</em> and <em>time</em> is a
-              per-competition choice for paragliding (hang gliding always uses the FAI HG formula):
+              per-competition choice for paragliding (hang gliding always uses the FAI HG formula).
+              <strong>New PG competitions default to S7F 2024</strong>; competitions created before
+              15 July 2026 default to GAP2020 so their published scores never shift:
             </p>
             <ul class="list-disc ml-5 space-y-1 text-muted-foreground">
               <li>
-                <strong>GAP2020</strong> (the default) — leading takes 35% of the non-distance
+                <strong>S7F 2024</strong> (<SpecRef section="10" />, the default for new comps) —
+                leading takes the task's <em>LeadingTimeRatio</em> (0–50%, default 26%) of the
+                non-distance weight when someone makes goal, and <strong>all</strong> of it when
+                nobody does (with no goal, paragliders earn no time points, so every non-distance
+                point goes to leading). The remainder goes to time.
+              </li>
+              <li>
+                <strong>GAP2020</strong> (older comps) — leading takes 35% of the non-distance
                 weight when someone makes goal, and
                 <Fragment set:html={km(String.raw`0.1 \times \text{BestDist}/\text{TaskDist}`)} /> of the
                 total when nobody does. This matches AirScore's gap2020/gap2021 presets.
-              </li>
-              <li>
-                <strong>S7F 2024</strong> (<SpecRef section="10" />) — leading takes the task's
-                <em>LeadingTimeRatio</em> (0–50%, default 26%) of the non-distance weight when
-                someone makes goal, and <strong>all</strong> of it when nobody does (with no goal,
-                paragliders earn no time points, so every non-distance point goes to leading). The
-                remainder goes to time.
               </li>
             </ul>
           </div>
@@ -608,15 +627,20 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Leading formula</td>
-                  <td class="py-2 pr-4 whitespace-nowrap">Weighted</td>
-                  <td class="py-2">The modern GAP2020+ / current-S7F weighted-area leading coefficient (5/6 speed exponent). "Classic" selects the older GAP2016/2018 variant.</td>
+                  <td class="py-2 pr-4 whitespace-nowrap">Per sport</td>
+                  <td class="py-2">The leading-coefficient variant (<SpecRef section="11.3.1" label="§11.3.1" />): <strong>classic</strong> (squared-distance) for hang gliding, <strong>weighted</strong> (weighted-area, GAP2020+) for paragliding — the 2024 spec pairing. Either can be selected for any competition.</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">Time points exponent</td>
+                  <td class="py-2 pr-4 whitespace-nowrap">5/6</td>
+                  <td class="py-2">The speed-fraction exponent (<SpecRef section="11.2" label="§11.2" />), for both sports. Set independently of the leading formula; "2/3" selects the older, slightly more generous GAP2016/2018 curve.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">
                     <a href="#leading-weight" class="underline hover:text-foreground">PG leading weight</a>
                   </td>
-                  <td class="py-2 pr-4 whitespace-nowrap">GAP2020</td>
-                  <td class="py-2">Paragliding only: the leading↔time weight split. GAP2020 matches AirScore; "S7F 2024" uses the LeadingTimeRatio parameter (default 26%). No effect on hang gliding.</td>
+                  <td class="py-2 pr-4 whitespace-nowrap">S7F 2024</td>
+                  <td class="py-2">Paragliding only: the leading↔time weight split. New PG comps default to <strong>S7F 2024</strong> (the LeadingTimeRatio parameter, default 26%); comps created before 15 July 2026 default to <strong>GAP2020</strong> (AirScore parity) so their scores don't shift. No effect on hang gliding.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">
@@ -634,7 +658,9 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             <ul class="list-disc list-inside text-muted-foreground space-y-1 ml-2">
               <li><a href="#arrival-points" class="underline hover:text-foreground">Arrival points</a>: <strong>on</strong> — HG scores order of arrival at ESS (<SpecRef section="11.4" label="§11.4" />).</li>
               <li><a href="#distance-difficulty" class="underline hover:text-foreground">Distance difficulty</a>: <strong>on</strong> — HG distance points are half linear, half difficulty (<SpecRef section="11.1.1" label="§11.1.1" />).</li>
+              <li><a href="#leading-points" class="underline hover:text-foreground">Leading coefficient</a>: <strong>classic</strong> (squared-distance) with the <strong>5/6</strong> time-points exponent — the 2024-spec hang-gliding pairing (<SpecRef section="11.2" label="§11.2" />, <SpecRef section="11.3.1" label="§11.3.1" />).</li>
               <li>Jump-the-gun (early start, <SpecRef section="12.2" label="§12.2" />): 1 penalty point per <strong>2 s</strong> early, up to <strong>300 s</strong> before minimum distance only.</li>
+              <li>ESS but not goal (<SpecRef section="12.1" label="§12.1" />): keeps <strong>80%</strong> of time and arrival points — the spec's recommended default, overridable by local regulations.</li>
             </ul>
           </div>
 
@@ -643,7 +669,9 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             <ul class="list-disc list-inside text-muted-foreground space-y-1 ml-2">
               <li><a href="#arrival-points" class="underline hover:text-foreground">Arrival points</a>: <strong>off</strong> — paragliding has no arrival term in the spec.</li>
               <li><a href="#distance-difficulty" class="underline hover:text-foreground">Distance difficulty</a>: <strong>off</strong> — paragliding distance is always the pure-linear proportion.</li>
+              <li><a href="#leading-points" class="underline hover:text-foreground">Leading coefficient</a>: <strong>weighted</strong> (weighted-area) with the <strong>5/6</strong> time-points exponent — the 2024-spec paragliding pairing (<SpecRef section="11.2" label="§11.2" />, <SpecRef section="11.3.1" label="§11.3.1" />).</li>
               <li>Early starts are scored launch→start (no jump-the-gun penalty; that is HG-only).</li>
+              <li>ESS but not goal (<SpecRef section="12.1" label="§12.1" />): <strong>0%</strong> — no goal, no time points. Fixed by the spec (it discourages high-speed final glides low to the ground) and not configurable for paragliding.</li>
             </ul>
           </div>
         </div>
@@ -709,6 +737,10 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   <td class="py-2">Implemented — PG scored launch→start; HG 1 pt per X s early (X, Y configurable, defaults 2/300)</td>
                 </tr>
                 <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">ESS but not goal (<SpecRef section="12.1" />)</td>
+                  <td class="py-2">Implemented — PG keeps 0% of time points; HG keeps 80% of time and arrival points (configurable)</td>
+                </tr>
+                <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Start gates / race start times (<SpecRef section="6.3.3" />, <SpecRef section="8.3.1" />)</td>
                   <td class="py-2">Implemented — start snapped to the last gate ≤ crossing; LC clock from the first gate (<SpecRef section="11.3.1" />)</td>
                 </tr>
@@ -721,8 +753,12 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   <td class="py-2">Not implemented — every turnpoint before goal is a cylinder</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Task deadline enforcement (<SpecRef section="8.3" />)</td>
-                  <td class="py-2">Not implemented</td>
+                  <td class="py-2 pr-4">Task deadline enforcement (<SpecRef section="8.3" />, <SpecRef section="11.1" />)</td>
+                  <td class="py-2">Implemented — crossings after the goal deadline don't count; landed-out distance is measured up to the deadline</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">Launch window (<SpecRef section="8.6.1" />)</td>
+                  <td class="py-2">Partially implemented — start crossings before the window opens can't validate a start; see below</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Stopped tasks (weather calldowns, <SpecRef section="12.3" />)</td>
@@ -785,45 +821,35 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </p>
             </div>
             <div>
-              <h3 class="text-base font-semibold mb-1">Hang gliding: no penalty for reaching ESS but not goal (<SpecRef section="12.1" />)</h3>
+              <h3 class="text-base font-semibold mb-1">Hang gliding "best time" follows AirScore, not the letter of §11.2.1 (<SpecRef section="11.2" />, <SpecRef section="12.1" />)</h3>
               <p class="text-muted-foreground">
-                The spec docks pilots who cross ESS but fail to reach goal: paragliders lose all
-                time points, and hang glider pilots keep only 80% (by default) of their time and
-                arrival points. GlideComp applies the paragliding rule correctly (no goal, no time
-                points) but pays hang glider pilots their <strong>full</strong> time and arrival
-                points once they reach ESS. Relatedly, the spec takes "best time" from the fastest
-                pilot <em>who also reached goal</em>; GlideComp's hang-gliding best time is the
-                fastest pilot to reach ESS, whether or not they made goal.
+                The ESS-but-not-goal rule itself is implemented per <SpecRef section="12.1" label="§12.1" />:
+                paragliders lose all time points without goal, and hang glider pilots keep 80% of
+                their time and arrival points by default (configurable per competition). However,
+                §11.2.1 defines "best time" as the fastest pilot <em>who also reached goal</em>,
+                and GlideComp instead mirrors AirScore's implementation: while the
+                ESS-but-not-goal share keeps part of the time points (the HG default), the best
+                time is the fastest pilot to reach ESS, goal or not — so the docked pilots' speed
+                fractions are measured on the same scale as everyone else's. When the share is
+                set to 0% (always the case for paragliding), the best time is goal-validated
+                exactly as the spec reads.
               </p>
             </div>
             <div>
-              <h3 class="text-base font-semibold mb-1">Paragliding leading weight defaults to the GAP2020 formula (<SpecRef section="10" />)</h3>
+              <h3 class="text-base font-semibold mb-1">Older paragliding comps keep the GAP2020 leading weight (<SpecRef section="10" />)</h3>
               <p class="text-muted-foreground">
                 The 2024 spec derives the PG leading weight from a per-task
                 <em>LeadingTimeRatio</em> parameter (default 26% of the non-distance weight, and
-                100% of it when nobody makes goal). GlideComp supports this
-                <strong>S7F 2024</strong> formula, but a paragliding competition <strong>defaults</strong>
-                to the earlier <strong>GAP2020</strong> formula: 35% of the non-distance weight when
+                100% of it when nobody makes goal). Paragliding competitions created from
+                <strong>15 July 2026</strong> onward <strong>default</strong> to this
+                <strong>S7F 2024</strong> formula. Competitions created before that date keep the
+                earlier <strong>GAP2020</strong> formula — 35% of the non-distance weight when
                 someone makes goal, and
-                <Fragment set:html={km(String.raw`0.1 \times \text{BestDist}/\text{TaskDist}`)} /> when nobody does.
-                The default matches AirScore's gap2020/gap2021 presets; switch a competition to the
-                2024 formula (and set its LeadingTimeRatio) under <em>Paragliding leading weight</em> in
-                scoring settings. The hang-gliding weights match the 2024 spec and are unaffected by
-                this setting.
-              </p>
-            </div>
-            <div>
-              <h3 class="text-base font-semibold mb-1">One leading/time formula variant for both sports (<SpecRef section="11.2" />, <SpecRef section="11.3.1" />)</h3>
-              <p class="text-muted-foreground">
-                The 2024 spec pairs hang gliding with the classic squared-distance leading
-                coefficient and paragliding with the weighted-area one, both with the 5/6
-                time-points exponent. GlideComp exposes a single per-competition
-                <em>formula</em> setting applied to either sport: <em>weighted</em> (the default —
-                weighted-area LC, 5/6 exponent) or <em>classic</em> (squared-distance LC
-                <strong>and</strong> the older 2/3 exponent, matching GAP2016/2018). A
-                hang-gliding competition on defaults therefore uses the paragliding-style
-                weighted LC, and the exact 2024-spec hang-gliding combination (classic LC with the
-                5/6 exponent) is not currently selectable.
+                <Fragment set:html={km(String.raw`0.1 \times \text{BestDist}/\text{TaskDist}`)} /> when nobody does —
+                so their published scores never shift; this matches AirScore's gap2020/gap2021
+                presets. Either comp can switch between the two (and set its LeadingTimeRatio) under
+                <em>Paragliding leading weight</em> in scoring settings. The hang-gliding weights
+                match the 2024 spec and are unaffected by this setting.
               </p>
             </div>
             <div>
@@ -840,12 +866,18 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </p>
             </div>
             <div>
-              <h3 class="text-base font-semibold mb-1">Task deadline is not enforced (<SpecRef section="8.3" />)</h3>
+              <h3 class="text-base font-semibold mb-1">Launch window: only provable violations are enforced (<SpecRef section="8.6.1" />)</h3>
               <p class="text-muted-foreground">
-                The spec only counts turnpoint crossings recorded before the task deadline, and
-                measures landed-out pilots' best distance up to the deadline. GlideComp parses the
-                goal deadline from the task file but scores the whole track regardless of time — a
-                pilot tagging a turnpoint after the deadline would still be credited.
+                The spec counts a pilot's turnpoints only if they launched within the launch time
+                window. GlideComp enforces the half of this that a tracklog can prove: a
+                start-cylinder crossing recorded <em>before</em> the window even opened
+                (<code>takeoff.timeOpen</code> in the task file) means the pilot was airborne
+                before launching was allowed, so such crossings cannot validate a start — the
+                score explanation says so. What a tracklog alone cannot prove is <em>when</em> the
+                pilot launched: a pilot who launched before the window but only started the course
+                after it opened, or who launched after the window closed, is not detected —
+                launch-time detection is not part of scoring, so those cases are left to the
+                scorekeeper (a penalty can be applied manually).
               </p>
             </div>
             <div>
@@ -858,6 +890,16 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   percentage is 0.5% (the Cat&nbsp;2 maximum), used for every competition rather
                   than auto-selecting 0.1% for Cat&nbsp;1 events; it is configurable per task. A
                   goal line carries no tolerance band — it is scored as exact geometry.
+                </li>
+                <li>
+                  <strong>Mis-set task deadlines are ignored (<SpecRef section="8.3" />):</strong> the goal
+                  deadline is enforced as the spec requires — crossings after it don't count, and
+                  a landed-out pilot's distance is measured only up to it (<SpecRef section="11.1" />) — with one
+                  pragmatic guard: a deadline that falls at or before the first start gate (or a
+                  launch-window open time at or after the deadline) is a task-setting mistake that
+                  would zero every pilot, so it is treated as unset, in the same spirit as the
+                  missing-SSS/ESS fallbacks. When the deadline shaped a pilot's score, the score
+                  explanation shows the cutoff time and each ignored crossing.
                 </li>
                 <li>
                   <strong>Rounding (<SpecRef section="11" />, <SpecRef section="12.4" />):</strong> GlideComp rounds each pilot's total to

@@ -135,16 +135,53 @@
 //     1/2/5 all score under the HG profile), which touches a hashed scoring
 //     source, so the fingerprint guard requires a bump. The extra cache roll
 //     is harmless (scores recompute identically).
-// v17: paragliding leading-weight formula generation (issue #257). A new
-//     `leadingWeightFormula` param ('gap2020' default | 's7f2024') and
+// v17: HG "ESS but not goal" penalty (S7F §12.1, issue #256). A hang-glider
+//     pilot who reaches ESS but lands before goal now keeps only the new
+//     per-comp essNotGoalFactor share of their time AND arrival points
+//     (default 0.8, the spec's recommended value; configurable by local
+//     regulations). Previously such a pilot kept 100% of both. PG is
+//     unchanged (the spec fixes its factor at 0 — no goal, no time points —
+//     which the engine already enforced). The factor also selects the best
+//     time source, matching AirScore's pilot_speed: factor > 0 → fastest
+//     ESS pilot (the previous HG behaviour); factor 0 (and always PG) →
+//     fastest pilot in goal per §11.2.1.
+// v18: task deadline + launch window enforcement (issue #260, S7F §8.3.c,
+//     §8.6.1, §11.1). The xctsk goal deadline is now enforced: boundary
+//     crossings after it are excluded from sequence resolution (so a
+//     turnpoint/ESS/goal tagged too late no longer counts, and the goal
+//     ratio only counts pre-deadline goals per §10), and a landed-out
+//     pilot's best distance is measured only up to the deadline. Start
+//     crossings before the launch window opens (takeoff.timeOpen) can no
+//     longer validate a start — a pre-window crossing proves the pilot was
+//     airborne before launching was allowed. Mis-set tasks are guarded: a
+//     deadline at/before the first start gate, or a window open at/after
+//     the deadline or after the first gate, is treated as unset. The result
+//     carries deadline/launchWindow transparency fields and the score
+//     explanation narrates the cutoff and each ignored crossing.
+// v19: sport-correct leading/time-points pairing (issue #258). The
+//     time-points exponent (S7F §11.2) is now an independent GAPParameters
+//     knob (timePointsExponent) instead of being implied by the
+//     leading-coefficient variant, and the per-category defaults adopt the
+//     2024-spec pairing: HG → classic squared-distance LC + 5/6 exponent,
+//     PG → weighted-area LC + 5/6 exponent (previously both categories
+//     defaulted to the weighted LC, and 'classic' forced a 2/3 exponent).
+//     An HG comp with no saved formula therefore switches from the weighted
+//     LC to the classic LC (both at 5/6); comps that saved an explicit
+//     leadingFormula keep the exponent it used to imply (classic → 2/3,
+//     weighted → 5/6), so their scores are unchanged. The bump invalidates
+//     cached scores for the null-/default-formula comps whose LC variant
+//     changed.
+// v20: paragliding leading-weight formula generation (issue #257). A new
+//     `leadingWeightFormula` param ('gap2020' | 's7f2024') and
 //     `leadingTimeRatio` (0–0.5, default 0.26) let a PG comp score its
-//     leading↔time weight split under either the GAP2020/AirScore formula
-//     (unchanged) or the FAI S7F 2024 §10 LeadingTimeRatio formula (leading =
+//     leading↔time weight split under either the GAP2020/AirScore formula or
+//     the FAI S7F 2024 §10 LeadingTimeRatio formula (leading =
 //     LeadingTimeRatio × (1 − DW) at goal, and the whole non-distance weight
-//     when nobody makes goal). The default preserves existing scores; only
-//     comps that opt into 's7f2024' move. Hang-gliding weights are
-//     untouched. Bump rolls caches so opted-in comps recompute.
-export const SCORING_ENGINE_VERSION = 17;
+//     when nobody makes goal). The default is date-based (resolveCompGapParams):
+//     PG comps created on/after 2026-07-15 default to 's7f2024', earlier comps
+//     to 'gap2020' — so no pre-existing comp's scores move. Hang-gliding
+//     weights are untouched. Bump rolls caches so new-default comps recompute.
+export const SCORING_ENGINE_VERSION = 20;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -152,4 +189,4 @@ export const SCORING_ENGINE_VERSION = 17;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "6a433e9ebc2bcb7cbfc546e692fce101c2b35301e751fcb70a0fb91c72e67214";
+  "a77b409ef0333dab10385151036cc8addb23d1e32ce1df950a7e25ca49bb9bf9";

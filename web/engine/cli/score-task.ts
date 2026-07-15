@@ -35,12 +35,14 @@
  *     --use-arrival / --no-use-arrival                       `useArrival`
  *     --use-distance-difficulty / --no-use-distance-difficulty  `useDistanceDifficulty`
  *   Formula & advanced:
- *     --leading-formula <weighted|classic>   `leadingFormula` (default: weighted)
+ *     --leading-formula <weighted|classic>   `leadingFormula` (default: classic HG / weighted PG)
  *     --leading-weight-formula <gap2020|s7f2024>  `leadingWeightFormula`, PG (default: gap2020)
  *     --leading-time-ratio <ratio>           `leadingTimeRatio` 0-0.5, PG S7F-2024 (default: 0.26)
+ *     --time-points-exponent <5/6|2/3>       `timePointsExponent` (default: 5/6)
  *     --distance-origin <takeoff|start>      `distanceOrigin` (default: takeoff)
  *     --jump-the-gun-factor <n>              `jumpTheGunFactor`, HG (default: 2)
  *     --jump-the-gun-max-seconds <s>         `jumpTheGunMaxSeconds`, HG (default: 300)
+ *     --ess-not-goal-factor <ratio>          `essNotGoalFactor` 0-1, HG (default: 0.8)
  *   Output:
  *     --json                                 Output results as JSON
  */
@@ -50,7 +52,7 @@ import { resolve, basename, extname } from 'path';
 import { parseIGC } from '../src/igc-parser';
 import { parseXCTask } from '../src/xctsk-parser';
 import { calculateOptimizedTaskDistance } from '../src/task-optimizer';
-import { scoreTask, defaultsFor, type GAPParameters, type PilotFlight } from '../src/gap-scoring';
+import { scoreTask, resolveCompGapParams, resolveTimePointsExponent, type GAPParameters, type PilotFlight } from '../src/gap-scoring';
 import { scoreOpenDistance } from '../src/open-distance-scoring';
 
 // ---------------------------------------------------------------------------
@@ -89,18 +91,26 @@ function usage(): never {
     '                             `useDistanceDifficulty`, HG (default: on)\n\n' +
     'Formula & advanced:\n' +
     '  --leading-formula <weighted|classic>\n' +
-    '                             `leadingFormula` (default: weighted)\n' +
+    '                             `leadingFormula` leading-coefficient variant\n' +
+    '                             (default: classic for HG, weighted for PG — 2024 spec)\n' +
     '  --leading-weight-formula <gap2020|s7f2024>\n' +
     '                             `leadingWeightFormula`, PG only (default: gap2020;\n' +
     '                             "s7f2024" uses the FAI S7F §10 LeadingTimeRatio split)\n' +
     '  --leading-time-ratio <ratio>\n' +
     '                             `leadingTimeRatio` 0-0.5, PG S7F-2024 only (default: 0.26)\n' +
+    '  --time-points-exponent <5/6|2/3>\n' +
+    '                             `timePointsExponent` speed-fraction exponent (default: 5/6;\n' +
+    '                             set independently of --leading-formula)\n' +
     '  --distance-origin <takeoff|start>\n' +
     '                             `distanceOrigin` (default: takeoff; "start" excludes\n' +
     '                             the take-off→SSS leg)\n' +
     '  --jump-the-gun-factor <n>  `jumpTheGunFactor`, HG early-start (default: 2)\n' +
     '  --jump-the-gun-max-seconds <s>\n' +
-    '                             `jumpTheGunMaxSeconds`, HG (default: 300)\n\n' +
+    '                             `jumpTheGunMaxSeconds`, HG (default: 300)\n' +
+    '  --ess-not-goal-factor <ratio>\n' +
+    '                             `essNotGoalFactor` 0-1: share of time+arrival points\n' +
+    '                             kept on ESS without goal (S7F §12.1). HG default 0.8;\n' +
+    '                             PG is fixed at 0 by the spec and ignores it.\n\n' +
     'Output:\n' +
     '  --json                     Output results as JSON\n'
   );
@@ -159,11 +169,17 @@ for (let i = 0; i < args.length; i++) {
     case '--leading-time-ratio':
       params.leadingTimeRatio = Number(args[++i]);
       break;
+    case '--time-points-exponent':
+      params.timePointsExponent = args[++i] as '5/6' | '2/3';
+      break;
     case '--jump-the-gun-factor':
       params.jumpTheGunFactor = Number(args[++i]);
       break;
     case '--jump-the-gun-max-seconds':
       params.jumpTheGunMaxSeconds = Number(args[++i]);
+      break;
+    case '--ess-not-goal-factor':
+      params.essNotGoalFactor = Number(args[++i]);
       break;
     case '--use-distance-difficulty':
       params.useDistanceDifficulty = true;
@@ -315,7 +331,11 @@ const taskDistance = openDistance ? 0 : calculateOptimizedTaskDistance(task);
 // back to 'hg' harmlessly). This keeps a run numerically identical to the web
 // app for the same task and wing.
 const category = params.scoring === 'PG' ? 'pg' : 'hg';
-const gapParams: Partial<GAPParameters> = { ...defaultsFor(category), ...params };
+// resolveCompGapParams merges the passed flags over the per-category defaults
+// and, like the competition-api, keeps the pre-#258 exponent when only a
+// leading formula is given (classic → 2/3, weighted → 5/6) — so passing a
+// stored comp's gap_params reproduces its exact scores.
+const gapParams: Partial<GAPParameters> = resolveCompGapParams(category, params);
 
 // Auto-fill nominalDistance from a percentage of the optimized task distance
 // (UI uses 70%) unless the user pinned an explicit --nominal-distance. Key off
@@ -422,9 +442,11 @@ if (jsonOutput) {
         : 'GAP2020 (AirScore parity)'}`
     );
   }
+  console.log(`  Time exponent:  ${resolveTimePointsExponent(p)}`);
   if (p.scoring === 'HG') {
     console.log(`  Arrival:        ${p.useArrival ? 'on' : 'off'}`);
     console.log(`  Difficulty:     ${p.useDistanceDifficulty ? 'on' : 'off'}`);
+    console.log(`  ESS w/o goal:   keeps ${(p.essNotGoalFactor * 100).toFixed(0)}% of time+arrival (§12.1)`);
   }
   console.log(`  Nominal:        dist ${formatDist(p.nominalDistance)} / time ${Math.round(p.nominalTime / 60)} min / goal ${(p.nominalGoal * 100).toFixed(0)}% / launch ${(p.nominalLaunch * 100).toFixed(0)}%`);
   console.log(`  Min distance:   ${formatDist(p.minimumDistance)}`);

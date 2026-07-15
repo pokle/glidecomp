@@ -8,7 +8,7 @@ import { createCompSchema, updateCompSchema, validated } from "../validators";
 import { audit, describeChange } from "../audit";
 import { bumpAndRevalidateScores, taskIdsForComp } from "../score-store";
 import { speedSectionTypeWarnings, hasLineGoal } from "../xctsk-summary";
-import { DEFAULT_GAP_PARAMETERS, type GAPParameters } from "@glidecomp/engine";
+import { DEFAULT_GAP_PARAMETERS, resolveTimePointsExponent, type GAPParameters } from "@glidecomp/engine";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
 
 type Variables = {
@@ -96,6 +96,14 @@ function describeGapParamChanges(
   if (oLtr !== nLtr) {
     out.push(describeChange("PG leading-time ratio", pct(oLtr), pct(nLtr)));
   }
+  // Time-points exponent (S7F §11.2), decoupled from the leading formula
+  // (issue #258). Report the effective exponent so a change from the
+  // formula-implied default to an explicit override is still logged.
+  const oExp = resolveTimePointsExponent(o);
+  const nExp = resolveTimePointsExponent(n);
+  if (oExp !== nExp) {
+    out.push(describeChange("time points exponent", oExp, nExp));
+  }
   const oOrigin = o.distanceOrigin ?? "takeoff";
   const nOrigin = n.distanceOrigin ?? "takeoff";
   if (oOrigin !== nOrigin) {
@@ -124,6 +132,15 @@ function describeGapParamChanges(
   if (oJtgY !== nJtgY) {
     out.push(
       `Changed jump-the-gun limit from ${oJtgY} s to ${nJtgY} s early (beyond it, minimum distance)`
+    );
+  }
+  // ESS-but-not-goal (S7F §12.1): the share of time and arrival points an
+  // HG pilot keeps after reaching ESS but landing before goal.
+  const oEng = o.essNotGoalFactor ?? 0.8;
+  const nEng = n.essNotGoalFactor ?? 0.8;
+  if (oEng !== nEng) {
+    out.push(
+      `Changed the ESS-but-not-goal factor from ${pct(oEng)} to ${pct(nEng)} of time and arrival points kept (HG, S7F §12.1)`
     );
   }
   return out;

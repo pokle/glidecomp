@@ -13,7 +13,7 @@ import {
   computeLeadingAggregate,
   calculateOptimizedTaskDistance,
   DEFAULT_GAP_PARAMETERS,
-  defaultsFor,
+  resolveCompGapParams,
   SCORING_ENGINE_VERSION,
   type GAPParameters,
   type FlightScoringData,
@@ -435,7 +435,7 @@ export async function computeTaskScore(
   const taskRow = await db
     .prepare(
       `SELECT t.task_id, t.comp_id, t.task_date, t.xctsk,
-              c.category, c.gap_params, c.scoring_format
+              c.category, c.gap_params, c.scoring_format, c.creation_date
        FROM task t
        JOIN comp c ON t.comp_id = c.comp_id
        WHERE t.task_id = ?`
@@ -449,6 +449,7 @@ export async function computeTaskScore(
       xctsk: string;
       gap_params: string | null;
       scoring_format: string | null;
+      creation_date: string;
     }>();
 
   if (!taskRow) throw new Error("Task not found");
@@ -457,23 +458,30 @@ export async function computeTaskScore(
     taskRow.scoring_format === "open_distance" ? "open_distance" : "gap";
 
   const xcTask = parseXCTask(taskRow.xctsk);
-  const storedGapParams: Partial<GAPParameters> = taskRow.gap_params
+  const storedGapParams: Partial<GAPParameters> | null = taskRow.gap_params
     ? JSON.parse(taskRow.gap_params)
-    : {};
+    : null;
   // A comp that hasn't saved its scoring settings falls back to the official
   // per-category FAI defaults (leading/arrival/difficulty as the S7F formula
   // uses them) rather than the raw HG-shaped engine baseline (issue #343).
+  // resolveCompGapParams also keeps the pre-#258 time-points exponent for a
+  // comp that saved a leadingFormula before the exponent was decoupled.
   const category = taskRow.category === "pg" ? "pg" : "hg";
-  const gapParams: Partial<GAPParameters> = {
-    ...defaultsFor(category),
-    ...storedGapParams,
-  };
+  // Pass the comp's creation time so a PG comp with no pinned leading-weight
+  // formula defaults to S7F-2024 when created on/after the cutoff, and to
+  // GAP2020/AirScore parity when created before it (issue #257).
+  const compCreatedAtMs = Date.parse(taskRow.creation_date);
+  const gapParams: Partial<GAPParameters> = resolveCompGapParams(
+    category,
+    storedGapParams,
+    Number.isNaN(compCreatedAtMs) ? null : compCreatedAtMs
+  );
 
   // Default nominalDistance to 70% of task distance when the comp hasn't
   // pinned one (the per-category defaults carry the engine baseline, so key
   // off the *stored* value's absence). Only relevant to GAP — open distance
   // ignores GAP parameters entirely.
-  if (scoringFormat === "gap" && storedGapParams.nominalDistance == null) {
+  if (scoringFormat === "gap" && storedGapParams?.nominalDistance == null) {
     gapParams.nominalDistance =
       calculateOptimizedTaskDistance(xcTask) * 0.7;
   }

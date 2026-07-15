@@ -5,7 +5,7 @@
  * Provides a unified interface for flight analysis data.
  */
 
-import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, extractGlides, extractClimbs, extractSinks, type FlightEvent, type FlightEventType, type XCTask, type TurnpointType, type Turnpoint, type TurnpointSequenceResult, type GlideData, type ClimbData, type SinkData, type FixIndexDetails, type GlideEventDetails, type WaypointRecord, type TaskScoreResult, type GAPParameters } from '@glidecomp/engine';
+import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, extractGlides, extractClimbs, extractSinks, resolveTimePointsExponent, type FlightEvent, type FlightEventType, type XCTask, type TurnpointType, type Turnpoint, type TurnpointSequenceResult, type GlideData, type ClimbData, type SinkData, type FixIndexDetails, type GlideEventDetails, type WaypointRecord, type TaskScoreResult, type GAPParameters } from '@glidecomp/engine';
 import { formatAltitude, formatSpeed, formatDistance, formatClimbRate } from './units-browser';
 import { config } from './config';
 import { createTaskEditor, type TaskEditor } from './task-editor';
@@ -1534,6 +1534,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     const leadCfg = params.useLeading
       ? `on (${params.leadingFormula}${leadWeightCfg})`
       : 'off';
+    const timeExp = resolveTimePointsExponent(params).replace('/', '⁄');
     html += `
       <div class="rounded-lg border border-border bg-muted/30 p-3">
         <div class="text-xs text-muted-foreground mb-1">${docLink('what-is-gap', 'Scoring configuration')}</div>
@@ -1545,6 +1546,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
           <span title="Nominal launch ratio">Nom launch: ${pct1(params.nominalLaunch)}</span>
           <span>Min dist: ${formatDistance(params.minimumDistance).withUnit}</span>
           <span>${docLink('leading-points', 'Leading')}: ${leadCfg}</span>
+          <span title="Time-points speed-fraction exponent (S7F §11.2)">${docLink('time-points', 'Time exp')}: ${timeExp}</span>
           ${params.scoring === 'HG' ? `<span>${docLink('arrival-points', 'Arrival')}: ${params.useArrival ? 'on' : 'off'}</span>` : ''}
           <span title="Where scored distance begins (take-off vs start cylinder)">${docLink('distance-origin', 'Dist origin')}: ${params.distanceOrigin}</span>
           ${params.scoring === 'HG' ? `<span>${docLink('distance-difficulty', 'Difficulty')}: ${params.useDistanceDifficulty ? 'on' : 'off'}</span>` : ''}

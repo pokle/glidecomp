@@ -5,7 +5,7 @@
  */
 import { useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { defaultsFor } from "@glidecomp/engine";
+import { defaultsFor, resolveCompGapParams, resolveTimePointsExponent } from "@glidecomp/engine";
 import { Button } from "@/react/ui/button";
 import {
   Dialog,
@@ -72,6 +72,7 @@ export function SettingsDialog({
     jtgFactor: useId(),
     jtgMax: useId(),
     leadingTimeRatio: useId(),
+    essNotGoal: useId(),
   };
 
   // GAP scoring parameters — fall back to the official per-category FAI
@@ -79,7 +80,21 @@ export function SettingsDialog({
   // section always starts from the correct official values.
   // nominalDistance stays blank when unset so the scorer auto-computes
   // it per task (70% of task distance), matching historical behavior.
-  const gp = comp.gap_params ?? defaultsFor(comp.category === "pg" ? "pg" : "hg");
+  // Resolve the *effective* params the scorer uses (official per-category
+  // defaults + saved overrides, plus the date-based PG leading-weight default
+  // from the comp's creation time — issue #257), so every field's initial
+  // value matches what the scoreboard is computed from.
+  const gpCreatedAtMs = Date.parse(comp.creation_date);
+  // Strip nominalDistance (nullable "auto") before merging — the dialog keys
+  // its own nominalDistance field off the stored value, and the engine type
+  // wants number | undefined, not the CompGapParams number | null.
+  const { nominalDistance: _gpNd, ...gpStored } = comp.gap_params ?? {};
+  void _gpNd;
+  const gp = resolveCompGapParams(
+    comp.category === "pg" ? "pg" : "hg",
+    comp.gap_params ? gpStored : null,
+    Number.isNaN(gpCreatedAtMs) ? null : gpCreatedAtMs
+  );
 
   const [name, setName] = useState(comp.name);
   const [category, setCategory] = useState<"hg" | "pg">(comp.category === "hg" ? "hg" : "pg");
@@ -119,17 +134,30 @@ export function SettingsDialog({
   const [leadingFormula, setLeadingFormula] = useState<"weighted" | "classic">(
     gp.leadingFormula ?? "weighted"
   );
+  // Leading-weight generation (PG only; issue #257). `gp` is the effective
+  // params (resolveCompGapParams with the comp's creation date), so a new PG
+  // comp shows 's7f2024' and an older one 'gap2020' — matching the scorer.
   const [leadingWeightFormula, setLeadingWeightFormula] = useState<"gap2020" | "s7f2024">(
     gp.leadingWeightFormula ?? "gap2020"
   );
   const [leadingTimeRatio, setLeadingTimeRatio] = useState(
     String(Math.round((gp.leadingTimeRatio ?? 0.26) * 100))
   );
+  // Time-points exponent (S7F §11.2), decoupled from the leading formula
+  // (issue #258). A saved comp that predates the split keeps the exponent its
+  // leadingFormula historically implied (resolveTimePointsExponent).
+  const [timePointsExponent, setTimePointsExponent] = useState<"5/6" | "2/3">(
+    resolveTimePointsExponent(gp)
+  );
   const [distanceOrigin, setDistanceOrigin] = useState<"takeoff" | "start">(
     gp.distanceOrigin ?? "takeoff"
   );
   const [jtgFactor, setJtgFactor] = useState(String(gp.jumpTheGunFactor ?? 2));
   const [jtgMax, setJtgMax] = useState(String(gp.jumpTheGunMaxSeconds ?? 300));
+  // ESS-but-not-goal (S7F §12.1), shown as a percentage of points kept.
+  const [essNotGoal, setEssNotGoal] = useState(
+    String(Math.round((gp.essNotGoalFactor ?? 0.8) * 100))
+  );
 
   const [saving, setSaving] = useState(false);
 
@@ -141,6 +169,14 @@ export function SettingsDialog({
    */
   function resetToDefaults() {
     const d = defaultsFor(category);
+    // The PG leading-weight default is date-based (issue #257): reset to what a
+    // comp of this age would default to — 's7f2024' for one created on/after
+    // the cutoff, 'gap2020' for an older one — not the raw engine baseline.
+    const resolved = resolveCompGapParams(
+      category,
+      null,
+      Number.isNaN(gpCreatedAtMs) ? null : gpCreatedAtMs
+    );
     setNominalDistance("");
     setNominalTime(String(Math.round(d.nominalTime / 60)));
     setNominalGoal(String(Math.round(d.nominalGoal * 100)));
@@ -150,11 +186,13 @@ export function SettingsDialog({
     setUseArrival(d.useArrival);
     setUseDifficulty(d.useDistanceDifficulty);
     setLeadingFormula(d.leadingFormula);
-    setLeadingWeightFormula(d.leadingWeightFormula);
+    setLeadingWeightFormula(resolved.leadingWeightFormula);
     setLeadingTimeRatio(String(Math.round(d.leadingTimeRatio * 100)));
+    setTimePointsExponent(resolveTimePointsExponent(d));
     setDistanceOrigin(d.distanceOrigin);
     setJtgFactor(String(d.jumpTheGunFactor));
     setJtgMax(String(d.jumpTheGunMaxSeconds));
+    setEssNotGoal(String(Math.round(d.essNotGoalFactor * 100)));
   }
 
   // Live class list for the default-class dropdown.
@@ -224,10 +262,12 @@ export function SettingsDialog({
       leadingFormula,
       leadingWeightFormula,
       leadingTimeRatio: parseField(leadingTimeRatio, 26) / 100,
+      timePointsExponent,
       distanceOrigin,
       useDistanceDifficulty: useDifficulty,
       jumpTheGunFactor: parseField(jtgFactor, 2),
       jumpTheGunMaxSeconds: parseField(jtgMax, 300),
+      essNotGoalFactor: parseField(essNotGoal, 80) / 100,
     };
 
     setSaving(true);
@@ -500,6 +540,25 @@ export function SettingsDialog({
                   Starting earlier than this scores minimum distance only. Spec default 300.
                 </FieldDescription>
               </Field>
+              <Field>
+                <FieldLabel htmlFor={ids.essNotGoal}>
+                  ESS but not goal: points kept (%, HG)
+                </FieldLabel>
+                <Input
+                  id={ids.essNotGoal}
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={essNotGoal}
+                  onChange={(e) => setEssNotGoal(e.target.value)}
+                />
+                <FieldDescription>
+                  FAI S7F §12.1: an HG pilot who reaches ESS but lands before goal keeps
+                  this share of their time and arrival points. Spec default 80. No effect
+                  on PG (the spec fixes it at 0 — no goal, no time points).
+                </FieldDescription>
+              </Field>
 
               <CheckboxField
                 checked={useLeading}
@@ -524,13 +583,31 @@ export function SettingsDialog({
                   value={leadingFormula}
                   onChange={(v) => setLeadingFormula(v as "weighted" | "classic")}
                   options={[
-                    { value: "weighted", label: "Weighted — GAP2020+ / current FAI S7F" },
-                    { value: "classic", label: "Classic — GAP2016/2018, PWC ≤2017" },
+                    { value: "weighted", label: "Weighted — GAP2020+ / S7F paragliding" },
+                    { value: "classic", label: "Classic — S7F hang gliding / GAP2016/2018" },
                   ]}
                   ariaLabel="Leading coefficient formula"
                 />
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Both match AirScore; weighted is the modern default.
+                  The leading-points envelope (S7F §11.3.1). The 2024 spec pairs hang
+                  gliding with classic and paragliding with weighted; both match AirScore.
+                </p>
+              </div>
+              <div>
+                <h4 className="mb-1.5 text-sm font-medium">Time points exponent</h4>
+                <SimpleSelect
+                  value={timePointsExponent}
+                  onChange={(v) => setTimePointsExponent(v as "5/6" | "2/3")}
+                  options={[
+                    { value: "5/6", label: "5⁄6 — current FAI S7F (both sports)" },
+                    { value: "2/3", label: "2⁄3 — older GAP2016/2018 curve" },
+                  ]}
+                  ariaLabel="Time points exponent"
+                />
+                <p className="mt-1 text-sm text-muted-foreground">
+                  The speed-fraction exponent (S7F §11.2), set independently of the leading
+                  formula. 5⁄6 is the current spec for both sports; 2⁄3 is slightly more
+                  generous.
                 </p>
               </div>
               {category === "pg" ? (

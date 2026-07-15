@@ -21,6 +21,7 @@ import {
   explainOpenDistanceScore,
   explainManualFlightScore,
   parseIGC,
+  resolveCompGapParams,
   reviveTurnpointSequenceResult,
   taskForDistanceOrigin,
   type ExplanationAnchor,
@@ -278,6 +279,26 @@ function buildDetailData(
     };
   }
 
+  // Resolve the exact parameter set the scorer used, so the explanation names
+  // the same formula and time-points exponent (issue #258): the official
+  // per-category defaults with the comp's saved gap_params merged over them,
+  // keeping the pre-#258 exponent for a comp that saved only a leadingFormula.
+  // nominalDistance is left off — the explainer derives points from the class
+  // context, not from it, and the stored value may be a nullable "auto".
+  const params: Partial<GAPParameters> = (() => {
+    const { nominalDistance: _nd, ...stored } = comp.gap_params ?? {};
+    void _nd;
+    // Pass the comp's creation time so the PG leading-weight default matches the
+    // scorer's date-based choice (S7F-2024 for new comps, GAP2020 for older
+    // ones — issue #257).
+    const createdAtMs = Date.parse(comp.creation_date);
+    return resolveCompGapParams(
+      comp.category === "pg" ? "pg" : "hg",
+      comp.gap_params ? stored : null,
+      Number.isNaN(createdAtMs) ? null : createdAtMs,
+    );
+  })();
+
   // Manual flight (issue #306): a track-less pilot scored from the last
   // turnpoint reached + landing point. No tracklog to narrate — the engine
   // explains the made-good, and attaches the routed distance-to-goal line to
@@ -285,9 +306,6 @@ function buildDetailData(
   // track. Same distance-origin trim as the scorer used.
   if (analysis.manual_flight) {
     const mf = analysis.manual_flight;
-    const { nominalDistance, ...gapRest } = comp.gap_params ?? {};
-    const params: Partial<GAPParameters> =
-      nominalDistance != null ? { ...gapRest, nominalDistance } : gapRest;
     const scoringTask = taskForDistanceOrigin(
       task.xctsk,
       params.distanceOrigin ?? "takeoff",
@@ -332,9 +350,6 @@ function buildDetailData(
   if (!analysis.turnpoint_result)
     throw new Error("The analysis of the pilot's track is not available");
   const result = reviveTurnpointSequenceResult(analysis.turnpoint_result);
-  const { nominalDistance, ...gapRest } = comp.gap_params ?? {};
-  const params: Partial<GAPParameters> =
-    nominalDistance != null ? { ...gapRest, nominalDistance } : gapRest;
   const scoringTask = taskForDistanceOrigin(
     task.xctsk,
     params.distanceOrigin ?? "takeoff",

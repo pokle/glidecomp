@@ -31,7 +31,7 @@ should move behind an "Advanced" wall. It does not change code.
 | `useLeading` | `false` | ⚠️ not the official FAI formula (see §2) |
 | `useArrival` | `false` | ⚠️ comment says *"default true for HG"* but the value is `false` |
 | `leadingFormula` | `'weighted'` | GAP2020+ / current S7F ✅ |
-| `leadingWeightFormula` | `'gap2020'` | PG leading↔time split. AirScore parity by default; `'s7f2024'` opts into the FAI S7F 2024 §10 LeadingTimeRatio formula (issue #257). No effect on HG |
+| `leadingWeightFormula` | `'gap2020'` (engine baseline) | PG leading↔time split. `resolveCompGapParams` resolves the effective comp default by creation date: PG comps created on/after 2026-07-15 default to `'s7f2024'` (FAI S7F 2024 §10 LeadingTimeRatio), earlier ones to `'gap2020'` (AirScore parity) — issue #257. No effect on HG |
 | `leadingTimeRatio` | `0.26` | PG S7F-2024 only: fraction (0–0.5) of the non-distance weight given to leading when someone makes goal |
 | `distanceOrigin` | `'takeoff'` | FAI CIVL GAP / PWCA ✅ |
 | `useDistanceDifficulty` | `true` | HG-only; ignored for PG ✅ |
@@ -108,9 +108,10 @@ global blob. Recommended values:
 | `useLeading` | **`true`** | ⬆ official PG GAP uses leading points |
 | `useArrival` | `false` | — (PG has no arrival) |
 | `useDistanceDifficulty` | `false` | irrelevant for PG (always pure-linear); keep off to avoid implying otherwise |
-| `leadingFormula` | `weighted` | — |
-| `leadingWeightFormula` | `gap2020` | — (AirScore parity; Advanced can switch to `s7f2024`) |
+| `leadingFormula` | `weighted` | — (2024-spec PG variant) |
+| `leadingWeightFormula` | `s7f2024` (new comps) / `gap2020` (before 2026-07-15) | ⬆ new PG comps default to the 2024 S7F §10 formula; comps created before the cutoff keep AirScore parity ([#257](https://github.com/pokle/glidecomp/issues/257)) |
 | `leadingTimeRatio` | `0.26` | S7F-2024 only; unused under the `gap2020` default |
+| `timePointsExponent` | `5/6` | independent knob ([#258](https://github.com/pokle/glidecomp/issues/258)); current S7F |
 | `distanceOrigin` | `takeoff` | — |
 | jump-the-gun | n/a for PG | stored `2` / `300` but unused (PG early start = launch→SSS) |
 
@@ -127,10 +128,19 @@ global blob. Recommended values:
 | `useLeading` | **`true`** | ⬆ to match FAI S7F (Advanced can turn off for SAFA-style) |
 | `useArrival` | **`true`** | ⬆ HG scores arrival under FAI S7F (Advanced can turn off) |
 | `useDistanceDifficulty` | `true` | — (FAI S7F §11.1.1) |
-| `leadingFormula` | `weighted` | — |
+| `leadingFormula` | `classic` | ⬆ was `weighted`; the 2024-spec HG variant ([#258](https://github.com/pokle/glidecomp/issues/258)) |
+| `timePointsExponent` | `5/6` | now an independent knob ([#258](https://github.com/pokle/glidecomp/issues/258)); HG uses classic LC **with** the 5/6 exponent |
 | `distanceOrigin` | `takeoff` | — |
 | `jumpTheGunFactor` | `2` | — |
 | `jumpTheGunMaxSeconds` | `300` | — |
+
+> **Update ([#258](https://github.com/pokle/glidecomp/issues/258)):** the HG
+> `leadingFormula` default moved from `weighted` to `classic`, and the
+> time-points exponent (S7F §11.2) is now a separate `timePointsExponent` knob
+> defaulting to `5/6` for both sports — so the exact 2024-spec HG pairing
+> (classic LC + 5/6) is the default and is expressible. PG keeps `weighted` +
+> `5/6`. A comp that saved an explicit `leadingFormula` before the split keeps
+> the exponent that formula used to imply (classic → 2/3, weighted → 5/6).
 
 > If we'd rather the HG default match the app's own AirScore reference comp
 > (Australian practice) instead of strict FAI, set `useLeading: false` and
