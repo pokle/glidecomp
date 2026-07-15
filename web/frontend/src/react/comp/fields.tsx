@@ -13,7 +13,15 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@/react/ui/combobox";
-import { Field, FieldDescription, FieldLabel } from "@/react/ui/field";
+import {
+  Field,
+  FieldDescription,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/react/ui/field";
+import { Input } from "@/react/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/react/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -129,5 +137,142 @@ export function CheckboxField({
       </FieldLabel>
       {hint ? <FieldDescription className="basis-full">{hint}</FieldDescription> : null}
     </Field>
+  );
+}
+
+/*
+ * Fields shared by the create-competition and competition-settings dialogs.
+ * Keeping the markup in one place stops the two forms drifting apart (labels,
+ * placeholders, comma-separated hints, validation shape) as either evolves.
+ */
+
+export function NameField({
+  value,
+  onChange,
+  placeholder,
+  autoFocus,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  autoFocus?: boolean;
+}) {
+  const id = useId();
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>Name</FieldLabel>
+      <Input
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        required
+        maxLength={128}
+        autoFocus={autoFocus}
+      />
+    </Field>
+  );
+}
+
+export function CategoryField({
+  value,
+  onChange,
+  description,
+}: {
+  value: "hg" | "pg";
+  onChange: (value: "hg" | "pg") => void;
+  description?: React.ReactNode;
+}) {
+  const hgId = useId();
+  const pgId = useId();
+  return (
+    <FieldSet>
+      <FieldLegend variant="label">Wing</FieldLegend>
+      <RadioGroup value={value} onValueChange={(v) => onChange(v as "hg" | "pg")}>
+        <Field orientation="horizontal">
+          <RadioGroupItem value="hg" id={hgId} />
+          <FieldLabel htmlFor={hgId} className="font-normal">
+            Hang Gliding
+          </FieldLabel>
+        </Field>
+        <Field orientation="horizontal">
+          <RadioGroupItem value="pg" id={pgId} />
+          <FieldLabel htmlFor={pgId} className="font-normal">
+            Paragliding
+          </FieldLabel>
+        </Field>
+      </RadioGroup>
+      {description ? <FieldDescription>{description}</FieldDescription> : null}
+    </FieldSet>
+  );
+}
+
+/**
+ * Ready-made class sets offered as one-click presets under the Pilot Classes
+ * field, per wing. `open` (one ranking) leads both as the simple-club default;
+ * the wing-specific variants follow:
+ * - HG: `open, sport` (topless vs the kingposted Sport Class) and
+ *   `open, sport, floater` (adding a lower-performance floater tier).
+ * - PG: `open, sport` (open/CCC wings vs the ≤EN-C sport class) and
+ *   `open, serial` (competition wings vs serial-certified gliders).
+ */
+const PILOT_CLASS_EXAMPLES: Record<"hg" | "pg", string[]> = {
+  hg: ["open", "open, sport", "open, sport, floater"],
+  pg: ["open", "open, sport", "open, serial"],
+};
+
+export function PilotClassesField({
+  value,
+  onChange,
+  wing,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  wing: "hg" | "pg";
+}) {
+  const id = useId();
+  const examples = PILOT_CLASS_EXAMPLES[wing];
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>Pilot Classes</FieldLabel>
+      <Input
+        id={id}
+        placeholder={examples[1]}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <FieldDescription>
+        Separately-scored divisions of the field. Comma-separated — or pick an example:
+      </FieldDescription>
+      <div className="flex flex-wrap gap-1.5">
+        {examples.map((example) => (
+          <button
+            key={example}
+            type="button"
+            onClick={() => onChange(example)}
+            aria-label={`Use example: ${example}`}
+            className="inline-flex min-h-6 items-center rounded border bg-muted px-2 py-1 font-mono text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            {example}
+          </button>
+        ))}
+      </div>
+    </Field>
+  );
+}
+
+export function TestCompField({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <CheckboxField
+      checked={checked}
+      onChange={onChange}
+      label="Test competition (only visible to admins)"
+    />
   );
 }

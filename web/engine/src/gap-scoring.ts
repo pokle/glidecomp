@@ -151,6 +151,16 @@ export type ScoringPreset = 'fai';
  * `nominalDistance` keeps the engine baseline (70 km); the competition backend
  * still auto-computes it per task (70% of the task distance) whenever a comp
  * hasn't pinned an explicit value.
+ *
+ * On FAI classes: S7F GAP defines only these *two* scoring profiles, so 'hg'
+ * and 'pg' cover every FAI XC class — 'pg' is FAI Class 3 (paragliders); 'hg'
+ * is FAI Class 1 (flexwing) AND Classes 2 and 5 (rigid wings), which S7F /
+ * AirScore score with the HG ruleset. The arrival / difficulty / jump-the-gun
+ * distinctions are hang-glider-vs-paraglider only, never flexwing-vs-rigid, so
+ * there is no separate rigid-wing profile to add. Distinguishing specific
+ * classes within an event (e.g. flex vs rigid ranked separately, or Sport
+ * Class — itself an FAI sub-class of Class 1) is a results subdivision and
+ * belongs in the comp's pilot classes, not here.
  */
 export function defaultsFor(
   category: 'hg' | 'pg',
