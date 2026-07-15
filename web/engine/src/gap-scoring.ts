@@ -63,6 +63,31 @@ export interface GAPParameters {
    */
   leadingFormula: LeadingFormula;
   /**
+   * Which generation of the *leading-weight* formula distributes the
+   * non-distance weight between leading and time — a paragliding-only
+   * choice (hang-gliding weights are identical across generations):
+   * - 'gap2020'  — GAP2020/2021, matching AirScore's presets (the default,
+   *   preserving historical scores). PG leading weight is 0.35 × (1 − DW)
+   *   when someone makes goal, and 0.1 × BestDist/TaskDist when nobody does.
+   * - 's7f2024'  — the 2024 FAI Sporting Code S7F §10 formula. PG leading
+   *   weight is (1 − DW) × {@link GAPParameters.leadingTimeRatio} when
+   *   someone makes goal, and the *entire* non-distance weight (1 − DW)
+   *   when nobody does (nobody can earn PG time points without goal).
+   *
+   * See issue #257 and the `/scoring/gap` "Differences from the Official
+   * Spec" section. Only the leading↔time split changes; distance and
+   * arrival weights are unaffected, so hang-gliding scores never move.
+   */
+  leadingWeightFormula: LeadingWeightFormula;
+  /**
+   * S7F 2024 §10 "LeadingTimeRatio": for paragliding under the
+   * {@link GAPParameters.leadingWeightFormula} `'s7f2024'` formula, the
+   * fraction (0–0.5, default 0.26) of the non-distance weight allocated to
+   * leading when someone makes goal; the remainder goes to time. Ignored
+   * for hang gliding, and for PG under the `'gap2020'` formula.
+   */
+  leadingTimeRatio: number;
+  /**
    * Where scored task distance begins, for tasks that define a take-off
    * turnpoint before the SSS:
    * - 'takeoff' — measure from the take-off point through the SSS to goal,
@@ -103,6 +128,9 @@ export interface GAPParameters {
 /** Leading coefficient variant — see {@link GAPParameters.leadingFormula}. */
 export type LeadingFormula = 'classic' | 'weighted';
 
+/** Leading-weight formula generation — see {@link GAPParameters.leadingWeightFormula}. */
+export type LeadingWeightFormula = 'gap2020' | 's7f2024';
+
 /** Where scored task distance begins — see {@link GAPParameters.distanceOrigin}. */
 export type DistanceOrigin = 'takeoff' | 'start';
 
@@ -124,6 +152,8 @@ export const DEFAULT_GAP_PARAMETERS: GAPParameters = {
   useLeading: false,
   useArrival: false,
   leadingFormula: 'weighted',
+  leadingWeightFormula: 'gap2020',
+  leadingTimeRatio: 0.26,
   distanceOrigin: 'takeoff',
   useDistanceDifficulty: true,
   jumpTheGunFactor: 2,
@@ -427,6 +457,10 @@ export function calculateTaskValidity(
  *
  * @param useLeading - Whether leading (departure) points are enabled
  * @param useArrival - Whether arrival points are enabled (HG only)
+ * @param leadingWeightFormula - PG leading-weight generation (see
+ *   {@link GAPParameters.leadingWeightFormula}); ignored for HG
+ * @param leadingTimeRatio - PG S7F-2024 LeadingTimeRatio (see
+ *   {@link GAPParameters.leadingTimeRatio})
  */
 export function calculateWeights(
   goalRatio: number,
@@ -435,6 +469,8 @@ export function calculateWeights(
   scoring: 'PG' | 'HG',
   useLeading = true,
   useArrival = true,
+  leadingWeightFormula: LeadingWeightFormula = 'gap2020',
+  leadingTimeRatio = 0.26,
 ): WeightFractions {
   const gr = goalRatio;
 
@@ -444,10 +480,17 @@ export function calculateWeights(
   // Arrival weight: HG only, when enabled
   const aw = (scoring === 'HG' && useArrival) ? (1 - dw) / 8 : 0;
 
-  // Leading weight: shared formula, PG doubles the multiplier
+  // Leading weight. Hang gliding is generation-independent; paragliding
+  // picks between the GAP2020/AirScore split and the S7F-2024 §10 formula.
   let lw: number;
   if (!useLeading) {
     lw = 0;
+  } else if (scoring === 'PG' && leadingWeightFormula === 's7f2024') {
+    // FAI S7F 2024 §10: leading takes LeadingTimeRatio of the non-distance
+    // weight when someone makes goal; when nobody does (GoalRatio = 0) PG
+    // time points are unearnable, so *all* non-distance weight goes to
+    // leading.
+    lw = gr === 0 ? 1 - dw : (1 - dw) * leadingTimeRatio;
   } else if (gr === 0) {
     lw = taskDistance > 0 ? (bestDistance / taskDistance) * 0.1 : 0;
   } else {
@@ -1272,6 +1315,7 @@ export function scoreFlights(
   const weights = calculateWeights(
     goalRatio, bestDistance, taskDistance, fullParams.scoring,
     fullParams.useLeading, fullParams.useArrival,
+    fullParams.leadingWeightFormula, fullParams.leadingTimeRatio,
   );
   const totalAvailable = 1000 * taskValidity.task;
   const availablePoints: AvailablePoints = {

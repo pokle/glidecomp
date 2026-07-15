@@ -135,7 +135,16 @@
 //     1/2/5 all score under the HG profile), which touches a hashed scoring
 //     source, so the fingerprint guard requires a bump. The extra cache roll
 //     is harmless (scores recompute identically).
-export const SCORING_ENGINE_VERSION = 16;
+// v17: paragliding leading-weight formula generation (issue #257). A new
+//     `leadingWeightFormula` param ('gap2020' default | 's7f2024') and
+//     `leadingTimeRatio` (0–0.5, default 0.26) let a PG comp score its
+//     leading↔time weight split under either the GAP2020/AirScore formula
+//     (unchanged) or the FAI S7F 2024 §10 LeadingTimeRatio formula (leading =
+//     LeadingTimeRatio × (1 − DW) at goal, and the whole non-distance weight
+//     when nobody makes goal). The default preserves existing scores; only
+//     comps that opt into 's7f2024' move. Hang-gliding weights are
+//     untouched. Bump rolls caches so opted-in comps recompute.
+export const SCORING_ENGINE_VERSION = 17;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -143,4 +152,4 @@ export const SCORING_ENGINE_VERSION = 16;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "3cf1b4c02cafa29f3fbd8d21313eb0346c6fd888127ee69f759c33532b65f044";
+  "6a433e9ebc2bcb7cbfc546e692fce101c2b35301e751fcb70a0fb91c72e67214";

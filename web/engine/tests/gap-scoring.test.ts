@@ -940,6 +940,45 @@ describe('calculateWeights with flags', () => {
   });
 });
 
+describe('calculateWeights — S7F 2024 leading formula (issue #257)', () => {
+  it('PG s7f2024 with goal: leading = LeadingTimeRatio × (1 − DW)', () => {
+    const gr = 0.3;
+    const w = calculateWeights(gr, 80000, 100000, 'PG', true, true, 's7f2024', 0.26);
+    const dw = w.distance;
+    expect(w.leading).toBeCloseTo((1 - dw) * 0.26, 6);
+    // the remainder goes to time (PG has no arrival)
+    expect(w.time).toBeCloseTo((1 - dw) * 0.74, 6);
+    expect(w.distance + w.time + w.leading + w.arrival).toBeCloseTo(1, 6);
+  });
+
+  it('PG s7f2024 honours a custom LeadingTimeRatio', () => {
+    const w = calculateWeights(0.3, 80000, 100000, 'PG', true, true, 's7f2024', 0.5);
+    expect(w.leading).toBeCloseTo((1 - w.distance) * 0.5, 6);
+  });
+
+  it('PG s7f2024 at goal ratio 0: all non-distance weight goes to leading', () => {
+    const w = calculateWeights(0, 50000, 100000, 'PG', true, true, 's7f2024', 0.26);
+    expect(w.leading).toBeCloseTo(1 - w.distance, 6);
+    expect(w.time).toBeCloseTo(0, 6);
+  });
+
+  it('s7f2024 differs from the gap2020 default for PG', () => {
+    const s7f = calculateWeights(0.3, 80000, 100000, 'PG', true, true, 's7f2024', 0.26);
+    const gap = calculateWeights(0.3, 80000, 100000, 'PG', true, true, 'gap2020', 0.26);
+    // gap2020 PG leading = 0.35 × (1 − DW); s7f2024 = 0.26 × (1 − DW)
+    expect(gap.leading).toBeGreaterThan(s7f.leading);
+    expect(gap.leading).toBeCloseTo((1 - gap.distance) * 0.35, 6);
+  });
+
+  it('HG weights are unchanged by the leading-weight formula', () => {
+    const gap = calculateWeights(0.3, 80000, 100000, 'HG', true, true, 'gap2020', 0.26);
+    const s7f = calculateWeights(0.3, 80000, 100000, 'HG', true, true, 's7f2024', 0.26);
+    expect(s7f.leading).toBeCloseTo(gap.leading, 10);
+    expect(s7f.time).toBeCloseTo(gap.time, 10);
+    expect(s7f.arrival).toBeCloseTo(gap.arrival, 10);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // scoreFlights — the shared aggregation core that lets the competition
 // backend cache per-track analysis and skip re-parsing unchanged tracks.

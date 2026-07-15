@@ -71,6 +71,7 @@ export function SettingsDialog({
     minimumDistance: useId(),
     jtgFactor: useId(),
     jtgMax: useId(),
+    leadingTimeRatio: useId(),
   };
 
   // GAP scoring parameters — fall back to the official per-category FAI
@@ -118,6 +119,12 @@ export function SettingsDialog({
   const [leadingFormula, setLeadingFormula] = useState<"weighted" | "classic">(
     gp.leadingFormula ?? "weighted"
   );
+  const [leadingWeightFormula, setLeadingWeightFormula] = useState<"gap2020" | "s7f2024">(
+    gp.leadingWeightFormula ?? "gap2020"
+  );
+  const [leadingTimeRatio, setLeadingTimeRatio] = useState(
+    String(Math.round((gp.leadingTimeRatio ?? 0.26) * 100))
+  );
   const [distanceOrigin, setDistanceOrigin] = useState<"takeoff" | "start">(
     gp.distanceOrigin ?? "takeoff"
   );
@@ -143,6 +150,8 @@ export function SettingsDialog({
     setUseArrival(d.useArrival);
     setUseDifficulty(d.useDistanceDifficulty);
     setLeadingFormula(d.leadingFormula);
+    setLeadingWeightFormula(d.leadingWeightFormula);
+    setLeadingTimeRatio(String(Math.round(d.leadingTimeRatio * 100)));
     setDistanceOrigin(d.distanceOrigin);
     setJtgFactor(String(d.jumpTheGunFactor));
     setJtgMax(String(d.jumpTheGunMaxSeconds));
@@ -213,6 +222,8 @@ export function SettingsDialog({
       useLeading,
       useArrival,
       leadingFormula,
+      leadingWeightFormula,
+      leadingTimeRatio: parseField(leadingTimeRatio, 26) / 100,
       distanceOrigin,
       useDistanceDifficulty: useDifficulty,
       jumpTheGunFactor: parseField(jtgFactor, 2),
@@ -522,6 +533,48 @@ export function SettingsDialog({
                   Both match AirScore; weighted is the modern default.
                 </p>
               </div>
+              {category === "pg" ? (
+                <div>
+                  <h4 className="mb-1.5 text-sm font-medium">
+                    Paragliding leading weight
+                  </h4>
+                  <SimpleSelect
+                    value={leadingWeightFormula}
+                    onChange={(v) => setLeadingWeightFormula(v as "gap2020" | "s7f2024")}
+                    options={[
+                      { value: "gap2020", label: "GAP2020 — AirScore parity (default)" },
+                      { value: "s7f2024", label: "S7F 2024 — LeadingTimeRatio (§10)" },
+                    ]}
+                    ariaLabel="Paragliding leading weight formula"
+                  />
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    How much of the non-distance weight goes to leading vs time.
+                    GAP2020 gives leading 35% (and all of it when nobody makes goal);
+                    S7F 2024 uses the LeadingTimeRatio below. Hang-gliding is unaffected.
+                  </p>
+                  {leadingWeightFormula === "s7f2024" ? (
+                    <Field className="mt-3">
+                      <FieldLabel htmlFor={ids.leadingTimeRatio}>
+                        Leading-time ratio (%)
+                      </FieldLabel>
+                      <Input
+                        id={ids.leadingTimeRatio}
+                        type="number"
+                        min={0}
+                        max={50}
+                        step={1}
+                        value={leadingTimeRatio}
+                        onChange={(e) => setLeadingTimeRatio(e.target.value)}
+                      />
+                      <FieldDescription>
+                        FAI S7F §10: the % of the non-distance weight allocated to
+                        leading when someone makes goal (0–50%, spec default 26%). The
+                        rest goes to time.
+                      </FieldDescription>
+                    </Field>
+                  ) : null}
+                </div>
+              ) : null}
               <div>
                 <h4 className="mb-1.5 text-sm font-medium">Distance origin</h4>
                 <SimpleSelect

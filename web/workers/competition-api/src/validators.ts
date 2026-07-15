@@ -51,6 +51,13 @@ const gapParamsSchema = z
     // Leading coefficient variant (AirScore lc_formula). Optional; the
     // scorer defaults to 'weighted' (modern CIVL GAP) when omitted.
     leadingFormula: z.enum(["classic", "weighted"]).optional(),
+    // Leading-weight generation (paragliding only; issue #257). Optional;
+    // defaults to 'gap2020' (AirScore parity) when omitted. 's7f2024'
+    // selects the 2024 FAI S7F §10 LeadingTimeRatio formula.
+    leadingWeightFormula: z.enum(["gap2020", "s7f2024"]).optional(),
+    // S7F 2024 §10 LeadingTimeRatio (0–0.5, spec default 0.26). Optional;
+    // only used for PG under the 's7f2024' leadingWeightFormula.
+    leadingTimeRatio: z.number().min(0).max(0.5).optional(),
     // Where scored distance begins. Optional; defaults to 'takeoff'
     // (FAI CIVL GAP / PWCA) when omitted. 'start' excludes the
     // take-off→SSS leg (HGFA wording / "Move Origin").

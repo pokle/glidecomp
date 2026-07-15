@@ -36,6 +36,8 @@
  *     --use-distance-difficulty / --no-use-distance-difficulty  `useDistanceDifficulty`
  *   Formula & advanced:
  *     --leading-formula <weighted|classic>   `leadingFormula` (default: weighted)
+ *     --leading-weight-formula <gap2020|s7f2024>  `leadingWeightFormula`, PG (default: gap2020)
+ *     --leading-time-ratio <ratio>           `leadingTimeRatio` 0-0.5, PG S7F-2024 (default: 0.26)
  *     --distance-origin <takeoff|start>      `distanceOrigin` (default: takeoff)
  *     --jump-the-gun-factor <n>              `jumpTheGunFactor`, HG (default: 2)
  *     --jump-the-gun-max-seconds <s>         `jumpTheGunMaxSeconds`, HG (default: 300)
@@ -88,6 +90,11 @@ function usage(): never {
     'Formula & advanced:\n' +
     '  --leading-formula <weighted|classic>\n' +
     '                             `leadingFormula` (default: weighted)\n' +
+    '  --leading-weight-formula <gap2020|s7f2024>\n' +
+    '                             `leadingWeightFormula`, PG only (default: gap2020;\n' +
+    '                             "s7f2024" uses the FAI S7F §10 LeadingTimeRatio split)\n' +
+    '  --leading-time-ratio <ratio>\n' +
+    '                             `leadingTimeRatio` 0-0.5, PG S7F-2024 only (default: 0.26)\n' +
     '  --distance-origin <takeoff|start>\n' +
     '                             `distanceOrigin` (default: takeoff; "start" excludes\n' +
     '                             the take-off→SSS leg)\n' +
@@ -145,6 +152,12 @@ for (let i = 0; i < args.length; i++) {
       break;
     case '--leading-formula':
       params.leadingFormula = args[++i] as 'weighted' | 'classic';
+      break;
+    case '--leading-weight-formula':
+      params.leadingWeightFormula = args[++i] as 'gap2020' | 's7f2024';
+      break;
+    case '--leading-time-ratio':
+      params.leadingTimeRatio = Number(args[++i]);
       break;
     case '--jump-the-gun-factor':
       params.jumpTheGunFactor = Number(args[++i]);
@@ -402,6 +415,13 @@ if (jsonOutput) {
   console.log(`  Sport:          ${p.scoring}`);
   console.log(`  Distance origin:${p.distanceOrigin === 'takeoff' ? ' take-off' : ' start cylinder'}`);
   console.log(`  Leading:        ${p.useLeading ? `on (${p.leadingFormula})` : 'off'}`);
+  if (p.useLeading && p.scoring === 'PG') {
+    console.log(
+      `  Leading weight: ${p.leadingWeightFormula === 's7f2024'
+        ? `S7F 2024 (ratio ${(p.leadingTimeRatio * 100).toFixed(0)}%)`
+        : 'GAP2020 (AirScore parity)'}`
+    );
+  }
   if (p.scoring === 'HG') {
     console.log(`  Arrival:        ${p.useArrival ? 'on' : 'off'}`);
     console.log(`  Difficulty:     ${p.useDistanceDifficulty ? 'on' : 'off'}`);

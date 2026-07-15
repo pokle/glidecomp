@@ -83,6 +83,19 @@ function describeGapParamChanges(
   if (oFormula !== nFormula) {
     out.push(describeChange("leading coefficient formula", oFormula, nFormula));
   }
+  // Leading-weight generation (PG only; issue #257) — changes every PG
+  // pilot's leading↔time split, so both the generation and its ratio are
+  // individually audit-logged.
+  const oLwf = o.leadingWeightFormula ?? "gap2020";
+  const nLwf = n.leadingWeightFormula ?? "gap2020";
+  if (oLwf !== nLwf) {
+    out.push(describeChange("PG leading-weight formula", oLwf, nLwf));
+  }
+  const oLtr = o.leadingTimeRatio ?? 0.26;
+  const nLtr = n.leadingTimeRatio ?? 0.26;
+  if (oLtr !== nLtr) {
+    out.push(describeChange("PG leading-time ratio", pct(oLtr), pct(nLtr)));
+  }
   const oOrigin = o.distanceOrigin ?? "takeoff";
   const nOrigin = n.distanceOrigin ?? "takeoff";
   if (oOrigin !== nOrigin) {
