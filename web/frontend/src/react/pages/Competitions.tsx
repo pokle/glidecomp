@@ -225,7 +225,7 @@ function CreateCompDialog({
             }
           />
 
-          <PilotClassesField value={pilotClasses} onChange={setPilotClasses} />
+          <PilotClassesField value={pilotClasses} onChange={setPilotClasses} wing={category} />
 
           <TestCompField checked={test} onChange={setTest} />
 

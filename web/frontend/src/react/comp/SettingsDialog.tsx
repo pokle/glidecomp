@@ -268,7 +268,7 @@ export function SettingsDialog({
 
           <CategoryField value={category} onChange={setCategory} />
 
-          <PilotClassesField value={pilotClassesText} onChange={setPilotClassesText} />
+          <PilotClassesField value={pilotClassesText} onChange={setPilotClassesText} wing={category} />
 
           <div>
             <h3 className="mb-1.5 text-sm font-medium">Default Pilot Class</h3>
