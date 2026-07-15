@@ -35,7 +35,8 @@
  *     --use-arrival / --no-use-arrival                       `useArrival`
  *     --use-distance-difficulty / --no-use-distance-difficulty  `useDistanceDifficulty`
  *   Formula & advanced:
- *     --leading-formula <weighted|classic>   `leadingFormula` (default: weighted)
+ *     --leading-formula <weighted|classic>   `leadingFormula` (default: classic HG / weighted PG)
+ *     --time-points-exponent <5/6|2/3>       `timePointsExponent` (default: 5/6)
  *     --distance-origin <takeoff|start>      `distanceOrigin` (default: takeoff)
  *     --jump-the-gun-factor <n>              `jumpTheGunFactor`, HG (default: 2)
  *     --jump-the-gun-max-seconds <s>         `jumpTheGunMaxSeconds`, HG (default: 300)
@@ -48,7 +49,7 @@ import { resolve, basename, extname } from 'path';
 import { parseIGC } from '../src/igc-parser';
 import { parseXCTask } from '../src/xctsk-parser';
 import { calculateOptimizedTaskDistance } from '../src/task-optimizer';
-import { scoreTask, defaultsFor, type GAPParameters, type PilotFlight } from '../src/gap-scoring';
+import { scoreTask, resolveCompGapParams, resolveTimePointsExponent, type GAPParameters, type PilotFlight } from '../src/gap-scoring';
 import { scoreOpenDistance } from '../src/open-distance-scoring';
 
 // ---------------------------------------------------------------------------
@@ -87,7 +88,11 @@ function usage(): never {
     '                             `useDistanceDifficulty`, HG (default: on)\n\n' +
     'Formula & advanced:\n' +
     '  --leading-formula <weighted|classic>\n' +
-    '                             `leadingFormula` (default: weighted)\n' +
+    '                             `leadingFormula` leading-coefficient variant\n' +
+    '                             (default: classic for HG, weighted for PG — 2024 spec)\n' +
+    '  --time-points-exponent <5/6|2/3>\n' +
+    '                             `timePointsExponent` speed-fraction exponent (default: 5/6;\n' +
+    '                             set independently of --leading-formula)\n' +
     '  --distance-origin <takeoff|start>\n' +
     '                             `distanceOrigin` (default: takeoff; "start" excludes\n' +
     '                             the take-off→SSS leg)\n' +
@@ -145,6 +150,9 @@ for (let i = 0; i < args.length; i++) {
       break;
     case '--leading-formula':
       params.leadingFormula = args[++i] as 'weighted' | 'classic';
+      break;
+    case '--time-points-exponent':
+      params.timePointsExponent = args[++i] as '5/6' | '2/3';
       break;
     case '--jump-the-gun-factor':
       params.jumpTheGunFactor = Number(args[++i]);
@@ -302,7 +310,11 @@ const taskDistance = openDistance ? 0 : calculateOptimizedTaskDistance(task);
 // back to 'hg' harmlessly). This keeps a run numerically identical to the web
 // app for the same task and wing.
 const category = params.scoring === 'PG' ? 'pg' : 'hg';
-const gapParams: Partial<GAPParameters> = { ...defaultsFor(category), ...params };
+// resolveCompGapParams merges the passed flags over the per-category defaults
+// and, like the competition-api, keeps the pre-#258 exponent when only a
+// leading formula is given (classic → 2/3, weighted → 5/6) — so passing a
+// stored comp's gap_params reproduces its exact scores.
+const gapParams: Partial<GAPParameters> = resolveCompGapParams(category, params);
 
 // Auto-fill nominalDistance from a percentage of the optimized task distance
 // (UI uses 70%) unless the user pinned an explicit --nominal-distance. Key off
@@ -402,6 +414,7 @@ if (jsonOutput) {
   console.log(`  Sport:          ${p.scoring}`);
   console.log(`  Distance origin:${p.distanceOrigin === 'takeoff' ? ' take-off' : ' start cylinder'}`);
   console.log(`  Leading:        ${p.useLeading ? `on (${p.leadingFormula})` : 'off'}`);
+  console.log(`  Time exponent:  ${resolveTimePointsExponent(p)}`);
   if (p.scoring === 'HG') {
     console.log(`  Arrival:        ${p.useArrival ? 'on' : 'off'}`);
     console.log(`  Difficulty:     ${p.useDistanceDifficulty ? 'on' : 'off'}`);

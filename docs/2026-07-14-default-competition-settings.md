@@ -106,7 +106,8 @@ global blob. Recommended values:
 | `useLeading` | **`true`** | ⬆ official PG GAP uses leading points |
 | `useArrival` | `false` | — (PG has no arrival) |
 | `useDistanceDifficulty` | `false` | irrelevant for PG (always pure-linear); keep off to avoid implying otherwise |
-| `leadingFormula` | `weighted` | — |
+| `leadingFormula` | `weighted` | — (2024-spec PG variant) |
+| `timePointsExponent` | `5/6` | independent knob ([#258](https://github.com/pokle/glidecomp/issues/258)); current S7F |
 | `distanceOrigin` | `takeoff` | — |
 | jump-the-gun | n/a for PG | stored `2` / `300` but unused (PG early start = launch→SSS) |
 
@@ -123,10 +124,19 @@ global blob. Recommended values:
 | `useLeading` | **`true`** | ⬆ to match FAI S7F (Advanced can turn off for SAFA-style) |
 | `useArrival` | **`true`** | ⬆ HG scores arrival under FAI S7F (Advanced can turn off) |
 | `useDistanceDifficulty` | `true` | — (FAI S7F §11.1.1) |
-| `leadingFormula` | `weighted` | — |
+| `leadingFormula` | `classic` | ⬆ was `weighted`; the 2024-spec HG variant ([#258](https://github.com/pokle/glidecomp/issues/258)) |
+| `timePointsExponent` | `5/6` | now an independent knob ([#258](https://github.com/pokle/glidecomp/issues/258)); HG uses classic LC **with** the 5/6 exponent |
 | `distanceOrigin` | `takeoff` | — |
 | `jumpTheGunFactor` | `2` | — |
 | `jumpTheGunMaxSeconds` | `300` | — |
+
+> **Update ([#258](https://github.com/pokle/glidecomp/issues/258)):** the HG
+> `leadingFormula` default moved from `weighted` to `classic`, and the
+> time-points exponent (S7F §11.2) is now a separate `timePointsExponent` knob
+> defaulting to `5/6` for both sports — so the exact 2024-spec HG pairing
+> (classic LC + 5/6) is the default and is expressible. PG keeps `weighted` +
+> `5/6`. A comp that saved an explicit `leadingFormula` before the split keeps
+> the exponent that formula used to imply (classic → 2/3, weighted → 5/6).
 
 > If we'd rather the HG default match the app's own AirScore reference comp
 > (Australian practice) instead of strict FAI, set `useLeading: false` and

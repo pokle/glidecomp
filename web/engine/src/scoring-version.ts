@@ -135,7 +135,20 @@
 //     1/2/5 all score under the HG profile), which touches a hashed scoring
 //     source, so the fingerprint guard requires a bump. The extra cache roll
 //     is harmless (scores recompute identically).
-export const SCORING_ENGINE_VERSION = 16;
+// v17: sport-correct leading/time-points pairing (issue #258). The
+//     time-points exponent (S7F §11.2) is now an independent GAPParameters
+//     knob (timePointsExponent) instead of being implied by the
+//     leading-coefficient variant, and the per-category defaults adopt the
+//     2024-spec pairing: HG → classic squared-distance LC + 5/6 exponent,
+//     PG → weighted-area LC + 5/6 exponent (previously both categories
+//     defaulted to the weighted LC, and 'classic' forced a 2/3 exponent).
+//     An HG comp with no saved formula therefore switches from the weighted
+//     LC to the classic LC (both at 5/6); comps that saved an explicit
+//     leadingFormula keep the exponent it used to imply (classic → 2/3,
+//     weighted → 5/6), so their scores are unchanged. The bump invalidates
+//     cached scores for the null-/default-formula comps whose LC variant
+//     changed.
+export const SCORING_ENGINE_VERSION = 17;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -143,4 +156,4 @@ export const SCORING_ENGINE_VERSION = 16;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "3cf1b4c02cafa29f3fbd8d21313eb0346c6fd888127ee69f759c33532b65f044";
+  "7888660f5dcc17543df84c321037dd049a0f697213105561557220c83ef05251";

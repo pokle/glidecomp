@@ -49,8 +49,15 @@ const gapParamsSchema = z
     useLeading: z.boolean(),
     useArrival: z.boolean(),
     // Leading coefficient variant (AirScore lc_formula). Optional; the
-    // scorer defaults to 'weighted' (modern CIVL GAP) when omitted.
+    // per-category default is 'weighted' for PG and 'classic' for HG (2024
+    // spec, issue #258) when omitted.
     leadingFormula: z.enum(["classic", "weighted"]).optional(),
+    // Time-points exponent (FAI S7F §11.2), decoupled from the leading
+    // variant (issue #258). Optional; the per-category default is '5/6'.
+    // When omitted for a comp that saved a leadingFormula, the scorer keeps
+    // the exponent that formula historically implied (classic → 2/3,
+    // weighted → 5/6) so older saved comps keep their scores.
+    timePointsExponent: z.enum(["2/3", "5/6"]).optional(),
     // Where scored distance begins. Optional; defaults to 'takeoff'
     // (FAI CIVL GAP / PWCA) when omitted. 'start' excludes the
     // take-off→SSS leg (HGFA wording / "Move Origin").
