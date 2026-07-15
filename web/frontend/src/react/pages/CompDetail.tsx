@@ -199,7 +199,7 @@ function CompDetailView({
           <h1 className="text-2xl font-bold">{comp.name}</h1>
           <p className="text-sm text-muted-foreground">
             {facts.join(" · ")}
-            {comp.test ? " · Test" : null}
+            {comp.test ? " · Hidden" : null}
           </p>
         </div>
         {isAdmin ? (

@@ -103,7 +103,7 @@ export function Competitions() {
                     {comp.name}
                     {comp.test ? (
                       <span className="ml-2 inline-flex items-center rounded-full border px-2 py-0.5 align-middle text-xs font-medium text-muted-foreground">
-                        Test
+                        Hidden
                       </span>
                     ) : null}
                   </span>
