@@ -8,7 +8,7 @@ import { createCompSchema, updateCompSchema, validated } from "../validators";
 import { audit, describeChange } from "../audit";
 import { bumpAndRevalidateScores, taskIdsForComp } from "../score-store";
 import { speedSectionTypeWarnings, hasLineGoal } from "../xctsk-summary";
-import { DEFAULT_GAP_PARAMETERS, type GAPParameters } from "@glidecomp/engine";
+import { DEFAULT_GAP_PARAMETERS, resolveTimePointsExponent, type GAPParameters } from "@glidecomp/engine";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
 
 type Variables = {
@@ -82,6 +82,14 @@ function describeGapParamChanges(
   const nFormula = n.leadingFormula ?? "weighted";
   if (oFormula !== nFormula) {
     out.push(describeChange("leading coefficient formula", oFormula, nFormula));
+  }
+  // Time-points exponent (S7F §11.2), decoupled from the leading formula
+  // (issue #258). Report the effective exponent so a change from the
+  // formula-implied default to an explicit override is still logged.
+  const oExp = resolveTimePointsExponent(o);
+  const nExp = resolveTimePointsExponent(n);
+  if (oExp !== nExp) {
+    out.push(describeChange("time points exponent", oExp, nExp));
   }
   const oOrigin = o.distanceOrigin ?? "takeoff";
   const nOrigin = n.distanceOrigin ?? "takeoff";

@@ -158,7 +158,20 @@
 //     the deadline or after the first gate, is treated as unset. The result
 //     carries deadline/launchWindow transparency fields and the score
 //     explanation narrates the cutoff and each ignored crossing.
-export const SCORING_ENGINE_VERSION = 18;
+// v19: sport-correct leading/time-points pairing (issue #258). The
+//     time-points exponent (S7F §11.2) is now an independent GAPParameters
+//     knob (timePointsExponent) instead of being implied by the
+//     leading-coefficient variant, and the per-category defaults adopt the
+//     2024-spec pairing: HG → classic squared-distance LC + 5/6 exponent,
+//     PG → weighted-area LC + 5/6 exponent (previously both categories
+//     defaulted to the weighted LC, and 'classic' forced a 2/3 exponent).
+//     An HG comp with no saved formula therefore switches from the weighted
+//     LC to the classic LC (both at 5/6); comps that saved an explicit
+//     leadingFormula keep the exponent it used to imply (classic → 2/3,
+//     weighted → 5/6), so their scores are unchanged. The bump invalidates
+//     cached scores for the null-/default-formula comps whose LC variant
+//     changed.
+export const SCORING_ENGINE_VERSION = 19;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -166,4 +179,4 @@ export const SCORING_ENGINE_VERSION = 18;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "9e5153b2159e4b8e011298875e145cfc71e9eaf0eb0566ccb0848297f4785865";
+  "4c15fdc66abd36b39d2f8141688d43155b5ae3fa286c038effd18ac16768a193";

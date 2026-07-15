@@ -5,7 +5,7 @@
  */
 import { useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { defaultsFor } from "@glidecomp/engine";
+import { defaultsFor, resolveTimePointsExponent } from "@glidecomp/engine";
 import { Button } from "@/react/ui/button";
 import {
   Dialog,
@@ -119,6 +119,12 @@ export function SettingsDialog({
   const [leadingFormula, setLeadingFormula] = useState<"weighted" | "classic">(
     gp.leadingFormula ?? "weighted"
   );
+  // Time-points exponent (S7F §11.2), decoupled from the leading formula
+  // (issue #258). A saved comp that predates the split keeps the exponent its
+  // leadingFormula historically implied (resolveTimePointsExponent).
+  const [timePointsExponent, setTimePointsExponent] = useState<"5/6" | "2/3">(
+    resolveTimePointsExponent(gp)
+  );
   const [distanceOrigin, setDistanceOrigin] = useState<"takeoff" | "start">(
     gp.distanceOrigin ?? "takeoff"
   );
@@ -148,6 +154,7 @@ export function SettingsDialog({
     setUseArrival(d.useArrival);
     setUseDifficulty(d.useDistanceDifficulty);
     setLeadingFormula(d.leadingFormula);
+    setTimePointsExponent(resolveTimePointsExponent(d));
     setDistanceOrigin(d.distanceOrigin);
     setJtgFactor(String(d.jumpTheGunFactor));
     setJtgMax(String(d.jumpTheGunMaxSeconds));
@@ -219,6 +226,7 @@ export function SettingsDialog({
       useLeading,
       useArrival,
       leadingFormula,
+      timePointsExponent,
       distanceOrigin,
       useDistanceDifficulty: useDifficulty,
       jumpTheGunFactor: parseField(jtgFactor, 2),
@@ -539,13 +547,31 @@ export function SettingsDialog({
                   value={leadingFormula}
                   onChange={(v) => setLeadingFormula(v as "weighted" | "classic")}
                   options={[
-                    { value: "weighted", label: "Weighted — GAP2020+ / current FAI S7F" },
-                    { value: "classic", label: "Classic — GAP2016/2018, PWC ≤2017" },
+                    { value: "weighted", label: "Weighted — GAP2020+ / S7F paragliding" },
+                    { value: "classic", label: "Classic — S7F hang gliding / GAP2016/2018" },
                   ]}
                   ariaLabel="Leading coefficient formula"
                 />
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Both match AirScore; weighted is the modern default.
+                  The leading-points envelope (S7F §11.3.1). The 2024 spec pairs hang
+                  gliding with classic and paragliding with weighted; both match AirScore.
+                </p>
+              </div>
+              <div>
+                <h4 className="mb-1.5 text-sm font-medium">Time points exponent</h4>
+                <SimpleSelect
+                  value={timePointsExponent}
+                  onChange={(v) => setTimePointsExponent(v as "5/6" | "2/3")}
+                  options={[
+                    { value: "5/6", label: "5⁄6 — current FAI S7F (both sports)" },
+                    { value: "2/3", label: "2⁄3 — older GAP2016/2018 curve" },
+                  ]}
+                  ariaLabel="Time points exponent"
+                />
+                <p className="mt-1 text-sm text-muted-foreground">
+                  The speed-fraction exponent (S7F §11.2), set independently of the leading
+                  formula. 5⁄6 is the current spec for both sports; 2⁄3 is slightly more
+                  generous.
                 </p>
               </div>
               <div>

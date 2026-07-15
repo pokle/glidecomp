@@ -30,7 +30,12 @@ import type {
   TurnpointReaching,
 } from './turnpoint-sequence';
 import type { GAPParameters } from './gap-scoring';
-import { DEFAULT_GAP_PARAMETERS, calculateSpeedFraction } from './gap-scoring';
+import {
+  DEFAULT_GAP_PARAMETERS,
+  calculateSpeedFraction,
+  resolveTimePointsExponent,
+  speedExponentValue,
+} from './gap-scoring';
 import type { OpenDistanceGeometry } from './open-distance-scoring';
 import type { ManualFlightGeometry } from './manual-flight';
 import type { IGCFix } from './igc-parser';
@@ -286,6 +291,16 @@ function reachingAnchor(
 // ---------------------------------------------------------------------------
 // GAP explanation
 // ---------------------------------------------------------------------------
+
+/**
+ * Name the leading-coefficient variant actually used (S7F §11.3.1), decoupled
+ * from the time-points exponent since issue #258.
+ */
+function leadingVariantSentence(formula: GAPParameters['leadingFormula']): string {
+  return formula === 'classic'
+    ? 'Measured with the classic squared-distance leading coefficient (S7F §11.3.1, the hang-gliding / GAP2016–2018 variant).'
+    : 'Measured with the weighted-area leading coefficient (S7F §11.3.1, the paragliding / GAP2020+ variant).';
+}
 
 /** Cap on individually listed start crossings — beyond this, summarise. */
 const MAX_START_CROSSINGS_LISTED = 12;
@@ -957,12 +972,22 @@ function buildTimeSection(
       emphasis: 'muted',
     });
   } else {
-    const exponent = params.leadingFormula === 'classic' ? 2 / 3 : 5 / 6;
+    // Time-points exponent (S7F §11.2) actually used for this comp, decoupled
+    // from the leading-coefficient variant (issue #258).
+    const exp = resolveTimePointsExponent(params);
+    const exponentLabel = exp === '2/3' ? '2⁄3' : '5⁄6';
+    const exponentName =
+      exp === '2/3' ? 'the older GAP2016/2018 curve' : 'the current FAI S7F';
     const sf = calculateSpeedFraction(
       entry.speed_section_time,
       bestTime,
-      exponent,
+      speedExponentValue(exp),
     );
+    items.push({
+      id: 'time-exponent',
+      text: `Time points use the ${exponentLabel} speed-fraction exponent (${exponentName}, S7F §11.2).`,
+      emphasis: 'muted',
+    });
     items.push({
       id: 'your-time',
       text: 'Your speed section time',
@@ -1017,11 +1042,10 @@ function buildTimeSection(
           : undefined,
       });
     } else {
-      const exponentLabel =
-        params.leadingFormula === 'classic' ? '2⁄3' : '5⁄6';
       // time points = speed fraction × available (× the §12.1 factor),
       // exactly — print the fraction with enough decimals that the
-      // multiplication visibly holds at the 0.1-pt step.
+      // multiplication visibly holds at the 0.1-pt step. exponentLabel is the
+      // decoupled time-points exponent resolved above (issue #258).
       const { availStr, decimals, reconciles } = reconcileWithAvailable(
         ap.time, 3, 6, entry.time_points,
         (d, avail) => Number(sf.toFixed(d)) * avail * factor,
@@ -1218,6 +1242,11 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
           id: 'leading',
           text: 'Leading points reward flying out front during the speed section — the pilot with the best leading coefficient takes all available leading points, others fall off with the gap.',
           value: pts(entry.leading_points),
+        },
+        {
+          id: 'leading-variant',
+          text: leadingVariantSentence(params.leadingFormula),
+          emphasis: 'muted',
         },
       ],
     });

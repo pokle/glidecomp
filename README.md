@@ -177,7 +177,8 @@ bun run score-task <task.xctsk> <igc-file-or-folder>... [options]
 #   --no-use-leading           Disable leading (departure) points (`useLeading`)
 #   --no-use-arrival           Disable arrival points (`useArrival`)
 # Formula & advanced:
-#   --leading-formula <weighted|classic>  `leadingFormula` (default: weighted)
+#   --leading-formula <weighted|classic>  `leadingFormula` (default: classic HG / weighted PG)
+#   --time-points-exponent <5/6|2/3>       `timePointsExponent` (default: 5/6)
 #   (see --help for the full list, incl. nominal-launch, distance-origin, jump-the-gun)
 # Output:
 #   --json                     Output as JSON
@@ -196,7 +197,8 @@ Example output:
 
 Scoring config:
   Sport:          HG
-  Leading:        on (weighted)
+  Leading:        on (classic)
+  Time exponent:  5/6
   Arrival:        on
   Difficulty:     on
   Nominal:        dist 55.2 km / time 90 min / goal 30% / launch 96%

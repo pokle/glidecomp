@@ -54,14 +54,29 @@ export interface GAPParameters {
   /** Whether to compute arrival points (default true for HG, ignored for PG) */
   useArrival: boolean;
   /**
-   * GAP formula generation (matches AirScore's formula presets). Selects
-   * both the leading-coefficient variant and the speed-points exponent:
-   * - 'weighted' — GAP2020+ / current FAI S7F: weighted-area leading
-   *   envelope; speed exponent 5/6 (the modern default).
-   * - 'classic'  — GAP2016/2018 & PWC≤2017: squared-distance leading,
-   *   time from each pilot's own start; speed exponent 2/3.
+   * Leading-coefficient (departure points) variant — see {@link LeadingFormula}.
+   * Since issue #258 this selects ONLY the LC envelope, independently of the
+   * time-points exponent ({@link timePointsExponent}):
+   * - 'weighted' — GAP2020+ / current FAI S7F paragliding: weighted-area
+   *   leading envelope.
+   * - 'classic'  — GAP2016/2018 & current FAI S7F hang gliding: squared-distance
+   *   leading, time from each pilot's own start.
+   * When {@link timePointsExponent} is unset the exponent falls back to the
+   * value this formula historically implied (weighted → 5/6, classic → 2/3),
+   * preserving the scores of competitions saved before the two were split.
    */
   leadingFormula: LeadingFormula;
+  /**
+   * Speed-points exponent for the time-points curve (FAI S7F §11.2), decoupled
+   * from {@link leadingFormula} since issue #258:
+   * - '5/6' — current FAI S7F (2024), for both sports.
+   * - '2/3' — the older GAP2016/2018 curve (slightly more generous).
+   * Optional: when unset the exponent is derived from {@link leadingFormula}
+   * for backward compatibility (see its doc). The per-category defaults
+   * ({@link defaultsFor}) set it to '5/6' for both sports, so the exact
+   * 2024-spec hang-gliding pairing (classic LC + 5/6) is expressible.
+   */
+  timePointsExponent?: SpeedExponent;
   /**
    * Where scored task distance begins, for tasks that define a take-off
    * turnpoint before the SSS:
@@ -118,6 +133,9 @@ export interface GAPParameters {
 /** Leading coefficient variant — see {@link GAPParameters.leadingFormula}. */
 export type LeadingFormula = 'classic' | 'weighted';
 
+/** Time-points exponent (FAI S7F §11.2) — see {@link GAPParameters.timePointsExponent}. */
+export type SpeedExponent = '5/6' | '2/3';
+
 /** Where scored task distance begins — see {@link GAPParameters.distanceOrigin}. */
 export type DistanceOrigin = 'takeoff' | 'start';
 
@@ -162,6 +180,13 @@ export type ScoringPreset = 'fai';
  * - Leading (departure) points: on for both PG and HG — part of the S7F score.
  * - Arrival points: on for HG, off for PG (S7F arrival applies to HG only).
  * - Distance difficulty: on for HG, off for PG (S7F §11.1.1; PG is pure-linear).
+ * - Leading formula + time-points exponent: the 2024-spec sport pairing
+ *   (issue #258) — HG uses the classic squared-distance LC (S7F §11.3.1 HG
+ *   variant), PG the weighted-area LC (PG variant), and BOTH use the 5/6
+ *   time-points exponent (§11.2). These two knobs are independent, so an
+ *   organiser can pick any (LC variant, exponent) combination for AirScore
+ *   parity — e.g. weighted + 5/6 for the gap2020/2021 preset the Corryong
+ *   fixture is scored with, or classic + 2/3 for gap2016/2018.
  * - Nominal goal 30% — the FAI / AirScore norm.
  *
  * `nominalDistance` keeps the engine baseline (70 km); the competition backend
@@ -190,11 +215,41 @@ export function defaultsFor(
     useLeading: true,
     useArrival: !pg,
     useDistanceDifficulty: !pg,
+    // 2024-spec sport pairing (issue #258): PG weighted LC, HG classic LC,
+    // both with the modern 5/6 time-points exponent.
+    leadingFormula: pg ? 'weighted' : 'classic',
+    timePointsExponent: '5/6',
     // S7F §12.1 fixes the PG ESS-but-not-goal parameter at 0 (no goal → no
     // time points); the HG recommended default is 0.8. The engine ignores
     // the value for PG either way — this keeps the displayed default honest.
     essNotGoalFactor: pg ? 0 : 0.8,
   };
+}
+
+/**
+ * Merge a competition's stored GAP parameters over the official per-category
+ * defaults, resolving the effective parameter set the scorer (and the score
+ * explainer) should use.
+ *
+ * Backward compatibility (issue #258): a comp that explicitly saved a
+ * `leadingFormula` but predates the independent {@link
+ * GAPParameters.timePointsExponent} keeps the exponent that formula used to
+ * imply (classic → 2/3, weighted → 5/6), rather than inheriting the category
+ * default's 5/6. A comp with no stored params — or stored params that never
+ * pinned a formula — takes the category default pairing.
+ *
+ * @param category - 'hg' or 'pg' (drives {@link defaultsFor})
+ * @param stored - the comp's saved gap_params, or null when it never saved any
+ */
+export function resolveCompGapParams(
+  category: 'hg' | 'pg',
+  stored: Partial<GAPParameters> | null,
+): GAPParameters {
+  const merged: GAPParameters = { ...defaultsFor(category), ...(stored ?? {}) };
+  if (stored && stored.timePointsExponent == null && stored.leadingFormula != null) {
+    merged.timePointsExponent = stored.leadingFormula === 'classic' ? '2/3' : '5/6';
+  }
+  return merged;
 }
 
 /**
@@ -657,9 +712,10 @@ export function applyMinimumDistance(
  *
  *   SF = max(0, 1 − ((Tp − Tmin) / √Tmin)^e)    with times in hours
  *
- * where e = 5/6 for the modern formula (`weighted`) and 2/3 for the
- * older one (`classic`, AirScore gap.py — the same exponent it uses for
- * the leading factor). Tp/Tmin are speed-section times.
+ * where e is the time-points exponent (FAI S7F §11.2): 5/6 for the modern
+ * formula (current S7F, both sports) and 2/3 for the older GAP2016/2018 curve.
+ * Since issue #258 this exponent is chosen independently of the
+ * leading-coefficient variant. Tp/Tmin are speed-section times.
  */
 export function calculateSpeedFraction(
   pilotTimeSeconds: number,
@@ -676,9 +732,46 @@ export function calculateSpeedFraction(
   return Math.max(0, 1 - Math.pow((pilotTime - bestTime) / sqrtBest, exponent));
 }
 
-/** Speed-fraction exponent for a GAP formula generation. */
-function speedExponent(formula: LeadingFormula): number {
-  return formula === 'classic' ? 2 / 3 : 5 / 6;
+/** Numeric value of a time-points exponent (FAI S7F §11.2). */
+export function speedExponentValue(exponent: SpeedExponent): number {
+  return exponent === '2/3' ? 2 / 3 : 5 / 6;
+}
+
+/**
+ * Resolve the effective time-points exponent for a parameter set (issue #258).
+ * An explicit {@link GAPParameters.timePointsExponent} wins; otherwise the
+ * exponent is derived from {@link GAPParameters.leadingFormula} — the value it
+ * historically implied (classic → 2/3, weighted → 5/6) — so competitions saved
+ * before the two were decoupled keep their exact scores.
+ */
+export function resolveTimePointsExponent(
+  params: Pick<GAPParameters, 'timePointsExponent' | 'leadingFormula'>,
+): SpeedExponent {
+  if (params.timePointsExponent) return params.timePointsExponent;
+  return params.leadingFormula === 'classic' ? '2/3' : '5/6';
+}
+
+/** Inputs to {@link calculateTimePoints} for one pilot. */
+export interface TimePointsInput {
+  /** Pilot's speed-section time in seconds, or null if ESS not reached. */
+  pilotTime: number | null;
+  /** Fastest qualifying speed-section time in the class (seconds), or null. */
+  bestTime: number | null;
+  /** Whether the pilot reached goal. */
+  madeGoal: boolean;
+  /** Whether the pilot reached the end of the speed section. */
+  reachedESS: boolean;
+  /** Time points available to the class. */
+  availableTimePoints: number;
+  /** Sport — PG requires goal, HG requires ESS, to earn any time points. */
+  scoring: 'PG' | 'HG';
+  /** Time-points exponent (S7F §11.2). Defaults to '5/6' (current spec). */
+  exponent?: SpeedExponent;
+  /**
+   * §12.1 share of time points an HG pilot keeps when they reach ESS but not
+   * goal. Defaults to the engine baseline (0.8). PG is fixed at 0 by the spec.
+   */
+  essNotGoalFactor?: number;
 }
 
 /**
@@ -689,16 +782,16 @@ function speedExponent(formula: LeadingFormula): number {
  * on to reach goal keeps only `essNotGoalFactor` of them (S7F §12.1,
  * default 0.8) — reaching goal "validates" the speed section.
  */
-export function calculateTimePoints(
-  pilotTime: number | null,
-  bestTime: number | null,
-  madeGoal: boolean,
-  reachedESS: boolean,
-  availableTimePoints: number,
-  scoring: 'PG' | 'HG',
-  formula: LeadingFormula = 'weighted',
-  essNotGoalFactor: number = DEFAULT_GAP_PARAMETERS.essNotGoalFactor,
-): number {
+export function calculateTimePoints({
+  pilotTime,
+  bestTime,
+  madeGoal,
+  reachedESS,
+  availableTimePoints,
+  scoring,
+  exponent = '5/6',
+  essNotGoalFactor = DEFAULT_GAP_PARAMETERS.essNotGoalFactor,
+}: TimePointsInput): number {
   if (bestTime === null || pilotTime === null) return 0;
 
   // PG: must make goal to get time points
@@ -706,7 +799,7 @@ export function calculateTimePoints(
   // HG: must reach ESS
   if (scoring === 'HG' && !reachedESS) return 0;
 
-  const sf = calculateSpeedFraction(pilotTime, bestTime, speedExponent(formula));
+  const sf = calculateSpeedFraction(pilotTime, bestTime, speedExponentValue(exponent));
   const points = sf * availableTimePoints;
   // §12.1: an HG pilot with ESS but no goal keeps only the configured share.
   if (scoring === 'HG' && !madeGoal) return points * essNotGoalFactor;
@@ -1394,6 +1487,11 @@ export function scoreFlights(
   // §12.2 floor for the jump-the-gun penalty: the score a pilot would get
   // for exactly the minimum distance (distance points only) — the penalty
   // never drops a pilot below it, unlike the generic §12.4 zero floor.
+  // Time-points exponent (§11.2), resolved once for the field. Decoupled from
+  // the leading-coefficient variant (issue #258); backward-compatible when only
+  // leadingFormula was stored.
+  const timeExponent = resolveTimePointsExponent(fullParams);
+
   const anyJtgPenalty = earlyOutcomes.some(o => o === 'hg_penalty');
   const scoreForMinDistance = anyJtgPenalty
     ? (difficulty
@@ -1423,13 +1521,16 @@ export function scoreFlights(
         })();
     const distPts = distScore.total;
 
-    const timePts = calculateTimePoints(
-      f.speedSectionTime, bestTime,
-      f.madeGoal, f.reachedESS,
-      availablePoints.time, fullParams.scoring,
-      fullParams.leadingFormula,
+    const timePts = calculateTimePoints({
+      pilotTime: f.speedSectionTime,
+      bestTime,
+      madeGoal: f.madeGoal,
+      reachedESS: f.reachedESS,
+      availableTimePoints: availablePoints.time,
+      scoring: fullParams.scoring,
+      exponent: timeExponent,
       essNotGoalFactor,
-    );
+    });
 
     const leadPts = calculateLeadingPoints(
       leadingCoefficients[idx], minLC, availablePoints.leading,
