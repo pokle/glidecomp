@@ -689,8 +689,12 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   <td class="py-2">Not implemented — every turnpoint before goal is a cylinder</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Task deadline enforcement (<SpecRef section="8.3" />)</td>
-                  <td class="py-2">Not implemented</td>
+                  <td class="py-2 pr-4">Task deadline enforcement (<SpecRef section="8.3" />, <SpecRef section="11.1" />)</td>
+                  <td class="py-2">Implemented — crossings after the goal deadline don't count; landed-out distance is measured up to the deadline</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">Launch window (<SpecRef section="8.6.1" />)</td>
+                  <td class="py-2">Partially implemented — start crossings before the window opens can't validate a start; see below</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Stopped tasks (weather calldowns, <SpecRef section="12.3" />)</td>
@@ -804,12 +808,18 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </p>
             </div>
             <div>
-              <h3 class="text-base font-semibold mb-1">Task deadline is not enforced (<SpecRef section="8.3" />)</h3>
+              <h3 class="text-base font-semibold mb-1">Launch window: only provable violations are enforced (<SpecRef section="8.6.1" />)</h3>
               <p class="text-muted-foreground">
-                The spec only counts turnpoint crossings recorded before the task deadline, and
-                measures landed-out pilots' best distance up to the deadline. GlideComp parses the
-                goal deadline from the task file but scores the whole track regardless of time — a
-                pilot tagging a turnpoint after the deadline would still be credited.
+                The spec counts a pilot's turnpoints only if they launched within the launch time
+                window. GlideComp enforces the half of this that a tracklog can prove: a
+                start-cylinder crossing recorded <em>before</em> the window even opened
+                (<code>takeoff.timeOpen</code> in the task file) means the pilot was airborne
+                before launching was allowed, so such crossings cannot validate a start — the
+                score explanation says so. What a tracklog alone cannot prove is <em>when</em> the
+                pilot launched: a pilot who launched before the window but only started the course
+                after it opened, or who launched after the window closed, is not detected —
+                launch-time detection is not part of scoring, so those cases are left to the
+                scorekeeper (a penalty can be applied manually).
               </p>
             </div>
             <div>
@@ -822,6 +832,16 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   percentage is 0.5% (the Cat&nbsp;2 maximum), used for every competition rather
                   than auto-selecting 0.1% for Cat&nbsp;1 events; it is configurable per task. A
                   goal line carries no tolerance band — it is scored as exact geometry.
+                </li>
+                <li>
+                  <strong>Mis-set task deadlines are ignored (<SpecRef section="8.3" />):</strong> the goal
+                  deadline is enforced as the spec requires — crossings after it don't count, and
+                  a landed-out pilot's distance is measured only up to it (<SpecRef section="11.1" />) — with one
+                  pragmatic guard: a deadline that falls at or before the first start gate (or a
+                  launch-window open time at or after the deadline) is a task-setting mistake that
+                  would zero every pilot, so it is treated as unset, in the same spirit as the
+                  missing-SSS/ESS fallbacks. When the deadline shaped a pilot's score, the score
+                  explanation shows the cutoff time and each ignored crossing.
                 </li>
                 <li>
                   <strong>Rounding (<SpecRef section="11" />, <SpecRef section="12.4" />):</strong> GlideComp rounds each pilot's total to

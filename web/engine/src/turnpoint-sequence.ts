@@ -27,7 +27,12 @@ import {
   isInGoalSemicircle,
   type GoalLine,
 } from './goal-line';
-import { resolveStartGates, gateIndexForCrossing } from './time-gates';
+import {
+  resolveStartGates,
+  gateIndexForCrossing,
+  resolveTaskDeadline,
+  resolveLaunchWindowOpen,
+} from './time-gates';
 
 /**
  * Default cylinder tolerance as a fraction of the radius. 0.5% is the Cat 2
@@ -278,6 +283,54 @@ export interface EarlyStart {
 }
 
 // ---------------------------------------------------------------------------
+// Task deadline and launch window
+// ---------------------------------------------------------------------------
+
+/**
+ * The task deadline as applied to this flight (FAI S7F §8.3.c, §8.6.1,
+ * §11.1): crossings after the deadline don't count toward the sequence, and
+ * a landed-out pilot's best distance is measured only up to it. Present on
+ * the result whenever the task defines an enforceable deadline, so the
+ * score explanation can state the cutoff and point at any ignored
+ * crossings (which remain in {@link TurnpointSequenceResult.crossings}).
+ */
+export interface TaskDeadlineInfo {
+  /** The absolute task deadline, resolved onto the flight's day. */
+  time: Date;
+
+  /**
+   * Boundary crossings recorded after the deadline — still listed in
+   * `crossings` for transparency, but excluded from sequence resolution.
+   */
+  crossingsAfter: number;
+
+  /**
+   * True when the tracklog continues past the deadline. Distance and
+   * crossings from that part of the track earn nothing (§11.1); the flag
+   * lets the explanation say so without re-scanning the fixes.
+   */
+  trackContinuesPastDeadline: boolean;
+}
+
+/**
+ * The launch window's open time as applied to this flight (FAI S7F §8.6.1,
+ * from the task's `takeoff.timeOpen`). A start-cylinder crossing before the
+ * window opens proves the pilot was airborne before launching was allowed,
+ * so such crossings cannot validate a start. Present whenever the task
+ * defines an enforceable window open time.
+ */
+export interface LaunchWindowInfo {
+  /** When the launch window opened, resolved onto the flight's day. */
+  openTime: Date;
+
+  /**
+   * Start-cylinder crossings before the window opened, excluded from start
+   * validation (they remain in `crossings` for transparency).
+   */
+  droppedStartCrossings: number;
+}
+
+// ---------------------------------------------------------------------------
 // Complete result
 // ---------------------------------------------------------------------------
 
@@ -388,6 +441,20 @@ export interface TurnpointSequenceResult {
    * has an explicit ESS turnpoint.
    */
   essFallback?: 'last_turnpoint';
+
+  /**
+   * Present when the task defines an enforceable goal deadline (§8.3.c):
+   * crossings after it were excluded from the sequence and best-progress
+   * distance was measured only up to it. See {@link TaskDeadlineInfo}.
+   */
+  deadline?: TaskDeadlineInfo;
+
+  /**
+   * Present when the task defines an enforceable launch-window open time
+   * (§8.6.1): start crossings before it cannot validate a start. See
+   * {@link LaunchWindowInfo}.
+   */
+  launchWindow?: LaunchWindowInfo;
 }
 
 // ---------------------------------------------------------------------------
@@ -931,6 +998,9 @@ type NextTPMeasure =
  *   remaining TPs (length = remainingTPs.length - 1).
  * @param nextMeasure - How to measure the fix→next-turnpoint distance
  *   (see {@link NextTPMeasure}).
+ * @param deadlineMs - The task deadline (FAI S7F §11.1): best distance is
+ *   measured up until the pilot landed or the deadline, whichever comes
+ *   first — fixes after it are not scanned. Null when the task has none.
  */
 function computeBestProgress(
   fixes: IGCFix[],
@@ -938,6 +1008,7 @@ function computeBestProgress(
   remainingTPs: Array<{ lat: number; lon: number; radius: number }>,
   remainingLegDistances: number[],
   nextMeasure: NextTPMeasure,
+  deadlineMs: number | null,
 ): BestProgress | null {
   // Sum of optimized leg distances between remaining TPs (TP[1]→TP[2]→...→Goal)
   let interTPDistance = 0;
@@ -951,6 +1022,8 @@ function computeBestProgress(
   for (let i = 0; i < fixes.length; i++) {
     const fix = fixes[i];
     if (fix.time.getTime() <= lastReachingTime) continue;
+    // §11.1: flying after the task deadline earns no further distance.
+    if (deadlineMs !== null && fix.time.getTime() > deadlineMs) break;
 
     // Distance to the next un-reached turnpoint — see NextTPMeasure for
     // which measurement applies and why. Measuring to a tag point avoids
@@ -991,22 +1064,29 @@ function computeBestProgress(
  *
  * Algorithm (per CIVL GAP / Section 7F):
  * 1. Detect all cylinder crossings per task position
- * 2. For gated races: drop SSS crossings before the first start gate
+ * 2. Enforce the task deadline (§8.3.c): crossings after the goal deadline
+ *    are excluded from sequence resolution (and best-progress distance is
+ *    measured only up to the deadline, §11.1); the full crossing list is
+ *    still returned so ignored crossings can be explained
+ * 3. Enforce the launch window's open time (§8.6.1): SSS crossings before
+ *    takeoff.timeOpen prove the pilot was airborne before launching was
+ *    allowed and cannot validate a start
+ * 4. For gated races: drop SSS crossings before the first start gate
  *    (§8.3 — a start can't validate before the gate opens); when every
  *    crossing is pre-gate, resolve from them anyway and report earlyStart
- * 3. For SSS: use last valid crossing before continuing to next TP
- * 4. For other TPs (ESS and goal included): use first valid crossing after
+ * 5. For SSS: use last valid crossing before continuing to next TP
+ * 6. For other TPs (ESS and goal included): use first valid crossing after
  *    previous TP reached — outward for an EXIT cylinder (one the route
  *    arrives at from inside, see computeTurnpointDirections) — or, when the
  *    pilot is already on the required side of the boundary at the previous
  *    reaching (nested/overlapping cylinders), credit it at that same moment
  *    (presence-based reaching, §8)
- * 5. For ESS: always first crossing (no re-tries)
- * 6. For multi-gate/elapsed-time: iterate SSS crossings, keep best path
+ * 7. For ESS: always first crossing (no re-tries)
+ * 8. For multi-gate/elapsed-time: iterate SSS crossings, keep best path
  *    (most TPs reached, then most flown distance, then latest SSS)
- * 7. Snap the start time to the last gate ≤ crossing (§8.3.1) and time the
+ * 9. Snap the start time to the last gate ≤ crossing (§8.3.1) and time the
  *    speed section from the gate (§8.7)
- * 8. Compute optimized leg distances and flown distance
+ * 10. Compute optimized leg distances and flown distance
  *
  * @param task - The competition task definition
  * @param fixes - The pilot's GPS tracklog
@@ -1081,9 +1161,80 @@ export function resolveTurnpointSequence(
     ) <= edge;
   });
 
-  // Group crossings by taskIndex
+  // Filter SSS crossings by the required direction (e.g. EXIT for paragliding races).
+  // If no SSS config or direction is unspecified, accept all crossings for backward compat.
+  // The direction rule describes the explicit SSS cylinder; in fallback mode the
+  // anchor is the first turnpoint (not a configured start), so no filter applies.
+  const requiredDirection = sssIsFallback
+    ? undefined
+    : task.sss?.direction?.toLowerCase() as 'enter' | 'exit' | undefined;
+  const allSSSCrossings = sssIdx >= 0
+    ? allCrossings.filter(c => c.taskIndex === sssIdx)
+    : [];
+  const directionSSSCrossings = requiredDirection
+    ? allSSSCrossings.filter(c => c.direction === requiredDirection)
+    : allSSSCrossings;
+
+  // Start gates (RACE tasks, §6.3.3/§8.3): resolved before the timing clips
+  // below — the deadline's mis-set guard compares against the first gate.
+  // The reference instant (any SSS crossing, else the first fix) only
+  // places the gates' time-of-day on the right calendar day. Gates describe
+  // the configured start cylinder, so — like the direction rule above —
+  // they don't apply in fallback-start mode.
+  const gateReferenceMs = directionSSSCrossings.length > 0
+    ? directionSSSCrossings[0].time.getTime()
+    : (fixes.length > 0 ? fixes[0].time.getTime() : null);
+  const gates = !sssIsFallback && gateReferenceMs !== null
+    ? resolveStartGates(task, gateReferenceMs)
+    : null;
+
+  // Task deadline (§8.3.c): crossings after the goal deadline cannot count,
+  // and best-progress distance is measured only up to it (§8.6.1, §11.1).
+  // Resolved near the END of the flight — the deadline bounds the end of
+  // the scoring window. A deadline at or before the first start gate is a
+  // task-setting mistake (nobody could score anything) and is ignored, in
+  // the same spirit as the SSS/ESS fallbacks for mis-set tasks.
+  let deadlineMs = fixes.length > 0
+    ? resolveTaskDeadline(task, fixes[fixes.length - 1].time.getTime())
+    : null;
+  if (deadlineMs !== null && gates && deadlineMs <= gates[0]) deadlineMs = null;
+
+  // Launch window open (§8.6.1, takeoff.timeOpen): a start crossing before
+  // the window opens proves the pilot was airborne before launching was
+  // allowed, so it cannot validate a start. Like gates, the window
+  // describes the configured task, so it doesn't apply in fallback-start
+  // mode; an open time at/after the deadline or after the first gate is a
+  // task-setting mistake and is ignored.
+  let windowOpenMs = !sssIsFallback && fixes.length > 0
+    ? resolveLaunchWindowOpen(task, fixes[0].time.getTime())
+    : null;
+  if (windowOpenMs !== null && deadlineMs !== null && windowOpenMs >= deadlineMs) {
+    windowOpenMs = null;
+  }
+  if (windowOpenMs !== null && gates && windowOpenMs > gates[0]) windowOpenMs = null;
+
+  // The crossings the sequence may be built from: everything at or before
+  // the deadline. The full list (allCrossings) is still returned for
+  // transparency — the explanation shows ignored crossings with the reason.
+  // Dropping only the time-sorted tail never corrupts the inside/outside
+  // state the presence-based reaching logic derives from earlier crossings.
+  const scoredCrossings = deadlineMs === null
+    ? allCrossings
+    : allCrossings.filter(c => c.time.getTime() <= deadlineMs);
+  const crossingsAfterDeadline = allCrossings.length - scoredCrossings.length;
+
+  const deadlineInfo: TaskDeadlineInfo | undefined = deadlineMs !== null
+    ? {
+        time: new Date(deadlineMs),
+        crossingsAfter: crossingsAfterDeadline,
+        trackContinuesPastDeadline:
+          fixes.length > 0 && fixes[fixes.length - 1].time.getTime() > deadlineMs,
+      }
+    : undefined;
+
+  // Group scored crossings by taskIndex
   const crossingsByTP = new Map<number, CylinderCrossing[]>();
-  for (const crossing of allCrossings) {
+  for (const crossing of scoredCrossings) {
     const arr = crossingsByTP.get(crossing.taskIndex);
     if (arr) {
       arr.push(crossing);
@@ -1092,34 +1243,25 @@ export function resolveTurnpointSequence(
     }
   }
 
-  // Filter SSS crossings by the required direction (e.g. EXIT for paragliding races).
-  // If no SSS config or direction is unspecified, accept all crossings for backward compat.
-  // The direction rule describes the explicit SSS cylinder; in fallback mode the
-  // anchor is the first turnpoint (not a configured start), so no filter applies.
-  const requiredDirection = sssIsFallback
-    ? undefined
-    : task.sss?.direction?.toLowerCase() as 'enter' | 'exit' | undefined;
-  const allSSSCrossings = sssIdx >= 0 ? (crossingsByTP.get(sssIdx) ?? []) : [];
-  let sssCrossings = requiredDirection
-    ? allSSSCrossings.filter(c => c.direction === requiredDirection)
-    : allSSSCrossings;
-
-  // Start gates (RACE tasks, §6.3.3/§8.3): crossings before the first gate
-  // cannot validate a start — filter them out so the best-path iteration
-  // only considers gate-legal starts. When EVERY crossing is pre-gate the
-  // pilot "jumped the gun" (§12.2): the sequence is still resolved from
-  // those crossings (HG scores the complete flight with a penalty; the
-  // PG launch→SSS clamp happens in the scorer) and earlyStart reports the
-  // facts. Gates describe the configured start cylinder, so — like the
-  // direction rule above — they don't apply in fallback-start mode.
-  // The reference instant (any SSS crossing, else the first fix) only
-  // places the gates' time-of-day on the right calendar day.
-  const gateReferenceMs = sssCrossings.length > 0
-    ? sssCrossings[0].time.getTime()
-    : (fixes.length > 0 ? fixes[0].time.getTime() : null);
-  const gates = !sssIsFallback && gateReferenceMs !== null
-    ? resolveStartGates(task, gateReferenceMs)
-    : null;
+  // Start validation order: deadline clip (above), direction, launch-window
+  // open, then gates. Pre-window crossings are dropped outright (§8.6.1 —
+  // launching before the window has no scored-with-penalty provision);
+  // pre-gate crossings are kept only when EVERY crossing is pre-gate, the
+  // §12.2 "jumped the gun" case (HG scores the complete flight with a
+  // penalty; the PG launch→SSS clamp happens in the scorer) with earlyStart
+  // reporting the facts.
+  let sssCrossings = deadlineMs === null
+    ? directionSSSCrossings
+    : directionSSSCrossings.filter(c => c.time.getTime() <= deadlineMs);
+  let droppedStartCrossings = 0;
+  if (windowOpenMs !== null) {
+    const beforeCount = sssCrossings.length;
+    sssCrossings = sssCrossings.filter(c => c.time.getTime() >= windowOpenMs);
+    droppedStartCrossings = beforeCount - sssCrossings.length;
+  }
+  const launchWindowInfo: LaunchWindowInfo | undefined = windowOpenMs !== null
+    ? { openTime: new Date(windowOpenMs), droppedStartCrossings }
+    : undefined;
   if (gates && sssCrossings.length > 0) {
     const legal = sssCrossings.filter(c => c.time.getTime() >= gates[0]);
     if (legal.length > 0) sssCrossings = legal;
@@ -1176,6 +1318,8 @@ export function resolveTurnpointSequence(
       speedSectionTime: null,
       ...(startFallback ? { startFallback } : {}),
       ...(essIsFallback ? { essFallback: 'last_turnpoint' as const } : {}),
+      ...(deadlineInfo ? { deadline: deadlineInfo } : {}),
+      ...(launchWindowInfo ? { launchWindow: launchWindowInfo } : {}),
     };
   }
 
@@ -1222,7 +1366,7 @@ export function resolveTurnpointSequence(
         buildRemainingPath(task, lastReaching.taskIndex, segmentDistances);
       const progress = computeBestProgress(
         fixes, lastReaching.time.getTime(), remainingTPs, remainingLegDistances,
-        nextMeasureFor(lastReaching.taskIndex)
+        nextMeasureFor(lastReaching.taskIndex), deadlineMs
       );
       candidateFlownDist = progress
         ? taskDistance - progress.distanceToGoal
@@ -1278,7 +1422,7 @@ export function resolveTurnpointSequence(
       buildRemainingPath(task, lastReaching.taskIndex, segmentDistances);
     bestProgress = computeBestProgress(
       fixes, lastReaching.time.getTime(), remainingTPs, remainingLegDistances,
-      nextMeasureFor(lastReaching.taskIndex)
+      nextMeasureFor(lastReaching.taskIndex), deadlineMs
     );
     flownDistance = bestProgress
       ? taskDistance - bestProgress.distanceToGoal
@@ -1329,6 +1473,8 @@ export function resolveTurnpointSequence(
     ...(earlyStart ? { earlyStart } : {}),
     ...(startFallback ? { startFallback } : {}),
     ...(essIsFallback ? { essFallback: 'last_turnpoint' as const } : {}),
+    ...(deadlineInfo ? { deadline: deadlineInfo } : {}),
+    ...(launchWindowInfo ? { launchWindow: launchWindowInfo } : {}),
   };
 }
 
@@ -1362,6 +1508,16 @@ export type EarlyStartJSON = Omit<EarlyStart, 'crossingTime' | 'firstGateTime'> 
   firstGateTime: string | number;
 };
 
+/** {@link TaskDeadlineInfo} as it arrives over JSON — `time` serialized. */
+export type TaskDeadlineInfoJSON = Omit<TaskDeadlineInfo, 'time'> & {
+  time: string | number;
+};
+
+/** {@link LaunchWindowInfo} as it arrives over JSON — `openTime` serialized. */
+export type LaunchWindowInfoJSON = Omit<LaunchWindowInfo, 'openTime'> & {
+  openTime: string | number;
+};
+
 /**
  * {@link TurnpointSequenceResult} as it arrives over JSON. `Date` fields
  * serialize to ISO strings (JSON.stringify's default) or epoch milliseconds;
@@ -1373,7 +1529,7 @@ export interface TurnpointSequenceResultJSON
   extends Omit<
     TurnpointSequenceResult,
     'crossings' | 'sequence' | 'sssReaching' | 'essReaching' | 'bestProgress'
-    | 'startGate' | 'earlyStart'
+    | 'startGate' | 'earlyStart' | 'deadline' | 'launchWindow'
   > {
   crossings: CylinderCrossingJSON[];
   sequence: TurnpointReachingJSON[];
@@ -1382,6 +1538,8 @@ export interface TurnpointSequenceResultJSON
   bestProgress: BestProgressJSON | null;
   startGate?: StartGateTakenJSON;
   earlyStart?: EarlyStartJSON;
+  deadline?: TaskDeadlineInfoJSON;
+  launchWindow?: LaunchWindowInfoJSON;
 }
 
 /** Revive a JSON-round-tripped {@link TurnpointSequenceResult}. */
@@ -1391,7 +1549,7 @@ export function reviveTurnpointSequenceResult(
   const revive = <T extends { time: string | number }>(
     v: T,
   ): Omit<T, 'time'> & { time: Date } => ({ ...v, time: new Date(v.time) });
-  const { startGate, earlyStart, ...rest } = raw;
+  const { startGate, earlyStart, deadline, launchWindow, ...rest } = raw;
   return {
     ...rest,
     crossings: raw.crossings.map(revive),
@@ -1406,6 +1564,15 @@ export function reviveTurnpointSequenceResult(
             ...earlyStart,
             crossingTime: new Date(earlyStart.crossingTime),
             firstGateTime: new Date(earlyStart.firstGateTime),
+          },
+        }
+      : {}),
+    ...(deadline ? { deadline: revive(deadline) } : {}),
+    ...(launchWindow
+      ? {
+          launchWindow: {
+            ...launchWindow,
+            openTime: new Date(launchWindow.openTime),
           },
         }
       : {}),

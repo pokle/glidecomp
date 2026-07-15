@@ -290,6 +290,9 @@ function reachingAnchor(
 /** Cap on individually listed start crossings — beyond this, summarise. */
 const MAX_START_CROSSINGS_LISTED = 12;
 
+/** Cap on individually listed post-deadline crossings — beyond this, summarise. */
+const MAX_DEADLINE_CROSSINGS_LISTED = 6;
+
 /**
  * Shown when a crossing was credited by the cylinder tolerance band rather
  * than a physical crossing of the nominal radius (FAI S7F §8.1).
@@ -319,6 +322,18 @@ function buildFlightSection(
     items.push({
       id: 'start-fallback',
       text: 'This task has no start (SSS) turnpoint — the first turnpoint is treated as the start.',
+      emphasis: 'warning',
+    });
+  }
+
+  // Launch-window violation (FAI S7F §8.6.1): start crossings before the
+  // window even opened prove the pilot was airborne before launching was
+  // allowed — they were excluded from start validation.
+  if (result.launchWindow && result.launchWindow.droppedStartCrossings > 0) {
+    const lw = result.launchWindow;
+    items.push({
+      id: 'launch-window',
+      text: `${lw.droppedStartCrossings === 1 ? 'A start-cylinder crossing' : `${lw.droppedStartCrossings} start-cylinder crossings`} before the launch window opened at ${fmt(lw.openTime)} ${lw.droppedStartCrossings === 1 ? 'was' : 'were'} ignored (FAI S7F §8.6.1) — a crossing before the window opens means the pilot was airborne before launching was allowed, so it cannot validate a start.`,
       emphasis: 'warning',
     });
   }
@@ -509,6 +524,55 @@ function buildFlightSection(
       detail,
       anchor: reachingAnchor(reaching, isGoal ? 'goal' : isESS ? 'ess' : 'turnpoint'),
     });
+  }
+
+  // Task deadline (FAI S7F §8.3.c, §11.1): crossings after it were excluded
+  // from the sequence and distance was measured only up to it. Shown when it
+  // actually shaped this flight — crossings were ignored, or a landed-out
+  // pilot's track continues past the deadline.
+  const dl = result.deadline;
+  if (dl && (dl.crossingsAfter > 0 || (!entry.made_goal && dl.trackContinuesPastDeadline))) {
+    items.push({
+      id: 'task-deadline',
+      text: 'Task deadline — turnpoint crossings after this time do not count, and distance is measured only up to it (FAI S7F §8.3, §11.1).',
+      value: fmt(dl.time),
+      emphasis: dl.crossingsAfter > 0 ? 'warning' : 'muted',
+    });
+    // List the ignored crossings so a pilot who tagged a turnpoint (or goal)
+    // too late can see exactly what was dropped and where.
+    const ignored = result.crossings.filter(
+      (c) => c.time.getTime() > dl.time.getTime(),
+    );
+    const goalIdx = getGoalIndex(task);
+    for (const [i, c] of ignored.slice(0, MAX_DEADLINE_CROSSINGS_LISTED).entries()) {
+      // Same labelling rule as the reachings above: the goal position reads
+      // "Goal" even when it doubles as the ESS cylinder.
+      const label =
+        c.taskIndex === goalIdx ? 'Goal' : turnpointLabel(task, c.taskIndex);
+      const name = turnpointName(task, c.taskIndex);
+      const isGoalCrossing = c.taskIndex === goalIdx && c.direction === 'enter';
+      items.push({
+        id: `deadline-ignored-${i}`,
+        text: `${c.direction === 'enter' ? 'Entered' : 'Exited'} ${label}${name ? ` (${name})` : ''} after the deadline — not counted`,
+        value: fmt(c.time),
+        // Reaching goal too late is the heartbreaker worth flagging loudly.
+        emphasis: isGoalCrossing ? 'warning' : 'muted',
+        anchor: {
+          kind: 'turnpoint',
+          latitude: c.latitude,
+          longitude: c.longitude,
+          altitude: c.altitude,
+          timeMs: c.time.getTime(),
+        },
+      });
+    }
+    if (ignored.length > MAX_DEADLINE_CROSSINGS_LISTED) {
+      items.push({
+        id: 'deadline-ignored-more',
+        text: `…and ${ignored.length - MAX_DEADLINE_CROSSINGS_LISTED} more crossings after the deadline`,
+        emphasis: 'muted',
+      });
+    }
   }
 
   if (entry.made_goal) {

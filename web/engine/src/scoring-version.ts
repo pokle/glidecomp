@@ -135,7 +135,20 @@
 //     1/2/5 all score under the HG profile), which touches a hashed scoring
 //     source, so the fingerprint guard requires a bump. The extra cache roll
 //     is harmless (scores recompute identically).
-export const SCORING_ENGINE_VERSION = 16;
+// v17: task deadline + launch window enforcement (issue #260, S7F §8.3.c,
+//     §8.6.1, §11.1). The xctsk goal deadline is now enforced: boundary
+//     crossings after it are excluded from sequence resolution (so a
+//     turnpoint/ESS/goal tagged too late no longer counts, and the goal
+//     ratio only counts pre-deadline goals per §10), and a landed-out
+//     pilot's best distance is measured only up to the deadline. Start
+//     crossings before the launch window opens (takeoff.timeOpen) can no
+//     longer validate a start — a pre-window crossing proves the pilot was
+//     airborne before launching was allowed. Mis-set tasks are guarded: a
+//     deadline at/before the first start gate, or a window open at/after
+//     the deadline or after the first gate, is treated as unset. The result
+//     carries deadline/launchWindow transparency fields and the score
+//     explanation narrates the cutoff and each ignored crossing.
+export const SCORING_ENGINE_VERSION = 17;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -143,4 +156,4 @@ export const SCORING_ENGINE_VERSION = 16;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "3cf1b4c02cafa29f3fbd8d21313eb0346c6fd888127ee69f759c33532b65f044";
+  "e55d899778e34bb675dc5e3bef7761cd185be1db9f06bbaf46591bd7cadf5157";
