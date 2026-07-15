@@ -68,8 +68,8 @@ export function AddWaypointDialog({
   // Seed the fields once each time the dialog opens (the false→true edge), from
   // whatever the map told us about the tapped point. Everything the map knows
   // pre-fills but stays fully editable: terrain elevation → altitude, nearest
-  // rendered label → name, a short code derived from that name. All blank on
-  // the Leaflet fallback, which reports no details. When a peak is near the tap
+  // rendered label → name, a short code derived from that name. All blank when
+  // the map reports no details. When a peak is near the tap
   // we snap-to-peak: a tight tap silently adopts the summit (revertible), a
   // looser one only offers it (see the status row under Coordinates). Both are
   // decided by peakSnapMode; nothing is committed until Add either way.

@@ -6,7 +6,7 @@
  *
  * Targets workerd: the `workerd` export condition resolves react-dom/server to
  * its edge build (renderToReadableStream, web streams, no node:stream). Heavy,
- * browser-only modules (mapbox, three, leaflet, tabulator) sit behind
+ * browser-only modules (mapbox, three, tabulator) sit behind
  * lazy()/dynamic import, so they tree-shake out of this bundle. `noExternal`
  * makes the output self-contained for the Functions esbuild step.
  */
@@ -41,7 +41,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         // Keep lazy()/dynamic imports (the map, tabulator grids) as separate
-        // chunks the server never imports, so mapbox/three/leaflet/tabulator —
+        // chunks the server never imports, so mapbox/three/tabulator —
         // which touch `window` at module scope — stay out of the entry the
         // Pages Function executes.
         inlineDynamicImports: false,

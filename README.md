@@ -32,7 +32,7 @@ The app is live at **[glidecomp.com](https://glidecomp.com)**.
 - **Authentication** — Google OAuth login with user profiles
 - **Task editor** — create and edit tasks with drag-to-reorder turnpoints, waypoint database search, and click-on-map placement
 - **Multiple data sources** — drag & drop IGC/XCTSK files, import from XContest by task code, or import from AirScore by URL
-- **Interactive map** — 2D (Mapbox/Leaflet) and 3D views with track overlay, task cylinders, and map annotations
+- **Interactive map** — 2D (Mapbox) and 3D views with track overlay, task cylinders, and map annotations
 - **Altitude sparkline** — clickable time-series chart linked to events and map position
 - **Theme editor** — customizable UI themes with color and font controls, import/export support
 - **Configurable units & detection** — speed, altitude, distance, climb rate units; adjustable thermal/glide detection thresholds

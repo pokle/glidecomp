@@ -9,7 +9,7 @@
  *
  * The read-only content (heading, table, download links) is server-rendered
  * via loadCompWaypoints so the page has real content for crawlers; the map
- * (mapbox/leaflet) stays lazy behind Suspense so it never enters the SSR
+ * (mapbox) stays lazy behind Suspense so it never enters the SSR
  * bundle — the server streams its "Loading map…" fallback instead.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";

@@ -1,8 +1,8 @@
 /**
- * Shared utilities for map providers.
+ * Shared utilities for the map provider.
  *
- * Extracted from mapbox-provider.ts so both MapBox and Leaflet providers
- * can reuse the same constants, color functions, geometry helpers, and DOM builders.
+ * Constants, color functions, geometry helpers, and DOM builders used by
+ * mapbox-provider.ts.
  */
 
 import {
@@ -87,8 +87,8 @@ export interface TrackSegment {
  * Divide a fixes array into at most `maxSegments` contiguous segments,
  * each carrying a normalised altitude value derived from the segment's mid-point fix.
  *
- * The caller is responsible for building provider-specific geometry (GeoJSON, Leaflet LatLngs, etc.)
- * from the returned index ranges.
+ * The caller is responsible for building the map geometry (GeoJSON) from the
+ * returned index ranges.
  *
  * @param fixes         Full array of IGC fixes.
  * @param altRange      Pre-computed altitude range (from `calculateAltitudeRange`).
@@ -737,20 +737,9 @@ export function hideTrackPointHUD(el: HTMLElement | null): void {
   if (el) el.style.display = 'none';
 }
 
-/** Create circle polygon points as LatLng pairs for Leaflet Polygon */
-export function createCirclePolygonLatLng(
-  centerLat: number,
-  centerLon: number,
-  radiusMeters: number,
-  numPoints = 64
-): [number, number][] {
-  const points = getCirclePoints(centerLat, centerLon, radiusMeters, numPoints);
-  return points.map(p => [p.lat, p.lon]);
-}
-
 // ── Shared business logic ────────────────────────────────────────────────
-// Pure functions extracted from MapBox/Leaflet providers to eliminate duplication.
-// Each provider calls these, then applies the result using its own map API.
+// Pure functions extracted from the MapBox provider to keep the provider file
+// focused on map-API calls.
 
 // ── buildTrackPointHUDData ──────────────────────────────────────────────
 
@@ -814,9 +803,8 @@ export function buildTrackPointHUDData(
 
 /**
  * Resolve the next turnpoint context for glide calculations.
- * The `resolveAltitude` callback lets each provider supply altitude differently:
- *   - MapBox queries terrain elevation, falling back to altSmoothed
- *   - Leaflet uses altSmoothed directly
+ * The `resolveAltitude` callback supplies the target altitude — the MapBox
+ * provider queries terrain elevation, falling back to altSmoothed.
  */
 export function buildNextTurnpointContext(
   task: XCTask,

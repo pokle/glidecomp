@@ -37,7 +37,6 @@ Quick access menu for display options and actions.
 - **Toggle Task** - Show/hide task visualization (cylinders, route lines, labels) - persisted via `?task-visible=0` URL param
 - **Toggle Track** - Show/hide flight track and event markers - persisted via `?track-visible=0` URL param
 - **Show Track Metrics** - Show/hide speed overlay with glide chevrons and labels for all glide segments (on/off indicator)
-- **Switch Map Provider** - Toggle between MapBox GL and Leaflet
 
 **File Operations:**
 - **Open IGC file** - File picker for IGC upload
@@ -182,14 +181,13 @@ When an event is selected from the panel, the map highlights the event location 
 
 /web/frontend/src/
 ├── analysis.html                # Main HTML page with Tailwind layout
-├── analysis.css                 # Page styles (Tailwind, shadcn tokens, MapBox/Leaflet CSS)
+├── analysis.css                 # Page styles (Tailwind, shadcn tokens, MapBox CSS)
 └── analysis/
     ├── main.ts                  # Application entry point and orchestration
     ├── analysis-panel.ts        # Tabbed panel UI (Track/Task/Score tabs)
     ├── map-provider.ts          # Map provider interface
     ├── map-provider-shared.ts   # Shared map utilities (HUD, glide markers, collision detection)
     ├── mapbox-provider.ts       # MapBox GL JS implementation
-    ├── leaflet-provider.ts      # Leaflet 2.0 implementation (alternative provider)
     ├── airscore-client.ts       # AirScore API client
     ├── config.ts                # Configuration storage abstraction
     ├── units-browser.ts         # Browser-side unit formatting

@@ -22,7 +22,6 @@ export interface UserPreferences {
   theme?: 'light' | 'dark' | 'system';
   mapLocation?: MapLocation;
   mapStyle?: string;
-  mapProvider?: 'mapbox' | 'leaflet';
   gapParameters?: Partial<GAPParameters>;
   /** Nominal distance as percentage of task distance (default 70). Stored separately
    *  from gapParameters.nominalDistance because it's resolved at scoring time. */

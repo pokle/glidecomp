@@ -5,7 +5,7 @@ import { loginAs, request } from "./helpers";
 const SAMPLE_PREFS = {
   units: { speed: "mph", altitude: "ft", distance: "mi", climbRate: "ft/min" },
   thresholds: { thermal: { minDuration: 60 } },
-  mapProvider: "leaflet",
+  theme: "dark",
 };
 
 const SAMPLE_THEME = {
@@ -185,7 +185,7 @@ describe("PUT /api/auth/preferences roundtrips", () => {
       body: { prefs: SAMPLE_PREFS, theme: SAMPLE_THEME },
     });
     // Then update only prefs
-    const newPrefs = { ...SAMPLE_PREFS, mapProvider: "mapbox" };
+    const newPrefs = { ...SAMPLE_PREFS, theme: "light" };
     await request("PUT", "/api/auth/preferences", {
       cookie,
       body: { prefs: newPrefs },
@@ -244,7 +244,7 @@ describe("PUT /api/auth/preferences roundtrips", () => {
     await new Promise((r) => setTimeout(r, 5));
     const r2 = await request("PUT", "/api/auth/preferences", {
       cookie,
-      body: { prefs: { ...SAMPLE_PREFS, mapProvider: "mapbox" } },
+      body: { prefs: { ...SAMPLE_PREFS, theme: "light" } },
     });
     const t2 = ((await r2.json()) as { updated_at: string }).updated_at;
     expect(t2 > t1).toBe(true);

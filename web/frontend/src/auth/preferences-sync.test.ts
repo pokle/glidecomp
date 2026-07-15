@@ -22,7 +22,7 @@ const STORAGE_KEY_PREFS = "glidecomp:preferences";
 
 const SAMPLE_PREFS = {
   units: { speed: "mph", altitude: "ft", distance: "mi", climbRate: "ft/min" },
-  mapProvider: "leaflet",
+  theme: "dark",
 };
 const ALT_PREFS = { units: { speed: "knots" } };
 

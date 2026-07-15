@@ -14,7 +14,7 @@ import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistan
 import { SAMPLE_COMPS } from '@glidecomp/samples';
 import { getCurrentUser } from '../auth/client';
 import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
-import { createMapProvider, type MapProvider, type MapProviderType, type LoadedTrack, type OpenDistanceLine } from './map-provider';
+import { createMapProvider, type MapProvider, type LoadedTrack, type OpenDistanceLine } from './map-provider';
 import { createAnalysisPanel, AnalysisPanel, FlightInfo, type OpenDistancePilotStats } from './analysis-panel';
 import { loadCorryongWaypoints } from './waypoint-loader';
 import { config, type UnitPreferences } from './config';
@@ -138,10 +138,6 @@ async function init(): Promise<void> {
   const sidebar = document.getElementById('waypoint-sidebar');
   const sidebarBackdrop = document.getElementById('sidebar-backdrop');
 
-  // Map provider switch menu
-  const menuSwitchMap = document.getElementById('menu-switch-map');
-  const mapProviderLabel = document.getElementById('map-provider-label');
-
   if (!mapContainer || !eventPanelContainer) {
     console.error('Required containers not found');
     return;
@@ -150,24 +146,9 @@ async function init(): Promise<void> {
   // Wire the command palette (filtering, keyboard nav) on its static markup
   initCommandMenus();
 
-  // Determine map provider: URL param > saved preference > default
-  // Force leaflet if no MapBox token is configured
-  const hasMapboxToken = !!import.meta.env.VITE_MAPBOX_TOKEN;
-  let providerType: MapProviderType;
-  if (!hasMapboxToken) {
-    providerType = 'leaflet';
-  } else {
-    const mapParam = new URLSearchParams(window.location.search).get('m');
-    const savedMapProvider = config.getPreferences().mapProvider;
-    providerType =
-      mapParam === 'l' ? 'leaflet' :
-      mapParam === 'm' ? 'mapbox' :
-      savedMapProvider ?? 'mapbox';
-  }
-
   // Initialize map
   try {
-    mapRenderer = await createMapProvider(mapContainer, providerType);
+    mapRenderer = await createMapProvider(mapContainer);
   } catch (err) {
     console.error('Failed to initialize map:', err);
     showStatus('Failed to initialize map', 'error');
@@ -202,17 +183,6 @@ async function init(): Promise<void> {
     });
   }
   window.addEventListener('orientationchange', () => setTimeout(resyncMapSize, 300));
-
-  // Update provider label in command menu to show the target provider
-  // Hide the switch option entirely if no Mapbox token is available
-  if (mapProviderLabel) {
-    if (!hasMapboxToken) {
-      menuSwitchMap?.remove();
-    } else {
-      const targetProvider = providerType === 'leaflet' ? 'MapBox' : 'Leaflet';
-      mapProviderLabel.textContent = `Switch Map Provider to ${targetProvider}`;
-    }
-  }
 
   // Load waypoint database for enriching IGC tasks and task editor search
   try {
@@ -454,17 +424,6 @@ async function init(): Promise<void> {
     panel.querySelector('#ts-preset-none')!.addEventListener('click', () => applyShadow('none'));
 
     apply();
-  });
-
-  // Switch Map Provider handler
-  menuSwitchMap?.addEventListener('click', () => {
-    const newProvider: MapProviderType = providerType === 'mapbox' ? 'leaflet' : 'mapbox';
-    config.setPreferences({ mapProvider: newProvider });
-
-    // Update URL param and reload (provider switch requires full page reload)
-    const params = new URLSearchParams(window.location.search);
-    params.set('m', newProvider === 'leaflet' ? 'l' : 'm');
-    window.location.search = params.toString();
   });
 
   // Settings dialog handlers
@@ -1046,7 +1005,7 @@ async function init(): Promise<void> {
   // First-visit tooltip on Analysis button
   if (!localStorage.getItem('glidecomp-seen-analysis-hint')) {
     // Find the panel toggle button container in the DOM (top-right control)
-    const panelToggleContainer = document.querySelector('.mapboxgl-ctrl-top-right .mapboxgl-ctrl:first-child, .leaflet-top.leaflet-right .leaflet-bar:first-child');
+    const panelToggleContainer = document.querySelector('.mapboxgl-ctrl-top-right .mapboxgl-ctrl:first-child');
     if (panelToggleContainer) {
       (panelToggleContainer as HTMLElement).style.position = 'relative';
       const tooltip = document.createElement('div');

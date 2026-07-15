@@ -52,7 +52,7 @@ import type { MapFocus } from "../comp/ScoreDetailMap";
 import { useInitialData } from "../lib/initial-data";
 import type { PilotScoreLoaderData } from "../loaders";
 
-// Lazy so mapbox/leaflet (and their CSS) load only with this page's map.
+// Lazy so mapbox (and its CSS) loads only with this page's map.
 const ScoreDetailMap = lazy(() => import("../comp/ScoreDetailMap"));
 
 // ---------------------------------------------------------------------------
