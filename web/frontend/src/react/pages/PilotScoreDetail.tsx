@@ -288,9 +288,14 @@ function buildDetailData(
   const params: Partial<GAPParameters> = (() => {
     const { nominalDistance: _nd, ...stored } = comp.gap_params ?? {};
     void _nd;
+    // Pass the comp's creation time so the PG leading-weight default matches the
+    // scorer's date-based choice (S7F-2024 for new comps, GAP2020 for older
+    // ones — issue #257).
+    const createdAtMs = Date.parse(comp.creation_date);
     return resolveCompGapParams(
       comp.category === "pg" ? "pg" : "hg",
       comp.gap_params ? stored : null,
+      Number.isNaN(createdAtMs) ? null : createdAtMs,
     );
   })();
 

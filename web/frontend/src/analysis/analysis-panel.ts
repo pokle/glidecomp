@@ -1522,7 +1522,18 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     const wPct = (n: number) => `${Math.round(n * 100)}%`;
 
     // Scoring configuration in effect (so scores are reproducible)
-    const leadCfg = params.useLeading ? `on (${params.leadingFormula})` : 'off';
+    const lwf = params.leadingWeightFormula ?? 'gap2020';
+    // PG leading weight has a second, orthogonal knob (issue #257): the
+    // GAP2020 vs S7F-2024 generation. Surface it so the split is reproducible.
+    const leadWeightCfg =
+      params.scoring === 'PG' && lwf === 's7f2024'
+        ? `, S7F 2024 ratio ${Math.round((params.leadingTimeRatio ?? 0.26) * 100)}%`
+        : params.scoring === 'PG'
+          ? ', GAP2020 weight'
+          : '';
+    const leadCfg = params.useLeading
+      ? `on (${params.leadingFormula}${leadWeightCfg})`
+      : 'off';
     const timeExp = resolveTimePointsExponent(params).replace('/', '⁄');
     html += `
       <div class="rounded-lg border border-border bg-muted/30 p-3">

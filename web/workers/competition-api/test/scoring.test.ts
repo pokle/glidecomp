@@ -283,6 +283,11 @@ describe("Live Scoring", () => {
       useLeading: true,
       useArrival: false,
       leadingFormula: "weighted" as const,
+      // Pin the leading-weight generation so this cached-vs-engine parity test
+      // stays deterministic regardless of the comp's creation date (issue #257
+      // otherwise defaults new PG comps to 's7f2024'); the engine ground truth
+      // below uses the same gapParams, so both sides agree either way.
+      leadingWeightFormula: "gap2020" as const,
     };
     const compId = await createComp({ category: "pg", gap_params: gapParams });
     const taskId = await createTask(compId, {
@@ -343,6 +348,73 @@ describe("Live Scoring", () => {
     const res2 = await request("GET", `/api/comp/${compId}/task/${taskId}/score`);
     expect(res2.headers.get("X-Cache")).toBe("HIT");
     expect(await res2.json()).toEqual(data);
+  });
+
+  test("new PG comp with no pinned leading-weight formula defaults to S7F-2024 (issue #257)", async () => {
+    const taskXctsk = JSON.parse(env.SAMPLE_TASK_XCTSK);
+    // A PG comp created now (>= the 2026-07-15 cutoff) that never pins a
+    // leadingWeightFormula must score its leading weight under the S7F-2024
+    // formula, not the GAP2020 one — the date-based default (issue #257).
+    const gapParams = {
+      nominalLaunch: 0.96,
+      nominalGoal: 0.3,
+      nominalTime: 5400,
+      minimumDistance: 5000,
+      scoring: "PG" as const,
+      useLeading: true,
+      useArrival: false,
+      leadingFormula: "weighted" as const,
+    };
+    const compId = await createComp({ category: "pg", gap_params: gapParams });
+    const taskId = await createTask(compId, {
+      xctsk: taskXctsk,
+      pilot_classes: ["open"],
+    });
+
+    const igcEntries = sampleIgcEntries().slice(0, 3);
+    const users = ["user-1", "user-2", "user-3"];
+    for (let i = 0; i < igcEntries.length; i++) {
+      const res = await uploadRequest(
+        `/api/comp/${compId}/task/${taskId}/igc`,
+        await compressText(igcEntries[i][1]),
+        { user: users[i] }
+      );
+      expect(res.status).toBe(201);
+    }
+
+    const { data } = await getFreshScores<{
+      classes: Array<{
+        pilot_class: string;
+        available_points: { leading: number };
+      }>;
+    }>(`/api/comp/${compId}/task/${taskId}/score`);
+    const leading = data.classes.find((c) => c.pilot_class === "open")!
+      .available_points.leading;
+
+    const xcTask = parseXCTask(env.SAMPLE_TASK_XCTSK);
+    const taskDistance = calculateOptimizedTaskDistance(xcTask);
+    const enginePilots = igcEntries.map(([, text]) => {
+      const igc = parseIGC(text);
+      return {
+        pilotName: igc.header.pilot || igc.header.competitionId || "unknown",
+        trackFile: "sample.igc",
+        fixes: igc.fixes,
+      };
+    });
+    const commonParams = { ...gapParams, nominalDistance: taskDistance * 0.7 };
+    const s7f = scoreTask(xcTask, enginePilots, {
+      ...commonParams,
+      leadingWeightFormula: "s7f2024" as const,
+    });
+    const gap2020 = scoreTask(xcTask, enginePilots, {
+      ...commonParams,
+      leadingWeightFormula: "gap2020" as const,
+    });
+
+    // The API's leading pool matches the S7F-2024 engine result and is smaller
+    // than GAP2020's — confirming the new default took effect end to end.
+    expect(leading).toBeCloseTo(s7f.availablePoints.leading, 5);
+    expect(s7f.availablePoints.leading).toBeLessThan(gap2020.availablePoints.leading);
   });
 
   test("task without xctsk returns 422", async () => {

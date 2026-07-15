@@ -67,6 +67,31 @@ export interface GAPParameters {
    */
   leadingFormula: LeadingFormula;
   /**
+   * Which generation of the *leading-weight* formula distributes the
+   * non-distance weight between leading and time — a paragliding-only
+   * choice (hang-gliding weights are identical across generations):
+   * - 'gap2020'  — GAP2020/2021, matching AirScore's presets (the default,
+   *   preserving historical scores). PG leading weight is 0.35 × (1 − DW)
+   *   when someone makes goal, and 0.1 × BestDist/TaskDist when nobody does.
+   * - 's7f2024'  — the 2024 FAI Sporting Code S7F §10 formula. PG leading
+   *   weight is (1 − DW) × {@link GAPParameters.leadingTimeRatio} when
+   *   someone makes goal, and the *entire* non-distance weight (1 − DW)
+   *   when nobody does (nobody can earn PG time points without goal).
+   *
+   * See issue #257 and the `/scoring/gap` "Differences from the Official
+   * Spec" section. Only the leading↔time split changes; distance and
+   * arrival weights are unaffected, so hang-gliding scores never move.
+   */
+  leadingWeightFormula: LeadingWeightFormula;
+  /**
+   * S7F 2024 §10 "LeadingTimeRatio": for paragliding under the
+   * {@link GAPParameters.leadingWeightFormula} `'s7f2024'` formula, the
+   * fraction (0–0.5, default 0.26) of the non-distance weight allocated to
+   * leading when someone makes goal; the remainder goes to time. Ignored
+   * for hang gliding, and for PG under the `'gap2020'` formula.
+   */
+  leadingTimeRatio: number;
+  /**
    * Speed-points exponent for the time-points curve (FAI S7F §11.2), decoupled
    * from {@link leadingFormula} since issue #258:
    * - '5/6' — current FAI S7F (2024), for both sports.
@@ -133,6 +158,9 @@ export interface GAPParameters {
 /** Leading coefficient variant — see {@link GAPParameters.leadingFormula}. */
 export type LeadingFormula = 'classic' | 'weighted';
 
+/** Leading-weight formula generation — see {@link GAPParameters.leadingWeightFormula}. */
+export type LeadingWeightFormula = 'gap2020' | 's7f2024';
+
 /** Time-points exponent (FAI S7F §11.2) — see {@link GAPParameters.timePointsExponent}. */
 export type SpeedExponent = '5/6' | '2/3';
 
@@ -157,6 +185,8 @@ export const DEFAULT_GAP_PARAMETERS: GAPParameters = {
   useLeading: false,
   useArrival: false,
   leadingFormula: 'weighted',
+  leadingWeightFormula: 'gap2020',
+  leadingTimeRatio: 0.26,
   distanceOrigin: 'takeoff',
   useDistanceDifficulty: true,
   jumpTheGunFactor: 2,
@@ -227,6 +257,17 @@ export function defaultsFor(
 }
 
 /**
+ * Paragliding competitions created on or after this instant default to the
+ * S7F-2024 leading-weight formula; earlier comps keep the GAP2020/AirScore-
+ * parity default, so no pre-existing comp's paragliding scores shift when the
+ * 2024 formula ships (issue #257). A comp that explicitly saves a
+ * {@link GAPParameters.leadingWeightFormula} overrides this either way, and
+ * hang gliding is generation-independent. Expressed as a fixed UTC constant
+ * (2026-07-15T00:00:00Z) so the resolution stays deterministic.
+ */
+export const S7F2024_PG_DEFAULT_SINCE_MS = Date.UTC(2026, 6, 15);
+
+/**
  * Merge a competition's stored GAP parameters over the official per-category
  * defaults, resolving the effective parameter set the scorer (and the score
  * explainer) should use.
@@ -238,16 +279,35 @@ export function defaultsFor(
  * default's 5/6. A comp with no stored params — or stored params that never
  * pinned a formula — takes the category default pairing.
  *
+ * Paragliding leading-weight default (issue #257): a PG comp that never pinned
+ * a {@link GAPParameters.leadingWeightFormula} defaults to S7F-2024 when it was
+ * created on/after {@link S7F2024_PG_DEFAULT_SINCE_MS}, and to GAP2020/AirScore
+ * parity otherwise. Pass `createdAtMs` (the comp's creation time in epoch ms)
+ * to opt into the date-based default; omit it — as the CLI does — to keep the
+ * GAP2020 baseline.
+ *
  * @param category - 'hg' or 'pg' (drives {@link defaultsFor})
  * @param stored - the comp's saved gap_params, or null when it never saved any
+ * @param createdAtMs - the comp's creation time (epoch ms), or null/undefined
+ *   when unknown (keeps the GAP2020 leading-weight default)
  */
 export function resolveCompGapParams(
   category: 'hg' | 'pg',
   stored: Partial<GAPParameters> | null,
+  createdAtMs?: number | null,
 ): GAPParameters {
   const merged: GAPParameters = { ...defaultsFor(category), ...(stored ?? {}) };
   if (stored && stored.timePointsExponent == null && stored.leadingFormula != null) {
     merged.timePointsExponent = stored.leadingFormula === 'classic' ? '2/3' : '5/6';
+  }
+  if (
+    category === 'pg' &&
+    stored?.leadingWeightFormula == null &&
+    createdAtMs != null &&
+    Number.isFinite(createdAtMs) &&
+    createdAtMs >= S7F2024_PG_DEFAULT_SINCE_MS
+  ) {
+    merged.leadingWeightFormula = 's7f2024';
   }
   return merged;
 }
@@ -502,6 +562,10 @@ export function calculateTaskValidity(
  *
  * @param useLeading - Whether leading (departure) points are enabled
  * @param useArrival - Whether arrival points are enabled (HG only)
+ * @param leadingWeightFormula - PG leading-weight generation (see
+ *   {@link GAPParameters.leadingWeightFormula}); ignored for HG
+ * @param leadingTimeRatio - PG S7F-2024 LeadingTimeRatio (see
+ *   {@link GAPParameters.leadingTimeRatio})
  */
 export function calculateWeights(
   goalRatio: number,
@@ -510,6 +574,8 @@ export function calculateWeights(
   scoring: 'PG' | 'HG',
   useLeading = true,
   useArrival = true,
+  leadingWeightFormula: LeadingWeightFormula = 'gap2020',
+  leadingTimeRatio = 0.26,
 ): WeightFractions {
   const gr = goalRatio;
 
@@ -519,10 +585,17 @@ export function calculateWeights(
   // Arrival weight: HG only, when enabled
   const aw = (scoring === 'HG' && useArrival) ? (1 - dw) / 8 : 0;
 
-  // Leading weight: shared formula, PG doubles the multiplier
+  // Leading weight. Hang gliding is generation-independent; paragliding
+  // picks between the GAP2020/AirScore split and the S7F-2024 §10 formula.
   let lw: number;
   if (!useLeading) {
     lw = 0;
+  } else if (scoring === 'PG' && leadingWeightFormula === 's7f2024') {
+    // FAI S7F 2024 §10: leading takes LeadingTimeRatio of the non-distance
+    // weight when someone makes goal; when nobody does (GoalRatio = 0) PG
+    // time points are unearnable, so *all* non-distance weight goes to
+    // leading.
+    lw = gr === 0 ? 1 - dw : (1 - dw) * leadingTimeRatio;
   } else if (gr === 0) {
     lw = taskDistance > 0 ? (bestDistance / taskDistance) * 0.1 : 0;
   } else {
@@ -1403,6 +1476,7 @@ export function scoreFlights(
   const weights = calculateWeights(
     goalRatio, bestDistance, taskDistance, fullParams.scoring,
     fullParams.useLeading, fullParams.useArrival,
+    fullParams.leadingWeightFormula, fullParams.leadingTimeRatio,
   );
   const totalAvailable = 1000 * taskValidity.task;
   const availablePoints: AvailablePoints = {

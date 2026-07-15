@@ -178,8 +178,10 @@ bun run score-task <task.xctsk> <igc-file-or-folder>... [options]
 #   --no-use-arrival           Disable arrival points (`useArrival`)
 # Formula & advanced:
 #   --leading-formula <weighted|classic>  `leadingFormula` (default: classic HG / weighted PG)
+#   --leading-weight-formula <gap2020|s7f2024>  PG leading weight (default: gap2020)
 #   --time-points-exponent <5/6|2/3>       `timePointsExponent` (default: 5/6)
-#   (see --help for the full list, incl. nominal-launch, distance-origin, jump-the-gun)
+#   (see --help for the full list, incl. nominal-launch, distance-origin, jump-the-gun,
+#    leading-time-ratio)
 # Output:
 #   --json                     Output as JSON
 

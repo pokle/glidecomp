@@ -5,7 +5,7 @@
  */
 import { useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { defaultsFor, resolveTimePointsExponent } from "@glidecomp/engine";
+import { defaultsFor, resolveCompGapParams, resolveTimePointsExponent } from "@glidecomp/engine";
 import { Button } from "@/react/ui/button";
 import {
   Dialog,
@@ -71,6 +71,7 @@ export function SettingsDialog({
     minimumDistance: useId(),
     jtgFactor: useId(),
     jtgMax: useId(),
+    leadingTimeRatio: useId(),
     essNotGoal: useId(),
   };
 
@@ -79,7 +80,21 @@ export function SettingsDialog({
   // section always starts from the correct official values.
   // nominalDistance stays blank when unset so the scorer auto-computes
   // it per task (70% of task distance), matching historical behavior.
-  const gp = comp.gap_params ?? defaultsFor(comp.category === "pg" ? "pg" : "hg");
+  // Resolve the *effective* params the scorer uses (official per-category
+  // defaults + saved overrides, plus the date-based PG leading-weight default
+  // from the comp's creation time — issue #257), so every field's initial
+  // value matches what the scoreboard is computed from.
+  const gpCreatedAtMs = Date.parse(comp.creation_date);
+  // Strip nominalDistance (nullable "auto") before merging — the dialog keys
+  // its own nominalDistance field off the stored value, and the engine type
+  // wants number | undefined, not the CompGapParams number | null.
+  const { nominalDistance: _gpNd, ...gpStored } = comp.gap_params ?? {};
+  void _gpNd;
+  const gp = resolveCompGapParams(
+    comp.category === "pg" ? "pg" : "hg",
+    comp.gap_params ? gpStored : null,
+    Number.isNaN(gpCreatedAtMs) ? null : gpCreatedAtMs
+  );
 
   const [name, setName] = useState(comp.name);
   const [category, setCategory] = useState<"hg" | "pg">(comp.category === "hg" ? "hg" : "pg");
@@ -119,6 +134,15 @@ export function SettingsDialog({
   const [leadingFormula, setLeadingFormula] = useState<"weighted" | "classic">(
     gp.leadingFormula ?? "weighted"
   );
+  // Leading-weight generation (PG only; issue #257). `gp` is the effective
+  // params (resolveCompGapParams with the comp's creation date), so a new PG
+  // comp shows 's7f2024' and an older one 'gap2020' — matching the scorer.
+  const [leadingWeightFormula, setLeadingWeightFormula] = useState<"gap2020" | "s7f2024">(
+    gp.leadingWeightFormula ?? "gap2020"
+  );
+  const [leadingTimeRatio, setLeadingTimeRatio] = useState(
+    String(Math.round((gp.leadingTimeRatio ?? 0.26) * 100))
+  );
   // Time-points exponent (S7F §11.2), decoupled from the leading formula
   // (issue #258). A saved comp that predates the split keeps the exponent its
   // leadingFormula historically implied (resolveTimePointsExponent).
@@ -145,6 +169,14 @@ export function SettingsDialog({
    */
   function resetToDefaults() {
     const d = defaultsFor(category);
+    // The PG leading-weight default is date-based (issue #257): reset to what a
+    // comp of this age would default to — 's7f2024' for one created on/after
+    // the cutoff, 'gap2020' for an older one — not the raw engine baseline.
+    const resolved = resolveCompGapParams(
+      category,
+      null,
+      Number.isNaN(gpCreatedAtMs) ? null : gpCreatedAtMs
+    );
     setNominalDistance("");
     setNominalTime(String(Math.round(d.nominalTime / 60)));
     setNominalGoal(String(Math.round(d.nominalGoal * 100)));
@@ -154,6 +186,8 @@ export function SettingsDialog({
     setUseArrival(d.useArrival);
     setUseDifficulty(d.useDistanceDifficulty);
     setLeadingFormula(d.leadingFormula);
+    setLeadingWeightFormula(resolved.leadingWeightFormula);
+    setLeadingTimeRatio(String(Math.round(d.leadingTimeRatio * 100)));
     setTimePointsExponent(resolveTimePointsExponent(d));
     setDistanceOrigin(d.distanceOrigin);
     setJtgFactor(String(d.jumpTheGunFactor));
@@ -226,6 +260,8 @@ export function SettingsDialog({
       useLeading,
       useArrival,
       leadingFormula,
+      leadingWeightFormula,
+      leadingTimeRatio: parseField(leadingTimeRatio, 26) / 100,
       timePointsExponent,
       distanceOrigin,
       useDistanceDifficulty: useDifficulty,
@@ -574,6 +610,48 @@ export function SettingsDialog({
                   generous.
                 </p>
               </div>
+              {category === "pg" ? (
+                <div>
+                  <h4 className="mb-1.5 text-sm font-medium">
+                    Paragliding leading weight
+                  </h4>
+                  <SimpleSelect
+                    value={leadingWeightFormula}
+                    onChange={(v) => setLeadingWeightFormula(v as "gap2020" | "s7f2024")}
+                    options={[
+                      { value: "gap2020", label: "GAP2020 — AirScore parity (default)" },
+                      { value: "s7f2024", label: "S7F 2024 — LeadingTimeRatio (§10)" },
+                    ]}
+                    ariaLabel="Paragliding leading weight formula"
+                  />
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    How much of the non-distance weight goes to leading vs time.
+                    GAP2020 gives leading 35% (and all of it when nobody makes goal);
+                    S7F 2024 uses the LeadingTimeRatio below. Hang-gliding is unaffected.
+                  </p>
+                  {leadingWeightFormula === "s7f2024" ? (
+                    <Field className="mt-3">
+                      <FieldLabel htmlFor={ids.leadingTimeRatio}>
+                        Leading-time ratio (%)
+                      </FieldLabel>
+                      <Input
+                        id={ids.leadingTimeRatio}
+                        type="number"
+                        min={0}
+                        max={50}
+                        step={1}
+                        value={leadingTimeRatio}
+                        onChange={(e) => setLeadingTimeRatio(e.target.value)}
+                      />
+                      <FieldDescription>
+                        FAI S7F §10: the % of the non-distance weight allocated to
+                        leading when someone makes goal (0–50%, spec default 26%). The
+                        rest goes to time.
+                      </FieldDescription>
+                    </Field>
+                  ) : null}
+                </div>
+              ) : null}
               <div>
                 <h4 className="mb-1.5 text-sm font-medium">Distance origin</h4>
                 <SimpleSelect

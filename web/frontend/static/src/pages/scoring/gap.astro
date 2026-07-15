@@ -465,6 +465,33 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             higher weight than HG, since paragliding has no arrival term to share the non-distance
             points with.
           </p>
+
+          <div>
+            <h3 id="leading-weight" class="text-base font-semibold mb-1 scroll-mt-20">
+              How much weight goes to leading (paragliding)
+            </h3>
+            <p class="text-muted-foreground">
+              How the day's non-distance points split between <em>leading</em> and <em>time</em> is a
+              per-competition choice for paragliding (hang gliding always uses the FAI HG formula).
+              <strong>New PG competitions default to S7F 2024</strong>; competitions created before
+              15 July 2026 default to GAP2020 so their published scores never shift:
+            </p>
+            <ul class="list-disc ml-5 space-y-1 text-muted-foreground">
+              <li>
+                <strong>S7F 2024</strong> (<SpecRef section="10" />, the default for new comps) —
+                leading takes the task's <em>LeadingTimeRatio</em> (0–50%, default 26%) of the
+                non-distance weight when someone makes goal, and <strong>all</strong> of it when
+                nobody does (with no goal, paragliders earn no time points, so every non-distance
+                point goes to leading). The remainder goes to time.
+              </li>
+              <li>
+                <strong>GAP2020</strong> (older comps) — leading takes 35% of the non-distance
+                weight when someone makes goal, and
+                <Fragment set:html={km(String.raw`0.1 \times \text{BestDist}/\text{TaskDist}`)} /> of the
+                total when nobody does. This matches AirScore's gap2020/gap2021 presets.
+              </li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -607,6 +634,13 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   <td class="py-2 pr-4">Time points exponent</td>
                   <td class="py-2 pr-4 whitespace-nowrap">5/6</td>
                   <td class="py-2">The speed-fraction exponent (<SpecRef section="11.2" label="§11.2" />), for both sports. Set independently of the leading formula; "2/3" selects the older, slightly more generous GAP2016/2018 curve.</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">
+                    <a href="#leading-weight" class="underline hover:text-foreground">PG leading weight</a>
+                  </td>
+                  <td class="py-2 pr-4 whitespace-nowrap">S7F 2024</td>
+                  <td class="py-2">Paragliding only: the leading↔time weight split. New PG comps default to <strong>S7F 2024</strong> (the LeadingTimeRatio parameter, default 26%); comps created before 15 July 2026 default to <strong>GAP2020</strong> (AirScore parity) so their scores don't shift. No effect on hang gliding.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">
@@ -802,15 +836,20 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </p>
             </div>
             <div>
-              <h3 class="text-base font-semibold mb-1">Paragliding leading weight uses the GAP2020 formula (<SpecRef section="10" />)</h3>
+              <h3 class="text-base font-semibold mb-1">Older paragliding comps keep the GAP2020 leading weight (<SpecRef section="10" />)</h3>
               <p class="text-muted-foreground">
                 The 2024 spec derives the PG leading weight from a per-task
                 <em>LeadingTimeRatio</em> parameter (default 26% of the non-distance weight, and
-                100% of it when nobody makes goal). GlideComp uses the earlier GAP2020 formula:
-                35% of the non-distance weight when someone makes goal, and
-                <Fragment set:html={km(String.raw`0.1 \times \text{BestDist}/\text{TaskDist}`)} /> when nobody does.
-                This matches AirScore's gap2020/gap2021 presets rather than the 2024 wording. The
-                hang-gliding weights match the 2024 spec.
+                100% of it when nobody makes goal). Paragliding competitions created from
+                <strong>15 July 2026</strong> onward <strong>default</strong> to this
+                <strong>S7F 2024</strong> formula. Competitions created before that date keep the
+                earlier <strong>GAP2020</strong> formula — 35% of the non-distance weight when
+                someone makes goal, and
+                <Fragment set:html={km(String.raw`0.1 \times \text{BestDist}/\text{TaskDist}`)} /> when nobody does —
+                so their published scores never shift; this matches AirScore's gap2020/gap2021
+                presets. Either comp can switch between the two (and set its LeadingTimeRatio) under
+                <em>Paragliding leading weight</em> in scoring settings. The hang-gliding weights
+                match the 2024 spec and are unaffected by this setting.
               </p>
             </div>
             <div>

@@ -1214,6 +1214,20 @@ function buildPenaltySection(
 }
 
 /**
+ * Name the leading-weight generation that set this task's leading↔time split,
+ * so the explanation is self-describing (issue #257). Hang gliding is
+ * generation-independent, so it needs no note.
+ */
+function leadingWeightDetail(params: GAPParameters): string | undefined {
+  if (params.scoring !== 'PG') return undefined;
+  if (params.leadingWeightFormula === 's7f2024') {
+    const ratioPct = Math.round(params.leadingTimeRatio * 100);
+    return `Leading weight follows the FAI S7F 2024 §10 formula: ${ratioPct}% of the non-distance weight (LeadingTimeRatio) goes to leading when someone makes goal, and all of it when nobody does.`;
+  }
+  return 'Leading weight follows the GAP2020 formula (AirScore parity): 35% of the non-distance weight when someone makes goal, and 0.1 × best distance ÷ task distance when nobody does.';
+}
+
+/**
  * Explain a GAP-scored pilot's result.
  *
  * The narrative uses the pilot's resolved turnpoint sequence; the point
@@ -1242,6 +1256,7 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
           id: 'leading',
           text: 'Leading points reward flying out front during the speed section — the pilot with the best leading coefficient takes all available leading points, others fall off with the gap.',
           value: pts(entry.leading_points),
+          detail: leadingWeightDetail(params),
         },
         {
           id: 'leading-variant',

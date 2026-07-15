@@ -20,6 +20,8 @@ import {
   scoreFlights,
   toFlightScoringData,
   taskForDistanceOrigin,
+  resolveCompGapParams,
+  S7F2024_PG_DEFAULT_SINCE_MS,
   DEFAULT_GAP_PARAMETERS,
   type GAPParameters,
   type PilotFlight,
@@ -975,6 +977,78 @@ describe('calculateWeights with flags', () => {
     expect(w.leading).toBe(0);
     expect(w.arrival).toBe(0);
     expect(w.distance + w.time).toBeCloseTo(1, 5);
+  });
+});
+
+describe('calculateWeights — S7F 2024 leading formula (issue #257)', () => {
+  it('PG s7f2024 with goal: leading = LeadingTimeRatio × (1 − DW)', () => {
+    const gr = 0.3;
+    const w = calculateWeights(gr, 80000, 100000, 'PG', true, true, 's7f2024', 0.26);
+    const dw = w.distance;
+    expect(w.leading).toBeCloseTo((1 - dw) * 0.26, 6);
+    // the remainder goes to time (PG has no arrival)
+    expect(w.time).toBeCloseTo((1 - dw) * 0.74, 6);
+    expect(w.distance + w.time + w.leading + w.arrival).toBeCloseTo(1, 6);
+  });
+
+  it('PG s7f2024 honours a custom LeadingTimeRatio', () => {
+    const w = calculateWeights(0.3, 80000, 100000, 'PG', true, true, 's7f2024', 0.5);
+    expect(w.leading).toBeCloseTo((1 - w.distance) * 0.5, 6);
+  });
+
+  it('PG s7f2024 at goal ratio 0: all non-distance weight goes to leading', () => {
+    const w = calculateWeights(0, 50000, 100000, 'PG', true, true, 's7f2024', 0.26);
+    expect(w.leading).toBeCloseTo(1 - w.distance, 6);
+    expect(w.time).toBeCloseTo(0, 6);
+  });
+
+  it('s7f2024 differs from the gap2020 default for PG', () => {
+    const s7f = calculateWeights(0.3, 80000, 100000, 'PG', true, true, 's7f2024', 0.26);
+    const gap = calculateWeights(0.3, 80000, 100000, 'PG', true, true, 'gap2020', 0.26);
+    // gap2020 PG leading = 0.35 × (1 − DW); s7f2024 = 0.26 × (1 − DW)
+    expect(gap.leading).toBeGreaterThan(s7f.leading);
+    expect(gap.leading).toBeCloseTo((1 - gap.distance) * 0.35, 6);
+  });
+
+  it('HG weights are unchanged by the leading-weight formula', () => {
+    const gap = calculateWeights(0.3, 80000, 100000, 'HG', true, true, 'gap2020', 0.26);
+    const s7f = calculateWeights(0.3, 80000, 100000, 'HG', true, true, 's7f2024', 0.26);
+    expect(s7f.leading).toBeCloseTo(gap.leading, 10);
+    expect(s7f.time).toBeCloseTo(gap.time, 10);
+    expect(s7f.arrival).toBeCloseTo(gap.arrival, 10);
+  });
+});
+
+describe('resolveCompGapParams — date-based PG leading-weight default (issue #257)', () => {
+  const before = S7F2024_PG_DEFAULT_SINCE_MS - 1;
+  const onCutoff = S7F2024_PG_DEFAULT_SINCE_MS;
+  const after = S7F2024_PG_DEFAULT_SINCE_MS + 24 * 3600 * 1000;
+
+  it('a new PG comp (created on/after the cutoff) defaults to s7f2024', () => {
+    expect(resolveCompGapParams('pg', null, onCutoff).leadingWeightFormula).toBe('s7f2024');
+    expect(resolveCompGapParams('pg', null, after).leadingWeightFormula).toBe('s7f2024');
+  });
+
+  it('a PG comp created before the cutoff keeps gap2020 (AirScore parity)', () => {
+    expect(resolveCompGapParams('pg', null, before).leadingWeightFormula).toBe('gap2020');
+  });
+
+  it('omitting the creation date keeps the gap2020 baseline (e.g. the CLI)', () => {
+    expect(resolveCompGapParams('pg', null).leadingWeightFormula).toBe('gap2020');
+    expect(resolveCompGapParams('pg', {}).leadingWeightFormula).toBe('gap2020');
+  });
+
+  it('an explicitly saved leadingWeightFormula always wins over the date default', () => {
+    expect(
+      resolveCompGapParams('pg', { leadingWeightFormula: 'gap2020' }, after).leadingWeightFormula
+    ).toBe('gap2020');
+    expect(
+      resolveCompGapParams('pg', { leadingWeightFormula: 's7f2024' }, before).leadingWeightFormula
+    ).toBe('s7f2024');
+  });
+
+  it('hang gliding is never switched to s7f2024 by the date default', () => {
+    expect(resolveCompGapParams('hg', null, after).leadingWeightFormula).toBe('gap2020');
   });
 });
 

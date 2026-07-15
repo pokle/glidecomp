@@ -31,6 +31,8 @@ should move behind an "Advanced" wall. It does not change code.
 | `useLeading` | `false` | ⚠️ not the official FAI formula (see §2) |
 | `useArrival` | `false` | ⚠️ comment says *"default true for HG"* but the value is `false` |
 | `leadingFormula` | `'weighted'` | GAP2020+ / current S7F ✅ |
+| `leadingWeightFormula` | `'gap2020'` (engine baseline) | PG leading↔time split. `resolveCompGapParams` resolves the effective comp default by creation date: PG comps created on/after 2026-07-15 default to `'s7f2024'` (FAI S7F 2024 §10 LeadingTimeRatio), earlier ones to `'gap2020'` (AirScore parity) — issue #257. No effect on HG |
+| `leadingTimeRatio` | `0.26` | PG S7F-2024 only: fraction (0–0.5) of the non-distance weight given to leading when someone makes goal |
 | `distanceOrigin` | `'takeoff'` | FAI CIVL GAP / PWCA ✅ |
 | `useDistanceDifficulty` | `true` | HG-only; ignored for PG ✅ |
 | `jumpTheGunFactor` | `2` | FAI S7F §12.2 default ✅ |
@@ -107,6 +109,8 @@ global blob. Recommended values:
 | `useArrival` | `false` | — (PG has no arrival) |
 | `useDistanceDifficulty` | `false` | irrelevant for PG (always pure-linear); keep off to avoid implying otherwise |
 | `leadingFormula` | `weighted` | — (2024-spec PG variant) |
+| `leadingWeightFormula` | `s7f2024` (new comps) / `gap2020` (before 2026-07-15) | ⬆ new PG comps default to the 2024 S7F §10 formula; comps created before the cutoff keep AirScore parity ([#257](https://github.com/pokle/glidecomp/issues/257)) |
+| `leadingTimeRatio` | `0.26` | S7F-2024 only; unused under the `gap2020` default |
 | `timePointsExponent` | `5/6` | independent knob ([#258](https://github.com/pokle/glidecomp/issues/258)); current S7F |
 | `distanceOrigin` | `takeoff` | — |
 | jump-the-gun | n/a for PG | stored `2` / `300` but unused (PG early start = launch→SSS) |

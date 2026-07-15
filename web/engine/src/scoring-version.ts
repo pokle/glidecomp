@@ -171,7 +171,17 @@
 //     weighted → 5/6), so their scores are unchanged. The bump invalidates
 //     cached scores for the null-/default-formula comps whose LC variant
 //     changed.
-export const SCORING_ENGINE_VERSION = 19;
+// v20: paragliding leading-weight formula generation (issue #257). A new
+//     `leadingWeightFormula` param ('gap2020' | 's7f2024') and
+//     `leadingTimeRatio` (0–0.5, default 0.26) let a PG comp score its
+//     leading↔time weight split under either the GAP2020/AirScore formula or
+//     the FAI S7F 2024 §10 LeadingTimeRatio formula (leading =
+//     LeadingTimeRatio × (1 − DW) at goal, and the whole non-distance weight
+//     when nobody makes goal). The default is date-based (resolveCompGapParams):
+//     PG comps created on/after 2026-07-15 default to 's7f2024', earlier comps
+//     to 'gap2020' — so no pre-existing comp's scores move. Hang-gliding
+//     weights are untouched. Bump rolls caches so new-default comps recompute.
+export const SCORING_ENGINE_VERSION = 20;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -179,4 +189,4 @@ export const SCORING_ENGINE_VERSION = 19;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "4c15fdc66abd36b39d2f8141688d43155b5ae3fa286c038effd18ac16768a193";
+  "a77b409ef0333dab10385151036cc8addb23d1e32ce1df950a7e25ca49bb9bf9";

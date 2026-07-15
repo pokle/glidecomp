@@ -52,6 +52,13 @@ const gapParamsSchema = z
     // per-category default is 'weighted' for PG and 'classic' for HG (2024
     // spec, issue #258) when omitted.
     leadingFormula: z.enum(["classic", "weighted"]).optional(),
+    // Leading-weight generation (paragliding only; issue #257). Optional; the
+    // default is date-based — new PG comps default to 's7f2024' and older ones
+    // to 'gap2020' (AirScore parity) — resolved in resolveCompGapParams.
+    leadingWeightFormula: z.enum(["gap2020", "s7f2024"]).optional(),
+    // S7F 2024 §10 LeadingTimeRatio (0–0.5, spec default 0.26). Optional;
+    // only used for PG under the 's7f2024' leadingWeightFormula.
+    leadingTimeRatio: z.number().min(0).max(0.5).optional(),
     // Time-points exponent (FAI S7F §11.2), decoupled from the leading
     // variant (issue #258). Optional; the per-category default is '5/6'.
     // When omitted for a comp that saved a leadingFormula, the scorer keeps

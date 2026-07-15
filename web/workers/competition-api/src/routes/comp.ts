@@ -83,6 +83,19 @@ function describeGapParamChanges(
   if (oFormula !== nFormula) {
     out.push(describeChange("leading coefficient formula", oFormula, nFormula));
   }
+  // Leading-weight generation (PG only; issue #257) — changes every PG
+  // pilot's leading↔time split, so both the generation and its ratio are
+  // individually audit-logged.
+  const oLwf = o.leadingWeightFormula ?? "gap2020";
+  const nLwf = n.leadingWeightFormula ?? "gap2020";
+  if (oLwf !== nLwf) {
+    out.push(describeChange("PG leading-weight formula", oLwf, nLwf));
+  }
+  const oLtr = o.leadingTimeRatio ?? 0.26;
+  const nLtr = n.leadingTimeRatio ?? 0.26;
+  if (oLtr !== nLtr) {
+    out.push(describeChange("PG leading-time ratio", pct(oLtr), pct(nLtr)));
+  }
   // Time-points exponent (S7F §11.2), decoupled from the leading formula
   // (issue #258). Report the effective exponent so a change from the
   // formula-implied default to an explicit override is still logged.
