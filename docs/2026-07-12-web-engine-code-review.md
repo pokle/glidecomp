@@ -150,6 +150,9 @@ the same divergence.)
   `madeGoal`/arrival time anchor to cylinder-edge crossing rather than line crossing. Either
   implement line geometry or explicitly reject/flag LINE-goal tasks; today it degrades
   silently.
+  Status: Fixed in #339 — `src/goal-line.ts` implements the line + control semicircle, consumed
+  by `turnpoint-sequence.ts` and `task-optimizer.ts`. Line control zones at *intermediate*
+  turnpoints (S7F §8.4) remain unimplemented; tracked in #259.
 - **[P] `toleranceCredited` mislabels two-step band penetrations** —
   `src/turnpoint-sequence.ts:429-440`. Detection straddles the outer band edge, interpolation
   targets nominal radius; a pilot entering in two steps (410 m → 402 m → 398 m) is flagged
