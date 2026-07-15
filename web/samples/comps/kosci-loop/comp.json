@@ -1,0 +1,39 @@
+{
+  "name": "Kosciuszko Loop",
+  "slug": "kosci-loop",
+  "comp_name": "Kosciuszko Loop (Sample)",
+  "category": "pg",
+  "scoring_format": "gap",
+  "filename_id_field": "civl_id",
+  "classes": [
+    "open"
+  ],
+  "location": {
+    "name": "KOSCI",
+    "description": "Mount Kosciuszko",
+    "lat": -36.455825,
+    "lon": 148.263502,
+    "alt": 2228
+  },
+  "synthetic": true,
+  "tasks": [
+    {
+      "pilot_class": "open",
+      "name": "Grand Loop",
+      "date": "2026-03-01",
+      "dir": "kosci-loop-t1"
+    },
+    {
+      "pilot_class": "open",
+      "name": "Double Ring",
+      "date": "2026-03-02",
+      "dir": "kosci-loop-t2"
+    },
+    {
+      "pilot_class": "open",
+      "name": "Ridge Run",
+      "date": "2026-03-03",
+      "dir": "kosci-loop-t3"
+    }
+  ]
+}
