@@ -15,7 +15,7 @@ import {
   MAP_FONT_FAMILY, GLIDE_LABEL_TEXT_SHADOW, GLIDE_LABEL_SPARSE_MIN_ZOOM, GLIDE_LABEL_SPEED_MIN_ZOOM,
   KEY_EVENT_TYPES, getAltitudeColorNormalized,
   findNearestFixIndex as sharedFindNearestFixIndex,
-  createCirclePolygon, createGlideLegend, showGlideLegend as sharedShowGlideLegend,
+  createCirclePolygon, exitTurnpointArrowFeatures, createGlideLegend, showGlideLegend as sharedShowGlideLegend,
   createTrackPointHUD, updateTrackPointHUD, hideTrackPointHUD as sharedHideTrackPointHUD,
   CROSSHAIR_MAP_SVG,
   buildTrackPointHUDData, buildNextTurnpointContext, ensureTurnpointCache,
@@ -572,6 +572,7 @@ export function createMapBoxProvider(
           'track-line',
           'track-line-outline',
           'task-goal-line',
+          'task-exit-arrows',
           'task-cylinders-stroke',
           'task-cylinders-fill',
           'task-line-arrows',
@@ -603,7 +604,7 @@ export function createMapBoxProvider(
         }
 
         // Other sources with default simplification
-        const sourcesToAdd = ['task-line', 'task-points', 'task-cylinders', 'task-goal-line', 'task-segment-labels', 'highlight-segment', 'speed-fastest-segment', 'open-distance-lines', 'best-progress-route', 'multi-track-names', 'waypoints'];
+        const sourcesToAdd = ['task-line', 'task-points', 'task-cylinders', 'task-exit-arrows', 'task-goal-line', 'task-segment-labels', 'highlight-segment', 'speed-fastest-segment', 'open-distance-lines', 'best-progress-route', 'multi-track-names', 'waypoints'];
         for (const sourceId of sourcesToAdd) {
           if (!map.getSource(sourceId)) {
             map.addSource(sourceId, {
@@ -699,6 +700,19 @@ export function createMapBoxProvider(
             ],
             'line-width': 2,
             'line-opacity': 0.8,
+          },
+        });
+
+        // 3a-bis. Exit-turnpoint arrowheads: solid outward-pointing
+        // triangles on the rings of inferred exit cylinders (see
+        // exitTurnpointArrowFeatures / mapbox-interactions-spec.md).
+        map.addLayer({
+          id: 'task-exit-arrows',
+          type: 'fill',
+          source: 'task-exit-arrows',
+          paint: {
+            'fill-color': '#a855f7',
+            'fill-opacity': 0.9,
           },
         });
 
@@ -2411,6 +2425,7 @@ export function createMapBoxProvider(
             'task-line-arrows',
             'task-cylinders-fill',
             'task-cylinders-stroke',
+            'task-exit-arrows',
             'task-goal-line',
             'task-points',
             'task-labels',
@@ -2552,6 +2567,7 @@ export function createMapBoxProvider(
             updateGeoJSONSource(map, 'task-line', []);
             updateGeoJSONSource(map, 'task-points', []);
             updateGeoJSONSource(map, 'task-cylinders', []);
+            updateGeoJSONSource(map, 'task-exit-arrows', []);
             updateGeoJSONSource(map, 'task-goal-line', []);
             updateGeoJSONSource(map, 'task-segment-labels', []);
             return;
@@ -2631,6 +2647,13 @@ export function createMapBoxProvider(
 
           updateGeoJSONSource(map, 'task-cylinders', cylinderFeatures);
 
+          // Outward arrowheads marking exit turnpoints (crossed flying out).
+          updateGeoJSONSource(
+            map,
+            'task-exit-arrows',
+            exitTurnpointArrowFeatures(task, optimizedPath) as GeoJSON.Feature<GeoJSON.Geometry>[]
+          );
+
           updateGeoJSONSource(
             map,
             'task-goal-line',
@@ -2669,6 +2692,7 @@ export function createMapBoxProvider(
           updateGeoJSONSource(map, 'task-line', []);
           updateGeoJSONSource(map, 'task-points', []);
           updateGeoJSONSource(map, 'task-cylinders', []);
+          updateGeoJSONSource(map, 'task-exit-arrows', []);
           updateGeoJSONSource(map, 'task-goal-line', []);
           updateGeoJSONSource(map, 'task-segment-labels', []);
         },

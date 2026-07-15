@@ -24,8 +24,8 @@
  */
 
 import type { XCTask } from './xctsk-parser';
-import { getGoalIndex } from './xctsk-parser';
-import { calculateOptimizedTaskLine } from './task-optimizer';
+import { getGoalIndex, getEffectiveSSSIndex } from './xctsk-parser';
+import { calculateOptimizedTaskLine, computeTurnpointDirections } from './task-optimizer';
 import { computeGoalLine, distanceToGoalLine } from './goal-line';
 import { andoyerDistance, calculateBearingRadians, destinationPoint } from './geo';
 import type { FlightScoringData } from './gap-scoring';
@@ -154,19 +154,31 @@ export function manualFlightGeometry(
   const nextIdx = anchor + 1;
   const nextIsGoal = nextIdx >= goalIdx;
   const nextTP = task.turnpoints[nextIdx];
-  // Same goal measurement as computeBestProgress: nearest edge of the goal
-  // cylinder, or the nearest point on the goal line for a LINE goal.
+  // Same measurements as computeBestProgress (see NextTPMeasure there):
+  // nearest edge of the goal cylinder or nearest point on a LINE goal; the
+  // nearest boundary from inside for an un-reached EXIT cylinder; the
+  // nearest edge for the ENTER turnpoint right after a reached inferred
+  // EXIT cylinder (the tag bearing is arbitrary on a symmetric task — but
+  // not after the declared-EXIT start, where the tag point is the
+  // AirScore-parity measurement); the optimal tag point otherwise.
+  const directions = computeTurnpointDirections(task, optimizedLine);
+  const sssIdx = getEffectiveSSSIndex(task);
   const goalLine = nextIsGoal ? computeGoalLine(task) : null;
-  const distToNextTP = nextIsGoal
-    ? goalLine
-      ? distanceToGoalLine(goalLine, point.lat, point.lon)
-      : Math.max(0, andoyerDistance(
-          point.lat, point.lon, nextTP.waypoint.lat, nextTP.waypoint.lon,
-        ) - nextTP.radius)
-    : andoyerDistance(
-        point.lat, point.lon,
-        optimizedLine[nextIdx].lat, optimizedLine[nextIdx].lon,
-      );
+  const distToCenter = andoyerDistance(
+    point.lat, point.lon, nextTP.waypoint.lat, nextTP.waypoint.lon,
+  );
+  const distToNextTP = directions[nextIdx] === 'exit'
+    ? Math.max(0, nextTP.radius - distToCenter)
+    : nextIsGoal
+      ? goalLine
+        ? distanceToGoalLine(goalLine, point.lat, point.lon)
+        : Math.max(0, distToCenter - nextTP.radius)
+      : directions[anchor] === 'exit' && anchor !== sssIdx
+        ? Math.max(0, distToCenter - nextTP.radius)
+        : andoyerDistance(
+            point.lat, point.lon,
+            optimizedLine[nextIdx].lat, optimizedLine[nextIdx].lon,
+          );
   const interTPDistance = taskDistance - cum[nextIdx];
   const distanceToGoal = distToNextTP + interTPDistance;
   const madeGoodFromPoint = taskDistance - distanceToGoal;

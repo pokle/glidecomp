@@ -28,6 +28,13 @@ export interface RouteRow {
   altitude: string | number;
   /** Optimized distance (m) from the previous turnpoint; display-only. */
   leg: number | null;
+  /**
+   * Crossing direction derived from the route geometry (display-only,
+   * recomputed live as rows change): 'exit' = a cylinder the route reaches
+   * from inside, crossed flying out. Null while the route is incomplete or
+   * for the take-off.
+   */
+  dir: "enter" | "exit" | null;
 }
 
 export const TYPE_LABELS: Record<string, string> = {
@@ -168,6 +175,7 @@ export function turnpointToRow(tp: Turnpoint, id: number): RouteRow {
     radius: tp.radius,
     altitude: tp.waypoint.altSmoothed ?? "",
     leg: null,
+    dir: null,
   };
 }
 

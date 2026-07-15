@@ -112,7 +112,25 @@
 //     a flight as LC = Infinity (0 leading points) rather than throwing. Only
 //     affects leading-enabled tasks with manual flights — which the new
 //     per-category HG default (leading on) made reachable.
-export const SCORING_ENGINE_VERSION = 14;
+// v15: exit turnpoints (issue #347). A turnpoint whose cylinder the optimized
+//     route reaches from inside (its boundary contains the previous tag
+//     point — e.g. the big ring of a concentric out-and-return) is now an
+//     EXIT cylinder: reached at the first OUTWARD boundary crossing at/after
+//     the previous reaching (or credited 'already_outside' when the pilot
+//     tagged the previous turnpoint beyond it), detected against the inner
+//     tolerance edge (§8.1) like the EXIT start. Previously it was credited
+//     'already_inside' at the previous reaching — on the concentric task
+//     every starter was instantly credited the ring AND the enclosing ESS,
+//     zeroing every speed section and scoring never-exited pilots near full
+//     distance. Land-out distance now routes to an un-reached exit
+//     cylinder's boundary from inside (radius − distance-to-centre), and to
+//     the nearest edge of the ENTER turnpoint right after a reached inferred
+//     exit cylinder (the optimizer's tag bearing is arbitrary on a
+//     rotationally symmetric task); measurement after the declared-EXIT
+//     start is unchanged (AirScore parity). The SSS keeps its declared
+//     direction; the goal (a destination) is always ENTER. Manual flights
+//     route with the same rules.
+export const SCORING_ENGINE_VERSION = 15;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -120,4 +138,4 @@ export const SCORING_ENGINE_VERSION = 14;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "2e2dca31289810faf4e087abe7cd962af703da27813f766a188150a2f3b9e70e";
+  "8783b4fd878f0c41b45acd76068367bd2c0495aaaa3de061bb49504c577bec20";

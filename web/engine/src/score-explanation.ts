@@ -34,7 +34,7 @@ import { DEFAULT_GAP_PARAMETERS, calculateSpeedFraction } from './gap-scoring';
 import type { OpenDistanceGeometry } from './open-distance-scoring';
 import type { ManualFlightGeometry } from './manual-flight';
 import type { IGCFix } from './igc-parser';
-import { calculateOptimizedTaskLine } from './task-optimizer';
+import { calculateOptimizedTaskLine, computeTurnpointDirections } from './task-optimizer';
 import { computeGoalLine } from './goal-line';
 
 // ---------------------------------------------------------------------------
@@ -310,6 +310,10 @@ function buildFlightSection(
   const items: ScoreExplanationItem[] = [];
   const sssIdx = getEffectiveSSSIndex(task);
   const essIdx = getEffectiveESSIndex(task);
+  // Per-turnpoint crossing directions, inferred from the task geometry —
+  // an exit cylinder (one the route reaches from inside) counts when the
+  // pilot flies OUT of it, and the narrative must say so.
+  const directions = computeTurnpointDirections(task);
 
   if (result.startFallback === 'first_turnpoint') {
     items.push({
@@ -455,11 +459,22 @@ function buildFlightSection(
     // cylinder entry, and the wording must say so.
     const goalLine = isGoal ? computeGoalLine(task) : null;
 
+    // An exit cylinder (never the goal — goal is always entered) is reached
+    // by flying out of it, and the narrative must make that visible: it is
+    // the one case where a pilot can be "at" the turnpoint the whole flight
+    // yet never reach it.
+    const isExitTP = !isGoal && directions[reaching.taskIndex] === 'exit';
+    const radiusKm = km(task.turnpoints[reaching.taskIndex]?.radius ?? 0);
+
     let detail: string | undefined;
     if (reaching.selectionReason === 'already_inside') {
       detail = goalLine
         ? 'Already inside the control semicircle behind the goal line when the previous turnpoint was reached — credited at that same moment, no extra crossing needed.'
         : 'Already inside this cylinder when the previous turnpoint was reached — credited at that same moment, no extra crossing needed.';
+    } else if (reaching.selectionReason === 'already_outside') {
+      detail = `Already outside this exit cylinder when the previous turnpoint was reached — credited at that same moment, no extra crossing needed.`;
+    } else if (isExitTP) {
+      detail = `An exit turnpoint — the route reaches this ${radiusKm} cylinder from inside, so it counts when the pilot crosses its boundary flying OUT.${reaching.candidateCount > 1 ? ` First outward crossing of ${reaching.candidateCount} boundary crossings — once a turnpoint is reached, later crossings don't matter.` : ''}`;
     } else if (reaching.candidateCount > 1) {
       detail = `First of ${reaching.candidateCount} crossings — once a turnpoint is reached, later crossings don't matter.`;
     }
@@ -489,7 +504,7 @@ function buildFlightSection(
 
     items.push({
       id: `reaching-${reaching.taskIndex}`,
-      text: `${isGoal ? 'Goal' : label}${name ? ` — ${name}` : ''}`,
+      text: `${isGoal ? 'Goal' : label}${name ? ` — ${name}` : ''}${isExitTP ? ' (exit cylinder)' : ''}`,
       value: fmt(reaching.time),
       detail,
       anchor: reachingAnchor(reaching, isGoal ? 'goal' : isESS ? 'ess' : 'turnpoint'),
@@ -509,6 +524,7 @@ function buildFlightSection(
     const nextIdx = result.lastTurnpointReached + 1;
     const nextIsGoal = nextIdx === getGoalIndex(task);
     const goalIsLine = nextIsGoal && computeGoalLine(task) !== null;
+    const nextIsExit = !nextIsGoal && directions[nextIdx] === 'exit';
     const nextName = turnpointName(task, nextIdx);
     const nextDesc = `${turnpointLabel(task, nextIdx)}${nextName ? ` (${nextName})` : ''}`;
     // The remaining routed line: from the best-progress point, through each
@@ -529,7 +545,9 @@ function buildFlightSection(
       value: fmt(result.bestProgress.time),
       detail: nextIsGoal
         ? `The marked point is where the track came closest to ${goalIsLine ? 'the goal line' : 'goal'}${nextName ? ` (${nextName})` : ''}. Scored distance is measured along the task to this point: ${km(entry.flown_distance)}.`
-        : `The marked point is where the track came closest to the next turnpoint, ${nextDesc} — not the point nearest goal. Distance is measured along the task route from here, on through the remaining turnpoints to goal, so the scored distance is ${km(entry.flown_distance)}.`,
+        : nextIsExit
+          ? `The next turnpoint, ${nextDesc}, is an exit cylinder — it counts only when the pilot flies OUT of its ${km(task.turnpoints[nextIdx]?.radius ?? 0)} boundary, and this flight never did. The marked point is where the track came closest to that boundary from inside; distance is measured along the task route from here, out to the boundary and on through the remaining turnpoints to goal, so the scored distance is ${km(entry.flown_distance)}.`
+          : `The marked point is where the track came closest to the next turnpoint, ${nextDesc} — not the point nearest goal. Distance is measured along the task route from here, on through the remaining turnpoints to goal, so the scored distance is ${km(entry.flown_distance)}.`,
       anchor: {
         kind: 'best_progress',
         latitude: result.bestProgress.latitude,

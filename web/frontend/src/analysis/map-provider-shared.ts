@@ -8,7 +8,8 @@
 import {
   andoyerDistance, getCirclePoints, calculateBearing, calculatePointMetrics,
   calculateOptimizedTaskLine, getOptimizedSegmentDistances,
-  resolveTurnpointSequence, getEffectiveSSSIndex,
+  resolveTurnpointSequence, getEffectiveSSSIndex, getSSSIndex,
+  computeTurnpointDirections, destinationPoint,
   type IGCFix, type FlightEvent, type XCTask, type Turnpoint,
   type GlideContext, type GlideMarker, type TurnpointSequenceResult,
 } from '@glidecomp/engine';
@@ -265,6 +266,65 @@ export function createCirclePolygon(
     type: 'Polygon',
     coordinates: [coords],
   };
+}
+
+/**
+ * Outward-pointing arrowheads on the rings of EXIT turnpoints — the map
+ * notation for "this cylinder is crossed flying out of it" (see
+ * docs/mapbox-interactions-spec.md §Task visualization).
+ *
+ * Only inferred exit turnpoints are marked: a declared-EXIT start is the
+ * normal case on race tasks and is already described by the start summary
+ * text, so decorating it would just add noise. Three arrowheads per ring,
+ * one anchored at the optimized route's tag bearing (where the route
+ * actually crosses the boundary) and the others at ±120°.
+ *
+ * @param optimizedLine - Optional precomputed calculateOptimizedTaskLine
+ *   result for the same task.
+ */
+export function exitTurnpointArrowFeatures(
+  task: XCTask,
+  optimizedLine?: { lat: number; lon: number }[],
+): GeoJSON.Feature[] {
+  if (task.turnpoints.length < 2) return [];
+  const line = optimizedLine ?? calculateOptimizedTaskLine(task);
+  const directions = computeTurnpointDirections(task, line);
+  const sssIdx = getSSSIndex(task);
+
+  const features: GeoJSON.Feature[] = [];
+  for (let i = 0; i < task.turnpoints.length; i++) {
+    if (directions[i] !== 'exit' || i === sssIdx) continue;
+    const tp = task.turnpoints[i];
+    const { lat, lon } = tp.waypoint;
+    const r = tp.radius;
+    // Arrow size scales with the ring but stays visible on small ones and
+    // restrained on huge ones.
+    const len = Math.min(Math.max(r * 0.12, 80), 600);
+    const halfWidthRad = (len * 0.6) / r; // base half-width as an angle at the centre
+    const tag = line[i];
+    const anchorBearing = tag ? calculateBearing(lat, lon, tag.lat, tag.lon) : 0;
+
+    for (const offset of [0, 120, 240]) {
+      const bearingRad = ((anchorBearing + offset) * Math.PI) / 180;
+      const apex = destinationPoint(lat, lon, r + len, bearingRad);
+      const base1 = destinationPoint(lat, lon, r, bearingRad + halfWidthRad);
+      const base2 = destinationPoint(lat, lon, r, bearingRad - halfWidthRad);
+      features.push({
+        type: 'Feature',
+        properties: { turnpointIndex: i },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [[
+            [apex.lon, apex.lat],
+            [base1.lon, base1.lat],
+            [base2.lon, base2.lat],
+            [apex.lon, apex.lat],
+          ]],
+        },
+      });
+    }
+  }
+  return features;
 }
 
 // ── DOM helpers ─────────────────────────────────────────────────────────────

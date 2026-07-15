@@ -77,6 +77,24 @@ When multiple tracks are loaded (competition mode), single-track layers are hidd
     - Other: `#a855f7` (purple)
   - Rendered as 64-point polygons via `createCirclePolygon()`
 
+- **Exit-turnpoint arrowheads** (issue #347)
+  - An inferred exit turnpoint — a cylinder the optimized route reaches
+    from inside (`computeTurnpointDirections()` in the engine), crossed by
+    flying OUT of it — carries three solid outward-pointing triangles on
+    its ring: one anchored at the optimized route's tag bearing (where the
+    route crosses the boundary), the others at ±120°
+  - Geometry from `exitTurnpointArrowFeatures()` (map-provider-shared):
+    apex at `radius + len` from the centre, base on the ring; `len =
+    clamp(radius × 0.12, 80 m, 600 m)`
+  - Fill: `#a855f7` (purple, the plain-turnpoint color), opacity 0.9
+    (mapbox layer `task-exit-arrows`; leaflet draws the same polygons)
+  - The declared-EXIT start is NOT decorated — an exit start is the normal
+    case on race tasks and is described by the start summary text; the
+    arrowheads flag the unusual cylinder only
+  - Decorative reinforcement: the authoritative carrier of direction is the
+    task turnpoint table (Direction column) on the task page & route editor
+  - 3D globe / Threebox providers: out of scope (not drawn)
+
 - **Goal line** (tasks with `goal.type === 'LINE'`, S7F §6.3.1)
   - The last turnpoint's circle is replaced by two features:
     - The goal line itself: `task-goal-line` layer, solid line in the type
@@ -231,7 +249,7 @@ When enabled via the "Show Track Metrics" command palette option, displays glide
 
 ## Visibility Toggles
 
-- **Task visibility** — toggles 8 task layers (cylinder fill/stroke, goal line, points, labels, segment labels, line, line arrows)
+- **Task visibility** — toggles 9 task layers (cylinder fill/stroke, exit arrows, goal line, points, labels, segment labels, line, line arrows)
 - **Track visibility** — toggles all track layers (`track-line`, `track-line-outline`, `highlight-segment`) + 3D objects + event markers (markers hidden via `display: none`); clears highlights when hiding
 
 ## Layer Ordering (bottom to top)
@@ -240,22 +258,23 @@ When enabled via the "Show Track Metrics" command palette option, displays glide
 2. `task-line-arrows` — directional arrows on route
 3. `task-cylinders-fill` — turnpoint cylinder fills
 4. `task-cylinders-stroke` — turnpoint cylinder strokes
-5. `task-goal-line` — goal line (LINE goals only)
-6. `track-line-outline` — black track shadow
-7. `track-line` — altitude-colored track
-8. `highlight-segment` — cyan highlight for selected events
-9. `speed-fastest-segment` — red overlay for fastest speed segment
-10. `task-points` — turnpoint dots
-11. `task-labels` — turnpoint name labels
-12. `waypoints` — pickable waypoint marker dots (route editor)
-13. `waypoint-labels` — pickable waypoint name labels (route editor, zoom ≥ 10)
-14. `task-segment-labels` — leg distance labels
-15. `open-distance-line` — dashed scored open-distance line per pilot
-16. `open-distance-labels` — distance label along each open-distance line
-17. `multi-track-name-labels` — pilot name at each track's landing point
-18. `annotation-strokes-layer` — committed annotation strokes
-19. `annotation-live-layer` — in-progress annotation stroke preview
-20. `threebox-layer` — 3D custom rendering layer (Threebox)
+5. `task-exit-arrows` — outward arrowheads on exit-turnpoint rings
+6. `task-goal-line` — goal line (LINE goals only)
+7. `track-line-outline` — black track shadow
+8. `track-line` — altitude-colored track
+9. `highlight-segment` — cyan highlight for selected events
+10. `speed-fastest-segment` — red overlay for fastest speed segment
+11. `task-points` — turnpoint dots
+12. `task-labels` — turnpoint name labels
+13. `waypoints` — pickable waypoint marker dots (route editor)
+14. `waypoint-labels` — pickable waypoint name labels (route editor, zoom ≥ 10)
+15. `task-segment-labels` — leg distance labels
+16. `open-distance-line` — dashed scored open-distance line per pilot
+17. `open-distance-labels` — distance label along each open-distance line
+18. `multi-track-name-labels` — pilot name at each track's landing point
+19. `annotation-strokes-layer` — committed annotation strokes
+20. `annotation-live-layer` — in-progress annotation stroke preview
+21. `threebox-layer` — 3D custom rendering layer (Threebox)
 
 ## 3D Drone Follow Camera
 

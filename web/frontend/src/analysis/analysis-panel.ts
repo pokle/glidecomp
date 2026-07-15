@@ -1111,6 +1111,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
           reasonStr = `First of ${reaching.candidateCount} crossings`;
         } else if (reaching.selectionReason === 'already_inside') {
           reasonStr = 'Already inside when the previous turnpoint was reached';
+        } else if (reaching.selectionReason === 'already_outside') {
+          reasonStr = 'Already outside the exit cylinder when the previous turnpoint was reached';
         } else if (reaching.selectionReason === 'track_start') {
           reasonStr = 'Track began outside the start cylinder — measured from first fix';
         }
