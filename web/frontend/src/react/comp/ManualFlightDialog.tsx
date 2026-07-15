@@ -182,7 +182,7 @@ export function ManualFlightDialog({
             : "Scored from the last turnpoint they reached and where they landed."}
         </p>
         <form
-          className="flex flex-col gap-4"
+          className="flex flex-col gap-6"
           onSubmit={(e) => {
             e.preventDefault();
             void save();
