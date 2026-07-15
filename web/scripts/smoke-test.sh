@@ -92,29 +92,42 @@ check_sha || fail=1
 
 # ── SSR public pages render content (no JS) ──────────────────────────────────
 check_ssr_content() {
-  local local_fail=0 path code name cid
-  # robots.txt + the dynamic sitemap must be served.
-  for path in /robots.txt /sitemap.xml; do
-    code=$(curl -s -o /dev/null -w '%{http_code}' "${DEPLOY_URL}${path}")
-    echo "${path} -> ${code}"
-    [ "$code" = "200" ] || { echo "::error::${path} returned ${code}"; local_fail=1; }
-  done
+  local local_fail=0 name="" cid="" body attempt comp_html hub_html
+  # robots.txt + the dynamic sitemap must be served. Both are backed by Pages
+  # Functions (/sitemap.xml is dynamic), so they're subject to the same
+  # post-deploy edge-propagation race as the SPA routes above — a fresh
+  # deployment can serve the static assets seconds before the Functions
+  # propagate. Retry with backoff instead of a single un-retried read.
+  check_route /robots.txt || local_fail=1
+  check_route /sitemap.xml || local_fail=1
 
   # The defining SSR property: a public comp's name is present in the server
-  # HTML of /comp AND its hub — with no JavaScript run.
-  name=$(curl -s "${DEPLOY_URL}/api/comp" | jq -r '[.comps[] | select(.test==false)][0].name // empty')
-  cid=$(curl -s "${DEPLOY_URL}/api/comp" | jq -r '[.comps[] | select(.test==false)][0].comp_id // empty')
+  # HTML of /comp AND its hub — with no JavaScript run. /api/comp is served by
+  # its own Pages Function, so retry until it returns parseable JSON (same race).
+  for attempt in $(seq 1 10); do
+    body=$(curl -s "${DEPLOY_URL}/api/comp")
+    name=$(echo "$body" | jq -r '[.comps[] | select(.test==false)][0].name // empty' 2>/dev/null)
+    cid=$(echo "$body" | jq -r '[.comps[] | select(.test==false)][0].comp_id // empty' 2>/dev/null)
+    if [ -n "$name" ] && [ -n "$cid" ]; then break; fi
+    echo "/api/comp not ready yet (attempt ${attempt}/10, retrying in 3s…)"
+    sleep 3
+  done
   if [ -z "$name" ] || [ -z "$cid" ]; then
     echo "::warning::No public comp to verify SSR content against — skipping"
     return "$local_fail"
   fi
   echo "Verifying SSR content for '${name}' (${cid})"
-  if curl -s "${DEPLOY_URL}/comp" | grep -qF "$name"; then
+  # Capture then grep, rather than `curl | grep -qF`: under `pipefail` a
+  # short-circuiting `grep -q` closes the pipe early and curl dies with SIGPIPE
+  # (141), which pipefail would surface as a false "not found" even on a match.
+  comp_html=$(curl -s "${DEPLOY_URL}/comp")
+  if grep -qF "$name" <<<"$comp_html"; then
     echo "Good — /comp server-renders the comp list"
   else
     echo "::error::/comp HTML did not contain '${name}' — SSR not rendering content"; local_fail=1
   fi
-  if curl -s "${DEPLOY_URL}/comp/${cid}" | grep -qF "$name"; then
+  hub_html=$(curl -s "${DEPLOY_URL}/comp/${cid}")
+  if grep -qF "$name" <<<"$hub_html"; then
     echo "Good — /comp/${cid} server-renders the comp hub"
   else
     echo "::error::/comp/${cid} HTML did not contain '${name}' — hub SSR broken"; local_fail=1
