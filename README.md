@@ -158,22 +158,29 @@ bun run get-xcontest-task -- --file task.json
 ```bash
 bun run score-task <task.xctsk> <igc-file-or-folder>... [options]
 
+# Scores identically to the web app. --scoring (HG or PG) is REQUIRED for GAP
+# scoring — the CLI has no comp record and won't guess. Given it, the run starts
+# from the official per-category FAI/S7F defaults and each flag overrides one
+# parameter. Flag names are the kebab-case of the gap_params keys the UI saves;
+# units are the engine's (metres / seconds / 0-1 ratios).
+#
 # Options:
-#   --scoring <PG|HG>         Sport type (default: PG)
-#   --nominal-distance <m>    Nominal distance in meters (default: 70% of task distance)
-#   --nominal-goal <ratio>    Nominal goal ratio 0-1 (default: 0.2)
-#   --nominal-time <s>        Nominal time in seconds (default: 5400)
-#   --min-distance <m>        Minimum distance in meters (default: 5000)
-#   --no-leading              Disable leading (departure) points
-#   --no-arrival              Disable arrival points
-#   --json                    Output as JSON
+#   --scoring <HG|PG>          Wing (`scoring`). REQUIRED unless --open-distance
+#   --nominal-distance <m>     `nominalDistance` (default: 70% of task distance)
+#   --nominal-goal <ratio>     `nominalGoal` 0-1 (default: 0.3)
+#   --nominal-time <s>         `nominalTime` in seconds (default: 5400)
+#   --minimum-distance <m>     `minimumDistance` in metres (default: 5000)
+#   --no-use-leading           Disable leading (departure) points (`useLeading`)
+#   --no-use-arrival           Disable arrival points (`useArrival`)
+#   --leading-formula <which>  `leadingFormula`: weighted | classic (default: weighted)
+#   --json                     Output as JSON
+#   (see --help for the full list, incl. jump-the-gun and distance-origin)
 
-# Example: score Corryong Cup 2026 Open Task 1 (HG, no leading/arrival)
+# Example: score Corryong Cup 2026 Open Task 1 as HG with the official defaults
 bun run score-task \
   web/samples/comps/corryong-cup-2026-open-t1/task.xctsk \
   web/samples/comps/corryong-cup-2026-open-t1/ \
-  --scoring HG --no-leading --no-arrival \
-  --nominal-distance 35000 --nominal-goal 0.3
+  --scoring HG
 ```
 
 Example output:
@@ -181,24 +188,31 @@ Example output:
 ```
 === Task Scoring Results (CIVL GAP) ===
 
-Task distance:    73.9 km
+Scoring config:
+  Sport:          HG
+  Leading:        on (weighted)
+  Arrival:        on
+  Difficulty:     on
+  Nominal:        dist 55.2 km / time 90 min / goal 30% / launch 96%
+
+Task distance:    78.8 km
 Pilots:           32 flying / 32 present
 In goal:          12 (37.5%)
-Best time:        1:37:43
+Best time:        1:37:55
 
 Task Validity:    100.0%
-Available Points: 1000 (dist: 486, time: 514, lead: 0, arr: 0)
+Available Points: 1000 (dist: 486, time: 360, lead: 90, arr: 64)
 
-   #  Pilot                            Dist        Time   Dist Pts   Time Pts   Lead Pts    Arr Pts    Total
-------------------------------------------------------------------------------------------------------------
-   1  Jon Durand                    73.9 km     1:37:43      485.6      514.4        0.0        0.0     1000
-   2  Rohan Holtkamp                73.9 km     1:46:05      485.6      386.9        0.0        0.0      872
-   3  Peter  Burkitt                73.9 km     1:49:00      485.6      358.8        0.0        0.0      844
+   #  Pilot                            Dist     SS Time   Dist Pts   Diff Pts   Time Pts   Lead Pts    Arr Pts    Total
+-----------------------------------------------------------------------------------------------------------------------
+   1  Rohan Holtkamp                78.8 km     1:47:55      485.6      242.8      294.1       90.0       64.3      934
+   2  Jon Durand                    78.8 km     1:37:55      485.6      242.8      360.1       21.2       44.2      911
+   3  Peter  Burkitt                78.8 km     1:50:13      485.6      242.8      281.7       89.4       53.4      910
   ...
-  13  Rich Reinauer                 72.0 km           -      473.1        0.0        0.0        0.0      473
-  ...
-  29  Rennick Kerr                   5.0 km           -       32.9        0.0        0.0        0.0       33
+  13  Rich Reinauer                 76.9 km          LO      479.7      242.8        0.0        0.0        0.0      480
 ```
+
+> The full HG table also shows a leading-coefficient (`LC`) column; it's elided here for width.
 
 ## Project Structure
 
