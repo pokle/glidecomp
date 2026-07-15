@@ -1,8 +1,7 @@
 /** Competition list + create dialog — React port of comp.ts / comp.html. */
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/react/ui/button";
-import { Checkbox } from "@/react/ui/checkbox";
 import {
   Dialog,
   DialogClose,
@@ -11,16 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/react/ui/dialog";
-import {
-  Field,
-  FieldDescription,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from "@/react/ui/field";
-import { Input } from "@/react/ui/input";
-import { RadioGroup, RadioGroupItem } from "@/react/ui/radio-group";
 import { api } from "../../comp/api";
+import { CategoryField, NameField, PilotClassesField, TestCompField } from "../comp/fields";
 import { toast } from "../lib/toast";
 import { goToSignIn, useUser } from "../lib/user";
 import {
@@ -158,11 +149,6 @@ function CreateCompDialog({
   const [pilotClasses, setPilotClasses] = useState("open");
   const [test, setTest] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const nameId = useId();
-  const hgId = useId();
-  const pgId = useId();
-  const classesId = useId();
-  const testId = useId();
 
   // Reset the form each time the dialog opens (matches the vanilla behaviour).
   function handleOpenChange(next: boolean) {
@@ -213,73 +199,35 @@ function CreateCompDialog({
           <DialogTitle>Create Competition</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <Field>
-            <FieldLabel htmlFor={nameId}>Name</FieldLabel>
-            <Input
-              id={nameId}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Corryong Cup 2026"
-              required
-              maxLength={128}
-              autoFocus
-            />
-          </Field>
+          <NameField
+            value={name}
+            onChange={setName}
+            placeholder="e.g. Corryong Cup 2026"
+            autoFocus
+          />
 
-          <FieldSet>
-            <FieldLegend variant="label">Category</FieldLegend>
-            <RadioGroup
-              value={category}
-              onValueChange={(value) => setCategory(value as "hg" | "pg")}
-            >
-              <Field orientation="horizontal">
-                <RadioGroupItem value="hg" id={hgId} />
-                <FieldLabel htmlFor={hgId} className="font-normal">
-                  Hang Gliding
-                </FieldLabel>
-              </Field>
-              <Field orientation="horizontal">
-                <RadioGroupItem value="pg" id={pgId} />
-                <FieldLabel htmlFor={pgId} className="font-normal">
-                  Paragliding
-                </FieldLabel>
-              </Field>
-            </RadioGroup>
-            <FieldDescription>
-              Sets the official CIVL GAP scoring defaults for your category — see the{" "}
-              <a
-                href={`/scoring/gap#defaults-${category}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline underline-offset-4"
-              >
-                {category === "pg" ? "paragliding" : "hang gliding"} defaults
-              </a>
-              . You can fine-tune them later in the competition's Advanced settings.
-            </FieldDescription>
-          </FieldSet>
+          <CategoryField
+            value={category}
+            onChange={setCategory}
+            description={
+              <>
+                Sets the official CIVL GAP scoring defaults for your category — see the{" "}
+                <a
+                  href={`/scoring/gap#defaults-${category}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-4"
+                >
+                  {category === "pg" ? "paragliding" : "hang gliding"} defaults
+                </a>
+                . You can fine-tune them later in the competition's Advanced settings.
+              </>
+            }
+          />
 
-          <Field>
-            <FieldLabel htmlFor={classesId}>Pilot Classes</FieldLabel>
-            <Input
-              id={classesId}
-              value={pilotClasses}
-              onChange={(e) => setPilotClasses(e.target.value)}
-              placeholder="open, sport, floater"
-            />
-            <FieldDescription>Comma-separated class names</FieldDescription>
-          </Field>
+          <PilotClassesField value={pilotClasses} onChange={setPilotClasses} />
 
-          <Field orientation="horizontal">
-            <Checkbox
-              id={testId}
-              checked={test}
-              onCheckedChange={(checked) => setTest(checked === true)}
-            />
-            <FieldLabel htmlFor={testId} className="font-normal">
-              Test competition (only visible to admins)
-            </FieldLabel>
-          </Field>
+          <TestCompField checked={test} onChange={setTest} />
 
           <DialogFooter>
             <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>

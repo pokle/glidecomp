@@ -15,14 +15,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/react/ui/dialog";
-import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "@/react/ui/field";
+import { Field, FieldDescription, FieldLabel } from "@/react/ui/field";
 import { Input } from "@/react/ui/input";
-import { Label } from "@/react/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/react/ui/radio-group";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
-import { CheckboxField, SearchableSelect, SimpleSelect } from "./fields";
+import {
+  CategoryField,
+  CheckboxField,
+  NameField,
+  PilotClassesField,
+  SearchableSelect,
+  SimpleSelect,
+  TestCompField,
+} from "./fields";
 import { type CompDetailData, type ScoringFormat } from "./types";
 
 /**
@@ -56,10 +62,6 @@ export function SettingsDialog({
   const navigate = useNavigate();
   const confirm = useConfirm();
   const ids = {
-    name: useId(),
-    hg: useId(),
-    pg: useId(),
-    pilotClasses: useId(),
     closeDate: useId(),
     adminEmails: useId(),
     nominalDistance: useId(),
@@ -262,49 +264,11 @@ export function SettingsDialog({
           <DialogTitle>Competition Settings</DialogTitle>
         </DialogHeader>
         <form onSubmit={(e) => void save(e)} className="flex flex-col gap-4">
-          <Field>
-            <FieldLabel htmlFor={ids.name}>Name</FieldLabel>
-            <Input
-              id={ids.name}
-              required
-              maxLength={128}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </Field>
+          <NameField value={name} onChange={setName} />
 
-          <FieldSet>
-            <FieldLegend variant="label">Category</FieldLegend>
-            <RadioGroup
-              value={category}
-              onValueChange={(v) => setCategory(v as "hg" | "pg")}
-              className="flex flex-row gap-4"
-            >
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="hg" id={ids.hg} />
-                <Label htmlFor={ids.hg} className="font-normal">
-                  HG
-                </Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="pg" id={ids.pg} />
-                <Label htmlFor={ids.pg} className="font-normal">
-                  PG
-                </Label>
-              </div>
-            </RadioGroup>
-          </FieldSet>
+          <CategoryField value={category} onChange={setCategory} />
 
-          <Field>
-            <FieldLabel htmlFor={ids.pilotClasses}>Pilot Classes</FieldLabel>
-            <Input
-              id={ids.pilotClasses}
-              placeholder="open, sport, floater"
-              value={pilotClassesText}
-              onChange={(e) => setPilotClassesText(e.target.value)}
-            />
-            <FieldDescription>Comma-separated class names</FieldDescription>
-          </Field>
+          <PilotClassesField value={pilotClassesText} onChange={setPilotClassesText} />
 
           <div>
             <h3 className="mb-1.5 text-sm font-medium">Default Pilot Class</h3>
@@ -357,11 +321,7 @@ export function SettingsDialog({
             </p>
           </div>
 
-          <CheckboxField
-            checked={test}
-            onChange={setTest}
-            label="Test competition (only visible to admins)"
-          />
+          <TestCompField checked={test} onChange={setTest} />
           <CheckboxField
             checked={openUpload}
             onChange={setOpenUpload}

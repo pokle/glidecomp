@@ -13,7 +13,15 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@/react/ui/combobox";
-import { Field, FieldDescription, FieldLabel } from "@/react/ui/field";
+import {
+  Field,
+  FieldDescription,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/react/ui/field";
+import { Input } from "@/react/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/react/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -129,5 +137,110 @@ export function CheckboxField({
       </FieldLabel>
       {hint ? <FieldDescription className="basis-full">{hint}</FieldDescription> : null}
     </Field>
+  );
+}
+
+/*
+ * Fields shared by the create-competition and competition-settings dialogs.
+ * Keeping the markup in one place stops the two forms drifting apart (labels,
+ * placeholders, comma-separated hints, validation shape) as either evolves.
+ */
+
+export function NameField({
+  value,
+  onChange,
+  placeholder,
+  autoFocus,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  autoFocus?: boolean;
+}) {
+  const id = useId();
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>Name</FieldLabel>
+      <Input
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        required
+        maxLength={128}
+        autoFocus={autoFocus}
+      />
+    </Field>
+  );
+}
+
+export function CategoryField({
+  value,
+  onChange,
+  description,
+}: {
+  value: "hg" | "pg";
+  onChange: (value: "hg" | "pg") => void;
+  description?: React.ReactNode;
+}) {
+  const hgId = useId();
+  const pgId = useId();
+  return (
+    <FieldSet>
+      <FieldLegend variant="label">Category</FieldLegend>
+      <RadioGroup value={value} onValueChange={(v) => onChange(v as "hg" | "pg")}>
+        <Field orientation="horizontal">
+          <RadioGroupItem value="hg" id={hgId} />
+          <FieldLabel htmlFor={hgId} className="font-normal">
+            Hang Gliding
+          </FieldLabel>
+        </Field>
+        <Field orientation="horizontal">
+          <RadioGroupItem value="pg" id={pgId} />
+          <FieldLabel htmlFor={pgId} className="font-normal">
+            Paragliding
+          </FieldLabel>
+        </Field>
+      </RadioGroup>
+      {description ? <FieldDescription>{description}</FieldDescription> : null}
+    </FieldSet>
+  );
+}
+
+export function PilotClassesField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const id = useId();
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>Pilot Classes</FieldLabel>
+      <Input
+        id={id}
+        placeholder="open, sport, floater"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <FieldDescription>Comma-separated class names</FieldDescription>
+    </Field>
+  );
+}
+
+export function TestCompField({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <CheckboxField
+      checked={checked}
+      onChange={onChange}
+      label="Test competition (only visible to admins)"
+    />
   );
 }
