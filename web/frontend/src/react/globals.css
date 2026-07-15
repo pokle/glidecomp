@@ -143,8 +143,7 @@
      dark text colour so overlay chrome that inherits `color` — most visibly the
      popup callouts, whose background is a fixed white — stays legible instead of
      turning white-on-white when the surrounding app is in dark mode. */
-  .mapboxgl-map,
-  .leaflet-container {
+  .mapboxgl-map {
     color-scheme: light;
     color: #1a1a1a;
   }

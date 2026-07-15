@@ -58,7 +58,6 @@ Via command menu (`Cmd/Ctrl+K`):
 - **Track metrics overlay** (speed)
 - **Annotate map** (drawing mode)
 - **Text Shadow Tuner**
-- **Map provider** switch (Mapbox/Leaflet/Three.js globe)
 
 ### 6. Configure Settings
 
@@ -238,7 +237,6 @@ Each event row shows:
 | `track=FILE` | Load track file |
 | `storedTask=ID` | Load stored task from IndexedDB |
 | `storedTrack=ID` | Load stored track from IndexedDB |
-| `m=l\|m` | Map provider (leaflet/mapbox) |
 | `3d=0` | Disable 3D mode |
 | `task-visible=0` | Hide task overlay |
 | `track-visible=0` | Hide track overlay |

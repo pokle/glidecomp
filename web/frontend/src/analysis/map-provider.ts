@@ -1,8 +1,7 @@
 /**
  * Map Provider Interface
  *
- * Abstraction layer for map visualization.
- * Supports MapBox GL JS and Leaflet 2.0 providers.
+ * Abstraction layer for map visualization, backed by MapBox GL JS.
  */
 
 import type { IGCFix, XCTask, FlightEvent, PilotScore } from '@glidecomp/engine';
@@ -16,8 +15,6 @@ export interface LoadedTrack {
     fixes: IGCFix[];
     events: FlightEvent[];
 }
-
-export type MapProviderType = 'mapbox' | 'leaflet';
 
 /** One pilot's scored open-distance line: take-off cylinder exit → furthest fix */
 export interface OpenDistanceLine {
@@ -65,10 +62,9 @@ export interface MapWaypoint {
 }
 
 /**
- * Extra context a provider can attach to an add-waypoint map pick, when its
+ * Extra context the provider can attach to an add-waypoint map pick, when its
  * data source offers it. Everything is best-effort: the Mapbox provider fills
- * what it can from the terrain DEM and the rendered label tiles; the Leaflet
- * provider has neither and passes no details at all.
+ * what it can from the terrain DEM and the rendered label tiles.
  */
 export interface MapPickDetails {
     /** Ground elevation in metres AMSL at the picked point (terrain DEM). */
@@ -277,17 +273,12 @@ export interface MapProviderOptions {
 
 /**
  * Factory function to create a map provider.
- * Uses dynamic import so only the selected provider's code is bundled.
+ * Uses dynamic import so the map code is bundled in its own chunk.
  */
 export async function createMapProvider(
     container: HTMLElement,
-    providerType: MapProviderType = 'mapbox',
     options: MapProviderOptions = {}
 ): Promise<MapProvider> {
-    if (providerType === 'leaflet') {
-        const { createLeafletProvider } = await import('./leaflet-provider');
-        return createLeafletProvider(container, options);
-    }
     const { createMapBoxProvider } = await import('./mapbox-provider');
     return createMapBoxProvider(container, options);
 }

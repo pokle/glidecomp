@@ -114,16 +114,14 @@ cd web/frontend && bunx vitest run     # or: bun run --filter '@glidecomp/fronte
   `/onboarding`** before any comp page loads; complete it (fill Full name +
   Username, click Continue) then re-navigate, or you'll wait forever for a
   map selector that the onboarding page doesn't have.
-- **"The map fell back to Leaflet, so there's no Mapbox token" is almost always
-  WRONG.** The token IS configured. Two things mislead you: (a) the token lives
-  in **`.env` at the repo root**, not `web/frontend/` — `vite.config.ts` sets
-  `envDir: '../..'`, so `ls web/frontend/.env*` finds nothing and you conclude
-  "no token." Check the repo root (`grep VITE_MAPBOX_TOKEN ./.env`). (b) The
-  provider is chosen by `import.meta.env.VITE_MAPBOX_TOKEN ? 'mapbox' : 'leaflet'`
-  (`RouteMap.tsx`), so with the token present the real **Mapbox** canvas renders
-  (`.mapboxgl-canvas`) and Mapbox-only features (snap-to-peak, place-name
-  pre-fill, terrain DEM) work — verify against it, don't assume Leaflet. If a
-  drive times out waiting for `.mapboxgl-canvas`, it's the auth/onboarding trap
+- **"There's no Mapbox token" is almost always WRONG.** The token IS
+  configured — it just lives in **`.env` at the repo root**, not
+  `web/frontend/` — `vite.config.ts` sets `envDir: '../..'`, so
+  `ls web/frontend/.env*` finds nothing and you conclude "no token." Check the
+  repo root (`grep VITE_MAPBOX_TOKEN ./.env`). Mapbox is the only map provider,
+  so the real **Mapbox** canvas renders (`.mapboxgl-canvas`) and its features
+  (snap-to-peak, place-name pre-fill, terrain DEM) work — verify against it. If
+  a drive times out waiting for `.mapboxgl-canvas`, it's the auth/onboarding trap
   above, not the token. The Mapbox `Map` instance is **not** exposed on
   `window`; to drive a specific location, use the waypoint table's per-row
   locate button (pans via `panTo`) rather than hunting for a label's canvas

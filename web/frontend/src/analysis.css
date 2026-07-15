@@ -13,9 +13,8 @@
 
 @import "./react/globals.css";
 
-/* Map libraries */
+/* Map library */
 @import "mapbox-gl/dist/mapbox-gl.css";
-@import "leaflet/dist/leaflet.css";
 
 :root {
   color-scheme: light;
@@ -469,8 +468,8 @@
   }
 
   /* Map container - use !important to ensure it displays.
-     z-index: 0 creates a stacking context so Leaflet's internal z-indices
-     (400–1000) don't escape and overlay the sidebar (z-40). */
+     z-index: 0 pins the map into its own stacking context so any map control
+     chrome stays below the sidebar (z-40). */
   #map {
     position: absolute !important;
     top: 0 !important;
@@ -511,8 +510,7 @@
   }
 
   /* Allow throb to scale beyond the control group boundary */
-  .mapboxgl-ctrl-group:has(.pulse-attention),
-  .leaflet-bar:has(.pulse-attention) {
+  .mapboxgl-ctrl-group:has(.pulse-attention) {
     overflow: visible !important;
   }
 

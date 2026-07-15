@@ -1,10 +1,10 @@
 /**
  * Read-only evidence map for the score-details page.
  *
- * Thin React wrapper around the shared analysis MapProvider (Mapbox or
- * Leaflet — the same renderers the analysis page uses, so visuals follow
- * docs/mapbox-interactions-spec.md). Loaded lazily so the map libraries
- * stay out of the main app bundle.
+ * Thin React wrapper around the shared analysis MapProvider (Mapbox — the
+ * same renderer the analysis page uses, so visuals follow
+ * docs/mapbox-interactions-spec.md). Loaded lazily so the map library
+ * stays out of the main app bundle.
  */
 import { useEffect, useRef, useState } from "react";
 import type { FlightEvent, IGCFix, XCTask } from "@glidecomp/engine";
@@ -15,7 +15,6 @@ import {
   type BestProgressRoute,
 } from "../../analysis/map-provider";
 import "mapbox-gl/dist/mapbox-gl.css";
-import "leaflet/dist/leaflet.css";
 
 /** A pan/highlight request — bump `nonce` to re-trigger the same event. */
 export interface MapFocus {
@@ -52,8 +51,7 @@ export default function ScoreDetailMap({
 
   // Create the provider once per mount; destroy on unmount. Each mount gets
   // its own inner DOM node — StrictMode mounts twice, and the async provider
-  // creation races otherwise (Leaflet refuses to re-init a container that a
-  // not-yet-destroyed instance is still attached to).
+  // creation races otherwise over a shared container.
   useEffect(() => {
     const outer = containerRef.current;
     if (!outer) return;
@@ -64,8 +62,7 @@ export default function ScoreDetailMap({
     let cancelled = false;
     let created: MapProvider | null = null;
     destroyedRef.current = false;
-    const providerType = import.meta.env.VITE_MAPBOX_TOKEN ? "mapbox" : "leaflet";
-    createMapProvider(inner, providerType, { appControls: false })
+    createMapProvider(inner, { appControls: false })
       .then((p) => {
         if (cancelled) {
           p.destroy();

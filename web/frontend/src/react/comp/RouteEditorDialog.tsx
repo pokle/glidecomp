@@ -56,8 +56,8 @@ import {
 } from "./route-editor";
 import { AddWaypointDialog } from "./AddWaypointDialog";
 
-// Lazy so the map libraries (mapbox/leaflet) and their CSS load only when the
-// editor opens and never enter the SSR'd task-detail bundle.
+// Lazy so the map library (mapbox) and its CSS load only when the editor
+// opens and never enter the SSR'd task-detail bundle.
 const RouteMap = lazy(() => import("./RouteMap"));
 
 const NEW_ROW_RADIUS = 400;

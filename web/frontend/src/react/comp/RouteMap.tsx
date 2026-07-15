@@ -2,14 +2,14 @@
  * Editable route map for the task route editor (RouteEditorDialog).
  *
  * A thin React wrapper around the shared analysis MapProvider — the same
- * Mapbox/Leaflet renderers the score-details map uses, so visuals follow
+ * Mapbox renderer the score-details map uses, so visuals follow
  * docs/mapbox-interactions-spec.md. It renders the task being edited live
  * (cylinders + optimised route line), draws loaded waypoints as pickable
  * markers, and reports picks back:
  *   - clicking a waypoint marker  → onWaypointPick(waypoint)
  *   - clicking bare ground (pick mode) → onMapPick(lat, lon)
  *
- * Loaded lazily (via React.lazy in the dialog) so the map libraries and CSS
+ * Loaded lazily (via React.lazy in the dialog) so the map library and CSS
  * stay out of the SSR'd task-detail bundle.
  */
 import { useEffect, useRef, useState } from "react";
@@ -21,7 +21,6 @@ import {
   type MapWaypoint,
 } from "../../analysis/map-provider";
 import "mapbox-gl/dist/mapbox-gl.css";
-import "leaflet/dist/leaflet.css";
 
 export default function RouteMap({
   task,
@@ -56,7 +55,7 @@ export default function RouteMap({
   focus?: { lat: number; lon: number; key: number } | null;
   onWaypointPick: (waypoint: MapWaypoint) => void;
   /** Ground pick. `details` carries best-effort extras from the Mapbox data
-   *  (ground elevation, nearby place name); undefined on the Leaflet fallback. */
+   *  (ground elevation, nearby place name), when available. */
   onMapPick: (lat: number, lon: number, details?: MapPickDetails) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -73,7 +72,7 @@ export default function RouteMap({
   onMapPickRef.current = onMapPick;
 
   // Create the provider once per mount; destroy on unmount. Each mount gets
-  // its own inner node (StrictMode double-mount + Leaflet re-init guard).
+  // its own inner node (StrictMode double-mount guard over a shared container).
   useEffect(() => {
     const outer = containerRef.current;
     if (!outer) return;
@@ -84,8 +83,7 @@ export default function RouteMap({
     let cancelled = false;
     let created: MapProvider | null = null;
     destroyedRef.current = false;
-    const providerType = import.meta.env.VITE_MAPBOX_TOKEN ? "mapbox" : "leaflet";
-    createMapProvider(inner, providerType, { appControls: false })
+    createMapProvider(inner, { appControls: false })
       .then((p) => {
         if (cancelled) {
           p.destroy();
