@@ -682,7 +682,11 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Goal lines (<SpecRef section="6.2.3" />, <SpecRef section="8.5.2" />)</td>
-                  <td class="py-2">Partial — scored as a cylinder</td>
+                  <td class="py-2">Implemented — line perpendicular to the final leg, with the control semi-circle behind it</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">Line-type control zones at intermediate turnpoints (<SpecRef section="8.4" />)</td>
+                  <td class="py-2">Not implemented — every turnpoint before goal is a cylinder</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Task deadline enforcement (<SpecRef section="8.3" />)</td>
@@ -787,15 +791,16 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </p>
             </div>
             <div>
-              <h3 class="text-base font-semibold mb-1">Goal lines are scored as cylinders (<SpecRef section="6.2.3" />, <SpecRef section="8.5.2" />)</h3>
+              <h3 class="text-base font-semibold mb-1">Line control zones are only supported at goal (<SpecRef section="8.4" />)</h3>
               <p class="text-muted-foreground">
-                The spec defines a goal line with a semi-circular control zone behind it, crossed
-                in the direction of the last leg. GlideComp reads line goals from the task file
-                but scores them as a cylinder whose radius is half the line length. That is more
-                permissive than the spec (a pilot passing "in front of" the line inside that
-                radius is counted), though for typical straight-in finishes the result is the
-                same. Line-type intermediate control zones and the 120&nbsp;km/h two-fix line
-                validation rule (<SpecRef section="8.4" />) are likewise not implemented.
+                A goal line is scored as the spec defines it — a line through the goal waypoint,
+                perpendicular to the final leg, with the semi-circular control zone behind it —
+                but goal is the only place GlideComp understands a line. The spec also allows an
+                intermediate turnpoint to be a line, validated when two consecutive fixes sit on
+                opposite sides of it and going around its end would have required an implausible
+                speed (over 120&nbsp;km/h). GlideComp treats every turnpoint before goal as a
+                cylinder. Line-type turnpoints are rare in XCTrack task files, so in practice this
+                affects few tasks.
               </p>
             </div>
             <div>
@@ -815,7 +820,8 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   spec tolerance band — a percentage plus a 5&nbsp;m absolute minimum, extending
                   outward for cylinders you enter and inward for the start you exit. The default
                   percentage is 0.5% (the Cat&nbsp;2 maximum), used for every competition rather
-                  than auto-selecting 0.1% for Cat&nbsp;1 events; it is configurable per task.
+                  than auto-selecting 0.1% for Cat&nbsp;1 events; it is configurable per task. A
+                  goal line carries no tolerance band — it is scored as exact geometry.
                 </li>
                 <li>
                   <strong>Rounding (<SpecRef section="11" />, <SpecRef section="12.4" />):</strong> GlideComp rounds each pilot's total to
