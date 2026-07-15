@@ -10,14 +10,37 @@
  *   bun run score-task -- task.xctsk ./tracks/
  *   bun run score-task -- task.xctsk ./tracks/ extra-pilot.igc
  *
- * Options:
- *   --nominal-distance <m>    Nominal distance in meters (default: 70% of task distance)
- *   --nominal-time <s>        Nominal time in seconds (default: 5400)
- *   --nominal-goal <ratio>    Nominal goal ratio 0-1 (default: 0.2)
- *   --nominal-launch <ratio>  Nominal launch ratio 0-1 (default: 0.96)
- *   --min-distance <m>        Minimum distance in meters (default: 5000)
- *   --scoring <PG|HG>         Sport type (default: PG)
- *   --json                    Output results as JSON
+ * Behaves identically to the web app. --wing (HG or PG) is REQUIRED for GAP
+ * scoring — the CLI has no comp record to read the wing from, and won't guess.
+ * Given it, the run starts from the official per-category FAI/S7F GAP settings
+ * (engine `defaultsFor`) and every flag below overrides one parameter, exactly as
+ * the settings dialog does. Flag names are the kebab-case of the `gap_params`
+ * keys the UI saves, so a comp's stored settings map 1:1. Units are the engine's
+ * (metres / seconds / 0-1 ratios), not the form's (km / min / %).
+ *
+ * Options (grouped by function; see --help for the full text):
+ *   Wing (required for GAP):
+ *     --wing <HG|PG>                         `scoring`
+ *   Task mode:
+ *     --open-distance                        Score as open distance (GAP options ignored)
+ *   Nominal parameters:
+ *     --nominal-distance <m>                 `nominalDistance` (default: 70% of task)
+ *     --nominal-distance-pct <%>             …as % of task distance (default: 70)
+ *     --nominal-time <s>                     `nominalTime` (default: 5400)
+ *     --nominal-goal <ratio>                 `nominalGoal` 0-1 (default: 0.3)
+ *     --nominal-launch <ratio>               `nominalLaunch` 0-1 (default: 0.96)
+ *     --minimum-distance <m>                 `minimumDistance` (default: 5000)
+ *   Scoring terms (per-wing defaults; pass to override):
+ *     --use-leading / --no-use-leading                       `useLeading`
+ *     --use-arrival / --no-use-arrival                       `useArrival`
+ *     --use-distance-difficulty / --no-use-distance-difficulty  `useDistanceDifficulty`
+ *   Formula & advanced:
+ *     --leading-formula <weighted|classic>   `leadingFormula` (default: weighted)
+ *     --distance-origin <takeoff|start>      `distanceOrigin` (default: takeoff)
+ *     --jump-the-gun-factor <n>              `jumpTheGunFactor`, HG (default: 2)
+ *     --jump-the-gun-max-seconds <s>         `jumpTheGunMaxSeconds`, HG (default: 300)
+ *   Output:
+ *     --json                                 Output results as JSON
  */
 
 import { readFileSync, readdirSync, statSync } from 'fs';
@@ -25,7 +48,7 @@ import { resolve, basename, extname } from 'path';
 import { parseIGC } from '../src/igc-parser';
 import { parseXCTask } from '../src/xctsk-parser';
 import { calculateOptimizedTaskDistance } from '../src/task-optimizer';
-import { scoreTask, DEFAULT_GAP_PARAMETERS, type GAPParameters, type PilotFlight } from '../src/gap-scoring';
+import { scoreTask, defaultsFor, type GAPParameters, type PilotFlight } from '../src/gap-scoring';
 import { scoreOpenDistance } from '../src/open-distance-scoring';
 
 // ---------------------------------------------------------------------------
@@ -34,26 +57,45 @@ import { scoreOpenDistance } from '../src/open-distance-scoring';
 
 function usage(): never {
   process.stderr.write(
-    'Usage: score-task <task.xctsk> <igc-file-or-folder>...\n\n' +
-    'Options:\n' +
+    'Usage: score-task --wing <HG|PG> <task.xctsk> <igc-file-or-folder>...\n\n' +
+    'Scores identically to the web app. --wing (the competition wing) is REQUIRED\n' +
+    'for GAP scoring — the CLI has no comp record and will not guess. Given it, the\n' +
+    'run starts from the official per-category FAI/S7F GAP defaults and each flag\n' +
+    'below overrides one parameter, exactly as the settings dialog does. Flag names\n' +
+    'are the kebab-case of the gap_params keys the UI saves; units are the engine\'s\n' +
+    '(metres / seconds / 0-1 ratios), not the form\'s (km / min / %).\n\n' +
+    'Wing (required for GAP):\n' +
+    '  --wing <HG|PG>             Competition wing (gap_params `scoring`)\n\n' +
+    'Task mode:\n' +
+    '  --open-distance            Score as open distance: a single TAKEOFF turnpoint,\n' +
+    '                             no goal; each pilot scores metres from the take-off\n' +
+    '                             exit to their furthest fix. All GAP options below are\n' +
+    '                             ignored, and --wing is not required.\n\n' +
+    'Nominal parameters:\n' +
+    '  --nominal-distance <m>     `nominalDistance` in metres (default: 70% of task)\n' +
     '  --nominal-distance-pct <%> Nominal distance as % of task distance (default: 70)\n' +
-    '  --nominal-distance <m>     Nominal distance in meters (overrides percentage)\n' +
-    '  --nominal-time <s>         Nominal time in seconds (default: 5400)\n' +
-    '  --nominal-goal <ratio>     Nominal goal ratio 0-1 (default: 0.2)\n' +
-    '  --nominal-launch <ratio>   Nominal launch ratio 0-1 (default: 0.96)\n' +
-    '  --min-distance <m>         Minimum distance in meters (default: 5000)\n' +
-    '  --scoring <PG|HG>          Sport type (default: HG)\n' +
-    '  --distance-origin <where>  takeoff | start — where scored distance begins\n' +
-    '                             (default: takeoff; "start" excludes the take-off→SSS leg)\n' +
-    '  --open-distance            Score as open distance (single TAKEOFF turnpoint,\n' +
-    '                             no goal): each pilot scores metres from take-off\n' +
-    '                             exit to their furthest fix. GAP options are ignored.\n' +
-    '  --leading                  Enable leading (departure) points (default: off)\n' +
-    '  --no-leading               Disable leading (departure) points\n' +
-    '  --arrival                  Enable arrival points, HG only (default: off)\n' +
-    '  --no-arrival               Disable arrival points\n' +
-    '  --no-difficulty            Disable HG distance difficulty (pure linear; default: on)\n' +
-    '  --json                     Output as JSON\n'
+    '  --nominal-time <s>         `nominalTime` in seconds (default: 5400)\n' +
+    '  --nominal-goal <ratio>     `nominalGoal` 0-1 (default: 0.3)\n' +
+    '  --nominal-launch <ratio>   `nominalLaunch` 0-1 (default: 0.96)\n' +
+    '  --minimum-distance <m>     `minimumDistance` in metres (default: 5000)\n\n' +
+    'Scoring terms (per-wing defaults; pass to override):\n' +
+    '  --use-leading / --no-use-leading\n' +
+    '                             `useLeading` (default: on)\n' +
+    '  --use-arrival / --no-use-arrival\n' +
+    '                             `useArrival` (default: on for HG, off for PG)\n' +
+    '  --use-distance-difficulty / --no-use-distance-difficulty\n' +
+    '                             `useDistanceDifficulty`, HG (default: on)\n\n' +
+    'Formula & advanced:\n' +
+    '  --leading-formula <weighted|classic>\n' +
+    '                             `leadingFormula` (default: weighted)\n' +
+    '  --distance-origin <takeoff|start>\n' +
+    '                             `distanceOrigin` (default: takeoff; "start" excludes\n' +
+    '                             the take-off→SSS leg)\n' +
+    '  --jump-the-gun-factor <n>  `jumpTheGunFactor`, HG early-start (default: 2)\n' +
+    '  --jump-the-gun-max-seconds <s>\n' +
+    '                             `jumpTheGunMaxSeconds`, HG (default: 300)\n\n' +
+    'Output:\n' +
+    '  --json                     Output results as JSON\n'
   );
   process.exit(1);
 }
@@ -86,31 +128,46 @@ for (let i = 0; i < args.length; i++) {
     case '--nominal-launch':
       params.nominalLaunch = Number(args[++i]);
       break;
-    case '--min-distance':
+    case '--minimum-distance':
       params.minimumDistance = Number(args[++i]);
       break;
-    case '--scoring':
-      params.scoring = args[++i] as 'PG' | 'HG';
+    case '--wing': {
+      const v = args[++i];
+      if (v !== 'HG' && v !== 'PG') {
+        process.stderr.write(`Error: --wing must be HG or PG (got "${v ?? ''}")\n`);
+        process.exit(1);
+      }
+      params.scoring = v;
       break;
+    }
     case '--distance-origin':
       params.distanceOrigin = args[++i] as 'takeoff' | 'start';
       break;
-    case '--difficulty':
+    case '--leading-formula':
+      params.leadingFormula = args[++i] as 'weighted' | 'classic';
+      break;
+    case '--jump-the-gun-factor':
+      params.jumpTheGunFactor = Number(args[++i]);
+      break;
+    case '--jump-the-gun-max-seconds':
+      params.jumpTheGunMaxSeconds = Number(args[++i]);
+      break;
+    case '--use-distance-difficulty':
       params.useDistanceDifficulty = true;
       break;
-    case '--no-difficulty':
+    case '--no-use-distance-difficulty':
       params.useDistanceDifficulty = false;
       break;
-    case '--leading':
+    case '--use-leading':
       params.useLeading = true;
       break;
-    case '--no-leading':
+    case '--no-use-leading':
       params.useLeading = false;
       break;
-    case '--arrival':
+    case '--use-arrival':
       params.useArrival = true;
       break;
-    case '--no-arrival':
+    case '--no-use-arrival':
       params.useArrival = false;
       break;
     case '--open-distance':
@@ -124,11 +181,41 @@ for (let i = 0; i < args.length; i++) {
       usage();
       break;
     default:
+      // Unknown --flags are an error, not a stray positional path (which would
+      // fail later with a confusing statSync ENOENT). Point renamed flags at
+      // their new gap_params-key names.
+      if (arg.startsWith('--')) {
+        const renamed: Record<string, string> = {
+          '--scoring': '--wing',
+          '--min-distance': '--minimum-distance',
+          '--leading': '--use-leading',
+          '--no-leading': '--no-use-leading',
+          '--arrival': '--use-arrival',
+          '--no-arrival': '--no-use-arrival',
+          '--difficulty': '--use-distance-difficulty',
+          '--no-difficulty': '--no-use-distance-difficulty',
+        };
+        const hint = renamed[arg] ? ` (renamed to ${renamed[arg]})` : '';
+        process.stderr.write(`Error: unknown option ${arg}${hint}\n\n`);
+        usage();
+      }
       positional.push(arg);
   }
 }
 
 if (positional.length < 2) usage();
+
+// Refuse to guess the wing: GAP scoring needs a category to pick the official
+// per-category defaults (arrival/difficulty/leading-weight differ HG vs PG), and
+// the CLI has no comp record to read it from. Open distance ignores GAP params.
+if (!openDistance && params.scoring === undefined) {
+  process.stderr.write(
+    'Error: --wing <HG|PG> is required for GAP scoring.\n' +
+    'The CLI has no competition record to read the wing from and will not guess.\n' +
+    '(Use --open-distance for open-distance tasks, where GAP parameters are ignored.)\n',
+  );
+  process.exit(1);
+}
 
 // ---------------------------------------------------------------------------
 // Find IGC files
@@ -206,10 +293,23 @@ const task = parseXCTask(taskContent);
 // no nominal-distance resolution — the take-off is the only turnpoint.
 const taskDistance = openDistance ? 0 : calculateOptimizedTaskDistance(task);
 
-// Resolve nominal distance: explicit meters > percentage > default 70%
+// Mirror the UI / competition-api scoring path exactly (see computeTaskScore in
+// web/workers/competition-api/src/scoring.ts): start from the official
+// per-category FAI defaults (defaultsFor — leading/arrival/difficulty/nominal
+// goal as the S7F formula actually uses them), then overlay only the flags the
+// user explicitly passed. The CLI has no comp record, so the category comes from
+// the required --wing flag (open distance ignores GAP params, so it falls
+// back to 'hg' harmlessly). This keeps a run numerically identical to the web
+// app for the same task and wing.
+const category = params.scoring === 'PG' ? 'pg' : 'hg';
+const gapParams: Partial<GAPParameters> = { ...defaultsFor(category), ...params };
+
+// Auto-fill nominalDistance from a percentage of the optimized task distance
+// (UI uses 70%) unless the user pinned an explicit --nominal-distance. Key off
+// the *explicit* flag, exactly as the UI keys off the comp's stored value.
 if (!openDistance && params.nominalDistance === undefined) {
   const pct = nominalDistancePct ?? 70;
-  params.nominalDistance = taskDistance * (pct / 100);
+  gapParams.nominalDistance = taskDistance * (pct / 100);
 }
 
 // Parse all IGC files
@@ -241,7 +341,7 @@ if (openDistance) {
 }
 
 // Score
-const result = openDistance ? scoreOpenDistance(task, pilots) : scoreTask(task, pilots, params);
+const result = openDistance ? scoreOpenDistance(task, pilots) : scoreTask(task, pilots, gapParams);
 
 // ---------------------------------------------------------------------------
 // Output
