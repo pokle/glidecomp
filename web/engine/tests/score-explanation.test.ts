@@ -487,6 +487,105 @@ describe('explainGapScore — point components', () => {
     expect(formula!.text).toContain('Fastest through the speed section');
   });
 
+  it('shows the §12.1 ESS-but-not-goal reduction as an explicit ×0.8 line (HG)', () => {
+    // Our pilot reached ESS in 70 min but landed before goal; the fastest
+    // pilot (65 min) made goal. Engine: sf × available × 0.8.
+    const sf = calculateSpeedFraction(70 * 60, 65 * 60);
+    const timePoints = Math.round(sf * 500 * 0.8 * 10) / 10;
+    const ctx = makeClassContext();
+    ctx.available_points.arrival = 50;
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: { ...makeReentryResult(), madeGoal: false },
+      entry: {
+        ...makeGoalEntry(),
+        made_goal: false,
+        reached_ess: true,
+        time_points: timePoints,
+        arrival_points: 32,
+      },
+      classContext: ctx,
+      params: { scoring: 'HG', useArrival: true },
+    });
+
+    const time = section(explanation, 'time');
+    const reduction = time.items.find((i) => i.id === 'ess-not-goal');
+    expect(reduction).toBeDefined();
+    expect(reduction!.text).toContain('80%');
+    expect(reduction!.text).toContain('§12.1');
+    expect(reduction!.emphasis).toBe('warning');
+    const formula = time.items.find((i) => i.id === 'time-formula');
+    expect(formula!.detail).toContain('× 0.8 (ESS but not goal, §12.1)');
+    expect(formula!.detail).toContain(`= ${timePoints}`);
+
+    const arrival = section(explanation, 'arrival');
+    const arrivalNote = arrival.items.find((i) => i.id === 'arrival-ess-not-goal');
+    expect(arrivalNote).toBeDefined();
+    expect(arrivalNote!.text).toContain('80%');
+    expect(arrivalNote!.text).toContain('§12.1');
+  });
+
+  it('folds the §12.1 factor into the fastest-pilot equation too (HG)', () => {
+    // The ESS-but-not-goal pilot set the fastest time (AirScore best-time
+    // rule) — full speed fraction, then ×0.8.
+    const ctx = makeClassContext();
+    ctx.pilots[0] = { ...ctx.pilots[0], made_goal: false }; // our pilot
+    ctx.pilots[1].speed_section_time = 80 * 60; // goal pilot is slower
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: { ...makeReentryResult(), madeGoal: false },
+      entry: { ...makeGoalEntry(), made_goal: false, reached_ess: true, time_points: 400 },
+      classContext: ctx,
+      params: { scoring: 'HG' },
+    });
+    const formula = section(explanation, 'time').items.find((i) => i.id === 'time-formula');
+    expect(formula!.text).toContain('before the goal-validation reduction');
+    expect(formula!.detail).toContain('500 available × 0.8 (ESS but not goal, §12.1) = 400');
+  });
+
+  it('explains a 0% ESS-but-not-goal factor and goal-validates the best time (HG)', () => {
+    const ctx = makeClassContext();
+    // Fastest overall reached only ESS — with factor 0 the best time must
+    // come from the goal pilots instead.
+    ctx.pilots.push({
+      flown_distance: 58_000, speed_section_time: 60 * 60,
+      made_goal: false, reached_ess: true,
+    });
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: { ...makeReentryResult(), madeGoal: false },
+      entry: { ...makeGoalEntry(), made_goal: false, reached_ess: true, time_points: 0 },
+      classContext: ctx,
+      params: { scoring: 'HG', essNotGoalFactor: 0 },
+    });
+    const time = section(explanation, 'time');
+    expect(time.items[0].id).toBe('no-time-points');
+    expect(time.items[0].text).toContain('0% of time and arrival points');
+    expect(time.items[0].text).toContain('§12.1');
+  });
+
+  it('goal-validated best time is shown to goal pilots when the factor is 0 (HG)', () => {
+    const ctx = makeClassContext();
+    // A faster ESS-only pilot exists (60 min) but must not set the best time.
+    ctx.pilots.push({
+      flown_distance: 58_000, speed_section_time: 60 * 60,
+      made_goal: false, reached_ess: true,
+    });
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: makeGoalEntry(),
+      classContext: ctx,
+      params: { scoring: 'HG', essNotGoalFactor: 0 },
+    });
+    const time = section(explanation, 'time');
+    const best = time.items.find((i) => i.id === 'best-time');
+    expect(best!.value).toBe('1:05:00'); // the fastest GOAL pilot, not 1:00:00
+    expect(best!.text).toContain('among pilots who made goal');
+    // A goal pilot keeps full points — no reduction line.
+    expect(time.items.find((i) => i.id === 'ess-not-goal')).toBeUndefined();
+  });
+
   it('summarises the validity → available-points chain', () => {
     const explanation = explainGapScore({
       task: makeTask(),

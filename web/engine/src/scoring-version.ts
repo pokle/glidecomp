@@ -135,7 +135,17 @@
 //     1/2/5 all score under the HG profile), which touches a hashed scoring
 //     source, so the fingerprint guard requires a bump. The extra cache roll
 //     is harmless (scores recompute identically).
-export const SCORING_ENGINE_VERSION = 16;
+// v17: HG "ESS but not goal" penalty (S7F §12.1, issue #256). A hang-glider
+//     pilot who reaches ESS but lands before goal now keeps only the new
+//     per-comp essNotGoalFactor share of their time AND arrival points
+//     (default 0.8, the spec's recommended value; configurable by local
+//     regulations). Previously such a pilot kept 100% of both. PG is
+//     unchanged (the spec fixes its factor at 0 — no goal, no time points —
+//     which the engine already enforced). The factor also selects the best
+//     time source, matching AirScore's pilot_speed: factor > 0 → fastest
+//     ESS pilot (the previous HG behaviour); factor 0 (and always PG) →
+//     fastest pilot in goal per §11.2.1.
+export const SCORING_ENGINE_VERSION = 17;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -143,4 +153,4 @@ export const SCORING_ENGINE_VERSION = 16;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "3cf1b4c02cafa29f3fbd8d21313eb0346c6fd888127ee69f759c33532b65f044";
+  "60adb5bdb24e5b90e19ea448156bbffbf27906397c324abe37b4f0212cbbb7d5";
