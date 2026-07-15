@@ -10,13 +10,17 @@
  *   bun run score-task -- task.xctsk ./tracks/
  *   bun run score-task -- task.xctsk ./tracks/ extra-pilot.igc
  *
+ * Defaults mirror the web app: a flag-free run uses the official per-category
+ * FAI/S7F GAP settings (engine `defaultsFor`), keyed off --scoring, so it scores
+ * a task identically to the UI. Flags override individual parameters.
+ *
  * Options:
  *   --nominal-distance <m>    Nominal distance in meters (default: 70% of task distance)
  *   --nominal-time <s>        Nominal time in seconds (default: 5400)
- *   --nominal-goal <ratio>    Nominal goal ratio 0-1 (default: 0.2)
+ *   --nominal-goal <ratio>    Nominal goal ratio 0-1 (default: 0.3)
  *   --nominal-launch <ratio>  Nominal launch ratio 0-1 (default: 0.96)
  *   --min-distance <m>        Minimum distance in meters (default: 5000)
- *   --scoring <PG|HG>         Sport type (default: PG)
+ *   --scoring <PG|HG>         Sport type (default: HG)
  *   --json                    Output results as JSON
  */
 
@@ -25,7 +29,7 @@ import { resolve, basename, extname } from 'path';
 import { parseIGC } from '../src/igc-parser';
 import { parseXCTask } from '../src/xctsk-parser';
 import { calculateOptimizedTaskDistance } from '../src/task-optimizer';
-import { scoreTask, DEFAULT_GAP_PARAMETERS, type GAPParameters, type PilotFlight } from '../src/gap-scoring';
+import { scoreTask, defaultsFor, type GAPParameters, type PilotFlight } from '../src/gap-scoring';
 import { scoreOpenDistance } from '../src/open-distance-scoring';
 
 // ---------------------------------------------------------------------------
@@ -35,11 +39,15 @@ import { scoreOpenDistance } from '../src/open-distance-scoring';
 function usage(): never {
   process.stderr.write(
     'Usage: score-task <task.xctsk> <igc-file-or-folder>...\n\n' +
+    'Defaults follow the web app: a flag-free run uses the official per-category\n' +
+    'FAI/S7F GAP settings (keyed off --scoring), so it scores identically to the UI.\n' +
+    'The per-category defaults below are the leading/arrival/difficulty state for\n' +
+    'that sport; any flag overrides its parameter.\n\n' +
     'Options:\n' +
     '  --nominal-distance-pct <%> Nominal distance as % of task distance (default: 70)\n' +
     '  --nominal-distance <m>     Nominal distance in meters (overrides percentage)\n' +
     '  --nominal-time <s>         Nominal time in seconds (default: 5400)\n' +
-    '  --nominal-goal <ratio>     Nominal goal ratio 0-1 (default: 0.2)\n' +
+    '  --nominal-goal <ratio>     Nominal goal ratio 0-1 (default: 0.3)\n' +
     '  --nominal-launch <ratio>   Nominal launch ratio 0-1 (default: 0.96)\n' +
     '  --min-distance <m>         Minimum distance in meters (default: 5000)\n' +
     '  --scoring <PG|HG>          Sport type (default: HG)\n' +
@@ -48,11 +56,12 @@ function usage(): never {
     '  --open-distance            Score as open distance (single TAKEOFF turnpoint,\n' +
     '                             no goal): each pilot scores metres from take-off\n' +
     '                             exit to their furthest fix. GAP options are ignored.\n' +
-    '  --leading                  Enable leading (departure) points (default: off)\n' +
+    '  --leading                  Enable leading (departure) points (default: on)\n' +
     '  --no-leading               Disable leading (departure) points\n' +
-    '  --arrival                  Enable arrival points, HG only (default: off)\n' +
+    '  --arrival                  Enable arrival points (default: on for HG, off for PG)\n' +
     '  --no-arrival               Disable arrival points\n' +
-    '  --no-difficulty            Disable HG distance difficulty (pure linear; default: on)\n' +
+    '  --difficulty               Enable HG distance difficulty\n' +
+    '  --no-difficulty            Disable HG distance difficulty (default: on for HG, off for PG)\n' +
     '  --json                     Output as JSON\n'
   );
   process.exit(1);
@@ -206,10 +215,22 @@ const task = parseXCTask(taskContent);
 // no nominal-distance resolution — the take-off is the only turnpoint.
 const taskDistance = openDistance ? 0 : calculateOptimizedTaskDistance(task);
 
-// Resolve nominal distance: explicit meters > percentage > default 70%
+// Mirror the UI / competition-api scoring path exactly (see computeTaskScore in
+// web/workers/competition-api/src/scoring.ts): start from the official
+// per-category FAI defaults (defaultsFor — leading/arrival/difficulty/nominal
+// goal as the S7F formula actually uses them), then overlay only the flags the
+// user explicitly passed. The CLI has no comp record, so the category is derived
+// from --scoring (default HG, matching the sample-seed default). This keeps a
+// flag-free CLI run numerically identical to the web app for the same task.
+const category = params.scoring === 'PG' ? 'pg' : 'hg';
+const gapParams: Partial<GAPParameters> = { ...defaultsFor(category), ...params };
+
+// Auto-fill nominalDistance from a percentage of the optimized task distance
+// (UI uses 70%) unless the user pinned an explicit --nominal-distance. Key off
+// the *explicit* flag, exactly as the UI keys off the comp's stored value.
 if (!openDistance && params.nominalDistance === undefined) {
   const pct = nominalDistancePct ?? 70;
-  params.nominalDistance = taskDistance * (pct / 100);
+  gapParams.nominalDistance = taskDistance * (pct / 100);
 }
 
 // Parse all IGC files
@@ -241,7 +262,7 @@ if (openDistance) {
 }
 
 // Score
-const result = openDistance ? scoreOpenDistance(task, pilots) : scoreTask(task, pilots, params);
+const result = openDistance ? scoreOpenDistance(task, pilots) : scoreTask(task, pilots, gapParams);
 
 // ---------------------------------------------------------------------------
 // Output
