@@ -145,7 +145,20 @@
 //     time source, matching AirScore's pilot_speed: factor > 0 → fastest
 //     ESS pilot (the previous HG behaviour); factor 0 (and always PG) →
 //     fastest pilot in goal per §11.2.1.
-export const SCORING_ENGINE_VERSION = 17;
+// v18: task deadline + launch window enforcement (issue #260, S7F §8.3.c,
+//     §8.6.1, §11.1). The xctsk goal deadline is now enforced: boundary
+//     crossings after it are excluded from sequence resolution (so a
+//     turnpoint/ESS/goal tagged too late no longer counts, and the goal
+//     ratio only counts pre-deadline goals per §10), and a landed-out
+//     pilot's best distance is measured only up to the deadline. Start
+//     crossings before the launch window opens (takeoff.timeOpen) can no
+//     longer validate a start — a pre-window crossing proves the pilot was
+//     airborne before launching was allowed. Mis-set tasks are guarded: a
+//     deadline at/before the first start gate, or a window open at/after
+//     the deadline or after the first gate, is treated as unset. The result
+//     carries deadline/launchWindow transparency fields and the score
+//     explanation narrates the cutoff and each ignored crossing.
+export const SCORING_ENGINE_VERSION = 18;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -153,4 +166,4 @@ export const SCORING_ENGINE_VERSION = 17;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "60adb5bdb24e5b90e19ea448156bbffbf27906397c324abe37b4f0212cbbb7d5";
+  "9e5153b2159e4b8e011298875e145cfc71e9eaf0eb0566ccb0848297f4785865";

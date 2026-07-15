@@ -227,6 +227,8 @@ The CIVL GAP spec notes that for **ESS**, the *first* crossing is always used (e
 
 All crossings must occur before the **task deadline**. A pilot who tags turnpoints after the deadline gets no credit. The algorithm must filter crossings by the deadline *before* searching for valid paths. A re-fly that occurs after the deadline would be ignored entirely.
 
+> **Implemented** (issue #260): `resolveTurnpointSequence` resolves the xctsk `goal.deadline` onto the flight's day, excludes later crossings from sequence resolution (they stay in the raw crossing list for transparency), and clips best-progress distance at the deadline (S7F §8.3.c, §8.6.1, §11.1). Start crossings before the launch window opens (`takeoff.timeOpen`) likewise cannot validate a start. A deadline at/before the first start gate is treated as a mis-set task and ignored.
+
 ### 7. Early Start ("Jump the Gun")
 
 If a pilot's last SSS crossing (in the start direction) occurred *before* the start gate time:
