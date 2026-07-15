@@ -777,7 +777,7 @@ export function RouteEditorDialog({
     >
       <DialogContent
         id="route-edit-dialog"
-        className="flex max-h-[90vh] flex-col overflow-y-auto sm:max-w-5xl"
+        className="flex h-[96vh] max-h-[96vh] w-[96vw] max-w-[96vw] flex-col overflow-y-auto sm:max-w-[96vw]"
       >
         <DialogHeader>
           <DialogTitle>Edit route</DialogTitle>
@@ -794,11 +794,13 @@ export function RouteEditorDialog({
           </p>
         ) : null}
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:h-[62vh] lg:grid-cols-2">
           {/* Map + waypoint picker — floats at the top on narrow screens, sits
-              on the right on wide ones (same pattern as the score-explainer). */}
-          <div className="order-1 flex flex-col gap-2 lg:order-2 lg:sticky lg:top-0 lg:self-start">
-            <div className="h-64 overflow-hidden rounded border border-border sm:h-72 lg:h-[360px]">
+              on the right on wide ones (same pattern as the score-explainer).
+              On wide screens the column is a full-height flex box so the map
+              fills the space left by the buttons and picker below it. */}
+          <div className="order-1 flex min-h-0 flex-col gap-2 lg:order-2">
+            <div className="h-64 overflow-hidden rounded border border-border sm:h-72 lg:h-auto lg:min-h-0 lg:flex-1">
               <Suspense
                 fallback={
                   <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -899,12 +901,15 @@ export function RouteEditorDialog({
             )}
           </div>
 
-          {/* Editable turnpoint grid */}
-          <div className="order-2 flex min-w-0 flex-col gap-2 lg:order-1">
+          {/* Editable turnpoint grid — on wide screens it flexes to fill the
+              column height left by the buttons and footnote below it, so those
+              always have room (a fixed grid height equal to the row would push
+              them out and overlap the next section). */}
+          <div className="order-2 flex min-h-0 min-w-0 flex-col gap-2 lg:order-1">
             <div
               ref={gridRef}
               id="route-grid"
-              className="h-[320px] shrink-0 rounded border border-border"
+              className="h-[320px] shrink-0 rounded border border-border lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink"
             />
             <div className="flex flex-wrap items-center gap-2">
               <Button
