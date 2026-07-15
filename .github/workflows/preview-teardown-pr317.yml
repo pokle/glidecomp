@@ -1,0 +1,31 @@
+# One-off: tear down the preview infrastructure deployed by PR #317 (closed
+# unmerged). The PR branch's own preview-cleanup.yml never landed on master,
+# so its pull_request:closed trigger did not fire — this workflow runs the
+# same destroy scripts with the repo's Cloudflare credentials instead.
+# Remove this workflow (and web/scripts/preview/) once the run has succeeded.
+name: Preview Teardown (PR 317 one-off)
+
+on:
+  push:
+    branches: [claude/pr-317-branch-isolation-mczgiu]
+
+jobs:
+  teardown:
+    name: Destroy PR 317 preview stack + shared workers
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      # The preview scripts use only the Cloudflare REST API + node built-ins —
+      # no bun install needed.
+      - name: Tear down PR 317 preview infrastructure
+        run: bun web/scripts/preview/teardown-pr317.ts
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
