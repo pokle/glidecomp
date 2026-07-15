@@ -158,29 +158,35 @@ bun run get-xcontest-task -- --file task.json
 ```bash
 bun run score-task <task.xctsk> <igc-file-or-folder>... [options]
 
-# Scores identically to the web app. --scoring (HG or PG) is REQUIRED for GAP
+# Scores identically to the web app. --wing (HG or PG) is REQUIRED for GAP
 # scoring — the CLI has no comp record and won't guess. Given it, the run starts
 # from the official per-category FAI/S7F defaults and each flag overrides one
 # parameter. Flag names are the kebab-case of the gap_params keys the UI saves;
-# units are the engine's (metres / seconds / 0-1 ratios).
+# units are the engine's (metres / seconds / 0-1 ratios). Grouped by function:
 #
-# Options:
-#   --scoring <HG|PG>          Wing (`scoring`). REQUIRED unless --open-distance
+# Wing (required for GAP):
+#   --wing <HG|PG>             Competition wing (`scoring`)
+# Task mode:
+#   --open-distance            Score as open distance (GAP options ignored)
+# Nominal parameters:
 #   --nominal-distance <m>     `nominalDistance` (default: 70% of task distance)
 #   --nominal-goal <ratio>     `nominalGoal` 0-1 (default: 0.3)
 #   --nominal-time <s>         `nominalTime` in seconds (default: 5400)
 #   --minimum-distance <m>     `minimumDistance` in metres (default: 5000)
+# Scoring terms (per-wing defaults; pass to override):
 #   --no-use-leading           Disable leading (departure) points (`useLeading`)
 #   --no-use-arrival           Disable arrival points (`useArrival`)
-#   --leading-formula <which>  `leadingFormula`: weighted | classic (default: weighted)
+# Formula & advanced:
+#   --leading-formula <weighted|classic>  `leadingFormula` (default: weighted)
+#   (see --help for the full list, incl. nominal-launch, distance-origin, jump-the-gun)
+# Output:
 #   --json                     Output as JSON
-#   (see --help for the full list, incl. jump-the-gun and distance-origin)
 
 # Example: score Corryong Cup 2026 Open Task 1 as HG with the official defaults
 bun run score-task \
   web/samples/comps/corryong-cup-2026-open-t1/task.xctsk \
   web/samples/comps/corryong-cup-2026-open-t1/ \
-  --scoring HG
+  --wing HG
 ```
 
 Example output:
