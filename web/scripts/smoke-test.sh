@@ -91,8 +91,28 @@ for route in /comp /u/me /scores; do check_route "$route" || fail=1; done
 check_sha || fail=1
 
 # ── SSR public pages render content (no JS) ──────────────────────────────────
+# Assert that a page's server HTML contains a needle, retrying with backoff.
+# Capture-then-grep (never `curl | grep -q`): under `pipefail` a short-circuiting
+# `grep -q` closes the pipe early and curl dies with SIGPIPE (141), which
+# pipefail would surface as a false "not found" even on a match.
+# The retry matters because the SSR Pages Function falls back to the plain SPA
+# shell (no content) on any transient loader/render error, so a just-deployed
+# page can serve the contentless shell for a few seconds while it warms — the
+# same propagation race every other check here retries for.
+check_contains() {
+  local url="$1" needle="$2" label="$3" html attempt
+  for attempt in $(seq 1 10); do
+    html=$(curl -s "$url")
+    if grep -qF "$needle" <<<"$html"; then echo "Good — ${label}"; return 0; fi
+    echo "${label}: '${needle}' not present yet (attempt ${attempt}/10, retrying in 3s…)"
+    sleep 3
+  done
+  echo "::error::${url} HTML did not contain '${needle}' — ${label} not server-rendering after retries"
+  return 1
+}
+
 check_ssr_content() {
-  local local_fail=0 name="" cid="" body attempt comp_html hub_html
+  local local_fail=0 name="" cid="" body attempt
   # robots.txt + the dynamic sitemap must be served. Both are backed by Pages
   # Functions (/sitemap.xml is dynamic), so they're subject to the same
   # post-deploy edge-propagation race as the SPA routes above — a fresh
@@ -117,21 +137,8 @@ check_ssr_content() {
     return "$local_fail"
   fi
   echo "Verifying SSR content for '${name}' (${cid})"
-  # Capture then grep, rather than `curl | grep -qF`: under `pipefail` a
-  # short-circuiting `grep -q` closes the pipe early and curl dies with SIGPIPE
-  # (141), which pipefail would surface as a false "not found" even on a match.
-  comp_html=$(curl -s "${DEPLOY_URL}/comp")
-  if grep -qF "$name" <<<"$comp_html"; then
-    echo "Good — /comp server-renders the comp list"
-  else
-    echo "::error::/comp HTML did not contain '${name}' — SSR not rendering content"; local_fail=1
-  fi
-  hub_html=$(curl -s "${DEPLOY_URL}/comp/${cid}")
-  if grep -qF "$name" <<<"$hub_html"; then
-    echo "Good — /comp/${cid} server-renders the comp hub"
-  else
-    echo "::error::/comp/${cid} HTML did not contain '${name}' — hub SSR broken"; local_fail=1
-  fi
+  check_contains "${DEPLOY_URL}/comp" "$name" "/comp server-renders the comp list" || local_fail=1
+  check_contains "${DEPLOY_URL}/comp/${cid}" "$name" "/comp/${cid} server-renders the comp hub" || local_fail=1
   return "$local_fail"
 }
 
