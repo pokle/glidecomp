@@ -31,6 +31,33 @@ function roundToTenth(x: number): number {
   return Math.round(x * 10) / 10;
 }
 
+/** Coefficients of a cubic c0 + c1·x + c2·x² + c3·x³. */
+interface Cubic {
+  c0: number;
+  c1: number;
+  c2: number;
+  c3: number;
+}
+
+/**
+ * Evaluate a cubic at x. The FAI S7F validity/arrival curves are fixed
+ * polynomials whose coefficients carry no independent meaning — naming them
+ * (below) and evaluating here keeps each formula readable while the term
+ * grouping (left-to-right multiply then add) stays bit-identical to writing
+ * `c1*x + c2*x*x + c3*x*x*x` out inline, so scores never move.
+ */
+function poly3(x: number, { c0, c1, c2, c3 }: Cubic): number {
+  return c0 + c1 * x + c2 * x * x + c3 * x * x * x;
+}
+
+// FAI S7F validity/arrival polynomial coefficients (the spec's own numbers).
+/** Launch-validity curve in the launch-validity ratio (§ launch validity). */
+const LAUNCH_VALIDITY_CUBIC: Cubic = { c0: 0, c1: 0.027, c2: 2.917, c3: -1.944 };
+/** Time-validity curve in the time-validity ratio (§ time validity). */
+const TIME_VALIDITY_CUBIC: Cubic = { c0: -0.271, c1: 2.912, c2: -2.098, c3: 0.457 };
+/** Arrival-points curve in the arrival ratio (S7F §11.4, HG only). */
+const ARRIVAL_POINTS_CUBIC: Cubic = { c0: 0.2, c1: 0.037, c2: 0.13, c3: 0.633 };
+
 // ---------------------------------------------------------------------------
 // Competition parameters
 // ---------------------------------------------------------------------------
@@ -469,9 +496,7 @@ export function calculateLaunchValidity(
 ): number {
   if (numPresent === 0) return 0;
   const lvr = Math.min(1, numFlying / (numPresent * nominalLaunch));
-  return Math.min(1, Math.max(0,
-    0.027 * lvr + 2.917 * lvr * lvr - 1.944 * lvr * lvr * lvr
-  ));
+  return Math.min(1, Math.max(0, poly3(lvr, LAUNCH_VALIDITY_CUBIC)));
 }
 
 /**
@@ -519,9 +544,7 @@ export function calculateTimeValidity(
     x = bestDistance / nominalDistance;
   }
   const tvr = Math.min(1, x);
-  return Math.max(0, Math.min(1,
-    -0.271 + 2.912 * tvr - 2.098 * tvr * tvr + 0.457 * tvr * tvr * tvr
-  ));
+  return Math.max(0, Math.min(1, poly3(tvr, TIME_VALIDITY_CUBIC)));
 }
 
 /**
@@ -1239,7 +1262,7 @@ export function calculateArrivalPoints(
 ): number {
   if (numPilotsAtESS <= 0 || positionAtESS <= 0) return 0;
   const ac = 1 - (positionAtESS - 1) / numPilotsAtESS;
-  const af = 0.2 + 0.037 * ac + 0.13 * ac * ac + 0.633 * ac * ac * ac;
+  const af = poly3(ac, ARRIVAL_POINTS_CUBIC);
   return af * availableArrivalPoints;
 }
 
