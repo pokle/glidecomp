@@ -19,6 +19,9 @@ import type { XCTask, Turnpoint } from './xctsk-parser';
 import { getSSSIndex } from './xctsk-parser';
 import { computeGoalLine, goalLinePointAt, type GoalLine } from './goal-line';
 
+/** A geographic point in this module's (lat, lon) convention. */
+type LatLon = { lat: number; lon: number };
+
 /**
  * Effective radius of the first turnpoint for optimization.
  *
@@ -41,18 +44,15 @@ function firstTurnpointRadius(tp: Turnpoint): number {
  * so this converges in O(log(1/ε)) iterations (~30 for ε=1e-5).
  */
 function findOptimalCirclePoint(
-  prevLat: number,
-  prevLon: number,
-  centerLat: number,
-  centerLon: number,
+  prev: LatLon,
+  center: LatLon,
   radius: number,
-  nextLat: number,
-  nextLon: number
-): { lat: number; lon: number } {
+  next: LatLon
+): LatLon {
   const cost = (angle: number): number => {
-    const point = destinationPoint(centerLat, centerLon, radius, angle);
-    const d1 = andoyerDistance(prevLat, prevLon, point.lat, point.lon);
-    const d2 = andoyerDistance(point.lat, point.lon, nextLat, nextLon);
+    const point = destinationPoint(center.lat, center.lon, radius, angle);
+    const d1 = andoyerDistance(prev.lat, prev.lon, point.lat, point.lon);
+    const d2 = andoyerDistance(point.lat, point.lon, next.lat, next.lon);
     return d1 + d2;
   };
 
@@ -85,7 +85,7 @@ function findOptimalCirclePoint(
   }
 
   const optimalAngle = (a + b) / 2;
-  return destinationPoint(centerLat, centerLon, radius, optimalAngle);
+  return destinationPoint(center.lat, center.lon, radius, optimalAngle);
 }
 
 /**
@@ -189,10 +189,10 @@ function optimizePass(
         : { lat: task.turnpoints[i + 1].waypoint.lat, lon: task.turnpoints[i + 1].waypoint.lon };
 
       path.push(findOptimalCirclePoint(
-        prevPoint.lat, prevPoint.lon,
-        tp.waypoint.lat, tp.waypoint.lon,
+        prevPoint,
+        { lat: tp.waypoint.lat, lon: tp.waypoint.lon },
         tp.radius,
-        nextPoint.lat, nextPoint.lon
+        nextPoint
       ));
     }
   }

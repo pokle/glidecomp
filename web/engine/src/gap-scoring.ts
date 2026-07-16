@@ -567,16 +567,32 @@ export function calculateTaskValidity(
  * @param leadingTimeRatio - PG S7F-2024 LeadingTimeRatio (see
  *   {@link GAPParameters.leadingTimeRatio})
  */
-export function calculateWeights(
-  goalRatio: number,
-  bestDistance: number,
-  taskDistance: number,
-  scoring: 'PG' | 'HG',
-  useLeading = true,
-  useArrival = true,
-  leadingWeightFormula: LeadingWeightFormula = 'gap2020',
-  leadingTimeRatio = 0.26,
-): WeightFractions {
+export interface WeightInputs {
+  goalRatio: number;
+  bestDistance: number;
+  taskDistance: number;
+  scoring: 'PG' | 'HG';
+  /** Leading (departure) points enabled. Default true. */
+  useLeading?: boolean;
+  /** Arrival points enabled (HG only). Default true. */
+  useArrival?: boolean;
+  /** PG leading-weight generation (ignored for HG). Default 'gap2020'. */
+  leadingWeightFormula?: LeadingWeightFormula;
+  /** PG S7F-2024 LeadingTimeRatio. Default 0.26. */
+  leadingTimeRatio?: number;
+}
+
+export function calculateWeights(inputs: WeightInputs): WeightFractions {
+  const {
+    goalRatio,
+    bestDistance,
+    taskDistance,
+    scoring,
+    useLeading = true,
+    useArrival = true,
+    leadingWeightFormula = 'gap2020',
+    leadingTimeRatio = 0.26,
+  } = inputs;
   const gr = goalRatio;
 
   // Distance weight (same for PG and HG)
@@ -746,13 +762,21 @@ export interface DistanceScore {
  * (FAI S7F §11.1.1): half linear (distance / 2·best) + half difficulty.
  * Goal pilots get the full available distance points (0.5 + 0.5).
  */
-export function calculateDistancePointsHG(
-  pilotDistance: number,
-  bestDistance: number,
-  availableDistancePoints: number,
-  difficulty: DistanceDifficulty,
-  madeGoal: boolean,
-): DistanceScore {
+export interface DistancePointsHGInput {
+  pilotDistance: number;
+  bestDistance: number;
+  availableDistancePoints: number;
+  difficulty: DistanceDifficulty;
+  madeGoal: boolean;
+}
+
+export function calculateDistancePointsHG({
+  pilotDistance,
+  bestDistance,
+  availableDistancePoints,
+  difficulty,
+  madeGoal,
+}: DistancePointsHGInput): DistanceScore {
   if (bestDistance <= 0) return { total: 0, linear: 0, difficulty: 0 };
   if (madeGoal) {
     const half = availableDistancePoints * 0.5;
@@ -1473,11 +1497,16 @@ export function scoreFlights(
   );
 
   // Step 4: Calculate weights and available points
-  const weights = calculateWeights(
-    goalRatio, bestDistance, taskDistance, fullParams.scoring,
-    fullParams.useLeading, fullParams.useArrival,
-    fullParams.leadingWeightFormula, fullParams.leadingTimeRatio,
-  );
+  const weights = calculateWeights({
+    goalRatio,
+    bestDistance,
+    taskDistance,
+    scoring: fullParams.scoring,
+    useLeading: fullParams.useLeading,
+    useArrival: fullParams.useArrival,
+    leadingWeightFormula: fullParams.leadingWeightFormula,
+    leadingTimeRatio: fullParams.leadingTimeRatio,
+  });
   const totalAvailable = 1000 * taskValidity.task;
   const availablePoints: AvailablePoints = {
     distance: totalAvailable * weights.distance,
@@ -1569,10 +1598,13 @@ export function scoreFlights(
   const anyJtgPenalty = earlyOutcomes.some(o => o === 'hg_penalty');
   const scoreForMinDistance = anyJtgPenalty
     ? (difficulty
-        ? calculateDistancePointsHG(
-            fullParams.minimumDistance, bestDistance,
-            availablePoints.distance, difficulty, false,
-          ).total
+        ? calculateDistancePointsHG({
+            pilotDistance: fullParams.minimumDistance,
+            bestDistance,
+            availableDistancePoints: availablePoints.distance,
+            difficulty,
+            madeGoal: false,
+          }).total
         : calculateDistancePoints(
             fullParams.minimumDistance, bestDistance, availablePoints.distance,
           ))
@@ -1583,10 +1615,13 @@ export function scoreFlights(
     const pilotScoredDistance = scoredDistances[idx];
 
     const distScore: DistanceScore = difficulty
-      ? calculateDistancePointsHG(
-          pilotScoredDistance, bestDistance, availablePoints.distance,
-          difficulty, f.madeGoal,
-        )
+      ? calculateDistancePointsHG({
+          pilotDistance: pilotScoredDistance,
+          bestDistance,
+          availableDistancePoints: availablePoints.distance,
+          difficulty,
+          madeGoal: f.madeGoal,
+        })
       : (() => {
           const linear = calculateDistancePoints(
             pilotScoredDistance, bestDistance, availablePoints.distance,

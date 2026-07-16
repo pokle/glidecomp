@@ -803,16 +803,28 @@ function detectGoalLineCrossings(
  * @param directions - Per task index: the required crossing direction
  *   ({@link computeTurnpointDirections}).
  */
-function buildForwardPath(
-  sssCrossing: CylinderCrossing,
-  crossingsByTP: Map<number, CylinderCrossing[]>,
-  sssIdx: number,
-  essIdx: number,
-  goalIdx: number,
-  startedInsideTP: boolean[],
-  directions: TurnpointDirection[],
-  startSelectionReason: TurnpointReaching['selectionReason'] = 'last_before_next',
-): TurnpointReaching[] {
+interface BuildForwardPathParams {
+  sssCrossing: CylinderCrossing;
+  crossingsByTP: Map<number, CylinderCrossing[]>;
+  sssIdx: number;
+  essIdx: number;
+  goalIdx: number;
+  startedInsideTP: boolean[];
+  directions: TurnpointDirection[];
+  startSelectionReason?: TurnpointReaching['selectionReason'];
+}
+
+function buildForwardPath(params: BuildForwardPathParams): TurnpointReaching[] {
+  const {
+    sssCrossing,
+    crossingsByTP,
+    sssIdx,
+    essIdx,
+    goalIdx,
+    startedInsideTP,
+    directions,
+    startSelectionReason = 'last_before_next',
+  } = params;
   const sequence: TurnpointReaching[] = [];
 
   // Add SSS reaching
@@ -1002,14 +1014,24 @@ type NextTPMeasure =
  *   measured up until the pilot landed or the deadline, whichever comes
  *   first — fixes after it are not scanned. Null when the task has none.
  */
-function computeBestProgress(
-  fixes: IGCFix[],
-  lastReachingTime: number,
-  remainingTPs: Array<{ lat: number; lon: number; radius: number }>,
-  remainingLegDistances: number[],
-  nextMeasure: NextTPMeasure,
-  deadlineMs: number | null,
-): BestProgress | null {
+interface BestProgressParams {
+  fixes: IGCFix[];
+  lastReachingTime: number;
+  remainingTPs: Array<{ lat: number; lon: number; radius: number }>;
+  remainingLegDistances: number[];
+  nextMeasure: NextTPMeasure;
+  deadlineMs: number | null;
+}
+
+function computeBestProgress(params: BestProgressParams): BestProgress | null {
+  const {
+    fixes,
+    lastReachingTime,
+    remainingTPs,
+    remainingLegDistances,
+    nextMeasure,
+    deadlineMs,
+  } = params;
   // Sum of optimized leg distances between remaining TPs (TP[1]→TP[2]→...→Goal)
   let interTPDistance = 0;
   for (const d of remainingLegDistances) {
@@ -1349,9 +1371,10 @@ export function resolveTurnpointSequence(
 
   for (let i = sssCrossings.length - 1; i >= 0; i--) {
     const sssCrossing = sssCrossings[i];
-    const candidateSequence = buildForwardPath(
-      sssCrossing, crossingsByTP, sssIdx, essIdx, goalIdx, startedInsideTP, directions, startSelectionReason
-    );
+    const candidateSequence = buildForwardPath({
+      sssCrossing, crossingsByTP, sssIdx, essIdx, goalIdx,
+      startedInsideTP, directions, startSelectionReason,
+    });
 
     const tpsReached = candidateSequence.length;
     const madeGoal = tpsReached > 0 &&
@@ -1364,10 +1387,14 @@ export function resolveTurnpointSequence(
       const lastReaching = candidateSequence[tpsReached - 1];
       const { remainingTPs, remainingLegDistances } =
         buildRemainingPath(task, lastReaching.taskIndex, segmentDistances);
-      const progress = computeBestProgress(
-        fixes, lastReaching.time.getTime(), remainingTPs, remainingLegDistances,
-        nextMeasureFor(lastReaching.taskIndex), deadlineMs
-      );
+      const progress = computeBestProgress({
+        fixes,
+        lastReachingTime: lastReaching.time.getTime(),
+        remainingTPs,
+        remainingLegDistances,
+        nextMeasure: nextMeasureFor(lastReaching.taskIndex),
+        deadlineMs,
+      });
       candidateFlownDist = progress
         ? taskDistance - progress.distanceToGoal
         : 0;
@@ -1420,10 +1447,14 @@ export function resolveTurnpointSequence(
     const lastReaching = sequence[sequence.length - 1];
     const { remainingTPs, remainingLegDistances } =
       buildRemainingPath(task, lastReaching.taskIndex, segmentDistances);
-    bestProgress = computeBestProgress(
-      fixes, lastReaching.time.getTime(), remainingTPs, remainingLegDistances,
-      nextMeasureFor(lastReaching.taskIndex), deadlineMs
-    );
+    bestProgress = computeBestProgress({
+      fixes,
+      lastReachingTime: lastReaching.time.getTime(),
+      remainingTPs,
+      remainingLegDistances,
+      nextMeasure: nextMeasureFor(lastReaching.taskIndex),
+      deadlineMs,
+    });
     flownDistance = bestProgress
       ? taskDistance - bestProgress.distanceToGoal
       : 0;
