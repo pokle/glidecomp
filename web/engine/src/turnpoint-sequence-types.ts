@@ -9,7 +9,6 @@
 
 import type { GoalLine } from './goal-line';
 
-
 /**
  * Default cylinder tolerance as a fraction of the radius. 0.5% is the Cat 2
  * maximum (FAI S7F §8.1); Cat 1 uses 0.1%. Kept as the default for club

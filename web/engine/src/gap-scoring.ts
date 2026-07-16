@@ -20,10 +20,9 @@ import type { XCTask } from './xctsk-parser';
 import type { IGCFix } from './igc-parser';
 import type { TurnpointSequenceResult, TurnpointReaching } from './turnpoint-sequence';
 import { resolveTurnpointSequence } from './turnpoint-sequence';
-import { getSSSIndex, getEffectiveSSSIndex, getEffectiveESSIndex } from './xctsk-parser';
+import { getSSSIndex, getEffectiveSSSIndex } from './xctsk-parser';
 import { calculateOptimizedTaskDistance, getOptimizedSegmentDistances } from './task-optimizer';
 import { resolveStartGates } from './time-gates';
-import { andoyerDistance } from './geo';
 import { maxBy, minBy } from './array-utils';
 
 import { DEFAULT_GAP_PARAMETERS } from './gap-params';
@@ -46,13 +45,11 @@ import type {
   TaskValidity,
   WeightFractions,
   DistanceScore,
-  DistanceDifficulty,
   LeadingAggregate,
 } from './gap-formulas';
 
 export * from './gap-params';
 export * from './gap-formulas';
-
 
 /**
  * Round a point value to one decimal place — the precision the FAI Sporting

@@ -17,7 +17,6 @@ import { andoyerDistance } from './geo';
 import type { GAPParameters, LeadingFormula, LeadingWeightFormula, SpeedExponent } from './gap-params';
 import { DEFAULT_GAP_PARAMETERS } from './gap-params';
 
-
 /** Coefficients of a cubic c0 + c1·x + c2·x² + c3·x³. */
 interface Cubic {
   c0: number;

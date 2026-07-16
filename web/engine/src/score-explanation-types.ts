@@ -13,7 +13,6 @@ import type { OpenDistanceGeometry } from './open-distance-scoring';
 import type { ManualFlightGeometry } from './manual-flight';
 import type { IGCFix } from './igc-parser';
 
-
 // ---------------------------------------------------------------------------
 // Output types
 // ---------------------------------------------------------------------------

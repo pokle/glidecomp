@@ -42,7 +42,6 @@ import {
   availableTotalDetail,
 } from './score-explanation-format';
 
-
 /** Human label for a task position: Takeoff / Start / TP3 / ESS / Goal. */
 export function turnpointLabel(task: XCTask, taskIndex: number): string {
   const tp: Turnpoint | undefined = task.turnpoints[taskIndex];
@@ -54,11 +53,11 @@ export function turnpointLabel(task: XCTask, taskIndex: number): string {
   return `TP${taskIndex + 1}`;
 }
 
-export function turnpointName(task: XCTask, taskIndex: number): string {
+function turnpointName(task: XCTask, taskIndex: number): string {
   return task.turnpoints[taskIndex]?.waypoint.name ?? '';
 }
 
-export function reachingAnchor(
+function reachingAnchor(
   r: TurnpointReaching,
   kind: ExplanationAnchorKind,
 ): ExplanationAnchor {
@@ -86,22 +85,18 @@ export function leadingVariantSentence(formula: GAPParameters['leadingFormula'])
 }
 
 /** Cap on individually listed start crossings — beyond this, summarise. */
-export const MAX_START_CROSSINGS_LISTED = 12;
+const MAX_START_CROSSINGS_LISTED = 12;
 
 /** Cap on individually listed post-deadline crossings — beyond this, summarise. */
-export const MAX_DEADLINE_CROSSINGS_LISTED = 6;
+const MAX_DEADLINE_CROSSINGS_LISTED = 6;
 
 /**
  * Shown when a crossing was credited by the cylinder tolerance band rather
  * than a physical crossing of the nominal radius (FAI S7F §8.1).
  */
-export const TOLERANCE_NOTE =
+const TOLERANCE_NOTE =
   'Credited by the cylinder tolerance band (FAI S7F §8.1) — the track came within tolerance of the cylinder edge but did not physically cross the nominal radius.';
 
-/**
- * Build the flight-narrative section: what the pilot flew, in task order,
- * with the reason each crossing was (or wasn't) the one that scored.
- */
 /** The inputs every flight-narrative phase builder shares. */
 interface FlightNarrativeCtx {
   task: XCTask;
@@ -114,7 +109,7 @@ interface FlightNarrativeCtx {
 }
 
 function buildStartItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
-  const { task, result, entry, fmt, sssIdx, essIdx, directions } = ctx;
+  const { task, result, fmt, sssIdx } = ctx;
   const out: ScoreExplanationItem[] = [];
   if (result.startFallback === 'first_turnpoint') {
     out.push({
@@ -261,7 +256,7 @@ function buildStartItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
 }
 
 function buildTurnpointReachingItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
-  const { task, result, entry, fmt, sssIdx, essIdx, directions } = ctx;
+  const { task, result, entry, fmt, essIdx, directions } = ctx;
   const out: ScoreExplanationItem[] = [];
   // Turnpoints after the start, in scored order.
   for (const reaching of result.sequence) {
@@ -332,7 +327,7 @@ function buildTurnpointReachingItems(ctx: FlightNarrativeCtx): ScoreExplanationI
 }
 
 function buildDeadlineItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
-  const { task, result, entry, fmt, sssIdx, essIdx, directions } = ctx;
+  const { task, result, entry, fmt } = ctx;
   const out: ScoreExplanationItem[] = [];
   // Task deadline (FAI S7F §8.3.c, §11.1): crossings after it were excluded
   // from the sequence and distance was measured only up to it. Shown when it
@@ -386,7 +381,7 @@ function buildDeadlineItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
 }
 
 function buildBestProgressItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
-  const { task, result, entry, fmt, sssIdx, essIdx, directions } = ctx;
+  const { task, result, entry, fmt, directions } = ctx;
   const out: ScoreExplanationItem[] = [];
   if (entry.made_goal) {
     out.push({
@@ -475,7 +470,6 @@ export function buildFlightSection(
     items,
   };
 }
-
 
 export function buildValiditySection(
   classContext: ClassContextInput,

@@ -65,7 +65,6 @@ export type {
 } from './score-explanation-types';
 export { turnpointLabel } from './score-explanation-sections';
 
-
 /**
  * Explain a GAP-scored pilot's result.
  *

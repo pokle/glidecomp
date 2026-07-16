@@ -8,12 +8,11 @@
 
 import type { XCTask } from './xctsk-parser';
 import type { IGCFix } from './igc-parser';
-import { andoyerDistance, isInsideCylinder } from './geo';
-import { getSSSIndex, getEffectiveSSSIndex, getESSIndex, getEffectiveESSIndex, getGoalIndex } from './xctsk-parser';
-import { calculateOptimizedTaskLine, computeTurnpointDirections, type TurnpointDirection } from './task-optimizer';
+import { andoyerDistance } from './geo';
+import { getGoalIndex } from './xctsk-parser';
+import { computeTurnpointDirections, type TurnpointDirection } from './task-optimizer';
 import {
   computeGoalLine,
-  distanceToGoalLine,
   goalLineCrossingFraction,
   goalSemicircleBoundaryFraction,
   isForwardGoalCrossing,
@@ -21,37 +20,10 @@ import {
   type GoalLine,
 } from './goal-line';
 import {
-  resolveStartGates,
-  gateIndexForCrossing,
-  resolveTaskDeadline,
-  resolveLaunchWindowOpen,
-} from './time-gates';
-
-import {
   DEFAULT_CYLINDER_TOLERANCE,
   MIN_CYLINDER_TOLERANCE_M,
 } from './turnpoint-sequence-types';
-import type {
-  CylinderCrossing,
-  TurnpointReaching,
-  BestProgress,
-  LegDistance,
-  StartGateTaken,
-  EarlyStart,
-  TaskDeadlineInfo,
-  LaunchWindowInfo,
-  TurnpointSequenceResult,
-  NextTPMeasure,
-  CylinderCrossingJSON,
-  TurnpointReachingJSON,
-  BestProgressJSON,
-  StartGateTakenJSON,
-  EarlyStartJSON,
-  TaskDeadlineInfoJSON,
-  LaunchWindowInfoJSON,
-  TurnpointSequenceResultJSON,
-} from './turnpoint-sequence-types';
-
+import type { CylinderCrossing } from './turnpoint-sequence-types';
 
 /**
  * Outer edge of a cylinder's tolerance band (§8.1): the radius at which an
@@ -303,7 +275,7 @@ export function detectCylinderCrossings(
  * goal line is exact geometry (its semicircle already absorbs the
  * fast-crossing case), so `toleranceCredited` is always false here.
  */
-export function detectGoalLineCrossings(
+function detectGoalLineCrossings(
   goalLine: GoalLine,
   fixes: IGCFix[],
   taskIndex: number,

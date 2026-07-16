@@ -8,7 +8,6 @@
 
 import type { ClassContextInput } from './score-explanation-types';
 
-
 // ---------------------------------------------------------------------------
 // Formatting helpers (fixed metric — the UI can localise via formatTime)
 // ---------------------------------------------------------------------------
@@ -54,8 +53,8 @@ export function defaultFormatTime(d: Date): string {
  * suffices (worst-case rounding error 1000 × 3 × 0.5e-5 ≈ 0.015 pt, under
  * the 0.05 pt display step).
  */
-export const VALIDITY_MIN_DECIMALS = 2;
-export const VALIDITY_MAX_DECIMALS = 5;
+const VALIDITY_MIN_DECIMALS = 2;
+const VALIDITY_MAX_DECIMALS = 5;
 
 export function validityFactorDecimals(
   v: ClassContextInput['task_validity'],
@@ -137,7 +136,7 @@ export function trimZeros(s: string, min: number): string {
 }
 
 /** A validity factor at the section's precision, e.g. 0.9993 → "0.9993", 1 → "1.00". */
-export function fmtValidityFactor(f: number, decimals: number): string {
+function fmtValidityFactor(f: number, decimals: number): string {
   return trimZeros(f.toFixed(decimals), VALIDITY_MIN_DECIMALS);
 }
 

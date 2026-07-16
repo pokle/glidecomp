@@ -7,7 +7,6 @@
  * (defaultsFor, resolveCompGapParams) a competition is scored from.
  */
 
-
 // ---------------------------------------------------------------------------
 // Competition parameters
 // ---------------------------------------------------------------------------

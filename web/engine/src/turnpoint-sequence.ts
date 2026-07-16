@@ -23,16 +23,8 @@ import type { XCTask } from './xctsk-parser';
 import type { IGCFix } from './igc-parser';
 import { andoyerDistance, isInsideCylinder } from './geo';
 import { getSSSIndex, getEffectiveSSSIndex, getESSIndex, getEffectiveESSIndex, getGoalIndex } from './xctsk-parser';
-import { calculateOptimizedTaskLine, computeTurnpointDirections, type TurnpointDirection } from './task-optimizer';
-import {
-  computeGoalLine,
-  distanceToGoalLine,
-  goalLineCrossingFraction,
-  goalSemicircleBoundaryFraction,
-  isForwardGoalCrossing,
-  isInGoalSemicircle,
-  type GoalLine,
-} from './goal-line';
+import { calculateOptimizedTaskLine, computeTurnpointDirections } from './task-optimizer';
+import { computeGoalLine, isInGoalSemicircle } from './goal-line';
 import {
   resolveStartGates,
   gateIndexForCrossing,
@@ -43,17 +35,13 @@ import {
   outerDetectionRadius,
   innerDetectionRadius,
   detectCylinderCrossings,
-  detectGoalLineCrossings,
 } from './turnpoint-sequence-crossings';
 import {
   buildForwardPath,
   buildRemainingPath,
   computeBestProgress,
 } from './turnpoint-sequence-path';
-import {
-  DEFAULT_CYLINDER_TOLERANCE,
-  MIN_CYLINDER_TOLERANCE_M,
-} from './turnpoint-sequence-types';
+import { DEFAULT_CYLINDER_TOLERANCE } from './turnpoint-sequence-types';
 import type {
   CylinderCrossing,
   TurnpointReaching,
@@ -64,15 +52,8 @@ import type {
   TaskDeadlineInfo,
   LaunchWindowInfo,
   TurnpointSequenceResult,
-  NextTPMeasure,
-  CylinderCrossingJSON,
-  TurnpointReachingJSON,
-  BestProgressJSON,
-  StartGateTakenJSON,
-  EarlyStartJSON,
-  TaskDeadlineInfoJSON,
-  LaunchWindowInfoJSON,
   TurnpointSequenceResultJSON,
+  NextTPMeasure,
 } from './turnpoint-sequence-types';
 
 export {
@@ -99,7 +80,6 @@ export type {
   TurnpointSequenceResultJSON,
 } from './turnpoint-sequence-types';
 export { detectCylinderCrossings } from './turnpoint-sequence-crossings';
-
 
 /**
  * Resolve the turnpoint sequence for a flight against a competition task.

@@ -8,50 +8,15 @@
 
 import type { XCTask } from './xctsk-parser';
 import type { IGCFix } from './igc-parser';
-import { andoyerDistance, isInsideCylinder } from './geo';
-import { getSSSIndex, getEffectiveSSSIndex, getESSIndex, getEffectiveESSIndex, getGoalIndex } from './xctsk-parser';
-import { calculateOptimizedTaskLine, computeTurnpointDirections, type TurnpointDirection } from './task-optimizer';
-import {
-  computeGoalLine,
-  distanceToGoalLine,
-  goalLineCrossingFraction,
-  goalSemicircleBoundaryFraction,
-  isForwardGoalCrossing,
-  isInGoalSemicircle,
-  type GoalLine,
-} from './goal-line';
-import {
-  resolveStartGates,
-  gateIndexForCrossing,
-  resolveTaskDeadline,
-  resolveLaunchWindowOpen,
-} from './time-gates';
-
-import {
-  DEFAULT_CYLINDER_TOLERANCE,
-  MIN_CYLINDER_TOLERANCE_M,
-} from './turnpoint-sequence-types';
+import { andoyerDistance } from './geo';
+import { computeTurnpointDirections, type TurnpointDirection } from './task-optimizer';
+import { distanceToGoalLine } from './goal-line';
 import type {
   CylinderCrossing,
   TurnpointReaching,
   BestProgress,
-  LegDistance,
-  StartGateTaken,
-  EarlyStart,
-  TaskDeadlineInfo,
-  LaunchWindowInfo,
-  TurnpointSequenceResult,
   NextTPMeasure,
-  CylinderCrossingJSON,
-  TurnpointReachingJSON,
-  BestProgressJSON,
-  StartGateTakenJSON,
-  EarlyStartJSON,
-  TaskDeadlineInfoJSON,
-  LaunchWindowInfoJSON,
-  TurnpointSequenceResultJSON,
 } from './turnpoint-sequence-types';
-
 
 /**
  * Build a forward path from an SSS crossing through subsequent turnpoints.
@@ -73,7 +38,7 @@ import type {
  * @param directions - Per task index: the required crossing direction
  *   ({@link computeTurnpointDirections}).
  */
-export interface BuildForwardPathParams {
+interface BuildForwardPathParams {
   sssCrossing: CylinderCrossing;
   crossingsByTP: Map<number, CylinderCrossing[]>;
   sssIdx: number;
@@ -259,7 +224,7 @@ export function buildRemainingPath(
  *   measured up until the pilot landed or the deadline, whichever comes
  *   first — fixes after it are not scanned. Null when the task has none.
  */
-export interface BestProgressParams {
+interface BestProgressParams {
   fixes: IGCFix[];
   lastReachingTime: number;
   remainingTPs: Array<{ lat: number; lon: number; radius: number }>;
