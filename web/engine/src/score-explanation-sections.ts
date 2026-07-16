@@ -17,7 +17,7 @@ import {
   speedExponentValue,
 } from './gap-scoring';
 import type { ManualFlightGeometry } from './manual-flight';
-import { calculateOptimizedTaskLine, computeTurnpointDirections } from './task-optimizer';
+import { calculateOptimizedTaskLine, computeTurnpointDirections, type TurnpointDirection } from './task-optimizer';
 import { computeGoalLine } from './goal-line';
 import type {
   ScoreExplanationItem,
@@ -102,22 +102,22 @@ export const TOLERANCE_NOTE =
  * Build the flight-narrative section: what the pilot flew, in task order,
  * with the reason each crossing was (or wasn't) the one that scored.
  */
-export function buildFlightSection(
-  task: XCTask,
-  result: TurnpointSequenceResult,
-  entry: ScoreEntryInput,
-  fmt: (d: Date) => string,
-): ScoreExplanationSection {
-  const items: ScoreExplanationItem[] = [];
-  const sssIdx = getEffectiveSSSIndex(task);
-  const essIdx = getEffectiveESSIndex(task);
-  // Per-turnpoint crossing directions, inferred from the task geometry —
-  // an exit cylinder (one the route reaches from inside) counts when the
-  // pilot flies OUT of it, and the narrative must say so.
-  const directions = computeTurnpointDirections(task);
+/** The inputs every flight-narrative phase builder shares. */
+interface FlightNarrativeCtx {
+  task: XCTask;
+  result: TurnpointSequenceResult;
+  entry: ScoreEntryInput;
+  fmt: (d: Date) => string;
+  sssIdx: number;
+  essIdx: number;
+  directions: TurnpointDirection[];
+}
 
+function buildStartItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
+  const { task, result, entry, fmt, sssIdx, essIdx, directions } = ctx;
+  const out: ScoreExplanationItem[] = [];
   if (result.startFallback === 'first_turnpoint') {
-    items.push({
+    out.push({
       id: 'start-fallback',
       text: 'This task has no start (SSS) turnpoint — the first turnpoint is treated as the start.',
       emphasis: 'warning',
@@ -129,7 +129,7 @@ export function buildFlightSection(
   // allowed — they were excluded from start validation.
   if (result.launchWindow && result.launchWindow.droppedStartCrossings > 0) {
     const lw = result.launchWindow;
-    items.push({
+    out.push({
       id: 'launch-window',
       text: `${lw.droppedStartCrossings === 1 ? 'A start-cylinder crossing' : `${lw.droppedStartCrossings} start-cylinder crossings`} before the launch window opened at ${fmt(lw.openTime)} ${lw.droppedStartCrossings === 1 ? 'was' : 'were'} ignored (FAI S7F §8.6.1) — a crossing before the window opens means the pilot was airborne before launching was allowed, so it cannot validate a start.`,
       emphasis: 'warning',
@@ -137,7 +137,7 @@ export function buildFlightSection(
   }
 
   if (!result.sssReaching) {
-    items.push({
+    out.push({
       id: 'no-start',
       text: 'No valid start — the track never crossed the start cylinder in the required direction, so only pre-start progress can score.',
       emphasis: 'warning',
@@ -155,7 +155,7 @@ export function buildFlightSection(
       // Careful wording: the scored crossing can be the first one (later
       // crossings were just flying back through the cylinder mid-task) or a
       // later one (a re-start superseded an earlier start).
-      items.push({
+      out.push({
         id: 'start-multiple',
         text: `Crossed the start cylinder boundary ${startCrossings.length} times. The scored start is the latest crossing from which the flight still makes its best run along the course — re-starting supersedes an earlier start, while simply flying back through the cylinder later in the task changes nothing.`,
         emphasis: 'muted',
@@ -184,7 +184,7 @@ export function buildFlightSection(
       let prevListed = -1;
       for (const i of listIndices) {
         if (i > prevListed + 1) {
-          items.push({
+          out.push({
             id: `start-crossings-elided-${prevListed + 1}`,
             text: `…${i - prevListed - 1} more crossings…`,
             emphasis: 'muted',
@@ -192,7 +192,7 @@ export function buildFlightSection(
         }
         const c = startCrossings[i];
         const scored = i === scoredIdx;
-        items.push({
+        out.push({
           id: `start-crossing-${i}`,
           text: scored
             ? `${c.direction === 'enter' ? 'Entered' : 'Exited'} the start cylinder — this is the scored start`
@@ -211,14 +211,14 @@ export function buildFlightSection(
         prevListed = i;
       }
       if (prevListed < startCrossings.length - 1) {
-        items.push({
+        out.push({
           id: 'start-crossings-more',
           text: `…and ${startCrossings.length - prevListed - 1} more crossings`,
           emphasis: 'muted',
         });
       }
     } else if (sss.selectionReason === 'track_start') {
-      items.push({
+      out.push({
         id: 'start',
         text: 'Track began outside the start cylinder — the start is measured from the first fix.',
         value: fmt(sss.time),
@@ -226,7 +226,7 @@ export function buildFlightSection(
         anchor: reachingAnchor(sss, 'start'),
       });
     } else {
-      items.push({
+      out.push({
         id: 'start',
         text: `Started${startName ? ` at ${startName}` : ''}`,
         value: fmt(sss.time),
@@ -239,14 +239,14 @@ export function buildFlightSection(
     // Start-gate story (gated races): the official start time is the gate
     // taken, not the crossing — make the snapping visible.
     if (result.earlyStart) {
-      items.push({
+      out.push({
         id: 'early-start',
         text: `Crossed the start ${duration(result.earlyStart.secondsEarly)} before the first start gate opened at ${fmt(result.earlyStart.firstGateTime)} — an early start ("jumping the gun", FAI S7F §12.2). The speed-section clock runs from the first gate.`,
         emphasis: 'warning',
       });
     } else if (result.startGate) {
       const gate = result.startGate;
-      items.push({
+      out.push({
         id: 'start-gate',
         text:
           gate.gateCount > 1
@@ -257,7 +257,12 @@ export function buildFlightSection(
       });
     }
   }
+  return out;
+}
 
+function buildTurnpointReachingItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
+  const { task, result, entry, fmt, sssIdx, essIdx, directions } = ctx;
+  const out: ScoreExplanationItem[] = [];
   // Turnpoints after the start, in scored order.
   for (const reaching of result.sequence) {
     if (result.sssReaching && reaching.taskIndex <= result.sssReaching.taskIndex) {
@@ -315,7 +320,7 @@ export function buildFlightSection(
       }
     }
 
-    items.push({
+    out.push({
       id: `reaching-${reaching.taskIndex}`,
       text: `${isGoal ? 'Goal' : label}${name ? ` — ${name}` : ''}${isExitTP ? ' (exit cylinder)' : ''}`,
       value: fmt(reaching.time),
@@ -323,14 +328,19 @@ export function buildFlightSection(
       anchor: reachingAnchor(reaching, isGoal ? 'goal' : isESS ? 'ess' : 'turnpoint'),
     });
   }
+  return out;
+}
 
+function buildDeadlineItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
+  const { task, result, entry, fmt, sssIdx, essIdx, directions } = ctx;
+  const out: ScoreExplanationItem[] = [];
   // Task deadline (FAI S7F §8.3.c, §11.1): crossings after it were excluded
   // from the sequence and distance was measured only up to it. Shown when it
   // actually shaped this flight — crossings were ignored, or a landed-out
   // pilot's track continues past the deadline.
   const dl = result.deadline;
   if (dl && (dl.crossingsAfter > 0 || (!entry.made_goal && dl.trackContinuesPastDeadline))) {
-    items.push({
+    out.push({
       id: 'task-deadline',
       text: 'Task deadline — turnpoint crossings after this time do not count, and distance is measured only up to it (FAI S7F §8.3, §11.1).',
       value: fmt(dl.time),
@@ -349,7 +359,7 @@ export function buildFlightSection(
         c.taskIndex === goalIdx ? 'Goal' : turnpointLabel(task, c.taskIndex);
       const name = turnpointName(task, c.taskIndex);
       const isGoalCrossing = c.taskIndex === goalIdx && c.direction === 'enter';
-      items.push({
+      out.push({
         id: `deadline-ignored-${i}`,
         text: `${c.direction === 'enter' ? 'Entered' : 'Exited'} ${label}${name ? ` (${name})` : ''} after the deadline — not counted`,
         value: fmt(c.time),
@@ -365,16 +375,21 @@ export function buildFlightSection(
       });
     }
     if (ignored.length > MAX_DEADLINE_CROSSINGS_LISTED) {
-      items.push({
+      out.push({
         id: 'deadline-ignored-more',
         text: `…and ${ignored.length - MAX_DEADLINE_CROSSINGS_LISTED} more crossings after the deadline`,
         emphasis: 'muted',
       });
     }
   }
+  return out;
+}
 
+function buildBestProgressItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
+  const { task, result, entry, fmt, sssIdx, essIdx, directions } = ctx;
+  const out: ScoreExplanationItem[] = [];
   if (entry.made_goal) {
-    items.push({
+    out.push({
       id: 'made-goal',
       text: 'Completed the task — full task distance is credited.',
     });
@@ -401,7 +416,7 @@ export function buildFlightSection(
       },
       ...remainingTags.map((p) => ({ latitude: p.lat, longitude: p.lon })),
     ];
-    items.push({
+    out.push({
       id: 'best-progress',
       text: `Landed out — best distance made good along the task, ${km(result.bestProgress.distanceToGoal)} short of goal`,
       value: fmt(result.bestProgress.time),
@@ -420,7 +435,39 @@ export function buildFlightSection(
       },
     });
   }
+  return out;
+}
 
+/**
+ * Build the flight-narrative section: what the pilot flew, in task order,
+ * with the reason each crossing was (or wasn't) the one that scored. Composed
+ * from four phase builders — start, turnpoint reachings, task deadline, and
+ * goal / best-progress.
+ */
+export function buildFlightSection(
+  task: XCTask,
+  result: TurnpointSequenceResult,
+  entry: ScoreEntryInput,
+  fmt: (d: Date) => string,
+): ScoreExplanationSection {
+  const ctx: FlightNarrativeCtx = {
+    task,
+    result,
+    entry,
+    fmt,
+    sssIdx: getEffectiveSSSIndex(task),
+    essIdx: getEffectiveESSIndex(task),
+    // Per-turnpoint crossing directions, inferred from the task geometry — an
+    // exit cylinder (one the route reaches from inside) counts when the pilot
+    // flies OUT of it, and the narrative must say so.
+    directions: computeTurnpointDirections(task),
+  };
+  const items: ScoreExplanationItem[] = [
+    ...buildStartItems(ctx),
+    ...buildTurnpointReachingItems(ctx),
+    ...buildDeadlineItems(ctx),
+    ...buildBestProgressItems(ctx),
+  ];
   return {
     id: 'flight',
     title: 'The flight',
@@ -428,6 +475,7 @@ export function buildFlightSection(
     items,
   };
 }
+
 
 export function buildValiditySection(
   classContext: ClassContextInput,
