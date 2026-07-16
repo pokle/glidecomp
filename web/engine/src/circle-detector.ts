@@ -17,7 +17,7 @@
 
 import { IGCFix } from './igc-parser';
 import { calculateBearing, andoyerDistance } from './geo';
-import { TrackSegment } from './event-detector';
+import { TrackSegment } from './event-types';
 
 // --- Constants ---
 
@@ -87,6 +87,33 @@ export interface CircleDetectionOptions {
   maxReasonableWindSpeed?: number;  // default 30 m/s
   minGroundSpeedVariation?: number; // default 1 m/s
 }
+
+/**
+ * Timing constants for the {@link detectCirclingSegments} 4-state machine.
+ * Grouped so callers name each field rather than passing bare numbers
+ * positionally (a swapped delay silently mis-detects thermals).
+ */
+export interface CirclingSegmentParams {
+  minTurnRate?: number;  // default 4.0 deg/s
+  t1Seconds?: number;    // default 8  (CRUISE -> CLIMB transition delay)
+  t2Seconds?: number;    // default 15 (CLIMB -> CRUISE transition delay)
+}
+
+/**
+ * Tuning bounds shared by the two per-circle wind estimators. Threaded as one
+ * value so the estimators don't each repeat the same trailing scalars.
+ */
+export interface WindTuning {
+  /** Reject wind estimates above this speed (m/s). */
+  maxWindSpeed: number;
+  /** Minimum ground-speed spread (m/s) for a usable ground-speed estimate. */
+  minGroundSpeedVariation: number;
+}
+
+const DEFAULT_WIND_TUNING: WindTuning = {
+  maxWindSpeed: MAX_REASONABLE_WIND_SPEED,
+  minGroundSpeedVariation: MIN_GROUND_SPEED_VARIATION,
+};
 
 // --- Exported helpers ---
 
@@ -164,10 +191,11 @@ export function computeBearingRates(
 export function detectCirclingSegments(
   fixes: IGCFix[],
   bearingRates: number[],
-  minTurnRate: number = 4.0,
-  t1Seconds: number = 8,
-  t2Seconds: number = 15
+  params: CirclingSegmentParams = {}
 ): CirclingSegment[] {
+  const minTurnRate = params.minTurnRate ?? 4.0;
+  const t1Seconds = params.t1Seconds ?? 8;
+  const t2Seconds = params.t2Seconds ?? 15;
   const segments: CirclingSegment[] = [];
 
   if (fixes.length < 3) return segments;
@@ -349,8 +377,7 @@ function extractCircles(
   fixes: IGCFix[],
   circlingSegments: CirclingSegment[],
   minFixesPerCircle: number = 8,
-  maxReasonableWindSpeedOpt: number = MAX_REASONABLE_WIND_SPEED,
-  minGroundSpeedVariationOpt: number = MIN_GROUND_SPEED_VARIATION
+  tuning: WindTuning = DEFAULT_WIND_TUNING
 ): CircleSegment[] {
   const circles: CircleSegment[] = [];
 
@@ -387,11 +414,16 @@ function extractCircles(
         if (fixCount >= minFixesPerCircle) {
           circleNumber++;
           const circleEndIndex = i;
-          const circle = buildCircle(
-            fixes, circleStartIndex, circleEndIndex,
-            cumulative, circleNumber, segIdx, circles,
-            maxReasonableWindSpeedOpt, minGroundSpeedVariationOpt
-          );
+          const circle = buildCircle({
+            fixes,
+            startIndex: circleStartIndex,
+            endIndex: circleEndIndex,
+            cumulativeBearing: cumulative,
+            circleNumber,
+            circlingSegmentIndex: segIdx,
+            previousCircles: circles,
+            tuning,
+          });
           if (circle) {
             circles.push(circle);
           }
@@ -407,20 +439,26 @@ function extractCircles(
   return circles;
 }
 
+/** Inputs for {@link buildCircle} — one object so the seven values are named. */
+interface BuildCircleParams {
+  fixes: IGCFix[];
+  startIndex: number;
+  endIndex: number;
+  cumulativeBearing: number;
+  circleNumber: number;         // 1-based within parent circling segment
+  circlingSegmentIndex: number; // index of parent circling segment
+  previousCircles: CircleSegment[];
+  tuning: WindTuning;
+}
+
 /**
  * Build a CircleSegment with all per-circle metrics.
  */
-function buildCircle(
-  fixes: IGCFix[],
-  startIndex: number,
-  endIndex: number,
-  cumulativeBearing: number,
-  circleNumber: number,
-  circlingSegmentIndex: number,
-  previousCircles: CircleSegment[],
-  maxReasonableWindSpeedOpt: number = MAX_REASONABLE_WIND_SPEED,
-  minGroundSpeedVariationOpt: number = MIN_GROUND_SPEED_VARIATION
-): CircleSegment | null {
+function buildCircle(params: BuildCircleParams): CircleSegment | null {
+  const {
+    fixes, startIndex, endIndex, cumulativeBearing,
+    circleNumber, circlingSegmentIndex, previousCircles, tuning,
+  } = params;
   const duration = (fixes[endIndex].time.getTime() - fixes[startIndex].time.getTime()) / 1000;
   if (duration <= 0) return null;
 
@@ -460,19 +498,23 @@ function buildCircle(
 
   // Wind from ground speed (per-circle)
   const windFromGroundSpeed = estimateWindFromGroundSpeed(
-    fixes, startIndex, endIndex, maxReasonableWindSpeedOpt, minGroundSpeedVariationOpt
+    fixes, startIndex, endIndex, tuning
   );
 
   // Wind from center drift (between consecutive circles in same segment)
   let windFromCenterDrift: WindEstimate | undefined;
   const prevCircle = findPreviousCircleInSegment(previousCircles, circlingSegmentIndex);
   if (prevCircle) {
-    windFromCenterDrift = estimateWindFromCenterDrift(
-      fixes, prevCircle, fittedCircle,
-      prevCircle.startIndex, prevCircle.endIndex,
-      startIndex, endIndex,
-      maxReasonableWindSpeedOpt
-    );
+    windFromCenterDrift = estimateWindFromCenterDrift({
+      fixes,
+      prevCircle,
+      currentFit: fittedCircle,
+      prevStartIndex: prevCircle.startIndex,
+      prevEndIndex: prevCircle.endIndex,
+      curStartIndex: startIndex,
+      curEndIndex: endIndex,
+      maxWindSpeed: tuning.maxWindSpeed,
+    });
   }
 
   return {
@@ -516,9 +558,9 @@ function estimateWindFromGroundSpeed(
   fixes: IGCFix[],
   startIndex: number,
   endIndex: number,
-  maxWindSpeed: number = MAX_REASONABLE_WIND_SPEED,
-  minGSVariation: number = MIN_GROUND_SPEED_VARIATION
+  tuning: WindTuning = DEFAULT_WIND_TUNING
 ): WindEstimate | undefined {
+  const { maxWindSpeed, minGroundSpeedVariation: minGSVariation } = tuning;
   let maxGS = -Infinity;
   let minGS = Infinity;
   let maxGSIndex = startIndex;
@@ -565,16 +607,23 @@ function estimateWindFromGroundSpeed(
 /**
  * Estimate wind from drift between consecutive circle centers.
  */
-function estimateWindFromCenterDrift(
-  fixes: IGCFix[],
-  prevCircle: CircleSegment,
-  currentFit: FittedCircle,
-  prevStartIndex: number,
-  prevEndIndex: number,
-  curStartIndex: number,
-  curEndIndex: number,
-  maxWindSpeed: number = MAX_REASONABLE_WIND_SPEED
-): WindEstimate | undefined {
+/** Inputs for {@link estimateWindFromCenterDrift}. */
+interface CenterDriftParams {
+  fixes: IGCFix[];
+  prevCircle: CircleSegment;
+  currentFit: FittedCircle;
+  prevStartIndex: number;
+  prevEndIndex: number;
+  curStartIndex: number;
+  curEndIndex: number;
+  maxWindSpeed: number;
+}
+
+function estimateWindFromCenterDrift(params: CenterDriftParams): WindEstimate | undefined {
+  const {
+    fixes, prevCircle, currentFit,
+    prevStartIndex, prevEndIndex, curStartIndex, curEndIndex, maxWindSpeed,
+  } = params;
   const prevFit = prevCircle.fittedCircle;
 
   // Time between circle midpoints
@@ -621,19 +670,21 @@ export function detectCircles(
   const t2Seconds = options?.t2Seconds ?? 15;
   const minFixesPerCircle = options?.minFixesPerCircle ?? 8;
   const maxBearingRateOpt = options?.maxBearingRate ?? MAX_BEARING_RATE;
-  const maxWindSpeedOpt = options?.maxReasonableWindSpeed ?? MAX_REASONABLE_WIND_SPEED;
-  const minGSVariationOpt = options?.minGroundSpeedVariation ?? MIN_GROUND_SPEED_VARIATION;
+  const tuning: WindTuning = {
+    maxWindSpeed: options?.maxReasonableWindSpeed ?? MAX_REASONABLE_WIND_SPEED,
+    minGroundSpeedVariation: options?.minGroundSpeedVariation ?? MIN_GROUND_SPEED_VARIATION,
+  };
 
   // Step 1: Compute bearing rates
   const bearingRates = computeBearingRates(fixes, lookbackSeconds, maxBearingRateOpt);
 
   // Step 2: Detect circling segments
   const circlingSegments = detectCirclingSegments(
-    fixes, bearingRates, minTurnRate, t1Seconds, t2Seconds
+    fixes, bearingRates, { minTurnRate, t1Seconds, t2Seconds }
   );
 
   // Step 3 & 4: Extract circles with per-circle metrics
-  const circles = extractCircles(fixes, circlingSegments, minFixesPerCircle, maxWindSpeedOpt, minGSVariationOpt);
+  const circles = extractCircles(fixes, circlingSegments, minFixesPerCircle, tuning);
 
   return { circlingSegments, circles, bearingRates };
 }

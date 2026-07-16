@@ -267,7 +267,7 @@ describe('detectCirclingSegments', () => {
 
     const combined = [...thermal1, ...glide, ...thermal2Base];
     const rates = computeBearingRates(combined, 5);
-    const segments = detectCirclingSegments(combined, rates, 4.0, 8, 15);
+    const segments = detectCirclingSegments(combined, rates, { minTurnRate: 4.0, t1Seconds: 8, t2Seconds: 15 });
 
     expect(segments.length).toBe(2);
   });

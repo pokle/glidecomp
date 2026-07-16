@@ -181,7 +181,16 @@
 //     PG comps created on/after 2026-07-15 default to 's7f2024', earlier comps
 //     to 'gap2020' — so no pre-existing comp's scores move. Hang-gliding
 //     weights are untouched. Bump rolls caches so new-default comps recompute.
-export const SCORING_ENGINE_VERSION = 20;
+// v21: no behaviour change — internal refactor only (engine complexity review).
+//     Order-sensitive scoring signatures became options objects, the longest
+//     scoring/sequence functions were split into named helpers, the four
+//     oversized modules were broken into per-concern files (re-exported from
+//     the same entry modules), and the FAI validity/arrival cubics were pulled
+//     into named constants via a poly3 helper (identical arithmetic). Every
+//     scoring number is unchanged; the fingerprint moved because the hashed
+//     sources were reorganised, so the guard requires a bump. The cache roll is
+//     harmless — scores recompute identically.
+export const SCORING_ENGINE_VERSION = 21;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -189,4 +198,4 @@ export const SCORING_ENGINE_VERSION = 20;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "a77b409ef0333dab10385151036cc8addb23d1e32ce1df950a7e25ca49bb9bf9";
+  "39415a09c46672750fa5e1f05db979f03ce56b9b03553155ef6b0364d0a6ec31";

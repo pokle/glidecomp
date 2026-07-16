@@ -49,7 +49,9 @@
     "seed:sample": "bun web/scripts/seed-sample-comp.ts",
     "detect-events": "bun web/engine/cli/detect-events.ts",
     "get-xcontest-task": "bun web/engine/cli/get-xcontest-task.ts",
-    "score-task": "bun web/engine/cli/score-task.ts"
+    "score-task": "bun web/engine/cli/score-task.ts",
+    "bench-task": "bun web/engine/cli/bench-task.ts",
+    "bench-analysis": "bun web/engine/cli/bench-analysis.ts"
   },
   "workspaces": [
     "web/engine",
