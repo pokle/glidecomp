@@ -7,7 +7,7 @@ import {
   createTask,
   clearCompData,
 } from "./helpers";
-import { encodeId } from "../src/sqids";
+import { encodeId, decodeId } from "../src/sqids";
 
 const ALPHABET = env.SQIDS_ALPHABET;
 
@@ -318,6 +318,71 @@ describe("PATCH /api/comp/:comp_id/task/:task_id", () => {
       "PATCH",
       `/api/comp/${compId}/task/${taskId}`,
       { pilot_classes: ["open", "novice"] }
+    );
+    expect(res.status).toBe(400);
+  });
+
+  // Stopped tasks (issue #264, S7F §12.3)
+  test("sets and clears the task stop announcement time, audit-logged and score-bumping", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+
+    const setRes = await authRequest(
+      "PATCH",
+      `/api/comp/${compId}/task/${taskId}`,
+      { stop_announcement_time: "2026-01-15T03:45:00Z" }
+    );
+    expect(setRes.status).toBe(200);
+    const setData = (await setRes.json()) as { stop_announcement_time: string | null };
+    expect(setData.stop_announcement_time).toBe("2026-01-15T03:45:00.000Z");
+
+    // GET reflects it
+    const getRes = await authRequest("GET", `/api/comp/${compId}/task/${taskId}`);
+    const getData = (await getRes.json()) as { stop_announcement_time: string | null };
+    expect(getData.stop_announcement_time).toBe("2026-01-15T03:45:00.000Z");
+
+    // Audit-logged as a stop
+    const auditRows = await env.DB.prepare(
+      "SELECT description FROM audit_log ORDER BY audit_id"
+    ).all<{ description: string }>();
+    expect(
+      auditRows.results.some((r) => r.description.includes("Stopped the task"))
+    ).toBe(true);
+
+    // Scores marked stale (inputs_rev bumped on the task_scores row)
+    const scoresRow = await env.DB.prepare(
+      "SELECT inputs_rev FROM task_scores WHERE task_id = ?"
+    )
+      .bind(decodeId(ALPHABET, taskId))
+      .first<{ inputs_rev: number }>();
+    expect(scoresRow?.inputs_rev ?? 0).toBeGreaterThanOrEqual(1);
+
+    // Clearing the stop is audit-logged too
+    const clearRes = await authRequest(
+      "PATCH",
+      `/api/comp/${compId}/task/${taskId}`,
+      { stop_announcement_time: null }
+    );
+    expect(clearRes.status).toBe(200);
+    const clearData = (await clearRes.json()) as { stop_announcement_time: string | null };
+    expect(clearData.stop_announcement_time).toBeNull();
+    const auditRows2 = await env.DB.prepare(
+      "SELECT description FROM audit_log ORDER BY audit_id"
+    ).all<{ description: string }>();
+    expect(
+      auditRows2.results.some((r) =>
+        r.description.includes("Cleared the task stop")
+      )
+    ).toBe(true);
+  });
+
+  test("rejects an unparseable stop announcement time", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+    const res = await authRequest(
+      "PATCH",
+      `/api/comp/${compId}/task/${taskId}`,
+      { stop_announcement_time: "yesterday-ish" }
     );
     expect(res.status).toBe(400);
   });

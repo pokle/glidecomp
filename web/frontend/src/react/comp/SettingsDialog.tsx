@@ -73,6 +73,7 @@ export function SettingsDialog({
     jtgMax: useId(),
     leadingTimeRatio: useId(),
     essNotGoal: useId(),
+    scoreBack: useId(),
   };
 
   // GAP scoring parameters — fall back to the official per-category FAI
@@ -158,6 +159,10 @@ export function SettingsDialog({
   const [essNotGoal, setEssNotGoal] = useState(
     String(Math.round((gp.essNotGoalFactor ?? 0.8) * 100))
   );
+  // PG score-back time (S7F §5.6, §12.3.1), shown in minutes.
+  const [scoreBack, setScoreBack] = useState(
+    String(Math.round((gp.scoreBackTime ?? 300) / 60))
+  );
 
   const [saving, setSaving] = useState(false);
 
@@ -193,6 +198,7 @@ export function SettingsDialog({
     setJtgFactor(String(d.jumpTheGunFactor));
     setJtgMax(String(d.jumpTheGunMaxSeconds));
     setEssNotGoal(String(Math.round(d.essNotGoalFactor * 100)));
+    setScoreBack(String(Math.round(d.scoreBackTime / 60)));
   }
 
   // Live class list for the default-class dropdown.
@@ -268,6 +274,7 @@ export function SettingsDialog({
       jumpTheGunFactor: parseField(jtgFactor, 2),
       jumpTheGunMaxSeconds: parseField(jtgMax, 300),
       essNotGoalFactor: parseField(essNotGoal, 80) / 100,
+      scoreBackTime: parseField(scoreBack, 5) * 60,
     };
 
     setSaving(true);
@@ -557,6 +564,26 @@ export function SettingsDialog({
                   FAI S7F §12.1: an HG pilot who reaches ESS but lands before goal keeps
                   this share of their time and arrival points. Spec default 80. No effect
                   on PG (the spec fixes it at 0 — no goal, no time points).
+                </FieldDescription>
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor={ids.scoreBack}>
+                  Score-back time (min, PG stopped tasks)
+                </FieldLabel>
+                <Input
+                  id={ids.scoreBack}
+                  type="number"
+                  min={0}
+                  max={60}
+                  step={1}
+                  value={scoreBack}
+                  onChange={(e) => setScoreBack(e.target.value)}
+                />
+                <FieldDescription>
+                  FAI S7F §5.6, §12.3.1: when a PG task is stopped, the task stop time is
+                  the stop announcement minus this. Spec default 5 minutes. No effect on HG
+                  (scored back one start-gate interval, or 15 minutes with a single gate).
                 </FieldDescription>
               </Field>
 

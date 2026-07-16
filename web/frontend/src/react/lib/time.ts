@@ -102,6 +102,65 @@ export function zonedToUtcHHMM(
 }
 
 /**
+ * UTC ISO instant for a `datetime-local` value ("YYYY-MM-DDTHH:MM")
+ * interpreted as a wall clock in `timeZone` (UTC when null). Runs the
+ * offset lookup twice so a wall time near a DST transition converges on
+ * the offset actually in force — same approach as {@link zonedToUtcHHMM}.
+ * Used by the stopped-task editor (issue #264): organisers enter the stop
+ * announcement in comp-local time; scoring stores the UTC instant.
+ */
+export function zonedDateTimeLocalToUtcISO(
+  local: string,
+  timeZone: string | null
+): string | null {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(local.trim());
+  if (!m) return null;
+  const wallAsUtc = new Date(`${m[1]}T${m[2]}:${m[3]}:00Z`);
+  if (Number.isNaN(wallAsUtc.getTime())) return null;
+  if (!timeZone) return wallAsUtc.toISOString();
+  try {
+    let utc = new Date(
+      wallAsUtc.getTime() - zoneOffsetMinutes(wallAsUtc, timeZone) * 60_000
+    );
+    utc = new Date(wallAsUtc.getTime() - zoneOffsetMinutes(utc, timeZone) * 60_000);
+    return utc.toISOString();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The `datetime-local` value ("YYYY-MM-DDTHH:MM") showing a UTC instant as
+ * a wall clock in `timeZone` (UTC when null) — the inverse of
+ * {@link zonedDateTimeLocalToUtcISO} to the minute.
+ */
+export function utcISOToZonedDateTimeLocal(
+  iso: string,
+  timeZone: string | null
+): string | null {
+  const utc = new Date(iso);
+  if (Number.isNaN(utc.getTime())) return null;
+  try {
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: timeZone ?? "UTC",
+        hourCycle: "h23",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+        .formatToParts(utc)
+        .map((p) => [p.type, p.value])
+    );
+    return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Zone label for display next to times: the IANA name plus its UTC offset
  * at `refDate` — "Australia/Melbourne (GMT+11)" — so the DST offset matches
  * the comp date. Uses the viewer's zone when `timeZone` is undefined. Falls

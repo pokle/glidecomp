@@ -78,6 +78,9 @@ export interface TaskDetailData {
   task_date: string;
   creation_date: string;
   xctsk: XCTask | null;
+  /** Stopped tasks (S7F §12.3): the recorded stop announcement time (ISO
+   * UTC), or null when the task ran to completion. */
+  stop_announcement_time: string | null;
   pilot_classes: string[];
   track_count: number;
 }
@@ -143,11 +146,32 @@ export interface PilotScoreEntry {
   early_start_outcome?: "pg_launch_to_sss" | "hg_penalty" | "hg_min_distance" | null;
   /** Automatic jump-the-gun penalty points deducted (HG early starts). */
   jump_the_gun_penalty?: number | null;
+  /** Stopped tasks (S7F §12.3.6): altitude-bonus metres folded into
+   * flown_distance for a pilot still flying at the stop. */
+  stopped_altitude_bonus?: number | null;
+}
+
+/** Whole-class stopped-task outcome (S7F §12.3) — see the API's ClassStoppedInfo. */
+export interface ClassStoppedInfo {
+  stop_time_ms: number;
+  scored_window_seconds: number | null;
+  minimum_run_seconds: number;
+  requirement_met: boolean;
+  stopped_validity: number;
+  time_points_reduction: number;
+  num_landed_before_stop: number;
 }
 
 export interface ClassScore {
   pilot_class: string;
-  task_validity: { launch: number; distance: number; time: number; task: number };
+  task_validity: {
+    launch: number;
+    distance: number;
+    time: number;
+    /** Stopped-task validity (S7F §12.3.3), present when the task was stopped. */
+    stopped?: number;
+    task: number;
+  };
   available_points: {
     distance: number;
     time: number;
@@ -156,6 +180,8 @@ export interface ClassScore {
     total: number;
   };
   pilots: PilotScoreEntry[];
+  /** Present when the task was scored as stopped (S7F §12.3). */
+  stopped?: ClassStoppedInfo;
 }
 
 export interface TaskScoreData {

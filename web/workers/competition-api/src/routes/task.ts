@@ -220,7 +220,8 @@ export const taskRoutes = new Hono<HonoEnv>()
       }
 
       const task = await c.env.DB.prepare(
-        `SELECT task_id, comp_id, name, task_date, creation_date, xctsk
+        `SELECT task_id, comp_id, name, task_date, creation_date, xctsk,
+                stop_announcement_time
          FROM task WHERE task_id = ? AND comp_id = ?`
       )
         .bind(taskId, compId)
@@ -251,6 +252,7 @@ export const taskRoutes = new Hono<HonoEnv>()
         task_date: task.task_date,
         creation_date: task.creation_date,
         xctsk: task.xctsk ? JSON.parse(task.xctsk as string) : null,
+        stop_announcement_time: (task.stop_announcement_time as string | null) ?? null,
         pilot_classes: tc.results.map((r) => r.pilot_class),
         track_count: trackCount?.cnt ?? 0,
       });
@@ -272,7 +274,8 @@ export const taskRoutes = new Hono<HonoEnv>()
 
       // Verify task exists and belongs to comp; capture current state for audit
       const task = await c.env.DB.prepare(
-        "SELECT task_id, name, task_date, xctsk FROM task WHERE task_id = ? AND comp_id = ?"
+        `SELECT task_id, name, task_date, xctsk, stop_announcement_time
+         FROM task WHERE task_id = ? AND comp_id = ?`
       )
         .bind(taskId, compId)
         .first<{
@@ -280,6 +283,7 @@ export const taskRoutes = new Hono<HonoEnv>()
           name: string;
           task_date: string;
           xctsk: string | null;
+          stop_announcement_time: string | null;
         }>();
 
       if (!task) {
@@ -352,6 +356,17 @@ export const taskRoutes = new Hono<HonoEnv>()
         updates.push("xctsk = ?");
         values.push(body.xctsk ? JSON.stringify(body.xctsk) : null);
       }
+      // Stopped tasks (issue #264, S7F §12.3): store the announcement as a
+      // normalized ISO UTC instant so the scorer and the UI agree on it.
+      const newStopTime = body.stop_announcement_time !== undefined
+        ? (body.stop_announcement_time === null
+            ? null
+            : new Date(Date.parse(body.stop_announcement_time)).toISOString())
+        : undefined;
+      if (newStopTime !== undefined) {
+        updates.push("stop_announcement_time = ?");
+        values.push(newStopTime);
+      }
 
       if (updates.length > 0) {
         values.push(taskId);
@@ -401,6 +416,28 @@ export const taskRoutes = new Hono<HonoEnv>()
           scoreInputsChanged = true;
         }
       }
+      // Stopping (or un-stopping) a task rescores every pilot in it — the
+      // spec's stopped-task machinery (§12.3) turns on/off with this field.
+      if (newStopTime !== undefined && newStopTime !== task.stop_announcement_time) {
+        if (task.stop_announcement_time === null && newStopTime !== null) {
+          auditChanges.push(
+            `Stopped the task — stop announcement time ${newStopTime} (scored per FAI S7F §12.3)`
+          );
+        } else if (newStopTime === null) {
+          auditChanges.push(
+            "Cleared the task stop — task scored as run to completion"
+          );
+        } else {
+          auditChanges.push(
+            describeChange(
+              "task stop announcement time",
+              task.stop_announcement_time,
+              newStopTime
+            )
+          );
+        }
+        scoreInputsChanged = true;
+      }
       if (body.xctsk !== undefined) {
         const oldHasXctsk = task.xctsk !== null;
         const newHasXctsk = body.xctsk !== null;
@@ -445,7 +482,8 @@ export const taskRoutes = new Hono<HonoEnv>()
 
       // Return updated task
       const updated = await c.env.DB.prepare(
-        `SELECT task_id, comp_id, name, task_date, creation_date, xctsk
+        `SELECT task_id, comp_id, name, task_date, creation_date, xctsk,
+                stop_announcement_time
          FROM task WHERE task_id = ?`
       )
         .bind(taskId)
@@ -466,6 +504,8 @@ export const taskRoutes = new Hono<HonoEnv>()
         task_date: updated.task_date,
         creation_date: updated.creation_date,
         xctsk: updated.xctsk ? JSON.parse(updated.xctsk as string) : null,
+        stop_announcement_time:
+          (updated.stop_announcement_time as string | null) ?? null,
         pilot_classes: tc.results.map((r) => r.pilot_class),
       });
     }

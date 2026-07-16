@@ -115,6 +115,14 @@ export interface GAPParameters {
    */
   jumpTheGunMaxSeconds: number;
   /**
+   * Paragliding score-back time in seconds (FAI S7F §5.6, §12.3.1): when a
+   * task is stopped, the PG task stop time is the stop announcement time
+   * minus this competition parameter (default 300 s = 5 minutes). Ignored
+   * for hang gliding, whose score-back is one start-gate interval (or 15
+   * minutes with a single gate) per §12.3.1.
+   */
+  scoreBackTime: number;
+  /**
    * Hang-gliding "ESS but not goal" (FAI S7F §12.1): the fraction of time
    * and arrival points KEPT by a pilot who reaches the end of the speed
    * section but fails to reach goal (reaching goal "validates" the speed
@@ -167,6 +175,7 @@ export const DEFAULT_GAP_PARAMETERS: GAPParameters = {
   useDistanceDifficulty: true,
   jumpTheGunFactor: 2,
   jumpTheGunMaxSeconds: 300,
+  scoreBackTime: 300,
   essNotGoalFactor: 0.8,
 };
 

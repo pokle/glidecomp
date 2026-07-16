@@ -88,6 +88,7 @@ Tables referenced from the auth-api worker:
   - task_date (TEXT NOT NULL) — ISO date (e.g. "2026-01-15"). The competition day this task belongs to. Multiple tasks can share the same date (e.g. different classes flying different routes on the same day).
   - creation_date (TEXT NOT NULL)
   - xctsk (TEXT) — the XCTask JSON object. Stored directly in D1 (typically < 5KB). NULL until the task is defined.
+  - stop_announcement_time (TEXT) — stopped tasks (issue #264, FAI S7F §12.3): the recorded task stop announcement time as an ISO 8601 UTC datetime. NULL when the task ran to completion. When set, the scoring engine scores the task as stopped — the announcement is scored back to the task stop time (§12.3.1: PG minus the comp's `gap_params.scoreBackTime`, default 300 s; HG minus one start-gate interval, or 15 min for a single gate), every pilot is scored only for the scored time window (§12.3.4), pilots still flying at the stop earn the altitude bonus (§12.3.6: GNSS height above goal × 4.0 PG / 5.0 HG), a fourth stopped-task validity factor applies (§12.3.3), and a task stopped before min(1 h, nominalTime/2) of running time scores zero (§12.3.2). Edited via `PATCH .../task/:task_id` (`stop_announcement_time`, null to clear) — audit-logged and score-staleness-bumped like any scoring input.
 
 - **task_class**: Join table linking tasks to the pilot classes they score. A task can score multiple classes (e.g. both 'open' and 'novice' fly the same task). A pilot is only scored in a task if their `comp_pilot.pilot_class` matches one of the task's classes.
   - task_id (INTEGER NOT NULL REFERENCES task(task_id) ON DELETE CASCADE)
@@ -204,7 +205,7 @@ Admin management is handled via `PATCH` — the client sends the desired admin l
 |--------|-------|------|-------------|
 | POST | `/api/comp/:comp_id/task` | Admin | Create task (name, pilot classes). Returns new task with task_id. |
 | GET | `/api/comp/:comp_id/task/:task_id` | Optional | Get task details including xctsk data and track list. Public for non-test. |
-| PATCH | `/api/comp/:comp_id/task/:task_id` | Admin | Update task name, pilot classes (via `task_class`), **and/or xctsk data**. |
+| PATCH | `/api/comp/:comp_id/task/:task_id` | Admin | Update task name, pilot classes (via `task_class`), **and/or xctsk data**, and/or `stop_announcement_time` (stopped tasks, S7F §12.3 — set to stop, null to clear; audit-logged, rescores the task). |
 | DELETE | `/api/comp/:comp_id/task/:task_id` | Admin | Delete task. D1 rows cascade-deleted immediately. R2 cleanup enqueued via Queue. |
 | POST | `/api/comp/:comp_id/task/:task_id/reprocess` | Admin | Reprocess all `flight_data` for this task. Enqueues one Cloudflare Queue message per `task_track` — each Queue Consumer fetches the IGC from R2, parses it against the current xctsk, and writes updated `flight_data` back to D1. Use after changing task xctsk. |
 

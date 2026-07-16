@@ -1,0 +1,14 @@
+-- Stopped tasks (issue #264, FAI S7F §12.3).
+--
+-- task.stop_announcement_time holds the recorded "task stop announcement
+-- time" as an ISO 8601 UTC datetime (e.g. "2026-01-15T03:45:00.000Z").
+-- NULL means the task ran to completion (the overwhelmingly common case).
+--
+-- When set, the scoring engine scores the task as STOPPED: the announcement
+-- is scored back to the task stop time (§12.3.1 — PG minus the comp's
+-- gap_params.scoreBackTime, HG minus one start-gate interval), every pilot
+-- is scored only for the scored time window (§12.3.4), pilots still flying
+-- earn the altitude bonus (§12.3.6), and the stopped-task validity factor
+-- applies (§12.3.3). Setting or clearing it is audit-logged and marks the
+-- task's materialized scores stale.
+ALTER TABLE task ADD COLUMN stop_announcement_time TEXT;
