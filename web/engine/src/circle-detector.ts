@@ -17,7 +17,7 @@
 
 import { IGCFix } from './igc-parser';
 import { calculateBearing, andoyerDistance } from './geo';
-import { TrackSegment } from './event-detector';
+import { TrackSegment } from './event-types';
 
 // --- Constants ---
 
