@@ -13,7 +13,7 @@ import { IGCFix } from './igc-parser';
 import { andoyerDistance, calculateTrackDistance } from './geo';
 import { XCTask, getEffectiveSSSIndex, getEffectiveESSIndex, getGoalIndex } from './xctsk-parser';
 import { resolveTurnpointSequence } from './turnpoint-sequence';
-import { detectCircles } from './circle-detector';
+import { detectCircles, type CircleSegment } from './circle-detector';
 import { resolveThresholds, DEFAULT_THRESHOLDS, type DetectionThresholds, type PartialThresholds } from './thresholds';
 
 export type FlightEventType =
@@ -797,6 +797,142 @@ function adjustFixIndex(event: FlightEvent, offset: number): void {
 }
 
 /**
+ * Entry + exit events for one detected thermal. Indices are shifted by
+ * `indexOffset` back into the original (pre-takeoff-slice) fix array.
+ */
+function thermalToEvents(
+  thermal: ThermalSegment,
+  indexOffset: number,
+  fixes: IGCFix[],
+): FlightEvent[] {
+  const startIndex = thermal.startIndex + indexOffset;
+  const endIndex = thermal.endIndex + indexOffset;
+  const altitudeGain = thermal.endAltitude - thermal.startAltitude;
+  // Entry/exit events sit on the track's boundary fixes (like glide events)
+  // so the markers land where the pilot actually entered and left the climb;
+  // the thermal's mean position stays available as ThermalSegment.location.
+  const details: ThermalEventDetails = {
+    avgClimbRate: thermal.avgClimbRate,
+    duration: thermal.duration,
+    altitudeGain,
+  };
+  const segment = { startIndex, endIndex };
+  return [
+    {
+      id: `thermal-entry-${startIndex}`,
+      type: 'thermal_entry',
+      time: fixes[startIndex].time,
+      latitude: fixes[startIndex].latitude,
+      longitude: fixes[startIndex].longitude,
+      altitude: thermal.startAltitude,
+      description: `Thermal entry (${thermal.avgClimbRate > 0 ? '+' : ''}${thermal.avgClimbRate.toFixed(1)}m/s avg)`,
+      details,
+      segment,
+    },
+    {
+      id: `thermal-exit-${endIndex}`,
+      type: 'thermal_exit',
+      time: fixes[endIndex].time,
+      latitude: fixes[endIndex].latitude,
+      longitude: fixes[endIndex].longitude,
+      altitude: thermal.endAltitude,
+      description: `Thermal exit (${altitudeGain > 0 ? '+' : ''}${altitudeGain.toFixed(0)}m gained)`,
+      details,
+      segment,
+    },
+  ];
+}
+
+/** Start + end events for one detected glide. */
+function glideToEvents(
+  glide: GlideSegment,
+  indexOffset: number,
+  fixes: IGCFix[],
+): FlightEvent[] {
+  const startIndex = glide.startIndex + indexOffset;
+  const endIndex = glide.endIndex + indexOffset;
+  const averageSpeed = glide.duration > 0 ? glide.distance / glide.duration : 0;
+  const segment = { startIndex, endIndex };
+  return [
+    {
+      id: `glide-start-${startIndex}`,
+      type: 'glide_start',
+      time: fixes[startIndex].time,
+      latitude: fixes[startIndex].latitude,
+      longitude: fixes[startIndex].longitude,
+      altitude: glide.startAltitude,
+      description: glide.glideRatio !== undefined
+        ? `Glide start (L/D ${glide.glideRatio.toFixed(0)})`
+        : 'Glide start (altitude gained)',
+      details: {
+        distance: glide.distance,
+        glideRatio: glide.glideRatio,
+        duration: glide.duration,
+        averageSpeed,
+      },
+      segment,
+    },
+    {
+      id: `glide-end-${endIndex}`,
+      type: 'glide_end',
+      time: fixes[endIndex].time,
+      latitude: fixes[endIndex].latitude,
+      longitude: fixes[endIndex].longitude,
+      altitude: glide.endAltitude,
+      description: `Glide end (${(glide.distance / 1000).toFixed(2)}km)`,
+      details: {
+        distance: glide.distance,
+        glideRatio: glide.glideRatio,
+        altitudeLost: glide.startAltitude - glide.endAltitude,
+        averageSpeed,
+      },
+      segment,
+    },
+  ];
+}
+
+/** The `circle_complete` event for one detected 360° circle. */
+function circleToEvent(
+  circle: CircleSegment,
+  indexOffset: number,
+  fixes: IGCFix[],
+): FlightEvent {
+  const startIndex = circle.startIndex + indexOffset;
+  const endIndex = circle.endIndex + indexOffset;
+  const dir = circle.turnDirection === 'right' ? 'R' : 'L';
+  const climbStr = circle.climbRate >= 0
+    ? `+${circle.climbRate.toFixed(1)}`
+    : circle.climbRate.toFixed(1);
+
+  return {
+    id: `circle-${startIndex}`,
+    type: 'circle_complete',
+    time: fixes[startIndex].time,
+    latitude: circle.fittedCircle.centerLat,
+    longitude: circle.fittedCircle.centerLon,
+    altitude: fixes[startIndex].gnssAltitude,
+    description: `Circle #${circle.circleNumber} (${dir}, ${climbStr}m/s, r=${Math.round(circle.fittedCircle.radiusMeters)}m)`,
+    details: {
+      turnDirection: circle.turnDirection,
+      duration: circle.duration,
+      climbRate: circle.climbRate,
+      radius: circle.fittedCircle.radiusMeters,
+      centerLat: circle.fittedCircle.centerLat,
+      centerLon: circle.fittedCircle.centerLon,
+      fitError: circle.fittedCircle.fitErrorRMS,
+      quality: circle.quality,
+      strongestLiftBearing: circle.strongestLiftBearing,
+      circleNumber: circle.circleNumber,
+      windSpeed: circle.windFromGroundSpeed?.speed,
+      windDirection: circle.windFromGroundSpeed?.direction,
+      driftWindSpeed: circle.windFromCenterDrift?.speed,
+      driftWindDirection: circle.windFromCenterDrift?.direction,
+    },
+    segment: { startIndex, endIndex },
+  };
+}
+
+/**
  * Main function to detect all flight events
  */
 export function detectFlightEvents(
@@ -833,94 +969,14 @@ export function detectFlightEvents(
 
   // Detect thermals (only after takeoff)
   const thermals = detectThermals(flightFixes, thresholds);
-
   for (const thermal of thermals) {
-    // Adjust indices to reference original array
-    const adjustedStartIndex = thermal.startIndex + indexOffset;
-    const adjustedEndIndex = thermal.endIndex + indexOffset;
-
-    // Entry/exit events sit on the track's boundary fixes (like glide events)
-    // so the markers land where the pilot actually entered and left the climb;
-    // the thermal's mean position stays available as ThermalSegment.location.
-    allEvents.push({
-      id: `thermal-entry-${adjustedStartIndex}`,
-      type: 'thermal_entry',
-      time: fixes[adjustedStartIndex].time,
-      latitude: fixes[adjustedStartIndex].latitude,
-      longitude: fixes[adjustedStartIndex].longitude,
-      altitude: thermal.startAltitude,
-      description: `Thermal entry (${thermal.avgClimbRate > 0 ? '+' : ''}${thermal.avgClimbRate.toFixed(1)}m/s avg)`,
-      details: {
-        avgClimbRate: thermal.avgClimbRate,
-        duration: thermal.duration,
-        altitudeGain: thermal.endAltitude - thermal.startAltitude,
-      },
-      segment: { startIndex: adjustedStartIndex, endIndex: adjustedEndIndex },
-    });
-
-    allEvents.push({
-      id: `thermal-exit-${adjustedEndIndex}`,
-      type: 'thermal_exit',
-      time: fixes[adjustedEndIndex].time,
-      latitude: fixes[adjustedEndIndex].latitude,
-      longitude: fixes[adjustedEndIndex].longitude,
-      altitude: thermal.endAltitude,
-      description: `Thermal exit (${(thermal.endAltitude - thermal.startAltitude) > 0 ? '+' : ''}${(thermal.endAltitude - thermal.startAltitude).toFixed(0)}m gained)`,
-      details: {
-        avgClimbRate: thermal.avgClimbRate,
-        duration: thermal.duration,
-        altitudeGain: thermal.endAltitude - thermal.startAltitude,
-      },
-      segment: { startIndex: adjustedStartIndex, endIndex: adjustedEndIndex },
-    });
+    allEvents.push(...thermalToEvents(thermal, indexOffset, fixes));
   }
 
   // Detect glides (only after takeoff)
   const glides = detectGlides(flightFixes, thermals, thresholds);
-
   for (const glide of glides) {
-    // Adjust indices to reference original array
-    const adjustedStartIndex = glide.startIndex + indexOffset;
-    const adjustedEndIndex = glide.endIndex + indexOffset;
-
-    // Calculate average speed in m/s
-    const averageSpeed = glide.duration > 0 ? glide.distance / glide.duration : 0;
-
-    allEvents.push({
-      id: `glide-start-${adjustedStartIndex}`,
-      type: 'glide_start',
-      time: fixes[adjustedStartIndex].time,
-      latitude: fixes[adjustedStartIndex].latitude,
-      longitude: fixes[adjustedStartIndex].longitude,
-      altitude: glide.startAltitude,
-      description: glide.glideRatio !== undefined
-        ? `Glide start (L/D ${glide.glideRatio.toFixed(0)})`
-        : 'Glide start (altitude gained)',
-      details: {
-        distance: glide.distance,
-        glideRatio: glide.glideRatio,
-        duration: glide.duration,
-        averageSpeed: averageSpeed,
-      },
-      segment: { startIndex: adjustedStartIndex, endIndex: adjustedEndIndex },
-    });
-
-    allEvents.push({
-      id: `glide-end-${adjustedEndIndex}`,
-      type: 'glide_end',
-      time: fixes[adjustedEndIndex].time,
-      latitude: fixes[adjustedEndIndex].latitude,
-      longitude: fixes[adjustedEndIndex].longitude,
-      altitude: glide.endAltitude,
-      description: `Glide end (${(glide.distance / 1000).toFixed(2)}km)`,
-      details: {
-        distance: glide.distance,
-        glideRatio: glide.glideRatio,
-        altitudeLost: glide.startAltitude - glide.endAltitude,
-        averageSpeed: averageSpeed,
-      },
-      segment: { startIndex: adjustedStartIndex, endIndex: adjustedEndIndex },
-    });
+    allEvents.push(...glideToEvents(glide, indexOffset, fixes));
   }
 
   // Detect altitude and vario extremes (only after takeoff)
@@ -954,39 +1010,7 @@ export function detectFlightEvents(
     minGroundSpeedVariation: thresholds.circle.minGroundSpeedVariation,
   });
   for (const circle of circleResult.circles) {
-    const adjustedStartIndex = circle.startIndex + indexOffset;
-    const adjustedEndIndex = circle.endIndex + indexOffset;
-    const dir = circle.turnDirection === 'right' ? 'R' : 'L';
-    const climbStr = circle.climbRate >= 0
-      ? `+${circle.climbRate.toFixed(1)}`
-      : circle.climbRate.toFixed(1);
-
-    allEvents.push({
-      id: `circle-${adjustedStartIndex}`,
-      type: 'circle_complete',
-      time: fixes[adjustedStartIndex].time,
-      latitude: circle.fittedCircle.centerLat,
-      longitude: circle.fittedCircle.centerLon,
-      altitude: fixes[adjustedStartIndex].gnssAltitude,
-      description: `Circle #${circle.circleNumber} (${dir}, ${climbStr}m/s, r=${Math.round(circle.fittedCircle.radiusMeters)}m)`,
-      details: {
-        turnDirection: circle.turnDirection,
-        duration: circle.duration,
-        climbRate: circle.climbRate,
-        radius: circle.fittedCircle.radiusMeters,
-        centerLat: circle.fittedCircle.centerLat,
-        centerLon: circle.fittedCircle.centerLon,
-        fitError: circle.fittedCircle.fitErrorRMS,
-        quality: circle.quality,
-        strongestLiftBearing: circle.strongestLiftBearing,
-        circleNumber: circle.circleNumber,
-        windSpeed: circle.windFromGroundSpeed?.speed,
-        windDirection: circle.windFromGroundSpeed?.direction,
-        driftWindSpeed: circle.windFromCenterDrift?.speed,
-        driftWindDirection: circle.windFromCenterDrift?.direction,
-      },
-      segment: { startIndex: adjustedStartIndex, endIndex: adjustedEndIndex },
-    });
+    allEvents.push(circleToEvent(circle, indexOffset, fixes));
   }
 
   // Sort by time
