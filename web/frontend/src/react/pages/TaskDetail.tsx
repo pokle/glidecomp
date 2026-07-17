@@ -20,6 +20,7 @@ import {
 } from "@/react/ui/dialog";
 import { Field, FieldLabel, FieldLegend, FieldSet } from "@/react/ui/field";
 import { Input } from "@/react/ui/input";
+import { DatePicker, TimePicker } from "@/react/ui/date-picker";
 import {
   Table,
   TableBody,
@@ -441,11 +442,16 @@ function EditTaskDialog({
   const [selectedClasses, setSelectedClasses] = useState<string[]>(
     compPilotClasses.filter((cls) => task.pilot_classes.includes(cls))
   );
-  // Stopped task (S7F §12.3): the stop announcement, edited as a comp-local
-  // wall clock ("" = task not stopped). Stored/scored as a UTC instant.
-  const [stopLocal, setStopLocal] = useState(
+  // Stopped task (S7F §12.3): the stop time, edited as a comp-local wall-clock
+  // time of day ("" = task not stopped) — the stop is always on the task date,
+  // so only the time is editable. Recombined with taskDate on save and stored/
+  // scored as a UTC instant.
+  const [stopTime, setStopTime] = useState(
     task.stop_announcement_time
-      ? (utcISOToZonedDateTimeLocal(task.stop_announcement_time, timezone) ?? "")
+      ? (utcISOToZonedDateTimeLocal(task.stop_announcement_time, timezone)?.slice(
+          11,
+          16
+        ) ?? "")
       : ""
   );
   const [saving, setSaving] = useState(false);
@@ -464,11 +470,13 @@ function EditTaskDialog({
       return;
     }
 
-    const stopIso = stopLocal
-      ? zonedDateTimeLocalToUtcISO(stopLocal, timezone)
-      : null;
-    if (stopLocal && !stopIso) {
-      toast.warning("Enter a valid stop announcement time");
+    // The stop is on the task date; combine it with the comp-local stop time.
+    const stopIso =
+      stopTime && taskDate
+        ? zonedDateTimeLocalToUtcISO(`${taskDate}T${stopTime}`, timezone)
+        : null;
+    if (stopTime && !stopIso) {
+      toast.warning("Enter a valid stop time");
       return;
     }
 
@@ -547,13 +555,12 @@ function EditTaskDialog({
             />
           </Field>
           <Field>
-            <FieldLabel htmlFor={dateId}>Date</FieldLabel>
-            <Input
-              id={dateId}
-              type="date"
+            <FieldLabel id={dateId}>Date</FieldLabel>
+            <DatePicker
               required
+              aria-labelledby={dateId}
               value={taskDate}
-              onChange={(e) => setTaskDate(e.target.value)}
+              onChange={setTaskDate}
             />
           </Field>
           <FieldSet>
@@ -568,28 +575,16 @@ function EditTaskDialog({
             ))}
           </FieldSet>
           <Field>
-            <FieldLabel htmlFor={stopId}>
-              Task stop announcement (
+            <FieldLabel id={stopId}>
+              Task stop (
               {zoneLabel(new Date(`${taskDate}T12:00:00Z`), timezone ?? "UTC")})
             </FieldLabel>
-            <div className="flex items-center gap-2">
-              <Input
-                id={stopId}
-                type="datetime-local"
-                value={stopLocal}
-                onChange={(e) => setStopLocal(e.target.value)}
-              />
-              {stopLocal ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setStopLocal("")}
-                >
-                  Clear
-                </Button>
-              ) : null}
-            </div>
+            <TimePicker
+              clearable
+              aria-labelledby={stopId}
+              value={stopTime}
+              onChange={setStopTime}
+            />
             <p className="text-xs text-muted-foreground">
               Set only when the task was stopped mid-flight (weather calldown).
               Scores are recomputed under the stopped-task rules (FAI S7F
