@@ -33,11 +33,6 @@ export default defineConfig(async () => {
     test: {
       setupFiles: ["./test/apply-migrations.ts"],
       include: ["test/**/*.test.ts"],
-      // Better Auth's dev-login signupEmail throws an internal "user already
-      // exists" rejection that escapes the route handler's try/catch on
-      // duplicate emails. We use unique emails per test, but suppress here
-      // as a safety net (matches competition-api's pattern).
-      dangerouslyIgnoreUnhandledErrors: true,
       // dev-login does a real signUp + signIn (Better Auth hashes a password
       // on each call). Multi-user tests do this twice plus several round
       // trips — the default 5s timeout is too tight on CI runners.

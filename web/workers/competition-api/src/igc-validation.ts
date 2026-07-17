@@ -1,5 +1,5 @@
 /**
- * Validate and stream-decompress an uploaded IGC body.
+ * Validate and decompress an uploaded IGC body.
  *
  * SEC-11 mitigation. The IGC upload routes accept gzip-compressed
  * bodies; the previous code applied a single 5 MB cap to the
@@ -10,19 +10,29 @@
  * This helper enforces four independent checks in the order they're
  * cheapest to run:
  *   1. Compressed-size cap (rejects giant blobs before allocating).
- *   2. Gzip magic (rejects non-gzip bodies before starting the
- *      DecompressionStream).
- *   3. Decompressed-size cap, enforced *while* streaming — never
- *      buffers more than the cap, even for highly compressible input.
+ *   2. Gzip magic (rejects non-gzip bodies before decompressing).
+ *   3. Decompressed-size cap, enforced by `gunzipSync`'s `maxOutputLength`
+ *      — zlib aborts with a RangeError the moment the output would exceed
+ *      the cap, so a bomb never materialises more than the cap in memory.
  *   4. SEC-04: IGC content shape — manufacturer record (`A…`) plus the
  *      `HFDTE` date header. Same pattern as
  *      `airscore-api/src/handlers/track.ts:isValidIgcContent`. Blocks
  *      authenticated callers from stashing up to 2 MiB of arbitrary
  *      gzipped text per registered pilot per task / per user in R2.
  *
+ * We decompress with the synchronous `node:zlib` `gunzipSync` (workerd has
+ * `nodejs_compat`) rather than a `DecompressionStream` pipeline: corrupt
+ * input and the bomb cap both surface as ordinary synchronous throws we
+ * catch here. The streaming APIs, by contrast, report decompression
+ * failures on internal promises that `pipeTo`/`pipeThrough` don't hand
+ * back, which leak as unhandled rejections (harmless in production, but
+ * noisy false positives in the test runner).
+ *
  * Errors are typed so the route can return a clean 400 with a
  * specific message instead of a generic 500.
  */
+
+import { gunzipSync } from "node:zlib";
 
 export const MAX_COMPRESSED_BYTES = 1 * 1024 * 1024; // 1 MiB compressed
 export const MAX_DECOMPRESSED_BYTES = 2 * 1024 * 1024; // 2 MiB decompressed
@@ -66,68 +76,48 @@ export async function validateAndDecompressIgc(
     });
   }
 
-  // Gzip magic: 1f 8b. Reject anything that isn't gzip before allocating
-  // a DecompressionStream — kills "store arbitrary bytes in R2" abuse too.
-  const head = new Uint8Array(body, 0, Math.min(2, body.byteLength));
-  if (head.length < 2 || head[0] !== 0x1f || head[1] !== 0x8b) {
+  // Gzip magic: 1f 8b. Reject anything that isn't gzip before decompressing
+  // — kills "store arbitrary bytes in R2" abuse too.
+  const bytes = new Uint8Array(body);
+  if (bytes.length < 2 || bytes[0] !== 0x1f || bytes[1] !== 0x8b) {
     throw new IgcValidationException({
       kind: "not_gzip",
       message: "File is not gzip-compressed",
     });
   }
 
-  // Stream-decompress with a hard cap. The pipeline is: source body →
-  // gzip decompressor → byte counter (errors on overflow) → consumer.
-  // We await every promise the pipeline produces (via allSettled) so
-  // pipeline errors are observed exactly once and never leak as
-  // unhandled rejections.
-  let total = 0;
-  const counter = new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, controller) {
-      total += chunk.byteLength;
-      if (total > MAX_DECOMPRESSED_BYTES) {
-        controller.error(
-          new IgcValidationException({
-            kind: "decompressed_too_large",
-            message: `Decompressed file too large (max ${MAX_DECOMPRESSED_BYTES} bytes)`,
-          })
-        );
-        return;
-      }
-      controller.enqueue(chunk);
-    },
-  });
-
-  const decompressor = new DecompressionStream("gzip");
-  const source = new Response(body).body!;
-
-  const sourcePipe = source.pipeTo(decompressor.writable);
-  const decompressPipe = decompressor.readable.pipeTo(counter.writable);
-  const consume = new Response(counter.readable).arrayBuffer();
-
-  const [, , consumeResult] = await Promise.allSettled([
-    sourcePipe,
-    decompressPipe,
-    consume,
-  ]);
-
-  if (consumeResult.status === "fulfilled") {
-    const text = new TextDecoder().decode(consumeResult.value);
-    // SEC-04: every real IGC starts with `A` (manufacturer record) and
-    // carries the `HFDTE` date header. Reject anything that doesn't so
-    // attackers can't use the upload as a free 2 MiB blob store in R2.
-    if (text[0] !== "A" || !text.includes("HFDTE")) {
+  // Decompress with a hard output cap. `maxOutputLength` makes zlib abort
+  // with a RangeError as soon as the output would exceed the cap, so a gzip
+  // bomb never buffers more than the cap. Corrupt/invalid deflate data
+  // throws an ordinary Error. Both are caught synchronously here — no stream
+  // pipeline, so no internal promise can leak as an unhandled rejection.
+  let decompressed: Uint8Array;
+  try {
+    decompressed = gunzipSync(bytes, {
+      maxOutputLength: MAX_DECOMPRESSED_BYTES,
+    });
+  } catch (err) {
+    if (err instanceof RangeError) {
       throw new IgcValidationException({
-        kind: "not_igc_content",
-        message: "File does not look like an IGC track log",
+        kind: "decompressed_too_large",
+        message: `Decompressed file too large (max ${MAX_DECOMPRESSED_BYTES} bytes)`,
       });
     }
-    return text;
+    throw new IgcValidationException({
+      kind: "decompression_failed",
+      message: "Could not decompress file (not valid gzip)",
+    });
   }
-  const err = consumeResult.reason;
-  if (err instanceof IgcValidationException) throw err;
-  throw new IgcValidationException({
-    kind: "decompression_failed",
-    message: "Could not decompress file (not valid gzip)",
-  });
+
+  const text = new TextDecoder().decode(decompressed);
+  // SEC-04: every real IGC starts with `A` (manufacturer record) and
+  // carries the `HFDTE` date header. Reject anything that doesn't so
+  // attackers can't use the upload as a free 2 MiB blob store in R2.
+  if (text[0] !== "A" || !text.includes("HFDTE")) {
+    throw new IgcValidationException({
+      kind: "not_igc_content",
+      message: "File does not look like an IGC track log",
+    });
+  }
+  return text;
 }
