@@ -18,6 +18,7 @@ import {
 } from "@/react/ui/dialog";
 import { Field, FieldLabel, FieldLegend, FieldSet } from "@/react/ui/field";
 import { Input } from "@/react/ui/input";
+import { DatePicker } from "@/react/ui/date-picker";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { goToSignIn, useAdminView, useUser } from "../lib/user";
@@ -826,13 +827,12 @@ function CreateTaskDialog({
             />
           </Field>
           <Field>
-            <FieldLabel htmlFor={dateId}>Date</FieldLabel>
-            <Input
-              id={dateId}
-              type="date"
+            <FieldLabel id={dateId}>Date</FieldLabel>
+            <DatePicker
               required
+              aria-labelledby={dateId}
               value={taskDate}
-              onChange={(e) => setTaskDate(e.target.value)}
+              onChange={setTaskDate}
             />
           </Field>
           <FieldSet>

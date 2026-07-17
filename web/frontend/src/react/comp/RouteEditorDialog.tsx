@@ -34,6 +34,7 @@ import {
   DialogTitle,
 } from "@/react/ui/dialog";
 import { Input } from "@/react/ui/input";
+import { TimePicker } from "@/react/ui/date-picker";
 import { api } from "../../comp/api";
 import { fetchTaskByCodeWithRaw } from "../../analysis/xctsk-fetch";
 import { toast } from "../lib/toast";
@@ -999,13 +1000,12 @@ export function RouteEditorDialog({
               <ul className="mt-2 flex flex-col gap-2">
                 {gates.map((g, i) => (
                   <li key={i} className="flex items-center gap-2">
-                    <Input
-                      type="time"
+                    <TimePicker
                       className="w-32"
                       required
                       aria-label={`Gate ${i + 1} time — ${timeZoneLabel}`}
                       value={g}
-                      onChange={(e) => updateGate(i, e.target.value)}
+                      onChange={(v) => updateGate(i, v)}
                     />
                     <Button
                       type="button"
@@ -1078,25 +1078,14 @@ export function RouteEditorDialog({
                 />
                 <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   Deadline — {timeZoneLabel}
-                  <Input
-                    type="time"
+                  <TimePicker
                     className="w-32"
+                    clearable
                     aria-label={`Goal deadline — ${timeZoneLabel}`}
                     value={goalDeadline}
-                    onChange={(e) => setGoalDeadline(e.target.value)}
+                    onChange={setGoalDeadline}
                   />
-                  {goalDeadline ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setGoalDeadline("")}
-                    >
-                      Clear
-                    </Button>
-                  ) : (
-                    "(optional)"
-                  )}
+                  {goalDeadline ? null : "(optional)"}
                 </span>
               </div>
               {goalType === "LINE" ? (

@@ -17,6 +17,7 @@ import {
 } from "@/react/ui/dialog";
 import { Field, FieldDescription, FieldLabel } from "@/react/ui/field";
 import { Input } from "@/react/ui/input";
+import { DatePicker } from "@/react/ui/date-picker";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
@@ -342,25 +343,16 @@ export function SettingsDialog({
           </div>
 
           <Field>
-            <FieldLabel htmlFor={ids.closeDate}>Close Date</FieldLabel>
-            <Input
-              id={ids.closeDate}
-              type="date"
+            <FieldLabel id={ids.closeDate}>Close Date</FieldLabel>
+            <DatePicker
+              clearable
+              aria-labelledby={ids.closeDate}
               value={closeDate}
-              onChange={(e) => setCloseDate(e.target.value)}
+              onChange={setCloseDate}
             />
             <FieldDescription>
               After this date, track submissions are rejected. Leave empty for open-ended.
             </FieldDescription>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="self-start"
-              onClick={() => setCloseDate("")}
-            >
-              Clear
-            </Button>
           </Field>
 
           <div>
