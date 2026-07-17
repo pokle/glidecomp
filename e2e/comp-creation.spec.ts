@@ -87,7 +87,12 @@ test("dev login, create competition and task", async ({ page }) => {
   await page.getByRole("button", { name: "New Task" }).first().click();
   const taskDialog = page.getByRole("dialog");
   await taskDialog.getByLabel("Name").fill("Day 1 - Ridge Run");
-  await taskDialog.getByLabel("Date").fill("2026-04-15");
+  // The Date field is a segmented picker (react-aria), not a native input, so
+  // it can't be filled — type into its day segment; en-GB order is D/M/Y and
+  // each segment auto-advances (15 → 04 → 2026 = 2026-04-15).
+  const dateField = taskDialog.getByRole("group", { name: "Date" });
+  await dateField.getByRole("spinbutton", { name: /day/ }).click();
+  await page.keyboard.type("15042026");
   // Pilot class checkboxes default to all checked (just "open")
   await taskDialog.getByRole("button", { name: "Create" }).click();
 
