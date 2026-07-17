@@ -1,0 +1,54 @@
+diff --git a/dist/endpoint.cjs b/dist/endpoint.cjs
+index 070dc5543ce6879416eaa059b50ea2318244b246..2c633284f6bf18a9ca8c9e7377093f43fde160b5 100644
+--- a/dist/endpoint.cjs
++++ b/dist/endpoint.cjs
+@@ -27,14 +27,17 @@ function createEndpoint(pathOrOptions, handlerOrOptions, handlerOrNever) {
+ 				code: "VALIDATION_ERROR"
+ 			});
+ 		}
+-		const response = await handler(internalContext).catch(async (e) => {
++		let response;
++		try {
++			response = await handler(internalContext);
++		} catch (e) {
+ 			if (require_utils.isAPIError(e)) {
+ 				const onAPIError = options.onAPIError;
+ 				if (onAPIError) await onAPIError(e);
+-				if (context.asResponse) return e;
+-			}
+-			throw e;
+-		});
++				if (context.asResponse) response = e;
++				else throw e;
++			} else throw e;
++		}
+ 		const headers = internalContext.responseHeaders;
+ 		const status = internalContext.responseStatus;
+ 		return context.asResponse ? require_to_response.toResponse(response, {
+diff --git a/dist/endpoint.mjs b/dist/endpoint.mjs
+index 37932fc34fb857113ea4b59dd8d283ff7401656f..5ac67b79143f2db9f3123ace242d29b28813d8e2 100644
+--- a/dist/endpoint.mjs
++++ b/dist/endpoint.mjs
+@@ -27,14 +27,17 @@ function createEndpoint(pathOrOptions, handlerOrOptions, handlerOrNever) {
+ 				code: "VALIDATION_ERROR"
+ 			});
+ 		}
+-		const response = await handler(internalContext).catch(async (e) => {
++		let response;
++		try {
++			response = await handler(internalContext);
++		} catch (e) {
+ 			if (isAPIError(e)) {
+ 				const onAPIError = options.onAPIError;
+ 				if (onAPIError) await onAPIError(e);
+-				if (context.asResponse) return e;
+-			}
+-			throw e;
+-		});
++				if (context.asResponse) response = e;
++				else throw e;
++			} else throw e;
++		}
+ 		const headers = internalContext.responseHeaders;
+ 		const status = internalContext.responseStatus;
+ 		return context.asResponse ? toResponse(response, {
