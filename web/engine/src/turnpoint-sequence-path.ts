@@ -223,6 +223,13 @@ export function buildRemainingPath(
  * @param deadlineMs - The task deadline (FAI S7F §11.1): best distance is
  *   measured up until the pilot landed or the deadline, whichever comes
  *   first — fixes after it are not scanned. Null when the task has none.
+ *   For a stopped task the caller folds the scored-window end (§12.3.4)
+ *   into this same clip.
+ * @param altitudeBonus - Stopped tasks only (§12.3.6): credit each scanned
+ *   fix a bonus distance of glideRatio × (GNSS altitude − goalAltitude),
+ *   clamped to the geometric remaining distance, and pick the best
+ *   EFFECTIVE (bonus-adjusted) remaining distance. Null when no bonus
+ *   applies (task not stopped, or the pilot landed before the stop).
  */
 interface BestProgressParams {
   fixes: IGCFix[];
@@ -231,6 +238,7 @@ interface BestProgressParams {
   remainingLegDistances: number[];
   nextMeasure: NextTPMeasure;
   deadlineMs: number | null;
+  altitudeBonus?: { glideRatio: number; goalAltitude: number } | null;
 }
 
 export function computeBestProgress(params: BestProgressParams): BestProgress | null {
@@ -241,6 +249,7 @@ export function computeBestProgress(params: BestProgressParams): BestProgress | 
     remainingLegDistances,
     nextMeasure,
     deadlineMs,
+    altitudeBonus = null,
   } = params;
   // Sum of optimized leg distances between remaining TPs (TP[1]→TP[2]→...→Goal)
   let interTPDistance = 0;
@@ -249,12 +258,13 @@ export function computeBestProgress(params: BestProgressParams): BestProgress | 
   }
 
   const nextTP = remainingTPs[0];
-  let bestFix: { index: number; distToGoal: number } | null = null;
+  let bestFix: { index: number; distToGoal: number; bonus: number } | null = null;
 
   for (let i = 0; i < fixes.length; i++) {
     const fix = fixes[i];
     if (fix.time.getTime() <= lastReachingTime) continue;
     // §11.1: flying after the task deadline earns no further distance.
+    // (For a stopped task the caller folds the §12.3.4 window end in here.)
     if (deadlineMs !== null && fix.time.getTime() > deadlineMs) break;
 
     // Distance to the next un-reached turnpoint — see NextTPMeasure for
@@ -272,10 +282,23 @@ export function computeBestProgress(params: BestProgressParams): BestProgress | 
             ? distanceToGoalLine(nextMeasure.line, fix.latitude, fix.longitude)
             : Math.max(0, andoyerDistance(fix.latitude, fix.longitude, nextTP.lat, nextTP.lon) - nextTP.radius);
     // Total remaining = distance to next TP + optimized path from there to goal
-    const distToGoal = distToNextTP + interTPDistance;
+    const geometricDist = distToNextTP + interTPDistance;
+
+    // §12.3.6 altitude bonus (stopped tasks, pilot still flying at the
+    // stop): height above goal glides out at the spec's fixed glide ratio.
+    // Clamped so the effective remaining distance never goes negative —
+    // the bonus can bring a pilot to goal distance, not past it.
+    const bonus = altitudeBonus
+      ? Math.min(
+          geometricDist,
+          altitudeBonus.glideRatio *
+            Math.max(0, fix.gnssAltitude - altitudeBonus.goalAltitude),
+        )
+      : 0;
+    const distToGoal = geometricDist - bonus;
 
     if (!bestFix || distToGoal < bestFix.distToGoal) {
-      bestFix = { index: i, distToGoal };
+      bestFix = { index: i, distToGoal, bonus };
     }
   }
 
@@ -288,5 +311,8 @@ export function computeBestProgress(params: BestProgressParams): BestProgress | 
     latitude: fix.latitude,
     longitude: fix.longitude,
     distanceToGoal: bestFix.distToGoal,
+    ...(altitudeBonus
+      ? { altitudeBonus: bestFix.bonus, altitude: fix.gnssAltitude }
+      : {}),
   };
 }

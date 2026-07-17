@@ -51,6 +51,8 @@ import type {
   EarlyStart,
   TaskDeadlineInfo,
   LaunchWindowInfo,
+  StopResolutionOptions,
+  TaskStopInfo,
   TurnpointSequenceResult,
   TurnpointSequenceResultJSON,
   NextTPMeasure,
@@ -69,6 +71,8 @@ export type {
   EarlyStart,
   TaskDeadlineInfo,
   LaunchWindowInfo,
+  StopResolutionOptions,
+  TaskStopInfo,
   TurnpointSequenceResult,
   CylinderCrossingJSON,
   TurnpointReachingJSON,
@@ -77,6 +81,7 @@ export type {
   EarlyStartJSON,
   TaskDeadlineInfoJSON,
   LaunchWindowInfoJSON,
+  TaskStopInfoJSON,
   TurnpointSequenceResultJSON,
 } from './turnpoint-sequence-types';
 export { detectCylinderCrossings } from './turnpoint-sequence-crossings';
@@ -112,11 +117,103 @@ export { detectCylinderCrossings } from './turnpoint-sequence-crossings';
  *
  * @param task - The competition task definition
  * @param fixes - The pilot's GPS tracklog
+ * @param options - Optional stopped-task context (FAI S7F §12.3): when
+ *   `options.stop` is set the scored flight is clipped to the pilot's
+ *   scored time window (§12.3.4), a pilot at/after ESS at the window end is
+ *   scored for their complete flight (§12.3.5), and a pilot still flying at
+ *   the window end earns the altitude bonus (§12.3.6). The result then
+ *   carries {@link TaskStopInfo} for transparency.
  * @returns Complete sequence result with scoring data and explanations
  */
 export function resolveTurnpointSequence(
   task: XCTask,
-  fixes: IGCFix[]
+  fixes: IGCFix[],
+  options?: { stop?: StopResolutionOptions | null },
+): TurnpointSequenceResult {
+  const stop = options?.stop ?? null;
+  if (!stop) return resolveSequenceOnce(task, fixes, null);
+
+  const windowEndMs = stop.windowEndMs ?? stop.stopTimeMs;
+  const bonusOpts = { glideRatio: stop.glideRatio, goalAltitude: stop.goalAltitude };
+  // "Still flying at the stop": the tracklog reaches the scored-window end.
+  // (Comp tracklogs end at landing; a logger left running on the ground can
+  // only earn a bonus near zero, since ground altitude ≈ landing altitude.)
+  const flyingAtStop = fixes.length > 0 &&
+    fixes[fixes.length - 1].time.getTime() >= windowEndMs;
+
+  // Probe pass without the stop: decides the §12.3.5 exemption (a pilot
+  // at/after ESS at the window end is scored for the complete flight) and
+  // already IS the final answer for a pilot who landed before the stop.
+  const probe = resolveSequenceOnce(task, fixes, null);
+  const essBeforeStop = probe.essReaching !== null &&
+    probe.essReaching.time.getTime() <= windowEndMs;
+
+  let result: TurnpointSequenceResult;
+  let bonusApplied = false;
+  let clipped = false;
+  if (!flyingAtStop) {
+    // Landed before the window end: nothing to clip, no altitude bonus.
+    result = probe;
+  } else if (essBeforeStop) {
+    // §12.3.5: complete flight scored, including anything after the stop.
+    // A landed-out pilot (between ESS and goal) still gets the §12.3.6
+    // altitude bonus over the whole flight; a goal pilot needs no re-run.
+    if (probe.madeGoal) {
+      result = probe;
+    } else {
+      result = resolveSequenceOnce(task, fixes, { windowEndMs: null, altitudeBonus: bonusOpts });
+      bonusApplied = true;
+    }
+  } else {
+    // §12.3.4: scored only up to the window end — crossings after it can't
+    // count and distance is measured only up to it, with the bonus.
+    result = resolveSequenceOnce(task, fixes, { windowEndMs, altitudeBonus: bonusOpts });
+    bonusApplied = true;
+    clipped = true;
+  }
+
+  // Crossings excluded by the stop clip (those already past the task
+  // deadline are the deadline's, not the stop's).
+  const deadlineMs = result.deadline ? result.deadline.time.getTime() : null;
+  const crossingsAfterStop = clipped
+    ? result.crossings.filter(c => {
+        const t = c.time.getTime();
+        return t > windowEndMs && (deadlineMs === null || t <= deadlineMs);
+      }).length
+    : 0;
+
+  const stopInfo: TaskStopInfo = {
+    stopTime: new Date(stop.stopTimeMs),
+    windowEnd: new Date(windowEndMs),
+    essBeforeStop,
+    flyingAtStop,
+    crossingsAfterStop,
+    altitudeBonus: bonusApplied ? (result.bestProgress?.altitudeBonus ?? 0) : 0,
+    ...(bonusApplied && result.bestProgress?.altitude !== undefined
+      ? { bestPointAltitude: result.bestProgress.altitude }
+      : {}),
+    glideRatio: stop.glideRatio,
+    goalAltitude: stop.goalAltitude,
+  };
+  return { ...result, stopInfo };
+}
+
+/**
+ * The clip a stopped task places on one flight's resolution: crossings
+ * after `windowEndMs` are excluded and best-progress stops scanning there
+ * (null = no clip, used for the §12.3.5 complete-flight case); when
+ * `altitudeBonus` is set the best-progress scan credits the §12.3.6 bonus.
+ */
+interface StopClip {
+  windowEndMs: number | null;
+  altitudeBonus: { glideRatio: number; goalAltitude: number } | null;
+}
+
+/** One resolution pass — the stop-unaware algorithm (see the public wrapper). */
+function resolveSequenceOnce(
+  task: XCTask,
+  fixes: IGCFix[],
+  stopClip: StopClip | null,
 ): TurnpointSequenceResult {
   // Optimized task line (one tag point per turnpoint), computed once. The
   // tag points feed best-progress so a pilot's remaining distance to goal
@@ -235,15 +332,30 @@ export function resolveTurnpointSequence(
   }
   if (windowOpenMs !== null && gates && windowOpenMs > gates[0]) windowOpenMs = null;
 
+  // The scored-flight end: the task deadline and — for a stopped task — the
+  // pilot's scored-window end (§12.3.4), whichever comes first. Crossings
+  // after it can't count and best-progress distance stops there.
+  const stopEndMs = stopClip?.windowEndMs ?? null;
+  const clipMs = deadlineMs === null
+    ? stopEndMs
+    : stopEndMs === null
+      ? deadlineMs
+      : Math.min(deadlineMs, stopEndMs);
+
   // The crossings the sequence may be built from: everything at or before
-  // the deadline. The full list (allCrossings) is still returned for
-  // transparency — the explanation shows ignored crossings with the reason.
-  // Dropping only the time-sorted tail never corrupts the inside/outside
-  // state the presence-based reaching logic derives from earlier crossings.
-  const scoredCrossings = deadlineMs === null
+  // the scored-flight end. The full list (allCrossings) is still returned
+  // for transparency — the explanation shows ignored crossings with the
+  // reason. Dropping only the time-sorted tail never corrupts the
+  // inside/outside state the presence-based reaching logic derives from
+  // earlier crossings.
+  const scoredCrossings = clipMs === null
     ? allCrossings
-    : allCrossings.filter(c => c.time.getTime() <= deadlineMs);
-  const crossingsAfterDeadline = allCrossings.length - scoredCrossings.length;
+    : allCrossings.filter(c => c.time.getTime() <= clipMs);
+  const crossingsAfterDeadline = deadlineMs === null
+    ? 0
+    : allCrossings.reduce(
+        (n, c) => n + (c.time.getTime() > deadlineMs ? 1 : 0), 0,
+      );
 
   const deadlineInfo: TaskDeadlineInfo | undefined = deadlineMs !== null
     ? {
@@ -272,9 +384,9 @@ export function resolveTurnpointSequence(
   // §12.2 "jumped the gun" case (HG scores the complete flight with a
   // penalty; the PG launch→SSS clamp happens in the scorer) with earlyStart
   // reporting the facts.
-  let sssCrossings = deadlineMs === null
+  let sssCrossings = clipMs === null
     ? directionSSSCrossings
-    : directionSSSCrossings.filter(c => c.time.getTime() <= deadlineMs);
+    : directionSSSCrossings.filter(c => c.time.getTime() <= clipMs);
   let droppedStartCrossings = 0;
   if (windowOpenMs !== null) {
     const beforeCount = sssCrossings.length;
@@ -393,7 +505,8 @@ export function resolveTurnpointSequence(
         remainingTPs,
         remainingLegDistances,
         nextMeasure: nextMeasureFor(lastReaching.taskIndex),
-        deadlineMs,
+        deadlineMs: clipMs,
+        altitudeBonus: stopClip?.altitudeBonus ?? null,
       });
       candidateFlownDist = progress
         ? taskDistance - progress.distanceToGoal
@@ -453,7 +566,8 @@ export function resolveTurnpointSequence(
       remainingTPs,
       remainingLegDistances,
       nextMeasure: nextMeasureFor(lastReaching.taskIndex),
-      deadlineMs,
+      deadlineMs: clipMs,
+      altitudeBonus: stopClip?.altitudeBonus ?? null,
     });
     flownDistance = bestProgress
       ? taskDistance - bestProgress.distanceToGoal
@@ -516,7 +630,7 @@ export function reviveTurnpointSequenceResult(
   const revive = <T extends { time: string | number }>(
     v: T,
   ): Omit<T, 'time'> & { time: Date } => ({ ...v, time: new Date(v.time) });
-  const { startGate, earlyStart, deadline, launchWindow, ...rest } = raw;
+  const { startGate, earlyStart, deadline, launchWindow, stopInfo, ...rest } = raw;
   return {
     ...rest,
     crossings: raw.crossings.map(revive),
@@ -540,6 +654,15 @@ export function reviveTurnpointSequenceResult(
           launchWindow: {
             ...launchWindow,
             openTime: new Date(launchWindow.openTime),
+          },
+        }
+      : {}),
+    ...(stopInfo
+      ? {
+          stopInfo: {
+            ...stopInfo,
+            stopTime: new Date(stopInfo.stopTime),
+            windowEnd: new Date(stopInfo.windowEnd),
           },
         }
       : {}),

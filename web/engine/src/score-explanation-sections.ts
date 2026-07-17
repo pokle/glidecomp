@@ -380,6 +380,48 @@ function buildDeadlineItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
   return out;
 }
 
+function buildStopItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
+  const { result, entry, fmt } = ctx;
+  const out: ScoreExplanationItem[] = [];
+  // Stopped task (FAI S7F §12.3): narrate how the stop shaped this flight —
+  // the scored window's end, the complete-flight exemption for pilots
+  // at/after ESS (§12.3.5), and any crossings dropped by the clip.
+  const stop = result.stopInfo;
+  if (!stop) return out;
+  const windowDiffers =
+    stop.windowEnd.getTime() !== stop.stopTime.getTime();
+  out.push({
+    id: 'task-stopped',
+    // A pilot already past ESS keeps their complete flight (§12.3.5, stated
+    // next) — for them the stop is context, not a clip, so don't claim one.
+    text: stop.essBeforeStop
+      ? 'The task was stopped (FAI S7F §12.3).'
+      : windowDiffers
+        ? 'The task was stopped. With multiple start gates every pilot is scored for the time window the last-started pilot had (FAI S7F §12.3.4) — this flight scored up to the window end shown.'
+        : 'The task was stopped — the flight is scored only up to the task stop time (FAI S7F §12.3).',
+    value: fmt(stop.windowEnd),
+    emphasis: stop.crossingsAfterStop > 0 ? 'warning' : 'muted',
+    detail: windowDiffers
+      ? `Task stop time ${fmt(stop.stopTime)}; this pilot's scored window ends ${fmt(stop.windowEnd)}.`
+      : undefined,
+  });
+  if (stop.essBeforeStop && (entry.made_goal || result.essReaching)) {
+    out.push({
+      id: 'stop-ess-exemption',
+      text: 'Already past the end of the speed section when the task was stopped — the complete flight is scored, including anything flown after the stop (FAI S7F §12.3.5).',
+      emphasis: 'muted',
+    });
+  }
+  if (stop.crossingsAfterStop > 0) {
+    out.push({
+      id: 'stop-ignored-crossings',
+      text: `${stop.crossingsAfterStop} boundary crossing${stop.crossingsAfterStop === 1 ? '' : 's'} after the scored window ${stop.crossingsAfterStop === 1 ? 'was' : 'were'} not counted.`,
+      emphasis: 'warning',
+    });
+  }
+  return out;
+}
+
 function buildBestProgressItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
   const { task, result, entry, fmt, directions } = ctx;
   const out: ScoreExplanationItem[] = [];
@@ -461,6 +503,7 @@ export function buildFlightSection(
     ...buildStartItems(ctx),
     ...buildTurnpointReachingItems(ctx),
     ...buildDeadlineItems(ctx),
+    ...buildStopItems(ctx),
     ...buildBestProgressItems(ctx),
   ];
   return {
@@ -495,6 +538,18 @@ export function buildValiditySection(
       text: 'Time validity — was the winning time long enough relative to the nominal time?',
       value: pctValidity(v.time, decimals),
     },
+    // Stopped tasks (S7F §12.3.3): the fourth validity factor.
+    ...(v.stopped !== undefined
+      ? [{
+          id: 'stopped-validity',
+          text:
+            classContext.stopped && !classContext.stopped.requirement_met
+              ? 'Stopped-task validity — the task was stopped before running the minimum time (min(1 h, half the nominal time) after the start), so it cannot be scored (FAI S7F §12.3.2).'
+              : 'Stopped-task validity — the task was stopped; when nobody has reached the end of the speed section, the day is devalued by how settled the field already was (FAI S7F §12.3.3).',
+          value: pctValidity(v.stopped, decimals),
+          emphasis: (v.stopped < 1 ? 'warning' : 'muted') as 'warning' | 'muted',
+        }]
+      : []),
     {
       id: 'available-total',
       text: 'Points on offer for the day',
@@ -557,6 +612,27 @@ export function buildDistanceSection(
       id: 'minimum-distance',
       text: `Flew ${km(result.flownDistance)}, less than the ${km(params.minimumDistance)} minimum — scored as the minimum distance.`,
       emphasis: 'warning',
+    });
+  }
+
+  // Stopped tasks (S7F §12.3.6): a pilot still flying at the stop gets a
+  // bonus distance for their height above goal — it is already inside the
+  // scored distance, so state it before the figure it explains.
+  const altBonus = entry.stopped_altitude_bonus ?? result.stopInfo?.altitudeBonus ?? 0;
+  if (altBonus > 0 && result.stopInfo) {
+    items.push({
+      id: 'stopped-altitude-bonus',
+      text: `Still flying when the task was stopped — an altitude bonus of ${km(altBonus)} is included in the scored distance: height above goal glides out at a fixed ${result.stopInfo.glideRatio}:1 ratio (FAI S7F §12.3.6).`,
+      // Print the arithmetic only when it reconciles — the bonus is clamped
+      // at goal distance, and a clamped figure would contradict the equation.
+      detail: result.stopInfo.bestPointAltitude !== undefined &&
+        Math.abs(
+          result.stopInfo.glideRatio *
+            Math.max(0, result.stopInfo.bestPointAltitude - result.stopInfo.goalAltitude) -
+            altBonus,
+        ) < 0.5
+        ? `${Math.round(result.stopInfo.bestPointAltitude)} m GNSS at the scored point vs a ${Math.round(result.stopInfo.goalAltitude)} m goal → ${result.stopInfo.glideRatio} × ${Math.round(Math.max(0, result.stopInfo.bestPointAltitude - result.stopInfo.goalAltitude))} m = ${km(altBonus)}.`
+        : 'The bonus is capped at the remaining distance to goal.',
     });
   }
 
@@ -723,41 +799,61 @@ export function buildTimeSection(
         emphasis: 'warning',
       });
     }
+    // Stopped tasks (S7F §12.3.5): every goal pilot's time points are docked
+    // by a fixed amount — the points a pilot reaching ESS exactly at the end
+    // of the scored window would get. Stated before the formula, and folded
+    // into the printed equations so they reconcile with the published points.
+    const stopReduction =
+      entry.made_goal && classContext.stopped
+        ? classContext.stopped.time_points_reduction
+        : 0;
+    if (stopReduction > 0) {
+      items.push({
+        id: 'stopped-time-reduction',
+        text: `The task was stopped: every goal pilot's time points are reduced by ${fmtPoints(stopReduction)} — the points a pilot reaching the end of the speed section exactly at the task stop would get — so finishing just before the stop scores no better than being stopped just after ESS (FAI S7F §12.3.5).`,
+        emphasis: 'warning',
+      });
+    }
     // The ×factor the engine applied (1 when no reduction) — folded into the
     // printed equations so they reconcile with the published points.
     const factor = essReduction ? essNotGoalFactor : 1;
     const factorEq = essReduction
       ? ` × ${trimZeros(essNotGoalFactor.toFixed(2), 1)} (ESS but not goal, §12.1)`
       : '';
+    const stopEq = stopReduction > 0
+      ? ` − ${fmtPoints(stopReduction)} (task stopped, §12.3.5)`
+      : '';
     if (entry.speed_section_time <= bestTime) {
       const { availStr, reconciles } = reconcileWithAvailable(
         ap.time, 0, 0, entry.time_points,
-        (_d, avail) => avail * factor,
+        (_d, avail) => Math.max(0, avail * factor - stopReduction),
       );
       items.push({
         id: 'time-formula',
         text: essReduction
           ? 'Fastest through the speed section — full available time points, before the goal-validation reduction'
-          : 'Fastest through the speed section — full available time points.',
+          : stopReduction > 0
+            ? 'Fastest through the speed section — full available time points, before the stopped-task reduction'
+            : 'Fastest through the speed section — full available time points.',
         value: pts(entry.time_points),
-        detail: essReduction
-          ? `${availStr} available${factorEq} ${reconciles ? '=' : '≈'} ${fmtPoints(entry.time_points)}`
+        detail: essReduction || stopReduction > 0
+          ? `${availStr} available${factorEq}${stopEq} ${reconciles ? '=' : '≈'} ${fmtPoints(entry.time_points)}`
           : undefined,
       });
     } else {
-      // time points = speed fraction × available (× the §12.1 factor),
-      // exactly — print the fraction with enough decimals that the
-      // multiplication visibly holds at the 0.1-pt step. exponentLabel is the
-      // decoupled time-points exponent resolved above (issue #258).
+      // time points = speed fraction × available (× the §12.1 factor, − the
+      // §12.3.5 stopped reduction), exactly — print the fraction with enough
+      // decimals that the multiplication visibly holds at the 0.1-pt step.
+      // exponentLabel is the decoupled time-points exponent (issue #258).
       const { availStr, decimals, reconciles } = reconcileWithAvailable(
         ap.time, 3, 6, entry.time_points,
-        (d, avail) => Number(sf.toFixed(d)) * avail * factor,
+        (d, avail) => Math.max(0, Number(sf.toFixed(d)) * avail * factor - stopReduction),
       );
       items.push({
         id: 'time-formula',
         text: 'Time points fall off with the gap to the fastest time',
         value: pts(entry.time_points),
-        detail: `speed fraction = max(0, 1 − ((T − Tbest) ÷ √Tbest)^${exponentLabel}) = ${trimZeros(sf.toFixed(decimals), 3)}; × ${availStr} available${factorEq} ${
+        detail: `speed fraction = max(0, 1 − ((T − Tbest) ÷ √Tbest)^${exponentLabel}) = ${trimZeros(sf.toFixed(decimals), 3)}; × ${availStr} available${factorEq}${stopEq} ${
           reconciles
             ? `= ${fmtPoints(entry.time_points)}`
             : `≈ ${fmtPoints(entry.time_points)} — the figures are shown rounded; the points come from their full precision`

@@ -45,6 +45,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
           <li><a href="#leading-points" class="hover:underline">Leading Points</a></li>
           <li><a href="#arrival-points" class="hover:underline">Arrival Points</a></li>
           <li><a href="#total-score" class="hover:underline">Your Total Score</a></li>
+          <li><a href="#stopped-tasks" class="hover:underline">Stopped Tasks</a></li>
           <li><a href="#defaults" class="hover:underline">Default Competition Settings</a></li>
           <li><a href="#glidecomp-notes" class="hover:underline">GlideComp Implementation Notes</a></li>
           <li><a href="#spec-differences" class="hover:underline">Differences from the Official Spec</a></li>
@@ -560,6 +561,89 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         </div>
       </section>
 
+      {/* Stopped Tasks */}
+      <section id="stopped-tasks" class="mb-14 scroll-mt-20">
+        <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
+          <h2 class="text-2xl font-bold">Stopped Tasks</h2>
+          <SpecRef section="12.3" label="FAI S7F §12.3" class="text-xs font-medium text-muted-foreground shrink-0" />
+        </div>
+        <div class="space-y-4 text-sm leading-relaxed">
+          <p class="text-muted-foreground">
+            When deteriorating weather forces the safety committee to stop a task mid-flight,
+            the task is scored as a <strong>stopped task</strong>. The organiser records the
+            stop announcement time on the task; GlideComp then applies the spec's stopped-task
+            rules automatically and every affected pilot's score explanation says exactly how.
+          </p>
+
+          <div class="ml-2 space-y-4">
+            <div>
+              <h3 class="text-base font-semibold mb-1">The task stop time (<SpecRef section="12.3.1" />)</h3>
+              <p class="text-muted-foreground">
+                Pilots close to a scoring milestone when the stop is announced shouldn't be
+                tempted to keep flying in dangerous conditions, so the announcement is
+                <em>scored back</em> to an earlier task stop time. Paragliding: the announcement
+                minus the competition's <strong>score-back time</strong> (default 5 minutes,
+                adjustable in the comp's scoring settings). Hang gliding: one start-gate
+                interval, or 15 minutes when the task has a single start gate.
+              </p>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold mb-1">Can the task be scored at all? (<SpecRef section="12.3.2" />)</h3>
+              <p class="text-muted-foreground">
+                A stopped task only counts if it ran long enough: at least
+                <strong> min(1 hour, half the nominal time)</strong> from the race start (single
+                start gate) or from the last pilot's start (multiple gates / elapsed time). A
+                task stopped earlier than that scores zero for everyone, and the standings say
+                why.
+              </p>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold mb-1">Stopped-task validity (<SpecRef section="12.3.3" />)</h3>
+              <p class="text-muted-foreground">
+                A fourth validity factor joins launch, distance and time. If anyone reached the
+                end of the speed section it is 1 (the race had a result); otherwise it devalues
+                the day based on how spread out the field was and how many pilots had already
+                landed when the task was stopped.
+              </p>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold mb-1">What part of your flight counts (<SpecRef section="12.3.4" />, <SpecRef section="12.3.5" />)</h3>
+              <p class="text-muted-foreground">
+                In a race with a single start gate, everyone is scored from the start up to the
+                task stop time — turnpoints tagged after it don't count and distance is measured
+                only up to it. With multiple start gates or elapsed-time starts, every pilot is
+                scored for the same amount of flying time: the time the <em>last-started</em>
+                pilot had between their start and the stop. Pilots who were already past the end
+                of the speed section at the stop are scored for their <strong>complete
+                flight</strong> — including reaching goal after the stop — and every goal
+                pilot's time points are reduced by a fixed amount (the time points of a
+                hypothetical pilot reaching ESS exactly at the stop), so finishing just before
+                the stop is worth no more than being stopped just after ESS.
+              </p>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold mb-1">The altitude bonus (<SpecRef section="12.3.6" />)</h3>
+              <p class="text-muted-foreground">
+                A pilot still airborne at the stop with height in hand would have glided further,
+                so their distance gets an <strong>altitude bonus</strong>: at every track point
+                in the scored window, height above goal counts as extra distance at a fixed
+                glide ratio — <strong>4:1 for paragliders, 5:1 for hang gliders</strong> (GNSS
+                altitude). The bonus feeds distance points only (never past goal distance); time
+                and leading points are unaffected. Pilots who landed before the stop get no
+                bonus.
+              </p>
+            </div>
+          </div>
+
+          <p class="text-muted-foreground">
+            A stopped task is flagged on the task page with its stop time, the stop action is
+            recorded in the competition's public audit log, and each pilot's score-details page
+            narrates the scored window, any crossings that no longer counted, the altitude
+            bonus, and the goal time-points reduction.
+          </p>
+        </div>
+      </section>
+
       {/* Default Competition Settings */}
       <section id="defaults" class="mb-14 scroll-mt-20">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
@@ -762,7 +846,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Stopped tasks (weather calldowns, <SpecRef section="12.3" />)</td>
-                  <td class="py-2">Not implemented</td>
+                  <td class="py-2">Implemented — scored-back stop time, minimum-run check, stopped validity, scored time window, altitude bonus; see <a href="#stopped-tasks" class="underline hover:text-foreground">Stopped Tasks</a></td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Multi-task series scoring</td>

@@ -18,9 +18,9 @@
 
 import type { XCTask } from './xctsk-parser';
 import type { IGCFix } from './igc-parser';
-import type { TurnpointSequenceResult, TurnpointReaching } from './turnpoint-sequence';
+import type { TurnpointSequenceResult, TurnpointReaching, StopResolutionOptions } from './turnpoint-sequence';
 import { resolveTurnpointSequence } from './turnpoint-sequence';
-import { getSSSIndex, getEffectiveSSSIndex } from './xctsk-parser';
+import { getSSSIndex, getEffectiveSSSIndex, getEffectiveESSIndex } from './xctsk-parser';
 import { calculateOptimizedTaskDistance, getOptimizedSegmentDistances } from './task-optimizer';
 import { resolveStartGates } from './time-gates';
 import { maxBy, minBy } from './array-utils';
@@ -29,6 +29,7 @@ import { DEFAULT_GAP_PARAMETERS } from './gap-params';
 import type { GAPParameters, DistanceOrigin } from './gap-params';
 import {
   calculateTaskValidity,
+  calculateStoppedTaskValidity,
   calculateWeights,
   calculateDistancePoints,
   calculateDistanceDifficulty,
@@ -47,9 +48,17 @@ import type {
   DistanceScore,
   LeadingAggregate,
 } from './gap-formulas';
+import {
+  resolveTaskStop,
+  resolveScoredWindowEnds,
+  stoppedGlideRatio,
+  stoppedMinimumRunSeconds,
+  resolveGoalAltitude,
+} from './gap-stopped';
 
 export * from './gap-params';
 export * from './gap-formulas';
+export * from './gap-stopped';
 
 /**
  * Round a point value to one decimal place — the precision the FAI Sporting
@@ -141,8 +150,47 @@ export interface PilotScore {
    * at the minimum-distance score rather than zero (§12.2).
    */
   jumpTheGunPenalty?: number;
+  /**
+   * Stopped tasks only (§12.3.6): the altitude-bonus distance (meters)
+   * folded into this pilot's flownDistance. Absent when no bonus applied.
+   */
+  stoppedAltitudeBonus?: number;
   /** Underlying turnpoint sequence result for transparency */
   turnpointResult: TurnpointSequenceResult;
+}
+
+/**
+ * The whole-field stopped-task outcome (FAI S7F §12.3), present on the
+ * result when the task was scored as stopped.
+ */
+export interface StoppedTaskScore {
+  /** The resolved task stop time (epoch ms) the field was scored against (§12.3.1). */
+  stopTimeMs: number;
+  /**
+   * Seconds from the scored-window start — the race start for a
+   * single-start-gate race, otherwise the last pilot's start — to the stop
+   * time (§12.3.2/§12.3.4). Null when nobody started before the stop.
+   */
+  scoredWindowSeconds: number | null;
+  /** §12.3.2 minimum run: min(1 h, nominalTime ÷ 2), in seconds. */
+  minimumRunSeconds: number;
+  /**
+   * Whether the stopped task ran long enough to be scored (§12.3.2). When
+   * false the stopped validity is 0, so every pilot scores 0 — the closest
+   * scoreable representation of "the task cannot be scored".
+   */
+  requirementMet: boolean;
+  /** The §12.3.3 stopped-task validity applied (0 when requirementMet is false). */
+  stoppedValidity: number;
+  /**
+   * §12.3.5: the fixed time-points reduction applied to every goal pilot —
+   * the time points a pilot reaching ESS exactly at the end of the scored
+   * window would get (removes the goal/landed-short discontinuity). 0 when
+   * nobody made goal or no best time exists.
+   */
+  timePointsReduction: number;
+  /** Launched pilots who landed before the stop (feeds §12.3.3). */
+  numLandedBeforeStop: number;
 }
 
 /** Complete task scoring result. */
@@ -154,6 +202,8 @@ export interface TaskScoreResult {
   pilotScores: PilotScore[];
   /** Aggregate stats used in scoring */
   stats: TaskStats;
+  /** Present when the task was scored as stopped (FAI S7F §12.3). */
+  stopped?: StoppedTaskScore;
 }
 
 /** Aggregate statistics from all pilots in the task. */
@@ -249,6 +299,25 @@ export interface FlightScoringData {
    */
   earlyStartSeconds?: number;
   /**
+   * The pilot's OFFICIAL start time (epoch ms): the start gate taken in a
+   * gated race (§8.3.1), otherwise the actual crossing. Feeds the stopped-
+   * task scored-window arithmetic (§12.3.2/§12.3.4). Null/absent when the
+   * pilot never started (older cached data may omit it — sssTimeMs is the
+   * fallback).
+   */
+  startTimeMs?: number | null;
+  /**
+   * Stopped tasks only: whether the pilot landed before the task stop
+   * (their tracklog ends before the scored-window end). Feeds the §12.3.3
+   * stopped validity. Absent (counted as landed) for track-less pilots.
+   */
+  landedBeforeStop?: boolean;
+  /**
+   * Stopped tasks only (§12.3.6): the altitude-bonus distance (meters)
+   * already folded into flownDistance, passed through for transparency.
+   */
+  stoppedAltitudeBonus?: number;
+  /**
    * Leading calculation input, needed only when useLeading is true. Provide
    * EITHER the precomputed {@link LeadingAggregate} (lets the backend cache the
    * per-track scan and skip the tracklog entirely) OR the raw fixes + sequence
@@ -296,8 +365,17 @@ export function toFlightScoringData(
     speedSectionTime: result.speedSectionTime,
     sssTimeMs: result.sssReaching?.time.getTime() ?? null,
     essTimeMs: result.essReaching?.time.getTime() ?? null,
+    startTimeMs: result.startGate?.time.getTime()
+      ?? result.sssReaching?.time.getTime()
+      ?? null,
     ...(result.earlyStart
       ? { earlyStartSeconds: result.earlyStart.secondsEarly }
+      : {}),
+    ...(result.stopInfo
+      ? {
+          landedBeforeStop: !result.stopInfo.flyingAtStop,
+          stoppedAltitudeBonus: result.stopInfo.altitudeBonus,
+        }
       : {}),
     fixes: includeTrack ? pilot.fixes : undefined,
     sequence: includeTrack ? result.sequence : undefined,
@@ -320,12 +398,19 @@ export function toFlightScoringData(
  * @param flights - Compact per-pilot scoring inputs
  * @param params - GAP competition parameters (uses defaults if not provided)
  * @param numPresent - Number of pilots present at launch (defaults to flights.length)
+ * @param stop - Present when the task was stopped (FAI S7F §12.3): the
+ *   resolved task stop time (see {@link resolveTaskStop}). The flights must
+ *   already be stop-aware — resolved with the stop's scored windows (their
+ *   flownDistance clipped/bonused, landedBeforeStop set); this function adds
+ *   the whole-field pieces: the §12.3.2 minimum-run requirement, the
+ *   §12.3.3 stopped validity, and the §12.3.5 goal time-points reduction.
  */
 export function scoreFlights(
   scoringTask: XCTask,
   flights: FlightScoringData[],
   params: Partial<GAPParameters> = {},
   numPresent?: number,
+  stop?: { stopTimeMs: number },
 ): TaskScoreCore {
   const fullParams: GAPParameters = { ...DEFAULT_GAP_PARAMETERS, ...params };
   const actualNumPresent = numPresent ?? flights.length;
@@ -370,6 +455,7 @@ export function scoreFlights(
         // No valid start for time/leading/arrival purposes.
         sssTimeMs: null,
         essTimeMs: null,
+        startTimeMs: null,
       };
     }
     return f;
@@ -430,9 +516,66 @@ export function scoreFlights(
     taskDistance,
   };
 
+  // §12.3 stopped task: the scored-window duration (§12.3.4), the
+  // minimum-run requirement (§12.3.2), and the stopped validity (§12.3.3).
+  let stopped: StoppedTaskScore | undefined;
+  if (stop) {
+    // Scored-window start: the race start for a single-start-gate race,
+    // otherwise (multi-gate / elapsed time) the LAST pilot's official start.
+    const startTimes = effFlights
+      .map(f => f.startTimeMs ?? f.sssTimeMs)
+      .filter((t): t is number => t !== null);
+    const gates = resolveStartGates(
+      scoringTask,
+      startTimes.length > 0 ? startTimes[0] : stop.stopTimeMs,
+    );
+    let windowStartMs: number | null = null;
+    if (gates && gates.length === 1) windowStartMs = gates[0];
+    else if (startTimes.length > 0) windowStartMs = maxBy(startTimes, t => t);
+    const scoredWindowSeconds = windowStartMs !== null
+      ? Math.max(0, (stop.stopTimeMs - windowStartMs) / 1000)
+      : null;
+    const minimumRunSeconds = stoppedMinimumRunSeconds(fullParams.nominalTime);
+    const requirementMet = scoredWindowSeconds !== null
+      && scoredWindowSeconds >= minimumRunSeconds;
+
+    // §12.3.3 inputs: raw flown distances (bonus included), pilots landed
+    // before the stop (track-less pilots count as landed), and the
+    // optimized launch→ESS distance.
+    const numLandedBeforeStop = effFlights.reduce(
+      (n, f) => n + (f.landedBeforeStop !== false ? 1 : 0), 0,
+    );
+    const essIdxForDist = Math.max(0, getEffectiveESSIndex(scoringTask));
+    const segs = getOptimizedSegmentDistances(scoringTask);
+    let launchToEssDistance = 0;
+    for (let i = 0; i < essIdxForDist && i < segs.length; i++) {
+      launchToEssDistance += segs[i];
+    }
+    const formulaValidity = calculateStoppedTaskValidity({
+      pilotDistances: effFlights.map(f => Math.max(0, f.flownDistance)),
+      numReachedESS,
+      numLandedBeforeStop,
+      launchToEssDistance,
+    });
+    // A stopped task that didn't run the minimum time "cannot be scored"
+    // (§12.3.2): stopped validity 0 zeroes every pilot while keeping the
+    // other validity factors honest for the explanation.
+    const stoppedValidity = requirementMet ? formulaValidity : 0;
+    stopped = {
+      stopTimeMs: stop.stopTimeMs,
+      scoredWindowSeconds,
+      minimumRunSeconds,
+      requirementMet,
+      stoppedValidity,
+      timePointsReduction: 0, // finalized below, once available points exist
+      numLandedBeforeStop,
+    };
+  }
+
   // Step 3: Calculate task validity
   const taskValidity = calculateTaskValidity(
     fullParams, scoredDistances, bestDistance, bestTime, actualNumPresent,
+    stopped?.stoppedValidity,
   );
 
   // Step 4: Calculate weights and available points
@@ -534,6 +677,29 @@ export function scoreFlights(
   // leadingFormula was stored.
   const timeExponent = resolveTimePointsExponent(fullParams);
 
+  // §12.3.5: every goal pilot's time points are reduced by the points a
+  // pilot reaching ESS exactly at the end of the scored window would get —
+  // removing the discontinuity against pilots stopped between ESS and goal.
+  let stopTimeReduction = 0;
+  if (
+    stopped?.requirementMet &&
+    stopped.scoredWindowSeconds !== null &&
+    bestTime !== null &&
+    numInGoal > 0
+  ) {
+    stopTimeReduction = calculateTimePoints({
+      pilotTime: stopped.scoredWindowSeconds,
+      bestTime,
+      madeGoal: true,
+      reachedESS: true,
+      availableTimePoints: availablePoints.time,
+      scoring: fullParams.scoring,
+      exponent: timeExponent,
+      essNotGoalFactor,
+    });
+    stopped.timePointsReduction = Math.round(stopTimeReduction * 10) / 10;
+  }
+
   const anyJtgPenalty = earlyOutcomes.some(o => o === 'hg_penalty');
   const scoreForMinDistance = anyJtgPenalty
     ? (difficulty
@@ -569,7 +735,7 @@ export function scoreFlights(
         })();
     const distPts = distScore.total;
 
-    const timePts = calculateTimePoints({
+    let timePts = calculateTimePoints({
       pilotTime: f.speedSectionTime,
       bestTime,
       madeGoal: f.madeGoal,
@@ -579,6 +745,12 @@ export function scoreFlights(
       exponent: timeExponent,
       essNotGoalFactor,
     });
+    // §12.3.5 stopped-task reduction — goal pilots only (a goal pilot's own
+    // speed time never exceeds the scored window, so this stays ≥ 0; the
+    // clamp guards degenerate inputs).
+    if (stopTimeReduction > 0 && f.madeGoal) {
+      timePts = Math.max(0, timePts - stopTimeReduction);
+    }
 
     const leadPts = calculateLeadingPoints(
       leadingCoefficients[idx], minLC, availablePoints.leading,
@@ -631,6 +803,9 @@ export function scoreFlights(
       ...(jtgPenalty > 0
         ? { jumpTheGunPenalty: Math.round(jtgPenalty * 10) / 10 }
         : {}),
+      ...(f.stoppedAltitudeBonus && f.stoppedAltitudeBonus > 0
+        ? { stoppedAltitudeBonus: f.stoppedAltitudeBonus }
+        : {}),
     };
   });
 
@@ -656,7 +831,20 @@ export function scoreFlights(
     availablePoints,
     pilotScores,
     stats,
+    ...(stopped ? { stopped } : {}),
   };
+}
+
+/** Options for {@link scoreTask} beyond the parameter set. */
+export interface ScoreTaskOptions {
+  /**
+   * The task stop announcement time (epoch ms) when the task was stopped
+   * (FAI S7F §12.3). The task stop time is derived from it per §12.3.1
+   * (PG: minus {@link GAPParameters.scoreBackTime}; HG: minus one start-gate
+   * interval, or 15 minutes with a single gate) and the whole §12.3
+   * machinery applies. Omit/null for a normally completed task.
+   */
+  stopAnnouncementMs?: number | null;
 }
 
 export function scoreTask(
@@ -664,6 +852,7 @@ export function scoreTask(
   pilots: PilotFlight[],
   params: Partial<GAPParameters> = {},
   numPresent?: number,
+  options: ScoreTaskOptions = {},
 ): TaskScoreResult {
   const fullParams: GAPParameters = { ...DEFAULT_GAP_PARAMETERS, ...params };
 
@@ -671,16 +860,59 @@ export function scoreTask(
   // up front; everything downstream scores against this task.
   const scoringTask = taskForDistanceOrigin(task, fullParams.distanceOrigin);
 
+  // Stopped task (§12.3): derive the task stop time from the announcement
+  // and build the per-flight stop context (glide ratio + goal altitude for
+  // the §12.3.6 bonus). The first pass clips every pilot at the stop time.
+  const stopCtx = options.stopAnnouncementMs != null
+    ? resolveTaskStop(scoringTask, options.stopAnnouncementMs, fullParams)
+    : null;
+  const stopBase: StopResolutionOptions | null = stopCtx
+    ? {
+        stopTimeMs: stopCtx.stopTimeMs,
+        glideRatio: stoppedGlideRatio(fullParams.scoring),
+        goalAltitude: resolveGoalAltitude(scoringTask),
+      }
+    : null;
+
   // Step 1: Resolve turnpoint sequences for all pilots (the per-pilot,
   // field-independent work), then aggregate over the whole field.
-  const results = pilots.map(pilot =>
-    resolveTurnpointSequence(scoringTask, pilot.fixes)
+  let results = pilots.map(pilot =>
+    resolveTurnpointSequence(
+      scoringTask, pilot.fixes,
+      stopBase ? { stop: stopBase } : undefined,
+    )
   );
+
+  // §12.3.4, multi-gate / elapsed-time stopped tasks: every pilot is scored
+  // for the duration the LAST-started pilot had. The per-pilot window ends
+  // come from the first pass's official starts (already clipped at the stop
+  // time); pilots whose window is the stop time keep their first pass.
+  if (stopBase) {
+    const starts = results.map(r =>
+      r.startGate?.time.getTime() ?? r.sssReaching?.time.getTime() ?? null,
+    );
+    const windowEnds = resolveScoredWindowEnds(
+      scoringTask, starts, stopBase.stopTimeMs,
+    );
+    if (windowEnds) {
+      results = results.map((r, idx) =>
+        windowEnds[idx] < stopBase.stopTimeMs
+          ? resolveTurnpointSequence(scoringTask, pilots[idx].fixes, {
+              stop: { ...stopBase, windowEndMs: windowEnds[idx] },
+            })
+          : r,
+      );
+    }
+  }
+
   const flights = pilots.map((pilot, idx) =>
     toFlightScoringData(pilot, results[idx], fullParams.useLeading)
   );
 
-  const core = scoreFlights(scoringTask, flights, params, numPresent);
+  const core = scoreFlights(
+    scoringTask, flights, params, numPresent,
+    stopCtx ? { stopTimeMs: stopCtx.stopTimeMs } : undefined,
+  );
 
   // Re-attach the per-pilot turnpoint result (transparency data) by trackFile,
   // the same unique key the sorted scores carry.

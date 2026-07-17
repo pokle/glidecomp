@@ -143,6 +143,15 @@ function describeGapParamChanges(
       `Changed the ESS-but-not-goal factor from ${pct(oEng)} to ${pct(nEng)} of time and arrival points kept (HG, S7F §12.1)`
     );
   }
+  // PG score-back time (S7F §5.6, §12.3.1): shifts the stop time of every
+  // stopped task, so it is individually audit-logged.
+  const oSb = o.scoreBackTime ?? 300;
+  const nSb = n.scoreBackTime ?? 300;
+  if (oSb !== nSb) {
+    out.push(
+      `Changed the PG score-back time from ${min(oSb)} to ${min(nSb)} (stopped tasks, S7F §12.3.1)`
+    );
+  }
   return out;
 }
 

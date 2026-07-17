@@ -84,6 +84,11 @@ const gapParamsSchema = z
     // Optional; the scorer defaults to the spec's recommended 0.8. The spec
     // fixes PG at 0 — the engine ignores the value for PG comps.
     essNotGoalFactor: z.number().min(0).max(1).optional(),
+    // PG score-back time in seconds (FAI S7F §5.6, §12.3.1): when a task is
+    // stopped, the PG stop time is the announcement minus this. Optional;
+    // the scorer defaults to the spec's 300 s (5 minutes). HG score-back is
+    // one start-gate interval (or 15 min single-gate) and has no setting.
+    scoreBackTime: z.number().min(0).max(3600).optional(),
   })
   .strict();
 
@@ -342,4 +347,12 @@ export const updateTaskSchema = z.object({
     .optional(),
   pilot_classes: pilotClassesArray.optional(),
   xctsk: xctskSchema.nullable().optional(),
+  // Stopped tasks (issue #264, S7F §12.3): the task stop announcement time
+  // as an ISO 8601 UTC datetime. Setting it scores the task as stopped;
+  // null clears the stop (task scored as run to completion).
+  stop_announcement_time: z
+    .string()
+    .refine((v) => !Number.isNaN(Date.parse(v)), "Must be an ISO 8601 datetime")
+    .nullable()
+    .optional(),
 });

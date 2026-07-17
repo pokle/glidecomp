@@ -272,8 +272,12 @@ function ScoreClassTable({
         <p className="mt-2 text-sm text-muted-foreground">
           {/* Two decimals (trimmed) so a 99.93% day doesn't read as a
               contradictory "100% · 999 pts". */}
-          Task validity: {Number((v.task * 100).toFixed(2))}% · Available:{" "}
-          {Number(ap.total.toFixed(1))} pts
+          Task validity: {Number((v.task * 100).toFixed(2))}%
+          {/* Stopped tasks (S7F §12.3.3): surface the fourth factor. */}
+          {v.stopped !== undefined
+            ? ` (task stopped — stopped validity ${Number((v.stopped * 100).toFixed(2))}%)`
+            : ""}{" "}
+          · Available: {Number(ap.total.toFixed(1))} pts
           (dist {Math.round(ap.distance)}, time {Math.round(ap.time)}, lead{" "}
           {Math.round(ap.leading)})
         </p>

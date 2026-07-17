@@ -29,6 +29,12 @@ import {
   TableRow,
 } from "@/react/ui/table";
 import { api } from "../../comp/api";
+import {
+  formatInstant,
+  utcISOToZonedDateTimeLocal,
+  zonedDateTimeLocalToUtcISO,
+  zoneLabel,
+} from "../lib/time";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { useAdminView, useUser } from "../lib/user";
@@ -186,6 +192,22 @@ export function TaskDetail() {
             </span>{" "}
             <span>{task.xctsk ? "Task defined" : "No task defined"}</span>
           </p>
+          {task.stop_announcement_time ? (
+            // Stopped task (FAI S7F §12.3): surface the stop prominently —
+            // it reshapes every score. Comp-zone (or UTC) rendering keeps
+            // the SSR markup deterministic.
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+              <Badge variant="destructive">Task stopped</Badge>
+              <span className="text-muted-foreground">
+                Stop announced{" "}
+                {formatInstant(
+                  new Date(task.stop_announcement_time),
+                  comp?.timezone ?? "UTC"
+                )}{" "}
+                — scored as a stopped task (FAI S7F §12.3)
+              </span>
+            </p>
+          ) : null}
           <ul className="mt-1 text-sm text-muted-foreground">
             {task.pilot_classes.map((cls) => (
               <li key={cls}>{cls}</li>
@@ -271,10 +293,12 @@ export function TaskDetail() {
           taskId={taskId}
           task={task}
           compPilotClasses={comp.pilot_classes}
+          timezone={comp.timezone ?? null}
           onClose={() => setEditOpen(false)}
           onSaved={() => {
             setEditOpen(false);
             setRefresh((n) => n + 1);
+            setScoresRefresh((n) => n + 1);
           }}
         />
       ) : null}
@@ -394,6 +418,7 @@ function EditTaskDialog({
   taskId,
   task,
   compPilotClasses,
+  timezone,
   onClose,
   onSaved,
 }: {
@@ -401,6 +426,8 @@ function EditTaskDialog({
   taskId: string;
   task: TaskDetailData;
   compPilotClasses: string[];
+  /** Comp-local IANA zone; the stop time is entered comp-local when set. */
+  timezone: string | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -408,10 +435,18 @@ function EditTaskDialog({
   const confirm = useConfirm();
   const nameId = useId();
   const dateId = useId();
+  const stopId = useId();
   const [name, setName] = useState(task.name);
   const [taskDate, setTaskDate] = useState(task.task_date);
   const [selectedClasses, setSelectedClasses] = useState<string[]>(
     compPilotClasses.filter((cls) => task.pilot_classes.includes(cls))
+  );
+  // Stopped task (S7F §12.3): the stop announcement, edited as a comp-local
+  // wall clock ("" = task not stopped). Stored/scored as a UTC instant.
+  const [stopLocal, setStopLocal] = useState(
+    task.stop_announcement_time
+      ? (utcISOToZonedDateTimeLocal(task.stop_announcement_time, timezone) ?? "")
+      : ""
   );
   const [saving, setSaving] = useState(false);
 
@@ -429,6 +464,14 @@ function EditTaskDialog({
       return;
     }
 
+    const stopIso = stopLocal
+      ? zonedDateTimeLocalToUtcISO(stopLocal, timezone)
+      : null;
+    if (stopLocal && !stopIso) {
+      toast.warning("Enter a valid stop announcement time");
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await api.api.comp[":comp_id"].task[":task_id"].$patch({
@@ -437,6 +480,7 @@ function EditTaskDialog({
           name: name.trim(),
           task_date: taskDate,
           pilot_classes: selectedClasses,
+          stop_announcement_time: stopIso,
         },
       });
 
@@ -523,6 +567,37 @@ function EditTaskDialog({
               />
             ))}
           </FieldSet>
+          <Field>
+            <FieldLabel htmlFor={stopId}>
+              Task stop announcement (
+              {zoneLabel(new Date(`${taskDate}T12:00:00Z`), timezone ?? "UTC")})
+            </FieldLabel>
+            <div className="flex items-center gap-2">
+              <Input
+                id={stopId}
+                type="datetime-local"
+                value={stopLocal}
+                onChange={(e) => setStopLocal(e.target.value)}
+              />
+              {stopLocal ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setStopLocal("")}
+                >
+                  Clear
+                </Button>
+              ) : null}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Set only when the task was stopped mid-flight (weather calldown).
+              Scores are recomputed under the stopped-task rules (FAI S7F
+              §12.3): a scored-back stop time, a clipped scoring window, and an
+              altitude bonus for pilots still flying. Leave empty for a task
+              that ran to completion.
+            </p>
+          </Field>
           <DialogFooter>
             <Button
               type="button"

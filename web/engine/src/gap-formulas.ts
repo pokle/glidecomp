@@ -53,7 +53,13 @@ export interface TaskValidity {
   launch: number;
   distance: number;
   time: number;
-  /** Product of launch × distance × time */
+  /**
+   * Stopped-task validity (FAI S7F §12.3.3) — the fourth factor, present
+   * only when the task was stopped. 1 when anyone reached ESS; 0 when the
+   * stopped task didn't run long enough to be scored (§12.3.2).
+   */
+  stopped?: number;
+  /** Product of launch × distance × time (× stopped when the task was stopped) */
   task: number;
 }
 
@@ -132,7 +138,64 @@ export function calculateTimeValidity(
 }
 
 /**
+ * Inputs to the §12.3.3 stopped-task validity formula, all distances in
+ * METRES (the formula itself works in km, per the spec).
+ */
+export interface StoppedValidityInputs {
+  /** Pilots' flown distances (m) — every launched pilot, bonus included. */
+  pilotDistances: number[];
+  /** How many of the launched pilots reached the end of the speed section. */
+  numReachedESS: number;
+  /** Launched pilots who landed before the task stop time. */
+  numLandedBeforeStop: number;
+  /** Optimized distance from launch to the end of the speed section (m). */
+  launchToEssDistance: number;
+}
+
+/**
+ * Stopped-task validity (FAI S7F §12.3.3) — the fourth validity factor for
+ * a stopped task:
+ *
+ *   NumberOfPilotsReachedESS > 0 : StoppedTaskValidity = 1
+ *   NumberOfPilotsReachedESS = 0 :
+ *     min(1, √((BestDistFlown − AvgDistFlown) / (TaskDistLaunchToESS −
+ *       BestDistFlown + 1) × √(StDevDistFlown / 5)) +
+ *       (NumPilotsLandedBeforeStop / NumPilotsLaunched)³)
+ *
+ * with distances in km and the sample standard deviation, matching AirScore.
+ * Degenerate inputs (nobody launched, best distance at/past the ESS with the
+ * +1 km buffer) clamp rather than produce NaN.
+ */
+export function calculateStoppedTaskValidity(inputs: StoppedValidityInputs): number {
+  const { pilotDistances, numReachedESS, numLandedBeforeStop, launchToEssDistance } = inputs;
+  if (numReachedESS > 0) return 1;
+  const launched = pilotDistances.length;
+  if (launched === 0) return 0;
+
+  const distancesKm = pilotDistances.map(d => d / 1000);
+  const bestKm = distancesKm.reduce((max, d) => Math.max(max, d), 0);
+  const avgKm = distancesKm.reduce((sum, d) => sum + d, 0) / launched;
+  // Sample standard deviation (n − 1), 0 for a single pilot.
+  let stDevKm = 0;
+  if (launched > 1) {
+    const sumSq = distancesKm.reduce((sum, d) => sum + (d - avgKm) * (d - avgKm), 0);
+    stDevKm = Math.sqrt(sumSq / (launched - 1));
+  }
+
+  const denomKm = launchToEssDistance / 1000 - bestKm + 1;
+  const spread = denomKm > 0 && bestKm > avgKm
+    ? Math.sqrt(((bestKm - avgKm) / denomKm) * Math.sqrt(stDevKm / 5))
+    : 0;
+  const landedRatio = numLandedBeforeStop / launched;
+  return Math.min(1, spread + landedRatio * landedRatio * landedRatio);
+}
+
+/**
  * Calculate complete task validity.
+ *
+ * @param stoppedValidity - The §12.3.3 stopped-task validity factor, present
+ *   only when the task was stopped ({@link calculateStoppedTaskValidity} — or
+ *   0 when the stopped task failed the §12.3.2 minimum-run requirement).
  */
 export function calculateTaskValidity(
   params: GAPParameters,
@@ -140,6 +203,7 @@ export function calculateTaskValidity(
   bestDistance: number,
   bestTime: number | null,
   numPresent: number,
+  stoppedValidity?: number,
 ): TaskValidity {
   const numFlying = pilotDistances.length;
   const launch = calculateLaunchValidity(numFlying, numPresent, params.nominalLaunch);
@@ -156,7 +220,8 @@ export function calculateTaskValidity(
     launch,
     distance,
     time,
-    task: launch * distance * time,
+    ...(stoppedValidity !== undefined ? { stopped: stoppedValidity } : {}),
+    task: launch * distance * time * (stoppedValidity ?? 1),
   };
 }
 

@@ -14,12 +14,18 @@ import {
   calculateOptimizedTaskDistance,
   DEFAULT_GAP_PARAMETERS,
   resolveCompGapParams,
+  resolveTaskStop,
+  resolveScoredWindowEnds,
+  stoppedGlideRatio,
+  resolveGoalAltitude,
   SCORING_ENGINE_VERSION,
   type GAPParameters,
   type FlightScoringData,
   type OpenDistanceFlightData,
   type TaskScoreCore,
   type LeadingAggregate,
+  type StoppedTaskScore,
+  type StopResolutionOptions,
   type TurnpointSequenceResultJSON,
 } from "@glidecomp/engine";
 import { encodeId } from "./sqids";
@@ -52,13 +58,29 @@ export interface PilotScoreEntry {
   early_start_outcome: "pg_launch_to_sss" | "hg_penalty" | "hg_min_distance" | null;
   /** Automatic jump-the-gun penalty points deducted (HG early starts). */
   jump_the_gun_penalty: number | null;
+  /** Stopped tasks (S7F §12.3.6): altitude-bonus metres folded into
+   * flown_distance for a pilot still flying at the stop. Null otherwise. */
+  stopped_altitude_bonus: number | null;
+}
+
+/** Whole-class stopped-task outcome (S7F §12.3) — see engine StoppedTaskScore. */
+export interface ClassStoppedInfo {
+  stop_time_ms: number;
+  scored_window_seconds: number | null;
+  minimum_run_seconds: number;
+  requirement_met: boolean;
+  stopped_validity: number;
+  time_points_reduction: number;
+  num_landed_before_stop: number;
 }
 
 export interface ClassScore {
   pilot_class: string;
-  task_validity: { launch: number; distance: number; time: number; task: number };
+  task_validity: { launch: number; distance: number; time: number; task: number; stopped?: number };
   available_points: { distance: number; time: number; leading: number; arrival: number; total: number };
   pilots: PilotScoreEntry[];
+  /** Present when the task was scored as stopped (S7F §12.3). */
+  stopped?: ClassStoppedInfo;
 }
 
 export interface TaskScoreResponse {
@@ -91,12 +113,16 @@ export async function computeScoreStateKey(
 ): Promise<string> {
   const task = await db
     .prepare(
-      `SELECT t.xctsk, c.scoring_format
+      `SELECT t.xctsk, t.stop_announcement_time, c.scoring_format
        FROM task t JOIN comp c ON c.comp_id = t.comp_id
        WHERE t.task_id = ?`
     )
     .bind(taskId)
-    .first<{ xctsk: string | null; scoring_format: string | null }>();
+    .first<{
+      xctsk: string | null;
+      stop_announcement_time: string | null;
+      scoring_format: string | null;
+    }>();
 
   // Include the pilot roster (comp_pilot_id, name, class) in the hashed state.
   // The scored output embeds these fields, so a roster change — a rename, a
@@ -167,6 +193,8 @@ export async function computeScoreStateKey(
     `engine:${SCORING_ENGINE_VERSION}`,
     task?.scoring_format ?? "gap",
     task?.xctsk ?? "",
+    // Stopped tasks (S7F §12.3): the stop announcement reshapes every score.
+    `stop:${task?.stop_announcement_time ?? ""}`,
     ...tracks.results.map(
       (t) =>
         `${t.task_track_id}:${t.uploaded_at}:${t.penalty_points}:${t.comp_pilot_id}:${t.registered_pilot_name}:${t.pilot_class}`
@@ -192,7 +220,8 @@ export async function computeScoreStateKey(
   // v5: added scoring_format to the hashed state (open-distance support).
   // v6: added per-task pilot statuses (they now feed launch validity).
   // v7: only active tracks count; added active manual flights (issue #306).
-  return `score:v7:${taskId}:${hex}`;
+  // v8: added the task stop announcement time (stopped tasks, issue #264).
+  return `score:v8:${taskId}:${hex}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -293,6 +322,14 @@ interface CachedFlightAnalysis {
   essTimeMs: number | null;
   /** Seconds started before the first gate (S7F §12.2), when early. */
   earlyStartSeconds?: number;
+  /** Official start time (gate-snapped in a gated race), epoch ms. Feeds the
+   * stopped-task scored-window arithmetic (S7F §12.3.4). Absent in rows
+   * cached before stopped tasks shipped — sssTimeMs is the fallback. */
+  startTimeMs?: number | null;
+  /** Stopped tasks: pilot landed before the stop (feeds §12.3.3 validity). */
+  landedBeforeStop?: boolean;
+  /** Stopped tasks: §12.3.6 altitude bonus folded into flownDistance (m). */
+  stoppedAltitudeBonus?: number;
   /** Present only for leading-enabled comps — the per-track leading scan,
    * cached so a new upload doesn't force a re-scan of the whole field. Its
    * validity is tied to the task geometry + leading formula in the cache key. */
@@ -355,7 +392,9 @@ function emptyClassScore(pilotClass: string): ClassScore {
  */
 function buildClassScore(
   pilotClass: string,
-  result: Pick<TaskScoreCore, "taskValidity" | "availablePoints" | "pilotScores">,
+  result: Pick<TaskScoreCore, "taskValidity" | "availablePoints" | "pilotScores"> & {
+    stopped?: StoppedTaskScore;
+  },
   pilotMeta: Map<
     string,
     { comp_pilot_id: number; penalty_points: number; penalty_reason: string | null }
@@ -401,6 +440,7 @@ function buildClassScore(
     early_start_seconds: p.pilotScore.earlyStartSeconds ?? null,
     early_start_outcome: p.pilotScore.earlyStartOutcome ?? null,
     jump_the_gun_penalty: p.pilotScore.jumpTheGunPenalty ?? null,
+    stopped_altitude_bonus: p.pilotScore.stoppedAltitudeBonus ?? null,
   }));
 
   return {
@@ -408,6 +448,19 @@ function buildClassScore(
     task_validity: result.taskValidity,
     available_points: result.availablePoints,
     pilots,
+    ...(result.stopped
+      ? {
+          stopped: {
+            stop_time_ms: result.stopped.stopTimeMs,
+            scored_window_seconds: result.stopped.scoredWindowSeconds,
+            minimum_run_seconds: result.stopped.minimumRunSeconds,
+            requirement_met: result.stopped.requirementMet,
+            stopped_validity: result.stopped.stoppedValidity,
+            time_points_reduction: result.stopped.timePointsReduction,
+            num_landed_before_stop: result.stopped.numLandedBeforeStop,
+          },
+        }
+      : {}),
   };
 }
 
@@ -434,7 +487,7 @@ export async function computeTaskScore(
   // Load task + comp gap_params
   const taskRow = await db
     .prepare(
-      `SELECT t.task_id, t.comp_id, t.task_date, t.xctsk,
+      `SELECT t.task_id, t.comp_id, t.task_date, t.xctsk, t.stop_announcement_time,
               c.category, c.gap_params, c.scoring_format, c.creation_date
        FROM task t
        JOIN comp c ON t.comp_id = c.comp_id
@@ -447,6 +500,7 @@ export async function computeTaskScore(
       task_date: string;
       category: string;
       xctsk: string;
+      stop_announcement_time: string | null;
       gap_params: string | null;
       scoring_format: string | null;
       creation_date: string;
@@ -492,6 +546,26 @@ export async function computeTaskScore(
   const useLeading = gapParams.useLeading ?? DEFAULT_GAP_PARAMETERS.useLeading;
   const leadingFormula = gapParams.leadingFormula ?? DEFAULT_GAP_PARAMETERS.leadingFormula;
   const scoringTask = taskForDistanceOrigin(xcTask, distanceOrigin);
+
+  // Stopped tasks (issue #264, S7F §12.3): derive the task stop time from
+  // the recorded announcement (PG: minus scoreBackTime; HG: minus one gate
+  // interval) and the per-flight stop context. GAP only — open distance has
+  // no stopped-task concept in the spec.
+  const fullGapParams: GAPParameters = { ...DEFAULT_GAP_PARAMETERS, ...gapParams };
+  const stopAnnouncementMs = taskRow.stop_announcement_time
+    ? Date.parse(taskRow.stop_announcement_time)
+    : NaN;
+  const stopCtx =
+    scoringFormat === "gap" && Number.isFinite(stopAnnouncementMs)
+      ? resolveTaskStop(scoringTask, stopAnnouncementMs, fullGapParams)
+      : null;
+  const stopBase: StopResolutionOptions | null = stopCtx
+    ? {
+        stopTimeMs: stopCtx.stopTimeMs,
+        glideRatio: stoppedGlideRatio(fullGapParams.scoring),
+        goalAltitude: resolveGoalAltitude(scoringTask),
+      }
+    : null;
 
   // Load all active tracks joined with pilot info, grouped by class. A
   // superseded track (active = 0 — e.g. a pilot later marked DNF, or replaced
@@ -721,27 +795,85 @@ export async function computeTaskScore(
   // comps also reuse rows — but the leading aggregate depends on the formula,
   // so it is folded into the hash (and the payload carries the aggregate).
   // The leading vs no-leading variants hash differently so a hit always has
-  // the shape it needs.
+  // the shape it needs. A task stop reshapes every per-track result (window
+  // clip + altitude bonus), so the resolved stop time and glide ratio fold
+  // in too (the goal altitude comes from the xctsk, already in the key).
+  const stopKey = stopBase
+    ? ` stop:${stopBase.stopTimeMs}:${stopBase.glideRatio}`
+    : "";
   const geomKey = useLeading
-    ? `${taskRow.xctsk} ${distanceOrigin} lead:${leadingFormula}`
-    : `${taskRow.xctsk} ${distanceOrigin} nolead`;
+    ? `${taskRow.xctsk} ${distanceOrigin} lead:${leadingFormula}${stopKey}`
+    : `${taskRow.xctsk} ${distanceOrigin} nolead${stopKey}`;
   const geomHash = await shortHash(`${geomKey} engine:${SCORING_ENGINE_VERSION}`);
   const stored = await loadTrackAnalyses(db, taskId, "gap", geomHash);
   const analysisWrites: TrackAnalysisWrite[] = [];
 
+  type ScoredTrack = (typeof scoredTracks)[number];
   type AnalyzedPilot = {
     flight: FlightScoringData;
     comp_pilot_id: number;
     pilot_class: string;
     penalty_points: number;
     penalty_reason: string | null;
+    /** The underlying track row — null for manual (track-less) flights. */
+    track: ScoredTrack | null;
+  };
+
+  /** Fetch, decompress and parse one track's IGC from R2 (null on failure). */
+  const fetchIgcFixes = async (igcFilename: string) => {
+    const object = await r2.get(igcFilename);
+    if (!object) return null;
+    const compressed = await object.arrayBuffer();
+    const decompressedStream = new Response(compressed).body!.pipeThrough(
+      new DecompressionStream("gzip")
+    );
+    const decompressed = await new Response(decompressedStream).arrayBuffer();
+    const igcText = new TextDecoder().decode(decompressed);
+    let igc;
+    try {
+      igc = parseIGC(igcText);
+    } catch {
+      // Skip unparseable tracks — admin can delete and ask pilot to re-upload
+      console.warn(`Skipping unparseable IGC: ${igcFilename}`);
+      return null;
+    }
+    if (igc.fixes.length === 0) return null;
+    return igc.fixes;
+  };
+
+  /** Resolve one track's scoring inputs against the task (stop-aware). */
+  const resolveGapFlight = (
+    track: ScoredTrack,
+    fixes: NonNullable<Awaited<ReturnType<typeof fetchIgcFixes>>>,
+    stop: StopResolutionOptions | null
+  ): FlightScoringData => {
+    const result = resolveTurnpointSequence(
+      scoringTask, fixes, stop ? { stop } : undefined,
+    );
+    // Base (field-independent) analysis, without retaining the heavy
+    // tracklog. Leading comps additionally capture the per-track leading
+    // scan as an aggregate, so a later upload doesn't re-scan the field.
+    const base = toFlightScoringData(
+      { pilotName: track.pilot_name, trackFile: track.igc_filename, fixes },
+      result,
+      false
+    );
+    const leadingAggregate = useLeading
+      ? computeLeadingAggregate(
+          fixes, scoringTask, result.sequence,
+          base.sssTimeMs, base.essTimeMs, leadingFormula
+        )
+      : undefined;
+    return leadingAggregate ? { ...base, leadingAggregate } : base;
   };
 
   // Gather each pilot's scoring inputs — from the per-track analysis store
   // when possible, otherwise by fetching + decompressing + parsing the IGC
   // from R2 and resolving its turnpoint sequence. Bounded concurrency
   // overlaps R2 latency while capping peak memory from decompressed
-  // tracklogs.
+  // tracklogs. For a stopped task this pass scores every pilot against the
+  // stop-time window — exact for single-start-gate races; the multi-gate
+  // per-pilot equalization happens in the class loop below (§12.3.4).
   const analyzed = await mapWithConcurrency(
     scoredTracks,
     TRACK_FETCH_CONCURRENCY,
@@ -759,58 +891,34 @@ export async function computeTaskScore(
       }
 
       if (!flight) {
-        const object = await r2.get(track.igc_filename);
-        if (!object) return null;
-
-        const compressed = await object.arrayBuffer();
-        const decompressedStream = new Response(compressed).body!.pipeThrough(
-          new DecompressionStream("gzip")
-        );
-        const decompressed = await new Response(decompressedStream).arrayBuffer();
-        const igcText = new TextDecoder().decode(decompressed);
-
-        let igc;
-        try {
-          igc = parseIGC(igcText);
-        } catch {
-          // Skip unparseable tracks — admin can delete and ask pilot to re-upload
-          console.warn(`Skipping unparseable IGC: ${track.igc_filename}`);
-          return null;
-        }
-        if (igc.fixes.length === 0) return null;
-
-        const result = resolveTurnpointSequence(scoringTask, igc.fixes);
-        // Base (field-independent) analysis, without retaining the heavy
-        // tracklog. Leading comps additionally capture the per-track leading
-        // scan as an aggregate, so a later upload doesn't re-scan the field.
-        const base = toFlightScoringData(
-          { pilotName: track.pilot_name, trackFile: track.igc_filename, fixes: igc.fixes },
-          result,
-          false
-        );
-        const leadingAggregate = useLeading
-          ? computeLeadingAggregate(
-              igc.fixes, scoringTask, result.sequence,
-              base.sssTimeMs, base.essTimeMs, leadingFormula
-            )
-          : undefined;
-        flight = leadingAggregate ? { ...base, leadingAggregate } : base;
+        const fixes = await fetchIgcFixes(track.igc_filename);
+        if (!fixes) return null;
+        flight = resolveGapFlight(track, fixes, stopBase);
 
         // Store the compact, field-independent analysis for reuse. Only the
         // geometric fields (+ leading aggregate) — the pilot name/id come
         // fresh from the DB each run, so renames and penalties never
         // invalidate this entry.
         const compact: CachedFlightAnalysis = {
-          flownDistance: base.flownDistance,
-          madeGoal: base.madeGoal,
-          reachedESS: base.reachedESS,
-          speedSectionTime: base.speedSectionTime,
-          sssTimeMs: base.sssTimeMs,
-          essTimeMs: base.essTimeMs,
-          ...(base.earlyStartSeconds !== undefined
-            ? { earlyStartSeconds: base.earlyStartSeconds }
+          flownDistance: flight.flownDistance,
+          madeGoal: flight.madeGoal,
+          reachedESS: flight.reachedESS,
+          speedSectionTime: flight.speedSectionTime,
+          sssTimeMs: flight.sssTimeMs,
+          essTimeMs: flight.essTimeMs,
+          startTimeMs: flight.startTimeMs ?? null,
+          ...(flight.earlyStartSeconds !== undefined
+            ? { earlyStartSeconds: flight.earlyStartSeconds }
             : {}),
-          ...(leadingAggregate ? { leadingAggregate } : {}),
+          ...(flight.landedBeforeStop !== undefined
+            ? { landedBeforeStop: flight.landedBeforeStop }
+            : {}),
+          ...(flight.stoppedAltitudeBonus !== undefined
+            ? { stoppedAltitudeBonus: flight.stoppedAltitudeBonus }
+            : {}),
+          ...(flight.leadingAggregate
+            ? { leadingAggregate: flight.leadingAggregate }
+            : {}),
         };
         analysisWrites.push({
           task_track_id: track.task_track_id,
@@ -827,6 +935,7 @@ export async function computeTaskScore(
         pilot_class: track.pilot_class,
         penalty_points: track.penalty_points,
         penalty_reason: track.penalty_reason,
+        track,
       };
     }
   );
@@ -878,6 +987,7 @@ export async function computeTaskScore(
       pilot_class: m.pilot_class,
       penalty_points: 0,
       penalty_reason: null,
+      track: null,
     });
   }
 
@@ -894,13 +1004,48 @@ export async function computeTaskScore(
       continue;
     }
 
+    let classFlights = classPilots.map((p) => p.flight);
+
+    // Stopped multi-gate / elapsed-time tasks (§12.3.4): every pilot in the
+    // class is scored for the duration the LAST-started pilot had. The
+    // equalized windows come from the stop-clipped first pass; affected
+    // tracks are re-resolved live against their own window end. This path
+    // is rare (a stopped task with multiple gates), so it deliberately does
+    // NOT write to the per-track cache — overwriting the single-row-per-
+    // variant store with per-window rows would thrash the common cache.
+    if (stopBase) {
+      const starts = classFlights.map(
+        (f) => f.startTimeMs ?? f.sssTimeMs ?? null
+      );
+      const windowEnds = resolveScoredWindowEnds(
+        scoringTask, starts, stopBase.stopTimeMs
+      );
+      if (windowEnds) {
+        classFlights = await mapWithConcurrency(
+          classFlights,
+          TRACK_FETCH_CONCURRENCY,
+          async (flight, idx) => {
+            const track = classPilots[idx].track;
+            if (!track || windowEnds[idx] >= stopBase.stopTimeMs) return flight;
+            const fixes = await fetchIgcFixes(track.igc_filename);
+            if (!fixes) return flight; // keep the stop-time-clipped pass 1
+            return resolveGapFlight(track, fixes, {
+              ...stopBase,
+              windowEndMs: windowEnds[idx],
+            });
+          }
+        );
+      }
+    }
+
     const numPresent =
       classPilots.length + (dnfByClass.get(pilotClass) ?? 0);
     const result = scoreFlights(
       scoringTask,
-      classPilots.map((p) => p.flight),
+      classFlights,
       gapParams,
-      numPresent
+      numPresent,
+      stopCtx ? { stopTimeMs: stopCtx.stopTimeMs } : undefined
     );
     const pilotMeta = new Map(
       classPilots.map((p) => [
@@ -982,6 +1127,50 @@ type PilotAnalysisPayload = Pick<
 >;
 
 /**
+ * Recover one pilot's §12.3.4 equalized scored-window end for a stopped
+ * multi-gate / elapsed-time task, from the cached per-track analyses
+ * computeTaskScore wrote (variant "gap", the stop-aware pass-1 hash) for the
+ * pilot's class. Returns null when the common window applies (single-gate
+ * race, nobody started) or when the cached field isn't available yet — the
+ * caller then clips at the stop time, which is exact for single-gate races.
+ */
+async function resolvePilotStopWindow(
+  db: D1Database,
+  args: {
+    taskId: number;
+    compPilotId: number;
+    scoringTask: ReturnType<typeof taskForDistanceOrigin>;
+    stopTimeMs: number;
+    gapGeomHash: string;
+  }
+): Promise<number | null> {
+  const rows = await db
+    .prepare(
+      `SELECT tt.comp_pilot_id, ta.payload_json
+       FROM track_analysis ta
+       JOIN task_track tt ON tt.task_track_id = ta.task_track_id
+       JOIN comp_pilot cp ON cp.comp_pilot_id = tt.comp_pilot_id
+       WHERE tt.task_id = ? AND tt.active = 1
+         AND ta.variant = 'gap' AND ta.geom_hash = ?
+         AND ta.uploaded_at = tt.uploaded_at
+         AND cp.pilot_class = (
+           SELECT pilot_class FROM comp_pilot WHERE comp_pilot_id = ?
+         )`
+    )
+    .bind(args.taskId, args.gapGeomHash, args.compPilotId)
+    .all<{ comp_pilot_id: number; payload_json: string }>();
+  if (rows.results.length === 0) return null;
+  const starts = rows.results.map((r) => {
+    const cached = JSON.parse(r.payload_json) as CachedFlightAnalysis;
+    return cached.startTimeMs ?? cached.sssTimeMs ?? null;
+  });
+  const ends = resolveScoredWindowEnds(args.scoringTask, starts, args.stopTimeMs);
+  if (!ends) return null;
+  const idx = rows.results.findIndex((r) => r.comp_pilot_id === args.compPilotId);
+  return idx >= 0 ? ends[idx] : null;
+}
+
+/**
  * Compute one pilot's scoring-transparency analysis for a task, mirroring
  * computeTaskScore's inputs exactly (distance-origin trim, task geometry).
  * Stored per track in track_analysis (variant "pilot-detail") — any xctsk /
@@ -998,13 +1187,21 @@ export async function computePilotAnalysis(
 ): Promise<PilotAnalysisResponse | null> {
   const taskRow = await db
     .prepare(
-      `SELECT t.xctsk, c.gap_params, c.scoring_format
+      `SELECT t.xctsk, t.stop_announcement_time,
+              c.gap_params, c.scoring_format, c.category, c.creation_date
        FROM task t
        JOIN comp c ON t.comp_id = c.comp_id
        WHERE t.task_id = ?`
     )
     .bind(taskId)
-    .first<{ xctsk: string; gap_params: string | null; scoring_format: string | null }>();
+    .first<{
+      xctsk: string;
+      stop_announcement_time: string | null;
+      gap_params: string | null;
+      scoring_format: string | null;
+      category: string;
+      creation_date: string;
+    }>();
   if (!taskRow || !taskRow.xctsk) return null;
 
   const track = await db
@@ -1091,8 +1288,58 @@ export async function computePilotAnalysis(
   const distanceOrigin =
     gapParams.distanceOrigin ?? DEFAULT_GAP_PARAMETERS.distanceOrigin;
 
+  // Stopped tasks (S7F §12.3): mirror computeTaskScore's stop context so the
+  // transparency narrative matches the published score exactly. The pilot's
+  // §12.3.4 equalized window (multi-gate/elapsed tasks) is recovered from
+  // the cached field analyses the scorer wrote — best effort: when they're
+  // not available yet the stop time is used (exact for single-gate races).
+  let stopOptions: StopResolutionOptions | null = null;
+  if (scoringFormat === "gap" && taskRow.stop_announcement_time) {
+    const announceMs = Date.parse(taskRow.stop_announcement_time);
+    if (Number.isFinite(announceMs)) {
+      const category = taskRow.category === "pg" ? "pg" : "hg";
+      const compCreatedAtMs = Date.parse(taskRow.creation_date);
+      const fullGapParams = resolveCompGapParams(
+        category,
+        taskRow.gap_params ? (JSON.parse(taskRow.gap_params) as Partial<GAPParameters>) : null,
+        Number.isNaN(compCreatedAtMs) ? null : compCreatedAtMs
+      );
+      const stopScoringTask = taskForDistanceOrigin(
+        parseXCTask(taskRow.xctsk),
+        fullGapParams.distanceOrigin
+      );
+      const stopCtx = resolveTaskStop(stopScoringTask, announceMs, fullGapParams);
+      stopOptions = {
+        stopTimeMs: stopCtx.stopTimeMs,
+        glideRatio: stoppedGlideRatio(fullGapParams.scoring),
+        goalAltitude: resolveGoalAltitude(stopScoringTask),
+      };
+      const windowEndMs = await resolvePilotStopWindow(db, {
+        taskId,
+        compPilotId,
+        scoringTask: stopScoringTask,
+        stopTimeMs: stopCtx.stopTimeMs,
+        // The pass-1 "gap"-variant geometry hash computeTaskScore uses.
+        gapGeomHash: await shortHash(
+          `${
+            fullGapParams.useLeading
+              ? `${taskRow.xctsk} ${fullGapParams.distanceOrigin} lead:${fullGapParams.leadingFormula}`
+              : `${taskRow.xctsk} ${fullGapParams.distanceOrigin} nolead`
+          } stop:${stopCtx.stopTimeMs}:${stopOptions.glideRatio} engine:${SCORING_ENGINE_VERSION}`
+        ),
+      });
+      if (windowEndMs !== null && windowEndMs < stopCtx.stopTimeMs) {
+        stopOptions = { ...stopOptions, windowEndMs };
+      }
+    }
+  }
+
   const geomHash = await shortHash(
-    `${taskRow.xctsk} ${scoringFormat} ${distanceOrigin} engine:${SCORING_ENGINE_VERSION}`
+    `${taskRow.xctsk} ${scoringFormat} ${distanceOrigin}${
+      stopOptions
+        ? ` stop:${stopOptions.stopTimeMs}:${stopOptions.glideRatio}:${stopOptions.windowEndMs ?? ""}`
+        : ""
+    } engine:${SCORING_ENGINE_VERSION}`
   );
 
   let payload: PilotAnalysisPayload | null = null;
@@ -1157,7 +1404,10 @@ export async function computePilotAnalysis(
       };
     } else {
       const scoringTask = taskForDistanceOrigin(xcTask, distanceOrigin);
-      const result = resolveTurnpointSequence(scoringTask, igc.fixes);
+      const result = resolveTurnpointSequence(
+        scoringTask, igc.fixes,
+        stopOptions ? { stop: stopOptions } : undefined,
+      );
       // Round-trip through JSON so the payload is typed as the wire format
       // (Dates → ISO strings) — exactly what D1 stores and the client revives.
       payload = {

@@ -181,8 +181,23 @@ export interface BestProgress {
   /** Longitude at the best progress point */
   longitude: number;
 
-  /** Shortest remaining distance to goal from this point (meters) */
+  /**
+   * Shortest remaining distance to goal from this point (meters). For a
+   * stopped task with an altitude bonus (§12.3.6) this is the EFFECTIVE
+   * remaining distance — geometric distance minus {@link altitudeBonus} —
+   * so `flownDistance = taskDistance − distanceToGoal` stays true.
+   */
   distanceToGoal: number;
+
+  /**
+   * Stopped tasks only (§12.3.6): the altitude-bonus distance credited at
+   * this point — glideRatio × (GNSS altitude − goal altitude), clamped to
+   * the geometric remaining distance. Absent when no bonus applied.
+   */
+  altitudeBonus?: number;
+
+  /** Stopped tasks only: GNSS altitude (m) at the best progress point. */
+  altitude?: number;
 }
 
 /**
@@ -284,6 +299,84 @@ export interface LaunchWindowInfo {
    * validation (they remain in `crossings` for transparency).
    */
   droppedStartCrossings: number;
+}
+
+// ---------------------------------------------------------------------------
+// Stopped task (FAI S7F §12.3)
+// ---------------------------------------------------------------------------
+
+/**
+ * How a stopped task is applied to one flight's sequence resolution
+ * (FAI S7F §12.3). Passed to resolveTurnpointSequence when the task was
+ * stopped; the resolver clips the scored flight to the pilot's scored time
+ * window (§12.3.4), scores a pilot at/after ESS for their complete flight
+ * (§12.3.5), and credits the altitude bonus (§12.3.6).
+ */
+export interface StopResolutionOptions {
+  /** The resolved task stop time (epoch ms) — see resolveTaskStop (§12.3.1). */
+  stopTimeMs: number;
+
+  /**
+   * This pilot's scored-window end (epoch ms, §12.3.4). Defaults to
+   * `stopTimeMs` — the single-start-gate common window. For multi-gate /
+   * elapsed-time tasks pass the per-pilot window end from
+   * resolveScoredWindowEnds.
+   */
+  windowEndMs?: number;
+
+  /** §12.3.6 altitude-bonus glide ratio: 5.0 HG, 4.0 PG. */
+  glideRatio: number;
+
+  /** Goal altitude (m GNSS) the altitude bonus is measured above. */
+  goalAltitude: number;
+}
+
+/**
+ * How the task stop shaped this flight's scoring (§12.3) — present on the
+ * result whenever the task was scored as stopped, so the score explanation
+ * can narrate the stop time, the clipped window, and any altitude bonus.
+ */
+export interface TaskStopInfo {
+  /** The task stop time the field was scored against (§12.3.1). */
+  stopTime: Date;
+
+  /** This pilot's scored-window end (§12.3.4; equals stopTime for a common window). */
+  windowEnd: Date;
+
+  /**
+   * True when the pilot reached ESS within their scored window (§12.3.5):
+   * the complete flight is scored, including anything flown after the stop.
+   */
+  essBeforeStop: boolean;
+
+  /**
+   * True when the tracklog reaches the scored-window end — the pilot was
+   * still flying at the stop, making them eligible for the §12.3.6 altitude
+   * bonus (and counted as "still flying" in the §12.3.3 stopped validity).
+   */
+  flyingAtStop: boolean;
+
+  /**
+   * Boundary crossings after the scored-window end, excluded from sequence
+   * resolution (they remain in `crossings` for transparency). Crossings
+   * already past the task deadline are not double-counted here.
+   */
+  crossingsAfterStop: number;
+
+  /**
+   * §12.3.6 altitude bonus folded into flownDistance (meters); 0 when the
+   * pilot landed before the stop, made goal, or the bonus never helped.
+   */
+  altitudeBonus: number;
+
+  /** GNSS altitude (m) at the scored best point, when a bonus applied. */
+  bestPointAltitude?: number;
+
+  /** The glide ratio the bonus used (5.0 HG / 4.0 PG). */
+  glideRatio: number;
+
+  /** The goal altitude (m) the bonus was measured above. */
+  goalAltitude: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -411,6 +504,13 @@ export interface TurnpointSequenceResult {
    * {@link LaunchWindowInfo}.
    */
   launchWindow?: LaunchWindowInfo;
+
+  /**
+   * Present when the task was scored as stopped (§12.3): how the stop
+   * shaped this flight — the scored window, the §12.3.5 complete-flight
+   * exemption, and any §12.3.6 altitude bonus. See {@link TaskStopInfo}.
+   */
+  stopInfo?: TaskStopInfo;
 }
 
 /**
@@ -478,6 +578,12 @@ export type LaunchWindowInfoJSON = Omit<LaunchWindowInfo, 'openTime'> & {
   openTime: string | number;
 };
 
+/** {@link TaskStopInfo} as it arrives over JSON — `Date`s serialized. */
+export type TaskStopInfoJSON = Omit<TaskStopInfo, 'stopTime' | 'windowEnd'> & {
+  stopTime: string | number;
+  windowEnd: string | number;
+};
+
 /**
  * {@link TurnpointSequenceResult} as it arrives over JSON. `Date` fields
  * serialize to ISO strings (JSON.stringify's default) or epoch milliseconds;
@@ -489,7 +595,7 @@ export interface TurnpointSequenceResultJSON
   extends Omit<
     TurnpointSequenceResult,
     'crossings' | 'sequence' | 'sssReaching' | 'essReaching' | 'bestProgress'
-    | 'startGate' | 'earlyStart' | 'deadline' | 'launchWindow'
+    | 'startGate' | 'earlyStart' | 'deadline' | 'launchWindow' | 'stopInfo'
   > {
   crossings: CylinderCrossingJSON[];
   sequence: TurnpointReachingJSON[];
@@ -500,4 +606,5 @@ export interface TurnpointSequenceResultJSON
   earlyStart?: EarlyStartJSON;
   deadline?: TaskDeadlineInfoJSON;
   launchWindow?: LaunchWindowInfoJSON;
+  stopInfo?: TaskStopInfoJSON;
 }

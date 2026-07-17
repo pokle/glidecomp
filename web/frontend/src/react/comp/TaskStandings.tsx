@@ -32,6 +32,7 @@ import {
   TableRow,
 } from "@/react/ui/table";
 import { api } from "../../comp/api";
+import { formatInstant } from "../lib/time";
 import { toast } from "../lib/toast";
 import { SimpleSelect } from "./fields";
 import { ScoreFreshness } from "./ScoreFreshness";
@@ -48,6 +49,36 @@ import type {
   TaskScoreData,
   TrackInfo,
 } from "./types";
+
+/**
+ * Task-level stopped notice (FAI S7F §12.3): shown above the standings when
+ * the task was scored as stopped — the scored-back stop time, and (when the
+ * stop came before the minimum scoring time) why every pilot reads 0. The
+ * comp zone (or UTC) keeps the SSR markup deterministic.
+ */
+function StoppedTaskNotice({
+  score,
+  timezone,
+}: {
+  score: TaskScoreData;
+  timezone: string | null;
+}) {
+  const stopped = score.classes.find((c) => c.stopped)?.stopped;
+  if (!stopped) return null;
+  return (
+    <p className="mt-2 text-sm">
+      <span className="font-medium text-destructive">Task stopped</span>{" "}
+      <span className="text-muted-foreground">
+        — flights scored up to{" "}
+        {formatInstant(new Date(stopped.stop_time_ms), timezone ?? "UTC")} (the
+        stop announcement, scored back per FAI S7F §12.3.1).{" "}
+        {stopped.requirement_met
+          ? "Pilots still flying at the stop keep an altitude bonus for height above goal; a stopped-task validity factor applies."
+          : "The task was stopped before running the minimum scoring time (FAI S7F §12.3.2), so it cannot be scored — every pilot reads 0."}
+      </span>
+    </p>
+  );
+}
 
 type Outcome = "present" | "absent" | "dnf" | "landed";
 
@@ -303,6 +334,8 @@ export function TaskStandings({
         etag={etag}
         pollUrl={`/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/score`}
       />
+
+      <StoppedTaskNotice score={score} timezone={timezone} />
 
       {score.classes.map((cls) => (
         <ClassStandings

@@ -56,12 +56,18 @@ export function defaultFormatTime(d: Date): string {
 const VALIDITY_MIN_DECIMALS = 2;
 const VALIDITY_MAX_DECIMALS = 5;
 
+/** The validity factors in play: the three S7F basics, plus the stopped-task
+ * factor (§12.3.3) when the task was stopped. */
+function validityFactors(v: ClassContextInput['task_validity']): number[] {
+  return [v.launch, v.distance, v.time, ...(v.stopped !== undefined ? [v.stopped] : [])];
+}
+
 export function validityFactorDecimals(
   v: ClassContextInput['task_validity'],
   total: number,
 ): number {
   for (let d = VALIDITY_MIN_DECIMALS; d < VALIDITY_MAX_DECIMALS; d++) {
-    const product = [v.launch, v.distance, v.time].reduce(
+    const product = validityFactors(v).reduce(
       (p, f) => p * Number(f.toFixed(d)),
       1000,
     );
@@ -155,7 +161,7 @@ export function availableTotalDetail(
   total: number,
   decimals: number,
 ): string {
-  const factors = [v.launch, v.distance, v.time].map((f) =>
+  const factors = validityFactors(v).map((f) =>
     fmtValidityFactor(f, decimals),
   );
   const product = factors.reduce((p, f) => p * Number(f), 1000);

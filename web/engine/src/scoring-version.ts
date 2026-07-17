@@ -190,7 +190,22 @@
 //     scoring number is unchanged; the fingerprint moved because the hashed
 //     sources were reorganised, so the guard requires a bump. The cache roll is
 //     harmless — scores recompute identically.
-export const SCORING_ENGINE_VERSION = 21;
+// v22: stopped tasks (issue #264, S7F §12.3). A task with a recorded stop
+//     announcement time is now scored as stopped: the announcement is scored
+//     back to the task stop time (§12.3.1 — PG minus the new scoreBackTime
+//     comp parameter, default 300 s; HG minus one start-gate interval, or 15
+//     minutes with a single gate); every pilot is scored only for the scored
+//     time window (§12.3.4 — start→stop for single-gate races; the last
+//     starter's duration for multi-gate/elapsed), with crossings after it
+//     excluded; a pilot at/after ESS at the window end keeps their complete
+//     flight (§12.3.5) and every goal pilot's time points are reduced by the
+//     points of a hypothetical pilot reaching ESS exactly at the stop; pilots
+//     still flying at the stop earn the §12.3.6 altitude bonus (GNSS height
+//     above goal × 5.0 HG / 4.0 PG, folded into flown distance); a fourth
+//     validity factor (§12.3.3) applies, and a stopped task that ran less
+//     than min(1 h, nominalTime/2) after the start scores zero (§12.3.2).
+//     Tasks without a stop announcement are scored exactly as before.
+export const SCORING_ENGINE_VERSION = 22;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -198,4 +213,4 @@ export const SCORING_ENGINE_VERSION = 21;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "39415a09c46672750fa5e1f05db979f03ce56b9b03553155ef6b0364d0a6ec31";
+  "26687a67efb6ce6112d9236d2f8e419b9226f05e4f331395a3829ff8d6a3f7f6";

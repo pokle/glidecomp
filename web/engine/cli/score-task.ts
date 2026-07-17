@@ -43,6 +43,10 @@
  *     --jump-the-gun-factor <n>              `jumpTheGunFactor`, HG (default: 2)
  *     --jump-the-gun-max-seconds <s>         `jumpTheGunMaxSeconds`, HG (default: 300)
  *     --ess-not-goal-factor <ratio>          `essNotGoalFactor` 0-1, HG (default: 0.8)
+ *     --score-back-time <s>                  `scoreBackTime`, PG stopped tasks (default: 300)
+ *   Stopped task (S7F §12.3):
+ *     --stop-time <iso-datetime>             Task stop announcement time; scores the
+ *                                            task as stopped
  *   Output:
  *     --json                                 Output results as JSON
  */
@@ -110,7 +114,10 @@ function usage(): never {
     '  --ess-not-goal-factor <ratio>\n' +
     '                             `essNotGoalFactor` 0-1: share of time+arrival points\n' +
     '                             kept on ESS without goal (S7F §12.1). HG default 0.8;\n' +
-    '                             PG is fixed at 0 by the spec and ignores it.\n\n' +
+    '                             PG is fixed at 0 by the spec and ignores it.\n' +
+    '  --score-back-time <s>      `scoreBackTime`, PG stopped tasks (default: 300)\n' +
+    '  --stop-time <iso-datetime> Task stop announcement time (S7F §12.3) — scores\n' +
+    '                             the task as stopped (e.g. 2026-01-15T03:45:00Z)\n\n' +
     'Output:\n' +
     '  --json                     Output results as JSON\n'
   );
@@ -124,6 +131,8 @@ if (args.length < 2) usage();
 const params: Partial<GAPParameters> = {};
 let jsonOutput = false;
 let openDistance = false;
+// Stopped task (S7F §12.3): the stop announcement time, when given.
+let stopAnnouncementMs: number | null = null;
 let nominalDistancePct: number | undefined;
 const positional: string[] = [];
 
@@ -181,6 +190,19 @@ for (let i = 0; i < args.length; i++) {
     case '--ess-not-goal-factor':
       params.essNotGoalFactor = Number(args[++i]);
       break;
+    case '--score-back-time':
+      params.scoreBackTime = Number(args[++i]);
+      break;
+    case '--stop-time': {
+      // Stopped task (S7F §12.3): the stop announcement as an ISO datetime.
+      const parsed = Date.parse(args[++i]);
+      if (Number.isNaN(parsed)) {
+        process.stderr.write('Error: --stop-time must be an ISO 8601 datetime (e.g. 2026-01-15T03:45:00Z)\n');
+        process.exit(1);
+      }
+      stopAnnouncementMs = parsed;
+      break;
+    }
     case '--use-distance-difficulty':
       params.useDistanceDifficulty = true;
       break;
@@ -374,7 +396,12 @@ if (openDistance) {
 }
 
 // Score
-const result = openDistance ? scoreOpenDistance(task, pilots) : scoreTask(task, pilots, gapParams);
+const result = openDistance
+  ? scoreOpenDistance(task, pilots)
+  : scoreTask(
+      task, pilots, gapParams, undefined,
+      stopAnnouncementMs !== null ? { stopAnnouncementMs } : {},
+    );
 
 // ---------------------------------------------------------------------------
 // Output
@@ -458,10 +485,33 @@ if (jsonOutput) {
   console.log(`Best distance:    ${formatDist(s.bestDistance)}`);
   console.log(`Best time:        ${s.bestTime !== null ? formatTime(s.bestTime) : 'none'}`);
   console.log('');
+  // Stopped task (S7F §12.3): the transparency block the UI also shows.
+  if (result.stopped) {
+    const st = result.stopped;
+    console.log(`STOPPED TASK (S7F §12.3):`);
+    console.log(`  Stop time:      ${new Date(st.stopTimeMs).toISOString()} (announcement scored back per §12.3.1)`);
+    console.log(
+      `  Scored window:  ${st.scoredWindowSeconds !== null ? formatTime(st.scoredWindowSeconds) : 'none (nobody started)'} (minimum to score: ${formatTime(st.minimumRunSeconds)})`
+    );
+    if (!st.requirementMet) {
+      console.log('  NOT SCORED — the task was stopped before the §12.3.2 minimum run; every pilot scores 0.');
+    } else {
+      console.log(`  Stopped validity: ${(st.stoppedValidity * 100).toFixed(1)}% (§12.3.3)`);
+      if (st.timePointsReduction > 0) {
+        console.log(`  Goal pilots' time points reduced by ${st.timePointsReduction.toFixed(1)} (§12.3.5)`);
+      }
+      console.log(`  Landed before the stop: ${st.numLandedBeforeStop} of ${s.numFlying}`);
+    }
+    console.log('');
+  }
+
   console.log(`Task Validity:    ${(tv.task * 100).toFixed(1)}%`);
   console.log(`  Launch:         ${(tv.launch * 100).toFixed(1)}%`);
   console.log(`  Distance:       ${(tv.distance * 100).toFixed(1)}%`);
   console.log(`  Time:           ${(tv.time * 100).toFixed(1)}%`);
+  if (tv.stopped !== undefined) {
+    console.log(`  Stopped:        ${(tv.stopped * 100).toFixed(1)}%`);
+  }
   console.log('');
   console.log(`Available Points: ${ap.total.toFixed(0)} (dist: ${ap.distance.toFixed(0)}, time: ${ap.time.toFixed(0)}, lead: ${ap.leading.toFixed(0)}, arr: ${ap.arrival.toFixed(0)})`);
   console.log(`Weights:          dist: ${(w.distance * 100).toFixed(1)}%, time: ${(w.time * 100).toFixed(1)}%, lead: ${(w.leading * 100).toFixed(1)}%, arr: ${(w.arrival * 100).toFixed(1)}%`);
