@@ -146,9 +146,16 @@ differs. Know which surface you're touching:
   H1-below-breadcrumbs the current page). Headings are hierarchical and not
   skipped (no h2 → h4). `SectionHeader` titles are real headings, not styled
   text.
-- **Breadcrumbs** (`Breadcrumbs.tsx`) are parents-only and use the same label
-  for the same destination everywhere ("Competitions"). Mark up as a `<nav
-  aria-label="Breadcrumb">` with an ordered list.
+- **Breadcrumbs** use the same label for the same destination everywhere
+  ("Competitions") and are marked up as a `<nav aria-label="Breadcrumb">`
+  wrapping an ordered list. Two variants exist during the RAC migration:
+  - `rac/breadcrumbs.tsx` (task page; the app-wide target) follows the
+    **WAI-ARIA breadcrumb pattern** — ancestor links, then the current page as
+    the final crumb, rendered as plain text with `aria-current="page"`.
+  - `components/Breadcrumbs.tsx` (unconverted pages) is **parents-only** — the
+    current page is not a crumb, since the H1 directly below marks it.
+  Either satisfies WCAG; prefer the ARIA-native one for new/converted pages, as
+  the explicit `aria-current` gives AT users a "you are here" anchor.
 - **Page titles** (WCAG 2.4.2): each SPA route sets a unique, descriptive
   `<title>`; static pages already do.
 

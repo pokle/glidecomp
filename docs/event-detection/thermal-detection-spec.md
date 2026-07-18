@@ -141,7 +141,8 @@ This causes two visible issues:
 - Straight climbing segments are labelled as thermals.
 - Segments with weak lift (climbing below 0.5 m/s on glide) are neither thermal nor glide — they become gaps in the event list and are unselectable on the map.
 
-See TODO.md for the tracked bug.
+Tracked in GitHub issues (https://github.com/pokle/glidecomp/issues) — the
+project's backlog of record.
 
 ### Parameter Sensitivity
 

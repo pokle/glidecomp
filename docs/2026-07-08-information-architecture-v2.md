@@ -293,13 +293,19 @@ components so future work stays consistent:
   (which ride the tab-switcher row, as that page has no section headers).
   Inline CTA clusters (the hero's action row) are content, not section
   management — they stay left-aligned.
-- **Breadcrumbs are parents-only** — `Breadcrumbs`
-  (`src/react/components/Breadcrumbs.tsx`): the current page is never a
-  crumb because the H1 directly below is the current-page marker (GOV.UK
-  "up links" style). Same label for the same destination everywhere
+- **Breadcrumbs** — same label for the same destination everywhere
   ("Competitions"). The pilot score page carries the full
   `Competitions › comp › task` trail; the full-screen tools carry the
-  top-center bar described in §3.
+  top-center bar described in §3. Two variants coexist during the RAC
+  migration (see the RAC adoption guide, gotcha #11):
+  - **ARIA-native** — `src/react/rac/breadcrumbs.tsx` (task page, and the
+    pattern to adopt app-wide): ancestor links followed by the current page
+    as a final `aria-current="page"` crumb, per the WAI-ARIA breadcrumb
+    pattern. The H1 below still names the page; the crumb duplicates it
+    deliberately, as the "you are here" anchor.
+  - **Parents-only** — `src/react/components/Breadcrumbs.tsx` (unconverted
+    pages): the current page is never a crumb, because the H1 directly
+    below is the current-page marker (GOV.UK "up links" style).
 - **One Submit track dialog everywhere** (`comp/SubmitTrackDialog.tsx`):
   every Submit track button opens the same dialog; the "Submitting for" row
   is always visible (locked to "Myself" for plain pilots, registered-pilot

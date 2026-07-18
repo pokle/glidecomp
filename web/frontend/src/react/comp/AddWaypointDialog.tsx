@@ -134,6 +134,25 @@ export function AddWaypointDialog({
     });
   }
 
+  // A short "we pre-filled these" note when the dialog was opened from a map
+  // tap (details present). It names what the map supplied; every field stays
+  // editable. A nearby peak gets its own richer status row under Coordinates.
+  const filledNote = (() => {
+    if (!details) return "";
+    const parts: string[] = [];
+    if (initialCoords) parts.push("coordinates");
+    if (details.elevation !== undefined) parts.push("elevation");
+    if (details.placeName) parts.push("name");
+    if (parts.length === 0) return "";
+    const list =
+      parts.length === 1
+        ? parts[0]
+        : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+    return details.placeName
+      ? `Filled ${list} from the map — adjust anything below.`
+      : `Filled ${list} from the map — add a code and name below.`;
+  })();
+
   return (
     <Modal
       isOpen={open}
@@ -145,6 +164,15 @@ export function AddWaypointDialog({
         <DialogHeader>
           <DialogTitle>Add waypoint</DialogTitle>
         </DialogHeader>
+        {filledNote ? (
+          <p
+            className="-mt-1 flex items-start gap-1.5 rounded-md bg-muted/60 px-2.5 py-1.5 text-xs text-muted-foreground"
+            aria-live="polite"
+          >
+            <span aria-hidden="true">📍</span>
+            <span>{filledNote}</span>
+          </p>
+        ) : null}
         <TextField
           label="Code"
           placeholder="e.g. A01"

@@ -1,8 +1,9 @@
 /**
  * React Aria Components Disclosure — collapsible sections with proper
  * button/region semantics. Used for the route editor's Start (SSS) and Goal
- * panels: expanded by default (scoring-critical settings stay visible), but
- * collapsible to tame the dialog.
+ * panels, which are collapsed by default (no `defaultExpanded`) — their
+ * defaults suit most competitions, so collapsing them keeps the turnpoint list
+ * the focus of the dialog. Pass `defaultExpanded` where a panel should open.
  */
 import {
   Disclosure as AriaDisclosure,
