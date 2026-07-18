@@ -261,6 +261,8 @@ working band 850–2350 m · phases cover 100.0% of flight time
 
 `report.ts` is generic over the registry — a Stage 1 agent adding a metric to their family array appears in the report with zero report-code changes.
 
+**Presentation principle (user, 2026-07-19): lead with the metric-separation results.** The separation ranking is the reader's guide — it tells a pilot which strategies actually mattered on that task/day (task-by-task inspection shows e.g. "T2 was a selectivity day, T3 a low-saves day") — so it prints FIRST, right after the basis line, before the family sections; the comp report likewise leads with the cross-task separation table. Any future surface presenting these metrics (task page UI, debrief) should follow the same order: separation ranking first, then the per-family detail.
+
 ## Testing
 
 Stage 0: `web/engine/tests/field-resample.test.ts` (interpolation, >60 s gaps → nulls, ENU z = −north matches cluster-detector), `field-shared-thermals.test.ts` (concurrent 300 m apart clusters; 2 km / 10 min apart don't; singletons kept), `field-phase-partition.test.ts` (exact coverage, no overlaps, fast-straight → glide, slow-meander → search), `field-stats.test.ts` (Spearman hand-computed incl. ties/constant/n=2), `field-analysis.test.ts` (integration skeleton over `web/samples/comps/kosci-loop-t1/`: parse → `scoreTask` (PG) → `buildFieldContext` → `evaluateField` → `renderFieldReport`; passes with stub families), plus `web/engine/tests/field-test-helpers.ts` (`makeTestField(...)` factory — FROZEN after Stage 0).
@@ -308,6 +310,8 @@ Cross-package needs (shared thermals for P1+P4, grid for P4+P5, working band for
 
 - [x] P1 · [x] P2 · [x] P3 · [x] P4 · [x] P5 · [x] P6 (each: implement + tests green in isolation)
 
+**Synthetic-comp caveat (user, 2026-07-19): kosci-loop and big-chip are fully artificial fixtures** — kosci exists to test out-and-return/exit-turnpoint scoring, big-chip open-distance scoring. Their correlation values exercise the *machinery* (coverage, sanity ordering) and must never be read as behavioural findings. Only real comps (Corryong, and future imports) inform which metrics matter.
+
 **Stage 1 as-built notes (deviations & findings, from the package agents):**
 - `glide.track_efficiency` reads a constant per-leg offset above 1 (~1.25–1.56 on the synthetic task): reachings sit on cylinder crossing points while `optimizedMeters` uses optimizer tag points. Identical for all pilots on a leg, so correlation is unaffected; subtract per-leg crossing-to-tag geometry if absolute ≈1.0 readings are wanted.
 - `race.leg_time_lost`'s scalar is censored: pilots who bomb early complete few legs and so "lose" little time (Corryong T1 ρ ≈ 0). The waterfall table is right; the scalar needs a per-leg normalisation or completed-legs weighting to be a fair separator.
@@ -316,10 +320,11 @@ Cross-package needs (shared thermals for P1+P4, grid for P4+P5, working band for
 - `climb.shared_percentile` ranks uses, not pilots — a pilot with two uses in one cluster occupies two rank slots.
 - First real-data separation ranking (Corryong open, comp-level ρ vs comp rank): glide.speed −0.76, gaggle.affinity −0.74, race.time_behind 0.77 (sanity), race.ess_margin 0.60, climb.selectivity −0.56, decision.search_fraction 0.54, race.start_delay 0.52, decision.climbs_per_100km 0.52, glide.ld_vs_field −0.51; weak on real data: climb.time_to_core, glide.stf_proxy, climb.circle_smoothness, day.launch_timing.
 
-### Stage 2 — serial, ONE agent
-- [ ] Tighten kosci-loop-t1 integration assertions — **with these exemptions the fixture forces** (found in Stage 1): `decision.climbs_per_100km` is all-null there (flights max ~19.6 km, below its 20 km gate); `climb.selectivity` and `climb.circle_smoothness` are all-null (the triangle-wave tracks yield zero detected circles field-wide); `glide.stf_proxy` is sparse (uniform synthetic climb rates); and `race.time_behind`'s sanity check must use the goal-subset (Spearman over `madeGoal` pilots > 0.9 — it is 1.0 there), NOT whole-field |ρ| > 0.9 (only 7/44 reach ESS, whole-field ρ is legitimately weak and sign-flipped). Assert the rest populate for ≥ 80% of started pilots; wind/day tables non-empty.
-- [ ] Run corryong single-task + `--comp corryong-cup-2026` + `--comp kosci-loop`; polish column widths/ordering/wording; check runtime
-- [ ] Usage note in `score-task.ts` header comment; `bun run test` + `bun run typecheck:all` green
+### Stage 2 — serial, ONE agent — DONE
+- [x] Tighten kosci-loop-t1 integration assertions — **with these exemptions the fixture forces** (found in Stage 1): `decision.climbs_per_100km` is all-null there (flights max ~19.6 km, below its 20 km gate); `climb.selectivity`, `climb.circle_smoothness`, `race.final_glide_init` and `day.wind` samples are all-null/empty (the triangle-wave tracks yield zero detected circles field-wide and no qualifying final glides); `glide.stf_proxy` is sparse (uniform synthetic climb rates); and `race.time_behind`'s sanity check uses the goal-subset (Spearman over the 4 `madeGoal` pilots > 0.9 — it is 1.0 there), NOT whole-field |ρ|. As-built gates: 12 broad metrics ≥ 80% of started pilots, 4 leg/marker-scoped metrics ≥ 55%, ESS-scoped ≥ 5 of the 7 ESS reachers; day tables present.
+- [x] Report leads with the metric-separation ranking (task report right after the basis line; comp report leads with the cross-task separation table) per the presentation principle above — asserted in the integration test.
+- [x] Run corryong single-task + `--comp corryong-cup-2026` + `--comp kosci-loop` + `--comp big-chip` (open-distance path degrades correctly: SSS-scoped metrics null). Whole-comp runtime ~1 s.
+- [x] Usage note in `score-task.ts` header comment; `bun run test` + `bun run typecheck:all` green (891 tests)
 
 ## Deferred — for later (all wanted, in time; recorded so nothing gets lost)
 

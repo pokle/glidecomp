@@ -9,6 +9,16 @@
  *   bun run score-task -- task.xctsk pilot1.igc pilot2.igc pilot3.igc
  *   bun run score-task -- task.xctsk ./tracks/
  *   bun run score-task -- task.xctsk ./tracks/ extra-pilot.igc
+ *   bun run score-task -- task.xctsk ./tracks/ --wing HG --field-analysis
+ *   bun run score-task -- --comp corryong-cup-2026
+ *
+ * Field analysis (--field-analysis, implied by --comp): after the scores, a
+ * behavioural report over the whole field — per-pilot metrics (climbing,
+ * gliding, decision-making, gaggle, race craft, day profile/wind) led by the
+ * metric-separation ranking (Spearman ρ vs GAP rank), which tells the reader
+ * which strategies mattered on that task. --comp scores every task of a
+ * bundled comp per class and adds a per-class cross-task aggregate. See
+ * docs/2026-07-18-field-analysis-plan.md.
  *
  * Behaves identically to the web app. --wing (HG or PG) is REQUIRED for GAP
  * scoring — the CLI has no comp record to read the wing from, and won't guess.

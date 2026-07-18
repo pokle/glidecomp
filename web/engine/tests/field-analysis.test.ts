@@ -10,6 +10,7 @@ import {
   buildFieldContext,
   evaluateField,
   renderFieldReport,
+  spearman,
   ALL_METRICS,
   type FieldContext,
   type MetricComputer,
@@ -90,6 +91,89 @@ describe('field analysis integration (kosci-loop-t1)', () => {
     expect(rendered).toContain('Field Analysis');
     expect(rendered).toContain('Basis: 44 scored pilots');
     expect(rendered).toContain('Metric separation ranking');
+  }, 120_000);
+
+  it('populates every non-exempt metric across the field (Stage 2 coverage gates)', () => {
+    const report = evaluateField(field);
+    const started = field.pilots.filter((p) => p.sssMs !== null).length;
+    const byId = new Map(report.metrics.map((m) => [m.id, m]));
+    const coverage = (id: string): number => {
+      const m = byId.get(id);
+      if (!m) throw new Error(`metric ${id} not registered`);
+      return m.perPilot.filter((v) => v.value !== null).length;
+    };
+
+    // Broadly-applicable metrics: ≥ 80% of started pilots.
+    for (const id of [
+      'day.launch_timing',
+      'climb.shared_percentile',
+      'climb.time_to_core',
+      'climb.exit_decay',
+      'climb.departure_band',
+      'glide.speed',
+      'glide.dolphin_fraction',
+      'decision.altitude_floor',
+      'decision.low_saves',
+      'decision.search_fraction',
+      'gaggle.affinity',
+      'race.start_delay',
+    ]) {
+      expect(coverage(id)).toBeGreaterThanOrEqual(Math.floor(0.8 * started));
+    }
+    // Leg/marker-scoped metrics: only pilots completing speed-section legs
+    // (or sharing marked thermals) qualify — ≥ 55% of started pilots here.
+    for (const id of [
+      'glide.ld_vs_field',
+      'glide.track_efficiency',
+      'race.leg_time_lost',
+      'gaggle.marker_usage',
+    ]) {
+      expect(coverage(id)).toBeGreaterThanOrEqual(Math.floor(0.55 * started));
+    }
+    // ESS-scoped metrics: bounded by the 7 pilots who reach ESS on this task.
+    expect(coverage('race.time_behind')).toBeGreaterThanOrEqual(5);
+    expect(coverage('race.ess_margin')).toBeGreaterThanOrEqual(5);
+    // Fixture-exempt on kosci (documented in the plan doc): the synthetic
+    // triangle-wave tracks yield zero detected circles (selectivity,
+    // circle_smoothness, day.wind samples), sub-20 km flights
+    // (climbs_per_100km), uniform climbs (stf_proxy sparse), and no
+    // qualifying gaggle departures or final-glide initiations. No coverage
+    // gate for those — corryong is their exercise.
+
+    // The day tables exist regardless.
+    expect(byId.get('day.climb_by_hour')!.extraTables?.[0]?.rows.length).toBeGreaterThan(0);
+    expect(byId.get('day.wind')!.extraTables?.length).toBeGreaterThanOrEqual(1);
+  }, 120_000);
+
+  it('orders the goal field perfectly by time behind at ESS (horserace sanity)', () => {
+    // Whole-field ρ is legitimately weak here (only 7/44 reach ESS and rank
+    // separation is goal-completion, not speed) — the true sanity check is
+    // that AMONG goal pilots, minutes-behind orders exactly with rank.
+    const report = evaluateField(field);
+    const tb = report.metrics.find((m) => m.id === 'race.time_behind')!;
+    const valueByTrack = new Map(tb.perPilot.map((v) => [v.trackFile, v.value]));
+    const values: number[] = [];
+    const ranks: number[] = [];
+    for (const p of field.pilots) {
+      if (!p.score.madeGoal) continue;
+      const v = valueByTrack.get(p.trackFile);
+      if (v === null || v === undefined) continue;
+      values.push(v);
+      ranks.push(p.score.rank);
+    }
+    expect(values.length).toBeGreaterThanOrEqual(4); // kosci T1 has 4 goal-makers
+    expect(spearman(values, ranks)).toBeGreaterThan(0.9);
+  }, 120_000);
+
+  it('leads the rendered report with the metric separation ranking', () => {
+    const rendered = renderFieldReport(evaluateField(field));
+    const separationAt = rendered.indexOf('Metric separation ranking');
+    const firstFamilyAt = rendered.indexOf('--- Day profile');
+    expect(separationAt).toBeGreaterThan(-1);
+    expect(firstFamilyAt).toBeGreaterThan(-1);
+    // Presentation principle: the separation ranking guides the reader to the
+    // strategies that mattered today, so it prints before the family detail.
+    expect(separationAt).toBeLessThan(firstFamilyAt);
   }, 120_000);
 
   it('correlates a known-good metric strongly against rank (eval template)', () => {

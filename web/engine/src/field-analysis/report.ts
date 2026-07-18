@@ -88,6 +88,11 @@ export function renderFieldReport(report: FieldAnalysisReport): string {
       ` · phases cover ${b.phaseCoveragePct.toFixed(1)}% of flight time`,
   );
 
+  // The separation ranking leads: it tells the reader which strategies
+  // actually mattered on this task, and so how to read everything below.
+  lines.push('', heading('Metric separation ranking (Spearman ρ vs GAP rank)', '-'));
+  lines.push(...renderCorrelationTable(report));
+
   for (const family of FAMILY_ORDER) {
     const metrics = report.metrics.filter((m) => m.family === family);
     if (metrics.length === 0) continue;
@@ -131,8 +136,6 @@ export function renderFieldReport(report: FieldAnalysisReport): string {
     }
   }
 
-  lines.push('', heading('Metric separation ranking (Spearman ρ vs GAP rank)', '-'));
-  lines.push(...renderCorrelationTable(report));
   lines.push('');
   return lines.join('\n');
 }
@@ -178,27 +181,12 @@ export function renderCompReport(report: CompAggregateReport): string {
   const lines: string[] = [];
   lines.push(heading('Competition Field Analysis', '='));
 
-  const standings: ReportTable = {
-    title: `Comp standings (${report.taskLabels.length} tasks)`,
-    columns: [
-      { header: '#', align: 'right' },
-      { header: 'Pilot', align: 'left' },
-      { header: 'Tasks', align: 'right' },
-      { header: 'Total', align: 'right' },
-    ],
-    rows: report.pilots.map((p) => [
-      String(p.rank),
-      p.name.slice(0, 25),
-      String(p.taskCount),
-      p.totalScore.toFixed(1),
-    ]),
-  };
-  lines.push('', ...renderTable(standings));
-
+  // Separation first here too — task-by-task ρ columns show which strategies
+  // mattered on which day; the standings are context, not the headline.
   const ranked = [...report.metrics].sort(
     (a, b) => (b.meanAbsRho ?? -1) - (a.meanAbsRho ?? -1),
   );
-  const table: ReportTable = {
+  const separation: ReportTable = {
     title: 'Metric separation across the comp (Spearman ρ vs rank, per task and comp-level)',
     columns: [
       { header: 'Metric', align: 'left' },
@@ -218,9 +206,27 @@ export function renderCompReport(report: CompAggregateReport): string {
     ]),
     footnotes: [
       'comp ρ correlates each pilot\'s cross-task metric mean against their comp rank (total score).',
+      'Read the per-task columns to see which strategies mattered on which day.',
     ],
   };
-  lines.push('', ...renderTable(table));
+  lines.push('', ...renderTable(separation));
+
+  const standings: ReportTable = {
+    title: `Comp standings (${report.taskLabels.length} tasks)`,
+    columns: [
+      { header: '#', align: 'right' },
+      { header: 'Pilot', align: 'left' },
+      { header: 'Tasks', align: 'right' },
+      { header: 'Total', align: 'right' },
+    ],
+    rows: report.pilots.map((p) => [
+      String(p.rank),
+      p.name.slice(0, 25),
+      String(p.taskCount),
+      p.totalScore.toFixed(1),
+    ]),
+  };
+  lines.push('', ...renderTable(standings));
   lines.push('');
   return lines.join('\n');
 }
