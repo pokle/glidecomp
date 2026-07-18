@@ -19,7 +19,6 @@ import {
   FileTrigger,
   useDragAndDrop,
   useFilter,
-  Autocomplete,
   Button as AriaButton,
   DropIndicator,
 } from "react-aria-components";
@@ -44,8 +43,8 @@ import {
 } from "@/react/rac/dialog";
 import { Badge } from "@/react/rac/badge";
 import { Disclosure } from "@/react/rac/disclosure";
-import { NumberField, SearchField, TextField } from "@/react/rac/field";
-import { ListBox, ListBoxItem } from "@/react/rac/list-box";
+import { NumberField, TextField } from "@/react/rac/field";
+import { ComboBox, ComboBoxItem } from "@/react/rac/combo-box";
 import { SimpleSelect } from "@/react/rac/select";
 import { GridList, GridListItem } from "@/react/rac/grid-list";
 import { TimePicker } from "@/react/ui/date-picker";
@@ -1245,8 +1244,8 @@ function TurnpointDetailsDialog({
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<TurnpointDraft>(initial);
-  // The waypoint Autocomplete's query. Kept controlled so the result list only
-  // shows while searching (empty query → just the one-line field, less space).
+  // The waypoint ComboBox's query. Controlled so picking a waypoint can clear
+  // it (see applyWaypoint) and so the filtering below can see it.
   const [wpQuery, setWpQuery] = useState("");
   const { contains } = useFilter({ sensitivity: "base" });
   const radius = Number(draft.radius);
@@ -1268,12 +1267,22 @@ function TurnpointDetailsDialog({
     setWpQuery("");
   };
 
-  // All waypoints as keyed items; Autocomplete filters them by the query via
-  // each item's textValue (code + name), so no manual filtering here.
-  const wpItems = useMemo(
-    () => waypointRecords.map((w, i) => ({ id: `${w.code}-${i}`, record: w })),
-    [waypointRecords]
-  );
+  // All waypoints as keyed items, narrowed to the query. ComboBox does no
+  // filtering of its own for a controlled `items`, so match here — on code AND
+  // name, the same text each item exposes as its textValue.
+  const wpItems = useMemo(() => {
+    const all = waypointRecords.map((w, i) => ({
+      id: `${w.code}-${i}`,
+      record: w,
+      text: w.name !== w.code ? `${w.code} ${w.name}` : w.code,
+    }));
+    const q = wpQuery.trim();
+    // Empty query → no items, so the popover stays shut until you actually
+    // search. It also makes Esc work: RAC's Esc reverts the query to empty,
+    // and an empty collection is what lets the popover close instead of
+    // immediately reopening on the resulting input change.
+    return q === "" ? [] : all.filter((it) => contains(it.text, q));
+  }, [waypointRecords, wpQuery, contains]);
 
   const canSave = draft.name.trim() !== "" && parseCoords(draft.coords) != null;
 
@@ -1312,56 +1321,57 @@ function TurnpointDetailsDialog({
             .
           </p>
         ) : (
-          // RAC Autocomplete: type to filter, arrow-key/Enter to pick without
-          // leaving the field. The result list is only rendered while there's a
-          // query, so at rest this is a single compact search field.
-          <Autocomplete
-            filter={contains}
+          // Type to filter, arrow-key/Enter to pick without leaving the field.
+          // Matches float in a popover, so they can't be clipped or squashed by
+          // this dialog's scroll container and they flip above the field when
+          // there's no room below (short window, phone with the keyboard up).
+          //
+          // selectedKey is pinned to null: picking a waypoint copies its values
+          // into the draft below rather than leaving the combobox "holding" a
+          // selection, and re-picking the same one must fire again.
+          <ComboBox
+            label="Load from a waypoint"
+            placeholder={`Search ${waypointRecords.length} waypoints…`}
+            items={wpItems}
             inputValue={wpQuery}
             onInputChange={setWpQuery}
+            selectedKey={null}
+            onSelectionChange={(key) => {
+              // With BOTH selectedKey and inputValue controlled, react-stately
+              // hands us every commit and makes syncing inputValue our job
+              // (useComboBoxState: "it's the user's responsibility to update
+              // inputValue in onSelectionChange"). That includes key === null
+              // on the Esc/blur revert — clearing the query there is what
+              // actually lets the popover close, and what stops a stale query
+              // sitting in a field that looks like it's still filtering.
+              if (key == null) {
+                setWpQuery("");
+                return;
+              }
+              const item = wpItems.find((it) => it.id === key);
+              if (item) applyWaypoint(item.record);
+            }}
+            // Only while searching: an empty collection must close the popover
+            // when the query is empty, but stay open to say "No matches".
+            allowsEmptyCollection={wpQuery.trim() !== ""}
+            listClassName="max-h-48"
+            renderEmptyState={() => (
+              <p className="px-2 py-1.5 text-sm text-muted-foreground">
+                No matches
+              </p>
+            )}
           >
-            <SearchField
-              label="Load from a waypoint"
-              aria-label="Search competition waypoints"
-              placeholder={`Search ${waypointRecords.length} waypoints…`}
-            />
-            {wpQuery.trim() !== "" ? (
-              <ListBox
-                aria-label="Competition waypoints"
-                className="mt-1 max-h-48"
-                items={wpItems}
-                onAction={(key) => {
-                  const item = wpItems.find((it) => it.id === key);
-                  if (item) applyWaypoint(item.record);
-                }}
-                renderEmptyState={() => (
-                  <p className="px-2 py-1.5 text-sm text-muted-foreground">
-                    No matches
-                  </p>
-                )}
-              >
-                {(item: { id: string; record: WaypointFileRecord }) => (
-                  <ListBoxItem
-                    id={item.id}
-                    // textValue drives Autocomplete's filter + typeahead — match
-                    // on code AND name.
-                    textValue={
-                      item.record.name !== item.record.code
-                        ? `${item.record.code} ${item.record.name}`
-                        : item.record.code
-                    }
-                  >
-                    <span className="font-medium">{item.record.code}</span>
-                    {item.record.name !== item.record.code ? (
-                      <span className="truncate text-muted-foreground">
-                        {item.record.name}
-                      </span>
-                    ) : null}
-                  </ListBoxItem>
-                )}
-              </ListBox>
-            ) : null}
-          </Autocomplete>
+            {(item: { id: string; record: WaypointFileRecord; text: string }) => (
+              <ComboBoxItem id={item.id} textValue={item.text}>
+                <span className="font-medium">{item.record.code}</span>
+                {item.record.name !== item.record.code ? (
+                  <span className="truncate text-muted-foreground">
+                    {item.record.name}
+                  </span>
+                ) : null}
+              </ComboBoxItem>
+            )}
+          </ComboBox>
         )}
 
         <TextField
