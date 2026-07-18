@@ -9,6 +9,16 @@
  *   bun run score-task -- task.xctsk pilot1.igc pilot2.igc pilot3.igc
  *   bun run score-task -- task.xctsk ./tracks/
  *   bun run score-task -- task.xctsk ./tracks/ extra-pilot.igc
+ *   bun run score-task -- task.xctsk ./tracks/ --wing HG --field-analysis
+ *   bun run score-task -- --comp corryong-cup-2026
+ *
+ * Field analysis (--field-analysis, implied by --comp): after the scores, a
+ * behavioural report over the whole field — per-pilot metrics (climbing,
+ * gliding, decision-making, gaggle, race craft, day profile/wind) led by the
+ * metric-separation ranking (Spearman ρ vs GAP rank), which tells the reader
+ * which strategies mattered on that task. --comp scores every task of a
+ * bundled comp per class and adds a per-class cross-task aggregate. See
+ * docs/2026-07-18-field-analysis-plan.md.
  *
  * Behaves identically to the web app. --wing (HG or PG) is REQUIRED for GAP
  * scoring — the CLI has no comp record to read the wing from, and won't guess.
@@ -23,6 +33,13 @@
  *     --wing <HG|PG>                         `scoring`
  *   Task mode:
  *     --open-distance                        Score as open distance (GAP options ignored)
+ *     --comp <slug-or-dir>                   Score a whole bundled comp (comp.json manifest):
+ *                                            every task per class, plus a per-class comp
+ *                                            aggregate. Implies --field-analysis; wing comes
+ *                                            from the manifest category (--wing overrides).
+ *   Field analysis:
+ *     --field-analysis                       After the scores, print the behavioural field
+ *                                            analysis (see docs/2026-07-18-field-analysis-plan.md)
  *   Nominal parameters:
  *     --nominal-distance <m>                 `nominalDistance` (default: 70% of task)
  *     --nominal-distance-pct <%>             …as % of task distance (default: 70)
@@ -56,8 +73,20 @@ import { resolve, basename, extname } from 'path';
 import { parseIGC } from '../src/igc-parser';
 import { parseXCTask } from '../src/xctsk-parser';
 import { calculateOptimizedTaskDistance } from '../src/task-optimizer';
-import { scoreTask, resolveCompGapParams, resolveTimePointsExponent, type GAPParameters, type PilotFlight } from '../src/gap-scoring';
+import { scoreTask, resolveCompGapParams, resolveTimePointsExponent, type GAPParameters, type PilotFlight, type TaskScoreResult } from '../src/gap-scoring';
 import { scoreOpenDistance } from '../src/open-distance-scoring';
+import type { XCTask } from '../src/xctsk-parser';
+import {
+  buildFieldContext,
+  evaluateField,
+  renderFieldReport,
+  aggregateComp,
+  renderCompReport,
+  type CompTaskResult,
+  type FieldAnalysisReport,
+} from '../src/field-analysis';
+import { loadCompManifest, readTaskDir, pilotKeyFor } from './comp-manifest';
+import { join } from 'path';
 
 // ---------------------------------------------------------------------------
 // Argument parsing
@@ -118,6 +147,16 @@ function usage(): never {
     '  --score-back-time <s>      `scoreBackTime`, PG stopped tasks (default: 300)\n' +
     '  --stop-time <iso-datetime> Task stop announcement time (S7F §12.3) — scores\n' +
     '                             the task as stopped (e.g. 2026-01-15T03:45:00Z)\n\n' +
+    'Whole comp:\n' +
+    '  --comp <slug-or-dir>       Score a bundled comp (web/samples/comps/<slug>/comp.json,\n' +
+    '                             or a directory/path holding comp.json): every task per\n' +
+    '                             class plus a per-class comp aggregate. Implies\n' +
+    '                             --field-analysis; wing comes from the manifest category\n' +
+    '                             (--wing overrides).\n\n' +
+    'Field analysis:\n' +
+    '  --field-analysis           After the scores, print the behavioural field analysis\n' +
+    '                             (per-pilot metrics vs the field, ranked by Spearman\n' +
+    '                             correlation against GAP rank)\n\n' +
     'Output:\n' +
     '  --json                     Output results as JSON\n'
   );
@@ -131,6 +170,9 @@ if (args.length < 2) usage();
 const params: Partial<GAPParameters> = {};
 let jsonOutput = false;
 let openDistance = false;
+let fieldAnalysis = false;
+// Whole-comp mode: the --comp slug or directory (implies --field-analysis).
+let compArg: string | null = null;
 // Stopped task (S7F §12.3): the stop announcement time, when given.
 let stopAnnouncementMs: number | null = null;
 let nominalDistancePct: number | undefined;
@@ -224,6 +266,19 @@ for (let i = 0; i < args.length; i++) {
     case '--open-distance':
       openDistance = true;
       break;
+    case '--field-analysis':
+      fieldAnalysis = true;
+      break;
+    case '--comp': {
+      const v = args[++i];
+      if (!v || v.startsWith('--')) {
+        process.stderr.write('Error: --comp needs a bundled comp slug or a directory holding comp.json\n');
+        process.exit(1);
+      }
+      compArg = v;
+      fieldAnalysis = true;
+      break;
+    }
     case '--json':
       jsonOutput = true;
       break;
@@ -254,12 +309,13 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
-if (positional.length < 2) usage();
+if (compArg === null && positional.length < 2) usage();
 
 // Refuse to guess the wing: GAP scoring needs a category to pick the official
 // per-category defaults (arrival/difficulty/leading-weight differ HG vs PG), and
 // the CLI has no comp record to read it from. Open distance ignores GAP params.
-if (!openDistance && params.scoring === undefined) {
+// In --comp mode the manifest's `category` IS the comp record, so no flag needed.
+if (compArg === null && !openDistance && params.scoring === undefined) {
   process.stderr.write(
     'Error: --wing <HG|PG> is required for GAP scoring.\n' +
     'The CLI has no competition record to read the wing from and will not guess.\n' +
@@ -326,91 +382,67 @@ function padLeft(s: string, n: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// Main
+// Scoring + output building blocks (shared by single-task and --comp modes)
 // ---------------------------------------------------------------------------
 
-const taskPath = resolve(positional[0]);
-const igcPaths = findIGCFiles(positional.slice(1));
+/**
+ * Score one task exactly like the web app. Mirrors computeTaskScore in
+ * web/workers/competition-api/src/scoring.ts: start from the official
+ * per-category FAI defaults (defaultsFor — leading/arrival/difficulty/nominal
+ * goal as the S7F formula actually uses them), then overlay only the flags the
+ * user explicitly passed. resolveCompGapParams also keeps the pre-#258
+ * exponent when only a leading formula is given (classic → 2/3, weighted →
+ * 5/6), so passing a stored comp's gap_params reproduces its exact scores.
+ */
+function runScoring(
+  task: XCTask,
+  pilots: PilotFlight[],
+  openDist: boolean,
+  category: 'hg' | 'pg',
+): { result: TaskScoreResult; taskDistance: number } {
+  // Open distance has no goal/route, so there is no optimized task distance and
+  // no nominal-distance resolution — the take-off is the only turnpoint.
+  const taskDistance = openDist ? 0 : calculateOptimizedTaskDistance(task);
+  const gapParams: Partial<GAPParameters> = resolveCompGapParams(category, params);
 
-if (igcPaths.length === 0) {
-  process.stderr.write('Error: No IGC files found\n');
-  process.exit(1);
+  // Auto-fill nominalDistance from a percentage of the optimized task distance
+  // (UI uses 70%) unless the user pinned an explicit --nominal-distance. Key off
+  // the *explicit* flag, exactly as the UI keys off the comp's stored value.
+  if (!openDist && params.nominalDistance === undefined) {
+    const pct = nominalDistancePct ?? 70;
+    gapParams.nominalDistance = taskDistance * (pct / 100);
+  }
+
+  const result = openDist
+    ? scoreOpenDistance(task, pilots)
+    : scoreTask(
+        task, pilots, gapParams, undefined,
+        stopAnnouncementMs !== null ? { stopAnnouncementMs } : {},
+      );
+  return { result, taskDistance };
 }
 
-// Parse task
-const taskContent = readFileSync(taskPath, 'utf-8');
-const task = parseXCTask(taskContent);
-// Open distance has no goal/route, so there is no optimized task distance and
-// no nominal-distance resolution — the take-off is the only turnpoint.
-const taskDistance = openDistance ? 0 : calculateOptimizedTaskDistance(task);
-
-// Mirror the UI / competition-api scoring path exactly (see computeTaskScore in
-// web/workers/competition-api/src/scoring.ts): start from the official
-// per-category FAI defaults (defaultsFor — leading/arrival/difficulty/nominal
-// goal as the S7F formula actually uses them), then overlay only the flags the
-// user explicitly passed. The CLI has no comp record, so the category comes from
-// the required --wing flag (open distance ignores GAP params, so it falls
-// back to 'hg' harmlessly). This keeps a run numerically identical to the web
-// app for the same task and wing.
-const category = params.scoring === 'PG' ? 'pg' : 'hg';
-// resolveCompGapParams merges the passed flags over the per-category defaults
-// and, like the competition-api, keeps the pre-#258 exponent when only a
-// leading formula is given (classic → 2/3, weighted → 5/6) — so passing a
-// stored comp's gap_params reproduces its exact scores.
-const gapParams: Partial<GAPParameters> = resolveCompGapParams(category, params);
-
-// Auto-fill nominalDistance from a percentage of the optimized task distance
-// (UI uses 70%) unless the user pinned an explicit --nominal-distance. Key off
-// the *explicit* flag, exactly as the UI keys off the comp's stored value.
-if (!openDistance && params.nominalDistance === undefined) {
-  const pct = nominalDistancePct ?? 70;
-  gapParams.nominalDistance = taskDistance * (pct / 100);
-}
-
-// Parse all IGC files
-const pilots: PilotFlight[] = [];
-for (const igcPath of igcPaths) {
+/** Build the field-analysis report; a failure warns rather than killing the scores. */
+function tryFieldAnalysis(
+  task: XCTask,
+  pilots: PilotFlight[],
+  result: TaskScoreResult,
+  category: 'hg' | 'pg',
+): FieldAnalysisReport | null {
   try {
-    const igcContent = readFileSync(igcPath, 'utf-8');
-    const igc = parseIGC(igcContent);
-    if (igc.fixes.length === 0) {
-      process.stderr.write(`Warning: No fixes in ${basename(igcPath)}, skipping\n`);
-      continue;
-    }
-    const pilotName = igc.header.pilot || igc.header.competitionId || basename(igcPath, '.igc');
-    pilots.push({ pilotName, trackFile: igcPath, fixes: igc.fixes });
+    return evaluateField(buildFieldContext(task, pilots, result, category));
   } catch (err) {
-    process.stderr.write(`Warning: Failed to parse ${basename(igcPath)}: ${err}\n`);
+    process.stderr.write(`Warning: field analysis failed: ${err}\n`);
+    return null;
   }
 }
 
-if (pilots.length === 0) {
-  process.stderr.write('Error: No valid IGC files could be parsed\n');
-  process.exit(1);
-}
-
-if (openDistance) {
-  process.stderr.write(`Scoring ${pilots.length} pilots as open distance\n`);
-} else {
-  process.stderr.write(`Scoring ${pilots.length} pilots against task (${formatDist(taskDistance)})\n`);
-}
-
-// Score
-const result = openDistance
-  ? scoreOpenDistance(task, pilots)
-  : scoreTask(
-      task, pilots, gapParams, undefined,
-      stopAnnouncementMs !== null ? { stopAnnouncementMs } : {},
-    );
-
-// ---------------------------------------------------------------------------
-// Output
-// ---------------------------------------------------------------------------
-
-if (jsonOutput) {
-  // JSON output — keep the turnpoint sequence/leg breakdown for transparency,
-  // but drop the bulky raw cylinder-crossing array.
-  const output = {
+/**
+ * JSON shape — keep the turnpoint sequence/leg breakdown for transparency,
+ * but drop the bulky raw cylinder-crossing array.
+ */
+function stripCrossings(result: TaskScoreResult): unknown {
+  return {
     ...result,
     pilotScores: result.pilotScores.map(ps => {
       const { turnpointResult, ...rest } = ps;
@@ -418,8 +450,171 @@ if (jsonOutput) {
       return { ...rest, turnpointResult: sequenceResult };
     }),
   };
-  console.log(JSON.stringify(output, null, 2));
-} else if (openDistance) {
+}
+
+if (compArg !== null) {
+  runComp(compArg);
+} else {
+  runSingleTask();
+}
+
+// ---------------------------------------------------------------------------
+// Single-task mode (the original CLI behaviour)
+// ---------------------------------------------------------------------------
+
+function runSingleTask(): void {
+  const taskPath = resolve(positional[0]);
+  const igcPaths = findIGCFiles(positional.slice(1));
+
+  if (igcPaths.length === 0) {
+    process.stderr.write('Error: No IGC files found\n');
+    process.exit(1);
+  }
+
+  const task = parseXCTask(readFileSync(taskPath, 'utf-8'));
+  // The category comes from the required --wing flag (open distance ignores
+  // GAP params, so it falls back to 'hg' harmlessly).
+  const category = params.scoring === 'PG' ? 'pg' : 'hg';
+
+  // Parse all IGC files
+  const pilots: PilotFlight[] = [];
+  for (const igcPath of igcPaths) {
+    try {
+      const igcContent = readFileSync(igcPath, 'utf-8');
+      const igc = parseIGC(igcContent);
+      if (igc.fixes.length === 0) {
+        process.stderr.write(`Warning: No fixes in ${basename(igcPath)}, skipping\n`);
+        continue;
+      }
+      const pilotName = igc.header.pilot || igc.header.competitionId || basename(igcPath, '.igc');
+      pilots.push({ pilotName, trackFile: igcPath, fixes: igc.fixes });
+    } catch (err) {
+      process.stderr.write(`Warning: Failed to parse ${basename(igcPath)}: ${err}\n`);
+    }
+  }
+
+  if (pilots.length === 0) {
+    process.stderr.write('Error: No valid IGC files could be parsed\n');
+    process.exit(1);
+  }
+
+  const { result, taskDistance } = runScoring(task, pilots, openDistance, category);
+  if (openDistance) {
+    process.stderr.write(`Scoring ${pilots.length} pilots as open distance\n`);
+  } else {
+    process.stderr.write(`Scoring ${pilots.length} pilots against task (${formatDist(taskDistance)})\n`);
+  }
+
+  const report = fieldAnalysis ? tryFieldAnalysis(task, pilots, result, category) : null;
+
+  if (jsonOutput) {
+    const output = stripCrossings(result) as Record<string, unknown>;
+    if (report) output.fieldAnalysis = report;
+    console.log(JSON.stringify(output, null, 2));
+  } else {
+    printResultTables(task, result, openDistance);
+    if (report) console.log(renderFieldReport(report));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Whole-comp mode (--comp)
+// ---------------------------------------------------------------------------
+
+function runComp(arg: string): void {
+  const { manifest, compsRoot } = loadCompManifest(arg);
+  const openDist = openDistance || manifest.scoring_format === 'open_distance';
+  // The manifest's category is the comp record the single-task mode lacks;
+  // an explicit --wing still wins.
+  const category: 'hg' | 'pg' =
+    params.scoring !== undefined
+      ? (params.scoring === 'PG' ? 'pg' : 'hg')
+      : (manifest.category === 'pg' ? 'pg' : 'hg');
+
+  const jsonTasks: unknown[] = [];
+  const jsonComps: unknown[] = [];
+
+  for (const pilotClass of manifest.classes) {
+    const specs = manifest.tasks
+      .filter((t) => t.pilot_class === pilotClass)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const compTasks: CompTaskResult[] = [];
+
+    for (const spec of specs) {
+      const fullLabel = `${spec.name} (${spec.date})`;
+      let taskDir;
+      try {
+        taskDir = readTaskDir(join(compsRoot, spec.dir));
+      } catch (err) {
+        process.stderr.write(`Warning: skipping ${spec.dir}: ${err}\n`);
+        continue;
+      }
+      const { task, pilots } = taskDir;
+      if (pilots.length === 0) {
+        process.stderr.write(`Warning: no parseable tracks in ${spec.dir}, skipping\n`);
+        continue;
+      }
+      process.stderr.write(
+        `Scoring ${manifest.name} [${pilotClass}] ${fullLabel}: ${pilots.length} pilots\n`,
+      );
+
+      const { result } = runScoring(task, pilots, openDist, category);
+      const report = tryFieldAnalysis(task, pilots, result, category);
+
+      if (jsonOutput) {
+        jsonTasks.push({
+          pilotClass,
+          label: fullLabel,
+          result: stripCrossings(result),
+          fieldAnalysis: report,
+        });
+      } else {
+        console.log('');
+        console.log(`${'='.repeat(20)} ${manifest.name} — ${pilotClass} — ${fullLabel} ${'='.repeat(20)}`);
+        printResultTables(task, result, openDist);
+        if (report) console.log(renderFieldReport(report));
+      }
+
+      if (report) {
+        compTasks.push({
+          // Short label ("T1") — it becomes a column header in the comp table.
+          label: spec.name.replace(/^Task\s*/i, 'T'),
+          report,
+          pilotKeyByTrackFile: Object.fromEntries(
+            pilots.map((p) => [p.trackFile, pilotKeyFor(p.trackFile, p.pilotName)]),
+          ),
+          totals: result.pilotScores.map((ps) => ({
+            trackFile: ps.trackFile,
+            pilotName: ps.pilotName,
+            totalScore: ps.totalScore,
+          })),
+        });
+      }
+    }
+
+    if (compTasks.length > 0) {
+      const aggregate = aggregateComp(compTasks);
+      if (jsonOutput) {
+        jsonComps.push({ pilotClass, aggregate });
+      } else {
+        console.log('');
+        console.log(`${'='.repeat(20)} ${manifest.name} — ${pilotClass} — whole comp ${'='.repeat(20)}`);
+        console.log(renderCompReport(aggregate));
+      }
+    }
+  }
+
+  if (jsonOutput) {
+    console.log(JSON.stringify({ tasks: jsonTasks, comp: jsonComps }, null, 2));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Score-table printing
+// ---------------------------------------------------------------------------
+
+function printResultTables(task: XCTask, result: TaskScoreResult, openDist: boolean): void {
+if (openDist) {
   // Open-distance table — the score IS the metres flown from the take-off exit,
   // so the GAP validity/weight/points columns don't apply.
   const s = result.stats;
@@ -556,4 +751,5 @@ if (jsonOutput) {
   if (showDiff) console.log('Diff Pts = difficulty half of distance points (linear half = Dist Pts − Diff Pts).');
   if (showLC) console.log('LC = leading coefficient (lower means more time spent out front).');
   console.log('');
+}
 }
