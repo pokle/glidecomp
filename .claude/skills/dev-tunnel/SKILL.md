@@ -46,6 +46,25 @@ cloudflared tunnel --url http://localhost:3000
 cloudflared prints a `https://<random>.trycloudflare.com` URL — open it on the
 phone. Edits hot-reload over the tunnel.
 
+## Show a QR code of the tunnel URL
+
+Always finish by displaying the tunnel URL as a QR code in the chat so it can
+be scanned straight off the screen with the phone camera:
+
+```bash
+bunx qrcode -t utf8 -o <scratchpad>/dev-tunnel-qr.txt 'https://<random>.trycloudflare.com'
+```
+
+Then Read the file and paste its contents into the reply inside a fenced code
+block, alongside the plain URL.
+
+- The `utf8` renderer emits plain `▀▄█` half-block characters, which render
+  correctly in a markdown code block. Do **not** use the default terminal
+  renderer (`bunx qrcode '<url>'` with no `-t`) — it emits ANSI color escapes
+  that don't render in chat output. `-t utf8` requires `-o <file>`.
+- On dark terminal themes the code appears inverted (light on dark); phone
+  cameras usually scan it anyway. Add `-i` to flip colors if scanning fails.
+
 ## Notes
 
 - **`cloudflared` must be installed** (`brew install cloudflared`). Quick
