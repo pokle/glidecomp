@@ -140,25 +140,32 @@ entirely (no table+list in parallel — the list wins on desktop too, and its
 narrow column frees width for the map). Verified live (headless admin drive,
 0 console errors) + typecheck + unit + build + 12/12 SSR e2e. What shipped:
 
+- **Layout:** the list is at the **top** of the dialog and never scrolls
+  internally (every turnpoint visible; the dialog itself scrolls). The map
+  preview + waypoint picker sit **below** it in a two-column block.
 - **`GridList` with `keyboardNavigationBehavior="tab"`** — arrows move between
-  cards, Tab reaches a card's inline editors, so **no CellEditZone** is needed
-  here (contrast the Table, gotcha #2). `selectionMode="none"`; reorder via the
-  same `useDragAndDrop` hooks + `slot="drag"` handle as the Table (unchanged).
-- **Card = a flight plan line:** identity (position badge · code · name) with a
-  right-aligned derived recap (radius · Enter/Exit badge · optimized leg km),
-  reading top-to-bottom.
-- **Inline hot fields:** Type (SimpleSelect) and Radius (preset chips
-  **400 / 1 km / 2 km / 3 km / 5 km** as `ToggleButton`s whose `isSelected`
-  tracks the current radius, plus a custom NumberField, step 1 — gotcha #1).
-- **`EditTurnpointPopover`** (DialogTrigger + Popover + Dialog) holds code,
-  name, coordinates (with `validate` → inline FieldError), altitude. Edits
-  apply **live** to the map/legs; **Cancel reverts** to a `snapshotRef` taken
-  on open (dismiss-by-click-away keeps the live edits). Dialog-level "nothing
-  saved until Save" still holds.
+  cards, Tab reaches focusable children, so **no CellEditZone** is needed here
+  (contrast the Table, gotcha #2). `selectionMode="none"`; reorder via the same
+  `useDragAndDrop` hooks + `slot="drag"` handle as the Table (unchanged).
+- **Each row is a compact, single-line flight-plan summary** (no inline edit
+  controls): position badge · code · name · type badge, with a right-aligned
+  recap (radius grouped as `50,000 m` · Enter/Exit badge · optimized leg km).
+- **`EditTurnpointPopover`** (DialogTrigger + Popover + Dialog) holds **every**
+  editable field — code, name, Type (SimpleSelect), Radius (preset chips
+  **400 / 1 km / 2 km / 3 km / 5 km** as `ToggleButton`s + a custom NumberField,
+  step 1, `useGrouping:true` — gotcha #1), coordinates (with `validate` → inline
+  FieldError), altitude. Edits apply **live** to the map/legs; **Cancel reverts**
+  to a `snapshotRef` (all six fields) taken on open (dismiss-by-click-away keeps
+  the live edits). Dialog-level "nothing saved until Save" still holds. The
+  Type SimpleSelect is a Select-popover nested inside the edit Popover inside
+  the Modal — RAC handles the nested overlays fine.
 - Reused unchanged: rows state + `derived` memo, `dependencies={[rows,
   derived]}` on the GridList (gotcha #3 — position #/legs/dirs would otherwise
   stale on reorder; verified: drag renumbers and recomputes legs), waypoint
-  picker, FileTrigger, SSS/Goal Disclosures, the two-column map layout.
+  picker, FileTrigger, SSS/Goal Disclosures.
+- **An earlier iteration put Type + Radius inline on each card**; it was
+  replaced with the compact "everything in the popover" row above, on request —
+  the list reads cleaner and scans faster as a plain flight plan.
 
 New gotchas learned building it:
 - **`keyboardNavigationBehavior` typechecks** (it's on `AriaGridListProps`,
@@ -175,9 +182,9 @@ New gotchas learned building it:
   in-cell editors.
 
 Not done (follow-ups): a true full-width bottom sheet for the edit popover on
-mobile (today it's a fitted floating panel), and making the map preview itself
-collapsible (rac Disclosure) — the two-column layout already keeps the map
-beside/above the list without obscuring it, so this was deprioritized.
+mobile (today it's a fitted floating panel). The map now sits below the list
+(so it never obscures it), which made the earlier "collapsible map preview"
+idea unnecessary.
 
 ## Converting other pages (recipe)
 

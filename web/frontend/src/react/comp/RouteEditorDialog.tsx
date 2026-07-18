@@ -94,6 +94,11 @@ function radiusChipLabel(m: number): string {
   return m >= 1000 ? `${m / 1000} km` : `${m}`;
 }
 
+/** Grouped metres for display: 50000 → "50,000". */
+function formatMetres(m: number): string {
+  return m.toLocaleString("en-US");
+}
+
 export function RouteEditorDialog({
   compId,
   taskId,
@@ -698,11 +703,11 @@ export function RouteEditorDialog({
           <DialogTitle>Edit route</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Set each turnpoint's type and radius inline; use <span className="font-medium">Edit</span> for its
-          code, name, coordinates and altitude. Drag the handle (or press Enter
-          on it) to reorder. Each card reads top-to-bottom like a flight plan —
-          leg distance and Enter/Exit crossing are derived from the optimized
-          route through each cylinder.
+          Each row is a turnpoint, top-to-bottom like a flight plan — leg
+          distance and Enter/Exit crossing are derived from the optimized route.
+          Drag the handle (or press Enter on it) to reorder; open a row's{" "}
+          <span className="font-medium">Edit</span> to change its code, name,
+          type, radius, coordinates and altitude.
         </p>
         {openDistance ? (
           <p className="text-sm text-muted-foreground">
@@ -711,13 +716,66 @@ export function RouteEditorDialog({
           </p>
         ) : null}
 
-        <div className="grid gap-4 lg:h-[62vh] lg:grid-cols-2">
-          {/* Map + waypoint picker — floats at the top on narrow screens, sits
-              on the right on wide ones (same pattern as the score-explainer).
-              On wide screens the column is a full-height flex box so the map
-              fills the space left by the buttons and picker below it. */}
-          <div className="order-1 flex min-h-0 flex-col gap-2 lg:order-2">
-            <div className="h-64 overflow-hidden rounded border border-border sm:h-72 lg:h-auto lg:min-h-0 lg:flex-1">
+        {/* Turnpoint list — at the top of the dialog, every row visible (the
+            dialog scrolls; the list itself never does). Each row is a compact
+            flight-plan summary; all editing is behind its Edit popover. */}
+        <div className="flex flex-col gap-2">
+          <GridList
+            aria-label="Turnpoints"
+            selectionMode="none"
+            dragAndDropHooks={dragAndDropHooks}
+            items={rows}
+            // RAC caches each item's rendered output by identity, so props
+            // derived from OUTSIDE the item — the # position and the Leg/Dir
+            // summary computed from the whole route — would go stale on
+            // reorder or on edits to other rows. Declaring them as
+            // dependencies invalidates the cache (gotcha #3).
+            dependencies={[rows, derived]}
+            renderEmptyState={() => (
+              <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                No turnpoints yet — use Add turnpoint, pick a waypoint, or
+                import a task
+              </p>
+            )}
+          >
+            {(row) => (
+              <TurnpointCard
+                key={row.id}
+                row={row}
+                index={rows.indexOf(row)}
+                leg={derived.legByRowId.get(row.id) ?? null}
+                dir={derived.dirByRowId.get(row.id) ?? null}
+                onUpdate={updateRow}
+                onRemove={removeRow}
+              />
+            )}
+          </GridList>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onPress={addBlankRow}>
+              Add turnpoint
+            </Button>
+            <Button variant="outline" size="sm" onPress={() => void clearTurnpoints()}>
+              Clear turnpoints
+            </Button>
+            {derived.totalKm !== null ? (
+              <span className="text-sm text-muted-foreground">
+                Optimized total: {derived.totalKm.toFixed(1)} km
+              </span>
+            ) : null}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Directions are derived from the route geometry — a cylinder that
+            contains the previous route point is an exit cylinder, reached by
+            flying out of it.
+          </p>
+        </div>
+
+        {/* Map preview + waypoint tools — below the list, for previewing the
+            route and adding turnpoints (from the map or the competition's
+            shared waypoint set). Two columns on wide screens. */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="flex flex-col gap-2">
+            <div className="h-64 overflow-hidden rounded border border-border sm:h-72 lg:h-80">
               <Suspense
                 fallback={
                   <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -757,13 +815,15 @@ export function RouteEditorDialog({
                 </span>
               ) : null}
             </div>
-            {/* Searchable list of the competition's waypoints to pick from. */}
+          </div>
+          {/* Searchable list of the competition's waypoints to pick from. */}
+          <div className="flex min-h-0 flex-col gap-2">
             {wpLoading ? (
               <p className="text-xs text-muted-foreground">Loading competition waypoints…</p>
             ) : waypointRecords.length === 0 ? (
               <p className="rounded border border-dashed border-border p-3 text-xs text-muted-foreground">
                 This competition has no waypoints yet. Use <span className="font-medium">Add from map</span> or{" "}
-                <span className="font-medium">New point</span> above to create one — it's added to this
+                <span className="font-medium">New point</span> to create one — it's added to this
                 route now and saved to the competition when you save. Or{" "}
                 <a
                   href={`/comp/${compId}/waypoints`}
@@ -785,7 +845,7 @@ export function RouteEditorDialog({
                 />
                 <ListBox
                   aria-label="Competition waypoints"
-                  className="max-h-40"
+                  className="max-h-64"
                   items={pickerItems}
                   // Arrow keys + Enter add a turnpoint; so does a click/tap.
                   onAction={(key) => {
@@ -813,64 +873,6 @@ export function RouteEditorDialog({
               </>
             )}
           </div>
-
-          {/* Editable turnpoint list — a vertical stack of cards (RAC GridList)
-              instead of a wide table: each card owns one turnpoint, so a narrow
-              column never forces horizontal scrolling and the row context stays
-              intact on small screens. On wide screens it flexes to fill the
-              column height left by the buttons and footnote below it. */}
-          <div className="order-2 flex min-h-0 min-w-0 flex-col gap-2 lg:order-1">
-            <div className="h-[320px] shrink-0 overflow-y-auto rounded-lg lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink">
-              <GridList
-                aria-label="Turnpoints"
-                selectionMode="none"
-                dragAndDropHooks={dragAndDropHooks}
-                items={rows}
-                // RAC caches each item's rendered output by identity, so props
-                // derived from OUTSIDE the item — the # position and the
-                // Leg/Dir summary computed from the whole route — would go
-                // stale on reorder or on edits to other rows. Declaring them as
-                // dependencies invalidates the cache (gotcha #3).
-                dependencies={[rows, derived]}
-                renderEmptyState={() => (
-                  <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                    No turnpoints yet — use Add turnpoint, pick a waypoint, or
-                    import a task
-                  </p>
-                )}
-              >
-                {(row) => (
-                  <TurnpointCard
-                    key={row.id}
-                    row={row}
-                    index={rows.indexOf(row)}
-                    leg={derived.legByRowId.get(row.id) ?? null}
-                    dir={derived.dirByRowId.get(row.id) ?? null}
-                    onUpdate={updateRow}
-                    onRemove={removeRow}
-                  />
-                )}
-              </GridList>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" onPress={addBlankRow}>
-                Add turnpoint
-              </Button>
-              <Button variant="outline" size="sm" onPress={() => void clearTurnpoints()}>
-                Clear turnpoints
-              </Button>
-              {derived.totalKm !== null ? (
-                <span className="text-sm text-muted-foreground">
-                  Optimized total: {derived.totalKm.toFixed(1)} km
-                </span>
-              ) : null}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Directions are derived from the route geometry — a cylinder that
-              contains the previous route point is an exit cylinder, reached by
-              flying out of it.
-            </p>
-          </div>
         </div>
 
         {shownErrors.length > 0 ? (
@@ -894,7 +896,7 @@ export function RouteEditorDialog({
             <Disclosure title="Start (SSS)" defaultExpanded>
               {!derived.hasSSSTurnpoint ? (
                 <p className="mt-1 text-sm text-amber-500">
-                  ⚠ This task has no Start (SSS) turnpoint — set one in the table
+                  ⚠ This task has no Start (SSS) turnpoint — set one in the list
                   above, otherwise gates have no cylinder to apply to.
                 </p>
               ) : null}
@@ -1092,13 +1094,12 @@ export function RouteEditorDialog({
 }
 
 /**
- * One turnpoint card (RAC GridListItem). Reads top-to-bottom like a flight
- * plan: an identity line (position · code · name) with a derived recap
- * (radius · Enter/Exit crossing · optimized leg distance) alongside, then the
- * two hottest editors inline — Type (select) and Radius (preset chips + a
- * custom NumberField). Code, name, coordinates and altitude sit behind the
- * Edit popover (they're set once when the turnpoint is added). Leg and Dir are
- * outputs of the dialog's geometry memo, so they're display-only by design.
+ * One turnpoint row (RAC GridListItem) — a compact, single-line flight-plan
+ * summary: position · code · name · type, with a derived recap (radius ·
+ * Enter/Exit crossing · optimized leg distance) aligned right. No inline edit
+ * controls: everything is set in the row's Edit popover, so the list stays
+ * scannable top-to-bottom. Leg and Dir are outputs of the dialog's geometry
+ * memo (display-only by design).
  */
 function TurnpointCard({
   row,
@@ -1118,107 +1119,72 @@ function TurnpointCard({
   const radius = Number(row.radius);
   const label = row.name || `turnpoint ${index + 1}`;
   const coordsMissing = parseCoords(row.coords) == null;
+  // Show the type only when it's a special one (Takeoff/SSS/ESS); a plain
+  // turnpoint needs no badge.
+  const typeLabel = row.type ? TYPE_LABELS[row.type] : null;
   return (
-    <GridListItem id={row.id} textValue={row.name || `Turnpoint ${index + 1}`}>
-      <div className="flex items-start gap-2">
+    <GridListItem
+      id={row.id}
+      textValue={row.name || `Turnpoint ${index + 1}`}
+      className="px-2 py-1.5"
+    >
+      <div className="flex items-center gap-2">
         <AriaButton
           slot="drag"
-          className="mt-0.5 flex size-7 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground outline-none data-hovered:text-foreground data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
+          className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground outline-none data-hovered:text-foreground data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
           aria-label={`Reorder ${label}`}
         >
           <GripVerticalIcon className="size-4" />
         </AriaButton>
 
-        <div className="min-w-0 flex-1">
-          {/* Identity line + derived recap. */}
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium tabular-nums text-muted-foreground">
-              {index + 1}
-            </span>
-            {row.name ? (
-              <span className="font-medium">{row.name}</span>
-            ) : (
-              <span className="text-muted-foreground italic">New turnpoint</span>
-            )}
-            {row.description ? (
-              <span className="min-w-0 truncate text-sm text-muted-foreground">
-                {row.description}
-              </span>
-            ) : null}
-            <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-              {coordsMissing ? (
-                <span className="text-amber-500">⚠ set coordinates</span>
-              ) : (
-                <span className="tabular-nums">
-                  {Number.isFinite(radius) && radius > 0 ? `${radius} m` : "radius?"}
-                </span>
-              )}
-              {dir === "exit" ? (
-                <Badge
-                  variant="outline"
-                  title="Exit cylinder — reached by flying out of it"
-                >
-                  Exit
-                </Badge>
-              ) : dir === "enter" ? (
-                <span>Enter</span>
-              ) : null}
-              {leg != null ? (
-                <span className="tabular-nums">leg {(leg / 1000).toFixed(1)} km</span>
-              ) : null}
-            </span>
-          </div>
+        <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium tabular-nums text-muted-foreground">
+          {index + 1}
+        </span>
 
-          {/* Inline hot fields: Type and Radius. */}
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-            <SimpleSelect
-              value={row.type}
-              onChange={(v) => onUpdate(row.id, { type: v as RouteRow["type"] })}
-              options={TYPE_OPTIONS}
-              ariaLabel={`Type of ${label}`}
-              className="[&_button]:h-7 [&_button]:min-w-32"
-            />
-            <div
-              role="group"
-              aria-label={`Radius of ${label} in metres`}
-              className="flex flex-wrap items-center gap-1"
-            >
-              {RADIUS_PRESETS.map((preset) => (
-                <ToggleButton
-                  key={preset}
-                  size="sm"
-                  isSelected={radius === preset}
-                  // Chips set an absolute value; re-pressing the active one is a
-                  // no-op (the toggle-off event just re-sets the same radius).
-                  onChange={() => onUpdate(row.id, { radius: preset })}
-                  className="h-7 px-2 tabular-nums"
-                  aria-label={`Set radius ${preset} metres`}
-                >
-                  {radiusChipLabel(preset)}
-                </ToggleButton>
-              ))}
-              <NumberField
-                aria-label={`Custom radius of ${label} in metres`}
-                minValue={1}
-                maxValue={50000}
-                // Step stays 1: RAC snaps values to minValue + k·step, so a
-                // larger step corrupts loaded radii (1000 → 1001 with step 100).
-                step={1}
-                // Group thousands so the widest radius reads "50,000"; the
-                // width fits five digits + separator past the two steppers.
-                formatOptions={{ useGrouping: true }}
-                value={Number.isFinite(radius) ? radius : NaN}
-                onChange={(v) =>
-                  onUpdate(row.id, { radius: Number.isFinite(v) ? v : "" })
-                }
-                className="w-36"
-              />
-              <span className="text-xs text-muted-foreground">m</span>
-            </div>
-          </div>
+        {/* Identity + derived recap, all on one line. */}
+        <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
+          {row.name ? (
+            <span className="font-medium">{row.name}</span>
+          ) : (
+            <span className="text-muted-foreground italic">New turnpoint</span>
+          )}
+          {row.description ? (
+            <span className="min-w-0 truncate text-muted-foreground">
+              {row.description}
+            </span>
+          ) : null}
+          {typeLabel ? (
+            <Badge variant="secondary" className="shrink-0">
+              {typeLabel}
+            </Badge>
+          ) : null}
+          <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+            {coordsMissing ? (
+              <span className="text-amber-500">⚠ set coordinates</span>
+            ) : (
+              <span className="tabular-nums">
+                {Number.isFinite(radius) && radius > 0
+                  ? `${formatMetres(radius)} m`
+                  : "radius?"}
+              </span>
+            )}
+            {dir === "exit" ? (
+              <Badge
+                variant="outline"
+                title="Exit cylinder — reached by flying out of it"
+              >
+                Exit
+              </Badge>
+            ) : dir === "enter" ? (
+              <span>Enter</span>
+            ) : null}
+            {leg != null ? (
+              <span className="tabular-nums">leg {(leg / 1000).toFixed(1)} km</span>
+            ) : null}
+          </span>
         </div>
 
-        {/* Actions: edit the rest of the turnpoint, or remove it. */}
+        {/* Actions: edit the turnpoint, or remove it. */}
         <div className="flex shrink-0 items-center gap-1">
           <EditTurnpointPopover row={row} label={label} onUpdate={onUpdate} />
           <Button
@@ -1236,11 +1202,12 @@ function TurnpointCard({
 }
 
 /**
- * The "edit the rest of the turnpoint" popover: code, name, coordinates and
- * altitude with real labels and per-field validation. Edits apply LIVE to the
- * map and legs while it's open; Cancel reverts to the values captured when it
- * opened (the dialog-level "nothing saved until Save" still holds). Dismissing
- * by clicking away keeps the live edits.
+ * The turnpoint editor popover: every editable field — code, name, type,
+ * radius (preset chips + a custom NumberField), coordinates and altitude —
+ * with real labels and per-field validation. Edits apply LIVE to the map and
+ * legs while it's open; Cancel reverts to the values captured when it opened
+ * (the dialog-level "nothing saved until Save" still holds). Dismissing by
+ * clicking away keeps the live edits.
  */
 function EditTurnpointPopover({
   row,
@@ -1252,6 +1219,7 @@ function EditTurnpointPopover({
   onUpdate: (id: number, patch: Partial<RouteRow>) => void;
 }) {
   const snapshotRef = useRef<Partial<RouteRow>>({});
+  const radius = Number(row.radius);
   return (
     <DialogTrigger
       onOpenChange={(open) => {
@@ -1259,6 +1227,8 @@ function EditTurnpointPopover({
           snapshotRef.current = {
             name: row.name,
             description: row.description,
+            type: row.type,
+            radius: row.radius,
             coords: row.coords,
             altitude: row.altitude,
           };
@@ -1273,7 +1243,7 @@ function EditTurnpointPopover({
       >
         <AriaDialog
           aria-label={`Edit ${label}`}
-          className="w-[min(22rem,calc(100vw-2rem))] outline-none"
+          className="w-[min(24rem,calc(100vw-2rem))] outline-none"
         >
           {({ close }) => (
             <div className="flex flex-col gap-3 p-3">
@@ -1292,6 +1262,54 @@ function EditTurnpointPopover({
                 onChange={(v) => onUpdate(row.id, { description: v })}
                 placeholder="Bordano Landing"
               />
+              <div className="flex flex-col gap-2">
+                <span className="text-sm font-medium">Type</span>
+                <SimpleSelect
+                  value={row.type}
+                  onChange={(v) => onUpdate(row.id, { type: v as RouteRow["type"] })}
+                  options={TYPE_OPTIONS}
+                  ariaLabel={`Type of ${label}`}
+                  className="w-full [&_button]:w-full"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <span className="text-sm font-medium">Radius (m)</span>
+                <div
+                  role="group"
+                  aria-label={`Radius of ${label} in metres`}
+                  className="flex flex-wrap items-center gap-1"
+                >
+                  {RADIUS_PRESETS.map((preset) => (
+                    <ToggleButton
+                      key={preset}
+                      size="sm"
+                      isSelected={radius === preset}
+                      // Chips set an absolute value; re-pressing the active one
+                      // is a no-op (the toggle-off event re-sets the same value).
+                      onChange={() => onUpdate(row.id, { radius: preset })}
+                      className="h-7 px-2 tabular-nums"
+                      aria-label={`Set radius ${preset} metres`}
+                    >
+                      {radiusChipLabel(preset)}
+                    </ToggleButton>
+                  ))}
+                  <NumberField
+                    aria-label={`Custom radius of ${label} in metres`}
+                    minValue={1}
+                    maxValue={50000}
+                    // Step stays 1: RAC snaps values to minValue + k·step, so a
+                    // larger step corrupts loaded radii (1000 → 1001, step 100).
+                    step={1}
+                    // Group thousands so the widest radius reads "50,000".
+                    formatOptions={{ useGrouping: true }}
+                    value={Number.isFinite(radius) ? radius : NaN}
+                    onChange={(v) =>
+                      onUpdate(row.id, { radius: Number.isFinite(v) ? v : "" })
+                    }
+                    className="w-36"
+                  />
+                </div>
+              </div>
               <TextField
                 label="Coordinates (lat, lon)"
                 value={row.coords}
