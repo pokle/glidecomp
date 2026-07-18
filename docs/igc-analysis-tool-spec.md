@@ -157,14 +157,20 @@ When an event is selected from the panel, the map highlights the event location 
 ## Technical Architecture
 
 ```
-/web/engine/src/               # Shared analysis library
+/web/engine/src/               # Shared analysis library (key modules; not exhaustive)
 ├── igc-parser.ts                # IGC file format parser
 ├── xctsk-parser.ts              # XContest task format parser
-├── event-detector.ts            # Flight event detection algorithms
+├── event-detector.ts            # Flight event detection orchestration
+├── flight-phase-detectors.ts    # Thermal and glide segment detection
 ├── circle-detector.ts           # Circling flight detection and wind estimation
+├── cluster-detector.ts          # Cross-pilot gaggle detection
 ├── turnpoint-sequence.ts        # Turnpoint sequencing and best-progress scoring
 ├── task-optimizer.ts            # Optimized task line calculation (golden section search)
 ├── gap-scoring.ts               # CIVL GAP multi-track task scoring (FAI Section 7F)
+├── open-distance-scoring.ts     # Open-distance task scoring
+├── field-analysis/              # Per-pilot behavioural metrics across a whole field of
+│                                # tracks, ranked by Spearman correlation vs GAP rank
+│                                # (see docs/2026-07-18-field-analysis-plan.md)
 ├── segment-extractors.ts        # Data extraction for glides, climbs, sinks
 ├── event-styles.ts              # Event type colors and visual styles
 ├── geo.ts                       # Geographic calculations (WGS84: Andoyer-Lambert distance, Vincenty destination, Turf.js bearing/bbox)
@@ -177,7 +183,10 @@ When an event is selected from the panel, the map highlights the event location 
 /web/engine/cli/
 ├── detect-events.ts             # Detect flight events from an IGC file
 ├── get-xcontest-task.ts         # Download a task from XContest by code
-└── score-task.ts                # Score multiple pilots against a task (CIVL GAP)
+├── score-task.ts                # Score multiple pilots against a task (CIVL GAP);
+│                                # --field-analysis / --comp print the behavioural
+│                                # field-analysis report after the scores
+└── comp-manifest.ts             # Bundled-comp manifest reading for --comp mode
 
 /web/frontend/src/
 ├── analysis.html                # Main HTML page with Tailwind layout

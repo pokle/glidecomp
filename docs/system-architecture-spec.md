@@ -52,7 +52,7 @@ Local dev (`bun run dev`) runs the three Workers under wrangler plus Vite and `a
 
 ### Analysis Engine (`web/engine`)
 
-Pure TypeScript library with no DOM dependencies, consumed by the browser, the Workers, and CLI scripts (`web/engine/cli/`). Major modules: IGC parsing (`igc-parser.ts`), XCTask parsing (`xctsk-parser.ts`), event detection (`event-detector.ts`, `circle-detector.ts`, `cluster-detector.ts`), GAP scoring (`gap-scoring.ts`), open-distance scoring (`open-distance-scoring.ts`), task-line optimization (`task-optimizer.ts`), geo math (`geo.ts` — the single home for distance/bearing formulas), score explanations (`score-explanation.ts`), and 3D track packing (`track-packer.ts`).
+Pure TypeScript library with no DOM dependencies, consumed by the browser, the Workers, and CLI scripts (`web/engine/cli/`). Major modules: IGC parsing (`igc-parser.ts`), XCTask parsing (`xctsk-parser.ts`), event detection (`event-detector.ts`, `circle-detector.ts`, `cluster-detector.ts`), GAP scoring (`gap-scoring.ts`), open-distance scoring (`open-distance-scoring.ts`), task-line optimization (`task-optimizer.ts`), geo math (`geo.ts` — the single home for distance/bearing formulas), score explanations (`score-explanation.ts`), 3D track packing (`track-packer.ts`), and field analysis (`field-analysis/` — per-pilot behavioural metrics across a whole task's tracks with a Spearman-vs-GAP-rank eval; CLI-only via `score-task --field-analysis` / `--comp`, see `docs/2026-07-18-field-analysis-plan.md`).
 
 ### Workers
 
