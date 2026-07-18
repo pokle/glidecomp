@@ -20,8 +20,9 @@ import {
   useDragAndDrop,
   Button as AriaButton,
   DropIndicator,
-  TextField as AriaTextField,
-  Input as AriaInput,
+  DialogTrigger,
+  Popover as AriaPopover,
+  Dialog as AriaDialog,
 } from "react-aria-components";
 import {
   computeTurnpointDirections,
@@ -47,21 +48,12 @@ import { Disclosure } from "@/react/rac/disclosure";
 import { NumberField, SearchField, TextField } from "@/react/rac/field";
 import { ListBox, ListBoxItem } from "@/react/rac/list-box";
 import { SimpleSelect } from "@/react/rac/select";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  Column,
-  Row,
-  Cell,
-  CellEditZone,
-} from "@/react/rac/table";
+import { GridList, GridListItem } from "@/react/rac/grid-list";
 import { TimePicker } from "@/react/ui/date-picker";
 import { api } from "../../comp/api";
 import { fetchTaskByCodeWithRaw } from "../../analysis/xctsk-fetch";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
-import { cn } from "../lib/utils";
 import { downloadFile } from "../lib/format";
 import { utcToZonedHHMM, zonedToUtcHHMM, zoneNameWithOffset } from "../lib/time";
 import { slugify } from "./csv";
@@ -71,6 +63,7 @@ import {
   editableGates,
   formatCoords,
   gateToHHMM,
+  parseCoords,
   turnpointsToCSV,
   turnpointToRow,
   xctskForPatch,
@@ -78,7 +71,7 @@ import {
   type RouteRow,
 } from "./route-editor";
 import { AddWaypointDialog } from "./AddWaypointDialog";
-import { GripVerticalIcon, XIcon } from "lucide-react";
+import { GripVerticalIcon, PencilIcon, XIcon } from "lucide-react";
 
 // Lazy so the map library (mapbox) and its CSS load only when the editor
 // opens and never enter the SSR'd task-detail bundle.
@@ -86,10 +79,20 @@ const RouteMap = lazy(() => import("./RouteMap"));
 
 const NEW_ROW_RADIUS = 400;
 
+// Common competition cylinder radii — one-tap presets on each turnpoint card,
+// so the hottest edit (set a radius) is a single click; the NumberField beside
+// them still takes any value.
+const RADIUS_PRESETS = [400, 1000, 2000, 3000, 5000] as const;
+
 const TYPE_OPTIONS = Object.entries(TYPE_LABELS).map(([value, label]) => ({
   value,
   label,
 }));
+
+/** Short radius label for a preset chip: 400 → "400", 1000 → "1 km". */
+function radiusChipLabel(m: number): string {
+  return m >= 1000 ? `${m / 1000} km` : `${m}`;
+}
 
 export function RouteEditorDialog({
   compId,
@@ -695,10 +698,11 @@ export function RouteEditorDialog({
           <DialogTitle>Edit route</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Tap a cell to edit; drag the handle (or press Enter on it) to
-          reorder. Coordinates are decimal degrees: <code>lat, lon</code> (e.g.
-          -36.550979, 147.890395). Distances are the optimized route through
-          each cylinder.
+          Set each turnpoint's type and radius inline; use <span className="font-medium">Edit</span> for its
+          code, name, coordinates and altitude. Drag the handle (or press Enter
+          on it) to reorder. Each card reads top-to-bottom like a flight plan —
+          leg distance and Enter/Exit crossing are derived from the optimized
+          route through each cylinder.
         </p>
         {openDistance ? (
           <p className="text-sm text-muted-foreground">
@@ -810,68 +814,43 @@ export function RouteEditorDialog({
             )}
           </div>
 
-          {/* Editable turnpoint grid — on wide screens it flexes to fill the
-              column height left by the buttons and footnote below it, so those
-              always have room. */}
+          {/* Editable turnpoint list — a vertical stack of cards (RAC GridList)
+              instead of a wide table: each card owns one turnpoint, so a narrow
+              column never forces horizontal scrolling and the row context stays
+              intact on small screens. On wide screens it flexes to fill the
+              column height left by the buttons and footnote below it. */}
           <div className="order-2 flex min-h-0 min-w-0 flex-col gap-2 lg:order-1">
-            <div className="h-[320px] shrink-0 overflow-y-auto rounded border border-border lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink">
-              <Table
+            <div className="h-[320px] shrink-0 overflow-y-auto rounded-lg lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink">
+              <GridList
                 aria-label="Turnpoints"
+                selectionMode="none"
                 dragAndDropHooks={dragAndDropHooks}
-                className="text-[0.8rem]"
+                items={rows}
+                // RAC caches each item's rendered output by identity, so props
+                // derived from OUTSIDE the item — the # position and the
+                // Leg/Dir summary computed from the whole route — would go
+                // stale on reorder or on edits to other rows. Declaring them as
+                // dependencies invalidates the cache (gotcha #3).
+                dependencies={[rows, derived]}
+                renderEmptyState={() => (
+                  <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                    No turnpoints yet — use Add turnpoint, pick a waypoint, or
+                    import a task
+                  </p>
+                )}
               >
-                <TableHeader className="sticky top-0 z-10 bg-popover">
-                  <Column className="w-9">
-                    <span className="sr-only">Reorder</span>
-                  </Column>
-                  <Column className="w-10 text-right">#</Column>
-                  {/* Every field a turnpoint stores is editable in place —
-                      picking a waypoint only pre-fills the row. Dir and Leg
-                      are derived from the geometry and read-only. */}
-                  <Column isRowHeader className="min-w-24">Code</Column>
-                  <Column className="min-w-28">Name</Column>
-                  <Column className="min-w-32">Type</Column>
-                  <Column className="min-w-44">Coordinates (lat, lon)</Column>
-                  <Column className="min-w-28">Radius (m)</Column>
-                  {/* Read-only, derived live: which way the cylinder is
-                      crossed. Not editable — direction is a consequence of the
-                      geometry, and showing it flip as radii/order change is
-                      what catches mis-set tasks before they're saved. */}
-                  <Column className="min-w-16">Dir</Column>
-                  <Column className="min-w-16 text-right">Alt (m)</Column>
-                  <Column className="min-w-18 text-right">Leg</Column>
-                  <Column className="w-10">
-                    <span className="sr-only">Remove</span>
-                  </Column>
-                </TableHeader>
-                <TableBody
-                  items={rows}
-                  // RAC caches each row's rendered output by item identity, so
-                  // props derived from OUTSIDE the item — the # position,
-                  // and the Leg/Dir columns computed from the whole route —
-                  // would go stale on reorder or on edits to other rows.
-                  // Declaring them as dependencies invalidates the cache.
-                  dependencies={[rows, derived]}
-                  renderEmptyState={() => (
-                    <p className="p-4 text-sm text-muted-foreground">
-                      No turnpoints yet — use Add turnpoint, pick a waypoint,
-                      or import a task
-                    </p>
-                  )}
-                >
-                  {(row) => (
-                    <RouteGridRow
-                      key={row.id}
-                      row={row}
-                      index={rows.indexOf(row)}
-                      leg={derived.legByRowId.get(row.id) ?? null}
-                      dir={derived.dirByRowId.get(row.id) ?? null}
-                      onUpdate={updateRow}
-                      onRemove={removeRow}
-                    />
-                  )}
-                </TableBody>
-              </Table>
+                {(row) => (
+                  <TurnpointCard
+                    key={row.id}
+                    row={row}
+                    index={rows.indexOf(row)}
+                    leg={derived.legByRowId.get(row.id) ?? null}
+                    dir={derived.dirByRowId.get(row.id) ?? null}
+                    onUpdate={updateRow}
+                    onRemove={removeRow}
+                  />
+                )}
+              </GridList>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm" onPress={addBlankRow}>
@@ -1113,76 +1092,15 @@ export function RouteEditorDialog({
 }
 
 /**
- * In-place text editor for a grid cell (the Tabulator-style tap-to-edit
- * cells: Code, Name, Coordinates, Alt). Keeps a local draft while focused and
- * commits on blur or Enter — so the (expensive) route re-optimization runs
- * per edit, not per keystroke, exactly like Tabulator's cellEdited event.
- * Escape reverts to the last committed value (RAC grids also return focus to
- * the cell on Escape).
+ * One turnpoint card (RAC GridListItem). Reads top-to-bottom like a flight
+ * plan: an identity line (position · code · name) with a derived recap
+ * (radius · Enter/Exit crossing · optimized leg distance) alongside, then the
+ * two hottest editors inline — Type (select) and Radius (preset chips + a
+ * custom NumberField). Code, name, coordinates and altitude sit behind the
+ * Edit popover (they're set once when the turnpoint is added). Leg and Dir are
+ * outputs of the dialog's geometry memo, so they're display-only by design.
  */
-function EditableCell({
-  value,
-  onCommit,
-  "aria-label": ariaLabel,
-  className,
-  placeholder,
-}: {
-  value: string;
-  onCommit: (value: string) => void;
-  "aria-label": string;
-  className?: string;
-  placeholder?: string;
-}) {
-  const [draft, setDraft] = useState(value);
-  const focusedRef = useRef(false);
-  // External change (import, revert) while not editing → adopt it.
-  useEffect(() => {
-    if (!focusedRef.current) setDraft(value);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-  return (
-    // CellEditZone suspends the grid's arrow-key cell navigation while the
-    // field has focus, so Arrow/Home/End move the caret (see rac/table.tsx).
-    <CellEditZone className="w-full">
-      <AriaTextField
-        aria-label={ariaLabel}
-        value={draft}
-        onChange={setDraft}
-        onFocusChange={(focused) => {
-          focusedRef.current = focused;
-          if (!focused && draft !== value) onCommit(draft);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            if (draft !== value) onCommit(draft);
-          } else if (e.key === "Escape") {
-            setDraft(value);
-          }
-        }}
-        className="w-full"
-      >
-      <AriaInput
-        placeholder={placeholder}
-        className={cn(
-          "h-7 w-full min-w-0 rounded border border-transparent bg-transparent px-1.5 outline-none placeholder:text-muted-foreground/60",
-          "data-hovered:border-input data-focused:border-ring data-focused:ring-2 data-focused:ring-ring/50",
-          className
-        )}
-        />
-      </AriaTextField>
-    </CellEditZone>
-  );
-}
-
-/**
- * One grid row. Everything a turnpoint stores is editable in place: Code /
- * Name / Coordinates / Alt as tap-to-edit text cells, Type as a select,
- * Radius as a number field. Dir and Leg are outputs — derived from the route
- * geometry by the dialog's memo — so they are display-only by design (editing
- * them would have no meaning; change the geometry and they follow).
- */
-function RouteGridRow({
+function TurnpointCard({
   row,
   index,
   leg,
@@ -1199,105 +1117,216 @@ function RouteGridRow({
 }) {
   const radius = Number(row.radius);
   const label = row.name || `turnpoint ${index + 1}`;
+  const coordsMissing = parseCoords(row.coords) == null;
   return (
-    <Row id={row.id} textValue={row.name || `Turnpoint ${index + 1}`}>
-      <Cell className="p-1">
+    <GridListItem id={row.id} textValue={row.name || `Turnpoint ${index + 1}`}>
+      <div className="flex items-start gap-2">
         <AriaButton
           slot="drag"
-          className="flex size-6 cursor-grab items-center justify-center rounded text-muted-foreground outline-none data-hovered:text-foreground data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
+          className="mt-0.5 flex size-7 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground outline-none data-hovered:text-foreground data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
           aria-label={`Reorder ${label}`}
         >
           <GripVerticalIcon className="size-4" />
         </AriaButton>
-      </Cell>
-      <Cell className="text-right tabular-nums">{index + 1}</Cell>
-      <Cell className="p-1 font-medium">
-        <EditableCell
-          value={row.name}
-          onCommit={(v) => onUpdate(row.id, { name: v })}
-          aria-label={`Code of ${label}`}
-          placeholder="Code"
-        />
-      </Cell>
-      <Cell className="p-1">
-        <EditableCell
-          value={row.description}
-          onCommit={(v) => onUpdate(row.id, { description: v })}
-          aria-label={`Name of ${label}`}
-          placeholder="Name"
-          className="text-muted-foreground"
-        />
-      </Cell>
-      <Cell className="p-1">
-        <CellEditZone>
-          <SimpleSelect
-            value={row.type}
-            onChange={(v) => onUpdate(row.id, { type: v as RouteRow["type"] })}
-            options={TYPE_OPTIONS}
-            ariaLabel={`Type of ${label}`}
-            className="[&_button]:min-w-28"
-          />
-        </CellEditZone>
-      </Cell>
-      <Cell className="p-1">
-        <EditableCell
-          value={row.coords}
-          onCommit={(v) => onUpdate(row.id, { coords: v })}
-          aria-label={`Coordinates of ${label} (lat, lon)`}
-          placeholder="-36.550979, 147.890395"
-          className="min-w-44 tabular-nums"
-        />
-      </Cell>
-      <Cell className="p-1">
-        <CellEditZone>
-          <NumberField
-            aria-label={`Radius of ${label} (metres)`}
-            minValue={1}
-            maxValue={50000}
-            // Step stays 1: RAC snaps values to minValue + k·step, so a larger
-            // step corrupts loaded radii (1000 → 1001 with step 100).
-            step={1}
-            formatOptions={{ useGrouping: false }}
-            value={Number.isFinite(radius) ? radius : NaN}
-            onChange={(v) =>
-              onUpdate(row.id, { radius: Number.isFinite(v) ? v : "" })
-            }
-            className="w-32"
-          />
-        </CellEditZone>
-      </Cell>
-      <Cell>
-        {!dir ? (
-          <span className="text-muted-foreground">—</span>
-        ) : dir === "exit" ? (
-          <Badge variant="outline" title="Exit cylinder — reached by flying out of it">
-            Exit
-          </Badge>
-        ) : (
-          <span className="text-muted-foreground">Enter</span>
-        )}
-      </Cell>
-      <Cell className="p-1">
-        <EditableCell
-          value={String(row.altitude ?? "")}
-          onCommit={(v) => onUpdate(row.id, { altitude: v })}
-          aria-label={`Altitude of ${label} (metres)`}
-          className="w-16 text-right tabular-nums"
-        />
-      </Cell>
-      <Cell className="text-right tabular-nums">
-        {leg == null ? "" : `${(leg / 1000).toFixed(1)} km`}
-      </Cell>
-      <Cell className="p-1 text-center">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={`Remove ${label}`}
-          onPress={() => onRemove(row.id)}
+
+        <div className="min-w-0 flex-1">
+          {/* Identity line + derived recap. */}
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium tabular-nums text-muted-foreground">
+              {index + 1}
+            </span>
+            {row.name ? (
+              <span className="font-medium">{row.name}</span>
+            ) : (
+              <span className="text-muted-foreground italic">New turnpoint</span>
+            )}
+            {row.description ? (
+              <span className="min-w-0 truncate text-sm text-muted-foreground">
+                {row.description}
+              </span>
+            ) : null}
+            <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+              {coordsMissing ? (
+                <span className="text-amber-500">⚠ set coordinates</span>
+              ) : (
+                <span className="tabular-nums">
+                  {Number.isFinite(radius) && radius > 0 ? `${radius} m` : "radius?"}
+                </span>
+              )}
+              {dir === "exit" ? (
+                <Badge
+                  variant="outline"
+                  title="Exit cylinder — reached by flying out of it"
+                >
+                  Exit
+                </Badge>
+              ) : dir === "enter" ? (
+                <span>Enter</span>
+              ) : null}
+              {leg != null ? (
+                <span className="tabular-nums">leg {(leg / 1000).toFixed(1)} km</span>
+              ) : null}
+            </span>
+          </div>
+
+          {/* Inline hot fields: Type and Radius. */}
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <SimpleSelect
+              value={row.type}
+              onChange={(v) => onUpdate(row.id, { type: v as RouteRow["type"] })}
+              options={TYPE_OPTIONS}
+              ariaLabel={`Type of ${label}`}
+              className="[&_button]:h-7 [&_button]:min-w-32"
+            />
+            <div
+              role="group"
+              aria-label={`Radius of ${label} in metres`}
+              className="flex flex-wrap items-center gap-1"
+            >
+              {RADIUS_PRESETS.map((preset) => (
+                <ToggleButton
+                  key={preset}
+                  size="sm"
+                  isSelected={radius === preset}
+                  // Chips set an absolute value; re-pressing the active one is a
+                  // no-op (the toggle-off event just re-sets the same radius).
+                  onChange={() => onUpdate(row.id, { radius: preset })}
+                  className="h-7 px-2 tabular-nums"
+                  aria-label={`Set radius ${preset} metres`}
+                >
+                  {radiusChipLabel(preset)}
+                </ToggleButton>
+              ))}
+              <NumberField
+                aria-label={`Custom radius of ${label} in metres`}
+                minValue={1}
+                maxValue={50000}
+                // Step stays 1: RAC snaps values to minValue + k·step, so a
+                // larger step corrupts loaded radii (1000 → 1001 with step 100).
+                step={1}
+                formatOptions={{ useGrouping: false }}
+                value={Number.isFinite(radius) ? radius : NaN}
+                onChange={(v) =>
+                  onUpdate(row.id, { radius: Number.isFinite(v) ? v : "" })
+                }
+                className="w-24"
+              />
+              <span className="text-xs text-muted-foreground">m</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Actions: edit the rest of the turnpoint, or remove it. */}
+        <div className="flex shrink-0 items-center gap-1">
+          <EditTurnpointPopover row={row} label={label} onUpdate={onUpdate} />
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Remove ${label}`}
+            onPress={() => onRemove(row.id)}
+          >
+            <XIcon className="size-4 text-muted-foreground" />
+          </Button>
+        </div>
+      </div>
+    </GridListItem>
+  );
+}
+
+/**
+ * The "edit the rest of the turnpoint" popover: code, name, coordinates and
+ * altitude with real labels and per-field validation. Edits apply LIVE to the
+ * map and legs while it's open; Cancel reverts to the values captured when it
+ * opened (the dialog-level "nothing saved until Save" still holds). Dismissing
+ * by clicking away keeps the live edits.
+ */
+function EditTurnpointPopover({
+  row,
+  label,
+  onUpdate,
+}: {
+  row: RouteRow;
+  label: string;
+  onUpdate: (id: number, patch: Partial<RouteRow>) => void;
+}) {
+  const snapshotRef = useRef<Partial<RouteRow>>({});
+  return (
+    <DialogTrigger
+      onOpenChange={(open) => {
+        if (open)
+          snapshotRef.current = {
+            name: row.name,
+            description: row.description,
+            coords: row.coords,
+            altitude: row.altitude,
+          };
+      }}
+    >
+      <Button variant="outline" size="icon-sm" aria-label={`Edit ${label}`}>
+        <PencilIcon className="size-4" />
+      </Button>
+      <AriaPopover
+        placement="bottom end"
+        className="z-50 rounded-lg border border-border bg-popover text-popover-foreground shadow-md outline-none data-entering:animate-in data-entering:fade-in-0 data-entering:zoom-in-95 data-exiting:animate-out data-exiting:fade-out-0 data-exiting:zoom-out-95 data-entering:duration-100 data-exiting:duration-100"
+      >
+        <AriaDialog
+          aria-label={`Edit ${label}`}
+          className="w-[min(22rem,calc(100vw-2rem))] outline-none"
         >
-          <XIcon className="size-4 text-muted-foreground" />
-        </Button>
-      </Cell>
-    </Row>
+          {({ close }) => (
+            <div className="flex flex-col gap-3 p-3">
+              <p className="text-sm font-medium">Turnpoint details</p>
+              <TextField
+                label="Code"
+                isRequired
+                value={row.name}
+                onChange={(v) => onUpdate(row.id, { name: v })}
+                placeholder="A01"
+              />
+              <TextField
+                label="Name"
+                description="Full descriptive name (optional)"
+                value={row.description}
+                onChange={(v) => onUpdate(row.id, { description: v })}
+                placeholder="Bordano Landing"
+              />
+              <TextField
+                label="Coordinates (lat, lon)"
+                value={row.coords}
+                onChange={(v) => onUpdate(row.id, { coords: v })}
+                placeholder="-36.550979, 147.890395"
+                validate={(v) =>
+                  v.trim() === "" || parseCoords(v)
+                    ? null
+                    : 'Enter "lat, lon" decimal degrees'
+                }
+              />
+              <TextField
+                label="Altitude (m)"
+                description="Waypoint altitude, optional"
+                value={String(row.altitude ?? "")}
+                onChange={(v) => onUpdate(row.id, { altitude: v })}
+                placeholder="0"
+              />
+              <div className="mt-1 flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onPress={() => {
+                    onUpdate(row.id, snapshotRef.current);
+                    close();
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button size="sm" onPress={close}>
+                  Done
+                </Button>
+              </div>
+            </div>
+          )}
+        </AriaDialog>
+      </AriaPopover>
+    </DialogTrigger>
   );
 }

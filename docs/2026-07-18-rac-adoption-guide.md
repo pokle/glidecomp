@@ -4,10 +4,13 @@
 **Status (2026-07-18):** the task detail page (`/comp/:id/task/:id`) and every
 dialog it opens is fully converted to react-aria-components and verified
 (typecheck, unit tests, production build, 12/12 SSR e2e with clean hydration,
-headless admin drives with zero console errors). The rest of the app still uses
-the shadcn/Base UI kit in `src/react/ui/`. The decision so far: **keep going
-with RAC** — it earned its keep everywhere except editable tables, where we
-built our own support (see gotchas).
+headless admin drives with zero console errors). The route editor's turnpoint
+grid has since been rebuilt as a **GridList card list** (2026-07-18, see that
+section). The rest of the app still uses the shadcn/Base UI kit in
+`src/react/ui/`. The decision so far: **keep going with RAC** — it earned its
+keep everywhere except editable tables, where we built our own support (the
+GridList card list is now the preferred pattern for editable collections; see
+gotchas).
 
 ## What exists
 
@@ -19,7 +22,9 @@ built our own support (see gotchas).
   SearchField/Label/Description/FieldError/Input), `select` (Select/SelectItem/
   SimpleSelect — string-in/out drop-in for the old comp/fields SimpleSelect),
   `checkbox` (Checkbox/CheckboxGroup), `table` (Table/TableHeader/Column/Row/
-  Cell/CellEditZone), `list-box`, `menu`, `tooltip`, `tag-group`, `disclosure`,
+  Cell/CellEditZone), `grid-list` (GridList/GridListItem — vertical card list
+  with `keyboardNavigationBehavior="tab"`, the editable-list alternative to
+  Table; see the route editor), `list-box`, `menu`, `tooltip`, `tag-group`, `disclosure`,
   `breadcrumbs`, `badge` (static span — RAC has no presentational components),
   `confirm` (RacConfirmProvider — supplies the same ConfirmContext as
   lib/confirm.tsx so `useConfirm()` inside a wrapped subtree gets the RAC
@@ -27,7 +32,8 @@ built our own support (see gotchas).
   react-router; SSR-safe).
 - **Converted files:** `pages/TaskDetail.tsx` (page + EditTaskDialog +
   turnpoints table), `comp/TaskStandings.tsx`, `comp/RouteEditorDialog.tsx`
-  (Tabulator grid → RAC Table, see below), `comp/SubmitTrackDialog.tsx`,
+  (Tabulator grid → RAC **GridList** card list, see below — was a RAC Table),
+  `comp/SubmitTrackDialog.tsx`,
   `comp/ManualFlightDialog.tsx`, `comp/AddWaypointDialog.tsx`,
   `comp/TaskExportButtons.tsx`, `comp/ScoreFreshness.tsx` (button only).
   Note the last five are **shared** — CompDetail/CompWaypoints/Scores already
@@ -125,36 +131,53 @@ bun run test:e2e                   # full suite (one known flaky dev-login test;
   a hidden `input[accept=…]`, still driveable with `setInputFiles`.
 - `bun run kill-dev` clears stale servers (port-in-use crashes on dev start).
 
-## Next planned step: route editor list view (decided, not yet built)
+## Route editor list view (BUILT — 2026-07-18)
 
-The table works but is cramped on small screens (horizontal scrolling breaks
-row context). Agreed direction — build as a variant and compare live:
+The cramped-table problem (horizontal scroll broke row context on small
+screens) is solved: the turnpoint Table is now a **vertical list of cards**
+(`rac/grid-list.tsx` → RAC GridList/GridListItem), replacing the Table
+entirely (no table+list in parallel — the list wins on desktop too, and its
+narrow column frees width for the map). Verified live (headless admin drive,
+0 console errors) + typecheck + unit + build + 12/12 SSR e2e. What shipped:
 
-- **Vertical list of turnpoint cards** (RAC **GridList**, not Table) with
-  `useDragAndDrop` reorder and `keyboardNavigationBehavior="tab"` (kills the
-  CellEditZone requirement for this surface).
-- **Hybrid editing — inline is non-negotiable** (this is an *editor*, not a
-  display table). The most common flow is: add turnpoints (picker/map/search),
-  then set radii. So each card keeps the hot fields inline:
-  - **Radius**: preset chips **400 / 1000 / 2000 / 3000 / 5000** plus a custom
-    NumberField (step 1 — see gotcha #1).
-  - **Type**: the existing SimpleSelect.
-- Everything else (code, name, coordinates, altitude) behind an **edit
-  popover/sheet** (full-width sheet on small screens) with real labels,
-  per-field validation, Submit/Cancel. Edits apply **live** to the map/legs
-  while the editor is open; Cancel reverts the turnpoint (dialog-level "nothing
-  saved until Save" still holds).
-- Card summary line carries the derived feedback: position number, code,
-  type, radius, **leg distance + Enter/Exit direction**, reading top-to-bottom
-  like a flight plan (XCTrack's task editor is the users' mental model).
-- **Map preview becomes collapsible** (rac Disclosure) so it never obscures
-  the list on small screens — likely default-expanded on `lg+`, collapsed
-  below. Same for one layout everywhere: prefer the list on desktop too
-  (frees width for the map) over maintaining table+list in parallel.
-- Reuse from the current implementation: rows state + `derived` memo
-  (buildRoute → errors/warnings/legs/dirs/mapTask), commit-on-blur draft
-  pattern, waypoint picker (SearchField + ListBox), FileTrigger import,
-  Disclosure SSS/Goal panels, and the drive scripts approach for verification.
+- **`GridList` with `keyboardNavigationBehavior="tab"`** — arrows move between
+  cards, Tab reaches a card's inline editors, so **no CellEditZone** is needed
+  here (contrast the Table, gotcha #2). `selectionMode="none"`; reorder via the
+  same `useDragAndDrop` hooks + `slot="drag"` handle as the Table (unchanged).
+- **Card = a flight plan line:** identity (position badge · code · name) with a
+  right-aligned derived recap (radius · Enter/Exit badge · optimized leg km),
+  reading top-to-bottom.
+- **Inline hot fields:** Type (SimpleSelect) and Radius (preset chips
+  **400 / 1 km / 2 km / 3 km / 5 km** as `ToggleButton`s whose `isSelected`
+  tracks the current radius, plus a custom NumberField, step 1 — gotcha #1).
+- **`EditTurnpointPopover`** (DialogTrigger + Popover + Dialog) holds code,
+  name, coordinates (with `validate` → inline FieldError), altitude. Edits
+  apply **live** to the map/legs; **Cancel reverts** to a `snapshotRef` taken
+  on open (dismiss-by-click-away keeps the live edits). Dialog-level "nothing
+  saved until Save" still holds.
+- Reused unchanged: rows state + `derived` memo, `dependencies={[rows,
+  derived]}` on the GridList (gotcha #3 — position #/legs/dirs would otherwise
+  stale on reorder; verified: drag renumbers and recomputes legs), waypoint
+  picker, FileTrigger, SSS/Goal Disclosures, the two-column map layout.
+
+New gotchas learned building it:
+- **`keyboardNavigationBehavior` typechecks** (it's on `AriaGridListProps`,
+  inherited by `GridListProps`) even though it isn't spelled out in
+  `GridList.d.ts`'s own body. It defaults to `'arrow'`; `layout="grid"` forces
+  `'tab'` regardless.
+- **The task page and the editor both render a grid `aria-label="Turnpoints"`**
+  (the read-only page table sits behind the open dialog). Scope drives/queries
+  to the dialog, or disambiguate on a marker only the editor has (e.g. a
+  `Custom radius` input), or the first match is the read-only page table.
+- Live-writing the popover fields on every keystroke re-runs the `derived` memo
+  per keystroke (that *is* the point — the map updates as you type). It's cheap
+  at ≤50 turnpoints; the commit-on-blur pattern is only needed for the Table's
+  in-cell editors.
+
+Not done (follow-ups): a true full-width bottom sheet for the edit popover on
+mobile (today it's a fitted floating panel), and making the map preview itself
+collapsible (rac Disclosure) — the two-column layout already keeps the map
+beside/above the list without obscuring it, so this was deprioritized.
 
 ## Converting other pages (recipe)
 
