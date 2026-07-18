@@ -6,22 +6,24 @@
  * open_igc_upload). Picking an IGC file surfaces the pilot name from the
  * file's header, and auto-selects the matching registered pilot when there is
  * exactly one — visibly, so the user can correct it.
+ *
+ * RAC EXPLORATION (see pages/TaskDetail.tsx): RAC Modal/Dialog, Select and
+ * FileTrigger — the file lives in state (a File object), not in a DOM input.
  */
-import { useEffect, useId, useRef, useState } from "react";
-import { Button } from "@/react/ui/button";
+import { useEffect, useRef, useState } from "react";
+import { FileTrigger } from "react-aria-components";
+import { Button } from "@/react/rac/button";
 import {
   Dialog,
-  DialogClose,
-  DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/react/ui/dialog";
-import { Field, FieldLabel } from "@/react/ui/field";
-import { Input } from "@/react/ui/input";
+  Modal,
+} from "@/react/rac/dialog";
+import { Label } from "@/react/rac/field";
+import { SimpleSelect } from "@/react/rac/select";
 import { api } from "../../comp/api";
 import { useUser } from "../lib/user";
-import { SimpleSelect } from "./fields";
 import { compressIgc, type PilotListEntry } from "./types";
 
 const SELF = "self";
@@ -93,17 +95,16 @@ export function SubmitTrackDialog({
   onClose: () => void;
   onUploaded: () => void;
 }) {
-  const fileId = useId();
   const { user } = useUser();
   const [pilots, setPilots] = useState<
     Array<{ comp_pilot_id: string; name: string; pilot_class: string }>
   >([]);
   const [selected, setSelected] = useState(SELF);
+  const [file, setFile] = useState<File | null>(null);
   const [igcPilotName, setIgcPilotName] = useState<string | null>(null);
   const [autoSelected, setAutoSelected] = useState(false);
   const [status, setStatus] = useState<{ message: string; isError: boolean } | null>(null);
   const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   // A manual pilot choice always wins over auto-detection.
   const userTouched = useRef(false);
 
@@ -129,17 +130,18 @@ export function SubmitTrackDialog({
     };
   }, [compId, canUploadOnBehalf]);
 
-  async function onFileChange() {
+  async function onFilePicked(files: FileList | null) {
     setStatus(null);
     setAutoSelected(false);
-    const file = fileInputRef.current?.files?.[0];
-    if (!file) {
+    const picked = files?.[0] ?? null;
+    setFile(picked);
+    if (!picked) {
       setIgcPilotName(null);
       return;
     }
     let name: string | null = null;
     try {
-      name = igcPilotNameFromText(await file.text());
+      name = igcPilotNameFromText(await picked.text());
     } catch {
       // Unreadable file — the upload step will report it.
     }
@@ -155,7 +157,6 @@ export function SubmitTrackDialog({
   }
 
   async function upload() {
-    const file = fileInputRef.current?.files?.[0];
     if (!file) {
       setStatus({ message: "Select an IGC file", isError: true });
       return;
@@ -202,53 +203,57 @@ export function SubmitTrackDialog({
       setStatus({ message: "Network error. Please try again.", isError: true });
     } finally {
       setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
   const selfLabel = user?.name ? `Myself (${user.name})` : "Myself";
 
   return (
-    <Dialog
-      open
+    <Modal
+      isOpen
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
+      className="sm:max-w-lg"
     >
-      <DialogContent className="sm:max-w-lg">
+      <Dialog>
         <DialogHeader>
           <DialogTitle>Submit track</DialogTitle>
         </DialogHeader>
-        <div>
-          <h3 className="mb-1.5 text-sm font-medium">Submitting for</h3>
-          <SimpleSelect
-            value={selected}
-            onChange={(v) => {
-              userTouched.current = true;
-              setAutoSelected(false);
-              setSelected(v || SELF);
-            }}
-            options={[
-              { value: SELF, label: selfLabel },
-              ...pilots.map((p) => ({
-                value: p.comp_pilot_id,
-                label: `${p.name} (${p.pilot_class})`,
-              })),
-            ]}
-            disabled={!canUploadOnBehalf}
-            ariaLabel="Pilot"
-          />
+        <SimpleSelect
+          value={selected}
+          onChange={(v) => {
+            userTouched.current = true;
+            setAutoSelected(false);
+            setSelected(v || SELF);
+          }}
+          options={[
+            { value: SELF, label: selfLabel },
+            ...pilots.map((p) => ({
+              value: p.comp_pilot_id,
+              label: `${p.name} (${p.pilot_class})`,
+            })),
+          ]}
+          disabled={!canUploadOnBehalf}
+          ariaLabel="Submitting for"
+          className="w-full"
+        />
+        <div className="flex flex-col gap-2">
+          <Label>IGC File</Label>
+          <div className="flex flex-wrap items-center gap-2">
+            <FileTrigger
+              acceptedFileTypes={[".igc"]}
+              onSelect={(files) => void onFilePicked(files)}
+            >
+              <Button variant="outline" size="sm">
+                {file ? "Change file…" : "Choose IGC file…"}
+              </Button>
+            </FileTrigger>
+            {file ? (
+              <span className="truncate text-sm text-muted-foreground">{file.name}</span>
+            ) : null}
+          </div>
         </div>
-        <Field>
-          <FieldLabel htmlFor={fileId}>IGC File</FieldLabel>
-          <Input
-            id={fileId}
-            ref={fileInputRef}
-            type="file"
-            accept=".igc"
-            onChange={() => void onFileChange()}
-          />
-        </Field>
         {igcPilotName ? (
           <p className="text-sm text-muted-foreground">
             Pilot named in the IGC file: <strong>{igcPilotName}</strong>
@@ -266,14 +271,14 @@ export function SubmitTrackDialog({
           </p>
         ) : null}
         <DialogFooter>
-          <DialogClose render={<Button type="button" variant="outline" />}>
+          <Button slot="close" variant="outline">
             Cancel
-          </DialogClose>
-          <Button type="button" disabled={uploading} onClick={() => void upload()}>
+          </Button>
+          <Button isDisabled={uploading} onPress={() => void upload()}>
             {uploading ? "Uploading..." : "Upload"}
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </Dialog>
+    </Modal>
   );
 }

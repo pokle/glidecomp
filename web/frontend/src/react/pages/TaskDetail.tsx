@@ -1,34 +1,37 @@
 /**
  * Task detail page — React port of the task view in comp-detail.ts.
  *
+ * RAC EXPLORATION: this page (and everything it opens) is built entirely from
+ * react-aria-components primitives (src/react/rac/) instead of the shadcn /
+ * Base UI kit, to evaluate RAC as the app-wide foundation. Visuals match the
+ * rest of the app; the interaction layer (dialogs, tables, fields, menus) is
+ * RAC. See the PR/issue discussion before extending the pattern elsewhere.
+ *
  * Everyone sees a read-only Turnpoints listing; admins additionally get the
  * route editor dialog (comp/RouteEditorDialog) covering turnpoints, start
  * gates, goal, and .xctsk / XContest import-export (#270).
  */
 import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Form } from "react-aria-components";
 import { computeTurnpointDirections, xctaskTurnpointsToRecords, type XCTask } from "@glidecomp/engine";
-import { Badge } from "@/react/ui/badge";
-import { Button } from "@/react/ui/button";
+import { Badge } from "@/react/rac/badge";
+import { Button, buttonVariants } from "@/react/rac/button";
+import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import {
   Dialog,
-  DialogClose,
-  DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/react/ui/dialog";
-import { Field, FieldLabel, FieldLegend, FieldSet } from "@/react/ui/field";
-import { Input } from "@/react/ui/input";
+  Modal,
+} from "@/react/rac/dialog";
+import { TextField, Label, Description } from "@/react/rac/field";
+import { Checkbox, CheckboxGroup } from "@/react/rac/checkbox";
+import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
+import { Tag, TagGroup } from "@/react/rac/tag-group";
+import { RacRouterProvider } from "@/react/rac/router";
+import { RacConfirmProvider } from "@/react/rac/confirm";
 import { DatePicker, TimePicker } from "@/react/ui/date-picker";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/react/ui/table";
 import { api } from "../../comp/api";
 import {
   formatInstant,
@@ -40,10 +43,8 @@ import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { useAdminView, useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
-import { Breadcrumbs } from "../components/Breadcrumbs";
 import { SectionHeader } from "../components/SectionHeader";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
-import { CheckboxField } from "../comp/fields";
 import { TaskStandings } from "../comp/TaskStandings";
 import { RouteEditorDialog } from "../comp/RouteEditorDialog";
 import { startConfigSummary } from "../comp/route-editor";
@@ -56,8 +57,19 @@ import {
 } from "../comp/types";
 import { useInitialData } from "../lib/initial-data";
 import type { TaskDetailLoaderData } from "../loaders";
+import { cn } from "../lib/utils";
 
 export function TaskDetail() {
+  return (
+    <RacRouterProvider>
+      <RacConfirmProvider>
+        <TaskDetailContent />
+      </RacConfirmProvider>
+    </RacRouterProvider>
+  );
+}
+
+function TaskDetailContent() {
   const { compId, taskId } = useParams<{ compId: string; taskId: string }>();
   const { user } = useUser();
   const location = useLocation();
@@ -209,14 +221,16 @@ export function TaskDetail() {
               </span>
             </p>
           ) : null}
-          <ul className="mt-1 text-sm text-muted-foreground">
+          <TagGroup label="Pilot classes" className="mt-1.5">
             {task.pilot_classes.map((cls) => (
-              <li key={cls}>{cls}</li>
+              <Tag key={cls} id={cls}>
+                {cls}
+              </Tag>
             ))}
-          </ul>
+          </TagGroup>
         </div>
         {isAdmin && comp ? (
-          <Button type="button" variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+          <Button variant="outline" size="sm" onPress={() => setEditOpen(true)}>
             Settings
           </Button>
         ) : null}
@@ -230,33 +244,25 @@ export function TaskDetail() {
             records={xctaskTurnpointsToRecords(task.xctsk.turnpoints)}
           />
         ) : null}
+        {/* Plain anchors (not RAC Links): these leave the SPA for the vanilla
+            analysis / replay entries, so client routing must not intercept. */}
         {task.xctsk ? (
-          <Button nativeButton={false}
-            variant="outline"
-            size="sm"
-            render={
-              <a
-                href={`/analysis.html?compId=${encodeURIComponent(compId)}&taskId=${encodeURIComponent(taskId)}`}
-                title="Open this task on the analysis map"
-              />
-            }
+          <a
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            href={`/analysis.html?compId=${encodeURIComponent(compId)}&taskId=${encodeURIComponent(taskId)}`}
+            title="Open this task on the analysis map"
           >
             View on map
-          </Button>
+          </a>
         ) : null}
         {replayAvailable ? (
-          <Button nativeButton={false}
-            variant="outline"
-            size="sm"
-            render={
-              <a
-                href={`/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}`}
-                title="Open the 3D flight replay for this task"
-              />
-            }
+          <a
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            href={`/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}`}
+            title="Open the 3D flight replay for this task"
           >
             3D replay
-          </Button>
+          </a>
         ) : null}
       </div>
 
@@ -335,24 +341,22 @@ export function TaskDetail() {
 function TurnpointsTable({ xctsk }: { xctsk: XCTask }) {
   const directions = useMemo(() => computeTurnpointDirections(xctsk), [xctsk]);
   return (
-    <Table className="mt-2">
+    <Table aria-label="Turnpoints" className="mt-2">
       <TableHeader>
-        <TableRow>
-          <TableHead>#</TableHead>
-          <TableHead>Name</TableHead>
-          <TableHead>Radius</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead>Direction</TableHead>
-        </TableRow>
+        <Column isRowHeader={false}>#</Column>
+        <Column isRowHeader>Name</Column>
+        <Column>Radius</Column>
+        <Column>Type</Column>
+        <Column>Direction</Column>
       </TableHeader>
       <TableBody>
         {xctsk.turnpoints.map((tp, i) => (
-          <TableRow key={i}>
-            <TableCell>{i + 1}</TableCell>
-            <TableCell>{tp.waypoint.name}</TableCell>
-            <TableCell>{tp.radius} m</TableCell>
-            <TableCell>{tp.type ?? "—"}</TableCell>
-            <TableCell>
+          <Row key={i}>
+            <Cell>{i + 1}</Cell>
+            <Cell>{tp.waypoint.name}</Cell>
+            <Cell>{tp.radius} m</Cell>
+            <Cell>{tp.type ?? "—"}</Cell>
+            <Cell>
               {tp.type === "TAKEOFF" ? (
                 <span className="text-muted-foreground">—</span>
               ) : directions[i] === "exit" ? (
@@ -360,8 +364,8 @@ function TurnpointsTable({ xctsk }: { xctsk: XCTask }) {
               ) : (
                 <span className="text-muted-foreground">Enter</span>
               )}
-            </TableCell>
-          </TableRow>
+            </Cell>
+          </Row>
         ))}
       </TableBody>
     </Table>
@@ -394,7 +398,7 @@ function TurnpointsSection({
         title="Turnpoints"
         action={
           isAdmin ? (
-            <Button type="button" variant="outline" size="sm" onClick={onEditRoute}>
+            <Button variant="outline" size="sm" onPress={onEditRoute}>
               {xctsk && xctsk.turnpoints.length > 0 ? "Edit route…" : "Create route…"}
             </Button>
           ) : null
@@ -434,7 +438,6 @@ function EditTaskDialog({
 }) {
   const navigate = useNavigate();
   const confirm = useConfirm();
-  const nameId = useId();
   const dateId = useId();
   const stopId = useId();
   const [name, setName] = useState(task.name);
@@ -456,15 +459,7 @@ function EditTaskDialog({
   );
   const [saving, setSaving] = useState(false);
 
-  function toggleClass(cls: string, checked: boolean) {
-    setSelectedClasses((prev) =>
-      checked ? [...prev.filter((c) => c !== cls), cls] : prev.filter((c) => c !== cls)
-    );
-  }
-
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-
+  async function save() {
     if (selectedClasses.length === 0) {
       toast.warning("Select at least one pilot class");
       return;
@@ -533,84 +528,88 @@ function EditTaskDialog({
   }
 
   return (
-    <Dialog
-      open
+    <Modal
+      isOpen
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
+      className="sm:max-w-lg"
     >
-      <DialogContent className="sm:max-w-lg">
+      <Dialog>
         <DialogHeader>
           <DialogTitle>Task Settings</DialogTitle>
         </DialogHeader>
-        <form onSubmit={(e) => void save(e)} className="flex flex-col gap-4">
-          <Field>
-            <FieldLabel htmlFor={nameId}>Name</FieldLabel>
-            <Input
-              id={nameId}
-              required
-              maxLength={128}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </Field>
-          <Field>
-            <FieldLabel id={dateId}>Date</FieldLabel>
+        <Form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+          className="flex flex-col gap-4"
+        >
+          <TextField
+            label="Name"
+            isRequired
+            maxLength={128}
+            value={name}
+            onChange={setName}
+            errorMessage="Enter a task name"
+          />
+          <div className="flex flex-col gap-2">
+            <Label id={dateId}>Date</Label>
             <DatePicker
               required
               aria-labelledby={dateId}
               value={taskDate}
               onChange={setTaskDate}
             />
-          </Field>
-          <FieldSet>
-            <FieldLegend variant="label">Pilot Classes</FieldLegend>
+          </div>
+          <CheckboxGroup
+            label="Pilot Classes"
+            value={selectedClasses}
+            onChange={setSelectedClasses}
+          >
             {compPilotClasses.map((cls) => (
-              <CheckboxField
-                key={cls}
-                checked={selectedClasses.includes(cls)}
-                onChange={(checked) => toggleClass(cls, checked)}
-                label={cls}
-              />
+              <Checkbox key={cls} value={cls}>
+                {cls}
+              </Checkbox>
             ))}
-          </FieldSet>
-          <Field>
-            <FieldLabel id={stopId}>
+          </CheckboxGroup>
+          <div className="flex flex-col gap-2">
+            <Label id={stopId}>
               Task stop (
               {zoneLabel(new Date(`${taskDate}T12:00:00Z`), timezone ?? "UTC")})
-            </FieldLabel>
+            </Label>
             <TimePicker
               clearable
               aria-labelledby={stopId}
               value={stopTime}
               onChange={setStopTime}
             />
-            <p className="text-xs text-muted-foreground">
+            <Description>
               Set only when the task was stopped mid-flight (weather calldown).
               Scores are recomputed under the stopped-task rules (FAI S7F
               §12.3): a scored-back stop time, a clipped scoring window, and an
               altitude bonus for pilots still flying. Leave empty for a task
               that ran to completion.
-            </p>
-          </Field>
+            </Description>
+          </div>
           <DialogFooter>
             <Button
-              type="button"
               variant="destructive"
               className="sm:mr-auto"
-              onClick={() => void deleteTask()}
+              onPress={() => void deleteTask()}
             >
               Delete task
             </Button>
-            <DialogClose render={<Button type="button" variant="outline" />}>
+            <Button slot="close" variant="outline">
               Cancel
-            </DialogClose>
-            <Button type="submit" disabled={saving}>
+            </Button>
+            <Button type="submit" isDisabled={saving}>
               {saving ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </Form>
+      </Dialog>
+    </Modal>
   );
 }

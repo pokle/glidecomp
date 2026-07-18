@@ -1,6 +1,10 @@
 /**
  * Record a manual flight for a track-less pilot (issue #306, FAI S7F §8.4).
  *
+ * RAC EXPLORATION (see pages/TaskDetail.tsx): RAC Modal/Form/TextField/
+ * NumberField/Select. The coordinates field uses RAC's `validate` so "must be
+ * lat, lon" shows inline as the user types, not as a toast on save.
+ *
  * Pre-scoped to one pilot (unlike SubmitTrackDialog, which picks the pilot
  * inside). The made-good distance is computed live by the SAME engine helpers
  * the server scores with, so the number shown before saving is the number that
@@ -15,27 +19,26 @@
  * This is the accessible, non-map path required by docs/accessibility-standard.md
  * (a "lat, lon" field). A map picker is a planned follow-up.
  */
-import { useId, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { Form } from "react-aria-components";
 import type { XCTask } from "@glidecomp/engine";
 import {
   taskForDistanceOrigin,
   distanceMadeGoodTo,
   manualOpenDistanceGeometry,
 } from "@glidecomp/engine";
-import { Button } from "@/react/ui/button";
+import { Button } from "@/react/rac/button";
 import {
   Dialog,
-  DialogClose,
-  DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/react/ui/dialog";
-import { Field, FieldDescription, FieldLabel } from "@/react/ui/field";
-import { Input } from "@/react/ui/input";
+  Modal,
+} from "@/react/rac/dialog";
+import { NumberField, TextField } from "@/react/rac/field";
+import { Select, SelectItem } from "@/react/rac/select";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
-import { SimpleSelect } from "./fields";
 import { parseCoords, formatCoords } from "./route-editor";
 import type { DistanceOriginValue } from "./types";
 import type { ManualFlightEntry } from "./types";
@@ -79,10 +82,6 @@ export function ManualFlightDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const tpId = useId();
-  const coordsId = useId();
-  const durationId = useId();
-
   const goalIdx = task.turnpoints.length - 1;
   // Default: the last reached is the previous report's, else the start (SSS or
   // first turnpoint) — the minimum for a pilot who launched.
@@ -99,8 +98,8 @@ export function ManualFlightDialog({
     existing ? formatCoords(existing.landing_lat, existing.landing_lon) : ""
   );
   // Minutes:seconds is fiddly — collect whole minutes, the common granularity.
-  const [durationMin, setDurationMin] = useState(
-    existing?.duration_seconds != null ? String(Math.round(existing.duration_seconds / 60)) : ""
+  const [durationMin, setDurationMin] = useState<number>(
+    existing?.duration_seconds != null ? Math.round(existing.duration_seconds / 60) : NaN
   );
   const [saving, setSaving] = useState(false);
 
@@ -132,13 +131,7 @@ export function ManualFlightDialog({
       return;
     }
     const durationSeconds =
-      madeGoal && durationMin.trim() !== ""
-        ? Math.round(Number(durationMin) * 60)
-        : null;
-    if (madeGoal && durationMin.trim() !== "" && !Number.isFinite(Number(durationMin))) {
-      toast.warning("Enter the finish time in whole minutes");
-      return;
-    }
+      madeGoal && Number.isFinite(durationMin) ? Math.round(durationMin * 60) : null;
 
     setSaving(true);
     try {
@@ -170,8 +163,14 @@ export function ManualFlightDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-lg">
+    <Modal
+      isOpen
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      className="sm:max-w-lg"
+    >
+      <Dialog>
         <DialogHeader>
           <DialogTitle>Record manual flight</DialogTitle>
         </DialogHeader>
@@ -181,7 +180,7 @@ export function ManualFlightDialog({
             ? "Scored as open distance from the take-off cylinder to where they landed."
             : "Scored from the last turnpoint they reached and where they landed."}
         </p>
-        <form
+        <Form
           className="flex flex-col gap-6"
           onSubmit={(e) => {
             e.preventDefault();
@@ -189,50 +188,47 @@ export function ManualFlightDialog({
           }}
         >
           {!openDistance ? (
-            <Field>
-              <FieldLabel htmlFor={tpId}>Last turnpoint reached</FieldLabel>
-              <SimpleSelect
-                value={String(lastIdx)}
-                onChange={(v) => setLastIdx(Number(v))}
-                options={task.turnpoints.map((_, i) => ({
-                  value: String(i),
-                  label: turnpointLabel(task, i),
-                }))}
-                ariaLabel="Last turnpoint reached"
-              />
-              <FieldDescription>
-                The furthest turnpoint the pilot legally tagged, in order.
-              </FieldDescription>
-            </Field>
+            <Select
+              label="Last turnpoint reached"
+              description="The furthest turnpoint the pilot legally tagged, in order."
+              selectedKey={String(lastIdx)}
+              onSelectionChange={(k) => {
+                if (k != null) setLastIdx(Number(k));
+              }}
+            >
+              {task.turnpoints.map((_, i) => (
+                <SelectItem key={i} id={String(i)}>
+                  {turnpointLabel(task, i)}
+                </SelectItem>
+              ))}
+            </Select>
           ) : null}
 
-          <Field>
-            <FieldLabel htmlFor={coordsId}>Landing point</FieldLabel>
-            <Input
-              id={coordsId}
-              placeholder="-36.550979, 147.890395"
-              value={coords}
-              onChange={(e) => setCoords(e.target.value)}
-            />
-            <FieldDescription>
-              Latitude, longitude — paste straight from Google Maps.
-            </FieldDescription>
-          </Field>
+          <TextField
+            label="Landing point"
+            placeholder="-36.550979, 147.890395"
+            description="Latitude, longitude — paste straight from Google Maps."
+            value={coords}
+            onChange={setCoords}
+            // Inline validation: flags a malformed pair as the user types
+            // (only once touched), instead of a toast at save time.
+            validate={(v) =>
+              v.trim() === "" || parseCoords(v) !== null
+                ? null
+                : 'Enter "latitude, longitude" decimal degrees'
+            }
+          />
 
           {madeGoal ? (
-            <Field>
-              <FieldLabel htmlFor={durationId}>Finish time (minutes)</FieldLabel>
-              <Input
-                id={durationId}
-                inputMode="numeric"
-                placeholder="e.g. 92"
-                value={durationMin}
-                onChange={(e) => setDurationMin(e.target.value)}
-              />
-              <FieldDescription>
-                Speed-section time, for time and speed points. Optional.
-              </FieldDescription>
-            </Field>
+            <NumberField
+              label="Finish time (minutes)"
+              description="Speed-section time, for time and speed points. Optional."
+              placeholder="e.g. 92"
+              minValue={1}
+              step={1}
+              value={durationMin}
+              onChange={setDurationMin}
+            />
           ) : null}
 
           <div
@@ -254,15 +250,15 @@ export function ManualFlightDialog({
           </div>
 
           <DialogFooter>
-            <DialogClose render={<Button type="button" variant="outline" />}>
+            <Button slot="close" variant="outline">
               Cancel
-            </DialogClose>
-            <Button type="submit" disabled={saving || !coordsValid}>
+            </Button>
+            <Button type="submit" isDisabled={saving || !coordsValid}>
               {saving ? "Saving…" : "Record flight"}
             </Button>
           </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </Form>
+      </Dialog>
+    </Modal>
   );
 }
