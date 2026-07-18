@@ -24,7 +24,11 @@ gotchas).
   `checkbox` (Checkbox/CheckboxGroup), `table` (Table/TableHeader/Column/Row/
   Cell/CellEditZone), `grid-list` (GridList/GridListItem — vertical card list
   with `keyboardNavigationBehavior="tab"`, the editable-list alternative to
-  Table; see the route editor), `list-box`, `menu`, `tooltip`, `tag-group`, `disclosure`,
+  Table; see the route editor), `combo-box` (ComboBox/ComboBoxItem — text input
+  + floating filtered suggestions; **use this, not SearchField + list-box**,
+  whenever typing filters a list: it owns the ARIA combobox contract that a
+  searchbox beside a detached listbox doesn't provide — see gotcha #12),
+  `list-box` (standalone option list; no callers today), `menu`, `tooltip`, `tag-group`, `disclosure`,
   `breadcrumbs` (ARIA-native trail — parent links + current page as
   `aria-current="page"`; see gotcha #11), `badge` (static span — RAC has no presentational components),
   `confirm` (RacConfirmProvider — supplies the same ConfirmContext as
@@ -125,6 +129,45 @@ gotchas).
     navigates, current crumb carries `aria-current="page"`) + clean `:task`
     hydration.
 
+12. **Type-to-filter lists belong in a `ComboBox`, and a fully-controlled one
+    makes you own the resets.** RAC's `Autocomplete` is built for *inline*
+    filtering inside an already-floating surface (searchable menu, command
+    palette) — it renders no popover, so a list under it is in normal flow.
+    Two consequences bit the route editor's waypoint picker:
+    - **In flow, inside a `flex flex-col` dialog body, it collapsed to ~6px on a
+      phone.** `overflow-y-auto` sets an element's automatic minimum size to 0,
+      so it was the one flex item that could absorb the overflow. A floating
+      popover sidesteps the whole class of bug (it's out of flow, and can't be
+      clipped by the dialog's scroll container either).
+    - **A `searchbox` next to a detached `listbox` isn't the ARIA combobox
+      pattern** — no `role="combobox"`, no `aria-expanded`/`aria-controls`.
+      `rac/combo-box.tsx` gets these for free.
+
+    When you control **both** `selectedKey` and `inputValue`, react-stately
+    hands syncing back to you (`useComboBoxState`: *"it's the user's
+    responsibility to update inputValue in onSelectionChange"*). It calls
+    `onSelectionChange(null)` on the Esc/blur revert — **if you ignore the null
+    case, Esc silently does nothing and the popover can never be dismissed.**
+    Pin `selectedKey={null}` when picking should copy values elsewhere rather
+    than leave the field holding a selection (it also lets the same item be
+    re-picked). Keep the empty query mapping to an *empty* list so the popover
+    stays shut at rest — if an empty query lists everything, Esc's revert
+    reopens it immediately. Gate `allowsEmptyCollection` on having a query so
+    "No matches" still shows while searching.
+
+    **Don't put a toggle/clear button in the field.** react-aria's
+    `ariaHideOutside` aria-hides everything except the input and the popover
+    while the list is open — including RAC's *own* trigger button — so any
+    button there is invisible to AT exactly when it's on screen. Esc dismisses;
+    blur and picking both clear.
+
+    **Testing gotchas:** that same `ariaHideOutside` makes Playwright *role*
+    locators fail for the rest of the dialog while the list is open (CSS
+    locators still work — role locators respect `aria-hidden`); measure boxes
+    only after the `zoom-in-95` entrance animation settles or everything reads
+    ~5% small; and don't "blur by clicking the field below" — the popover now
+    covers it, so the click selects an option instead.
+
 ## Verification playbook (all part of "done" for RAC work)
 
 ```bash
@@ -175,11 +218,15 @@ narrow column frees width for the map). Verified live (headless admin drive,
   so adding is draft-first (**nothing joins the route until Save**, Cancel adds
   nothing) and editing is atomic (Cancel keeps the turnpoint as it was); the
   parent's `onSave` appends (add) or `updateRow`-patches (edit). "Load from a
-  waypoint" is an **RAC `Autocomplete`** (`useFilter().contains`) wrapping the
-  kit SearchField + ListBox; the ListBox is only rendered while the (controlled)
-  query is non-empty, so at rest it's a single compact field — type to filter,
-  arrow/Enter to pick via virtual focus, which fills the draft and clears the
-  query. `textValue` on each item is `code + name` so the filter matches both.
+  waypoint" is the kit **`ComboBox`**: matches float in a popover over the
+  fields below, so they can't be clipped or squashed by the dialog's scroll
+  container and they flip above the field when there's no room (phone with the
+  keyboard up). Type to filter, arrow/Enter to pick via virtual focus, which
+  fills the draft and clears the query. Filtering is done at the call site
+  (`useFilter().contains` over `code + name`, also each item's `textValue`)
+  because RAC doesn't filter a controlled `items`; an empty query yields an
+  empty list so the popover stays shut at rest — and so Esc can close it, see
+  gotcha #12.
   Then every field: code, name, Type (SimpleSelect), Radius (preset chips
   **400 / 1 km / 2 km / 3 km / 5 km** + custom NumberField, step 1,
   `useGrouping:true` — gotcha #1), coordinates (`validate` → inline FieldError),
