@@ -168,6 +168,15 @@ bun run score-task <task.xctsk> <igc-file-or-folder>... [options]
 #   --wing <HG|PG>             Competition wing (`scoring`)
 # Task mode:
 #   --open-distance            Score as open distance (GAP options ignored)
+#   --comp <slug-or-dir>       Score a whole bundled comp (every task per class,
+#                              plus a per-class cross-task aggregate); wing comes
+#                              from the comp.json manifest. Implies --field-analysis.
+# Field analysis:
+#   --field-analysis           After the scores, print the behavioural field
+#                              analysis — per-pilot metrics (climbing, gliding,
+#                              decisions, gaggle, race craft, day profile/wind)
+#                              led by the metric-separation ranking (Spearman ρ
+#                              vs GAP rank). See docs/2026-07-18-field-analysis-plan.md.
 # Nominal parameters:
 #   --nominal-distance <m>     `nominalDistance` (default: 70% of task distance)
 #   --nominal-goal <ratio>     `nominalGoal` 0-1 (default: 0.3)
@@ -190,6 +199,10 @@ bun run score-task \
   web/samples/comps/corryong-cup-2026-open-t1/task.xctsk \
   web/samples/comps/corryong-cup-2026-open-t1/ \
   --wing HG
+
+# Example: score the whole bundled comp, with field analysis per task and a
+# per-class cross-task aggregate
+bun run score-task -- --comp corryong-cup-2026
 ```
 
 Example output:
@@ -224,18 +237,25 @@ Available Points: 1000 (dist: 486, time: 360, lead: 90, arr: 64)
 
 > The full HG table also shows a leading-coefficient (`LC`) column; it's elided here for width.
 
+**seed** - Seed the bundled sample competitions into local D1 + R2 (idempotent; `--remote` targets production):
+
+```bash
+bun run seed                    # every bundled comp
+bun run seed big-chip kosci-loop  # just these slugs
+```
+
 ## Project Structure
 
 ```
 web/
   frontend/              - Cloudflare Pages frontend (Vite + TypeScript)
-  engine/                - Shared analysis library (IGC parsing, event detection, GAP scoring)
-    cli/                 - CLI utilities (detect-events, get-xcontest-task, score-task)
+  engine/                - Shared analysis library (IGC parsing, event detection, GAP scoring, field analysis)
+    cli/                 - CLI utilities (detect-events, get-xcontest-task, score-task, build-3dvis, benchmarks)
   workers/
     auth-api/            - Authentication API (Cloudflare Worker + D1)
     competition-api/     - Competition management API (Cloudflare Worker + D1 + R2)
     airscore-api/        - AirScore caching proxy (Cloudflare Worker)
-  scripts/               - Operational scripts (secrets, test emails)
+  scripts/               - Operational scripts (comp seeding/download/generation, dev helpers, secrets)
 e2e/                     - Playwright end-to-end tests
 docs/                    - Feature and architecture specifications
 ```

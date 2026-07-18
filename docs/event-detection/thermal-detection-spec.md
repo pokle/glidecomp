@@ -1,6 +1,6 @@
 # Thermal Detection Algorithm
 
-Specification for the thermal detection logic in `web/engine/src/event-detector.ts`.
+Specification for the thermal detection logic in `web/engine/src/flight-phase-detectors.ts` (orchestrated by `web/engine/src/event-detector.ts`).
 
 ## Overview
 
