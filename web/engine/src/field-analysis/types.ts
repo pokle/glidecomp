@@ -1,0 +1,243 @@
+// Copyright (c) 2026, Tushar Pokle.  All rights reserved.
+
+/**
+ * Field analysis — shared types and the MetricComputer contract.
+ *
+ * THIS FILE IS THE CONTRACT between the field-analysis foundation and the
+ * metric families in `metrics/*.ts`. Metric implementations may ONLY read the
+ * FieldContext (never re-run detectors) and must express cross-pilot proximity
+ * through `grid` / `gaggles` / `sharedThermals`, never nested per-fix loops
+ * over pilots. See docs/2026-07-18-field-analysis-plan.md.
+ */
+
+import type { IGCFix } from '../igc-parser';
+import type { XCTask } from '../xctsk-parser';
+import type { ThermalSegment, GlideSegment } from '../event-types';
+import type { CircleDetectionResult } from '../circle-detector';
+import type { GaggleResult } from '../cluster-detector';
+import type { PilotScore, TaskScoreResult } from '../gap-scoring';
+import type { TimeGrid, ResampledTrack } from './resample';
+import type { SharedThermal } from './shared-thermals';
+import type { PhaseInterval } from './phase-partition';
+import type { WorkingBand } from './working-band';
+
+// ---------------------------------------------------------------------------
+// Context — everything a metric may read, computed once per field
+// ---------------------------------------------------------------------------
+
+/** One pilot's fully-analysed flight. All detector output is precomputed. */
+export interface PilotAnalysisContext {
+  pilotName: string;
+  /** Pairing key across every per-pilot structure (project rule: never pair by array index). */
+  trackFile: string;
+  /** Index into FieldContext.pilots AND the grid frames' PilotState.pilot. */
+  pilotIndex: number;
+  fixes: IGCFix[];
+  /** GAP score, including the full turnpointResult (crossing times, legs, gates). */
+  score: PilotScore;
+  /** Fix indices are absolute (into `fixes`). */
+  thermals: ThermalSegment[];
+  /** Fix indices are absolute (into `fixes`). */
+  glides: GlideSegment[];
+  /**
+   * detectCircles over the takeoff→landing slice, with segment/circle fix
+   * indices offset back to absolute. `bearingRates` stays aligned to the
+   * sliced fixes (index i ↔ fixes[takeoffIndex + i]).
+   */
+  circles: CircleDetectionResult;
+  /** Three-way climb/glide/search partition covering takeoff..landing exactly. */
+  phases: PhaseInterval[];
+  takeoffIndex: number;
+  landingIndex: number;
+  /** SSS reaching time (epoch ms), null when the pilot never started. */
+  sssMs: number | null;
+  /** ESS reaching time (epoch ms), null when not reached. */
+  essMs: number | null;
+  /** This pilot on the shared time grid. */
+  track: ResampledTrack;
+}
+
+/** One speed-section (or reference) leg of the task. */
+export interface LegInfo {
+  fromTaskIndex: number;
+  toTaskIndex: number;
+  /** Optimized leg distance in metres (getOptimizedSegmentDistances). */
+  optimizedMeters: number;
+}
+
+/** The whole scored field, analysed. The single input to every metric. */
+export interface FieldContext {
+  task: XCTask;
+  category: 'hg' | 'pg';
+  scoreResult: TaskScoreResult;
+  /** Sorted by score.rank ascending. */
+  pilots: PilotAnalysisContext[];
+  /** Shared time grid + per-step cluster-detector frames. */
+  grid: TimeGrid;
+  /** detectGaggles over the grid frames, start-cylinder excluded. */
+  gaggles: GaggleResult;
+  /** Cross-pilot thermal clusters, singletons included, ascending by start. */
+  sharedThermals: SharedThermal[];
+  workingBand: WorkingBand;
+  /** One entry per task leg (turnpoint i → i+1). */
+  legs: LegInfo[];
+  /** ENU origin every grid east/north is measured from (first turnpoint's waypoint). */
+  origin: { lat: number; lon: number };
+}
+
+// ---------------------------------------------------------------------------
+// MetricComputer — the parallel-work interface
+// ---------------------------------------------------------------------------
+
+export type MetricFamily = 'climbing' | 'gliding' | 'decision' | 'gaggle' | 'racecraft' | 'day';
+
+/**
+ * Expected relationship to GAP rank: 'higher' = a larger value should mean a
+ * better (numerically lower) rank; 'neutral' = no prior, the Spearman sign
+ * itself is the finding.
+ */
+export type MetricDirection = 'higher' | 'lower' | 'neutral';
+
+export interface PilotMetricValue {
+  /** Pairing key back to FieldContext.pilots. */
+  trackFile: string;
+  /** null = not applicable for this pilot (no thermals, never started, …). */
+  value: number | null;
+  /** Optional short per-pilot note, e.g. "3 low saves, deepest at 12% of band". */
+  note?: string;
+}
+
+/** A generic plain-text table a metric wants printed (horserace, waterfall, wind…). */
+export interface ReportTable {
+  title: string;
+  columns: { header: string; align: 'left' | 'right' }[];
+  rows: string[][];
+  footnotes?: string[];
+}
+
+export interface MetricOutput {
+  /**
+   * One entry per FieldContext.pilots element. Entries are re-aligned by
+   * trackFile during evaluation, so order mismatches are tolerated — but
+   * every pilot must appear exactly once.
+   */
+  perPilot: PilotMetricValue[];
+  /** Free-form lines printed under the family heading (field-level summaries). */
+  fieldSummary?: string[];
+  /** Rich tables printed after the family's per-pilot table. */
+  extraTables?: ReportTable[];
+}
+
+export interface MetricComputer {
+  /** Stable id, family-prefixed: 'climb.shared_percentile', 'race.leg_time_lost', … */
+  id: string;
+  /** Full label, e.g. "Climb vs field (shared thermals)". */
+  label: string;
+  /** Column header in the family table (≤ 10 chars); falls back to a truncated label. */
+  shortLabel?: string;
+  /** 'pct' | 'm/s' | 's' | 'min' | 'km/h' | 'count' | 'ratio' | 'm'. */
+  unit: string;
+  family: MetricFamily;
+  direction: MetricDirection;
+  /** 1–2 sentence method description, printed once per report (explainability rule). */
+  explanation: string;
+  /** Pure function of the field context. Must not mutate it. */
+  compute(field: FieldContext): MetricOutput;
+}
+
+// ---------------------------------------------------------------------------
+// Evaluation & report model
+// ---------------------------------------------------------------------------
+
+export type CorrelationVerdict = 'strong' | 'moderate' | 'weak' | 'n too small';
+
+/** Spearman correlation of a metric's values against GAP rank (rank 1 = best). */
+export interface MetricCorrelation {
+  metricId: string;
+  /**
+   * Signed ρ of (value, rank). Because rank 1 is best, a well-behaved
+   * 'higher' metric shows NEGATIVE ρ and a 'lower' metric positive ρ.
+   */
+  rho: number;
+  absRho: number;
+  /** Pilots with a non-null value that entered the correlation. */
+  n: number;
+  verdict: CorrelationVerdict;
+}
+
+/** One metric's computed output plus its correlation, ready to render. */
+export interface MetricReport {
+  id: string;
+  label: string;
+  shortLabel?: string;
+  unit: string;
+  family: MetricFamily;
+  direction: MetricDirection;
+  explanation: string;
+  /** Aligned to FieldAnalysisReport.pilots order. */
+  perPilot: PilotMetricValue[];
+  fieldSummary?: string[];
+  extraTables?: ReportTable[];
+  /** Null when too few non-null values (< 3) or zero variance. */
+  correlation: MetricCorrelation | null;
+  /** Set when compute() threw — the report shows the failure instead of dying. */
+  error?: string;
+}
+
+/** Field-level facts printed in the report header. */
+export interface FieldAnalysisBasis {
+  pilotCount: number;
+  gridStepSeconds: number;
+  sharedThermalCount: number;
+  /** Shared thermals used by ≥ 2 pilots. */
+  multiPilotThermalCount: number;
+  workingBandFloor: number;
+  workingBandCeiling: number;
+  workingBandFallback: boolean;
+  /** Mean over pilots of (time in any phase) / (takeoff→landing time), %. */
+  phaseCoveragePct: number;
+}
+
+export interface FieldAnalysisReport {
+  basis: FieldAnalysisBasis;
+  /** Rank order — every perPilot array is aligned to this. */
+  pilots: { trackFile: string; pilotName: string; rank: number }[];
+  /** Registry order. */
+  metrics: MetricReport[];
+}
+
+// ---------------------------------------------------------------------------
+// Whole-comp aggregation model
+// ---------------------------------------------------------------------------
+
+/** One task's inputs to the comp aggregate. */
+export interface CompTaskResult {
+  /** e.g. "Task 1 (2026-01-05)". */
+  label: string;
+  report: FieldAnalysisReport;
+  /** trackFile → cross-task pilot key (see cli pilotKeyFor). */
+  pilotKeyByTrackFile: Record<string, string>;
+  /** Per-pilot totals for comp ranking. */
+  totals: { trackFile: string; pilotName: string; totalScore: number }[];
+}
+
+export interface CompMetricAggregate {
+  id: string;
+  label: string;
+  unit: string;
+  direction: MetricDirection;
+  /** Signed per-task ρ, parallel to CompAggregateReport.taskLabels (null = not computed). */
+  perTaskRho: (number | null)[];
+  /** n-weighted mean |ρ| across tasks; null when no task produced one. */
+  meanAbsRho: number | null;
+  /** Correlation of per-pilot cross-task metric means vs comp rank. */
+  compRho: MetricCorrelation | null;
+}
+
+export interface CompAggregateReport {
+  taskLabels: string[];
+  /** Comp standings: total score across tasks, rank 1 = best. */
+  pilots: { key: string; name: string; taskCount: number; totalScore: number; rank: number }[];
+  /** Registry order (union across tasks, first-seen order). */
+  metrics: CompMetricAggregate[];
+}

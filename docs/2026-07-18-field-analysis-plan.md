@@ -65,7 +65,8 @@ export interface MetricOutput {
 export interface MetricComputer {
   id: string;                        // 'climb.shared_percentile', 'race.leg_time_lost', …
   label: string;
-  unit: string;                      // 'pct' | 'm/s' | 's' | 'km/h' | 'count' | 'ratio' | 'm'
+  shortLabel?: string;               // ≤10-char column header for the family table
+  unit: string;                      // 'pct' | 'm/s' | 's' | 'min' | 'km/h' | 'count' | 'ratio' | 'm'
   family: MetricFamily;
   direction: MetricDirection;
   explanation: string;               // 1–2 sentence method text, printed once (explainability rule)
@@ -83,14 +84,16 @@ export interface PilotAnalysisContext {
   pilotIndex: number;               // index into FieldContext.pilots AND grid PilotState.pilot
   fixes: IGCFix[];
   score: PilotScore;                // includes turnpointResult
-  events: FlightEvent[];            // detectFlightEvents(fixes, task)
-  thermals: ThermalSegment[]; glides: GlideSegment[];
-  circles: CircleDetectionResult;
+  thermals: ThermalSegment[]; glides: GlideSegment[];   // fix indices absolute
+  circles: CircleDetectionResult;   // segment/circle indices absolute; bearingRates slice-relative
   phases: PhaseInterval[];          // covers takeoff..landing exactly
   takeoffIndex: number; landingIndex: number;
   sssMs: number | null; essMs: number | null;
   track: ResampledTrack;            // this pilot on the shared grid
 }
+// NOTE (Stage 0 as built): no `events: FlightEvent[]` field — no metric spec reads raw
+// FlightEvents and including it would run every detector twice. Detectors are invoked
+// individually in context.ts (detectTakeoffLanding → slice → detectThermals/Glides/Circles).
 export interface LegInfo { fromTaskIndex: number; toTaskIndex: number; optimizedMeters: number; }
 export interface FieldContext {
   task: XCTask;
@@ -275,13 +278,20 @@ Eyeball: horserace matches the airscore-parity task's known results; wind plausi
 
 ## Todo list / staging DAG (for parallel agents)
 
-### Stage 0 — serial, ONE agent (foundation; types.ts, registry.ts, test helpers FROZEN after)
+### Stage 0 — serial, ONE agent (foundation; types.ts, registry.ts, test helpers FROZEN after) — DONE
 - [x] Merge `origin/master` into this branch
 - [x] Commit this plan as `docs/2026-07-18-field-analysis-plan.md`
-- [ ] `field-analysis/`: `types.ts` (full contract above), `stats.ts`, `resample.ts`, `shared-thermals.ts`, `phase-partition.ts`, `working-band.ts`, `context.ts`, `evaluate.ts`, `report.ts`, `aggregate.ts`, `index.ts`; one export line in `web/engine/src/index.ts`
-- [ ] Six `metrics/*.ts` stubs each exporting a typed empty array (`export const CLIMBING_METRICS: MetricComputer[] = []` etc.); `registry.ts` concatenating them into `ALL_METRICS`
-- [ ] CLI: `--field-analysis`, `--comp`, `cli/comp-manifest.ts`; stub metrics yield a valid (nearly empty) report end-to-end
-- [ ] Foundation tests + integration skeleton + `tests/field-test-helpers.ts`; `bun run test` green
+- [x] `field-analysis/`: `types.ts` (full contract above), `stats.ts`, `resample.ts`, `shared-thermals.ts`, `phase-partition.ts`, `working-band.ts`, `context.ts`, `evaluate.ts`, `report.ts`, `aggregate.ts`, `index.ts`; one export line in `web/engine/src/index.ts`
+- [x] Six `metrics/*.ts` stubs each exporting a typed empty array (`export const CLIMBING_METRICS: MetricComputer[] = []` etc.); `registry.ts` concatenating them into `ALL_METRICS`
+- [x] CLI: `--field-analysis`, `--comp`, `cli/comp-manifest.ts`; stub metrics yield a valid (nearly empty) report end-to-end
+- [x] Foundation tests + integration skeleton + `tests/field-test-helpers.ts`; `bun run test` green
+
+**Stage 0 as-built notes for Stage 1 agents:**
+- The contract deltas vs the spec above: no `PilotAnalysisContext.events` (see NOTE), `MetricComputer.shortLabel?` added, `WorkingBand.usedFallback: boolean` added, and `resample.ts` also exports `stepFor(grid, tMs)` (clamped grid-step lookup).
+- `tests/field-test-helpers.ts` (FROZEN) exports `makeTestField(specs, opts?)` — runs the REAL foundation pass over hand-built fixes with a faked score — plus `makeTestTask`, `makeEmptyTurnpointResult`, `straightFixes`, `circlingFixes`, `TEST_ORIGIN`, `DEG_LAT_PER_M`, `DEG_LON_PER_M`.
+- `tests/field-analysis.test.ts` has the metric authoring template: the `test.flown_distance` case shows a full MetricComputer, evaluation, correlation assertion, and render check. Copy its shape.
+- `evaluateField` re-aligns `perPilot` by trackFile (order-tolerant), turns a thrown `compute()` into `MetricReport.error`, and skips correlation below 3 non-null values. Family sections render in `FAMILY_ORDER` (day first).
+- Correlation sanity from the stub run: kosci-loop-t1 `test.flown_distance` shows ρ ≈ −0.9 vs rank.
 
 ### Stage 1 — SIX parallel agents (each owns exactly two files; no other edits)
 
