@@ -3,10 +3,14 @@
  * task appears — the competition hub's task card and the task detail page — so
  * pilots can grab the route from anywhere:
  *
- *  - "Share task" opens a dialog with a format dropdown (native .xctsk plus
+ *  - "Share task" opens a dialog with a format menu (native .xctsk plus
  *    every waypoint file format) and the "swap code / name" option. On a phone
  *    each format opens straight into a flight app; on desktop it downloads.
  *  - "QR code" shows a full-screen, tap-to-dismiss XCTrack `XCTSK:` QR.
+ *
+ * RAC EXPLORATION (see pages/TaskDetail.tsx): RAC Modal/Menu/Checkbox. Menu
+ * items are real links (RAC MenuItem href + download), with menu keyboard
+ * semantics.
  *
  * Turnpoints can be passed inline (`records`, on the task page) or fetched on
  * demand from the task API (the comp hub card, which lists tasks without their
@@ -20,16 +24,10 @@ import {
   type WaypointFileRecord,
   type XCTask,
 } from "@glidecomp/engine";
-import { Button } from "@/react/ui/button";
-import { Checkbox } from "@/react/ui/checkbox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/react/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/react/ui/dropdown-menu";
+import { Button } from "@/react/rac/button";
+import { Checkbox } from "@/react/rac/checkbox";
+import { Dialog, DialogHeader, DialogTitle, Modal } from "@/react/rac/dialog";
+import { Menu, MenuItem, MenuTrigger } from "@/react/rac/menu";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { Share2Icon, QrCodeIcon, ChevronDownIcon } from "lucide-react";
@@ -113,10 +111,9 @@ export function TaskExportButtons({
   const shareButton = (
     <Button
       key="share"
-      type="button"
       variant={primary === "share" ? "default" : "outline"}
       size={size}
-      onClick={() => setShareOpen(true)}
+      onPress={() => setShareOpen(true)}
     >
       <Share2Icon className="size-4" aria-hidden />
       Share task
@@ -125,11 +122,10 @@ export function TaskExportButtons({
   const qrButton = (
     <Button
       key="qr"
-      type="button"
       variant={primary === "qr" ? "default" : "outline"}
       size={size}
-      disabled={qrLoading}
-      onClick={() => void showQR()}
+      isDisabled={qrLoading}
+      onPress={() => void showQR()}
     >
       <QrCodeIcon className="size-4" aria-hidden />
       QR code
@@ -150,8 +146,8 @@ export function TaskExportButtons({
         </>
       )}
 
-      <Dialog open={shareOpen} onOpenChange={setShareOpen}>
-        <DialogContent className="flex flex-col gap-3 sm:max-w-sm">
+      <Modal isOpen={shareOpen} onOpenChange={setShareOpen}>
+        <Dialog className="gap-3">
           <DialogHeader>
             <DialogTitle className="truncate">Share “{taskName}”</DialogTitle>
           </DialogHeader>
@@ -161,41 +157,42 @@ export function TaskExportButtons({
               : "Download the task in a format your instrument reads."}
           </p>
 
-          <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">
-            <Checkbox checked={swap} onCheckedChange={(c) => setSwap(c === true)} />
+          <Checkbox
+            isSelected={swap}
+            onChange={setSwap}
+            className="text-xs text-muted-foreground"
+          >
             Swap code &amp; name — use the full name as the waypoint label
-          </label>
+          </Checkbox>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<Button type="button" variant="outline" size="sm" className="w-fit" />}
-            >
+          <MenuTrigger>
+            <Button variant="outline" size="sm" className="w-fit">
               {openInApp ? "Open in app" : "Download"}
               <ChevronDownIcon className="size-4 opacity-60" aria-hidden />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuGroup>
-                {TASK_FORMATS.map((f) =>
-                  openInApp ? (
-                    <DropdownMenuItem
-                      key={f.id}
-                      render={<a href={hostedUrl(f.id)} target="_blank" rel="noopener noreferrer" />}
-                    >
-                      {f.label}
-                    </DropdownMenuItem>
-                  ) : (
-                    // `download` (no value) forces a save and uses the server's
-                    // Content-Disposition filename.
-                    <DropdownMenuItem key={f.id} render={<a href={hostedUrl(f.id)} download />}>
-                      {f.label}
-                    </DropdownMenuItem>
-                  )
-                )}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </DialogContent>
-      </Dialog>
+            </Button>
+            <Menu>
+              {TASK_FORMATS.map((f) =>
+                openInApp ? (
+                  <MenuItem
+                    key={f.id}
+                    href={hostedUrl(f.id)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {f.label}
+                  </MenuItem>
+                ) : (
+                  // `download` (no value) forces a save and uses the server's
+                  // Content-Disposition filename.
+                  <MenuItem key={f.id} href={hostedUrl(f.id)} download="">
+                    {f.label}
+                  </MenuItem>
+                )
+              )}
+            </Menu>
+          </MenuTrigger>
+        </Dialog>
+      </Modal>
 
       {qrValue ? (
         <Suspense fallback={null}>

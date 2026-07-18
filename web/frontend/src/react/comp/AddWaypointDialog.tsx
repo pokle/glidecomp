@@ -1,6 +1,9 @@
 /**
  * Shared "add a single waypoint" dialog.
  *
+ * RAC EXPLORATION (see pages/TaskDetail.tsx): RAC Modal/TextField/NumberField
+ * with inline coordinate validation.
+ *
  * One small, single-purpose form — code, name, coordinates, altitude, with
  * snap-to-peak (#341) — used both by the competition waypoints editor
  * (CompWaypoints) and, inline, by the task route editor (RouteEditorDialog) so
@@ -13,16 +16,15 @@
 import { useEffect, useRef, useState } from "react";
 import type { WaypointFileRecord } from "@glidecomp/engine";
 import type { MapPickDetails, PickedPeak } from "../../analysis/map-provider";
-import { Button } from "@/react/ui/button";
-import { Input } from "@/react/ui/input";
+import { Button } from "@/react/rac/button";
 import {
   Dialog,
-  DialogClose,
-  DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/react/ui/dialog";
+  Modal,
+} from "@/react/rac/dialog";
+import { NumberField, TextField } from "@/react/rac/field";
 import { toast } from "../lib/toast";
 import {
   formatCoords,
@@ -57,13 +59,13 @@ export function AddWaypointDialog({
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [coords, setCoords] = useState("");
-  const [altitude, setAltitude] = useState("");
+  const [altitude, setAltitude] = useState<number>(NaN);
   // Snap-to-peak: the candidate peak near the tap (null when none), whether the
   // coords currently reflect it, and the raw tap to revert to.
   const [peak, setPeak] = useState<PickedPeak | null>(null);
   const [snapped, setSnapped] = useState(false);
   const [tapCoords, setTapCoords] = useState("");
-  const [tapAltitude, setTapAltitude] = useState("");
+  const [tapAltitude, setTapAltitude] = useState<number>(NaN);
 
   // Seed the fields once each time the dialog opens (the false→true edge), from
   // whatever the map told us about the tapped point. Everything the map knows
@@ -78,7 +80,7 @@ export function AddWaypointDialog({
     if (open && !wasOpen.current) {
       const placeName = details?.placeName ?? "";
       const tapAlt =
-        details?.elevation !== undefined ? String(Math.round(details.elevation)) : "";
+        details?.elevation !== undefined ? Math.round(details.elevation) : NaN;
       const nearPeak = details?.peak ?? null;
       setCode(placeName ? suggestWaypointCode(placeName, takenCodes) : "");
       setName(placeName);
@@ -88,7 +90,7 @@ export function AddWaypointDialog({
       if (nearPeak && peakSnapMode(nearPeak) === "auto") {
         setCoords(formatCoords(nearPeak.lat, nearPeak.lon));
         setAltitude(
-          nearPeak.elevation !== undefined ? String(Math.round(nearPeak.elevation)) : tapAlt
+          nearPeak.elevation !== undefined ? Math.round(nearPeak.elevation) : tapAlt
         );
         setSnapped(true);
       } else {
@@ -106,7 +108,7 @@ export function AddWaypointDialog({
   function applySnap() {
     if (!peak) return;
     setCoords(formatCoords(peak.lat, peak.lon));
-    if (peak.elevation !== undefined) setAltitude(String(Math.round(peak.elevation)));
+    if (peak.elevation !== undefined) setAltitude(Math.round(peak.elevation));
     setSnapped(true);
   }
   function revertToTap() {
@@ -122,40 +124,56 @@ export function AddWaypointDialog({
       return;
     }
     const finalCode = code.trim() || "WP";
-    const alt = Number(altitude);
     onAdd({
       code: finalCode,
       name: name.trim() || finalCode,
       latitude: c.lat,
       longitude: c.lon,
-      altitude: altitude.trim() !== "" && Number.isFinite(alt) ? Math.round(alt) : 0,
+      altitude: Number.isFinite(altitude) ? Math.round(altitude) : 0,
       radius: DEFAULT_RADIUS,
     });
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onCancel(); }}>
-      <DialogContent className="flex flex-col gap-3 sm:max-w-sm">
+    <Modal
+      isOpen={open}
+      onOpenChange={(o) => {
+        if (!o) onCancel();
+      }}
+    >
+      <Dialog className="gap-3">
         <DialogHeader>
           <DialogTitle>Add waypoint</DialogTitle>
         </DialogHeader>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Code</span>
-          <Input autoFocus placeholder="e.g. A01" value={code} onChange={(e) => setCode(e.target.value)} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Name <span className="text-muted-foreground">— optional</span></span>
-          <Input placeholder="e.g. Bordano Landing" value={name} onChange={(e) => setName(e.target.value)} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Coordinates (lat, lon)</span>
-          <Input
-            placeholder="-36.185, 147.891"
-            spellCheck={false}
-            value={coords}
-            onChange={(e) => setCoords(e.target.value)}
-          />
-        </label>
+        <TextField
+          label="Code"
+          placeholder="e.g. A01"
+          autoFocus
+          value={code}
+          onChange={setCode}
+        />
+        <TextField
+          label={
+            <>
+              Name <span className="font-normal text-muted-foreground">— optional</span>
+            </>
+          }
+          placeholder="e.g. Bordano Landing"
+          value={name}
+          onChange={setName}
+        />
+        <TextField
+          label="Coordinates (lat, lon)"
+          placeholder="-36.185, 147.891"
+          spellCheck="false"
+          value={coords}
+          onChange={setCoords}
+          validate={(v) =>
+            v.trim() === "" || parseCoords(v) !== null
+              ? null
+              : 'Enter "lat, lon" decimal degrees'
+          }
+        />
         {peak && (
           <p
             className="-mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground"
@@ -167,39 +185,50 @@ export function AddWaypointDialog({
                 Snapped to{" "}
                 <span className="font-medium text-foreground">{peak.name}</span>{" "}
                 summit — {formatSnapDistance(peak.distanceM)} from your tap ·{" "}
-                <button
-                  type="button"
-                  className="font-medium underline underline-offset-2 hover:text-foreground"
-                  onClick={revertToTap}
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-xs font-medium underline underline-offset-2"
+                  onPress={revertToTap}
                 >
                   Use tapped point
-                </button>
+                </Button>
               </span>
             ) : (
               <span>
-                <button
-                  type="button"
-                  className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
-                  onClick={applySnap}
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-xs font-medium underline underline-offset-2"
+                  onPress={applySnap}
                 >
                   Snap to {peak.name} summit
-                </button>{" "}
+                </Button>{" "}
                 ({formatSnapDistance(peak.distanceM)} away)
               </span>
             )}
           </p>
         )}
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Altitude (m) <span className="text-muted-foreground">— optional</span></span>
-          <Input type="number" inputMode="numeric" value={altitude} onChange={(e) => setAltitude(e.target.value)} />
-        </label>
+        <NumberField
+          label={
+            <>
+              Altitude (m){" "}
+              <span className="font-normal text-muted-foreground">— optional</span>
+            </>
+          }
+          value={altitude}
+          onChange={setAltitude}
+          step={1}
+        />
         <DialogFooter>
-          <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
-          <Button type="button" disabled={parseCoords(coords) === null} onClick={handleAdd}>
+          <Button slot="close" variant="outline">
+            Cancel
+          </Button>
+          <Button isDisabled={parseCoords(coords) === null} onPress={handleAdd}>
             Add
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </Dialog>
+    </Modal>
   );
 }

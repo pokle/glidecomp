@@ -24,9 +24,10 @@ export interface ConfirmOptions {
   alert?: boolean;
 }
 
-type ConfirmFn = (opts: ConfirmOptions) => Promise<boolean>;
+export type ConfirmFn = (opts: ConfirmOptions) => Promise<boolean>;
 
-const ConfirmContext = createContext<ConfirmFn>(() => Promise.resolve(false));
+/** Exported so an inner provider (e.g. rac/confirm.tsx) can shadow it. */
+export const ConfirmContext = createContext<ConfirmFn>(() => Promise.resolve(false));
 
 export function useConfirm(): ConfirmFn {
   return useContext(ConfirmContext);

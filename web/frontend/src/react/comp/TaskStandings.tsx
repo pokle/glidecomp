@@ -1,6 +1,11 @@
 /**
  * Unified per-pilot task standings (issue #306).
  *
+ * RAC EXPLORATION: built on react-aria-components (src/react/rac/) — the
+ * standings are an ARIA grid (keyboard-navigable rows with onAction for the
+ * pilot detail page), per-row admin controls use RAC Select / FileTrigger /
+ * Tooltip. See pages/TaskDetail.tsx for the experiment's scope.
+ *
  * Merges the old Scores + Pilot Status + Tracks sections into one table — the
  * three were three views of one object: a pilot's outcome on a task. Ranked
  * scorers first, then a per-class "did not score" tail (present-not-flown /
@@ -20,21 +25,16 @@
  * Reload when the rescore lands — no silent resettle.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { FileTrigger, Link as AriaLink } from "react-aria-components";
 import type { XCTask } from "@glidecomp/engine";
-import { Button } from "@/react/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/react/ui/table";
+import { Button } from "@/react/rac/button";
+import { SimpleSelect } from "@/react/rac/select";
+import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
+import { Tooltip, TooltipTrigger } from "@/react/rac/tooltip";
 import { api } from "../../comp/api";
 import { formatInstant } from "../lib/time";
 import { toast } from "../lib/toast";
-import { SimpleSelect } from "./fields";
 import { ScoreFreshness } from "./ScoreFreshness";
 import { SubmitTrackDialog } from "./SubmitTrackDialog";
 import { ManualFlightDialog } from "./ManualFlightDialog";
@@ -298,17 +298,17 @@ export function TaskStandings({
       <div className="mt-8 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="text-lg font-bold">
           Standings{" "}
-          <Link
-            className="text-sm font-normal underline underline-offset-4"
-            to={`/comp/${encodeURIComponent(compId)}#scores`}
+          <AriaLink
+            className="text-sm font-normal underline underline-offset-4 outline-none data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
+            href={`/comp/${encodeURIComponent(compId)}#scores`}
           >
             Full competition scores →
-          </Link>
+          </AriaLink>
         </h2>
         {/* Self-service upload entry point (replaces the old Tracks section
             button). A control, so it mounts on hydration. */}
         {mounted && isAuthenticated && !isClosed ? (
-          <Button type="button" variant="outline" size="sm" onClick={() => setUploadOpen(true)}>
+          <Button variant="outline" size="sm" onPress={() => setUploadOpen(true)}>
             Submit track
           </Button>
         ) : null}
@@ -466,25 +466,38 @@ function ClassStandings({
     return a.name.localeCompare(b.name);
   });
 
-  const hasSpeed = cls.pilots.some((p) => p.speed_section_time !== null);
   const showManage = mounted && isAdmin;
+  const rows = [...ranked, ...tail];
+
+  const detailHref = (row: RowPilot) =>
+    `/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/pilot/${encodeURIComponent(row.compPilotId)}`;
 
   return (
     <div className="mt-4">
       {showClassName ? <h3 className="mt-4 font-semibold">{cls.pilot_class}</h3> : null}
-      <Table className="mt-2">
+      <Table
+        aria-label={`Standings — ${cls.pilot_class}`}
+        className="mt-2"
+        // Whole-row activation for ranked pilots: keyboard (Enter) and click
+        // both open the score breakdown. RAC keeps presses on the inner
+        // controls (Select, buttons) from bubbling into the row action.
+        onRowAction={(key) => {
+          const row = rows.find((r) => r.compPilotId === key);
+          if (row && row.outcome === "landed" && row.score) {
+            void navigate(detailHref(row));
+          }
+        }}
+      >
         <TableHeader>
-          <TableRow>
-            <TableHead>#</TableHead>
-            <TableHead>Pilot</TableHead>
-            <TableHead>Outcome</TableHead>
-            <TableHead>Distance</TableHead>
-            {!isOpenDistance ? <TableHead>Points</TableHead> : null}
-            {showManage ? <TableHead className="text-right">Manage</TableHead> : null}
-          </TableRow>
+          <Column>#</Column>
+          <Column isRowHeader>Pilot</Column>
+          <Column>Outcome</Column>
+          <Column>Distance</Column>
+          {!isOpenDistance ? <Column>Points</Column> : null}
+          {showManage ? <Column className="text-right">Manage</Column> : null}
         </TableHeader>
         <TableBody>
-          {ranked.map((row) => (
+          {rows.map((row) => (
             <StandingsRow
               key={row.compPilotId}
               row={row}
@@ -497,35 +510,14 @@ function ClassStandings({
               distanceOrigin={distanceOrigin}
               taskXctsk={taskXctsk}
               statuses={statuses}
-              onOpenDetail={() =>
-                navigate(
-                  `/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/pilot/${encodeURIComponent(row.compPilotId)}`
-                )
-              }
-              onMutated={onMutated}
-            />
-          ))}
-          {tail.map((row) => (
-            <StandingsRow
-              key={row.compPilotId}
-              row={row}
-              compId={compId}
-              taskId={taskId}
-              isOpenDistance={isOpenDistance}
-              greyed={greyed}
-              showManage={showManage}
-              isClosed={isClosed}
-              distanceOrigin={distanceOrigin}
-              taskXctsk={taskXctsk}
-              statuses={statuses}
-              onOpenDetail={null}
+              detailHref={row.outcome === "landed" && row.score ? detailHref(row) : null}
               onMutated={onMutated}
             />
           ))}
         </TableBody>
       </Table>
 
-      {ranked.length === 0 && tail.length === 0 ? (
+      {rows.length === 0 ? (
         <p className="mt-2 text-muted-foreground">No pilots yet</p>
       ) : null}
     </div>
@@ -566,7 +558,7 @@ function StandingsRow({
   distanceOrigin,
   taskXctsk,
   statuses,
-  onOpenDetail,
+  detailHref,
   onMutated,
 }: {
   row: RowPilot;
@@ -579,46 +571,42 @@ function StandingsRow({
   distanceOrigin: DistanceOriginValue;
   taskXctsk: XCTask | null;
   statuses: Map<string, PilotStatusEntry>;
-  onOpenDetail: (() => void) | null;
+  detailHref: string | null;
   onMutated: () => void;
 }) {
-  const detailHref = onOpenDetail
-    ? `/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/pilot/${encodeURIComponent(row.compPilotId)}`
-    : null;
-
   const scoreCell = (content: React.ReactNode) => (
-    <TableCell
+    <Cell
       className={greyed ? "opacity-40" : undefined}
       aria-busy={greyed || undefined}
-      title={greyed ? "Scores are being recomputed" : undefined}
     >
       {content}
-    </TableCell>
+    </Cell>
   );
 
   return (
-    <TableRow className={detailHref ? "cursor-pointer" : undefined} onClick={onOpenDetail ?? undefined}>
+    <Row id={row.compPilotId} className={detailHref ? "cursor-pointer" : undefined}>
       {scoreCell(row.score ? row.score.rank : "—")}
-      <TableCell>
+      <Cell>
         {detailHref ? (
-          <Link
-            to={detailHref}
-            className="underline decoration-muted-foreground/40 underline-offset-4 hover:decoration-current"
-            onClick={(e) => e.stopPropagation()}
+          // A real anchor (crawlable, middle-clickable) inside the row; the
+          // row-level onAction covers plain clicks anywhere else in the row.
+          <AriaLink
+            href={detailHref}
+            className="underline decoration-muted-foreground/40 underline-offset-4 outline-none data-hovered:decoration-current data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
           >
             {row.name}
-          </Link>
+          </AriaLink>
         ) : (
           row.name
         )}
-      </TableCell>
-      <TableCell>
+      </Cell>
+      <Cell>
         <OutcomeBadge outcome={row.outcome} evidence={row.evidence} />
-      </TableCell>
+      </Cell>
       {scoreCell(row.score ? `${(row.score.flown_distance / 1000).toFixed(1)} km` : "—")}
       {!isOpenDistance ? scoreCell(row.score ? Math.round(row.score.total_score) : "—") : null}
       {showManage ? (
-        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+        <Cell className="text-right">
           <RowManage
             row={row}
             compId={compId}
@@ -630,9 +618,9 @@ function StandingsRow({
             statuses={statuses}
             onMutated={onMutated}
           />
-        </TableCell>
+        </Cell>
       ) : null}
-    </TableRow>
+    </Row>
   );
 }
 
@@ -661,12 +649,12 @@ function RowManage({
 }) {
   const [recordOpen, setRecordOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // The pilot is already known from the row, so the Track button skips the
   // pilot-picker dialog and uploads straight to this pilot's IGC endpoint.
-  async function uploadTrackFile() {
-    const file = fileInputRef.current?.files?.[0];
+  // RAC FileTrigger replaces the old hidden-<input> + ref dance.
+  async function uploadTrackFile(files: FileList | null) {
+    const file = files?.[0];
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".igc")) {
       toast.error("Please choose an IGC file");
@@ -697,7 +685,6 @@ function RowManage({
       toast.error("Network error. Please try again.");
     } finally {
       setBusy(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
@@ -767,48 +754,40 @@ function RowManage({
         ariaLabel={`Status for ${row.name}`}
       />
       {!isClosed ? (
-        <>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".igc"
-            className="hidden"
-            onChange={() => void uploadTrackFile()}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => fileInputRef.current?.click()}
-            title={`Upload ${row.name}'s GPS track (IGC file)`}
+        <TooltipTrigger>
+          <FileTrigger
+            acceptedFileTypes={[".igc"]}
+            onSelect={(files) => void uploadTrackFile(files)}
           >
-            {row.evidence === "track" ? "Replace track" : "Upload track"}
-          </Button>
-        </>
+            <Button variant="outline" size="sm" isDisabled={busy}>
+              {row.evidence === "track" ? "Replace track" : "Upload track"}
+            </Button>
+          </FileTrigger>
+          <Tooltip>Upload {row.name}'s GPS track (IGC file)</Tooltip>
+        </TooltipTrigger>
       ) : null}
       {!isClosed && hasRoute ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setRecordOpen(true)}
-          title={`Record a manual flight for ${row.name} — for a pilot with no tracklog`}
-        >
-          {row.evidence === "manual" ? "Edit manual flight" : "Add manual flight"}
-        </Button>
+        <TooltipTrigger>
+          <Button variant="outline" size="sm" onPress={() => setRecordOpen(true)}>
+            {row.evidence === "manual" ? "Edit manual flight" : "Add manual flight"}
+          </Button>
+          <Tooltip>
+            Record a manual flight for {row.name} — for a pilot with no tracklog
+          </Tooltip>
+        </TooltipTrigger>
       ) : null}
       {row.supersededTrack && row.evidence !== "track" && !isClosed ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onClick={() => void restoreTrack()}
-          title="Restore this pilot's superseded track"
-        >
-          Restore track
-        </Button>
+        <TooltipTrigger>
+          <Button
+            variant="outline"
+            size="sm"
+            isDisabled={busy}
+            onPress={() => void restoreTrack()}
+          >
+            Restore track
+          </Button>
+          <Tooltip>Restore this pilot's superseded track</Tooltip>
+        </TooltipTrigger>
       ) : null}
 
       {recordOpen && taskXctsk ? (

@@ -11,7 +11,7 @@
  */
 import { useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/react/ui/alert";
-import { Button } from "@/react/ui/button";
+import { Button } from "@/react/rac/button";
 import { Timestamp } from "../components/Timestamp";
 
 /** Poll cadence: every ~4s backing off to ~15s, giving up after ~2 minutes
@@ -136,10 +136,9 @@ export function ScoreFreshness({
           <AlertTitle>
             Re-score finished{" "}
             <Button
-              type="button"
               size="sm"
               className="ml-2"
-              onClick={() => window.location.reload()}
+              onPress={() => window.location.reload()}
             >
               Reload
             </Button>
