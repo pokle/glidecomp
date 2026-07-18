@@ -306,10 +306,18 @@ Eyeball: horserace matches the airscore-parity task's known results; wind plausi
 
 Cross-package needs (shared thermals for P1+P4, grid for P4+P5, working band for P1+P3, phases for P2+P3) are all Stage 0 outputs — no Stage 1 package imports another Stage 1 file.
 
-- [ ] P1 · [ ] P2 · [ ] P3 · [ ] P4 · [ ] P5 · [ ] P6 (each: implement + tests green in isolation)
+- [x] P1 · [x] P2 · [x] P3 · [x] P4 · [x] P5 · [x] P6 (each: implement + tests green in isolation)
+
+**Stage 1 as-built notes (deviations & findings, from the package agents):**
+- `glide.track_efficiency` reads a constant per-leg offset above 1 (~1.25–1.56 on the synthetic task): reachings sit on cylinder crossing points while `optimizedMeters` uses optimizer tag points. Identical for all pilots on a leg, so correlation is unaffected; subtract per-leg crossing-to-tag geometry if absolute ≈1.0 readings are wanted.
+- `race.leg_time_lost`'s scalar is censored: pilots who bomb early complete few legs and so "lose" little time (Corryong T1 ρ ≈ 0). The waterfall table is right; the scalar needs a per-leg normalisation or completed-legs weighting to be a fair separator.
+- `race.start_delay` stays signed (early starters negative). `glide.stf_proxy` returns null when next-climb rates are too uniform to split.
+- `gaggle.marker_usage` has an O(uses²)-per-thermal scan — fine at ≲1k uses.
+- `climb.shared_percentile` ranks uses, not pilots — a pilot with two uses in one cluster occupies two rank slots.
+- First real-data separation ranking (Corryong open, comp-level ρ vs comp rank): glide.speed −0.76, gaggle.affinity −0.74, race.time_behind 0.77 (sanity), race.ess_margin 0.60, climb.selectivity −0.56, decision.search_fraction 0.54, race.start_delay 0.52, decision.climbs_per_100km 0.52, glide.ld_vs_field −0.51; weak on real data: climb.time_to_core, glide.stf_proxy, climb.circle_smoothness, day.launch_timing.
 
 ### Stage 2 — serial, ONE agent
-- [ ] Tighten kosci-loop-t1 integration assertions (all 23 per-pilot metrics populated for ≥ 80% of started pilots; wind/day tables non-empty; `race.time_behind` |ρ| > 0.9)
+- [ ] Tighten kosci-loop-t1 integration assertions — **with these exemptions the fixture forces** (found in Stage 1): `decision.climbs_per_100km` is all-null there (flights max ~19.6 km, below its 20 km gate); `climb.selectivity` and `climb.circle_smoothness` are all-null (the triangle-wave tracks yield zero detected circles field-wide); `glide.stf_proxy` is sparse (uniform synthetic climb rates); and `race.time_behind`'s sanity check must use the goal-subset (Spearman over `madeGoal` pilots > 0.9 — it is 1.0 there), NOT whole-field |ρ| > 0.9 (only 7/44 reach ESS, whole-field ρ is legitimately weak and sign-flipped). Assert the rest populate for ≥ 80% of started pilots; wind/day tables non-empty.
 - [ ] Run corryong single-task + `--comp corryong-cup-2026` + `--comp kosci-loop`; polish column widths/ordering/wording; check runtime
 - [ ] Usage note in `score-task.ts` header comment; `bun run test` + `bun run typecheck:all` green
 
