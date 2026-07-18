@@ -24,6 +24,8 @@ If `node_modules/` is missing or a dependency can't be resolved, run `bun instal
 
 **Testing on a phone (dev tunnel):** `TUNNEL=1 bun run dev` + `cloudflared tunnel --url http://localhost:3000` exposes the local Vite server publicly with HMR intact. The `TUNNEL` env var gates two settings in `web/frontend/vite.config.ts` — `allowedHosts: ['.trycloudflare.com']` and `hmr.clientPort: 443` — which are **deliberately not unconditional**, because `clientPort: 443` breaks HMR on plain localhost. Only Vite needs exposing; `/api/*` and Astro are proxied server-side. See `.claude/skills/dev-tunnel/SKILL.md`.
 
+**Backlog:** open and planned work is tracked in [GitHub issues](https://github.com/pokle/glidecomp/issues) — **not** in a checked-in TODO file (`docs/TODO.md` existed until 2026-07-18 and was deleted as stale; don't recreate it). `docs/` holds specs, plans, and dated review reports; treat the dated ones (`docs/2026-*.md`) as point-in-time snapshots rather than current status.
+
 **Production:** https://glidecomp.com
 
 **Branch preview deploys:** every branch gets a Cloudflare Pages branch-alias URL: `https://<slug>.glidecomp.pages.dev`, where `<slug>` is the branch name lowercased, non-alphanumerics replaced with `-`, and truncated to 28 chars (e.g. `claude/map-point-picker-routes-s5iyhx` → `claude-map-point-picker-rout`). The alias always tracks the branch's latest commit. **When you open or push to a PR, always include this branch preview URL in the PR body and show it in the chat.**

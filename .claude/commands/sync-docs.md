@@ -28,16 +28,22 @@ For each doc, check the following categories of issues:
 - Check for source files that exist but aren't mentioned in any doc
 - Check map provider specs against actual layers, controls, and interactions
 
-#### C. Stale TODOs
-- Check TODO items marked as incomplete — are any actually done?
-- Check TODO items marked as done — are they really done?
+#### C. Stale status claims
+Open work is tracked in [GitHub issues](https://github.com/pokle/glidecomp/issues),
+not in a checked-in TODO file (`docs/TODO.md` was removed as stale). So check:
+- Checklists inside plan/spec docs (e.g. the dated `docs/2026-*-plan.md` files):
+  are items marked incomplete actually shipped, or vice versa?
+- Docs that describe something as "planned", "not yet implemented", or "TODO"
+  in prose — is it implemented now?
+- Dated review/report docs are point-in-time snapshots: correct forward-looking
+  pointers, but don't rewrite their historical narrative.
 
 ### Phase 3: Present findings
 
 Organize all findings into a plan with three sections:
 1. **Rotted docs** — factual errors to fix
 2. **Missing feature docs** — new features to document
-3. **Stale TODOs** — TODO items to update
+3. **Stale status claims** — "planned"/"not implemented" claims to update
 
 Present the plan to the user and wait for approval before making changes.
 
@@ -62,7 +68,6 @@ These are the main doc files and the source files they describe:
 | `docs/browser-storage-spec.md` | `web/frontend/src/analysis/storage.ts`, `storage-menu.ts` |
 | `docs/airscore-api-worker-spec.md` | `web/workers/airscore-api/src/**/*.ts` |
 | `docs/event-detection/*.md` | `web/engine/src/event-detector.ts`, `circle-detector.ts`, `glide-speed.ts` |
-| `docs/TODO.md` | All source files (check completed items) |
 | `CLAUDE.md` | Project structure, build commands |
 | `README.md` | `package.json` scripts, project structure |
 

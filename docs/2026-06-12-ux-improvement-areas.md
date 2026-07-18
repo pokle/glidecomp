@@ -3,8 +3,8 @@
 Date: 2026-06-12
 
 A review of the GlideComp UX based on the frontend code, the existing design
-docs (`information-architecture.md`, `ux-inventory.md`, `TODO.md`), and a full
-sweep of the UI surface.
+docs (`information-architecture.md`, `ux-inventory.md`, and the since-removed
+`TODO.md`), and a full sweep of the UI surface.
 
 **Summary:** The analysis page is polished, but the competition pages feel
 like a different, rougher product — native browser `alert()` dialogs,
@@ -62,7 +62,8 @@ the unfinished half of the information-architecture plan.
 
 ## 4. Knock off the documented usability debt
 
-Still open in `TODO.md`:
+Still open as of this review (`TODO.md` has since been removed; open work now
+lives in [GitHub issues](https://github.com/pokle/glidecomp/issues)):
 
 - Explain scores **on the map** — scoring decisions are explainable by design
   principle, but the explanation isn't surfaced where users look.

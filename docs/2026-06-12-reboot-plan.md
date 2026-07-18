@@ -47,7 +47,8 @@ point, explained.*
   one real comp as the future case study
 - MCP server, AirScore proxy, theme editor
 
-**Explicitly parked (post-launch backlog, see TODO.md):**
+**Explicitly parked (post-launch backlog — tracked in
+[GitHub issues](https://github.com/pokle/glidecomp/issues)):**
 
 - Email IGC submission, aggregated cross-pilot analysis, score-explanation
   map overlay, box plots, R2 queue cleanup, Leaflet alpha.2 migration
