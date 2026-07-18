@@ -1204,12 +1204,14 @@ function TurnpointCard({
                 // Step stays 1: RAC snaps values to minValue + k·step, so a
                 // larger step corrupts loaded radii (1000 → 1001 with step 100).
                 step={1}
-                formatOptions={{ useGrouping: false }}
+                // Group thousands so the widest radius reads "50,000"; the
+                // width fits five digits + separator past the two steppers.
+                formatOptions={{ useGrouping: true }}
                 value={Number.isFinite(radius) ? radius : NaN}
                 onChange={(v) =>
                   onUpdate(row.id, { radius: Number.isFinite(v) ? v : "" })
                 }
-                className="w-24"
+                className="w-36"
               />
               <span className="text-xs text-muted-foreground">m</span>
             </div>
