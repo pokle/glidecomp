@@ -181,6 +181,19 @@ export function RouteEditorDialog({
     { mode: "add" } | { mode: "edit"; rowId: number } | null
   >(null);
 
+  // Pan the map to a turnpoint when its row is tapped. The key bumps on every
+  // tap so re-tapping the same row re-centres after the user has panned away.
+  const [mapFocus, setMapFocus] = useState<{
+    lat: number;
+    lon: number;
+    key: number;
+  } | null>(null);
+  const focusKeyRef = useRef(0);
+  const focusTurnpoint = useCallback((row: RouteRow) => {
+    const c = parseCoords(row.coords);
+    if (c) setMapFocus({ lat: c.lat, lon: c.lon, key: ++focusKeyRef.current });
+  }, []);
+
   // The competition's shared waypoints (loaded once on open), shown on the map
   // and in a searchable list. Turnpoints are picked from this set only — the
   // task copies each waypoint's details in, so it can't be changed after the
@@ -710,6 +723,12 @@ export function RouteEditorDialog({
             aria-label="Turnpoints"
             selectionMode="none"
             dragAndDropHooks={dragAndDropHooks}
+            // Tapping a row pans the map to that turnpoint (the Edit/Remove
+            // buttons and drag handle are separate targets and don't trigger it).
+            onAction={(key) => {
+              const row = rows.find((r) => r.id === key);
+              if (row) focusTurnpoint(row);
+            }}
             items={rows}
             // RAC caches each item's rendered output by identity, so props
             // derived from OUTSIDE the item — the # position and the Leg/Dir
@@ -776,6 +795,7 @@ export function RouteEditorDialog({
                 waypoints={mapWaypoints}
                 addMode={addMode}
                 fitNonce={wpFitNonce}
+                focus={mapFocus}
                 onWaypointPick={pickWaypoint}
                 onMapPick={(lat, lon, details) =>
                   openAddPoint(formatCoords(lat, lon), details)
@@ -783,16 +803,13 @@ export function RouteEditorDialog({
               />
             </Suspense>
           </div>
-          {/* Create a competition waypoint without leaving the editor: tap the
-              map to place it, or open a blank form. It's added to the route now
-              and written to the competition when you save. */}
+          {/* Create a competition waypoint by tapping the map: the tap seeds a
+              form (place name, terrain elevation, nearest peak) and, once
+              confirmed, drops into the route and is saved to the competition. */}
           <div className="flex flex-wrap items-center gap-2">
             <ToggleButton size="sm" isSelected={addMode} onChange={setAddMode}>
-              {addMode ? "Tap the map to place…" : "Add from map"}
+              {addMode ? "Tap the map to place a waypoint…" : "Add from map"}
             </ToggleButton>
-            <Button size="sm" variant="outline" onPress={() => openAddPoint()}>
-              New point
-            </Button>
             {pendingWaypoints.length > 0 ? (
               <span className="text-xs text-muted-foreground">
                 {pendingWaypoints.length} new — saved to the competition when you save the route

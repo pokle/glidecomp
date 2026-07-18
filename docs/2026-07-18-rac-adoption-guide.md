@@ -164,7 +164,18 @@ narrow column frees width for the map). Verified live (headless admin drive,
 - **The route-editor dialog no longer carries the waypoint picker** (it moved
   into the details dialog). Start (SSS) / Goal Disclosures are **collapsed by
   default** (defaults suit most comps). The map preview is full-width below the
-  list; its "Add from map" / "New point" still create *competition waypoints*.
+  list. Its **"Add from map"** toggle still creates a *competition waypoint*
+  (the tap seeds `AddWaypointDialog` with coordinates + terrain elevation +
+  nearest place label + peak-snap, all from `mapbox-provider.ts` `onMapClick`
+  → `MapPickDetails`; the `queryRenderedFeatures` label lookup means code/name
+  only pre-fill where the style renders a label — rural taps get coords +
+  elevation only). The old **"New point"** button was removed (redundant with
+  "Add turnpoint"). `AddWaypointDialog` now shows a **"Filled … from the map"**
+  call-out so the non-peak prefill is visible.
+- **Tapping a turnpoint row pans the map to it** (GridList `onAction` →
+  `RouteMap` `focus={{lat,lon,key}}` → `provider.panTo`; the key bumps each tap
+  so re-tapping re-centres). The Edit/Remove buttons and drag handle are
+  separate targets and don't trigger the row action.
 - Reused unchanged: rows state + `derived` memo, `dependencies={[rows,
   derived]}` on the GridList (gotcha #3 — position #/legs/dirs would otherwise
   stale on reorder; verified: drag renumbers and recomputes legs), FileTrigger.
