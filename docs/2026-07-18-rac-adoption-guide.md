@@ -160,7 +160,8 @@ narrow column frees width for the map). Verified live (headless admin drive,
 
 - **Layout:** the list is at the **top** of the dialog and never scrolls
   internally (every turnpoint visible; the dialog itself scrolls). The map
-  preview + waypoint picker sit **below** it in a two-column block.
+  preview sits **full-width below** it; the waypoint picker is no longer on
+  this dialog at all (it moved into `TurnpointDetailsDialog` — see below).
 - **`GridList` with `keyboardNavigationBehavior="tab"`** — arrows move between
   cards, Tab reaches focusable children, so **no CellEditZone** is needed here
   (contrast the Table, gotcha #2). `selectionMode="none"`; reorder via the same
@@ -254,9 +255,12 @@ idea unnecessary.
 
 ## Reference
 
-- Branch: `explore/rac-task-detail` (worktree `.claude/worktrees/explore-rac`).
-- RAC version pinned in web/frontend: 1.19.0. Upgrades: re-run the drives —
-  `CellEditZone` and `dependencies` behavior are the fragile seams.
+- Branches: `explore/rac-task-detail` (the original conversion, worktree
+  `.claude/worktrees/explore-rac`), then `explore/rac-route-editor-list`
+  (PR #374 — the GridList route editor + ARIA-native breadcrumbs).
+- RAC version in web/frontend: `^1.19.0` (a caret range, currently resolving to
+  1.19.0 — not a hard pin). Upgrades: re-run the drives — `CellEditZone` and
+  `dependencies` behavior are the fragile seams.
 - Docs: react-aria.adobe.com (RAC), react-spectrum.adobe.com (Spectrum 2 —
   same behavior engine, Adobe-styled; its TableView `EditableCell` popover
   pattern is a good future model for *occasional*-edit tables).
