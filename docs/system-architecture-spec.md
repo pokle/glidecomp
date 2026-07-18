@@ -119,7 +119,7 @@ Every mutation that could affect a competition's scores is recorded in `audit_lo
 
 ### Sample data
 
-`bun run seed:sample` loads bundled sample competitions from `web/samples/comps/` (Corryong Cup 2026 by default; `big-chip` for the synthetic open-distance comp) into D1 + R2, idempotently. The 3D replay's default dataset is served from the seeded sample via `GET /api/comp/sample-3dvis`.
+`bun run seed` loads the bundled sample competitions from `web/samples/comps/` into D1 + R2, idempotently — every comp with a `comp.json` manifest by default, or just the slugs you name (e.g. `bun run seed big-chip` for the synthetic open-distance comp). Comps whose manifest sets `"hidden": true` (the fabricated Big Chip and Kosciuszko Loop fixtures) seed with the D1 `test` flag, so they're admin-only. The 3D replay's default dataset is served from the seeded sample via `GET /api/comp/sample-3dvis`.
 
 ## Design Principles
 

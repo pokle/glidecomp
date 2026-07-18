@@ -47,8 +47,9 @@ viewer was built from) as background.
 
 ```bash
 bun run dev                   # workers + frontend; http://localhost:3000/replay
-bun run seed:sample           # load the sample comp into local D1 + R2 (idempotent)
-bun run seed:sample --remote  # …or into production D1 + R2
+bun run seed                     # load every bundled comp into local D1 + R2 (idempotent)
+bun run seed corryong-cup-2026   # …or just the comp the replay defaults to
+bun run seed --remote            # …or into production D1 + R2
 bun run build-3dvis           # offline: regenerate the static asset mirror
 ```
 
@@ -523,12 +524,16 @@ file, so any user can view it and the same path serves any comp task.
   — the first task of the bundled Corryong Cup 2026 comp; `sample-3dvis` serves
   the earliest task by date. See the CLAUDE.md "Updating bundled data" notes for
   the full open/floater multi-class layout.
-- **Seed:** `bun run seed:sample` (`--remote` for production). Idempotent — the
-  comp is found by name (`SAMPLE_COMP_NAME`, shared in
+- **Seed:** `bun run seed` seeds every bundled comp; `bun run seed
+  corryong-cup-2026` just this one (`--remote` for production). Idempotent — the
+  comp is found by name (`SAMPLE_COMP_NAME` = "Corryong Cup 2026", shared in
   `web/workers/competition-api/src/sample.ts`); reruns wipe that comp's tasks /
   pilots / tracks (D1) and IGC objects (R2) and rebuild under the **same
   comp_id**, so a messed-with sample is fixed back up. It's a public comp
-  (`test = 0`), single class `open`, scored together for legend order.
+  (`test = 0`), single class `open`, scored together for legend order. Because
+  the lookup is by name, renaming `SAMPLE_COMP_NAME` needs a matching `UPDATE
+  comp SET name=…` on any already-seeded database, or the seeder inserts a
+  duplicate under a new comp_id and `sample-3dvis` 404s.
 - **Endpoint:** `web/workers/competition-api/src/visualization.ts`
   (`buildTask3dvisBundle`) + `routes/visualization.ts`. Mirrors `scoring.ts`:
   fetch `task_track` rows → R2 `get` → gunzip → `packTracksFromIgc` → gzip data

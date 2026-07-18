@@ -17,7 +17,10 @@ for _ in $(seq 1 60); do
   if curl -s -o /dev/null "http://localhost:8789/api/comp"; then break; fi
   sleep 1
 done
-bun run seed:sample
+# Just the one comp: these tests only need a single public comp, and seeding the
+# whole bundled set would slow the build and make discover()'s "first non-test
+# comp" pick depend on seed order.
+bun run seed corryong-cup-2026
 
 exec npx wrangler pages dev web/frontend/dist --port 3100 \
   --compatibility-date=2025-03-10 --compatibility-flags=nodejs_compat \

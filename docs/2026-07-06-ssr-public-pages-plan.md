@@ -218,7 +218,7 @@ routes fall back to the SPA shell.
   explanation text appear in the response body; assert narrative-page links
   are present in the comp page HTML; assert `/u/me` etc. still work (SPA path
   untouched); assert no hydration errors in the console on the SSR pages.
-- The seeded sample comp (`bun run seed:sample`, Corryong Cup 2026) gives
+- The seeded sample comp (`bun run seed`, Corryong Cup 2026) gives
   deterministic fixtures for all four routes; the `run-glidecomp` flow already
   covers boot + seed.
 - Lighthouse SEO pass on the four routes; `curl -s | grep` smoke checks in the

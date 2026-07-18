@@ -1,9 +1,10 @@
 {
   "name": "Kosciuszko Loop",
   "slug": "kosci-loop",
-  "comp_name": "Kosciuszko Loop (Sample)",
+  "comp_name": "Kosciuszko Loop",
   "category": "pg",
   "scoring_format": "gap",
+  "hidden": true,
   "filename_id_field": "civl_id",
   "classes": [
     "open"

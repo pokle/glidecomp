@@ -1,24 +1,25 @@
 #!/usr/bin/env bun
 // Copyright (c) 2026, Tushar Pokle.  All rights reserved.
 /**
- * Seed (or re-seed) the public sample competition into D1 + R2, so every user
- * can view it and the /replay page can pull packed track data from the
+ * Seed (or re-seed) the bundled sample competitions into D1 + R2, so every user
+ * can view them and the /replay page can pull packed track data from the
  * competition-api Worker (GET /api/comp/sample-3dvis).
  *
- * Loads the full Corryong Cup 2026 competition — all three tasks and every
- * pilot track — as a single comp. Each task lives in its own source directory
- * (web/samples/comps/corryong-cup-2026-t{1,2,3}); a pilot who flew several
+ * Loads each comp in full — every task and pilot track — as a single comp. Each
+ * task lives in its own source directory (e.g.
+ * web/samples/comps/corryong-cup-2026-open-t{1,2,3}); a pilot who flew several
  * tasks gets one comp_pilot row (keyed by their federation id, see
  * `filename_id_field` below) with a task_track per task.
  *
- * Idempotent: the comp is identified by name (SAMPLE_COMP_NAME). On a rerun the
- * existing comp's tasks / pilots / tracks (D1) and IGC objects (R2) are wiped
- * and rebuilt under the SAME comp_id, so if users have messed with the loaded
- * sample it gets fixed back up.
+ * Idempotent: each comp is identified by name (its manifest's `comp_name`, else
+ * SAMPLE_COMP_NAME). On a rerun the existing comp's tasks / pilots / tracks (D1)
+ * and IGC objects (R2) are wiped and rebuilt under the SAME comp_id, so if users
+ * have messed with a loaded sample it gets fixed back up.
  *
  * Usage:
- *   bun run seed:sample            # local dev state (web/.wrangler/state)
- *   bun run seed:sample --remote   # production D1 + R2 (needs wrangler auth)
+ *   bun run seed                      # every bundled comp → local dev state
+ *   bun run seed big-chip kosci-loop  # just these comps
+ *   bun run seed --remote             # production D1 + R2 (needs wrangler auth)
  *
  * Source: the comp folders written by download-airscore-comp.ts, described by
  * web/samples/comps/<slug>/comp.json. That manifest lists every task with its
@@ -36,7 +37,7 @@
  * fans the independent R2 uploads out concurrently instead of one at a time.
  */
 
-import { readFileSync, readdirSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { resolve, join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { gzipSync } from 'node:zlib';
@@ -53,9 +54,10 @@ import { SAMPLE_COMP_NAME } from '../workers/competition-api/src/sample';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const COMPS_ROOT = join(REPO_ROOT, 'web/samples/comps');
-// Which downloaded comp to seed (matches a folder under COMPS_ROOT). The
-// `--remote` flag and the slug can appear in any arg order.
-const SLUG = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'corryong-cup-2026';
+// Which bundled comps to seed (each slug matches a folder under COMPS_ROOT
+// holding a comp.json manifest). With no slug given we seed every bundled comp;
+// flags and slugs can appear in any arg order.
+const ARG_SLUGS = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const PERSIST = 'web/.wrangler/state';
 // Resolve all bindings (D1 + R2) from the competition-api worker config.
 const WRANGLER_CONFIG_PATH = 'web/workers/competition-api/wrangler.toml';
@@ -320,6 +322,14 @@ interface CompManifest {
   category?: string;
   scoring_format?: 'gap' | 'open_distance';
   /**
+   * Hide the comp from the public: it seeds with the D1 `test` flag set, so it
+   * 404s for anonymous visitors and is left out of the public comp list, while
+   * admins still see it. Use for the fabricated comps (Big Chip, Kosciuszko
+   * Loop) — they're generated fixtures, not real events, so they shouldn't show
+   * up as competitions the public can browse. Defaults to false (public).
+   */
+  hidden?: boolean;
+  /**
    * Which comp_pilot column the numeric id embedded in the IGC filenames
    * (`lamb_18239_050126.igc`) belongs to. AirScore's exports for the bundled
    * Australian comps stamp the pilot's SAFA member number there, so 'safa_id'
@@ -368,9 +378,17 @@ function readTask(spec: TaskSpec, tzOut: { value?: string }): SampleTask {
  * match key), else the display name, scoped by pilot class. A pilot who flew in
  * two classes (e.g. floater one day, open the next) gets one comp_pilot row per
  * class; within a class, all their tasks share a single row.
+ *
+ * The `|` separator only has to be absent from `pilotClass`: the second field is
+ * last and self-describing (`id:` / `name:`), so nothing a pilot name contains
+ * can shift the parse. Classes come from the checked-in comp.json manifests
+ * ("open" / "floater"), so `|` can't collide. This key is in-memory only — the
+ * DB stores name / id / class as separate columns — so the separator is free to
+ * change. (It used to be a literal NUL, which made the whole file read as binary
+ * to grep/rg and git's word-diff; don't reintroduce one.)
  */
 function pilotKey(pilotClass: string, id: string | null, name: string): string {
-  return `${pilotClass} ${id ? `id:${id}` : `name:${name}`}`;
+  return `${pilotClass}|${id ? `id:${id}` : `name:${name}`}`;
 }
 
 /** "open" → "Open", so task names read "Task 1 (Open)". */
@@ -396,23 +414,45 @@ function unionTaskWaypoints(tasks: SampleTask[]): WaypointFileRecord[] {
   return [...byCode.values()];
 }
 
-function loadManifest(): CompManifest {
-  const path = join(COMPS_ROOT, SLUG, 'comp.json');
+function loadManifest(slug: string): CompManifest {
+  const path = join(COMPS_ROOT, slug, 'comp.json');
+  if (!existsSync(path)) {
+    throw new Error(`No comp manifest at ${path} — is "${slug}" a bundled comp?`);
+  }
   return JSON.parse(readFileSync(path, 'utf-8')) as CompManifest;
 }
 
+/**
+ * Every bundled comp, i.e. each folder under COMPS_ROOT holding a comp.json.
+ * The per-task folders (`<slug>-<class>-t<N>`) have no manifest, so they're
+ * skipped. Sorted so a full seed runs in a stable order.
+ */
+function allSlugs(): string[] {
+  return readdirSync(COMPS_ROOT)
+    .filter((name) => existsSync(join(COMPS_ROOT, name, 'comp.json')))
+    .sort();
+}
+
 async function main(): Promise<void> {
+  const slugs = ARG_SLUGS.length > 0 ? ARG_SLUGS : allSlugs();
   const where = REMOTE ? 'REMOTE (production)' : `local (${PERSIST})`;
+  // One store (and for local, one Miniflare boot) shared across every comp.
   const store = REMOTE ? createRemoteStore() : await createLocalStore();
   try {
-    await seed(store, where);
+    console.log(`Seeding ${slugs.length} competition(s): ${slugs.join(', ')}\n`);
+    for (const slug of slugs) {
+      await seed(store, where, slug);
+      console.log('');
+    }
+    console.log(`Seeded ${slugs.length} competition(s) into ${where}.`);
+    if (!REMOTE) console.log('  (local state — start dev servers with `bun run dev`)');
   } finally {
     await store.dispose();
   }
 }
 
-async function seed(store: SeedStore, where: string): Promise<void> {
-  const manifest = loadManifest();
+async function seed(store: SeedStore, where: string, slug: string): Promise<void> {
+  const manifest = loadManifest(slug);
   // The comp's D1 name, category and scoring format come from the manifest when
   // present (Big Chip), else fall back to the historical Corryong defaults.
   const compName = manifest.comp_name ?? SAMPLE_COMP_NAME;
@@ -423,9 +463,12 @@ async function seed(store: SeedStore, where: string): Promise<void> {
   // the matching comp_pilot column.
   const idField = manifest.filename_id_field ?? 'safa_id';
   const idColumn = `registered_pilot_${idField}`;
-  console.log(`Seeding "${compName}" (${SLUG}) into ${where}…`);
+  // The D1 `test` flag doubles as "hidden from the public".
+  const testFlag = manifest.hidden ? 1 : 0;
+  console.log(`Seeding "${compName}" (${slug}) into ${where}…`);
   console.log(`  classes: ${manifest.classes.join(', ')}`);
   console.log(`  category: ${category}, scoring: ${scoringFormat}, filename id: ${idField}`);
+  console.log(`  visibility: ${manifest.hidden ? 'hidden (test=1, admins only)' : 'public'}`);
 
   // Read every task, sharing one resolved timezone across the comp.
   const tzOut: { value?: string } = {};
@@ -478,7 +521,7 @@ async function seed(store: SeedStore, where: string): Promise<void> {
       `DELETE FROM comp_pilot WHERE comp_id = ${compId};`,
       `DELETE FROM comp_waypoints WHERE comp_id = ${compId};`,
       `DELETE FROM audit_log WHERE comp_id = ${compId};`,
-      `UPDATE comp SET category=${q(category)}, test=0, scoring_format=${q(scoringFormat)},
+      `UPDATE comp SET category=${q(category)}, test=${testFlag}, scoring_format=${q(scoringFormat)},
          pilot_classes=${q(classesJson)},
          default_pilot_class=${q(defaultClass)},
          timezone=${q(tzOut.value ?? null)} WHERE comp_id = ${compId};`,
@@ -486,7 +529,7 @@ async function seed(store: SeedStore, where: string): Promise<void> {
   } else {
     await store.exec(
       `INSERT INTO comp (name, creation_date, category, test, scoring_format, pilot_classes, default_pilot_class, timezone)
-       VALUES (${q(compName)}, ${q(today)}, ${q(category)}, 0, ${q(scoringFormat)}, ${q(classesJson)}, ${q(defaultClass)}, ${q(tzOut.value ?? null)});`,
+       VALUES (${q(compName)}, ${q(today)}, ${q(category)}, ${testFlag}, ${q(scoringFormat)}, ${q(classesJson)}, ${q(defaultClass)}, ${q(tzOut.value ?? null)});`,
     );
     compId = Number((await store.rows(`SELECT comp_id FROM comp WHERE name = ${q(compName)};`))[0].comp_id);
     console.log(`  created comp_id ${compId}`);
@@ -531,7 +574,6 @@ async function seed(store: SeedStore, where: string): Promise<void> {
   //    Open and floater "Task 1" share a date but are distinct rows, named by
   //    class so the app's task list disambiguates them.
   let totalTracks = 0;
-  const taskSummaries: string[] = [];
   for (const t of tasks) {
     const taskName = `${t.name} (${classLabel(t.pilotClass)})`;
     await store.exec(
@@ -569,15 +611,10 @@ async function seed(store: SeedStore, where: string): Promise<void> {
     await mapPool(uploads, R2_CONCURRENCY, (u) => store.r2Put(u.key, u.gz));
     await store.exec(trackInserts);
     totalTracks += uploads.length;
-    taskSummaries.push(`${taskName} (task_id=${taskId}, ${uploads.length} tracks)`);
     console.log(`  seeded ${taskName}: task_id=${taskId}, ${uploads.length} tracks`);
   }
 
-  console.log(`\nDone. comp_id=${compId} — ${tasks.length} tasks, ${totalTracks} tracks total`);
-  for (const s of taskSummaries) console.log(`    ${s}`);
-  console.log(`  Sample 3dvis: GET /api/comp/sample-3dvis`);
-  console.log(`  View at:      /replay`);
-  if (!REMOTE) console.log('  (local state — start dev servers with `bun run dev`)');
+  console.log(`  Done. comp_id=${compId} — ${tasks.length} tasks, ${totalTracks} tracks total`);
 }
 
 main().catch((err) => {

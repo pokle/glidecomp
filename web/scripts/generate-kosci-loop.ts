@@ -28,7 +28,7 @@
  *   bun web/scripts/generate-kosci-loop.ts
  *
  * Load it with the seed script:
- *   bun run seed:sample kosci-loop
+ *   bun run seed kosci-loop
  */
 
 import { mkdirSync, writeFileSync, existsSync, readdirSync, unlinkSync } from 'node:fs';
@@ -433,9 +433,12 @@ function main(): void {
   const manifest = {
     name: 'Kosciuszko Loop',
     slug: 'kosci-loop',
-    comp_name: 'Kosciuszko Loop (Sample)',
+    comp_name: 'Kosciuszko Loop',
     category: 'pg',
     scoring_format: 'gap',
+    // Fabricated comp, not a real event — seed it hidden (D1 `test` flag) so it
+    // stays out of the public comp list and 404s for anonymous visitors.
+    hidden: true,
     filename_id_field: 'civl_id',
     classes: ['open'],
     location: KOSCI,
@@ -506,7 +509,7 @@ function main(): void {
   }
 
   console.log(`\nWrote kosci-loop sample under ${COMPS_ROOT}`);
-  console.log('  Seed:  bun run seed:sample kosci-loop');
+  console.log('  Seed:  bun run seed kosci-loop');
 }
 
 main();

@@ -1,20 +1,25 @@
 #!/usr/bin/env bun
 // Drives the running GlideComp app in a headless browser to prove it works
-// end-to-end: loads a competition and its open-distance scores, screenshots
-// both, and asserts the scores table actually rendered rows.
+// end-to-end: loads a competition and its scores, screenshots both, and asserts
+// the scores table actually rendered rows.
 //
-// Prereq: the dev stack must already be running (`bun run dev`) and the
-// sample comp seeded (`bun run seed:sample big-chip`). See SKILL.md.
+// Prereq: the dev stack must already be running (`bun run dev`) and the sample
+// comps seeded (`bun run seed`). See SKILL.md.
 //
 // Usage:
-//   bun .claude/skills/run-glidecomp/driver.mjs               # auto-find "Big Chip" comp
+//   bun .claude/skills/run-glidecomp/driver.mjs               # auto-find "Corryong Cup 2026"
 //   BASE_URL=http://localhost:3000 bun .../driver.mjs         # override base URL
-//   COMP_MATCH="Corryong" bun .../driver.mjs                  # drive a different comp
+//   COMP_MATCH="Unungra" bun .../driver.mjs                   # drive a different comp
 //
 // Env:
 //   BASE_URL   frontend origin (default http://localhost:3000)
-//   COMP_MATCH substring to match a comp name (default "Big Chip")
+//   COMP_MATCH substring to match a comp name (default "Corryong Cup 2026")
 //   OUT_DIR    where screenshots land (default <skill>/shots)
+//
+// This browses anonymously, so it can only see PUBLIC comps. The fabricated
+// fixtures (Big Chip, Kosciuszko Loop) seed hidden — they're absent from
+// /api/comp and 404 unless you're signed in as an admin, so don't point
+// COMP_MATCH at them without adding auth.
 
 import { chromium } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
@@ -22,7 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:3000';
-const MATCH = process.env.COMP_MATCH ?? 'Big Chip';
+const MATCH = process.env.COMP_MATCH ?? 'Corryong Cup 2026';
 const OUT = process.env.OUT_DIR ?? join(dirname(fileURLToPath(import.meta.url)), 'shots');
 mkdirSync(OUT, { recursive: true });
 
@@ -33,7 +38,7 @@ const res = await fetch(`${BASE}/api/comp`).catch((e) => die(`GET /api/comp fail
 if (!res.ok) die(`GET /api/comp → HTTP ${res.status}`);
 const { comps } = await res.json();
 const comp = comps?.find((c) => c.name.includes(MATCH));
-if (!comp) die(`no comp matching "${MATCH}" — seed it first: bun run seed:sample big-chip`);
+if (!comp) die(`no comp matching "${MATCH}" — seed it first: bun run seed`);
 console.log(`→ comp "${comp.name}" id=${comp.comp_id} scoring=${comp.scoring_format}`);
 
 const browser = await chromium.launch(); // headless

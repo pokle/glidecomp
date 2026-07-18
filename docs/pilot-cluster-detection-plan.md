@@ -302,7 +302,7 @@ Run via `bun run test` (engine + typecheck).
 | **1 — Engine** | `cluster-detector.ts` (`clusterFrame`, `detectGaggles`) + tests, exported from `index.ts` | `bun run test` green; episodes match the spike visually |
 | **2 — In-scene viz** | `gaggle-layer.ts`: translucent hull blob + count label + stable colour + fade in/out, vScale-correct, both backends | Scrubbing shows blobs form/grow/dissolve; Playwright screenshot confirms |
 | **3 — UI** | Timeline ribbon + gaggle panel + toggle + click-to-seek/follow + dev sliders | Can find every gaggle from the ribbon and jump to it |
-| **4 — Polish / port** | Move packing into the competition-api Worker; serve a single bundle per comp task; seed the sample as a real DB competition | ✅ Worker serves `GET /api/comp/.../3dvis` (+ `sample-3dvis`); `bun run seed:sample` (idempotent) loads the sample comp; page loads via `loadBundle`. See docs/3d-flight-replay-notes.md §8. |
+| **4 — Polish / port** | Move packing into the competition-api Worker; serve a single bundle per comp task; seed the sample as a real DB competition | ✅ Worker serves `GET /api/comp/.../3dvis` (+ `sample-3dvis`); `bun run seed` (idempotent) loads the sample comp; page loads via `loadBundle`. See docs/3d-flight-replay-notes.md §8. |
 
 ---
 

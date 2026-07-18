@@ -166,7 +166,7 @@ targets local state or `--remote` (production). Add a `--preview` flag that:
   resolve to the preview bindings, and
 - swaps `DB_NAME` to `taskscore-auth-preview` for the `d1` commands.
 
-Then `bun run seed:sample --preview` (and `--preview big-chip`) populates the
+Then `bun run seed --preview` (and `--preview big-chip`) populates the
 preview stack with the bundled comps so previews have data to render.
 
 ## Step 5 — CI: extend `branch-deploy.yml`
@@ -288,7 +288,7 @@ Sequencing matters because the Pages Preview binding flip is the switch:
   until merged (migrations apply on every branch push). If that hurts, the
   escape hatch is a throwaway D1 for that branch — manual, deliberate.
 - **Preview D1/R2 accumulate junk.** Fine by design; reseed with
-  `bun run seed:sample --preview` or drop/recreate the database when needed.
+  `bun run seed --preview` or drop/recreate the database when needed.
 - **Config drift** between top-level and `[env.preview]` blocks is the main
   ongoing tax — see the rule in step 2.
 - **Audit logging** applies on preview exactly as production (same code path);
