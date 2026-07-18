@@ -25,7 +25,8 @@ gotchas).
   Cell/CellEditZone), `grid-list` (GridList/GridListItem — vertical card list
   with `keyboardNavigationBehavior="tab"`, the editable-list alternative to
   Table; see the route editor), `list-box`, `menu`, `tooltip`, `tag-group`, `disclosure`,
-  `breadcrumbs`, `badge` (static span — RAC has no presentational components),
+  `breadcrumbs` (ARIA-native trail — parent links + current page as
+  `aria-current="page"`; see gotcha #11), `badge` (static span — RAC has no presentational components),
   `confirm` (RacConfirmProvider — supplies the same ConfirmContext as
   lib/confirm.tsx so `useConfirm()` inside a wrapped subtree gets the RAC
   alertdialog), `router` (RacRouterProvider — bridges RAC `href` links to
@@ -106,6 +107,23 @@ gotchas).
     RAC Table renders native `<table>` markup. Keep the CLAUDE.md SSR rules
     (no window at module scope, deterministic dates, identical trees); heavy
     admin-only stuff (map) stays behind `lazy()`.
+11. **Breadcrumbs follow the ARIA-native pattern — the last crumb IS the
+    current page.** `rac/breadcrumbs.tsx` uses RAC's `Breadcrumbs`/`Breadcrumb`
+    collection: parent crumbs are RAC `Link`s (client-routed via the
+    RouterProvider), and the current page is the final crumb rendered as plain
+    text with `aria-current="page"` (per the WAI-ARIA breadcrumb pattern). API:
+    `<Breadcrumbs items={[{label,to},…]} current="This page" />`. **Gotcha:** RAC
+    hard-codes the LAST `Breadcrumb` (`node.nextKey == null`) as current — it
+    disables that item's `Link` and sets `aria-current`. So you must pass the
+    current page as the last item; if you (wrongly) end the trail on a parent
+    link, RAC disables it (this was the original task-page bug — the comp crumb
+    was last and came out disabled). This differs from the older parents-only
+    `components/Breadcrumbs.tsx` (react-router `<Link>`s, no current-page crumb,
+    relies on the H1 below) — the RAC one is the pattern to adopt app-wide. RAC's
+    `Breadcrumbs` renders a bare `<ol>`, so the kit wraps it in a
+    `<nav aria-label="Breadcrumb">` landmark. Verified live (comp crumb
+    navigates, current crumb carries `aria-current="page"`) + clean `:task`
+    hydration.
 
 ## Verification playbook (all part of "done" for RAC work)
 

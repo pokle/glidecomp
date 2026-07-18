@@ -188,6 +188,7 @@ function TaskDetailContent() {
           { label: "Competitions", to: "/comp" },
           { label: comp?.name ?? "Competition", to: `/comp/${compId}` },
         ]}
+        current={task.name}
       />
 
       {/* Header row mirrors CompDetail: title/meta left, admin Settings top right. */}
