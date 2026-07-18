@@ -155,10 +155,14 @@ narrow column frees width for the map). Verified live (headless admin drive,
   open. It edits a **local draft** (`TurnpointDraft`) and only commits on Save —
   so adding is draft-first (**nothing joins the route until Save**, Cancel adds
   nothing) and editing is atomic (Cancel keeps the turnpoint as it was); the
-  parent's `onSave` appends (add) or `updateRow`-patches (edit). It carries a
-  **"Load from a waypoint"** SearchField + ListBox at the top (picking fills the
-  draft), then every field: code, name, Type (SimpleSelect), Radius (preset
-  chips **400 / 1 km / 2 km / 3 km / 5 km** + custom NumberField, step 1,
+  parent's `onSave` appends (add) or `updateRow`-patches (edit). "Load from a
+  waypoint" is an **RAC `Autocomplete`** (`useFilter().contains`) wrapping the
+  kit SearchField + ListBox; the ListBox is only rendered while the (controlled)
+  query is non-empty, so at rest it's a single compact field — type to filter,
+  arrow/Enter to pick via virtual focus, which fills the draft and clears the
+  query. `textValue` on each item is `code + name` so the filter matches both.
+  Then every field: code, name, Type (SimpleSelect), Radius (preset chips
+  **400 / 1 km / 2 km / 3 km / 5 km** + custom NumberField, step 1,
   `useGrouping:true` — gotcha #1), coordinates (`validate` → inline FieldError),
   altitude. Save is gated on a non-empty code + valid coords.
 - **The route-editor dialog no longer carries the waypoint picker** (it moved
@@ -176,6 +180,11 @@ narrow column frees width for the map). Verified live (headless admin drive,
   `RouteMap` `focus={{lat,lon,key}}` → `provider.panTo`; the key bumps each tap
   so re-tapping re-centres). The Edit/Remove buttons and drag handle are
   separate targets and don't trigger the row action.
+- **Footer holds only Cancel / Save.** Import .xctsk, Load from XContest,
+  Export .xctsk/.csv moved up into the Add-turnpoint toolbar row. **Load from
+  XContest** is now its own small pop-up (code input + Load) instead of an
+  inline field, controlled by `xcImportOpen`; `importXContest` closes it on a
+  successful load.
 - Reused unchanged: rows state + `derived` memo, `dependencies={[rows,
   derived]}` on the GridList (gotcha #3 — position #/legs/dirs would otherwise
   stale on reorder; verified: drag renumbers and recomputes legs), FileTrigger.

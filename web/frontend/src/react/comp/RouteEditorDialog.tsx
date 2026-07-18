@@ -18,6 +18,8 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import {
   FileTrigger,
   useDragAndDrop,
+  useFilter,
+  Autocomplete,
   Button as AriaButton,
   DropIndicator,
 } from "react-aria-components";
@@ -217,6 +219,8 @@ export function RouteEditorDialog({
   const [pendingWaypoints, setPendingWaypoints] = useState<WaypointFileRecord[]>([]);
   const [xcontestCode, setXcontestCode] = useState("");
   const [xcontestLoading, setXcontestLoading] = useState(false);
+  // The "Load from XContest" flow is a small pop-up (a code input + Load).
+  const [xcImportOpen, setXcImportOpen] = useState(false);
 
   // Fields not edited by the grid/panels (taskType, earthModel, takeoff,
   // cylinderTolerance) are carried over from the loaded task; an import
@@ -521,6 +525,7 @@ export function RouteEditorDialog({
       const { task } = await fetchTaskByCodeWithRaw(code);
       await loadTask(task, `XContest task ${code.toUpperCase()}`);
       setXcontestCode("");
+      setXcImportOpen(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load XContest task");
     } finally {
@@ -765,8 +770,31 @@ export function RouteEditorDialog({
             <Button variant="outline" size="sm" onPress={() => void clearTurnpoints()}>
               Clear turnpoints
             </Button>
+            {/* Import / export the whole route (moved out of the footer, which
+                now holds only Cancel / Save). */}
+            <FileTrigger
+              acceptedFileTypes={[".xctsk"]}
+              onSelect={(files) => void importFile(files)}
+            >
+              <Button variant="outline" size="sm">
+                Import .xctsk
+              </Button>
+            </FileTrigger>
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={() => setXcImportOpen(true)}
+            >
+              Load from XContest
+            </Button>
+            <Button variant="outline" size="sm" onPress={exportFile}>
+              Export .xctsk
+            </Button>
+            <Button variant="outline" size="sm" onPress={exportCsv}>
+              Export .csv
+            </Button>
             {derived.totalKm !== null ? (
-              <span className="text-sm text-muted-foreground">
+              <span className="ml-auto text-sm text-muted-foreground">
                 Optimized total: {derived.totalKm.toFixed(1)} km
               </span>
             ) : null}
@@ -977,19 +1005,34 @@ export function RouteEditorDialog({
         ) : null}
 
         <DialogFooter className="mx-0 mb-0 border-t border-border">
-          <div className="flex flex-wrap items-center gap-2 sm:mr-auto">
-            <FileTrigger
-              acceptedFileTypes={[".xctsk"]}
-              onSelect={(files) => void importFile(files)}
-            >
-              <Button variant="outline" size="sm">
-                Import .xctsk
-              </Button>
-            </FileTrigger>
+          <Button slot="close" variant="outline">
+            Cancel
+          </Button>
+          <Button isDisabled={saving || errors.length > 0} onPress={() => void save()}>
+            {saving ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+
+        {/* Load a whole task from an XContest / XCTrack task code. */}
+        <Modal
+          isOpen={xcImportOpen}
+          onOpenChange={(open) => {
+            if (!open) setXcImportOpen(false);
+          }}
+        >
+          <Dialog className="gap-3">
+            <DialogHeader>
+              <DialogTitle>Load from XContest</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              Paste an XContest / XCTrack task code to replace the editor with
+              that task's turnpoints, start and goal. Nothing is saved until you
+              press Save.
+            </p>
             <TextField
-              aria-label="XContest task code"
-              placeholder="Task code"
-              className="w-28"
+              label="Task code"
+              autoFocus
+              placeholder="e.g. 3sVv6dV"
               value={xcontestCode}
               onChange={setXcontestCode}
               onKeyDown={(e) => {
@@ -999,28 +1042,19 @@ export function RouteEditorDialog({
                 }
               }}
             />
-            <Button
-              variant="outline"
-              size="sm"
-              isDisabled={xcontestLoading || xcontestCode.trim() === ""}
-              onPress={() => void importXContest()}
-            >
-              {xcontestLoading ? "Loading…" : "Load from XContest"}
-            </Button>
-            <Button variant="outline" size="sm" onPress={exportFile}>
-              Export .xctsk
-            </Button>
-            <Button variant="outline" size="sm" onPress={exportCsv}>
-              Export .csv
-            </Button>
-          </div>
-          <Button slot="close" variant="outline">
-            Cancel
-          </Button>
-          <Button isDisabled={saving || errors.length > 0} onPress={() => void save()}>
-            {saving ? "Saving..." : "Save"}
-          </Button>
-        </DialogFooter>
+            <DialogFooter>
+              <Button slot="close" variant="outline">
+                Cancel
+              </Button>
+              <Button
+                isDisabled={xcontestLoading || xcontestCode.trim() === ""}
+                onPress={() => void importXContest()}
+              >
+                {xcontestLoading ? "Loading…" : "Load"}
+              </Button>
+            </DialogFooter>
+          </Dialog>
+        </Modal>
 
         {/* Add / edit a single turnpoint. Adding is draft-first: the turnpoint
             joins the route only on Save. */}
@@ -1211,15 +1245,18 @@ function TurnpointDetailsDialog({
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<TurnpointDraft>(initial);
-  const [wpSearch, setWpSearch] = useState("");
+  // The waypoint Autocomplete's query. Kept controlled so the result list only
+  // shows while searching (empty query → just the one-line field, less space).
+  const [wpQuery, setWpQuery] = useState("");
+  const { contains } = useFilter({ sensitivity: "base" });
   const radius = Number(draft.radius);
   const label = draft.name || "turnpoint";
 
   const patch = (p: Partial<TurnpointDraft>) => setDraft((d) => ({ ...d, ...p }));
 
   // Load a competition waypoint's details into the draft (keep the type — a
-  // waypoint doesn't carry one).
-  const applyWaypoint = (rec: WaypointFileRecord) =>
+  // waypoint doesn't carry one), and clear the search so the list collapses.
+  const applyWaypoint = (rec: WaypointFileRecord) => {
     setDraft((d) => ({
       ...d,
       name: rec.code,
@@ -1228,17 +1265,15 @@ function TurnpointDetailsDialog({
       radius: rec.radius > 0 ? rec.radius : d.radius,
       altitude: rec.altitude ? rec.altitude : "",
     }));
+    setWpQuery("");
+  };
 
-  const pickerItems = useMemo(() => {
-    const q = wpSearch.trim().toLowerCase();
-    const matched = q
-      ? waypointRecords.filter(
-          (w) =>
-            w.code.toLowerCase().includes(q) || w.name.toLowerCase().includes(q)
-        )
-      : waypointRecords;
-    return matched.slice(0, 200).map((w, i) => ({ id: `${w.code}-${i}`, record: w }));
-  }, [waypointRecords, wpSearch]);
+  // All waypoints as keyed items; Autocomplete filters them by the query via
+  // each item's textValue (code + name), so no manual filtering here.
+  const wpItems = useMemo(
+    () => waypointRecords.map((w, i) => ({ id: `${w.code}-${i}`, record: w })),
+    [waypointRecords]
+  );
 
   const canSave = draft.name.trim() !== "" && parseCoords(draft.coords) != null;
 
@@ -1277,40 +1312,56 @@ function TurnpointDetailsDialog({
             .
           </p>
         ) : (
-          <div className="flex flex-col gap-2">
+          // RAC Autocomplete: type to filter, arrow-key/Enter to pick without
+          // leaving the field. The result list is only rendered while there's a
+          // query, so at rest this is a single compact search field.
+          <Autocomplete
+            filter={contains}
+            inputValue={wpQuery}
+            onInputChange={setWpQuery}
+          >
             <SearchField
               label="Load from a waypoint"
               aria-label="Search competition waypoints"
               placeholder={`Search ${waypointRecords.length} waypoints…`}
-              value={wpSearch}
-              onChange={setWpSearch}
             />
-            <ListBox
-              aria-label="Competition waypoints"
-              className="max-h-40"
-              items={pickerItems}
-              onAction={(key) => {
-                const item = pickerItems.find((it) => it.id === key);
-                if (item) applyWaypoint(item.record);
-              }}
-              renderEmptyState={() => (
-                <p className="px-2 py-1.5 text-sm text-muted-foreground">
-                  No matches
-                </p>
-              )}
-            >
-              {(item: { id: string; record: WaypointFileRecord }) => (
-                <ListBoxItem id={item.id} textValue={item.record.code}>
-                  <span className="font-medium">{item.record.code}</span>
-                  {item.record.name !== item.record.code ? (
-                    <span className="truncate text-muted-foreground">
-                      {item.record.name}
-                    </span>
-                  ) : null}
-                </ListBoxItem>
-              )}
-            </ListBox>
-          </div>
+            {wpQuery.trim() !== "" ? (
+              <ListBox
+                aria-label="Competition waypoints"
+                className="mt-1 max-h-48"
+                items={wpItems}
+                onAction={(key) => {
+                  const item = wpItems.find((it) => it.id === key);
+                  if (item) applyWaypoint(item.record);
+                }}
+                renderEmptyState={() => (
+                  <p className="px-2 py-1.5 text-sm text-muted-foreground">
+                    No matches
+                  </p>
+                )}
+              >
+                {(item: { id: string; record: WaypointFileRecord }) => (
+                  <ListBoxItem
+                    id={item.id}
+                    // textValue drives Autocomplete's filter + typeahead — match
+                    // on code AND name.
+                    textValue={
+                      item.record.name !== item.record.code
+                        ? `${item.record.code} ${item.record.name}`
+                        : item.record.code
+                    }
+                  >
+                    <span className="font-medium">{item.record.code}</span>
+                    {item.record.name !== item.record.code ? (
+                      <span className="truncate text-muted-foreground">
+                        {item.record.name}
+                      </span>
+                    ) : null}
+                  </ListBoxItem>
+                )}
+              </ListBox>
+            ) : null}
+          </Autocomplete>
         )}
 
         <TextField
