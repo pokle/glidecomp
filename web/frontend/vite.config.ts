@@ -243,6 +243,17 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    // Set TUNNEL=1 when exposing the dev server via `cloudflared tunnel`:
+    //  - allowedHosts: let the random *.trycloudflare.com hostname through
+    //    (leading dot matches the domain and all subdomains).
+    //  - hmr.clientPort 443: the tunnel terminates TLS at :443, so the HMR
+    //    websocket must target that, not the raw dev port, or live reload
+    //    silently fails over the tunnel.
+    // Gated so normal localhost HMR (which needs the real port) is unaffected.
+    ...(process.env.TUNNEL ? {
+      allowedHosts: ['.trycloudflare.com'] as string[],
+      hmr: { clientPort: 443 },
+    } : {}),
     fs: {
       allow: [
         searchForWorkspaceRoot(process.cwd()),
