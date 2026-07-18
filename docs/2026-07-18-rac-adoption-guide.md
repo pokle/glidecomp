@@ -150,22 +150,29 @@ narrow column frees width for the map). Verified live (headless admin drive,
 - **Each row is a compact, single-line flight-plan summary** (no inline edit
   controls): position badge · code · name · type badge, with a right-aligned
   recap (radius grouped as `50,000 m` · Enter/Exit badge · optimized leg km).
-- **`EditTurnpointPopover`** (DialogTrigger + Popover + Dialog) holds **every**
-  editable field — code, name, Type (SimpleSelect), Radius (preset chips
-  **400 / 1 km / 2 km / 3 km / 5 km** as `ToggleButton`s + a custom NumberField,
-  step 1, `useGrouping:true` — gotcha #1), coordinates (with `validate` → inline
-  FieldError), altitude. Edits apply **live** to the map/legs; **Cancel reverts**
-  to a `snapshotRef` (all six fields) taken on open (dismiss-by-click-away keeps
-  the live edits). Dialog-level "nothing saved until Save" still holds. The
-  Type SimpleSelect is a Select-popover nested inside the edit Popover inside
-  the Modal — RAC handles the nested overlays fine.
+- **`TurnpointDetailsDialog`** — a controlled kit `Modal`/`Dialog` (nested
+  inside the route-editor Modal) that both **Add turnpoint** and a row's **Edit**
+  open. It edits a **local draft** (`TurnpointDraft`) and only commits on Save —
+  so adding is draft-first (**nothing joins the route until Save**, Cancel adds
+  nothing) and editing is atomic (Cancel keeps the turnpoint as it was); the
+  parent's `onSave` appends (add) or `updateRow`-patches (edit). It carries a
+  **"Load from a waypoint"** SearchField + ListBox at the top (picking fills the
+  draft), then every field: code, name, Type (SimpleSelect), Radius (preset
+  chips **400 / 1 km / 2 km / 3 km / 5 km** + custom NumberField, step 1,
+  `useGrouping:true` — gotcha #1), coordinates (`validate` → inline FieldError),
+  altitude. Save is gated on a non-empty code + valid coords.
+- **The route-editor dialog no longer carries the waypoint picker** (it moved
+  into the details dialog). Start (SSS) / Goal Disclosures are **collapsed by
+  default** (defaults suit most comps). The map preview is full-width below the
+  list; its "Add from map" / "New point" still create *competition waypoints*.
 - Reused unchanged: rows state + `derived` memo, `dependencies={[rows,
   derived]}` on the GridList (gotcha #3 — position #/legs/dirs would otherwise
-  stale on reorder; verified: drag renumbers and recomputes legs), waypoint
-  picker, FileTrigger, SSS/Goal Disclosures.
-- **An earlier iteration put Type + Radius inline on each card**; it was
-  replaced with the compact "everything in the popover" row above, on request —
-  the list reads cleaner and scans faster as a plain flight plan.
+  stale on reorder; verified: drag renumbers and recomputes legs), FileTrigger.
+- **Design evolution** (all on request): inline Type+Radius on the card →
+  compact row + per-row edit **popover** (live edits, snapshot-revert) →
+  the current draft-on-save **Modal** shared by Add and Edit. The popover's
+  live-apply/`snapshotRef` revert is gone; the draft model is simpler and gives
+  a clean "Add nothing until Save".
 
 New gotchas learned building it:
 - **`keyboardNavigationBehavior` typechecks** (it's on `AriaGridListProps`,
@@ -176,10 +183,10 @@ New gotchas learned building it:
   (the read-only page table sits behind the open dialog). Scope drives/queries
   to the dialog, or disambiguate on a marker only the editor has (e.g. a
   `Custom radius` input), or the first match is the read-only page table.
-- Live-writing the popover fields on every keystroke re-runs the `derived` memo
-  per keystroke (that *is* the point — the map updates as you type). It's cheap
-  at ≤50 turnpoints; the commit-on-blur pattern is only needed for the Table's
-  in-cell editors.
+- The turnpoint editor now edits a **local draft** and commits on Save, so it
+  never re-runs the route `derived` memo per keystroke (an earlier popover
+  iteration did, to live-update the map). Draft-on-save also sidesteps the
+  commit-on-blur pattern the Table's in-cell editors needed.
 
 Not done (follow-ups): a true full-width bottom sheet for the edit popover on
 mobile (today it's a fitted floating panel). The map now sits below the list

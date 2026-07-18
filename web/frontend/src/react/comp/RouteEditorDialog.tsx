@@ -20,9 +20,6 @@ import {
   useDragAndDrop,
   Button as AriaButton,
   DropIndicator,
-  DialogTrigger,
-  Popover as AriaPopover,
-  Dialog as AriaDialog,
 } from "react-aria-components";
 import {
   computeTurnpointDirections,
@@ -99,6 +96,24 @@ function formatMetres(m: number): string {
   return m.toLocaleString("en-US");
 }
 
+/** The editable fields of a turnpoint (everything the details dialog sets). */
+type TurnpointDraft = Pick<
+  RouteRow,
+  "name" | "description" | "type" | "coords" | "radius" | "altitude"
+>;
+
+/** A fresh, empty turnpoint draft (for the "Add turnpoint" flow). */
+function blankDraft(): TurnpointDraft {
+  return {
+    name: "",
+    description: "",
+    type: "",
+    coords: "",
+    radius: NEW_ROW_RADIUS,
+    altitude: "",
+  };
+}
+
 export function RouteEditorDialog({
   compId,
   taskId,
@@ -160,13 +175,18 @@ export function RouteEditorDialog({
     setRows((prev) => prev.filter((r) => r.id !== id));
   }, []);
 
+  // The turnpoint details dialog: which turnpoint (if any) is being added or
+  // edited. Adding is draft-first — nothing joins the route until Save.
+  const [tpEditor, setTpEditor] = useState<
+    { mode: "add" } | { mode: "edit"; rowId: number } | null
+  >(null);
+
   // The competition's shared waypoints (loaded once on open), shown on the map
   // and in a searchable list. Turnpoints are picked from this set only — the
   // task copies each waypoint's details in, so it can't be changed after the
   // fact by editing the competition waypoints.
   const [waypointRecords, setWaypointRecords] = useState<WaypointFileRecord[]>([]);
   const [wpLoading, setWpLoading] = useState(true);
-  const [wpSearch, setWpSearch] = useState("");
   const [wpFitNonce, setWpFitNonce] = useState(0);
   // Inline "add a missing waypoint" flow. The map goes into add-mode so a tap
   // seeds the shared dialog; the new point drops straight into this route (see
@@ -341,74 +361,39 @@ export function RouteEditorDialog({
     [waypointRecords]
   );
 
-  // Filtered list for the searchable picker (by code or name).
-  const filteredWaypoints = useMemo(() => {
-    const q = wpSearch.trim().toLowerCase();
-    if (!q) return waypointRecords;
-    return waypointRecords.filter(
-      (w) => w.code.toLowerCase().includes(q) || w.name.toLowerCase().includes(q)
-    );
-  }, [waypointRecords, wpSearch]);
-
-  // Capped, keyed items for the picker ListBox.
-  const pickerItems = useMemo(
-    () =>
-      filteredWaypoints
-        .slice(0, 200)
-        .map((w, i) => ({ id: `${w.code}-${i}`, record: w })),
-    [filteredWaypoints]
+  /** A competition waypoint's details as a turnpoint draft (copied in, so a
+   *  later edit to the competition waypoint never changes this task). */
+  const draftFromRecord = useCallback(
+    (rec: WaypointFileRecord): TurnpointDraft => ({
+      name: rec.code,
+      description: rec.name !== rec.code ? rec.name : "",
+      type: "",
+      coords: formatCoords(rec.latitude, rec.longitude),
+      radius: rec.radius > 0 ? rec.radius : NEW_ROW_RADIUS,
+      altitude: rec.altitude ? rec.altitude : "",
+    }),
+    []
   );
 
-  /**
-   * Append a turnpoint by COPYING a competition waypoint's details (code, long
-   * name, coordinates, radius, altitude) into the task — so a later edit to
-   * the competition waypoint never changes this task.
-   */
-  const addTurnpointFromRecord = useCallback(
-    (rec: WaypointFileRecord) => {
+  /** Append a new turnpoint from a draft (the details dialog's Add). */
+  const appendTurnpoint = useCallback(
+    (draft: TurnpointDraft) => {
       setRows((prev) => [
         ...prev,
-        {
-          id: nextRowId(),
-          name: rec.code,
-          description: rec.name !== rec.code ? rec.name : "",
-          type: "",
-          coords: formatCoords(rec.latitude, rec.longitude),
-          radius: rec.radius > 0 ? rec.radius : NEW_ROW_RADIUS,
-          altitude: rec.altitude ? rec.altitude : "",
-          leg: null,
-          dir: null,
-        } satisfies RouteRow,
+        { id: nextRowId(), ...draft, leg: null, dir: null } satisfies RouteRow,
       ]);
     },
     [nextRowId]
   );
 
-  /** Append a blank row to fill in by hand (blank rows are ignored on save). */
-  const addBlankRow = useCallback(() => {
-    setRows((prev) => [
-      ...prev,
-      {
-        id: nextRowId(),
-        name: "",
-        description: "",
-        type: "",
-        coords: "",
-        radius: NEW_ROW_RADIUS,
-        altitude: "",
-        leg: null,
-        dir: null,
-      } satisfies RouteRow,
-    ]);
-  }, [nextRowId]);
-
-  /** Pick from the map: the nearest marker, resolved to its record by id. */
+  /** Pick from the map: the nearest marker, resolved to its record by id, and
+   *  appended straight to the route (a map tap is an explicit add). */
   const pickWaypoint = useCallback(
     (wp: MapWaypoint) => {
       const rec = waypointRecords[Number(wp.id)];
-      if (rec) addTurnpointFromRecord(rec);
+      if (rec) appendTurnpoint(draftFromRecord(rec));
     },
-    [waypointRecords, addTurnpointFromRecord]
+    [waypointRecords, appendTurnpoint, draftFromRecord]
   );
 
   // Open the shared add-waypoint dialog, seeded from a map tap (or blank when
@@ -431,7 +416,7 @@ export function RouteEditorDialog({
     setAdding(false);
     setWaypointRecords((prev) => [...prev, rec]);
     setPendingWaypoints((prev) => [...prev, rec]);
-    addTurnpointFromRecord(rec);
+    appendTurnpoint(draftFromRecord(rec));
     toast.success(`Added ${rec.code} to the route — saved to the competition when you save`);
   }
 
@@ -705,9 +690,10 @@ export function RouteEditorDialog({
         <p className="text-sm text-muted-foreground">
           Each row is a turnpoint, top-to-bottom like a flight plan — leg
           distance and Enter/Exit crossing are derived from the optimized route.
-          Drag the handle (or press Enter on it) to reorder; open a row's{" "}
-          <span className="font-medium">Edit</span> to change its code, name,
-          type, radius, coordinates and altitude.
+          Drag the handle (or press Enter on it) to reorder.{" "}
+          <span className="font-medium">Add turnpoint</span> or a row's{" "}
+          <span className="font-medium">Edit</span> opens its details — load from
+          a competition waypoint, or set them by hand.
         </p>
         {openDistance ? (
           <p className="text-sm text-muted-foreground">
@@ -718,7 +704,7 @@ export function RouteEditorDialog({
 
         {/* Turnpoint list — at the top of the dialog, every row visible (the
             dialog scrolls; the list itself never does). Each row is a compact
-            flight-plan summary; all editing is behind its Edit popover. */}
+            flight-plan summary; adding/editing happens in the details dialog. */}
         <div className="flex flex-col gap-2">
           <GridList
             aria-label="Turnpoints"
@@ -733,8 +719,7 @@ export function RouteEditorDialog({
             dependencies={[rows, derived]}
             renderEmptyState={() => (
               <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                No turnpoints yet — use Add turnpoint, pick a waypoint, or
-                import a task
+                No turnpoints yet — use Add turnpoint or import a task
               </p>
             )}
           >
@@ -745,13 +730,17 @@ export function RouteEditorDialog({
                 index={rows.indexOf(row)}
                 leg={derived.legByRowId.get(row.id) ?? null}
                 dir={derived.dirByRowId.get(row.id) ?? null}
-                onUpdate={updateRow}
+                onEdit={(id) => setTpEditor({ mode: "edit", rowId: id })}
                 onRemove={removeRow}
               />
             )}
           </GridList>
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" onPress={addBlankRow}>
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={() => setTpEditor({ mode: "add" })}
+            >
               Add turnpoint
             </Button>
             <Button variant="outline" size="sm" onPress={() => void clearTurnpoints()}>
@@ -770,108 +759,45 @@ export function RouteEditorDialog({
           </p>
         </div>
 
-        {/* Map preview + waypoint tools — below the list, for previewing the
-            route and adding turnpoints (from the map or the competition's
-            shared waypoint set). Two columns on wide screens. */}
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="flex flex-col gap-2">
-            <div className="h-64 overflow-hidden rounded border border-border sm:h-72 lg:h-80">
-              <Suspense
-                fallback={
-                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                    Loading map…
-                  </div>
+        {/* Map preview — below the list, showing the optimized route as it's
+            edited. Tap a waypoint to add it, or tap empty space to create a new
+            one (added to the competition when the route is saved). */}
+        <div className="flex flex-col gap-2">
+          <div className="h-64 overflow-hidden rounded border border-border sm:h-72 lg:h-96">
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  Loading map…
+                </div>
+              }
+            >
+              <RouteMap
+                task={derived.mapTask}
+                waypoints={mapWaypoints}
+                addMode={addMode}
+                fitNonce={wpFitNonce}
+                onWaypointPick={pickWaypoint}
+                onMapPick={(lat, lon, details) =>
+                  openAddPoint(formatCoords(lat, lon), details)
                 }
-              >
-                <RouteMap
-                  task={derived.mapTask}
-                  waypoints={mapWaypoints}
-                  addMode={addMode}
-                  fitNonce={wpFitNonce}
-                  onWaypointPick={pickWaypoint}
-                  onMapPick={(lat, lon, details) =>
-                    openAddPoint(formatCoords(lat, lon), details)
-                  }
-                />
-              </Suspense>
-            </div>
-            {/* Add a missing waypoint without leaving the route editor: tap the
-                map to place it, or open a blank form. Either way it's added to
-                the route now and written to the competition when you save. */}
-            <div className="flex flex-wrap items-center gap-2">
-              <ToggleButton
-                size="sm"
-                isSelected={addMode}
-                onChange={setAddMode}
-              >
-                {addMode ? "Tap the map to place…" : "Add from map"}
-              </ToggleButton>
-              <Button size="sm" variant="outline" onPress={() => openAddPoint()}>
-                New point
-              </Button>
-              {pendingWaypoints.length > 0 ? (
-                <span className="text-xs text-muted-foreground">
-                  {pendingWaypoints.length} new — saved to the competition when you save the route
-                </span>
-              ) : null}
-            </div>
+              />
+            </Suspense>
           </div>
-          {/* Searchable list of the competition's waypoints to pick from. */}
-          <div className="flex min-h-0 flex-col gap-2">
-            {wpLoading ? (
-              <p className="text-xs text-muted-foreground">Loading competition waypoints…</p>
-            ) : waypointRecords.length === 0 ? (
-              <p className="rounded border border-dashed border-border p-3 text-xs text-muted-foreground">
-                This competition has no waypoints yet. Use <span className="font-medium">Add from map</span> or{" "}
-                <span className="font-medium">New point</span> to create one — it's added to this
-                route now and saved to the competition when you save. Or{" "}
-                <a
-                  href={`/comp/${compId}/waypoints`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline hover:text-foreground"
-                >
-                  manage all waypoints
-                </a>
-                .
-              </p>
-            ) : (
-              <>
-                <SearchField
-                  aria-label="Search competition waypoints"
-                  placeholder={`Search ${waypointRecords.length} waypoints…`}
-                  value={wpSearch}
-                  onChange={setWpSearch}
-                />
-                <ListBox
-                  aria-label="Competition waypoints"
-                  className="max-h-64"
-                  items={pickerItems}
-                  // Arrow keys + Enter add a turnpoint; so does a click/tap.
-                  onAction={(key) => {
-                    const item = pickerItems.find((it) => it.id === key);
-                    if (item) addTurnpointFromRecord(item.record);
-                  }}
-                  renderEmptyState={() => (
-                    <p className="px-2 py-1.5 text-sm text-muted-foreground">No matches</p>
-                  )}
-                >
-                  {(item: { id: string; record: WaypointFileRecord }) => (
-                    <ListBoxItem id={item.id} textValue={item.record.code}>
-                      <span className="font-medium">{item.record.code}</span>
-                      {item.record.name !== item.record.code ? (
-                        <span className="truncate text-muted-foreground">
-                          {item.record.name}
-                        </span>
-                      ) : null}
-                    </ListBoxItem>
-                  )}
-                </ListBox>
-                <p className="text-xs text-muted-foreground">
-                  Click a waypoint (or tap it on the map) to add it as a turnpoint.
-                </p>
-              </>
-            )}
+          {/* Create a competition waypoint without leaving the editor: tap the
+              map to place it, or open a blank form. It's added to the route now
+              and written to the competition when you save. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <ToggleButton size="sm" isSelected={addMode} onChange={setAddMode}>
+              {addMode ? "Tap the map to place…" : "Add from map"}
+            </ToggleButton>
+            <Button size="sm" variant="outline" onPress={() => openAddPoint()}>
+              New point
+            </Button>
+            {pendingWaypoints.length > 0 ? (
+              <span className="text-xs text-muted-foreground">
+                {pendingWaypoints.length} new — saved to the competition when you save the route
+              </span>
+            ) : null}
           </div>
         </div>
 
@@ -893,7 +819,8 @@ export function RouteEditorDialog({
 
         {!openDistance ? (
           <>
-            <Disclosure title="Start (SSS)" defaultExpanded>
+            {/* Collapsed by default — the defaults suit most competitions. */}
+            <Disclosure title="Start (SSS)">
               {!derived.hasSSSTurnpoint ? (
                 <p className="mt-1 text-sm text-amber-500">
                   ⚠ This task has no Start (SSS) turnpoint — set one in the list
@@ -998,7 +925,7 @@ export function RouteEditorDialog({
               </div>
             </Disclosure>
 
-            <Disclosure title="Goal" defaultExpanded>
+            <Disclosure title="Goal">
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <SimpleSelect
                   value={goalType}
@@ -1078,6 +1005,39 @@ export function RouteEditorDialog({
           </Button>
         </DialogFooter>
 
+        {/* Add / edit a single turnpoint. Adding is draft-first: the turnpoint
+            joins the route only on Save. */}
+        {tpEditor ? (
+          <TurnpointDetailsDialog
+            mode={tpEditor.mode}
+            initial={
+              tpEditor.mode === "edit"
+                ? (() => {
+                    const r = rows.find((row) => row.id === tpEditor.rowId);
+                    return r
+                      ? {
+                          name: r.name,
+                          description: r.description,
+                          type: r.type,
+                          coords: r.coords,
+                          radius: r.radius,
+                          altitude: r.altitude,
+                        }
+                      : blankDraft();
+                  })()
+                : blankDraft()
+            }
+            waypointRecords={waypointRecords}
+            wpLoading={wpLoading}
+            compId={compId}
+            onSave={(draft) => {
+              if (tpEditor.mode === "edit") updateRow(tpEditor.rowId, draft);
+              else appendTurnpoint(draft);
+            }}
+            onClose={() => setTpEditor(null)}
+          />
+        ) : null}
+
         {/* Inline create — stages a new waypoint into the route; it's written to
             the competition on save. Shared with the competition waypoints page. */}
         <AddWaypointDialog
@@ -1106,14 +1066,14 @@ function TurnpointCard({
   index,
   leg,
   dir,
-  onUpdate,
+  onEdit,
   onRemove,
 }: {
   row: RouteRow;
   index: number;
   leg: number | null;
   dir: RouteRow["dir"];
-  onUpdate: (id: number, patch: Partial<RouteRow>) => void;
+  onEdit: (id: number) => void;
   onRemove: (id: number) => void;
 }) {
   const radius = Number(row.radius);
@@ -1186,7 +1146,14 @@ function TurnpointCard({
 
         {/* Actions: edit the turnpoint, or remove it. */}
         <div className="flex shrink-0 items-center gap-1">
-          <EditTurnpointPopover row={row} label={label} onUpdate={onUpdate} />
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label={`Edit ${label}`}
+            onPress={() => onEdit(row.id)}
+          >
+            <PencilIcon className="size-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -1202,151 +1169,226 @@ function TurnpointCard({
 }
 
 /**
- * The turnpoint editor popover: every editable field — code, name, type,
- * radius (preset chips + a custom NumberField), coordinates and altitude —
- * with real labels and per-field validation. Edits apply LIVE to the map and
- * legs while it's open; Cancel reverts to the values captured when it opened
- * (the dialog-level "nothing saved until Save" still holds). Dismissing by
- * clicking away keeps the live edits.
+ * Add / edit one turnpoint. A self-contained dialog over a local draft: it
+ * loads from a competition waypoint via the search field at the top, or takes
+ * every field by hand (code, name, type, radius chips + custom NumberField,
+ * coordinates, altitude). Nothing touches the route until Save — so adding is
+ * draft-first (Cancel adds nothing) and editing is atomic (Cancel keeps the
+ * turnpoint as it was). The parent's onSave appends (add) or patches (edit).
  */
-function EditTurnpointPopover({
-  row,
-  label,
-  onUpdate,
+function TurnpointDetailsDialog({
+  mode,
+  initial,
+  waypointRecords,
+  wpLoading,
+  compId,
+  onSave,
+  onClose,
 }: {
-  row: RouteRow;
-  label: string;
-  onUpdate: (id: number, patch: Partial<RouteRow>) => void;
+  mode: "add" | "edit";
+  initial: TurnpointDraft;
+  waypointRecords: WaypointFileRecord[];
+  wpLoading: boolean;
+  compId: string;
+  onSave: (draft: TurnpointDraft) => void;
+  onClose: () => void;
 }) {
-  const snapshotRef = useRef<Partial<RouteRow>>({});
-  const radius = Number(row.radius);
+  const [draft, setDraft] = useState<TurnpointDraft>(initial);
+  const [wpSearch, setWpSearch] = useState("");
+  const radius = Number(draft.radius);
+  const label = draft.name || "turnpoint";
+
+  const patch = (p: Partial<TurnpointDraft>) => setDraft((d) => ({ ...d, ...p }));
+
+  // Load a competition waypoint's details into the draft (keep the type — a
+  // waypoint doesn't carry one).
+  const applyWaypoint = (rec: WaypointFileRecord) =>
+    setDraft((d) => ({
+      ...d,
+      name: rec.code,
+      description: rec.name !== rec.code ? rec.name : "",
+      coords: formatCoords(rec.latitude, rec.longitude),
+      radius: rec.radius > 0 ? rec.radius : d.radius,
+      altitude: rec.altitude ? rec.altitude : "",
+    }));
+
+  const pickerItems = useMemo(() => {
+    const q = wpSearch.trim().toLowerCase();
+    const matched = q
+      ? waypointRecords.filter(
+          (w) =>
+            w.code.toLowerCase().includes(q) || w.name.toLowerCase().includes(q)
+        )
+      : waypointRecords;
+    return matched.slice(0, 200).map((w, i) => ({ id: `${w.code}-${i}`, record: w }));
+  }, [waypointRecords, wpSearch]);
+
+  const canSave = draft.name.trim() !== "" && parseCoords(draft.coords) != null;
+
   return (
-    <DialogTrigger
+    <Modal
+      isOpen
       onOpenChange={(open) => {
-        if (open)
-          snapshotRef.current = {
-            name: row.name,
-            description: row.description,
-            type: row.type,
-            radius: row.radius,
-            coords: row.coords,
-            altitude: row.altitude,
-          };
+        if (!open) onClose();
       }}
+      className="flex max-h-[90vh] w-full max-w-md flex-col p-0 sm:max-w-md"
     >
-      <Button variant="outline" size="icon-sm" aria-label={`Edit ${label}`}>
-        <PencilIcon className="size-4" />
-      </Button>
-      <AriaPopover
-        placement="bottom end"
-        className="z-50 rounded-lg border border-border bg-popover text-popover-foreground shadow-md outline-none data-entering:animate-in data-entering:fade-in-0 data-entering:zoom-in-95 data-exiting:animate-out data-exiting:fade-out-0 data-exiting:zoom-out-95 data-entering:duration-100 data-exiting:duration-100"
-      >
-        <AriaDialog
-          aria-label={`Edit ${label}`}
-          className="w-[min(24rem,calc(100vw-2rem))] outline-none"
-        >
-          {({ close }) => (
-            <div className="flex flex-col gap-3 p-3">
-              <p className="text-sm font-medium">Turnpoint details</p>
-              <TextField
-                label="Code"
-                isRequired
-                value={row.name}
-                onChange={(v) => onUpdate(row.id, { name: v })}
-                placeholder="A01"
-              />
-              <TextField
-                label="Name"
-                description="Full descriptive name (optional)"
-                value={row.description}
-                onChange={(v) => onUpdate(row.id, { description: v })}
-                placeholder="Bordano Landing"
-              />
-              <div className="flex flex-col gap-2">
-                <span className="text-sm font-medium">Type</span>
-                <SimpleSelect
-                  value={row.type}
-                  onChange={(v) => onUpdate(row.id, { type: v as RouteRow["type"] })}
-                  options={TYPE_OPTIONS}
-                  ariaLabel={`Type of ${label}`}
-                  className="w-full [&_button]:w-full"
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <span className="text-sm font-medium">Radius (m)</span>
-                <div
-                  role="group"
-                  aria-label={`Radius of ${label} in metres`}
-                  className="flex flex-wrap items-center gap-1"
-                >
-                  {RADIUS_PRESETS.map((preset) => (
-                    <ToggleButton
-                      key={preset}
-                      size="sm"
-                      isSelected={radius === preset}
-                      // Chips set an absolute value; re-pressing the active one
-                      // is a no-op (the toggle-off event re-sets the same value).
-                      onChange={() => onUpdate(row.id, { radius: preset })}
-                      className="h-7 px-2 tabular-nums"
-                      aria-label={`Set radius ${preset} metres`}
-                    >
-                      {radiusChipLabel(preset)}
-                    </ToggleButton>
-                  ))}
-                  <NumberField
-                    aria-label={`Custom radius of ${label} in metres`}
-                    minValue={1}
-                    maxValue={50000}
-                    // Step stays 1: RAC snaps values to minValue + k·step, so a
-                    // larger step corrupts loaded radii (1000 → 1001, step 100).
-                    step={1}
-                    // Group thousands so the widest radius reads "50,000".
-                    formatOptions={{ useGrouping: true }}
-                    value={Number.isFinite(radius) ? radius : NaN}
-                    onChange={(v) =>
-                      onUpdate(row.id, { radius: Number.isFinite(v) ? v : "" })
-                    }
-                    className="w-36"
-                  />
-                </div>
-              </div>
-              <TextField
-                label="Coordinates (lat, lon)"
-                value={row.coords}
-                onChange={(v) => onUpdate(row.id, { coords: v })}
-                placeholder="-36.550979, 147.890395"
-                validate={(v) =>
-                  v.trim() === "" || parseCoords(v)
-                    ? null
-                    : 'Enter "lat, lon" decimal degrees'
-                }
-              />
-              <TextField
-                label="Altitude (m)"
-                description="Waypoint altitude, optional"
-                value={String(row.altitude ?? "")}
-                onChange={(v) => onUpdate(row.id, { altitude: v })}
-                placeholder="0"
-              />
-              <div className="mt-1 flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onPress={() => {
-                    onUpdate(row.id, snapshotRef.current);
-                    close();
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button size="sm" onPress={close}>
-                  Done
-                </Button>
-              </div>
-            </div>
-          )}
-        </AriaDialog>
-      </AriaPopover>
-    </DialogTrigger>
+      <Dialog className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+        <DialogHeader>
+          <DialogTitle>
+            {mode === "add" ? "Add turnpoint" : "Edit turnpoint"}
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Load from a preset competition waypoint. */}
+        {wpLoading ? (
+          <p className="text-xs text-muted-foreground">
+            Loading competition waypoints…
+          </p>
+        ) : waypointRecords.length === 0 ? (
+          <p className="rounded border border-dashed border-border p-3 text-xs text-muted-foreground">
+            This competition has no waypoints yet — enter the coordinates below,
+            or{" "}
+            <a
+              href={`/comp/${compId}/waypoints`}
+              target="_blank"
+              rel="noreferrer"
+              className="underline hover:text-foreground"
+            >
+              manage all waypoints
+            </a>
+            .
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <SearchField
+              label="Load from a waypoint"
+              aria-label="Search competition waypoints"
+              placeholder={`Search ${waypointRecords.length} waypoints…`}
+              value={wpSearch}
+              onChange={setWpSearch}
+            />
+            <ListBox
+              aria-label="Competition waypoints"
+              className="max-h-40"
+              items={pickerItems}
+              onAction={(key) => {
+                const item = pickerItems.find((it) => it.id === key);
+                if (item) applyWaypoint(item.record);
+              }}
+              renderEmptyState={() => (
+                <p className="px-2 py-1.5 text-sm text-muted-foreground">
+                  No matches
+                </p>
+              )}
+            >
+              {(item: { id: string; record: WaypointFileRecord }) => (
+                <ListBoxItem id={item.id} textValue={item.record.code}>
+                  <span className="font-medium">{item.record.code}</span>
+                  {item.record.name !== item.record.code ? (
+                    <span className="truncate text-muted-foreground">
+                      {item.record.name}
+                    </span>
+                  ) : null}
+                </ListBoxItem>
+              )}
+            </ListBox>
+          </div>
+        )}
+
+        <TextField
+          label="Code"
+          value={draft.name}
+          onChange={(v) => patch({ name: v })}
+          placeholder="A01"
+        />
+        <TextField
+          label="Name"
+          description="Full descriptive name (optional)"
+          value={draft.description}
+          onChange={(v) => patch({ description: v })}
+          placeholder="Bordano Landing"
+        />
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium">Type</span>
+          <SimpleSelect
+            value={draft.type}
+            onChange={(v) => patch({ type: v as RouteRow["type"] })}
+            options={TYPE_OPTIONS}
+            ariaLabel={`Type of ${label}`}
+            className="w-full [&_button]:w-full"
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium">Radius (m)</span>
+          <div
+            role="group"
+            aria-label={`Radius of ${label} in metres`}
+            className="flex flex-wrap items-center gap-1"
+          >
+            {RADIUS_PRESETS.map((preset) => (
+              <ToggleButton
+                key={preset}
+                size="sm"
+                isSelected={radius === preset}
+                // Chips set an absolute value; re-pressing the active one is a
+                // no-op (the toggle-off event re-sets the same value).
+                onChange={() => patch({ radius: preset })}
+                className="h-7 px-2 tabular-nums"
+                aria-label={`Set radius ${preset} metres`}
+              >
+                {radiusChipLabel(preset)}
+              </ToggleButton>
+            ))}
+            <NumberField
+              aria-label={`Custom radius of ${label} in metres`}
+              minValue={1}
+              maxValue={50000}
+              // Step stays 1: RAC snaps values to minValue + k·step, so a
+              // larger step corrupts loaded radii (1000 → 1001, step 100).
+              step={1}
+              // Group thousands so the widest radius reads "50,000".
+              formatOptions={{ useGrouping: true }}
+              value={Number.isFinite(radius) ? radius : NaN}
+              onChange={(v) => patch({ radius: Number.isFinite(v) ? v : "" })}
+              className="w-36"
+            />
+          </div>
+        </div>
+        <TextField
+          label="Coordinates (lat, lon)"
+          value={draft.coords}
+          onChange={(v) => patch({ coords: v })}
+          placeholder="-36.550979, 147.890395"
+          validate={(v) =>
+            v.trim() === "" || parseCoords(v)
+              ? null
+              : 'Enter "lat, lon" decimal degrees'
+          }
+        />
+        <TextField
+          label="Altitude (m)"
+          description="Waypoint altitude, optional"
+          value={String(draft.altitude ?? "")}
+          onChange={(v) => patch({ altitude: v })}
+          placeholder="0"
+        />
+
+        <DialogFooter className="mt-1">
+          <Button slot="close" variant="outline">
+            Cancel
+          </Button>
+          <Button
+            isDisabled={!canSave}
+            onPress={() => {
+              onSave(draft);
+              onClose();
+            }}
+          >
+            {mode === "add" ? "Add turnpoint" : "Save"}
+          </Button>
+        </DialogFooter>
+      </Dialog>
+    </Modal>
   );
 }
