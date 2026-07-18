@@ -422,7 +422,7 @@ async function downloadComp(slug: string): Promise<void> {
       `(${classes.join(', ')}); ${requestCount} requests.`,
   );
   console.log(`  Manifest: ${join('web/samples/comps', slug, 'comp.json')}`);
-  console.log(`  Seed it:  bun run seed:sample`);
+  console.log(`  Seed it:  bun run seed`);
 }
 
 const slug = process.argv[2] ?? 'corryong-cup-2026';

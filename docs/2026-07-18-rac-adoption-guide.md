@@ -140,7 +140,7 @@ bun run test:e2e                   # full suite (one known flaky dev-login test;
   comp has no scored pilots". Delete the cruft row from local D1 (`comp`
   table) or reseed.
 - **Headless driving of admin UI:** start `bun run dev`, seed
-  (`bun run seed:sample`), then in Playwright: goto an SPA page, dev-login as
+  (`bun run seed`), then in Playwright: goto an SPA page, dev-login as
   the super-admin **tushar.pokle@gmail.com** via
   `fetch('/api/auth/dev-login', {method:'POST', body: JSON.stringify({name, email}), credentials:'include'})`
   from `page.evaluate`, then navigate to the task page. Drive dialogs by role

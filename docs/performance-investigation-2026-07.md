@@ -20,7 +20,7 @@ Three measurement layers, biggest sample task first
    times gunzip → parseIGC → resolveTurnpointSequence → scoreFlights and
    gunzip → packTracksFromIgc → gzip with all files local. Run under both Bun
    (JSC) and Node 22 (V8, same engine family as workerd).
-2. **Local workerd** — `bun run dev:workers` + `bun run seed:sample`, then
+2. **Local workerd** — `bun run dev:workers` + `bun run seed`, then
    time `GET /task/:id/score` and `/task/:id/3dvis` cold (fresh KV) and warm.
    Local D1/R2/KV are on disk, so this isolates compute + framework overhead
    in the real Workers runtime with storage latency ≈ 0.

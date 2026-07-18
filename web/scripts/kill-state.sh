@@ -46,4 +46,4 @@ echo "Re-applying D1 migrations…"
 bun run db:migrate
 
 echo "Done. Local database state reset."
-echo "Start fresh with: bun run dev   (re-seed sample data with: bun run seed:sample)"
+echo "Start fresh with: bun run dev   (re-seed sample data with: bun run seed)"

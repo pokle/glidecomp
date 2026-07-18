@@ -1,9 +1,10 @@
 {
   "name": "Big Chip",
   "slug": "big-chip",
-  "comp_name": "Big Chip (Sample)",
+  "comp_name": "Big Chip",
   "category": "hg",
   "scoring_format": "open_distance",
+  "hidden": true,
   "filename_id_field": "civl_id",
   "classes": [
     "open"

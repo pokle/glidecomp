@@ -23,7 +23,7 @@
  *   bun web/scripts/generate-big-chip.ts
  *
  * Load it with the seed script and score it with the CLI:
- *   bun run seed:sample big-chip
+ *   bun run seed big-chip
  *   bun run score-task -- --open-distance \
  *     web/samples/comps/big-chip-t1/task.xctsk web/samples/comps/big-chip-t1/
  */
@@ -428,9 +428,12 @@ function main(): void {
   const manifest = {
     name: 'Big Chip',
     slug: 'big-chip',
-    comp_name: 'Big Chip (Sample)',
+    comp_name: 'Big Chip',
     category: 'hg',
     scoring_format: 'open_distance',
+    // Fabricated comp, not a real event — seed it hidden (D1 `test` flag) so it
+    // stays out of the public comp list and 404s for anonymous visitors.
+    hidden: true,
     // Big Chip's IGC filenames carry its fabricated CIVL ids, not SAFA numbers
     // (the default the seed script assumes for the real AirScore comps).
     filename_id_field: 'civl_id',
@@ -518,7 +521,7 @@ function main(): void {
   }
 
   console.log(`\nWrote big-chip sample under ${COMPS_ROOT}`);
-  console.log('  Seed:  bun run seed:sample big-chip');
+  console.log('  Seed:  bun run seed big-chip');
   console.log('  Score: bun run score-task -- --open-distance web/samples/comps/big-chip-t1/task.xctsk web/samples/comps/big-chip-t1/');
 }
 

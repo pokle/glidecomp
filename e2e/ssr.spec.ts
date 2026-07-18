@@ -27,7 +27,7 @@ async function discover(request: APIRequestContext): Promise<Discovered> {
     comps: Array<{ comp_id: string; name: string; test: boolean }>;
   };
   const comp = comps.find((c) => !c.test);
-  if (!comp) throw new Error("No public sample comp seeded — run `bun run seed:sample`.");
+  if (!comp) throw new Error("No public sample comp seeded — run `bun run seed corryong-cup-2026`.");
 
   const scoresRes = await request.get(`/api/comp/${comp.comp_id}/scores`);
   expect(scoresRes.ok()).toBeTruthy();

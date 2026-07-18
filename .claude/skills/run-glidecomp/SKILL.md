@@ -1,6 +1,6 @@
 ---
 name: run-glidecomp
-description: Build, launch, and drive the GlideComp web app (Vite frontend + Cloudflare Workers on D1/R2). Use to run, start, serve, smoke-test, or screenshot GlideComp — seed a sample competition and verify the comp/scores pages render in a headless browser.
+description: Build, launch, and drive the GlideComp web app (Vite frontend + Cloudflare Workers on D1/R2). Use to run, start, serve, smoke-test, or screenshot GlideComp — seed the sample competitions and verify the comp/scores pages render in a headless browser.
 ---
 
 # Run GlideComp
@@ -41,23 +41,32 @@ screenshots them. Paths below are relative to the repo root.
    returns `200` and the log shows all three Workers `Ready on http://localhost:878x`.
    Stale servers from a prior run? `bun run kill-dev`.
 
-2. **Seed a sample competition** (idempotent; open-distance comp with 50
-   pilots × 2 tasks):
+2. **Seed the sample competitions** (idempotent; seeds all bundled comps,
+   ~1,500 tracks in ~11s):
    ```bash
-   bun run seed:sample big-chip
+   bun run seed
    ```
-   (Omit the slug for the default Corryong Cup GAP comp.)
+   (Pass slugs to seed a subset, e.g. `bun run seed corryong-cup-2026`.)
+   The fabricated fixtures (`big-chip`, `kosci-loop`) seed **hidden** — they're
+   invisible to anonymous visitors and need an admin sign-in to view.
 
 3. **Drive it** — loads the comp, loads its scores, screenshots both, asserts
    the scores table rendered and there were no console errors:
    ```bash
    bun .claude/skills/run-glidecomp/driver.mjs
    ```
-   Expected output ends with `✓ drove Big Chip (Sample) end-to-end`. Screenshots
+   Expected output ends with `✓ drove Corryong Cup 2026 end-to-end`. Screenshots
    land in `.claude/skills/run-glidecomp/shots/` (`comp.png`, `scores.png`) —
-   **open `scores.png` and look at it**; it should show a 50-row scores table,
-   distances descending from ~89 km / ~143 km down to `0` for pilots who
-   landed inside the launch cylinder.
+   **open `scores.png` and look at it**; it should show a ~99-row GAP standings
+   table with per-task points and a descending total (Jon Durand tops it at
+   ~2,433). Known quirk: `comp.png` and `scores.png` currently come out
+   byte-identical — `/comp/:id` carries the standings inline now, so the
+   driver's second stop (`/scores?comp_id=…`) renders the same view.
+
+   To drive the open-distance path instead, use the hidden Big Chip comp — it
+   needs an admin session, since hidden comps 404 anonymously:
+   `COMP_MATCH="Big Chip" bun .claude/skills/run-glidecomp/driver.mjs` will fail
+   at comp discovery until the driver is given a signed-in admin cookie.
 
    Override target with env vars: `BASE_URL`, `COMP_MATCH` (e.g.
    `COMP_MATCH=Corryong bun .claude/skills/run-glidecomp/driver.mjs`).
@@ -145,6 +154,8 @@ cd web/frontend && bunx vitest run     # or: bun run --filter '@glidecomp/fronte
 
 - `GET /api/comp failed` from the driver → dev stack isn't up. Run `bun run
   dev`, wait for `200` on `http://localhost:3000/`.
-- `no comp matching "Big Chip"` → not seeded. `bun run seed:sample big-chip`.
+- `no comp matching "Corryong Cup 2026"` → not seeded. Run `bun run seed`.
+  Note the driver browses anonymously, so it can only find **public** comps —
+  pointing `COMP_MATCH` at Big Chip or Kosciuszko Loop will always fail.
 - Auth/sign-in 404s or every e2e test fails at sign-in → missing
   `web/workers/auth-api/.dev.vars` (see Prerequisites).

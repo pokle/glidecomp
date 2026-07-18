@@ -36,21 +36,28 @@ both local and remote modes. Reserve `--file` for schema/DDL or large batched
 writes whose rows you don't read back. (This is why
 `web/scripts/seed-sample-comp.ts` reads via `--command` and writes via `--file`.)
 
-## Sample competition
+## Sample competitions
 
-`bun run seed:sample` loads the public sample competition (Corryong Cup 2026)
-into D1 + R2, so every user can view it and the 3D replay (`/replay`) can
-pull packed tracks from the competition-api Worker (`GET /api/comp/sample-3dvis`).
-It reads `web/samples/comps/corryong-cup-2026/comp.json`, which lists every task
-with its pilot class (open + floater — see the CLAUDE.md "Updating bundled data"
-notes). Refresh the source folders with `bun web/scripts/download-airscore-comp.ts`.
+`bun run seed` loads the public sample competitions into D1 + R2, so every user
+can view them and the 3D replay (`/replay`) can pull packed tracks from the
+competition-api Worker (`GET /api/comp/sample-3dvis`). With no arguments it seeds
+**every** bundled comp — each folder under `web/samples/comps/` holding a
+`comp.json` (Corryong Cup 2017–2026, Unungra Cup, Big Chip, Kosciuszko Loop);
+pass one or more slugs to seed just those (`bun run seed corryong-cup-2026`).
+The two fabricated fixtures (Big Chip, Kosciuszko Loop) set `"hidden": true` in
+their manifests and seed with the D1 `test` flag, so they stay out of the public
+comp list and 404 for anonymous visitors while admins can still open them.
+Each manifest lists every task with its pilot class (open + floater — see the
+CLAUDE.md "Updating bundled data" notes). Refresh the source folders with
+`bun web/scripts/download-airscore-comp.ts`.
 
-- **Idempotent:** the comp is identified by name (`SAMPLE_COMP_NAME`). Reruns
-  wipe that comp's tasks / pilots / tracks (D1) and IGC objects (R2) and rebuild
-  under the **same `comp_id`** — so a messed-with sample is fixed back up.
-- **Local:** `bun run seed:sample` writes to `web/.wrangler/state` (start the
+- **Idempotent:** each comp is identified by name (its manifest's `comp_name`,
+  else `SAMPLE_COMP_NAME`). Reruns wipe that comp's tasks / pilots / tracks (D1)
+  and IGC objects (R2) and rebuild under the **same `comp_id`** — so a
+  messed-with sample is fixed back up.
+- **Local:** `bun run seed` writes to `web/.wrangler/state` (start the
   dev servers with `bun run dev` to view it).
-- **Production:** `bun run seed:sample --remote` (needs wrangler auth + the same
+- **Production:** `bun run seed --remote` (needs wrangler auth + the same
   `CLOUDFLARE_API_TOKEN` D1/R2 permissions as migrations). Re-run after deploying
   schema changes that affect the sample.
 
