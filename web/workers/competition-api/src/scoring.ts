@@ -730,7 +730,13 @@ export async function computeTaskScore(
   taskId: number,
   db: D1Database,
   r2: R2Bucket,
-  alphabet: string
+  alphabet: string,
+  // A pre-resolved config, when the caller already has one. Field analysis
+  // passes its own so the official ranks it overlays are guaranteed to come
+  // from the SAME parameters/geometry as its re-score — two independent
+  // resolutions could straddle a concurrent task edit — and so the compute
+  // doesn't pay the 4 D1 queries twice.
+  cfg?: TaskScoringConfig
 ): Promise<TaskScoreResponse> {
   const {
     taskRow,
@@ -746,7 +752,7 @@ export async function computeTaskScore(
     scoredClasses,
     scoredTracks,
     dnfByClass,
-  } = await resolveTaskScoringConfig(taskId, db);
+  } = cfg ?? (await resolveTaskScoringConfig(taskId, db));
 
   // Open distance: score each pilot on how far they flew from the take-off
   // exit. Each pilot's open distance is field-independent, so — like the GAP
@@ -781,28 +787,13 @@ export async function computeTaskScore(
         }
 
         if (distance === null) {
-          const object = await r2.get(track.igc_filename);
-          if (!object) return null;
-          const compressed = await object.arrayBuffer();
-          const decompressedStream = new Response(compressed).body!.pipeThrough(
-            new DecompressionStream("gzip")
-          );
-          const igcText = new TextDecoder().decode(
-            await new Response(decompressedStream).arrayBuffer()
-          );
-          let igc;
-          try {
-            igc = parseIGC(igcText);
-          } catch {
-            console.warn(`Skipping unparseable IGC: ${track.igc_filename}`);
-            return null;
-          }
-          if (igc.fixes.length === 0) return null;
+          const fixes = await fetchIgcFixes(r2, track.igc_filename);
+          if (!fixes) return null;
 
           distance = openDistanceForFlight(xcTask, {
             pilotName: track.pilot_name,
             trackFile: track.igc_filename,
-            fixes: igc.fixes,
+            fixes,
           });
 
           analysisWrites.push({
@@ -1261,8 +1252,11 @@ export async function computeTaskFieldAnalysis(
 
   // Official standings — the ranks every correlation is measured against, and
   // the totals the comp aggregate ranks on. Usually cheap: computeTaskScore
-  // reads its per-track analyses from track_analysis rather than R2.
-  const official = await computeTaskScore(taskId, db, r2, alphabet);
+  // reads its per-track analyses from track_analysis rather than R2. Passing
+  // cfg through pins both passes to one parameter resolution — a concurrent
+  // task edit can't put the overlaid ranks on different geometry than the
+  // re-score below.
+  const official = await computeTaskScore(taskId, db, r2, alphabet, cfg);
   const trackFileByPilotId = new Map(
     cfg.scoredTracks.map((t) => [encodeId(alphabet, t.comp_pilot_id), t.igc_filename])
   );
@@ -1275,8 +1269,13 @@ export async function computeTaskFieldAnalysis(
 
     const officialClass = official.classes.find((c) => c.pilot_class === pilotClass);
     const excluded: { pilot_name: string; reason: string }[] = [];
+    // Officially-ranked pilots with no track (manual flight reports). They
+    // can't be analysed, but they DID count toward the official launch
+    // validity — remembered so the re-score's numPresent matches.
+    let trackless = 0;
     for (const entry of officialClass?.pilots ?? []) {
       if (!trackFileByPilotId.has(entry.comp_pilot_id)) {
+        trackless++;
         excluded.push({
           pilot_name: entry.pilot_name,
           reason: "scored from a manual flight report — no tracklog to analyse",
@@ -1311,8 +1310,10 @@ export async function computeTaskFieldAnalysis(
 
     // scoreTask applies the distance-origin trim itself, so it takes the
     // untrimmed task — as does buildFieldContext, whose ENU origin is the
-    // first turnpoint's waypoint.
-    const numPresent = flights.length + (cfg.dnfByClass.get(pilotClass) ?? 0);
+    // first turnpoint's waypoint. numPresent includes the trackless
+    // (manual-flight) pilots so launch validity matches the official score's.
+    const numPresent =
+      flights.length + trackless + (cfg.dnfByClass.get(pilotClass) ?? 0);
     const result = scoreTask(
       cfg.xcTask,
       flights,
@@ -1324,19 +1325,30 @@ export async function computeTaskFieldAnalysis(
     // Overlay the official rank/total on each re-scored pilot (paired by
     // trackFile — never by index, the two arrays sort differently), then
     // re-sort so buildFieldContext's rank ordering is the published one.
+    // A pilot the OFFICIAL pass didn't score (e.g. its R2 read failed there
+    // but succeeded here) is EXCLUDED rather than kept at the re-score's
+    // tracked-subset rank — mixing the two scales would collide rank numbers
+    // and silently distort every correlation.
     const officialByTrackFile = new Map(
       (officialClass?.pilots ?? []).flatMap((entry) => {
         const trackFile = trackFileByPilotId.get(entry.comp_pilot_id);
         return trackFile ? [[trackFile, entry] as const] : [];
       })
     );
-    for (const ps of result.pilotScores) {
+    result.pilotScores = result.pilotScores.filter((ps) => {
       const entry = officialByTrackFile.get(ps.trackFile);
-      if (entry) {
-        ps.rank = entry.rank;
-        ps.totalScore = entry.total_score;
+      if (!entry) {
+        excluded.push({
+          pilot_name: ps.pilotName,
+          reason: "not in the official standings for this task",
+        });
+        return false;
       }
-    }
+      ps.rank = entry.rank;
+      ps.totalScore = entry.total_score;
+      return true;
+    });
+    if (result.pilotScores.length === 0) continue;
     result.pilotScores.sort((a, b) => a.rank - b.rank);
 
     let report: FieldAnalysisReport;
@@ -1669,31 +1681,17 @@ export async function computePilotAnalysis(
   }
 
   if (!payload) {
-    const object = await r2.get(track.igc_filename);
-    if (!object) return null;
-    const compressed = await object.arrayBuffer();
-    const decompressedStream = new Response(compressed).body!.pipeThrough(
-      new DecompressionStream("gzip")
-    );
-    const igcText = new TextDecoder().decode(
-      await new Response(decompressedStream).arrayBuffer()
-    );
-    let igc;
-    try {
-      igc = parseIGC(igcText);
-    } catch {
-      return null;
-    }
-    if (igc.fixes.length === 0) return null;
+    const fixes = await fetchIgcFixes(r2, track.igc_filename);
+    if (!fixes) return null;
 
     const xcTask = parseXCTask(taskRow.xctsk);
     if (scoringFormat === "open_distance") {
       const geometry = openDistanceGeometryForFlight(xcTask, {
         pilotName: "",
         trackFile: track.igc_filename,
-        fixes: igc.fixes,
+        fixes,
       });
-      const furthestFix = geometry ? igc.fixes[geometry.furthest.fixIndex] : null;
+      const furthestFix = geometry ? fixes[geometry.furthest.fixIndex] : null;
       payload = {
         turnpoint_result: null,
         open_distance: geometry
@@ -1719,7 +1717,7 @@ export async function computePilotAnalysis(
     } else {
       const scoringTask = taskForDistanceOrigin(xcTask, distanceOrigin);
       const result = resolveTurnpointSequence(
-        scoringTask, igc.fixes,
+        scoringTask, fixes,
         stopOptions ? { stop: stopOptions } : undefined,
       );
       // Round-trip through JSON so the payload is typed as the wire format

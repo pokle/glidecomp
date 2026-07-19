@@ -267,10 +267,12 @@ function TaskDetailContent() {
         ) : null}
         {/* Field analysis: admin-only while the metrics settle, and
             meaningless without a route or on an open-distance task (which has
-            no legs or speed section to measure against). Unlike the two
-            anchors above this is an SPA route, so it uses a RAC LinkButton
-            and client-routes through the RouterProvider. */}
-        {isAdmin && task.xctsk && comp?.scoring_format !== "open_distance" ? (
+            no legs or speed section to measure against). Requires comp to be
+            LOADED — `comp?.scoring_format !== …` would fail open to a
+            dead-end refusal page whenever the non-critical comp fetch
+            degrades. Unlike the two anchors above this is an SPA route, so
+            it uses a RAC LinkButton through the RouterProvider. */}
+        {isAdmin && task.xctsk && comp && comp.scoring_format !== "open_distance" ? (
           <LinkButton
             variant="outline"
             size="sm"

@@ -31,7 +31,7 @@ CREATE TABLE "task_field_analysis" (
   -- repetitive (~10x on real data), keeping even a 150-pilot task well
   -- inside D1's value limits.
   "report_gz"          BLOB    NOT NULL,
-  "state_key"          TEXT    NOT NULL,            -- computeScoreStateKey at write time; the ETag (fa:-prefixed)
+  "state_key"          TEXT    NOT NULL,            -- computeScoreStateKey at write time; ETag = fa:<analysis_version>:<state_key>
   "computed_at"        TEXT    NOT NULL,            -- ISO, stamped when the compute finished
   "engine_version"     INTEGER NOT NULL DEFAULT 0,  -- SCORING_ENGINE_VERSION the report was computed with
   "analysis_version"   INTEGER NOT NULL DEFAULT 0,  -- FIELD_ANALYSIS_VERSION the report was computed with

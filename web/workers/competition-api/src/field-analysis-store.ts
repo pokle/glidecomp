@@ -195,12 +195,6 @@ export async function bumpFieldAnalysisInputs(
 }
 
 /**
- * The upsert that marks one task's field analysis stale. Exported as a
- * statement (not a query) so bumpScoreInputs() can fold it into its own
- * batch — one transactional bump covering both derived tables, which is what
- * keeps the 28 mutation call sites from ever learning this table exists.
- */
-/**
  * Create a task's placeholder row if it has none, without disturbing an
  * existing one. Distinct from a bump: this claims no pending revision, it
  * just gives the lease lock something to grab.
@@ -226,6 +220,12 @@ export async function ensureFieldAnalysisRow(
   }
 }
 
+/**
+ * The upsert that marks one task's field analysis stale. Exported as a
+ * statement (not a query) so bumpScoreInputs() can run it in its own batch
+ * right after the score bump — which is what keeps the 28 mutation call
+ * sites from ever learning this table exists.
+ */
 export function fieldAnalysisBumpStatement(
   db: D1Database,
   taskId: number
@@ -386,10 +386,15 @@ export async function computeAndStoreFieldAnalysis(
     if (err instanceof FieldAnalysisUnsupported) {
       error = err.message;
     } else {
-      // A real failure (R2 outage, OOM survivor, engine bug). Record it and
-      // leave the row stale-with-error so the next read retries.
+      // A real failure (R2 outage, engine bug on one malformed track). It
+      // MUST land in the error column — rethrowing here would leave the row
+      // at computed_rev = -1, indistinguishable from cold, so the UI would
+      // show "being computed" forever while every page view re-triggered the
+      // whole-field compute: an invisible retry loop with no backoff. Stored
+      // as computed-at-this-rev instead, the row serves the error and stops
+      // retrying; the next input change or an explicit refresh recomputes.
       console.error("field analysis compute failed", err, { taskId });
-      throw err;
+      error = `Analysis failed: ${err instanceof Error ? err.message : String(err)}`;
     }
   }
 

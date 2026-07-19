@@ -104,11 +104,19 @@ export async function readTaskScoreRowsForComp(
  * scored, so the very first mutation already gives readers a transactional
  * staleness signal.
  *
- * The batch bumps BOTH derived tables — `task_scores` and
- * `task_field_analysis` (migration 0019). Field analysis is a function of
- * exactly the same inputs as scores, so one bump covers both and the 28
- * mutation call sites never learn the second table exists. Anything added
- * later that derives from scoring inputs belongs in this batch too.
+ * This bumps BOTH derived tables — `task_scores` and `task_field_analysis`
+ * (migration 0019). Field analysis is a function of exactly the same inputs
+ * as scores, so one call covers both and the 28 mutation call sites never
+ * learn the second table exists. Anything added later that derives from
+ * scoring inputs belongs here too.
+ *
+ * The two bumps run as SEPARATE batches, deliberately: a D1 batch is one
+ * transaction, so folding them together would couple the sacred
+ * "mutation ⇒ scores stale" invariant to the newer table's existence — a
+ * worker deployed against a DB missing migration 0019 would roll back the
+ * task_scores bump along with the failing field-analysis statement, and the
+ * catch would swallow it. Scores bump first; a field-analysis failure then
+ * costs only a stale analysis signal, never a stale score.
  *
  * (The two then revalidate differently: scores eagerly, via
  * scheduleTaskRevalidation below; field analysis lazily, on read — it is far
@@ -123,7 +131,7 @@ export async function bumpScoreInputs(
   if (taskIds.length === 0) return;
   try {
     await db.batch(
-      taskIds.flatMap((id) => [
+      taskIds.map((id) =>
         db
           .prepare(
             `INSERT INTO task_scores (
@@ -133,12 +141,18 @@ export async function bumpScoreInputs(
              ON CONFLICT(task_id) DO UPDATE SET
                inputs_rev = task_scores.inputs_rev + 1`
           )
-          .bind(id),
-        fieldAnalysisBumpStatement(db, id),
-      ])
+          .bind(id)
+      )
     );
   } catch (err) {
     console.error("bumpScoreInputs failed", err, { taskIds });
+  }
+  try {
+    await db.batch(
+      taskIds.map((id) => fieldAnalysisBumpStatement(db, id))
+    );
+  } catch (err) {
+    console.error("bumpScoreInputs (field analysis) failed", err, { taskIds });
   }
 }
 

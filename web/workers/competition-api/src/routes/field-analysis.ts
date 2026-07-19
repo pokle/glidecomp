@@ -35,6 +35,7 @@ import {
   readFieldAnalysisRowsForComp,
   scheduleFieldAnalysisRevalidation,
   type StoredFieldAnalysis,
+  type TaskFieldAnalysisRow,
 } from "../field-analysis-store";
 
 type Variables = {
@@ -120,9 +121,12 @@ export const fieldAnalysisRoutes = new Hono<HonoEnv>()
         if (stale) scheduleFieldAnalysisRevalidation(c, [taskId]);
         // `fa:` prefix because scores and field analysis share the same
         // state_key (identical inputs) — without it a browser could match a
-        // score ETag against this body. The staleness label rides on the
-        // ETag so a stale body can never revalidate a fresh one.
-        const etagKey = `fa:${row.state_key}${stale ? ":stale" : ""}`;
+        // score ETag against this body. analysis_version folded in because a
+        // metrics bump recomputes the body from UNCHANGED scoring inputs —
+        // state_key alone would 304-revalidate the outdated report. The
+        // staleness label rides on the ETag so a stale body can never
+        // revalidate a fresh one.
+        const etagKey = `fa:${row.analysis_version}:${row.state_key}${stale ? ":stale" : ""}`;
         const headers = {
           ETag: toEtag(etagKey),
           "X-Cache": stale ? "HIT-STALE" : "HIT",
@@ -140,6 +144,11 @@ export const fieldAnalysisRoutes = new Hono<HonoEnv>()
             headers
           );
         }
+        // Corrupt blob on a row that claims a result. Self-heal by marking
+        // it stale — without the bump, the cold branch below would schedule
+        // a revalidation that bails as already-fresh, and the task would
+        // read "pending" forever.
+        await bumpFieldAnalysisInputs(c.env.DB, [taskId]);
       }
 
       // A row that computed successfully but produced nothing analysable
@@ -213,6 +222,67 @@ export const fieldAnalysisRoutes = new Hono<HonoEnv>()
 
       const rows = await readFieldAnalysisRowsForComp(c.env.DB, compId);
 
+      // Pass 1 — classify WITHOUT decoding. Everything the ETag and the
+      // scheduling decisions need (state_key, analysis_version, staleness)
+      // lives on the raw rows, and this endpoint is polled with
+      // If-None-Match by the freshness banner — gunzipping every task's
+      // report just to answer 304 would put the endpoint's whole CPU cost
+      // on requests that transfer nothing.
+      //
+      // `pending` = tasks with NO servable report (they really are absent
+      // from the figures). A stale-but-served task is NOT pending — it is
+      // in the aggregate and flagged by `stale` — conflating the two made
+      // the UI claim visible tasks were "left out".
+      const included: { row: TaskFieldAnalysisRow; taskIdNum: number; index: number }[] = [];
+      const scheduleIds: number[] = [];
+      const stateKeys: string[] = [];
+      let pendingCount = 0;
+      let anyStale = false;
+      let oldestComputedAt: string | null = null;
+
+      for (const [i, task] of tasks.results.entries()) {
+        const row = rows.get(task.task_id);
+        if (!row || !fieldRowHasResult(row)) {
+          // No servable report. Schedule unless it is a FRESH refusal
+          // (recomputing would reach the same refusal). A STALE refusal —
+          // "no tracks yet", then tracks arrived — MUST be rescheduled, or
+          // the task silently vanishes from this page forever.
+          if (!row || isFieldRowStale(row)) {
+            scheduleIds.push(task.task_id);
+            pendingCount++;
+          }
+          continue;
+        }
+        if (isFieldRowStale(row)) {
+          anyStale = true;
+          scheduleIds.push(task.task_id); // refresh in background; still served
+        }
+        // analysis_version folded in: a metrics bump recomputes the report
+        // from unchanged scoring inputs, so state_key alone would let a
+        // client 304-revalidate the outdated body.
+        stateKeys.push(`${row.state_key}:${row.analysis_version}`);
+        if (!oldestComputedAt || row.computed_at < oldestComputedAt) {
+          oldestComputedAt = row.computed_at;
+        }
+        included.push({ row, taskIdNum: task.task_id, index: i });
+      }
+
+      if (scheduleIds.length > 0) {
+        scheduleFieldAnalysisRevalidation(c, scheduleIds);
+      }
+
+      const etagKey = `compfa:${compId}:${await shortHash(
+        stateKeys.join("|")
+      )}${anyStale ? ":stale" : ""}`;
+      const headers = {
+        ETag: toEtag(etagKey),
+        "Cache-Control": "private, no-store",
+      };
+      if (ifNoneMatchMatches(c.req.header("If-None-Match"), etagKey)) {
+        return c.body(null, 304, headers);
+      }
+
+      // Pass 2 — a 200 body is actually due: decode and aggregate.
       // Per class: the ordered list of task reports aggregateComp needs.
       // Classes are never mixed (engine aggregate.ts), so a comp with an
       // open and a floater class produces one aggregate each.
@@ -224,36 +294,24 @@ export const fieldAnalysisRoutes = new Hono<HonoEnv>()
         task_date: string;
         label: string;
       }[] = [];
-      const coldTaskIds: number[] = [];
-      const stateKeys: string[] = [];
-      let anyStale = false;
-      let oldestComputedAt: string | null = null;
 
-      for (const [i, task] of tasks.results.entries()) {
-        const row = rows.get(task.task_id);
-        if (!row || !fieldRowHasResult(row)) {
-          // Cold or errored — schedule it (a refusal row won't recompute
-          // needlessly: revalidateFieldAnalysis bails when it's already
-          // fresh) and leave it out of the aggregate.
-          if (!row || !row.error) coldTaskIds.push(task.task_id);
+      for (const { row, taskIdNum, index } of included) {
+        const report: StoredFieldAnalysis | null = await decodeFieldAnalysisRow(row);
+        const task = tasks.results[index];
+        if (!report) {
+          // Corrupt blob. Self-heal: mark it stale so revalidation actually
+          // recomputes (a fresh-looking corrupt row would otherwise bail as
+          // already-fresh and stay unservable forever).
+          pendingCount++;
+          await bumpFieldAnalysisInputs(c.env.DB, [taskIdNum]);
+          scheduleFieldAnalysisRevalidation(c, [taskIdNum]);
           continue;
         }
-        const report: StoredFieldAnalysis | null = await decodeFieldAnalysisRow(row);
-        if (!report) continue;
 
-        if (isFieldRowStale(row)) {
-          anyStale = true;
-          coldTaskIds.push(task.task_id);
-        }
-        stateKeys.push(row.state_key);
-        if (!oldestComputedAt || row.computed_at < oldestComputedAt) {
-          oldestComputedAt = row.computed_at;
-        }
-
-        const label = taskLabel(task.name, i);
+        const label = taskLabel(task.name, index);
         taskLabels.push(label);
         includedTasks.push({
-          task_id: encodeId(alphabet, task.task_id),
+          task_id: encodeId(alphabet, taskIdNum),
           task_name: task.name,
           task_date: task.task_date,
           label,
@@ -271,25 +329,10 @@ export const fieldAnalysisRoutes = new Hono<HonoEnv>()
         }
       }
 
-      if (coldTaskIds.length > 0) {
-        scheduleFieldAnalysisRevalidation(c, coldTaskIds);
-      }
-
       const classes = [...byClass.entries()].map(([pilotClass, taskResults]) => ({
         pilot_class: pilotClass,
         aggregate: aggregateComp(taskResults),
       }));
-
-      const etagKey = `compfa:${compId}:${await shortHash(
-        stateKeys.join("|")
-      )}${anyStale ? ":stale" : ""}`;
-      const headers = {
-        ETag: toEtag(etagKey),
-        "Cache-Control": "private, no-store",
-      };
-      if (ifNoneMatchMatches(c.req.header("If-None-Match"), etagKey)) {
-        return c.body(null, 304, headers);
-      }
 
       return c.json(
         {
@@ -300,7 +343,7 @@ export const fieldAnalysisRoutes = new Hono<HonoEnv>()
           classes,
           computed_at: oldestComputedAt,
           stale: anyStale,
-          pending_task_count: coldTaskIds.length,
+          pending_task_count: pendingCount,
           total_task_count: tasks.results.length,
         },
         200,

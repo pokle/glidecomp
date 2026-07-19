@@ -89,26 +89,20 @@ export function PerPilotMetricTable({
       ),
     }));
     const col = String(sort.column);
-    const sorted = [...base].sort((a, b) => {
-      if (col === "rank") return a.rank - b.rank;
-      if (col === "pilot") return a.pilotName.localeCompare(b.pilotName);
+    const dir = sort.direction === "descending" ? -1 : 1;
+    return [...base].sort((a, b) => {
+      if (col === "rank") return dir * (a.rank - b.rank);
+      if (col === "pilot") return dir * a.pilotName.localeCompare(b.pilotName);
       const av = a.values.get(col)?.value ?? null;
       const bv = b.values.get(col)?.value ?? null;
-      // Nulls sort last in both directions — "not applicable" is not a score
-      // of zero, and burying it under a descending sort would imply it is.
+      // Nulls sort last in BOTH directions (checked before `dir` applies) —
+      // "not applicable" is not a score of zero, and reversing it to the top
+      // under a descending sort would imply it is.
       if (av === null && bv === null) return 0;
       if (av === null) return 1;
       if (bv === null) return -1;
-      return av - bv;
+      return dir * (av - bv);
     });
-    if (sort.direction === "descending" && col !== "rank") {
-      // Keep the nulls at the bottom rather than reversing them to the top.
-      const present = sorted.filter((r) => r.values.get(col)?.value != null || col === "pilot");
-      const absent = sorted.filter((r) => !(r.values.get(col)?.value != null || col === "pilot"));
-      return [...present.reverse(), ...absent];
-    }
-    if (sort.direction === "descending") return [...sorted].reverse();
-    return sorted;
   }, [report.pilots, metrics, valuesByMetric, sort]);
 
   return (

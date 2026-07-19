@@ -40,7 +40,10 @@ export function MetricExplanation({
       <Button
         variant="ghost"
         size="icon"
-        className="size-5 text-muted-foreground"
+        // size-6 (24px), the accessibility standard's §4.5 pointer-target
+        // floor (WCAG 2.5.8) — this button sits crowded inside sortable
+        // column headers, so it gets no spacing exemption.
+        className="size-6 text-muted-foreground"
         // A real accessible name, not a title attribute — the icon alone is
         // not a label, and title tooltips are unavailable to keyboard users.
         aria-label={`How ${label} is measured`}

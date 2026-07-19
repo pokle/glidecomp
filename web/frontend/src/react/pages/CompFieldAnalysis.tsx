@@ -49,11 +49,16 @@ function CompFieldAnalysisContent() {
     ? `/api/comp/${encodeURIComponent(compId)}/field-analysis`
     : null;
 
+  // refetchTick > 0 re-runs the fetch without flashing the loading state —
+  // the pending-poll effect below bumps it while tasks compute in the
+  // background.
+  const [refetchTick, setRefetchTick] = useState(0);
+
   useEffect(() => {
     if (!compId || !analysisUrl) return;
     let cancelled = false;
     (async () => {
-      setStatus("loading");
+      if (refetchTick === 0) setStatus("loading");
       try {
         const res = await fetch(analysisUrl, { credentials: "include" });
         if (cancelled) return;
@@ -77,7 +82,28 @@ function CompFieldAnalysisContent() {
     return () => {
       cancelled = true;
     };
-  }, [compId, analysisUrl]);
+  }, [compId, analysisUrl, refetchTick]);
+
+  // While any task's first analysis computes in the background, refetch so
+  // the aggregate fills in as reports land — mirrors the task page's pending
+  // poll. Backs off 3s → 10s, gives up after ~2 minutes.
+  const pendingTasks = status === "ready" && (data?.pending_task_count ?? 0) > 0;
+  useEffect(() => {
+    if (!pendingTasks) return;
+    const startedAt = Date.now();
+    let delay = 3_000;
+    let timer: number | undefined;
+    const schedule = () => {
+      if (Date.now() - startedAt > 120_000) return;
+      timer = window.setTimeout(() => {
+        if (!document.hidden) setRefetchTick((t) => t + 1);
+        else schedule();
+      }, delay);
+      delay = Math.min(delay * 1.5, 10_000);
+    };
+    schedule();
+    return () => window.clearTimeout(timer);
+  }, [pendingTasks, refetchTick]);
 
   useEffect(() => {
     if (!compId) return;
@@ -168,8 +194,7 @@ function CompFieldAnalysisContent() {
           timezone={comp?.timezone ?? null}
           etag={etag}
           pollUrl={analysisUrl}
-          noun="Analysis"
-          verb="recomputed"
+          variant="analysis"
         />
       ) : null}
 
@@ -181,7 +206,7 @@ function CompFieldAnalysisContent() {
           </AlertTitle>
           <AlertDescription>
             They're being computed in the background and are left out of the
-            figures below. Reload in a moment.
+            figures below; this page refreshes itself as they land.
           </AlertDescription>
         </Alert>
       ) : null}

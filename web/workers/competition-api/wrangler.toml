@@ -16,12 +16,14 @@ mode = "smart"
 # task's decompressed tracklogs in memory and runs the thermal/glide/circle
 # detectors plus a cross-pilot time grid over them (~0.4 s for 32 pilots,
 # extrapolating to a couple of seconds for a large field). That runs inside
-# waitUntil, sharing the invocation's CPU budget. The paid-plan default is
-# already 30 s, but state it explicitly so the ceiling is a reviewed decision
-# rather than an inherited one. See MAX_FIELD_ANALYSIS_TRACKS in scoring.ts —
-# memory, not CPU, is the real limit.
+# waitUntil, sharing the invocation's CPU budget. 30 000 ms IS the paid-plan
+# default — stated explicitly so the ceiling is a reviewed decision rather
+# than an inherited one, and left AT the default because raising it would
+# also raise the kill ceiling for every other route (e.g. a pathological IGC
+# upload spinning the parser). See MAX_FIELD_ANALYSIS_TRACKS in scoring.ts —
+# memory, not CPU, is the real limit for field analysis.
 [limits]
-cpu_ms = 60000
+cpu_ms = 30000
 
 [[d1_databases]]
 binding = "DB"

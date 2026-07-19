@@ -500,6 +500,67 @@ describe("field analysis invalidation is shared with scores", () => {
 });
 
 describe("comp-level aggregate", () => {
+  test("a stale-but-served task is NOT counted pending, and a stale refusal IS", async () => {
+    const t = await seedTask();
+    await computeAndStoreFieldAnalysis(env, t.taskIdNum, 0);
+
+    // Second task: a refusal row (no tracks), then its inputs move — the
+    // "tracks arrived after the refusal" shape that must be rescheduled and
+    // reported pending, not silently dropped from the comp page forever.
+    const second = await env.DB.prepare(
+      `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk)
+       VALUES (?, 'Task 2', '2026-01-16', '2026-01-01T00:00:00Z', ?)`
+    )
+      .bind(t.compIdNum, env.SAMPLE_TASK_XCTSK)
+      .run();
+    const secondId = second.meta.last_row_id;
+    await env.DB.prepare(
+      `INSERT INTO task_class (task_id, pilot_class) VALUES (?, 'open')`
+    )
+      .bind(secondId)
+      .run();
+    const refusal = await computeAndStoreFieldAnalysis(env, secondId, 0);
+    expect(refusal.error).toMatch(/needs tracks/i);
+
+    // Mark BOTH stale (as any scoring-input mutation would).
+    await env.DB.prepare(
+      `UPDATE task_field_analysis SET inputs_rev = inputs_rev + 1`
+    ).run();
+
+    const res = await adminGet(t.compPath);
+    const data = (await res.json()) as {
+      stale: boolean;
+      pending_task_count: number;
+      task_labels: string[];
+    };
+    // The served-but-stale first task is in the aggregate — pending would
+    // falsely tell the admin it was "left out of the figures below".
+    expect(data.task_labels).toEqual(["T1"]);
+    expect(data.stale).toBe(true);
+    // The stale REFUSAL is genuinely absent, so it IS pending (and got
+    // rescheduled — pre-fix it was skipped entirely and vanished forever).
+    expect(data.pending_task_count).toBe(1);
+  });
+
+  test("a real compute failure lands in the error column instead of pending forever", async () => {
+    const t = await seedTask();
+    // Delete every track object from R2 but keep the D1 rows: fetchIgcFixes
+    // returns null for all of them, which surfaces as an Unsupported "no
+    // analysable tracks" refusal — stored, not thrown, so the row is fresh
+    // with an explanation rather than an invisible retry loop.
+    const listed = await env.R2.list();
+    await Promise.all(listed.objects.map((o) => env.R2.delete(o.key)));
+
+    const stored = await computeAndStoreFieldAnalysis(env, t.taskIdNum, 0);
+    expect(stored.report).toBeNull();
+    expect(stored.error).not.toBe("");
+
+    const res = await adminGet(t.path);
+    const data = (await res.json()) as ServedAnalysis;
+    expect(data.pending).toBe(false);
+    expect(data.error).not.toBeNull();
+  });
+
   test("aggregates the stored task reports and reports pending tasks", async () => {
     const t = await seedTask();
 

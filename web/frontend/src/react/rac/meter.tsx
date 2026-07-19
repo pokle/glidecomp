@@ -11,19 +11,9 @@
  * bar grows toward, never by colour alone, and the signed number is always
  * printed beside it (WCAG 1.4.1 Use of Color).
  */
-import {
-  Meter as AriaMeter,
-  type MeterProps as AriaMeterProps,
-} from "react-aria-components";
+import { Meter as AriaMeter } from "react-aria-components";
 
 import { cn } from "@/react/lib/utils";
-
-export function Meter({
-  className,
-  ...props
-}: Omit<AriaMeterProps, "className"> & { className?: string }) {
-  return <AriaMeter className={cn("flex items-center", className)} {...props} />;
-}
 
 /**
  * A bar growing left or right from a centred zero axis.
@@ -51,7 +41,7 @@ export function DivergingMeter({
   const text = valueLabel ?? clamped.toFixed(2);
 
   return (
-    <Meter
+    <AriaMeter
       // aria-valuenow must be the magnitude to sit inside minValue/maxValue,
       // so aria-valuetext (via valueLabel) carries the signed reading — that
       // is what a screen reader actually announces.
@@ -60,7 +50,7 @@ export function DivergingMeter({
       maxValue={1}
       aria-label={label}
       valueLabel={text}
-      className={cn("w-full", className)}
+      className={cn("flex w-full items-center", className)}
     >
       <div
         aria-hidden
@@ -78,6 +68,6 @@ export function DivergingMeter({
           }
         />
       </div>
-    </Meter>
+    </AriaMeter>
   );
 }

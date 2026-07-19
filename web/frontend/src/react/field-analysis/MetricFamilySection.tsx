@@ -7,6 +7,7 @@
  * top-3 metric open by default — the separation ranking above just told the
  * reader those are the ones worth opening.
  */
+import { useMemo } from "react";
 import { Disclosure } from "@/react/rac/disclosure";
 import { Badge } from "@/react/rac/badge";
 import { PerPilotMetricTable } from "./PerPilotMetricTable";
@@ -27,15 +28,18 @@ export function MetricFamilySection({
   report: FieldAnalysisReport;
   defaultExpanded?: boolean;
 }) {
+  // Field-level metrics (wind, climb-by-hour) carry no per-pilot values at
+  // all; a column of dashes for them is noise, so they only contribute their
+  // summaries and extra tables below. Memoized so PerPilotMetricTable's own
+  // useMemos (keyed on this array's identity) survive parent re-renders.
+  const perPilotMetrics = useMemo(
+    () => metrics.filter((m) => m.perPilot.some((p) => p.value !== null)),
+    [metrics]
+  );
+
   if (metrics.length === 0) return null;
 
   const best = bestAbsRho(metrics);
-  // Field-level metrics (wind, climb-by-hour) carry no per-pilot values at
-  // all; a column of dashes for them is noise, so they only contribute their
-  // summaries and extra tables below.
-  const perPilotMetrics = metrics.filter((m) =>
-    m.perPilot.some((p) => p.value !== null)
-  );
   const failed = metrics.filter((m) => m.error);
 
   return (

@@ -69,11 +69,15 @@ function TaskFieldAnalysisContent() {
       ? `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/field-analysis`
       : null;
 
+  // refetchTick > 0 re-runs the fetch without flashing the loading state —
+  // the pending-poll effect below bumps it until the background compute lands.
+  const [refetchTick, setRefetchTick] = useState(0);
+
   useEffect(() => {
     if (!compId || !taskId || !analysisUrl) return;
     let cancelled = false;
     (async () => {
-      setStatus("loading");
+      if (refetchTick === 0) setStatus("loading");
       try {
         const res = await fetch(analysisUrl, { credentials: "include" });
         if (cancelled) return;
@@ -109,7 +113,31 @@ function TaskFieldAnalysisContent() {
     return () => {
       cancelled = true;
     };
-  }, [compId, taskId, analysisUrl]);
+  }, [compId, taskId, analysisUrl, refetchTick]);
+
+  // While the first-ever compute runs in the background (the cold path never
+  // computes on the request), poll by refetching — the pending banner
+  // promises "this page refreshes itself". Backs off 3s → 10s and gives up
+  // after ~2 minutes (the banner stays; a manual reload picks up whatever is
+  // newest). The ScoreFreshness ETag poll can't cover this: the pending
+  // response has no stored body to validate against.
+  const pending = status === "ready" && data?.pending === true;
+  useEffect(() => {
+    if (!pending) return;
+    const startedAt = Date.now();
+    let delay = 3_000;
+    let timer: number | undefined;
+    const schedule = () => {
+      if (Date.now() - startedAt > 120_000) return;
+      timer = window.setTimeout(() => {
+        if (!document.hidden) setRefetchTick((t) => t + 1);
+        else schedule();
+      }, delay);
+      delay = Math.min(delay * 1.5, 10_000);
+    };
+    schedule();
+    return () => window.clearTimeout(timer);
+  }, [pending, refetchTick]);
 
   // Task + comp names for the heading and breadcrumbs. Non-critical: the
   // analysis renders fine without them.
@@ -278,8 +306,7 @@ function TaskFieldAnalysisContent() {
           timezone={comp?.timezone ?? null}
           etag={etag}
           pollUrl={analysisUrl}
-          noun="Analysis"
-          verb="recomputed"
+          variant="analysis"
         />
       ) : null}
 
