@@ -296,16 +296,25 @@ components so future work stays consistent:
 - **Breadcrumbs** — same label for the same destination everywhere
   ("Competitions"). The pilot score page carries the full
   `Competitions › comp › task` trail; the full-screen tools carry the
-  top-center bar described in §3. Two variants coexist during the RAC
-  migration (see the RAC adoption guide, gotcha #11):
-  - **ARIA-native** — `src/react/rac/breadcrumbs.tsx` (task page, and the
-    pattern to adopt app-wide): ancestor links followed by the current page
-    as a final `aria-current="page"` crumb, per the WAI-ARIA breadcrumb
-    pattern. The H1 below still names the page; the crumb duplicates it
-    deliberately, as the "you are here" anchor.
-  - **Parents-only** — `src/react/components/Breadcrumbs.tsx` (unconverted
-    pages): the current page is never a crumb, because the H1 directly
-    below is the current-page marker (GOV.UK "up links" style).
+  top-center bar described in §3. One component app-wide (see the RAC
+  adoption guide, gotcha #11): **ARIA-native** —
+  `src/react/rac/breadcrumbs.tsx`, ancestor links followed by the current
+  page as a final `aria-current="page"` crumb, per the WAI-ARIA breadcrumb
+  pattern. The H1 below still names the page; the crumb duplicates it
+  deliberately, as the "you are here" anchor. Ancestors come from
+  `src/react/lib/crumbs.ts` — never hand-rolled — so the same destination
+  always gets the same label and the same fallback while data loads. A
+  parents-only variant (`components/Breadcrumbs.tsx`, GOV.UK "up links"
+  style, current page omitted) coexisted through the RAC migration; it was
+  removed once every page converted, because two conventions made trail
+  depth inconsistent between sibling pages.
+- **The trail is the information architecture, not the history.** A page's
+  parent crumb is where it *belongs*, which is not always where you came
+  from: the per-task field analysis
+  (`/comp/:compId/analysis/task/:taskId`) is a chapter of the comp's field
+  analysis, so it parents on that report even though the task page also
+  links to it. Cross-links between subtrees get an explicit sibling link on
+  the destination ("View task") rather than a bent breadcrumb.
 - **One Submit track dialog everywhere** (`comp/SubmitTrackDialog.tsx`):
   every Submit track button opens the same dialog; the "Submitting for" row
   is always visible (locked to "Myself" for plain pilots, registered-pilot

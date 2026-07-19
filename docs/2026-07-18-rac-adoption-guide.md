@@ -131,9 +131,10 @@ gotchas).
     disables that item's `Link` and sets `aria-current`. So you must pass the
     current page as the last item; if you (wrongly) end the trail on a parent
     link, RAC disables it (this was the original task-page bug — the comp crumb
-    was last and came out disabled). This differs from the older parents-only
-    `components/Breadcrumbs.tsx` (react-router `<Link>`s, no current-page crumb,
-    relies on the H1 below) — the RAC one is the pattern to adopt app-wide. RAC's
+    was last and came out disabled). This is now the app's ONLY breadcrumb
+    component: the older parents-only `components/Breadcrumbs.tsx` (react-router
+    `<Link>`s, no current-page crumb, relied on the H1 below) has been deleted
+    and its three pages converted. Pass `items` from `lib/crumbs.ts`. RAC's
     `Breadcrumbs` renders a bare `<ol>`, so the kit wraps it in a
     `<nav aria-label="Breadcrumb">` landmark. Verified live (comp crumb
     navigates, current crumb carries `aria-current="page"`) + clean `:task`

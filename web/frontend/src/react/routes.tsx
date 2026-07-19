@@ -7,7 +7,14 @@
  * (it runs on the server too). The toaster (a body-level portal) is rendered
  * only by the client entry.
  */
-import { Link, Navigate, Route, Routes } from "react-router-dom";
+import {
+  Link,
+  Navigate,
+  Route,
+  Routes,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { ConfirmProvider } from "./lib/confirm";
 import { UserProvider } from "./lib/user";
 import { Shell } from "./components/Shell";
@@ -32,6 +39,23 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     <UserProvider>
       <ConfirmProvider>{children}</ConfirmProvider>
     </UserProvider>
+  );
+}
+
+/**
+ * The per-task field analysis moved from /comp/:c/task/:t/analysis to
+ * /comp/:c/analysis/task/:t. Keeps old links (and anyone's open tab) working.
+ * `?class=` is carried across — it's the shareable part of the URL.
+ */
+function TaskAnalysisRedirect() {
+  const { compId, taskId } = useParams();
+  const [searchParams] = useSearchParams();
+  const query = searchParams.toString();
+  return (
+    <Navigate
+      replace
+      to={`/comp/${compId}/analysis/task/${taskId}${query ? `?${query}` : ""}`}
+    />
   );
 }
 
@@ -71,15 +95,23 @@ export function AppRoutes() {
         <Route path="/comp" element={<Competitions />} />
         <Route path="/comp/:compId" element={<CompDetail />} />
         <Route path="/comp/:compId/waypoints" element={<CompWaypoints />} />
-        {/* Field analysis (behavioural metrics). Admin-gated by the API and
-            deliberately NOT server-rendered — functions/comp/[[path]].ts has
-            no ROUTES entry for these, so a hard reload falls through to the
-            plain SPA shell (with noindex). */}
+        {/* Field analysis (behavioural metrics). One report per competition,
+            with a chapter per task NESTED UNDER IT — the per-task page is a
+            drill-down of the comp report, not a leaf of the task page, so
+            "up one level" lands back in the report where the other tasks are.
+            Admin-gated by the API and deliberately NOT server-rendered —
+            functions/comp/[[path]].ts has no ROUTES entry for these, so a hard
+            reload falls through to the plain SPA shell (with noindex). */}
         <Route path="/comp/:compId/analysis" element={<CompFieldAnalysis />} />
+        <Route
+          path="/comp/:compId/analysis/task/:taskId"
+          element={<TaskFieldAnalysis />}
+        />
         <Route path="/comp/:compId/task/:taskId" element={<TaskDetail />} />
+        {/* Where the per-task analysis lived until the re-nesting above. */}
         <Route
           path="/comp/:compId/task/:taskId/analysis"
-          element={<TaskFieldAnalysis />}
+          element={<TaskAnalysisRedirect />}
         />
         <Route
           path="/comp/:compId/task/:taskId/pilot/:pilotId"

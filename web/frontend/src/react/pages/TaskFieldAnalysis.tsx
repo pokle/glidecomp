@@ -9,6 +9,11 @@
  * Its own page rather than a section on the task page: it is a long,
  * exploratory read that shouldn't compete with the official standings.
  *
+ * Lives at /comp/:compId/analysis/task/:taskId — a chapter of the comp's
+ * field analysis, NOT a leaf of the task page, so the breadcrumb's parent is
+ * that report and the H1 is the task's name (the section name is already in
+ * the trail). The task page is a sibling link in the header.
+ *
  * NOT SSR'd — admin-gated and private, so functions/comp/[[path]].ts falls
  * through to the plain SPA shell for this URL (with noindex). Everything
  * here fetches on mount.
@@ -21,10 +26,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Badge } from "@/react/rac/badge";
-import { Button } from "@/react/rac/button";
+import { Button, LinkButton } from "@/react/rac/button";
 import { SimpleSelect } from "@/react/rac/select";
-import { RacRouterProvider } from "@/react/rac/router";
 import { Alert, AlertDescription, AlertTitle } from "@/react/ui/alert";
+import { underCompAnalysis } from "../lib/crumbs";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { toast } from "../lib/toast";
@@ -45,14 +50,6 @@ import {
 import type { CompDetailData, TaskDetailData } from "../comp/types";
 
 export function TaskFieldAnalysis() {
-  return (
-    <RacRouterProvider>
-      <TaskFieldAnalysisContent />
-    </RacRouterProvider>
-  );
-}
-
-function TaskFieldAnalysisContent() {
   const { compId, taskId } = useParams<{ compId: string; taskId: string }>();
   const { user, loading: userLoading } = useUser();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -222,11 +219,10 @@ function TaskFieldAnalysisContent() {
     }
   }
 
-  const crumbs = [
-    { label: "Competitions", to: "/comp" },
-    { label: comp?.name ?? "Competition", to: `/comp/${compId}` },
-    { label: task?.name ?? "Task", to: `/comp/${compId}/task/${taskId}` },
-  ];
+  // Parented on the comp's field analysis, not the task page — this is one
+  // chapter of that report, and "up" should return to the other chapters.
+  const crumbs = underCompAnalysis(compId, comp?.name);
+  const heading = task?.name ?? "Task";
 
   if (userLoading || status === "loading") {
     return (
@@ -239,8 +235,8 @@ function TaskFieldAnalysisContent() {
   if (status === "forbidden") {
     return (
       <div className="mx-auto max-w-6xl px-4 py-6">
-        <Breadcrumbs items={crumbs} current="Field analysis" />
-        <h1 className="mt-3 text-2xl font-bold">Field analysis</h1>
+        <Breadcrumbs items={crumbs} current={heading} />
+        <h1 className="mt-3 text-2xl font-bold">{heading}</h1>
         <Alert className="mt-4">
           <AlertTitle>Not available</AlertTitle>
           <AlertDescription>
@@ -256,8 +252,8 @@ function TaskFieldAnalysisContent() {
   if (status === "error") {
     return (
       <div className="mx-auto max-w-6xl px-4 py-6">
-        <Breadcrumbs items={crumbs} current="Field analysis" />
-        <h1 className="mt-3 text-2xl font-bold">Field analysis</h1>
+        <Breadcrumbs items={crumbs} current={heading} />
+        <h1 className="mt-3 text-2xl font-bold">{heading}</h1>
         <Alert className="mt-4">
           <AlertTitle>Could not load the field analysis</AlertTitle>
           <AlertDescription>Please try again in a moment.</AlertDescription>
@@ -268,18 +264,27 @@ function TaskFieldAnalysisContent() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      <Breadcrumbs items={crumbs} current="Field analysis" />
+      <Breadcrumbs items={crumbs} current={heading} />
 
       <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold">Field analysis</h1>
+          <h1 className="text-2xl font-bold">{heading}</h1>
           <p className="text-sm text-muted-foreground">
-            {task?.name ?? "This task"} — how the field actually flew, and which
-            behaviours separated it.
+            How the field actually flew this task, and which behaviours
+            separated it.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline">Admins only</Badge>
+          {/* The trail now goes up to the comp report, so the task page — a
+              genuine sibling relationship — gets an explicit link here. */}
+          <LinkButton
+            variant="outline"
+            size="sm"
+            href={`/comp/${compId}/task/${taskId}`}
+          >
+            View task
+          </LinkButton>
           {isAdmin ? (
             <Button
               variant="outline"
