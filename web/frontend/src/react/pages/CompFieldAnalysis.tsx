@@ -19,6 +19,7 @@ import { RacRouterProvider } from "@/react/rac/router";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { DivergingMeter } from "@/react/rac/meter";
 import { Alert, AlertDescription, AlertTitle } from "@/react/ui/alert";
+import { RhoSparkline } from "../field-analysis/charts/RhoSparkline";
 import { api } from "../../comp/api";
 import { useUser } from "../lib/user";
 import { ScoreFreshness } from "../comp/ScoreFreshness";
@@ -266,6 +267,12 @@ function CompFieldAnalysisContent() {
                 <Column isRowHeader className="min-w-56">
                   Metric
                 </Column>
+                <Column
+                  className="w-28"
+                  aria-label="Per-task correlation trend, visual"
+                >
+                  Trend
+                </Column>
                 {active.aggregate.taskLabels.map((label) => (
                   <Column
                     key={label}
@@ -292,6 +299,13 @@ function CompFieldAnalysisContent() {
                         descriptions (they live on the per-task reports), and
                         an empty popover is worse than none. */}
                     <Cell className="whitespace-normal">{m.label}</Cell>
+                    <Cell>
+                      <RhoSparkline
+                        perTaskRho={m.perTaskRho}
+                        taskLabels={active.aggregate.taskLabels}
+                        metricLabel={m.label}
+                      />
+                    </Cell>
                     {m.perTaskRho.map((rho, i) => (
                       <Cell key={i} className="text-right tabular-nums">
                         {rho === null ? (

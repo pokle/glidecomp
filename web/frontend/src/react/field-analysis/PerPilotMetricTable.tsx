@@ -17,8 +17,8 @@ import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/ta
 import { MetricExplanation, directionWords } from "./MetricExplanation";
 import { formatMetricValue, type MetricReport, type FieldAnalysisReport } from "./types";
 
-/** Unit names as words, for the column's accessible name. */
-function unitWords(unit: string): string {
+/** Unit names as words, for accessible names (also used by the charts). */
+export function unitWords(unit: string): string {
   switch (unit) {
     case "pct":
       return "percent";
