@@ -10,7 +10,7 @@
 import { useMemo } from "react";
 import { cn } from "@/react/lib/utils";
 import { formatMetricValue, type MetricReport } from "../types";
-import { unitWords } from "../PerPilotMetricTable";
+import { unitWords } from "../units";
 import { extent, formatTickValue, linearScale, quantileSorted } from "./chart-utils";
 
 export function DistributionStrip({

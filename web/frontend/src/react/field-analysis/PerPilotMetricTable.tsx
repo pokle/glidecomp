@@ -15,31 +15,9 @@ import { useMemo, useState } from "react";
 import type { SortDescriptor } from "react-aria-components";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { MetricExplanation, directionWords } from "./MetricExplanation";
+import { unitWords } from "./units";
+import { usePilotHighlight } from "./PilotHighlightContext";
 import { formatMetricValue, type MetricReport, type FieldAnalysisReport } from "./types";
-
-/** Unit names as words, for accessible names (also used by the charts). */
-export function unitWords(unit: string): string {
-  switch (unit) {
-    case "pct":
-      return "percent";
-    case "m":
-      return "metres";
-    case "m/s":
-      return "metres per second";
-    case "km/h":
-      return "kilometres per hour";
-    case "s":
-      return "seconds";
-    case "min":
-      return "minutes";
-    case "count":
-      return "count";
-    case "ratio":
-      return "ratio";
-    default:
-      return unit;
-  }
-}
 
 /**
  * The column's accessible name. WCAG 2.5.3 (Label in Name) requires the
@@ -66,6 +44,9 @@ export function PerPilotMetricTable({
     column: "rank",
     direction: "ascending",
   });
+  // Page-wide pilot highlight (no-op outside the provider) — rows both emit
+  // it on hover and tint when some chart is pointing at their pilot.
+  const { highlight, setHighlight } = usePilotHighlight();
 
   const valuesByMetric = useMemo(() => {
     // perPilot is aligned to report.pilots by construction (evaluateField
@@ -137,6 +118,7 @@ export function PerPilotMetricTable({
                 unit={m.unit}
                 direction={m.direction}
                 explanation={m.explanation}
+                perPilot={m.perPilot}
               />
             </span>
           </Column>
@@ -144,7 +126,12 @@ export function PerPilotMetricTable({
       </TableHeader>
       <TableBody>
         {rows.map((pilot) => (
-          <Row key={pilot.trackFile}>
+          <Row
+            key={pilot.trackFile}
+            className={highlight === pilot.trackFile ? "bg-accent" : undefined}
+            onHoverStart={() => setHighlight(pilot.trackFile)}
+            onHoverEnd={() => setHighlight(null)}
+          >
             <Cell className="text-right tabular-nums text-muted-foreground">
               {pilot.rank}
             </Cell>

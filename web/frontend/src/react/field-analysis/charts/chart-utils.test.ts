@@ -1,12 +1,42 @@
 import { describe, expect, it } from "vitest";
 import {
+  directionAdjustedPercentile,
   extent,
   formatTickValue,
   linearScale,
   niceTicks,
+  percentileRank,
   quantileSorted,
   spreadLabels,
 } from "./chart-utils";
+
+describe("percentileRank", () => {
+  it("ranks by share of field below, midrank for ties", () => {
+    expect(percentileRank([1, 2, 3, 4], 4)).toBe(87.5);
+    expect(percentileRank([1, 2, 3, 4], 1)).toBe(12.5);
+    expect(percentileRank([1, 2, 2, 4], 2)).toBe(50);
+  });
+  it("a lone value is the 50th percentile", () => {
+    expect(percentileRank([7], 7)).toBe(50);
+  });
+  it("empty field is NaN", () => {
+    expect(percentileRank([], 5)).toBeNaN();
+  });
+});
+
+describe("directionAdjustedPercentile", () => {
+  const field = [1, 2, 3, 4];
+  it("keeps higher-is-better as-is", () => {
+    expect(directionAdjustedPercentile("higher", field, 4)).toBe(87.5);
+  });
+  it("inverts lower-is-better so 100 = best", () => {
+    expect(directionAdjustedPercentile("lower", field, 1)).toBe(87.5);
+  });
+  it("leaves neutral raw — position, not quality", () => {
+    expect(directionAdjustedPercentile("neutral", field, 4)).toBe(87.5);
+    expect(directionAdjustedPercentile("neutral", field, 1)).toBe(12.5);
+  });
+});
 
 describe("formatTickValue", () => {
   it("suffixes percentages without a space", () => {
