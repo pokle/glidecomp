@@ -102,8 +102,12 @@ export function ScoreFreshness({
   timezone,
   etag = null,
   pollUrl = null,
+  noun = "Scores",
+  verb = "re-scored",
+  pending = false,
 }: {
-  /** ISO compute timestamp; null (comp with no scored tasks) renders nothing. */
+  /** ISO compute timestamp; null (comp with no scored tasks) renders nothing,
+   * unless `pending` — a first-ever compute has no timestamp yet. */
   computedAt: string | null;
   stale: boolean;
   /** Comp IANA zone; the timestamp defaults to it, else the viewer's local zone. */
@@ -112,29 +116,52 @@ export function ScoreFreshness({
   etag?: string | null;
   /** Endpoint to poll for the re-score landing; usually the one that served the data. */
   pollUrl?: string | null;
+  /** What is being computed, sentence-initial. Field analysis passes "Analysis". */
+  noun?: string;
+  /** How the recompute reads in prose. Field analysis passes "recomputed". */
+  verb?: string;
+  /** No previous result at all (the field-analysis cold path, which never
+   * computes on the request). Shows "being computed for the first time"
+   * rather than a stale-results warning about results that don't exist. */
+  pending?: boolean;
 }) {
   const rescore = useRescorePoll(stale, etag, pollUrl);
+
+  if (pending) {
+    return (
+      <div className="mt-2">
+        <Alert role="status" aria-live="polite">
+          <AlertTitle>{noun} are being computed for the first time…</AlertTitle>
+          <AlertDescription>
+            This runs in the background over every pilot's tracklog. Reload in a
+            moment.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   if (!computedAt) return null;
 
   return (
     <div className="mt-2 space-y-2">
       <p className="text-sm text-muted-foreground">
-        Scores computed <Timestamp value={computedAt} compTimezone={timezone} />
+        {noun} computed <Timestamp value={computedAt} compTimezone={timezone} />
       </p>
       {rescore === "rescoring" ? (
         <Alert role="status" aria-live="polite">
-          <AlertTitle>Hold tight, scores are being re-scored…</AlertTitle>
+          <AlertTitle>Hold tight, {noun.toLowerCase()} are being {verb}…</AlertTitle>
           <AlertDescription>
-            Something changed (a track, a penalty, or the task). The scores
-            below were computed before that change and may shift slightly.
+            Something changed (a track, a penalty, or the task). The{" "}
+            {noun.toLowerCase()} below were computed before that change and may
+            shift slightly.
           </AlertDescription>
         </Alert>
       ) : null}
       {rescore === "landed" ? (
         <Alert role="status" aria-live="polite">
           <AlertTitle>
-            Re-score finished{" "}
+            Recompute finished{" "}
             <Button
               size="sm"
               className="ml-2"
@@ -144,7 +171,7 @@ export function ScoreFreshness({
             </Button>
           </AlertTitle>
           <AlertDescription>
-            Updated scores are ready — reload to see them.
+            Updated {noun.toLowerCase()} are ready — reload to see them.
           </AlertDescription>
         </Alert>
       ) : null}

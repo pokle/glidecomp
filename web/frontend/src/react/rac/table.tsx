@@ -26,9 +26,28 @@ import {
 
 import { cn } from "@/react/lib/utils";
 
-export function Table({ className, ...props }: Omit<TableProps, "className"> & { className?: string }) {
+export function Table({
+  className,
+  scrollLabel,
+  ...props
+}: Omit<TableProps, "className"> & {
+  className?: string;
+  /**
+   * Turns the horizontal overflow wrapper into a labelled, focusable scroll
+   * region. Pass this on any table wide enough to actually scroll: without a
+   * tabindex a keyboard-only user can never reach the off-screen columns
+   * (WCAG 2.1.1 Keyboard). Opt-in so narrow tables don't pick up a stop in
+   * the tab order for a region that never scrolls.
+   */
+  scrollLabel?: string;
+}) {
   return (
-    <div className="relative w-full overflow-x-auto">
+    <div
+      className="relative w-full overflow-x-auto"
+      {...(scrollLabel
+        ? { role: "region", "aria-label": scrollLabel, tabIndex: 0 }
+        : {})}
+    >
       <AriaTable
         className={cn("w-full caption-bottom text-sm outline-none", className)}
         {...props}

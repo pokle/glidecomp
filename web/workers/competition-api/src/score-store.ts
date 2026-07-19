@@ -22,6 +22,7 @@
 
 import { SCORING_ENGINE_VERSION } from "@glidecomp/engine";
 import type { Env } from "./env";
+import { fieldAnalysisBumpStatement } from "./field-analysis-store";
 import {
   computeScoreStateKey,
   computeTaskScore,
@@ -95,12 +96,23 @@ export async function readTaskScoreRowsForComp(
 // ---------------------------------------------------------------------------
 
 /**
- * Mark tasks' scores stale because a scoring input changed. Call this right
- * AFTER the mutation's DB write commits (never before — a bump that precedes
- * the write would let a concurrent revalidation record the pre-mutation state
- * as fresh), then scheduleTaskRevalidation() so fresh scores follow within
- * seconds. Upserts a placeholder row for tasks never scored, so the very
- * first mutation already gives readers a transactional staleness signal.
+ * Mark tasks' DERIVED ANALYSES stale because a scoring input changed. Call
+ * this right AFTER the mutation's DB write commits (never before — a bump
+ * that precedes the write would let a concurrent revalidation record the
+ * pre-mutation state as fresh), then scheduleTaskRevalidation() so fresh
+ * scores follow within seconds. Upserts a placeholder row for tasks never
+ * scored, so the very first mutation already gives readers a transactional
+ * staleness signal.
+ *
+ * The batch bumps BOTH derived tables — `task_scores` and
+ * `task_field_analysis` (migration 0019). Field analysis is a function of
+ * exactly the same inputs as scores, so one bump covers both and the 28
+ * mutation call sites never learn the second table exists. Anything added
+ * later that derives from scoring inputs belongs in this batch too.
+ *
+ * (The two then revalidate differently: scores eagerly, via
+ * scheduleTaskRevalidation below; field analysis lazily, on read — it is far
+ * more expensive and read by far fewer people. See field-analysis-store.ts.)
  *
  * Best-effort like audit(): a failure must never fail the mutation itself.
  */
@@ -111,7 +123,7 @@ export async function bumpScoreInputs(
   if (taskIds.length === 0) return;
   try {
     await db.batch(
-      taskIds.map((id) =>
+      taskIds.flatMap((id) => [
         db
           .prepare(
             `INSERT INTO task_scores (
@@ -121,8 +133,9 @@ export async function bumpScoreInputs(
              ON CONFLICT(task_id) DO UPDATE SET
                inputs_rev = task_scores.inputs_rev + 1`
           )
-          .bind(id)
-      )
+          .bind(id),
+        fieldAnalysisBumpStatement(db, id),
+      ])
     );
   } catch (err) {
     console.error("bumpScoreInputs failed", err, { taskIds });

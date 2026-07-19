@@ -19,6 +19,13 @@ import {
   stoppedGlideRatio,
   resolveGoalAltitude,
   SCORING_ENGINE_VERSION,
+  scoreTask,
+  buildFieldContext,
+  evaluateField,
+  type XCTask,
+  type IGCFix,
+  type PilotFlight,
+  type FieldAnalysisReport,
   type GAPParameters,
   type FlightScoringData,
   type OpenDistanceFlightData,
@@ -464,26 +471,63 @@ function buildClassScore(
   };
 }
 
+/** One active, scoreable track row joined with its pilot. */
+export interface ScoredTrackRow {
+  task_track_id: number;
+  comp_pilot_id: number;
+  igc_filename: string;
+  uploaded_at: string;
+  penalty_points: number;
+  penalty_reason: string | null;
+  pilot_name: string;
+  pilot_class: string;
+}
+
 /**
- * Compute scores for a task by gathering each pilot's flight analysis, then
- * running the GAP formula per pilot class.
+ * Everything that shapes how a task is scored, resolved from D1 once.
  *
- * Each pilot's turnpoint-sequence resolution (the expensive tracklog scan) is
- * independent of the rest of the field, so it is stored per-track in the
- * track_analysis table and reused across recomputes; only tracks that are new
- * or changed are fetched from R2, decompressed and re-parsed, and those run
- * with bounded concurrency. Leading comps store the per-track leading
- * aggregate alongside, so a new upload doesn't force a re-scan of the field.
- *
- * Penalties are applied after scoring — deducted from totalScore, floored at 0,
- * then pilots are re-ranked within their class.
+ * Extracted so the field-analysis path (computeTaskFieldAnalysis) provably
+ * scores against the SAME parameters as the published scores. Without a
+ * shared resolution the two would drift silently the first time someone
+ * touched the GAP defaults, and the analysis would correlate its metrics
+ * against ranks nobody recognises.
  */
-export async function computeTaskScore(
+export interface TaskScoringConfig {
+  taskRow: {
+    task_id: number;
+    comp_id: number;
+    task_date: string;
+    category: string;
+    xctsk: string;
+    stop_announcement_time: string | null;
+    gap_params: string | null;
+    scoring_format: string | null;
+    creation_date: string;
+  };
+  xcTask: XCTask;
+  /** xcTask trimmed by the distance-origin convention — what scoreFlights sees. */
+  scoringTask: XCTask;
+  scoringFormat: "gap" | "open_distance";
+  category: "hg" | "pg";
+  gapParams: Partial<GAPParameters>;
+  fullGapParams: GAPParameters;
+  distanceOrigin: GAPParameters["distanceOrigin"];
+  useLeading: boolean;
+  leadingFormula: GAPParameters["leadingFormula"];
+  stopCtx: ReturnType<typeof resolveTaskStop> | null;
+  stopBase: StopResolutionOptions | null;
+  scoredClasses: Set<string>;
+  scoredTracks: ScoredTrackRow[];
+  /** Per class: pilots marked DNF with neither a track nor a manual flight. */
+  dnfByClass: Map<string, number>;
+}
+
+/** Resolve a task's scoring parameters, roster and tracks. Throws when the
+ * task doesn't exist. */
+export async function resolveTaskScoringConfig(
   taskId: number,
-  db: D1Database,
-  r2: R2Bucket,
-  alphabet: string
-): Promise<TaskScoreResponse> {
+  db: D1Database
+): Promise<TaskScoringConfig> {
   // Load task + comp gap_params
   const taskRow = await db
     .prepare(
@@ -582,16 +626,7 @@ export async function computeTaskScore(
        ORDER BY tt.task_track_id`
     )
     .bind(taskId)
-    .all<{
-      task_track_id: number;
-      comp_pilot_id: number;
-      igc_filename: string;
-      uploaded_at: string;
-      penalty_points: number;
-      penalty_reason: string | null;
-      pilot_name: string;
-      pilot_class: string;
-    }>();
+    .all<ScoredTrackRow>();
 
   // Load task classes
   const taskClasses = await db
@@ -631,6 +666,87 @@ export async function computeTaskScore(
     .bind(taskId)
     .all<{ pilot_class: string; n: number }>();
   const dnfByClass = new Map(dnfRows.results.map((r) => [r.pilot_class, r.n]));
+
+  return {
+    taskRow,
+    xcTask,
+    scoringTask,
+    scoringFormat,
+    category,
+    gapParams,
+    fullGapParams,
+    distanceOrigin,
+    useLeading,
+    leadingFormula,
+    stopCtx,
+    stopBase,
+    scoredClasses,
+    scoredTracks,
+    dnfByClass,
+  };
+}
+
+/** Fetch, decompress and parse one track's IGC from R2 (null on failure —
+ * missing object, unparseable file, or no fixes). */
+export async function fetchIgcFixes(
+  r2: R2Bucket,
+  igcFilename: string
+): Promise<IGCFix[] | null> {
+  const object = await r2.get(igcFilename);
+  if (!object) return null;
+  const compressed = await object.arrayBuffer();
+  const decompressedStream = new Response(compressed).body!.pipeThrough(
+    new DecompressionStream("gzip")
+  );
+  const decompressed = await new Response(decompressedStream).arrayBuffer();
+  const igcText = new TextDecoder().decode(decompressed);
+  let igc;
+  try {
+    igc = parseIGC(igcText);
+  } catch {
+    // Skip unparseable tracks — admin can delete and ask pilot to re-upload
+    console.warn(`Skipping unparseable IGC: ${igcFilename}`);
+    return null;
+  }
+  if (igc.fixes.length === 0) return null;
+  return igc.fixes;
+}
+
+/**
+ * Compute scores for a task by gathering each pilot's flight analysis, then
+ * running the GAP formula per pilot class.
+ *
+ * Each pilot's turnpoint-sequence resolution (the expensive tracklog scan) is
+ * independent of the rest of the field, so it is stored per-track in the
+ * track_analysis table and reused across recomputes; only tracks that are new
+ * or changed are fetched from R2, decompressed and re-parsed, and those run
+ * with bounded concurrency. Leading comps store the per-track leading
+ * aggregate alongside, so a new upload doesn't force a re-scan of the field.
+ *
+ * Penalties are applied after scoring — deducted from totalScore, floored at 0,
+ * then pilots are re-ranked within their class.
+ */
+export async function computeTaskScore(
+  taskId: number,
+  db: D1Database,
+  r2: R2Bucket,
+  alphabet: string
+): Promise<TaskScoreResponse> {
+  const {
+    taskRow,
+    xcTask,
+    scoringTask,
+    scoringFormat,
+    gapParams,
+    distanceOrigin,
+    useLeading,
+    leadingFormula,
+    stopCtx,
+    stopBase,
+    scoredClasses,
+    scoredTracks,
+    dnfByClass,
+  } = await resolveTaskScoringConfig(taskId, db);
 
   // Open distance: score each pilot on how far they flew from the take-off
   // exit. Each pilot's open distance is field-independent, so — like the GAP
@@ -808,7 +924,6 @@ export async function computeTaskScore(
   const stored = await loadTrackAnalyses(db, taskId, "gap", geomHash);
   const analysisWrites: TrackAnalysisWrite[] = [];
 
-  type ScoredTrack = (typeof scoredTracks)[number];
   type AnalyzedPilot = {
     flight: FlightScoringData;
     comp_pilot_id: number;
@@ -816,35 +931,13 @@ export async function computeTaskScore(
     penalty_points: number;
     penalty_reason: string | null;
     /** The underlying track row — null for manual (track-less) flights. */
-    track: ScoredTrack | null;
-  };
-
-  /** Fetch, decompress and parse one track's IGC from R2 (null on failure). */
-  const fetchIgcFixes = async (igcFilename: string) => {
-    const object = await r2.get(igcFilename);
-    if (!object) return null;
-    const compressed = await object.arrayBuffer();
-    const decompressedStream = new Response(compressed).body!.pipeThrough(
-      new DecompressionStream("gzip")
-    );
-    const decompressed = await new Response(decompressedStream).arrayBuffer();
-    const igcText = new TextDecoder().decode(decompressed);
-    let igc;
-    try {
-      igc = parseIGC(igcText);
-    } catch {
-      // Skip unparseable tracks — admin can delete and ask pilot to re-upload
-      console.warn(`Skipping unparseable IGC: ${igcFilename}`);
-      return null;
-    }
-    if (igc.fixes.length === 0) return null;
-    return igc.fixes;
+    track: ScoredTrackRow | null;
   };
 
   /** Resolve one track's scoring inputs against the task (stop-aware). */
   const resolveGapFlight = (
-    track: ScoredTrack,
-    fixes: NonNullable<Awaited<ReturnType<typeof fetchIgcFixes>>>,
+    track: ScoredTrackRow,
+    fixes: IGCFix[],
     stop: StopResolutionOptions | null
   ): FlightScoringData => {
     const result = resolveTurnpointSequence(
@@ -891,7 +984,7 @@ export async function computeTaskScore(
       }
 
       if (!flight) {
-        const fixes = await fetchIgcFixes(track.igc_filename);
+        const fixes = await fetchIgcFixes(r2, track.igc_filename);
         if (!fixes) return null;
         flight = resolveGapFlight(track, fixes, stopBase);
 
@@ -1027,7 +1120,7 @@ export async function computeTaskScore(
           async (flight, idx) => {
             const track = classPilots[idx].track;
             if (!track || windowEnds[idx] >= stopBase.stopTimeMs) return flight;
-            const fixes = await fetchIgcFixes(track.igc_filename);
+            const fixes = await fetchIgcFixes(r2, track.igc_filename);
             if (!fixes) return flight; // keep the stop-time-clipped pass 1
             return resolveGapFlight(track, fixes, {
               ...stopBase,
@@ -1066,6 +1159,227 @@ export async function computeTaskScore(
     task_date: taskRow.task_date,
     scoring_format: scoringFormat,
     classes: classScores,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Field analysis (behavioural metrics across the whole field)
+// ---------------------------------------------------------------------------
+
+/**
+ * How many tracks one field analysis may hold in memory at once.
+ *
+ * Unlike scoring, field analysis needs EVERY pilot's raw fixes simultaneously
+ * (the detectors plus a cross-pilot time grid), and a Worker isolate that
+ * exceeds its 128 MB budget is killed with no useful error. This cap turns
+ * that silent death into an explicit, explainable message on the row. Raise
+ * it only with a measurement; the escape hatch for very large fields is to
+ * move the compute off the request path entirely (queue consumer/container).
+ */
+export const MAX_FIELD_ANALYSIS_TRACKS = 80;
+
+/** A task shape field analysis cannot describe — surfaced as a 422, not a 500. */
+export class FieldAnalysisUnsupported extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FieldAnalysisUnsupported";
+  }
+}
+
+/** One pilot class's field-analysis report plus what the comp aggregate needs. */
+export interface FieldAnalysisClass {
+  pilot_class: string;
+  report: FieldAnalysisReport;
+  /** trackFile → cross-task pilot key (`cp:<comp_pilot_id>`). Exact, unlike
+   * the CLI's filename heuristic, and survives pilot renames. */
+  pilot_key_by_track_file: Record<string, string>;
+  /** Per-pilot official totals — feeds aggregateComp's comp standings. */
+  totals: { trackFile: string; pilotName: string; totalScore: number }[];
+  /** Pilots in this class the analysis could not include, and why. Shown in
+   * the UI so nobody reads the correlations as covering the whole field. */
+  excluded: { pilot_name: string; reason: string }[];
+}
+
+/** The stored/served field-analysis blob for one task. */
+export interface TaskFieldAnalysisResponse {
+  task_id: string;
+  comp_id: string;
+  task_date: string;
+  classes: FieldAnalysisClass[];
+}
+
+/**
+ * Compute the behavioural field analysis for one task, per pilot class.
+ *
+ * Two things make this materially different from computeTaskScore:
+ *
+ * 1. It needs every pilot's RAW fixes at once — buildFieldContext runs the
+ *    thermal/glide/circle detectors and builds a cross-pilot time grid — so
+ *    the track_analysis cache (which stores scalars, not fixes) is no help
+ *    and every track is a cold R2 GET + gunzip + parseIGC.
+ *
+ * 2. It re-scores through the engine's scoreTask() instead of reusing the
+ *    stored scores. buildFieldContext reads PilotScore.turnpointResult, and
+ *    the path computeTaskScore takes (scoreFlights) deliberately drops it to
+ *    keep the hot scoring path light. Both run from resolveTaskScoringConfig,
+ *    so the parameters cannot drift.
+ *
+ * Correlations are measured against OFFICIAL ranks (from computeTaskScore),
+ * not the re-score's tracked-pilots-only ranks: manual flights (issue #306)
+ * count toward the published standings but have no fixes to analyse, so
+ * ranking within the tracked subset would correlate against a leaderboard
+ * nobody recognises. Those pilots land in `excluded` for disclosure.
+ */
+export async function computeTaskFieldAnalysis(
+  taskId: number,
+  db: D1Database,
+  r2: R2Bucket,
+  alphabet: string
+): Promise<TaskFieldAnalysisResponse> {
+  const cfg = await resolveTaskScoringConfig(taskId, db);
+
+  if (cfg.scoringFormat === "open_distance") {
+    // Field analysis is built around a turnpoint task: legs, speed sections,
+    // start gates, ESS. An open-distance task has a single take-off cylinder
+    // and none of that structure.
+    throw new FieldAnalysisUnsupported(
+      "Field analysis is not available for open-distance tasks"
+    );
+  }
+  if (cfg.scoredTracks.length === 0) {
+    throw new FieldAnalysisUnsupported(
+      "Field analysis needs tracks — none have been submitted for this task yet"
+    );
+  }
+  if (cfg.scoredTracks.length > MAX_FIELD_ANALYSIS_TRACKS) {
+    throw new FieldAnalysisUnsupported(
+      `Field analysis is limited to ${MAX_FIELD_ANALYSIS_TRACKS} tracks per task ` +
+        `(this task has ${cfg.scoredTracks.length}); the whole field must be ` +
+        `held in memory at once`
+    );
+  }
+
+  // Official standings — the ranks every correlation is measured against, and
+  // the totals the comp aggregate ranks on. Usually cheap: computeTaskScore
+  // reads its per-track analyses from track_analysis rather than R2.
+  const official = await computeTaskScore(taskId, db, r2, alphabet);
+  const trackFileByPilotId = new Map(
+    cfg.scoredTracks.map((t) => [encodeId(alphabet, t.comp_pilot_id), t.igc_filename])
+  );
+
+  const classes: FieldAnalysisClass[] = [];
+
+  for (const pilotClass of cfg.scoredClasses) {
+    const classTracks = cfg.scoredTracks.filter((t) => t.pilot_class === pilotClass);
+    if (classTracks.length === 0) continue;
+
+    const officialClass = official.classes.find((c) => c.pilot_class === pilotClass);
+    const excluded: { pilot_name: string; reason: string }[] = [];
+    for (const entry of officialClass?.pilots ?? []) {
+      if (!trackFileByPilotId.has(entry.comp_pilot_id)) {
+        excluded.push({
+          pilot_name: entry.pilot_name,
+          reason: "scored from a manual flight report — no tracklog to analyse",
+        });
+      }
+    }
+
+    // One class at a time, so a multi-class task never holds two fields'
+    // worth of decompressed tracklogs simultaneously.
+    const flights: PilotFlight[] = [];
+    const fixesPerTrack = await mapWithConcurrency(
+      classTracks,
+      TRACK_FETCH_CONCURRENCY,
+      (track) => fetchIgcFixes(r2, track.igc_filename)
+    );
+    for (const [i, fixes] of fixesPerTrack.entries()) {
+      const track = classTracks[i];
+      if (!fixes) {
+        excluded.push({
+          pilot_name: track.pilot_name,
+          reason: "tracklog missing or unreadable",
+        });
+        continue;
+      }
+      flights.push({
+        pilotName: track.pilot_name,
+        trackFile: track.igc_filename,
+        fixes,
+      });
+    }
+    if (flights.length === 0) continue;
+
+    // scoreTask applies the distance-origin trim itself, so it takes the
+    // untrimmed task — as does buildFieldContext, whose ENU origin is the
+    // first turnpoint's waypoint.
+    const numPresent = flights.length + (cfg.dnfByClass.get(pilotClass) ?? 0);
+    const result = scoreTask(
+      cfg.xcTask,
+      flights,
+      cfg.gapParams,
+      numPresent,
+      cfg.stopCtx ? { stopAnnouncementMs: Date.parse(cfg.taskRow.stop_announcement_time!) } : {}
+    );
+
+    // Overlay the official rank/total on each re-scored pilot (paired by
+    // trackFile — never by index, the two arrays sort differently), then
+    // re-sort so buildFieldContext's rank ordering is the published one.
+    const officialByTrackFile = new Map(
+      (officialClass?.pilots ?? []).flatMap((entry) => {
+        const trackFile = trackFileByPilotId.get(entry.comp_pilot_id);
+        return trackFile ? [[trackFile, entry] as const] : [];
+      })
+    );
+    for (const ps of result.pilotScores) {
+      const entry = officialByTrackFile.get(ps.trackFile);
+      if (entry) {
+        ps.rank = entry.rank;
+        ps.totalScore = entry.total_score;
+      }
+    }
+    result.pilotScores.sort((a, b) => a.rank - b.rank);
+
+    let report: FieldAnalysisReport;
+    try {
+      report = evaluateField(
+        buildFieldContext(cfg.xcTask, flights, result, cfg.category)
+      );
+    } catch (err) {
+      // One unanalysable class must not cost the others their report.
+      console.error("field analysis failed for class", pilotClass, err);
+      excluded.push({
+        pilot_name: `(class ${pilotClass})`,
+        reason: err instanceof Error ? err.message : String(err),
+      });
+      continue;
+    }
+
+    classes.push({
+      pilot_class: pilotClass,
+      report,
+      pilot_key_by_track_file: Object.fromEntries(
+        classTracks.map((t) => [t.igc_filename, `cp:${t.comp_pilot_id}`])
+      ),
+      totals: result.pilotScores.map((ps) => ({
+        trackFile: ps.trackFile,
+        pilotName: ps.pilotName,
+        totalScore: ps.totalScore,
+      })),
+      excluded,
+    });
+  }
+
+  if (classes.length === 0) {
+    throw new FieldAnalysisUnsupported(
+      "No pilot class on this task had analysable tracks"
+    );
+  }
+
+  return {
+    task_id: encodeId(alphabet, cfg.taskRow.task_id),
+    comp_id: encodeId(alphabet, cfg.taskRow.comp_id),
+    task_date: cfg.taskRow.task_date,
+    classes,
   };
 }
 

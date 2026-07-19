@@ -71,6 +71,19 @@ screenshots them. Paths below are relative to the repo root.
    Override target with env vars: `BASE_URL`, `COMP_MATCH` (e.g.
    `COMP_MATCH=Corryong bun .claude/skills/run-glidecomp/driver.mjs`).
 
+4. **Drive the admin-only Field Analysis pages** — signs in as the super-admin,
+   follows the task page's "Field analysis" link, waits out the background
+   compute, expands a metric family, then checks the comp-level aggregate and
+   that an anonymous visitor is gated:
+   ```bash
+   bun .claude/skills/run-glidecomp/drive-field-analysis.mjs
+   ```
+   Ends with `✓ drove field analysis end-to-end`; shots land in `shots/`
+   (`fa-task.png`, `fa-task-family.png`, `fa-comp.png`, `fa-anon.png`).
+   Cross-check the rendered separation ranking against the engine directly:
+   `bun run score-task -- --wing HG --field-analysis web/samples/comps/corryong-cup-2026-open-t1/task.xctsk web/samples/comps/corryong-cup-2026-open-t1/`
+   — the ρ values must match exactly.
+
 ## Run (human path)
 
 `bun run dev`, then open `http://localhost:3000/comp` in a browser, pick a
@@ -135,6 +148,13 @@ cd web/frontend && bunx vitest run     # or: bun run --filter '@glidecomp/fronte
   `window`; to drive a specific location, use the waypoint table's per-row
   locate button (pans via `panTo`) rather than hunting for a label's canvas
   pixel.
+- **`bun run dev` dies if you pipe it** (`bun run dev | tail`) — the pipe closes
+  and takes the stack with it. Redirect to a file instead:
+  `bun run dev > /tmp/glidecomp-dev.log 2>&1`.
+- **`waitUntil: "networkidle"` never settles on pages with a freshness poller**
+  (field analysis; any scores view showing a stale banner). `ScoreFreshness`
+  keeps a conditional request in flight by design. Use `"domcontentloaded"` plus
+  a role locator, or the drive times out on a page that rendered perfectly.
 - **The comp's public id (sqid) changes every seed.** Never hardcode it; the
   driver resolves it by matching the comp **name** via `GET /api/comp`. If you
   navigate by hand, grab the id from that endpoint first.

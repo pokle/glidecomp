@@ -226,6 +226,12 @@ function CompDetailView({
         <a href="#scores" className="hover:text-foreground hover:underline underline-offset-4">Scores</a>
         <a href="#pilots" className="hover:text-foreground hover:underline underline-offset-4">Pilots ({comp.pilot_count})</a>
         <Link to={`/comp/${compId}/waypoints`} className="hover:text-foreground hover:underline underline-offset-4">Waypoints ({comp.waypoint_count})</Link>
+        {/* Field analysis is admin-only while the metrics are being validated,
+            and has nothing to measure on an open-distance comp (no legs, no
+            speed section). Its own page — it's a long exploratory read. */}
+        {isAdmin && comp.scoring_format !== "open_distance" ? (
+          <Link to={`/comp/${compId}/analysis`} className="hover:text-foreground hover:underline underline-offset-4">Field analysis</Link>
+        ) : null}
         <a href="#activity" className="hover:text-foreground hover:underline underline-offset-4">Activity</a>
         <a href="#admins" className="hover:text-foreground hover:underline underline-offset-4">Admins ({comp.admins.length})</a>
       </nav>

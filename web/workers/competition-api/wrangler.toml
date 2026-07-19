@@ -12,6 +12,17 @@ compatibility_flags = ["nodejs_compat"]
 [placement]
 mode = "smart"
 
+# The worker's heaviest path is field-analysis revalidation: it holds a whole
+# task's decompressed tracklogs in memory and runs the thermal/glide/circle
+# detectors plus a cross-pilot time grid over them (~0.4 s for 32 pilots,
+# extrapolating to a couple of seconds for a large field). That runs inside
+# waitUntil, sharing the invocation's CPU budget. The paid-plan default is
+# already 30 s, but state it explicitly so the ceiling is a reviewed decision
+# rather than an inherited one. See MAX_FIELD_ANALYSIS_TRACKS in scoring.ts —
+# memory, not CPU, is the real limit.
+[limits]
+cpu_ms = 60000
+
 [[d1_databases]]
 binding = "DB"
 database_name = "taskscore-auth"
