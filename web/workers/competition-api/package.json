@@ -12,16 +12,16 @@
   },
   "dependencies": {
     "@glidecomp/engine": "workspace:*",
-    "@hono/zod-validator": "^0.7.6",
-    "hono": "^4.12.29",
+    "@hono/zod-validator": "^0.9.0",
+    "hono": "^4.12.31",
     "sqids": "^0.3.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.18.4",
+    "@cloudflare/vitest-pool-workers": "^0.18.6",
     "@cloudflare/workers-types": "^4.20260702.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10",
-    "wrangler": "4.110.0"
+    "wrangler": "4.112.0"
   }
 }

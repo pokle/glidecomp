@@ -2,6 +2,78 @@
 
 This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
 
+## 2026-07-19
+
+### Security Vulnerabilities Fixed
+
+| Package | Severity | Advisory | Description |
+|---------|----------|----------|-------------|
+| shadcn | MODERATE | (v4.13.1) | Three security fixes: (a) drop custom registry headers on cross-origin redirects to prevent credential leakage, (b) validate file paths for registry items to prevent path traversal, (c) prevent flag injection from registry-supplied dependency strings during install. |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **wrangler** | 4.110.0 | 4.112.0 | root, frontend, auth-api, competition-api, airscore-api | 4.111.0: removes deprecated `legacy_env` (verified not used); Durable Object eviction in test harness; host header rewriting fix in proxied responses. 4.112.0: top-level `addresses` field for Email Routing; DO SQLite storage in test harness; workers.dev subdomain check before first upload; workerd 1.20260714.1. No breaking changes affecting our usage. Requires Node ≥22.0.0 (CI installs Node 22 — no bump needed). |
+| **@cloudflare/vitest-pool-workers** | 0.18.4 | 0.18.6 | auth-api, competition-api | 0.18.5: dependency bump (wrangler 4.111.0, miniflare 4.20260710.0). 0.18.6: fix for DO `blockConcurrencyWhile()` hang in tests; bundles wrangler 4.112.0, miniflare 4.20260714.0. |
+| **hono** | 4.12.29 | 4.12.31 | frontend, auth-api, competition-api (+ root override) | 4.12.30: deduplicate Cache-Control directives case-insensitively; skip compression for 206 Partial Content; `replaceUrlParam` prefix-match fix; `duplex` on stream body forwarding. 4.12.31: multipart boundary mismatch in `cloneRawRequest`; formData caching in `parseBody()`; SSE retry field when value is zero; case-insensitive header names in response helpers. No security fixes, no breaking changes. |
+| **@hono/zod-validator** | 0.7.6 | 0.9.0 | competition-api | **Newly unblocked!** 0.9.0 declares `zod: "^3.25.0 \|\| ^4.0.0"` — no longer requires zod 4. 0.8.0: minimum hono peer bumped to ≥4.10.0; default 400 response propagates through RPC schema (additive); optional 4th-argument syntax for custom validation. 0.9.0: minimum hono peer bumped to ≥4.11.2; uses `InferInput` from `hono/validator` internally. No breaking API changes for our `zValidator(target, schema, hook)` usage. |
+| **shadcn** | 4.13.0 | 4.13.1 | frontend | Security: 3 fixes (credential leakage on cross-origin redirects, path traversal on registry items, flag injection during install). Also adds React Aria support. |
+| **tailwindcss** | 4.3.2 | 4.3.3 | frontend | Bug fixes: case-insensitive hex colors, Firefox iframe focus-visible outline, fractional opacity with named shadows, PostCSS rebuild on preprocessor changes, achromatic color-mixing fix, CJK font stack, `@source` nesting, CLI `--watch --poll`. No breaking changes. |
+| **@tailwindcss/vite** | 4.3.2 | 4.3.3 | frontend | Aligned with tailwindcss 4.3.3. |
+| **lucide-react** | 1.24.0 | 1.25.0 | frontend | New icon (`scan-box`), icon design tweaks. No breaking changes. |
+| **@fontsource/atkinson-hyperlegible-next** | 5.2.7 | 5.3.0 | root | Minor release. |
+
+### Code Changes Required
+
+None. All upgrades are drop-in replacements with no API changes affecting our usage. The `@hono/zod-validator` 0.9.0 upgrade was verified against the `validated()` wrapper in `web/workers/competition-api/src/validators.ts` — uses the standard 3-argument `zValidator(target, schema, hook)` form, fully compatible.
+
+### Overrides Cleaned Up
+
+| Override | Action | Reason |
+|----------|--------|--------|
+| `qs` (^6.15.2) | **Removed** | Only pulled by `@modelcontextprotocol/sdk` via the removed `mcp-api` worker. No package in the tree depends on it anymore — `node_modules/qs` does not exist. |
+| `fast-uri` (^3.1.2) | **Removed** | Same — only pulled by `@modelcontextprotocol/sdk`. No package depends on it. |
+| `ip-address` (^10.2.0) | **Removed** | Same — only pulled by `@modelcontextprotocol/sdk`. No package depends on it. |
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| @cloudflare/workers-types | 4.20260702.1 | 5.20260719.1 | **Major (5.x).** No newer 4.x release available. Evaluate in a focused PR. |
+| typescript | 7.0.2 | 7.0.2 | Already at latest within range. |
+| zod | 3.25.76 | 4.4.3 | Major. No longer blocked by `@hono/zod-validator` (0.9.0 accepts both), but still a major migration (`.strict()` → `strictObject()`, `error.errors` → `error.issues`, etc.). Defer to a focused PR. |
+| vite | 7.3.6 | 8.1.5 | Major. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. |
+| @vitejs/plugin-react | 5.2.0 | 6.0.3 | Major. Pairs with Vite 8. |
+| astro | 6.4.8 | 7.1.1 | **Major.** Rust compiler enforces strict HTML, whitespace follows JSX rules, Markdown processor changed. Needs focused evaluation. |
+| @astrojs/mdx | 6.0.3 | 7.0.3 | Major. Pairs with Astro 7. |
+| kysely | 0.28.17 | 0.29.4 | Pre-1.0 minor bump (equivalent to major). Defer to a focused PR. |
+| jsdom | 25.0.1 | 29.1.1 | Major version jump. Defer. |
+| katex | 0.17.0 | 0.18.1 | Pre-1.0 minor bump (equivalent to major). Defer. |
+| concurrently | 9.2.4 | 10.0.3 | Major. ESM-only, drops `--name-separator`. Low priority. |
+| @types/node | 25.9.5 | 26.1.1 | Major. Stay on 25.x. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+
+### Verification
+
+- `bun run typecheck:all` — all 5 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api).
+- `bun run test:all` — 891 root/engine tests + 94 auth-api (6 todo) + 379 competition-api all pass.
+- `bun run test:e2e` — 10/11 chromium specs pass. 1 flaky failure in "delete an uploaded track" (pre-existing timing issue, passes cleanly on isolated retry at 3.3s). Not a dependency regression.
+- `bun audit` — 0 vulnerabilities.
+
+### Lessons / Notes for Future Sessions
+
+- **`@hono/zod-validator` 0.9.0 now supports zod 3.25+.** The zod 4 migration is no longer the blocker for this package — it accepts both `^3.25.0 || ^4.0.0`. The zod 4 migration itself is now only needed for its own sake (API improvements, schema changes) rather than as a prerequisite for other packages.
+- **Dead overrides cleaned up.** `qs`, `fast-uri`, and `ip-address` overrides were only pulled by `@modelcontextprotocol/sdk` via the removed `mcp-api` worker. With them gone, the audit stays clean and the override list is smaller. Remaining overrides: `@babel/core`, `defu`, `esbuild`, `form-data`, `hono`, `kysely`, `postcss`, `protocol-buffers-schema`, `shell-quote`, `undici`, `vite`, `ws`.
+- **`@cloudflare/vitest-pool-workers` 0.18.6 bundles wrangler 4.112.0.** Continue upgrading these two together.
+- **wrangler 4.111.0 removed `legacy_env`.** Verified not used in this repo. Future sessions: this is a non-issue.
+- **wrangler 4.112.0 still requires Node ≥22.0.0.** CI's `setup-node@v4` with `node-version: 22` remains sufficient.
+- **`esbuild`, `hono`, `postcss`, `ws` overrides remain in place.** `bun audit` is clean. Keep overrides load-bearing until upstreams ship patched versions natively.
+- **Pre-installed Playwright browsers are still rev 1194 in this environment** while `@playwright/test` 1.61.1 pins rev 1228. Fix: `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell`.
+- **Zod 4 migration is now a standalone task.** No other package in the tree blocks on it (the `@hono/zod-validator` blocker is resolved). A focused PR can migrate whenever convenient — key changes: `.strict()` → `strictObject()`, `error.errors` → `error.issues`, `z.infer` behaviour changes for transforms.
+- **shadcn 4.13.1 has important security fixes** for the `shadcn` CLI used to add components. While not a runtime concern (CLI-only), it should be upgraded to prevent credential leakage and path traversal when adding new components.
+
 ## 2026-07-12
 
 ### Security Vulnerabilities Fixed
