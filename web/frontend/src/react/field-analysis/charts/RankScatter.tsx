@@ -29,7 +29,8 @@ import {
   type FieldAnalysisReport,
   type MetricReport,
 } from "../types";
-import { unitWords } from "../PerPilotMetricTable";
+import { unitWords } from "../units";
+import { usePilotHighlight } from "../PilotHighlightContext";
 import {
   extent,
   formatTickValue,
@@ -118,6 +119,9 @@ export function RankScatter({
   const [focusedTrack, setFocusedTrack] = useState<string | null>(null);
   const [readout, setReadout] = useState<ScatterPoint | null>(null);
   const dotRefs = useRef<(SVGGElement | null)[]>([]);
+  // Page-wide pilot highlight (no-op outside the provider): hovering a dot
+  // lights the pilot up in the heatmap and tables, and vice versa.
+  const { highlight, setHighlight } = usePilotHighlight();
 
   const excluded = pilots.length - points.length;
   const caption = captionText(metric, excluded);
@@ -230,7 +234,10 @@ export function RankScatter({
         className="h-auto w-full"
         role="group"
         aria-label={`${metric.label} against rank, scatter plot. ${caption}`}
-        onMouseLeave={() => setReadout(null)}
+        onMouseLeave={() => {
+          setReadout(null);
+          setHighlight(null);
+        }}
       >
         {/* Gridlines first, so dots draw over them. */}
         {xTicks.map((t) => (
@@ -301,9 +308,16 @@ export function RankScatter({
               setFocusIndex(i);
               setFocusedTrack(p.trackFile);
               setReadout(p);
+              setHighlight(p.trackFile);
             }}
-            onBlur={() => setFocusedTrack(null)}
-            onMouseEnter={() => setReadout(p)}
+            onBlur={() => {
+              setFocusedTrack(null);
+              setHighlight(null);
+            }}
+            onMouseEnter={() => {
+              setReadout(p);
+              setHighlight(p.trackFile);
+            }}
           >
             {/* Invisible halo: a 24px pointer/focus target over a 10px dot
                 (accessibility standard §4.5, WCAG 2.5.8). */}
@@ -314,7 +328,8 @@ export function RankScatter({
               r={5}
               className={cn(
                 "fill-chart-1/70",
-                focusedTrack === p.trackFile && "stroke-ring stroke-2"
+                (focusedTrack === p.trackFile || highlight === p.trackFile) &&
+                  "stroke-ring stroke-2"
               )}
             />
           </g>

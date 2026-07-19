@@ -35,6 +35,8 @@ import {
   metricsByFamily,
 } from "../field-analysis/MetricFamilySection";
 import { AnalysisBasis } from "../field-analysis/AnalysisBasis";
+import { PilotHighlightProvider } from "../field-analysis/PilotHighlightContext";
+import { PercentileHeatmap } from "../field-analysis/charts/PercentileHeatmap";
 import {
   FAMILY_ORDER,
   FAMILY_LABELS,
@@ -330,35 +332,44 @@ function TaskFieldAnalysisContent() {
       ) : null}
 
       {active ? (
-        <div className="mt-6 space-y-8">
-          <AnalysisBasis basis={active.report.basis} excluded={active.excluded} />
+        <PilotHighlightProvider>
+          <div className="mt-6 space-y-8">
+            <AnalysisBasis basis={active.report.basis} excluded={active.excluded} />
 
-          <section aria-labelledby="separation-heading" className="space-y-3">
-            <h2 id="separation-heading" className="text-lg font-semibold">
-              What separated the field
-            </h2>
-            <SeparationRanking metrics={active.report.metrics} report={active.report} />
-          </section>
+            <section aria-labelledby="separation-heading" className="space-y-3">
+              <h2 id="separation-heading" className="text-lg font-semibold">
+                What separated the field
+              </h2>
+              <SeparationRanking metrics={active.report.metrics} report={active.report} />
+            </section>
 
-          <section aria-labelledby="families-heading" className="space-y-2">
-            <h2 id="families-heading" className="text-lg font-semibold">
-              The metrics in detail
-            </h2>
-            {FAMILY_ORDER.map((family) => {
-              const metrics = grouped.get(family) ?? [];
-              return (
-                <MetricFamilySection
-                  key={family}
-                  family={family}
-                  familyLabel={FAMILY_LABELS[family]}
-                  metrics={metrics}
-                  report={active.report}
-                  defaultExpanded={topFamilies.has(family)}
-                />
-              );
-            })}
-          </section>
-        </div>
+            <section aria-labelledby="heatmap-heading" className="space-y-3">
+              <h2 id="heatmap-heading" className="text-lg font-semibold">
+                The whole field at a glance
+              </h2>
+              <PercentileHeatmap report={active.report} />
+            </section>
+
+            <section aria-labelledby="families-heading" className="space-y-2">
+              <h2 id="families-heading" className="text-lg font-semibold">
+                The metrics in detail
+              </h2>
+              {FAMILY_ORDER.map((family) => {
+                const metrics = grouped.get(family) ?? [];
+                return (
+                  <MetricFamilySection
+                    key={family}
+                    family={family}
+                    familyLabel={FAMILY_LABELS[family]}
+                    metrics={metrics}
+                    report={active.report}
+                    defaultExpanded={topFamilies.has(family)}
+                  />
+                );
+              })}
+            </section>
+          </div>
+        </PilotHighlightProvider>
       ) : null}
     </div>
   );

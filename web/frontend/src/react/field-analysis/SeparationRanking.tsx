@@ -32,7 +32,7 @@ import {
 interface RankedMetric {
   metric: Pick<
     MetricReport,
-    "id" | "label" | "unit" | "family" | "direction" | "explanation"
+    "id" | "label" | "unit" | "family" | "direction" | "explanation" | "perPilot"
   >;
   correlation: MetricCorrelation;
 }
@@ -147,6 +147,7 @@ export function SeparationRanking({
                     unit={metric.unit}
                     direction={metric.direction}
                     explanation={metric.explanation}
+                    perPilot={metric.perPilot}
                   />
                 </span>
               </Cell>

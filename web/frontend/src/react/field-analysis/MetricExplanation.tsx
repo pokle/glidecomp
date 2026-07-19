@@ -10,7 +10,8 @@
 import { InfoIcon } from "lucide-react";
 import { Popover, PopoverTrigger } from "@/react/rac/popover";
 import { Button } from "@/react/rac/button";
-import type { MetricDirection } from "./types";
+import { DistributionStrip } from "./charts/DistributionStrip";
+import type { MetricDirection, PilotMetricValue } from "./types";
 
 /** How a metric's expected relationship to rank reads in prose. */
 export function directionWords(direction: MetricDirection): string {
@@ -29,11 +30,15 @@ export function MetricExplanation({
   unit,
   direction,
   explanation,
+  perPilot,
 }: {
   label: string;
   unit: string;
   direction: MetricDirection;
   explanation: string;
+  /** When provided, the popover also shows the field's distribution — the
+   * method AND where the field actually landed, in one stop. */
+  perPilot?: PilotMetricValue[];
 }) {
   return (
     <PopoverTrigger>
@@ -56,6 +61,11 @@ export function MetricExplanation({
           Measured in {unit} · {directionWords(direction)}
         </p>
         <p className="mt-2">{explanation}</p>
+        {perPilot && perPilot.some((p) => p.value !== null) ? (
+          <div className="mt-2">
+            <DistributionStrip metric={{ label, unit, perPilot }} compact />
+          </div>
+        ) : null}
       </Popover>
     </PopoverTrigger>
   );

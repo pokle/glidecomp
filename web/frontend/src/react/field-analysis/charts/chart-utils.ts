@@ -138,3 +138,35 @@ export function quantileSorted(sorted: number[], p: number): number {
   if (lo === hi) return sorted[lo];
   return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
 }
+
+/**
+ * Midrank percentile of v within values, 0–100: the share of the field
+ * strictly below v plus half of those equal to it. A lone value is the 50th
+ * percentile, not the 0th or 100th.
+ */
+export function percentileRank(values: number[], v: number): number {
+  if (values.length === 0) return NaN;
+  let below = 0;
+  let equal = 0;
+  for (const w of values) {
+    if (w < v) below++;
+    else if (w === v) equal++;
+  }
+  return ((below + equal / 2) / values.length) * 100;
+}
+
+/**
+ * Percentile oriented so that 100 = best in field, per the metric's
+ * direction. 'lower'-is-better metrics invert; 'neutral' metrics return the
+ * RAW percentile — orientation would claim a quality direction the metric
+ * doesn't have (and auto-orienting by the observed ρ sign would bake one
+ * day's noise into that claim, which the explainability rule forbids).
+ */
+export function directionAdjustedPercentile(
+  direction: "higher" | "lower" | "neutral",
+  values: number[],
+  v: number
+): number {
+  const pct = percentileRank(values, v);
+  return direction === "lower" ? 100 - pct : pct;
+}
