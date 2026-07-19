@@ -22,6 +22,7 @@
 
 import { SCORING_ENGINE_VERSION } from "@glidecomp/engine";
 import type { Env } from "./env";
+import { fieldAnalysisBumpStatement } from "./field-analysis-store";
 import {
   computeScoreStateKey,
   computeTaskScore,
@@ -95,12 +96,31 @@ export async function readTaskScoreRowsForComp(
 // ---------------------------------------------------------------------------
 
 /**
- * Mark tasks' scores stale because a scoring input changed. Call this right
- * AFTER the mutation's DB write commits (never before — a bump that precedes
- * the write would let a concurrent revalidation record the pre-mutation state
- * as fresh), then scheduleTaskRevalidation() so fresh scores follow within
- * seconds. Upserts a placeholder row for tasks never scored, so the very
- * first mutation already gives readers a transactional staleness signal.
+ * Mark tasks' DERIVED ANALYSES stale because a scoring input changed. Call
+ * this right AFTER the mutation's DB write commits (never before — a bump
+ * that precedes the write would let a concurrent revalidation record the
+ * pre-mutation state as fresh), then scheduleTaskRevalidation() so fresh
+ * scores follow within seconds. Upserts a placeholder row for tasks never
+ * scored, so the very first mutation already gives readers a transactional
+ * staleness signal.
+ *
+ * This bumps BOTH derived tables — `task_scores` and `task_field_analysis`
+ * (migration 0019). Field analysis is a function of exactly the same inputs
+ * as scores, so one call covers both and the 28 mutation call sites never
+ * learn the second table exists. Anything added later that derives from
+ * scoring inputs belongs here too.
+ *
+ * The two bumps run as SEPARATE batches, deliberately: a D1 batch is one
+ * transaction, so folding them together would couple the sacred
+ * "mutation ⇒ scores stale" invariant to the newer table's existence — a
+ * worker deployed against a DB missing migration 0019 would roll back the
+ * task_scores bump along with the failing field-analysis statement, and the
+ * catch would swallow it. Scores bump first; a field-analysis failure then
+ * costs only a stale analysis signal, never a stale score.
+ *
+ * (The two then revalidate differently: scores eagerly, via
+ * scheduleTaskRevalidation below; field analysis lazily, on read — it is far
+ * more expensive and read by far fewer people. See field-analysis-store.ts.)
  *
  * Best-effort like audit(): a failure must never fail the mutation itself.
  */
@@ -126,6 +146,13 @@ export async function bumpScoreInputs(
     );
   } catch (err) {
     console.error("bumpScoreInputs failed", err, { taskIds });
+  }
+  try {
+    await db.batch(
+      taskIds.map((id) => fieldAnalysisBumpStatement(db, id))
+    );
+  } catch (err) {
+    console.error("bumpScoreInputs (field analysis) failed", err, { taskIds });
   }
 }
 

@@ -128,6 +128,26 @@ test.describe("SSR — isolation and fallback", () => {
     expect(html).toContain('<div id="root"></div>');
     expect(html).not.toContain("window.__SSR_DATA__");
   });
+
+  /**
+   * Field analysis is admin-only and deliberately client-only, so a hard
+   * reload of its deep URL must still get a usable SPA shell — the Functions
+   * fallback path, which `vite dev` never exercises — and must not be
+   * indexable, since there is nothing in it for a crawler.
+   */
+  for (const path of [
+    "/comp/anything/analysis",
+    "/comp/anything/task/anything/analysis",
+  ]) {
+    test(`a hard reload of ${path} serves a noindex app shell`, async ({ request }) => {
+      const res = await request.get(path, { failOnStatusCode: false });
+      expect(res.status()).toBe(200);
+      const html = await res.text();
+      expect(html).toContain('<div id="root"></div>');
+      expect(html).toContain('name="robots" content="noindex"');
+      expect(html).not.toContain("window.__SSR_DATA__");
+    });
+  }
 });
 
 test.describe("SSR — hydration is clean (real browser)", () => {

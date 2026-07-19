@@ -96,14 +96,43 @@ function useRescorePoll(
   return state;
 }
 
+/**
+ * Complete sentences per variant — NOT word-splicing. "Scores" is plural and
+ * "analysis" is singular, so templating a noun into shared copy produced
+ * "Analysis are being computed…"; live-region text is read aloud verbatim.
+ */
+const COPY = {
+  scores: {
+    computedPrefix: "Scores computed",
+    pendingTitle: "Scores are being computed for the first time…",
+    staleTitle: "Hold tight, scores are being re-scored…",
+    staleBody:
+      "Something changed (a track, a penalty, or the task). The scores below were computed before that change and may shift slightly.",
+    landedTitle: "Re-score finished",
+    landedBody: "Updated scores are ready — reload to see them.",
+  },
+  analysis: {
+    computedPrefix: "Analysis computed",
+    pendingTitle: "The analysis is being computed for the first time…",
+    staleTitle: "Hold tight, the analysis is being recomputed…",
+    staleBody:
+      "Something changed (a track, a penalty, or the task). The analysis below was computed before that change and may shift slightly.",
+    landedTitle: "Recompute finished",
+    landedBody: "The updated analysis is ready — reload to see it.",
+  },
+} as const;
+
 export function ScoreFreshness({
   computedAt,
   stale,
   timezone,
   etag = null,
   pollUrl = null,
+  variant = "scores",
+  pending = false,
 }: {
-  /** ISO compute timestamp; null (comp with no scored tasks) renders nothing. */
+  /** ISO compute timestamp; null (comp with no scored tasks) renders nothing,
+   * unless `pending` — a first-ever compute has no timestamp yet. */
   computedAt: string | null;
   stale: boolean;
   /** Comp IANA zone; the timestamp defaults to it, else the viewer's local zone. */
@@ -112,29 +141,48 @@ export function ScoreFreshness({
   etag?: string | null;
   /** Endpoint to poll for the re-score landing; usually the one that served the data. */
   pollUrl?: string | null;
+  /** Which copy set to use. Field analysis passes "analysis". */
+  variant?: keyof typeof COPY;
+  /** No previous result at all (the field-analysis cold path, which never
+   * computes on the request). Shows "being computed for the first time"
+   * rather than a stale-results warning about results that don't exist. */
+  pending?: boolean;
 }) {
+  const copy = COPY[variant];
   const rescore = useRescorePoll(stale, etag, pollUrl);
+
+  if (pending) {
+    return (
+      <div className="mt-2">
+        <Alert role="status" aria-live="polite">
+          <AlertTitle>{copy.pendingTitle}</AlertTitle>
+          <AlertDescription>
+            This runs in the background over every pilot's tracklog and usually
+            lands within a minute; this page refreshes itself when it does.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   if (!computedAt) return null;
 
   return (
     <div className="mt-2 space-y-2">
       <p className="text-sm text-muted-foreground">
-        Scores computed <Timestamp value={computedAt} compTimezone={timezone} />
+        {copy.computedPrefix}{" "}
+        <Timestamp value={computedAt} compTimezone={timezone} />
       </p>
       {rescore === "rescoring" ? (
         <Alert role="status" aria-live="polite">
-          <AlertTitle>Hold tight, scores are being re-scored…</AlertTitle>
-          <AlertDescription>
-            Something changed (a track, a penalty, or the task). The scores
-            below were computed before that change and may shift slightly.
-          </AlertDescription>
+          <AlertTitle>{copy.staleTitle}</AlertTitle>
+          <AlertDescription>{copy.staleBody}</AlertDescription>
         </Alert>
       ) : null}
       {rescore === "landed" ? (
         <Alert role="status" aria-live="polite">
           <AlertTitle>
-            Re-score finished{" "}
+            {copy.landedTitle}{" "}
             <Button
               size="sm"
               className="ml-2"
@@ -143,9 +191,7 @@ export function ScoreFreshness({
               Reload
             </Button>
           </AlertTitle>
-          <AlertDescription>
-            Updated scores are ready — reload to see them.
-          </AlertDescription>
+          <AlertDescription>{copy.landedBody}</AlertDescription>
         </Alert>
       ) : null}
     </div>

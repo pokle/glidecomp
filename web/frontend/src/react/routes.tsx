@@ -18,6 +18,8 @@ import { Competitions } from "./pages/Competitions";
 import { CompDetail } from "./pages/CompDetail";
 import { CompWaypoints } from "./pages/CompWaypoints";
 import { TaskDetail } from "./pages/TaskDetail";
+import { CompFieldAnalysis } from "./pages/CompFieldAnalysis";
+import { TaskFieldAnalysis } from "./pages/TaskFieldAnalysis";
 import { PilotScoreDetail } from "./pages/PilotScoreDetail";
 import { Scores } from "./pages/Scores";
 import { Settings } from "./pages/Settings";
@@ -69,7 +71,16 @@ export function AppRoutes() {
         <Route path="/comp" element={<Competitions />} />
         <Route path="/comp/:compId" element={<CompDetail />} />
         <Route path="/comp/:compId/waypoints" element={<CompWaypoints />} />
+        {/* Field analysis (behavioural metrics). Admin-gated by the API and
+            deliberately NOT server-rendered — functions/comp/[[path]].ts has
+            no ROUTES entry for these, so a hard reload falls through to the
+            plain SPA shell (with noindex). */}
+        <Route path="/comp/:compId/analysis" element={<CompFieldAnalysis />} />
         <Route path="/comp/:compId/task/:taskId" element={<TaskDetail />} />
+        <Route
+          path="/comp/:compId/task/:taskId/analysis"
+          element={<TaskFieldAnalysis />}
+        />
         <Route
           path="/comp/:compId/task/:taskId/pilot/:pilotId"
           element={<PilotScoreDetail />}

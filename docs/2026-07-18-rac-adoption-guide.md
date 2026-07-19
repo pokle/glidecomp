@@ -29,6 +29,14 @@ gotchas).
   whenever typing filters a list: it owns the ARIA combobox contract that a
   searchbox beside a detached listbox doesn't provide — see gotcha #12),
   `list-box` (standalone option list; no callers today), `menu`, `tooltip`, `tag-group`, `disclosure`,
+  `meter` (Meter/DivergingMeter — a **measurement**, `role="meter"`; NOT
+  ProgressBar, which means task completion. `DivergingMeter` draws a signed
+  value from a centred zero axis for the field-analysis ρ bars: sign is which
+  side it grows toward, never colour alone, and the signed number is always
+  printed beside it), `popover` (standalone DialogTrigger+Popover+Dialog,
+  reusing `popoverClass` from select.tsx — **use this, not tooltip, whenever
+  the content is prose**: tooltips are hover-only, so touch users never see
+  them, and they dismiss before a sentence can be read),
   `breadcrumbs` (ARIA-native trail — parent links + current page as
   `aria-current="page"`; see gotcha #11), `badge` (static span — RAC has no presentational components),
   `confirm` (RacConfirmProvider — supplies the same ConfirmContext as
@@ -40,7 +48,9 @@ gotchas).
   (Tabulator grid → RAC **GridList** card list, see below — was a RAC Table),
   `comp/SubmitTrackDialog.tsx`,
   `comp/ManualFlightDialog.tsx`, `comp/AddWaypointDialog.tsx`,
-  `comp/TaskExportButtons.tsx`, `comp/ScoreFreshness.tsx` (button only).
+  `comp/TaskExportButtons.tsx`, `comp/ScoreFreshness.tsx` (button only),
+  `pages/TaskFieldAnalysis.tsx` + `pages/CompFieldAnalysis.tsx` and all of
+  `react/field-analysis/` (built RAC-native from the start — 2026-07-19).
   Note the last five are **shared** — CompDetail/CompWaypoints/Scores already
   render these RAC components today; RAC components work fine outside the
   converted page (no provider needed except for `href`-based client routing).
@@ -174,10 +184,15 @@ gotchas).
 bun run typecheck:all
 bun run test                       # engine + workers unit tests
 bun run build                      # Vite + SSR bundle + Astro
-bun run test:e2e:ssr               # 12 tests; needs no other servers running
+bun run test:e2e:ssr               # 14 tests; needs no other servers running
 bun run test:e2e                   # full suite (one known flaky dev-login test; rerun)
 ```
 
+- **`waitUntil: "networkidle"` never settles on a page with a freshness
+  poller** (field analysis, and any scores surface showing a stale banner) —
+  `ScoreFreshness` deliberately keeps a conditional request in flight. Wait on
+  the DOM (`waitUntil: "domcontentloaded"` + a role locator) instead, or the
+  drive times out on a page that rendered fine.
 - SSR-suite gotcha: its `discover()` takes the **first non-test comp**; cruft
   comps left by other e2e runs (e.g. "API Doc Comp …") break it with "Sample
   comp has no scored pilots". Delete the cruft row from local D1 (`comp`

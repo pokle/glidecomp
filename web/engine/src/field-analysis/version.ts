@@ -1,0 +1,25 @@
+// Copyright (c) 2026, Tushar Pokle.  All rights reserved.
+
+/**
+ * Version of the field-analysis metrics' observable behaviour.
+ *
+ * The competition API stores it on every materialized `task_field_analysis`
+ * row and treats a mismatch as staleness, so a deploy that changes what a
+ * metric measures rolls every stored report with no migration step —
+ * recomputes then spread over organic traffic instead of stampeding.
+ *
+ * This is deliberately SEPARATE from SCORING_ENGINE_VERSION. The stored row
+ * checks both: scoring changes move the GAP ranks every correlation is
+ * measured against, and metric changes move the values. Bump this one
+ * whenever a MetricComputer's compute() changes, a metric is added or
+ * removed, or the shared foundation (context/resample/shared-thermals/
+ * phase-partition/working-band/stats/evaluate) changes a number.
+ *
+ * Unlike SCORING_ENGINE_VERSION there is no fingerprint guard here: these
+ * metrics are exploratory and not a scoring input, so a missed bump costs a
+ * stale admin report, not a wrong score.
+ */
+// v1: initial release — 26 metrics across 6 families (day profile & wind,
+//     climbing, gliding, decision-making, gaggle, race craft), each ranked
+//     by Spearman correlation against GAP rank.
+export const FIELD_ANALYSIS_VERSION = 1;

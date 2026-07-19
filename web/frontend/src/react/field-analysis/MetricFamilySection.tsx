@@ -1,0 +1,104 @@
+/**
+ * One metric family, collapsed into a Disclosure: the per-pilot table, then
+ * each metric's field-level summary lines and rich extra tables.
+ *
+ * Disclosure rather than Tabs so several families can be open side by side
+ * for comparison (and so the page prints whole). Families that produced a
+ * top-3 metric open by default — the separation ranking above just told the
+ * reader those are the ones worth opening.
+ */
+import { useMemo } from "react";
+import { Disclosure } from "@/react/rac/disclosure";
+import { Badge } from "@/react/rac/badge";
+import { PerPilotMetricTable } from "./PerPilotMetricTable";
+import { ReportTableView, ReportTableTitle } from "./ReportTableView";
+import { bestAbsRho } from "./SeparationRanking";
+import type { FieldAnalysisReport, MetricReport, MetricFamily } from "./types";
+
+export function MetricFamilySection({
+  family,
+  familyLabel,
+  metrics,
+  report,
+  defaultExpanded,
+}: {
+  family: MetricFamily;
+  familyLabel: string;
+  metrics: MetricReport[];
+  report: FieldAnalysisReport;
+  defaultExpanded?: boolean;
+}) {
+  // Field-level metrics (wind, climb-by-hour) carry no per-pilot values at
+  // all; a column of dashes for them is noise, so they only contribute their
+  // summaries and extra tables below. Memoized so PerPilotMetricTable's own
+  // useMemos (keyed on this array's identity) survive parent re-renders.
+  const perPilotMetrics = useMemo(
+    () => metrics.filter((m) => m.perPilot.some((p) => p.value !== null)),
+    [metrics]
+  );
+
+  if (metrics.length === 0) return null;
+
+  const best = bestAbsRho(metrics);
+  const failed = metrics.filter((m) => m.error);
+
+  return (
+    <Disclosure
+      title={familyLabel}
+      defaultExpanded={defaultExpanded}
+      badge={
+        best !== null ? (
+          <Badge variant="outline">strongest |ρ| {best.toFixed(2)}</Badge>
+        ) : null
+      }
+    >
+      <div className="space-y-4 py-3">
+        {failed.map((m) => (
+          <p key={m.id} role="status" className="text-sm text-destructive">
+            {m.label} could not be computed: {m.error}
+          </p>
+        ))}
+
+        {perPilotMetrics.length > 0 ? (
+          <PerPilotMetricTable
+            report={report}
+            metrics={perPilotMetrics}
+            familyLabel={familyLabel}
+          />
+        ) : null}
+
+        {metrics.map((m) =>
+          (m.fieldSummary?.length ?? 0) > 0 || (m.extraTables?.length ?? 0) > 0 ? (
+            <section key={m.id} className="space-y-1" aria-label={m.label}>
+              <h4 className="text-sm font-medium">{m.label}</h4>
+              {m.fieldSummary?.map((line, i) => (
+                <p key={i} className="text-sm text-muted-foreground">
+                  {line}
+                </p>
+              ))}
+              {m.extraTables?.map((table) => (
+                <div key={`${m.id}-${table.title}`}>
+                  <ReportTableTitle table={table} />
+                  <ReportTableView table={table} />
+                </div>
+              ))}
+            </section>
+          ) : null
+        )}
+      </div>
+    </Disclosure>
+  );
+}
+
+/** Group a report's metrics by family, preserving registry order. */
+export function metricsByFamily(
+  metrics: MetricReport[]
+): Map<MetricFamily, MetricReport[]> {
+  const map = new Map<MetricFamily, MetricReport[]>();
+  for (const m of metrics) {
+    const list = map.get(m.family) ?? [];
+    list.push(m);
+    map.set(m.family, list);
+  }
+  return map;
+}

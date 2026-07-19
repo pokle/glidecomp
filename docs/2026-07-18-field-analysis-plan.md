@@ -347,3 +347,80 @@ Cross-package needs (shared thermals for P1+P4, grid for P4+P5, working band for
 3. `bun run score-task -- --comp corryong-cup-2026` — six tasks across two classes each print scores + analysis, then two per-class comp aggregates; classes never mixed; runtime < ~30 s.
 4. `--json` modes emit well-formed JSON including `fieldAnalysis`.
 5. Existing behaviour untouched: `score-task` without new flags byte-identical output; `airscore-parity.test.ts` still green.
+
+---
+
+## UI surface — SHIPPED (2026-07-19)
+
+The plan above was explicitly "engine + CLI only", with a forward note that any
+future surface should follow the same presentation order. That surface now
+exists, and it does.
+
+**Where it lives.** Two admin-only pages, linked from the comp page's section
+nav and the task page's button row:
+
+| Route | Page | Content |
+|---|---|---|
+| `/comp/:compId/task/:taskId/analysis` | `pages/TaskFieldAnalysis.tsx` | Basis → **separation ranking** → per-family `Disclosure`s (per-pilot table, field summaries, `extraTables`) |
+| `/comp/:compId/analysis` | `pages/CompFieldAnalysis.tsx` | Per-task ρ matrix + mean \|ρ\| + comp ρ, then the standings behind them |
+
+Presentation components are in `web/frontend/src/react/field-analysis/`. They
+re-export the engine's `formatMetricValue` / `FAMILY_ORDER` / `FAMILY_LABELS`
+rather than reimplementing them, so the pages and the CLI text report can never
+disagree about a number.
+
+**Rollout is admin + super-admin only**, deliberately — these metrics are
+exploratory and easy to misread. The gate is one function,
+`canViewFieldAnalysis()` in `web/workers/competition-api/src/routes/field-analysis.ts`,
+which carries a "WHEN WE GO PUBLIC" note listing the four things that change
+(the gate, Cache-Control, a pleasant anonymous cold path, and SSR + a `ROUTES`
+entry in `functions/comp/[[path]].ts`). Non-admins get **404**, not 403.
+
+**Storage: stale-first, like scores.** `task_field_analysis` (migration 0019)
+materializes one gzipped report per task, following the `task_scores` contract:
+reads never compute, mutations mark it stale, a lease-locked guarded CAS is the
+only writer. Two differences, both because this compute is expensive and read
+by few people:
+
+1. **Revalidation is lazy** — triggered by a read of a stale row, not by the
+   mutation. Recomputing on all 28 score-affecting mutations would multiply CPU
+   and R2 traffic for a report nobody asked for.
+2. **The cold path never computes synchronously.** It returns `pending: true`,
+   schedules the work, and the UI polls (reusing `ScoreFreshness`'s
+   If-None-Match poller). Because nothing else creates a row,
+   `revalidateFieldAnalysis` seeds a placeholder before taking its lease — the
+   lock is an `UPDATE`, which would otherwise no-op forever on a task that has
+   never been mutated. *(That bug shipped past the unit tests, which pre-seeded
+   rows, and was caught by driving the real app. There are now two regression
+   tests for it.)*
+
+**Invalidation is shared.** `bumpScoreInputs()` bumps BOTH tables in one batch,
+so the 28 mutation call sites never learn this table exists. A test in
+`test/field-analysis.test.ts` uploads an IGC through the real route and asserts
+`task_field_analysis.inputs_rev` moved — that is what stops someone re-splitting
+the bump later.
+
+**Two integration constraints worth remembering:**
+
+- **It re-scores.** `buildFieldContext` reads `PilotScore.turnpointResult`,
+  which `scoreFlights` (the path `computeTaskScore` takes) deliberately strips.
+  So `computeTaskFieldAnalysis` calls the engine's `scoreTask()` itself from raw
+  fixes. Both paths run from the extracted `resolveTaskScoringConfig()`, so the
+  GAP parameters cannot drift apart.
+- **Correlations use OFFICIAL ranks.** The re-score covers tracked pilots only,
+  but manual flights (issue #306) count toward the published standings. Ranking
+  within the tracked subset would correlate against a leaderboard nobody
+  recognises, so official rank/total are overlaid by `trackFile` before
+  `buildFieldContext`. Excluded pilots are listed on the page.
+
+**Sizing.** 32 pilots × 26 metrics ≈ 202 KB JSON, **19.9 KB gzipped** —
+extrapolating to ~90 KB at 150 pilots, comfortably a D1 BLOB. Memory, not CPU,
+is the ceiling (the whole field's fixes are live at once), hence
+`MAX_FIELD_ANALYSIS_TRACKS = 80` in `scoring.ts`: an explicit, explainable
+refusal instead of a silent isolate kill.
+
+**Verified** by `.claude/skills/run-glidecomp/drive-field-analysis.mjs`, which
+drives the real app end to end. The rendered separation ranking for Corryong T1
+(Open) matches the CLI exactly across all 14 visible metrics —
+`race.time_behind` 0.96, `glide.speed` −0.79, `gaggle.departure_winrate` −0.54,
+`glide.track_efficiency` 0.53, `race.start_delay` 0.50, …

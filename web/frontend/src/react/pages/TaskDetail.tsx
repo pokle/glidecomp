@@ -16,7 +16,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Form } from "react-aria-components";
 import { computeTurnpointDirections, xctaskTurnpointsToRecords, type XCTask } from "@glidecomp/engine";
 import { Badge } from "@/react/rac/badge";
-import { Button, buttonVariants } from "@/react/rac/button";
+import { Button, LinkButton, buttonVariants } from "@/react/rac/button";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import {
   Dialog,
@@ -264,6 +264,22 @@ function TaskDetailContent() {
           >
             3D replay
           </a>
+        ) : null}
+        {/* Field analysis: admin-only while the metrics settle, and
+            meaningless without a route or on an open-distance task (which has
+            no legs or speed section to measure against). Requires comp to be
+            LOADED — `comp?.scoring_format !== …` would fail open to a
+            dead-end refusal page whenever the non-critical comp fetch
+            degrades. Unlike the two anchors above this is an SPA route, so
+            it uses a RAC LinkButton through the RouterProvider. */}
+        {isAdmin && task.xctsk && comp && comp.scoring_format !== "open_distance" ? (
+          <LinkButton
+            variant="outline"
+            size="sm"
+            href={`/comp/${compId}/task/${taskId}/analysis`}
+          >
+            Field analysis
+          </LinkButton>
         ) : null}
       </div>
 

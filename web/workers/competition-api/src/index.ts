@@ -11,6 +11,7 @@ import { pilotRoutes } from "./routes/pilot";
 import { pilotStatusRoutes } from "./routes/pilot-status";
 import { manualFlightRoutes } from "./routes/manual-flight";
 import { scoreRoutes } from "./routes/score";
+import { fieldAnalysisRoutes } from "./routes/field-analysis";
 import { auditRoutes } from "./routes/audit";
 import { userFilesRoutes } from "./routes/user-files";
 import { visualizationRoutes } from "./routes/visualization";
@@ -95,6 +96,7 @@ const routes = app
   .route("/", taskRoutes)
   .route("/", waypointsRoutes)
   .route("/", scoreRoutes)
+  .route("/", fieldAnalysisRoutes)
   .route("/", auditRoutes)
   .route("/", userFilesRoutes)
   .route("/", adminRoutes)

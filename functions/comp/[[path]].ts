@@ -43,6 +43,20 @@ interface HeadTags {
   extra: string;
 }
 
+/**
+ * SPA routes under /comp that are deliberately NOT server-rendered and must
+ * not be indexed: admin-gated, private, and empty without a signed-in
+ * admin's API session. Checked before ROUTES.
+ *
+ * Field analysis (behavioural metrics) lives here while it is admin-only.
+ * When it goes public it wants the opposite treatment — a ROUTES entry with
+ * a loader — and should move out of this list.
+ */
+const NOINDEX_SHELL_ROUTES: RegExp[] = [
+  /^\/comp\/[^/]+\/analysis\/?$/,
+  /^\/comp\/[^/]+\/task\/[^/]+\/analysis\/?$/,
+];
+
 const ROUTES: Array<{
   pattern: RegExp;
   run: (f: FetchFn, m: RegExpMatchArray, origin: string) => Promise<Rendered>;
@@ -186,6 +200,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const path = url.pathname;
   const cookie = request.headers.get("Cookie");
 
+  // Private SPA-only routes under /comp: served as the plain shell (they
+  // fetch their own data client-side), but marked noindex — there is nothing
+  // here for a crawler, and the pages are admin-gated by the API anyway.
+  if (NOINDEX_SHELL_ROUTES.some((p) => p.test(path))) {
+    return shellWithNoindex(env, url, 200);
+  }
+
   const match = ROUTES.map((r) => ({ r, m: path.match(r.pattern) })).find((x) => x.m);
   // Not one of the SSR routes → serve the SPA shell unchanged (today's behavior).
   if (!match || !match.m) return fetchShell(env, url);
@@ -236,14 +257,25 @@ function fetchShell(env: Env, url: URL): Promise<Response> {
 }
 
 async function notFoundShell(env: Env, url: URL): Promise<Response> {
+  return shellWithNoindex(env, url, 404);
+}
+
+async function shellWithNoindex(
+  env: Env,
+  url: URL,
+  status: number
+): Promise<Response> {
   const template = await (await fetchShell(env, url)).text();
   const html = template.replace(
     "</head>",
     `<meta name="robots" content="noindex">\n</head>`
   );
   return new Response(html, {
-    status: 404,
-    headers: { "Content-Type": "text/html; charset=utf-8" },
+    status,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      ...(status === 200 ? { "Cache-Control": "private, no-store" } : {}),
+    },
   });
 }
 
