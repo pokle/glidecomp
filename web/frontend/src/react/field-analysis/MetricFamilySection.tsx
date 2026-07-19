@@ -12,6 +12,7 @@ import { Disclosure } from "@/react/rac/disclosure";
 import { Badge } from "@/react/rac/badge";
 import { PerPilotMetricTable } from "./PerPilotMetricTable";
 import { ReportTableView, ReportTableTitle } from "./ReportTableView";
+import { SeriesChart } from "./charts/SeriesChart";
 import { bestAbsRho } from "./SeparationRanking";
 import type { FieldAnalysisReport, MetricReport, MetricFamily } from "./types";
 
@@ -68,13 +69,20 @@ export function MetricFamilySection({
         ) : null}
 
         {metrics.map((m) =>
-          (m.fieldSummary?.length ?? 0) > 0 || (m.extraTables?.length ?? 0) > 0 ? (
+          (m.fieldSummary?.length ?? 0) > 0 ||
+          (m.extraTables?.length ?? 0) > 0 ||
+          (m.extraSeries?.length ?? 0) > 0 ? (
             <section key={m.id} className="space-y-1" aria-label={m.label}>
               <h4 className="text-sm font-medium">{m.label}</h4>
               {m.fieldSummary?.map((line, i) => (
                 <p key={i} className="text-sm text-muted-foreground">
                   {line}
                 </p>
+              ))}
+              {/* Charts before their tables: the shape first, the exact
+                  numbers (and the accessible reading) right below. */}
+              {m.extraSeries?.map((series) => (
+                <SeriesChart key={series.id} series={series} report={report} />
               ))}
               {m.extraTables?.map((table) => (
                 <div key={`${m.id}-${table.title}`}>

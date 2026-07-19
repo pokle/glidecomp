@@ -17,6 +17,7 @@ import type {
   MetricOutput,
   PilotAnalysisContext,
   PilotMetricValue,
+  ReportSeries,
   ReportTable,
 } from '../types';
 import type { TurnpointReaching } from '../../turnpoint-sequence-types';
@@ -250,6 +251,7 @@ const legTimeLost: MetricComputer = {
 
     const perPilot: PilotMetricValue[] = [];
     const rows: string[][] = [];
+    const seriesPilots: ReportSeries['perPilot'] = [];
     for (const p of field.pilots) {
       const own = timesByPilot.get(p.trackFile)!;
       if (own.size === 0) {
@@ -264,6 +266,7 @@ const legTimeLost: MetricComputer = {
       perPilot.push({ trackFile: p.trackFile, value: lost });
 
       const cells: string[] = [];
+      const points: (number | null)[] = [];
       let totalVsWinner = 0;
       let comparedLegs = 0;
       for (const leg of legKeys) {
@@ -271,8 +274,10 @@ const legTimeLost: MetricComputer = {
         const w = winnerTimes.get(leg.key);
         if (t === undefined || w === undefined) {
           cells.push('—');
+          points.push(null);
         } else {
           cells.push(fmtSignedMinSec(t - w));
+          points.push(t - w);
           totalVsWinner += t - w;
           comparedLegs++;
         }
@@ -282,6 +287,7 @@ const legTimeLost: MetricComputer = {
         ...cells,
         comparedLegs > 0 ? fmtSignedMinSec(totalVsWinner) : '—',
       ]);
+      seriesPilots.push({ trackFile: p.trackFile, points });
     }
 
     const table: ReportTable = {
@@ -303,7 +309,25 @@ const legTimeLost: MetricComputer = {
       ],
     };
 
-    return { perPilot, extraTables: rows.length > 0 ? [table] : undefined };
+    // The table's data twin: signed seconds vs the winner, per leg, for the
+    // waterfall chart.
+    const series: ReportSeries = {
+      id: 'race.leg_time_lost.waterfall',
+      title: table.title,
+      kind: 'waterfall',
+      xLabels: legKeys.map(
+        (leg) =>
+          `${tpLabel(field, leg.from, sssIdx, essIdx)}→${tpLabel(field, leg.to, sssIdx, essIdx)}`,
+      ),
+      yUnit: 's',
+      perPilot: seriesPilots,
+    };
+
+    return {
+      perPilot,
+      extraTables: rows.length > 0 ? [table] : undefined,
+      extraSeries: seriesPilots.length > 0 ? [series] : undefined,
+    };
   },
 };
 
@@ -354,6 +378,7 @@ const timeBehind: MetricComputer = {
     const essCol = tpIndices.indexOf(essIdx);
     const perPilot: PilotMetricValue[] = [];
     const rows: string[][] = [];
+    const seriesPilots: ReportSeries['perPilot'] = [];
     for (const p of field.pilots) {
       const elapsed = elapsedByPilot.get(p.trackFile);
       if (!elapsed) {
@@ -370,6 +395,7 @@ const timeBehind: MetricComputer = {
         trunc(p.pilotName, 20),
         ...behindMin.map((b) => (b === null ? '—' : b.toFixed(1))),
       ]);
+      seriesPilots.push({ trackFile: p.trackFile, points: behindMin });
     }
 
     const table: ReportTable = {
@@ -388,7 +414,24 @@ const timeBehind: MetricComputer = {
       ],
     };
 
-    return { perPilot, extraTables: rows.length > 0 ? [table] : undefined };
+    // The table's data twin: minutes behind at each turnpoint, for the
+    // horserace chart.
+    const series: ReportSeries = {
+      id: 'race.time_behind.horserace',
+      title: table.title,
+      kind: 'horserace',
+      xLabels: tpIndices.map((idx) =>
+        trunc(field.task.turnpoints[idx].waypoint.name || `TP${idx + 1}`, 8),
+      ),
+      yUnit: 'min',
+      perPilot: seriesPilots,
+    };
+
+    return {
+      perPilot,
+      extraTables: rows.length > 0 ? [table] : undefined,
+      extraSeries: seriesPilots.length > 0 ? [series] : undefined,
+    };
   },
 };
 

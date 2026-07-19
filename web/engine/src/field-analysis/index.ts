@@ -11,6 +11,7 @@ export type {
   MetricDirection,
   PilotMetricValue,
   ReportTable,
+  ReportSeries,
   MetricOutput,
   MetricComputer,
   CorrelationVerdict,

@@ -22,4 +22,8 @@
 // v1: initial release — 26 metrics across 6 families (day profile & wind,
 //     climbing, gliding, decision-making, gaggle, race craft), each ranked
 //     by Spearman correlation against GAP rank.
-export const FIELD_ANALYSIS_VERSION = 1;
+// v2: race.time_behind and race.leg_time_lost additionally emit extraSeries
+//     (structured horserace/waterfall data for the UI's charts) alongside
+//     their extraTables. No metric VALUE changed; the bump exists so stored
+//     reports regain the new field on their next lazy revalidation.
+export const FIELD_ANALYSIS_VERSION = 2;
