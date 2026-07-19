@@ -48,14 +48,19 @@ fail=0
 # elsewhere — e.g. the /app.html -> /app outage where every SPA route
 # 308-redirected to a "Page not found".
 # Retry with backoff: /comp is served by the SSR Pages Function, which can
-# propagate to the edge a few seconds after the static assets, so a
-# just-finished deploy may transiently 404 it.
+# propagate to the edge after the static assets, so a just-finished deploy may
+# transiently 404 it. On the FIRST deploy of a new branch (fresh preview
+# environment) that lag was measured at ~33s — run 29703696216 saw /comp 404
+# for the whole old 10×3s window and then serve the correct SHA two seconds
+# after it expired — so the budget is 20×3s (~60s): comfortable headroom for
+# first-time deploys while a live route still passes on the first attempt.
+ROUTE_ATTEMPTS=20
 check_route() {
   local route="$1" code=""
-  for attempt in $(seq 1 10); do
+  for attempt in $(seq 1 "$ROUTE_ATTEMPTS"); do
     code=$(curl -s -o /dev/null -w '%{http_code}' "${DEPLOY_URL}${route}")
     if [ "$code" = "200" ]; then echo "${route} -> ${code}"; return 0; fi
-    echo "${route} -> ${code} (attempt ${attempt}/10, retrying in 3s…)"
+    echo "${route} -> ${code} (attempt ${attempt}/${ROUTE_ATTEMPTS}, retrying in 3s…)"
     sleep 3
   done
   echo "::error::${route} returned HTTP ${code} after retries (expected 200 — route not serving the app shell)"

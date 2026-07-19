@@ -8,11 +8,18 @@ export default defineConfig({
   testIgnore: ["**/ssr.spec.ts"],
   timeout: 60_000,
   retries: process.env.CI ? 1 : 0,
-  // Force sequential runs in CI. With 2 workers, the comp-creation +
-  // user-files tests overlap on the shared local D1 and intermittently
-  // race a 500 out of GET /api/comp/:id. Locally we keep the default
-  // (parallel) for speed; CI prioritises determinism.
-  workers: process.env.CI ? 1 : undefined,
+  // Force sequential runs everywhere. auth-api and competition-api are two
+  // separate wrangler/Miniflare processes that open the SAME D1 SQLite file
+  // (shared --persist-to), and concurrent cross-process access intermittently
+  // surfaces as a 500 "D1_ERROR: internal error" from dev-login or
+  // GET /api/comp/:id. Parallel test workers multiply that concurrency —
+  // locally ~1 in 4 full runs lost a test to it (worst on a cold start),
+  // while single-worker CI runs green without retries. The suite is
+  // startup-dominated, so sequential costs only a few seconds over parallel
+  // (~37s vs ~32s). Don't restore parallelism without moving both workers
+  // into one Miniflare instance (needs a dev-router primary worker, since
+  // multi-config `wrangler dev -c … -c …` only exposes the primary's port).
+  workers: 1,
   reporter: process.env.CI
     ? [["html", { open: "never" }], ["list"]]
     : [["list"]],
