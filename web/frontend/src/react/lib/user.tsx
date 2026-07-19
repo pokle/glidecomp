@@ -9,6 +9,7 @@
  */
 import { createContext, useContext, useEffect, useState } from "react";
 import { getCurrentUser, type AuthUser } from "../../auth/client";
+import { safeNext } from "./safe-next";
 
 /**
  * "actual" is no preview (render the real role). "admin" renders comp-admin
@@ -114,10 +115,14 @@ export function goToSignIn(next?: string) {
     window.location.reload();
     return;
   }
-  const target =
-    next && next.startsWith("/") && !next.startsWith("//")
-      ? `/signin?next=${encodeURIComponent(next)}`
-      : "/signin";
+  // Validate `next` down to a same-origin path with the same parser the
+  // browser uses (safeNext) — the naive startsWith("/") guard let a
+  // backslash-folded "/\\host" through (see safe-next.ts). Empty fallback so
+  // an off-origin `next` degrades to a plain /signin rather than a bogus link.
+  const validated = safeNext(next, "");
+  const target = validated
+    ? `/signin?next=${encodeURIComponent(validated)}`
+    : "/signin";
   window.location.assign(target);
 }
 
