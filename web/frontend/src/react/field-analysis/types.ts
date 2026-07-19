@@ -24,6 +24,7 @@ export type {
   CompAggregateReport,
   CompMetricAggregate,
   ReportTable,
+  ReportSeries,
   PilotMetricValue,
 } from "@glidecomp/engine";
 

@@ -60,6 +60,7 @@ export function evaluateField(
       perPilot,
       fieldSummary: output?.fieldSummary,
       extraTables: output?.extraTables,
+      extraSeries: output?.extraSeries,
       correlation,
       ...(error !== undefined ? { error } : {}),
     };

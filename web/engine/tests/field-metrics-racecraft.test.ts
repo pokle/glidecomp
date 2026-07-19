@@ -237,6 +237,20 @@ describe('race.leg_time_lost (waterfall)', () => {
     ]);
     expect(table.footnotes!.length).toBeGreaterThan(0);
   });
+
+  it('emits the structured waterfall series as the table’s data twin', () => {
+    const series = out.extraSeries![0];
+    expect(series.kind).toBe('waterfall');
+    expect(series.yUnit).toBe('s');
+    expect(series.xLabels).toEqual(['SSS→MIDTP', 'MIDTP→ESS']);
+    // Same pilots and the same numbers the table's m:ss cells were formatted
+    // from — signed seconds vs the winner, null = leg not completed.
+    expect(series.perPilot).toEqual([
+      { trackFile: 'alpha.igc', points: [0, 0] },
+      { trackFile: 'bravo.igc', points: [60, 60] },
+      { trackFile: 'charlie.igc', points: [200, null] },
+    ]);
+  });
 });
 
 describe('race.time_behind (horserace)', () => {
@@ -268,6 +282,26 @@ describe('race.time_behind (horserace)', () => {
 
   it('notes the sanity-check role in its explanation', () => {
     expect(metric('race.time_behind').explanation).toContain('sanity check');
+  });
+
+  it('emits the structured horserace series as the table’s data twin', () => {
+    const series = out.extraSeries![0];
+    expect(series.kind).toBe('horserace');
+    expect(series.yUnit).toBe('min');
+    expect(series.xLabels).toEqual(['START', 'MIDTP', 'END', 'GOALWP']);
+    expect(series.perPilot.map((p) => p.trackFile)).toEqual([
+      'alpha.igc',
+      'bravo.igc',
+      'charlie.igc',
+    ]);
+    // Raw minutes behind — the numbers the table's 1-decimal cells came from.
+    expect(series.perPilot[0].points).toEqual([0, 0, 0, 0]);
+    expect(series.perPilot[1].points.slice(0, 3)).toEqual([0.5, 1.5, 2.5]);
+    expect(series.perPilot[1].points[3]).toBeNull();
+    expect(series.perPilot[2].points[2]).toBeNull();
+    for (const p of series.perPilot) {
+      expect(p.points.length).toBe(series.xLabels.length);
+    }
   });
 });
 

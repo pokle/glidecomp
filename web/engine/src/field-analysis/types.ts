@@ -115,6 +115,29 @@ export interface ReportTable {
   footnotes?: string[];
 }
 
+/**
+ * A structured numeric series a metric wants CHARTED — the data twin of an
+ * extraTable, emitted alongside it (never instead: the table is the CLI's
+ * rendering and the UI's accessible equivalent, so it always ships).
+ *
+ * X is categorical (turnpoints, legs); every pilot's points array aligns to
+ * xLabels, with null = not reached / leg not completed. Values are raw
+ * numbers in yUnit — presentation formatting stays with the consumer.
+ */
+export interface ReportSeries {
+  /** Stable id, unique within the metric (e.g. 'race.time_behind.horserace'). */
+  id: string;
+  title: string;
+  /** What shape the consumer should draw. */
+  kind: 'horserace' | 'waterfall';
+  /** Categorical x positions, in order (turnpoint or leg labels). */
+  xLabels: string[];
+  /** Unit of point values, in the metric unit vocabulary ('min', 's', …). */
+  yUnit: string;
+  /** One row per pilot with any data; points align to xLabels. */
+  perPilot: { trackFile: string; points: (number | null)[] }[];
+}
+
 export interface MetricOutput {
   /**
    * One entry per FieldContext.pilots element. Entries are re-aligned by
@@ -126,6 +149,8 @@ export interface MetricOutput {
   fieldSummary?: string[];
   /** Rich tables printed after the family's per-pilot table. */
   extraTables?: ReportTable[];
+  /** Structured twins of extraTables, for charting. Ignored by the CLI. */
+  extraSeries?: ReportSeries[];
 }
 
 export interface MetricComputer {
@@ -178,6 +203,7 @@ export interface MetricReport {
   perPilot: PilotMetricValue[];
   fieldSummary?: string[];
   extraTables?: ReportTable[];
+  extraSeries?: ReportSeries[];
   /** Null when too few non-null values (< 3) or zero variance. */
   correlation: MetricCorrelation | null;
   /** Set when compute() threw — the report shows the failure instead of dying. */
