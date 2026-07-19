@@ -5,8 +5,19 @@
  * crumb, marked `aria-current="page"` and rendered as plain (non-navigable)
  * text — you're already there.
  *
- * Built on RAC's `Breadcrumbs`/`Breadcrumb` collection (the component the rest
- * of the app will adopt as it moves to react-aria-components). RAC renders the
+ * This is the app's ONLY breadcrumb component. It replaced a parents-only
+ * variant (`components/Breadcrumbs.tsx`) that omitted the current page on the
+ * grounds that the H1 below already names it — the two coexisted through the
+ * RAC migration and disagreed, which made trail depth inconsistent between
+ * sibling pages (comp detail showed one crumb where task detail showed three)
+ * and cost the `aria-current="page"` anchor. The duplication with the H1 is
+ * the accepted trade: the trail is small muted text and reads as *location*,
+ * the H1 reads as *title*.
+ *
+ * Build the `items` array with the helpers in `lib/crumbs.ts` rather than
+ * inline, so the same destination gets the same label everywhere.
+ *
+ * Built on RAC's `Breadcrumbs`/`Breadcrumb` collection. RAC renders the
  * `<nav><ol><li>` structure and treats the LAST `Breadcrumb` as current; we
  * give it a plain-text child (not a `Link`) so there's no self-referential link
  * to disable, and set `aria-current="page"` on that span ourselves. Parent
@@ -14,8 +25,7 @@
  * rac/router.tsx.
  *
  * API: `items` are the ancestor links (each navigates); `current` is the label
- * of the page you're on. Contrast the parents-only `components/Breadcrumbs.tsx`,
- * which omits the current page entirely (relying on the H1 below the trail).
+ * of the page you're on.
  */
 import {
   Breadcrumbs as AriaBreadcrumbs,

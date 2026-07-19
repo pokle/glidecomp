@@ -22,7 +22,8 @@ import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { useAdminView, useUser } from "../lib/user";
-import { Breadcrumbs } from "../components/Breadcrumbs";
+import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { underComp } from "../lib/crumbs";
 import { formatCoords, parseCoords } from "../comp/route-editor";
 import { AddWaypointDialog } from "../comp/AddWaypointDialog";
 import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
@@ -262,12 +263,7 @@ export function CompWaypoints() {
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
-      <Breadcrumbs
-        items={[
-          { label: "Competitions", to: "/comp" },
-          { label: compName || "Competition", to: `/comp/${compId}` },
-        ]}
-      />
+      <Breadcrumbs items={underComp(compId, compName)} current="Waypoints" />
       <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2">
         <h1 className="min-w-0 flex-1 text-2xl font-bold">Waypoints</h1>
         {isAdmin ? (

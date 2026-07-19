@@ -15,11 +15,11 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Badge } from "@/react/rac/badge";
 import { SimpleSelect } from "@/react/rac/select";
-import { RacRouterProvider } from "@/react/rac/router";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { DivergingMeter } from "@/react/rac/meter";
 import { Alert, AlertDescription, AlertTitle } from "@/react/ui/alert";
 import { RhoSparkline } from "../field-analysis/charts/RhoSparkline";
+import { underComp } from "../lib/crumbs";
 import { api } from "../../comp/api";
 import { useUser } from "../lib/user";
 import { ScoreFreshness } from "../comp/ScoreFreshness";
@@ -27,14 +27,6 @@ import type { CompFieldAnalysisData } from "../field-analysis/types";
 import type { CompDetailData } from "../comp/types";
 
 export function CompFieldAnalysis() {
-  return (
-    <RacRouterProvider>
-      <CompFieldAnalysisContent />
-    </RacRouterProvider>
-  );
-}
-
-function CompFieldAnalysisContent() {
   const { compId } = useParams<{ compId: string }>();
   const { user, loading: userLoading } = useUser();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -139,10 +131,7 @@ function CompFieldAnalysisContent() {
     );
   }, [active]);
 
-  const crumbs = [
-    { label: "Competitions", to: "/comp" },
-    { label: comp?.name ?? data?.comp_name ?? "Competition", to: `/comp/${compId}` },
-  ];
+  const crumbs = underComp(compId, comp?.name ?? data?.comp_name);
 
   if (userLoading || status === "loading") {
     return (
@@ -212,21 +201,25 @@ function CompFieldAnalysisContent() {
         </Alert>
       ) : null}
 
+      {/* The per-task reports are chapters of this page, so they get a real
+          nav landmark rather than a prose footnote — this is the only way in
+          to them, and each is now a child URL of this one. */}
       {data && data.tasks.length > 0 ? (
-        <p className="mt-4 text-sm text-muted-foreground">
-          Includes{" "}
-          {data.tasks.map((t, i) => (
-            <span key={t.task_id}>
-              {i > 0 ? ", " : ""}
-              <Link
-                to={`/comp/${compId}/task/${t.task_id}/analysis`}
-                className="underline underline-offset-4"
-              >
-                {t.label} {t.task_name}
-              </Link>
-            </span>
+        <nav
+          aria-label="Per-task field analysis"
+          className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm"
+        >
+          <span className="text-muted-foreground">Per task:</span>
+          {data.tasks.map((t) => (
+            <Link
+              key={t.task_id}
+              to={`/comp/${compId}/analysis/task/${t.task_id}`}
+              className="underline underline-offset-4 hover:text-foreground"
+            >
+              {t.label} {t.task_name}
+            </Link>
           ))}
-        </p>
+        </nav>
       ) : null}
 
       {classes.length > 1 ? (

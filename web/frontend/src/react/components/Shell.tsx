@@ -19,6 +19,7 @@ import {
 } from "@/react/ui/dropdown-menu";
 import { Separator } from "@/react/ui/separator";
 import { cn } from "@/react/lib/utils";
+import { RacRouterProvider } from "@/react/rac/router";
 import { signOut } from "../../auth/client";
 import {
   DEV_SIGN_IN_ENABLED,
@@ -54,6 +55,10 @@ export function Shell() {
   }, [user, loading, navigate]);
 
   return (
+    // Every routed page can now use RAC links (breadcrumbs are app-wide), so
+    // the RAC->react-router bridge lives here once rather than in each page.
+    // SSR-safe: it only uses useNavigate/useHref, which work under StaticRouter.
+    <RacRouterProvider>
     <div className="flex min-h-dvh flex-col">
       {/* Always-present glass menu bar (Inscribe-style): translucent background
           with backdrop blur, so content scrolls beneath it. */}
@@ -143,6 +148,7 @@ export function Shell() {
 
       <PreviewAsPill />
     </div>
+    </RacRouterProvider>
   );
 }
 

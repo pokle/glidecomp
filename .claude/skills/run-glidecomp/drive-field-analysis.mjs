@@ -58,7 +58,7 @@ async function main() {
 
   // 2. Follow it. Cold => pending; poll until the background compute lands.
   await link.first().click();
-  await page.waitForURL(/\/analysis$/);
+  await page.waitForURL(/\/analysis\/task\/[^/]+$/);
   await page.screenshot({ path: path.join(SHOTS, "fa-task-pending.png"), fullPage: true });
 
   // NB: "networkidle" never settles here — the freshness poller keeps a
@@ -112,7 +112,7 @@ async function main() {
   // 5. Anonymous must not see it.
   const anon = await browser.newContext();
   const anonPage = await anon.newPage();
-  await anonPage.goto(`${BASE}/comp/${comp.comp_id}/task/${task.task_id}/analysis`, {
+  await anonPage.goto(`${BASE}/comp/${comp.comp_id}/analysis/task/${task.task_id}`, {
     waitUntil: "domcontentloaded",
   });
   await anonPage.waitForTimeout(1500);

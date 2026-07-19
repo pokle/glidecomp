@@ -39,7 +39,8 @@ import { gunzipResponse } from "../../analysis/storage";
 import type { BestProgressRoute, OpenDistanceLine } from "../../analysis/map-provider";
 import { formatTaskDate } from "../lib/format";
 import { formatTimeInZone, zoneNameWithOffset } from "../lib/time";
-import { Breadcrumbs } from "../components/Breadcrumbs";
+import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { underTask } from "../lib/crumbs";
 import { Timestamp } from "../components/Timestamp";
 import type {
   ClassScore,
@@ -509,11 +510,8 @@ export function PilotScoreDetail() {
   const ready = state.kind === "ready" ? state.data : null;
   const breadcrumbs = (
     <Breadcrumbs
-      items={[
-        { label: "Competitions", to: "/comp" },
-        { label: ready?.comp.name ?? "Competition", to: `/comp/${compId}` },
-        { label: ready?.task.name ?? "Task", to: `/comp/${compId}/task/${taskId}` },
-      ]}
+      items={underTask(compId, ready?.comp.name, taskId, ready?.task.name)}
+      current={ready?.entry.pilot_name ?? "Pilot"}
     />
   );
 

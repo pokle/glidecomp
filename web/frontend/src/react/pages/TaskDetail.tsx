@@ -29,7 +29,6 @@ import { TextField, Label, Description } from "@/react/rac/field";
 import { Checkbox, CheckboxGroup } from "@/react/rac/checkbox";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { Tag, TagGroup } from "@/react/rac/tag-group";
-import { RacRouterProvider } from "@/react/rac/router";
 import { RacConfirmProvider } from "@/react/rac/confirm";
 import { DatePicker, TimePicker } from "@/react/ui/date-picker";
 import { api } from "../../comp/api";
@@ -57,15 +56,14 @@ import {
 } from "../comp/types";
 import { useInitialData } from "../lib/initial-data";
 import type { TaskDetailLoaderData } from "../loaders";
+import { underComp } from "../lib/crumbs";
 import { cn } from "../lib/utils";
 
 export function TaskDetail() {
   return (
-    <RacRouterProvider>
-      <RacConfirmProvider>
-        <TaskDetailContent />
-      </RacConfirmProvider>
-    </RacRouterProvider>
+    <RacConfirmProvider>
+      <TaskDetailContent />
+    </RacConfirmProvider>
   );
 }
 
@@ -183,13 +181,7 @@ function TaskDetailContent() {
 
   return (
     <div>
-      <Breadcrumbs
-        items={[
-          { label: "Competitions", to: "/comp" },
-          { label: comp?.name ?? "Competition", to: `/comp/${compId}` },
-        ]}
-        current={task.name}
-      />
+      <Breadcrumbs items={underComp(compId, comp?.name)} current={task.name} />
 
       {/* Header row mirrors CompDetail: title/meta left, admin Settings top right. */}
       <div className="mt-2 flex flex-wrap items-start gap-x-4 gap-y-2">
@@ -271,12 +263,16 @@ function TaskDetailContent() {
             LOADED — `comp?.scoring_format !== …` would fail open to a
             dead-end refusal page whenever the non-critical comp fetch
             degrades. Unlike the two anchors above this is an SPA route, so
-            it uses a RAC LinkButton through the RouterProvider. */}
+            it uses a RAC LinkButton through the RouterProvider.
+
+            Cross-links into the comp's field analysis subtree (the per-task
+            report is a chapter of that report, not of this page), so from
+            there "up" goes to the comp report, not back here. */}
         {isAdmin && task.xctsk && comp && comp.scoring_format !== "open_distance" ? (
           <LinkButton
             variant="outline"
             size="sm"
-            href={`/comp/${compId}/task/${taskId}/analysis`}
+            href={`/comp/${compId}/analysis/task/${taskId}`}
           >
             Field analysis
           </LinkButton>

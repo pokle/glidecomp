@@ -137,6 +137,8 @@ test.describe("SSR — isolation and fallback", () => {
    */
   for (const path of [
     "/comp/anything/analysis",
+    "/comp/anything/analysis/task/anything",
+    // The pre-re-nesting URL, redirected client-side — still needs the shell.
     "/comp/anything/task/anything/analysis",
   ]) {
     test(`a hard reload of ${path} serves a noindex app shell`, async ({ request }) => {

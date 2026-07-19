@@ -148,14 +148,14 @@ differs. Know which surface you're touching:
   text.
 - **Breadcrumbs** use the same label for the same destination everywhere
   ("Competitions") and are marked up as a `<nav aria-label="Breadcrumb">`
-  wrapping an ordered list. Two variants exist during the RAC migration:
-  - `rac/breadcrumbs.tsx` (task page; the app-wide target) follows the
-    **WAI-ARIA breadcrumb pattern** — ancestor links, then the current page as
-    the final crumb, rendered as plain text with `aria-current="page"`.
-  - `components/Breadcrumbs.tsx` (unconverted pages) is **parents-only** — the
-    current page is not a crumb, since the H1 directly below marks it.
-  Either satisfies WCAG; prefer the ARIA-native one for new/converted pages, as
-  the explicit `aria-current` gives AT users a "you are here" anchor.
+  wrapping an ordered list. One component app-wide: `rac/breadcrumbs.tsx`
+  follows the **WAI-ARIA breadcrumb pattern** — ancestor links, then the
+  current page as the final crumb, rendered as plain text with
+  `aria-current="page"`, which gives AT users a "you are here" anchor. Build
+  the ancestor array with the helpers in `lib/crumbs.ts` so a destination's
+  label is identical wherever it appears. (A parents-only variant,
+  `components/Breadcrumbs.tsx`, coexisted through the RAC migration and was
+  removed once every page converted.)
 - **Page titles** (WCAG 2.4.2): each SPA route sets a unique, descriptive
   `<title>`; static pages already do.
 

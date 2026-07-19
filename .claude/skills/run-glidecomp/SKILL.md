@@ -80,6 +80,20 @@ screenshots them. Paths below are relative to the repo root.
    ```
    Ends with `✓ drove field analysis end-to-end`; shots land in `shots/`
    (`fa-task.png`, `fa-task-family.png`, `fa-comp.png`, `fa-anon.png`).
+   **Breadcrumbs / navigation hierarchy** have their own driver — it asserts
+   the trail text on every `/comp` page and walks the field-analysis journey
+   (comp detail → Field analysis → a task chapter → up one level), including
+   the legacy-URL redirect and the "View task" sibling link:
+   ```bash
+   bun .claude/skills/run-glidecomp/drive-breadcrumbs.mjs
+   ```
+   Ends with `✓ breadcrumb hierarchy verified end-to-end`; shots in
+   `shots/bc-*.png`. **Gotcha:** read a trail only after the page's *own*
+   chrome appears — `waitForURL` resolves while React still has the previous
+   route mounted, and the comp/task names arrive from a later fetch, so a
+   single read races both and reports the old page's trail. The driver's
+   `trail()` polls toward an expected string for this reason.
+
    Cross-check the rendered separation ranking against the engine directly:
    `bun run score-task -- --wing HG --field-analysis web/samples/comps/corryong-cup-2026-open-t1/task.xctsk web/samples/comps/corryong-cup-2026-open-t1/`
    — the ρ values must match exactly.

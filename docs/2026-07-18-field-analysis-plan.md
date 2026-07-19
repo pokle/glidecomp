@@ -361,8 +361,15 @@ nav and the task page's button row:
 
 | Route | Page | Content |
 |---|---|---|
-| `/comp/:compId/task/:taskId/analysis` | `pages/TaskFieldAnalysis.tsx` | Basis → **separation ranking** → per-family `Disclosure`s (per-pilot table, field summaries, `extraTables`) |
 | `/comp/:compId/analysis` | `pages/CompFieldAnalysis.tsx` | Per-task ρ matrix + mean \|ρ\| + comp ρ, then the standings behind them |
+| `/comp/:compId/analysis/task/:taskId` | `pages/TaskFieldAnalysis.tsx` | Basis → **separation ranking** → per-family `Disclosure`s (per-pilot table, field summaries, `extraTables`) |
+
+The per-task page is nested **under the comp report**, not under the task
+page, because it is one chapter of that report: going up should land you
+among the other tasks to compare against. The task page still links to it
+(a cross-link into another subtree), and the chapter links back with a
+"View task" sibling button. The pre-nesting URL
+`/comp/:compId/task/:taskId/analysis` redirects.
 
 Presentation components are in `web/frontend/src/react/field-analysis/`. They
 re-export the engine's `formatMetricValue` / `FAMILY_ORDER` / `FAMILY_LABELS`
