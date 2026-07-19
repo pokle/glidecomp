@@ -22,13 +22,9 @@ import {
   signInWithOtp,
 } from "../../auth/client";
 import { DEV_SIGN_IN_ENABLED, signInAsDev, useUser } from "../lib/user";
+import { safeNext } from "../lib/safe-next";
 
 const RESEND_COOLDOWN_S = 60;
-
-/** Only same-origin paths — a `next` like `//evil.example` must not win. */
-function safeNext(raw: string | null): string {
-  return raw && raw.startsWith("/") && !raw.startsWith("//") ? raw : "/comp";
-}
 
 function parseOtpHash(hash: string): { otp: string; email: string } | null {
   const params = new URLSearchParams(hash.replace(/^#/, ""));
