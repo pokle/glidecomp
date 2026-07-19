@@ -6,14 +6,24 @@
  * text report. That ordering is the point of the whole exercise: the per-
  * family tables below are only worth reading in the light of which metrics
  * have any explanatory power at all on this day.
+ *
+ * When given the full report, the table is single-selectable and the
+ * selected metric renders as a rank scatter below it — the coefficient says
+ * a metric separated the field; the scatter shows whether that is a clean
+ * trend, two clusters, or one outlier. The top-ranked metric starts
+ * selected, so the strongest finding is visualized on first paint.
  */
+import { useState } from "react";
+import type { Key, Selection } from "react-aria-components";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { DivergingMeter } from "@/react/rac/meter";
 import { Badge } from "@/react/rac/badge";
 import { MetricExplanation } from "./MetricExplanation";
+import { MetricDetailPanel } from "./charts/MetricDetailPanel";
 import {
   FAMILY_LABELS,
   MIN_CORRELATION_N,
+  type FieldAnalysisReport,
   type MetricReport,
   type MetricCorrelation,
 } from "./types";
@@ -49,8 +59,32 @@ function VerdictBadge({ correlation }: { correlation: MetricCorrelation }) {
   return <Badge variant={variant}>{correlation.verdict}</Badge>;
 }
 
-export function SeparationRanking({ metrics }: { metrics: MetricReport[] }) {
+export function SeparationRanking({
+  metrics,
+  report,
+}: {
+  metrics: MetricReport[];
+  /** When provided, rows are selectable and the selected metric is plotted
+   * against rank below the table. */
+  report?: FieldAnalysisReport;
+}) {
   const ranked = rankMetrics(metrics);
+
+  // The user's pick, if it still exists in this class's ranking (class
+  // switches swap the metric set out from under it); the top-ranked metric
+  // otherwise.
+  const [selectedId, setSelectedId] = useState<Key | null>(null);
+  // Owned here, not in the scatter, so ticking "label every pilot" survives
+  // switching metrics (per-session only; a refresh resets it).
+  const [showAllLabels, setShowAllLabels] = useState(false);
+  const effectiveId =
+    report && ranked.length > 0
+      ? ranked.some((r) => r.metric.id === selectedId)
+        ? selectedId
+        : ranked[0].metric.id
+      : null;
+  const selectedMetric =
+    effectiveId !== null ? (metrics.find((m) => m.id === effectiveId) ?? null) : null;
 
   if (ranked.length === 0) {
     return (
@@ -70,11 +104,23 @@ export function SeparationRanking({ metrics }: { metrics: MetricReport[] }) {
         is best, so a metric where more is better shows a{" "}
         <strong>negative</strong> ρ. Bigger bars mean the metric separated the
         field more sharply on this task.
+        {report ? " Select a row to see that metric plotted against rank." : null}
       </p>
 
       <Table
         aria-label="Metric separation ranking"
         scrollLabel="Metric separation ranking"
+        {...(report
+          ? {
+              selectionMode: "single" as const,
+              selectionBehavior: "replace" as const,
+              disallowEmptySelection: true,
+              selectedKeys: effectiveId !== null ? [effectiveId] : [],
+              onSelectionChange: (keys: Selection) => {
+                if (keys !== "all") setSelectedId([...keys][0] ?? null);
+              },
+            }
+          : {})}
       >
         <TableHeader>
           <Column isRowHeader className="min-w-56">
@@ -92,7 +138,7 @@ export function SeparationRanking({ metrics }: { metrics: MetricReport[] }) {
         </TableHeader>
         <TableBody>
           {ranked.map(({ metric, correlation }) => (
-            <Row key={metric.id}>
+            <Row key={metric.id} id={metric.id}>
               <Cell className="whitespace-normal">
                 <span className="inline-flex items-center gap-1">
                   {metric.label}
@@ -132,6 +178,15 @@ export function SeparationRanking({ metrics }: { metrics: MetricReport[] }) {
           correlated fewer than {MIN_CORRELATION_N} pilots — treat those rows as
           indicative only.
         </p>
+      ) : null}
+
+      {report && selectedMetric ? (
+        <MetricDetailPanel
+          metric={selectedMetric}
+          report={report}
+          showAllLabels={showAllLabels}
+          onShowAllLabelsChange={setShowAllLabels}
+        />
       ) : null}
     </div>
   );

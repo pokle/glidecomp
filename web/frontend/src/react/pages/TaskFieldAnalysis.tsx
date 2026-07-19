@@ -337,7 +337,7 @@ function TaskFieldAnalysisContent() {
             <h2 id="separation-heading" className="text-lg font-semibold">
               What separated the field
             </h2>
-            <SeparationRanking metrics={active.report.metrics} />
+            <SeparationRanking metrics={active.report.metrics} report={active.report} />
           </section>
 
           <section aria-labelledby="families-heading" className="space-y-2">
