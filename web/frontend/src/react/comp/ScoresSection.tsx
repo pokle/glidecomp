@@ -181,17 +181,21 @@ function ScoreClassTable({
           {/* Open distance has no goal, speed section, or GAP point split —
               the score is simply the distance flown — so those columns are
               omitted. */}
+          {/* Quantities are right-aligned + tabular so digits line up column-wise
+              and scores can be compared down the page. Penalty stays left: its
+              cell may carry a reason after the number, so right-aligning would
+              push the numbers out of line rather than into it. */}
           <TableRow>
-            <TableHead>#</TableHead>
+            <TableHead className="text-right">#</TableHead>
             <TableHead>Pilot</TableHead>
             {!isOpenDistance ? <TableHead>Goal</TableHead> : null}
-            <TableHead>Distance</TableHead>
-            {hasSpeed ? <TableHead>Speed</TableHead> : null}
-            {!isOpenDistance ? <TableHead>Dist Pts</TableHead> : null}
-            {hasTimePoints ? <TableHead>Time Pts</TableHead> : null}
-            {hasLeadPoints ? <TableHead>Lead Pts</TableHead> : null}
+            <TableHead className="text-right">Distance</TableHead>
+            {hasSpeed ? <TableHead className="text-right">Speed</TableHead> : null}
+            {!isOpenDistance ? <TableHead className="text-right">Dist Pts</TableHead> : null}
+            {hasTimePoints ? <TableHead className="text-right">Time Pts</TableHead> : null}
+            {hasLeadPoints ? <TableHead className="text-right">Lead Pts</TableHead> : null}
             {hasPenalties ? <TableHead>Penalty</TableHead> : null}
-            <TableHead>Total</TableHead>
+            <TableHead className="text-right">Total</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -205,7 +209,7 @@ function ScoreClassTable({
                 title={`How ${p.pilot_name}'s score was calculated`}
                 onClick={() => navigate(detailHref)}
               >
-                <TableCell>{p.rank}</TableCell>
+                <TableCell className="text-right tabular-nums">{p.rank}</TableCell>
                 <TableCell>
                   {/* Real link inside the clickable row for middle-click /
                       keyboard access. */}
@@ -218,16 +222,18 @@ function ScoreClassTable({
                   </Link>
                 </TableCell>
                 {!isOpenDistance ? <TableCell>{p.made_goal ? "✓" : "—"}</TableCell> : null}
-                <TableCell>{(p.flown_distance / 1000).toFixed(1)} km</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {(p.flown_distance / 1000).toFixed(1)} km
+                </TableCell>
                 {hasSpeed ? (
-                  <TableCell>
+                  <TableCell className="text-right tabular-nums">
                     {p.speed_section_time !== null
                       ? formatDuration(p.speed_section_time)
                       : "—"}
                   </TableCell>
                 ) : null}
                 {!isOpenDistance ? (
-                  <TableCell>
+                  <TableCell className="text-right tabular-nums">
                     {/* Show the linear/difficulty split as a tooltip when HG
                         difficulty applies. */}
                     {diffPts > 0 ? (
@@ -241,9 +247,15 @@ function ScoreClassTable({
                     )}
                   </TableCell>
                 ) : null}
-                {hasTimePoints ? <TableCell>{Math.round(p.time_points)}</TableCell> : null}
+                {hasTimePoints ? (
+                  <TableCell className="text-right tabular-nums">
+                    {Math.round(p.time_points)}
+                  </TableCell>
+                ) : null}
                 {hasLeadPoints ? (
-                  <TableCell>{Math.round(p.leading_points)}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {Math.round(p.leading_points)}
+                  </TableCell>
                 ) : null}
                 {hasPenalties ? (
                   <TableCell>
@@ -257,7 +269,9 @@ function ScoreClassTable({
                     ) : null}
                   </TableCell>
                 ) : null}
-                <TableCell>{Math.round(p.total_score)}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {Math.round(p.total_score)}
+                </TableCell>
               </TableRow>
             );
           })}

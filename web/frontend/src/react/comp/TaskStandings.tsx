@@ -489,11 +489,11 @@ function ClassStandings({
         }}
       >
         <TableHeader>
-          <Column>#</Column>
+          <Column className="text-right">#</Column>
           <Column isRowHeader>Pilot</Column>
           <Column>Outcome</Column>
-          <Column>Distance</Column>
-          {!isOpenDistance ? <Column>Points</Column> : null}
+          <Column className="text-right">Distance</Column>
+          {!isOpenDistance ? <Column className="text-right">Points</Column> : null}
           {showManage ? <Column className="text-right">Manage</Column> : null}
         </TableHeader>
         <TableBody>
@@ -574,9 +574,12 @@ function StandingsRow({
   detailHref: string | null;
   onMutated: () => void;
 }) {
+  // Every column that goes through scoreCell (rank, distance, points) is a
+  // quantity, so they all get the same right-aligned tabular treatment — the
+  // "—" placeholder included, so blanks sit under the digits they stand in for.
   const scoreCell = (content: React.ReactNode) => (
     <Cell
-      className={greyed ? "opacity-40" : undefined}
+      className={`text-right tabular-nums${greyed ? " opacity-40" : ""}`}
       aria-busy={greyed || undefined}
     >
       {content}

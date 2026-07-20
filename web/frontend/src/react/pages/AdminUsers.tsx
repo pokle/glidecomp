@@ -142,10 +142,10 @@ export function AdminUsers() {
                 <TableCell className="text-muted-foreground whitespace-nowrap">
                   {new Date(u.created_at).toLocaleDateString()}
                 </TableCell>
-                <TableCell className="text-right">{u.track_count}</TableCell>
-                <TableCell className="text-right">{u.task_count}</TableCell>
-                <TableCell className="text-right">{u.admin_comp_count}</TableCell>
-                <TableCell className="text-right">{u.pilot_comp_count}</TableCell>
+                <TableCell className="text-right tabular-nums">{u.track_count}</TableCell>
+                <TableCell className="text-right tabular-nums">{u.task_count}</TableCell>
+                <TableCell className="text-right tabular-nums">{u.admin_comp_count}</TableCell>
+                <TableCell className="text-right tabular-nums">{u.pilot_comp_count}</TableCell>
               </TableRow>
             ))}
           </TableBody>

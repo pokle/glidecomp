@@ -356,18 +356,20 @@ function TurnpointsTable({ xctsk }: { xctsk: XCTask }) {
   return (
     <Table aria-label="Turnpoints" className="mt-2">
       <TableHeader>
-        <Column isRowHeader={false}>#</Column>
+        <Column isRowHeader={false} className="text-right">
+          #
+        </Column>
         <Column isRowHeader>Name</Column>
-        <Column>Radius</Column>
+        <Column className="text-right">Radius</Column>
         <Column>Type</Column>
         <Column>Direction</Column>
       </TableHeader>
       <TableBody>
         {xctsk.turnpoints.map((tp, i) => (
           <Row key={i}>
-            <Cell>{i + 1}</Cell>
+            <Cell className="text-right tabular-nums">{i + 1}</Cell>
             <Cell>{tp.waypoint.name}</Cell>
-            <Cell>{tp.radius} m</Cell>
+            <Cell className="text-right tabular-nums">{tp.radius} m</Cell>
             <Cell>{tp.type ?? "—"}</Cell>
             <Cell>
               {tp.type === "TAKEOFF" ? (
