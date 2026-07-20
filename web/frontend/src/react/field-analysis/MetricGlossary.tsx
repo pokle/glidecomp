@@ -50,7 +50,11 @@ export function MetricGlossary({
   }
 
   return (
-    <section aria-labelledby="glossary-heading" className="space-y-4">
+    // A reference chapter, so print starts it on a fresh page.
+    <section
+      aria-labelledby="glossary-heading"
+      className="space-y-4 print:break-before-page"
+    >
       <div>
         <h2 id="glossary-heading" className="scroll-mt-20 text-lg font-semibold">
           Metric glossary

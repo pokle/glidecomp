@@ -279,7 +279,7 @@ export function TaskFieldAnalysis() {
 
   if (userLoading || status === "loading") {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-6">
+      <div className="mx-auto max-w-6xl px-4 py-6 font-hyperlegible">
         <p className="text-sm text-muted-foreground">Loading field analysis…</p>
       </div>
     );
@@ -287,7 +287,7 @@ export function TaskFieldAnalysis() {
 
   if (status === "forbidden") {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-6">
+      <div className="mx-auto max-w-6xl px-4 py-6 font-hyperlegible">
         <Breadcrumbs items={crumbs} current={heading} />
         <h1 className="mt-3 text-2xl font-bold">{heading}</h1>
         <Alert className="mt-4">
@@ -304,7 +304,7 @@ export function TaskFieldAnalysis() {
 
   if (status === "error") {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-6">
+      <div className="mx-auto max-w-6xl px-4 py-6 font-hyperlegible">
         <Breadcrumbs items={crumbs} current={heading} />
         <h1 className="mt-3 text-2xl font-bold">{heading}</h1>
         <Alert className="mt-4">
@@ -321,7 +321,7 @@ export function TaskFieldAnalysis() {
     // TOC-less error/pending states) this is exactly the old single column.
     <div
       className={cn(
-        "mx-auto max-w-6xl px-4 py-6",
+        "mx-auto max-w-6xl px-4 py-6 font-hyperlegible",
         tocItems.length > 0 &&
           "xl:grid xl:max-w-[87rem] xl:grid-cols-[12rem_minmax(0,1fr)] xl:gap-10"
       )}
@@ -429,25 +429,32 @@ export function TaskFieldAnalysis() {
               <PercentileHeatmap report={active.report} />
             </section>
 
-            <section aria-labelledby="families-heading" className="space-y-2">
+            {/* In print, this whole section starts a fresh page and every
+                family after the first breaks onto its own page — the families
+                are the report's chapters. The first family stays under the
+                heading so the heading is never orphaned at a page's end. */}
+            <section
+              aria-labelledby="families-heading"
+              className="space-y-2 print:break-before-page"
+            >
               <h2 id="families-heading" className="scroll-mt-20 text-lg font-semibold">
                 The metrics in detail
               </h2>
-              {FAMILY_ORDER.map((family) => {
-                const metrics = grouped.get(family) ?? [];
-                return (
+              {FAMILY_ORDER.filter((family) => (grouped.get(family) ?? []).length > 0).map(
+                (family, i) => (
                   <MetricFamilySection
                     key={family}
                     family={family}
                     familyLabel={FAMILY_LABELS[family]}
-                    metrics={metrics}
+                    metrics={grouped.get(family) ?? []}
                     report={active.report}
                     compTimezone={comp?.timezone ?? null}
                     isExpanded={expandedFamilies.has(family)}
                     onExpandedChange={(expanded) => expandFamily(family, expanded)}
+                    printBreakBefore={i > 0}
                   />
-                );
-              })}
+                )
+              )}
             </section>
 
             {/* Every ⓘ popover's method prose, as one skimmable reference —
