@@ -16,18 +16,43 @@ import { SeriesChart } from "./charts/SeriesChart";
 import { bestAbsRho } from "./SeparationRanking";
 import type { FieldAnalysisReport, MetricReport, MetricFamily } from "./types";
 
+/** DOM id of a family's section — the TOC's scroll target. */
+export function familySectionId(family: MetricFamily): string {
+  return `family-${family}`;
+}
+
+/** DOM id of one metric's block (chart/tables) inside its family section. */
+export function metricBlockId(metricId: string): string {
+  return `metric-${metricId.replace(/\./g, "-")}`;
+}
+
+/**
+ * Does this metric render a substantial block — a chart or a rich table —
+ * worth its own TOC entry? Summary-only metrics stay out of the TOC or it
+ * would list nearly every metric twice.
+ */
+export function hasMetricBlock(m: MetricReport): boolean {
+  return (m.extraSeries?.length ?? 0) > 0 || (m.extraTables?.length ?? 0) > 0;
+}
+
 export function MetricFamilySection({
   family,
   familyLabel,
   metrics,
   report,
   defaultExpanded,
+  isExpanded,
+  onExpandedChange,
 }: {
   family: MetricFamily;
   familyLabel: string;
   metrics: MetricReport[];
   report: FieldAnalysisReport;
   defaultExpanded?: boolean;
+  /** Controlled expansion (the task page owns it so the TOC can open a
+   * collapsed family before scrolling to it). */
+  isExpanded?: boolean;
+  onExpandedChange?: (isExpanded: boolean) => void;
 }) {
   // Field-level metrics (wind, climb-by-hour) carry no per-pilot values at
   // all; a column of dashes for them is noise, so they only contribute their
@@ -44,9 +69,16 @@ export function MetricFamilySection({
   const failed = metrics.filter((m) => m.error);
 
   return (
+    // The anchor div, not the Disclosure, carries the DOM id: react-aria
+    // consumes `id` for its own wiring rather than forwarding it. scroll-mt
+    // keeps the sticky header from covering the section when the TOC
+    // scrolls here.
+    <div id={familySectionId(family)} className="scroll-mt-20">
     <Disclosure
       title={familyLabel}
       defaultExpanded={defaultExpanded}
+      isExpanded={isExpanded}
+      onExpandedChange={onExpandedChange}
       badge={
         best !== null ? (
           <Badge variant="outline">strongest |ρ| {best.toFixed(2)}</Badge>
@@ -72,7 +104,12 @@ export function MetricFamilySection({
           (m.fieldSummary?.length ?? 0) > 0 ||
           (m.extraTables?.length ?? 0) > 0 ||
           (m.extraSeries?.length ?? 0) > 0 ? (
-            <section key={m.id} className="space-y-1" aria-label={m.label}>
+            <section
+              key={m.id}
+              id={metricBlockId(m.id)}
+              className="scroll-mt-20 space-y-1"
+              aria-label={m.label}
+            >
               <h4 className="text-sm font-medium">{m.label}</h4>
               {m.fieldSummary?.map((line, i) => (
                 <p key={i} className="text-sm text-muted-foreground">
@@ -95,6 +132,7 @@ export function MetricFamilySection({
         )}
       </div>
     </Disclosure>
+    </div>
   );
 }
 
