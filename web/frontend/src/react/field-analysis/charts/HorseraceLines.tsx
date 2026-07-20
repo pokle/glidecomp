@@ -296,7 +296,7 @@ export function HorseraceLines({
         </g>
       </svg>
 
-      <p aria-hidden className="min-h-4 text-xs text-muted-foreground">
+      <p aria-hidden className="min-h-4 text-xs text-muted-foreground print:hidden">
         {readout
           ? lineLabel(readout)
           : "Hover or focus a line to name the pilot behind it."}

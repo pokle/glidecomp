@@ -47,7 +47,14 @@ export function Disclosure({
         </AriaButton>
         {badge}
       </Heading>
-      <AriaDisclosurePanel className="pl-5.5">{children}</AriaDisclosurePanel>
+      {/* Print shows the panel even when collapsed — paper has no way to
+          expand it, and a report that prints only its open drawers is not the
+          report. RAC hides the collapsed panel with hidden="until-found"
+          (content-visibility in supporting browsers, plain hidden elsewhere),
+          so both properties need the override. */}
+      <AriaDisclosurePanel className="pl-5.5 print:block! print:[content-visibility:visible]!">
+        {children}
+      </AriaDisclosurePanel>
     </AriaDisclosure>
   );
 }

@@ -43,7 +43,10 @@ export function Table({
 }) {
   return (
     <div
-      className="relative w-full overflow-x-auto"
+      // print:overflow-x-visible: a scroll viewport would print only its
+      // visible slice; letting the table overflow at least keeps every
+      // column present for browsers' shrink-to-fit.
+      className="relative w-full overflow-x-auto print:overflow-x-visible"
       {...(scrollLabel
         ? { role: "region", "aria-label": scrollLabel, tabIndex: 0 }
         : {})}

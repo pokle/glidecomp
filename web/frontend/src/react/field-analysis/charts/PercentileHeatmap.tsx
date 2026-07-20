@@ -183,7 +183,9 @@ export function PercentileHeatmap({ report }: { report: FieldAnalysisReport }) {
             {row.cells.map((cell) => (
               <div
                 key={cell.metric.id}
-                className="h-4 rounded-[2px]"
+                // print-color-adjust: the shade IS the data — without it,
+                // browsers strip the background and print an empty grid.
+                className="h-4 rounded-[2px] [print-color-adjust:exact]"
                 style={
                   cell.pct === null
                     ? undefined
@@ -200,8 +202,9 @@ export function PercentileHeatmap({ report }: { report: FieldAnalysisReport }) {
         ))}
       </div>
 
-      {/* Visual mirror of hover; the family tables are the accessible read. */}
-      <p aria-hidden className="min-h-4 text-xs text-muted-foreground">
+      {/* Visual mirror of hover; the family tables are the accessible read.
+          Hidden in print — an invitation to hover is meaningless on paper. */}
+      <p aria-hidden className="min-h-4 text-xs text-muted-foreground print:hidden">
         {readout
           ? readoutText(readout)
           : "Hover a cell for the pilot, value, and percentile behind it."}

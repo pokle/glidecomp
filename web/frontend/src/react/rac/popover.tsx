@@ -16,6 +16,7 @@ import {
   Dialog as AriaDialog,
   OverlayArrow,
   type PopoverProps as AriaPopoverProps,
+  type DialogRenderProps,
 } from "react-aria-components";
 
 import { cn } from "@/react/lib/utils";
@@ -29,7 +30,9 @@ export function Popover({
   ...props
 }: Omit<AriaPopoverProps, "className" | "children"> & {
   className?: string;
-  children: React.ReactNode;
+  /** Function children get the Dialog's render props — `close` in
+   * particular, so in-popover links can dismiss before navigating. */
+  children: React.ReactNode | ((renderProps: DialogRenderProps) => React.ReactNode);
 }) {
   return (
     <AriaPopover

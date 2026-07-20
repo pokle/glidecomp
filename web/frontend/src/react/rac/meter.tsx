@@ -54,7 +54,9 @@ export function DivergingMeter({
     >
       <div
         aria-hidden
-        className="relative h-2 w-full rounded-full bg-muted"
+        // print-color-adjust: the bar IS the reading — without it, browsers
+        // strip the backgrounds and print an empty track.
+        className="relative h-2 w-full rounded-full bg-muted [print-color-adjust:exact]"
       >
         {/* The zero axis. Always visible, so a near-zero bar still reads as
             "no correlation" rather than as a rendering glitch. */}

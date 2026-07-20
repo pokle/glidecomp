@@ -7,6 +7,8 @@
  * also imported by MetricExplanation — which the table imports, so leaving
  * it in the table would close an import cycle.
  */
+import type { MetricDirection } from "./types";
+
 export function unitWords(unit: string): string {
   switch (unit) {
     case "pct":
@@ -27,5 +29,22 @@ export function unitWords(unit: string): string {
       return "ratio";
     default:
       return unit;
+  }
+}
+
+/**
+ * How a metric's expected relationship to rank reads in prose. Lives here
+ * (not in MetricExplanation, where it started) for the same cycle-breaking
+ * reason as unitWords: both the popover and the glossary need it, and the
+ * popover links into the glossary.
+ */
+export function directionWords(direction: MetricDirection): string {
+  switch (direction) {
+    case "higher":
+      return "higher is better";
+    case "lower":
+      return "lower is better";
+    default:
+      return "no expected direction";
   }
 }

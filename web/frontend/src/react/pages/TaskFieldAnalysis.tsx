@@ -45,6 +45,7 @@ import {
 import { PageToc, type PageTocItem } from "../components/PageToc";
 import { cn } from "../lib/utils";
 import { AnalysisBasis } from "../field-analysis/AnalysisBasis";
+import { MetricGlossary } from "../field-analysis/MetricGlossary";
 import { PilotHighlightProvider } from "../field-analysis/PilotHighlightContext";
 import { PercentileHeatmap } from "../field-analysis/charts/PercentileHeatmap";
 import {
@@ -247,6 +248,7 @@ export function TaskFieldAnalysis() {
           ),
         ]
       ),
+      { id: "glossary-heading", label: "Metric glossary" },
     ];
   }, [active, grouped, topFamilies]);
 
@@ -336,7 +338,8 @@ export function TaskFieldAnalysis() {
             separated it.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        {/* Pure navigation/actions — meaningless on paper. */}
+        <div className="flex items-center gap-2 print:hidden">
           <Badge variant="outline">Admins only</Badge>
           {/* The trail now goes up to the comp report, so the task page — a
               genuine sibling relationship — gets an explicit link here. */}
@@ -381,20 +384,27 @@ export function TaskFieldAnalysis() {
 
       {classes.length > 1 ? (
         <div className="mt-4">
-          <SimpleSelect
-            ariaLabel="Pilot class"
-            value={selectedClass}
-            onChange={(value) => {
-              // In the URL so a link to a specific class is shareable.
-              const next = new URLSearchParams(searchParams);
-              next.set("class", value);
-              setSearchParams(next, { replace: true });
-            }}
-            options={classes.map((c) => ({
-              value: c.pilot_class,
-              label: c.pilot_class,
-            }))}
-          />
+          {/* The select is a control, so print swaps it for a plain
+              statement of which class this printout covers. */}
+          <div className="print:hidden">
+            <SimpleSelect
+              ariaLabel="Pilot class"
+              value={selectedClass}
+              onChange={(value) => {
+                // In the URL so a link to a specific class is shareable.
+                const next = new URLSearchParams(searchParams);
+                next.set("class", value);
+                setSearchParams(next, { replace: true });
+              }}
+              options={classes.map((c) => ({
+                value: c.pilot_class,
+                label: c.pilot_class,
+              }))}
+            />
+          </div>
+          <p className="hidden text-sm print:block">
+            Pilot class: <strong>{selectedClass}</strong>
+          </p>
         </div>
       ) : null}
 
@@ -439,6 +449,10 @@ export function TaskFieldAnalysis() {
                 );
               })}
             </section>
+
+            {/* Every ⓘ popover's method prose, as one skimmable reference —
+                and the printed form of those explanations. */}
+            <MetricGlossary entries={active.report.metrics} />
           </div>
         </PilotHighlightProvider>
       ) : null}
