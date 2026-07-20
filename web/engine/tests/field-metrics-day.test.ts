@@ -200,6 +200,41 @@ describe('day.wind', () => {
     expect(byLeg.rows.every((r) => r[1] === '—' && r[4] === '0')).toBe(true);
   });
 
+  it('emits wind-hourly and wind-legs series that agree with the tables', () => {
+    const out = dayWind.compute(makeDriftField());
+    expect(out.extraSeries!.map((s) => s.kind)).toEqual(['wind-hourly', 'wind-legs']);
+    const [hourly, legs] = out.extraSeries!;
+    if (hourly.kind !== 'wind-hourly' || legs.kind !== 'wind-legs') throw new Error('kinds');
+
+    // The whole-task vector mean matches the table's "Whole task" row.
+    const taskRow = out.extraTables![0].rows[0];
+    expect(hourly.wholeTask).not.toBeNull();
+    expect(hourly.wholeTask!.speedKmh.toFixed(1)).toBe(taskRow[1] as string);
+    expect(String(Math.round(hourly.wholeTask!.directionDeg) % 360)).toBe(taskRow[2] as string);
+    expect(String(hourly.wholeTask!.n)).toBe(taskRow[3] as string);
+
+    // One hourly point, in the BASE_TIME hour, same numbers as the hour row.
+    expect(hourly.hours.length).toBe(1);
+    expect(hourly.hours[0].t).toBe('2024-01-15T10:00:00.000Z');
+    expect(hourly.hours[0].n).toBe(hourly.wholeTask!.n);
+
+    // Legs: the circled leg carries a window + wind; the empty leg is null/0.
+    const circled = legs.legs.find((l) => l.label === 'START (SSS)→END (ESS)')!;
+    expect(circled.n).toBeGreaterThan(0);
+    expect(circled.from).not.toBeNull();
+    expect(circled.to).not.toBeNull();
+    expect(circled.speedKmh!).toBeGreaterThan(5);
+    const empty = legs.legs.find((l) => l.label === 'END (ESS)→GOAL (GOAL)')!;
+    expect(empty).toEqual({
+      label: 'END (ESS)→GOAL (GOAL)',
+      from: null,
+      to: null,
+      speedKmh: null,
+      directionDeg: null,
+      n: 0,
+    });
+  });
+
   it('emits times as instants the consumer renders in its zone', () => {
     // The engine never bakes a zone: hours are instants and the leg window is a
     // range; no cell is a pre-formatted "…UTC" string.
@@ -245,6 +280,25 @@ describe('day.climb_by_hour', () => {
   it('renders an empty table when the field has no thermals', () => {
     const table = firstTable(1, makeStraightField());
     expect(table.rows.length).toBe(0);
+  });
+
+  it('emits a climb-hourly series with an ordered quantile fan matching the table', () => {
+    const out = dayClimbByHour.compute(makeDriftField());
+    const series = out.extraSeries![0];
+    if (series.kind !== 'climb-hourly') throw new Error('kind');
+    expect(series.hours.length).toBe(out.extraTables![0].rows.length);
+
+    const hour = series.hours[0];
+    const row = out.extraTables![0].rows[0];
+    expect(hour.t).toBe((row[0] as { t: string }).t);
+    expect(hour.median.toFixed(1)).toBe(row[1] as string);
+    expect(hour.p90.toFixed(1)).toBe(row[2] as string);
+    expect(String(hour.n)).toBe(row[3] as string);
+    // The fan is ordered.
+    expect(hour.p10).toBeLessThanOrEqual(hour.p25);
+    expect(hour.p25).toBeLessThanOrEqual(hour.median);
+    expect(hour.median).toBeLessThanOrEqual(hour.p75);
+    expect(hour.p75).toBeLessThanOrEqual(hour.p90);
   });
 });
 
@@ -312,6 +366,25 @@ describe('day.launch_timing', () => {
     expect(best).toEqual({ hourMs: t(2), median: 1 });
     // With only the sparse hour present it is the busiest, so it qualifies.
     expect(pickBestConditionsHour(new Map([[t(1), [5]]]))).toEqual({ hourMs: t(1), median: 5 });
+  });
+
+  it('emits a day-timing series with best hour, takeoffs, and the task clock', () => {
+    const out = dayLaunchTiming.compute(makeDriftField());
+    const series = out.extraSeries![0];
+    if (series.kind !== 'day-timing') throw new Error('kind');
+
+    // Best hour mirrors the table's range cell.
+    expect(series.bestHour).toEqual({
+      from: '2024-01-15T10:00:00.000Z',
+      to: '2024-01-15T11:00:00.000Z',
+    });
+    // Every pilot's takeoff, ascending ISO instants.
+    expect(series.takeoffs.length).toBe(2);
+    expect([...series.takeoffs].sort()).toEqual(series.takeoffs);
+    // The test task defines no gates, launch window, or deadline.
+    expect(series.startGates).toEqual([]);
+    expect(series.launchOpen).toBeNull();
+    expect(series.deadline).toBeNull();
   });
 
   it('returns null for a pilot with no grid samples', () => {
@@ -388,6 +461,16 @@ describe('day metrics over kosci-loop-t1 (smoke)', () => {
         expect(v.value).toBeLessThanOrEqual(100);
       }
     }
+
+    // Every charting series ships alongside its table. Kosci tasks are gated
+    // races (4 gates, no goal deadline), so the timing series carries them.
+    expect(wind.extraSeries!.map((s) => s.kind)).toEqual(['wind-hourly', 'wind-legs']);
+    expect(climb.extraSeries!.map((s) => s.kind)).toEqual(['climb-hourly']);
+    const timingSeries = timing.extraSeries![0];
+    if (timingSeries.kind !== 'day-timing') throw new Error('kind');
+    expect(timingSeries.takeoffs.length).toBe(field.pilots.length);
+    expect(timingSeries.startGates.length).toBe(4);
+    expect(timingSeries.deadline).toBeNull();
 
     // The whole thing renders.
     const rendered = renderFieldReport(report);

@@ -13,7 +13,7 @@
  */
 import { useMemo, useRef, useState } from "react";
 import { cn } from "@/react/lib/utils";
-import type { FieldAnalysisReport, ReportSeries } from "../types";
+import type { CategoricalReportSeries, FieldAnalysisReport } from "../types";
 import { usePilotHighlight } from "../PilotHighlightContext";
 import { formatTickValue, linearScale, niceTicks, spreadLabels } from "./chart-utils";
 
@@ -73,7 +73,7 @@ export function HorseraceLines({
   series,
   report,
 }: {
-  series: ReportSeries;
+  series: CategoricalReportSeries;
   report: FieldAnalysisReport;
 }) {
   const { highlight, setHighlight } = usePilotHighlight();

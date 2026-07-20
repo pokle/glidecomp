@@ -49,7 +49,9 @@ export function ReportTableView({
         <TableHeader>
           {table.columns.map((col, i) => (
             <Column
-              key={col.header || `col-${i}`}
+              // Index-qualified: concentric tasks (Kosciuszko Loop) repeat a
+              // waypoint name across turnpoint column headers.
+              key={`col-${i}-${col.header}`}
               // The first column identifies the row (a pilot, an hour, a leg),
               // so it is the row header — without this every cell is announced
               // without saying which row it belongs to.

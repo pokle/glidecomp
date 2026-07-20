@@ -1,6 +1,9 @@
 # Task Management & Matching Feature Specification
 
-> **Status:** Future Roadmap - Not yet implemented. Waiting on authentication, D1 database, and API Worker infrastructure.
+> **Status:** Future Roadmap - Not yet implemented. The infrastructure it was
+> waiting on (authentication, D1, API Workers) has since shipped — see
+> [system-architecture-spec.md](./system-architecture-spec.md) — but the
+> task-matching feature itself remains unbuilt.
 
 ## Overview
 
@@ -16,16 +19,15 @@ When loading a track (IGC file), we need to find matching task files (.xctsk). C
 
 ## Current State
 
-- **Frontend only** - No backend workers or D1 database yet (web/workers/ only has the AirScore caching proxy)
 - **Command menu exists** - Uses native `<dialog>` styled in `analysis.css`
-- **No authentication** - Needs to be implemented first
-- **Task files** - Currently loaded from static `/data/tasks/` or fetched from xcontest.org
+- **Task files** - Loaded from static `/data/tasks/`, fetched from xcontest.org, or attached to a competition task via the competition-api
+- **No task↔track matching** - The matching workflow this spec describes is not built
 
-## Prerequisites
+## Prerequisites (all shipped since this spec was written)
 
-- [ ] Implement secure authentication on Cloudflare (separate spec needed)
-- [ ] Set up D1 database
-- [ ] Create API Worker infrastructure
+- [x] Secure authentication (better-auth on the `auth-api` Worker, `docs/auth.md`)
+- [x] D1 database (`taskscore-auth`, migrations in `web/db/migrations/`)
+- [x] API Worker infrastructure (`web/workers/{auth-api,competition-api,airscore-api}`)
 
 ---
 

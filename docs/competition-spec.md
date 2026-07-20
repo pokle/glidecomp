@@ -291,9 +291,10 @@ Pilot profile (the `pilot` table) is managed via the competition-api worker:
   - Also lists all recently created non-test competitions (created within the last 24 months)
 - `/comp/{comp_id}`: Competition page for existing competition.
 - `/comp/{comp_id}/task/{task_id}`: Task page for existing tasks.
-- `/comp/{comp_id}/analysis`, `/comp/{comp_id}/task/{task_id}/analysis`:
-  field analysis (behavioural metrics). **Admin-only** during rollout, and
-  client-rendered only — see
+- `/comp/{comp_id}/analysis`, `/comp/{comp_id}/analysis/task/{task_id}`:
+  field analysis (behavioural metrics); the per-task page is a chapter of the
+  comp report (the old `/comp/{comp_id}/task/{task_id}/analysis` URL
+  redirects). **Admin-only** during rollout, and client-rendered only — see
   [2026-07-18-field-analysis-plan.md](./2026-07-18-field-analysis-plan.md).
 - `/scores`: public scores page. Query params: comp_id
 

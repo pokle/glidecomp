@@ -240,6 +240,7 @@ describe('race.leg_time_lost (waterfall)', () => {
 
   it('emits the structured waterfall series as the table’s data twin', () => {
     const series = out.extraSeries![0];
+    if (series.kind !== 'waterfall') throw new Error('kind');
     expect(series.kind).toBe('waterfall');
     expect(series.yUnit).toBe('s');
     expect(series.xLabels).toEqual(['SSS→MIDTP', 'MIDTP→ESS']);
@@ -286,6 +287,7 @@ describe('race.time_behind (horserace)', () => {
 
   it('emits the structured horserace series as the table’s data twin', () => {
     const series = out.extraSeries![0];
+    if (series.kind !== 'horserace') throw new Error('kind');
     expect(series.kind).toBe('horserace');
     expect(series.yUnit).toBe('min');
     expect(series.xLabels).toEqual(['START', 'MIDTP', 'END', 'GOALWP']);

@@ -12,7 +12,7 @@
  */
 import { useMemo, useState } from "react";
 import { SimpleSelect } from "@/react/rac/select";
-import type { FieldAnalysisReport, ReportSeries } from "../types";
+import type { CategoricalReportSeries, FieldAnalysisReport } from "../types";
 import { linearScale } from "./chart-utils";
 
 const W = 560;
@@ -44,7 +44,7 @@ export function LegWaterfall({
   series,
   report,
 }: {
-  series: ReportSeries;
+  series: CategoricalReportSeries;
   report: FieldAnalysisReport;
 }) {
   const pilots = useMemo<WaterfallPilot[]>(() => {

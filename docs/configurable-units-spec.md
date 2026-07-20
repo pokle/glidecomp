@@ -126,7 +126,7 @@ Provides conversion and formatting functions:
 - `formatClimbRate(mps)` - Format climb rate from m/s (shows + sign by default)
 - `formatAltitudeChange(m)` - Format altitude change (always shows sign)
 - `formatRadius(m)` - Format turnpoint radius with appropriate precision
-- `onUnitsChanged(callback)` - Subscribe to unit preference changes
+- `onUnitsChanged(callback)` - Subscribe to unit preference changes (browser-side, lives in `web/frontend/src/analysis/units-browser.ts`, not the engine's `units.ts`)
 
 **FormattedValue Interface:**
 ```typescript
