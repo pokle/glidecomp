@@ -1,14 +1,13 @@
 // Copyright (c) 2026, Tushar Pokle.  All rights reserved.
 
 /**
- * Presentational hour/clock formatting for the field-analysis report labels.
+ * Time-of-day formatting for the CLI's plain-text field-analysis report.
  *
- * The competition's IANA zone is threaded into the metrics as an EXPLICIT
- * input (FieldContext.timeZone) — never read from the runtime's default — so
- * output stays deterministic: the same field + zone always produces the same
- * labels, in workerd, bun and the browser alike. When no zone is given the
- * labels are UTC, byte-identical to what the metrics emitted before zones
- * existed.
+ * The metrics emit times as machine-readable instants (ReportCell `{ t: ISO }`)
+ * and never bake a zone; the CLI renderer (report.ts) formats them here in the
+ * zone it was given (the task's local zone, derived from its location — see
+ * cli/score-task.ts). The web UI formats the same instants with `comp.timezone`
+ * on the frontend instead. When no zone is given the output is UTC.
  *
  * DOM-free and Intl-only, so it is safe in the engine (no `@glidecomp/engine/
  * timezone` / tz-lookup dependency — the zone STRING is resolved upstream and
@@ -87,11 +86,11 @@ export function hhmmInZone(tMs: number, timeZone?: string): string {
 }
 
 /**
- * An hour-bucket label: the bucket's wall clock in the zone plus the zone
- * token — "14:00 AEDT", or "13:00 UTC" when no zone is given (byte-identical
- * to the pre-zone label). Whole-hour zones land on ":00"; a half-hour zone
- * (India) lands on ":30", which the minute field preserves.
+ * A time-of-day label: the instant's wall clock in the zone plus the zone
+ * token — "14:00 AEDT", or "13:00 UTC" when no zone is given. Used by the CLI
+ * renderer for every `{ t }` report cell (hour buckets and takeoff clocks
+ * alike).
  */
-export function hourLabelInZone(hourMs: number, timeZone?: string): string {
-  return `${hhmmInZone(hourMs, timeZone)} ${zoneToken(hourMs, timeZone)}`;
+export function timeWithZone(tMs: number, timeZone?: string): string {
+  return `${hhmmInZone(tMs, timeZone)} ${zoneToken(tMs, timeZone)}`;
 }

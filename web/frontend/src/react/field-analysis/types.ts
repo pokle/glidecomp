@@ -23,6 +23,7 @@ export type {
   MetricCorrelation,
   CompAggregateReport,
   CompMetricAggregate,
+  ReportCell,
   ReportTable,
   ReportSeries,
   PilotMetricValue,

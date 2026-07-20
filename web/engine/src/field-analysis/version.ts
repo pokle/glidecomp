@@ -30,4 +30,10 @@
 //     time zone (FieldContext.timeZone) instead of always UTC. No metric
 //     value changed — only the "HH:00 UTC" row/summary text — but the bump
 //     rolls stored reports so their labels pick up the comp zone.
-export const FIELD_ANALYSIS_VERSION = 3;
+// v4: report tables emit times of day as machine-readable instants
+//     (ReportCell `{ t: ISO }`) instead of pre-formatted "HH:00 UTC" strings,
+//     and the two prose "by hour"/"takeoffs … UTC" summaries became tables —
+//     so the consumer (web in comp time, CLI in the task's local time) renders
+//     the zone. No metric value changed; the bump rolls stored reports onto
+//     the new shape.
+export const FIELD_ANALYSIS_VERSION = 4;

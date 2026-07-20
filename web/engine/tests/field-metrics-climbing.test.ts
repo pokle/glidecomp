@@ -239,7 +239,12 @@ describe('climb.selectivity', () => {
     expect(picky).toBeGreaterThanOrEqual(50);
     expect(picky).toBeLessThan(100);
     expect(entryFor(out, 'picky').note).toContain('circling bouts');
-    expect(out.fieldSummary?.[0]).toContain('acceptance by hour');
+    // Acceptance-by-hour is a table of instants now (no baked "…UTC" prose).
+    const byHour = out.extraTables?.find((t) => t.title === 'Acceptance by hour');
+    expect(byHour).toBeDefined();
+    expect(byHour!.rows.length).toBeGreaterThan(0);
+    expect(typeof byHour!.rows[0][0]).toBe('object'); // an { t } instant
+    expect(out.fieldSummary).toBeUndefined();
   });
 
   it('is null for < 3 encounters or without a start', () => {

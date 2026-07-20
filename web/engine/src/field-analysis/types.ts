@@ -83,15 +83,6 @@ export interface FieldContext {
   legs: LegInfo[];
   /** ENU origin every grid east/north is measured from (first turnpoint's waypoint). */
   origin: { lat: number; lon: number };
-  /**
-   * Competition IANA zone for presentational hour/clock LABELS only (undefined
-   * → UTC). NEVER affects a computation — detectors, gates and every metric
-   * VALUE run on UTC regardless; this only decides how the day-profile/climbing
-   * report labels a time of day. An explicit input (resolved upstream from the
-   * comp's settings / task location), never the runtime's default, so labels
-   * stay deterministic. See ./format-time.ts.
-   */
-  timeZone?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -116,11 +107,22 @@ export interface PilotMetricValue {
   note?: string;
 }
 
-/** A generic plain-text table a metric wants printed (horserace, waterfall, wind…). */
+/**
+ * A report table cell: literal text, or `{ t }` — an instant (ISO 8601) the
+ * CONSUMER renders as a time of day in the reader's zone. The engine never
+ * bakes a zone into the report, so the same report reads in competition time
+ * on the web (frontend uses `comp.timezone`) and in the task's local time on
+ * the CLI (`renderFieldReport({ timeZone })`). See ./format-time.ts and the
+ * frontend's `formatTimeOfDay`.
+ */
+export type ReportCell = string | { t: string };
+
+/** A generic table a metric wants printed (horserace, waterfall, wind…). Cells
+ * are text or `{ t }` instants — see {@link ReportCell}. */
 export interface ReportTable {
   title: string;
   columns: { header: string; align: 'left' | 'right' }[];
-  rows: string[][];
+  rows: ReportCell[][];
   footnotes?: string[];
 }
 

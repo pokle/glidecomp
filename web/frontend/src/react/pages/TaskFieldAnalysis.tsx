@@ -432,6 +432,7 @@ export function TaskFieldAnalysis() {
                     familyLabel={FAMILY_LABELS[family]}
                     metrics={metrics}
                     report={active.report}
+                    compTimezone={comp?.timezone ?? null}
                     isExpanded={expandedFamilies.has(family)}
                     onExpandedChange={(expanded) => expandFamily(family, expanded)}
                   />

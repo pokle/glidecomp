@@ -2,16 +2,35 @@
  * Renders an engine `ReportTable` — the rich extra tables some metrics emit
  * (the start horserace, the leg-time waterfall, the wind-by-hour breakdown).
  *
- * These are pre-formatted strings from the engine, so this is presentation
- * only: the title becomes a real <caption>, column alignment is honoured, and
- * footnotes are associated with the table via aria-describedby rather than
- * merely sitting near it.
+ * Cells are mostly pre-formatted strings, so this is presentation only: the
+ * title becomes a real <caption>, column alignment is honoured, and footnotes
+ * are associated via aria-describedby. The exception is a `{ t }` cell — a
+ * machine-readable instant the engine leaves unzoned; here it is rendered as a
+ * time of day in the COMPETITION's zone (`compTimezone`), so the report never
+ * shows UTC unless the comp itself is UTC.
  */
 import { useId } from "react";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
-import type { ReportTable } from "./types";
+import { formatTimeOfDay } from "../lib/time";
+import type { ReportTable, ReportCell } from "./types";
 
-export function ReportTableView({ table }: { table: ReportTable }) {
+/** A report cell as a React node: text passes through; a `{ t }` instant
+ * renders as a comp-zone time of day inside a semantic <time>. */
+function renderCell(cell: ReportCell, compTimezone: string | null) {
+  if (typeof cell === "string") return cell;
+  return (
+    <time dateTime={cell.t}>{formatTimeOfDay(cell.t, compTimezone ?? undefined)}</time>
+  );
+}
+
+export function ReportTableView({
+  table,
+  compTimezone = null,
+}: {
+  table: ReportTable;
+  /** Competition IANA zone; `{ t }` time cells render in it (viewer-local when null). */
+  compTimezone?: string | null;
+}) {
   const footnotesId = useId();
   const hasFootnotes = (table.footnotes?.length ?? 0) > 0;
 
@@ -48,7 +67,7 @@ export function ReportTableView({ table }: { table: ReportTable }) {
                       : undefined
                   }
                 >
-                  {value}
+                  {renderCell(value, compTimezone)}
                 </Cell>
               ))}
             </Row>

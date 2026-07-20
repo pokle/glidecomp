@@ -92,28 +92,25 @@ function reaching(taskIndex: number, tSeconds: number): TurnpointReaching {
  * t=80 s, next turnpoint at t=600 s — the circling sits inside the SSS→ESS
  * leg) and one pilot gliding straight.
  */
-function makeDriftField(opts?: { timeZone?: string }): FieldContext {
+function makeDriftField(): FieldContext {
   const circler = [
     ...straightFixes(0, 60, -720, 800, 12, 0), // arrives at east = 0
     ...driftingCirclingFixes(70, 300, 0, 800, 2, 4), // 4 m/s eastward drift → wind FROM ~270°
     ...straightFixes(380, 300, 1300, 1400, 12, -1),
   ];
   const glider = straightFixes(0, 680, 0, 1500, 12, -0.5);
-  return makeTestField(
-    [
-      {
-        name: 'circler',
-        fixes: circler,
-        turnpointResult: {
-          sssReaching: reaching(1, 80),
-          sequence: [reaching(1, 80), reaching(2, 600)],
-          lastTurnpointReached: 2,
-        },
+  return makeTestField([
+    {
+      name: 'circler',
+      fixes: circler,
+      turnpointResult: {
+        sssReaching: reaching(1, 80),
+        sequence: [reaching(1, 80), reaching(2, 600)],
+        lastTurnpointReached: 2,
       },
-      { name: 'glider', fixes: glider },
-    ],
-    { timeZone: opts?.timeZone },
-  );
+    },
+    { name: 'glider', fixes: glider },
+  ]);
 }
 
 /** Field where nobody circles — no circles, no thermals. */
@@ -158,8 +155,12 @@ describe('day.wind', () => {
     expect(dir).toBeGreaterThanOrEqual(225); // eastward drift → wind FROM ~west
     expect(dir).toBeLessThanOrEqual(315);
 
-    // Hourly row: all fixes start at BASE_TIME (10:00 UTC).
-    const hourRow = table.rows.find((r) => r[0] === '10:00 UTC');
+    // Hourly row: all fixes start at BASE_TIME (10:00 UTC). The hour is emitted
+    // as a machine-readable instant, not a pre-formatted "10:00 UTC" string —
+    // the consumer renders the zone.
+    const hourRow = table.rows.find(
+      (r) => typeof r[0] === 'object' && r[0].t === '2024-01-15T10:00:00.000Z',
+    );
     expect(hourRow).toBeDefined();
     expect(Number(hourRow![3])).toBe(n); // every sample falls in that hour
 
@@ -186,20 +187,19 @@ describe('day.wind', () => {
     expect(table.rows.every((r, i) => i === 0 || r[3] === '0')).toBe(true);
   });
 
-  it('labels hour rows in the competition time zone when one is given', () => {
-    // BASE_TIME is 2024-01-15T10:00:00Z; in Melbourne (AEDT, +11) that hour
-    // reads 21:00. The default (no zone) stays UTC — proving it is the
-    // explicit input, not the runtime's zone, that moves the label.
-    const utcRow = firstTable(0, makeDriftField()).rows.find((r) => r[0] === '10:00 UTC');
-    expect(utcRow).toBeDefined();
+  it('emits hour buckets as instants the consumer renders in its zone', () => {
+    // The engine never bakes a zone: the hour is a machine-readable instant,
+    // and no cell is a pre-formatted "…UTC" string.
+    const table = firstTable(0, makeDriftField());
+    const hourCell = table.rows.map((r) => r[0]).find((c) => typeof c === 'object');
+    expect(hourCell).toEqual({ t: '2024-01-15T10:00:00.000Z' });
+    expect(table.rows.every((r) => typeof r[0] !== 'string' || !/UTC/.test(r[0]))).toBe(true);
 
-    const zoned = firstTable(0, makeDriftField({ timeZone: 'Australia/Melbourne' }));
-    const zonedRow = zoned.rows.find((r) => r[0] === '21:00 AEDT');
-    expect(zonedRow).toBeDefined();
-    // Same samples, just a relabelled hour: no UTC hour row survives.
-    expect(zoned.rows.some((r) => /UTC/.test(r[0]))).toBe(false);
-    // The sample count is unchanged by the relabelling.
-    expect(zonedRow![3]).toBe(utcRow![3]);
+    // The CLI renderer formats those instants in the zone it is given: Melbourne
+    // (AEDT, +11) reads 21:00 for BASE_TIME's 10:00Z hour; the default is UTC.
+    const report = evaluateField(makeDriftField(), DAY_METRICS);
+    expect(renderFieldReport(report, { timeZone: 'Australia/Melbourne' })).toContain('21:00 AEDT');
+    expect(renderFieldReport(report)).toContain('10:00 UTC');
   });
 });
 
@@ -218,7 +218,7 @@ describe('day.climb_by_hour', () => {
     const table = out.extraTables![0];
     expect(table.rows.length).toBeGreaterThanOrEqual(1);
     const row = table.rows[0];
-    expect(row[0]).toBe('10:00 UTC'); // BASE_TIME hour
+    expect(row[0]).toEqual({ t: '2024-01-15T10:00:00.000Z' }); // BASE_TIME hour, as an instant
     const med = Number(row[1]);
     const p90 = Number(row[2]);
     expect(med).toBeGreaterThan(0.5); // built with a 2 m/s climb
@@ -254,15 +254,27 @@ describe('day.launch_timing', () => {
     expect(sinky).not.toBeNull();
     expect(sinky!).toBeLessThan(10);
 
-    // Field summary is one line: conditions vs takeoff spread, UTC clock.
-    expect(out.fieldSummary?.length).toBe(1);
-    expect(out.fieldSummary![0]).toContain('takeoffs earliest');
-    expect(out.fieldSummary![0]).toContain('UTC');
+    // The timing summary is a table of instants (no baked zone), not prose.
+    expect(out.fieldSummary).toBeUndefined();
+    const timing = out.extraTables![0];
+    expect(timing.title).toBe('Day timing');
+    const labels = timing.rows.map((r) => r[0]);
+    expect(labels).toContain('Earliest takeoff');
+    expect(labels).toContain('Median takeoff');
+    expect(labels).toContain('Latest takeoff');
+    // Every time cell is a machine-readable instant, never a "…UTC" string.
+    for (const r of timing.rows) {
+      expect(typeof r[1]).toBe('object');
+      expect((r[1] as { t: string }).t).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    }
   });
 
   it('names the best-conditions hour when thermals exist', () => {
     const out = dayLaunchTiming.compute(makeDriftField());
-    expect(out.fieldSummary![0]).toContain('Best conditions around 10:00 UTC');
+    const timing = out.extraTables![0];
+    const best = timing.rows.find((r) => r[0] === 'Best conditions');
+    expect(best).toBeDefined();
+    expect(best![1]).toEqual({ t: '2024-01-15T10:00:00.000Z' });
   });
 
   it('returns null for a pilot with no grid samples', () => {

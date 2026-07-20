@@ -11,9 +11,8 @@
 
 import type { IGCFix } from '../../igc-parser';
 import type { ThermalSegment } from '../../event-types';
-import type { MetricComputer, PilotMetricValue } from '../types';
+import type { MetricComputer, PilotMetricValue, ReportCell, ReportTable } from '../types';
 import { mean, median } from '../stats';
-import { hhmmInZone, zoneToken } from '../format-time';
 
 /** Fix altitude with the same pressure fallback the resampler uses. */
 function fixAlt(f: IGCFix): number {
@@ -271,18 +270,32 @@ const selectivity: MetricComputer = {
       };
     });
 
-    let fieldSummary: string[] | undefined;
+    // Acceptance-by-hour as a table of instants (the consumer renders each
+    // hour in the reader's zone) rather than a "HH:00 UTC" prose line.
+    let extraTables: ReportTable[] | undefined;
     if (hourly.size > 0) {
-      const sorted = [...hourly.entries()].sort(([a], [b]) => a - b);
-      const parts = sorted.map(([hour, pcts]) => {
-        const hh = hhmmInZone(hour, field.timeZone);
-        return `${hh} ${Math.round(median(pcts))}% (${pcts.length} pilot${pcts.length === 1 ? '' : 's'})`;
-      });
-      const token = zoneToken(sorted[0][0], field.timeZone);
-      fieldSummary = [`Median acceptance by hour (${token}): ${parts.join(' · ')}`];
+      const rows: ReportCell[][] = [...hourly.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([hour, pcts]) => [
+          { t: new Date(hour).toISOString() },
+          String(Math.round(median(pcts))),
+          String(pcts.length),
+        ]);
+      extraTables = [
+        {
+          title: 'Acceptance by hour',
+          columns: [
+            { header: 'Hour', align: 'left' },
+            { header: 'Median accepted (%)', align: 'right' },
+            { header: 'pilots', align: 'right' },
+          ],
+          rows,
+          footnotes: ['Median per-pilot acceptance %, bucketed by the hour (competition time zone).'],
+        },
+      ];
     }
 
-    return { perPilot, fieldSummary };
+    return { perPilot, extraTables };
   },
 };
 

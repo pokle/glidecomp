@@ -10,6 +10,7 @@ export type {
   MetricFamily,
   MetricDirection,
   PilotMetricValue,
+  ReportCell,
   ReportTable,
   ReportSeries,
   MetricOutput,

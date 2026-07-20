@@ -123,7 +123,7 @@ function makePilotScore(
  */
 export function makeTestField(
   specs: TestPilotSpec[],
-  opts?: { task?: XCTask; stepSeconds?: number; timeZone?: string },
+  opts?: { task?: XCTask; stepSeconds?: number },
 ): FieldContext {
   const task = opts?.task ?? makeTestTask();
   const flights: PilotFlight[] = specs.map((s) => ({
@@ -151,7 +151,6 @@ export function makeTestField(
   };
   return buildFieldContext(task, flights, scoreResult, 'pg', {
     stepSeconds: opts?.stepSeconds,
-    timeZone: opts?.timeZone,
   });
 }
 

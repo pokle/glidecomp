@@ -11,14 +11,30 @@
 
 import { FAMILY_LABELS, FAMILY_ORDER } from './registry';
 import { MIN_CORRELATION_N } from './evaluate';
+import { timeWithZone } from './format-time';
 import type {
   CompAggregateReport,
   FieldAnalysisReport,
   MetricReport,
+  ReportCell,
   ReportTable,
 } from './types';
 
 const WIDTH = 100;
+
+/** Options for the text renderers. */
+export interface RenderReportOptions {
+  /** IANA zone for `{ t }` time cells (the task's local zone). UTC when unset. */
+  timeZone?: string;
+}
+
+/** A report cell as display text: literal strings pass through; `{ t }`
+ * instants render as a time of day in `timeZone` ("14:00 AEDT" / "13:00 UTC"). */
+function cellText(cell: ReportCell | undefined, timeZone?: string): string {
+  if (cell === undefined) return '';
+  if (typeof cell === 'string') return cell;
+  return timeWithZone(new Date(cell.t).getTime(), timeZone);
+}
 
 function padRight(s: string, n: number): string {
   return s.length >= n ? s : s + ' '.repeat(n - s.length);
@@ -57,9 +73,12 @@ function columnHeader(m: MetricReport): string {
   return m.shortLabel ?? (m.label.length <= 10 ? m.label : m.label.slice(0, 10));
 }
 
-function renderTable(t: ReportTable): string[] {
+function renderTable(t: ReportTable, timeZone?: string): string[] {
+  // Format cells to display text first ({ t } instants → zoned time) so column
+  // widths measure the rendered strings, not the ISO payloads.
+  const text = t.rows.map((r) => t.columns.map((_c, i) => cellText(r[i], timeZone)));
   const widths = t.columns.map((c, i) =>
-    Math.max(c.header.length, ...t.rows.map((r) => (r[i] ?? '').length)),
+    Math.max(c.header.length, ...text.map((r) => r[i].length)),
   );
   const pad = (s: string, i: number): string =>
     t.columns[i].align === 'left' ? padRight(s, widths[i]) : padLeft(s, widths[i]);
@@ -68,14 +87,18 @@ function renderTable(t: ReportTable): string[] {
   const headerLine = '  ' + t.columns.map((c, i) => pad(c.header, i)).join('  ');
   lines.push(headerLine);
   lines.push('  ' + '-'.repeat(Math.max(0, headerLine.length - 2)));
-  for (const row of t.rows) {
-    lines.push('  ' + row.map((cell, i) => pad(cell ?? '', i)).join('  '));
+  for (const row of text) {
+    lines.push('  ' + row.map((cell, i) => pad(cell, i)).join('  '));
   }
   for (const f of t.footnotes ?? []) lines.push(`  ${f}`);
   return lines;
 }
 
-export function renderFieldReport(report: FieldAnalysisReport): string {
+export function renderFieldReport(
+  report: FieldAnalysisReport,
+  opts: RenderReportOptions = {},
+): string {
+  const { timeZone } = opts;
   const lines: string[] = [];
   const b = report.basis;
 
@@ -131,7 +154,7 @@ export function renderFieldReport(report: FieldAnalysisReport): string {
         for (const s of m.fieldSummary) lines.push(s);
       }
       for (const t of m.extraTables ?? []) {
-        lines.push('', ...renderTable(t));
+        lines.push('', ...renderTable(t, timeZone));
       }
     }
   }

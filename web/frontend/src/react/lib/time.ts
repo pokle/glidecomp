@@ -274,6 +274,50 @@ export function formatInstant(date: Date, timeZone: string | undefined): string 
   return `${dateTime} ${zoneLabel(date, timeZone)}`;
 }
 
+/**
+ * A compact zone token for `date`: the abbreviation when the runtime knows one
+ * ("AEDT", "PST", "UTC"), else the numeric offset ("GMT+5:30"). Shorter than
+ * {@link zoneLabel} (no offset alongside the abbreviation) — for dense places
+ * like a per-row time cell. Viewer-local when `timeZone` is undefined.
+ */
+export function zoneAbbrev(date: Date, timeZone: string | undefined): string {
+  const offset = zoneToken(date, timeZone, "en-GB", "shortOffset");
+  for (const loc of ABBR_LOCALES) {
+    const s = zoneToken(date, timeZone, loc, "short");
+    if (s && !NUMERIC_OFFSET.test(s)) return s;
+  }
+  return !offset || ZERO_OFFSET.test(offset) ? "UTC" : (offset as string);
+}
+
+/**
+ * An ISO instant as a time of day in `timeZone` with a compact zone token —
+ * "02:00 AEDT", "14:30 GMT+5:30", "07:00 UTC". Viewer-local when `timeZone` is
+ * undefined. Used to render the field-analysis report's `{ t }` time cells
+ * (hour buckets, takeoff clocks) in the competition's zone. Returns the raw
+ * input unchanged when it is not a valid instant.
+ */
+export function formatTimeOfDay(iso: string, timeZone: string | undefined): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  let hhmm: string;
+  try {
+    hhmm = new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(date);
+  } catch {
+    hhmm = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "UTC",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(date);
+  }
+  return `${hhmm} ${zoneAbbrev(date, timeZone)}`;
+}
+
 /** True when the runtime recognises `tz` as an IANA zone. */
 function isValidTimeZone(tz: string): boolean {
   try {
