@@ -21,6 +21,20 @@ export function familySectionId(family: MetricFamily): string {
   return `family-${family}`;
 }
 
+/** DOM id of one metric's block (chart/tables) inside its family section. */
+export function metricBlockId(metricId: string): string {
+  return `metric-${metricId.replace(/\./g, "-")}`;
+}
+
+/**
+ * Does this metric render a substantial block — a chart or a rich table —
+ * worth its own TOC entry? Summary-only metrics stay out of the TOC or it
+ * would list nearly every metric twice.
+ */
+export function hasMetricBlock(m: MetricReport): boolean {
+  return (m.extraSeries?.length ?? 0) > 0 || (m.extraTables?.length ?? 0) > 0;
+}
+
 export function MetricFamilySection({
   family,
   familyLabel,
@@ -90,7 +104,12 @@ export function MetricFamilySection({
           (m.fieldSummary?.length ?? 0) > 0 ||
           (m.extraTables?.length ?? 0) > 0 ||
           (m.extraSeries?.length ?? 0) > 0 ? (
-            <section key={m.id} className="space-y-1" aria-label={m.label}>
+            <section
+              key={m.id}
+              id={metricBlockId(m.id)}
+              className="scroll-mt-20 space-y-1"
+              aria-label={m.label}
+            >
               <h4 className="text-sm font-medium">{m.label}</h4>
               {m.fieldSummary?.map((line, i) => (
                 <p key={i} className="text-sm text-muted-foreground">

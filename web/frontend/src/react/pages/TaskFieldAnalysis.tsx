@@ -38,6 +38,8 @@ import { SeparationRanking, rankMetrics } from "../field-analysis/SeparationRank
 import {
   MetricFamilySection,
   familySectionId,
+  hasMetricBlock,
+  metricBlockId,
   metricsByFamily,
 } from "../field-analysis/MetricFamilySection";
 import { PageToc, type PageTocItem } from "../components/PageToc";
@@ -48,6 +50,7 @@ import { PercentileHeatmap } from "../field-analysis/charts/PercentileHeatmap";
 import {
   FAMILY_ORDER,
   FAMILY_LABELS,
+  type MetricReport,
   type TaskFieldAnalysisData,
 } from "../field-analysis/types";
 import type { CompDetailData, TaskDetailData } from "../comp/types";
@@ -223,13 +226,26 @@ export function TaskFieldAnalysis() {
       { id: "separation-heading", label: "What separated the field" },
       { id: "heatmap-heading", label: "The whole field at a glance" },
       { id: "families-heading", label: "The metrics in detail" },
-      ...FAMILY_ORDER.filter((family) => (grouped.get(family) ?? []).length > 0).map(
-        (family) => ({
-          id: familySectionId(family),
-          label: FAMILY_LABELS[family],
-          indent: true,
-          onBeforeScroll: () => expandFamily(family, true),
-        })
+      ...FAMILY_ORDER.filter((family) => (grouped.get(family) ?? []).length > 0).flatMap(
+        (family): PageTocItem[] => [
+          {
+            id: familySectionId(family),
+            label: FAMILY_LABELS[family],
+            depth: 1,
+            onBeforeScroll: () => expandFamily(family, true),
+          },
+          // The family's charts and rich tables (h4 blocks inside the
+          // disclosure) — the deepest TOC level. Same expand-before-scroll,
+          // since the block lives inside the family's drawer.
+          ...(grouped.get(family) ?? []).filter(hasMetricBlock).map(
+            (m: MetricReport): PageTocItem => ({
+              id: metricBlockId(m.id),
+              label: m.label,
+              depth: 2,
+              onBeforeScroll: () => expandFamily(family, true),
+            })
+          ),
+        ]
       ),
     ];
   }, [active, grouped, topFamilies]);

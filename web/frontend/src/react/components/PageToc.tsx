@@ -30,8 +30,8 @@ export interface PageTocItem {
   /** DOM id of the target element. */
   id: string;
   label: string;
-  /** Render indented under the previous top-level entry. */
-  indent?: boolean;
+  /** Nesting level: 0 = page section, 1 = family, 2 = a chart/table block. */
+  depth?: 0 | 1 | 2;
   /** Runs before scrolling (e.g. expand the disclosure the target sits in). */
   onBeforeScroll?: () => void;
 }
@@ -81,8 +81,8 @@ export function PageToc({ items }: { items: PageTocItem[] }) {
     () =>
       items.map((item) => ({
         value: item.id,
-        // The select popover can't indent, so nested entries get a marker.
-        label: item.indent ? `· ${item.label}` : item.label,
+        // The select popover can't indent, so nested entries get markers.
+        label: "· ".repeat(item.depth ?? 0) + item.label,
       })),
     [items]
   );
@@ -131,7 +131,9 @@ export function PageToc({ items }: { items: PageTocItem[] }) {
                 className={cn(
                   "-ml-px block border-l-2 py-1 pl-3 outline-none transition-colors",
                   "focus-visible:ring-2 focus-visible:ring-ring/50",
-                  item.indent && "pl-7",
+                  item.depth === 1 && "pl-7",
+                  // Chart/table blocks: deepest indent, quieter type.
+                  item.depth === 2 && "pl-11 text-[13px]",
                   activeId === item.id
                     ? "border-foreground font-medium text-foreground"
                     : "border-transparent text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
