@@ -377,8 +377,11 @@ export function CompWaypoints() {
                       <th className="px-2 py-2 font-medium">Code</th>
                       <th className="px-2 py-2 font-medium">Name</th>
                       <th className="px-2 py-2 font-medium">Coordinates</th>
-                      <th className="px-2 py-2 font-medium">Alt</th>
-                      <th className="px-2 py-2 font-medium">Radius</th>
+                      {/* Alt and Radius are plain quantities, so they read right-
+                          aligned. Coordinates stays left: it is a "lat, lon"
+                          pair, not a single number to compare down the column. */}
+                      <th className="px-2 py-2 text-right font-medium">Alt</th>
+                      <th className="px-2 py-2 text-right font-medium">Radius</th>
                       {isAdmin ? <th className="w-8" /> : null}
                     </tr>
                   </thead>
@@ -416,11 +419,11 @@ export function CompWaypoints() {
                                   className="w-44"
                                 />
                               </td>
-                              <td className="p-1">
-                                <CellInput value={r.altitude} mono onChange={(v) => update(r.id, { altitude: v })} className="w-16" />
+                              <td className="p-1 text-right">
+                                <CellInput value={r.altitude} mono onChange={(v) => update(r.id, { altitude: v })} className="w-16 text-right" />
                               </td>
-                              <td className="p-1">
-                                <CellInput value={r.radius} mono onChange={(v) => update(r.id, { radius: v })} className="w-16" />
+                              <td className="p-1 text-right">
+                                <CellInput value={r.radius} mono onChange={(v) => update(r.id, { radius: v })} className="w-16 text-right" />
                               </td>
                               <td className="p-1 text-center">
                                 <button
@@ -438,8 +441,12 @@ export function CompWaypoints() {
                               <td className="px-2 py-1.5 font-medium">{r.code}</td>
                               <td className="px-2 py-1.5">{r.name || "—"}</td>
                               <td className="px-2 py-1.5 font-mono text-xs">{r.coords}</td>
-                              <td className="px-2 py-1.5 font-mono text-xs">{r.altitude || "—"}</td>
-                              <td className="px-2 py-1.5 font-mono text-xs">{r.radius}</td>
+                              <td className="px-2 py-1.5 text-right font-mono text-xs">
+                                {r.altitude || "—"}
+                              </td>
+                              <td className="px-2 py-1.5 text-right font-mono text-xs">
+                                {r.radius}
+                              </td>
                             </>
                           )}
                         </tr>

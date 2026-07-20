@@ -312,6 +312,12 @@ interface ColumnSpec {
   title?: string;
   /** First-click sort direction; scores read best-first when descending. */
   defaultDir?: "asc" | "desc";
+  /**
+   * Right-align the header and every cell in this column (with tabular figures),
+   * so quantities line up digit-for-digit and can be compared down the column.
+   * Columns are left-aligned by default — set this only for pure numbers.
+   */
+  align?: "right";
 }
 
 interface CellSpec {
@@ -362,15 +368,19 @@ function SortableTable({ columns, rows }: { columns: ColumnSpec[]; rows: CellSpe
               <TableHead
                 key={i}
                 title={col.title}
+                className={col.align === "right" ? "text-right" : undefined}
                 aria-sort={
                   sort?.col === i ? (sort.dir === "asc" ? "ascending" : "descending") : undefined
                 }
               >
+                {/* The negative margin pulls the ghost button's padding off the
+                    column's outer edge, so the label sits flush with the cells
+                    below it — which edge that is flips with the alignment. */}
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="-ml-2"
+                  className={col.align === "right" ? "-mr-2" : "-ml-2"}
                   onClick={() => handleHeaderClick(i)}
                 >
                   {col.label}
@@ -384,7 +394,14 @@ function SortableTable({ columns, rows }: { columns: ColumnSpec[]; rows: CellSpe
           {sortedRows.map((row, i) => (
             <TableRow key={i}>
               {row.map((cell, j) => (
-                <TableCell key={j}>{cell.node}</TableCell>
+                <TableCell
+                  key={j}
+                  className={
+                    columns[j]?.align === "right" ? "text-right tabular-nums" : undefined
+                  }
+                >
+                  {cell.node}
+                </TableCell>
               ))}
             </TableRow>
           ))}
@@ -402,10 +419,15 @@ function StandingsTable({ scores, cls }: { scores: CompScores; cls: ClassStandin
   const classTasks = scores.tasks.filter((t) => t.classes.includes(cls.pilot_class));
 
   const columns: ColumnSpec[] = [
-    { label: "#", defaultDir: "asc" },
+    { label: "#", defaultDir: "asc", align: "right" },
     { label: "Pilot", defaultDir: "asc" },
-    ...classTasks.map((t) => ({ label: t.task_name, title: t.task_date, defaultDir: "desc" as const })),
-    { label: "Total", defaultDir: "desc" },
+    ...classTasks.map((t) => ({
+      label: t.task_name,
+      title: t.task_date,
+      defaultDir: "desc" as const,
+      align: "right" as const,
+    })),
+    { label: "Total", defaultDir: "desc", align: "right" },
   ];
 
   const rows: CellSpec[][] = cls.pilots.map((p) => [
@@ -443,6 +465,9 @@ function Top3Table({
 }) {
   const rows = computeTop3Rows(group, scores.tasks);
 
+  // Left-aligned throughout: the place columns read "PilotName · score", so the
+  // number sits behind a name of varying length and right-aligning it would not
+  // line the scores up anyway.
   const columns: ColumnSpec[] = [
     { label: "Task", defaultDir: "asc" },
     { label: "1st", defaultDir: "desc" },
@@ -494,10 +519,15 @@ function TeamsTable({
   teams: ReturnType<typeof aggregateTeams>;
 }) {
   const columns: ColumnSpec[] = [
-    { label: "#", defaultDir: "asc" },
+    { label: "#", defaultDir: "asc", align: "right" },
     { label: "Team", defaultDir: "asc" },
-    ...scores.tasks.map((t) => ({ label: t.task_name, title: t.task_date, defaultDir: "desc" as const })),
-    { label: "Total", defaultDir: "desc" },
+    ...scores.tasks.map((t) => ({
+      label: t.task_name,
+      title: t.task_date,
+      defaultDir: "desc" as const,
+      align: "right" as const,
+    })),
+    { label: "Total", defaultDir: "desc", align: "right" },
   ];
 
   const rows: CellSpec[][] = teams.map((team) => [

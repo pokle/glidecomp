@@ -1468,7 +1468,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     html += `<table class="text-sm">`;
     html += `<thead class="bg-muted/50"><tr>
       <th class="px-2 py-1.5 text-left font-medium sticky left-0 z-10 bg-muted/50"><input type="checkbox" id="comp-select-all" class="accent-primary" ${allSelected ? 'checked' : ''}></th>
-      <th class="px-2 py-1.5 text-left font-medium sticky left-[28px] z-10 bg-muted/50">#</th>
+      <th class="px-2 py-1.5 text-right font-medium sticky left-[28px] z-10 bg-muted/50">#</th>
       <th class="px-2 py-1.5 text-left font-medium sticky left-[52px] z-10 bg-muted/50 after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border">Pilot</th>
       <th class="px-2 py-1.5 text-right font-medium" title="Straight-line distance from the take-off cylinder exit to the furthest point reached — this is the score">Scored</th>
       <th class="px-2 py-1.5 text-right font-medium" title="Distance actually flown along the track">Flown</th>
@@ -1484,7 +1484,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         : '';
       html += `<tr class="border-t border-border hover:bg-muted/30${!isChecked ? ' opacity-40' : ''}">
         <td class="px-2 py-1.5 sticky left-0 z-10 bg-background"><input type="checkbox" class="comp-pilot-cb accent-primary" data-pilot="${escapeHtml(ps.pilotName)}" ${isChecked ? 'checked' : ''}></td>
-        <td class="px-2 py-1.5 font-medium sticky left-[28px] z-10 bg-background">${ps.rank}</td>
+        <td class="px-2 py-1.5 text-right font-medium tabular-nums sticky left-[28px] z-10 bg-background">${ps.rank}</td>
         <td class="px-2 py-1.5 truncate max-w-[140px] sticky left-[52px] z-10 bg-background after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border" title="${escapeHtml(ps.pilotName)}">${escapeHtml(ps.pilotName)}</td>
         <td class="px-2 py-1.5 text-right font-medium tabular-nums">${formatDistance(ps.flownDistance).withUnit}${stayedMark}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${od ? formatDistance(od.flownTrackDistance).withUnit : '—'}</td>
@@ -1602,7 +1602,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     html += `<table class="text-sm">`;
     html += `<thead class="bg-muted/50"><tr>
       <th class="px-2 py-1.5 text-left font-medium sticky left-0 z-10 bg-muted/50"><input type="checkbox" id="comp-select-all" class="accent-primary" ${allSelected ? 'checked' : ''}></th>
-      <th class="px-2 py-1.5 text-left font-medium sticky left-[28px] z-10 bg-muted/50">#</th>
+      <th class="px-2 py-1.5 text-right font-medium sticky left-[28px] z-10 bg-muted/50">#</th>
       <th class="px-2 py-1.5 text-left font-medium sticky left-[52px] z-10 bg-muted/50 after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border">Pilot</th>
       <th class="px-2 py-1.5 text-right font-medium">Dist</th>
       <th class="px-2 py-1.5 text-right font-medium" title="Speed Section Time">SS Time</th>
@@ -1665,7 +1665,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         : ps.distancePoints.toFixed(1);
       html += `<tr class="border-t border-border hover:bg-muted/30${!isChecked ? ' opacity-40' : ''}">
         <td class="px-2 py-1.5 sticky left-0 z-10 bg-background"><input type="checkbox" class="comp-pilot-cb accent-primary" data-pilot="${escapeHtml(ps.pilotName)}" ${isChecked ? 'checked' : ''}></td>
-        <td class="px-2 py-1.5 font-medium sticky left-[28px] z-10 bg-background">${ps.rank}</td>
+        <td class="px-2 py-1.5 text-right font-medium tabular-nums sticky left-[28px] z-10 bg-background">${ps.rank}</td>
         <td class="comp-detail-toggle px-2 py-1.5 truncate max-w-[120px] sticky left-[52px] z-10 bg-background cursor-pointer select-none after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border" data-pilot="${escapeHtml(ps.pilotName)}" title="Show scoring breakdown for ${escapeHtml(ps.pilotName)}"><span class="comp-caret inline-block text-muted-foreground transition-transform">&#9656;</span> ${escapeHtml(ps.pilotName)}${goalIcon}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${formatDistance(ps.flownDistance).withUnit}${distMark}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${ps.madeGoal && ps.speedSectionTime !== null ? formatHMS(ps.speedSectionTime) : ps.reachedESS ? 'ESS' : 'LO'}</td>
