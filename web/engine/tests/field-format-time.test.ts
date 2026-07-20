@@ -6,7 +6,12 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { timeWithZone, hhmmInZone, zoneToken } from '../src/field-analysis/format-time';
+import {
+  timeWithZone,
+  timeRangeWithZone,
+  hhmmInZone,
+  zoneToken,
+} from '../src/field-analysis/format-time';
 
 const T = Date.UTC(2024, 0, 15, 10, 0, 0); // 2024-01-15T10:00:00Z (summer in AU)
 
@@ -16,6 +21,12 @@ describe('field-analysis time formatting', () => {
     expect(timeWithZone(T, 'Australia/Melbourne')).toBe('21:00 AEDT');
     // A half-hour zone keeps the minutes; no named abbreviation → offset token.
     expect(timeWithZone(T, 'Asia/Kolkata')).toBe('15:30 GMT+5:30');
+  });
+
+  it('renders an instant range with a single trailing token', () => {
+    const to = Date.UTC(2024, 0, 15, 11, 30, 0);
+    expect(timeRangeWithZone(T, to, 'Australia/Melbourne')).toBe('21:00–22:30 AEDT');
+    expect(timeRangeWithZone(T, to)).toBe('10:00–11:30 UTC');
   });
 
   it('falls back to UTC when no zone is given', () => {

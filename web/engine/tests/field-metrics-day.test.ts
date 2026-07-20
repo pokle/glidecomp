@@ -123,7 +123,7 @@ function makeStraightField(): FieldContext {
 
 function firstTable(metricIndex: number, field: FieldContext): ReportTable {
   const out = DAY_METRICS[metricIndex].compute(field);
-  expect(out.extraTables?.length).toBe(1);
+  expect(out.extraTables?.length).toBeGreaterThanOrEqual(1);
   return out.extraTables![0];
 }
 
@@ -132,7 +132,7 @@ function firstTable(metricIndex: number, field: FieldContext): ReportTable {
 // ---------------------------------------------------------------------------
 
 describe('day.wind', () => {
-  it('averages per-circle wind for task, hour, and leg scopes', () => {
+  it('splits into a by-hour table (whole-task total + hours) and a by-leg table', () => {
     const field = makeDriftField();
     const out = dayWind.compute(field);
 
@@ -140,12 +140,13 @@ describe('day.wind', () => {
     expect(out.perPilot.length).toBe(2);
     expect(out.perPilot.every((v) => v.value === null)).toBe(true);
 
-    const table = out.extraTables![0];
-    expect(table.columns.length).toBe(4);
+    expect(out.extraTables!.map((t) => t.title)).toEqual(['Wind by hour', 'Wind by leg']);
+    const [byHour, byLeg] = out.extraTables!;
 
-    // Task row first, with real samples from the drifting circles.
-    const taskRow = table.rows[0];
-    expect(taskRow[0]).toBe('Task');
+    // By-hour table: whole-task total first, with real samples from the drift.
+    expect(byHour.columns[0].header).toBe('Period');
+    const taskRow = byHour.rows[0];
+    expect(taskRow[0]).toBe('Whole task');
     const n = Number(taskRow[3]);
     expect(n).toBeGreaterThan(0);
     const speedKmh = Number(taskRow[1]);
@@ -155,50 +156,64 @@ describe('day.wind', () => {
     expect(dir).toBeGreaterThanOrEqual(225); // eastward drift → wind FROM ~west
     expect(dir).toBeLessThanOrEqual(315);
 
-    // Hourly row: all fixes start at BASE_TIME (10:00 UTC). The hour is emitted
-    // as a machine-readable instant, not a pre-formatted "10:00 UTC" string —
-    // the consumer renders the zone.
-    const hourRow = table.rows.find(
-      (r) => typeof r[0] === 'object' && r[0].t === '2024-01-15T10:00:00.000Z',
+    // Hourly row: all fixes start at BASE_TIME (10:00 UTC), emitted as an instant.
+    const hourRow = byHour.rows.find(
+      (r) => typeof r[0] === 'object' && 't' in r[0] && r[0].t === '2024-01-15T10:00:00.000Z',
     );
     expect(hourRow).toBeDefined();
     expect(Number(hourRow![3])).toBe(n); // every sample falls in that hour
 
-    // Leg rows: circling happened between SSS (t=80) and TP2 (t=600).
-    const legRow = table.rows.find((r) => r[0] === 'SSS→ESS');
+    // By-leg table: labelled by waypoint name + role, with a "When" range.
+    expect(byLeg.columns.map((c) => c.header)).toEqual(['Leg', 'When', 'Speed (km/h)', 'Dir (°)', 'n']);
+    const legRow = byLeg.rows.find((r) => r[0] === 'START (SSS)→END (ESS)');
     expect(legRow).toBeDefined();
-    expect(Number(legRow![3])).toBeGreaterThan(0);
-    const laterLeg = table.rows.find((r) => r[0] === 'ESS→GOAL');
+    expect(Number(legRow![4])).toBeGreaterThan(0); // n is the 5th column now
+    // Circling happened on this leg, so "When" is an instant range.
+    const when = legRow![1];
+    expect(typeof when).toBe('object');
+    expect('from' in (when as object) && 'to' in (when as object)).toBe(true);
+
+    // A leg no one circled on: n=0 and When "—".
+    const laterLeg = byLeg.rows.find((r) => r[0] === 'END (ESS)→GOAL (GOAL)');
     expect(laterLeg).toBeDefined();
-    expect(Number(laterLeg![3])).toBe(0);
+    expect(Number(laterLeg![4])).toBe(0);
+    expect(laterLeg![1]).toBe('—');
 
-    // Footnotes explain method and direction convention.
-    expect(table.footnotes!.join(' ')).toContain('FROM');
-    expect(table.footnotes!.join(' ')).toContain('drift');
+    // Footnotes explain method, direction convention, and the "When" window.
+    expect(byHour.footnotes!.join(' ')).toContain('FROM');
+    expect(byLeg.footnotes!.join(' ')).toContain('whole field');
   });
 
-  it('emits a Task row with n=0 when the field produced no circles', () => {
-    const table = firstTable(0, makeStraightField());
-    expect(table.rows[0]).toEqual(['Task', '—', '—', '0']);
-    // No hour rows; the two speed-section legs listed with zero samples.
-    expect(table.rows.length).toBe(3);
-    expect(table.rows[1][0]).toBe('SSS→ESS');
-    expect(table.rows[2][0]).toBe('ESS→GOAL');
-    expect(table.rows.every((r, i) => i === 0 || r[3] === '0')).toBe(true);
+  it('handles a field that produced no circles', () => {
+    const out = dayWind.compute(makeStraightField());
+    const [byHour, byLeg] = out.extraTables!;
+
+    // By-hour: just the whole-task total, empty, no hour rows.
+    expect(byHour.rows.length).toBe(1);
+    expect(byHour.rows[0]).toEqual(['Whole task', '—', '—', '0']);
+
+    // By-leg: both speed-section legs, zero samples, "When" dashed.
+    expect(byLeg.rows.map((r) => r[0])).toEqual([
+      'START (SSS)→END (ESS)',
+      'END (ESS)→GOAL (GOAL)',
+    ]);
+    expect(byLeg.rows.every((r) => r[1] === '—' && r[4] === '0')).toBe(true);
   });
 
-  it('emits hour buckets as instants the consumer renders in its zone', () => {
-    // The engine never bakes a zone: the hour is a machine-readable instant,
-    // and no cell is a pre-formatted "…UTC" string.
-    const table = firstTable(0, makeDriftField());
-    const hourCell = table.rows.map((r) => r[0]).find((c) => typeof c === 'object');
+  it('emits times as instants the consumer renders in its zone', () => {
+    // The engine never bakes a zone: hours are instants and the leg window is a
+    // range; no cell is a pre-formatted "…UTC" string.
+    const out = dayWind.compute(makeDriftField());
+    const hourCell = out.extraTables![0].rows.map((r) => r[0]).find((c) => typeof c === 'object');
     expect(hourCell).toEqual({ t: '2024-01-15T10:00:00.000Z' });
-    expect(table.rows.every((r) => typeof r[0] !== 'string' || !/UTC/.test(r[0]))).toBe(true);
 
-    // The CLI renderer formats those instants in the zone it is given: Melbourne
-    // (AEDT, +11) reads 21:00 for BASE_TIME's 10:00Z hour; the default is UTC.
+    // The CLI renderer formats those in the zone it is given: Melbourne (AEDT,
+    // +11) reads 21:00 for BASE_TIME's 10:00Z hour; the default is UTC. The leg
+    // "When" renders as a range with a single trailing token.
     const report = evaluateField(makeDriftField(), DAY_METRICS);
-    expect(renderFieldReport(report, { timeZone: 'Australia/Melbourne' })).toContain('21:00 AEDT');
+    const zoned = renderFieldReport(report, { timeZone: 'Australia/Melbourne' });
+    expect(zoned).toContain('21:00 AEDT');
+    expect(zoned).toMatch(/\d{2}:\d{2}–\d{2}:\d{2} AEDT/); // the leg When range
     expect(renderFieldReport(report)).toContain('10:00 UTC');
   });
 });
@@ -332,9 +347,10 @@ describe('day metrics over kosci-loop-t1 (smoke)', () => {
       expect(m.perPilot.length).toBe(field.pilots.length);
     }
 
-    // Wind table exists and starts with the Task row.
+    // Wind splits into by-hour (whole-task total first) and by-leg tables.
     const wind = report.metrics.find((m) => m.id === 'day.wind')!;
-    expect(wind.extraTables![0].rows[0][0]).toBe('Task');
+    expect(wind.extraTables!.map((t) => t.title)).toEqual(['Wind by hour', 'Wind by leg']);
+    expect(wind.extraTables![0].rows[0][0]).toBe('Whole task');
 
     // The day had thermals — the climb-by-hour table is non-empty.
     const climb = report.metrics.find((m) => m.id === 'day.climb_by_hour')!;
@@ -353,7 +369,8 @@ describe('day metrics over kosci-loop-t1 (smoke)', () => {
 
     // The whole thing renders.
     const rendered = renderFieldReport(report);
-    expect(rendered).toContain('Wind (from circling drift)');
+    expect(rendered).toContain('Wind by hour');
+    expect(rendered).toContain('Wind by leg');
     expect(rendered).toContain('Climb by hour');
   }, 120_000);
 });

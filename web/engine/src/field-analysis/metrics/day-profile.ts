@@ -52,13 +52,23 @@ function timeCell(tMs: number): ReportCell {
   return { t: new Date(tMs).toISOString() };
 }
 
-/** Short turnpoint label: SSS / ESS / GOAL / TP<n> (1-based over the task). */
+/**
+ * Turnpoint label using the waypoint name, tagged with its role where it has a
+ * special one: "ELLIOT (SSS)", "GOAL FIELD (GOAL)", or plain "KANGCK". Falls
+ * back to "TP<n>" (1-based) when the waypoint has no name.
+ */
 function tpLabel(task: XCTask, taskIndex: number): string {
   const tp = task.turnpoints[taskIndex];
-  if (tp?.type === 'SSS') return 'SSS';
-  if (tp?.type === 'ESS') return 'ESS';
-  if (taskIndex === task.turnpoints.length - 1) return 'GOAL';
-  return `TP${taskIndex + 1}`;
+  const name = tp?.waypoint.name?.trim() || `TP${taskIndex + 1}`;
+  const role =
+    tp?.type === 'SSS'
+      ? 'SSS'
+      : tp?.type === 'ESS'
+        ? 'ESS'
+        : taskIndex === task.turnpoints.length - 1
+          ? 'GOAL'
+          : null;
+  return role ? `${name} (${role})` : name;
 }
 
 function pushInto<K>(map: Map<K, WindSample[]>, key: K, sample: WindSample): void {
@@ -116,75 +126,107 @@ function legIndexAt(pilot: PilotAnalysisContext, tMs: number): number | null {
   return seq[last].taskIndex;
 }
 
-/** A wind table row: Scope / Speed km/h (1 dp) / Dir ° FROM / n. The scope is
- * text ("Task", "SSS→ESS") or an hour instant the consumer renders in its zone. */
-function windRow(scope: ReportCell, samples: WindSample[]): ReportCell[] {
+/** Speed (km/h, 1 dp) / Dir (° FROM) / n cells for a set of wind samples. */
+function windStats(samples: WindSample[]): [string, string, string] {
   const w = circularMeanWind(samples);
   return [
-    scope,
     w ? (w.speed * 3.6).toFixed(1) : '—',
     w ? String(Math.round(w.direction) % 360) : '—',
     String(samples.length),
   ];
 }
 
+/** A time-of-day range cell — the consumer renders it "13:05–14:30 AEDT". */
+function rangeCell(fromMs: number, toMs: number): ReportCell {
+  return { from: new Date(fromMs).toISOString(), to: new Date(toMs).toISOString() };
+}
+
+const WIND_METHOD_FOOTNOTE =
+  'Vector mean of per-circle wind estimates (centre-drift preferred over ' +
+  'ground-speed modulation); direction is degrees the wind blows FROM (0° = north).';
+
 const dayWind: MetricComputer = {
   id: 'day.wind',
-  label: 'Wind (task / hourly / per leg)',
+  label: 'Wind (by hour and by leg)',
   shortLabel: 'Wind',
   unit: 'km/h',
   family: 'day',
   direction: 'neutral',
   explanation:
     'Wind estimated from every pilot’s circling (centre drift preferred, ground-speed ' +
-    'modulation as fallback), vector-averaged over the whole task, each hour, and each ' +
-    'speed-section leg. Hour rows are shown in the competition’s time zone. ' +
-    'Field-level only — no per-pilot value.',
+    'modulation as fallback), vector-averaged two ways: by hour of day (how the wind built ' +
+    'and shifted through the day) and by speed-section leg (the wind each part of the course ' +
+    'saw). Field-level only — no per-pilot value.',
   compute(field) {
     const winds = collectCircleWinds(field);
 
-    const rows: ReportCell[][] = [windRow('Task', winds.map((w) => w.sample))];
-
-    // Per hour, by each circle's midpoint time (an instant; the consumer
-    // renders it in the reader's zone).
+    // 1) By hour of day — a time view. The whole-task total leads as the
+    // baseline the hourly rows vary around.
     const byHour = new Map<number, WindSample[]>();
     for (const w of winds) pushInto(byHour, hourStartMs(w.tMs), w.sample);
+    const hourRows: ReportCell[][] = [['Whole task', ...windStats(winds.map((w) => w.sample))]];
     for (const h of [...byHour.keys()].sort((a, b) => a - b)) {
-      rows.push(windRow(timeCell(h), byHour.get(h)!));
+      hourRows.push([timeCell(h), ...windStats(byHour.get(h)!)]);
     }
-
-    // Per speed-section leg, by where each circle's pilot was at that moment.
-    const sssIndex = field.task.turnpoints.findIndex((tp) => tp.type === 'SSS');
-    if (sssIndex >= 0) {
-      const byLeg = new Map<number, WindSample[]>();
-      for (const w of winds) {
-        const legIndex = legIndexAt(w.pilot, w.tMs);
-        if (legIndex !== null) pushInto(byLeg, legIndex, w.sample);
-      }
-      for (const leg of field.legs) {
-        if (leg.fromTaskIndex < sssIndex) continue;
-        const label = `${tpLabel(field.task, leg.fromTaskIndex)}→${tpLabel(field.task, leg.toTaskIndex)}`;
-        rows.push(windRow(label, byLeg.get(leg.fromTaskIndex) ?? []));
-      }
-    }
-
-    const table: ReportTable = {
-      title: 'Wind (from circling drift)',
+    const byHourTable: ReportTable = {
+      title: 'Wind by hour',
       columns: [
-        { header: 'Scope', align: 'left' },
+        { header: 'Period', align: 'left' },
         { header: 'Speed (km/h)', align: 'right' },
         { header: 'Dir (°)', align: 'right' },
         { header: 'n', align: 'right' },
       ],
-      rows,
-      footnotes: [
-        'Vector mean of per-circle wind estimates; centre-drift estimates preferred over ground-speed modulation.',
-        'Dir is degrees the wind blows FROM (0° = north). Leg rows cover the speed section only.',
-        'Read hour and leg rows against leg outcomes to spot e.g. a mid-task wind switch.',
-      ],
+      rows: hourRows,
+      footnotes: [WIND_METHOD_FOOTNOTE, 'Hours are shown in the competition’s time zone.'],
     };
 
-    return { perPilot: allNullPerPilot(field), extraTables: [table] };
+    const tables: ReportTable[] = [byHourTable];
+
+    // 2) By speed-section leg — a course view. Each leg carries the time span
+    // its estimates were drawn from, so a leg row is anchored in time.
+    const sssIndex = field.task.turnpoints.findIndex((tp) => tp.type === 'SSS');
+    if (sssIndex >= 0) {
+      const byLeg = new Map<number, CircleWindSample[]>();
+      for (const w of winds) {
+        const legIndex = legIndexAt(w.pilot, w.tMs);
+        if (legIndex === null) continue;
+        const list = byLeg.get(legIndex);
+        if (list) list.push(w);
+        else byLeg.set(legIndex, [w]);
+      }
+      const legRows: ReportCell[][] = [];
+      for (const leg of field.legs) {
+        if (leg.fromTaskIndex < sssIndex) continue;
+        const label = `${tpLabel(field.task, leg.fromTaskIndex)}→${tpLabel(field.task, leg.toTaskIndex)}`;
+        const legWinds = byLeg.get(leg.fromTaskIndex) ?? [];
+        const when: ReportCell = legWinds.length
+          ? rangeCell(
+              Math.min(...legWinds.map((w) => w.tMs)),
+              Math.max(...legWinds.map((w) => w.tMs)),
+            )
+          : '—';
+        legRows.push([label, when, ...windStats(legWinds.map((w) => w.sample))]);
+      }
+      tables.push({
+        title: 'Wind by leg',
+        columns: [
+          { header: 'Leg', align: 'left' },
+          { header: 'When', align: 'left' },
+          { header: 'Speed (km/h)', align: 'right' },
+          { header: 'Dir (°)', align: 'right' },
+          { header: 'n', align: 'right' },
+        ],
+        rows: legRows,
+        footnotes: [
+          WIND_METHOD_FOOTNOTE,
+          '“When” is the whole field’s circling window for the leg — from the first to the ' +
+            'last circle wind-estimate any pilot logged while on it (the exact times behind ' +
+            'that leg’s wind). Glides produce no estimate, so a leg no one circled on shows “—”.',
+        ],
+      });
+    }
+
+    return { perPilot: allNullPerPilot(field), extraTables: tables };
   },
 };
 

@@ -94,3 +94,12 @@ export function hhmmInZone(tMs: number, timeZone?: string): string {
 export function timeWithZone(tMs: number, timeZone?: string): string {
   return `${hhmmInZone(tMs, timeZone)} ${zoneToken(tMs, timeZone)}`;
 }
+
+/**
+ * A time-of-day range with a single trailing zone token — "13:05–14:30 AEDT"
+ * (or "…–… UTC" with no zone). Both ends share the token; the zone is resolved
+ * for the end instant so DST is the one in force.
+ */
+export function timeRangeWithZone(fromMs: number, toMs: number, timeZone?: string): string {
+  return `${hhmmInZone(fromMs, timeZone)}–${hhmmInZone(toMs, timeZone)} ${zoneToken(toMs, timeZone)}`;
+}

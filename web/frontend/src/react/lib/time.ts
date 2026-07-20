@@ -299,23 +299,44 @@ export function zoneAbbrev(date: Date, timeZone: string | undefined): string {
 export function formatTimeOfDay(iso: string, timeZone: string | undefined): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  let hhmm: string;
+  return `${hhmmInZone(date, timeZone)} ${zoneAbbrev(date, timeZone)}`;
+}
+
+/**
+ * A range of two ISO instants as a time of day with one trailing zone token —
+ * "13:05–14:30 AEDT". Viewer-local when `timeZone` is undefined. Used for the
+ * field-analysis report's `{ from, to }` cells (e.g. when the field flew a leg).
+ * Returns "from–to" verbatim if either end is not a valid instant.
+ */
+export function formatTimeRange(
+  from: string,
+  to: string,
+  timeZone: string | undefined
+): string {
+  const a = new Date(from);
+  const b = new Date(to);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return `${from}–${to}`;
+  return `${hhmmInZone(a, timeZone)}–${hhmmInZone(b, timeZone)} ${zoneAbbrev(b, timeZone)}`;
+}
+
+/** "14:30" wall clock in `timeZone` (viewer-local when undefined), falling back
+ * to UTC for a zone the runtime doesn't know. */
+function hhmmInZone(date: Date, timeZone: string | undefined): string {
   try {
-    hhmm = new Intl.DateTimeFormat("en-GB", {
+    return new Intl.DateTimeFormat("en-GB", {
       timeZone,
       hour: "2-digit",
       minute: "2-digit",
       hourCycle: "h23",
     }).format(date);
   } catch {
-    hhmm = new Intl.DateTimeFormat("en-GB", {
+    return new Intl.DateTimeFormat("en-GB", {
       timeZone: "UTC",
       hour: "2-digit",
       minute: "2-digit",
       hourCycle: "h23",
     }).format(date);
   }
-  return `${hhmm} ${zoneAbbrev(date, timeZone)}`;
 }
 
 /** True when the runtime recognises `tz` as an IANA zone. */

@@ -11,15 +11,20 @@
  */
 import { useId } from "react";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
-import { formatTimeOfDay } from "../lib/time";
+import { formatTimeOfDay, formatTimeRange } from "../lib/time";
 import type { ReportTable, ReportCell } from "./types";
 
-/** A report cell as a React node: text passes through; a `{ t }` instant
- * renders as a comp-zone time of day inside a semantic <time>. */
+/** A report cell as a React node: text passes through; a `{ t }` instant renders
+ * as a comp-zone time of day and a `{ from, to }` cell as a comp-zone range,
+ * each inside a semantic <time>. */
 function renderCell(cell: ReportCell, compTimezone: string | null) {
   if (typeof cell === "string") return cell;
+  const tz = compTimezone ?? undefined;
+  if ("t" in cell) {
+    return <time dateTime={cell.t}>{formatTimeOfDay(cell.t, tz)}</time>;
+  }
   return (
-    <time dateTime={cell.t}>{formatTimeOfDay(cell.t, compTimezone ?? undefined)}</time>
+    <time dateTime={cell.from}>{formatTimeRange(cell.from, cell.to, tz)}</time>
   );
 }
 

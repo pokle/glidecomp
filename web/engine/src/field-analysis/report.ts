@@ -11,7 +11,7 @@
 
 import { FAMILY_LABELS, FAMILY_ORDER } from './registry';
 import { MIN_CORRELATION_N } from './evaluate';
-import { timeWithZone } from './format-time';
+import { timeWithZone, timeRangeWithZone } from './format-time';
 import type {
   CompAggregateReport,
   FieldAnalysisReport,
@@ -29,11 +29,13 @@ export interface RenderReportOptions {
 }
 
 /** A report cell as display text: literal strings pass through; `{ t }`
- * instants render as a time of day in `timeZone` ("14:00 AEDT" / "13:00 UTC"). */
+ * instants render as a time of day and `{ from, to }` as a range, in `timeZone`
+ * ("14:00 AEDT", "13:05–14:30 AEDT", "13:00 UTC"). */
 function cellText(cell: ReportCell | undefined, timeZone?: string): string {
   if (cell === undefined) return '';
   if (typeof cell === 'string') return cell;
-  return timeWithZone(new Date(cell.t).getTime(), timeZone);
+  if ('t' in cell) return timeWithZone(new Date(cell.t).getTime(), timeZone);
+  return timeRangeWithZone(new Date(cell.from).getTime(), new Date(cell.to).getTime(), timeZone);
 }
 
 function padRight(s: string, n: number): string {

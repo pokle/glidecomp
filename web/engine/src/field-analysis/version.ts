@@ -36,4 +36,10 @@
 //     so the consumer (web in comp time, CLI in the task's local time) renders
 //     the zone. No metric value changed; the bump rolls stored reports onto
 //     the new shape.
-export const FIELD_ANALYSIS_VERSION = 4;
+// v5: day.wind split into two tables — "Wind by hour" (time view: whole-task
+//     total + per-hour) and "Wind by leg" (course view) — instead of one table
+//     mixing hour and leg rows in a single "Scope" column. The leg table gains
+//     a "When" column: a `{ from, to }` instant-range cell (new ReportCell
+//     variant) showing the field's circling window for that leg. No metric
+//     value changed; the bump rolls stored reports onto the new shape.
+export const FIELD_ANALYSIS_VERSION = 5;
