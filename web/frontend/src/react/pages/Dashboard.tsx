@@ -160,12 +160,16 @@ export function Dashboard() {
 
       <CompetitionFlightsSection />
 
+      {/* The local library below gets its own heading so it reads as a
+          sibling of the Competition flights section above. */}
+      <h2 className="mb-3 text-lg font-bold">Personal flights</h2>
+
       <Tabs
         value={tab}
         onValueChange={(value) => setTab(value as "tracks" | "tasks")}
       >
-        {/* No page header here, so the add-files action rides the tab row,
-            right-aligned like the section actions on the comp/task pages. */}
+        {/* The add-files action rides the tab row, right-aligned like the
+            section actions on the comp/task pages. */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <TabsList>
             <TabsTrigger value="tracks">
@@ -395,14 +399,17 @@ function CompetitionFlightsSection() {
             className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2"
           >
             <Link
-              to={`/comp/${f.comp_id}/task/${f.task_id}`}
+              to={`/comp/${f.comp_id}`}
               className="font-medium underline underline-offset-4"
             >
-              {f.task_name}
+              {f.comp_name}
             </Link>
             <span className="text-sm text-muted-foreground">
-              <Link to={`/comp/${f.comp_id}`} className="underline underline-offset-4">
-                {f.comp_name}
+              <Link
+                to={`/comp/${f.comp_id}/task/${f.task_id}`}
+                className="underline underline-offset-4"
+              >
+                {f.task_name}
               </Link>
             </span>
             <span className="text-sm text-muted-foreground">
