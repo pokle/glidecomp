@@ -151,9 +151,11 @@ describe('day.wind', () => {
     const speedKmh = Number(taskRow[1]);
     expect(speedKmh).toBeGreaterThan(5); // 4 m/s drift = 14.4 km/h
     expect(speedKmh).toBeLessThan(40);
-    const dir = Number(taskRow[2]);
+    // Dir cell is "<deg>° <compass> <arrow>", e.g. "270° W ←".
+    const dir = Number(taskRow[2].match(/^(\d+)°/)![1]);
     expect(dir).toBeGreaterThanOrEqual(225); // eastward drift → wind FROM ~west
     expect(dir).toBeLessThanOrEqual(315);
+    expect(taskRow[2]).toMatch(/^\d+° [NEWS]{1,3} [↑↗→↘↓↙←↖]$/); // compass point + wind-travel arrow
 
     // Hourly row: all fixes start at BASE_TIME (10:00 UTC).
     const hourRow = table.rows.find((r) => r[0] === '10:00 UTC');

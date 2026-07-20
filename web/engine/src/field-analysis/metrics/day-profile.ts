@@ -23,6 +23,7 @@ import type {
 } from '../types';
 import type { XCTask } from '../../xctsk-parser';
 import { circularMeanWind, median, percentile, type WindSample } from '../stats';
+import { formatWindDirection } from '../../units';
 
 const HOUR_MS = 3_600_000;
 
@@ -119,13 +120,13 @@ function legIndexAt(pilot: PilotAnalysisContext, tMs: number): number | null {
   return seq[last].taskIndex;
 }
 
-/** A wind table row: Scope / Speed km/h (1 dp) / Dir ° FROM / n. */
+/** A wind table row: Scope / Speed km/h (1 dp) / Dir (° FROM + compass + arrow) / n. */
 function windRow(scope: string, samples: WindSample[]): string[] {
   const w = circularMeanWind(samples);
   return [
     scope,
     w ? (w.speed * 3.6).toFixed(1) : '—',
-    w ? String(Math.round(w.direction) % 360) : '—',
+    w ? formatWindDirection(w.direction) : '—',
     String(samples.length),
   ];
 }
@@ -173,13 +174,13 @@ const dayWind: MetricComputer = {
       columns: [
         { header: 'Scope', align: 'left' },
         { header: 'Speed (km/h)', align: 'right' },
-        { header: 'Dir (°)', align: 'right' },
+        { header: 'Dir', align: 'left' },
         { header: 'n', align: 'right' },
       ],
       rows,
       footnotes: [
         'Vector mean of per-circle wind estimates; centre-drift estimates preferred over ground-speed modulation.',
-        'Dir is degrees the wind blows FROM (0° = north). Leg rows cover the speed section only.',
+        'Dir is degrees the wind blows FROM (0° = north) with its compass point; the arrow points the way the wind travels (a northerly ↓). Leg rows cover the speed section only.',
         'Read hour and leg rows against leg outcomes to spot e.g. a mid-task wind switch.',
       ],
     };

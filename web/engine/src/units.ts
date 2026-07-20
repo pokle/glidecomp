@@ -178,3 +178,45 @@ export function getCurrentUnit(unitType: UnitType, prefs?: UnitPreferences): str
   const p = prefs ?? DEFAULT_UNITS;
   return p[unitType];
 }
+
+// ---------------------------------------------------------------------------
+// Compass direction formatting
+// ---------------------------------------------------------------------------
+
+/** 16-point compass abbreviations, N at index 0, clockwise. */
+const COMPASS_POINTS = [
+  'N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
+  'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW',
+] as const;
+
+/** Unicode arrows pointing toward N, NE, E, SE, S, SW, W, NW (index 0..7). */
+const COMPASS_ARROWS = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'] as const;
+
+/** Normalise any bearing to the [0, 360) range. */
+function normBearing(deg: number): number {
+  return ((deg % 360) + 360) % 360;
+}
+
+/** Nearest 16-point compass abbreviation for a bearing in degrees (0 = north). */
+export function bearingToCardinal(deg: number): string {
+  return COMPASS_POINTS[Math.round(normBearing(deg) / 22.5) % 16];
+}
+
+/**
+ * Unicode arrow pointing toward a bearing in degrees (0 = north = up),
+ * snapped to the nearest of 8 principal directions.
+ */
+export function bearingToArrow(deg: number): string {
+  return COMPASS_ARROWS[Math.round(normBearing(deg) / 45) % 8];
+}
+
+/**
+ * Format a wind direction (degrees the wind blows FROM, 0 = north) as
+ * "315° NW ↘": the source bearing, its compass point, and an arrow pointing
+ * the way the wind travels (source → destination, i.e. FROM + 180 — a
+ * northerly blows top-to-bottom, so ↓).
+ */
+export function formatWindDirection(fromDeg: number): string {
+  const from = Math.round(normBearing(fromDeg)) % 360;
+  return `${from}° ${bearingToCardinal(from)} ${bearingToArrow(from + 180)}`;
+}
