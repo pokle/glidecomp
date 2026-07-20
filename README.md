@@ -126,7 +126,7 @@ bun run deploy           # Manual deploy to Cloudflare Pages
 bun run deploy:worker    # Manual deploy AirScore API Worker
 bun run deploy:comp      # Manual deploy Competition API Worker
 bun run deploy:auth      # Manual deploy Auth API Worker
-bun run deploy:all       # Deploy Pages + all Workers
+bun run deploy:all       # Deploy Pages + AirScore & Competition Workers (auth-api is separate: deploy:auth)
 ```
 
 **URLs:**

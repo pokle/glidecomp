@@ -45,14 +45,15 @@ All flight analysis (IGC parsing, event detection, scoring math) runs **client-s
 One Pages project (`glidecomp`, output `web/frontend/dist`) with three kinds of surface:
 
 - **Prerendered static pages** — a small Astro app in `web/frontend/static/` builds the content pages (`/`, `/about`, `/legal`, `/scoring`, `/scoring/gap`, `/scoring/open-distance`) as zero-client-JS HTML (KaTeX on the GAP page is rendered at build time). `bun run build` runs the Vite build, then the Astro build, and merges both into `dist/`.
-- **React SPA** — the main UI (`src/react/`, served from `app.html`): competitions, comp/task detail, pilot score detail, scores, dashboard, settings, onboarding, super-admin pages. Built with shadcn/ui components on the Base UI foundation and Tailwind. SPA routes reach the shell via `public/_redirects` rewrites (`/comp/*`, `/u/*`, `/scores`, … → `/app` 200).
+- **React SPA** — the main UI (`src/react/`, served from `app.html`): competitions, comp/task detail, pilot score detail, scores, dashboard, settings, onboarding, super-admin pages. Built with shadcn/ui components on the Base UI foundation and Tailwind. Most SPA routes reach the shell via `public/_redirects` rewrites (`/u/*`, `/scores`, … → `/app` 200); `/comp*` is handed to the SSR Pages Function below via `public/_routes.json`.
+- **SSR public comp pages** — the five public competition pages (`/comp`, `/comp/:id`, waypoints, task, pilot) are server-rendered by the Pages Function `functions/comp/[[path]].ts`, which renders the same React tree the SPA hydrates (this is the SEO strategy). Shipped 2026-07-09; full design in [docs/2026-07-06-ssr-public-pages-plan.md](2026-07-06-ssr-public-pages-plan.md).
 - **Vanilla-TS Vite entries** — the analysis page (`src/analysis/`, an imperative map app) and the 3D replay (`src/replay/`, three.js + Mapbox) are separate entries from the SPA.
 
 Local dev (`bun run dev`) runs the three Workers under wrangler plus Vite and `astro dev` together; the Vite dev server proxies `/api/*` to the local Workers and the static routes to Astro, so everything is seamless on `:3000`.
 
 ### Analysis Engine (`web/engine`)
 
-Pure TypeScript library with no DOM dependencies, consumed by the browser, the Workers, and CLI scripts (`web/engine/cli/`). Major modules: IGC parsing (`igc-parser.ts`), XCTask parsing (`xctsk-parser.ts`), event detection (`event-detector.ts`, `circle-detector.ts`, `cluster-detector.ts`), GAP scoring (`gap-scoring.ts`), open-distance scoring (`open-distance-scoring.ts`), task-line optimization (`task-optimizer.ts`), geo math (`geo.ts` — the single home for distance/bearing formulas), score explanations (`score-explanation.ts`), 3D track packing (`track-packer.ts`), and field analysis (`field-analysis/` — per-pilot behavioural metrics across a whole task's tracks with a Spearman-vs-GAP-rank eval; CLI-only via `score-task --field-analysis` / `--comp`, see `docs/2026-07-18-field-analysis-plan.md`).
+Pure TypeScript library with no DOM dependencies, consumed by the browser, the Workers, and CLI scripts (`web/engine/cli/`). Major modules: IGC parsing (`igc-parser.ts`), XCTask parsing (`xctsk-parser.ts`), event detection (`event-detector.ts`, `circle-detector.ts`, `cluster-detector.ts`), GAP scoring (`gap-scoring.ts`), open-distance scoring (`open-distance-scoring.ts`), task-line optimization (`task-optimizer.ts`), geo math (`geo.ts` — the single home for distance/bearing formulas), score explanations (`score-explanation.ts`), 3D track packing (`track-packer.ts`), and field analysis (`field-analysis/` — per-pilot behavioural metrics across a whole task's tracks with a Spearman-vs-GAP-rank eval; surfaced on the admin-only `/comp/:id/analysis` pages, stored stale-first by the competition-api Worker, and printed by the CLI `score-task --field-analysis` / `--comp`, see `docs/2026-07-18-field-analysis-plan.md`).
 
 ### Workers
 
@@ -154,7 +155,6 @@ All components operate within Cloudflare's free tier for typical competition usa
 Planned but **not yet implemented**:
 
 - **Email submission** — pilots email IGC files to `submit@{domain}`; an Email Worker archives, validates, and links submissions to pilots. Full design (workflow, dedup, submission states): [docs/email-submission-spec.md](email-submission-spec.md).
-- **SSR public pages** — server-render the public competition/score pages for SEO: [docs/2026-07-06-ssr-public-pages-plan.md](2026-07-06-ssr-public-pages-plan.md).
 - **Live tracking** — integration with live tracking services during competition.
 - **Multi-tenant** — richer support for multiple competition organizers (today any user can create a comp and add co-admins; super-admin is a hardcoded allowlist).
 - **XContest integration** — import tasks directly from XContest.
