@@ -30,6 +30,7 @@ export function MetricDetailPanel({
         <span className="inline-flex items-center gap-1">
           {metric.label}
           <MetricExplanation
+            metricId={metric.id}
             label={metric.label}
             unit={metric.unit}
             direction={metric.direction}

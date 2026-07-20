@@ -116,7 +116,7 @@ export function DayProfilePanel({
       {showLegs && legs ? (
         <WindLegsGantt series={legs} timing={timing} axis={axis} timeZone={timeZone} setReadout={setReadout} />
       ) : null}
-      <p aria-hidden className="min-h-4 text-xs text-muted-foreground">
+      <p aria-hidden className="min-h-4 text-xs text-muted-foreground print:hidden">
         {readout ?? "Hover a chart for exact figures."}
       </p>
       <p className="text-xs text-muted-foreground">

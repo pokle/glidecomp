@@ -19,11 +19,12 @@ import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/ta
 import { DivergingMeter } from "@/react/rac/meter";
 import { Alert, AlertDescription, AlertTitle } from "@/react/ui/alert";
 import { RhoSparkline } from "../field-analysis/charts/RhoSparkline";
+import { MetricGlossary, type GlossaryEntry } from "../field-analysis/MetricGlossary";
 import { underComp } from "../lib/crumbs";
 import { api } from "../../comp/api";
 import { useUser } from "../lib/user";
 import { ScoreFreshness } from "../comp/ScoreFreshness";
-import type { CompFieldAnalysisData } from "../field-analysis/types";
+import { ALL_METRICS, type CompFieldAnalysisData } from "../field-analysis/types";
 import type { CompDetailData } from "../comp/types";
 
 export function CompFieldAnalysis() {
@@ -131,6 +132,17 @@ export function CompFieldAnalysis() {
     );
   }, [active]);
 
+  // The aggregate stores no method descriptions, so the glossary reads them
+  // from the engine's registry by metric id — the current definitions, which
+  // is what the descriptions describe (the method, not one run's data). An
+  // aggregate id absent from the registry (a metric since removed) has no
+  // description anywhere and is left out.
+  const glossaryEntries = useMemo<GlossaryEntry[]>(() => {
+    if (!active) return [];
+    const ids = new Set(active.aggregate.metrics.map((m) => m.id));
+    return ALL_METRICS.filter((m) => ids.has(m.id));
+  }, [active]);
+
   const crumbs = underComp(compId, comp?.name ?? data?.comp_name);
 
   if (userLoading || status === "loading") {
@@ -174,7 +186,9 @@ export function CompFieldAnalysis() {
             the field, task by task.
           </p>
         </div>
-        <Badge variant="outline">Admins only</Badge>
+        <Badge variant="outline" className="print:hidden">
+          Admins only
+        </Badge>
       </div>
 
       {data ? (
@@ -224,19 +238,26 @@ export function CompFieldAnalysis() {
 
       {classes.length > 1 ? (
         <div className="mt-4">
-          <SimpleSelect
-            ariaLabel="Pilot class"
-            value={selectedClass}
-            onChange={(value) => {
-              const next = new URLSearchParams(searchParams);
-              next.set("class", value);
-              setSearchParams(next, { replace: true });
-            }}
-            options={classes.map((c) => ({
-              value: c.pilot_class,
-              label: c.pilot_class,
-            }))}
-          />
+          {/* The select is a control, so print swaps it for a plain
+              statement of which class this printout covers. */}
+          <div className="print:hidden">
+            <SimpleSelect
+              ariaLabel="Pilot class"
+              value={selectedClass}
+              onChange={(value) => {
+                const next = new URLSearchParams(searchParams);
+                next.set("class", value);
+                setSearchParams(next, { replace: true });
+              }}
+              options={classes.map((c) => ({
+                value: c.pilot_class,
+                label: c.pilot_class,
+              }))}
+            />
+          </div>
+          <p className="hidden text-sm print:block">
+            Pilot class: <strong>{selectedClass}</strong>
+          </p>
         </div>
       ) : null}
 
@@ -289,8 +310,8 @@ export function CompFieldAnalysis() {
                 {rankedMetrics.map((m) => (
                   <Row key={m.id}>
                     {/* No ⓘ here: the comp aggregate carries no method
-                        descriptions (they live on the per-task reports), and
-                        an empty popover is worse than none. */}
+                        descriptions (they live on the per-task reports and,
+                        for this page, in the glossary at the bottom). */}
                     <Cell className="whitespace-normal">{m.label}</Cell>
                     <Cell>
                       <RhoSparkline
@@ -372,6 +393,14 @@ export function CompFieldAnalysis() {
               </TableBody>
             </Table>
           </section>
+
+          {/* Method descriptions for every metric named above — this page has
+              no ⓘ popovers, so the glossary is the one place to read them
+              (and the printed reference). */}
+          <MetricGlossary
+            entries={glossaryEntries}
+            intro="How every metric named above is measured. These are the engine's current method descriptions; each task's own report carries the same prose next to its numbers."
+          />
         </div>
       ) : (
         <Alert className="mt-6">

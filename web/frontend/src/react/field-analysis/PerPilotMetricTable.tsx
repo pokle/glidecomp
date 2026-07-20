@@ -114,6 +114,7 @@ export function PerPilotMetricTable({
             <span className="inline-flex items-center gap-1">
               {m.shortLabel ?? m.label}
               <MetricExplanation
+                metricId={m.id}
                 label={m.label}
                 unit={m.unit}
                 direction={m.direction}

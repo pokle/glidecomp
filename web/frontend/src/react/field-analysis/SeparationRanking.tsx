@@ -104,7 +104,13 @@ export function SeparationRanking({
         is best, so a metric where more is better shows a{" "}
         <strong>negative</strong> ρ. Bigger bars mean the metric separated the
         field more sharply on this task.
-        {report ? " Select a row to see that metric plotted against rank." : null}
+        {report ? (
+          // An instruction to interact — meaningless on paper.
+          <span className="print:hidden">
+            {" "}
+            Select a row to see that metric plotted against rank.
+          </span>
+        ) : null}
       </p>
 
       <Table
@@ -143,6 +149,7 @@ export function SeparationRanking({
                 <span className="inline-flex items-center gap-1">
                   {metric.label}
                   <MetricExplanation
+                    metricId={metric.id}
                     label={metric.label}
                     unit={metric.unit}
                     direction={metric.direction}

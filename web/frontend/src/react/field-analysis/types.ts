@@ -13,6 +13,10 @@ export {
   FAMILY_ORDER,
   FAMILY_LABELS,
   MIN_CORRELATION_N,
+  // The metric registry itself: the comp aggregate stores no method
+  // descriptions, so the comp page's glossary reads them from here — the
+  // same definitions the engine computes with.
+  ALL_METRICS,
 } from "@glidecomp/engine";
 export type {
   FieldAnalysisReport,

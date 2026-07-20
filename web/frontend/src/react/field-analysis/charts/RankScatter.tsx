@@ -370,14 +370,19 @@ export function RankScatter({
       </svg>
 
       {onShowAllLabelsChange ? (
-        <Checkbox isSelected={showAllLabels} onChange={onShowAllLabelsChange}>
+        <Checkbox
+          isSelected={showAllLabels}
+          onChange={onShowAllLabelsChange}
+          className="print:hidden"
+        >
           Label every pilot
         </Checkbox>
       ) : null}
 
       {/* Visual mirror of hover/focus — the dots' aria-labels serve screen
-          readers, so no aria-live here (it would double-announce). */}
-      <p aria-hidden className="min-h-4 text-xs text-muted-foreground">
+          readers, so no aria-live here (it would double-announce). Hidden in
+          print: an invitation to hover is meaningless on paper. */}
+      <p aria-hidden className="min-h-4 text-xs text-muted-foreground print:hidden">
         {readout ? pointLabel(readout) : "Hover or focus a dot to name the pilot behind it."}
       </p>
 

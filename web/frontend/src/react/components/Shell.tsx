@@ -62,7 +62,7 @@ export function Shell() {
     <div className="flex min-h-dvh flex-col">
       {/* Always-present glass menu bar (Inscribe-style): translucent background
           with backdrop blur, so content scrolls beneath it. */}
-      <header className="sticky top-0 z-40 border-b bg-background/70 backdrop-blur-xl backdrop-saturate-150">
+      <header className="sticky top-0 z-40 border-b bg-background/70 backdrop-blur-xl backdrop-saturate-150 print:hidden">
         <nav
           aria-label="Main"
           className="mx-auto flex min-h-[60px] w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3"
@@ -104,9 +104,10 @@ export function Shell() {
         <Outlet />
       </main>
 
-      <Separator />
+      <Separator className="print:hidden" />
 
-      <footer className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-4 text-sm text-muted-foreground">
+      {/* Chrome, not content — a printed page keeps only the page itself. */}
+      <footer className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-4 text-sm text-muted-foreground print:hidden">
         <span>
           GlideComp{" "}
           <a
@@ -230,7 +231,7 @@ function PreviewAsPill() {
         aria-label={`Preview as${active ? `: ${active.label}` : ""}. Click to change.`}
         onClick={() => setOpen(true)}
         className={cn(
-          "fixed right-3 bottom-3 z-50 flex items-center gap-1.5 rounded-full border py-1 pr-3 pl-2.5 text-xs font-medium shadow-lg",
+          "fixed right-3 bottom-3 z-50 flex items-center gap-1.5 rounded-full border py-1 pr-3 pl-2.5 text-xs font-medium shadow-lg print:hidden",
           previewing
             ? "bg-primary text-primary-foreground"
             : "bg-card text-muted-foreground hover:text-foreground"
@@ -246,7 +247,7 @@ function PreviewAsPill() {
     <div
       role="group"
       aria-label="Preview as"
-      className="fixed right-3 bottom-3 z-50 flex items-center gap-1 rounded-full border bg-card py-1 pr-1.5 pl-3.5 text-xs shadow-lg"
+      className="fixed right-3 bottom-3 z-50 flex items-center gap-1 rounded-full border bg-card py-1 pr-1.5 pl-3.5 text-xs shadow-lg print:hidden"
     >
       <span className="mr-1 whitespace-nowrap text-muted-foreground">Preview as</span>
       {PREVIEW_ROLES.map(({ role, label }) => (
