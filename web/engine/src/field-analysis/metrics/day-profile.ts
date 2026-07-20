@@ -17,15 +17,24 @@
  */
 
 import type {
+  ClimbHourlySeries,
+  DayTimingSeries,
   FieldContext,
   MetricComputer,
   PilotAnalysisContext,
   PilotMetricValue,
   ReportCell,
   ReportTable,
+  WindHourlySeries,
+  WindLegsSeries,
 } from '../types';
 import type { XCTask } from '../../xctsk-parser';
-import { circularMeanWind, median, percentile, type WindSample } from '../stats';
+import {
+  resolveLaunchWindowOpen,
+  resolveStartGates,
+  resolveTaskDeadline,
+} from '../../time-gates';
+import { circularMeanWind, median, percentile, type MeanWind, type WindSample } from '../stats';
 
 const HOUR_MS = 3_600_000;
 
@@ -130,13 +139,12 @@ function legIndexAt(pilot: PilotAnalysisContext, tMs: number): number | null {
   return seq[last].taskIndex;
 }
 
-/** Speed (km/h, 1 dp) / Dir (° FROM) / n cells for a set of wind samples. */
-function windStats(samples: WindSample[]): [string, string, string] {
-  const w = circularMeanWind(samples);
+/** Speed (km/h, 1 dp) / Dir (° FROM) / n cells for a vector-mean wind. */
+function windCells(w: MeanWind | null): [string, string, string] {
   return [
     w ? (w.speed * 3.6).toFixed(1) : '—',
     w ? String(Math.round(w.direction) % 360) : '—',
-    String(samples.length),
+    String(w?.n ?? 0),
   ];
 }
 
@@ -165,12 +173,19 @@ const dayWind: MetricComputer = {
     const winds = collectCircleWinds(field);
 
     // 1) By hour of day — a time view. The whole-task total leads as the
-    // baseline the hourly rows vary around.
+    // baseline the hourly rows vary around. Table cells and the charting
+    // series are derived from the SAME MeanWind per bucket, so the chart can
+    // never disagree with the table.
     const byHour = new Map<number, WindSample[]>();
     for (const w of winds) pushInto(byHour, hourStartMs(w.tMs), w.sample);
-    const hourRows: ReportCell[][] = [['Whole task', ...windStats(winds.map((w) => w.sample))]];
-    for (const h of [...byHour.keys()].sort((a, b) => a - b)) {
-      hourRows.push([timeCell(h), ...windStats(byHour.get(h)!)]);
+    const wholeTask = circularMeanWind(winds.map((w) => w.sample));
+    const hourWinds = [...byHour.keys()]
+      .sort((a, b) => a - b)
+      .map((h) => ({ hourMs: h, wind: circularMeanWind(byHour.get(h)!)! }));
+
+    const hourRows: ReportCell[][] = [['Whole task', ...windCells(wholeTask)]];
+    for (const { hourMs, wind } of hourWinds) {
+      hourRows.push([timeCell(hourMs), ...windCells(wind)]);
     }
     const byHourTable: ReportTable = {
       title: 'Wind by hour',
@@ -185,6 +200,21 @@ const dayWind: MetricComputer = {
     };
 
     const tables: ReportTable[] = [byHourTable];
+    const hourlySeries: WindHourlySeries = {
+      id: 'day.wind.hourly',
+      title: 'Wind by hour',
+      kind: 'wind-hourly',
+      hours: hourWinds.map(({ hourMs, wind }) => ({
+        t: new Date(hourMs).toISOString(),
+        speedKmh: wind.speed * 3.6,
+        directionDeg: wind.direction,
+        n: wind.n,
+      })),
+      wholeTask: wholeTask
+        ? { speedKmh: wholeTask.speed * 3.6, directionDeg: wholeTask.direction, n: wholeTask.n }
+        : null,
+    };
+    const series: (WindHourlySeries | WindLegsSeries)[] = [hourlySeries];
 
     // 2) By speed-section leg — a course view. Each leg carries the time span
     // its estimates were drawn from, so a leg row is anchored in time.
@@ -199,18 +229,31 @@ const dayWind: MetricComputer = {
         else byLeg.set(legIndex, [w]);
       }
       const legRows: ReportCell[][] = [];
+      const legSeries: WindLegsSeries = {
+        id: 'day.wind.legs',
+        title: 'Wind by leg',
+        kind: 'wind-legs',
+        legs: [],
+      };
       for (const leg of field.legs) {
         if (leg.fromTaskIndex < sssIndex) continue;
         const label = `${tpLabel(field.task, leg.fromTaskIndex)}→${tpLabel(field.task, leg.toTaskIndex)}`;
         const legWinds = byLeg.get(leg.fromTaskIndex) ?? [];
-        const when: ReportCell = legWinds.length
-          ? rangeCell(
-              Math.min(...legWinds.map((w) => w.tMs)),
-              Math.max(...legWinds.map((w) => w.tMs)),
-            )
-          : '—';
-        legRows.push([label, when, ...windStats(legWinds.map((w) => w.sample))]);
+        const wind = circularMeanWind(legWinds.map((w) => w.sample));
+        const fromMs = legWinds.length ? Math.min(...legWinds.map((w) => w.tMs)) : null;
+        const toMs = legWinds.length ? Math.max(...legWinds.map((w) => w.tMs)) : null;
+        const when: ReportCell = fromMs !== null && toMs !== null ? rangeCell(fromMs, toMs) : '—';
+        legRows.push([label, when, ...windCells(wind)]);
+        legSeries.legs.push({
+          label,
+          from: fromMs !== null ? new Date(fromMs).toISOString() : null,
+          to: toMs !== null ? new Date(toMs).toISOString() : null,
+          speedKmh: wind ? wind.speed * 3.6 : null,
+          directionDeg: wind ? wind.direction : null,
+          n: wind?.n ?? 0,
+        });
       }
+      series.push(legSeries);
       tables.push({
         title: 'Wind by leg',
         columns: [
@@ -230,7 +273,7 @@ const dayWind: MetricComputer = {
       });
     }
 
-    return { perPilot: allNullPerPilot(field), extraTables: tables };
+    return { perPilot: allNullPerPilot(field), extraTables: tables, extraSeries: series };
   },
 };
 
@@ -269,15 +312,29 @@ const dayClimbByHour: MetricComputer = {
   compute(field) {
     const buckets = hourlyClimbBuckets(field);
     const rows: ReportCell[][] = [];
+    // The series carries the full quantile fan; the table prints its
+    // median/p90 slice — both cut from the same sorted bucket.
+    const series: ClimbHourlySeries = {
+      id: 'day.climb_by_hour.hourly',
+      title: 'Climb by hour',
+      kind: 'climb-hourly',
+      hours: [],
+    };
     for (const h of [...buckets.keys()].sort((a, b) => a - b)) {
       const rates = buckets.get(h)!;
       const sorted = [...rates].sort((a, b) => a - b);
-      rows.push([
-        timeCell(h),
-        median(rates).toFixed(1),
-        percentile(sorted, 90).toFixed(1),
-        String(rates.length),
-      ]);
+      const med = percentile(sorted, 50);
+      const p90 = percentile(sorted, 90);
+      rows.push([timeCell(h), med.toFixed(1), p90.toFixed(1), String(rates.length)]);
+      series.hours.push({
+        t: new Date(h).toISOString(),
+        p10: percentile(sorted, 10),
+        p25: percentile(sorted, 25),
+        median: med,
+        p75: percentile(sorted, 75),
+        p90,
+        n: rates.length,
+      });
     }
     const table: ReportTable = {
       title: 'Climb by hour',
@@ -293,7 +350,7 @@ const dayClimbByHour: MetricComputer = {
           'hours shown in the competition’s time zone.',
       ],
     };
-    return { perPilot: allNullPerPilot(field), extraTables: [table] };
+    return { perPilot: allNullPerPilot(field), extraTables: [table], extraSeries: [series] };
   },
 };
 
@@ -354,13 +411,18 @@ export function pickBestConditionsHour(
 }
 
 /**
- * Best-conditions hour vs the field's takeoff-time spread, as a small table of
- * time-of-day cells (rendered in the reader's zone by the consumer). The
- * best-conditions row is an hour RANGE, not an instant, so a takeoff inside
- * that window doesn't read as a contradiction. Null when there is neither
- * thermal data nor a recorded takeoff.
+ * Best-conditions hour vs the field's takeoff-time spread: a small table of
+ * time-of-day cells (rendered in the reader's zone by the consumer) plus its
+ * charting twin, which also carries the task's own clock (start gates,
+ * launch-window open, goal deadline) so the day-profile chart can anchor the
+ * field's behaviour to the race. The best-conditions row is an hour RANGE,
+ * not an instant, so a takeoff inside that window doesn't read as a
+ * contradiction. Null when there is neither thermal data nor a recorded
+ * takeoff.
  */
-function launchTimingTable(field: FieldContext): ReportTable | null {
+function launchTiming(
+  field: FieldContext,
+): { table: ReportTable; series: DayTimingSeries } | null {
   const best = pickBestConditionsHour(hourlyClimbBuckets(field));
 
   const takeoffs = field.pilots
@@ -379,7 +441,36 @@ function launchTimingTable(field: FieldContext): ReportTable | null {
   }
   if (rows.length === 0) return null;
 
-  return {
+  // The task carries gates/window/deadline as times of day; resolve them onto
+  // the flight's calendar day near the field's own instants (same rule the
+  // scorer uses — see time-gates.ts). Landings anchor the deadline since it
+  // falls near the end of the day.
+  const refStart = takeoffs[0] ?? best!.hourMs;
+  const landings = field.pilots
+    .filter((p) => p.fixes.length > 0 && p.fixes[p.landingIndex] !== undefined)
+    .map((p) => p.fixes[p.landingIndex].time.getTime());
+  const refEnd = landings.length > 0 ? Math.max(...landings) : refStart;
+  const gates = resolveStartGates(field.task, refStart) ?? [];
+  const launchOpen = resolveLaunchWindowOpen(field.task, refStart);
+  const deadline = resolveTaskDeadline(field.task, refEnd);
+
+  const series: DayTimingSeries = {
+    id: 'day.launch_timing.timing',
+    title: 'Day timing',
+    kind: 'day-timing',
+    bestHour: best
+      ? {
+          from: new Date(best.hourMs).toISOString(),
+          to: new Date(best.hourMs + HOUR_MS).toISOString(),
+        }
+      : null,
+    takeoffs: takeoffs.map((t) => new Date(t).toISOString()),
+    startGates: gates.map((t) => new Date(t).toISOString()),
+    launchOpen: launchOpen !== null ? new Date(launchOpen).toISOString() : null,
+    deadline: deadline !== null ? new Date(deadline).toISOString() : null,
+  };
+
+  const table: ReportTable = {
     title: 'Day timing',
     columns: [
       { header: '', align: 'left' },
@@ -395,6 +486,7 @@ function launchTimingTable(field: FieldContext): ReportTable | null {
           ]
         : undefined,
   };
+  return { table, series };
 }
 
 const dayLaunchTiming: MetricComputer = {
@@ -409,13 +501,14 @@ const dayLaunchTiming: MetricComputer = {
     '30 s-smoothed vario at or above −0.5 m/s. A low share suggests flying outside the ' +
     'day’s best window (launched too early or too late).',
   compute(field) {
-    const timing = launchTimingTable(field);
+    const timing = launchTiming(field);
     return {
       perPilot: field.pilots.map((p) => ({
         trackFile: p.trackFile,
         value: nonSinkingSharePct(field, p),
       })),
-      extraTables: timing ? [timing] : undefined,
+      extraTables: timing ? [timing.table] : undefined,
+      extraSeries: timing ? [timing.series] : undefined,
     };
   },
 };

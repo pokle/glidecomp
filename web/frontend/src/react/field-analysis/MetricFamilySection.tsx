@@ -13,6 +13,7 @@ import { Badge } from "@/react/rac/badge";
 import { PerPilotMetricTable } from "./PerPilotMetricTable";
 import { ReportTableView, ReportTableTitle } from "./ReportTableView";
 import { SeriesChart } from "./charts/SeriesChart";
+import { DayProfilePanel } from "./charts/day-profile/DayProfilePanel";
 import { bestAbsRho } from "./SeparationRanking";
 import type { FieldAnalysisReport, MetricReport, MetricFamily } from "./types";
 
@@ -94,6 +95,12 @@ export function MetricFamilySection({
             {m.label} could not be computed: {m.error}
           </p>
         ))}
+
+        {/* The day family opens with its series composed onto one shared
+            time axis — the panel is why SeriesChart skips these kinds. */}
+        {family === "day" ? (
+          <DayProfilePanel metrics={metrics} compTimezone={compTimezone} />
+        ) : null}
 
         {perPilotMetrics.length > 0 ? (
           <PerPilotMetricTable

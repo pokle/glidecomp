@@ -135,15 +135,24 @@ export interface ReportTable {
  * extraTable, emitted alongside it (never instead: the table is the CLI's
  * rendering and the UI's accessible equivalent, so it always ships).
  *
- * X is categorical (turnpoints, legs); every pilot's points array aligns to
- * xLabels, with null = not reached / leg not completed. Values are raw
- * numbers in yUnit — presentation formatting stays with the consumer.
+ * Discriminated by `kind`. A consumer that doesn't recognise a kind must
+ * ignore the series (an older UI in front of a newer engine degrades to the
+ * tables). Values are raw numbers and times are ISO instants — presentation
+ * (decimal places, time zone) stays with the consumer, same rule as
+ * {@link ReportCell}.
  */
-export interface ReportSeries {
+export interface ReportSeriesBase {
   /** Stable id, unique within the metric (e.g. 'race.time_behind.horserace'). */
   id: string;
   title: string;
-  /** What shape the consumer should draw. */
+}
+
+/**
+ * Categorical-x, one-line-per-pilot series (the horserace and the leg
+ * waterfall). Every pilot's points array aligns to xLabels, with null = not
+ * reached / leg not completed.
+ */
+export interface CategoricalReportSeries extends ReportSeriesBase {
   kind: 'horserace' | 'waterfall';
   /** Categorical x positions, in order (turnpoint or leg labels). */
   xLabels: string[];
@@ -152,6 +161,80 @@ export interface ReportSeries {
   /** One row per pilot with any data; points align to xLabels. */
   perPilot: { trackFile: string; points: (number | null)[] }[];
 }
+
+/**
+ * Hourly wind — the data twin of the "Wind by hour" table. One point per
+ * hour bucket that produced any circle wind estimate; `t` is the bucket's
+ * hour-start instant (the bucket covers [t, t+1h)).
+ */
+export interface WindHourlySeries extends ReportSeriesBase {
+  kind: 'wind-hourly';
+  hours: { t: string; speedKmh: number; directionDeg: number; n: number }[];
+  /** Vector mean over the whole task (the table's "Whole task" row). */
+  wholeTask: { speedKmh: number; directionDeg: number; n: number } | null;
+}
+
+/**
+ * Per-leg wind — the data twin of the "Wind by leg" table. Legs are in
+ * course order; `from`/`to` bound the field's circling window on the leg
+ * (null when nobody circled there, in which case speed/direction are null
+ * too and n is 0).
+ */
+export interface WindLegsSeries extends ReportSeriesBase {
+  kind: 'wind-legs';
+  legs: {
+    label: string;
+    from: string | null;
+    to: string | null;
+    speedKmh: number | null;
+    directionDeg: number | null;
+    n: number;
+  }[];
+}
+
+/**
+ * Hourly climb-rate distribution — the data twin of the "Climb by hour"
+ * table, with the full quantile fan (the table prints median and p90). All
+ * rates are m/s; `t` is the bucket's hour-start instant.
+ */
+export interface ClimbHourlySeries extends ReportSeriesBase {
+  kind: 'climb-hourly';
+  hours: {
+    t: string;
+    p10: number;
+    p25: number;
+    median: number;
+    p75: number;
+    p90: number;
+    n: number;
+  }[];
+}
+
+/**
+ * The day's timing marks — the data twin of the "Day timing" table, plus
+ * the task's own clock (gates, launch window, deadline) so a chart can
+ * anchor the field's behaviour to the race. All ISO instants.
+ */
+export interface DayTimingSeries extends ReportSeriesBase {
+  kind: 'day-timing';
+  /** The best-conditions one-hour window, null when there were no climbs. */
+  bestHour: { from: string; to: string } | null;
+  /** Every pilot's takeoff instant, ascending. */
+  takeoffs: string[];
+  /** Resolved start-gate instants, ascending ([] when the task has none). */
+  startGates: string[];
+  /** Launch-window open instant, null when the task doesn't define one. */
+  launchOpen: string | null;
+  /** Goal-deadline instant, null when the task doesn't define one. */
+  deadline: string | null;
+}
+
+export type ReportSeries =
+  | CategoricalReportSeries
+  | WindHourlySeries
+  | WindLegsSeries
+  | ClimbHourlySeries
+  | DayTimingSeries;
 
 export interface MetricOutput {
   /**

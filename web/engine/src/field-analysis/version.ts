@@ -46,4 +46,11 @@
 //     hour-start instant) and ignores sparse hours (< 20% of the busiest
 //     hour's climbs) when picking the best — a thin sliver right after launch
 //     no longer wins and then reads as predating the earliest takeoff.
-export const FIELD_ANALYSIS_VERSION = 6;
+// v7: the day-profile metrics emit charting series alongside their tables —
+//     day.wind → 'wind-hourly' + 'wind-legs', day.climb_by_hour →
+//     'climb-hourly' (full p10/p25/median/p75/p90 fan), day.launch_timing →
+//     'day-timing' (best hour, every takeoff, resolved start gates / launch
+//     window / goal deadline) — feeding the UI's shared-time-axis day-profile
+//     panel. No metric value changed; the bump rolls stored reports so they
+//     regain the new series on their next lazy revalidation.
+export const FIELD_ANALYSIS_VERSION = 7;

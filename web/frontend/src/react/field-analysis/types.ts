@@ -26,6 +26,11 @@ export type {
   ReportCell,
   ReportTable,
   ReportSeries,
+  CategoricalReportSeries,
+  WindHourlySeries,
+  WindLegsSeries,
+  ClimbHourlySeries,
+  DayTimingSeries,
   PilotMetricValue,
 } from "@glidecomp/engine";
 

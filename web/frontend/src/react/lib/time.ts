@@ -13,8 +13,9 @@
 /**
  * Minutes the zone is ahead of UTC at `utc` (AEDT → +660). Computed from
  * Intl.formatToParts, so it follows the runtime's tz database including DST.
+ * Throws for a zone the runtime doesn't know — callers catch.
  */
-function zoneOffsetMinutes(utc: Date, timeZone: string): number {
+export function zoneOffsetMinutes(utc: Date, timeZone: string): number {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-US", {
       timeZone,
@@ -321,7 +322,7 @@ export function formatTimeRange(
 
 /** "14:30" wall clock in `timeZone` (viewer-local when undefined), falling back
  * to UTC for a zone the runtime doesn't know. */
-function hhmmInZone(date: Date, timeZone: string | undefined): string {
+export function hhmmInZone(date: Date, timeZone: string | undefined): string {
   try {
     return new Intl.DateTimeFormat("en-GB", {
       timeZone,
