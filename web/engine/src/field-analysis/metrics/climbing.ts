@@ -11,7 +11,7 @@
 
 import type { IGCFix } from '../../igc-parser';
 import type { ThermalSegment } from '../../event-types';
-import type { MetricComputer, PilotMetricValue } from '../types';
+import type { MetricComputer, PilotMetricValue, ReportCell, ReportTable } from '../types';
 import { mean, median } from '../stats';
 
 /** Fix altitude with the same pressure fallback the resampler uses. */
@@ -270,18 +270,32 @@ const selectivity: MetricComputer = {
       };
     });
 
-    let fieldSummary: string[] | undefined;
+    // Acceptance-by-hour as a table of instants (the consumer renders each
+    // hour in the reader's zone) rather than a "HH:00 UTC" prose line.
+    let extraTables: ReportTable[] | undefined;
     if (hourly.size > 0) {
-      const parts = [...hourly.entries()]
+      const rows: ReportCell[][] = [...hourly.entries()]
         .sort(([a], [b]) => a - b)
-        .map(([hour, pcts]) => {
-          const hh = new Date(hour).toISOString().slice(11, 16);
-          return `${hh} ${Math.round(median(pcts))}% (${pcts.length} pilot${pcts.length === 1 ? '' : 's'})`;
-        });
-      fieldSummary = [`Median acceptance by hour (UTC): ${parts.join(' · ')}`];
+        .map(([hour, pcts]) => [
+          { t: new Date(hour).toISOString() },
+          String(Math.round(median(pcts))),
+          String(pcts.length),
+        ]);
+      extraTables = [
+        {
+          title: 'Acceptance by hour',
+          columns: [
+            { header: 'Hour', align: 'left' },
+            { header: 'Median accepted (%)', align: 'right' },
+            { header: 'pilots', align: 'right' },
+          ],
+          rows,
+          footnotes: ['Median per-pilot acceptance %, bucketed by the hour (competition time zone).'],
+        },
+      ];
     }
 
-    return { perPilot, fieldSummary };
+    return { perPilot, extraTables };
   },
 };
 

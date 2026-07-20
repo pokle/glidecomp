@@ -10,8 +10,10 @@
  *     non-sinking air (did they fly the day's window?).
  *
  * See docs/2026-07-18-field-analysis-plan.md §"P6 day profile & wind".
- * Metrics read ONLY the FieldContext (contract in ../types.ts). All hour and
- * clock labels are UTC — deterministic, never the runtime's locale/timezone.
+ * Metrics read ONLY the FieldContext (contract in ../types.ts). Times of day
+ * are emitted as machine-readable instants (ReportCell `{ t: ISO }`), NEVER as
+ * pre-formatted "HH:00 UTC" strings — the consumer (the web UI in comp time,
+ * the CLI in the task's local time) renders them in the reader's zone.
  */
 
 import type {
@@ -19,6 +21,7 @@ import type {
   MetricComputer,
   PilotAnalysisContext,
   PilotMetricValue,
+  ReportCell,
   ReportTable,
 } from '../types';
 import type { XCTask } from '../../xctsk-parser';
@@ -29,6 +32,10 @@ const HOUR_MS = 3_600_000;
 /** 30 s smoothing window and the "non-sinking" vario floor for #26. */
 const SMOOTH_WINDOW_SECONDS = 30;
 const NON_SINK_VARIO_MPS = -0.5;
+
+/** A candidate best-conditions hour must hold at least this share of the
+ * busiest hour's climbs, so a sparse edge bucket can't win on a noisy median. */
+const BEST_HOUR_MIN_SHARE = 0.2;
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -44,24 +51,28 @@ function hourStartMs(tMs: number): number {
   return Math.floor(tMs / HOUR_MS) * HOUR_MS;
 }
 
-/** "13:00 UTC" for an hour-start epoch ms. Deterministic (UTC, no locale). */
-function hourLabel(hourMs: number): string {
-  return `${String(new Date(hourMs).getUTCHours()).padStart(2, '0')}:00 UTC`;
+/** A time-of-day report cell — an instant the consumer formats in its zone. */
+function timeCell(tMs: number): ReportCell {
+  return { t: new Date(tMs).toISOString() };
 }
 
-/** "13:07" (UTC clock time, no suffix — callers add "UTC" once per line). */
-function clockLabel(tMs: number): string {
-  const d = new Date(tMs);
-  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
-}
-
-/** Short turnpoint label: SSS / ESS / GOAL / TP<n> (1-based over the task). */
+/**
+ * Turnpoint label using the waypoint name, tagged with its role where it has a
+ * special one: "ELLIOT (SSS)", "GOAL FIELD (GOAL)", or plain "KANGCK". Falls
+ * back to "TP<n>" (1-based) when the waypoint has no name.
+ */
 function tpLabel(task: XCTask, taskIndex: number): string {
   const tp = task.turnpoints[taskIndex];
-  if (tp?.type === 'SSS') return 'SSS';
-  if (tp?.type === 'ESS') return 'ESS';
-  if (taskIndex === task.turnpoints.length - 1) return 'GOAL';
-  return `TP${taskIndex + 1}`;
+  const name = tp?.waypoint.name?.trim() || `TP${taskIndex + 1}`;
+  const role =
+    tp?.type === 'SSS'
+      ? 'SSS'
+      : tp?.type === 'ESS'
+        ? 'ESS'
+        : taskIndex === task.turnpoints.length - 1
+          ? 'GOAL'
+          : null;
+  return role ? `${name} (${role})` : name;
 }
 
 function pushInto<K>(map: Map<K, WindSample[]>, key: K, sample: WindSample): void {
@@ -119,72 +130,107 @@ function legIndexAt(pilot: PilotAnalysisContext, tMs: number): number | null {
   return seq[last].taskIndex;
 }
 
-/** A wind table row: Scope / Speed km/h (1 dp) / Dir ° FROM / n. */
-function windRow(scope: string, samples: WindSample[]): string[] {
+/** Speed (km/h, 1 dp) / Dir (° FROM) / n cells for a set of wind samples. */
+function windStats(samples: WindSample[]): [string, string, string] {
   const w = circularMeanWind(samples);
   return [
-    scope,
     w ? (w.speed * 3.6).toFixed(1) : '—',
     w ? String(Math.round(w.direction) % 360) : '—',
     String(samples.length),
   ];
 }
 
+/** A time-of-day range cell — the consumer renders it "13:05–14:30 AEDT". */
+function rangeCell(fromMs: number, toMs: number): ReportCell {
+  return { from: new Date(fromMs).toISOString(), to: new Date(toMs).toISOString() };
+}
+
+const WIND_METHOD_FOOTNOTE =
+  'Vector mean of per-circle wind estimates (centre-drift preferred over ' +
+  'ground-speed modulation); direction is degrees the wind blows FROM (0° = north).';
+
 const dayWind: MetricComputer = {
   id: 'day.wind',
-  label: 'Wind (task / hourly / per leg)',
+  label: 'Wind (by hour and by leg)',
   shortLabel: 'Wind',
   unit: 'km/h',
   family: 'day',
   direction: 'neutral',
   explanation:
     'Wind estimated from every pilot’s circling (centre drift preferred, ground-speed ' +
-    'modulation as fallback), vector-averaged over the whole task, each UTC hour, and each ' +
-    'speed-section leg. Field-level only — no per-pilot value.',
+    'modulation as fallback), vector-averaged two ways: by hour of day (how the wind built ' +
+    'and shifted through the day) and by speed-section leg (the wind each part of the course ' +
+    'saw). Field-level only — no per-pilot value.',
   compute(field) {
     const winds = collectCircleWinds(field);
 
-    const rows: string[][] = [windRow('Task', winds.map((w) => w.sample))];
-
-    // Per hour, by each circle's midpoint time.
+    // 1) By hour of day — a time view. The whole-task total leads as the
+    // baseline the hourly rows vary around.
     const byHour = new Map<number, WindSample[]>();
     for (const w of winds) pushInto(byHour, hourStartMs(w.tMs), w.sample);
+    const hourRows: ReportCell[][] = [['Whole task', ...windStats(winds.map((w) => w.sample))]];
     for (const h of [...byHour.keys()].sort((a, b) => a - b)) {
-      rows.push(windRow(hourLabel(h), byHour.get(h)!));
+      hourRows.push([timeCell(h), ...windStats(byHour.get(h)!)]);
     }
-
-    // Per speed-section leg, by where each circle's pilot was at that moment.
-    const sssIndex = field.task.turnpoints.findIndex((tp) => tp.type === 'SSS');
-    if (sssIndex >= 0) {
-      const byLeg = new Map<number, WindSample[]>();
-      for (const w of winds) {
-        const legIndex = legIndexAt(w.pilot, w.tMs);
-        if (legIndex !== null) pushInto(byLeg, legIndex, w.sample);
-      }
-      for (const leg of field.legs) {
-        if (leg.fromTaskIndex < sssIndex) continue;
-        const label = `${tpLabel(field.task, leg.fromTaskIndex)}→${tpLabel(field.task, leg.toTaskIndex)}`;
-        rows.push(windRow(label, byLeg.get(leg.fromTaskIndex) ?? []));
-      }
-    }
-
-    const table: ReportTable = {
-      title: 'Wind (from circling drift)',
+    const byHourTable: ReportTable = {
+      title: 'Wind by hour',
       columns: [
-        { header: 'Scope', align: 'left' },
+        { header: 'Period', align: 'left' },
         { header: 'Speed (km/h)', align: 'right' },
         { header: 'Dir (°)', align: 'right' },
         { header: 'n', align: 'right' },
       ],
-      rows,
-      footnotes: [
-        'Vector mean of per-circle wind estimates; centre-drift estimates preferred over ground-speed modulation.',
-        'Dir is degrees the wind blows FROM (0° = north). Leg rows cover the speed section only.',
-        'Read hour and leg rows against leg outcomes to spot e.g. a mid-task wind switch.',
-      ],
+      rows: hourRows,
+      footnotes: [WIND_METHOD_FOOTNOTE, 'Hours are shown in the competition’s time zone.'],
     };
 
-    return { perPilot: allNullPerPilot(field), extraTables: [table] };
+    const tables: ReportTable[] = [byHourTable];
+
+    // 2) By speed-section leg — a course view. Each leg carries the time span
+    // its estimates were drawn from, so a leg row is anchored in time.
+    const sssIndex = field.task.turnpoints.findIndex((tp) => tp.type === 'SSS');
+    if (sssIndex >= 0) {
+      const byLeg = new Map<number, CircleWindSample[]>();
+      for (const w of winds) {
+        const legIndex = legIndexAt(w.pilot, w.tMs);
+        if (legIndex === null) continue;
+        const list = byLeg.get(legIndex);
+        if (list) list.push(w);
+        else byLeg.set(legIndex, [w]);
+      }
+      const legRows: ReportCell[][] = [];
+      for (const leg of field.legs) {
+        if (leg.fromTaskIndex < sssIndex) continue;
+        const label = `${tpLabel(field.task, leg.fromTaskIndex)}→${tpLabel(field.task, leg.toTaskIndex)}`;
+        const legWinds = byLeg.get(leg.fromTaskIndex) ?? [];
+        const when: ReportCell = legWinds.length
+          ? rangeCell(
+              Math.min(...legWinds.map((w) => w.tMs)),
+              Math.max(...legWinds.map((w) => w.tMs)),
+            )
+          : '—';
+        legRows.push([label, when, ...windStats(legWinds.map((w) => w.sample))]);
+      }
+      tables.push({
+        title: 'Wind by leg',
+        columns: [
+          { header: 'Leg', align: 'left' },
+          { header: 'When', align: 'left' },
+          { header: 'Speed (km/h)', align: 'right' },
+          { header: 'Dir (°)', align: 'right' },
+          { header: 'n', align: 'right' },
+        ],
+        rows: legRows,
+        footnotes: [
+          WIND_METHOD_FOOTNOTE,
+          '“When” is the whole field’s circling window for the leg — from the first to the ' +
+            'last circle wind-estimate any pilot logged while on it (the exact times behind ' +
+            'that leg’s wind). Glides produce no estimate, so a leg no one circled on shows “—”.',
+        ],
+      });
+    }
+
+    return { perPilot: allNullPerPilot(field), extraTables: tables };
   },
 };
 
@@ -217,17 +263,17 @@ const dayClimbByHour: MetricComputer = {
   family: 'day',
   direction: 'neutral',
   explanation:
-    'All pilots’ thermal climbs bucketed by the UTC hour the climb started: median and ' +
-    '90th-percentile average climb rate per hour show how the day’s lift developed. ' +
-    'Field-level only — no per-pilot value.',
+    'All pilots’ thermal climbs bucketed by the hour the climb started (labelled in the ' +
+    'competition’s time zone): median and 90th-percentile average climb rate per hour show ' +
+    'how the day’s lift developed. Field-level only — no per-pilot value.',
   compute(field) {
     const buckets = hourlyClimbBuckets(field);
-    const rows: string[][] = [];
+    const rows: ReportCell[][] = [];
     for (const h of [...buckets.keys()].sort((a, b) => a - b)) {
       const rates = buckets.get(h)!;
       const sorted = [...rates].sort((a, b) => a - b);
       rows.push([
-        hourLabel(h),
+        timeCell(h),
         median(rates).toFixed(1),
         percentile(sorted, 90).toFixed(1),
         String(rates.length),
@@ -243,7 +289,8 @@ const dayClimbByHour: MetricComputer = {
       ],
       rows,
       footnotes: [
-        'Average climb rate of every thermal use across the field, bucketed by climb start (UTC).',
+        'Average climb rate of every thermal use across the field, bucketed by climb start; ' +
+          'hours shown in the competition’s time zone.',
       ],
     };
     return { perPilot: allNullPerPilot(field), extraTables: [table] };
@@ -281,34 +328,73 @@ function nonSinkingSharePct(field: FieldContext, pilot: PilotAnalysisContext): n
   return (100 * nonSinking) / total;
 }
 
-/** One line: best-conditions hour vs the field's takeoff-time spread. */
-function launchTimingSummary(field: FieldContext): string {
-  const buckets = hourlyClimbBuckets(field);
-  let bestHour: number | null = null;
-  let bestMedian = -Infinity;
+/**
+ * The best-conditions hour: the one-hour bucket with the highest median climb,
+ * considering only hours with enough climbs to be representative (≥ 20% of the
+ * busiest hour). Without the sample floor a sparse edge-of-day bucket — e.g. a
+ * few climbs in the minutes after the first launch — can outscore the hours the
+ * field actually flew, making the "best" hour predate any takeoff. Takes the
+ * per-hour climb-rate buckets (hour-start ms → avg climb rates); returns the
+ * winning hour-start ms and its median, or null when there are no climbs.
+ * Exported for unit testing.
+ */
+export function pickBestConditionsHour(
+  buckets: Map<number, number[]>,
+): { hourMs: number; median: number } | null {
+  const maxN = Math.max(0, ...[...buckets.values()].map((v) => v.length));
+  if (maxN === 0) return null;
+  let best: { hourMs: number; median: number } | null = null;
   for (const h of [...buckets.keys()].sort((a, b) => a - b)) {
-    const m = median(buckets.get(h)!);
-    if (m > bestMedian) {
-      bestMedian = m;
-      bestHour = h;
-    }
+    const rates = buckets.get(h)!;
+    if (rates.length < BEST_HOUR_MIN_SHARE * maxN) continue; // too thin to judge
+    const m = median(rates);
+    if (best === null || m > best.median) best = { hourMs: h, median: m };
   }
-  const conditions =
-    bestHour !== null
-      ? `Best conditions around ${hourLabel(bestHour)} (median climb ${bestMedian.toFixed(1)} m/s)`
-      : 'No thermal data to pick a best-conditions hour';
+  return best;
+}
+
+/**
+ * Best-conditions hour vs the field's takeoff-time spread, as a small table of
+ * time-of-day cells (rendered in the reader's zone by the consumer). The
+ * best-conditions row is an hour RANGE, not an instant, so a takeoff inside
+ * that window doesn't read as a contradiction. Null when there is neither
+ * thermal data nor a recorded takeoff.
+ */
+function launchTimingTable(field: FieldContext): ReportTable | null {
+  const best = pickBestConditionsHour(hourlyClimbBuckets(field));
 
   const takeoffs = field.pilots
     .filter((p) => p.fixes.length > 0 && p.fixes[p.takeoffIndex] !== undefined)
     .map((p) => p.fixes[p.takeoffIndex].time.getTime())
     .sort((a, b) => a - b);
-  const spread =
-    takeoffs.length > 0
-      ? `takeoffs earliest ${clockLabel(takeoffs[0])}, median ${clockLabel(percentile(takeoffs, 50))}, ` +
-        `latest ${clockLabel(takeoffs[takeoffs.length - 1])} UTC`
-      : 'no takeoffs recorded';
 
-  return `${conditions}; ${spread}.`;
+  const rows: ReportCell[][] = [];
+  if (best !== null) {
+    rows.push(['Best conditions', rangeCell(best.hourMs, best.hourMs + HOUR_MS)]);
+  }
+  if (takeoffs.length > 0) {
+    rows.push(['Earliest takeoff', timeCell(takeoffs[0])]);
+    rows.push(['Median takeoff', timeCell(percentile(takeoffs, 50))]);
+    rows.push(['Latest takeoff', timeCell(takeoffs[takeoffs.length - 1])]);
+  }
+  if (rows.length === 0) return null;
+
+  return {
+    title: 'Day timing',
+    columns: [
+      { header: '', align: 'left' },
+      { header: 'Time', align: 'left' },
+    ],
+    rows,
+    footnotes:
+      best !== null
+        ? [
+            `Best conditions is the one-hour window with the strongest median climb ` +
+              `(${best.median.toFixed(1)} m/s), among hours with enough climbs to be ` +
+              `representative (≥20% of the busiest hour).`,
+          ]
+        : undefined,
+  };
 }
 
 const dayLaunchTiming: MetricComputer = {
@@ -323,12 +409,13 @@ const dayLaunchTiming: MetricComputer = {
     '30 s-smoothed vario at or above −0.5 m/s. A low share suggests flying outside the ' +
     'day’s best window (launched too early or too late).',
   compute(field) {
+    const timing = launchTimingTable(field);
     return {
       perPilot: field.pilots.map((p) => ({
         trackFile: p.trackFile,
         value: nonSinkingSharePct(field, p),
       })),
-      fieldSummary: [launchTimingSummary(field)],
+      extraTables: timing ? [timing] : undefined,
     };
   },
 };

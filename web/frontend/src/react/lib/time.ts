@@ -274,6 +274,71 @@ export function formatInstant(date: Date, timeZone: string | undefined): string 
   return `${dateTime} ${zoneLabel(date, timeZone)}`;
 }
 
+/**
+ * A compact zone token for `date`: the abbreviation when the runtime knows one
+ * ("AEDT", "PST", "UTC"), else the numeric offset ("GMT+5:30"). Shorter than
+ * {@link zoneLabel} (no offset alongside the abbreviation) — for dense places
+ * like a per-row time cell. Viewer-local when `timeZone` is undefined.
+ */
+export function zoneAbbrev(date: Date, timeZone: string | undefined): string {
+  const offset = zoneToken(date, timeZone, "en-GB", "shortOffset");
+  for (const loc of ABBR_LOCALES) {
+    const s = zoneToken(date, timeZone, loc, "short");
+    if (s && !NUMERIC_OFFSET.test(s)) return s;
+  }
+  return !offset || ZERO_OFFSET.test(offset) ? "UTC" : (offset as string);
+}
+
+/**
+ * An ISO instant as a time of day in `timeZone` with a compact zone token —
+ * "02:00 AEDT", "14:30 GMT+5:30", "07:00 UTC". Viewer-local when `timeZone` is
+ * undefined. Used to render the field-analysis report's `{ t }` time cells
+ * (hour buckets, takeoff clocks) in the competition's zone. Returns the raw
+ * input unchanged when it is not a valid instant.
+ */
+export function formatTimeOfDay(iso: string, timeZone: string | undefined): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return `${hhmmInZone(date, timeZone)} ${zoneAbbrev(date, timeZone)}`;
+}
+
+/**
+ * A range of two ISO instants as a time of day with one trailing zone token —
+ * "13:05–14:30 AEDT". Viewer-local when `timeZone` is undefined. Used for the
+ * field-analysis report's `{ from, to }` cells (e.g. when the field flew a leg).
+ * Returns "from–to" verbatim if either end is not a valid instant.
+ */
+export function formatTimeRange(
+  from: string,
+  to: string,
+  timeZone: string | undefined
+): string {
+  const a = new Date(from);
+  const b = new Date(to);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return `${from}–${to}`;
+  return `${hhmmInZone(a, timeZone)}–${hhmmInZone(b, timeZone)} ${zoneAbbrev(b, timeZone)}`;
+}
+
+/** "14:30" wall clock in `timeZone` (viewer-local when undefined), falling back
+ * to UTC for a zone the runtime doesn't know. */
+function hhmmInZone(date: Date, timeZone: string | undefined): string {
+  try {
+    return new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat("en-GB", {
+      timeZone: "UTC",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(date);
+  }
+}
+
 /** True when the runtime recognises `tz` as an IANA zone. */
 function isValidTimeZone(tz: string): boolean {
   try {

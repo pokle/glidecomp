@@ -40,6 +40,7 @@ export function MetricFamilySection({
   familyLabel,
   metrics,
   report,
+  compTimezone = null,
   defaultExpanded,
   isExpanded,
   onExpandedChange,
@@ -48,6 +49,8 @@ export function MetricFamilySection({
   familyLabel: string;
   metrics: MetricReport[];
   report: FieldAnalysisReport;
+  /** Competition IANA zone; report time cells render in it. */
+  compTimezone?: string | null;
   defaultExpanded?: boolean;
   /** Controlled expansion (the task page owns it so the TOC can open a
    * collapsed family before scrolling to it). */
@@ -124,7 +127,7 @@ export function MetricFamilySection({
               {m.extraTables?.map((table) => (
                 <div key={`${m.id}-${table.title}`}>
                   <ReportTableTitle table={table} />
-                  <ReportTableView table={table} />
+                  <ReportTableView table={table} compTimezone={compTimezone} />
                 </div>
               ))}
             </section>

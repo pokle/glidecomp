@@ -107,11 +107,26 @@ export interface PilotMetricValue {
   note?: string;
 }
 
-/** A generic plain-text table a metric wants printed (horserace, waterfall, wind…). */
+/**
+ * A report table cell:
+ *  - literal text; or
+ *  - `{ t }` — a single instant (ISO 8601), rendered as a time of day; or
+ *  - `{ from, to }` — an instant range, rendered as "13:05–14:30 AEDT".
+ *
+ * The CONSUMER formats the times in the reader's zone: the engine never bakes a
+ * zone into the report, so the same report reads in competition time on the web
+ * (frontend uses `comp.timezone`) and in the task's local time on the CLI
+ * (`renderFieldReport({ timeZone })`). See ./format-time.ts and the frontend's
+ * `formatTimeOfDay` / `formatTimeRange`.
+ */
+export type ReportCell = string | { t: string } | { from: string; to: string };
+
+/** A generic table a metric wants printed (horserace, waterfall, wind…). Cells
+ * are text or `{ t }` instants — see {@link ReportCell}. */
 export interface ReportTable {
   title: string;
   columns: { header: string; align: 'left' | 'right' }[];
-  rows: string[][];
+  rows: ReportCell[][];
   footnotes?: string[];
 }
 

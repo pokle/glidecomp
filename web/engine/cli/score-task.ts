@@ -85,6 +85,7 @@ import {
   type CompTaskResult,
   type FieldAnalysisReport,
 } from '../src/field-analysis';
+import { timezoneForXctsk } from '../src/timezone';
 import { loadCompManifest, readTaskDir, pilotKeyFor } from './comp-manifest';
 import { join } from 'path';
 
@@ -513,7 +514,9 @@ function runSingleTask(): void {
     console.log(JSON.stringify(output, null, 2));
   } else {
     printResultTables(task, result, openDistance);
-    if (report) console.log(renderFieldReport(report));
+    // Render report times in the task's local zone (derived from its first
+    // turnpoint); the engine emitted them as UTC instants.
+    if (report) console.log(renderFieldReport(report, { timeZone: timezoneForXctsk(task) }));
   }
 }
 
@@ -572,7 +575,7 @@ function runComp(arg: string): void {
         console.log('');
         console.log(`${'='.repeat(20)} ${manifest.name} — ${pilotClass} — ${fullLabel} ${'='.repeat(20)}`);
         printResultTables(task, result, openDist);
-        if (report) console.log(renderFieldReport(report));
+        if (report) console.log(renderFieldReport(report, { timeZone: timezoneForXctsk(task) }));
       }
 
       if (report) {

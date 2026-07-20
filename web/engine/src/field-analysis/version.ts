@@ -26,4 +26,24 @@
 //     (structured horserace/waterfall data for the UI's charts) alongside
 //     their extraTables. No metric VALUE changed; the bump exists so stored
 //     reports regain the new field on their next lazy revalidation.
-export const FIELD_ANALYSIS_VERSION = 2;
+// v3: day-profile & climbing hour/clock LABELS render in the competition's
+//     time zone (FieldContext.timeZone) instead of always UTC. No metric
+//     value changed — only the "HH:00 UTC" row/summary text — but the bump
+//     rolls stored reports so their labels pick up the comp zone.
+// v4: report tables emit times of day as machine-readable instants
+//     (ReportCell `{ t: ISO }`) instead of pre-formatted "HH:00 UTC" strings,
+//     and the two prose "by hour"/"takeoffs … UTC" summaries became tables —
+//     so the consumer (web in comp time, CLI in the task's local time) renders
+//     the zone. No metric value changed; the bump rolls stored reports onto
+//     the new shape.
+// v5: day.wind split into two tables — "Wind by hour" (time view: whole-task
+//     total + per-hour) and "Wind by leg" (course view) — instead of one table
+//     mixing hour and leg rows in a single "Scope" column. The leg table gains
+//     a "When" column: a `{ from, to }` instant-range cell (new ReportCell
+//     variant) showing the field's circling window for that leg. No metric
+//     value changed; the bump rolls stored reports onto the new shape.
+// v6: day.launch_timing "Best conditions" is now an hour RANGE (not a bare
+//     hour-start instant) and ignores sparse hours (< 20% of the busiest
+//     hour's climbs) when picking the best — a thin sliver right after launch
+//     no longer wins and then reads as predating the earliest takeoff.
+export const FIELD_ANALYSIS_VERSION = 6;
