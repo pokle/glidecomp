@@ -16,18 +16,29 @@ import { SeriesChart } from "./charts/SeriesChart";
 import { bestAbsRho } from "./SeparationRanking";
 import type { FieldAnalysisReport, MetricReport, MetricFamily } from "./types";
 
+/** DOM id of a family's section — the TOC's scroll target. */
+export function familySectionId(family: MetricFamily): string {
+  return `family-${family}`;
+}
+
 export function MetricFamilySection({
   family,
   familyLabel,
   metrics,
   report,
   defaultExpanded,
+  isExpanded,
+  onExpandedChange,
 }: {
   family: MetricFamily;
   familyLabel: string;
   metrics: MetricReport[];
   report: FieldAnalysisReport;
   defaultExpanded?: boolean;
+  /** Controlled expansion (the task page owns it so the TOC can open a
+   * collapsed family before scrolling to it). */
+  isExpanded?: boolean;
+  onExpandedChange?: (isExpanded: boolean) => void;
 }) {
   // Field-level metrics (wind, climb-by-hour) carry no per-pilot values at
   // all; a column of dashes for them is noise, so they only contribute their
@@ -44,9 +55,16 @@ export function MetricFamilySection({
   const failed = metrics.filter((m) => m.error);
 
   return (
+    // The anchor div, not the Disclosure, carries the DOM id: react-aria
+    // consumes `id` for its own wiring rather than forwarding it. scroll-mt
+    // keeps the sticky header from covering the section when the TOC
+    // scrolls here.
+    <div id={familySectionId(family)} className="scroll-mt-20">
     <Disclosure
       title={familyLabel}
       defaultExpanded={defaultExpanded}
+      isExpanded={isExpanded}
+      onExpandedChange={onExpandedChange}
       badge={
         best !== null ? (
           <Badge variant="outline">strongest |ρ| {best.toFixed(2)}</Badge>
@@ -95,6 +113,7 @@ export function MetricFamilySection({
         )}
       </div>
     </Disclosure>
+    </div>
   );
 }
 

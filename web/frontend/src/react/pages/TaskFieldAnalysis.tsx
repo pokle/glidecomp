@@ -37,8 +37,11 @@ import { ScoreFreshness } from "../comp/ScoreFreshness";
 import { SeparationRanking, rankMetrics } from "../field-analysis/SeparationRanking";
 import {
   MetricFamilySection,
+  familySectionId,
   metricsByFamily,
 } from "../field-analysis/MetricFamilySection";
+import { PageToc, type PageTocItem } from "../components/PageToc";
+import { cn } from "../lib/utils";
 import { AnalysisBasis } from "../field-analysis/AnalysisBasis";
 import { PilotHighlightProvider } from "../field-analysis/PilotHighlightContext";
 import { PercentileHeatmap } from "../field-analysis/charts/PercentileHeatmap";
@@ -199,6 +202,38 @@ export function TaskFieldAnalysis() {
     [active]
   );
 
+  // Family expansion is page state (not Disclosure-internal) so the TOC can
+  // open a collapsed family before scrolling to it. Until the user touches
+  // one, expansion follows the top-3 default; a class switch resets to it.
+  const [expandedOverride, setExpandedOverride] = useState<Set<string> | null>(null);
+  useEffect(() => setExpandedOverride(null), [selectedClass]);
+  const expandedFamilies = expandedOverride ?? topFamilies;
+  const expandFamily = (family: string, expanded: boolean) =>
+    setExpandedOverride((prev) => {
+      const next = new Set(prev ?? topFamilies);
+      if (expanded) next.add(family);
+      else next.delete(family);
+      return next;
+    });
+
+  const tocItems = useMemo<PageTocItem[]>(() => {
+    if (!active) return [];
+    return [
+      { id: "analysis-basis", label: "Analysis basis" },
+      { id: "separation-heading", label: "What separated the field" },
+      { id: "heatmap-heading", label: "The whole field at a glance" },
+      { id: "families-heading", label: "The metrics in detail" },
+      ...FAMILY_ORDER.filter((family) => (grouped.get(family) ?? []).length > 0).map(
+        (family) => ({
+          id: familySectionId(family),
+          label: FAMILY_LABELS[family],
+          indent: true,
+          onBeforeScroll: () => expandFamily(family, true),
+        })
+      ),
+    ];
+  }, [active, grouped, topFamilies]);
+
   async function handleRefresh() {
     if (!compId || !taskId) return;
     setRefreshing(true);
@@ -263,7 +298,18 @@ export function TaskFieldAnalysis() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
+    // With a TOC, wide screens get the docs layout: a narrow left rail
+    // column and the content column, centred together. Below xl (and on the
+    // TOC-less error/pending states) this is exactly the old single column.
+    <div
+      className={cn(
+        "mx-auto max-w-6xl px-4 py-6",
+        tocItems.length > 0 &&
+          "xl:grid xl:max-w-[87rem] xl:grid-cols-[12rem_minmax(0,1fr)] xl:gap-10"
+      )}
+    >
+      <PageToc items={tocItems} />
+      <div className="min-w-0">
       <Breadcrumbs items={crumbs} current={heading} />
 
       <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
@@ -339,24 +385,26 @@ export function TaskFieldAnalysis() {
       {active ? (
         <PilotHighlightProvider>
           <div className="mt-6 space-y-8">
-            <AnalysisBasis basis={active.report.basis} excluded={active.excluded} />
+            <div id="analysis-basis" className="scroll-mt-20">
+              <AnalysisBasis basis={active.report.basis} excluded={active.excluded} />
+            </div>
 
             <section aria-labelledby="separation-heading" className="space-y-3">
-              <h2 id="separation-heading" className="text-lg font-semibold">
+              <h2 id="separation-heading" className="scroll-mt-20 text-lg font-semibold">
                 What separated the field
               </h2>
               <SeparationRanking metrics={active.report.metrics} report={active.report} />
             </section>
 
             <section aria-labelledby="heatmap-heading" className="space-y-3">
-              <h2 id="heatmap-heading" className="text-lg font-semibold">
+              <h2 id="heatmap-heading" className="scroll-mt-20 text-lg font-semibold">
                 The whole field at a glance
               </h2>
               <PercentileHeatmap report={active.report} />
             </section>
 
             <section aria-labelledby="families-heading" className="space-y-2">
-              <h2 id="families-heading" className="text-lg font-semibold">
+              <h2 id="families-heading" className="scroll-mt-20 text-lg font-semibold">
                 The metrics in detail
               </h2>
               {FAMILY_ORDER.map((family) => {
@@ -368,7 +416,8 @@ export function TaskFieldAnalysis() {
                     familyLabel={FAMILY_LABELS[family]}
                     metrics={metrics}
                     report={active.report}
-                    defaultExpanded={topFamilies.has(family)}
+                    isExpanded={expandedFamilies.has(family)}
+                    onExpandedChange={(expanded) => expandFamily(family, expanded)}
                   />
                 );
               })}
@@ -376,6 +425,7 @@ export function TaskFieldAnalysis() {
           </div>
         </PilotHighlightProvider>
       ) : null}
+      </div>
     </div>
   );
 }
