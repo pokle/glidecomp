@@ -26,4 +26,7 @@
 //     (structured horserace/waterfall data for the UI's charts) alongside
 //     their extraTables. No metric VALUE changed; the bump exists so stored
 //     reports regain the new field on their next lazy revalidation.
-export const FIELD_ANALYSIS_VERSION = 2;
+// v3: day.wind's Dir cell now renders "<deg>° <compass> <arrow>" (compass
+//     point + wind-travel arrow) instead of bare degrees. Presentation-only,
+//     but the stored table strings change, so bump to reroll cached reports.
+export const FIELD_ANALYSIS_VERSION = 3;
