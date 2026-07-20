@@ -42,4 +42,8 @@
 //     a "When" column: a `{ from, to }` instant-range cell (new ReportCell
 //     variant) showing the field's circling window for that leg. No metric
 //     value changed; the bump rolls stored reports onto the new shape.
-export const FIELD_ANALYSIS_VERSION = 5;
+// v6: day.launch_timing "Best conditions" is now an hour RANGE (not a bare
+//     hour-start instant) and ignores sparse hours (< 20% of the busiest
+//     hour's climbs) when picking the best — a thin sliver right after launch
+//     no longer wins and then reads as predating the earliest takeoff.
+export const FIELD_ANALYSIS_VERSION = 6;

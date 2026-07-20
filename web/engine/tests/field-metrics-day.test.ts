@@ -24,7 +24,7 @@ import {
   type FieldContext,
   type ReportTable,
 } from '../src/field-analysis';
-import { DAY_METRICS } from '../src/field-analysis/metrics/day-profile';
+import { DAY_METRICS, pickBestConditionsHour } from '../src/field-analysis/metrics/day-profile';
 import {
   makeTestField,
   straightFixes,
@@ -284,12 +284,34 @@ describe('day.launch_timing', () => {
     }
   });
 
-  it('names the best-conditions hour when thermals exist', () => {
+  it('gives the best-conditions hour as a one-hour range', () => {
+    // makeDriftField's climbs are all in the 10:00Z hour, so that hour wins and
+    // is reported as the 10:00–11:00 window (not a bare 10:00 instant) — a
+    // takeoff inside the window then reads as no contradiction.
     const out = dayLaunchTiming.compute(makeDriftField());
     const timing = out.extraTables![0];
     const best = timing.rows.find((r) => r[0] === 'Best conditions');
     expect(best).toBeDefined();
-    expect(best![1]).toEqual({ t: '2024-01-15T10:00:00.000Z' });
+    expect(best![1]).toEqual({
+      from: '2024-01-15T10:00:00.000Z',
+      to: '2024-01-15T11:00:00.000Z',
+    });
+  });
+
+  it('ignores a sparse edge hour when picking best conditions', () => {
+    const t = (hour: number) => Date.UTC(2024, 0, 15, hour, 0, 0);
+    // 01:00 has one very strong climb (median 5); 02:00 and 03:00 are busy at
+    // median 1. Raw median would crown 01:00 — but with only 1 of 20 climbs it
+    // is below the 20% floor, so 02:00 (the earliest busy hour) wins instead.
+    const buckets = new Map<number, number[]>([
+      [t(1), [5]],
+      [t(2), Array(20).fill(1)],
+      [t(3), Array(18).fill(1)],
+    ]);
+    const best = pickBestConditionsHour(buckets);
+    expect(best).toEqual({ hourMs: t(2), median: 1 });
+    // With only the sparse hour present it is the busiest, so it qualifies.
+    expect(pickBestConditionsHour(new Map([[t(1), [5]]]))).toEqual({ hourMs: t(1), median: 5 });
   });
 
   it('returns null for a pilot with no grid samples', () => {

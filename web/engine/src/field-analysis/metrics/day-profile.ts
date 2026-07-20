@@ -33,6 +33,10 @@ const HOUR_MS = 3_600_000;
 const SMOOTH_WINDOW_SECONDS = 30;
 const NON_SINK_VARIO_MPS = -0.5;
 
+/** A candidate best-conditions hour must hold at least this share of the
+ * busiest hour's climbs, so a sparse edge bucket can't win on a noisy median. */
+const BEST_HOUR_MIN_SHARE = 0.2;
+
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
@@ -325,21 +329,39 @@ function nonSinkingSharePct(field: FieldContext, pilot: PilotAnalysisContext): n
 }
 
 /**
+ * The best-conditions hour: the one-hour bucket with the highest median climb,
+ * considering only hours with enough climbs to be representative (≥ 20% of the
+ * busiest hour). Without the sample floor a sparse edge-of-day bucket — e.g. a
+ * few climbs in the minutes after the first launch — can outscore the hours the
+ * field actually flew, making the "best" hour predate any takeoff. Takes the
+ * per-hour climb-rate buckets (hour-start ms → avg climb rates); returns the
+ * winning hour-start ms and its median, or null when there are no climbs.
+ * Exported for unit testing.
+ */
+export function pickBestConditionsHour(
+  buckets: Map<number, number[]>,
+): { hourMs: number; median: number } | null {
+  const maxN = Math.max(0, ...[...buckets.values()].map((v) => v.length));
+  if (maxN === 0) return null;
+  let best: { hourMs: number; median: number } | null = null;
+  for (const h of [...buckets.keys()].sort((a, b) => a - b)) {
+    const rates = buckets.get(h)!;
+    if (rates.length < BEST_HOUR_MIN_SHARE * maxN) continue; // too thin to judge
+    const m = median(rates);
+    if (best === null || m > best.median) best = { hourMs: h, median: m };
+  }
+  return best;
+}
+
+/**
  * Best-conditions hour vs the field's takeoff-time spread, as a small table of
- * time-of-day instants (rendered in the reader's zone by the consumer). Null
- * when there is neither thermal data nor a recorded takeoff.
+ * time-of-day cells (rendered in the reader's zone by the consumer). The
+ * best-conditions row is an hour RANGE, not an instant, so a takeoff inside
+ * that window doesn't read as a contradiction. Null when there is neither
+ * thermal data nor a recorded takeoff.
  */
 function launchTimingTable(field: FieldContext): ReportTable | null {
-  const buckets = hourlyClimbBuckets(field);
-  let bestHour: number | null = null;
-  let bestMedian = -Infinity;
-  for (const h of [...buckets.keys()].sort((a, b) => a - b)) {
-    const m = median(buckets.get(h)!);
-    if (m > bestMedian) {
-      bestMedian = m;
-      bestHour = h;
-    }
-  }
+  const best = pickBestConditionsHour(hourlyClimbBuckets(field));
 
   const takeoffs = field.pilots
     .filter((p) => p.fixes.length > 0 && p.fixes[p.takeoffIndex] !== undefined)
@@ -347,7 +369,9 @@ function launchTimingTable(field: FieldContext): ReportTable | null {
     .sort((a, b) => a - b);
 
   const rows: ReportCell[][] = [];
-  if (bestHour !== null) rows.push(['Best conditions', timeCell(bestHour)]);
+  if (best !== null) {
+    rows.push(['Best conditions', rangeCell(best.hourMs, best.hourMs + HOUR_MS)]);
+  }
   if (takeoffs.length > 0) {
     rows.push(['Earliest takeoff', timeCell(takeoffs[0])]);
     rows.push(['Median takeoff', timeCell(percentile(takeoffs, 50))]);
@@ -359,12 +383,16 @@ function launchTimingTable(field: FieldContext): ReportTable | null {
     title: 'Day timing',
     columns: [
       { header: '', align: 'left' },
-      { header: 'Time', align: 'right' },
+      { header: 'Time', align: 'left' },
     ],
     rows,
     footnotes:
-      bestHour !== null
-        ? [`Best-conditions hour carries the day’s highest median climb (${bestMedian.toFixed(1)} m/s).`]
+      best !== null
+        ? [
+            `Best conditions is the one-hour window with the strongest median climb ` +
+              `(${best.median.toFixed(1)} m/s), among hours with enough climbs to be ` +
+              `representative (≥20% of the busiest hour).`,
+          ]
         : undefined,
   };
 }
