@@ -29,6 +29,11 @@ import type { FieldContext, LegInfo, PilotAnalysisContext } from './types';
 export interface BuildFieldContextOptions {
   /** Shared-grid resolution; default 10 s (= DEFAULT_GAGGLE_PARAMS.stepSeconds). */
   stepSeconds?: number;
+  /**
+   * Competition IANA zone for presentational hour/clock labels only (see
+   * FieldContext.timeZone). Undefined → UTC. Never affects any computation.
+   */
+  timeZone?: string;
 }
 
 /**
@@ -106,6 +111,7 @@ export function buildFieldContext(
     workingBand,
     legs,
     origin,
+    timeZone: opts?.timeZone,
   };
 }
 

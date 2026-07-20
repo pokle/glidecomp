@@ -92,25 +92,28 @@ function reaching(taskIndex: number, tSeconds: number): TurnpointReaching {
  * t=80 s, next turnpoint at t=600 s — the circling sits inside the SSS→ESS
  * leg) and one pilot gliding straight.
  */
-function makeDriftField(): FieldContext {
+function makeDriftField(opts?: { timeZone?: string }): FieldContext {
   const circler = [
     ...straightFixes(0, 60, -720, 800, 12, 0), // arrives at east = 0
     ...driftingCirclingFixes(70, 300, 0, 800, 2, 4), // 4 m/s eastward drift → wind FROM ~270°
     ...straightFixes(380, 300, 1300, 1400, 12, -1),
   ];
   const glider = straightFixes(0, 680, 0, 1500, 12, -0.5);
-  return makeTestField([
-    {
-      name: 'circler',
-      fixes: circler,
-      turnpointResult: {
-        sssReaching: reaching(1, 80),
-        sequence: [reaching(1, 80), reaching(2, 600)],
-        lastTurnpointReached: 2,
+  return makeTestField(
+    [
+      {
+        name: 'circler',
+        fixes: circler,
+        turnpointResult: {
+          sssReaching: reaching(1, 80),
+          sequence: [reaching(1, 80), reaching(2, 600)],
+          lastTurnpointReached: 2,
+        },
       },
-    },
-    { name: 'glider', fixes: glider },
-  ]);
+      { name: 'glider', fixes: glider },
+    ],
+    { timeZone: opts?.timeZone },
+  );
 }
 
 /** Field where nobody circles — no circles, no thermals. */
@@ -181,6 +184,22 @@ describe('day.wind', () => {
     expect(table.rows[1][0]).toBe('SSS→ESS');
     expect(table.rows[2][0]).toBe('ESS→GOAL');
     expect(table.rows.every((r, i) => i === 0 || r[3] === '0')).toBe(true);
+  });
+
+  it('labels hour rows in the competition time zone when one is given', () => {
+    // BASE_TIME is 2024-01-15T10:00:00Z; in Melbourne (AEDT, +11) that hour
+    // reads 21:00. The default (no zone) stays UTC — proving it is the
+    // explicit input, not the runtime's zone, that moves the label.
+    const utcRow = firstTable(0, makeDriftField()).rows.find((r) => r[0] === '10:00 UTC');
+    expect(utcRow).toBeDefined();
+
+    const zoned = firstTable(0, makeDriftField({ timeZone: 'Australia/Melbourne' }));
+    const zonedRow = zoned.rows.find((r) => r[0] === '21:00 AEDT');
+    expect(zonedRow).toBeDefined();
+    // Same samples, just a relabelled hour: no UTC hour row survives.
+    expect(zoned.rows.some((r) => /UTC/.test(r[0]))).toBe(false);
+    // The sample count is unchanged by the relabelling.
+    expect(zonedRow![3]).toBe(utcRow![3]);
   });
 });
 

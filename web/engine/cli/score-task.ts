@@ -85,6 +85,7 @@ import {
   type CompTaskResult,
   type FieldAnalysisReport,
 } from '../src/field-analysis';
+import { timezoneForXctsk } from '../src/timezone';
 import { loadCompManifest, readTaskDir, pilotKeyFor } from './comp-manifest';
 import { join } from 'path';
 
@@ -430,7 +431,11 @@ function tryFieldAnalysis(
   category: 'hg' | 'pg',
 ): FieldAnalysisReport | null {
   try {
-    return evaluateField(buildFieldContext(task, pilots, result, category));
+    // Label hour/clock rows in the task's local zone (derived from its first
+    // turnpoint) so the CLI matches the app; undefined → UTC. Presentational
+    // only — scoring and metric values stay UTC.
+    const timeZone = timezoneForXctsk(task);
+    return evaluateField(buildFieldContext(task, pilots, result, category, { timeZone }));
   } catch (err) {
     process.stderr.write(`Warning: field analysis failed: ${err}\n`);
     return null;

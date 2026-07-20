@@ -26,4 +26,8 @@
 //     (structured horserace/waterfall data for the UI's charts) alongside
 //     their extraTables. No metric VALUE changed; the bump exists so stored
 //     reports regain the new field on their next lazy revalidation.
-export const FIELD_ANALYSIS_VERSION = 2;
+// v3: day-profile & climbing hour/clock LABELS render in the competition's
+//     time zone (FieldContext.timeZone) instead of always UTC. No metric
+//     value changed — only the "HH:00 UTC" row/summary text — but the bump
+//     rolls stored reports so their labels pick up the comp zone.
+export const FIELD_ANALYSIS_VERSION = 3;

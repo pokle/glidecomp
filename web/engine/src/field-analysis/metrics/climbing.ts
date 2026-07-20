@@ -13,6 +13,7 @@ import type { IGCFix } from '../../igc-parser';
 import type { ThermalSegment } from '../../event-types';
 import type { MetricComputer, PilotMetricValue } from '../types';
 import { mean, median } from '../stats';
+import { hhmmInZone, zoneToken } from '../format-time';
 
 /** Fix altitude with the same pressure fallback the resampler uses. */
 function fixAlt(f: IGCFix): number {
@@ -272,13 +273,13 @@ const selectivity: MetricComputer = {
 
     let fieldSummary: string[] | undefined;
     if (hourly.size > 0) {
-      const parts = [...hourly.entries()]
-        .sort(([a], [b]) => a - b)
-        .map(([hour, pcts]) => {
-          const hh = new Date(hour).toISOString().slice(11, 16);
-          return `${hh} ${Math.round(median(pcts))}% (${pcts.length} pilot${pcts.length === 1 ? '' : 's'})`;
-        });
-      fieldSummary = [`Median acceptance by hour (UTC): ${parts.join(' · ')}`];
+      const sorted = [...hourly.entries()].sort(([a], [b]) => a - b);
+      const parts = sorted.map(([hour, pcts]) => {
+        const hh = hhmmInZone(hour, field.timeZone);
+        return `${hh} ${Math.round(median(pcts))}% (${pcts.length} pilot${pcts.length === 1 ? '' : 's'})`;
+      });
+      const token = zoneToken(sorted[0][0], field.timeZone);
+      fieldSummary = [`Median acceptance by hour (${token}): ${parts.join(' · ')}`];
     }
 
     return { perPilot, fieldSummary };

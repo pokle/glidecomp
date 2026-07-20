@@ -10,8 +10,10 @@
  *     non-sinking air (did they fly the day's window?).
  *
  * See docs/2026-07-18-field-analysis-plan.md §"P6 day profile & wind".
- * Metrics read ONLY the FieldContext (contract in ../types.ts). All hour and
- * clock labels are UTC — deterministic, never the runtime's locale/timezone.
+ * Metrics read ONLY the FieldContext (contract in ../types.ts). Hour and clock
+ * labels are rendered in the competition's zone (FieldContext.timeZone, an
+ * explicit input — never the runtime's default), falling back to UTC when the
+ * comp has no zone. See ../format-time.ts.
  */
 
 import type {
@@ -23,6 +25,7 @@ import type {
 } from '../types';
 import type { XCTask } from '../../xctsk-parser';
 import { circularMeanWind, median, percentile, type WindSample } from '../stats';
+import { hhmmInZone, hourLabelInZone, zoneToken } from '../format-time';
 
 const HOUR_MS = 3_600_000;
 
@@ -44,15 +47,16 @@ function hourStartMs(tMs: number): number {
   return Math.floor(tMs / HOUR_MS) * HOUR_MS;
 }
 
-/** "13:00 UTC" for an hour-start epoch ms. Deterministic (UTC, no locale). */
-function hourLabel(hourMs: number): string {
-  return `${String(new Date(hourMs).getUTCHours()).padStart(2, '0')}:00 UTC`;
+/** "14:00 AEDT" for an hour-start epoch ms in the comp zone ("13:00 UTC" when
+ * no zone). Deterministic — the zone is an explicit input, not the runtime's. */
+function hourLabel(hourMs: number, timeZone?: string): string {
+  return hourLabelInZone(hourMs, timeZone);
 }
 
-/** "13:07" (UTC clock time, no suffix — callers add "UTC" once per line). */
-function clockLabel(tMs: number): string {
-  const d = new Date(tMs);
-  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+/** "13:07" wall clock in the comp zone (no suffix — callers add the zone token
+ * once per line). UTC when no zone. */
+function clockLabel(tMs: number, timeZone?: string): string {
+  return hhmmInZone(tMs, timeZone);
 }
 
 /** Short turnpoint label: SSS / ESS / GOAL / TP<n> (1-based over the task). */
@@ -139,18 +143,19 @@ const dayWind: MetricComputer = {
   direction: 'neutral',
   explanation:
     'Wind estimated from every pilot’s circling (centre drift preferred, ground-speed ' +
-    'modulation as fallback), vector-averaged over the whole task, each UTC hour, and each ' +
-    'speed-section leg. Field-level only — no per-pilot value.',
+    'modulation as fallback), vector-averaged over the whole task, each hour, and each ' +
+    'speed-section leg. Hour rows are labelled in the competition’s time zone. ' +
+    'Field-level only — no per-pilot value.',
   compute(field) {
     const winds = collectCircleWinds(field);
 
     const rows: string[][] = [windRow('Task', winds.map((w) => w.sample))];
 
-    // Per hour, by each circle's midpoint time.
+    // Per hour, by each circle's midpoint time (labelled in the comp zone).
     const byHour = new Map<number, WindSample[]>();
     for (const w of winds) pushInto(byHour, hourStartMs(w.tMs), w.sample);
     for (const h of [...byHour.keys()].sort((a, b) => a - b)) {
-      rows.push(windRow(hourLabel(h), byHour.get(h)!));
+      rows.push(windRow(hourLabel(h, field.timeZone), byHour.get(h)!));
     }
 
     // Per speed-section leg, by where each circle's pilot was at that moment.
@@ -217,9 +222,9 @@ const dayClimbByHour: MetricComputer = {
   family: 'day',
   direction: 'neutral',
   explanation:
-    'All pilots’ thermal climbs bucketed by the UTC hour the climb started: median and ' +
-    '90th-percentile average climb rate per hour show how the day’s lift developed. ' +
-    'Field-level only — no per-pilot value.',
+    'All pilots’ thermal climbs bucketed by the hour the climb started (labelled in the ' +
+    'competition’s time zone): median and 90th-percentile average climb rate per hour show ' +
+    'how the day’s lift developed. Field-level only — no per-pilot value.',
   compute(field) {
     const buckets = hourlyClimbBuckets(field);
     const rows: string[][] = [];
@@ -227,7 +232,7 @@ const dayClimbByHour: MetricComputer = {
       const rates = buckets.get(h)!;
       const sorted = [...rates].sort((a, b) => a - b);
       rows.push([
-        hourLabel(h),
+        hourLabel(h, field.timeZone),
         median(rates).toFixed(1),
         percentile(sorted, 90).toFixed(1),
         String(rates.length),
@@ -243,7 +248,8 @@ const dayClimbByHour: MetricComputer = {
       ],
       rows,
       footnotes: [
-        'Average climb rate of every thermal use across the field, bucketed by climb start (UTC).',
+        'Average climb rate of every thermal use across the field, bucketed by climb start ' +
+          '(competition time zone).',
       ],
     };
     return { perPilot: allNullPerPilot(field), extraTables: [table] };
@@ -293,9 +299,10 @@ function launchTimingSummary(field: FieldContext): string {
       bestHour = h;
     }
   }
+  const tz = field.timeZone;
   const conditions =
     bestHour !== null
-      ? `Best conditions around ${hourLabel(bestHour)} (median climb ${bestMedian.toFixed(1)} m/s)`
+      ? `Best conditions around ${hourLabel(bestHour, tz)} (median climb ${bestMedian.toFixed(1)} m/s)`
       : 'No thermal data to pick a best-conditions hour';
 
   const takeoffs = field.pilots
@@ -304,8 +311,8 @@ function launchTimingSummary(field: FieldContext): string {
     .sort((a, b) => a - b);
   const spread =
     takeoffs.length > 0
-      ? `takeoffs earliest ${clockLabel(takeoffs[0])}, median ${clockLabel(percentile(takeoffs, 50))}, ` +
-        `latest ${clockLabel(takeoffs[takeoffs.length - 1])} UTC`
+      ? `takeoffs earliest ${clockLabel(takeoffs[0], tz)}, median ${clockLabel(percentile(takeoffs, 50), tz)}, ` +
+        `latest ${clockLabel(takeoffs[takeoffs.length - 1], tz)} ${zoneToken(takeoffs[takeoffs.length - 1], tz)}`
       : 'no takeoffs recorded';
 
   return `${conditions}; ${spread}.`;

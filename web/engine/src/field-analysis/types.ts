@@ -83,6 +83,15 @@ export interface FieldContext {
   legs: LegInfo[];
   /** ENU origin every grid east/north is measured from (first turnpoint's waypoint). */
   origin: { lat: number; lon: number };
+  /**
+   * Competition IANA zone for presentational hour/clock LABELS only (undefined
+   * → UTC). NEVER affects a computation — detectors, gates and every metric
+   * VALUE run on UTC regardless; this only decides how the day-profile/climbing
+   * report labels a time of day. An explicit input (resolved upstream from the
+   * comp's settings / task location), never the runtime's default, so labels
+   * stay deterministic. See ./format-time.ts.
+   */
+  timeZone?: string;
 }
 
 // ---------------------------------------------------------------------------

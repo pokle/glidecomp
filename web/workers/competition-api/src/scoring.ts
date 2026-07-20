@@ -520,6 +520,9 @@ export interface TaskScoringConfig {
   scoredTracks: ScoredTrackRow[];
   /** Per class: pilots marked DNF with neither a track nor a manual flight. */
   dnfByClass: Map<string, number>;
+  /** Comp IANA zone (presentational; null when unset). Labels field-analysis
+   * times of day; never affects scoring, which is UTC. */
+  timezone: string | null;
 }
 
 /** Resolve a task's scoring parameters, roster and tracks. Throws when the
@@ -532,7 +535,7 @@ export async function resolveTaskScoringConfig(
   const taskRow = await db
     .prepare(
       `SELECT t.task_id, t.comp_id, t.task_date, t.xctsk, t.stop_announcement_time,
-              c.category, c.gap_params, c.scoring_format, c.creation_date
+              c.category, c.gap_params, c.scoring_format, c.creation_date, c.timezone
        FROM task t
        JOIN comp c ON t.comp_id = c.comp_id
        WHERE t.task_id = ?`
@@ -548,6 +551,7 @@ export async function resolveTaskScoringConfig(
       gap_params: string | null;
       scoring_format: string | null;
       creation_date: string;
+      timezone: string | null;
     }>();
 
   if (!taskRow) throw new Error("Task not found");
@@ -683,6 +687,7 @@ export async function resolveTaskScoringConfig(
     scoredClasses,
     scoredTracks,
     dnfByClass,
+    timezone: taskRow.timezone,
   };
 }
 
@@ -1354,7 +1359,11 @@ export async function computeTaskFieldAnalysis(
     let report: FieldAnalysisReport;
     try {
       report = evaluateField(
-        buildFieldContext(cfg.xcTask, flights, result, cfg.category)
+        buildFieldContext(cfg.xcTask, flights, result, cfg.category, {
+          // Presentational only: labels the day-profile/climbing hours in the
+          // comp's zone. Scoring and every metric value stay UTC.
+          timeZone: cfg.timezone ?? undefined,
+        })
       );
     } catch (err) {
       // One unanalysable class must not cost the others their report.
