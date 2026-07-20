@@ -4,7 +4,7 @@
  * (vanilla, imperative-map) analysis page uses.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/react/ui/tabs";
 import { Progress, ProgressLabel, ProgressValue } from "@/react/ui/progress";
 import { Button } from "@/react/ui/button";
@@ -18,7 +18,8 @@ import {
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { goToSignIn, useUser } from "../lib/user";
-import { downloadFile, relativeTime } from "../lib/format";
+import { downloadFile, formatTaskDate, ordinal, relativeTime } from "../lib/format";
+import { api } from "../../comp/api";
 
 // Mirrors the server-side limits in
 // web/workers/competition-api/src/routes/user-files.ts (MAX_USER_*).
@@ -156,6 +157,8 @@ export function Dashboard() {
   return (
     <section>
       <NearQuotaWarning tracks={tracks} tasks={tasks} />
+
+      <CompetitionFlightsSection />
 
       <Tabs
         value={tab}
@@ -344,6 +347,88 @@ export function Dashboard() {
           <p className="text-sm font-normal text-muted-foreground">.igc and .xctsk files</p>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+type CompFlight = Awaited<
+  ReturnType<Awaited<ReturnType<typeof api.api.comp.pilot.flights.$get>>["json"]>
+>["flights"][number];
+
+/**
+ * Flights linked to the signed-in pilot's competition registrations, fetched
+ * from the competition API (unlike the local library below). These belong to
+ * the competition — no remove button; rows link out to the comp, the task,
+ * and (once scored) the pilot's score detail page. Renders nothing until the
+ * pilot has at least one competition flight.
+ */
+function CompetitionFlightsSection() {
+  const [flights, setFlights] = useState<CompFlight[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.api.comp.pilot.flights.$get();
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setFlights(data.flights);
+      } catch {
+        // Network hiccup — the section just stays hidden; the local library
+        // below is unaffected.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (flights.length === 0) return null;
+
+  return (
+    <section className="mb-8">
+      <h2 className="text-lg font-bold">Competition flights</h2>
+      <ul className="mt-3 divide-y rounded-lg border">
+        {flights.map((f) => (
+          <li
+            key={`${f.task_id}:${f.comp_pilot_id}`}
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2"
+          >
+            <Link
+              to={`/comp/${f.comp_id}/task/${f.task_id}`}
+              className="font-medium underline underline-offset-4"
+            >
+              {f.task_name}
+            </Link>
+            <span className="text-sm text-muted-foreground">
+              <Link to={`/comp/${f.comp_id}`} className="underline underline-offset-4">
+                {f.comp_name}
+              </Link>
+            </span>
+            <span className="text-sm text-muted-foreground">
+              {formatTaskDate(f.task_date, { year: "numeric", month: "short", day: "numeric" })}
+              {f.kind === "manual" ? " · manual flight report" : ""}
+            </span>
+            <span className="ml-auto text-sm">
+              {f.rank != null ? (
+                <Link
+                  to={`/comp/${f.comp_id}/task/${f.task_id}/pilot/${f.comp_pilot_id}`}
+                  className="font-medium underline underline-offset-4"
+                  title={`View this flight's score (${f.pilot_class} class)`}
+                >
+                  {ordinal(f.rank)} of {f.class_size}
+                </Link>
+              ) : (
+                <span className="text-muted-foreground">Not scored yet</span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-sm text-muted-foreground">
+        These flights are part of their competition&rsquo;s record and are managed by the
+        competition, so they can&rsquo;t be removed here.
+      </p>
     </section>
   );
 }
