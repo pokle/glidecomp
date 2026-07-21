@@ -61,8 +61,12 @@ export function Shell() {
     <RacRouterProvider>
     <div className="flex min-h-dvh flex-col">
       {/* Always-present glass menu bar (Inscribe-style): translucent background
-          with backdrop blur, so content scrolls beneath it. */}
-      <header className="sticky top-0 z-40 border-b bg-background/70 backdrop-blur-xl backdrop-saturate-150 print:hidden">
+          with backdrop blur, so content scrolls beneath it. On phones
+          (max-sm) and short landscape viewports it scrolls away with the
+          page instead of pinning — vertical space is too precious there
+          (the score-details map is sticky and was left peeking out from
+          under the glass). Keep this in sync with SiteHeader.astro. */}
+      <header className="sticky top-0 z-40 border-b bg-background/70 backdrop-blur-xl backdrop-saturate-150 max-sm:static [@media(max-height:500px)]:static print:hidden">
         <nav
           aria-label="Main"
           className="mx-auto flex min-h-[60px] w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3"
