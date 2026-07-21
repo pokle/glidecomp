@@ -7,6 +7,11 @@
  * A "swap code / name" toggle flips which identifier the device shows as the
  * waypoint label — applied uniformly to the files and the QR.
  *
+ * RAC (see docs/2026-07-18-rac-adoption-guide.md): kit Button/ToggleButton/
+ * Checkbox/Menu. On touch devices the menu items are real links to the hosted
+ * file (so the OS hands it to a flight app); on desktop they serialize and
+ * download client-side via onAction.
+ *
  * SSR-safe: the task page is server-rendered, so the QR (which pulls in
  * qrcode.react) is lazy-loaded to stay out of the SSR/main entry bundle, and
  * nothing here touches window/document at module scope.
@@ -19,15 +24,9 @@ import {
   XCTSK_QR_MAX_BYTES,
   type WaypointFileRecord,
 } from "@glidecomp/engine";
-import { Button } from "@/react/ui/button";
-import { Checkbox } from "@/react/ui/checkbox";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/react/ui/dropdown-menu";
+import { Button, ToggleButton } from "@/react/rac/button";
+import { Checkbox } from "@/react/rac/checkbox";
+import { Menu, MenuItem, MenuTrigger } from "@/react/rac/menu";
 import { downloadFile } from "../lib/format";
 import { slugify } from "./csv";
 import { DownloadIcon, QrCodeIcon, ChevronDownIcon, ExternalLinkIcon } from "lucide-react";
@@ -97,16 +96,11 @@ export function WaypointDeviceExport({
           <p className="text-xs text-muted-foreground">{subtitle}</p>
         </div>
         <div className="flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  aria-label={openInApp ? "Open waypoints in a flight app" : "Download waypoints"}
-                />
-              }
+          <MenuTrigger>
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={openInApp ? "Open waypoints in a flight app" : "Download waypoints"}
             >
               {openInApp ? (
                 <ExternalLinkIcon className="size-4" aria-hidden />
@@ -115,46 +109,45 @@ export function WaypointDeviceExport({
               )}
               {openInApp ? "Open in app" : "Download"}
               <ChevronDownIcon className="size-4 opacity-60" aria-hidden />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuGroup>
-                {WAYPOINT_EXPORT_FORMATS.map((fmt) =>
-                  openInApp && hostedUrl ? (
-                    <DropdownMenuItem
-                      key={fmt.id}
-                      render={
-                        <a href={hostedUrl(fmt.id, swap)} target="_blank" rel="noopener noreferrer" />
-                      }
-                    >
-                      {fmt.label}
-                    </DropdownMenuItem>
-                  ) : (
-                    <DropdownMenuItem key={fmt.id} onClick={() => download(fmt)}>
-                      {fmt.label}
-                    </DropdownMenuItem>
-                  )
-                )}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button
-            type="button"
-            variant={showQR ? "default" : "outline"}
+            </Button>
+            <Menu>
+              {WAYPOINT_EXPORT_FORMATS.map((fmt) =>
+                openInApp && hostedUrl ? (
+                  <MenuItem
+                    key={fmt.id}
+                    href={hostedUrl(fmt.id, swap)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {fmt.label}
+                  </MenuItem>
+                ) : (
+                  <MenuItem key={fmt.id} onAction={() => download(fmt)}>
+                    {fmt.label}
+                  </MenuItem>
+                )
+              )}
+            </Menu>
+          </MenuTrigger>
+          <ToggleButton
             size="sm"
-            aria-pressed={showQR}
-            disabled={qrTooBig}
-            onClick={() => setShowQR((s) => !s)}
+            isSelected={showQR}
+            onChange={setShowQR}
+            isDisabled={qrTooBig}
           >
             <QrCodeIcon className="size-4" aria-hidden />
             {showQR ? "Hide QR" : "QR code"}
-          </Button>
+          </ToggleButton>
         </div>
       </div>
 
-      <label className="mt-3 flex w-fit items-center gap-2 text-xs text-muted-foreground">
-        <Checkbox checked={swap} onCheckedChange={(c) => setSwap(c === true)} />
+      <Checkbox
+        isSelected={swap}
+        onChange={setSwap}
+        className="mt-3 text-xs text-muted-foreground"
+      >
         Swap code &amp; name — use the full name as the waypoint label on your device
-      </label>
+      </Checkbox>
 
       {qrTooBig ? (
         <p className="mt-2 text-xs text-muted-foreground">

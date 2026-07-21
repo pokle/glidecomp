@@ -7,17 +7,29 @@
  * and save. Non-admins see a read-only list. The set is stored per-comp
  * (JSON blob) via GET/PUT /api/comp/:id/waypoints.
  *
+ * RAC chrome (buttons, file trigger, read-only table, dialogs) around a
+ * **Tabulator** editable grid — the app's standard for editable tables (see
+ * the Tabulator policy in docs/2026-07-18-rac-adoption-guide.md). The grid is
+ * admin-only and lazy-loaded; React `rows` state stays the source of truth
+ * for the map markers, dirty check and save — grid edits mirror back into it
+ * via cellEdited/rowDeleted, and external changes (file upload, the add
+ * dialog) are pushed into the grid imperatively.
+ *
  * The read-only content (heading, table, download links) is server-rendered
  * via loadCompWaypoints so the page has real content for crawlers; the map
- * (mapbox) stays lazy behind Suspense so it never enters the SSR
- * bundle — the server streams its "Loading map…" fallback instead.
+ * (mapbox) and the admin grid (tabulator) stay client-only — the server
+ * streams the map's "Loading map…" fallback and an empty grid container.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { FileTrigger } from "react-aria-components";
 import { MapPinIcon } from "lucide-react";
 import { parseWaypointFile, type WaypointFileRecord } from "@glidecomp/engine";
+import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
 import type { MapPickDetails, MapWaypoint } from "../../analysis/map-provider";
-import { Button } from "@/react/ui/button";
+import { Button, ToggleButton } from "@/react/rac/button";
+import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
+import { RacConfirmProvider } from "@/react/rac/confirm";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
@@ -71,7 +83,19 @@ function fromRow(r: WpRow): WaypointFileRecord | null {
   };
 }
 
+// Lucide's map-pin, inlined for Tabulator cell formatters (static markup only).
+const PIN_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>';
+
 export function CompWaypoints() {
+  return (
+    <RacConfirmProvider>
+      <CompWaypointsContent />
+    </RacConfirmProvider>
+  );
+}
+
+function CompWaypointsContent() {
   const { compId } = useParams<{ compId: string }>();
   const { user } = useUser();
   const confirm = useConfirm();
@@ -86,14 +110,14 @@ export function CompWaypoints() {
     initial ? initial.waypoints.map(toRow) : []
   );
   const [savedJson, setSavedJson] = useState<string>(() =>
-    initial ? serialize(initial.waypoints) : "[]"
+    initial ? baselineJson(initial.waypoints) : "[]"
   );
   const [loading, setLoading] = useState(!initial);
   const [saving, setSaving] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [addMode, setAddMode] = useState(false);
   const [fitNonce, setFitNonce] = useState(0);
-  // Fly-to-waypoint request from a table row click (see `locate`).
+  // Fly-to-waypoint request from a grid row click (see `locate`).
   const [focus, setFocus] = useState<{ lat: number; lon: number; key: number } | null>(null);
   const focusSeq = useRef(0);
 
@@ -104,8 +128,15 @@ export function CompWaypoints() {
   const [seedCoords, setSeedCoords] = useState("");
   const [seedDetails, setSeedDetails] = useState<MapPickDetails | undefined>(undefined);
 
-  const fileRef = useRef<HTMLInputElement>(null);
   const isAdmin = useAdminView(realIsAdmin);
+
+  // The Tabulator grid (admin-only). rowsRef always holds the latest rows so
+  // the build effect can read them without depending on `rows` (a dependency
+  // would tear the grid down on every edit).
+  const gridRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<Tabulator | null>(null);
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
 
   useEffect(() => {
     if (!compId) return;
@@ -137,7 +168,7 @@ export function CompWaypoints() {
           ? ((await wpRes.json()) as unknown as { waypoints: WaypointFileRecord[] })
           : { waypoints: [] };
         setRows(wpData.waypoints.map(toRow));
-        setSavedJson(serialize(wpData.waypoints));
+        setSavedJson(baselineJson(wpData.waypoints));
         setFitNonce((n) => n + 1);
       } finally {
         if (!cancelled) setLoading(false);
@@ -147,6 +178,60 @@ export function CompWaypoints() {
       cancelled = true;
     };
   }, [compId, user, initial]);
+
+  // Fly the map to a row's coordinates (bumping the key so a repeat click on the
+  // same row re-centres). No-op when the row's coordinates aren't yet valid.
+  const locate = useCallback((r: WpRow) => {
+    const c = parseCoords(r.coords);
+    if (c) setFocus({ lat: c.lat, lon: c.lon, key: ++focusSeq.current });
+  }, []);
+
+  // Build the Tabulator grid once the page is loaded and the viewer is an
+  // admin. Tabulator is lazy-loaded to keep it (and its CSS) out of the chunk
+  // every visitor downloads — same pattern as the pilots editor. Grid edits
+  // mirror back into React state (the source of truth for the map, dirty
+  // check and save); the grid itself is never rebuilt per edit.
+  useEffect(() => {
+    if (!isAdmin || loading) return;
+    let cancelled = false;
+    let table: Tabulator | null = null;
+    void (async () => {
+      const [{ TabulatorFull }] = await Promise.all([
+        import("tabulator-tables"),
+        import("tabulator-tables/dist/css/tabulator_simple.min.css"),
+        import("../comp/tabulator-grid.css"),
+      ]);
+      if (cancelled || !gridRef.current) return;
+      table = new TabulatorFull(gridRef.current, {
+        data: rowsRef.current.map((r) => ({ ...r })),
+        index: "id",
+        columns: waypointGridColumns(locate),
+        columnDefaults: { headerSort: false },
+        layout: "fitDataStretch",
+        height: "100%",
+        placeholder:
+          "No waypoints yet. Upload a file or add points from the map to get started.",
+      });
+      const sync = () => {
+        const t = table;
+        if (!t) return;
+        setRows((t.getData() as WpRow[]).map((r) => ({ ...r })));
+      };
+      table.on("cellEdited", (cell) => {
+        // Re-run the row's formatters so the locate pin picks up the new
+        // coordinate validity.
+        if (cell.getField() === "coords") cell.getRow().reformat();
+        sync();
+      });
+      table.on("rowDeleted", sync);
+      tableRef.current = table;
+    })();
+    return () => {
+      cancelled = true;
+      table?.destroy();
+      tableRef.current = null;
+    };
+  }, [isAdmin, loading, locate]);
 
   // Current records + validity, derived from the rows.
   const records = useMemo(() => rows.map(fromRow), [rows]);
@@ -169,20 +254,14 @@ export function CompWaypoints() {
     [rows]
   );
 
-  const update = (id: number, patch: Partial<WpRow>) =>
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  const removeRow = (id: number) => setRows((prev) => prev.filter((r) => r.id !== id));
+  /** Replace the whole set (file upload): state + grid + map refit. */
+  function replaceRows(next: WpRow[]) {
+    setRows(next);
+    void tableRef.current?.setData(next.map((r) => ({ ...r })));
+    setFitNonce((n) => n + 1);
+  }
 
-  // Fly the map to a row's coordinates (bumping the key so a repeat click on the
-  // same row re-centres). No-op when the row's coordinates aren't yet valid.
-  const locate = (r: WpRow) => {
-    const c = parseCoords(r.coords);
-    if (c) setFocus({ lat: c.lat, lon: c.lon, key: ++focusSeq.current });
-  };
-
-  async function loadFile(input: HTMLInputElement) {
-    const file = input.files?.[0];
-    input.value = "";
+  async function loadFile(file: File | null) {
     if (!file) return;
     try {
       const { waypoints, format } = parseWaypointFile(await file.text(), file.name);
@@ -198,8 +277,7 @@ export function CompWaypoints() {
         });
         if (!ok) return;
       }
-      setRows(waypoints.map(toRow));
-      setFitNonce((n) => n + 1);
+      replaceRows(waypoints.map(toRow));
       toast.success(
         `Loaded ${waypoints.length} waypoint${waypoints.length === 1 ? "" : "s"} (${format}) from ${file.name}`
       );
@@ -217,9 +295,13 @@ export function CompWaypoints() {
     setAddMode(false);
   }, []);
 
-  // The dialog hands back a finished record; drop it in as a new row.
+  // The dialog hands back a finished record; drop it in as a new row (state +
+  // grid — nothing is saved until Save). The grid scrolls to the new row so
+  // it's visible even when the set is longer than the viewport.
   function addWaypoint(rec: WaypointFileRecord) {
-    setRows((prev) => [...prev, toRow(rec)]);
+    const row = toRow(rec);
+    setRows((prev) => [...prev, row]);
+    void tableRef.current?.addRow({ ...row }).then((r) => r.scrollTo());
     setAdding(false);
   }
 
@@ -268,25 +350,18 @@ export function CompWaypoints() {
         <h1 className="min-w-0 flex-1 text-2xl font-bold">Waypoints</h1>
         {isAdmin ? (
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => fileRef.current?.click()}
+            <FileTrigger
+              acceptedFileTypes={[".wpt", ".cup", ".csv", ".txt", ".gpx", ".kml"]}
+              onSelect={(files) => void loadFile(files?.[0] ?? null)}
             >
-              Upload file
-            </Button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".wpt,.cup,.csv,.txt,.gpx,.kml"
-              hidden
-              onChange={(e) => void loadFile(e.currentTarget)}
-            />
-            <Button type="button" variant="outline" size="sm" onClick={() => openAdd()}>
+              <Button variant="outline" size="sm">
+                Upload file
+              </Button>
+            </FileTrigger>
+            <Button variant="outline" size="sm" onPress={() => openAdd()}>
               Add waypoint
             </Button>
-            <Button type="button" size="sm" disabled={saving || !dirty} onClick={() => void save()}>
+            <Button size="sm" isDisabled={saving || !dirty} onPress={() => void save()}>
               {saving ? "Saving…" : dirty ? "Save" : "Saved"}
             </Button>
           </div>
@@ -342,15 +417,9 @@ export function CompWaypoints() {
             </div>
             {isAdmin ? (
               <div className="mt-2 flex items-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={addMode ? "default" : "outline"}
-                  aria-pressed={addMode}
-                  onClick={() => setAddMode((a) => !a)}
-                >
+                <ToggleButton size="sm" isSelected={addMode} onChange={setAddMode}>
                   {addMode ? "Tap the map to place…" : "Add from map"}
-                </Button>
+                </ToggleButton>
                 <span className="text-xs text-muted-foreground">
                   {rows.length} waypoint{rows.length === 1 ? "" : "s"}
                   {invalidCount > 0 ? ` · ${invalidCount} need valid coordinates` : ""}
@@ -361,100 +430,54 @@ export function CompWaypoints() {
             )}
           </div>
 
-          {/* Table */}
+          {/* Grid (admins: editable Tabulator) / table (everyone else: RAC read-only) */}
           <div className="order-2 min-w-0 lg:order-1">
-            {rows.length === 0 ? (
+            {isAdmin ? (
+              <div
+                ref={gridRef}
+                className="gc-grid h-[420px] rounded border border-border lg:h-[560px]"
+              />
+            ) : rows.length === 0 ? (
               <p className="rounded border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                No waypoints yet.{" "}
-                {isAdmin ? "Upload a file or add points from the map to get started." : null}
+                No waypoints yet.
               </p>
             ) : (
-              <div className="overflow-x-auto rounded border border-border">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
-                    <tr>
-                      <th className="w-8" />
-                      <th className="px-2 py-2 font-medium">Code</th>
-                      <th className="px-2 py-2 font-medium">Name</th>
-                      <th className="px-2 py-2 font-medium">Coordinates</th>
-                      {/* Alt and Radius are plain quantities, so they read right-
-                          aligned. Coordinates stays left: it is a "lat, lon"
-                          pair, not a single number to compare down the column. */}
-                      <th className="px-2 py-2 text-right font-medium">Alt</th>
-                      <th className="px-2 py-2 text-right font-medium">Radius</th>
-                      {isAdmin ? <th className="w-8" /> : null}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((r) => {
-                      const valid = parseCoords(r.coords) !== null;
-                      return (
-                        <tr key={r.id} className="border-t border-border">
-                          <td className="px-1 text-center">
-                            <button
-                              type="button"
-                              className="inline-flex items-center justify-center rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
-                              title={valid ? `Show ${r.code || "waypoint"} on the map` : "Enter valid coordinates first"}
-                              aria-label={`Show ${r.code || "waypoint"} on the map`}
-                              disabled={!valid}
-                              onClick={() => locate(r)}
-                            >
-                              <MapPinIcon className="size-4" aria-hidden="true" />
-                            </button>
-                          </td>
-                          {isAdmin ? (
-                            <>
-                              <td className="p-1">
-                                <CellInput value={r.code} onChange={(v) => update(r.id, { code: v })} className="w-24" />
-                              </td>
-                              <td className="p-1">
-                                <CellInput value={r.name} placeholder="—" onChange={(v) => update(r.id, { name: v })} className="w-40" />
-                              </td>
-                              <td className="p-1">
-                                <CellInput
-                                  value={r.coords}
-                                  mono
-                                  invalid={!valid}
-                                  onChange={(v) => update(r.id, { coords: v })}
-                                  className="w-44"
-                                />
-                              </td>
-                              <td className="p-1 text-right">
-                                <CellInput value={r.altitude} mono onChange={(v) => update(r.id, { altitude: v })} className="w-16 text-right" />
-                              </td>
-                              <td className="p-1 text-right">
-                                <CellInput value={r.radius} mono onChange={(v) => update(r.id, { radius: v })} className="w-16 text-right" />
-                              </td>
-                              <td className="p-1 text-center">
-                                <button
-                                  type="button"
-                                  className="text-muted-foreground hover:text-destructive"
-                                  title="Remove"
-                                  onClick={() => removeRow(r.id)}
-                                >
-                                  ✕
-                                </button>
-                              </td>
-                            </>
-                          ) : (
-                            <>
-                              <td className="px-2 py-1.5 font-medium">{r.code}</td>
-                              <td className="px-2 py-1.5">{r.name || "—"}</td>
-                              <td className="px-2 py-1.5 font-mono text-xs">{r.coords}</td>
-                              <td className="px-2 py-1.5 text-right font-mono text-xs">
-                                {r.altitude || "—"}
-                              </td>
-                              <td className="px-2 py-1.5 text-right font-mono text-xs">
-                                {r.radius}
-                              </td>
-                            </>
-                          )}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <Table aria-label="Waypoints" scrollLabel="Waypoints">
+                <TableHeader>
+                  <Column className="w-8">
+                    <span className="sr-only">Show on map</span>
+                  </Column>
+                  <Column isRowHeader>Code</Column>
+                  <Column>Name</Column>
+                  <Column>Coordinates</Column>
+                  {/* Alt and Radius are plain quantities, so they read right-
+                      aligned. Coordinates stays left: it is a "lat, lon"
+                      pair, not a single number to compare down the column. */}
+                  <Column className="text-right">Alt</Column>
+                  <Column className="text-right">Radius</Column>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((r) => (
+                    <Row key={r.id} id={r.id}>
+                      <Cell className="p-1 text-center">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Show ${r.code || "waypoint"} on the map`}
+                          onPress={() => locate(r)}
+                        >
+                          <MapPinIcon className="size-4" aria-hidden="true" />
+                        </Button>
+                      </Cell>
+                      <Cell className="font-medium">{r.code}</Cell>
+                      <Cell>{r.name || "—"}</Cell>
+                      <Cell className="font-mono text-xs">{r.coords}</Cell>
+                      <Cell className="text-right font-mono text-xs">{r.altitude || "—"}</Cell>
+                      <Cell className="text-right font-mono text-xs">{r.radius}</Cell>
+                    </Row>
+                  ))}
+                </TableBody>
+              </Table>
             )}
           </div>
         </div>
@@ -480,30 +503,87 @@ function serialize(list: WaypointFileRecord[]): string {
   );
 }
 
-function CellInput({
-  value,
-  onChange,
-  className,
-  placeholder,
-  mono,
-  invalid,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  className?: string;
-  placeholder?: string;
-  mono?: boolean;
-  invalid?: boolean;
-}) {
-  return (
-    <input
-      value={value}
-      placeholder={placeholder}
-      spellCheck={false}
-      onChange={(e) => onChange(e.target.value)}
-      className={`rounded border bg-background px-2 py-1 text-sm outline-none focus:border-ring ${
-        mono ? "font-mono text-xs" : ""
-      } ${invalid ? "border-destructive" : "border-border"} ${className ?? ""}`}
-    />
+/**
+ * The saved-state baseline: what the untouched grid serializes to. Rows
+ * round-trip every record through the editable text form (toFixed(6)
+ * coordinates, rounded altitude/radius, name folded into code), so the
+ * baseline must round-trip the same way — comparing against the raw API
+ * records leaves a comp stored with more precision permanently "dirty".
+ */
+function baselineJson(list: WaypointFileRecord[]): string {
+  return serialize(
+    list
+      .map((w) => fromRow(toRow(w)))
+      .filter((w): w is WaypointFileRecord => w !== null)
   );
+}
+
+/**
+ * Tabulator column definitions for the waypoints grid: a frozen locate-on-map
+ * pin, one editable column per waypoint field, and a remove button. Cell
+ * formatters build DOM nodes with textContent (never HTML strings) — waypoint
+ * files are user-supplied, so their values must not reach innerHTML.
+ */
+function waypointGridColumns(locate: (r: WpRow) => void): ColumnDefinition[] {
+  const pin: ColumnDefinition = {
+    title: "",
+    width: 36,
+    hozAlign: "center",
+    frozen: true,
+    formatter: (cell) => {
+      const row = cell.getRow().getData() as WpRow;
+      const valid = parseCoords(row.coords) !== null;
+      const el = document.createElement("span");
+      el.className = valid ? "gc-cell-button" : "gc-cell-button gc-cell-button-disabled";
+      el.title = valid
+        ? `Show ${row.code || "waypoint"} on the map`
+        : "Enter valid coordinates first";
+      el.innerHTML = PIN_SVG;
+      return el;
+    },
+    cellClick: (_e: UIEvent, cell: CellComponent) => {
+      locate(cell.getRow().getData() as WpRow);
+    },
+  };
+
+  const text = (title: string, field: string, extra: Partial<ColumnDefinition> = {}): ColumnDefinition => ({
+    title,
+    field,
+    editor: "input",
+    // Select the existing value on edit so typing replaces it (matches
+    // spreadsheet behaviour; without this, mobile taps append text).
+    editorParams: { selectContents: true },
+    ...extra,
+  });
+
+  const coords: ColumnDefinition = {
+    ...text("Coordinates", "coords", { minWidth: 150, cssClass: "gc-mono" }),
+    formatter: (cell) => {
+      const value = String(cell.getValue() ?? "");
+      cell.getElement().classList.toggle("gc-cell-invalid", parseCoords(value) === null);
+      const el = document.createElement("span");
+      el.textContent = value;
+      return el;
+    },
+  };
+
+  const remove: ColumnDefinition = {
+    title: "",
+    width: 36,
+    hozAlign: "center",
+    formatter: () => '<span class="gc-cell-button" title="Remove waypoint">✕</span>',
+    cellClick: (_e: UIEvent, cell: CellComponent) => {
+      void cell.getRow().delete();
+    },
+  };
+
+  return [
+    pin,
+    text("Code", "code", { minWidth: 80, frozen: true }),
+    text("Name", "name", { minWidth: 130 }),
+    coords,
+    text("Alt", "altitude", { width: 70, hozAlign: "right", headerHozAlign: "right", cssClass: "gc-mono" }),
+    text("Radius", "radius", { width: 80, hozAlign: "right", headerHozAlign: "right", cssClass: "gc-mono" }),
+    remove,
+  ];
 }
