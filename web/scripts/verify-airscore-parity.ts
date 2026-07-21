@@ -15,12 +15,13 @@
  * than silently seeding wrong numbers.
  *
  * Usage:
- *   bun web/scripts/verify-airscore-parity.ts <slug> [<slug>…]
+ *   bun web/scripts/verify-airscore-parity.ts <slug-or-path> [<slug-or-path>…]
  *   bun web/scripts/verify-airscore-parity.ts corryong-cup-2021
+ *   bun web/scripts/verify-airscore-parity.ts ../glidecomp-archive/comps/bright-open-2026
  */
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   parseIGC,
@@ -75,8 +76,9 @@ function verifyTask(
   },
   category: 'hg' | 'pg',
   compGapParams: Partial<GAPParameters> | undefined,
+  root: string,
 ): TaskReport | null {
-  const dir = join(COMPS_ROOT, taskEntry.dir);
+  const dir = join(root, taskEntry.dir);
   const rawPath = join(dir, 'airscore-result-raw.json');
   if (!existsSync(rawPath)) return null;
   const raw = JSON.parse(readFileSync(rawPath, 'utf-8'));
@@ -153,8 +155,23 @@ function verifyTask(
   return report;
 }
 
-function verifyComp(slug: string): boolean {
-  const manifestPath = join(COMPS_ROOT, slug, 'comp.json');
+/**
+ * Resolve a CLI argument: a bare slug under COMPS_ROOT, or a path to a
+ * comp's meta folder (its parent then serves as the comps root, so the task
+ * folders resolve as siblings).
+ */
+function resolveCompArg(arg: string): { root: string; slug: string } {
+  const looksLikePath = arg.includes('/') || arg.startsWith('.');
+  const asPath = resolve(arg.replace(/\/+$/, ''));
+  if (looksLikePath || existsSync(join(asPath, 'comp.json'))) {
+    return { root: resolve(asPath, '..'), slug: basename(asPath) };
+  }
+  return { root: COMPS_ROOT, slug: arg };
+}
+
+function verifyComp(arg: string): boolean {
+  const { root, slug } = resolveCompArg(arg);
+  const manifestPath = join(root, slug, 'comp.json');
   if (!existsSync(manifestPath)) {
     throw new Error(`No manifest at ${manifestPath} — download the comp first`);
   }
@@ -164,7 +181,7 @@ function verifyComp(slug: string): boolean {
 
   let anyFlagged = false;
   for (const t of manifest.tasks) {
-    const r = verifyTask(t, category, manifest.gap_params);
+    const r = verifyTask(t, category, manifest.gap_params, root);
     if (!r) {
       console.log(`  ${t.dir}: no airscore-result-raw.json (curated fixture?) — skipped`);
       continue;

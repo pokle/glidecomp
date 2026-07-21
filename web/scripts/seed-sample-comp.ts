@@ -19,6 +19,10 @@
  * Usage:
  *   bun run seed                      # every bundled comp → local dev state
  *   bun run seed big-chip kosci-loop  # just these comps
+ *   bun run seed ../glidecomp-archive/comps/forbes-flatlands-2026
+ *                                     # a comp named by path (e.g. from the
+ *                                     # archive checkout) — equivalent to
+ *                                     # GLIDECOMP_COMPS_DIR=… + its slug
  *   bun run seed --history            # include history-flagged comps too
  *   bun run seed --remote             # production D1 + R2 (needs wrangler auth)
  *
@@ -68,9 +72,36 @@ const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const COMPS_ROOT = process.env.GLIDECOMP_COMPS_DIR
   ? resolve(process.env.GLIDECOMP_COMPS_DIR)
   : join(REPO_ROOT, 'web/samples/comps');
-// Which bundled comps to seed (each slug matches a folder under COMPS_ROOT
-// holding a comp.json manifest). With no slug given we seed every bundled comp;
-// flags and slugs can appear in any arg order.
+
+/** A comp to seed: the directory its folders live under + its slug. */
+interface CompRef {
+  root: string;
+  slug: string;
+}
+
+/**
+ * Resolve one CLI argument to the comp it names. A bare slug ("big-chip")
+ * is looked up under COMPS_ROOT; anything path-like — containing a slash,
+ * or an existing directory holding a comp.json — is taken as a direct path
+ * to a comp's meta folder (e.g. `../glidecomp-archive/comps/forbes-
+ * flatlands-2026/`), whose PARENT becomes the comps root so the task
+ * folders resolve as its siblings.
+ */
+function resolveCompArg(arg: string): CompRef {
+  const looksLikePath = arg.includes('/') || arg.startsWith('.');
+  const asPath = resolve(arg.replace(/\/+$/, ''));
+  if (looksLikePath || existsSync(join(asPath, 'comp.json'))) {
+    if (!existsSync(join(asPath, 'comp.json'))) {
+      throw new Error(`No comp manifest at ${join(asPath, 'comp.json')}`);
+    }
+    return { root: resolve(asPath, '..'), slug: basename(asPath) };
+  }
+  return { root: COMPS_ROOT, slug: arg };
+}
+
+// Which bundled comps to seed. Each argument is a slug under COMPS_ROOT or a
+// path to a comp folder; with no argument we seed every bundled comp. Flags
+// and comp arguments can appear in any order.
 const ARG_SLUGS = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const PERSIST = 'web/.wrangler/state';
 // Resolve all bindings (D1 + R2) from the competition-api worker config.
@@ -472,8 +503,8 @@ interface CompManifest {
  * the engine's tz-lookup helper — the same derivation the competition-api
  * runs on route save) so the caller can stamp it on the comp row.
  */
-function readTask(spec: TaskSpec, tzOut: { value?: string }): SampleTask {
-  const compDir = join(COMPS_ROOT, spec.dir);
+function readTask(spec: TaskSpec, tzOut: { value?: string }, root: string): SampleTask {
+  const compDir = join(root, spec.dir);
   const entries = readdirSync(compDir);
   const igcFiles = entries.filter((f) => f.toLowerCase().endsWith('.igc')).sort();
   if (igcFiles.length === 0) throw new Error(`No IGC files in ${compDir}`);
@@ -547,10 +578,10 @@ function unionTaskWaypoints(tasks: SampleTask[]): WaypointFileRecord[] {
   return [...byCode.values()];
 }
 
-function loadManifest(slug: string): CompManifest {
-  const path = join(COMPS_ROOT, slug, 'comp.json');
+function loadManifest(ref: CompRef): CompManifest {
+  const path = join(ref.root, ref.slug, 'comp.json');
   if (!existsSync(path)) {
-    throw new Error(`No comp manifest at ${path} — is "${slug}" a bundled comp?`);
+    throw new Error(`No comp manifest at ${path} — is "${ref.slug}" a bundled comp?`);
   }
   return JSON.parse(readFileSync(path, 'utf-8')) as CompManifest;
 }
@@ -561,34 +592,36 @@ function loadManifest(slug: string): CompManifest {
  * skipped, as are history-flagged manifests unless --history is passed.
  * Sorted so a full seed runs in a stable order.
  */
-function allSlugs(): string[] {
+function allSlugs(): CompRef[] {
   const withHistory = process.argv.includes('--history');
   return readdirSync(COMPS_ROOT)
     .filter((name) => existsSync(join(COMPS_ROOT, name, 'comp.json')))
-    .filter((name) => withHistory || !loadManifest(name).history)
-    .sort();
+    .map((name) => ({ root: COMPS_ROOT, slug: name }))
+    .filter((ref) => withHistory || !loadManifest(ref).history)
+    .sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
 async function main(): Promise<void> {
-  const slugs = ARG_SLUGS.length > 0 ? ARG_SLUGS : allSlugs();
+  const refs = ARG_SLUGS.length > 0 ? ARG_SLUGS.map(resolveCompArg) : allSlugs();
   const where = REMOTE ? 'REMOTE (production)' : `local (${PERSIST})`;
   // One store (and for local, one Miniflare boot) shared across every comp.
   const store = REMOTE ? createRemoteStore() : await createLocalStore();
   try {
-    console.log(`Seeding ${slugs.length} competition(s): ${slugs.join(', ')}\n`);
-    for (const slug of slugs) {
-      await seed(store, where, slug);
+    console.log(`Seeding ${refs.length} competition(s): ${refs.map((r) => r.slug).join(', ')}\n`);
+    for (const ref of refs) {
+      await seed(store, where, ref);
       console.log('');
     }
-    console.log(`Seeded ${slugs.length} competition(s) into ${where}.`);
+    console.log(`Seeded ${refs.length} competition(s) into ${where}.`);
     if (!REMOTE) console.log('  (local state — start dev servers with `bun run dev`)');
   } finally {
     await store.dispose();
   }
 }
 
-async function seed(store: SeedStore, where: string, slug: string): Promise<void> {
-  const manifest = loadManifest(slug);
+async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void> {
+  const { slug } = ref;
+  const manifest = loadManifest(ref);
   // The comp's D1 name, category and scoring format come from the manifest when
   // present (Big Chip), else fall back to the historical Corryong defaults.
   const compName = manifest.comp_name ?? SAMPLE_COMP_NAME;
@@ -619,6 +652,7 @@ async function seed(store: SeedStore, where: string, slug: string): Promise<void
     readTask(
       { dir: t.dir, name: t.name, date: t.date, pilotClass: t.pilot_class, gapParams: t.gap_params },
       tzOut,
+      ref.root,
     ),
   );
   for (const t of tasks) {
