@@ -138,8 +138,16 @@ published points. Findings that reshaped the design:
   (`repairTaskXctsk`; 2017/2021/2022 xctsks regenerated and committed).
   With the repair, engine speed-section times match the published elapsed
   times to the second.
-- **Two systematic legacy-scorer deviations remain** (documented and
-  bounded in the gap-2018 parity fixture, candidates for follow-up engine
+- **Legacy `speedrun` tasks are ELAPSED-TIME, not races** — published
+  per-pilot start times are arbitrary seconds (16:16:37), so each pilot is
+  timed from their own start crossing. 35 of the 59 bundled tasks are
+  `speedrun` and were previously built as xctsk RACE (timed from the
+  window-open gate — floater-task means in the parity report dropped ~3×
+  after the fix). The downloader now maps task_type → sss.type
+  (`speedrun-interval`→RACE+gates, `speedrun`→ELAPSED-TIME, `race`→RACE)
+  and repairs the on-disk xctsks.
+- **Systematic legacy-scorer deviations remain** (documented and bounded
+  in the gap-2018 parity fixture; candidates for follow-up engine
   variants if closer history parity is wanted):
   1. *Time validity from the second-fastest time* — Gap.pm's `tqtime`
      feeds time validity, the spec (and GlideComp) use the fastest.
@@ -149,6 +157,13 @@ published points. Findings that reshaped the design:
      landed-out count; more generous at low distances than S7F 2024
      §11.1.1 (a minimum-distance pilot published 120.8 vs spec-2024 ~92
      on the fixture task). Goal pilots are unaffected.
+  3. *Track-less pilots deflate published validity vs ours* — AirScore's
+     launched/distance-validity denominators count pilots whose tracks
+     aren't in the download zip (they appear as min-distance rows or not
+     at all); our field is tracks-only, so our distance validity can come
+     out higher (e.g. 2026 floater t2: ours 0.60 vs published 0.39).
+     Closing this needs importing track-less result rows (as manual
+     flights or min-distance statuses) — owner decision.
 
 Implementation (all in this PR): `web/scripts/lib/airscore-formula-map.ts`
 (+ tests), `task.gap_params` migration 0021 + merge in
@@ -318,6 +333,42 @@ against real published AirScore totals, per generation.
 
 ## Workstream 4 — load the competition history (2020 → present)
 
+**Status (2026-07-21):** the tooling is DONE — `history: true` registry
+entries flow into the manifest and `bun run seed` skips them unless named
+or `--history` is passed; `bun web/scripts/verify-airscore-parity.ts
+<slug>` prints the per-task parity report (formula, warnings, matched
+pilots, mean/max |Δtotal|, thresholds ±2 mean / ±10 max). The
+enumeration is done (one polite `get_all_comps.php` request,
+2026-07-21): **145 race comps with tasks since 2020-01-01** on
+xc.highcloud.net. Highlights by lineage (comPk in parens):
+
+- **Corryong Cup** (HG): already bundled 2021–2026.
+- **Forbes Flatlands** (HG): 2020 (283), 2022 (333 + sports 334),
+  2023 (365/366), 2024 (396/398), 2025 (434/435), 2026 (462/463).
+- **Dalby Big Air** (HG): 2021 (316), 2022 (343/347), 2023 (375/376),
+  2024 (407/408), 2025 (446), 2026 (493/494).
+- **NSW HG State Titles**: 2020 (288), 2021 (314), 2022 (342),
+  2023 (373/374), 2024 (405), 2025 (440/441), 2026 (486/487).
+- **Bright Open** (PG): 2020 (281), 2021 (310), 2022 (317), 2023 (370),
+  2024 (402), 2025 (431), 2026 (464) — prime candidates for the PG
+  gap-2020+ parity fixture (workstream 3 option a).
+- **Flow Corryong PG Open**: 2020 (287), 2021 (311), 2022 (337),
+  2023 (369), 2025 (430), 2026 (476).
+- **QLD Champs / Canungra** (PG): 2021 (300), 2022 (328), 2023 (367),
+  2024 (400), 2025 (445), plus Canungra Cups.
+- Plus NZ comps (NZ PG Opens, NZ HG Champs, Auckland/Otago leagues),
+  Barraba Big Toe 2020 (299, HG 7 tasks), Paint It Black (289), Wings
+  Out West (340), and European comps from 2025 on (Dutch Open Laragne
+  450, Liga Canaria 455, Copa Niviuk 473, El Peñon 482).
+
+The full 404-comp catalogue is one `get_all_comps.php` fetch away; the
+owner picks which lineages to load (open question 1 below still applies
+for repo-size policy). Verify-report learnings from the bundled comps:
+the known legacy deviations (tqtime validity, difficulty curve,
+track-less pilots — see the inventory section) put real comps at mean
+|Δtotal| ~20–90 unscaled, so thresholds need the quality-ratio treatment
+or the follow-up engine variants before they can be tightened to ±2/±10.
+
 **Goal:** real comps from ~2020 onward, seeded and publicly visible.
 
 1. **Enumerate** what xc.highcloud.net actually hosts:
@@ -363,17 +414,25 @@ recorded parity report.
 
 ---
 
-## Open questions (resolve with the owner or during 1a)
+## Open questions
 
 1. **Repo-size policy** for the history (bundled vs. gitignored + seeded;
-   see 4.2) — needs an owner decision.
-2. **`goal_penalty` / legacy-field semantics** — resolve empirically from
-   fixture data during 1a/3.
-3. **Timed (OzGAP) arrival** — Unungra 2020 needs it for full fidelity.
-   Implementing it is small (AirScore: `AC = 1 − 0.667·time_after_first_ess_hours`,
-   arrival weight ×2) but it's a new engine feature + version bump; decide
-   whether fidelity for one comp justifies it, or record the deviation.
-4. **Which PG comps exist** on the instance for fixture 3.2a — unknown
-   until enumeration.
+   see 4.2) — still needs an owner decision.
+2. ~~`goal_penalty` semantics~~ — RESOLVED: fraction of speed+arrival
+   points lost at ESS-without-goal (`essNotGoalFactor = 1 − goal_penalty`),
+   verified in Gap.pm and empirically (see the inventory section).
+3. ~~Timed (OzGAP) arrival for Unungra~~ — mostly MOOT: Unungra's
+   arrival is off (`arrival_scoring: timed` is just the stored method);
+   timed arrival only actually applies to Corryong 2024 open t2–4
+   (warned). Unungra remains unreproducible anyway (GGap).
+4. ~~Which PG comps exist~~ — RESOLVED by enumeration: Bright Opens /
+   Flow Corryong / QLD Champs 2020–2026 (see workstream 4 status); check
+   their formula blocks when downloading for a gap-2020+ PG fixture.
+5. **NEW — track-less result rows**: published validity counts pilots we
+   have no tracks for; decide whether to import them (manual flights /
+   min-distance statuses) for validity parity.
+6. **NEW — legacy scorer variants**: implement `tqtime` time validity
+   and/or the legacy km-difficulty curve as opt-in engine variants for
+   closer history parity, or accept the documented ~1–3% deviations.
 
 [biuti/airscore-app]: https://github.com/biuti/airscore-app

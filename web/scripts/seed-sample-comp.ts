@@ -19,7 +19,12 @@
  * Usage:
  *   bun run seed                      # every bundled comp → local dev state
  *   bun run seed big-chip kosci-loop  # just these comps
+ *   bun run seed --history            # include history-flagged comps too
  *   bun run seed --remote             # production D1 + R2 (needs wrangler auth)
+ *
+ * A manifest with `history: true` (a back-catalogue comp, see
+ * docs/2026-07-21-airscore-history-import-plan.md) is skipped by the default
+ * "seed everything" run — seed it by naming its slug or passing --history.
  *
  * Source: the comp folders written by download-airscore-comp.ts, described by
  * web/samples/comps/<slug>/comp.json. That manifest lists every task with its
@@ -347,6 +352,9 @@ interface CompManifest {
    * up as competitions the public can browse. Defaults to false (public).
    */
   hidden?: boolean;
+  /** Back-catalogue comp: excluded from the default "seed everything" run
+   * (seed it by slug or with --history). */
+  history?: boolean;
   /**
    * Which comp_pilot column the numeric id embedded in the IGC filenames
    * (`lamb_18239_050126.igc`) belongs to. AirScore's exports for the bundled
@@ -443,11 +451,14 @@ function loadManifest(slug: string): CompManifest {
 /**
  * Every bundled comp, i.e. each folder under COMPS_ROOT holding a comp.json.
  * The per-task folders (`<slug>-<class>-t<N>`) have no manifest, so they're
- * skipped. Sorted so a full seed runs in a stable order.
+ * skipped, as are history-flagged manifests unless --history is passed.
+ * Sorted so a full seed runs in a stable order.
  */
 function allSlugs(): string[] {
+  const withHistory = process.argv.includes('--history');
   return readdirSync(COMPS_ROOT)
     .filter((name) => existsSync(join(COMPS_ROOT, name, 'comp.json')))
+    .filter((name) => withHistory || !loadManifest(name).history)
     .sort();
 }
 

@@ -87,6 +87,14 @@ interface CompConfig {
    * its comp list. When omitted the seed script defaults to 'hg'.
    */
   category?: string;
+  /**
+   * Back-catalogue entry (see docs/2026-07-21-airscore-history-import-plan.md
+   * workstream 4): written into the manifest, where `bun run seed` skips the
+   * comp unless it's named explicitly or `--history` is passed — so the
+   * default dev seed stays fast while the registry can carry the whole
+   * history.
+   */
+  history?: boolean;
 }
 
 const HIGHCLOUD = 'https://xc.highcloud.net';
@@ -255,7 +263,7 @@ function buildXctsk(
     sss: {
       direction: source.sss?.direction ?? 'EXIT',
       timeGates,
-      type: source.sss?.type ?? 'RACE',
+      type: sssTypeForTaskType(taskType, source.sss?.type),
     },
     taskType: source.taskType ?? 'CLASSIC',
     turnpoints,
@@ -369,6 +377,25 @@ function readTaskFormulaFromDisk(dir: string): {
 }
 
 /**
+ * The xctsk SSS type for a legacy AirScore task type. Legacy semantics
+ * (verified against published per-pilot start times):
+ * - `speedrun-interval` — start gates at intervals; pilots snap to the last
+ *   gate at/before their crossing → xctsk RACE with a gate grid.
+ * - `speedrun` — ELAPSED TIME: each pilot is timed from their own start
+ *   crossing (published starts are arbitrary seconds, e.g. 16:16:37) →
+ *   xctsk ELAPSED-TIME. 35 of the 59 originally-bundled tasks are this
+ *   type and were previously built as RACE, timing every pilot from the
+ *   window-open gate.
+ * - `race` — a single start gate → RACE.
+ */
+function sssTypeForTaskType(taskType: string, sourceType?: string): string {
+  if (/interval/i.test(taskType)) return 'RACE';
+  if (/speedrun/i.test(taskType)) return 'ELAPSED-TIME';
+  if (/race/i.test(taskType)) return 'RACE';
+  return sourceType ?? 'RACE';
+}
+
+/**
  * The turnpoint types the task SHOULD have, derived from the published
  * result's waypoint roles (`tawType`) — the authoritative record of how
  * AirScore scored the course.
@@ -413,6 +440,7 @@ function repairTaskXctsk(
   dir: string,
   tolerance: number | undefined,
   rawWaypoints: RawTaskWaypoint[] | null,
+  taskType: string,
 ): void {
   if (existsSync(join(dir, '.curated'))) return;
   const path = join(dir, 'task.xctsk');
@@ -422,6 +450,13 @@ function repairTaskXctsk(
 
   if (tolerance !== undefined && xctsk.cylinderTolerance !== tolerance) {
     xctsk.cylinderTolerance = tolerance;
+    changed = true;
+  }
+
+  const sssType = sssTypeForTaskType(taskType, xctsk.sss?.type);
+  if (xctsk.sss && xctsk.sss.type !== sssType) {
+    console.warn(`  repaired ${basename(dir)} sss.type: ${xctsk.sss.type} → ${sssType} (task_type "${taskType}")`);
+    xctsk.sss.type = sssType;
     changed = true;
   }
 
@@ -486,7 +521,7 @@ function annotateFormula(
       t.formula_warnings = warnings;
       for (const w of warnings) console.warn(`  WARNING ${t.dir}: ${w}`);
     }
-    repairTaskXctsk(join(COMPS_ROOT, t.dir), cylinderTolerance, read[i].rawWaypoints);
+    repairTaskXctsk(join(COMPS_ROOT, t.dir), cylinderTolerance, read[i].rawWaypoints, t.task_type);
     return gapParams;
   });
 
@@ -617,6 +652,7 @@ async function downloadComp(slug: string): Promise<void> {
     source_host: cfg.host,
     ...(cfg.compName ? { comp_name: cfg.compName } : {}),
     ...(cfg.category ? { category: cfg.category } : {}),
+    ...(cfg.history ? { history: true } : {}),
     classes,
     waypoint_region: regPk ? { regPk: Number(regPk), name: regionName ?? null } : null,
     ...(gapParams ? { gap_params: gapParams } : {}),
@@ -662,6 +698,7 @@ function regenerateManifest(slug: string): void {
     source_host: existing.source_host,
     ...(existing.comp_name ? { comp_name: existing.comp_name } : {}),
     ...(existing.category ? { category: existing.category } : {}),
+    ...(cfg.history ? { history: true } : {}),
     classes: existing.classes,
     waypoint_region: existing.waypoint_region ?? null,
     ...(gapParams ? { gap_params: gapParams } : {}),

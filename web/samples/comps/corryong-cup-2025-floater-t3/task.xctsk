@@ -9,7 +9,7 @@
     "timeGates": [
       "03:15:00Z"
     ],
-    "type": "RACE"
+    "type": "ELAPSED-TIME"
   },
   "taskType": "CLASSIC",
   "turnpoints": [
