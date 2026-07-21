@@ -119,6 +119,12 @@ export interface MapProvider {
     /** Clear the flight track from the map */
     clearTrack(): void;
 
+    /** Clip the rendered track to fixes[0..index] and mark that position
+     *  (the score-details time scrubber). Pass null to restore the full
+     *  track and remove the marker. No-op when no track is loaded; affects
+     *  the 2D track rendering only. */
+    setTrackScrub?(index: number | null): void;
+
     /** Render task turnpoints and cylinders. By default fits the view to the
      *  task when no track is loaded; pass `{ fit: false }` to leave the current
      *  view alone (the route editor uses this so live edits don't re-zoom). */
