@@ -319,11 +319,16 @@ export function TaskFieldAnalysis() {
     // With a TOC, wide screens get the docs layout: a narrow left rail
     // column and the content column, centred together. Below xl (and on the
     // TOC-less error/pending states) this is exactly the old single column.
+    // Print drops the grid entirely (with !, since some engines keep min-
+    // width media queries matched from the window when printing): the TOC
+    // rail is print-hidden, but display:none does not remove its 12rem grid
+    // COLUMN — without this the whole report prints squashed into the
+    // content column whenever the window is wide.
     <div
       className={cn(
         "mx-auto max-w-6xl px-4 py-6 font-hyperlegible",
         tocItems.length > 0 &&
-          "xl:grid xl:max-w-[87rem] xl:grid-cols-[12rem_minmax(0,1fr)] xl:gap-10"
+          "xl:grid xl:max-w-[87rem] xl:grid-cols-[12rem_minmax(0,1fr)] xl:gap-10 print:block! print:max-w-6xl!"
       )}
     >
       <PageToc items={tocItems} />
