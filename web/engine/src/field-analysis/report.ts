@@ -14,6 +14,7 @@ import { MIN_CORRELATION_N } from './evaluate';
 import { timeWithZone, timeRangeWithZone } from './format-time';
 import type {
   CompAggregateReport,
+  CompMetricAggregate,
   FieldAnalysisReport,
   MetricReport,
   ReportCell,
@@ -165,41 +166,69 @@ export function renderFieldReport(
   return lines.join('\n');
 }
 
-function renderCorrelationTable(report: FieldAnalysisReport): string[] {
-  const withCorr = report.metrics
+const CORRELATION_COLUMNS: ReportTable['columns'] = [
+  { header: 'Metric', align: 'left' },
+  { header: 'ρ', align: 'right' },
+  { header: '|ρ|', align: 'right' },
+  { header: 'n', align: 'right' },
+  { header: 'direction', align: 'left' },
+  { header: 'verdict', align: 'left' },
+];
+
+function correlationRows(metrics: MetricReport[]): ReportCell[][] {
+  const withCorr = metrics
     .filter((m) => m.correlation !== null)
     .sort((a, b) => b.correlation!.absRho - a.correlation!.absRho);
-  const without = report.metrics.filter(
+  const without = metrics.filter(
     (m) => m.correlation === null && m.perPilot.some((v) => v.value !== null),
   );
+  return [
+    ...withCorr.map((m) => {
+      const c = m.correlation!;
+      return [m.id, c.rho.toFixed(2), c.absRho.toFixed(2), String(c.n), m.direction, c.verdict];
+    }),
+    ...without.map((m) => [m.id, '—', '—', '—', m.direction, 'not enough data']),
+  ];
+}
 
-  if (withCorr.length === 0 && without.length === 0) {
+function renderCorrelationTable(report: FieldAnalysisReport): string[] {
+  // Outcome-derived metrics (time behind the leader, …) correlate with rank
+  // by construction, so ranking them among the behaviours would make the
+  // headline a non-finding. They get their own table, framed as what they
+  // are: eval sanity checks.
+  const behavioural = correlationRows(report.metrics.filter((m) => !m.outcome));
+  const outcome = correlationRows(report.metrics.filter((m) => m.outcome));
+
+  if (behavioural.length === 0 && outcome.length === 0) {
     return ['(no per-pilot metrics registered yet)'];
   }
 
-  const table: ReportTable = {
-    title: 'Ranked by |ρ| — the metrics that separate the leaderboard hardest',
-    columns: [
-      { header: 'Metric', align: 'left' },
-      { header: 'ρ', align: 'right' },
-      { header: '|ρ|', align: 'right' },
-      { header: 'n', align: 'right' },
-      { header: 'direction', align: 'left' },
-      { header: 'verdict', align: 'left' },
-    ],
-    rows: [
-      ...withCorr.map((m) => {
-        const c = m.correlation!;
-        return [m.id, c.rho.toFixed(2), c.absRho.toFixed(2), String(c.n), m.direction, c.verdict];
+  const lines: string[] = [];
+  if (behavioural.length > 0) {
+    lines.push(
+      ...renderTable({
+        title: 'Ranked by |ρ| — the behaviours that separate the leaderboard hardest',
+        columns: CORRELATION_COLUMNS,
+        rows: behavioural,
+        footnotes: [
+          'Rank 1 is best, so a well-behaved "higher" metric shows NEGATIVE ρ and a "lower" metric positive ρ.',
+          `For "neutral" metrics the sign itself is the finding. Verdicts need n ≥ ${MIN_CORRELATION_N}.`,
+        ],
       }),
-      ...without.map((m) => [m.id, '—', '—', '—', m.direction, 'not enough data']),
-    ],
-    footnotes: [
-      'Rank 1 is best, so a well-behaved "higher" metric shows NEGATIVE ρ and a "lower" metric positive ρ.',
-      `For "neutral" metrics the sign itself is the finding. Verdicts need n ≥ ${MIN_CORRELATION_N}.`,
-    ],
-  };
-  return renderTable(table);
+    );
+  }
+  if (outcome.length > 0) {
+    lines.push(
+      '',
+      ...renderTable({
+        title: 'Outcome checks — derived from the race outcome, so they correlate by construction',
+        columns: CORRELATION_COLUMNS,
+        rows: outcome,
+        footnotes: ['A LOW |ρ| here questions the eval, not the flying.'],
+      }),
+    );
+  }
+  return lines;
 }
 
 export function renderCompReport(report: CompAggregateReport): string {
@@ -208,33 +237,49 @@ export function renderCompReport(report: CompAggregateReport): string {
 
   // Separation first here too — task-by-task ρ columns show which strategies
   // mattered on which day; the standings are context, not the headline.
-  const ranked = [...report.metrics].sort(
-    (a, b) => (b.meanAbsRho ?? -1) - (a.meanAbsRho ?? -1),
-  );
+  // Outcome-derived metrics rank apart, same as the per-task report: they
+  // correlate by construction, so they must not top the behavioural ranking.
+  const rankByMeanAbs = (a: CompMetricAggregate, b: CompMetricAggregate): number =>
+    (b.meanAbsRho ?? -1) - (a.meanAbsRho ?? -1);
+  const ranked = report.metrics.filter((m) => !m.outcome).sort(rankByMeanAbs);
+  const outcomeRanked = report.metrics.filter((m) => m.outcome).sort(rankByMeanAbs);
+  const compColumns: ReportTable['columns'] = [
+    { header: 'Metric', align: 'left' },
+    ...report.taskLabels.map((l) => ({ header: l, align: 'right' as const })),
+    { header: 'mean|ρ|', align: 'right' },
+    { header: 'comp ρ', align: 'right' },
+    { header: 'n', align: 'right' },
+    { header: 'verdict', align: 'left' },
+  ];
+  const compRow = (m: CompMetricAggregate): ReportCell[] => [
+    m.id,
+    ...m.perTaskRho.map((r) => (r === null ? '—' : r.toFixed(2))),
+    m.meanAbsRho === null ? '—' : m.meanAbsRho.toFixed(2),
+    m.compRho ? m.compRho.rho.toFixed(2) : '—',
+    m.compRho ? String(m.compRho.n) : '—',
+    m.compRho?.verdict ?? '—',
+  ];
   const separation: ReportTable = {
     title: 'Metric separation across the comp (Spearman ρ vs rank, per task and comp-level)',
-    columns: [
-      { header: 'Metric', align: 'left' },
-      ...report.taskLabels.map((l) => ({ header: l, align: 'right' as const })),
-      { header: 'mean|ρ|', align: 'right' },
-      { header: 'comp ρ', align: 'right' },
-      { header: 'n', align: 'right' },
-      { header: 'verdict', align: 'left' },
-    ],
-    rows: ranked.map((m) => [
-      m.id,
-      ...m.perTaskRho.map((r) => (r === null ? '—' : r.toFixed(2))),
-      m.meanAbsRho === null ? '—' : m.meanAbsRho.toFixed(2),
-      m.compRho ? m.compRho.rho.toFixed(2) : '—',
-      m.compRho ? String(m.compRho.n) : '—',
-      m.compRho?.verdict ?? '—',
-    ]),
+    columns: compColumns,
+    rows: ranked.map(compRow),
     footnotes: [
       'comp ρ correlates each pilot\'s cross-task metric mean against their comp rank (total score).',
       'Read the per-task columns to see which strategies mattered on which day.',
     ],
   };
   lines.push('', ...renderTable(separation));
+  if (outcomeRanked.length > 0) {
+    lines.push(
+      '',
+      ...renderTable({
+        title: 'Outcome checks — derived from the race outcome, so they correlate by construction',
+        columns: compColumns,
+        rows: outcomeRanked.map(compRow),
+        footnotes: ['A LOW |ρ| here questions the eval, not the flying.'],
+      }),
+    );
+  }
 
   const standings: ReportTable = {
     title: `Comp standings (${report.taskLabels.length} tasks)`,

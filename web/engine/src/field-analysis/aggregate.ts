@@ -113,6 +113,7 @@ export function aggregateComp(tasks: CompTaskResult[]): CompAggregateReport {
       label: meta.label,
       unit: meta.unit,
       direction: meta.direction,
+      ...(meta.outcome ? { outcome: true as const } : {}),
       perTaskRho,
       meanAbsRho: weightSum > 0 ? weightedAbs / weightSum : null,
       compRho,

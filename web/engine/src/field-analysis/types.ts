@@ -264,6 +264,14 @@ export interface MetricComputer {
   direction: MetricDirection;
   /** 1–2 sentence method description, printed once per report (explainability rule). */
   explanation: string;
+  /**
+   * True for metrics DERIVED FROM the race outcome (time behind the leader,
+   * time lost vs the top ranks) rather than a flying behaviour. They correlate
+   * with rank by construction, so every ranking surface presents them apart —
+   * as eval sanity checks, never as behavioural findings — and they never set
+   * a family's headline |ρ| or get auto-selected. Absent = behavioural.
+   */
+  outcome?: true;
   /** Pure function of the field context. Must not mutate it. */
   compute(field: FieldContext): MetricOutput;
 }
@@ -297,6 +305,10 @@ export interface MetricReport {
   family: MetricFamily;
   direction: MetricDirection;
   explanation: string;
+  /** Outcome-derived sanity check, not a behaviour — see MetricComputer.outcome.
+   * Optional so reports stored before the flag existed still parse (absent =
+   * behavioural). */
+  outcome?: true;
   /** Aligned to FieldAnalysisReport.pilots order. */
   perPilot: PilotMetricValue[];
   fieldSummary?: string[];
@@ -350,6 +362,8 @@ export interface CompMetricAggregate {
   label: string;
   unit: string;
   direction: MetricDirection;
+  /** Outcome-derived sanity check, not a behaviour — see MetricComputer.outcome. */
+  outcome?: true;
   /** Signed per-task ρ, parallel to CompAggregateReport.taskLabels (null = not computed). */
   perTaskRho: (number | null)[];
   /** n-weighted mean |ρ| across tasks; null when no task produced one. */

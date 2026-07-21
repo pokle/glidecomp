@@ -24,7 +24,11 @@ import { underComp } from "../lib/crumbs";
 import { api } from "../../comp/api";
 import { useUser } from "../lib/user";
 import { ScoreFreshness } from "../comp/ScoreFreshness";
-import { ALL_METRICS, type CompFieldAnalysisData } from "../field-analysis/types";
+import {
+  ALL_METRICS,
+  type CompFieldAnalysisData,
+  type CompMetricAggregate,
+} from "../field-analysis/types";
 import type { CompDetailData } from "../comp/types";
 
 export function CompFieldAnalysis() {
@@ -125,11 +129,20 @@ export function CompFieldAnalysis() {
       : (classes[0]?.pilot_class ?? "");
   const active = classes.find((c) => c.pilot_class === selectedClass);
 
+  // Outcome-derived metrics (time behind the leader, …) correlate with rank
+  // by construction, so they rank apart from the behaviours — same split as
+  // the task page and the CLI report.
   const rankedMetrics = useMemo(() => {
     if (!active) return [];
-    return [...active.aggregate.metrics].sort(
-      (a, b) => (b.meanAbsRho ?? -1) - (a.meanAbsRho ?? -1)
-    );
+    return active.aggregate.metrics
+      .filter((m) => !m.outcome)
+      .sort((a, b) => (b.meanAbsRho ?? -1) - (a.meanAbsRho ?? -1));
+  }, [active]);
+  const outcomeMetrics = useMemo(() => {
+    if (!active) return [];
+    return active.aggregate.metrics
+      .filter((m) => m.outcome)
+      .sort((a, b) => (b.meanAbsRho ?? -1) - (a.meanAbsRho ?? -1));
   }, [active]);
 
   // The aggregate stores no method descriptions, so the glossary reads them
@@ -273,95 +286,27 @@ export function CompFieldAnalysis() {
               you about the weather on those days. Rank 1 is best, so a metric
               where more is better shows a <strong>negative</strong> ρ.
             </p>
-            <Table
-              aria-label="Metric separation across tasks"
-              scrollLabel="Metric separation across tasks"
-            >
-              <TableHeader>
-                <Column isRowHeader className="min-w-56">
-                  Metric
-                </Column>
-                <Column
-                  className="w-28"
-                  aria-label="Per-task correlation trend, visual"
-                >
-                  Trend
-                </Column>
-                {active.aggregate.taskLabels.map((label) => (
-                  <Column
-                    key={label}
-                    className="w-20 text-right"
-                    aria-label={`${label}, Spearman rho for that task`}
-                  >
-                    {label}
-                  </Column>
-                ))}
-                <Column className="w-24 text-right" aria-label="Mean absolute rho across tasks">
-                  mean |ρ|
-                </Column>
-                <Column className="w-40" aria-label="Overall correlation, visual">
-                  Overall
-                </Column>
-                <Column className="w-24 text-right" aria-label="Comp-level rho">
-                  comp ρ
-                </Column>
-              </TableHeader>
-              <TableBody>
-                {rankedMetrics.map((m) => (
-                  <Row key={m.id}>
-                    {/* No ⓘ here: the comp aggregate carries no method
-                        descriptions (they live on the per-task reports and,
-                        for this page, in the glossary at the bottom). */}
-                    <Cell className="whitespace-normal">{m.label}</Cell>
-                    <Cell>
-                      <RhoSparkline
-                        perTaskRho={m.perTaskRho}
-                        taskLabels={active.aggregate.taskLabels}
-                        metricLabel={m.label}
-                      />
-                    </Cell>
-                    {m.perTaskRho.map((rho, i) => (
-                      <Cell key={i} className="text-right tabular-nums">
-                        {rho === null ? (
-                          <span aria-label="not applicable" className="text-muted-foreground">
-                            —
-                          </span>
-                        ) : (
-                          rho.toFixed(2)
-                        )}
-                      </Cell>
-                    ))}
-                    <Cell className="text-right tabular-nums">
-                      {m.meanAbsRho === null ? (
-                        <span aria-label="not applicable" className="text-muted-foreground">
-                          —
-                        </span>
-                      ) : (
-                        m.meanAbsRho.toFixed(2)
-                      )}
-                    </Cell>
-                    <Cell>
-                      {m.compRho ? (
-                        <DivergingMeter
-                          value={m.compRho.rho}
-                          label={`${m.label}: correlation against competition rank`}
-                          valueLabel={m.compRho.rho.toFixed(2)}
-                        />
-                      ) : null}
-                    </Cell>
-                    <Cell className="text-right tabular-nums">
-                      {m.compRho ? (
-                        m.compRho.rho.toFixed(2)
-                      ) : (
-                        <span aria-label="not applicable" className="text-muted-foreground">
-                          —
-                        </span>
-                      )}
-                    </Cell>
-                  </Row>
-                ))}
-              </TableBody>
-            </Table>
+            <SeparationTable
+              metrics={rankedMetrics}
+              taskLabels={active.aggregate.taskLabels}
+              ariaLabel="Metric separation across tasks"
+            />
+
+            {outcomeMetrics.length > 0 ? (
+              <div className="space-y-3 pt-2">
+                <h3 className="text-base font-semibold">Outcome checks</h3>
+                <p className="text-sm text-muted-foreground">
+                  These metrics are derived from the race outcome itself, so
+                  they correlate with rank by construction — a low |ρ| here
+                  questions the eval, not the flying.
+                </p>
+                <SeparationTable
+                  metrics={outcomeMetrics}
+                  taskLabels={active.aggregate.taskLabels}
+                  ariaLabel="Outcome checks across tasks"
+                />
+              </div>
+            ) : null}
           </section>
 
           <section aria-labelledby="standings-heading" className="space-y-3">
@@ -412,5 +357,103 @@ export function CompFieldAnalysis() {
         </Alert>
       )}
     </div>
+  );
+}
+
+/** One separation table — rendered once for the behavioural ranking and once
+ * for the outcome checks, so the two can never drift in layout. */
+function SeparationTable({
+  metrics,
+  taskLabels,
+  ariaLabel,
+}: {
+  metrics: CompMetricAggregate[];
+  taskLabels: string[];
+  ariaLabel: string;
+}) {
+  return (
+    <Table aria-label={ariaLabel} scrollLabel={ariaLabel}>
+      <TableHeader>
+        <Column isRowHeader className="min-w-56">
+          Metric
+        </Column>
+        <Column className="w-28" aria-label="Per-task correlation trend, visual">
+          Trend
+        </Column>
+        {taskLabels.map((label) => (
+          <Column
+            key={label}
+            className="w-20 text-right"
+            aria-label={`${label}, Spearman rho for that task`}
+          >
+            {label}
+          </Column>
+        ))}
+        <Column className="w-24 text-right" aria-label="Mean absolute rho across tasks">
+          mean |ρ|
+        </Column>
+        <Column className="w-40" aria-label="Overall correlation, visual">
+          Overall
+        </Column>
+        <Column className="w-24 text-right" aria-label="Comp-level rho">
+          comp ρ
+        </Column>
+      </TableHeader>
+      <TableBody>
+        {metrics.map((m) => (
+          <Row key={m.id}>
+            {/* No ⓘ here: the comp aggregate carries no method
+                descriptions (they live on the per-task reports and,
+                for this page, in the glossary at the bottom). */}
+            <Cell className="whitespace-normal">{m.label}</Cell>
+            <Cell>
+              <RhoSparkline
+                perTaskRho={m.perTaskRho}
+                taskLabels={taskLabels}
+                metricLabel={m.label}
+              />
+            </Cell>
+            {m.perTaskRho.map((rho, i) => (
+              <Cell key={i} className="text-right tabular-nums">
+                {rho === null ? (
+                  <span aria-label="not applicable" className="text-muted-foreground">
+                    —
+                  </span>
+                ) : (
+                  rho.toFixed(2)
+                )}
+              </Cell>
+            ))}
+            <Cell className="text-right tabular-nums">
+              {m.meanAbsRho === null ? (
+                <span aria-label="not applicable" className="text-muted-foreground">
+                  —
+                </span>
+              ) : (
+                m.meanAbsRho.toFixed(2)
+              )}
+            </Cell>
+            <Cell>
+              {m.compRho ? (
+                <DivergingMeter
+                  value={m.compRho.rho}
+                  label={`${m.label}: correlation against competition rank`}
+                  valueLabel={m.compRho.rho.toFixed(2)}
+                />
+              ) : null}
+            </Cell>
+            <Cell className="text-right tabular-nums">
+              {m.compRho ? (
+                m.compRho.rho.toFixed(2)
+              ) : (
+                <span aria-label="not applicable" className="text-muted-foreground">
+                  —
+                </span>
+              )}
+            </Cell>
+          </Row>
+        ))}
+      </TableBody>
+    </Table>
   );
 }

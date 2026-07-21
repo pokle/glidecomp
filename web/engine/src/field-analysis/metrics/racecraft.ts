@@ -212,10 +212,13 @@ const legTimeLost: MetricComputer = {
   unit: 's',
   family: 'racecraft',
   direction: 'lower',
+  outcome: true,
   explanation:
     'For each completed speed-section leg, the pilot’s leg time is compared with the mean of the ' +
     'top-10 (by rank) pilots who completed that leg; only losses count, and the losses are summed. ' +
-    'The waterfall table shows every leg against the task winner instead.',
+    'Summed leg times are race time and the reference is defined by rank, so this tracks the ' +
+    'outcome by construction — read the waterfall table (every leg against the task winner) for ' +
+    'the diagnostic, not the correlation for a finding.',
   compute(field): MetricOutput {
     const sssIdx = getEffectiveSSSIndex(field.task);
     const essIdx = getEffectiveESSIndex(field.task);
@@ -342,6 +345,7 @@ const timeBehind: MetricComputer = {
   unit: 'min',
   family: 'racecraft',
   direction: 'lower',
+  outcome: true,
   explanation:
     'At each speed-section turnpoint, elapsed race time (reaching minus own start) is compared with ' +
     'the fastest pilot to that turnpoint; the scalar is minutes behind at ESS. Expected to track ' +
