@@ -205,7 +205,15 @@
 //     validity factor (§12.3.3) applies, and a stopped task that ran less
 //     than min(1 h, nominalTime/2) after the start scores zero (§12.3.2).
 //     Tasks without a stop announcement are scored exactly as before.
-export const SCORING_ENGINE_VERSION = 22;
+// v23: no behaviour change — documentation only. Comparing the engine against
+//     the FAI S7F PDFs and the AirScore source showed the PG leading-weight
+//     mode stored as 'gap2020' is really the GAP2016/2018 formula (the true
+//     S7F 2020–2022 generation uses PWC-derived weights GlideComp doesn't
+//     implement); the gap-params/gap-formulas doc comments now say so. The
+//     comments touch hashed scoring sources, so the fingerprint guard
+//     requires a bump. The cache roll is harmless (scores recompute
+//     identically).
+export const SCORING_ENGINE_VERSION = 23;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -213,4 +221,4 @@ export const SCORING_ENGINE_VERSION = 22;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "26687a67efb6ce6112d9236d2f8e419b9226f05e4f331395a3829ff8d6a3f7f6";
+  "28a992fc138572f6202f8265280df8f2fb945026f1dc2a02dd44b19ad0cbc05f";
