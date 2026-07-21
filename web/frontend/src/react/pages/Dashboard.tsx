@@ -3,8 +3,8 @@
  * Local IGC/XCTSK library backed by the same IndexedDB storage module the
  * (vanilla, imperative-map) analysis page uses.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/react/ui/tabs";
 import { Progress, ProgressLabel, ProgressValue } from "@/react/ui/progress";
 import { Button } from "@/react/ui/button";
@@ -18,7 +18,9 @@ import {
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { goToSignIn, useUser } from "../lib/user";
-import { downloadFile, relativeTime } from "../lib/format";
+import { downloadFile, formatTaskDate, ordinal, relativeTime } from "../lib/format";
+import { api } from "../../comp/api";
+import { Tree, TreeItem, TreeItemContent, TreeChevron } from "../rac/tree";
 
 // Mirrors the server-side limits in
 // web/workers/competition-api/src/routes/user-files.ts (MAX_USER_*).
@@ -157,12 +159,18 @@ export function Dashboard() {
     <section>
       <NearQuotaWarning tracks={tracks} tasks={tasks} />
 
+      <CompetitionFlightsSection />
+
+      {/* The local library below gets its own heading so it reads as a
+          sibling of the Competition flights section above. */}
+      <h2 className="mb-3 text-lg font-bold">Personal flights</h2>
+
       <Tabs
         value={tab}
         onValueChange={(value) => setTab(value as "tracks" | "tasks")}
       >
-        {/* No page header here, so the add-files action rides the tab row,
-            right-aligned like the section actions on the comp/task pages. */}
+        {/* The add-files action rides the tab row, right-aligned like the
+            section actions on the comp/task pages. */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <TabsList>
             <TabsTrigger value="tracks">
@@ -344,6 +352,133 @@ export function Dashboard() {
           <p className="text-sm font-normal text-muted-foreground">.igc and .xctsk files</p>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+type CompFlight = Awaited<
+  ReturnType<Awaited<ReturnType<typeof api.api.comp.pilot.flights.$get>>["json"]>
+>["flights"][number];
+
+/**
+ * Flights linked to the signed-in pilot's competition registrations, fetched
+ * from the competition API (unlike the local library below). These belong to
+ * the competition — no remove button; rows link out to the comp, the task,
+ * and (once scored) the pilot's score detail page. Renders nothing until the
+ * pilot has at least one competition flight.
+ *
+ * Grouped as a RAC Tree: one expandable row per competition (pilots fly the
+ * same comps year after year, so a flat list repeats the comp name per task),
+ * with the comp's flights as child rows. All groups start expanded — the
+ * tree is for scanning, not hiding.
+ */
+function CompetitionFlightsSection() {
+  const [flights, setFlights] = useState<CompFlight[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.api.comp.pilot.flights.$get();
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setFlights(data.flights);
+      } catch {
+        // Network hiccup — the section just stays hidden; the local library
+        // below is unaffected.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Group by comp, preserving the API's newest-task-first order both across
+  // groups (first appearance) and within them.
+  const groups = useMemo(() => {
+    const byComp = new Map<
+      string,
+      { comp_id: string; comp_name: string; flights: CompFlight[] }
+    >();
+    for (const f of flights) {
+      let group = byComp.get(f.comp_id);
+      if (!group) {
+        group = { comp_id: f.comp_id, comp_name: f.comp_name, flights: [] };
+        byComp.set(f.comp_id, group);
+      }
+      group.flights.push(f);
+    }
+    return [...byComp.values()];
+  }, [flights]);
+
+  if (flights.length === 0) return null;
+
+  return (
+    <section className="mb-8">
+      <h2 className="text-lg font-bold">Competition flights</h2>
+      <Tree
+        aria-label="Competition flights"
+        selectionMode="none"
+        defaultExpandedKeys={groups.map((g) => g.comp_id)}
+        className="mt-3 divide-y rounded-lg border"
+      >
+        {groups.map((g) => (
+          <TreeItem key={g.comp_id} id={g.comp_id} textValue={g.comp_name}>
+            <TreeItemContent>
+              <TreeChevron />
+              <Link
+                to={`/comp/${g.comp_id}`}
+                className="font-medium underline underline-offset-4"
+              >
+                {g.comp_name}
+              </Link>
+              <span className="text-sm text-muted-foreground">
+                {g.flights.length} {g.flights.length === 1 ? "flight" : "flights"}
+              </span>
+            </TreeItemContent>
+            {g.flights.map((f) => (
+              <TreeItem
+                key={`${f.task_id}:${f.comp_pilot_id}`}
+                id={`${f.task_id}:${f.comp_pilot_id}`}
+                textValue={f.task_name}
+              >
+                <TreeItemContent>
+                  <Link
+                    to={`/comp/${f.comp_id}/task/${f.task_id}`}
+                    className="underline underline-offset-4"
+                  >
+                    {f.task_name}
+                  </Link>
+                  <span className="text-sm text-muted-foreground">
+                    {formatTaskDate(f.task_date, {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                    {f.kind === "manual" ? " · manual flight report" : ""}
+                  </span>
+                  <span className="ml-auto text-sm">
+                    {f.rank != null ? (
+                      <Link
+                        to={`/comp/${f.comp_id}/task/${f.task_id}/pilot/${f.comp_pilot_id}`}
+                        className="font-medium underline underline-offset-4"
+                        title={`View this flight's score (${f.pilot_class} class)`}
+                      >
+                        {ordinal(f.rank)} of {f.class_size}
+                      </Link>
+                    ) : (
+                      <span className="text-muted-foreground">Not scored yet</span>
+                    )}
+                  </span>
+                </TreeItemContent>
+              </TreeItem>
+            ))}
+          </TreeItem>
+        ))}
+      </Tree>
+      <p className="mt-3 text-sm text-muted-foreground">
+        Flights are managed by the competition. Contact the competition admin to delete.
+      </p>
     </section>
   );
 }

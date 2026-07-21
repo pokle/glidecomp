@@ -178,8 +178,10 @@ describe("8g signup linking via PATCH /api/comp/pilot", () => {
     expect(preReg!.pilot_id).toBeNull();
   });
 
-  test("does NOT link pre-registrations in closed comps", async () => {
-    // Closed comp — close_date yesterday
+  test("links pre-registrations in closed comps (claiming a historical record)", async () => {
+    // Closed comp — close_date yesterday. Linking is about identity, not
+    // competition state, so a pilot who signs up after the season still
+    // claims their flights (they feed the My Flights page).
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
       .toISOString()
       .split("T")[0];
@@ -201,7 +203,7 @@ describe("8g signup linking via PATCH /api/comp/pilot", () => {
     )
       .bind(preRegId)
       .first<{ pilot_id: number | null }>();
-    expect(preReg!.pilot_id).toBeNull();
+    expect(preReg!.pilot_id).not.toBeNull();
   });
 
   test("links across multiple open comps in one pass", async () => {

@@ -500,6 +500,11 @@ async function seed(store: SeedStore, where: string, slug: string): Promise<void
   const today = now.slice(0, 10);
   const classesJson = JSON.stringify(manifest.classes);
   const defaultClass = manifest.classes[0];
+  // Seeded fixtures are finished events: close them on their last task's
+  // date so the app treats them as historical (no new track submissions).
+  // Account linking still reaches closed comps — see pilot-linker.ts.
+  const closeDate = manifest.tasks.map((t) => t.date).sort().at(-1)!;
+  console.log(`  close date: ${closeDate}`);
 
   // 1) Find or create the comp (stable comp_id across reruns).
   const existing = await store.rows(`SELECT comp_id FROM comp WHERE name = ${q(compName)};`);
@@ -524,12 +529,13 @@ async function seed(store: SeedStore, where: string, slug: string): Promise<void
       `UPDATE comp SET category=${q(category)}, test=${testFlag}, scoring_format=${q(scoringFormat)},
          pilot_classes=${q(classesJson)},
          default_pilot_class=${q(defaultClass)},
+         close_date=${q(closeDate)},
          timezone=${q(tzOut.value ?? null)} WHERE comp_id = ${compId};`,
     ]);
   } else {
     await store.exec(
-      `INSERT INTO comp (name, creation_date, category, test, scoring_format, pilot_classes, default_pilot_class, timezone)
-       VALUES (${q(compName)}, ${q(today)}, ${q(category)}, ${testFlag}, ${q(scoringFormat)}, ${q(classesJson)}, ${q(defaultClass)}, ${q(tzOut.value ?? null)});`,
+      `INSERT INTO comp (name, creation_date, category, test, scoring_format, pilot_classes, default_pilot_class, close_date, timezone)
+       VALUES (${q(compName)}, ${q(today)}, ${q(category)}, ${testFlag}, ${q(scoringFormat)}, ${q(classesJson)}, ${q(defaultClass)}, ${q(closeDate)}, ${q(tzOut.value ?? null)});`,
     );
     compId = Number((await store.rows(`SELECT comp_id FROM comp WHERE name = ${q(compName)};`))[0].comp_id);
     console.log(`  created comp_id ${compId}`);
