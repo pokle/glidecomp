@@ -3,7 +3,8 @@
  *
  * Tokens follow the Apple design language (inspired by get-inscribe.com):
  * white / #f5f5f7 surfaces, #1d1d1f labels, iOS system blue as the primary,
- * hairline separators, and the SF Pro system font stack. Loaded by the React
+ * hairline separators, and Atkinson Hyperlegible Next (falling back to the
+ * SF Pro system stack) as the app face. Loaded by the React
  * entry (react/main.tsx) and imported by src/analysis.css so the vanilla
  * analysis page shares the same tokens.
  */
@@ -16,6 +17,16 @@
  * on first use of the family, so pages that never use `font-hyperlegible`
  * pay nothing. The analysis map HUD already referenced this family. */
 @import "@fontsource/atkinson-hyperlegible-next/400.css";
+@import "@fontsource/atkinson-hyperlegible-next/500.css";
+@import "@fontsource/atkinson-hyperlegible-next/600.css";
+@import "@fontsource/atkinson-hyperlegible-next/700.css";
+
+/* Atkinson Hyperlegible Next — the app UI face (self-hosted via @fontsource,
+   font-display: swap). Only the weights the UI actually uses (400/500/600/700
+   + 400 italic); each file is subsetted by unicode-range so latin-ext is only
+   fetched when a page needs it. */
+@import "@fontsource/atkinson-hyperlegible-next/400.css";
+@import "@fontsource/atkinson-hyperlegible-next/400-italic.css";
 @import "@fontsource/atkinson-hyperlegible-next/500.css";
 @import "@fontsource/atkinson-hyperlegible-next/600.css";
 @import "@fontsource/atkinson-hyperlegible-next/700.css";
@@ -52,8 +63,10 @@
   --chart-4: #af52de;
   --chart-5: #ff2d55;
   --radius: 0.75rem;
-  /* Apple system font stack (SF Pro on Apple platforms). */
+  /* Atkinson Hyperlegible Next, falling back to the Apple system stack
+     (SF Pro on Apple platforms) while the webfont loads or if it fails. */
   --font-app:
+    "Atkinson Hyperlegible Next",
     -apple-system,
     BlinkMacSystemFont,
     "SF Pro Display",

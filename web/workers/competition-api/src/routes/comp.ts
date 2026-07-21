@@ -324,8 +324,9 @@ export const compRoutes = new Hono<HonoEnv>()
       ])
     );
 
-    // Merge: admin comps first, then public (deduped). A super admin
-    // administers every comp, so mark the public ones as admin too.
+    // Merge admin + public (deduped); ordering is applied after the merge.
+    // A super admin administers every comp, so mark the public ones as
+    // admin too.
     const superAdmin = isSuperAdmin(user);
     const adminIds = new Set(
       adminComps.results.map((r) => r.comp_id as number)
@@ -354,6 +355,19 @@ export const compRoutes = new Hono<HonoEnv>()
           last_task_date: datesByComp.get(r.comp_id as number)?.last_task_date ?? null,
         })),
     ];
+
+    // Most recent event first: the list displays each comp's task date range,
+    // so sort by when the comp *ran* (last task date), not when its row was
+    // inserted. Comps with no tasks yet fall back to creation_date. Task
+    // dates (YYYY-MM-DD) and creation_date (ISO timestamp) both compare
+    // lexicographically, so one string compare orders the mix correctly.
+    merged.sort((a, b) => {
+      const aKey =
+        a.last_task_date ?? ((a as Record<string, unknown>).creation_date as string);
+      const bKey =
+        b.last_task_date ?? ((b as Record<string, unknown>).creation_date as string);
+      return bKey.localeCompare(aKey);
+    });
 
     return c.json({ comps: merged });
   })
