@@ -1,70 +1,25 @@
 /**
  * Small field wrappers shared by the comp/task dialogs so every select and
  * checkbox renders the same structure without repeating boilerplate at each
- * call site. The comp-form fields (name / wing / classes / hidden) are built
- * on the RAC kit (src/react/rac/) as part of the RAC exploration; the two
- * selects below are still shadcn/Base UI, used only by SettingsDialog.
+ * call site. Everything here is built on the RAC kit (src/react/rac/) — the
+ * last Base UI pieces (the two selects) converted with the CompDetail page.
  */
+import { useState } from "react";
 import {
   Button as AriaButton,
   TextField as AriaTextField,
+  useFilter,
 } from "react-aria-components";
 import { Checkbox as RacCheckbox } from "@/react/rac/checkbox";
+import { ComboBox, ComboBoxItem } from "@/react/rac/combo-box";
 import { Description, Input as RacInput, Label, TextField } from "@/react/rac/field";
 import { Radio, RadioGroup } from "@/react/rac/radio-group";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from "@/react/ui/combobox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/react/ui/select";
+
+export { SimpleSelect } from "@/react/rac/select";
 
 export interface SelectOption {
   value: string;
   label: string;
-}
-
-export function SimpleSelect({
-  value,
-  onChange,
-  options,
-  disabled,
-  ariaLabel,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  options: SelectOption[];
-  disabled?: boolean;
-  ariaLabel?: string;
-}) {
-  return (
-    <Select
-      value={value}
-      onValueChange={(v) => onChange((v as string) ?? "")}
-      items={options}
-      disabled={disabled}
-    >
-      <SelectTrigger aria-label={ariaLabel} className="min-w-40">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((o) => (
-          <SelectItem key={o.value} value={o.value}>
-            {o.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
 }
 
 /**
@@ -72,6 +27,12 @@ export function SimpleSelect({
  * typing in the input filters the options, so "aus" narrows hundreds of
  * entries down to the Australia/* ones. Same props as SimpleSelect.
  * Clearing the input without picking anything keeps the current value.
+ *
+ * Both selectedKey and inputValue are controlled, so per RAC gotcha #12 the
+ * resets are ours: onSelectionChange(null) (Esc / blur revert) restores the
+ * current value's label instead of changing the value. While the input still
+ * shows the selected label (at rest / just opened via menuTrigger="focus"),
+ * every option is listed — filtering kicks in once the user edits.
  */
 export function SearchableSelect({
   value,
@@ -88,30 +49,44 @@ export function SearchableSelect({
   ariaLabel?: string;
   placeholder?: string;
 }) {
+  const { contains } = useFilter({ sensitivity: "base" });
   const selected = options.find((o) => o.value === value) ?? null;
+  const [input, setInput] = useState(selected?.label ?? "");
+  const filtered =
+    input === "" || input === selected?.label
+      ? options
+      : options.filter((o) => contains(o.label, input));
   return (
-    <Combobox
-      items={options}
-      value={selected}
-      onValueChange={(item) => {
-        if (item) onChange(item.value);
+    <ComboBox
+      aria-label={ariaLabel}
+      placeholder={placeholder}
+      isDisabled={disabled}
+      menuTrigger="focus"
+      selectedKey={value}
+      inputValue={input}
+      onInputChange={setInput}
+      onSelectionChange={(key) => {
+        if (key == null) {
+          setInput(selected?.label ?? "");
+          return;
+        }
+        const next = String(key);
+        onChange(next);
+        setInput(options.find((o) => o.value === next)?.label ?? next);
       }}
-      isItemEqualToValue={(a, b) => a.value === b.value}
-      autoHighlight
-      disabled={disabled}
+      items={filtered}
+      allowsEmptyCollection
+      renderEmptyState={() => (
+        <div className="px-2 py-1.5 text-sm text-muted-foreground">No matches.</div>
+      )}
+      listClassName="max-h-80"
     >
-      <ComboboxInput aria-label={ariaLabel} placeholder={placeholder} className="w-full" />
-      <ComboboxContent>
-        <ComboboxEmpty>No matches.</ComboboxEmpty>
-        <ComboboxList>
-          {(item: SelectOption) => (
-            <ComboboxItem key={item.value} value={item}>
-              {item.label}
-            </ComboboxItem>
-          )}
-        </ComboboxList>
-      </ComboboxContent>
-    </Combobox>
+      {(item: SelectOption) => (
+        <ComboBoxItem id={item.value} textValue={item.label}>
+          {item.label}
+        </ComboBoxItem>
+      )}
+    </ComboBox>
   );
 }
 

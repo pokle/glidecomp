@@ -11,13 +11,8 @@
 import { useId, useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, Circle } from "lucide-react";
-import { Card, CardContent } from "@/react/ui/card";
-import {
-  Progress,
-  ProgressLabel,
-  ProgressValue,
-} from "@/react/ui/progress";
-import { Button } from "@/react/ui/button";
+import { Button } from "@/react/rac/button";
+import { ProgressBar } from "@/react/rac/progress";
 import type { CompDetailData } from "./types";
 
 export interface SetupStep {
@@ -167,52 +162,48 @@ export function CompSetupProgress({
 
   return (
     <section aria-labelledby={headingId} className="mt-6">
-      <Card>
-        <CardContent>
-          <Progress value={Math.round((done / requiredSteps.length) * 100)}>
-            <ProgressLabel
-              id={headingId}
-              render={<h2 />}
-              className="text-base font-bold"
-            >
+      <div className="rounded-xl bg-card p-4 text-sm text-card-foreground ring-1 ring-foreground/10">
+        <ProgressBar
+          value={Math.round((done / requiredSteps.length) * 100)}
+          aria-labelledby={headingId}
+          label={
+            <h2 id={headingId} className="text-base font-bold">
               Set up your competition
-            </ProgressLabel>
-            <ProgressValue className="ml-auto">
-              {() => `${done} of ${requiredSteps.length} steps`}
-            </ProgressValue>
-          </Progress>
-          <ol className="mt-3 space-y-1.5 text-sm">
-            {steps.map((step) => (
-              <li key={step.key} className="flex items-center gap-2">
+            </h2>
+          }
+          valueText={`${done} of ${requiredSteps.length} steps`}
+        />
+        <ol className="mt-3 space-y-1.5 text-sm">
+          {steps.map((step) => (
+            <li key={step.key} className="flex items-center gap-2">
+              {step.complete ? (
+                <Check aria-hidden className="size-4 shrink-0 text-primary" />
+              ) : (
+                <Circle
+                  aria-hidden
+                  className="size-4 shrink-0 text-muted-foreground"
+                />
+              )}
+              <span className={step.complete ? "text-muted-foreground" : ""}>
                 {step.complete ? (
-                  <Check aria-hidden className="size-4 shrink-0 text-primary" />
-                ) : (
-                  <Circle
-                    aria-hidden
-                    className="size-4 shrink-0 text-muted-foreground"
-                  />
-                )}
-                <span className={step.complete ? "text-muted-foreground" : ""}>
-                  {step.complete ? (
-                    <span className="sr-only">Completed: </span>
-                  ) : null}
-                  {stepControl(step)}
-                  {step.optional ? (
-                    <span className="ml-1.5 text-xs text-muted-foreground">
-                      (optional)
-                    </span>
-                  ) : null}
-                </span>
-              </li>
-            ))}
-          </ol>
-          <div className="mt-3 flex justify-end">
-            <Button type="button" variant="ghost" size="sm" onClick={hide}>
-              Hide guide
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+                  <span className="sr-only">Completed: </span>
+                ) : null}
+                {stepControl(step)}
+                {step.optional ? (
+                  <span className="ml-1.5 text-xs text-muted-foreground">
+                    (optional)
+                  </span>
+                ) : null}
+              </span>
+            </li>
+          ))}
+        </ol>
+        <div className="mt-3 flex justify-end">
+          <Button variant="ghost" size="sm" onPress={hide}>
+            Hide guide
+          </Button>
+        </div>
+      </div>
     </section>
   );
 }

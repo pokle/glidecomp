@@ -2,33 +2,30 @@
  * Pilots section on the comp detail page — React port of
  * src/comp/pilots-section.ts.
  *
- * Renders a read-only table of registered pilots and — for admins — an Edit
- * dialog: a Tabulator editable grid (frozen name column, fixed header,
- * spreadsheet-style cells, class as a list editor limited to the comp's
- * classes) with CSV import/export. All mutations funnel through
+ * Renders a read-only table of registered pilots (RAC kit) and — for admins —
+ * an Edit dialog: a **Tabulator** editable grid (frozen name column, fixed
+ * header, spreadsheet-style cells, class as a list editor limited to the
+ * comp's classes) with CSV import/export. The grid stays Tabulator by policy
+ * (docs/2026-07-18-rac-adoption-guide.md — it's excellent at spreadsheet
+ * editing and is not part of the RAC conversion); only the dialog shell and
+ * buttons around it are RAC. All mutations funnel through
  * POST /api/comp/:comp_id/pilot/bulk.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { FileTrigger, Link as AriaLink } from "react-aria-components";
 import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
-import { Button } from "@/react/ui/button";
+import { Button } from "@/react/rac/button";
 import { SectionHeader } from "../components/SectionHeader";
 import {
   Dialog,
-  DialogClose,
-  DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/react/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/react/ui/table";
+  Modal,
+} from "@/react/rac/dialog";
+import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
+import { Tooltip, TooltipTrigger } from "@/react/rac/tooltip";
 import { api } from "../../comp/api";
 import { downloadFile } from "../lib/format";
 import {
@@ -109,12 +106,7 @@ export function PilotsSection({
         title={<>Pilots {pilots && pilots.length > 0 ? `(${pilots.length})` : ""}</>}
         action={
           isAdmin ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setEditOpen(true)}
-            >
+            <Button variant="outline" size="sm" onPress={() => setEditOpen(true)}>
               Edit
             </Button>
           ) : null
@@ -130,49 +122,46 @@ export function PilotsSection({
           <p>No pilots registered yet — pilots appear here when the organizers add them or when they submit a track.</p>
           {isAdmin ? (
             <Button
-              type="button"
               variant="outline"
               size="sm"
               className="mt-3"
-              onClick={() => setEditOpen(true)}
+              onPress={() => setEditOpen(true)}
             >
               Add pilots
             </Button>
           ) : null}
         </div>
       ) : (
-        <Table className="mt-2">
+        <Table aria-label="Pilots" scrollLabel="Pilots" className="mt-2">
           <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>GlideComp account</TableHead>
-              <TableHead>CIVL</TableHead>
-              <TableHead>SAFA</TableHead>
-              <TableHead>Class</TableHead>
-              <TableHead>Team</TableHead>
-              <TableHead>Driver</TableHead>
-            </TableRow>
+            <Column isRowHeader>Name</Column>
+            <Column>GlideComp account</Column>
+            <Column>CIVL</Column>
+            <Column>SAFA</Column>
+            <Column>Class</Column>
+            <Column>Team</Column>
+            <Column>Driver</Column>
           </TableHeader>
           <TableBody>
             {pilots.map((p) => (
-              <TableRow key={p.comp_pilot_id}>
-                <TableCell>{p.name}</TableCell>
-                <TableCell>
+              <Row key={p.comp_pilot_id} id={p.comp_pilot_id}>
+                <Cell>{p.name}</Cell>
+                <Cell>
                   {p.linked && p.linked_username ? (
-                    <Link
-                      className="underline underline-offset-4"
-                      to={`/u/${encodeURIComponent(p.linked_username)}`}
+                    <AriaLink
+                      className="underline underline-offset-4 outline-none data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
+                      href={`/u/${encodeURIComponent(p.linked_username)}`}
                     >
                       @{p.linked_username}
-                    </Link>
+                    </AriaLink>
                   ) : null}
-                </TableCell>
-                <TableCell>{p.civl_id ?? ""}</TableCell>
-                <TableCell>{p.safa_id ?? ""}</TableCell>
-                <TableCell>{p.pilot_class}</TableCell>
-                <TableCell>{p.team_name ?? ""}</TableCell>
-                <TableCell>{p.driver_contact ?? ""}</TableCell>
-              </TableRow>
+                </Cell>
+                <Cell>{p.civl_id ?? ""}</Cell>
+                <Cell>{p.safa_id ?? ""}</Cell>
+                <Cell>{p.pilot_class}</Cell>
+                <Cell>{p.team_name ?? ""}</Cell>
+                <Cell>{p.driver_contact ?? ""}</Cell>
+              </Row>
             ))}
           </TableBody>
         </Table>
@@ -280,7 +269,6 @@ function EditPilotsDialog({
   const [status, setStatus] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -356,11 +344,10 @@ function EditPilotsDialog({
     void table.addRow(rows);
   }
 
-  async function importCsv(input: HTMLInputElement) {
-    const file = input.files?.[0];
+  async function importCsv(files: FileList | null) {
+    const file = files?.[0];
     if (!file) return;
     const text = await file.text();
-    input.value = ""; // allow re-selecting the same file
 
     setStatus(null);
     const result = parseImportedCsv(text, compClasses);
@@ -427,16 +414,14 @@ function EditPilotsDialog({
   const extraErrors = errors.length - shownErrors.length;
 
   return (
-    <Dialog
-      open
+    <Modal
+      isOpen
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
+      className="h-[min(700px,85vh)] sm:max-w-6xl"
     >
-      <DialogContent
-        id="pilots-edit-dialog"
-        className="flex h-[min(700px,85vh)] flex-col sm:max-w-6xl"
-      >
+      <Dialog id="pilots-edit-dialog" className="flex h-full min-h-0 flex-col gap-4">
         <DialogHeader>
           <DialogTitle>Edit pilots</DialogTitle>
         </DialogHeader>
@@ -470,62 +455,52 @@ function EditPilotsDialog({
         <DialogFooter>
           <div className="flex flex-wrap gap-2 sm:mr-auto">
             <Button
-              type="button"
               variant="outline"
               size="sm"
-              disabled={!gridReady}
-              onClick={addRow}
+              isDisabled={!gridReady}
+              onPress={addRow}
             >
               Add row
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!gridReady}
-              onClick={addTestPilots}
-              title="Add 3 dummy pilots (Test Dummy 1, testdummy1@example.com, …) to try the system"
+            <TooltipTrigger>
+              <Button
+                variant="outline"
+                size="sm"
+                isDisabled={!gridReady}
+                onPress={addTestPilots}
+              >
+                Add test pilots
+              </Button>
+              <Tooltip>
+                Add 3 dummy pilots (Test Dummy 1, testdummy1@example.com, …) to try
+                the system
+              </Tooltip>
+            </TooltipTrigger>
+            <FileTrigger
+              acceptedFileTypes={[".csv", ".tsv", ".txt"]}
+              onSelect={(files) => void importCsv(files)}
             >
-              Add test pilots
-            </Button>
+              <Button variant="outline" size="sm" isDisabled={!gridReady}>
+                Import CSV
+              </Button>
+            </FileTrigger>
             <Button
-              type="button"
               variant="outline"
               size="sm"
-              disabled={!gridReady}
-              onClick={() => importInputRef.current?.click()}
-            >
-              Import CSV
-            </Button>
-            <input
-              ref={importInputRef}
-              type="file"
-              accept=".csv,.tsv,.txt"
-              hidden
-              onChange={(e) => void importCsv(e.currentTarget)}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!gridReady}
-              onClick={exportCsv}
+              isDisabled={!gridReady}
+              onPress={exportCsv}
             >
               Export CSV
             </Button>
           </div>
-          <DialogClose render={<Button type="button" variant="outline" />}>
+          <Button slot="close" variant="outline">
             Cancel
-          </DialogClose>
-          <Button
-            type="button"
-            disabled={saving || !gridReady}
-            onClick={() => void save()}
-          >
+          </Button>
+          <Button isDisabled={saving || !gridReady} onPress={() => void save()}>
             {saving ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </Dialog>
+    </Modal>
   );
 }

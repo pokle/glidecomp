@@ -1,11 +1,11 @@
 /**
  * Activity (audit log) section — React port of setupActivitySection().
  * Uses plain fetch (not the Hono RPC client) to keep the response shape
- * simple, with filter tabs and cursor-based load-more.
+ * simple, with filter tabs (RAC kit) and cursor-based load-more.
  */
 import { useEffect, useState } from "react";
-import { Button } from "@/react/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/react/ui/tabs";
+import { Button } from "@/react/rac/button";
+import { Tabs, TabList, Tab, TabPanel } from "@/react/rac/tabs";
 import { formatAuditTime, type AuditEntry, type AuditResponse } from "./types";
 
 const FILTERS: Array<{ value: string; label: string }> = [
@@ -15,6 +15,10 @@ const FILTERS: Array<{ value: string; label: string }> = [
   { value: "track", label: "Tracks" },
   { value: "comp", label: "Settings" },
 ];
+
+// RAC tab keys can't be "" (falsy keys confuse selection) — the All filter
+// rides on a sentinel key that maps back to the empty subject_type filter.
+const ALL_KEY = "all";
 
 async function fetchAuditPage(
   compId: string,
@@ -79,23 +83,25 @@ export function ActivitySection({ compId }: { compId: string }) {
     }
   }
 
+  const selectedKey = filter === "" ? ALL_KEY : filter;
+
   return (
     <section>
       <h2 className="mt-8 text-lg font-bold">Activity</h2>
       <Tabs
         className="mt-2"
-        value={filter}
-        onValueChange={(v) => setFilter(v as string)}
+        selectedKey={selectedKey}
+        onSelectionChange={(key) => setFilter(key === ALL_KEY ? "" : String(key))}
       >
-        <TabsList>
+        <TabList aria-label="Activity filter">
           {FILTERS.map((f) => (
-            <TabsTrigger key={f.value} value={f.value}>
+            <Tab key={f.value} id={f.value === "" ? ALL_KEY : f.value}>
               {f.label}
-            </TabsTrigger>
+            </Tab>
           ))}
-        </TabsList>
-        {/* One shared panel: its value always matches the active tab. */}
-        <TabsContent value={filter}>
+        </TabList>
+        {/* One shared panel: its id always matches the active tab. */}
+        <TabPanel id={selectedKey}>
           {error ? (
             <p className="text-muted-foreground">Could not load activity</p>
           ) : loaded && entries.length === 0 ? (
@@ -114,16 +120,15 @@ export function ActivitySection({ compId }: { compId: string }) {
           )}
           {hasMore ? (
             <Button
-              type="button"
               variant="outline"
               size="sm"
               className="mt-2"
-              onClick={() => void loadMore()}
+              onPress={() => void loadMore()}
             >
               Load more
             </Button>
           ) : null}
-        </TabsContent>
+        </TabPanel>
       </Tabs>
     </section>
   );
