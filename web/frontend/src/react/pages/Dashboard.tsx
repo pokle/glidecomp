@@ -433,8 +433,7 @@ function CompetitionFlightsSection() {
         ))}
       </ul>
       <p className="mt-3 text-sm text-muted-foreground">
-        These flights are part of their competition&rsquo;s record and are managed by the
-        competition, so they can&rsquo;t be removed here.
+        Flights are managed by the competition. Contact the competition admin to delete.
       </p>
     </section>
   );

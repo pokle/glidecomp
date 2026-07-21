@@ -12,6 +12,7 @@ import {
 } from "./rate-limit";
 import { buildOtpEmail, type EmailSendBinding } from "./otp-email";
 import { deriveUniqueUsername } from "./username";
+import { bootstrapPilotForUser } from "./pilot-bootstrap";
 
 export function isLocalDev(env: { BETTER_AUTH_URL: string }): boolean {
   try {
@@ -209,6 +210,24 @@ export function createAuth(
               }
             );
             return { data: { ...user, username } };
+          },
+        },
+      },
+      session: {
+        create: {
+          // Lazy pilot bootstrap on every sign-in: ensure the account's
+          // `pilot` row exists and claim any email-matching unlinked
+          // pre-registrations (see pilot-bootstrap.ts). waitUntil keeps it
+          // off the sign-in latency path when an ExecutionContext exists
+          // (the main auth handler); dev-login constructs auth without one,
+          // so tests get the bootstrap synchronously.
+          after: async (session) => {
+            const run = bootstrapPilotForUser(
+              env.glidecomp_auth,
+              session.userId
+            );
+            if (executionCtx) executionCtx.waitUntil(run);
+            else await run;
           },
         },
       },
