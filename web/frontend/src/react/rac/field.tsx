@@ -156,7 +156,11 @@ export function SearchField({
       className={cn("group flex flex-col gap-2", className)}
       {...props}
     >
-      {label ? <Label>{label}</Label> : <Label className="sr-only">Search</Label>}
+      {label ? (
+        <Label>{label}</Label>
+      ) : props["aria-label"] ? null : (
+        <Label className="sr-only">Search</Label>
+      )}
       <Group
         className={cn(
           "flex h-8 w-full min-w-0 items-center gap-1.5 rounded-lg border border-input bg-transparent px-2.5 transition-colors",

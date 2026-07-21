@@ -1,10 +1,17 @@
 /**
  * Small field wrappers shared by the comp/task dialogs so every select and
  * checkbox renders the same structure without repeating boilerplate at each
- * call site. Built on the shadcn/ui components (Base UI underneath).
+ * call site. The comp-form fields (name / wing / classes / hidden) are built
+ * on the RAC kit (src/react/rac/) as part of the RAC exploration; the two
+ * selects below are still shadcn/Base UI, used only by SettingsDialog.
  */
-import { useId } from "react";
-import { Checkbox } from "@/react/ui/checkbox";
+import {
+  Button as AriaButton,
+  TextField as AriaTextField,
+} from "react-aria-components";
+import { Checkbox as RacCheckbox } from "@/react/rac/checkbox";
+import { Description, Input as RacInput, Label, TextField } from "@/react/rac/field";
+import { Radio, RadioGroup } from "@/react/rac/radio-group";
 import {
   Combobox,
   ComboboxContent,
@@ -13,15 +20,6 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@/react/ui/combobox";
-import {
-  Field,
-  FieldDescription,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from "@/react/ui/field";
-import { Input } from "@/react/ui/input";
-import { RadioGroup, RadioGroupItem } from "@/react/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -128,15 +126,10 @@ export function CheckboxField({
   label: React.ReactNode;
   hint?: React.ReactNode;
 }) {
-  const id = useId();
   return (
-    <Field orientation="horizontal">
-      <Checkbox id={id} checked={checked} onCheckedChange={(c) => onChange(c === true)} />
-      <FieldLabel htmlFor={id} className="font-normal">
-        {label}
-      </FieldLabel>
-      {hint ? <FieldDescription className="basis-full">{hint}</FieldDescription> : null}
-    </Field>
+    <RacCheckbox isSelected={checked} onChange={onChange} hint={hint}>
+      {label}
+    </RacCheckbox>
   );
 }
 
@@ -157,20 +150,16 @@ export function NameField({
   placeholder?: string;
   autoFocus?: boolean;
 }) {
-  const id = useId();
   return (
-    <Field>
-      <FieldLabel htmlFor={id}>Name</FieldLabel>
-      <Input
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        required
-        maxLength={128}
-        autoFocus={autoFocus}
-      />
-    </Field>
+    <TextField
+      label="Name"
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      isRequired
+      maxLength={128}
+      autoFocus={autoFocus}
+    />
   );
 }
 
@@ -183,27 +172,16 @@ export function CategoryField({
   onChange: (value: "hg" | "pg") => void;
   description?: React.ReactNode;
 }) {
-  const hgId = useId();
-  const pgId = useId();
   return (
-    <FieldSet>
-      <FieldLegend variant="label">Wing</FieldLegend>
-      <RadioGroup value={value} onValueChange={(v) => onChange(v as "hg" | "pg")}>
-        <Field orientation="horizontal">
-          <RadioGroupItem value="hg" id={hgId} />
-          <FieldLabel htmlFor={hgId} className="font-normal">
-            Hang Gliding
-          </FieldLabel>
-        </Field>
-        <Field orientation="horizontal">
-          <RadioGroupItem value="pg" id={pgId} />
-          <FieldLabel htmlFor={pgId} className="font-normal">
-            Paragliding
-          </FieldLabel>
-        </Field>
-      </RadioGroup>
-      {description ? <FieldDescription>{description}</FieldDescription> : null}
-    </FieldSet>
+    <RadioGroup
+      label="Wing"
+      value={value}
+      onChange={(v) => onChange(v as "hg" | "pg")}
+      description={description}
+    >
+      <Radio value="hg">Hang Gliding</Radio>
+      <Radio value="pg">Paragliding</Radio>
+    </RadioGroup>
   );
 }
 
@@ -230,34 +208,27 @@ export function PilotClassesField({
   onChange: (value: string) => void;
   wing: "hg" | "pg";
 }) {
-  const id = useId();
   const examples = PILOT_CLASS_EXAMPLES[wing];
   return (
-    <Field>
-      <FieldLabel htmlFor={id}>Pilot Classes</FieldLabel>
-      <Input
-        id={id}
-        placeholder={examples[1]}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      <FieldDescription>
+    <AriaTextField value={value} onChange={onChange} className="group flex flex-col gap-2">
+      <Label>Pilot Classes</Label>
+      <RacInput placeholder={examples[1]} />
+      <Description>
         Separately-scored divisions of the field. Comma-separated — or pick an example:
-      </FieldDescription>
+      </Description>
       <div className="flex flex-wrap gap-1.5">
         {examples.map((example) => (
-          <button
+          <AriaButton
             key={example}
-            type="button"
-            onClick={() => onChange(example)}
+            onPress={() => onChange(example)}
             aria-label={`Use example: ${example}`}
-            className="inline-flex min-h-6 items-center rounded border bg-muted px-2 py-1 font-mono text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="inline-flex min-h-6 items-center rounded border bg-muted px-2 py-1 font-mono text-xs text-muted-foreground transition-colors outline-none data-hovered:bg-accent data-hovered:text-accent-foreground data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50"
           >
             {example}
-          </button>
+          </AriaButton>
         ))}
       </div>
-    </Field>
+    </AriaTextField>
   );
 }
 
