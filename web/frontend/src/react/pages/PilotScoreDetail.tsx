@@ -427,6 +427,8 @@ export function PilotScoreDetail() {
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [mapExpanded, setMapExpanded] = useState(false);
+  // Time scrubber: draw the track only up to this fix (null = whole flight).
+  const [scrubIndex, setScrubIndex] = useState<number | null>(null);
 
   // While the map is expanded to fill the viewport: Esc restores it, and the
   // page behind it must not scroll.
@@ -480,6 +482,7 @@ export function PilotScoreDetail() {
     if (!compId || !taskId || !pilotId) return;
     let cancelled = false;
     setFixes(null);
+    setScrubIndex(null);
     (async () => {
       try {
         const res = await fetch(
@@ -541,6 +544,13 @@ export function PilotScoreDetail() {
     if (!event) return;
     setSelectedItem(item.id);
     setFocus((prev) => ({ event, nonce: (prev?.nonce ?? 0) + 1 }));
+    // Show the flight only up to the clicked moment — when a pilot crosses
+    // the same cylinder repeatedly, the clipped track is what makes the
+    // sequence readable. Items without a real time (manual flights, derived
+    // points) leave the scrub where it was.
+    if (fixes && fixes.length > 1 && event.time.getTime() > 0) {
+      setScrubIndex(nearestFixIndexByTime(fixes, event.time.getTime()));
+    }
   };
 
   return (
@@ -573,15 +583,15 @@ export function PilotScoreDetail() {
         <div
           className={
             mapExpanded
-              ? "fixed inset-0 z-50 bg-background"
+              ? "fixed inset-0 z-50 flex flex-col bg-background"
               : "sticky top-0 z-10 -mx-4 bg-background px-4 pb-2 pt-2 sm:-mx-6 sm:px-6 lg:order-2 lg:top-4 lg:m-0 lg:p-0"
           }
         >
           <div
             className={`relative overflow-hidden ${
               mapExpanded
-                ? "h-full w-full"
-                : "h-56 rounded-lg border sm:h-72 lg:h-[calc(100vh-6rem)]"
+                ? "min-h-0 w-full flex-1"
+                : "h-56 rounded-lg border sm:h-72 lg:h-[calc(100vh-8rem)]"
             }`}
           >
             <Suspense
@@ -596,6 +606,7 @@ export function PilotScoreDetail() {
                 fixes={fixes}
                 events={markerEvents}
                 focus={focus}
+                scrubIndex={scrubIndex}
                 openDistanceLine={data.openDistanceLine}
                 bestProgressRoute={data.bestProgressRoute}
               />
@@ -613,10 +624,23 @@ export function PilotScoreDetail() {
               {mapExpanded ? <MinimizeIcon /> : <MaximizeIcon />}
             </button>
           </div>
+          {fixes && fixes.length > 1 ? (
+            <div className={mapExpanded ? "border-t px-4 py-2" : "mt-1.5"}>
+              <TrackScrubber
+                fixes={fixes}
+                scrubIndex={scrubIndex}
+                timezone={data.comp.timezone}
+                onScrub={setScrubIndex}
+              />
+            </div>
+          ) : null}
           {mapExpanded ? null : (
             <p className="mt-1 hidden text-xs text-muted-foreground lg:block">
               Click any highlighted step in the explanation to see where it
               happened.
+              {fixes && fixes.length > 1
+                ? " Drag the slider to trace the flight up to any moment."
+                : ""}
             </p>
           )}
         </div>
@@ -634,6 +658,78 @@ export function PilotScoreDetail() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Time scrubber
+// ---------------------------------------------------------------------------
+
+/**
+ * Index of the fix closest in time to `timeMs` (fix times are ascending).
+ * Binary search — tracklogs run to tens of thousands of fixes.
+ */
+function nearestFixIndexByTime(fixes: IGCFix[], timeMs: number): number {
+  let lo = 0;
+  let hi = fixes.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (fixes[mid].time.getTime() < timeMs) lo = mid + 1;
+    else hi = mid;
+  }
+  if (
+    lo > 0 &&
+    timeMs - fixes[lo - 1].time.getTime() < fixes[lo].time.getTime() - timeMs
+  ) {
+    return lo - 1;
+  }
+  return lo;
+}
+
+/**
+ * Map time scrubber: drag to draw the track only up to a moment — when a
+ * pilot crosses the same cylinder repeatedly, the clipped track is what
+ * makes the sequence readable. At the right end the scrub clears and the
+ * whole flight shows again.
+ *
+ * A native range input (not a kit slider) on purpose: it lets us set
+ * aria-valuetext to the wall-clock flight time, where the RAC/shadcn
+ * sliders would announce a meaningless fix index.
+ */
+function TrackScrubber({
+  fixes,
+  scrubIndex,
+  timezone,
+  onScrub,
+}: {
+  fixes: IGCFix[];
+  scrubIndex: number | null;
+  timezone: string | null;
+  onScrub: (index: number | null) => void;
+}) {
+  const max = fixes.length - 1;
+  const value = Math.min(scrubIndex ?? max, max);
+  const time = formatTimeInZone(fixes[value].time, timezone ?? undefined);
+  return (
+    <div className="flex items-center gap-3">
+      <input
+        type="range"
+        min={0}
+        max={max}
+        step={1}
+        value={value}
+        aria-label="Flight time"
+        aria-valuetext={time}
+        onChange={(e) => {
+          const v = Number(e.currentTarget.value);
+          onScrub(v >= max ? null : v);
+        }}
+        className="h-6 min-w-0 flex-1 accent-primary"
+      />
+      <span className="w-28 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+        {scrubIndex == null ? "Whole flight" : `Until ${time}`}
+      </span>
     </div>
   );
 }

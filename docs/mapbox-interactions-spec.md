@@ -46,6 +46,14 @@ Track is rendered as individual per-segment LineString features (one per consecu
 
 - **Fit bounds** — on track load, map fits to track bounding box with 50px padding, 1s animation
 
+- **Time scrub** (`setTrackScrub(index | null)`, used by the score-details page's scrubber)
+  - Clips the 2D track rendering to `fixes[0..index]` and shows a position dot at `index`: 14px circle, GPS-blue `#3b82f6` fill, 2.5px white ring, soft shadow (a DOM marker, so it survives style reloads)
+  - Altitude colours stay normalised against the FULL flight's min/max so they don't shift while scrubbing
+  - `null` restores the whole track and removes the dot; no-op when no track is loaded
+  - Never re-fits bounds and never pans — scrubbing only redraws the line
+  - Marker moves are applied immediately; geometry rebuilds are rAF-batched (at most one per frame during a drag)
+  - 2D only — 3D mode has its own drone-follow scrubber; `setTrack`/`clearTrack` reset the scrub
+
 ## Multi-Track (competition view)
 
 When multiple tracks are loaded (competition mode), single-track layers are hidden and every visible pilot's track renders at once.
@@ -250,7 +258,7 @@ When enabled via the "Show Track Metrics" command palette option, displays glide
 ## Visibility Toggles
 
 - **Task visibility** — toggles 9 task layers (cylinder fill/stroke, exit arrows, goal line, points, labels, segment labels, line, line arrows)
-- **Track visibility** — toggles all track layers (`track-line`, `track-line-outline`, `highlight-segment`) + 3D objects + event markers (markers hidden via `display: none`); clears highlights when hiding
+- **Track visibility** — toggles all track layers (`track-line`, `track-line-outline`, `highlight-segment`) + 3D objects + event markers and the time-scrub position dot (markers hidden via `display: none`); clears highlights when hiding
 
 ## Layer Ordering (bottom to top)
 
@@ -341,4 +349,4 @@ Freehand drawing overlay for scrawling on the map. Strokes are geo-anchored (per
 
 ## Style Reload Behaviour
 
-On style change, all custom sources/layers are re-added and current track/task/event data is restored via `restoreData()`. Terrain and sky layer are also re-added on every `style.load` event.
+On style change, all custom sources/layers are re-added and current track/task/event data is restored via `restoreData()` (including an active time-scrub clip, re-applied after `setTrack`). Terrain and sky layer are also re-added on every `style.load` event.
