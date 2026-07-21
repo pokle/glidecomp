@@ -3,7 +3,7 @@
  * Local IGC/XCTSK library backed by the same IndexedDB storage module the
  * (vanilla, imperative-map) analysis page uses.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/react/ui/tabs";
 import { Progress, ProgressLabel, ProgressValue } from "@/react/ui/progress";
@@ -20,6 +20,7 @@ import { useConfirm } from "../lib/confirm";
 import { goToSignIn, useUser } from "../lib/user";
 import { downloadFile, formatTaskDate, ordinal, relativeTime } from "../lib/format";
 import { api } from "../../comp/api";
+import { Tree, TreeItem, TreeItemContent, TreeChevron } from "../rac/tree";
 
 // Mirrors the server-side limits in
 // web/workers/competition-api/src/routes/user-files.ts (MAX_USER_*).
@@ -365,6 +366,11 @@ type CompFlight = Awaited<
  * the competition — no remove button; rows link out to the comp, the task,
  * and (once scored) the pilot's score detail page. Renders nothing until the
  * pilot has at least one competition flight.
+ *
+ * Grouped as a RAC Tree: one expandable row per competition (pilots fly the
+ * same comps year after year, so a flat list repeats the comp name per task),
+ * with the comp's flights as child rows. All groups start expanded — the
+ * tree is for scanning, not hiding.
  */
 function CompetitionFlightsSection() {
   const [flights, setFlights] = useState<CompFlight[]>([]);
@@ -387,51 +393,89 @@ function CompetitionFlightsSection() {
     };
   }, []);
 
+  // Group by comp, preserving the API's newest-task-first order both across
+  // groups (first appearance) and within them.
+  const groups = useMemo(() => {
+    const byComp = new Map<
+      string,
+      { comp_id: string; comp_name: string; flights: CompFlight[] }
+    >();
+    for (const f of flights) {
+      let group = byComp.get(f.comp_id);
+      if (!group) {
+        group = { comp_id: f.comp_id, comp_name: f.comp_name, flights: [] };
+        byComp.set(f.comp_id, group);
+      }
+      group.flights.push(f);
+    }
+    return [...byComp.values()];
+  }, [flights]);
+
   if (flights.length === 0) return null;
 
   return (
     <section className="mb-8">
       <h2 className="text-lg font-bold">Competition flights</h2>
-      <ul className="mt-3 divide-y rounded-lg border">
-        {flights.map((f) => (
-          <li
-            key={`${f.task_id}:${f.comp_pilot_id}`}
-            className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2"
-          >
-            <Link
-              to={`/comp/${f.comp_id}`}
-              className="font-medium underline underline-offset-4"
-            >
-              {f.comp_name}
-            </Link>
-            <span className="text-sm text-muted-foreground">
+      <Tree
+        aria-label="Competition flights"
+        selectionMode="none"
+        defaultExpandedKeys={groups.map((g) => g.comp_id)}
+        className="mt-3 divide-y rounded-lg border"
+      >
+        {groups.map((g) => (
+          <TreeItem key={g.comp_id} id={g.comp_id} textValue={g.comp_name}>
+            <TreeItemContent>
+              <TreeChevron />
               <Link
-                to={`/comp/${f.comp_id}/task/${f.task_id}`}
-                className="underline underline-offset-4"
+                to={`/comp/${g.comp_id}`}
+                className="font-medium underline underline-offset-4"
               >
-                {f.task_name}
+                {g.comp_name}
               </Link>
-            </span>
-            <span className="text-sm text-muted-foreground">
-              {formatTaskDate(f.task_date, { year: "numeric", month: "short", day: "numeric" })}
-              {f.kind === "manual" ? " · manual flight report" : ""}
-            </span>
-            <span className="ml-auto text-sm">
-              {f.rank != null ? (
-                <Link
-                  to={`/comp/${f.comp_id}/task/${f.task_id}/pilot/${f.comp_pilot_id}`}
-                  className="font-medium underline underline-offset-4"
-                  title={`View this flight's score (${f.pilot_class} class)`}
-                >
-                  {ordinal(f.rank)} of {f.class_size}
-                </Link>
-              ) : (
-                <span className="text-muted-foreground">Not scored yet</span>
-              )}
-            </span>
-          </li>
+              <span className="text-sm text-muted-foreground">
+                {g.flights.length} {g.flights.length === 1 ? "flight" : "flights"}
+              </span>
+            </TreeItemContent>
+            {g.flights.map((f) => (
+              <TreeItem
+                key={`${f.task_id}:${f.comp_pilot_id}`}
+                id={`${f.task_id}:${f.comp_pilot_id}`}
+                textValue={f.task_name}
+              >
+                <TreeItemContent>
+                  <Link
+                    to={`/comp/${f.comp_id}/task/${f.task_id}`}
+                    className="underline underline-offset-4"
+                  >
+                    {f.task_name}
+                  </Link>
+                  <span className="text-sm text-muted-foreground">
+                    {formatTaskDate(f.task_date, {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                    {f.kind === "manual" ? " · manual flight report" : ""}
+                  </span>
+                  <span className="ml-auto text-sm">
+                    {f.rank != null ? (
+                      <Link
+                        to={`/comp/${f.comp_id}/task/${f.task_id}/pilot/${f.comp_pilot_id}`}
+                        className="font-medium underline underline-offset-4"
+                        title={`View this flight's score (${f.pilot_class} class)`}
+                      >
+                        {ordinal(f.rank)} of {f.class_size}
+                      </Link>
+                    ) : (
+                      <span className="text-muted-foreground">Not scored yet</span>
+                    )}
+                  </span>
+                </TreeItemContent>
+              </TreeItem>
+            ))}
+          </TreeItem>
         ))}
-      </ul>
+      </Tree>
       <p className="mt-3 text-sm text-muted-foreground">
         Flights are managed by the competition. Contact the competition admin to delete.
       </p>
