@@ -23,10 +23,22 @@
  * site (a few seconds apart, with jitter) so we never hammer the AirScore host.
  * Tune with REQUEST_DELAY_MS (milliseconds between requests; default 3500).
  *
+ * FORMULA CAPTURE: each task's published `formula` block (the parameters
+ * AirScore actually scored it with) is kept verbatim in the manifest and
+ * mapped onto GlideComp gap_params via lib/airscore-formula-map.ts — the
+ * comp-wide shared values at the manifest top level, per-task differences on
+ * each task entry (legacy AirScore varies nominal distance per class and
+ * departure/arrival per task). Anything unmappable is recorded in the task's
+ * formula_warnings and printed loudly.
+ *
  * Usage:
  *   bun web/scripts/download-airscore-comp.ts                 # default comp
  *   bun web/scripts/download-airscore-comp.ts corryong-cup-2026
  *   REQUEST_DELAY_MS=6000 bun web/scripts/download-airscore-comp.ts
+ *   bun web/scripts/download-airscore-comp.ts --manifest-only [slug…]
+ *     # regenerate comp.json (formula capture included) from the raw JSONs
+ *     # already on disk — no network requests; all registry comps when no
+ *     # slug is given
  */
 
 import {
@@ -41,10 +53,25 @@ import { join, basename, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parseIGC } from '@glidecomp/engine';
+import { parseIGC, type GAPParameters } from '@glidecomp/engine';
+import {
+  mapAirscoreFormula,
+  sharedGapParams,
+  taskGapParamOverrides,
+  type AirscoreFormulaBlock,
+} from './lib/airscore-formula-map';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-const COMPS_ROOT = join(REPO_ROOT, 'web/samples/comps');
+/**
+ * Where comp folders live. Defaults to the bundled samples; point
+ * GLIDECOMP_COMPS_DIR at a checkout of pokle/glidecomp-archive's
+ * `comps/` directory to download/regenerate the back-catalogue there —
+ * history comps (`history: true` below) belong in the archive repo, not in
+ * this one (only each competition's most recent year is bundled here).
+ */
+const COMPS_ROOT = process.env.GLIDECOMP_COMPS_DIR
+  ? resolve(process.env.GLIDECOMP_COMPS_DIR)
+  : join(REPO_ROOT, 'web/samples/comps');
 
 // --- comp registry ---------------------------------------------------------
 
@@ -69,6 +96,14 @@ interface CompConfig {
    * its comp list. When omitted the seed script defaults to 'hg'.
    */
   category?: string;
+  /**
+   * Back-catalogue entry (see docs/2026-07-21-airscore-history-import-plan.md
+   * workstream 4): written into the manifest, where `bun run seed` skips the
+   * comp unless it's named explicitly or `--history` is passed — so the
+   * default dev seed stays fast while the registry can carry the whole
+   * history.
+   */
+  history?: boolean;
 }
 
 const HIGHCLOUD = 'https://xc.highcloud.net';
@@ -76,18 +111,53 @@ const HIGHCLOUD = 'https://xc.highcloud.net';
 /**
  * Helper for the Corryong Cup lineage: one event, two AirScore comps (open +
  * floater), merged here into one GlideComp comp with two pilot classes.
+ * Prior years are `history: true` — they live in pokle/glidecomp-archive
+ * (download with GLIDECOMP_COMPS_DIR pointing at its comps/ checkout), only
+ * the most recent year stays bundled in this repo.
  */
 function corryongCup(year: number, openComPk: number, floaterComPk: number): CompConfig {
   return {
     name: `Corryong Cup ${year}`,
     compName: `Corryong Cup ${year}`,
     host: HIGHCLOUD,
+    history: true,
     sources: [
       { comPk: openComPk, pilotClass: 'open' },
       { comPk: floaterComPk, pilotClass: 'floater' },
     ],
   };
 }
+
+/** One event published as two AirScore comps (open + a second class). */
+function twoClassComp(
+  name: string,
+  openComPk: number,
+  second: CompSource,
+  category?: string,
+): CompConfig {
+  return {
+    name,
+    compName: name,
+    host: HIGHCLOUD,
+    history: true,
+    ...(category ? { category } : {}),
+    sources: [{ comPk: openComPk, pilotClass: 'open' }, second],
+  };
+}
+
+/** A single-class history comp. */
+function oneClassComp(name: string, comPk: number, category?: string): CompConfig {
+  return {
+    name,
+    compName: name,
+    host: HIGHCLOUD,
+    history: true,
+    ...(category ? { category } : {}),
+    sources: [{ comPk, pilotClass: 'open' }],
+  };
+}
+
+const sports = (comPk: number): CompSource => ({ comPk, pilotClass: 'sports' });
 
 const COMPS: Record<string, CompConfig> = {
   'corryong-cup-2026': {
@@ -109,7 +179,7 @@ const COMPS: Record<string, CompConfig> = {
   'corryong-cup-2022': corryongCup(2022, 335, 336),
   'corryong-cup-2021': corryongCup(2021, 305, 308),
   // Dec 2020 stand-in for the Corryong Cup (COVID season); a single comp with
-  // no separate floater class.
+  // no separate floater class. Its only year, so it stays bundled.
   'unungra-cup-2020': {
     name: 'Unungra Cup',
     compName: 'Unungra Cup',
@@ -118,6 +188,32 @@ const COMPS: Record<string, CompConfig> = {
     sources: [{ comPk: 303, pilotClass: 'open' }],
   },
   'corryong-cup-2017': corryongCup(2017, 208, 209),
+
+  // --- history back-catalogue (2026-07-21 enumeration; all HG unless noted).
+  // Forbes Flatlands — the flagship flatlands HG comp; sports class is a
+  // separate AirScore comp from 2022 on.
+  'forbes-flatlands-2020': oneClassComp('Forbes Flatlands 2020', 283),
+  'forbes-flatlands-2022': twoClassComp('Forbes Flatlands 2022', 333, sports(334)),
+  'forbes-flatlands-2023': twoClassComp('Forbes Flatlands 2023', 365, sports(366)),
+  'forbes-flatlands-2024': twoClassComp('Forbes Flatlands 2024', 396, sports(398)),
+  'forbes-flatlands-2025': twoClassComp('Forbes Flatlands 2025', 434, sports(435)),
+  'forbes-flatlands-2026': twoClassComp('Forbes Flatlands 2026', 462, sports(463)),
+  // Dalby Big Air (HG, aerotow).
+  'dalby-big-air-2021': oneClassComp('Dalby Big Air 2021', 316),
+  'dalby-big-air-2022': twoClassComp('Dalby Big Air 2022', 343, sports(347)),
+  'dalby-big-air-2023': twoClassComp('Dalby Big Air 2023', 375, sports(376)),
+  'dalby-big-air-2024': twoClassComp('Dalby Big Air 2024', 407, sports(408)),
+  'dalby-big-air-2025': oneClassComp('Dalby Big Air 2025', 446),
+  'dalby-big-air-2026': twoClassComp('Dalby Big Air 2026', 493, { comPk: 494, pilotClass: 'floater' }),
+  // Bright Open (PG) — also the candidate pool for a gap-2020+ PG parity
+  // fixture (the engine's 's7f2020' generation).
+  'bright-open-2020': oneClassComp('Bright Open 2020', 281, 'pg'),
+  'bright-open-2021': oneClassComp('Bright Open 2021', 310, 'pg'),
+  'bright-open-2022': oneClassComp('Bright Open 2022', 317, 'pg'),
+  'bright-open-2023': oneClassComp('Bright Open 2023', 370, 'pg'),
+  'bright-open-2024': oneClassComp('Bright Open 2024', 402, 'pg'),
+  'bright-open-2025': oneClassComp('Bright Open 2025', 431, 'pg'),
+  'bright-open-2026': oneClassComp('Bright Open 2026', 464, 'pg'),
 };
 
 // --- polite HTTP -----------------------------------------------------------
@@ -133,12 +229,37 @@ const pace = () => sleep(BASE_DELAY_MS + Math.floor(Math.random() * 1500));
 
 let requestCount = 0;
 
+/**
+ * curl fallback for environments where Bun's fetch can't tunnel through the
+ * local TLS-terminating egress proxy (the CONNECT succeeds but the TLS
+ * handshake is reset). curl honours the same proxy env vars and the system
+ * CA store, so it works wherever plain `curl <url>` does.
+ */
+function curlRequest(url: string, form?: Record<string, string>): Buffer {
+  const args = ['-sS', '--fail', '-A', UA, '--max-time', '300'];
+  if (form) {
+    args.push('-X', 'POST', '--data', new URLSearchParams(form).toString());
+    args.push('-H', 'Content-Type: application/x-www-form-urlencoded');
+  }
+  args.push(url);
+  const res = spawnSync('curl', args, { maxBuffer: 256 * 1024 * 1024 });
+  if (res.status !== 0) {
+    throw new Error(`curl ${url} → exit ${res.status}: ${res.stderr?.toString()}`);
+  }
+  return res.stdout;
+}
+
 async function getText(url: string): Promise<string> {
   await pace();
   requestCount++;
-  const res = await fetch(url, { headers: { 'User-Agent': UA } });
-  if (!res.ok) throw new Error(`GET ${url} → ${res.status}`);
-  return res.text();
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': UA } });
+    if (!res.ok) throw new Error(`GET ${url} → ${res.status}`);
+    return res.text();
+  } catch (err) {
+    if (err instanceof Error && /^GET .* → \d+$/.test(err.message)) throw err;
+    return curlRequest(url).toString('utf-8'); // socket-level failure → curl
+  }
 }
 
 async function getJson<T = any>(url: string): Promise<T> {
@@ -148,16 +269,22 @@ async function getJson<T = any>(url: string): Promise<T> {
 async function postForm(url: string, form: Record<string, string>): Promise<ArrayBuffer> {
   await pace();
   requestCount++;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': UA,
-    },
-    body: new URLSearchParams(form).toString(),
-  });
-  if (!res.ok) throw new Error(`POST ${url} → ${res.status}`);
-  return res.arrayBuffer();
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': UA,
+      },
+      body: new URLSearchParams(form).toString(),
+    });
+    if (!res.ok) throw new Error(`POST ${url} → ${res.status}`);
+    return res.arrayBuffer();
+  } catch (err) {
+    if (err instanceof Error && /^POST .* → \d+$/.test(err.message)) throw err;
+    const buf = curlRequest(url, form); // socket-level failure → curl
+    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+  }
 }
 
 // --- time helpers (AirScore publishes local HH:MM:SS; xctsk gates are Z) ----
@@ -237,7 +364,7 @@ function buildXctsk(
     sss: {
       direction: source.sss?.direction ?? 'EXIT',
       timeGates,
-      type: source.sss?.type ?? 'RACE',
+      type: sssTypeForTaskType(taskType, source.sss?.type),
     },
     taskType: source.taskType ?? 'CLASSIC',
     turnpoints,
@@ -263,7 +390,13 @@ function extractTracks(zipBuf: ArrayBuffer, dir: string, taskDateIso: string): n
   const res = spawnSync('unzip', ['-o', '-q', '-j', zipPath, '-d', dir]);
   rmSync(zipPath);
   if (res.status !== 0) {
-    throw new Error(`unzip failed: ${res.stderr?.toString() || res.stdout?.toString()}`);
+    // A task nobody flew (published data: null) serves an invalid "zip" —
+    // keep the task with zero tracks rather than failing the whole comp.
+    console.warn(
+      `  WARNING ${basename(dir)}: tracks zip did not extract (empty task?): ` +
+        `${(res.stderr?.toString() || res.stdout?.toString() || '').trim().slice(0, 200)}`,
+    );
+    return 0;
   }
 
   const stamp = dateToDDMMYY(taskDateIso);
@@ -298,6 +431,217 @@ interface TaskManifestEntry {
   tasPk: number;
   comPk: number;
   task_type: string;
+  /** The AirScore-published formula block, verbatim (provenance). */
+  airscore_formula?: AirscoreFormulaBlock;
+  /** Mapped GAP-parameter overrides where this task differs from the comp's
+   * shared gap_params. Omitted when the task matches the shared base. */
+  gap_params?: Partial<GAPParameters>;
+  /** Everything the published formula says that GlideComp can't reproduce. */
+  formula_warnings?: string[];
+}
+
+// --- formula capture (disk-based: works for downloads and --manifest-only) --
+
+/**
+ * Read a task folder's published formula block + the task-level hbess flag.
+ * Normal folders keep the verbatim result in airscore-result-raw.json. A
+ * `.curated` parity fixture keeps only a trimmed airscore-result.json whose
+ * top level still records formula/departure/arrival — enough to overlay on a
+ * sibling task's block (legacy AirScore stores the formula per comp; only
+ * departure/arrival/hbess vary per task).
+ */
+interface RawTaskWaypoint {
+  tawType: string;
+  tawHow: string;
+}
+
+function readTaskFormulaFromDisk(dir: string): {
+  block: AirscoreFormulaBlock | null;
+  curatedOverlay: Partial<AirscoreFormulaBlock> | null;
+  hbess: string | undefined;
+  rawWaypoints: RawTaskWaypoint[] | null;
+} {
+  const rawPath = join(dir, 'airscore-result-raw.json');
+  if (existsSync(rawPath)) {
+    const raw = JSON.parse(readFileSync(rawPath, 'utf-8'));
+    return {
+      block: (raw.formula ?? null) as AirscoreFormulaBlock | null,
+      curatedOverlay: null,
+      hbess: raw.task?.hbess,
+      rawWaypoints: Array.isArray(raw.task?.waypoints) ? raw.task.waypoints : null,
+    };
+  }
+  const trimmedPath = join(dir, 'airscore-result.json');
+  if (existsSync(trimmedPath)) {
+    const trimmed = JSON.parse(readFileSync(trimmedPath, 'utf-8'));
+    const overlay: Partial<AirscoreFormulaBlock> = {};
+    if (typeof trimmed.formula === 'string') overlay.formula = trimmed.formula;
+    if (typeof trimmed.departure === 'string') overlay.departure = trimmed.departure;
+    if (typeof trimmed.arrival === 'string') overlay.arrival = trimmed.arrival;
+    return { block: null, curatedOverlay: overlay, hbess: undefined, rawWaypoints: null };
+  }
+  return { block: null, curatedOverlay: null, hbess: undefined, rawWaypoints: null };
+}
+
+/**
+ * The xctsk SSS type for a legacy AirScore task type. Legacy semantics
+ * (verified against published per-pilot start times):
+ * - `speedrun-interval` — start gates at intervals; pilots snap to the last
+ *   gate at/before their crossing → xctsk RACE with a gate grid.
+ * - `speedrun` — ELAPSED TIME: each pilot is timed from their own start
+ *   crossing (published starts are arbitrary seconds, e.g. 16:16:37) →
+ *   xctsk ELAPSED-TIME. 35 of the 59 originally-bundled tasks are this
+ *   type and were previously built as RACE, timing every pilot from the
+ *   window-open gate.
+ * - `race` — a single start gate → RACE.
+ */
+function sssTypeForTaskType(taskType: string, sourceType?: string): string {
+  if (/interval/i.test(taskType)) return 'RACE';
+  if (/speedrun/i.test(taskType)) return 'ELAPSED-TIME';
+  if (/race/i.test(taskType)) return 'RACE';
+  return sourceType ?? 'RACE';
+}
+
+/**
+ * The turnpoint types the task SHOULD have, derived from the published
+ * result's waypoint roles (`tawType`) — the authoritative record of how
+ * AirScore scored the course.
+ *
+ * xc.highcloud.net's `download_task.php` export maps tawType start→TAKEOFF,
+ * speed→SSS, endspeed→ESS. That's right for tasks that have a separate
+ * `speed` turnpoint (the 2026 comps), but every earlier bundled task has NO
+ * `speed` waypoint: its `start` (the big exit ring the start gates apply
+ * to) IS the speed-section start, yet the export still labels it TAKEOFF —
+ * leaving the xctsk with no SSS at all, so the engine's SSS fallback (first
+ * turnpoint) starts the speed section from the wrong cylinder and every
+ * speed-section time is wrong. Rules:
+ *
+ * - `speed`   → SSS; then `start` → TAKEOFF.
+ * - no `speed`: `start` → SSS; a lone leading `waypoint` right before it
+ *   (the launch marker, e.g. ELLIOT 500 m) → TAKEOFF.
+ * - `endspeed` → ESS. No `endspeed` → untyped: the engine's ESS fallback
+ *   (goal) matches legacy AirScore's end-of-speed-section default.
+ */
+function desiredTurnpointTypes(rawWaypoints: RawTaskWaypoint[]): Array<string | undefined> {
+  const hasSpeed = rawWaypoints.some((w) => w.tawType === 'speed');
+  const sssIndex = rawWaypoints.findIndex((w) =>
+    hasSpeed ? w.tawType === 'speed' : w.tawType === 'start',
+  );
+  return rawWaypoints.map((w, i) => {
+    if (w.tawType === 'speed') return 'SSS';
+    if (w.tawType === 'start') return hasSpeed ? 'TAKEOFF' : 'SSS';
+    if (w.tawType === 'endspeed') return 'ESS';
+    if (w.tawType === 'waypoint' && i === 0 && sssIndex === 1) return 'TAKEOFF';
+    return undefined;
+  });
+}
+
+/**
+ * Repair a non-curated task's xctsk against the published result: correct
+ * the turnpoint types (see {@link desiredTurnpointTypes}) and stamp the
+ * comp's published cylinder tolerance (error_margin — e.g. 0.0005 = 0.05%),
+ * so crossing detection uses the same band AirScore scored with instead of
+ * the 0.5% club default. Idempotent; curated fixtures are never touched.
+ */
+function repairTaskXctsk(
+  dir: string,
+  tolerance: number | undefined,
+  rawWaypoints: RawTaskWaypoint[] | null,
+  taskType: string,
+): void {
+  if (existsSync(join(dir, '.curated'))) return;
+  const path = join(dir, 'task.xctsk');
+  if (!existsSync(path)) return;
+  const xctsk = JSON.parse(readFileSync(path, 'utf-8'));
+  let changed = false;
+
+  if (tolerance !== undefined && xctsk.cylinderTolerance !== tolerance) {
+    xctsk.cylinderTolerance = tolerance;
+    changed = true;
+  }
+
+  const sssType = sssTypeForTaskType(taskType, xctsk.sss?.type);
+  if (xctsk.sss && xctsk.sss.type !== sssType) {
+    console.warn(`  repaired ${basename(dir)} sss.type: ${xctsk.sss.type} → ${sssType} (task_type "${taskType}")`);
+    xctsk.sss.type = sssType;
+    changed = true;
+  }
+
+  if (rawWaypoints && Array.isArray(xctsk.turnpoints)) {
+    if (xctsk.turnpoints.length === rawWaypoints.length) {
+      const desired = desiredTurnpointTypes(rawWaypoints);
+      xctsk.turnpoints.forEach((tp: { type?: string }, i: number) => {
+        if ((tp.type ?? undefined) === desired[i]) return;
+        if (desired[i] === undefined) delete tp.type;
+        else tp.type = desired[i];
+        changed = true;
+        console.warn(
+          `  repaired ${basename(dir)} turnpoint ${i}: type ${JSON.stringify(tp.type ?? null)} (from tawType "${rawWaypoints[i].tawType}")`,
+        );
+      });
+    } else {
+      console.warn(
+        `  WARNING ${basename(dir)}: xctsk has ${xctsk.turnpoints.length} turnpoints but the published result has ${rawWaypoints.length} — type repair skipped`,
+      );
+    }
+  }
+
+  if (changed) writeFileSync(path, JSON.stringify(xctsk, null, 2));
+}
+
+/**
+ * Annotate the manifest's task entries with the formula AirScore scored each
+ * task with (verbatim + mapped), patch the task xctsk tolerance, and return
+ * the comp-level shared gap_params. Reads everything from disk, so it serves
+ * both a fresh download (raw JSONs just written) and --manifest-only.
+ */
+function annotateFormula(
+  cfg: CompConfig,
+  tasks: TaskManifestEntry[],
+): Partial<GAPParameters> | null {
+  const category = (cfg.category === 'pg' ? 'pg' : 'hg') as 'hg' | 'pg';
+
+  // Pass 1: read each folder's block; collect per-class consensus for the
+  // curated-fixture fallback.
+  const read = tasks.map((t) => readTaskFormulaFromDisk(join(COMPS_ROOT, t.dir)));
+  const classBlock = new Map<string, AirscoreFormulaBlock>();
+  tasks.forEach((t, i) => {
+    const b = read[i].block;
+    if (b && !classBlock.has(t.pilot_class)) classBlock.set(t.pilot_class, b);
+  });
+
+  const mapped: Array<Partial<GAPParameters> | null> = tasks.map((t, i) => {
+    let block = read[i].block;
+    if (!block && read[i].curatedOverlay) {
+      const sibling = classBlock.get(t.pilot_class);
+      if (sibling) block = { ...sibling, ...read[i].curatedOverlay };
+    }
+    if (!block) {
+      console.warn(`  WARNING ${t.dir}: no published formula on disk — task seeds under comp defaults`);
+      return null;
+    }
+    const { gapParams, cylinderTolerance, warnings } = mapAirscoreFormula(
+      block, category, { hbess: read[i].hbess },
+    );
+    t.airscore_formula = block;
+    if (warnings.length > 0) {
+      t.formula_warnings = warnings;
+      for (const w of warnings) console.warn(`  WARNING ${t.dir}: ${w}`);
+    }
+    repairTaskXctsk(join(COMPS_ROOT, t.dir), cylinderTolerance, read[i].rawWaypoints, t.task_type);
+    return gapParams;
+  });
+
+  const present = mapped.filter((m): m is Partial<GAPParameters> => m !== null);
+  if (present.length === 0) return null;
+  const shared = sharedGapParams(present);
+  tasks.forEach((t, i) => {
+    const m = mapped[i];
+    if (!m) return;
+    const overrides = taskGapParamOverrides(m, shared);
+    if (overrides) t.gap_params = overrides;
+  });
+  return shared;
 }
 
 async function downloadComp(slug: string): Promise<void> {
@@ -404,6 +748,10 @@ async function downloadComp(slug: string): Promise<void> {
     console.log(`\n▶ waypoints: region ${regionName ?? regPk} (${wptJson.waypoints?.length ?? 0} points)`);
   }
 
+  // Formula capture: annotate each task with the AirScore-published formula
+  // (verbatim + mapped gap_params) from the raw JSONs written above.
+  const gapParams = annotateFormula(cfg, tasks);
+
   // comp.json manifest — the seed script's source of truth for this comp.
   const manifest = {
     name: cfg.name,
@@ -411,8 +759,10 @@ async function downloadComp(slug: string): Promise<void> {
     source_host: cfg.host,
     ...(cfg.compName ? { comp_name: cfg.compName } : {}),
     ...(cfg.category ? { category: cfg.category } : {}),
+    ...(cfg.history ? { history: true } : {}),
     classes,
     waypoint_region: regPk ? { regPk: Number(regPk), name: regionName ?? null } : null,
+    ...(gapParams ? { gap_params: gapParams } : {}),
     tasks,
   };
   writeFileSync(join(metaDir, 'comp.json'), JSON.stringify(manifest, null, 2));
@@ -421,9 +771,57 @@ async function downloadComp(slug: string): Promise<void> {
     `\nDone. ${tasks.length} tasks across ${classes.length} classes ` +
       `(${classes.join(', ')}); ${requestCount} requests.`,
   );
-  console.log(`  Manifest: ${join('web/samples/comps', slug, 'comp.json')}`);
+  console.log(`  Manifest: ${join(COMPS_ROOT, slug, 'comp.json')}`);
   console.log(`  Seed it:  bun run seed`);
 }
 
-const slug = process.argv[2] ?? 'corryong-cup-2026';
-await downloadComp(slug);
+/**
+ * Regenerate a comp's manifest (formula capture included) from what's on
+ * disk — no network. Preserves the existing manifest's identity fields and
+ * task list; only the formula annotations (and xctsk tolerances) change.
+ */
+function regenerateManifest(slug: string): void {
+  const cfg = COMPS[slug];
+  if (!cfg) throw new Error(`Unknown comp "${slug}". Known: ${Object.keys(COMPS).join(', ')}`);
+  const manifestPath = join(COMPS_ROOT, slug, 'comp.json');
+  if (!existsSync(manifestPath)) {
+    throw new Error(`No manifest at ${manifestPath} — download the comp first`);
+  }
+  const existing = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+  console.log(`Regenerating manifest for "${cfg.name}" (${slug})…`);
+  const tasks: TaskManifestEntry[] = (existing.tasks as TaskManifestEntry[]).map((t) => ({
+    pilot_class: t.pilot_class,
+    name: t.name,
+    date: t.date,
+    dir: t.dir,
+    tasPk: t.tasPk,
+    comPk: t.comPk,
+    task_type: t.task_type,
+  }));
+  const gapParams = annotateFormula(cfg, tasks);
+  const manifest = {
+    name: existing.name,
+    slug: existing.slug,
+    source_host: existing.source_host,
+    ...(existing.comp_name ? { comp_name: existing.comp_name } : {}),
+    ...(existing.category ? { category: existing.category } : {}),
+    ...(cfg.history ? { history: true } : {}),
+    classes: existing.classes,
+    waypoint_region: existing.waypoint_region ?? null,
+    ...(gapParams ? { gap_params: gapParams } : {}),
+    tasks,
+  };
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  console.log(`  wrote ${join('web/samples/comps', slug, 'comp.json')}`);
+}
+
+const cliArgs = process.argv.slice(2);
+const MANIFEST_ONLY = cliArgs.includes('--manifest-only');
+const cliSlugs = cliArgs.filter((a) => !a.startsWith('--'));
+if (MANIFEST_ONLY) {
+  for (const slug of cliSlugs.length > 0 ? cliSlugs : Object.keys(COMPS)) {
+    regenerateManifest(slug);
+  }
+} else {
+  await downloadComp(cliSlugs[0] ?? 'corryong-cup-2026');
+}

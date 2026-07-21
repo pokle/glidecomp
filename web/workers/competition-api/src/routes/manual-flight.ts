@@ -16,6 +16,7 @@ import {
   markLandedFromEvidence,
   type ManualFlightInput,
 } from "../manual-flight-store";
+import { mergeStoredGapParamsJson } from "../scoring";
 
 type Variables = {
   user: AuthUser;
@@ -65,21 +66,32 @@ function formatKm(metres: number): string {
   return `${(metres / 1000).toFixed(1)} km`;
 }
 
-/** Load task xctsk + comp gap_params + scoring_format, verifying the task
- * belongs to the comp. */
+/** Load task xctsk + gap_params (task overrides merged over the comp's) +
+ * scoring_format, verifying the task belongs to the comp. */
 async function loadScoringTask(
   db: D1Database,
   compId: number,
   taskId: number
 ): Promise<{ xctsk: string | null; gap_params: string | null; scoring_format: string | null } | null> {
-  return db
+  const row = await db
     .prepare(
-      `SELECT t.xctsk, c.gap_params, c.scoring_format
+      `SELECT t.xctsk, t.gap_params AS task_gap_params, c.gap_params, c.scoring_format
        FROM task t JOIN comp c ON c.comp_id = t.comp_id
        WHERE t.task_id = ? AND t.comp_id = ?`
     )
     .bind(taskId, compId)
-    .first<{ xctsk: string | null; gap_params: string | null; scoring_format: string | null }>();
+    .first<{
+      xctsk: string | null;
+      task_gap_params: string | null;
+      gap_params: string | null;
+      scoring_format: string | null;
+    }>();
+  if (!row) return null;
+  return {
+    xctsk: row.xctsk,
+    gap_params: mergeStoredGapParamsJson(row.gap_params, row.task_gap_params),
+    scoring_format: row.scoring_format,
+  };
 }
 
 /** The turnpoint's display name for an audit line ("Goal", or the waypoint

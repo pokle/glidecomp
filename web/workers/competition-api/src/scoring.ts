@@ -471,6 +471,27 @@ function buildClassScore(
   };
 }
 
+/**
+ * Merge a task's stored GAP-parameter overrides over the comp's stored
+ * params, returning the combined JSON (or null when neither stored any).
+ *
+ * task.gap_params (migration 0021) exists for imported AirScore history,
+ * where the published formula varies per task inside one comp (nominal
+ * distances per class, departure/arrival flags per task). Task values win
+ * field-by-field; a field no task pinned still follows the comp settings
+ * dialog. Every scoring read path merges through here so the published
+ * score, the transparency narrative, the field analysis and the 3D pack
+ * all resolve identical parameters.
+ */
+export function mergeStoredGapParamsJson(
+  compJson: string | null,
+  taskJson: string | null
+): string | null {
+  if (!taskJson) return compJson;
+  if (!compJson) return taskJson;
+  return JSON.stringify({ ...JSON.parse(compJson), ...JSON.parse(taskJson) });
+}
+
 /** One active, scoreable track row joined with its pilot. */
 export interface ScoredTrackRow {
   task_track_id: number;
@@ -528,10 +549,11 @@ export async function resolveTaskScoringConfig(
   taskId: number,
   db: D1Database
 ): Promise<TaskScoringConfig> {
-  // Load task + comp gap_params
+  // Load task + comp gap_params (task overrides merge over comp values)
   const taskRow = await db
     .prepare(
       `SELECT t.task_id, t.comp_id, t.task_date, t.xctsk, t.stop_announcement_time,
+              t.gap_params AS task_gap_params,
               c.category, c.gap_params, c.scoring_format, c.creation_date
        FROM task t
        JOIN comp c ON t.comp_id = c.comp_id
@@ -545,12 +567,17 @@ export async function resolveTaskScoringConfig(
       category: string;
       xctsk: string;
       stop_announcement_time: string | null;
+      task_gap_params: string | null;
       gap_params: string | null;
       scoring_format: string | null;
       creation_date: string;
     }>();
 
   if (!taskRow) throw new Error("Task not found");
+  taskRow.gap_params = mergeStoredGapParamsJson(
+    taskRow.gap_params,
+    taskRow.task_gap_params
+  );
 
   const scoringFormat: "gap" | "open_distance" =
     taskRow.scoring_format === "open_distance" ? "open_distance" : "gap";
@@ -1513,7 +1540,7 @@ export async function computePilotAnalysis(
 ): Promise<PilotAnalysisResponse | null> {
   const taskRow = await db
     .prepare(
-      `SELECT t.xctsk, t.stop_announcement_time,
+      `SELECT t.xctsk, t.stop_announcement_time, t.gap_params AS task_gap_params,
               c.gap_params, c.scoring_format, c.category, c.creation_date
        FROM task t
        JOIN comp c ON t.comp_id = c.comp_id
@@ -1523,12 +1550,17 @@ export async function computePilotAnalysis(
     .first<{
       xctsk: string;
       stop_announcement_time: string | null;
+      task_gap_params: string | null;
       gap_params: string | null;
       scoring_format: string | null;
       category: string;
       creation_date: string;
     }>();
   if (!taskRow || !taskRow.xctsk) return null;
+  taskRow.gap_params = mergeStoredGapParamsJson(
+    taskRow.gap_params,
+    taskRow.task_gap_params
+  );
 
   const track = await db
     .prepare(

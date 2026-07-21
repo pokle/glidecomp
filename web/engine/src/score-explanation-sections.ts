@@ -1023,7 +1023,10 @@ export function leadingWeightDetail(params: GAPParameters): string | undefined {
     const ratioPct = Math.round(params.leadingTimeRatio * 100);
     return `Leading weight follows the FAI S7F 2024 §10 formula: ${ratioPct}% of the non-distance weight (LeadingTimeRatio) goes to leading when someone makes goal, and all of it when nobody does.`;
   }
-  return 'Leading weight follows the GAP2020 formula (AirScore parity): 35% of the non-distance weight when someone makes goal, and 0.1 × best distance ÷ task distance when nobody does.';
+  if (params.leadingWeightFormula === 's7f2020') {
+    return 'Weights follow the FAI S7F 2020–2022 §10 formula (PWC-derived): distance weight 0.838 when nobody makes goal, else 0.805 − 1.374·GR + 1.413·GR² − 0.484·GR³; leading weight fixed at 0.162; time takes the remainder.';
+  }
+  return 'Leading weight follows the GAP2020 formula (the GAP2016/2018 weights, AirScore legacy parity): 35% of the non-distance weight when someone makes goal, and 0.1 × best distance ÷ task distance when nobody does.';
 }
 
 /**

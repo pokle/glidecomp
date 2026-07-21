@@ -267,19 +267,32 @@ export function calculateWeights(inputs: WeightInputs): WeightFractions {
   } = inputs;
   const gr = goalRatio;
 
-  // Distance weight (same for PG and HG)
-  const dw = 0.9 - 1.665 * gr + 1.713 * gr * gr - 0.587 * gr * gr * gr;
+  // Distance weight: the shared polynomial for HG (identical in every
+  // generation) and for PG under the GAP2016/2018 and S7F-2024 generations.
+  // The S7F 2020–2022 PG generation ('s7f2020') replaced it with PWC-derived
+  // fixed weights (S7F 2020 §10): 0.838 when nobody makes goal, else its own
+  // polynomial.
+  const s7f2020Pg = scoring === 'PG' && leadingWeightFormula === 's7f2020';
+  const dw = s7f2020Pg
+    ? (gr === 0 ? 0.838 : 0.805 - 1.374 * gr + 1.413 * gr * gr - 0.484 * gr * gr * gr)
+    : 0.9 - 1.665 * gr + 1.713 * gr * gr - 0.587 * gr * gr * gr;
 
   // Arrival weight: HG only, when enabled
   const aw = (scoring === 'HG' && useArrival) ? (1 - dw) / 8 : 0;
 
   // Leading weight. Hang gliding is generation-independent; paragliding
   // picks between the legacy split (stored as 'gap2020', actually the
-  // GAP2016/2018 formula — see GAPParameters.leadingWeightFormula) and the
-  // S7F-2024 §10 formula.
+  // GAP2016/2018 formula — see GAPParameters.leadingWeightFormula), the
+  // S7F 2020–2022 PWC weights, and the S7F-2024 §10 formula.
   let lw: number;
   if (!useLeading) {
     lw = 0;
+  } else if (s7f2020Pg) {
+    // S7F 2020–2022 §10: PG leading weight is fixed at 0.162 whenever
+    // leading is on; time takes the remainder, which comes out exactly 0
+    // when nobody makes goal (0.838 + 0.162 = 1 — PG time points are
+    // unearnable without goal).
+    lw = 0.162;
   } else if (scoring === 'PG' && leadingWeightFormula === 's7f2024') {
     // FAI S7F 2024 §10: leading takes LeadingTimeRatio of the non-distance
     // weight when someone makes goal; when nobody does (GoalRatio = 0) PG
