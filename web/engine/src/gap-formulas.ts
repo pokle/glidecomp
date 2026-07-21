@@ -274,7 +274,9 @@ export function calculateWeights(inputs: WeightInputs): WeightFractions {
   const aw = (scoring === 'HG' && useArrival) ? (1 - dw) / 8 : 0;
 
   // Leading weight. Hang gliding is generation-independent; paragliding
-  // picks between the GAP2020/AirScore split and the S7F-2024 §10 formula.
+  // picks between the legacy split (stored as 'gap2020', actually the
+  // GAP2016/2018 formula — see GAPParameters.leadingWeightFormula) and the
+  // S7F-2024 §10 formula.
   let lw: number;
   if (!useLeading) {
     lw = 0;

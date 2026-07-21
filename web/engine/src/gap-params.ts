@@ -46,9 +46,13 @@ export interface GAPParameters {
    * Which generation of the *leading-weight* formula distributes the
    * non-distance weight between leading and time — a paragliding-only
    * choice (hang-gliding weights are identical across generations):
-   * - 'gap2020'  — GAP2020/2021, matching AirScore's presets (the default,
-   *   preserving historical scores). PG leading weight is 0.35 × (1 − DW)
-   *   when someone makes goal, and 0.1 × BestDist/TaskDist when nobody does.
+   * - 'gap2020'  — the stored name is historical: this is the GAP2016/2018
+   *   formula (CIVL GAP 2018 §10, AirScore's legacy GAP library), kept as
+   *   the default to preserve historical scores. PG leading weight is
+   *   0.35 × (1 − DW) when someone makes goal, and 0.1 × BestDist/TaskDist
+   *   when nobody does. The real S7F 2020–2022 generation (PWC-derived
+   *   fixed PG weights: DW 0.838/0.805-poly, leading 0.162 — what
+   *   AirScore's gap2020/gap2021 presets ship) is NOT implemented.
    * - 's7f2024'  — the 2024 FAI Sporting Code S7F §10 formula. PG leading
    *   weight is (1 − DW) × {@link GAPParameters.leadingTimeRatio} when
    *   someone makes goal, and the *entire* non-distance weight (1 − DW)
