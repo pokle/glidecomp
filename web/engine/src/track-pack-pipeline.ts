@@ -11,7 +11,7 @@
  * CLI; R2 + CompressionStream in the Worker), keeping this Worker-portable.
  */
 
-import { parseIGC } from './igc-parser';
+import { parseIGC, fixAltitude } from './igc-parser';
 import { parseXCTask, type XCTask } from './xctsk-parser';
 import { calculateOptimizedTaskDistance } from './task-optimizer';
 import { scoreTask, DEFAULT_GAP_PARAMETERS, type GAPParameters, type PilotFlight } from './gap-scoring';
@@ -68,7 +68,7 @@ export function packTracksFromIgc(input: PackFromIgcInput): PackedTracks {
         lat: f.latitude,
         lon: f.longitude,
         // Prefer GNSS altitude; fall back to pressure when GNSS is absent.
-        alt: f.gnssAltitude || f.pressureAltitude,
+        alt: fixAltitude(f),
         t: Math.round(f.time.getTime() / 1000),
       }))
       .sort((a, b) => a.t - b.t);

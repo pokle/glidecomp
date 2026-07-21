@@ -16,6 +16,17 @@ export interface IGCFix {
   valid: boolean;
 }
 
+/**
+ * A fix's altitude for analysis: GNSS, falling back to pressure when the
+ * logger wrote the GNSS field as 0 (the IGC "no GPS altitude" sentinel —
+ * dropout fixes, pressure-only instruments). THE canonical altitude read;
+ * every consumer must use it rather than raw gnssAltitude, or one dropout
+ * fix reads as sea level.
+ */
+export function fixAltitude(fix: IGCFix): number {
+  return fix.gnssAltitude !== 0 ? fix.gnssAltitude : fix.pressureAltitude;
+}
+
 export interface IGCHeader {
   date?: Date;
   pilot?: string;

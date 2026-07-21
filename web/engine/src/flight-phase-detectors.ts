@@ -6,7 +6,7 @@
  * each detected segment into its pair of boundary FlightEvents.
  */
 
-import { IGCFix } from './igc-parser';
+import { IGCFix, fixAltitude } from './igc-parser';
 import { calculateTrackDistance } from './geo';
 import type { DetectionThresholds } from './thresholds';
 import type {
@@ -30,13 +30,17 @@ function buildThermalSegment(fixes: IGCFix[], startIndex: number, endIndex: numb
     sumLon += fixes[j].longitude;
   }
   const count = endIndex - startIndex + 1;
-  const altGain = fixes[endIndex].gnssAltitude - fixes[startIndex].gnssAltitude;
+  // fixAltitude, not raw gnssAltitude: a zero-GNSS dropout fix on a segment
+  // boundary would otherwise record an entry/exit at sea level and poison
+  // every downstream consumer (the field-analysis working band is a p10 over
+  // exactly these values).
+  const altGain = fixAltitude(fixes[endIndex]) - fixAltitude(fixes[startIndex]);
 
   return {
     startIndex,
     endIndex,
-    startAltitude: fixes[startIndex].gnssAltitude,
-    endAltitude: fixes[endIndex].gnssAltitude,
+    startAltitude: fixAltitude(fixes[startIndex]),
+    endAltitude: fixAltitude(fixes[endIndex]),
     avgClimbRate: altGain / duration,
     duration,
     location: { lat: sumLat / count, lon: sumLon / count },
@@ -137,13 +141,14 @@ function buildGlideSegment(fixes: IGCFix[], startIdx: number, endIdx: number, mi
   if (duration <= minGlideDuration) return null;
 
   const totalDist = calculateTrackDistance(fixes, startIdx, endIdx);
-  const altLoss = fixes[startIdx].gnssAltitude - fixes[endIdx].gnssAltitude;
+  // Same zero-GNSS guard as buildThermalSegment — glideRatio divides by this.
+  const altLoss = fixAltitude(fixes[startIdx]) - fixAltitude(fixes[endIdx]);
 
   return {
     startIndex: startIdx,
     endIndex: endIdx,
-    startAltitude: fixes[startIdx].gnssAltitude,
-    endAltitude: fixes[endIdx].gnssAltitude,
+    startAltitude: fixAltitude(fixes[startIdx]),
+    endAltitude: fixAltitude(fixes[endIdx]),
     distance: totalDist,
     // undefined (not Infinity) when altitude was gained: Infinity survives into
     // display text and becomes null through JSON.stringify across worker/cache

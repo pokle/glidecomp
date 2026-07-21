@@ -10,7 +10,7 @@
  * reads the same on a 1,500 m Corryong day and a 3,500 m alpine day.
  */
 
-import type { IGCFix } from '../igc-parser';
+import { fixAltitude, type IGCFix } from '../igc-parser';
 import type { ThermalSegment } from '../event-types';
 import { percentile } from './stats';
 
@@ -45,6 +45,11 @@ const FALLBACK_FIX_STRIDE = 10;
 interface PilotBandSpec {
   thermals: ThermalSegment[];
   fixes: IGCFix[];
+  /** Airborne range for the fix-altitude fallback. Loggers record long
+   * ground periods, so without these the fallback floor collapses to ground
+   * elevation on exactly the days it fires. Absent = whole track. */
+  takeoffIndex?: number;
+  landingIndex?: number;
 }
 
 export function estimateWorkingBand(pilots: PilotBandSpec[]): WorkingBand {
@@ -77,8 +82,10 @@ export function estimateWorkingBand(pilots: PilotBandSpec[]): WorkingBand {
     usedFallback = true;
     const alts: number[] = [];
     for (const p of pilots) {
-      for (let i = 0; i < p.fixes.length; i += FALLBACK_FIX_STRIDE) {
-        alts.push(p.fixes[i].gnssAltitude !== 0 ? p.fixes[i].gnssAltitude : p.fixes[i].pressureAltitude);
+      const first = p.takeoffIndex ?? 0;
+      const last = p.landingIndex ?? p.fixes.length - 1;
+      for (let i = first; i <= last; i += FALLBACK_FIX_STRIDE) {
+        alts.push(fixAltitude(p.fixes[i]));
       }
     }
     sampleCount = alts.length;

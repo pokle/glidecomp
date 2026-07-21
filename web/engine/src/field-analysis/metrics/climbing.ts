@@ -9,15 +9,10 @@
  * Specs: docs/2026-07-18-field-analysis-plan.md §"P1 climbing" (metrics 1–6).
  */
 
-import type { IGCFix } from '../../igc-parser';
+import { fixAltitude as fixAlt, type IGCFix } from '../../igc-parser';
 import type { ThermalSegment } from '../../event-types';
 import type { MetricComputer, PilotMetricValue, ReportCell, ReportTable } from '../types';
 import { mean, median } from '../stats';
-
-/** Fix altitude with the same pressure fallback the resampler uses. */
-function fixAlt(f: IGCFix): number {
-  return f.gnssAltitude !== 0 ? f.gnssAltitude : f.pressureAltitude;
-}
 
 function fixMs(f: IGCFix): number {
   return f.time.getTime();
