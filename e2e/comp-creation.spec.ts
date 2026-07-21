@@ -51,9 +51,10 @@ test("dev login, create competition and task", async ({ page }) => {
   const createDialog = page.getByRole("dialog");
   await createDialog.getByLabel("Name").fill("E2E Test Competition");
   // Category defaults to HG — no change needed. Mark it hidden (admins only).
-  await createDialog
-    .getByRole("checkbox", { name: /Hidden/ })
-    .click();
+  // RAC checkboxes visually hide the real <input>, so clicking the checkbox
+  // role times out on actionability — click the visible label like a user.
+  await createDialog.getByText("Hidden?").click();
+  await expect(createDialog.getByRole("checkbox", { name: /Hidden/ })).toBeChecked();
   await createDialog.getByRole("button", { name: "Create" }).click();
 
   // Client-side navigation to the competition detail page; the heading

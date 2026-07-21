@@ -38,7 +38,9 @@ gotchas).
   the content is prose**: tooltips are hover-only, so touch users never see
   them, and they dismiss before a sentence can be read),
   `breadcrumbs` (ARIA-native trail — parent links + current page as
-  `aria-current="page"`; see gotcha #11), `badge` (static span — RAC has no presentational components),
+  `aria-current="page"`; see gotcha #11), `radio-group` (RadioGroup/Radio —
+  label part of each Radio, same slot pieces as field.tsx),
+  `badge` (static span — RAC has no presentational components),
   `confirm` (RacConfirmProvider — supplies the same ConfirmContext as
   lib/confirm.tsx so `useConfirm()` inside a wrapped subtree gets the RAC
   alertdialog), `router` (RacRouterProvider — bridges RAC `href` links to
@@ -50,7 +52,14 @@ gotchas).
   `comp/ManualFlightDialog.tsx`, `comp/AddWaypointDialog.tsx`,
   `comp/TaskExportButtons.tsx`, `comp/ScoreFreshness.tsx` (button only),
   `pages/TaskFieldAnalysis.tsx` + `pages/CompFieldAnalysis.tsx` and all of
-  `react/field-analysis/` (built RAC-native from the start — 2026-07-19).
+  `react/field-analysis/` (built RAC-native from the start — 2026-07-19),
+  `pages/Competitions.tsx` (2026-07-21 — list cards are RAC Links, create
+  dialog on the kit, plus a client-side SearchField filter over the loaded
+  list; see gotcha #13) and the shared comp-form fields in `comp/fields.tsx`
+  (NameField/CategoryField/PilotClassesField/CheckboxField → RAC; they also
+  render inside the still-Base-UI SettingsDialog on CompDetail, which is the
+  "shared RAC components work on unconverted pages" pattern in practice —
+  only SimpleSelect/SearchableSelect there remain Base UI).
   Note the last five are **shared** — CompDetail/CompWaypoints/Scores already
   render these RAC components today; RAC components work fine outside the
   converted page (no provider needed except for `href`-based client routing).
@@ -178,6 +187,18 @@ gotchas).
     only after the `zoom-in-95` entrance animation settles or everything reads
     ~5% small; and don't "blur by clicking the field below" — the popover now
     covers it, so the click selects an option instead.
+
+13. **Playwright can't `.click()` a RAC Checkbox by role.** RAC visually hides
+    the real `<input type=checkbox>` (1px, clipped) inside the wrapping
+    `<label>`, so `getByRole("checkbox").click()` fails actionability forever —
+    the label/box "intercepts pointer events". Click the visible label text
+    like a user (`getByText("Hidden?").click()`) and assert with
+    `expect(getByRole("checkbox")).toBeChecked()`. (Bit comp-creation.spec.ts
+    when the create-comp dialog converted.) A page-content *filter* (narrowing
+    an already-visible list) is a plain `SearchField` — gotcha #12's
+    "use ComboBox" rule is about *picking one item* from floating suggestions,
+    not filtering page content in place; the kit SearchField skips its sr-only
+    fallback label when you pass `aria-label`.
 
 ## Verification playbook (all part of "done" for RAC work)
 

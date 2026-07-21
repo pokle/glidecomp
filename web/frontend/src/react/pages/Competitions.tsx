@@ -1,15 +1,22 @@
-/** Competition list + create dialog — React port of comp.ts / comp.html. */
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Button } from "@/react/ui/button";
+/**
+ * Competition list + create dialog. Built on the RAC kit (src/react/rac/) as
+ * part of the RAC exploration — see docs/2026-07-18-rac-adoption-guide.md.
+ * The filter is client-side over the already-loaded list (a SearchField, not a
+ * backend query): the comp count is manageable today; server-side filtering is
+ * a later problem (~1,000+ comps).
+ */
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Link as AriaLink, useFilter } from "react-aria-components";
+import { Button } from "@/react/rac/button";
 import {
   Dialog,
-  DialogClose,
-  DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/react/ui/dialog";
+  Modal,
+} from "@/react/rac/dialog";
+import { SearchField } from "@/react/rac/field";
 import { api } from "../../comp/api";
 import { CategoryField, NameField, PilotClassesField, TestCompField } from "../comp/fields";
 import { toast } from "../lib/toast";
@@ -34,6 +41,8 @@ export function Competitions() {
   const [comps, setComps] = useState<Comp[] | null>(initial?.comps ?? null);
   const [loadError, setLoadError] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const { contains } = useFilter({ sensitivity: "base" });
 
   useEffect(() => {
     document.title = "GlideComp - Competitions";
@@ -66,37 +75,76 @@ export function Competitions() {
         ? comps.filter((c) => !c.test)
         : comps;
 
+  // Client-side filter: every query word must match somewhere in the comp's
+  // name or its meta line (wing / scoring format / classes), so "pg gap" or
+  // "corryong 2026" both narrow as expected. Matching is locale-aware and
+  // accent/case-insensitive (useFilter sensitivity "base"). An empty query
+  // renders the full list — which keeps the SSR markup identical at hydration.
+  const words = useMemo(() => query.trim().split(/\s+/).filter(Boolean), [query]);
+  const filteredComps =
+    visibleComps === null || words.length === 0
+      ? visibleComps
+      : visibleComps.filter((comp) => {
+          const haystack = [
+            comp.name,
+            categoryLabel(comp.category),
+            scoringFormatLabel(comp.scoring_format),
+            comp.pilot_classes.join(" "),
+          ].join(" ");
+          return words.every((word) => contains(haystack, word));
+        });
+
   return (
     <section>
-      <div className="flex justify-end">
-        {user ? (
-          <Button type="button" onClick={() => setCreateOpen(true)}>
-            Start a new competition
-          </Button>
-        ) : (
-          <Button type="button" variant="outline" onClick={() => goToSignIn("/comp")}>
-            Sign in to start a competition
-          </Button>
-        )}
+      <div className="flex flex-wrap items-center gap-3">
+        <SearchField
+          aria-label="Filter competitions"
+          placeholder="Filter competitions…"
+          value={query}
+          onChange={setQuery}
+          className="w-full max-w-xs"
+        />
+        <span className="ml-auto">
+          {user ? (
+            <Button type="button" onPress={() => setCreateOpen(true)}>
+              Start a new competition
+            </Button>
+          ) : (
+            <Button type="button" variant="outline" onPress={() => goToSignIn("/comp")}>
+              Sign in to start a competition
+            </Button>
+          )}
+        </span>
       </div>
+
+      {/* Announce filter results to screen readers as the list narrows. */}
+      <p role="status" className="sr-only">
+        {words.length > 0 && filteredComps !== null && visibleComps !== null
+          ? `${filteredComps.length} of ${visibleComps.length} competitions shown`
+          : ""}
+      </p>
 
       {loadError ? (
         <p role="alert" className="mt-4">
           Failed to load competitions. Please reload the page.
         </p>
-      ) : visibleComps === null ? (
+      ) : filteredComps === null ? (
         <p role="status" className="mt-4 text-muted-foreground">
           Loading competitions…
         </p>
-      ) : visibleComps.length === 0 ? (
-        <p className="mt-4 text-muted-foreground">No competitions found</p>
+      ) : filteredComps.length === 0 ? (
+        <p className="mt-4 text-muted-foreground">
+          {words.length > 0
+            ? `No competitions match “${query.trim()}”.`
+            : "No competitions found"}
+        </p>
       ) : (
         <ul className="mt-4 space-y-2.5">
-          {visibleComps.map((comp) => (
+          {filteredComps.map((comp) => (
             <li key={comp.comp_id}>
-              <Link
-                to={`/comp/${comp.comp_id}`}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-4 py-3 transition-colors hover:bg-muted"
+              <AriaLink
+                href={`/comp/${comp.comp_id}`}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-4 py-3 transition-colors outline-none data-hovered:bg-muted data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50"
               >
                 <span>
                   <span className="block font-semibold">
@@ -120,7 +168,7 @@ export function Competitions() {
                     ? formatTaskDateRange(comp.first_task_date, comp.last_task_date)
                     : `created ${formatDate(comp.creation_date)}`}
                 </span>
-              </Link>
+              </AriaLink>
             </li>
           ))}
         </ul>
@@ -193,8 +241,8 @@ function CreateCompDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+    <Modal isOpen={open} onOpenChange={handleOpenChange} className="sm:max-w-lg">
+      <Dialog>
         <DialogHeader>
           <DialogTitle>Start a new competition</DialogTitle>
         </DialogHeader>
@@ -230,13 +278,15 @@ function CreateCompDialog({
           <TestCompField checked={test} onChange={setTest} />
 
           <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-            <Button type="submit" disabled={submitting}>
+            <Button slot="close" variant="outline">
+              Cancel
+            </Button>
+            <Button type="submit" isDisabled={submitting}>
               {submitting ? "Creating..." : "Create"}
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </Dialog>
+    </Modal>
   );
 }
