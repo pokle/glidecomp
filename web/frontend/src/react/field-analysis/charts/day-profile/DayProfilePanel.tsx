@@ -98,9 +98,31 @@ export function DayProfilePanel({
   if (!axis || (!showWind && !showClimb && !showLegs)) return null;
 
   const zone = zoneAbbrev(new Date(axis.domainStart), timeZone);
+
+  // The ⓘ text of every metric whose series is actually drawn, inline under
+  // the heading — the panel composes several metrics, so each line carries
+  // its metric's name. Reads with the charts on screen and in print alike.
+  const shownKinds = new Set<string>([
+    ...(showWind ? ["wind-hourly"] : []),
+    ...(showClimb ? ["climb-hourly", "day-timing"] : []),
+    ...(showLegs ? ["wind-legs"] : []),
+  ]);
+  const contributors = metrics.filter((m) =>
+    (m.extraSeries ?? []).some((s) => shownKinds.has(s.kind))
+  );
+
   return (
     <figure className="space-y-1">
       <figcaption className="text-sm font-medium">The day at a glance</figcaption>
+      {contributors.length > 0 ? (
+        <div className="space-y-0.5 pb-1">
+          {contributors.map((m) => (
+            <p key={m.id} className="text-xs text-muted-foreground">
+              <span className="font-medium">{m.label}.</span> {m.explanation}
+            </p>
+          ))}
+        </div>
+      ) : null}
       {showWind ? (
         <WindHourlyChart series={wind} axis={axis} timeZone={timeZone} setReadout={setReadout} />
       ) : null}

@@ -4,9 +4,14 @@
  * emitted.
  *
  * Rendered under the separation ranking for whichever row is selected —
- * the ranking says WHICH metrics separated the field; this shows HOW.
+ * the ranking says WHICH metrics separated the field; this shows HOW. Also
+ * rendered print-only for every strong-verdict metric.
+ *
+ * The metric's method prose renders inline under the heading (MetricMethod)
+ * rather than behind a ⓘ popover: the panel is a reading surface, not a
+ * dense table, and print has no popovers at all.
  */
-import { MetricExplanation } from "../MetricExplanation";
+import { MetricMethod } from "../MetricExplanation";
 import type { FieldAnalysisReport, MetricReport } from "../types";
 import { RankScatter } from "./RankScatter";
 import { DistributionStrip } from "./DistributionStrip";
@@ -26,18 +31,15 @@ export function MetricDetailPanel({
 }) {
   return (
     <div className="space-y-3 rounded-lg border p-4">
-      <p className="font-medium">
-        <span className="inline-flex items-center gap-1">
-          {metric.label}
-          <MetricExplanation
-            metricId={metric.id}
-            label={metric.label}
-            unit={metric.unit}
-            direction={metric.direction}
-            explanation={metric.explanation}
-          />
-        </span>
-      </p>
+      <div>
+        <p className="font-medium">{metric.label}</p>
+        <MetricMethod
+          unit={metric.unit}
+          direction={metric.direction}
+          explanation={metric.explanation}
+          className="mt-1"
+        />
+      </div>
       <RankScatter
         metric={metric}
         pilots={report.pilots}
