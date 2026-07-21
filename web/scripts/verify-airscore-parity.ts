@@ -33,7 +33,7 @@ import {
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 /** Comp-folder root — override with GLIDECOMP_COMPS_DIR to verify comps in
- * a checkout of pokle/glidecomp-comp-archive (the history back-catalogue). */
+ * a checkout of pokle/glidecomp-archive (the history back-catalogue). */
 const COMPS_ROOT = process.env.GLIDECOMP_COMPS_DIR
   ? resolve(process.env.GLIDECOMP_COMPS_DIR)
   : join(REPO_ROOT, 'web/samples/comps');

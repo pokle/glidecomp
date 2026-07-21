@@ -417,7 +417,7 @@ recorded parity report.
 ## Decisions (owner, 2026-07-21)
 
 1. **Repo-size policy — DECIDED: separate archive repo.** The history
-   lives in **pokle/glidecomp-comp-archive** (`comps/<slug>…`, same layout
+   lives in **pokle/glidecomp-archive** (`comps/<slug>…`, same layout
    as `web/samples/comps/`). GlideComp keeps only each competition's most
    recent year bundled (Corryong 2026 + Unungra 2020, its only year) plus
    the curated parity-fixture task folders CI scores

@@ -64,7 +64,7 @@ import {
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 /**
  * Where comp folders live. Defaults to the bundled samples; point
- * GLIDECOMP_COMPS_DIR at a checkout of pokle/glidecomp-comp-archive's
+ * GLIDECOMP_COMPS_DIR at a checkout of pokle/glidecomp-archive's
  * `comps/` directory to download/regenerate the back-catalogue there —
  * history comps (`history: true` below) belong in the archive repo, not in
  * this one (only each competition's most recent year is bundled here).
@@ -111,7 +111,7 @@ const HIGHCLOUD = 'https://xc.highcloud.net';
 /**
  * Helper for the Corryong Cup lineage: one event, two AirScore comps (open +
  * floater), merged here into one GlideComp comp with two pilot classes.
- * Prior years are `history: true` — they live in pokle/glidecomp-comp-archive
+ * Prior years are `history: true` — they live in pokle/glidecomp-archive
  * (download with GLIDECOMP_COMPS_DIR pointing at its comps/ checkout), only
  * the most recent year stays bundled in this repo.
  */
