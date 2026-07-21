@@ -14,23 +14,34 @@ guide, Create Task, Settings, pilots section; new kit pieces `rac/tabs` and
 `rac/progress`; retired `ui/select` + `ui/combobox`), `rac/breadcrumbs` is
 the app-wide breadcrumb, `RacRouterProvider` is mounted globally in `Shell`,
 and shared chrome (`PageToc`, `Timestamp`) and the Dashboard's flights `Tree`
-use rac/ components. The remaining pages still use the shadcn/Base UI kit in
-`src/react/ui/` — see the conversion map at the end of this doc. The decision
-so far: **keep going with RAC** — it earned its keep everywhere except
-editable tables, where we built our own support (the GridList card list is
-now the preferred pattern for editable collections; see gotchas).
+use rac/ components. The waypoints page `/comp/:id/waypoints` converted
+(2026-07-21): RAC chrome + read-only table, and its hand-rolled editable
+grid **replaced with an inline Tabulator grid** per the policy below. The
+remaining pages still use the shadcn/Base UI kit in `src/react/ui/` — see
+the conversion map at the end of this doc. The decision so far: **keep going
+with RAC** — it earned its keep everywhere except editable tables, which are
+Tabulator's job (see the policy below).
 
-**Tabulator policy (2026-07-21): the remaining Tabulator grids STAY.** The
-pilots editor's spreadsheet grid (comp page → Pilots → Edit) works really
-well — frozen columns, spreadsheet-style cell editing, list editors — and
-replacing Tabulator with RAC has repeatedly been the most painful part of
-this exploration (see gotcha #2 and the route-editor history). Converting a
-page means converting the chrome *around* a Tabulator grid (dialog shell,
-buttons, read-only tables) and leaving the grid itself alone. It coexists
-happily inside a RAC Modal: give the kit `Dialog` an `id` and point
-Tabulator's `popupContainer` at it so editor popups render above the dialog,
-and keep the lazy `import("tabulator-tables")` so it stays out of the public
-bundle. Do NOT plan a GridList/Table rewrite of the pilots grid.
+**Tabulator policy (2026-07-21, owner preference): editable tables are
+Tabulator, full stop.** The project owner prefers Tabulator for every
+editable table/grid — don't reinvent spreadsheet editing in RAC. The pilots
+editor's grid (comp page → Pilots → Edit) works really well — frozen
+columns, spreadsheet-style cell editing, list editors — and replacing
+Tabulator with RAC has repeatedly been the most painful part of this
+exploration (see gotcha #2 and the route-editor history). This cuts both
+ways: existing Tabulator grids stay, and a hand-rolled editable table being
+converted should become a **Tabulator grid**, not a RAC Table/GridList (the
+waypoints page did exactly this — see gotcha #16 for the wiring pattern).
+The GridList card list stays where it's already built (the route editor) and
+remains the answer for *card-shaped* editable collections, but don't plan
+new RAC editable tables. Converting a page means converting the chrome
+*around* the grid (dialog shell, buttons, read-only tables) and using
+Tabulator for the grid itself. It coexists happily inside a RAC Modal: give
+the kit `Dialog` an `id` and point Tabulator's `popupContainer` at it so
+editor popups render above the dialog, and keep the lazy
+`import("tabulator-tables")` so it stays out of the public bundle. The
+shadcn-token theme lives in `comp/tabulator-grid.css` (shared, `gc-grid`
+container class). Do NOT plan a GridList/Table rewrite of the pilots grid.
 
 ## What exists
 
@@ -104,6 +115,15 @@ bundle. Do NOT plan a GridList/Table rewrite of the pilots grid.
   Select for the mobile section jump), `components/Timestamp.tsx` (rac
   Tooltip), and `rac/tree.tsx` in `pages/Dashboard.tsx` (the flights Tree —
   the rest of the Dashboard is still ui/).
+  And — 2026-07-21 — the waypoints page: `pages/CompWaypoints.tsx` (RAC
+  buttons/FileTrigger/ToggleButton, read-only RAC table for non-admins,
+  RacConfirmProvider; the editable grid became an **inline Tabulator grid**
+  per the Tabulator policy — gotcha #16), `comp/WaypointDeviceExport.tsx`
+  (rac Menu with href/onAction download items, ToggleButton QR toggle, rac
+  Checkbox — retired `ui/checkbox`, file deleted), and `comp/FullScreenQR.tsx`
+  (was a bare `fixed inset-0` div with hand-rolled Esc/scroll-lock listeners;
+  now RAC ModalOverlay/Modal/Dialog primitives, so focus trap/restore, Esc
+  and scroll-locking come from react-aria).
   Note that dialogs like SubmitTrackDialog/AddWaypointDialog are **shared** —
   unconverted pages (CompWaypoints) already render these RAC components today;
   RAC components work fine outside converted pages (`RacRouterProvider` is
@@ -270,6 +290,25 @@ bundle. Do NOT plan a GridList/Table rewrite of the pilots grid.
     ride on a span *inside* the Column, and every sortable/interactive
     Column still needs exactly one `isRowHeader` column beside it.
 
+16. **Inline Tabulator on a page (not in a dialog) — the waypoints pattern.**
+    When an editable grid lives on the page beside other React-driven UI (the
+    waypoints map), keep React state as the source of truth and let the grid
+    mirror into it: build Tabulator once in an effect gated on
+    `isAdmin && !loading` (NEVER depending on the rows state — that would tear
+    the grid down per keystroke), reading the current rows through a ref; wire
+    `cellEdited`/`rowDeleted` → `setRows(table.getData()...)` so the map/dirty
+    check/save all read state; push *external* changes (file upload, add
+    dialog) into the grid imperatively (`setData`/`addRow`) beside the
+    `setRows` call. Cell formatters must build DOM nodes and assign
+    `textContent` — a string return is innerHTML, and grid values come from
+    user-supplied waypoint files. Static icon markup (the pin/✕ buttons) as
+    HTML strings is fine. `columnDefaults: { headerSort: false }` unless you
+    actually want sorting (saved row order vs sorted view is a trap). SSR:
+    the admin variant server-renders an empty container div and the grid
+    builds client-side; the anonymous/crawler variant stays a real RAC
+    `<table>` so the page keeps its SSR content (the ssr.spec.ts waypoints
+    test asserts a waypoint code appears in the raw HTML).
+
 ## Verification playbook (all part of "done" for RAC work)
 
 ```bash
@@ -405,18 +444,21 @@ idea unnecessary.
    read gotchas #2/#3 first.
 4. Verify per the playbook; SSR pages additionally must pass `test:e2e:ssr`
    before "done".
-5. **Tabulator grids are exempt** (policy at the top of this doc): convert
-   the shell around them, keep the grid. Give the kit `Dialog` an `id` and
-   point Tabulator's `popupContainer` at it — editor popups (e.g. the class
-   list) render fine inside the RAC modal, and focus containment doesn't
-   fight the grid's dynamically-created cell editors.
-6. Suggested order: CompWaypoints (second editable grid — apply the GridList
-   card pattern; it's hand-rolled `<table>`, not Tabulator, so it's fair
-   game), Settings, then the auth/onboarding/admin pages and the app chrome
-   (Shell user menu, global confirm). CompDetail is done (2026-07-21) and
-   Competitions is done (PR #401); `/scores` is retired (a redirect to the
-   comp page — nothing to convert). See the conversion map below for the
-   full inventory.
+5. **Editable grids are Tabulator** (policy at the top of this doc): convert
+   the shell around an existing grid and keep it; convert a hand-rolled
+   editable table TO Tabulator (gotcha #16 for the inline-on-page wiring).
+   Inside a dialog, give the kit `Dialog` an `id` and point Tabulator's
+   `popupContainer` at it — editor popups (e.g. the class list) render fine
+   inside the RAC modal, and focus containment doesn't fight the grid's
+   dynamically-created cell editors. The shared shadcn-token theme is
+   `comp/tabulator-grid.css` (`gc-grid` container class).
+6. Suggested order: Settings (its two API-key dialogs; last consumer of
+   `ui/radio-group`), Dashboard's remaining tabs/progress (rac/tabs and
+   rac/progress already exist), then the auth/onboarding/admin pages and the
+   app chrome (Shell user menu, global confirm). CompDetail and CompWaypoints
+   are done (2026-07-21), Competitions is done (PR #401); `/scores` is
+   retired (a redirect to the comp page — nothing to convert). See the
+   conversion map below for the full inventory.
 
 ## Conversion map (2026-07-21)
 
@@ -433,12 +475,12 @@ Which SPA pages are on which kit, and the dialogs/popups each still owns.
 | `pages/PilotScoreDetail.tsx` | Bespoke narrative/map markup; kit pieces (breadcrumbs, Timestamp tooltip) are rac. No dialogs. Done. |
 | `pages/Scores.tsx` | Retired — pure redirect, nothing to convert. |
 | `pages/CompDetail.tsx` `/comp/:id` + its sections (2026-07-21) | Fully RAC: hero LinkButtons (the `/replay` link stays a plain `<a className={buttonVariants(...)}>` — non-SPA entry), Create Task dialog, `SettingsDialog` (NumberFields, rac SimpleSelect + select-like SearchableSelect), `CompScoresSection` (rac tabs + sortable RAC-grid tables), `ScoresSection`, `ActivitySection` (rac tabs), `CompSetupProgress` (rac ProgressBar), `PilotsSection` (RAC table + dialog shell). The pilots editor's **Tabulator grid is kept by policy** — only its chrome converted. Only ui/ import left is `date-picker` (itself RAC under the hood). |
+| `pages/CompWaypoints.tsx` `/comp/:id/waypoints` (2026-07-21) | RAC chrome (FileTrigger upload, ToggleButton add-from-map, RacConfirmProvider) around an **inline Tabulator grid** for admins (the hand-rolled editable `<table>` became Tabulator per the policy — gotcha #16); non-admins/crawlers get a read-only RAC table (SSR content preserved). `WaypointDeviceExport` → rac Menu/Checkbox/ToggleButton (retired `ui/checkbox`); `FullScreenQR` → RAC modal primitives. AddWaypointDialog was already RAC. |
 
 **Not converted (ui/shadcn) — with their dialogs/popups:**
 
 | Page / surface | ui/ usage | Dialogs & popups still on ui/ |
 |---|---|---|
-| `pages/CompWaypoints.tsx` (rac breadcrumbs only) | button; hand-rolled `<table>` for the editable waypoints grid | **`WaypointDeviceExport` DropdownMenu**; **`FullScreenQR`** (bare `fixed inset-0` overlay div, not a dialog — convert to a kit Modal for focus/Esc handling). The waypoints grid is the "second editable grid" — apply the GridList card pattern (it's hand-rolled, not Tabulator, so the keep-Tabulator policy doesn't apply). (AddWaypointDialog is already RAC.) |
 | `pages/Settings.tsx` | card, dialog, field, input, radio-group, table, button | **"Create API key" dialog**; **"API key created" dialog**. Last consumer of `ui/radio-group` (rac/radio-group exists). |
 | `pages/Dashboard.tsx` (partial — rac Tree) | tabs, progress, button | No dialogs. Tabs/progress remain ui/. |
 | `pages/Onboarding.tsx`, `pages/SignIn.tsx` | button, field, input (+ input-otp on SignIn) | No dialogs. |
@@ -448,9 +490,11 @@ Which SPA pages are on which kit, and the dialogs/popups each still owns.
 
 Shared ui/ leaf modules that only die with their last consumer:
 `ui/tabs` + `ui/progress` (Dashboard), `ui/table` (Settings, AdminUsers),
-`ui/card` (Settings), `ui/alert` (ScoreFreshness, field-analysis — could
-become a rac/ static component like badge). `ui/select` and `ui/combobox`
-died with the CompDetail conversion (deleted 2026-07-21).
+`ui/card` (Settings), `ui/dropdown-menu` (Shell only), `ui/alert`
+(ScoreFreshness, field-analysis — could become a rac/ static component like
+badge). `ui/select` and `ui/combobox` died with the CompDetail conversion
+(deleted 2026-07-21); `ui/checkbox` died with the CompWaypoints conversion
+(deleted 2026-07-21).
 
 ## Reference
 

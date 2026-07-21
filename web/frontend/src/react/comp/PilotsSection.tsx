@@ -279,7 +279,7 @@ function EditPilotsDialog({
       const [{ TabulatorFull }] = await Promise.all([
         import("tabulator-tables"),
         import("tabulator-tables/dist/css/tabulator_simple.min.css"),
-        import("./pilots-grid.css"),
+        import("./tabulator-grid.css"),
       ]);
       if (cancelled || !gridRef.current) return;
       table = new TabulatorFull(gridRef.current, {
@@ -432,7 +432,7 @@ function EditPilotsDialog({
         <div
           ref={gridRef}
           id="pilots-grid"
-          className="min-h-0 flex-1 rounded border border-border"
+          className="gc-grid min-h-0 flex-1 rounded border border-border"
         />
 
         {status ? <p className="text-sm text-muted-foreground">{status}</p> : null}
