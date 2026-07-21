@@ -193,6 +193,15 @@ describe("GET /api/comp/pilot/flights", () => {
     expect(await getFlights()).toEqual([]);
   });
 
+  test("still lists flights after the comp closes (historical record)", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+    await uploadIgc(compId, taskId);
+    await env.DB.prepare("UPDATE comp SET close_date = '2020-01-01'").run();
+
+    expect(await getFlights()).toHaveLength(1);
+  });
+
   test("excludes flights in hidden test comps", async () => {
     const compId = await createComp({ name: "Hidden Comp", test: true });
     const taskId = await createTask(compId);

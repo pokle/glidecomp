@@ -488,10 +488,12 @@ export const pilotRoutes = new Hono<HonoEnv>()
       }
 
       // Signup-linking (Iteration 8g): once the user's identity fields are
-      // up to date, scan every open competition for admin-pre-registered
-      // comp_pilot rows matching them and claim any hits. This is the
-      // mechanism that turns a pre-registration into a real linked
-      // registration as soon as the user fills in (e.g.) their CIVL ID.
+      // up to date, scan every competition — closed ones included — for
+      // admin-pre-registered comp_pilot rows matching them and claim any
+      // hits. This is the mechanism that turns a pre-registration into a
+      // real linked registration as soon as the user fills in (e.g.) their
+      // CIVL ID, and it is how a pilot claims their flights in historical
+      // comps for the My Flights page.
       const pilotIdRow = await c.env.DB.prepare(
         "SELECT pilot_id FROM pilot WHERE user_id = ?"
       )
@@ -501,7 +503,7 @@ export const pilotRoutes = new Hono<HonoEnv>()
         const linked = await linkExistingRegistrations(
           c.env.DB,
           pilotIdRow.pilot_id,
-          "open-comps"
+          "all-comps"
         );
         for (const link of linked) {
           await audit(c.env.DB, c.var.user, link.comp_id, {

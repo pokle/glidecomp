@@ -10,8 +10,12 @@
  * Triggered in two places (see docs/competition-spec.md, Iteration 8g):
  *
  *   1. `PATCH /api/comp/pilot` — after the user saves their pilot
- *      profile, scan ALL open competitions for unlinked rows matching
- *      the updated identity.
+ *      profile, scan ALL competitions for unlinked rows matching the
+ *      updated identity. Closed comps are included deliberately: a link
+ *      is a statement about identity, not a competition mutation (it
+ *      never touches scores), and the "My Flights" competition-flights
+ *      list is mostly about historical comps — a pilot who signs up
+ *      after the season must still be able to claim their record.
  *   2. `ensureCompPilot` in the IGC upload path — before inserting a
  *      fresh comp_pilot row, check for a matching unlinked row in the
  *      SAME comp and claim it instead of creating a duplicate.
@@ -92,8 +96,8 @@ async function loadPilotIdentity(
  * registrations so the caller can write audit entries.
  *
  * @param scope
- *   - `"open-comps"`: search all competitions whose `close_date` is NULL
- *     or in the future. Used by profile updates.
+ *   - `"all-comps"`: search every competition, closed ones included
+ *     (see the header note). Used by profile updates.
  *   - `{ comp_id }`: search only within the given competition. Used by
  *     the IGC upload path so we scope to the comp being uploaded to.
  *
@@ -106,7 +110,7 @@ async function loadPilotIdentity(
 export async function linkExistingRegistrations(
   db: D1Database,
   pilotId: number,
-  scope: "open-comps" | { comp_id: number }
+  scope: "all-comps" | { comp_id: number }
 ): Promise<LinkedRegistration[]> {
   const identity = await loadPilotIdentity(db, pilotId);
   if (!identity) return [];
@@ -131,14 +135,9 @@ export async function linkExistingRegistrations(
     bindings.push(identity.email);
   }
 
-  // Scope: open comps or a specific comp
+  // Scope: every comp, or a specific one (the IGC-upload path).
   let compScopeSql = "";
-  if (scope === "open-comps") {
-    compScopeSql = `AND comp_id IN (
-      SELECT comp_id FROM comp
-      WHERE close_date IS NULL OR close_date >= date('now')
-    )`;
-  } else {
+  if (scope !== "all-comps") {
     compScopeSql = "AND comp_id = ?";
     bindings.push(scope.comp_id);
   }
