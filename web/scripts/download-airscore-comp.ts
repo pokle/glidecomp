@@ -62,7 +62,16 @@ import {
 } from './lib/airscore-formula-map';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-const COMPS_ROOT = join(REPO_ROOT, 'web/samples/comps');
+/**
+ * Where comp folders live. Defaults to the bundled samples; point
+ * GLIDECOMP_COMPS_DIR at a checkout of pokle/glidecomp-comp-archive's
+ * `comps/` directory to download/regenerate the back-catalogue there —
+ * history comps (`history: true` below) belong in the archive repo, not in
+ * this one (only each competition's most recent year is bundled here).
+ */
+const COMPS_ROOT = process.env.GLIDECOMP_COMPS_DIR
+  ? resolve(process.env.GLIDECOMP_COMPS_DIR)
+  : join(REPO_ROOT, 'web/samples/comps');
 
 // --- comp registry ---------------------------------------------------------
 
@@ -102,18 +111,53 @@ const HIGHCLOUD = 'https://xc.highcloud.net';
 /**
  * Helper for the Corryong Cup lineage: one event, two AirScore comps (open +
  * floater), merged here into one GlideComp comp with two pilot classes.
+ * Prior years are `history: true` — they live in pokle/glidecomp-comp-archive
+ * (download with GLIDECOMP_COMPS_DIR pointing at its comps/ checkout), only
+ * the most recent year stays bundled in this repo.
  */
 function corryongCup(year: number, openComPk: number, floaterComPk: number): CompConfig {
   return {
     name: `Corryong Cup ${year}`,
     compName: `Corryong Cup ${year}`,
     host: HIGHCLOUD,
+    history: true,
     sources: [
       { comPk: openComPk, pilotClass: 'open' },
       { comPk: floaterComPk, pilotClass: 'floater' },
     ],
   };
 }
+
+/** One event published as two AirScore comps (open + a second class). */
+function twoClassComp(
+  name: string,
+  openComPk: number,
+  second: CompSource,
+  category?: string,
+): CompConfig {
+  return {
+    name,
+    compName: name,
+    host: HIGHCLOUD,
+    history: true,
+    ...(category ? { category } : {}),
+    sources: [{ comPk: openComPk, pilotClass: 'open' }, second],
+  };
+}
+
+/** A single-class history comp. */
+function oneClassComp(name: string, comPk: number, category?: string): CompConfig {
+  return {
+    name,
+    compName: name,
+    host: HIGHCLOUD,
+    history: true,
+    ...(category ? { category } : {}),
+    sources: [{ comPk, pilotClass: 'open' }],
+  };
+}
+
+const sports = (comPk: number): CompSource => ({ comPk, pilotClass: 'sports' });
 
 const COMPS: Record<string, CompConfig> = {
   'corryong-cup-2026': {
@@ -135,7 +179,7 @@ const COMPS: Record<string, CompConfig> = {
   'corryong-cup-2022': corryongCup(2022, 335, 336),
   'corryong-cup-2021': corryongCup(2021, 305, 308),
   // Dec 2020 stand-in for the Corryong Cup (COVID season); a single comp with
-  // no separate floater class.
+  // no separate floater class. Its only year, so it stays bundled.
   'unungra-cup-2020': {
     name: 'Unungra Cup',
     compName: 'Unungra Cup',
@@ -144,6 +188,32 @@ const COMPS: Record<string, CompConfig> = {
     sources: [{ comPk: 303, pilotClass: 'open' }],
   },
   'corryong-cup-2017': corryongCup(2017, 208, 209),
+
+  // --- history back-catalogue (2026-07-21 enumeration; all HG unless noted).
+  // Forbes Flatlands — the flagship flatlands HG comp; sports class is a
+  // separate AirScore comp from 2022 on.
+  'forbes-flatlands-2020': oneClassComp('Forbes Flatlands 2020', 283),
+  'forbes-flatlands-2022': twoClassComp('Forbes Flatlands 2022', 333, sports(334)),
+  'forbes-flatlands-2023': twoClassComp('Forbes Flatlands 2023', 365, sports(366)),
+  'forbes-flatlands-2024': twoClassComp('Forbes Flatlands 2024', 396, sports(398)),
+  'forbes-flatlands-2025': twoClassComp('Forbes Flatlands 2025', 434, sports(435)),
+  'forbes-flatlands-2026': twoClassComp('Forbes Flatlands 2026', 462, sports(463)),
+  // Dalby Big Air (HG, aerotow).
+  'dalby-big-air-2021': oneClassComp('Dalby Big Air 2021', 316),
+  'dalby-big-air-2022': twoClassComp('Dalby Big Air 2022', 343, sports(347)),
+  'dalby-big-air-2023': twoClassComp('Dalby Big Air 2023', 375, sports(376)),
+  'dalby-big-air-2024': twoClassComp('Dalby Big Air 2024', 407, sports(408)),
+  'dalby-big-air-2025': oneClassComp('Dalby Big Air 2025', 446),
+  'dalby-big-air-2026': twoClassComp('Dalby Big Air 2026', 493, { comPk: 494, pilotClass: 'floater' }),
+  // Bright Open (PG) — also the candidate pool for a gap-2020+ PG parity
+  // fixture (the engine's 's7f2020' generation).
+  'bright-open-2020': oneClassComp('Bright Open 2020', 281, 'pg'),
+  'bright-open-2021': oneClassComp('Bright Open 2021', 310, 'pg'),
+  'bright-open-2022': oneClassComp('Bright Open 2022', 317, 'pg'),
+  'bright-open-2023': oneClassComp('Bright Open 2023', 370, 'pg'),
+  'bright-open-2024': oneClassComp('Bright Open 2024', 402, 'pg'),
+  'bright-open-2025': oneClassComp('Bright Open 2025', 431, 'pg'),
+  'bright-open-2026': oneClassComp('Bright Open 2026', 464, 'pg'),
 };
 
 // --- polite HTTP -----------------------------------------------------------
@@ -159,12 +229,37 @@ const pace = () => sleep(BASE_DELAY_MS + Math.floor(Math.random() * 1500));
 
 let requestCount = 0;
 
+/**
+ * curl fallback for environments where Bun's fetch can't tunnel through the
+ * local TLS-terminating egress proxy (the CONNECT succeeds but the TLS
+ * handshake is reset). curl honours the same proxy env vars and the system
+ * CA store, so it works wherever plain `curl <url>` does.
+ */
+function curlRequest(url: string, form?: Record<string, string>): Buffer {
+  const args = ['-sS', '--fail', '-A', UA, '--max-time', '300'];
+  if (form) {
+    args.push('-X', 'POST', '--data', new URLSearchParams(form).toString());
+    args.push('-H', 'Content-Type: application/x-www-form-urlencoded');
+  }
+  args.push(url);
+  const res = spawnSync('curl', args, { maxBuffer: 256 * 1024 * 1024 });
+  if (res.status !== 0) {
+    throw new Error(`curl ${url} → exit ${res.status}: ${res.stderr?.toString()}`);
+  }
+  return res.stdout;
+}
+
 async function getText(url: string): Promise<string> {
   await pace();
   requestCount++;
-  const res = await fetch(url, { headers: { 'User-Agent': UA } });
-  if (!res.ok) throw new Error(`GET ${url} → ${res.status}`);
-  return res.text();
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': UA } });
+    if (!res.ok) throw new Error(`GET ${url} → ${res.status}`);
+    return res.text();
+  } catch (err) {
+    if (err instanceof Error && /^GET .* → \d+$/.test(err.message)) throw err;
+    return curlRequest(url).toString('utf-8'); // socket-level failure → curl
+  }
 }
 
 async function getJson<T = any>(url: string): Promise<T> {
@@ -174,16 +269,22 @@ async function getJson<T = any>(url: string): Promise<T> {
 async function postForm(url: string, form: Record<string, string>): Promise<ArrayBuffer> {
   await pace();
   requestCount++;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': UA,
-    },
-    body: new URLSearchParams(form).toString(),
-  });
-  if (!res.ok) throw new Error(`POST ${url} → ${res.status}`);
-  return res.arrayBuffer();
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': UA,
+      },
+      body: new URLSearchParams(form).toString(),
+    });
+    if (!res.ok) throw new Error(`POST ${url} → ${res.status}`);
+    return res.arrayBuffer();
+  } catch (err) {
+    if (err instanceof Error && /^POST .* → \d+$/.test(err.message)) throw err;
+    const buf = curlRequest(url, form); // socket-level failure → curl
+    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+  }
 }
 
 // --- time helpers (AirScore publishes local HH:MM:SS; xctsk gates are Z) ----
@@ -664,7 +765,7 @@ async function downloadComp(slug: string): Promise<void> {
     `\nDone. ${tasks.length} tasks across ${classes.length} classes ` +
       `(${classes.join(', ')}); ${requestCount} requests.`,
   );
-  console.log(`  Manifest: ${join('web/samples/comps', slug, 'comp.json')}`);
+  console.log(`  Manifest: ${join(COMPS_ROOT, slug, 'comp.json')}`);
   console.log(`  Seed it:  bun run seed`);
 }
 

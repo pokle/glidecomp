@@ -49,6 +49,10 @@ import { gzipSync } from 'node:zlib';
 import { spawnSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
+  andoyerDistance,
+  calculateBearingRadians,
+  calculateOptimizedTaskLine,
+  destinationPoint,
   parseIGC,
   parseXCTask,
   xctaskTurnpointsToRecords,
@@ -59,7 +63,11 @@ import { timezoneForXctsk } from '@glidecomp/engine/timezone';
 import { SAMPLE_COMP_NAME } from '../workers/competition-api/src/sample';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-const COMPS_ROOT = join(REPO_ROOT, 'web/samples/comps');
+/** Comp-folder root — override with GLIDECOMP_COMPS_DIR to seed from a
+ * checkout of pokle/glidecomp-comp-archive (the history back-catalogue). */
+const COMPS_ROOT = process.env.GLIDECOMP_COMPS_DIR
+  ? resolve(process.env.GLIDECOMP_COMPS_DIR)
+  : join(REPO_ROOT, 'web/samples/comps');
 // Which bundled comps to seed (each slug matches a folder under COMPS_ROOT
 // holding a comp.json manifest). With no slug given we seed every bundled comp;
 // flags and slugs can appear in any arg order.
@@ -302,6 +310,97 @@ interface SamplePilot {
   fileSize: number;
 }
 
+/**
+ * A pilot in the task's PUBLISHED AirScore results who has no IGC in the
+ * download (a handful per comp). Without them the seeded field is smaller
+ * than the field AirScore scored, so launch/distance validity — and with it
+ * every pilot's points — drifts from the published numbers. They seed as
+ * what they are: a DNF status, or a manual flight (S7F §8.4) landed at the
+ * published distance along the optimised route plus a "landed" status.
+ */
+interface TrackLessPilot {
+  name: string;
+  kind: 'dnf' | 'flew';
+  /** Published distance in metres, or null when unknown (a bare 'lo' row —
+   * scored at minimum distance, so the landing synthesizes at the start). */
+  distance: number | null;
+}
+
+/** '<a …>Todd Wisewould</a>' → "wisewould" — the IGC-filename surname key. */
+function surnameKeyFromPublishedName(html: string): string {
+  const full = String(html).replace(/<[^>]+>/g, '').trim();
+  const words = full.split(/\s+/);
+  return (words.length > 1 ? words.slice(1) : words).join('_').toLowerCase();
+}
+
+/**
+ * Published result rows with no matching IGC in the task folder. Matching is
+ * by the same surname key the IGC filenames use, consuming one file per row
+ * so duplicate surnames pair off correctly.
+ */
+function readTrackLessRows(compDir: string, igcFiles: string[]): TrackLessPilot[] {
+  const rawPath = join(compDir, 'airscore-result-raw.json');
+  if (!existsSync(rawPath)) return [];
+  const raw = JSON.parse(readFileSync(rawPath, 'utf-8'));
+  const available = new Map<string, number>();
+  for (const f of igcFiles) {
+    const key = basename(f, '.igc').replace(/_\d+_\d{6}$/, '').toLowerCase();
+    available.set(key, (available.get(key) ?? 0) + 1);
+  }
+  const out: TrackLessPilot[] = [];
+  for (const row of raw.data ?? []) {
+    const name = String(row[2]).replace(/<[^>]+>/g, '').trim();
+    if (!name) continue;
+    const key = surnameKeyFromPublishedName(row[2]);
+    const n = available.get(key) ?? 0;
+    if (n > 0) {
+      available.set(key, n - 1);
+      continue;
+    }
+    const dist = row[10];
+    if (dist === 'abs') continue; // absent — not part of the scored field
+    if (dist === 'dnf') {
+      out.push({ name, kind: 'dnf', distance: null });
+    } else if (typeof dist === 'number' && Number.isFinite(dist)) {
+      out.push({ name, kind: 'flew', distance: dist * 1000 });
+    } else {
+      out.push({ name, kind: 'flew', distance: null }); // 'lo' etc. — min distance
+    }
+  }
+  return out;
+}
+
+/**
+ * A landing point at `targetMeters` along the task's optimised route, plus
+ * the index of the last turnpoint passed getting there — the two facts a
+ * manual flight stores. The engine's made-good for a point ON the optimised
+ * line at cumulative distance d is d itself, so the synthesized flight
+ * scores the published distance.
+ */
+function landingAtRouteDistance(
+  xctsk: string,
+  targetMeters: number,
+): { lastReachedIndex: number; lat: number; lon: number } {
+  const line = calculateOptimizedTaskLine(parseXCTask(xctsk));
+  if (line.length === 0) throw new Error('task has no turnpoints');
+  let remaining = Math.max(0, targetMeters);
+  let index = 0;
+  for (let i = 0; i + 1 < line.length; i++) {
+    const leg = andoyerDistance(line[i].lat, line[i].lon, line[i + 1].lat, line[i + 1].lon);
+    if (remaining <= leg || i + 2 === line.length) {
+      // Land on this leg — capped 100 m short of its end so a published
+      // distance at/near full course stays a land-out, never a goal.
+      const along = Math.min(remaining, Math.max(0, leg - 100));
+      const bearing = calculateBearingRadians(line[i].lat, line[i].lon, line[i + 1].lat, line[i + 1].lon);
+      const p = destinationPoint(line[i].lat, line[i].lon, along, bearing);
+      return { lastReachedIndex: index, lat: p.lat, lon: p.lon };
+    }
+    remaining -= leg;
+    index = i + 1;
+  }
+  return { lastReachedIndex: 0, lat: line[0].lat, lon: line[0].lon };
+}
+
 interface TaskSpec {
   dir: string;
   name: string;
@@ -314,6 +413,8 @@ interface TaskSpec {
 interface SampleTask extends TaskSpec {
   xctsk: string;
   pilots: SamplePilot[];
+  /** Published-result pilots with no IGC in the folder (see TrackLessPilot). */
+  trackless: TrackLessPilot[];
 }
 
 interface CompManifest {
@@ -385,16 +486,22 @@ function readTask(spec: TaskSpec, tzOut: { value?: string }): SampleTask {
   }
 
   const pilots: SamplePilot[] = [];
+  const nonEmptyIgc: string[] = [];
   for (const file of igcFiles) {
     const text = readFileSync(join(compDir, file), 'utf-8');
     const igc = parseIGC(text);
     if (igc.fixes.length === 0) continue;
+    nonEmptyIgc.push(file);
     const name = (igc.header.pilot || basename(file, '.igc')).replace(/\s+/g, ' ').trim();
     const gz = gzipSync(Buffer.from(text, 'utf-8'), { level: 9 });
     pilots.push({ name, id: idFromFilename(file), gz, fileSize: gz.byteLength });
   }
 
-  return { ...spec, xctsk, pilots };
+  // Published pilots with no (non-empty) IGC — they seed as DNF statuses or
+  // manual flights so validity matches the field AirScore actually scored.
+  const trackless = readTrackLessRows(compDir, nonEmptyIgc);
+
+  return { ...spec, xctsk, pilots, trackless };
 }
 
 // --- seed ------------------------------------------------------------------
@@ -529,6 +636,14 @@ async function seed(store: SeedStore, where: string, slug: string): Promise<void
         registry.set(key, { name: p.name, id: p.id, pilotClass: t.pilotClass });
       }
     }
+    // Track-less published pilots register too (keyed by name — the published
+    // rows carry no federation id).
+    for (const p of t.trackless) {
+      const key = pilotKey(t.pilotClass, null, p.name);
+      if (!registry.has(key)) {
+        registry.set(key, { name: p.name, id: null, pilotClass: t.pilotClass });
+      }
+    }
   }
   const perClass = manifest.classes
     .map((c) => `${c}: ${[...registry.values()].filter((p) => p.pilotClass === c).length}`)
@@ -559,6 +674,7 @@ async function seed(store: SeedStore, where: string, slug: string): Promise<void
     await mapPool(oldKeys, R2_CONCURRENCY, (r) => store.r2Delete(String(r.k)));
     await store.exec([
       `DELETE FROM task_track WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
+      `DELETE FROM task_manual_flight WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
       `DELETE FROM task_pilot_status WHERE comp_id = ${compId};`,
       `DELETE FROM task_class WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
       `DELETE FROM task WHERE comp_id = ${compId};`,
@@ -655,10 +771,37 @@ async function seed(store: SeedStore, where: string, slug: string): Promise<void
          VALUES (${compId}, ${taskId}, ${compPilotId}, 'landed', NULL, NULL, 'Sample data', ${q(now)});`,
       );
     }
+    // Track-less published pilots (see TrackLessPilot): DNF rows become a
+    // DNF status (launch validity, S7F §9.1); flown rows become a manual
+    // flight landed at the published distance along the optimised route
+    // (+ a landed status), so the seeded field — and with it every pilot's
+    // validity-scaled points — matches the field AirScore scored.
+    for (const p of t.trackless) {
+      const compPilotId = cpByKey.get(pilotKey(t.pilotClass, null, p.name));
+      if (compPilotId === undefined) continue;
+      if (p.kind === 'dnf') {
+        trackInserts.push(
+          `INSERT INTO task_pilot_status (comp_id, task_id, comp_pilot_id, status_key, note, set_by_user_id, set_by_name, set_at)
+           VALUES (${compId}, ${taskId}, ${compPilotId}, 'dnf', 'Published AirScore result (no tracklog in download)', NULL, 'AirScore import', ${q(now)});`,
+        );
+        continue;
+      }
+      const landing = landingAtRouteDistance(t.xctsk, p.distance ?? 0);
+      trackInserts.push(
+        `INSERT INTO task_manual_flight (task_id, comp_pilot_id, last_reached_tp_index, landing_lat, landing_lon, made_goal, duration_seconds, computed_distance, active, set_by_user_id, set_by_name, set_at)
+         VALUES (${taskId}, ${compPilotId}, ${landing.lastReachedIndex}, ${landing.lat}, ${landing.lon}, 0, NULL, ${p.distance ?? 0}, 1, NULL, 'AirScore import', ${q(now)});`,
+      );
+      trackInserts.push(
+        `INSERT INTO task_pilot_status (comp_id, task_id, comp_pilot_id, status_key, note, set_by_user_id, set_by_name, set_at)
+         VALUES (${compId}, ${taskId}, ${compPilotId}, 'landed', 'Published AirScore result (no tracklog in download)', NULL, 'AirScore import', ${q(now)});`,
+      );
+    }
+
     await mapPool(uploads, R2_CONCURRENCY, (u) => store.r2Put(u.key, u.gz));
     await store.exec(trackInserts);
     totalTracks += uploads.length;
-    console.log(`  seeded ${taskName}: task_id=${taskId}, ${uploads.length} tracks`);
+    const extras = t.trackless.length > 0 ? `, ${t.trackless.length} track-less published pilot(s)` : '';
+    console.log(`  seeded ${taskName}: task_id=${taskId}, ${uploads.length} tracks${extras}`);
   }
 
   console.log(`  Done. comp_id=${compId} — ${tasks.length} tasks, ${totalTracks} tracks total`);

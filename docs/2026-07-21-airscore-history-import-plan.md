@@ -414,25 +414,46 @@ recorded parity report.
 
 ---
 
-## Open questions
+## Decisions (owner, 2026-07-21)
 
-1. **Repo-size policy** for the history (bundled vs. gitignored + seeded;
-   see 4.2) — still needs an owner decision.
-2. ~~`goal_penalty` semantics~~ — RESOLVED: fraction of speed+arrival
-   points lost at ESS-without-goal (`essNotGoalFactor = 1 − goal_penalty`),
-   verified in Gap.pm and empirically (see the inventory section).
-3. ~~Timed (OzGAP) arrival for Unungra~~ — mostly MOOT: Unungra's
-   arrival is off (`arrival_scoring: timed` is just the stored method);
-   timed arrival only actually applies to Corryong 2024 open t2–4
-   (warned). Unungra remains unreproducible anyway (GGap).
-4. ~~Which PG comps exist~~ — RESOLVED by enumeration: Bright Opens /
-   Flow Corryong / QLD Champs 2020–2026 (see workstream 4 status); check
-   their formula blocks when downloading for a gap-2020+ PG fixture.
-5. **NEW — track-less result rows**: published validity counts pilots we
-   have no tracks for; decide whether to import them (manual flights /
-   min-distance statuses) for validity parity.
-6. **NEW — legacy scorer variants**: implement `tqtime` time validity
-   and/or the legacy km-difficulty curve as opt-in engine variants for
-   closer history parity, or accept the documented ~1–3% deviations.
+1. **Repo-size policy — DECIDED: separate archive repo.** The history
+   lives in **pokle/glidecomp-comp-archive** (`comps/<slug>…`, same layout
+   as `web/samples/comps/`). GlideComp keeps only each competition's most
+   recent year bundled (Corryong 2026 + Unungra 2020, its only year) plus
+   the curated parity-fixture task folders CI scores
+   (`corryong-cup-2021-open-t1`, `corryong-cup-2026-open-t1`); Corryong
+   2017 & 2021–2025 moved to the archive. All comp scripts take
+   `GLIDECOMP_COMPS_DIR=<archive>/comps`; archive comps are
+   `history: true` in the registry, so the default `bun run seed` skips
+   them. First tranche downloaded into the archive: Forbes Flatlands
+   2020–2026, Dalby Big Air 2021–2026, Bright Open 2020–2026 (PG).
+2. **Track-less result rows — DECIDED: import them (option A).** The seed
+   now synthesizes every published result row that has no (or an empty)
+   IGC: `dnf` rows become a DNF pilot status (launch validity, §9.1);
+   flown rows become an S7F §8.4 manual flight landed at the published
+   distance along the optimised route plus a "landed" status — so the
+   seeded field matches the field AirScore scored. Bare `lo` rows land at
+   the start (scored at minimum distance). ~19 such rows exist across the
+   Corryong catalogue, plus the empty-IGC pilots the seed previously
+   dropped silently (e.g. Corryong 2026 floater t1: 7 tracked + 15
+   synthesized = the published 22).
+3. **Legacy scorer variants — DECIDED: don't implement (option B).** The
+   `tqtime` second-fastest time validity and the legacy km-difficulty
+   curve stay documented deviations (bounded in the gap-2018 fixture),
+   not engine knobs. Revisit only if future parity reports make the
+   noise floor unworkable.
+
+## Resolved earlier
+
+- ~~`goal_penalty` semantics~~ — fraction of speed+arrival points lost at
+  ESS-without-goal (`essNotGoalFactor = 1 − goal_penalty`), verified in
+  Gap.pm and empirically (see the inventory section).
+- ~~Timed (OzGAP) arrival for Unungra~~ — mostly moot: Unungra's arrival
+  is off (`arrival_scoring: timed` is just the stored method); timed
+  arrival only actually applies to Corryong 2024 open t2–4 (warned).
+  Unungra remains unreproducible anyway (GGap).
+- ~~Which PG comps exist~~ — Bright Opens / Flow Corryong / QLD Champs
+  2020–2026 (see workstream 4 status); check their formula blocks in the
+  archive downloads for a gap-2020+ PG fixture.
 
 [biuti/airscore-app]: https://github.com/biuti/airscore-app

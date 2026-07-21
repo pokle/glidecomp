@@ -32,7 +32,11 @@ import {
 } from '@glidecomp/engine';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-const COMPS_ROOT = join(REPO_ROOT, 'web/samples/comps');
+/** Comp-folder root — override with GLIDECOMP_COMPS_DIR to verify comps in
+ * a checkout of pokle/glidecomp-comp-archive (the history back-catalogue). */
+const COMPS_ROOT = process.env.GLIDECOMP_COMPS_DIR
+  ? resolve(process.env.GLIDECOMP_COMPS_DIR)
+  : join(REPO_ROOT, 'web/samples/comps');
 
 // Flag thresholds (points): tune from experience per the plan doc.
 const MEAN_THRESHOLD = 2;
@@ -137,6 +141,15 @@ function verifyTask(
     report.max = Math.max(...diffs);
     report.flagged = report.mean > MEAN_THRESHOLD || report.max > MAX_THRESHOLD;
   }
+  // Published pilots this tracks-only report can't score (no/empty IGC).
+  // The seed synthesizes them (DNF statuses / manual flights), so the app's
+  // scored validity includes them — this report's doesn't; a persistent gap
+  // here with unscored pilots present is expected, not a regression.
+  const unscored = report.publishedRows - report.matched;
+  if (unscored > 0) {
+    report.note = `${unscored} published pilot(s) not in this tracks-only comparison ` +
+      `(no/empty IGC or unmatched name) — the seed imports them as manual flights/statuses`;
+  }
   return report;
 }
 
@@ -156,8 +169,8 @@ function verifyComp(slug: string): boolean {
       console.log(`  ${t.dir}: no airscore-result-raw.json (curated fixture?) — skipped`);
       continue;
     }
-    if (r.note) {
-      console.log(`  ${t.dir} [${r.formula}]: ${r.note}`);
+    if (Number.isNaN(r.mean)) {
+      console.log(`  ${t.dir} [${r.formula}]: ${r.note ?? 'no comparable pilots'}`);
       continue;
     }
     const flag = r.flagged ? '  ⚠ ABOVE THRESHOLD' : '';
@@ -165,6 +178,7 @@ function verifyComp(slug: string): boolean {
       `  ${r.dir} [${r.formula}]: ${r.matched}/${r.publishedRows} pilots matched, ` +
         `mean |Δtotal| ${r.mean.toFixed(1)}, max ${r.max.toFixed(1)}${flag}`,
     );
+    if (r.note) console.log(`      note: ${r.note}`);
     for (const w of r.warnings) console.log(`      warning: ${w}`);
     anyFlagged ||= r.flagged;
   }
