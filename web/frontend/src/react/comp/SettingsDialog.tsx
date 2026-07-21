@@ -638,15 +638,17 @@ export function SettingsDialog({
                     value={leadingWeightFormula}
                     onChange={(v) => setLeadingWeightFormula(v as "gap2020" | "s7f2024")}
                     options={[
-                      { value: "gap2020", label: "GAP2020 — AirScore parity (default)" },
+                      { value: "gap2020", label: "GAP2020 — GAP2016/2018 weights (default)" },
                       { value: "s7f2024", label: "S7F 2024 — LeadingTimeRatio (§10)" },
                     ]}
                     ariaLabel="Paragliding leading weight formula"
                   />
                   <p className="mt-1 text-sm text-muted-foreground">
                     How much of the non-distance weight goes to leading vs time.
-                    GAP2020 gives leading 35% (and all of it when nobody makes goal);
-                    S7F 2024 uses the LeadingTimeRatio below. Hang-gliding is unaffected.
+                    GAP2020 gives leading 35% (and 0.1 × BestDist/TaskDist of the total
+                    when nobody makes goal); S7F 2024 uses the LeadingTimeRatio below
+                    (and all of the non-distance weight when nobody makes goal).
+                    Hang-gliding is unaffected.
                   </p>
                   {leadingWeightFormula === "s7f2024" ? (
                     <Field className="mt-3">

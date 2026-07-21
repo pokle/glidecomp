@@ -489,7 +489,9 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 <strong>GAP2020</strong> (older comps) — leading takes 35% of the non-distance
                 weight when someone makes goal, and
                 <Fragment set:html={km(String.raw`0.1 \times \text{BestDist}/\text{TaskDist}`)} /> of the
-                total when nobody does. This matches AirScore's gap2020/gap2021 presets.
+                total when nobody does. Despite the setting's name this is the GAP2016/2018
+                formula — AirScore's gap2020/gap2021 presets use different, PWC-derived weights
+                (see <a href="#spec-differences" class="underline hover:text-foreground">Differences from the Official Spec</a>).
               </li>
             </ul>
           </div>
@@ -724,7 +726,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                     <a href="#leading-weight" class="underline hover:text-foreground">PG leading weight</a>
                   </td>
                   <td class="py-2 pr-4 whitespace-nowrap">S7F 2024</td>
-                  <td class="py-2">Paragliding only: the leading↔time weight split. New PG comps default to <strong>S7F 2024</strong> (the LeadingTimeRatio parameter, default 26%); comps created before 15 July 2026 default to <strong>GAP2020</strong> (AirScore parity) so their scores don't shift. No effect on hang gliding.</td>
+                  <td class="py-2">Paragliding only: the leading↔time weight split. New PG comps default to <strong>S7F 2024</strong> (the LeadingTimeRatio parameter, default 26%); comps created before 15 July 2026 default to <strong>GAP2020</strong> (historically named — it is the GAP2016/2018 weight formula) so their scores don't shift. No effect on hang gliding.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">
@@ -883,10 +885,150 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
             We compared the GlideComp scoring engine line-by-line against the FAI Sporting Code
-            Section 7F (2024 edition). Beyond the unimplemented features listed above, these are
-            the places where GlideComp's behaviour differs from the letter of the spec. Section
-            numbers (§) refer to the 2024 edition and link to the relevant page of the
-            <SpecRef section="0" label="official PDF" />.
+            Section 7F (2024 edition) <em>and</em> against the source code of
+            <a href="https://github.com/biuti/airscore-app" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">AirScore</a>,
+            the CIVL-approved scoring software (last checked July 2026). The table summarises
+            how the three compare on each part of the formula; the notes below it explain the
+            differences that matter in more depth. Section numbers (§) refer to the 2024
+            edition and link to the relevant page of the
+            <SpecRef section="0" label="official PDF" />. The AirScore column describes its
+            current GAP presets (GAP2023 unless a generation is named); AirScore also ships
+            older preset generations that behave differently where noted.
+          </p>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-border">
+                  <th class="text-left py-2 pr-3 font-semibold">Feature</th>
+                  <th class="text-left py-2 pr-3 font-semibold">FAI S7F (2024)</th>
+                  <th class="text-left py-2 pr-3 font-semibold">GlideComp</th>
+                  <th class="text-left py-2 font-semibold">AirScore</th>
+                </tr>
+              </thead>
+              <tbody class="text-muted-foreground align-top">
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">Task validity (<SpecRef section="9" />)</td>
+                  <td class="py-2 pr-3">Launch, distance and time validity from the spec's cubic polynomials.</td>
+                  <td class="py-2 pr-3">As spec.</td>
+                  <td class="py-2">As spec in GAP2020+ presets. The legacy GAP2016/2018 library derives the launch-validity ratio from a DNF-count threshold and uses a 0.028 first coefficient (spec: 0.027).</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">Weight split — hang gliding (<SpecRef section="10" />)</td>
+                  <td class="py-2 pr-3">DistW = 0.9 − 1.665·GR + 1.713·GR² − 0.587·GR³; arrival (1−DistW)/8; leading 1.4·(1−DistW)/8.</td>
+                  <td class="py-2 pr-3">As spec.</td>
+                  <td class="py-2">As spec (identical across every generation).</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">Weight split — paragliding (<SpecRef section="10" />)</td>
+                  <td class="py-2 pr-3">Leading takes <em>LeadingTimeRatio</em> (default 26%) of the non-distance weight; <strong>all</strong> of it when nobody makes goal.</td>
+                  <td class="py-2 pr-3">"S7F 2024" setting = spec. The "GAP2020" setting is actually the <strong>GAP2016/2018</strong> formula: 0.35·(1−DistW), or 0.1·BestDist/TaskDist when nobody makes goal. The S7F 2020–2022 weights are <strong>not implemented</strong>.</td>
+                  <td class="py-2">gap2023 preset = spec. gap2020/gap2021/gap2022 presets = the S7F 2020–2022 weights (PWC-derived: distance 0.838 at 0% goal, else 0.805 − 1.374·GR + 1.413·GR² − 0.484·GR³; leading fixed 0.162).</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">Time-points curve (<SpecRef section="11.2" />)</td>
+                  <td class="py-2 pr-3">SF = 1 − (Δt/√t<sub>best</sub>)<sup>5/6</sup>, both sports.</td>
+                  <td class="py-2 pr-3">5/6 by default; 2/3 selectable per comp.</td>
+                  <td class="py-2">5/6 in GAP2020+; 2/3 in GAP2016/2018.</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">"Best time" (<SpecRef section="11.2" label="§11.2.1" />)</td>
+                  <td class="py-2 pr-3">The fastest pilot who <em>also reached goal</em>.</td>
+                  <td class="py-2 pr-3">Fastest pilot to ESS while the ESS-but-not-goal share is &gt; 0 (the HG default); goal-validated when it is 0 (always for PG).</td>
+                  <td class="py-2">Same rule (GAP2020+ <code>pilot_speed</code>) — GlideComp mirrors AirScore here.</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">ESS but not goal (<SpecRef section="12.1" />)</td>
+                  <td class="py-2 pr-3">PG keeps 0%, HG by default 80%, <em>of time points</em>; the §12.1 formula keeps arrival points in full.</td>
+                  <td class="py-2 pr-3">Docks time <strong>and arrival</strong> points by the factor.</td>
+                  <td class="py-2">Docks time <strong>and arrival</strong> points by the factor (same as GlideComp).</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">Leading coefficient (<SpecRef section="11.3.1" />)</td>
+                  <td class="py-2 pr-3">HG: classic squared-distance area. PG: weighted area. Clock from the first start gate.</td>
+                  <td class="py-2 pr-3">Both variants, per-sport spec defaults, either selectable. No "integrated" variant.</td>
+                  <td class="py-2">classic, weighted, plus the PWC 2023 "integrated" variant.</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">Leading-points curve (<SpecRef section="11.3" />)</td>
+                  <td class="py-2 pr-3">LF = 1 − ((LC − LC<sub>min</sub>)/√LC<sub>min</sub>)<sup>2/3</sup>.</td>
+                  <td class="py-2 pr-3">As spec.</td>
+                  <td class="py-2">As spec.</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">Arrival points (<SpecRef section="11.4" />)</td>
+                  <td class="py-2 pr-3">Position-based only (HG).</td>
+                  <td class="py-2 pr-3">Position-based only.</td>
+                  <td class="py-2">Position-based by default, plus a legacy OzGAP time-of-arrival option (at doubled weight).</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">HG distance difficulty (<SpecRef section="11.1.1" />)</td>
+                  <td class="py-2 pr-3">100 m slots; look-ahead max(30, 30·BestDist/PilotsLandedOut); cumulative relative difficulty.</td>
+                  <td class="py-2 pr-3">As spec, reproducing AirScore's sub-slot interpolation.</td>
+                  <td class="py-2">As spec.</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">Stopped task: score-back (<SpecRef section="12.3" label="§12.3.1" />)</td>
+                  <td class="py-2 pr-3">PG: announcement − score-back time (default 5 min). HG: one start-gate interval, or 15 min with a single gate.</td>
+                  <td class="py-2 pr-3">As spec.</td>
+                  <td class="py-2">A per-comp score-back time only (defaults 5 min PG / 15 min HG); no gate-interval rule.</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">Stopped task: time-points reduction (<SpecRef section="12.3" label="§12.3.5" />)</td>
+                  <td class="py-2 pr-3">A fixed amount subtracted from each <em>goal</em> pilot's time points.</td>
+                  <td class="py-2 pr-3">As spec (goal pilots only).</td>
+                  <td class="py-2">Subtracts it from <em>every</em> ESS pilot's time points, and adds the amount to the available distance points.</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">Stopped task: altitude bonus (<SpecRef section="12.3" label="§12.3.6" />)</td>
+                  <td class="py-2 pr-3">Glide ratio 4 (PG) / 5 (HG); GNSS altitude is the spec default.</td>
+                  <td class="py-2 pr-3">4 / 5, GNSS altitude.</td>
+                  <td class="py-2">4 / 5 (configurable); GPS altitude for PG but barometric (QNH) for HG by default.</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">Cylinder tolerance (<SpecRef section="8.1" />)</td>
+                  <td class="py-2 pr-3">0.1% for Cat 1; up to 0.5% for Cat 2; 5 m minimum.</td>
+                  <td class="py-2 pr-3">Defaults to 0.5% + 5 m for every comp (per-task configurable).</td>
+                  <td class="py-2">Defaults to 0.1% + 5 m in GAP2020+ (0.5% in GAP2016/2018).</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">Jump the gun (<SpecRef section="12.2" />)</td>
+                  <td class="py-2 pr-3">HG only: 1 pt per X s early (default 2), max Y s (default 300); PG scored launch→SSS.</td>
+                  <td class="py-2 pr-3">As spec (X, Y configurable).</td>
+                  <td class="py-2">As spec (expressed as 0.5 pt/s).</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">Penalties (<SpecRef section="12.4" />)</td>
+                  <td class="py-2 pr-3">Order: jump-the-gun → percentage → absolute; floor at 0.</td>
+                  <td class="py-2 pr-3">Jump-the-gun and absolute penalties; <strong>no percentage penalties</strong>.</td>
+                  <td class="py-2">All three, including negative (bonus) penalties.</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">Score rounding (<SpecRef section="11" />)</td>
+                  <td class="py-2 pr-3">Total = component sum rounded <em>once</em> to one decimal, after penalties.</td>
+                  <td class="py-2 pr-3">As spec; ranking and tie-breaks use the rounded value.</td>
+                  <td class="py-2">Full precision internally; rounds for display only (task results to 1 decimal in GAP2020+, comp totals to whole points).</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">Distance computation (<SpecRef section="4.2" />)</td>
+                  <td class="py-2 pr-3">WGS84 ellipsoid.</td>
+                  <td class="py-2 pr-3">WGS84 Andoyer-Lambert (+ Vincenty destination).</td>
+                  <td class="py-2">WGS84 Karney geodesics (geographiclib). Routes differ by metres → small absolute point differences between the two.</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-3">Series scoring / FTV</td>
+                  <td class="py-2 pr-3">Task ranking and competition totals, optionally FTV (§13–15).</td>
+                  <td class="py-2 pr-3">Single-task scoring only; no series totals or FTV.</td>
+                  <td class="py-2">Implemented; FTV is the PG preset default (factor 0.75).</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="text-muted-foreground">
+            Beyond the table — and the unimplemented features listed in the previous section —
+            these are the places where GlideComp's behaviour differs from the letter of the
+            spec, in more detail:
           </p>
 
           <div class="space-y-4 ml-2">
@@ -920,20 +1062,30 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </p>
             </div>
             <div>
-              <h3 class="text-base font-semibold mb-1">Older paragliding comps keep the GAP2020 leading weight (<SpecRef section="10" />)</h3>
+              <h3 class="text-base font-semibold mb-1">The paragliding leading weight: two generations implemented, one skipped (<SpecRef section="10" />)</h3>
               <p class="text-muted-foreground">
                 The 2024 spec derives the PG leading weight from a per-task
                 <em>LeadingTimeRatio</em> parameter (default 26% of the non-distance weight, and
                 100% of it when nobody makes goal). Paragliding competitions created from
                 <strong>15 July 2026</strong> onward <strong>default</strong> to this
-                <strong>S7F 2024</strong> formula. Competitions created before that date keep the
-                earlier <strong>GAP2020</strong> formula — 35% of the non-distance weight when
-                someone makes goal, and
-                <Fragment set:html={km(String.raw`0.1 \times \text{BestDist}/\text{TaskDist}`)} /> when nobody does —
-                so their published scores never shift; this matches AirScore's gap2020/gap2021
-                presets. Either comp can switch between the two (and set its LeadingTimeRatio) under
+                <strong>S7F 2024</strong> formula. Competitions created before that date keep
+                GlideComp's earlier formula — the setting named <strong>GAP2020</strong> — so
+                their published scores never shift: 35% of the non-distance weight when someone
+                makes goal, and
+                <Fragment set:html={km(String.raw`0.1 \times \text{BestDist}/\text{TaskDist}`)} /> when nobody does.
+                Reading the official documents and the AirScore source shows that name is
+                historical rather than accurate: that 35%/0.1×BestDist rule is the
+                <strong>GAP2016/2018</strong> formula (CIVL GAP 2018 §10, and AirScore's legacy
+                GAP library), while the real S7F 2020–2022 generation — which AirScore's
+                gap2020/gap2021/gap2022 presets implement — used different, PWC-derived PG
+                weights (distance weight 0.838 with nobody in goal, otherwise
+                <Fragment set:html={km(String.raw`0.805 - 1.374\,\text{GR} + 1.413\,\text{GR}^2 - 0.484\,\text{GR}^3`)} />,
+                with a fixed 0.162 leading weight). GlideComp does <strong>not</strong> implement
+                that intermediate generation, so a PG comp scored with AirScore's gap2020–gap2022
+                presets will not be weight-for-weight reproducible here. Either comp can switch
+                between the two implemented formulas (and set its LeadingTimeRatio) under
                 <em>Paragliding leading weight</em> in scoring settings. The hang-gliding weights
-                match the 2024 spec and are unaffected by this setting.
+                are identical in every generation and unaffected by this setting.
               </p>
             </div>
             <div>
@@ -991,6 +1143,13 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   requires. Component points are likewise kept to 0.1. The scoreboard displays
                   totals as whole points for readability, but ranking and tie-breaks use the
                   one-decimal value.
+                </li>
+                <li>
+                  <strong>ESS-but-not-goal docks arrival points too (<SpecRef section="12.1" />):</strong> the
+                  §12.1 formula reduces only a hang glider pilot's <em>time</em> points (keeping
+                  arrival points in full), but AirScore applies the factor to arrival points as
+                  well, and GlideComp matches AirScore — an ESS-but-not-goal pilot keeps 80% of
+                  both by default.
                 </li>
                 <li>
                   <strong>Optional leading/arrival points:</strong> the spec always allocates
