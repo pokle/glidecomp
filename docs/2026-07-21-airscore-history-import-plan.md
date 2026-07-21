@@ -1,0 +1,273 @@
+# Plan: faithful AirScore formula import + competition history back to 2020
+
+**Date:** 2026-07-21 · **Status:** planned (not started) · **Context:** PR #398
+
+PR #398 compared the GAP engine against the FAI S7F PDFs (2018/2020/2024
+editions) and the AirScore source ([biuti/airscore-app]) and documented the
+differences on `/scoring/gap`. Two actionable gaps fell out, and the comp
+owner wants a history of real competitions loaded into GlideComp going back
+to ~2020. This plan covers four workstreams:
+
+1. carry the formula AirScore actually used through the importer into
+   `comp.gap_params`;
+2. implement the missing S7F 2020–2022 paragliding weight generation;
+3. add per-generation AirScore parity fixtures;
+4. load the 2020→present back-catalogue.
+
+Do them in the order **1 → 2 → 3 → 4** (2 can start in parallel with 1; 4
+depends on all of them). One PR per workstream.
+
+---
+
+## Ground truth already verified (don't re-derive)
+
+- **The engine's PG "GAP2020" mode is really the GAP2016/2018 formula**
+  (leading = 0.35·(1−DW); 0.1·BestDist/TaskDist when nobody in goal). The
+  real S7F 2020–2022 generation uses PWC-derived PG weights — distance
+  weight **0.838** when nobody makes goal, else
+  **0.805 − 1.374·GR + 1.413·GR² − 0.484·GR³**, leading fixed **0.162**,
+  arrival 0, time = remainder (exactly 0 at GR=0) — verified in the
+  S7F 2020 v2.0 PDF §10 and in AirScore's `gap2020.py`/`gap2021.py`/
+  `gap2022.py`. GlideComp does **not** implement it (documented in the
+  `/scoring/gap` table and in `gap-params.ts` comments as of PR #398).
+- **HG weights are identical in every generation** — only PG is affected.
+- **xc.highcloud.net runs the *legacy PHP* AirScore** (geoffwong lineage:
+  `comPk`/`tasPk` keys, `get_all_comps.php`), *not* the Python
+  FAI-Airscore. Its per-task result JSON (saved by our downloader as
+  `airscore-result-raw.json`) includes a `formula` block, e.g. Corryong
+  2021 open t1: `{"formula":"gap-2018","goal_penalty":"1","nominal_goal":
+  "30%","minimum_distance":"5 km","nominal_distance":"35 km",
+  "nominal_time":"90 mins","arrival_scoring":"place","departure":"off",
+  "error_margin":0.0005,...}`. Unungra 2020 (PG!) shows the legacy
+  vocabulary can diverge further: `"formula":"ggap-2018"`,
+  `"departure":"Lkm"`, `"arrival_scoring":"timed"`.
+- **The importer throws this away today.** `web/scripts/
+  download-airscore-comp.ts` writes `comp.json` without any formula info,
+  and `web/scripts/seed-sample-comp.ts` inserts the comp row without
+  `gap_params` — every seeded comp scores under the current per-category
+  defaults (`defaultsFor` in `web/engine/src/gap-params.ts`). Consequence:
+  Corryong 2021 was scored by AirScore with `gap-2018` (2/3 time exponent)
+  but GlideComp seeds it with today's default (5/6) — HG *time points* in
+  the seeded history are already subtly unfaithful even though weights
+  match.
+- The comp table has a `gap_params` JSON column (read in
+  `web/workers/competition-api/src/scoring.ts` →
+  `resolveCompGapParams(category, stored, createdAtMs)`); stored values
+  always win over defaults, so seeding explicit params is fully supported
+  already.
+- Existing parity fixture: `web/samples/comps/corryong-cup-2026-open-t1/`
+  (`.curated` marker, `airscore-result.json` reference) tested by
+  `web/engine/tests/airscore-parity.test.ts` — HG, `gap-2021`, departure
+  OFF (so no leading-points reference).
+- Scoring sources are fingerprint-guarded: any change under the hashed
+  files requires bumping `SCORING_ENGINE_VERSION` +
+  `SCORING_SOURCE_FINGERPRINT` in `web/engine/src/scoring-version.ts`
+  (currently **v23**; the failing test prints the new hash).
+
+---
+
+## Workstream 1 — importer carries the AirScore formula into `gap_params`
+
+**Goal:** every imported comp seeds with the parameters AirScore actually
+scored it with, not today's defaults. Needed even for pure-HG history
+(exponent + LC variant + leading/arrival on-off).
+
+### 1a. Inventory the legacy vocabulary (first task, cheap)
+
+Write a throwaway scan (or a `--inventory` flag on the downloader) that
+prints the distinct `formula` blocks across every
+`web/samples/comps/*/airscore-result-raw.json` already on disk. This
+defines the mapping domain before any code is designed. Expect at least:
+`gap-2018`, `gap-2021`, `ggap-2018`; `departure` ∈ {`off`, `on`?, `Lkm`,
+…}; `arrival_scoring` ∈ {`place`, `timed`, `off`?}; `goal_penalty`,
+`error_margin`, nominal params as strings ("30%", "5 km", "90 mins").
+Record the inventory table in this doc when done.
+
+### 1b. Mapping function
+
+New module (suggested: `web/scripts/lib/airscore-formula-map.ts`, script-side
+— the engine shouldn't know about legacy AirScore vocab):
+
+`mapAirscoreFormula(block, category) → { gapParams: Partial<GAPParameters>, warnings: string[] }`
+
+| Legacy field | GlideComp param | Mapping |
+|---|---|---|
+| `formula` gap-2016/gap-2018/ggap-2018 | `timePointsExponent` `'2/3'`, `leadingFormula` `'classic'`, `leadingWeightFormula` `'gap2020'` (correct for this generation — it *is* GAP2016/2018) | |
+| `formula` gap-2020/gap-2021/gap-2022 | `timePointsExponent` `'5/6'`; PG: `leadingFormula` `'weighted'`, `leadingWeightFormula` `'s7f2020'` (new, workstream 2); HG: `leadingFormula` `'classic'` | |
+| `formula` gap-2023+ | `'5/6'`, PG `'weighted'` + `'s7f2024'` | |
+| `nominal_goal` "30%" | `nominalGoal` 0.3 | parse % |
+| `nominal_distance` "35 km" | `nominalDistance` 35000 | pins the comp-wide value (replaces the backend's auto-70%) |
+| `nominal_time` "90 mins" | `nominalTime` 5400 | |
+| `minimum_distance` "5 km" | `minimumDistance` 5000 | |
+| `departure` "off" | `useLeading` false | `Lkm` and any lead-out-ish value → true (verify against 1a inventory) |
+| `arrival_scoring` "off" | `useArrival` false | `place` → true; **`timed` → warn** (time-based arrival not implemented; see open questions) |
+| `goal_penalty` | `essNotGoalFactor`? | **semantics unverified** — legacy value "1" on an HG comp is suspicious (would mean keep 0%). Resolve during 1a by checking a published task where an HG pilot made ESS but not goal; until resolved, warn + leave category default |
+| `error_margin` 0.0005 | per-task cylinder tolerance | optional fidelity: GlideComp tolerance is per-task; thread through task seeding if cheap, else warn |
+
+Every unmapped/unknown value must produce a loud warning, not a silent
+default. Keep the raw block verbatim in the manifest for provenance.
+
+### 1c. Manifest + seed changes
+
+- `download-airscore-comp.ts`: after fetching each task, extract the
+  `formula` block; assert it's consistent across a comp's tasks (warn and
+  record per-task if not); write into `comp.json` as both
+  `airscore_formula` (raw, provenance) and `gap_params` (mapped). Add a
+  **`--manifest-only`** flag that regenerates `comp.json` from the raw
+  JSONs already on disk — the whole bundled back-catalogue can be
+  backfilled without re-hitting the server. (Respect `.curated` folders as
+  today.)
+- `seed-sample-comp.ts`: when the manifest has `gap_params`, write the
+  JSON into the comp row on insert *and* on the idempotent update path.
+  Scores are stale-first so no extra invalidation is needed at seed time,
+  but re-seeding an existing comp with changed gap_params must go through
+  the same stale-marking the seed script already does for re-seeded tracks
+  — verify that path touches `task_scores` (it should; if not, call
+  `bumpScoreInputs`-equivalent SQL from the script).
+- Backfill: run `--manifest-only` over all bundled comps and commit the
+  regenerated manifests. **Check the parity impact before committing**: the
+  curated corryong-cup-2026 fixture's published comp ran departure OFF —
+  after backfill the seeded comp will too, which is *more* faithful but
+  changes displayed scores; sanity-check a couple of tasks by hand.
+
+**Done when:** `bun run seed` produces comps whose settings dialog shows
+the AirScore-era parameters (e.g. Corryong 2021 → 2/3 exponent, leading
+off), and the doc table in this file lists the vocabulary inventory.
+
+---
+
+## Workstream 2 — implement the S7F 2020–2022 PG weight generation
+
+**Goal:** close the one remaining formula gap so PG comps scored by
+AirScore's gap-2020/2021/2022 (and by the real S7F 2020–2022 spec) are
+reproducible.
+
+- `web/engine/src/gap-params.ts`: extend
+  `LeadingWeightFormula = 'gap2020' | 's7f2020' | 's7f2024'`. Keep the
+  stored `'gap2020'` value and its meaning untouched (no migration, no
+  score shifts). Document that `'s7f2020'` — unlike the other two — also
+  switches the **PG distance weight** to the PWC polynomial; the name of
+  the param is now slightly too narrow, which the docblock should admit.
+- `web/engine/src/gap-formulas.ts` `calculateWeights`: for
+  `scoring === 'PG' && leadingWeightFormula === 's7f2020'`:
+  `dw = gr === 0 ? 0.838 : 0.805 − 1.374·gr + 1.413·gr² − 0.484·gr³`;
+  `lw = useLeading ? 0.162 : 0`; `aw = 0`; `tw = 1 − dw − lw` (comes out
+  exactly 0 at gr = 0). HG path unchanged.
+- `resolveCompGapParams` / `defaultsFor`: **no default changes** —
+  `'s7f2020'` is only ever selected explicitly (settings dialog) or by the
+  workstream-1 importer mapping.
+- Settings UI (`web/frontend/src/react/comp/SettingsDialog.tsx`): third
+  option "S7F 2020–2022 — PWC weights (AirScore gap2020/21/22)"; helper
+  text gains one sentence. Hide the LeadingTimeRatio field for it (as for
+  gap2020).
+- Score explanation: wherever the weight formula is named
+  (`score-explanation-sections.ts`, PilotScoreDetail) add the third name.
+- `/scoring/gap` doc: update the PG-weights table cell + the prose
+  subsection (both currently say "not implemented"), and the
+  leading-weight bullet list.
+- Tests: unit-test the exact weights at GR = 0, 0.3, 1.0 (expected DW at
+  GR=1: 0.805 − 1.374 + 1.413 − 0.484 = 0.36); integration test that a PG
+  field scored under `'s7f2020'` distributes 0.162·quality·1000 leading
+  points.
+- **Bump `SCORING_ENGINE_VERSION` to v24** + new fingerprint (behaviour
+  addition; existing comps unaffected but the guard fires regardless).
+
+**Done when:** typecheck + full `test:all` green, and workstream 1's
+mapping can emit `'s7f2020'` without a warning.
+
+---
+
+## Workstream 3 — per-generation parity fixtures
+
+**Goal:** turn "we mapped the formula correctly" into regression tests
+against real published AirScore totals, per generation.
+
+- Today's coverage: HG `gap-2021` (corryong-cup-2026-open-t1, departure
+  off). Add:
+  1. **HG gap-2018** — any Corryong 2021 task; raw JSON with published
+     per-pilot totals is already on disk. Curate it like the 2026 fixture
+     (`.curated` marker + trimmed `airscore-result.json` reference with
+     weights + per-pilot dist/time/total) and extend
+     `airscore-parity.test.ts` (or a sibling test file) to score it under
+     the workstream-1 mapped params (2/3 exponent!) and compare.
+  2. **PG fixture** — Unungra 2020 is PG but was scored with legacy
+     `ggap-2018` + `timed` arrival + `Lkm` departure, which we can't fully
+     reproduce (timed arrival unimplemented). Options, in order of
+     preference: (a) find a PG comp on xc.highcloud.net (or another public
+     legacy-AirScore instance) scored with `gap-2020`/`gap-2021` — check
+     `get_all_comps.php` during workstream 4's enumeration; (b) if none
+     exists, a *weights-only* parity check: assert our `'s7f2020'` weights
+     reproduce the `start_weight`/`speed_weight`/distance weight numbers
+     published in PG task JSONs; (c) accept spec-PDF-derived unit tests
+     from workstream 2 as the only PG coverage and say so in the doc.
+- Parity tolerance: follow the existing test's tolerances (it compares
+  dist/time points and totals; keep any relaxation explicit per-fixture
+  with a comment saying why, e.g. route-optimizer differences).
+- While curating the gap-2018 fixture, use it to **resolve the
+  `goal_penalty` semantics question** from workstream 1b.
+
+**Done when:** at least fixtures (1) and one of (2a/2b) run in CI.
+
+---
+
+## Workstream 4 — load the competition history (2020 → present)
+
+**Goal:** real comps from ~2020 onward, seeded and publicly visible.
+
+1. **Enumerate** what xc.highcloud.net actually hosts:
+   `get_all_comps.php` (the downloader's comment says comPks come from
+   there). Build a candidate list (name, year, class HG/PG, formula,
+   task/pilot counts, tracks available) and get the comp owner's pick.
+   Politeness rules as today (`REQUEST_DELAY_MS` ≥ 3500 ms, UA string,
+   idempotent re-runs).
+2. **Repo-size policy — decide before downloading** (open question below):
+   the bundled set is already ~1,600 IGCs. Recommended split:
+   - *bundled in git*: only parity fixtures and comps we want in every dev
+     seed (`bun run seed`);
+   - *history*: committed `COMPS`-registry entries (small) + a one-off
+     `download → seed --remote` run into prod D1/R2, with the IGC folders
+     kept out of git (e.g. a `web/samples/comps/.history/` path in
+     `.gitignore`, or a `--dir` override). Reproducible because the
+     registry + downloader are committed; re-runnable if prod is ever
+     reseeded.
+3. **Extend the `COMPS` registry** with the chosen comps (use the
+   `corryongCup()`-style helpers; set `compName`, `category`, and — new —
+   let a registry entry mark itself `history: true` so `bun run seed`
+   skips it unless asked (`bun run seed --history` or explicit slugs).
+4. **Import order per comp:** download → manifest with mapped
+   `gap_params` (workstream 1) → seed locally → **parity report** → seed
+   `--remote`. The parity report is a small script (suggested:
+   `bun web/scripts/verify-airscore-parity.ts <slug>`) that scores each
+   seeded task with the engine and prints per-task mean/max absolute
+   total-point difference vs the `airscore-result-raw.json` published
+   totals, flagging tasks above a threshold (start at ±2 pts mean / ±10
+   max, tighten from experience). Comps that can't be reproduced (legacy
+   formulas like `ggap-2018` timed-arrival) get seeded anyway but their
+   report is recorded in the comp description or this doc — transparency
+   over silent wrongness.
+5. Housekeeping per comp: `hidden` **false** (real public comps — they're
+   the SEO content), correct `category`, timezone from task data as today,
+   and the D1 `creation_date` note: `resolveCompGapParams` uses creation
+   date for the PG leading-weight *default*, but every imported comp gets
+   **explicit** `gap_params`, so the date-based default never applies —
+   no backdating needed.
+
+**Done when:** owner-approved comp list is live in prod, each with a
+recorded parity report.
+
+---
+
+## Open questions (resolve with the owner or during 1a)
+
+1. **Repo-size policy** for the history (bundled vs. gitignored + seeded;
+   see 4.2) — needs an owner decision.
+2. **`goal_penalty` / legacy-field semantics** — resolve empirically from
+   fixture data during 1a/3.
+3. **Timed (OzGAP) arrival** — Unungra 2020 needs it for full fidelity.
+   Implementing it is small (AirScore: `AC = 1 − 0.667·time_after_first_ess_hours`,
+   arrival weight ×2) but it's a new engine feature + version bump; decide
+   whether fidelity for one comp justifies it, or record the deviation.
+4. **Which PG comps exist** on the instance for fixture 3.2a — unknown
+   until enumeration.
+
+[biuti/airscore-app]: https://github.com/biuti/airscore-app
