@@ -206,6 +206,25 @@ describe("GET /api/comp", () => {
     expect(data.comps.length).toBe(1);
     expect(data.comps[0].test).toBe(true);
   });
+
+  test("sorts by most recent event first, creation date for task-less comps", async () => {
+    // Created oldest-event-last so creation order and event order disagree.
+    const recentId = await createComp({ name: "Recent Event" });
+    await createTask(recentId, { task_date: "2026-06-01" });
+    const noTasksId = await createComp({ name: "No Tasks" });
+    const oldId = await createComp({ name: "Old Event" });
+    await createTask(oldId, { task_date: "2020-05-10" });
+
+    const res = await authRequest("GET", "/api/comp");
+    const data = (await res.json()) as { comps: Array<{ name: string }> };
+    // "No Tasks" falls back to its creation timestamp (today), which
+    // outranks both events' task dates.
+    expect(data.comps.map((c) => c.name)).toEqual([
+      "No Tasks",
+      "Recent Event",
+      "Old Event",
+    ]);
+  });
 });
 
 // ── GET /api/comp/:comp_id ──────────────────────────────────────────────────
