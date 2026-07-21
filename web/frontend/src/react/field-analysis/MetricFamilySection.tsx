@@ -10,6 +10,7 @@
 import { useMemo } from "react";
 import { Disclosure } from "@/react/rac/disclosure";
 import { Badge } from "@/react/rac/badge";
+import { MetricMethod } from "./MetricExplanation";
 import { PerPilotMetricTable } from "./PerPilotMetricTable";
 import { ReportTableView, ReportTableTitle } from "./ReportTableView";
 import { SeriesChart } from "./charts/SeriesChart";
@@ -45,6 +46,7 @@ export function MetricFamilySection({
   defaultExpanded,
   isExpanded,
   onExpandedChange,
+  printBreakBefore = false,
 }: {
   family: MetricFamily;
   familyLabel: string;
@@ -57,6 +59,10 @@ export function MetricFamilySection({
    * collapsed family before scrolling to it). */
   isExpanded?: boolean;
   onExpandedChange?: (isExpanded: boolean) => void;
+  /** Start this family on a fresh printed page — every family is a chapter.
+   * The caller skips the first rendered family so it stays with the section
+   * heading instead of orphaning it. */
+  printBreakBefore?: boolean;
 }) {
   // Field-level metrics (wind, climb-by-hour) carry no per-pilot values at
   // all; a column of dashes for them is noise, so they only contribute their
@@ -77,7 +83,10 @@ export function MetricFamilySection({
     // consumes `id` for its own wiring rather than forwarding it. scroll-mt
     // keeps the sticky header from covering the section when the TOC
     // scrolls here.
-    <div id={familySectionId(family)} className="scroll-mt-20">
+    <div
+      id={familySectionId(family)}
+      className={printBreakBefore ? "scroll-mt-20 print:break-before-page" : "scroll-mt-20"}
+    >
     <Disclosure
       title={familyLabel}
       defaultExpanded={defaultExpanded}
@@ -121,6 +130,13 @@ export function MetricFamilySection({
               aria-label={m.label}
             >
               <h4 className="text-sm font-medium">{m.label}</h4>
+              {/* The ⓘ text inline, so the block's charts and tables read
+                  with their method — on screen and in print. */}
+              <MetricMethod
+                unit={m.unit}
+                direction={m.direction}
+                explanation={m.explanation}
+              />
               {m.fieldSummary?.map((line, i) => (
                 <p key={i} className="text-sm text-muted-foreground">
                   {line}

@@ -147,7 +147,7 @@ export function CompFieldAnalysis() {
 
   if (userLoading || status === "loading") {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-6">
+      <div className="mx-auto max-w-6xl px-4 py-6 font-hyperlegible">
         <p className="text-sm text-muted-foreground">Loading field analysis…</p>
       </div>
     );
@@ -155,7 +155,7 @@ export function CompFieldAnalysis() {
 
   if (status === "forbidden" || status === "error") {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-6">
+      <div className="mx-auto max-w-6xl px-4 py-6 font-hyperlegible">
         <Breadcrumbs items={crumbs} current="Field analysis" />
         <h1 className="mt-3 text-2xl font-bold">Field analysis</h1>
         <Alert className="mt-4">
@@ -175,7 +175,7 @@ export function CompFieldAnalysis() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
+    <div className="mx-auto max-w-6xl px-4 py-6 font-hyperlegible">
       <Breadcrumbs items={crumbs} current="Field analysis" />
 
       <div className="mt-3 flex flex-wrap items-start justify-between gap-3">

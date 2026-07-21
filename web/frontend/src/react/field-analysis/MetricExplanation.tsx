@@ -15,12 +15,41 @@
 import { InfoIcon } from "lucide-react";
 import { Popover, PopoverTrigger } from "@/react/rac/popover";
 import { Button } from "@/react/rac/button";
+import { cn } from "@/react/lib/utils";
 import { DistributionStrip } from "./charts/DistributionStrip";
 import { glossaryEntryId } from "./MetricGlossary";
-import { directionWords } from "./units";
+import { directionWords, unitWords } from "./units";
 import type { MetricDirection, PilotMetricValue } from "./types";
 
 export { directionWords };
+
+/**
+ * The ⓘ text, inline: unit + direction, then the method prose. Chart blocks
+ * render this UNDER their heading so the method reads with the chart, on
+ * screen and on paper alike — no popover to open (and none to lose in
+ * print). The ⓘ popover stays for the metrics named inside dense tables,
+ * where twenty-six inline explanations would bury the numbers.
+ */
+export function MetricMethod({
+  unit,
+  direction,
+  explanation,
+  className,
+}: {
+  unit: string;
+  direction: MetricDirection;
+  explanation: string;
+  className?: string;
+}) {
+  return (
+    <div className={cn("text-muted-foreground", className)}>
+      <p className="text-xs">
+        Measured in {unitWords(unit)} · {directionWords(direction)}
+      </p>
+      <p className="mt-0.5 text-sm">{explanation}</p>
+    </div>
+  );
+}
 
 export function MetricExplanation({
   metricId,

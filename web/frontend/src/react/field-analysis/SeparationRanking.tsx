@@ -18,6 +18,7 @@ import type { Key, Selection } from "react-aria-components";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { DivergingMeter } from "@/react/rac/meter";
 import { Badge } from "@/react/rac/badge";
+import { cn } from "@/react/lib/utils";
 import { MetricExplanation } from "./MetricExplanation";
 import { MetricDetailPanel } from "./charts/MetricDetailPanel";
 import {
@@ -189,13 +190,72 @@ export function SeparationRanking({
       ) : null}
 
       {report && selectedMetric ? (
-        <MetricDetailPanel
-          metric={selectedMetric}
-          report={report}
-          showAllLabels={showAllLabels}
-          onShowAllLabelsChange={setShowAllLabels}
-        />
+        // On paper the print-only strong-metric panels below replace this
+        // interactive one — printing it too would duplicate a chart. When no
+        // metric earned "strong", this panel is all print gets, so it stays.
+        <div className={strongMetrics(ranked).length > 0 ? "print:hidden" : undefined}>
+          <MetricDetailPanel
+            metric={selectedMetric}
+            report={report}
+            showAllLabels={showAllLabels}
+            onShowAllLabelsChange={setShowAllLabels}
+          />
+        </div>
       ) : null}
+
+      {report ? <StrongMetricPrintCharts ranked={ranked} metrics={metrics} report={report} /> : null}
+    </div>
+  );
+}
+
+function strongMetrics(ranked: RankedMetric[]): RankedMetric[] {
+  return ranked.filter((r) => r.correlation.verdict === "strong");
+}
+
+/**
+ * Print-only: the rank scatter + distribution of EVERY metric the ranking
+ * called "strong", two to a page. On screen one chart at a time (row
+ * selection) is the right reading; on paper there is no selection, and the
+ * strong metrics are exactly the ones whose shape the reader needs to see.
+ *
+ * display:none on screen also keeps these out of the accessibility tree —
+ * they are duplicates of what row selection already offers interactively.
+ */
+function StrongMetricPrintCharts({
+  ranked,
+  metrics,
+  report,
+}: {
+  ranked: RankedMetric[];
+  metrics: MetricReport[];
+  report: FieldAnalysisReport;
+}) {
+  const strong = strongMetrics(ranked);
+  if (strong.length === 0) return null;
+
+  return (
+    <div className="hidden print:block print:break-before-page">
+      <h3 className="text-base font-semibold">
+        Metrics with a strong verdict, plotted against rank
+      </h3>
+      {strong.map(({ metric }, i) => {
+        const full = metrics.find((m) => m.id === metric.id);
+        if (!full) return null;
+        return (
+          <div
+            key={metric.id}
+            // Two charts per page: never split a panel, force a page break
+            // after every second one, and cap the width (the scatter scales
+            // with it) so a pair genuinely fits one A4 page.
+            className={cn(
+              "mx-auto mt-4 max-w-[34rem] break-inside-avoid",
+              i % 2 === 1 && "print:break-after-page"
+            )}
+          >
+            <MetricDetailPanel metric={full} report={report} />
+          </div>
+        );
+      })}
     </div>
   );
 }
