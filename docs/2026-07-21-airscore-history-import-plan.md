@@ -369,6 +369,31 @@ track-less pilots — see the inventory section) put real comps at mean
 |Δtotal| ~20–90 unscaled, so thresholds need the quality-ratio treatment
 or the follow-up engine variants before they can be tightened to ±2/±10.
 
+**First-tranche findings (2026-07-21, after downloading Forbes/Dalby/
+Bright into the archive):**
+
+- **Australian PG on highcloud ran GGap through 2024**: Bright Open
+  2020–2024 are `ggap-2018/2019/2020` with `Lkm` departure — same
+  unreproducible family as Unungra. There is still **no real
+  gap-2020/21/22 PG comp** in this tranche, so the `'s7f2020'` engine
+  generation keeps its spec-derived unit tests as its only coverage
+  (check Flow Corryong / QLD Champs if a real-data fixture is ever
+  wanted; they're likely GGap too).
+- **Bright Open 2025 & 2026 are `gap-2024` with lead-out ON**
+  (`start_weight` 0.26 = the S7F LeadingTimeRatio) — the first real
+  reference for PG s7f2024 weights AND weighted-LC leading points.
+  Parity on bright-open-2026-open-t2: weights exact, time/distance
+  points within ~1 pt, leading points within ~10 pts, land-out totals
+  within ~2 pts. Strong candidate for a third curated parity fixture.
+- **The verify report's big outliers are administrative zeroes**: pilots
+  the organisers scored 0 despite a full flight (penalties/DSQ — e.g.
+  Bright 2026 t2 "esquillaro": published 0, formula says ~926). The
+  importer doesn't carry penalty rows yet; treat those as expected
+  mismatches or import penalties later.
+- Empty tasks exist (published `data: null`, e.g. Dalby 2022 open t6) —
+  the tracks "zip" isn't a zip; the downloader now warns and keeps the
+  task with zero tracks instead of failing the comp.
+
 **Goal:** real comps from ~2020 onward, seeded and publicly visible.
 
 1. **Enumerate** what xc.highcloud.net actually hosts:

@@ -390,7 +390,13 @@ function extractTracks(zipBuf: ArrayBuffer, dir: string, taskDateIso: string): n
   const res = spawnSync('unzip', ['-o', '-q', '-j', zipPath, '-d', dir]);
   rmSync(zipPath);
   if (res.status !== 0) {
-    throw new Error(`unzip failed: ${res.stderr?.toString() || res.stdout?.toString()}`);
+    // A task nobody flew (published data: null) serves an invalid "zip" —
+    // keep the task with zero tracks rather than failing the whole comp.
+    console.warn(
+      `  WARNING ${basename(dir)}: tracks zip did not extract (empty task?): ` +
+        `${(res.stderr?.toString() || res.stdout?.toString() || '').trim().slice(0, 200)}`,
+    );
+    return 0;
   }
 
   const stamp = dateToDDMMYY(taskDateIso);
