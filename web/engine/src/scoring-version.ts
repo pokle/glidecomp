@@ -213,7 +213,16 @@
 //     comments touch hashed scoring sources, so the fingerprint guard
 //     requires a bump. The cache roll is harmless (scores recompute
 //     identically).
-export const SCORING_ENGINE_VERSION = 23;
+// v24: S7F 2020–2022 PG weight generation (AirScore history import). A third
+//     `leadingWeightFormula` value 's7f2020' implements the PWC-derived PG
+//     weights of the S7F 2020–2022 editions (AirScore's gap2020/gap2021/
+//     gap2022 presets): distance weight fixed at 0.838 when nobody makes
+//     goal, else 0.805 − 1.374·GR + 1.413·GR² − 0.484·GR³; leading weight
+//     fixed at 0.162 (LeadingTimeRatio ignored); arrival 0; time the
+//     remainder (exactly 0 at goal ratio 0). Never a default — selected
+//     explicitly in settings or by the AirScore formula importer — so no
+//     existing comp's scores move; the guard fires on the added branch.
+export const SCORING_ENGINE_VERSION = 24;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -221,4 +230,4 @@ export const SCORING_ENGINE_VERSION = 23;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "28a992fc138572f6202f8265280df8f2fb945026f1dc2a02dd44b19ad0cbc05f";
+  "335fd42096da4cb09662dc7a55c5f1afff397d62b4753e4890041f07a43ad141";

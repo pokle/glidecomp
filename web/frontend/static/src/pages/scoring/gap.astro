@@ -490,8 +490,17 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 weight when someone makes goal, and
                 <Fragment set:html={km(String.raw`0.1 \times \text{BestDist}/\text{TaskDist}`)} /> of the
                 total when nobody does. Despite the setting's name this is the GAP2016/2018
-                formula — AirScore's gap2020/gap2021 presets use different, PWC-derived weights
-                (see <a href="#spec-differences" class="underline hover:text-foreground">Differences from the Official Spec</a>).
+                formula (see <a href="#spec-differences" class="underline hover:text-foreground">Differences from the Official Spec</a>).
+              </li>
+              <li>
+                <strong>S7F 2020–2022</strong> — the PWC-derived generation between those two
+                (what AirScore's gap2020/gap2021/gap2022 presets implement). Unlike the other
+                settings it fixes the whole split: distance weight 0.838 when nobody makes
+                goal, otherwise
+                <Fragment set:html={km(String.raw`0.805 - 1.374\,\text{GR} + 1.413\,\text{GR}^2 - 0.484\,\text{GR}^3`)} />;
+                leading weight always 0.162; time takes the remainder (exactly zero when
+                nobody makes goal). Never a default — pick it to reproduce a comp AirScore
+                scored under those presets.
               </li>
             </ul>
           </div>
@@ -726,7 +735,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                     <a href="#leading-weight" class="underline hover:text-foreground">PG leading weight</a>
                   </td>
                   <td class="py-2 pr-4 whitespace-nowrap">S7F 2024</td>
-                  <td class="py-2">Paragliding only: the leading↔time weight split. New PG comps default to <strong>S7F 2024</strong> (the LeadingTimeRatio parameter, default 26%); comps created before 15 July 2026 default to <strong>GAP2020</strong> (historically named — it is the GAP2016/2018 weight formula) so their scores don't shift. No effect on hang gliding.</td>
+                  <td class="py-2">Paragliding only: the leading↔time weight split. New PG comps default to <strong>S7F 2024</strong> (the LeadingTimeRatio parameter, default 26%); comps created before 15 July 2026 default to <strong>GAP2020</strong> (historically named — it is the GAP2016/2018 weight formula) so their scores don't shift. <strong>S7F 2020–2022</strong> (the PWC-derived weights AirScore's gap2020/21/22 presets use) is selectable for reproducing comps of that era. No effect on hang gliding.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">
@@ -922,7 +931,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">Weight split — paragliding (<SpecRef section="10" />)</td>
                   <td class="py-2 pr-3">Leading takes <em>LeadingTimeRatio</em> (default 26%) of the non-distance weight; <strong>all</strong> of it when nobody makes goal.</td>
-                  <td class="py-2 pr-3">"S7F 2024" setting = spec. The "GAP2020" setting is actually the <strong>GAP2016/2018</strong> formula: 0.35·(1−DistW), or 0.1·BestDist/TaskDist when nobody makes goal. The S7F 2020–2022 weights are <strong>not implemented</strong>.</td>
+                  <td class="py-2 pr-3">"S7F 2024" setting = spec. The "GAP2020" setting is actually the <strong>GAP2016/2018</strong> formula: 0.35·(1−DistW), or 0.1·BestDist/TaskDist when nobody makes goal. The "S7F 2020–2022" setting implements the PWC-derived generation (matching AirScore's gap2020/21/22 presets).</td>
                   <td class="py-2">gap2023 preset = spec. gap2020/gap2021/gap2022 presets = the S7F 2020–2022 weights (PWC-derived: distance 0.838 at 0% goal, else 0.805 − 1.374·GR + 1.413·GR² − 0.484·GR³; leading fixed 0.162).</td>
                 </tr>
                 <tr class="border-b border-border/50">
@@ -1062,7 +1071,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </p>
             </div>
             <div>
-              <h3 class="text-base font-semibold mb-1">The paragliding leading weight: two generations implemented, one skipped (<SpecRef section="10" />)</h3>
+              <h3 class="text-base font-semibold mb-1">The paragliding leading weight: three generations, one misleading name (<SpecRef section="10" />)</h3>
               <p class="text-muted-foreground">
                 The 2024 spec derives the PG leading weight from a per-task
                 <em>LeadingTimeRatio</em> parameter (default 26% of the non-distance weight, and
@@ -1076,14 +1085,14 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 Reading the official documents and the AirScore source shows that name is
                 historical rather than accurate: that 35%/0.1×BestDist rule is the
                 <strong>GAP2016/2018</strong> formula (CIVL GAP 2018 §10, and AirScore's legacy
-                GAP library), while the real S7F 2020–2022 generation — which AirScore's
+                GAP library). The real S7F 2020–2022 generation — which AirScore's
                 gap2020/gap2021/gap2022 presets implement — used different, PWC-derived PG
                 weights (distance weight 0.838 with nobody in goal, otherwise
                 <Fragment set:html={km(String.raw`0.805 - 1.374\,\text{GR} + 1.413\,\text{GR}^2 - 0.484\,\text{GR}^3`)} />,
-                with a fixed 0.162 leading weight). GlideComp does <strong>not</strong> implement
-                that intermediate generation, so a PG comp scored with AirScore's gap2020–gap2022
-                presets will not be weight-for-weight reproducible here. Either comp can switch
-                between the two implemented formulas (and set its LeadingTimeRatio) under
+                with a fixed 0.162 leading weight); GlideComp implements it as the
+                <strong>S7F 2020–2022</strong> setting, used when reproducing a comp that
+                AirScore scored under those presets (it is never a default). A comp can switch
+                between the three formulas (and set its LeadingTimeRatio) under
                 <em>Paragliding leading weight</em> in scoring settings. The hang-gliding weights
                 are identical in every generation and unaffected by this setting.
               </p>
