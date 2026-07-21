@@ -1,18 +1,24 @@
 /**
- * AirScore parity check against real published results.
+ * AirScore parity checks against real published results — one fixture per
+ * formula generation the importer maps (see
+ * docs/2026-07-21-airscore-history-import-plan.md, workstream 3).
  *
- * Corryong Cup 2026 Task 1 (xc.highcloud.net comPk=466, tasPk=2027) — a
- * 33-pilot HG task scored by AirScore with `gap-2021` (the `weighted`
- * leading formula). The published comp ran with departure (leading) OFF,
- * so there are no reference leading points; this test therefore:
+ * 1. Corryong Cup 2026 Task 1 (comPk=466, tasPk=2027) — a 33-pilot HG task
+ *    scored with `gap-2021` (modern generation: 5/6 time-points curve).
+ *    The published comp ran with departure (leading) OFF, so there are no
+ *    reference leading points; the test validates the shared pipeline
+ *    (validity, weights, distance/time points) against AirScore's real
+ *    numbers and sanity-checks the weighted leadout ordering.
  *
- *  1. validates the shared pipeline (validity, weights, distance/time
- *     points) against AirScore's real numbers — these feed the LC, so a
- *     match gives indirect confidence in the LC inputs, and
- *  2. sanity-checks that our `weighted` leadout ranks early course-leaders
- *     above a faster-but-later finisher, as AirScore's weighted leadout does.
+ * 2. Corryong Cup 2021 Task 1 (comPk=305, tasPk=1340) — a 32-pilot HG task
+ *    scored with `gap-2018` (pre-2020 generation: classic 2/3 curve,
+ *    ESS-but-not-goal keeps 0%). Scored here under the importer-mapped
+ *    parameters, proving the workstream-1 formula mapping reproduces the
+ *    published points of the older generation.
  *
- * Sample IGC/xctsk and the AirScore reference live in web/samples.
+ * Sample IGC/xctsk and the AirScore references live in web/samples (both
+ * task folders carry a `.curated` marker so re-downloads never overwrite
+ * them).
  */
 import { describe, it, expect } from 'bun:test';
 import { readFileSync, readdirSync } from 'fs';
@@ -194,5 +200,177 @@ describe('AirScore parity — Corryong Cup 2026 T1', () => {
     expect(holtkamp.leadingPoints).toBeGreaterThan(durand.leadingPoints);
     expect(burkitt.leadingPoints).toBeGreaterThan(durand.leadingPoints);
     expect(holtkamp.leadingCoefficient).toBeLessThan(durand.leadingCoefficient);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// gap-2018 generation (Corryong Cup 2021 T1) — the pre-2020 formula the
+// importer maps: classic 2/3 time-points curve, leading/arrival off,
+// essNotGoalFactor 0 (goal_penalty "1").
+// ---------------------------------------------------------------------------
+
+const COMP_DIR_2021 = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../samples/comps/corryong-cup-2021-open-t1',
+);
+
+interface RefPilot2021 {
+  surname: string; name: string; start: string | null; time: string | null;
+  distKm: number | null; timePts: number; distPts: number; total: number;
+}
+const ref2021 = JSON.parse(
+  readFileSync(resolve(COMP_DIR_2021, 'airscore-result.json'), 'utf8'),
+) as {
+  quality: { task: number; distance: number; time: number; launch: number };
+  goal: number; launched: number;
+  weights: { distance: number; time: number };
+  pilots: RefPilot2021[];
+};
+// Two Atkinsons share the surname key; both are minimum-distance pilots with
+// identical published points, so first-wins keying is safe for every
+// assertion below.
+const ref2021BySurname = new Map(ref2021.pilots.map((p) => [p.surname, p]));
+
+const task2021 = parseXCTask(readFileSync(resolve(COMP_DIR_2021, 'task.xctsk'), 'utf8'));
+
+function loadPilots2021(): PilotFlight[] {
+  // Full surname key: strip the trailing _<id>_<DDMMYY>.igc so multi-word
+  // surnames (de_vecchi) keep their whole key.
+  return readdirSync(COMP_DIR_2021)
+    .filter((f: string) => f.endsWith('.igc'))
+    .map((f: string) => {
+      const igc = parseIGC(readFileSync(resolve(COMP_DIR_2021, f), 'utf8'));
+      return {
+        pilotName: f.replace(/_\d+_\d{6}\.igc$/, ''),
+        trackFile: f,
+        fixes: igc.fixes,
+      };
+    });
+}
+
+// The importer-mapped parameters for this task (comp.json formula capture):
+// gap-2018 → 2/3 exponent, departure/arrival off, goal_penalty 1 → keep 0%.
+const params2021 = {
+  scoring: 'HG' as const,
+  useLeading: false,
+  useArrival: false,
+  timePointsExponent: '2/3' as const,
+  essNotGoalFactor: 0,
+  nominalDistance: 35000,
+  nominalGoal: 0.3,
+  nominalTime: 5400,
+  minimumDistance: 5000,
+};
+
+describe('AirScore parity — Corryong Cup 2021 T1 (gap-2018 generation)', () => {
+  const pilots = loadPilots2021();
+  const r = scoreTask(task2021, pilots, params2021);
+
+  // KNOWN DEVIATION (legacy AirScore, every pre-Python comp on the host):
+  // Gap.pm feeds the SECOND-fastest ESS time ("tqtime") into time validity,
+  // where the FAI spec (and this engine) uses the fastest. Published task
+  // quality is therefore 0.978 (from Adriaans' 4743 s) vs our spec-correct
+  // 0.9696 (from Wisewould's 4600 s), and every published point value is
+  // scaled by that ratio. The per-pilot assertions below compare through
+  // qualityRatio so everything else must match exactly.
+  const qualityRatio = r.taskValidity.task / ref2021.quality.task;
+
+  it('loaded all 32 tracks', () => {
+    expect(pilots.length).toBe(32);
+  });
+
+  it('reproduces the published goal count; task validity differs only by the legacy second-fastest rule', () => {
+    const goal = r.pilotScores.filter((p) => p.madeGoal).length;
+    expect(goal).toBe(ref2021.goal); // 15 — including the two zero-time-point finishers
+    expect(r.taskValidity.distance).toBeCloseTo(ref2021.quality.distance, 2);
+    expect(r.taskValidity.launch).toBeCloseTo(ref2021.quality.launch, 2);
+    // Our time validity from the fastest time (spec §9.3)…
+    expect(r.taskValidity.time).toBeCloseTo(0.9696, 3);
+    // …while the published 0.978 reproduces exactly from the second-fastest
+    // ESS time (4743 s) through the same cubic — proving the divergence is
+    // the legacy tqtime rule and nothing else.
+    const x = 4743 / 5400;
+    const legacyTime = -0.271 + 2.912 * x - 2.098 * x * x + 0.457 * x * x * x;
+    expect(legacyTime).toBeCloseTo(ref2021.quality.time, 3);
+  });
+
+  it('distance/time weights match the published goal ratio (leading & arrival off)', () => {
+    expect(r.weights.distance).toBeCloseTo(ref2021.weights.distance, 3); // 0.4355
+    expect(r.weights.time).toBeCloseTo(ref2021.weights.time, 3);
+    expect(r.weights.leading).toBe(0);
+    expect(r.weights.arrival).toBe(0);
+  });
+
+  it('goal pilots get AirScore\'s full distance points (quality-scaled)', () => {
+    let checked = 0;
+    for (const p of r.pilotScores) {
+      if (!p.madeGoal) continue;
+      const ref = ref2021BySurname.get(p.pilotName);
+      if (!ref) continue;
+      expect(Math.abs(p.distancePoints - ref.distPts * qualityRatio)).toBeLessThan(0.5);
+      checked++;
+    }
+    expect(checked).toBe(15);
+  });
+
+  it('time points match AirScore for every ESS pilot under the classic 2/3 curve', () => {
+    // The generation's distinguishing curve: 1 − (Δt/√Tmin)^(2/3) in hours.
+    // Under the modern 5/6 curve the runner-up (Adriaans) would score ~518,
+    // not the published 492.8. Divito and Pokle are goal pilots whose slow
+    // times clamp the curve to 0 — also part of the reference.
+    let checked = 0;
+    for (const p of r.pilotScores) {
+      if (!p.reachedESS) continue;
+      const ref = ref2021BySurname.get(p.pilotName);
+      if (!ref) continue;
+      expect(Math.abs(p.timePoints - ref.timePts * qualityRatio)).toBeLessThan(1);
+      checked++;
+    }
+    expect(checked).toBe(15);
+  });
+
+  it('goal-pilot totals match within a point (quality-scaled)', () => {
+    let checked = 0;
+    for (const p of r.pilotScores) {
+      if (!p.madeGoal) continue;
+      const ref = ref2021BySurname.get(p.pilotName);
+      if (!ref) continue;
+      expect(Math.abs(p.totalScore - ref.total * qualityRatio)).toBeLessThan(1.5);
+      checked++;
+    }
+    expect(checked).toBe(15);
+  });
+
+  it('landed-out totals track AirScore, with the legacy difficulty curve as the only gap', () => {
+    // KNOWN DEVIATION: legacy Gap.pm's km-difficulty (calc_kmdiff) counts
+    // each pilot a full look-ahead BEFORE their landing slot and normalises
+    // by the landed-out count, which is systematically more generous low
+    // down than the S7F 2024 §11.1.1 construction this engine implements —
+    // e.g. the eight minimum-distance pilots publish 120.8 where the
+    // spec-2024 curve gives ~92. The gap shrinks with distance (Halsall,
+    // best landed-out, is within ~3 points scaled). Bounded here so a
+    // regression can't hide behind the documented difference.
+    let maxGap = 0;
+    let checked = 0;
+    for (const p of r.pilotScores) {
+      if (p.madeGoal) continue;
+      const ref = ref2021BySurname.get(p.pilotName);
+      if (!ref) continue;
+      const gap = Math.abs(p.totalScore - ref.total * qualityRatio);
+      maxGap = Math.max(maxGap, gap);
+      expect(gap).toBeLessThan(30);
+      checked++;
+    }
+    expect(checked).toBeGreaterThanOrEqual(16);
+    expect(maxGap).toBeGreaterThan(5); // the deviation is real — see above
+  });
+
+  it('under the modern 5/6 exponent the runner-up would score visibly differently (regression guard)', () => {
+    const modern = scoreTask(task2021, pilots, { ...params2021, timePointsExponent: '5/6' as const });
+    const adriaans = modern.pilotScores.find((p) => p.pilotName === 'adriaans')!;
+    const refAdriaans = ref2021BySurname.get('adriaans')!;
+    // 5/6 is ~25 points more generous here — proving the fixture really
+    // pins the 2/3 generation.
+    expect(adriaans.timePoints - refAdriaans.timePts * qualityRatio).toBeGreaterThan(10);
   });
 });

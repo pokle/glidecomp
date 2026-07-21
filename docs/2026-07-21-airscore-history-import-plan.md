@@ -126,6 +126,29 @@ published points. Findings that reshaped the design:
   for HG the Perl hardcodes 1.4/8 + 1/8 anyway. `scale_to_validity` is
   always "0"; `stop_glide_bonus` is "5" only on Unungra (PG — spec says
   4:1; warned, matters only for stopped tasks).
+- **Every pre-2026 bundled task's xctsk had a BROKEN speed section** —
+  found while curating the gap-2018 fixture. `download_task.php` exports
+  tawType `start`→TAKEOFF / `speed`→SSS / `endspeed`→ESS, which is right
+  only when a separate `speed` turnpoint exists (the 2026 comps). Every
+  earlier task has no `speed` waypoint: its `start` (the big exit ring the
+  start gates apply to) IS the SSS, but the export labels it TAKEOFF, so
+  the xctsk had no SSS and the engine's fallback (first turnpoint) timed
+  the speed section from the wrong cylinder. The downloader now repairs
+  turnpoint types from the published result's `tawType` roles
+  (`repairTaskXctsk`; 2017/2021/2022 xctsks regenerated and committed).
+  With the repair, engine speed-section times match the published elapsed
+  times to the second.
+- **Two systematic legacy-scorer deviations remain** (documented and
+  bounded in the gap-2018 parity fixture, candidates for follow-up engine
+  variants if closer history parity is wanted):
+  1. *Time validity from the second-fastest time* — Gap.pm's `tqtime`
+     feeds time validity, the spec (and GlideComp) use the fastest.
+     Scales every published point by ~1% on tasks where the two differ.
+  2. *Legacy km-difficulty curve* — `calc_kmdiff` counts each pilot a
+     full look-ahead before their landing slot and normalises by the
+     landed-out count; more generous at low distances than S7F 2024
+     §11.1.1 (a minimum-distance pilot published 120.8 vs spec-2024 ~92
+     on the fixture task). Goal pilots are unaffected.
 
 Implementation (all in this PR): `web/scripts/lib/airscore-formula-map.ts`
 (+ tests), `task.gap_params` migration 0021 + merge in
@@ -250,6 +273,17 @@ mapping can emit `'s7f2020'` without a warning.
 ---
 
 ## Workstream 3 — per-generation parity fixtures
+
+**Status (2026-07-21):** fixture (1) is DONE — `corryong-cup-2021-open-t1`
+is curated (`.curated` + trimmed `airscore-result.json`) and
+`airscore-parity.test.ts` scores it under the importer-mapped gap-2018
+params: goal count, weights, per-pilot 2/3-curve time points and
+goal-pilot totals match the published numbers (quality-scaled for the
+legacy tqtime rule; landed-out totals bounded around the legacy
+difficulty-curve deviation — both documented above). PG coverage is
+option (c) for now: the spec-derived `'s7f2020'` unit/integration tests
+from workstream 2 — no gap-2020+ PG comp exists on disk (Unungra is
+`ggap-2018`); revisit after workstream 4's enumeration (option a).
 
 **Goal:** turn "we mapped the formula correctly" into regression tests
 against real published AirScore totals, per generation.

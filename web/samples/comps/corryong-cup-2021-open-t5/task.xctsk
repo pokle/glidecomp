@@ -23,7 +23,8 @@
         "altSmoothed": 935,
         "name": "ELLIOT",
         "description": "ELLIOT"
-      }
+      },
+      "type": "TAKEOFF"
     },
     {
       "radius": 5000,
@@ -34,7 +35,7 @@
         "name": "ELLIOT",
         "description": "ELLIOT"
       },
-      "type": "TAKEOFF"
+      "type": "SSS"
     },
     {
       "radius": 400,

@@ -335,10 +335,16 @@ interface TaskManifestEntry {
  * sibling task's block (legacy AirScore stores the formula per comp; only
  * departure/arrival/hbess vary per task).
  */
+interface RawTaskWaypoint {
+  tawType: string;
+  tawHow: string;
+}
+
 function readTaskFormulaFromDisk(dir: string): {
   block: AirscoreFormulaBlock | null;
   curatedOverlay: Partial<AirscoreFormulaBlock> | null;
   hbess: string | undefined;
+  rawWaypoints: RawTaskWaypoint[] | null;
 } {
   const rawPath = join(dir, 'airscore-result-raw.json');
   if (existsSync(rawPath)) {
@@ -347,6 +353,7 @@ function readTaskFormulaFromDisk(dir: string): {
       block: (raw.formula ?? null) as AirscoreFormulaBlock | null,
       curatedOverlay: null,
       hbess: raw.task?.hbess,
+      rawWaypoints: Array.isArray(raw.task?.waypoints) ? raw.task.waypoints : null,
     };
   }
   const trimmedPath = join(dir, 'airscore-result.json');
@@ -356,25 +363,88 @@ function readTaskFormulaFromDisk(dir: string): {
     if (typeof trimmed.formula === 'string') overlay.formula = trimmed.formula;
     if (typeof trimmed.departure === 'string') overlay.departure = trimmed.departure;
     if (typeof trimmed.arrival === 'string') overlay.arrival = trimmed.arrival;
-    return { block: null, curatedOverlay: overlay, hbess: undefined };
+    return { block: null, curatedOverlay: overlay, hbess: undefined, rawWaypoints: null };
   }
-  return { block: null, curatedOverlay: null, hbess: undefined };
+  return { block: null, curatedOverlay: null, hbess: undefined, rawWaypoints: null };
 }
 
 /**
- * Ensure a non-curated task's xctsk carries the comp's published cylinder
- * tolerance (error_margin — e.g. 0.0005 = 0.05%), so crossing detection uses
- * the same band AirScore scored with instead of the 0.5% club default.
- * Idempotent; curated fixtures are never touched.
+ * The turnpoint types the task SHOULD have, derived from the published
+ * result's waypoint roles (`tawType`) — the authoritative record of how
+ * AirScore scored the course.
+ *
+ * xc.highcloud.net's `download_task.php` export maps tawType start→TAKEOFF,
+ * speed→SSS, endspeed→ESS. That's right for tasks that have a separate
+ * `speed` turnpoint (the 2026 comps), but every earlier bundled task has NO
+ * `speed` waypoint: its `start` (the big exit ring the start gates apply
+ * to) IS the speed-section start, yet the export still labels it TAKEOFF —
+ * leaving the xctsk with no SSS at all, so the engine's SSS fallback (first
+ * turnpoint) starts the speed section from the wrong cylinder and every
+ * speed-section time is wrong. Rules:
+ *
+ * - `speed`   → SSS; then `start` → TAKEOFF.
+ * - no `speed`: `start` → SSS; a lone leading `waypoint` right before it
+ *   (the launch marker, e.g. ELLIOT 500 m) → TAKEOFF.
+ * - `endspeed` → ESS. No `endspeed` → untyped: the engine's ESS fallback
+ *   (goal) matches legacy AirScore's end-of-speed-section default.
  */
-function patchXctskTolerance(dir: string, tolerance: number | undefined): void {
-  if (tolerance === undefined || existsSync(join(dir, '.curated'))) return;
+function desiredTurnpointTypes(rawWaypoints: RawTaskWaypoint[]): Array<string | undefined> {
+  const hasSpeed = rawWaypoints.some((w) => w.tawType === 'speed');
+  const sssIndex = rawWaypoints.findIndex((w) =>
+    hasSpeed ? w.tawType === 'speed' : w.tawType === 'start',
+  );
+  return rawWaypoints.map((w, i) => {
+    if (w.tawType === 'speed') return 'SSS';
+    if (w.tawType === 'start') return hasSpeed ? 'TAKEOFF' : 'SSS';
+    if (w.tawType === 'endspeed') return 'ESS';
+    if (w.tawType === 'waypoint' && i === 0 && sssIndex === 1) return 'TAKEOFF';
+    return undefined;
+  });
+}
+
+/**
+ * Repair a non-curated task's xctsk against the published result: correct
+ * the turnpoint types (see {@link desiredTurnpointTypes}) and stamp the
+ * comp's published cylinder tolerance (error_margin — e.g. 0.0005 = 0.05%),
+ * so crossing detection uses the same band AirScore scored with instead of
+ * the 0.5% club default. Idempotent; curated fixtures are never touched.
+ */
+function repairTaskXctsk(
+  dir: string,
+  tolerance: number | undefined,
+  rawWaypoints: RawTaskWaypoint[] | null,
+): void {
+  if (existsSync(join(dir, '.curated'))) return;
   const path = join(dir, 'task.xctsk');
   if (!existsSync(path)) return;
   const xctsk = JSON.parse(readFileSync(path, 'utf-8'));
-  if (xctsk.cylinderTolerance === tolerance) return;
-  xctsk.cylinderTolerance = tolerance;
-  writeFileSync(path, JSON.stringify(xctsk, null, 2));
+  let changed = false;
+
+  if (tolerance !== undefined && xctsk.cylinderTolerance !== tolerance) {
+    xctsk.cylinderTolerance = tolerance;
+    changed = true;
+  }
+
+  if (rawWaypoints && Array.isArray(xctsk.turnpoints)) {
+    if (xctsk.turnpoints.length === rawWaypoints.length) {
+      const desired = desiredTurnpointTypes(rawWaypoints);
+      xctsk.turnpoints.forEach((tp: { type?: string }, i: number) => {
+        if ((tp.type ?? undefined) === desired[i]) return;
+        if (desired[i] === undefined) delete tp.type;
+        else tp.type = desired[i];
+        changed = true;
+        console.warn(
+          `  repaired ${basename(dir)} turnpoint ${i}: type ${JSON.stringify(tp.type ?? null)} (from tawType "${rawWaypoints[i].tawType}")`,
+        );
+      });
+    } else {
+      console.warn(
+        `  WARNING ${basename(dir)}: xctsk has ${xctsk.turnpoints.length} turnpoints but the published result has ${rawWaypoints.length} — type repair skipped`,
+      );
+    }
+  }
+
+  if (changed) writeFileSync(path, JSON.stringify(xctsk, null, 2));
 }
 
 /**
@@ -416,7 +486,7 @@ function annotateFormula(
       t.formula_warnings = warnings;
       for (const w of warnings) console.warn(`  WARNING ${t.dir}: ${w}`);
     }
-    patchXctskTolerance(join(COMPS_ROOT, t.dir), cylinderTolerance);
+    repairTaskXctsk(join(COMPS_ROOT, t.dir), cylinderTolerance, read[i].rawWaypoints);
     return gapParams;
   });
 
