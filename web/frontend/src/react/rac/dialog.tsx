@@ -36,10 +36,12 @@ export function Modal({
   return (
     <ModalOverlay
       isDismissable={isDismissable}
-      // Centering happens on the overlay (a flex container), not with a
-      // translate on the panel — oversized panels stay scrollable in view.
+      // Centering happens via the panel's auto margins, not items-center on
+      // the overlay: flex centering clips the TOP of a panel taller than the
+      // viewport (it overflows above the scroll origin, unreachable), while
+      // auto margins collapse to 0 on overflow so the whole panel scrolls.
       className={cn(
-        "fixed inset-0 isolate z-50 flex min-h-dvh items-center justify-center overflow-y-auto bg-black/10 p-4 supports-backdrop-filter:backdrop-blur-xs",
+        "fixed inset-0 isolate z-50 flex min-h-dvh justify-center overflow-y-auto bg-black/10 p-4 supports-backdrop-filter:backdrop-blur-xs",
         "data-entering:animate-in data-entering:fade-in-0 data-exiting:animate-out data-exiting:fade-out-0 data-entering:duration-100 data-exiting:duration-100"
       )}
       {...props}
@@ -47,7 +49,7 @@ export function Modal({
       <AriaModal
         data-slot="dialog-content"
         className={cn(
-          "relative grid w-full max-w-[calc(100%-2rem)] gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 outline-none sm:max-w-sm",
+          "relative my-auto grid h-fit w-full max-w-[calc(100%-2rem)] gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 outline-none sm:max-w-sm",
           "data-entering:animate-in data-entering:fade-in-0 data-entering:zoom-in-95 data-exiting:animate-out data-exiting:fade-out-0 data-exiting:zoom-out-95 data-entering:duration-100 data-exiting:duration-100",
           className
         )}

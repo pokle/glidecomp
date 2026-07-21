@@ -8,14 +8,29 @@ hydration, headless admin drives with zero console errors). The route
 editor's turnpoint grid has since been rebuilt as a **GridList card list**
 (2026-07-18, see that section). RAC has since spread beyond the exploration
 page: the two field-analysis pages were built RAC-native, the comp list page
-converted (PR #401), `rac/breadcrumbs` is the app-wide breadcrumb,
-`RacRouterProvider` is mounted globally in `Shell`, and shared chrome
-(`PageToc`, `Timestamp`) and the Dashboard's flights `Tree` use rac/
-components. The remaining pages still use the shadcn/Base UI kit in
+converted (PR #401), **the comp detail page `/comp/:id` and every section and
+dialog it owns converted (2026-07-21** — sortable score tables, tabs, setup
+guide, Create Task, Settings, pilots section; new kit pieces `rac/tabs` and
+`rac/progress`; retired `ui/select` + `ui/combobox`), `rac/breadcrumbs` is
+the app-wide breadcrumb, `RacRouterProvider` is mounted globally in `Shell`,
+and shared chrome (`PageToc`, `Timestamp`) and the Dashboard's flights `Tree`
+use rac/ components. The remaining pages still use the shadcn/Base UI kit in
 `src/react/ui/` — see the conversion map at the end of this doc. The decision
 so far: **keep going with RAC** — it earned its keep everywhere except
 editable tables, where we built our own support (the GridList card list is
 now the preferred pattern for editable collections; see gotchas).
+
+**Tabulator policy (2026-07-21): the remaining Tabulator grids STAY.** The
+pilots editor's spreadsheet grid (comp page → Pilots → Edit) works really
+well — frozen columns, spreadsheet-style cell editing, list editors — and
+replacing Tabulator with RAC has repeatedly been the most painful part of
+this exploration (see gotcha #2 and the route-editor history). Converting a
+page means converting the chrome *around* a Tabulator grid (dialog shell,
+buttons, read-only tables) and leaving the grid itself alone. It coexists
+happily inside a RAC Modal: give the kit `Dialog` an `id` and point
+Tabulator's `popupContainer` at it so editor popups render above the dialog,
+and keep the lazy `import("tabulator-tables")` so it stays out of the public
+bundle. Do NOT plan a GridList/Table rewrite of the pilots grid.
 
 ## What exists
 
@@ -47,11 +62,17 @@ now the preferred pattern for editable collections; see gotchas).
   label part of each Radio, same slot pieces as field.tsx), `tree` (Tree/
   TreeItem/TreeItemContent/TreeChevron — hierarchical rows with
   expand/collapse; first consumer is the Dashboard's competition-flights
-  grouping), `badge` (static span — RAC has no presentational components),
-  `confirm` (RacConfirmProvider — supplies the same ConfirmContext as
-  lib/confirm.tsx so `useConfirm()` inside a wrapped subtree gets the RAC
-  alertdialog), `router` (RacRouterProvider — bridges RAC `href` links to
-  react-router; SSR-safe).
+  grouping), `tabs` (Tabs/TabList/Tab/TabPanel — styled like ui/tabs' default
+  pill variant; controlled via `selectedKey`/`onSelectionChange`, panels pair
+  with tabs by `id`, and tab keys can't be `""` — map an "All" filter through
+  a sentinel key, see ActivitySection), `progress` (ProgressBar — **task
+  completion**, role="progressbar"; the mirror of `meter`'s "measurement"
+  distinction. Label row + thin track like ui/progress; pass a heading node
+  as `label` and point `aria-labelledby` at it), `badge` (static span — RAC
+  has no presentational components), `confirm` (RacConfirmProvider — supplies
+  the same ConfirmContext as lib/confirm.tsx so `useConfirm()` inside a
+  wrapped subtree gets the RAC alertdialog), `router` (RacRouterProvider —
+  bridges RAC `href` links to react-router; SSR-safe).
 - **Converted files:** `pages/TaskDetail.tsx` (page + EditTaskDialog +
   turnpoints table), `comp/TaskStandings.tsx`, `comp/RouteEditorDialog.tsx`
   (Tabulator grid → RAC **GridList** card list, see below — was a RAC Table),
@@ -62,24 +83,35 @@ now the preferred pattern for editable collections; see gotchas).
   `react/field-analysis/` (built RAC-native from the start — 2026-07-19),
   `pages/Competitions.tsx` (2026-07-21 — list cards are RAC Links, create
   dialog on the kit, plus a client-side SearchField filter over the loaded
-  list; see gotcha #13) and the shared comp-form fields in `comp/fields.tsx`
-  (NameField/CategoryField/PilotClassesField/CheckboxField → RAC; they also
-  render inside the still-Base-UI SettingsDialog on CompDetail, which is the
-  "shared RAC components work on unconverted pages" pattern in practice —
-  only SimpleSelect/SearchableSelect there remain Base UI).
+  list; see gotcha #13), and — 2026-07-21 — the whole comp detail page:
+  `pages/CompDetail.tsx` (hero LinkButtons, Create Task dialog on
+  Form/TextField/CheckboxGroup, RacConfirmProvider wrapper),
+  `comp/SettingsDialog.tsx` (kit Modal/Dialog; numeric GAP params became
+  NumberFields holding numbers with NaN-as-blank), `comp/CompScoresSection.tsx`
+  (rac tabs + sortable RAC-grid tables), `comp/ScoresSection.tsx` (onRowAction
+  + AriaLink rows), `comp/ActivitySection.tsx` (rac tabs),
+  `comp/CompSetupProgress.tsx` (rac ProgressBar; the Card became a plain
+  styled div), `comp/PilotsSection.tsx` (RAC read-only table + dialog shell
+  around the kept Tabulator grid), and `comp/fields.tsx` is now **fully** RAC:
+  SimpleSelect re-exports rac/select's, and SearchableSelect is a select-like
+  kit ComboBox (menuTrigger="focus", controlled selectedKey+inputValue, "at
+  rest shows the selected label → list everything; edited → filter",
+  onSelectionChange(null) restores the label — the gotcha #12 rules applied
+  to a value-holding picker). That retired `ui/select` and `ui/combobox`
+  entirely (files deleted).
   Also converted: `pages/PilotScoreDetail.tsx` (mostly bespoke map/narrative
   markup; the kit pieces it uses are rac), `components/PageToc.tsx` (rac
   Select for the mobile section jump), `components/Timestamp.tsx` (rac
   Tooltip), and `rac/tree.tsx` in `pages/Dashboard.tsx` (the flights Tree —
   the rest of the Dashboard is still ui/).
   Note that dialogs like SubmitTrackDialog/AddWaypointDialog are **shared** —
-  unconverted pages (CompDetail, CompWaypoints) already render these RAC
-  components today; RAC components work fine outside converted pages
-  (`RacRouterProvider` is global in `Shell`, so `href`-based client routing
-  just works).
+  unconverted pages (CompWaypoints) already render these RAC components today;
+  RAC components work fine outside converted pages (`RacRouterProvider` is
+  global in `Shell`, so `href`-based client routing just works).
 - **Not converted:** see the conversion map at the end of this doc. Tabulator
-  remains in the comp-page pilots dialog only. The ui/ (shadcn) kit stays for
-  unconverted pages.
+  remains in the comp-page pilots dialog **by design** (see the Tabulator
+  policy at the top — it is kept, not pending). The ui/ (shadcn) kit stays
+  for unconverted pages.
 - The date/time pickers (`ui/date-picker.tsx`) were already RAC and are used
   as-is by both kits.
 
@@ -215,6 +247,29 @@ now the preferred pattern for editable collections; see gotchas).
     not filtering page content in place; the kit SearchField skips its sr-only
     fallback label when you pass `aria-label`.
 
+14. **Flex-centering an overlay clips the TOP of an oversized dialog.** The
+    kit Modal originally centred the panel with `items-center` on the
+    scrollable overlay; a panel taller than the viewport (Competition
+    Settings with Advanced open) then overflows *above the scroll origin* —
+    `scrollTop` can't go negative, so the title and first fields are
+    unreachable. Fixed in rac/dialog.tsx the canonical way: no `items-center`
+    on the overlay; the panel carries `my-auto` instead (cross-axis auto
+    margins centre a fitting panel and collapse to 0 on overflow, making the
+    whole panel scrollable). Don't re-add `items-center` to the overlay, and
+    don't give tall dialogs their own `max-h`/`overflow-y-auto` unless you
+    specifically want an inner scroll region (the pilots dialog does, for its
+    fixed-height grid).
+
+15. **RAC Table sorting always starts a new column ascending — override it in
+    `onSortChange` when scores should read best-first.** With a controlled
+    `sortDescriptor`, clicking an unsorted column always yields
+    `direction: "ascending"`; CompScoresSection's SortableTable keeps the old
+    per-column first-click direction by replacing the descriptor when the
+    column *changes* (same column = RAC's toggle is already right). Also:
+    RAC Columns filter non-ARIA DOM attributes, so a `title` tooltip must
+    ride on a span *inside* the Column, and every sortable/interactive
+    Column still needs exactly one `isRowHeader` column beside it.
+
 ## Verification playbook (all part of "done" for RAC work)
 
 ```bash
@@ -335,7 +390,7 @@ idea unnecessary.
 
 1. `RacRouterProvider` is already mounted globally in `components/Shell.tsx` —
    nothing to wrap for routing. Add `RacConfirmProvider` around the page only
-   if it uses `useConfirm` (today only TaskDetail does; the global
+   if it uses `useConfirm` (TaskDetail and CompDetail do; the global
    ConfirmProvider in `lib/confirm.tsx` is still the ui/ alert-dialog).
    Providers are SSR-safe.
 2. Swap imports ui/ → rac/ mechanically: Button (`onClick`→`onPress`,
@@ -350,14 +405,18 @@ idea unnecessary.
    read gotchas #2/#3 first.
 4. Verify per the playbook; SSR pages additionally must pass `test:e2e:ssr`
    before "done".
-5. Suggested order: CompDetail (mostly shared, already-converted dialogs, and
-   converting it retires SettingsDialog + the rest of fields.tsx),
-   CompWaypoints (second editable grid — apply the list pattern), Settings,
-   then the auth/onboarding/admin pages and the app chrome (Shell user menu,
-   global confirm). Competitions is done (PR #401); `/scores` is retired
-   (a redirect to the comp page — nothing to convert). The pilots dialog is
-   the last Tabulator user. See the conversion map below for the full
-   inventory.
+5. **Tabulator grids are exempt** (policy at the top of this doc): convert
+   the shell around them, keep the grid. Give the kit `Dialog` an `id` and
+   point Tabulator's `popupContainer` at it — editor popups (e.g. the class
+   list) render fine inside the RAC modal, and focus containment doesn't
+   fight the grid's dynamically-created cell editors.
+6. Suggested order: CompWaypoints (second editable grid — apply the GridList
+   card pattern; it's hand-rolled `<table>`, not Tabulator, so it's fair
+   game), Settings, then the auth/onboarding/admin pages and the app chrome
+   (Shell user menu, global confirm). CompDetail is done (2026-07-21) and
+   Competitions is done (PR #401); `/scores` is retired (a redirect to the
+   comp page — nothing to convert). See the conversion map below for the
+   full inventory.
 
 ## Conversion map (2026-07-21)
 
@@ -373,13 +432,13 @@ Which SPA pages are on which kit, and the dialogs/popups each still owns.
 | `pages/CompFieldAnalysis.tsx`, `pages/TaskFieldAnalysis.tsx` + `field-analysis/` | RAC-native from the start (table, meter, popover, disclosure, select, checkbox, badge). Residual `ui/alert` is presentational. |
 | `pages/PilotScoreDetail.tsx` | Bespoke narrative/map markup; kit pieces (breadcrumbs, Timestamp tooltip) are rac. No dialogs. Done. |
 | `pages/Scores.tsx` | Retired — pure redirect, nothing to convert. |
+| `pages/CompDetail.tsx` `/comp/:id` + its sections (2026-07-21) | Fully RAC: hero LinkButtons (the `/replay` link stays a plain `<a className={buttonVariants(...)}>` — non-SPA entry), Create Task dialog, `SettingsDialog` (NumberFields, rac SimpleSelect + select-like SearchableSelect), `CompScoresSection` (rac tabs + sortable RAC-grid tables), `ScoresSection`, `ActivitySection` (rac tabs), `CompSetupProgress` (rac ProgressBar), `PilotsSection` (RAC table + dialog shell). The pilots editor's **Tabulator grid is kept by policy** — only its chrome converted. Only ui/ import left is `date-picker` (itself RAC under the hood). |
 
 **Not converted (ui/shadcn) — with their dialogs/popups:**
 
 | Page / surface | ui/ usage | Dialogs & popups still on ui/ |
 |---|---|---|
-| `pages/CompDetail.tsx` `/comp/:id` (rac breadcrumbs only) | button, dialog, field, input, date-picker; sections: `CompScoresSection` (tabs+table), `ActivitySection` (tabs), `CompSetupProgress` (card/progress), `PilotsSection`, `ScoresSection` (table) | **Create Task dialog** (inline); **`SettingsDialog`** (Competition Settings — its fields.tsx inputs are already RAC, but the dialog shell, date-picker rows, and SimpleSelect/SearchableSelect are Base UI); **`PilotsSection` "Edit pilots" dialog** — the **last Tabulator grid**. (SubmitTrackDialog it opens is already RAC.) |
-| `pages/CompWaypoints.tsx` (rac breadcrumbs only) | button; hand-rolled `<table>` for the editable waypoints grid | **`WaypointDeviceExport` DropdownMenu**; **`FullScreenQR`** (bare `fixed inset-0` overlay div, not a dialog — convert to a kit Modal for focus/Esc handling). The waypoints grid is the "second editable grid" — apply the GridList card pattern. (AddWaypointDialog is already RAC.) |
+| `pages/CompWaypoints.tsx` (rac breadcrumbs only) | button; hand-rolled `<table>` for the editable waypoints grid | **`WaypointDeviceExport` DropdownMenu**; **`FullScreenQR`** (bare `fixed inset-0` overlay div, not a dialog — convert to a kit Modal for focus/Esc handling). The waypoints grid is the "second editable grid" — apply the GridList card pattern (it's hand-rolled, not Tabulator, so the keep-Tabulator policy doesn't apply). (AddWaypointDialog is already RAC.) |
 | `pages/Settings.tsx` | card, dialog, field, input, radio-group, table, button | **"Create API key" dialog**; **"API key created" dialog**. Last consumer of `ui/radio-group` (rac/radio-group exists). |
 | `pages/Dashboard.tsx` (partial — rac Tree) | tabs, progress, button | No dialogs. Tabs/progress remain ui/. |
 | `pages/Onboarding.tsx`, `pages/SignIn.tsx` | button, field, input (+ input-otp on SignIn) | No dialogs. |
@@ -388,11 +447,10 @@ Which SPA pages are on which kit, and the dialogs/popups each still owns.
 | `lib/confirm.tsx` (global ConfirmProvider in routes.tsx) | alert-dialog, button | The global confirm is still ui/; `rac/confirm.tsx` exists and serves the TaskDetail subtree. Swapping the global one retires `ui/alert-dialog`. |
 
 Shared ui/ leaf modules that only die with their last consumer:
-`comp/fields.tsx`'s remaining Base UI selects (`ui/combobox` + `ui/select` —
-used by SettingsDialog), `ui/tabs` (Dashboard + CompDetail sections),
-`ui/table` (CompScoresSection, ScoresSection, PilotsSection, Settings,
-AdminUsers), `ui/alert` (ScoreFreshness, field-analysis — could become a
-rac/ static component like badge).
+`ui/tabs` + `ui/progress` (Dashboard), `ui/table` (Settings, AdminUsers),
+`ui/card` (Settings), `ui/alert` (ScoreFreshness, field-analysis — could
+become a rac/ static component like badge). `ui/select` and `ui/combobox`
+died with the CompDetail conversion (deleted 2026-07-21).
 
 ## Reference
 

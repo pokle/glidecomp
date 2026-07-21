@@ -2,17 +2,13 @@
  * Task scores section — React port of setupScoreSection()/renderScoreClass().
  * Columns are conditional exactly as in the vanilla renderer; open distance
  * omits goal, distance-points and validity (the score is metres flown).
+ * Tables are RAC ARIA grids: whole-row activation (click/Enter) opens the
+ * pilot's score breakdown, with a real link on the pilot name.
  */
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/react/ui/table";
+import { Link as AriaLink } from "react-aria-components";
+import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { api } from "../../comp/api";
 import { formatDuration } from "../lib/format";
 import { ScoreFreshness } from "./ScoreFreshness";
@@ -173,10 +169,18 @@ function ScoreClassTable({
   const v = cls.task_validity;
   const ap = cls.available_points;
 
+  const detailHref = (compPilotId: string) =>
+    `/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/pilot/${encodeURIComponent(compPilotId)}`;
+
   return (
     <div className="mt-2">
       {showClassName ? <h3 className="mt-4 font-semibold">{cls.pilot_class}</h3> : null}
-      <Table>
+      <Table
+        aria-label={`Scores — ${cls.pilot_class}`}
+        // Whole-row activation (click or Enter) opens the score breakdown; the
+        // pilot-name link stays a real anchor for middle-click / crawlers.
+        onRowAction={(key) => void navigate(detailHref(String(key)))}
+      >
         <TableHeader>
           {/* Open distance has no goal, speed section, or GAP point split —
               the score is simply the distance flown — so those columns are
@@ -185,55 +189,45 @@ function ScoreClassTable({
               and scores can be compared down the page. Penalty stays left: its
               cell may carry a reason after the number, so right-aligning would
               push the numbers out of line rather than into it. */}
-          <TableRow>
-            <TableHead className="text-right">#</TableHead>
-            <TableHead>Pilot</TableHead>
-            {!isOpenDistance ? <TableHead>Goal</TableHead> : null}
-            <TableHead className="text-right">Distance</TableHead>
-            {hasSpeed ? <TableHead className="text-right">Speed</TableHead> : null}
-            {!isOpenDistance ? <TableHead className="text-right">Dist Pts</TableHead> : null}
-            {hasTimePoints ? <TableHead className="text-right">Time Pts</TableHead> : null}
-            {hasLeadPoints ? <TableHead className="text-right">Lead Pts</TableHead> : null}
-            {hasPenalties ? <TableHead>Penalty</TableHead> : null}
-            <TableHead className="text-right">Total</TableHead>
-          </TableRow>
+          <Column className="text-right">#</Column>
+          <Column isRowHeader>Pilot</Column>
+          {!isOpenDistance ? <Column>Goal</Column> : null}
+          <Column className="text-right">Distance</Column>
+          {hasSpeed ? <Column className="text-right">Speed</Column> : null}
+          {!isOpenDistance ? <Column className="text-right">Dist Pts</Column> : null}
+          {hasTimePoints ? <Column className="text-right">Time Pts</Column> : null}
+          {hasLeadPoints ? <Column className="text-right">Lead Pts</Column> : null}
+          {hasPenalties ? <Column>Penalty</Column> : null}
+          <Column className="text-right">Total</Column>
         </TableHeader>
         <TableBody>
           {cls.pilots.map((p) => {
             const diffPts = p.distance_difficulty_points ?? 0;
-            const detailHref = `/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/pilot/${encodeURIComponent(p.comp_pilot_id)}`;
             return (
-              <TableRow
-                key={p.comp_pilot_id}
-                className="cursor-pointer"
-                title={`How ${p.pilot_name}'s score was calculated`}
-                onClick={() => navigate(detailHref)}
-              >
-                <TableCell className="text-right tabular-nums">{p.rank}</TableCell>
-                <TableCell>
-                  {/* Real link inside the clickable row for middle-click /
-                      keyboard access. */}
-                  <Link
-                    to={detailHref}
-                    className="underline decoration-muted-foreground/40 underline-offset-4 hover:decoration-current"
-                    onClick={(e) => e.stopPropagation()}
+              <Row key={p.comp_pilot_id} id={p.comp_pilot_id} className="cursor-pointer">
+                <Cell className="text-right tabular-nums">{p.rank}</Cell>
+                <Cell>
+                  <AriaLink
+                    href={detailHref(p.comp_pilot_id)}
+                    aria-label={`How ${p.pilot_name}'s score was calculated`}
+                    className="underline decoration-muted-foreground/40 underline-offset-4 outline-none data-hovered:decoration-current data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
                   >
                     {p.pilot_name}
-                  </Link>
-                </TableCell>
-                {!isOpenDistance ? <TableCell>{p.made_goal ? "✓" : "—"}</TableCell> : null}
-                <TableCell className="text-right tabular-nums">
+                  </AriaLink>
+                </Cell>
+                {!isOpenDistance ? <Cell>{p.made_goal ? "✓" : "—"}</Cell> : null}
+                <Cell className="text-right tabular-nums">
                   {(p.flown_distance / 1000).toFixed(1)} km
-                </TableCell>
+                </Cell>
                 {hasSpeed ? (
-                  <TableCell className="text-right tabular-nums">
+                  <Cell className="text-right tabular-nums">
                     {p.speed_section_time !== null
                       ? formatDuration(p.speed_section_time)
                       : "—"}
-                  </TableCell>
+                  </Cell>
                 ) : null}
                 {!isOpenDistance ? (
-                  <TableCell className="text-right tabular-nums">
+                  <Cell className="text-right tabular-nums">
                     {/* Show the linear/difficulty split as a tooltip when HG
                         difficulty applies. */}
                     {diffPts > 0 ? (
@@ -245,20 +239,20 @@ function ScoreClassTable({
                     ) : (
                       Math.round(p.distance_points)
                     )}
-                  </TableCell>
+                  </Cell>
                 ) : null}
                 {hasTimePoints ? (
-                  <TableCell className="text-right tabular-nums">
+                  <Cell className="text-right tabular-nums">
                     {Math.round(p.time_points)}
-                  </TableCell>
+                  </Cell>
                 ) : null}
                 {hasLeadPoints ? (
-                  <TableCell className="text-right tabular-nums">
+                  <Cell className="text-right tabular-nums">
                     {Math.round(p.leading_points)}
-                  </TableCell>
+                  </Cell>
                 ) : null}
                 {hasPenalties ? (
-                  <TableCell>
+                  <Cell>
                     {p.penalty_points !== 0 ? (
                       <span className="text-destructive">
                         {p.penalty_points < 0
@@ -267,12 +261,12 @@ function ScoreClassTable({
                         {p.penalty_reason ? <span> {p.penalty_reason}</span> : null}
                       </span>
                     ) : null}
-                  </TableCell>
+                  </Cell>
                 ) : null}
-                <TableCell className="text-right tabular-nums">
+                <Cell className="text-right tabular-nums">
                   {Math.round(p.total_score)}
-                </TableCell>
-              </TableRow>
+                </Cell>
+              </Row>
             );
           })}
         </TableBody>

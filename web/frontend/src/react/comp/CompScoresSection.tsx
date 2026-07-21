@@ -3,20 +3,16 @@
  * page is the canonical scores surface; the old /scores route redirects
  * here). View transforms (class rollups, top-3, teams) come from the shared
  * scores-views module; the "Results by task" tab reuses the task page's
- * ScoresSection one task at a time.
+ * ScoresSection one task at a time. Built on the RAC kit: the view tabs are
+ * ARIA tabs, and each view is a sortable ARIA-grid table (RAC sorting with
+ * per-column first-click directions — scores read best-first).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import { Button } from "@/react/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/react/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/react/ui/tabs";
+import { Link as AriaLink, type SortDescriptor } from "react-aria-components";
+import { Button } from "@/react/rac/button";
+import { Select, SelectItem } from "@/react/rac/select";
+import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
+import { Tabs, TabList, Tab, TabPanel } from "@/react/rac/tabs";
 import {
   aggregateTeams,
   buildClassGroups,
@@ -34,6 +30,9 @@ import type { CompScores } from "../loaders";
 function scoreDetailHref(compId: string, taskId: string, pilotId: string): string {
   return `/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/pilot/${encodeURIComponent(pilotId)}`;
 }
+
+const cellLinkClass =
+  "underline underline-offset-4 outline-none data-focus-visible:ring-2 data-focus-visible:ring-ring/50";
 
 export function CompScoresSection({
   compId,
@@ -138,11 +137,10 @@ export function CompScoresSection({
         <h2 className="text-lg font-bold">Scores</h2>
         {isAdmin && state.kind === "ready" && state.scores.standings.length > 0 ? (
           <Button
-            type="button"
             variant="outline"
             size="sm"
-            onClick={() => void handleRescore()}
-            disabled={rescoring}
+            onPress={() => void handleRescore()}
+            isDisabled={rescoring}
           >
             {rescoring ? "Re-scoring…" : "Recompute scores"}
           </Button>
@@ -232,27 +230,29 @@ function ScoresViews({
   );
 
   return (
-    <Tabs value={tab} onValueChange={(value) => setTab(value as string)} className="mt-4">
-      <TabsList>
+    <Tabs
+      selectedKey={tab}
+      onSelectionChange={(key) => setTab(String(key))}
+      className="mt-4"
+    >
+      <TabList aria-label="Score views">
         {scores.standings.map((cls) => (
-          <TabsTrigger key={cls.pilot_class} value={`standings:${cls.pilot_class}`}>
+          <Tab key={cls.pilot_class} id={`standings:${cls.pilot_class}`}>
             {cls.pilot_class}
-          </TabsTrigger>
+          </Tab>
         ))}
-        <TabsTrigger value="top3">Top 3 per task &amp; class</TabsTrigger>
-        {teams.length > 0 ? <TabsTrigger value="teams">Teams</TabsTrigger> : null}
-        {scorableTasks.length > 0 ? (
-          <TabsTrigger value="bytask">Results by task</TabsTrigger>
-        ) : null}
-      </TabsList>
+        <Tab id="top3">Top 3 per task &amp; class</Tab>
+        {teams.length > 0 ? <Tab id="teams">Teams</Tab> : null}
+        {scorableTasks.length > 0 ? <Tab id="bytask">Results by task</Tab> : null}
+      </TabList>
 
       {scores.standings.map((cls) => (
-        <TabsContent key={cls.pilot_class} value={`standings:${cls.pilot_class}`}>
+        <TabPanel key={cls.pilot_class} id={`standings:${cls.pilot_class}`}>
           <StandingsTable scores={scores} cls={cls} />
-        </TabsContent>
+        </TabPanel>
       ))}
 
-      <TabsContent value="top3">
+      <TabPanel id="top3">
         {groups.map((group) => (
           <section key={group.label}>
             <h3 className="mt-6 font-bold">{group.label}</h3>
@@ -264,32 +264,32 @@ function ScoresViews({
             <Top3Table scores={scores} group={group} />
           </section>
         ))}
-      </TabsContent>
+      </TabPanel>
 
       {teams.length > 0 ? (
-        <TabsContent value="teams">
+        <TabPanel id="teams">
           <TeamsTable scores={scores} teams={teams} />
-        </TabsContent>
+        </TabPanel>
       ) : null}
 
       {scorableTasks.length > 0 && pickedTaskId ? (
-        <TabsContent value="bytask">
+        <TabPanel id="bytask">
           {/* One task at a time — every task's full tables at once is too
               heavy for long comps. */}
-          <label className="mt-2 block text-sm font-medium">
-            Task{" "}
-            <select
-              className="ml-2 rounded-md border bg-background px-2 py-1.5 text-sm"
-              value={pickedTaskId}
-              onChange={(e) => setPickedTaskId(e.target.value)}
-            >
-              {scorableTasks.map((t) => (
-                <option key={t.task_id} value={t.task_id}>
-                  {t.name} — {formatTaskDate(t.task_date)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Select
+            label="Task"
+            className="mt-2 w-fit"
+            selectedKey={pickedTaskId}
+            onSelectionChange={(key) => {
+              if (key != null) setPickedTaskId(String(key));
+            }}
+          >
+            {scorableTasks.map((t) => (
+              <SelectItem key={t.task_id} id={t.task_id}>
+                {`${t.name} — ${formatTaskDate(t.task_date)}`}
+              </SelectItem>
+            ))}
+          </Select>
           <ScoresSection
             key={pickedTaskId}
             compId={compId}
@@ -299,7 +299,7 @@ function ScoresViews({
             onReplayAvailable={() => {}}
             embedded
           />
-        </TabsContent>
+        </TabPanel>
       ) : null}
     </Tabs>
   );
@@ -318,6 +318,8 @@ interface ColumnSpec {
    * Columns are left-aligned by default — set this only for pure numbers.
    */
   align?: "right";
+  /** The one column whose cells name each row for AT (exactly one per table). */
+  isRowHeader?: boolean;
 }
 
 interface CellSpec {
@@ -326,12 +328,26 @@ interface CellSpec {
   node: React.ReactNode;
 }
 
-function SortableTable({ columns, rows }: { columns: ColumnSpec[]; rows: CellSpec[][] }) {
-  const [sort, setSort] = useState<{ col: number; dir: "asc" | "desc" } | null>(null);
+function SortableTable({
+  label,
+  columns,
+  rows,
+}: {
+  /** Accessible name for the grid. */
+  label: string;
+  columns: ColumnSpec[];
+  rows: CellSpec[][];
+}) {
+  const [sort, setSort] = useState<SortDescriptor | null>(null);
+
+  const numericColumn = (col: number) => {
+    const values = rows.map((row) => row[col]?.sort ?? "");
+    return values.every((v) => v === "" || !Number.isNaN(Number(v)));
+  };
 
   const sortedRows = useMemo(() => {
     if (!sort) return rows;
-    const { col, dir } = sort;
+    const col = Number(sort.column);
     const values = rows.map((row) => row[col]?.sort ?? "");
     const numeric = values.every((v) => v === "" || !Number.isNaN(Number(v)));
     return rows
@@ -345,65 +361,70 @@ function SortableTable({ columns, rows }: { columns: ColumnSpec[]; rows: CellSpe
         } else {
           cmp = a.value.localeCompare(b.value);
         }
-        return dir === "asc" ? cmp : -cmp;
+        return sort.direction === "ascending" ? cmp : -cmp;
       })
       .map(({ row }) => row);
   }, [rows, sort]);
 
-  function handleHeaderClick(col: number) {
-    setSort((prev) => {
-      if (prev?.col === col) return { col, dir: prev.dir === "asc" ? "desc" : "asc" };
-      const values = rows.map((row) => row[col]?.sort ?? "");
-      const numeric = values.every((v) => v === "" || !Number.isNaN(Number(v)));
-      return { col, dir: columns[col].defaultDir ?? (numeric ? "desc" : "asc") };
-    });
-  }
-
   return (
     <div className="mt-3 overflow-x-auto rounded-lg border">
-      <Table>
+      <Table
+        aria-label={label}
+        sortDescriptor={sort ?? undefined}
+        onSortChange={(desc) =>
+          setSort((prev) => {
+            // Same column: RAC already toggled the direction relative to prev.
+            if (prev && prev.column === desc.column) return desc;
+            // New column: start from its default direction, not RAC's
+            // always-ascending — scores read best-first (descending).
+            const col = Number(desc.column);
+            const dir =
+              columns[col]?.defaultDir ?? (numericColumn(col) ? "desc" : "asc");
+            return {
+              column: desc.column,
+              direction: dir === "asc" ? "ascending" : "descending",
+            };
+          })
+        }
+      >
         <TableHeader>
-          <TableRow>
-            {columns.map((col, i) => (
-              <TableHead
-                key={i}
-                title={col.title}
-                className={col.align === "right" ? "text-right" : undefined}
-                aria-sort={
-                  sort?.col === i ? (sort.dir === "asc" ? "ascending" : "descending") : undefined
-                }
-              >
-                {/* The negative margin pulls the ghost button's padding off the
-                    column's outer edge, so the label sits flush with the cells
-                    below it — which edge that is flips with the alignment. */}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={col.align === "right" ? "-mr-2" : "-ml-2"}
-                  onClick={() => handleHeaderClick(i)}
-                >
+          {columns.map((col, i) => (
+            <Column
+              key={i}
+              id={String(i)}
+              allowsSorting
+              isRowHeader={col.isRowHeader ?? false}
+              className={
+                col.align === "right"
+                  ? "cursor-pointer text-right data-hovered:bg-muted/50"
+                  : "cursor-pointer data-hovered:bg-muted/50"
+              }
+            >
+              {({ sortDirection }) => (
+                // The date tooltip rides on an inner span — RAC Columns filter
+                // out non-ARIA DOM attributes like title.
+                <span title={col.title}>
                   {col.label}
-                  {sort?.col === i ? (sort.dir === "asc" ? " ▲" : " ▼") : ""}
-                </Button>
-              </TableHead>
-            ))}
-          </TableRow>
+                  {sortDirection ? (sortDirection === "ascending" ? " ▲" : " ▼") : ""}
+                </span>
+              )}
+            </Column>
+          ))}
         </TableHeader>
         <TableBody>
           {sortedRows.map((row, i) => (
-            <TableRow key={i}>
+            <Row key={i}>
               {row.map((cell, j) => (
-                <TableCell
+                <Cell
                   key={j}
                   className={
                     columns[j]?.align === "right" ? "text-right tabular-nums" : undefined
                   }
                 >
                   {cell.node}
-                </TableCell>
+                </Cell>
               ))}
-            </TableRow>
+            </Row>
           ))}
         </TableBody>
       </Table>
@@ -420,7 +441,7 @@ function StandingsTable({ scores, cls }: { scores: CompScores; cls: ClassStandin
 
   const columns: ColumnSpec[] = [
     { label: "#", defaultDir: "asc", align: "right" },
-    { label: "Pilot", defaultDir: "asc" },
+    { label: "Pilot", defaultDir: "asc", isRowHeader: true },
     ...classTasks.map((t) => ({
       label: t.task_name,
       title: t.task_date,
@@ -439,21 +460,23 @@ function StandingsTable({ scores, cls }: { scores: CompScores; cls: ClassStandin
       return {
         sort: String(entry.score),
         node: (
-          <Link
-            to={scoreDetailHref(scores.comp_id, task.task_id, p.comp_pilot_id)}
-            title={`How ${p.pilot_name}'s score for ${task.task_name} was calculated`}
-            className="underline underline-offset-4"
+          <AriaLink
+            href={scoreDetailHref(scores.comp_id, task.task_id, p.comp_pilot_id)}
+            aria-label={`How ${p.pilot_name}'s score for ${task.task_name} was calculated`}
+            className={cellLinkClass}
           >
             {formatScore(entry.score)}{" "}
             <span className="text-muted-foreground">({ordinal(entry.rank)})</span>
-          </Link>
+          </AriaLink>
         ),
       };
     }),
     { sort: String(p.total_score), node: <strong>{formatScore(p.total_score)}</strong> },
   ]);
 
-  return <SortableTable columns={columns} rows={rows} />;
+  return (
+    <SortableTable label={`Standings — ${cls.pilot_class}`} columns={columns} rows={rows} />
+  );
 }
 
 function Top3Table({
@@ -469,7 +492,7 @@ function Top3Table({
   // number sits behind a name of varying length and right-aligning it would not
   // line the scores up anyway.
   const columns: ColumnSpec[] = [
-    { label: "Task", defaultDir: "asc" },
+    { label: "Task", defaultDir: "asc", isRowHeader: true },
     { label: "1st", defaultDir: "desc" },
     { label: "2nd", defaultDir: "desc" },
     { label: "3rd", defaultDir: "desc" },
@@ -493,13 +516,13 @@ function Top3Table({
         return {
           sort: String(entry.score),
           node: row.task_id ? (
-            <Link
-              to={scoreDetailHref(scores.comp_id, row.task_id, entry.comp_pilot_id)}
-              title={`How ${entry.pilot_name}'s score for ${row.label} was calculated`}
-              className="underline underline-offset-4"
+            <AriaLink
+              href={scoreDetailHref(scores.comp_id, row.task_id, entry.comp_pilot_id)}
+              aria-label={`How ${entry.pilot_name}'s score for ${row.label} was calculated`}
+              className={cellLinkClass}
             >
               {content}
-            </Link>
+            </AriaLink>
           ) : (
             content
           ),
@@ -508,7 +531,9 @@ function Top3Table({
     ];
   });
 
-  return <SortableTable columns={columns} rows={tableRows} />;
+  return (
+    <SortableTable label={`Top 3 — ${group.label}`} columns={columns} rows={tableRows} />
+  );
 }
 
 function TeamsTable({
@@ -520,7 +545,7 @@ function TeamsTable({
 }) {
   const columns: ColumnSpec[] = [
     { label: "#", defaultDir: "asc", align: "right" },
-    { label: "Team", defaultDir: "asc" },
+    { label: "Team", defaultDir: "asc", isRowHeader: true },
     ...scores.tasks.map((t) => ({
       label: t.task_name,
       title: t.task_date,
@@ -552,5 +577,5 @@ function TeamsTable({
     { sort: String(team.total_score), node: <strong>{formatScore(team.total_score)}</strong> },
   ]);
 
-  return <SortableTable columns={columns} rows={rows} />;
+  return <SortableTable label="Team standings" columns={columns} rows={rows} />;
 }

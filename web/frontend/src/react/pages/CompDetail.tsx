@@ -4,20 +4,24 @@
  * hero first, then tasks, inline competition scores, pilots, activity,
  * admins. Mutations that used to window.location.reload() instead bump a
  * refresh counter that re-runs the comp fetch.
+ *
+ * Built on the RAC kit (src/react/rac/) like the task detail page — the
+ * pilots editor keeps its Tabulator grid (see PilotsSection).
  */
 import { Fragment, useEffect, useId, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { Button } from "@/react/ui/button";
+import { Form } from "react-aria-components";
+import { Button, LinkButton, buttonVariants } from "@/react/rac/button";
 import {
   Dialog,
-  DialogClose,
-  DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/react/ui/dialog";
-import { Field, FieldLabel, FieldLegend, FieldSet } from "@/react/ui/field";
-import { Input } from "@/react/ui/input";
+  Modal,
+} from "@/react/rac/dialog";
+import { TextField, Label } from "@/react/rac/field";
+import { Checkbox, CheckboxGroup } from "@/react/rac/checkbox";
+import { RacConfirmProvider } from "@/react/rac/confirm";
 import { DatePicker } from "@/react/ui/date-picker";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
@@ -36,7 +40,6 @@ import { CompScoresSection } from "../comp/CompScoresSection";
 import { CompSetupProgress } from "../comp/CompSetupProgress";
 import { PilotsSection } from "../comp/PilotsSection";
 import { SettingsDialog } from "../comp/SettingsDialog";
-import { CheckboxField } from "../comp/fields";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 import {
@@ -49,6 +52,14 @@ import { useInitialData } from "../lib/initial-data";
 import type { CompDetailLoaderData, CompScores } from "../loaders";
 
 export function CompDetail() {
+  return (
+    <RacConfirmProvider>
+      <CompDetailContent />
+    </RacConfirmProvider>
+  );
+}
+
+function CompDetailContent() {
   const { compId } = useParams<{ compId: string }>();
   const { user, loading } = useUser();
   const location = useLocation();
@@ -205,12 +216,7 @@ function CompDetailView({
           </p>
         </div>
         {isAdmin ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setSettingsOpen(true)}
-          >
+          <Button variant="outline" size="sm" onPress={() => setSettingsOpen(true)}>
             Settings
           </Button>
         ) : null}
@@ -250,34 +256,31 @@ function CompDetailView({
 
       <ClassWarnings warnings={comp.class_coverage_warnings} tasks={comp.tasks} />
 
-      {hero ? (
-        <TaskHero
-          hero={hero}
-          compId={compId}
-          canSubmitTrack={canSubmitTrack}
-          canUploadOnBehalf={canUploadOnBehalf}
-          signedOut={!user && !loading}
-          isAdmin={isAdmin}
-        />
-      ) : null}
-
       {/* break-before-page: when printing, each major section starts a fresh page. */}
       <section id="tasks" className="scroll-mt-4 break-before-page">
         <SectionHeader
           title="Tasks"
           action={
             isAdmin ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setCreateOpen(true)}
-              >
+              <Button variant="outline" size="sm" onPress={() => setCreateOpen(true)}>
                 New Task
               </Button>
             ) : null
           }
         />
+        {/* The current task leads the section: it's the one a pilot needs
+            right now, so its card sits under the Tasks heading with the full
+            chronological list below it. */}
+        {hero ? (
+          <TaskHero
+            hero={hero}
+            compId={compId}
+            canSubmitTrack={canSubmitTrack}
+            canUploadOnBehalf={canUploadOnBehalf}
+            signedOut={!user && !loading}
+            isAdmin={isAdmin}
+          />
+        ) : null}
         <TasksList
           tasks={comp.tasks}
           compId={compId}
@@ -421,7 +424,7 @@ function TaskHero({
   isAdmin: boolean;
 }) {
   return (
-    <div className="mt-6 rounded-xl border bg-gradient-to-br from-muted to-card p-5">
+    <div className="mt-3 rounded-xl border bg-gradient-to-br from-muted to-card p-5">
       <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
         {hero.label} · {formatTaskDate(hero.date)}
       </p>
@@ -430,28 +433,26 @@ function TaskHero({
           key: "task-details",
           visible: true,
           render: (primary) => (
-            <Button
-              nativeButton={false}
+            <LinkButton
               variant={primary ? "default" : "outline"}
               size="sm"
-              render={<Link to={`/comp/${compId}/task/${task.task_id}`} />}
+              href={`/comp/${compId}/task/${task.task_id}`}
             >
               Task details
-            </Button>
+            </LinkButton>
           ),
         };
         const editRouteSlot: HeroSlot = {
           key: "edit-route",
           visible: isAdmin,
           render: (primary) => (
-            <Button
-              nativeButton={false}
+            <LinkButton
               variant={primary ? "default" : "ghost"}
               size="sm"
-              render={<Link to={`/comp/${compId}/task/${task.task_id}#edit-route`} />}
+              href={`/comp/${compId}/task/${task.task_id}#edit-route`}
             >
               Edit route…
-            </Button>
+            </LinkButton>
           ),
         };
         const submitTrackSlot: HeroSlot = {
@@ -483,19 +484,18 @@ function TaskHero({
           key: "replay",
           visible: true,
           render: (primary) => (
-            <Button
-              nativeButton={false}
-              variant={primary ? "default" : "outline"}
-              size="sm"
-              render={
-                <a
-                  href={`/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(task.task_id)}`}
-                  title="Open the 3D flight replay for this task"
-                />
-              }
+            // /replay is its own Vite entry, not an SPA route — keep it a
+            // plain anchor so RacRouterProvider never client-routes it.
+            <a
+              className={buttonVariants({
+                variant: primary ? "default" : "outline",
+                size: "sm",
+              })}
+              href={`/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(task.task_id)}`}
+              title="Open the 3D flight replay for this task"
             >
               3D replay
-            </Button>
+            </a>
           ),
         };
         const signInSlot: HeroSlot = {
@@ -503,10 +503,9 @@ function TaskHero({
           visible: signedOut,
           render: () => (
             <Button
-              type="button"
               variant="outline"
               size="sm"
-              onClick={() => goToSignIn(window.location.pathname)}
+              onPress={() => goToSignIn(window.location.pathname)}
             >
               Sign in to submit your track
             </Button>
@@ -621,13 +620,7 @@ function TasksList({
       <div className="mt-2 text-muted-foreground">
         <p>The organizers haven't published any tasks yet.</p>
         {isAdmin ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="mt-3"
-            onClick={onCreateTask}
-          >
+          <Button variant="outline" size="sm" className="mt-3" onPress={onCreateTask}>
             New Task
           </Button>
         ) : null}
@@ -735,10 +728,9 @@ function SubmitTrackButton({
   return (
     <>
       <Button
-        type="button"
         variant={primary ? "default" : "outline"}
         size="sm"
-        onClick={() => setOpen(true)}
+        onPress={() => setOpen(true)}
       >
         Submit track
       </Button>
@@ -766,7 +758,6 @@ function CreateTaskDialog({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const nameId = useId();
   const dateId = useId();
   const [name, setName] = useState("");
   const [taskDate, setTaskDate] = useState(new Date().toISOString().split("T")[0]);
@@ -774,15 +765,7 @@ function CreateTaskDialog({
   const [selectedClasses, setSelectedClasses] = useState<string[]>(pilotClasses);
   const [submitting, setSubmitting] = useState(false);
 
-  function toggleClass(cls: string, checked: boolean) {
-    setSelectedClasses((prev) =>
-      checked ? [...prev.filter((c) => c !== cls), cls] : prev.filter((c) => c !== cls)
-    );
-  }
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-
+  async function submit() {
     if (selectedClasses.length === 0) {
       toast.warning("Select at least one pilot class");
       return;
@@ -810,59 +793,64 @@ function CreateTaskDialog({
   }
 
   return (
-    <Dialog
-      open
+    <Modal
+      isOpen
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
+      className="sm:max-w-lg"
     >
-      <DialogContent className="sm:max-w-lg">
+      <Dialog>
         <DialogHeader>
           <DialogTitle>Create Task</DialogTitle>
         </DialogHeader>
-        <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
-          <Field>
-            <FieldLabel htmlFor={nameId}>Name</FieldLabel>
-            <Input
-              id={nameId}
-              required
-              maxLength={128}
-              autoFocus
-              placeholder="e.g. Day 1 - Ridge Run"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </Field>
-          <Field>
-            <FieldLabel id={dateId}>Date</FieldLabel>
+        <Form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+          className="flex flex-col gap-4"
+        >
+          <TextField
+            label="Name"
+            isRequired
+            maxLength={128}
+            autoFocus
+            placeholder="e.g. Day 1 - Ridge Run"
+            value={name}
+            onChange={setName}
+            errorMessage="Enter a task name"
+          />
+          <div className="flex flex-col gap-2">
+            <Label id={dateId}>Date</Label>
             <DatePicker
               required
               aria-labelledby={dateId}
               value={taskDate}
               onChange={setTaskDate}
             />
-          </Field>
-          <FieldSet>
-            <FieldLegend variant="label">Pilot Classes</FieldLegend>
+          </div>
+          <CheckboxGroup
+            label="Pilot Classes"
+            value={selectedClasses}
+            onChange={setSelectedClasses}
+          >
             {pilotClasses.map((cls) => (
-              <CheckboxField
-                key={cls}
-                checked={selectedClasses.includes(cls)}
-                onChange={(checked) => toggleClass(cls, checked)}
-                label={cls}
-              />
+              <Checkbox key={cls} value={cls}>
+                {cls}
+              </Checkbox>
             ))}
-          </FieldSet>
+          </CheckboxGroup>
           <DialogFooter>
-            <DialogClose render={<Button type="button" variant="outline" />}>
+            <Button slot="close" variant="outline">
               Cancel
-            </DialogClose>
-            <Button type="submit" disabled={submitting}>
+            </Button>
+            <Button type="submit" isDisabled={submitting}>
               {submitting ? "Creating..." : "Create"}
             </Button>
           </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </Form>
+      </Dialog>
+    </Modal>
   );
 }
