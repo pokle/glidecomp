@@ -11,6 +11,18 @@
     "regPk": 28,
     "name": "NthEastVic2020"
   },
+  "gap_params": {
+    "timePointsExponent": "2/3",
+    "leadingFormula": "classic",
+    "leadingWeightFormula": "gap2020",
+    "nominalDistance": 40000,
+    "minimumDistance": 5000,
+    "nominalTime": 6900,
+    "nominalGoal": 0.3,
+    "useLeading": false,
+    "useArrival": false,
+    "essNotGoalFactor": 0
+  },
   "tasks": [
     {
       "pilot_class": "open",
@@ -19,7 +31,31 @@
       "dir": "unungra-cup-2020-open-t1",
       "tasPk": 1324,
       "comPk": 303,
-      "task_type": "race"
+      "task_type": "race",
+      "airscore_formula": {
+        "formula": "ggap-2018",
+        "goal_penalty": "1",
+        "nominal_goal": "30%",
+        "minimum_distance": "5 km",
+        "nominal_distance": "40 km",
+        "nominal_time": "115 mins",
+        "arrival_scoring": "timed",
+        "departure": "Lkm",
+        "stop_glide_bonus": "5",
+        "start_weight": "0.15",
+        "arrival_weight": "0.175",
+        "speed_weight": "0.7",
+        "scale_to_validity": "0",
+        "error_margin": 0.0005,
+        "arrival": "off",
+        "height_bonus": "off"
+      },
+      "formula_warnings": [
+        "formula \"ggap-2018\" is GGap (Geoff's GAP variant) — median distance validity, linear distance quality, √(Tmin/1800) time curve and flat leading weight are not reproducible; mapped to the nearest GAP-generation parameters",
+        "PG pre-2020 formula: mapped to the GAP2016/2018 weights (the \"GAP2020\" setting); the legacy Perl AirScore used its published weight knobs — verify parity",
+        "departure \"Lkm\" (km-marker bonus points) is not implemented — published scores include bonus points GlideComp omits",
+        "stopped-task glide bonus 5:1 differs from the engine's spec-fixed 4:1 for pg — only matters for stopped tasks"
+      ]
     },
     {
       "pilot_class": "open",
@@ -28,7 +64,31 @@
       "dir": "unungra-cup-2020-open-t2",
       "tasPk": 1325,
       "comPk": 303,
-      "task_type": "race"
+      "task_type": "race",
+      "airscore_formula": {
+        "formula": "ggap-2018",
+        "goal_penalty": "1",
+        "nominal_goal": "30%",
+        "minimum_distance": "5 km",
+        "nominal_distance": "40 km",
+        "nominal_time": "115 mins",
+        "arrival_scoring": "timed",
+        "departure": "Lkm",
+        "stop_glide_bonus": "5",
+        "start_weight": "0.15",
+        "arrival_weight": "0.175",
+        "speed_weight": "0.7",
+        "scale_to_validity": "0",
+        "error_margin": 0.0005,
+        "arrival": "off",
+        "height_bonus": "off"
+      },
+      "formula_warnings": [
+        "formula \"ggap-2018\" is GGap (Geoff's GAP variant) — median distance validity, linear distance quality, √(Tmin/1800) time curve and flat leading weight are not reproducible; mapped to the nearest GAP-generation parameters",
+        "PG pre-2020 formula: mapped to the GAP2016/2018 weights (the \"GAP2020\" setting); the legacy Perl AirScore used its published weight knobs — verify parity",
+        "departure \"Lkm\" (km-marker bonus points) is not implemented — published scores include bonus points GlideComp omits",
+        "stopped-task glide bonus 5:1 differs from the engine's spec-fixed 4:1 for pg — only matters for stopped tasks"
+      ]
     },
     {
       "pilot_class": "open",
@@ -37,7 +97,31 @@
       "dir": "unungra-cup-2020-open-t3",
       "tasPk": 1327,
       "comPk": 303,
-      "task_type": "race"
+      "task_type": "race",
+      "airscore_formula": {
+        "formula": "ggap-2018",
+        "goal_penalty": "1",
+        "nominal_goal": "30%",
+        "minimum_distance": "5 km",
+        "nominal_distance": "40 km",
+        "nominal_time": "115 mins",
+        "arrival_scoring": "timed",
+        "departure": "Lkm",
+        "stop_glide_bonus": "5",
+        "start_weight": "0.15",
+        "arrival_weight": "0.175",
+        "speed_weight": "0.7",
+        "scale_to_validity": "0",
+        "error_margin": 0.0005,
+        "arrival": "off",
+        "height_bonus": "off"
+      },
+      "formula_warnings": [
+        "formula \"ggap-2018\" is GGap (Geoff's GAP variant) — median distance validity, linear distance quality, √(Tmin/1800) time curve and flat leading weight are not reproducible; mapped to the nearest GAP-generation parameters",
+        "PG pre-2020 formula: mapped to the GAP2016/2018 weights (the \"GAP2020\" setting); the legacy Perl AirScore used its published weight knobs — verify parity",
+        "departure \"Lkm\" (km-marker bonus points) is not implemented — published scores include bonus points GlideComp omits",
+        "stopped-task glide bonus 5:1 differs from the engine's spec-fixed 4:1 for pg — only matters for stopped tasks"
+      ]
     },
     {
       "pilot_class": "open",
@@ -46,7 +130,31 @@
       "dir": "unungra-cup-2020-open-t4",
       "tasPk": 1330,
       "comPk": 303,
-      "task_type": "race"
+      "task_type": "race",
+      "airscore_formula": {
+        "formula": "ggap-2018",
+        "goal_penalty": "1",
+        "nominal_goal": "30%",
+        "minimum_distance": "5 km",
+        "nominal_distance": "40 km",
+        "nominal_time": "115 mins",
+        "arrival_scoring": "timed",
+        "departure": "Lkm",
+        "stop_glide_bonus": "5",
+        "start_weight": "0.15",
+        "arrival_weight": "0.175",
+        "speed_weight": "0.7",
+        "scale_to_validity": "0",
+        "error_margin": 0.0005,
+        "arrival": "off",
+        "height_bonus": "off"
+      },
+      "formula_warnings": [
+        "formula \"ggap-2018\" is GGap (Geoff's GAP variant) — median distance validity, linear distance quality, √(Tmin/1800) time curve and flat leading weight are not reproducible; mapped to the nearest GAP-generation parameters",
+        "PG pre-2020 formula: mapped to the GAP2016/2018 weights (the \"GAP2020\" setting); the legacy Perl AirScore used its published weight knobs — verify parity",
+        "departure \"Lkm\" (km-marker bonus points) is not implemented — published scores include bonus points GlideComp omits",
+        "stopped-task glide bonus 5:1 differs from the engine's spec-fixed 4:1 for pg — only matters for stopped tasks"
+      ]
     }
   ]
 }

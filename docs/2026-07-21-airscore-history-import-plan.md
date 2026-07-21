@@ -1,6 +1,6 @@
 # Plan: faithful AirScore formula import + competition history back to 2020
 
-**Date:** 2026-07-21 · **Status:** planned (not started) · **Context:** PR #398
+**Date:** 2026-07-21 · **Status:** workstreams 1–2 implemented (same PR); 3–4 in progress · **Context:** PR #398
 
 PR #398 compared the GAP engine against the FAI S7F PDFs (2018/2020/2024
 editions) and the AirScore source ([biuti/airscore-app]) and documented the
@@ -63,6 +63,78 @@ depends on all of them). One PR per workstream.
   files requires bumping `SCORING_ENGINE_VERSION` +
   `SCORING_SOURCE_FINGERPRINT` in `web/engine/src/scoring-version.ts`
   (currently **v23**; the failing test prints the new hash).
+
+---
+
+## Legacy vocabulary inventory (1a — DONE, 2026-07-21)
+
+Scanned all 59 `web/samples/comps/*/airscore-result-raw.json` files and
+verified the semantics against the legacy Perl scoring source
+([geoffwong/airscore]: `Gap.pm`, `GGap.pm`, `get_task_result.php`) — the
+codebase xc.highcloud.net actually runs — plus empirical checks against
+published points. Findings that reshaped the design:
+
+- **`formula` values on disk:** `gap-2021` (21 tasks), `gap-2018` (17),
+  `gap-2007` (13), `gap-hg2013` (4), `ggap-2018` (4). The string is
+  `forClass-forVersion` from `tblFormula`.
+- **The block varies per CLASS and per TASK inside one GlideComp comp** —
+  not per comp as the original plan assumed. Every Corryong year runs
+  different nominal distances per class (open 35 km, floater 20–25 km);
+  2017 and 2023 score the classes under *different formula generations*
+  (2023 open `gap-2021` vs floater `gap-2007`); departure/arrival flip
+  between tasks of one class (2024 open t1 vs t2–4; 2025 floater t3).
+  Consequence: **`gap_params` became per-task** (migration 0021,
+  `task.gap_params` merged over the comp's in every scoring read path);
+  the manifest stores the shared base at comp level and per-task diffs.
+- **`goal_penalty` = `forGoalSSpenalty` = the fraction of speed AND
+  arrival points LOST by an ESS-but-not-goal pilot** (`Pspeed -= Pspeed *
+  sspenalty` in Gap.pm) → GlideComp `essNotGoalFactor = 1 − goal_penalty`.
+  Values on disk: `"1"` (keep 0% — every comp since 2018, including HG)
+  and `"0.2"` (keep 80% — Corryong 2017 open, gap-hg2013). Question
+  resolved.
+- **`departure`** (per task): `off` | `Dpt` (classic time-delay departure
+  points — unimplemented) | `Ldo` (lead-out; maps to leading points, but
+  legacy uses the LINEAR-area LC for version ≤ 2022 — `select_coeff`
+  switches to `tarLeadingCoeff2` only for > 2022) | `Lkm` (km-marker
+  bonus — unimplemented).
+- **`arrival`** (per task, on/off) is the real arrival switch;
+  `arrival_scoring` (`place` | `timed`, per comp) only picks the curve.
+  Unungra 2020's `timed` is therefore harmless — its arrival is **off**
+  (open question 3 mostly evaporates). The published `height_bonus` is a
+  PHP publishing bug (copies the arrival flag); the real ESS-height-bonus
+  flag is the task block's `hbess`.
+- **Time-points curve verified empirically:** Corryong 2021 (gap-2018)
+  published speed points reproduce exactly under the classic
+  `1 − (Δt/√(Tmin/3600))^(2/3)` curve (e.g. 492.8 computed vs 492.8
+  published), and the corryong-2026 fixture already proves gap-2021 → 5/6.
+  So: version < 2020 → `'2/3'`, ≥ 2020 → `'5/6'`. The published distance
+  weight + goal ratio also reproduce `Adistance` to 0.1 pt.
+- **Legacy PG weights are knob-driven** (`points_weight` uses the
+  published start/arrival/speed weights for non-HG), not the spec's PWC
+  generation — so a highcloud PG comp under gap-2020+ may still differ
+  from `'s7f2020'`; the mapping warns and the parity report decides.
+- **`ggap-*` is GGap, Geoff Wong's own variant** (median-based distance
+  validity, LINEAR distance quality, `√(Tmin/1800)` 2/3 time curve, flat
+  `weightstart × 1000` leading off the top): not reproducible, warned
+  loudly. This is Unungra 2020's formula.
+- **`error_margin`** (0.0005 = 0.05% everywhere on disk) is the cylinder
+  tolerance; GlideComp's xctsk carries it natively
+  (`XCTask.cylinderTolerance`), so the importer now embeds it per task
+  (GlideComp's club default is 0.5% — 10× looser than what these comps
+  were scored with).
+- `start_weight`/`arrival_weight`/`speed_weight` always sum to 1 on disk;
+  for HG the Perl hardcodes 1.4/8 + 1/8 anyway. `scale_to_validity` is
+  always "0"; `stop_glide_bonus` is "5" only on Unungra (PG — spec says
+  4:1; warned, matters only for stopped tasks).
+
+Implementation (all in this PR): `web/scripts/lib/airscore-formula-map.ts`
+(+ tests), `task.gap_params` migration 0021 + merge in
+`mergeStoredGapParamsJson` (scoring.ts, visualization.ts,
+manual-flight.ts), downloader formula capture + `--manifest-only` backfill
+(all bundled manifests + xctsk tolerances committed), seed writes comp +
+per-task params, engine `'s7f2020'` generation (v24).
+
+[geoffwong/airscore]: https://github.com/geoffwong/airscore
 
 ---
 

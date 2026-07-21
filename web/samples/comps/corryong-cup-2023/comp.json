@@ -11,6 +11,15 @@
     "regPk": 179,
     "name": "CorryongHG2015"
   },
+  "gap_params": {
+    "leadingFormula": "classic",
+    "minimumDistance": 5000,
+    "nominalTime": 5400,
+    "nominalGoal": 0.3,
+    "useLeading": false,
+    "useArrival": false,
+    "essNotGoalFactor": 0
+  },
   "tasks": [
     {
       "pilot_class": "open",
@@ -19,7 +28,29 @@
       "dir": "corryong-cup-2023-open-t1",
       "tasPk": 1568,
       "comPk": 363,
-      "task_type": "speedrun-interval"
+      "task_type": "speedrun-interval",
+      "airscore_formula": {
+        "formula": "gap-2021",
+        "goal_penalty": "1",
+        "nominal_goal": "30%",
+        "minimum_distance": "5 km",
+        "nominal_distance": "35 km",
+        "nominal_time": "90 mins",
+        "arrival_scoring": "place",
+        "departure": "off",
+        "stop_glide_bonus": "0",
+        "start_weight": "0.175",
+        "arrival_weight": "0.125",
+        "speed_weight": "0.7",
+        "scale_to_validity": "0",
+        "error_margin": 0.0005,
+        "arrival": "off",
+        "height_bonus": "off"
+      },
+      "gap_params": {
+        "timePointsExponent": "5/6",
+        "nominalDistance": 35000
+      }
     },
     {
       "pilot_class": "open",
@@ -28,7 +59,29 @@
       "dir": "corryong-cup-2023-open-t2",
       "tasPk": 1577,
       "comPk": 363,
-      "task_type": "speedrun-interval"
+      "task_type": "speedrun-interval",
+      "airscore_formula": {
+        "formula": "gap-2021",
+        "goal_penalty": "1",
+        "nominal_goal": "30%",
+        "minimum_distance": "5 km",
+        "nominal_distance": "35 km",
+        "nominal_time": "90 mins",
+        "arrival_scoring": "place",
+        "departure": "off",
+        "stop_glide_bonus": "0",
+        "start_weight": "0.175",
+        "arrival_weight": "0.125",
+        "speed_weight": "0.7",
+        "scale_to_validity": "0",
+        "error_margin": 0.0005,
+        "arrival": "off",
+        "height_bonus": "off"
+      },
+      "gap_params": {
+        "timePointsExponent": "5/6",
+        "nominalDistance": 35000
+      }
     },
     {
       "pilot_class": "open",
@@ -37,7 +90,29 @@
       "dir": "corryong-cup-2023-open-t3",
       "tasPk": 1582,
       "comPk": 363,
-      "task_type": "speedrun-interval"
+      "task_type": "speedrun-interval",
+      "airscore_formula": {
+        "formula": "gap-2021",
+        "goal_penalty": "1",
+        "nominal_goal": "30%",
+        "minimum_distance": "5 km",
+        "nominal_distance": "35 km",
+        "nominal_time": "90 mins",
+        "arrival_scoring": "place",
+        "departure": "off",
+        "stop_glide_bonus": "0",
+        "start_weight": "0.175",
+        "arrival_weight": "0.125",
+        "speed_weight": "0.7",
+        "scale_to_validity": "0",
+        "error_margin": 0.0005,
+        "arrival": "off",
+        "height_bonus": "off"
+      },
+      "gap_params": {
+        "timePointsExponent": "5/6",
+        "nominalDistance": 35000
+      }
     },
     {
       "pilot_class": "open",
@@ -46,7 +121,29 @@
       "dir": "corryong-cup-2023-open-t4",
       "tasPk": 1586,
       "comPk": 363,
-      "task_type": "speedrun-interval"
+      "task_type": "speedrun-interval",
+      "airscore_formula": {
+        "formula": "gap-2021",
+        "goal_penalty": "1",
+        "nominal_goal": "30%",
+        "minimum_distance": "5 km",
+        "nominal_distance": "35 km",
+        "nominal_time": "90 mins",
+        "arrival_scoring": "place",
+        "departure": "off",
+        "stop_glide_bonus": "0",
+        "start_weight": "0.175",
+        "arrival_weight": "0.125",
+        "speed_weight": "0.7",
+        "scale_to_validity": "0",
+        "error_margin": 0.0005,
+        "arrival": "off",
+        "height_bonus": "off"
+      },
+      "gap_params": {
+        "timePointsExponent": "5/6",
+        "nominalDistance": 35000
+      }
     },
     {
       "pilot_class": "floater",
@@ -55,7 +152,29 @@
       "dir": "corryong-cup-2023-floater-t1",
       "tasPk": 1571,
       "comPk": 364,
-      "task_type": "speedrun"
+      "task_type": "speedrun",
+      "airscore_formula": {
+        "formula": "gap-2007",
+        "goal_penalty": "1",
+        "nominal_goal": "30%",
+        "minimum_distance": "5 km",
+        "nominal_distance": "20 km",
+        "nominal_time": "90 mins",
+        "arrival_scoring": "place",
+        "departure": "off",
+        "stop_glide_bonus": "0",
+        "start_weight": "0.175",
+        "arrival_weight": "0.125",
+        "speed_weight": "0.7",
+        "scale_to_validity": "0",
+        "error_margin": 0.0005,
+        "arrival": "off",
+        "height_bonus": "off"
+      },
+      "gap_params": {
+        "timePointsExponent": "2/3",
+        "nominalDistance": 20000
+      }
     },
     {
       "pilot_class": "floater",
@@ -64,7 +183,29 @@
       "dir": "corryong-cup-2023-floater-t2",
       "tasPk": 1578,
       "comPk": 364,
-      "task_type": "speedrun"
+      "task_type": "speedrun",
+      "airscore_formula": {
+        "formula": "gap-2007",
+        "goal_penalty": "1",
+        "nominal_goal": "30%",
+        "minimum_distance": "5 km",
+        "nominal_distance": "20 km",
+        "nominal_time": "90 mins",
+        "arrival_scoring": "place",
+        "departure": "off",
+        "stop_glide_bonus": "0",
+        "start_weight": "0.175",
+        "arrival_weight": "0.125",
+        "speed_weight": "0.7",
+        "scale_to_validity": "0",
+        "error_margin": 0.0005,
+        "arrival": "off",
+        "height_bonus": "off"
+      },
+      "gap_params": {
+        "timePointsExponent": "2/3",
+        "nominalDistance": 20000
+      }
     },
     {
       "pilot_class": "floater",
@@ -73,7 +214,29 @@
       "dir": "corryong-cup-2023-floater-t3",
       "tasPk": 1580,
       "comPk": 364,
-      "task_type": "speedrun"
+      "task_type": "speedrun",
+      "airscore_formula": {
+        "formula": "gap-2007",
+        "goal_penalty": "1",
+        "nominal_goal": "30%",
+        "minimum_distance": "5 km",
+        "nominal_distance": "20 km",
+        "nominal_time": "90 mins",
+        "arrival_scoring": "place",
+        "departure": "off",
+        "stop_glide_bonus": "0",
+        "start_weight": "0.175",
+        "arrival_weight": "0.125",
+        "speed_weight": "0.7",
+        "scale_to_validity": "0",
+        "error_margin": 0.0005,
+        "arrival": "off",
+        "height_bonus": "off"
+      },
+      "gap_params": {
+        "timePointsExponent": "2/3",
+        "nominalDistance": 20000
+      }
     },
     {
       "pilot_class": "floater",
@@ -82,7 +245,29 @@
       "dir": "corryong-cup-2023-floater-t4",
       "tasPk": 1583,
       "comPk": 364,
-      "task_type": "speedrun"
+      "task_type": "speedrun",
+      "airscore_formula": {
+        "formula": "gap-2007",
+        "goal_penalty": "1",
+        "nominal_goal": "30%",
+        "minimum_distance": "5 km",
+        "nominal_distance": "20 km",
+        "nominal_time": "90 mins",
+        "arrival_scoring": "place",
+        "departure": "off",
+        "stop_glide_bonus": "0",
+        "start_weight": "0.175",
+        "arrival_weight": "0.125",
+        "speed_weight": "0.7",
+        "scale_to_validity": "0",
+        "error_margin": 0.0005,
+        "arrival": "off",
+        "height_bonus": "off"
+      },
+      "gap_params": {
+        "timePointsExponent": "2/3",
+        "nominalDistance": 20000
+      }
     },
     {
       "pilot_class": "floater",
@@ -91,7 +276,29 @@
       "dir": "corryong-cup-2023-floater-t5",
       "tasPk": 1587,
       "comPk": 364,
-      "task_type": "speedrun"
+      "task_type": "speedrun",
+      "airscore_formula": {
+        "formula": "gap-2007",
+        "goal_penalty": "1",
+        "nominal_goal": "30%",
+        "minimum_distance": "5 km",
+        "nominal_distance": "20 km",
+        "nominal_time": "90 mins",
+        "arrival_scoring": "place",
+        "departure": "off",
+        "stop_glide_bonus": "0",
+        "start_weight": "0.175",
+        "arrival_weight": "0.125",
+        "speed_weight": "0.7",
+        "scale_to_validity": "0",
+        "error_margin": 0.0005,
+        "arrival": "off",
+        "height_bonus": "off"
+      },
+      "gap_params": {
+        "timePointsExponent": "2/3",
+        "nominalDistance": 20000
+      }
     }
   ]
 }

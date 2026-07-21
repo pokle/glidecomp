@@ -23,10 +23,22 @@
  * site (a few seconds apart, with jitter) so we never hammer the AirScore host.
  * Tune with REQUEST_DELAY_MS (milliseconds between requests; default 3500).
  *
+ * FORMULA CAPTURE: each task's published `formula` block (the parameters
+ * AirScore actually scored it with) is kept verbatim in the manifest and
+ * mapped onto GlideComp gap_params via lib/airscore-formula-map.ts — the
+ * comp-wide shared values at the manifest top level, per-task differences on
+ * each task entry (legacy AirScore varies nominal distance per class and
+ * departure/arrival per task). Anything unmappable is recorded in the task's
+ * formula_warnings and printed loudly.
+ *
  * Usage:
  *   bun web/scripts/download-airscore-comp.ts                 # default comp
  *   bun web/scripts/download-airscore-comp.ts corryong-cup-2026
  *   REQUEST_DELAY_MS=6000 bun web/scripts/download-airscore-comp.ts
+ *   bun web/scripts/download-airscore-comp.ts --manifest-only [slug…]
+ *     # regenerate comp.json (formula capture included) from the raw JSONs
+ *     # already on disk — no network requests; all registry comps when no
+ *     # slug is given
  */
 
 import {
@@ -41,7 +53,13 @@ import { join, basename, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parseIGC } from '@glidecomp/engine';
+import { parseIGC, type GAPParameters } from '@glidecomp/engine';
+import {
+  mapAirscoreFormula,
+  sharedGapParams,
+  taskGapParamOverrides,
+  type AirscoreFormulaBlock,
+} from './lib/airscore-formula-map';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const COMPS_ROOT = join(REPO_ROOT, 'web/samples/comps');
@@ -298,6 +316,120 @@ interface TaskManifestEntry {
   tasPk: number;
   comPk: number;
   task_type: string;
+  /** The AirScore-published formula block, verbatim (provenance). */
+  airscore_formula?: AirscoreFormulaBlock;
+  /** Mapped GAP-parameter overrides where this task differs from the comp's
+   * shared gap_params. Omitted when the task matches the shared base. */
+  gap_params?: Partial<GAPParameters>;
+  /** Everything the published formula says that GlideComp can't reproduce. */
+  formula_warnings?: string[];
+}
+
+// --- formula capture (disk-based: works for downloads and --manifest-only) --
+
+/**
+ * Read a task folder's published formula block + the task-level hbess flag.
+ * Normal folders keep the verbatim result in airscore-result-raw.json. A
+ * `.curated` parity fixture keeps only a trimmed airscore-result.json whose
+ * top level still records formula/departure/arrival — enough to overlay on a
+ * sibling task's block (legacy AirScore stores the formula per comp; only
+ * departure/arrival/hbess vary per task).
+ */
+function readTaskFormulaFromDisk(dir: string): {
+  block: AirscoreFormulaBlock | null;
+  curatedOverlay: Partial<AirscoreFormulaBlock> | null;
+  hbess: string | undefined;
+} {
+  const rawPath = join(dir, 'airscore-result-raw.json');
+  if (existsSync(rawPath)) {
+    const raw = JSON.parse(readFileSync(rawPath, 'utf-8'));
+    return {
+      block: (raw.formula ?? null) as AirscoreFormulaBlock | null,
+      curatedOverlay: null,
+      hbess: raw.task?.hbess,
+    };
+  }
+  const trimmedPath = join(dir, 'airscore-result.json');
+  if (existsSync(trimmedPath)) {
+    const trimmed = JSON.parse(readFileSync(trimmedPath, 'utf-8'));
+    const overlay: Partial<AirscoreFormulaBlock> = {};
+    if (typeof trimmed.formula === 'string') overlay.formula = trimmed.formula;
+    if (typeof trimmed.departure === 'string') overlay.departure = trimmed.departure;
+    if (typeof trimmed.arrival === 'string') overlay.arrival = trimmed.arrival;
+    return { block: null, curatedOverlay: overlay, hbess: undefined };
+  }
+  return { block: null, curatedOverlay: null, hbess: undefined };
+}
+
+/**
+ * Ensure a non-curated task's xctsk carries the comp's published cylinder
+ * tolerance (error_margin — e.g. 0.0005 = 0.05%), so crossing detection uses
+ * the same band AirScore scored with instead of the 0.5% club default.
+ * Idempotent; curated fixtures are never touched.
+ */
+function patchXctskTolerance(dir: string, tolerance: number | undefined): void {
+  if (tolerance === undefined || existsSync(join(dir, '.curated'))) return;
+  const path = join(dir, 'task.xctsk');
+  if (!existsSync(path)) return;
+  const xctsk = JSON.parse(readFileSync(path, 'utf-8'));
+  if (xctsk.cylinderTolerance === tolerance) return;
+  xctsk.cylinderTolerance = tolerance;
+  writeFileSync(path, JSON.stringify(xctsk, null, 2));
+}
+
+/**
+ * Annotate the manifest's task entries with the formula AirScore scored each
+ * task with (verbatim + mapped), patch the task xctsk tolerance, and return
+ * the comp-level shared gap_params. Reads everything from disk, so it serves
+ * both a fresh download (raw JSONs just written) and --manifest-only.
+ */
+function annotateFormula(
+  cfg: CompConfig,
+  tasks: TaskManifestEntry[],
+): Partial<GAPParameters> | null {
+  const category = (cfg.category === 'pg' ? 'pg' : 'hg') as 'hg' | 'pg';
+
+  // Pass 1: read each folder's block; collect per-class consensus for the
+  // curated-fixture fallback.
+  const read = tasks.map((t) => readTaskFormulaFromDisk(join(COMPS_ROOT, t.dir)));
+  const classBlock = new Map<string, AirscoreFormulaBlock>();
+  tasks.forEach((t, i) => {
+    const b = read[i].block;
+    if (b && !classBlock.has(t.pilot_class)) classBlock.set(t.pilot_class, b);
+  });
+
+  const mapped: Array<Partial<GAPParameters> | null> = tasks.map((t, i) => {
+    let block = read[i].block;
+    if (!block && read[i].curatedOverlay) {
+      const sibling = classBlock.get(t.pilot_class);
+      if (sibling) block = { ...sibling, ...read[i].curatedOverlay };
+    }
+    if (!block) {
+      console.warn(`  WARNING ${t.dir}: no published formula on disk — task seeds under comp defaults`);
+      return null;
+    }
+    const { gapParams, cylinderTolerance, warnings } = mapAirscoreFormula(
+      block, category, { hbess: read[i].hbess },
+    );
+    t.airscore_formula = block;
+    if (warnings.length > 0) {
+      t.formula_warnings = warnings;
+      for (const w of warnings) console.warn(`  WARNING ${t.dir}: ${w}`);
+    }
+    patchXctskTolerance(join(COMPS_ROOT, t.dir), cylinderTolerance);
+    return gapParams;
+  });
+
+  const present = mapped.filter((m): m is Partial<GAPParameters> => m !== null);
+  if (present.length === 0) return null;
+  const shared = sharedGapParams(present);
+  tasks.forEach((t, i) => {
+    const m = mapped[i];
+    if (!m) return;
+    const overrides = taskGapParamOverrides(m, shared);
+    if (overrides) t.gap_params = overrides;
+  });
+  return shared;
 }
 
 async function downloadComp(slug: string): Promise<void> {
@@ -404,6 +536,10 @@ async function downloadComp(slug: string): Promise<void> {
     console.log(`\n▶ waypoints: region ${regionName ?? regPk} (${wptJson.waypoints?.length ?? 0} points)`);
   }
 
+  // Formula capture: annotate each task with the AirScore-published formula
+  // (verbatim + mapped gap_params) from the raw JSONs written above.
+  const gapParams = annotateFormula(cfg, tasks);
+
   // comp.json manifest — the seed script's source of truth for this comp.
   const manifest = {
     name: cfg.name,
@@ -413,6 +549,7 @@ async function downloadComp(slug: string): Promise<void> {
     ...(cfg.category ? { category: cfg.category } : {}),
     classes,
     waypoint_region: regPk ? { regPk: Number(regPk), name: regionName ?? null } : null,
+    ...(gapParams ? { gap_params: gapParams } : {}),
     tasks,
   };
   writeFileSync(join(metaDir, 'comp.json'), JSON.stringify(manifest, null, 2));
@@ -425,5 +562,52 @@ async function downloadComp(slug: string): Promise<void> {
   console.log(`  Seed it:  bun run seed`);
 }
 
-const slug = process.argv[2] ?? 'corryong-cup-2026';
-await downloadComp(slug);
+/**
+ * Regenerate a comp's manifest (formula capture included) from what's on
+ * disk — no network. Preserves the existing manifest's identity fields and
+ * task list; only the formula annotations (and xctsk tolerances) change.
+ */
+function regenerateManifest(slug: string): void {
+  const cfg = COMPS[slug];
+  if (!cfg) throw new Error(`Unknown comp "${slug}". Known: ${Object.keys(COMPS).join(', ')}`);
+  const manifestPath = join(COMPS_ROOT, slug, 'comp.json');
+  if (!existsSync(manifestPath)) {
+    throw new Error(`No manifest at ${manifestPath} — download the comp first`);
+  }
+  const existing = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+  console.log(`Regenerating manifest for "${cfg.name}" (${slug})…`);
+  const tasks: TaskManifestEntry[] = (existing.tasks as TaskManifestEntry[]).map((t) => ({
+    pilot_class: t.pilot_class,
+    name: t.name,
+    date: t.date,
+    dir: t.dir,
+    tasPk: t.tasPk,
+    comPk: t.comPk,
+    task_type: t.task_type,
+  }));
+  const gapParams = annotateFormula(cfg, tasks);
+  const manifest = {
+    name: existing.name,
+    slug: existing.slug,
+    source_host: existing.source_host,
+    ...(existing.comp_name ? { comp_name: existing.comp_name } : {}),
+    ...(existing.category ? { category: existing.category } : {}),
+    classes: existing.classes,
+    waypoint_region: existing.waypoint_region ?? null,
+    ...(gapParams ? { gap_params: gapParams } : {}),
+    tasks,
+  };
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  console.log(`  wrote ${join('web/samples/comps', slug, 'comp.json')}`);
+}
+
+const cliArgs = process.argv.slice(2);
+const MANIFEST_ONLY = cliArgs.includes('--manifest-only');
+const cliSlugs = cliArgs.filter((a) => !a.startsWith('--'));
+if (MANIFEST_ONLY) {
+  for (const slug of cliSlugs.length > 0 ? cliSlugs : Object.keys(COMPS)) {
+    regenerateManifest(slug);
+  }
+} else {
+  await downloadComp(cliSlugs[0] ?? 'corryong-cup-2026');
+}

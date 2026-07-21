@@ -1,0 +1,21 @@
+-- Per-task GAP parameter overrides (AirScore history import).
+--
+-- task.gap_params holds a JSON Partial<GAPParameters> merged OVER the comp's
+-- gap_params when the task is scored. NULL (the overwhelmingly common case)
+-- means the task scores under the comp's settings alone.
+--
+-- Why per task: AirScore publishes its formula per task, and the real
+-- back-catalogue varies inside one GlideComp comp — every Corryong year runs
+-- different nominal distances per pilot class (open 35 km vs floater
+-- 20–25 km), 2017/2023 score the classes under different formula
+-- generations, and departure/arrival flags flip between tasks of one class
+-- (e.g. Corryong 2024 open t1 vs t2–4). The importer stores each task's
+-- mapped parameters here (only the fields that differ from the comp-level
+-- shared base), so seeded history scores under the settings AirScore
+-- actually used.
+--
+-- Import-only surface: no API mutation route writes this column — it is set
+-- by the seed script when a comp manifest carries per-task gap_params. The
+-- comp settings dialog keeps editing the comp-level params, which still
+-- reach every field a task didn't pin.
+ALTER TABLE task ADD COLUMN gap_params TEXT;

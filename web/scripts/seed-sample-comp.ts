@@ -47,6 +47,7 @@ import {
   parseIGC,
   parseXCTask,
   xctaskTurnpointsToRecords,
+  type GAPParameters,
   type WaypointFileRecord,
 } from '@glidecomp/engine';
 import { timezoneForXctsk } from '@glidecomp/engine/timezone';
@@ -301,6 +302,8 @@ interface TaskSpec {
   name: string;
   date: string;
   pilotClass: string;
+  /** Per-task GAP overrides from the manifest (AirScore formula capture). */
+  gapParams?: Partial<GAPParameters>;
 }
 
 interface SampleTask extends TaskSpec {
@@ -312,7 +315,22 @@ interface CompManifest {
   name: string;
   slug: string;
   classes: string[];
-  tasks: Array<{ pilot_class: string; name: string; date: string; dir: string }>;
+  tasks: Array<{
+    pilot_class: string;
+    name: string;
+    date: string;
+    dir: string;
+    /** Mapped GAP overrides where this task's published AirScore formula
+     * differs from the comp-wide gap_params (see download-airscore-comp.ts). */
+    gap_params?: Partial<GAPParameters>;
+  }>;
+  /**
+   * Comp-wide GAP parameters mapped from the AirScore-published formula the
+   * comp was actually scored with (shared across its tasks; per-task
+   * differences ride on each task entry). Absent for the synthetic comps —
+   * they score under the per-category defaults.
+   */
+  gap_params?: Partial<GAPParameters>;
   /**
    * Optional overrides. The Corryong sample omits these and inherits the
    * historical defaults (the fixed SAMPLE_COMP_NAME, 'hg', GAP scoring). The
@@ -470,10 +488,20 @@ async function seed(store: SeedStore, where: string, slug: string): Promise<void
   console.log(`  category: ${category}, scoring: ${scoringFormat}, filename id: ${idField}`);
   console.log(`  visibility: ${manifest.hidden ? 'hidden (test=1, admins only)' : 'public'}`);
 
+  // Comp-wide GAP parameters from the manifest's AirScore formula capture
+  // (null for the synthetic comps → the per-category defaults apply).
+  const compGapParamsJson = manifest.gap_params ? JSON.stringify(manifest.gap_params) : null;
+  console.log(
+    `  gap_params: ${compGapParamsJson ? 'from AirScore formula capture' : 'none (category defaults)'}`,
+  );
+
   // Read every task, sharing one resolved timezone across the comp.
   const tzOut: { value?: string } = {};
   const tasks = manifest.tasks.map((t) =>
-    readTask({ dir: t.dir, name: t.name, date: t.date, pilotClass: t.pilot_class }, tzOut),
+    readTask(
+      { dir: t.dir, name: t.name, date: t.date, pilotClass: t.pilot_class, gapParams: t.gap_params },
+      tzOut,
+    ),
   );
   for (const t of tasks) {
     console.log(`  ${t.pilotClass}/${t.name} (${t.date}): ${t.pilots.length} pilots`);
@@ -530,12 +558,13 @@ async function seed(store: SeedStore, where: string, slug: string): Promise<void
          pilot_classes=${q(classesJson)},
          default_pilot_class=${q(defaultClass)},
          close_date=${q(closeDate)},
+         gap_params=${q(compGapParamsJson)},
          timezone=${q(tzOut.value ?? null)} WHERE comp_id = ${compId};`,
     ]);
   } else {
     await store.exec(
-      `INSERT INTO comp (name, creation_date, category, test, scoring_format, pilot_classes, default_pilot_class, close_date, timezone)
-       VALUES (${q(compName)}, ${q(today)}, ${q(category)}, ${testFlag}, ${q(scoringFormat)}, ${q(classesJson)}, ${q(defaultClass)}, ${q(closeDate)}, ${q(tzOut.value ?? null)});`,
+      `INSERT INTO comp (name, creation_date, category, test, scoring_format, pilot_classes, default_pilot_class, close_date, gap_params, timezone)
+       VALUES (${q(compName)}, ${q(today)}, ${q(category)}, ${testFlag}, ${q(scoringFormat)}, ${q(classesJson)}, ${q(defaultClass)}, ${q(closeDate)}, ${q(compGapParamsJson)}, ${q(tzOut.value ?? null)});`,
     );
     compId = Number((await store.rows(`SELECT comp_id FROM comp WHERE name = ${q(compName)};`))[0].comp_id);
     console.log(`  created comp_id ${compId}`);
@@ -583,8 +612,9 @@ async function seed(store: SeedStore, where: string, slug: string): Promise<void
   for (const t of tasks) {
     const taskName = `${t.name} (${classLabel(t.pilotClass)})`;
     await store.exec(
-      `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk)
-       VALUES (${compId}, ${q(taskName)}, ${q(t.date)}, ${q(today)}, ${q(t.xctsk)});`,
+      `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk, gap_params)
+       VALUES (${compId}, ${q(taskName)}, ${q(t.date)}, ${q(today)}, ${q(t.xctsk)},
+               ${q(t.gapParams ? JSON.stringify(t.gapParams) : null)});`,
     );
     const taskId = Number(
       (await store.rows(`SELECT task_id FROM task WHERE comp_id = ${compId} AND name = ${q(taskName)};`))[0]

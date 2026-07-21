@@ -108,5 +108,6 @@
       }
     }
   ],
-  "version": 1
+  "version": 1,
+  "cylinderTolerance": 0.0005
 }
