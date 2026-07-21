@@ -1,0 +1,4 @@
+Hand-curated AirScore gap-2018 parity fixture (see web/engine/tests/airscore-parity.test.ts).
+The downloader leaves this folder untouched on re-download.
+NOTE: the rest of Corryong Cup 2021 lives in pokle/glidecomp-comp-archive;
+this task folder stays bundled because the engine parity tests score it in CI.

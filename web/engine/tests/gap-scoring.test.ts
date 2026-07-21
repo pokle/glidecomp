@@ -1019,6 +1019,79 @@ describe('calculateWeights — S7F 2024 leading formula (issue #257)', () => {
   });
 });
 
+describe('calculateWeights — S7F 2020–2022 PWC generation (s7f2020)', () => {
+  const base = { bestDistance: 80000, taskDistance: 100000, scoring: 'PG' as const, useLeading: true, useArrival: true, leadingWeightFormula: 's7f2020' as const, leadingTimeRatio: 0.26 };
+
+  it('PG at goal ratio 0: DW 0.838, leading 0.162, time exactly 0', () => {
+    const w = calculateWeights({ ...base, goalRatio: 0 });
+    expect(w.distance).toBeCloseTo(0.838, 10);
+    expect(w.leading).toBeCloseTo(0.162, 10);
+    expect(w.time).toBeCloseTo(0, 10);
+    expect(w.arrival).toBe(0);
+  });
+
+  it('PG with goal: DW from the PWC polynomial, leading fixed 0.162, time the remainder', () => {
+    const gr = 0.3;
+    const w = calculateWeights({ ...base, goalRatio: gr });
+    const dw = 0.805 - 1.374 * gr + 1.413 * gr * gr - 0.484 * gr * gr * gr;
+    expect(w.distance).toBeCloseTo(dw, 10);
+    expect(w.leading).toBeCloseTo(0.162, 10);
+    expect(w.time).toBeCloseTo(1 - dw - 0.162, 10);
+    expect(w.distance + w.time + w.leading + w.arrival).toBeCloseTo(1, 10);
+  });
+
+  it('PG at goal ratio 1: DW = 0.805 − 1.374 + 1.413 − 0.484 = 0.36', () => {
+    const w = calculateWeights({ ...base, goalRatio: 1 });
+    expect(w.distance).toBeCloseTo(0.36, 10);
+    expect(w.leading).toBeCloseTo(0.162, 10);
+    expect(w.time).toBeCloseTo(1 - 0.36 - 0.162, 10);
+  });
+
+  it('PG s7f2020 ignores LeadingTimeRatio', () => {
+    const a = calculateWeights({ ...base, goalRatio: 0.3, leadingTimeRatio: 0.26 });
+    const b = calculateWeights({ ...base, goalRatio: 0.3, leadingTimeRatio: 0.5 });
+    expect(a.leading).toBeCloseTo(b.leading, 12);
+    expect(a.time).toBeCloseTo(b.time, 12);
+  });
+
+  it('PG s7f2020 with leading off drops the 0.162 to time', () => {
+    const w = calculateWeights({ ...base, goalRatio: 0.3, useLeading: false });
+    expect(w.leading).toBe(0);
+    expect(w.time).toBeCloseTo(1 - w.distance, 10);
+  });
+
+  it('a PG task scored under s7f2020 distributes 0.162 × validity × 1000 leading points', () => {
+    const leader = createTrackThroughCylinders(standardWaypoints, { fixIntervalMinutes: 1 });
+    const laggard = createTrackThroughCylinders(standardWaypoints, { fixIntervalMinutes: 3 });
+    const pilots: PilotFlight[] = [
+      { pilotName: 'Leader', trackFile: 'leader.igc', fixes: leader },
+      { pilotName: 'Laggard', trackFile: 'laggard.igc', fixes: laggard },
+    ];
+    const result = scoreTask(standardTask, pilots, {
+      nominalDistance: 20000,
+      nominalTime: 1800,
+      scoring: 'PG',
+      useLeading: true,
+      leadingWeightFormula: 's7f2020',
+    });
+    expect(result.weights.leading).toBeCloseTo(0.162, 10);
+    expect(result.availablePoints.leading).toBeCloseTo(
+      0.162 * result.taskValidity.task * 1000, 6);
+    // Best LC ⇒ full available leading points.
+    const L = result.pilotScores.find(p => p.pilotName === 'Leader')!;
+    expect(L.leadingPoints).toBeCloseTo(result.availablePoints.leading, 1);
+  });
+
+  it('HG weights are untouched by s7f2020', () => {
+    const gap = calculateWeights({ goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'HG', useLeading: true, useArrival: true, leadingWeightFormula: 'gap2020', leadingTimeRatio: 0.26 });
+    const s7f = calculateWeights({ goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'HG', useLeading: true, useArrival: true, leadingWeightFormula: 's7f2020', leadingTimeRatio: 0.26 });
+    expect(s7f.distance).toBeCloseTo(gap.distance, 12);
+    expect(s7f.leading).toBeCloseTo(gap.leading, 12);
+    expect(s7f.time).toBeCloseTo(gap.time, 12);
+    expect(s7f.arrival).toBeCloseTo(gap.arrival, 12);
+  });
+});
+
 describe('resolveCompGapParams — date-based PG leading-weight default (issue #257)', () => {
   const before = S7F2024_PG_DEFAULT_SINCE_MS - 1;
   const onCutoff = S7F2024_PG_DEFAULT_SINCE_MS;

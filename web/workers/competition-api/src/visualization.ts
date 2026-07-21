@@ -14,7 +14,7 @@
 
 import { packTracksFromIgc, type GAPParameters, type PilotIgc } from "@glidecomp/engine";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
-import { mapWithConcurrency } from "./scoring";
+import { mapWithConcurrency, mergeStoredGapParamsJson } from "./scoring";
 
 /** How many tracks to fetch from R2 at once. The pack step already holds every
  * decompressed IGC in memory simultaneously, so fetching concurrently doesn't
@@ -82,7 +82,8 @@ export async function buildTask3dvisBundle(
   const t0 = performance.now();
   const taskRow = await db
     .prepare(
-      `SELECT t.task_id, t.comp_id, t.xctsk, c.gap_params, c.timezone
+      `SELECT t.task_id, t.comp_id, t.xctsk, t.gap_params AS task_gap_params,
+              c.gap_params, c.timezone
        FROM task t JOIN comp c ON t.comp_id = c.comp_id
        WHERE t.task_id = ?`
     )
@@ -91,12 +92,17 @@ export async function buildTask3dvisBundle(
       task_id: number;
       comp_id: number;
       xctsk: string | null;
+      task_gap_params: string | null;
       gap_params: string | null;
       timezone: string | null;
     }>();
 
   if (!taskRow) throw new Error("Task not found");
   if (!taskRow.xctsk) throw new Error("Task has no xctsk definition");
+  taskRow.gap_params = mergeStoredGapParamsJson(
+    taskRow.gap_params,
+    taskRow.task_gap_params
+  );
   console.log(`[3dvis] task ${taskId}: loaded task row in ${(performance.now() - t0).toFixed(0)}ms`);
 
   // Comp-local IANA zone for the replay clock (#269): the comp setting when

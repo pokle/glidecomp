@@ -1,0 +1,344 @@
+{
+ "source": "https://xc.highcloud.net/get_task_result.php?comPk=305&tasPk=1340",
+ "comp": "Corryong Cup 2021 Open - Task 1 (T1)",
+ "note": "AirScore published results (trimmed), gap-2018 generation: classic 2/3 time-points curve, departure=off, arrival=off, goal_penalty=1 (ESS-but-not-goal keeps 0% \u2014 two goal pilots here instead have time points clamped to 0 by the curve). Known legacy deviations the parity test scales/bounds for: (1) published task quality 0.978 uses the SECOND-fastest ESS time (Gap.pm tqtime) where the spec and GlideComp use the fastest (0.9696); (2) the legacy km-difficulty curve is more generous at low distances than S7F 2024 \u00a711.1.1. See airscore-parity.test.ts.",
+ "formula": "gap-2018",
+ "departure": "off",
+ "arrival": "off",
+ "task_dist_km": 52.2,
+ "wp_dist_km": 55.41,
+ "quality": {
+  "task": 0.978,
+  "distance": 1.0,
+  "time": 0.978,
+  "launch": 1.0
+ },
+ "goal": 15,
+ "launched": 32,
+ "weights": {
+  "distance": 0.435464,
+  "time": 0.564536
+ },
+ "pilots": [
+  {
+   "surname": "wisewould",
+   "name": "Todd Wisewould",
+   "start": "16:00:00",
+   "time": "1:16:40",
+   "distKm": 51.7,
+   "timePts": 552,
+   "distPts": 425.8,
+   "total": 978
+  },
+  {
+   "surname": "adriaans",
+   "name": "Peter Adriaans",
+   "start": "15:45:00",
+   "time": "1:19:03",
+   "distKm": 51.7,
+   "timePts": 492.8,
+   "distPts": 425.8,
+   "total": 919
+  },
+  {
+   "surname": "free",
+   "name": "Michael Free",
+   "start": "16:15:00",
+   "time": "1:21:02",
+   "distKm": 51.7,
+   "timePts": 463.3,
+   "distPts": 425.8,
+   "total": 889
+  },
+  {
+   "surname": "clotworthy",
+   "name": "Randall Clotworthy",
+   "start": "16:45:00",
+   "time": "1:21:43",
+   "distKm": 51.7,
+   "timePts": 454.3,
+   "distPts": 425.8,
+   "total": 880
+  },
+  {
+   "surname": "cross",
+   "name": "Tony Cross",
+   "start": "15:30:00",
+   "time": "1:25:45",
+   "distKm": 51.7,
+   "timePts": 407.5,
+   "distPts": 425.8,
+   "total": 833
+  },
+  {
+   "surname": "stevens",
+   "name": "Adam Stevens",
+   "start": "15:30:00",
+   "time": "1:27:13",
+   "distKm": 51.7,
+   "timePts": 392.4,
+   "distPts": 425.8,
+   "total": 818
+  },
+  {
+   "surname": "blenkinsop",
+   "name": "Steve Blenkinsop",
+   "start": "15:30:00",
+   "time": "1:27:38",
+   "distKm": 51.7,
+   "timePts": 388.2,
+   "distPts": 425.8,
+   "total": 814
+  },
+  {
+   "surname": "rowntree",
+   "name": "Harrison Rowntree",
+   "start": "15:30:00",
+   "time": "1:30:20",
+   "distKm": 51.7,
+   "timePts": 362.3,
+   "distPts": 425.8,
+   "total": 788
+  },
+  {
+   "surname": "butler",
+   "name": "Mitch Butler",
+   "start": "15:15:00",
+   "time": "1:42:13",
+   "distKm": 51.7,
+   "timePts": 264.1,
+   "distPts": 425.8,
+   "total": 690
+  },
+  {
+   "surname": "alexander",
+   "name": "Hughbert Alexander",
+   "start": "14:15:00",
+   "time": "1:48:38",
+   "distKm": 51.7,
+   "timePts": 217.7,
+   "distPts": 425.8,
+   "total": 644
+  },
+  {
+   "surname": "schmidt",
+   "name": "Andy Schmidt",
+   "start": "15:00:00",
+   "time": "1:49:09",
+   "distKm": 51.7,
+   "timePts": 214.1,
+   "distPts": 425.8,
+   "total": 640
+  },
+  {
+   "surname": "hooke",
+   "name": "Neil Hooke",
+   "start": "15:30:00",
+   "time": "1:53:16",
+   "distKm": 51.7,
+   "timePts": 186.1,
+   "distPts": 425.8,
+   "total": 612
+  },
+  {
+   "surname": "moore",
+   "name": "Dave Moore",
+   "start": "14:30:00",
+   "time": "2:05:28",
+   "distKm": 51.7,
+   "timePts": 108.8,
+   "distPts": 425.8,
+   "total": 535
+  },
+  {
+   "surname": "divito",
+   "name": "Mark Divito",
+   "start": "16:00:00",
+   "time": "3:03:19",
+   "distKm": 51.7,
+   "timePts": 0,
+   "distPts": 425.8,
+   "total": 426
+  },
+  {
+   "surname": "pokle",
+   "name": "Tushar Pokle",
+   "start": "16:00:00",
+   "time": "2:29:38",
+   "distKm": 51.7,
+   "timePts": 0,
+   "distPts": 425.8,
+   "total": 426
+  },
+  {
+   "surname": "halsall",
+   "name": "Neale Halsall",
+   "start": null,
+   "time": null,
+   "distKm": 44.63,
+   "timePts": 0,
+   "distPts": 396.7,
+   "total": 397
+  },
+  {
+   "surname": "chitty",
+   "name": "Ollie Chitty",
+   "start": null,
+   "time": null,
+   "distKm": 28.46,
+   "timePts": 0,
+   "distPts": 317.6,
+   "total": 318
+  },
+  {
+   "surname": "bolton",
+   "name": "Pete Bolton",
+   "start": null,
+   "time": null,
+   "distKm": 24.33,
+   "timePts": 0,
+   "distPts": 300.6,
+   "total": 301
+  },
+  {
+   "surname": "norman",
+   "name": "Steve Norman",
+   "start": null,
+   "time": null,
+   "distKm": 22.19,
+   "timePts": 0,
+   "distPts": 283.7,
+   "total": 284
+  },
+  {
+   "surname": "carman",
+   "name": "Jason Carman",
+   "start": null,
+   "time": null,
+   "distKm": 21.29,
+   "timePts": 0,
+   "distPts": 275.5,
+   "total": 276
+  },
+  {
+   "surname": "lavers",
+   "name": "Keith Lavers",
+   "start": null,
+   "time": null,
+   "distKm": 17.1,
+   "timePts": 0,
+   "distPts": 245.7,
+   "total": 246
+  },
+  {
+   "surname": "holtkamp",
+   "name": "Rohan Holtkamp",
+   "start": null,
+   "time": null,
+   "distKm": 14.41,
+   "timePts": 0,
+   "distPts": 210,
+   "total": 210
+  },
+  {
+   "surname": "wynd",
+   "name": "James Wynd",
+   "start": null,
+   "time": null,
+   "distKm": 14.33,
+   "timePts": 0,
+   "distPts": 209.5,
+   "total": 209
+  },
+  {
+   "surname": "kubeil",
+   "name": "Jay Kubeil",
+   "start": null,
+   "time": null,
+   "distKm": 13.68,
+   "timePts": 0,
+   "distPts": 206.6,
+   "total": 207
+  },
+  {
+   "surname": "meechan",
+   "name": "Anthony Meechan",
+   "start": null,
+   "time": null,
+   "distKm": 1.42,
+   "timePts": 0,
+   "distPts": 120.8,
+   "total": 121
+  },
+  {
+   "surname": "atkinson",
+   "name": "Bruce Atkinson",
+   "start": null,
+   "time": null,
+   "distKm": 2.67,
+   "timePts": 0,
+   "distPts": 120.8,
+   "total": 121
+  },
+  {
+   "surname": "bayly",
+   "name": "Dean Bayly",
+   "start": null,
+   "time": null,
+   "distKm": null,
+   "timePts": 0,
+   "distPts": 120.8,
+   "total": 121
+  },
+  {
+   "surname": "atkinson",
+   "name": "James Atkinson",
+   "start": null,
+   "time": null,
+   "distKm": 0.03,
+   "timePts": 0,
+   "distPts": 120.8,
+   "total": 121
+  },
+  {
+   "surname": "mcginty",
+   "name": "James McGinty",
+   "start": null,
+   "time": null,
+   "distKm": null,
+   "timePts": 0,
+   "distPts": 120.8,
+   "total": 121
+  },
+  {
+   "surname": "de_vecchi",
+   "name": "Marcus De Vecchi",
+   "start": null,
+   "time": null,
+   "distKm": 1.89,
+   "timePts": 0,
+   "distPts": 120.8,
+   "total": 121
+  },
+  {
+   "surname": "hughes",
+   "name": "Richard Hughes",
+   "start": null,
+   "time": null,
+   "distKm": null,
+   "timePts": 0,
+   "distPts": 120.8,
+   "total": 121
+  },
+  {
+   "surname": "prest",
+   "name": "Sam Prest",
+   "start": null,
+   "time": null,
+   "distKm": null,
+   "timePts": 0,
+   "distPts": 120.8,
+   "total": 121
+  }
+ ]
+}

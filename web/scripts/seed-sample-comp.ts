@@ -19,7 +19,16 @@
  * Usage:
  *   bun run seed                      # every bundled comp → local dev state
  *   bun run seed big-chip kosci-loop  # just these comps
+ *   bun run seed ../glidecomp-archive/comps/forbes-flatlands-2026
+ *                                     # a comp named by path (e.g. from the
+ *                                     # archive checkout) — equivalent to
+ *                                     # GLIDECOMP_COMPS_DIR=… + its slug
+ *   bun run seed --history            # include history-flagged comps too
  *   bun run seed --remote             # production D1 + R2 (needs wrangler auth)
+ *
+ * A manifest with `history: true` (a back-catalogue comp, see
+ * docs/2026-07-21-airscore-history-import-plan.md) is skipped by the default
+ * "seed everything" run — seed it by naming its slug or passing --history.
  *
  * Source: the comp folders written by download-airscore-comp.ts, described by
  * web/samples/comps/<slug>/comp.json. That manifest lists every task with its
@@ -44,19 +53,55 @@ import { gzipSync } from 'node:zlib';
 import { spawnSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
+  andoyerDistance,
+  calculateBearingRadians,
+  calculateOptimizedTaskLine,
+  destinationPoint,
   parseIGC,
   parseXCTask,
   xctaskTurnpointsToRecords,
+  type GAPParameters,
   type WaypointFileRecord,
 } from '@glidecomp/engine';
 import { timezoneForXctsk } from '@glidecomp/engine/timezone';
 import { SAMPLE_COMP_NAME } from '../workers/competition-api/src/sample';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-const COMPS_ROOT = join(REPO_ROOT, 'web/samples/comps');
-// Which bundled comps to seed (each slug matches a folder under COMPS_ROOT
-// holding a comp.json manifest). With no slug given we seed every bundled comp;
-// flags and slugs can appear in any arg order.
+/** Comp-folder root — override with GLIDECOMP_COMPS_DIR to seed from a
+ * checkout of pokle/glidecomp-archive (the history back-catalogue). */
+const COMPS_ROOT = process.env.GLIDECOMP_COMPS_DIR
+  ? resolve(process.env.GLIDECOMP_COMPS_DIR)
+  : join(REPO_ROOT, 'web/samples/comps');
+
+/** A comp to seed: the directory its folders live under + its slug. */
+interface CompRef {
+  root: string;
+  slug: string;
+}
+
+/**
+ * Resolve one CLI argument to the comp it names. A bare slug ("big-chip")
+ * is looked up under COMPS_ROOT; anything path-like — containing a slash,
+ * or an existing directory holding a comp.json — is taken as a direct path
+ * to a comp's meta folder (e.g. `../glidecomp-archive/comps/forbes-
+ * flatlands-2026/`), whose PARENT becomes the comps root so the task
+ * folders resolve as its siblings.
+ */
+function resolveCompArg(arg: string): CompRef {
+  const looksLikePath = arg.includes('/') || arg.startsWith('.');
+  const asPath = resolve(arg.replace(/\/+$/, ''));
+  if (looksLikePath || existsSync(join(asPath, 'comp.json'))) {
+    if (!existsSync(join(asPath, 'comp.json'))) {
+      throw new Error(`No comp manifest at ${join(asPath, 'comp.json')}`);
+    }
+    return { root: resolve(asPath, '..'), slug: basename(asPath) };
+  }
+  return { root: COMPS_ROOT, slug: arg };
+}
+
+// Which bundled comps to seed. Each argument is a slug under COMPS_ROOT or a
+// path to a comp folder; with no argument we seed every bundled comp. Flags
+// and comp arguments can appear in any order.
 const ARG_SLUGS = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const PERSIST = 'web/.wrangler/state';
 // Resolve all bindings (D1 + R2) from the competition-api worker config.
@@ -296,23 +341,133 @@ interface SamplePilot {
   fileSize: number;
 }
 
+/**
+ * A pilot in the task's PUBLISHED AirScore results who has no IGC in the
+ * download (a handful per comp). Without them the seeded field is smaller
+ * than the field AirScore scored, so launch/distance validity — and with it
+ * every pilot's points — drifts from the published numbers. They seed as
+ * what they are: a DNF status, or a manual flight (S7F §8.4) landed at the
+ * published distance along the optimised route plus a "landed" status.
+ */
+interface TrackLessPilot {
+  name: string;
+  kind: 'dnf' | 'flew';
+  /** Published distance in metres, or null when unknown (a bare 'lo' row —
+   * scored at minimum distance, so the landing synthesizes at the start). */
+  distance: number | null;
+}
+
+/** '<a …>Todd Wisewould</a>' → "wisewould" — the IGC-filename surname key. */
+function surnameKeyFromPublishedName(html: string): string {
+  const full = String(html).replace(/<[^>]+>/g, '').trim();
+  const words = full.split(/\s+/);
+  return (words.length > 1 ? words.slice(1) : words).join('_').toLowerCase();
+}
+
+/**
+ * Published result rows with no matching IGC in the task folder. Matching is
+ * by the same surname key the IGC filenames use, consuming one file per row
+ * so duplicate surnames pair off correctly.
+ */
+function readTrackLessRows(compDir: string, igcFiles: string[]): TrackLessPilot[] {
+  const rawPath = join(compDir, 'airscore-result-raw.json');
+  if (!existsSync(rawPath)) return [];
+  const raw = JSON.parse(readFileSync(rawPath, 'utf-8'));
+  const available = new Map<string, number>();
+  for (const f of igcFiles) {
+    const key = basename(f, '.igc').replace(/_\d+_\d{6}$/, '').toLowerCase();
+    available.set(key, (available.get(key) ?? 0) + 1);
+  }
+  const out: TrackLessPilot[] = [];
+  for (const row of raw.data ?? []) {
+    const name = String(row[2]).replace(/<[^>]+>/g, '').trim();
+    if (!name) continue;
+    const key = surnameKeyFromPublishedName(row[2]);
+    const n = available.get(key) ?? 0;
+    if (n > 0) {
+      available.set(key, n - 1);
+      continue;
+    }
+    const dist = row[10];
+    if (dist === 'abs') continue; // absent — not part of the scored field
+    if (dist === 'dnf') {
+      out.push({ name, kind: 'dnf', distance: null });
+    } else if (typeof dist === 'number' && Number.isFinite(dist)) {
+      out.push({ name, kind: 'flew', distance: dist * 1000 });
+    } else {
+      out.push({ name, kind: 'flew', distance: null }); // 'lo' etc. — min distance
+    }
+  }
+  return out;
+}
+
+/**
+ * A landing point at `targetMeters` along the task's optimised route, plus
+ * the index of the last turnpoint passed getting there — the two facts a
+ * manual flight stores. The engine's made-good for a point ON the optimised
+ * line at cumulative distance d is d itself, so the synthesized flight
+ * scores the published distance.
+ */
+function landingAtRouteDistance(
+  xctsk: string,
+  targetMeters: number,
+): { lastReachedIndex: number; lat: number; lon: number } {
+  const line = calculateOptimizedTaskLine(parseXCTask(xctsk));
+  if (line.length === 0) throw new Error('task has no turnpoints');
+  let remaining = Math.max(0, targetMeters);
+  let index = 0;
+  for (let i = 0; i + 1 < line.length; i++) {
+    const leg = andoyerDistance(line[i].lat, line[i].lon, line[i + 1].lat, line[i + 1].lon);
+    if (remaining <= leg || i + 2 === line.length) {
+      // Land on this leg — capped 100 m short of its end so a published
+      // distance at/near full course stays a land-out, never a goal.
+      const along = Math.min(remaining, Math.max(0, leg - 100));
+      const bearing = calculateBearingRadians(line[i].lat, line[i].lon, line[i + 1].lat, line[i + 1].lon);
+      const p = destinationPoint(line[i].lat, line[i].lon, along, bearing);
+      return { lastReachedIndex: index, lat: p.lat, lon: p.lon };
+    }
+    remaining -= leg;
+    index = i + 1;
+  }
+  return { lastReachedIndex: 0, lat: line[0].lat, lon: line[0].lon };
+}
+
 interface TaskSpec {
   dir: string;
   name: string;
   date: string;
   pilotClass: string;
+  /** Per-task GAP overrides from the manifest (AirScore formula capture). */
+  gapParams?: Partial<GAPParameters>;
 }
 
 interface SampleTask extends TaskSpec {
   xctsk: string;
   pilots: SamplePilot[];
+  /** Published-result pilots with no IGC in the folder (see TrackLessPilot). */
+  trackless: TrackLessPilot[];
 }
 
 interface CompManifest {
   name: string;
   slug: string;
   classes: string[];
-  tasks: Array<{ pilot_class: string; name: string; date: string; dir: string }>;
+  tasks: Array<{
+    pilot_class: string;
+    name: string;
+    date: string;
+    dir: string;
+    /** Mapped GAP overrides where this task's published AirScore formula
+     * differs from the comp-wide gap_params (see download-airscore-comp.ts). */
+    gap_params?: Partial<GAPParameters>;
+  }>;
+  /**
+   * Comp-wide GAP parameters mapped from the AirScore-published formula the
+   * comp was actually scored with (shared across its tasks; per-task
+   * differences ride on each task entry). Absent for the synthetic comps —
+   * they score under the per-category defaults.
+   */
+  gap_params?: Partial<GAPParameters>;
   /**
    * Optional overrides. The Corryong sample omits these and inherits the
    * historical defaults (the fixed SAMPLE_COMP_NAME, 'hg', GAP scoring). The
@@ -329,6 +484,9 @@ interface CompManifest {
    * up as competitions the public can browse. Defaults to false (public).
    */
   hidden?: boolean;
+  /** Back-catalogue comp: excluded from the default "seed everything" run
+   * (seed it by slug or with --history). */
+  history?: boolean;
   /**
    * Which comp_pilot column the numeric id embedded in the IGC filenames
    * (`lamb_18239_050126.igc`) belongs to. AirScore's exports for the bundled
@@ -345,8 +503,8 @@ interface CompManifest {
  * the engine's tz-lookup helper — the same derivation the competition-api
  * runs on route save) so the caller can stamp it on the comp row.
  */
-function readTask(spec: TaskSpec, tzOut: { value?: string }): SampleTask {
-  const compDir = join(COMPS_ROOT, spec.dir);
+function readTask(spec: TaskSpec, tzOut: { value?: string }, root: string): SampleTask {
+  const compDir = join(root, spec.dir);
   const entries = readdirSync(compDir);
   const igcFiles = entries.filter((f) => f.toLowerCase().endsWith('.igc')).sort();
   if (igcFiles.length === 0) throw new Error(`No IGC files in ${compDir}`);
@@ -359,16 +517,22 @@ function readTask(spec: TaskSpec, tzOut: { value?: string }): SampleTask {
   }
 
   const pilots: SamplePilot[] = [];
+  const nonEmptyIgc: string[] = [];
   for (const file of igcFiles) {
     const text = readFileSync(join(compDir, file), 'utf-8');
     const igc = parseIGC(text);
     if (igc.fixes.length === 0) continue;
+    nonEmptyIgc.push(file);
     const name = (igc.header.pilot || basename(file, '.igc')).replace(/\s+/g, ' ').trim();
     const gz = gzipSync(Buffer.from(text, 'utf-8'), { level: 9 });
     pilots.push({ name, id: idFromFilename(file), gz, fileSize: gz.byteLength });
   }
 
-  return { ...spec, xctsk, pilots };
+  // Published pilots with no (non-empty) IGC — they seed as DNF statuses or
+  // manual flights so validity matches the field AirScore actually scored.
+  const trackless = readTrackLessRows(compDir, nonEmptyIgc);
+
+  return { ...spec, xctsk, pilots, trackless };
 }
 
 // --- seed ------------------------------------------------------------------
@@ -414,10 +578,10 @@ function unionTaskWaypoints(tasks: SampleTask[]): WaypointFileRecord[] {
   return [...byCode.values()];
 }
 
-function loadManifest(slug: string): CompManifest {
-  const path = join(COMPS_ROOT, slug, 'comp.json');
+function loadManifest(ref: CompRef): CompManifest {
+  const path = join(ref.root, ref.slug, 'comp.json');
   if (!existsSync(path)) {
-    throw new Error(`No comp manifest at ${path} — is "${slug}" a bundled comp?`);
+    throw new Error(`No comp manifest at ${path} — is "${ref.slug}" a bundled comp?`);
   }
   return JSON.parse(readFileSync(path, 'utf-8')) as CompManifest;
 }
@@ -425,34 +589,39 @@ function loadManifest(slug: string): CompManifest {
 /**
  * Every bundled comp, i.e. each folder under COMPS_ROOT holding a comp.json.
  * The per-task folders (`<slug>-<class>-t<N>`) have no manifest, so they're
- * skipped. Sorted so a full seed runs in a stable order.
+ * skipped, as are history-flagged manifests unless --history is passed.
+ * Sorted so a full seed runs in a stable order.
  */
-function allSlugs(): string[] {
+function allSlugs(): CompRef[] {
+  const withHistory = process.argv.includes('--history');
   return readdirSync(COMPS_ROOT)
     .filter((name) => existsSync(join(COMPS_ROOT, name, 'comp.json')))
-    .sort();
+    .map((name) => ({ root: COMPS_ROOT, slug: name }))
+    .filter((ref) => withHistory || !loadManifest(ref).history)
+    .sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
 async function main(): Promise<void> {
-  const slugs = ARG_SLUGS.length > 0 ? ARG_SLUGS : allSlugs();
+  const refs = ARG_SLUGS.length > 0 ? ARG_SLUGS.map(resolveCompArg) : allSlugs();
   const where = REMOTE ? 'REMOTE (production)' : `local (${PERSIST})`;
   // One store (and for local, one Miniflare boot) shared across every comp.
   const store = REMOTE ? createRemoteStore() : await createLocalStore();
   try {
-    console.log(`Seeding ${slugs.length} competition(s): ${slugs.join(', ')}\n`);
-    for (const slug of slugs) {
-      await seed(store, where, slug);
+    console.log(`Seeding ${refs.length} competition(s): ${refs.map((r) => r.slug).join(', ')}\n`);
+    for (const ref of refs) {
+      await seed(store, where, ref);
       console.log('');
     }
-    console.log(`Seeded ${slugs.length} competition(s) into ${where}.`);
+    console.log(`Seeded ${refs.length} competition(s) into ${where}.`);
     if (!REMOTE) console.log('  (local state — start dev servers with `bun run dev`)');
   } finally {
     await store.dispose();
   }
 }
 
-async function seed(store: SeedStore, where: string, slug: string): Promise<void> {
-  const manifest = loadManifest(slug);
+async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void> {
+  const { slug } = ref;
+  const manifest = loadManifest(ref);
   // The comp's D1 name, category and scoring format come from the manifest when
   // present (Big Chip), else fall back to the historical Corryong defaults.
   const compName = manifest.comp_name ?? SAMPLE_COMP_NAME;
@@ -470,10 +639,21 @@ async function seed(store: SeedStore, where: string, slug: string): Promise<void
   console.log(`  category: ${category}, scoring: ${scoringFormat}, filename id: ${idField}`);
   console.log(`  visibility: ${manifest.hidden ? 'hidden (test=1, admins only)' : 'public'}`);
 
+  // Comp-wide GAP parameters from the manifest's AirScore formula capture
+  // (null for the synthetic comps → the per-category defaults apply).
+  const compGapParamsJson = manifest.gap_params ? JSON.stringify(manifest.gap_params) : null;
+  console.log(
+    `  gap_params: ${compGapParamsJson ? 'from AirScore formula capture' : 'none (category defaults)'}`,
+  );
+
   // Read every task, sharing one resolved timezone across the comp.
   const tzOut: { value?: string } = {};
   const tasks = manifest.tasks.map((t) =>
-    readTask({ dir: t.dir, name: t.name, date: t.date, pilotClass: t.pilot_class }, tzOut),
+    readTask(
+      { dir: t.dir, name: t.name, date: t.date, pilotClass: t.pilot_class, gapParams: t.gap_params },
+      tzOut,
+      ref.root,
+    ),
   );
   for (const t of tasks) {
     console.log(`  ${t.pilotClass}/${t.name} (${t.date}): ${t.pilots.length} pilots`);
@@ -488,6 +668,14 @@ async function seed(store: SeedStore, where: string, slug: string): Promise<void
       const key = pilotKey(t.pilotClass, p.id, p.name);
       if (!registry.has(key)) {
         registry.set(key, { name: p.name, id: p.id, pilotClass: t.pilotClass });
+      }
+    }
+    // Track-less published pilots register too (keyed by name — the published
+    // rows carry no federation id).
+    for (const p of t.trackless) {
+      const key = pilotKey(t.pilotClass, null, p.name);
+      if (!registry.has(key)) {
+        registry.set(key, { name: p.name, id: null, pilotClass: t.pilotClass });
       }
     }
   }
@@ -520,6 +708,7 @@ async function seed(store: SeedStore, where: string, slug: string): Promise<void
     await mapPool(oldKeys, R2_CONCURRENCY, (r) => store.r2Delete(String(r.k)));
     await store.exec([
       `DELETE FROM task_track WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
+      `DELETE FROM task_manual_flight WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
       `DELETE FROM task_pilot_status WHERE comp_id = ${compId};`,
       `DELETE FROM task_class WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
       `DELETE FROM task WHERE comp_id = ${compId};`,
@@ -530,12 +719,13 @@ async function seed(store: SeedStore, where: string, slug: string): Promise<void
          pilot_classes=${q(classesJson)},
          default_pilot_class=${q(defaultClass)},
          close_date=${q(closeDate)},
+         gap_params=${q(compGapParamsJson)},
          timezone=${q(tzOut.value ?? null)} WHERE comp_id = ${compId};`,
     ]);
   } else {
     await store.exec(
-      `INSERT INTO comp (name, creation_date, category, test, scoring_format, pilot_classes, default_pilot_class, close_date, timezone)
-       VALUES (${q(compName)}, ${q(today)}, ${q(category)}, ${testFlag}, ${q(scoringFormat)}, ${q(classesJson)}, ${q(defaultClass)}, ${q(closeDate)}, ${q(tzOut.value ?? null)});`,
+      `INSERT INTO comp (name, creation_date, category, test, scoring_format, pilot_classes, default_pilot_class, close_date, gap_params, timezone)
+       VALUES (${q(compName)}, ${q(today)}, ${q(category)}, ${testFlag}, ${q(scoringFormat)}, ${q(classesJson)}, ${q(defaultClass)}, ${q(closeDate)}, ${q(compGapParamsJson)}, ${q(tzOut.value ?? null)});`,
     );
     compId = Number((await store.rows(`SELECT comp_id FROM comp WHERE name = ${q(compName)};`))[0].comp_id);
     console.log(`  created comp_id ${compId}`);
@@ -583,8 +773,9 @@ async function seed(store: SeedStore, where: string, slug: string): Promise<void
   for (const t of tasks) {
     const taskName = `${t.name} (${classLabel(t.pilotClass)})`;
     await store.exec(
-      `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk)
-       VALUES (${compId}, ${q(taskName)}, ${q(t.date)}, ${q(today)}, ${q(t.xctsk)});`,
+      `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk, gap_params)
+       VALUES (${compId}, ${q(taskName)}, ${q(t.date)}, ${q(today)}, ${q(t.xctsk)},
+               ${q(t.gapParams ? JSON.stringify(t.gapParams) : null)});`,
     );
     const taskId = Number(
       (await store.rows(`SELECT task_id FROM task WHERE comp_id = ${compId} AND name = ${q(taskName)};`))[0]
@@ -614,10 +805,37 @@ async function seed(store: SeedStore, where: string, slug: string): Promise<void
          VALUES (${compId}, ${taskId}, ${compPilotId}, 'landed', NULL, NULL, 'Sample data', ${q(now)});`,
       );
     }
+    // Track-less published pilots (see TrackLessPilot): DNF rows become a
+    // DNF status (launch validity, S7F §9.1); flown rows become a manual
+    // flight landed at the published distance along the optimised route
+    // (+ a landed status), so the seeded field — and with it every pilot's
+    // validity-scaled points — matches the field AirScore scored.
+    for (const p of t.trackless) {
+      const compPilotId = cpByKey.get(pilotKey(t.pilotClass, null, p.name));
+      if (compPilotId === undefined) continue;
+      if (p.kind === 'dnf') {
+        trackInserts.push(
+          `INSERT INTO task_pilot_status (comp_id, task_id, comp_pilot_id, status_key, note, set_by_user_id, set_by_name, set_at)
+           VALUES (${compId}, ${taskId}, ${compPilotId}, 'dnf', 'Published AirScore result (no tracklog in download)', NULL, 'AirScore import', ${q(now)});`,
+        );
+        continue;
+      }
+      const landing = landingAtRouteDistance(t.xctsk, p.distance ?? 0);
+      trackInserts.push(
+        `INSERT INTO task_manual_flight (task_id, comp_pilot_id, last_reached_tp_index, landing_lat, landing_lon, made_goal, duration_seconds, computed_distance, active, set_by_user_id, set_by_name, set_at)
+         VALUES (${taskId}, ${compPilotId}, ${landing.lastReachedIndex}, ${landing.lat}, ${landing.lon}, 0, NULL, ${p.distance ?? 0}, 1, NULL, 'AirScore import', ${q(now)});`,
+      );
+      trackInserts.push(
+        `INSERT INTO task_pilot_status (comp_id, task_id, comp_pilot_id, status_key, note, set_by_user_id, set_by_name, set_at)
+         VALUES (${compId}, ${taskId}, ${compPilotId}, 'landed', 'Published AirScore result (no tracklog in download)', NULL, 'AirScore import', ${q(now)});`,
+      );
+    }
+
     await mapPool(uploads, R2_CONCURRENCY, (u) => store.r2Put(u.key, u.gz));
     await store.exec(trackInserts);
     totalTracks += uploads.length;
-    console.log(`  seeded ${taskName}: task_id=${taskId}, ${uploads.length} tracks`);
+    const extras = t.trackless.length > 0 ? `, ${t.trackless.length} track-less published pilot(s)` : '';
+    console.log(`  seeded ${taskName}: task_id=${taskId}, ${uploads.length} tracks${extras}`);
   }
 
   console.log(`  Done. comp_id=${compId} — ${tasks.length} tasks, ${totalTracks} tracks total`);

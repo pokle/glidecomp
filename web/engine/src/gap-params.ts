@@ -50,9 +50,15 @@ export interface GAPParameters {
    *   formula (CIVL GAP 2018 §10, AirScore's legacy GAP library), kept as
    *   the default to preserve historical scores. PG leading weight is
    *   0.35 × (1 − DW) when someone makes goal, and 0.1 × BestDist/TaskDist
-   *   when nobody does. The real S7F 2020–2022 generation (PWC-derived
-   *   fixed PG weights: DW 0.838/0.805-poly, leading 0.162 — what
-   *   AirScore's gap2020/gap2021 presets ship) is NOT implemented.
+   *   when nobody does.
+   * - 's7f2020'  — the S7F 2020–2022 generation (PWC-derived, what
+   *   AirScore's gap2020/gap2021/gap2022 presets ship). Unlike the other
+   *   two values this ALSO switches the PG *distance* weight — the param
+   *   name is slightly too narrow for it: DW is fixed at 0.838 when nobody
+   *   makes goal, else 0.805 − 1.374·GR + 1.413·GR² − 0.484·GR³; leading
+   *   weight is fixed at 0.162; arrival 0; time is the remainder (exactly
+   *   0 at GR = 0). Never a default — selected explicitly, or by the
+   *   AirScore importer for comps scored under those presets.
    * - 's7f2024'  — the 2024 FAI Sporting Code S7F §10 formula. PG leading
    *   weight is (1 − DW) × {@link GAPParameters.leadingTimeRatio} when
    *   someone makes goal, and the *entire* non-distance weight (1 − DW)
@@ -68,7 +74,8 @@ export interface GAPParameters {
    * {@link GAPParameters.leadingWeightFormula} `'s7f2024'` formula, the
    * fraction (0–0.5, default 0.26) of the non-distance weight allocated to
    * leading when someone makes goal; the remainder goes to time. Ignored
-   * for hang gliding, and for PG under the `'gap2020'` formula.
+   * for hang gliding, and for PG under the `'gap2020'` and `'s7f2020'`
+   * formulas.
    */
   leadingTimeRatio: number;
   /**
@@ -147,7 +154,7 @@ export interface GAPParameters {
 export type LeadingFormula = 'classic' | 'weighted';
 
 /** Leading-weight formula generation — see {@link GAPParameters.leadingWeightFormula}. */
-export type LeadingWeightFormula = 'gap2020' | 's7f2024';
+export type LeadingWeightFormula = 'gap2020' | 's7f2020' | 's7f2024';
 
 /** Time-points exponent (FAI S7F §11.2) — see {@link GAPParameters.timePointsExponent}. */
 export type SpeedExponent = '5/6' | '2/3';

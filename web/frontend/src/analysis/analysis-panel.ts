@@ -1528,9 +1528,11 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     const leadWeightCfg =
       params.scoring === 'PG' && lwf === 's7f2024'
         ? `, S7F 2024 ratio ${Math.round((params.leadingTimeRatio ?? 0.26) * 100)}%`
-        : params.scoring === 'PG'
-          ? ', GAP2020 weight'
-          : '';
+        : params.scoring === 'PG' && lwf === 's7f2020'
+          ? ', S7F 2020–2022 weights'
+          : params.scoring === 'PG'
+            ? ', GAP2020 weight'
+            : '';
     const leadCfg = params.useLeading
       ? `on (${params.leadingFormula}${leadWeightCfg})`
       : 'off';
