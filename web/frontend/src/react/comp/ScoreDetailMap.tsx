@@ -27,6 +27,7 @@ export default function ScoreDetailMap({
   fixes,
   events,
   focus,
+  scrubIndex,
   openDistanceLine,
   bestProgressRoute,
 }: {
@@ -34,6 +35,8 @@ export default function ScoreDetailMap({
   fixes: IGCFix[] | null;
   events: FlightEvent[];
   focus: MapFocus | null;
+  /** Draw the track only up to this fix (the time scrubber); null = whole flight. */
+  scrubIndex?: number | null;
   /** The scored open-distance line (exit → furthest), when applicable. */
   openDistanceLine?: OpenDistanceLine | null;
   /** A landed-out pilot's routed distance-to-goal line, when applicable. */
@@ -102,6 +105,14 @@ export default function ScoreDetailMap({
       if (!destroyedRef.current) provider.clearTrack();
     };
   }, [provider, fixes]);
+
+  // Declared after the track effect so it runs later in the same commit:
+  // setTrack redraws the whole line, so the clip must be re-applied whenever
+  // the fixes (re)load, not just when the scrub position moves.
+  useEffect(() => {
+    if (!provider) return;
+    provider.setTrackScrub?.(scrubIndex ?? null);
+  }, [provider, fixes, scrubIndex]);
 
   useEffect(() => {
     if (!provider || events.length === 0) return;

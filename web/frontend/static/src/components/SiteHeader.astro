@@ -4,6 +4,10 @@
  * translucent, backdrop-blurred, with a right-aligned Sign in pill.
  * min-h-[60px] matches the SPA header's height so the chrome doesn't jump
  * when crossing between static and SPA pages.
+ *
+ * On phones (max-sm) and short landscape viewports the bar scrolls away
+ * with the page instead of pinning — vertical space is too precious there.
+ * Keep this in sync with the SPA header in react/components/Shell.tsx.
  */
 interface Props {
   /** Which tab to highlight, if any. */
@@ -17,7 +21,7 @@ const tab = (isActive: boolean) =>
   }`;
 ---
 
-<header class="sticky top-0 z-50 border-b bg-background/70 backdrop-blur-xl backdrop-saturate-150">
+<header class="sticky top-0 z-50 border-b bg-background/70 backdrop-blur-xl backdrop-saturate-150 max-sm:static [@media(max-height:500px)]:static">
   <nav
     aria-label="Main"
     class="mx-auto flex min-h-[60px] w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3"

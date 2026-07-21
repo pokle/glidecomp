@@ -54,6 +54,37 @@ function updateGeoJSONSource(
   });
 }
 
+/**
+ * Build the altitude-coloured LineString features for a track. Consecutive
+ * fixes are batched into multi-point segments for reliable rendering:
+ * individual 2-point segments get dropped at Mapbox vector tile boundaries,
+ * causing visible breaks on long flights. ~500 segments balances visual
+ * fidelity of altitude-based styling with rendering robustness.
+ *
+ * `altRange`/`minAlt` are passed in (rather than derived from `fixes`) so a
+ * clipped track can keep the full flight's colour normalisation.
+ */
+function buildTrackFeatures(
+  fixes: IGCFix[],
+  altRange: number,
+  minAlt: number,
+): GeoJSON.Feature[] {
+  return buildTrackSegments(fixes, altRange, minAlt).map(seg => {
+    const coordinates: [number, number][] = [];
+    for (let j = seg.startIndex; j < seg.endIndex; j++) {
+      coordinates.push([fixes[j].longitude, fixes[j].latitude]);
+    }
+    return {
+      type: 'Feature' as const,
+      properties: { normalizedAlt: seg.normalizedAlt },
+      geometry: {
+        type: 'LineString' as const,
+        coordinates,
+      },
+    };
+  });
+}
+
 // How far (screen px) from an add-waypoint tap to look for a named label —
 // slightly wider than the 44px waypoint-pick tolerance since labels render
 // offset from the feature they name.
@@ -208,6 +239,13 @@ export function createMapBoxProvider(
       let activeMarkers: mapboxgl.Marker[] = [];
       let glideLegendElement: HTMLElement | null = null;
       let hudElement: HTMLElement | null = null;
+
+      // Track time-scrub state (the score-details scrubber): the 2D track is
+      // clipped to fixes[0..N] with a position dot at N. Geometry rebuilds
+      // are rAF-batched so slider drags cost at most one rebuild per frame.
+      let trackScrubIndex: number | null = null;
+      let trackScrubMarker: mapboxgl.Marker | null = null;
+      let trackScrubRaf: number | null = null;
 
       // 3D rendering state
       let tb: Threebox | null = null;
@@ -1038,7 +1076,12 @@ export function createMapBoxProvider(
        */
       function restoreData(): void {
         if (currentFixes.length > 0) {
+          // setTrack resets the scrub (it's a new track as far as the
+          // provider knows) — re-apply it so a style change doesn't lose
+          // the scrubbed view.
+          const scrub = trackScrubIndex;
           renderer.setTrack(currentFixes);
+          if (scrub != null) renderer.setTrackScrub?.(scrub);
         }
         if (currentTask) {
           renderer.setTask(currentTask);
@@ -1056,6 +1099,49 @@ export function createMapBoxProvider(
           renderer.setWaypoints?.(waypointsData);
         }
         updateTrackRendering();
+      }
+
+      // ── Track time-scrub (score-details scrubber) ──
+
+      /**
+       * Redraw the 'track' source clipped to fixes[0..index] (null = whole
+       * flight). Altitude colours stay normalised against the FULL track so
+       * they don't shift while scrubbing.
+       */
+      function renderTrackScrubClip(index: number | null): void {
+        if (currentFixes.length < 2) return;
+        const { minAlt, altRange } = calculateAltitudeRange(currentFixes);
+        const upTo = index == null ? currentFixes.length : Math.max(2, index + 1);
+        const fixes = upTo >= currentFixes.length ? currentFixes : currentFixes.slice(0, upTo);
+        updateGeoJSONSource(map, 'track', buildTrackFeatures(fixes, altRange, minAlt));
+      }
+
+      function updateTrackScrubMarker(index: number): void {
+        const fix = currentFixes[index];
+        if (!fix) return;
+        if (!trackScrubMarker) {
+          // A GPS-style position dot: white ring so it reads on any terrain.
+          const el = document.createElement('div');
+          el.style.cssText =
+            'width:14px;height:14px;border-radius:50%;background:#3b82f6;' +
+            'border:2.5px solid #fff;box-shadow:0 0 4px rgba(0,0,0,0.5);';
+          trackScrubMarker = new mapboxgl.Marker({ element: el })
+            .setLngLat([fix.longitude, fix.latitude])
+            .addTo(map);
+        } else {
+          trackScrubMarker.setLngLat([fix.longitude, fix.latitude]);
+        }
+        trackScrubMarker.getElement().style.display = isTrackVisible ? '' : 'none';
+      }
+
+      function clearTrackScrub(): void {
+        if (trackScrubRaf != null) {
+          cancelAnimationFrame(trackScrubRaf);
+          trackScrubRaf = null;
+        }
+        trackScrubIndex = null;
+        trackScrubMarker?.remove();
+        trackScrubMarker = null;
       }
 
       // Custom panel toggle control (top-right, added first so it's topmost)
@@ -2468,6 +2554,11 @@ export function createMapBoxProvider(
             }
           }
 
+          // The scrub position dot belongs to the track — hide it with it
+          if (trackScrubMarker) {
+            trackScrubMarker.getElement().style.display = visible ? '' : 'none';
+          }
+
           // Clear any active highlights when hiding
           if (!visible) {
             clearEventHighlights();
@@ -2475,6 +2566,7 @@ export function createMapBoxProvider(
         },
         setTrack(fixes: IGCFix[]) {
           clearEventHighlights();
+          clearTrackScrub();
           currentFixes = fixes;
           cachedSequenceResult = null;
           cachedOptimizedPath = null;
@@ -2487,27 +2579,7 @@ export function createMapBoxProvider(
           // Calculate altitude range for normalization
           const { minAlt, altRange } = calculateAltitudeRange(fixes);
 
-          // Batch consecutive fixes into multi-point segments for reliable rendering.
-          // Individual 2-point segments get dropped at Mapbox vector tile boundaries,
-          // causing visible breaks on long flights. ~500 segments balances visual
-          // fidelity of altitude-based styling with rendering robustness.
-          const segments = buildTrackSegments(fixes, altRange, minAlt);
-          const features = segments.map(seg => {
-            const coordinates: [number, number][] = [];
-            for (let j = seg.startIndex; j < seg.endIndex; j++) {
-              coordinates.push([fixes[j].longitude, fixes[j].latitude]);
-            }
-            return {
-              type: 'Feature' as const,
-              properties: { normalizedAlt: seg.normalizedAlt },
-              geometry: {
-                type: 'LineString' as const,
-                coordinates,
-              },
-            };
-          });
-
-          updateGeoJSONSource(map, 'track', features);
+          updateGeoJSONSource(map, 'track', buildTrackFeatures(fixes, altRange, minAlt));
 
           // Fit map to track bounds. Re-measure first: if the map initialized
           // during iOS layout churn its cached size can be stale, which would
@@ -2546,6 +2618,7 @@ export function createMapBoxProvider(
         clearTrack() {
           clearEventHighlights();
           clearSpeedOverlay();
+          clearTrackScrub();
           currentFixes = [];
           cachedSequenceResult = null;
           cachedOptimizedPath = null;
@@ -2556,6 +2629,26 @@ export function createMapBoxProvider(
           removeAltitudeScrubber();
           removeCompass();
           clearGliderMarker();
+        },
+
+        setTrackScrub(index: number | null) {
+          if (currentFixes.length < 2) return;
+          if (index == null) {
+            const wasScrubbed = trackScrubIndex != null;
+            clearTrackScrub();
+            if (wasScrubbed) renderTrackScrubClip(null);
+            return;
+          }
+          trackScrubIndex = Math.max(0, Math.min(currentFixes.length - 1, Math.floor(index)));
+          // The marker move is cheap — do it immediately for drag feedback;
+          // the geometry rebuild is batched to one per animation frame.
+          updateTrackScrubMarker(trackScrubIndex);
+          if (trackScrubRaf == null) {
+            trackScrubRaf = requestAnimationFrame(() => {
+              trackScrubRaf = null;
+              renderTrackScrubClip(trackScrubIndex);
+            });
+          }
         },
 
         async setTask(task: XCTask, options?: { fit?: boolean }) {
