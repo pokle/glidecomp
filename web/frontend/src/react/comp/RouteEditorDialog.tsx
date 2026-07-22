@@ -842,18 +842,20 @@ export function RouteEditorDialog({
             <Button variant="outline" size="sm" onPress={() => void clearTurnpoints()}>
               Clear turnpoints
             </Button>
-            {fillableAltCount > 0 ? (
-              <Button
-                variant="outline"
-                size="sm"
-                isDisabled={fillingAlts}
-                onPress={() => void fillAltitudes()}
-              >
-                {fillingAlts
-                  ? "Filling altitudes…"
-                  : `Fill ${fillableAltCount} altitude${fillableAltCount === 1 ? "" : "s"} from map`}
-              </Button>
-            ) : null}
+            {/* Always visible so the capability is discoverable; disabled when
+                every turnpoint already has an altitude. */}
+            <Button
+              variant="outline"
+              size="sm"
+              isDisabled={fillingAlts || fillableAltCount === 0}
+              onPress={() => void fillAltitudes()}
+            >
+              {fillingAlts
+                ? "Filling altitudes…"
+                : fillableAltCount > 0
+                  ? `Fill ${fillableAltCount} altitude${fillableAltCount === 1 ? "" : "s"} from map`
+                  : "Fill altitudes from map"}
+            </Button>
             {/* Import / export the whole route (moved out of the footer, which
                 now holds only Cancel / Save). */}
             <FileTrigger

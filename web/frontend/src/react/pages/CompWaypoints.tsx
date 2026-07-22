@@ -432,18 +432,20 @@ function CompWaypointsContent() {
             <Button variant="outline" size="sm" onPress={() => openAdd()}>
               Add waypoint
             </Button>
-            {fillableCount > 0 ? (
-              <Button
-                variant="outline"
-                size="sm"
-                isDisabled={fillingAlts}
-                onPress={() => void fillAltitudes()}
-              >
-                {fillingAlts
-                  ? "Filling altitudes…"
-                  : `Fill ${fillableCount} altitude${fillableCount === 1 ? "" : "s"} from map`}
-              </Button>
-            ) : null}
+            {/* Always visible so the capability is discoverable; disabled when
+                every waypoint already has an altitude. */}
+            <Button
+              variant="outline"
+              size="sm"
+              isDisabled={fillingAlts || fillableCount === 0}
+              onPress={() => void fillAltitudes()}
+            >
+              {fillingAlts
+                ? "Filling altitudes…"
+                : fillableCount > 0
+                  ? `Fill ${fillableCount} altitude${fillableCount === 1 ? "" : "s"} from map`
+                  : "Fill altitudes from map"}
+            </Button>
             <Button size="sm" isDisabled={saving || !dirty} onPress={() => void save()}>
               {saving ? "Saving…" : dirty ? "Save" : "Saved"}
             </Button>
