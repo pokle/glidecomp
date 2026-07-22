@@ -13,6 +13,9 @@
  */
 import type { WindHourlySeries } from "../../types";
 import { formatTimeRange } from "@/react/lib/time";
+import { useUnits } from "@/react/lib/units";
+import { formatMetricValue } from "../../types";
+import { unitDisplay } from "../../units";
 import { formatTickValue, linearScale, niceTicks } from "../chart-utils";
 import type { TimeAxis } from "./time-axis";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
@@ -42,17 +45,28 @@ export function WindHourlyChart({
   timeZone: string | undefined;
   setReadout: (text: string | null) => void;
 }) {
+  // Wind is a horizontal drift, so it follows the speed preference; the
+  // engine's series values are km/h and convert here at the display boundary.
+  const wind = unitDisplay("km/h", useUnits());
+
   if (series.hours.length === 0) return null;
 
   const maxN = Math.max(...series.hours.map((h) => h.n));
+  const wholeTaskSpeed =
+    series.wholeTask === null ? null : series.wholeTask.speedKmh * wind.factor;
   const yMax =
-    Math.max(5, ...series.hours.map((h) => h.speedKmh), series.wholeTask?.speedKmh ?? 0) * 1.08;
+    Math.max(
+      5 * wind.factor,
+      ...series.hours.map((h) => h.speedKmh * wind.factor),
+      wholeTaskSpeed ?? 0
+    ) * 1.08;
   const y = linearScale([0, yMax], [PLOT.bottom, PLOT.top]);
   const yTicks = niceTicks([0, yMax], 3);
 
   const points = series.hours.map((h) => {
     const t = new Date(h.t).getTime();
-    return { ...h, tMs: t, cx: axis.x(t + HOUR_MS / 2), cy: y(h.speedKmh) };
+    const speed = h.speedKmh * wind.factor;
+    return { ...h, speed, tMs: t, cx: axis.x(t + HOUR_MS / 2), cy: y(speed) };
   });
   const linePath = points
     .map((p, i) => `${i === 0 ? "M" : "L"}${p.cx.toFixed(1)},${p.cy.toFixed(1)}`)
@@ -60,10 +74,10 @@ export function WindHourlyChart({
 
   const hourReadout = (p: (typeof points)[number]): string =>
     `${formatTimeRange(p.t, new Date(p.tMs + HOUR_MS).toISOString(), timeZone)} — ` +
-    `${p.speedKmh.toFixed(1)} km/h from ${Math.round(p.directionDeg)}° (${degToCompass(p.directionDeg)}), ` +
+    `${formatMetricValue(wind.unit, p.speed)} ${wind.unit} from ${Math.round(p.directionDeg)}° (${degToCompass(p.directionDeg)}), ` +
     `${p.n} circle estimate${p.n === 1 ? "" : "s"}`;
 
-  const speeds = points.map((p) => p.speedKmh);
+  const speeds = points.map((p) => p.speed);
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
@@ -71,8 +85,8 @@ export function WindHourlyChart({
       role="img"
       aria-label={
         `Wind by hour: speed line with direction arrows across ${points.length} ` +
-        `hour${points.length === 1 ? "" : "s"}, ranging ${Math.min(...speeds).toFixed(1)} to ` +
-        `${Math.max(...speeds).toFixed(1)} km/h. The Wind by hour table below carries the exact numbers.`
+        `hour${points.length === 1 ? "" : "s"}, ranging ${formatMetricValue(wind.unit, Math.min(...speeds))} to ` +
+        `${formatMetricValue(wind.unit, Math.max(...speeds))} ${wind.unit}. The Wind by hour table below carries the exact numbers.`
       }
       onMouseLeave={() => setReadout(null)}
     >
@@ -91,7 +105,7 @@ export function WindHourlyChart({
       <g aria-hidden className="text-[10px] text-muted-foreground">
         {yTicks.map((t) => (
           <text key={`ty${t}`} x={PLOT_LEFT - 6} y={y(t) + 3} textAnchor="end" className="fill-current">
-            {formatTickValue("km/h", t)}
+            {formatTickValue(wind.unit, t)}
           </text>
         ))}
         <text x={PLOT_LEFT - 6} y={LANE_Y + 3} textAnchor="end" className="fill-current text-[9px]">
@@ -100,13 +114,13 @@ export function WindHourlyChart({
       </g>
 
       {/* Whole-task vector mean — the baseline the hours vary around. */}
-      {series.wholeTask ? (
+      {wholeTaskSpeed !== null ? (
         <g aria-hidden>
           <line
             x1={PLOT_LEFT}
             x2={PLOT_RIGHT}
-            y1={y(series.wholeTask.speedKmh)}
-            y2={y(series.wholeTask.speedKmh)}
+            y1={y(wholeTaskSpeed)}
+            y2={y(wholeTaskSpeed)}
             style={{ stroke: "var(--chart-2)" }}
             strokeWidth={1}
             strokeDasharray="4 3"
@@ -114,11 +128,11 @@ export function WindHourlyChart({
           />
           <text
             x={PLOT_RIGHT - 2}
-            y={y(series.wholeTask.speedKmh) - 4}
+            y={y(wholeTaskSpeed) - 4}
             textAnchor="end"
             className="fill-current text-[9px] text-muted-foreground"
           >
-            task mean {series.wholeTask.speedKmh.toFixed(0)} km/h
+            task mean {wholeTaskSpeed.toFixed(0)} {wind.unit}
           </text>
         </g>
       ) : null}

@@ -11,6 +11,7 @@ import { Link as AriaLink } from "react-aria-components";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { api } from "../../comp/api";
 import { formatDuration } from "../lib/format";
+import { formatDistance, useUnits } from "../lib/units";
 import { ScoreFreshness } from "./ScoreFreshness";
 import type { ClassScore, ScoringFormat, TaskScoreData } from "./types";
 
@@ -160,6 +161,7 @@ function ScoreClassTable({
   format: ScoringFormat;
 }) {
   const navigate = useNavigate();
+  const units = useUnits();
   const isOpenDistance = format === "open_distance";
   const hasSpeed = cls.pilots.some((p) => p.speed_section_time !== null);
   const hasTimePoints = cls.pilots.some((p) => p.time_points !== 0);
@@ -217,7 +219,7 @@ function ScoreClassTable({
                 </Cell>
                 {!isOpenDistance ? <Cell>{p.made_goal ? "✓" : "—"}</Cell> : null}
                 <Cell className="text-right tabular-nums">
-                  {(p.flown_distance / 1000).toFixed(1)} km
+                  {formatDistance(p.flown_distance, { decimals: 1, prefs: units }).withUnit}
                 </Cell>
                 {hasSpeed ? (
                   <Cell className="text-right tabular-nums">

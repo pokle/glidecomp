@@ -51,7 +51,9 @@ export function windArrowTransform(x: number, y: number, directionFromDeg: numbe
   return `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${((directionFromDeg + 180) % 360).toFixed(0)})`;
 }
 
-/** "15 km/h NW" — the compact wind reading used on bars and in readouts. */
-export function windLabel(speedKmh: number, directionFromDeg: number): string {
-  return `${speedKmh.toFixed(0)} km/h ${degToCompass(directionFromDeg)}`;
+/** "15 km/h NW" — the compact wind reading used on bars and in readouts.
+ * Speed arrives already converted to the display unit; the token is the
+ * metric-unit vocabulary ('km/h', 'mph', 'kts'). */
+export function windLabel(speed: number, unit: string, directionFromDeg: number): string {
+  return `${speed.toFixed(0)} ${unit} ${degToCompass(directionFromDeg)}`;
 }

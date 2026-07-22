@@ -69,6 +69,13 @@ import {
   type RouteRow,
 } from "./route-editor";
 import { AddWaypointDialog } from "./AddWaypointDialog";
+import {
+  formatAltitude,
+  formatDistance,
+  formatRadius,
+  useUnits,
+  type UnitPreferences,
+} from "../lib/units";
 import { GripVerticalIcon, PencilIcon, XIcon } from "lucide-react";
 
 // Lazy so the map library (mapbox) and its CSS load only when the editor
@@ -95,6 +102,18 @@ function radiusChipLabel(m: number): string {
 /** Grouped metres for display: 50000 → "50,000". */
 function formatMetres(m: number): string {
   return m.toLocaleString("en-US");
+}
+
+/** Recap-row altitude in the preferred unit, grouped: "alt 1,234 m" / "alt 4,049 ft". */
+function altitudeRecap(
+  altitude: string | number,
+  units: UnitPreferences
+): { text: string; title: string } {
+  const alt = formatAltitude(Number(altitude), { prefs: units });
+  return {
+    text: `alt ${formatMetres(Math.round(alt.value))} ${alt.unit}`,
+    title: `Waypoint altitude (${alt.unit} AMSL)`,
+  };
 }
 
 /** The editable fields of a turnpoint (everything the details dialog sets). */
@@ -153,6 +172,7 @@ export function RouteEditorDialog({
   onSaved: () => void;
 }) {
   const confirm = useConfirm();
+  const units = useUnits();
 
   // Gate/deadline times are edited in the comp zone when one is set (#274).
   // The xctsk file stores UTC, so times convert on load and on save; all
@@ -882,7 +902,8 @@ export function RouteEditorDialog({
             </Button>
             {derived.totalKm !== null ? (
               <span className="ml-auto text-sm text-muted-foreground">
-                Optimized total: {derived.totalKm.toFixed(1)} km
+                Optimized total:{" "}
+                {formatDistance(derived.totalKm * 1000, { decimals: 1, prefs: units }).withUnit}
               </span>
             ) : null}
           </div>
@@ -1216,6 +1237,7 @@ function TurnpointCard({
   onEdit: (id: number) => void;
   onRemove: (id: number) => void;
 }) {
+  const units = useUnits();
   const radius = Number(row.radius);
   const label = row.name || `turnpoint ${index + 1}`;
   const coordsMissing = parseCoords(row.coords) == null;
@@ -1267,8 +1289,11 @@ function TurnpointCard({
             {/* Waypoint altitude, when known — labelled so it can't be read as
                 the radius beside it. */}
             {!missingAltitude(row.altitude) ? (
-              <span className="tabular-nums" title="Waypoint altitude (m AMSL)">
-                alt {formatMetres(Number(row.altitude))} m
+              <span
+                className="tabular-nums"
+                title={altitudeRecap(row.altitude, units).title}
+              >
+                {altitudeRecap(row.altitude, units).text}
               </span>
             ) : null}
             {coordsMissing ? (
@@ -1276,7 +1301,7 @@ function TurnpointCard({
             ) : (
               <span className="tabular-nums">
                 {Number.isFinite(radius) && radius > 0
-                  ? `${formatMetres(radius)} m`
+                  ? formatRadius(radius, { prefs: units }).withUnit
                   : "radius?"}
               </span>
             )}
@@ -1291,7 +1316,9 @@ function TurnpointCard({
               <span>Enter</span>
             ) : null}
             {leg != null ? (
-              <span className="tabular-nums">leg {(leg / 1000).toFixed(1)} km</span>
+              <span className="tabular-nums">
+                leg {formatDistance(leg, { decimals: 1, prefs: units }).withUnit}
+              </span>
             ) : null}
           </span>
         </div>

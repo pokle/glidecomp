@@ -34,6 +34,7 @@ import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/ta
 import { Tooltip, TooltipTrigger } from "@/react/rac/tooltip";
 import { api } from "../../comp/api";
 import { formatInstant } from "../lib/time";
+import { formatDistance, useUnits } from "../lib/units";
 import { toast } from "../lib/toast";
 import { ScoreFreshness } from "./ScoreFreshness";
 import { SubmitTrackDialog } from "./SubmitTrackDialog";
@@ -574,6 +575,7 @@ function StandingsRow({
   detailHref: string | null;
   onMutated: () => void;
 }) {
+  const units = useUnits();
   // Every column that goes through scoreCell (rank, distance, points) is a
   // quantity, so they all get the same right-aligned tabular treatment — the
   // "—" placeholder included, so blanks sit under the digits they stand in for.
@@ -606,7 +608,11 @@ function StandingsRow({
       <Cell>
         <OutcomeBadge outcome={row.outcome} evidence={row.evidence} />
       </Cell>
-      {scoreCell(row.score ? `${(row.score.flown_distance / 1000).toFixed(1)} km` : "—")}
+      {scoreCell(
+        row.score
+          ? formatDistance(row.score.flown_distance, { decimals: 1, prefs: units }).withUnit
+          : "—"
+      )}
       {!isOpenDistance ? scoreCell(row.score ? Math.round(row.score.total_score) : "—") : null}
       {showManage ? (
         <Cell className="text-right">

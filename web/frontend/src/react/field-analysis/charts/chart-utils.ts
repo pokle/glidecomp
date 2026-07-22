@@ -31,9 +31,13 @@ export function formatTickValue(unit: string, value: number): string {
       return `${num}%`;
     case "m/s":
     case "km/h":
+    case "mph":
+    case "kts":
+    case "fpm":
     case "s":
     case "min":
     case "m":
+    case "ft":
       return `${num} ${unit}`;
     default:
       return num;

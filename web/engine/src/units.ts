@@ -47,7 +47,7 @@ const CONVERSIONS = {
 
 type UnitType = keyof typeof CONVERSIONS;
 
-const DEFAULT_UNITS: UnitPreferences = {
+export const DEFAULT_UNITS: UnitPreferences = {
   speed: 'km/h',
   altitude: 'm',
   distance: 'km',
@@ -131,6 +131,18 @@ export function formatRadius(meters: number, opts?: { prefs?: UnitPreferences })
   const prefs = opts?.prefs ?? DEFAULT_UNITS;
   const unitKey = prefs.distance;
   const conv = CONVERSIONS.distance[unitKey];
+
+  // Sub-kilometre radii in metric read as whole metres ("400m"), matching how
+  // task briefings state cylinder radii.
+  if (unitKey === 'km' && meters < 1000) {
+    const rounded = Math.round(meters);
+    return {
+      value: rounded,
+      formatted: String(rounded),
+      withUnit: `${rounded}m`,
+      unit: 'm',
+    };
+  }
 
   const converted = meters * conv.factor;
   // Use 0 decimals for values >= 1, 1 decimal for smaller

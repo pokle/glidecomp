@@ -40,6 +40,7 @@ import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { goToSignIn, useUser } from "../lib/user";
 import { type ThemePreference, useTheme } from "../lib/theme";
+import { setUnit, useUnits, type UnitPreferences } from "../lib/units";
 
 interface ApiKey {
   id: string;
@@ -69,6 +70,7 @@ export function Settings() {
           </Button>
         </div>
         <AppearanceSection />
+        <UnitsSection />
       </section>
     );
   }
@@ -79,6 +81,7 @@ export function Settings() {
       <AccountSection />
       <ProfileSection />
       <AppearanceSection />
+      <UnitsSection />
       <ApiKeysSection />
       {isSuperAdmin && previewRole === "actual" ? <SuperadminSection /> : null}
       <DangerZoneSection />
@@ -163,6 +166,119 @@ function AppearanceSection() {
             );
           })}
         </RadioGroup>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Preferred display units, shared with the analysis page and 3D replay via
+// the glidecomp:preferences store (device-local, cloud-synced to the account
+// when signed in). Changing a unit here updates every open surface live.
+const UNIT_GROUPS: {
+  key: keyof UnitPreferences;
+  label: string;
+  description: string;
+  options: { value: string; label: string }[];
+}[] = [
+  {
+    key: "speed",
+    label: "Speed",
+    description: "Ground speed and wind",
+    options: [
+      { value: "km/h", label: "km/h" },
+      { value: "mph", label: "mph" },
+      { value: "knots", label: "kts" },
+    ],
+  },
+  {
+    key: "altitude",
+    label: "Altitude",
+    description: "Heights and altitude gains",
+    options: [
+      { value: "m", label: "m" },
+      { value: "ft", label: "ft" },
+    ],
+  },
+  {
+    key: "climbRate",
+    label: "Climb",
+    description: "Climb and sink rates",
+    options: [
+      { value: "m/s", label: "m/s" },
+      { value: "ft/min", label: "fpm" },
+      { value: "knots", label: "kts" },
+    ],
+  },
+  {
+    key: "distance",
+    label: "Distance",
+    description: "Task and flown distances",
+    options: [
+      { value: "km", label: "km" },
+      { value: "mi", label: "mi" },
+      { value: "nmi", label: "NM" },
+    ],
+  },
+];
+
+function UnitsSection() {
+  const units = useUnits();
+  const idBase = useId();
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Units</CardTitle>
+        <CardDescription>
+          How speeds, altitudes, climb rates and distances are displayed. Saved
+          to your account when you're signed in.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-4">
+          {UNIT_GROUPS.map((group) => {
+            const labelId = `${idBase}-${group.key}-label`;
+            return (
+              <div
+                key={group.key}
+                className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2"
+              >
+                <div className="grid gap-0.5">
+                  <span id={labelId} className="text-sm font-medium leading-none">
+                    {group.label}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {group.description}
+                  </span>
+                </div>
+                <RadioGroup
+                  value={units[group.key]}
+                  onValueChange={(value) =>
+                    setUnit(group.key, value as UnitPreferences[typeof group.key])
+                  }
+                  aria-labelledby={labelId}
+                  className="flex flex-row gap-2"
+                >
+                  {group.options.map((option) => {
+                    const id = `${idBase}-${group.key}-${option.value}`;
+                    return (
+                      <label
+                        key={option.value}
+                        htmlFor={id}
+                        className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 has-[[data-checked]]:border-primary has-[[data-checked]]:bg-accent/50"
+                      >
+                        <RadioGroupItem id={id} value={option.value} />
+                        <span className="text-sm font-medium leading-none">
+                          {option.label}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </RadioGroup>
+              </div>
+            );
+          })}
+        </div>
       </CardContent>
     </Card>
   );

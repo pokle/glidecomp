@@ -26,6 +26,7 @@ import {
 } from "@/react/rac/dialog";
 import { NumberField, TextField } from "@/react/rac/field";
 import { toast } from "../lib/toast";
+import { useUnits } from "../lib/units";
 import {
   formatCoords,
   formatSnapDistance,
@@ -56,6 +57,7 @@ export function AddWaypointDialog({
   onAdd: (record: WaypointFileRecord) => void;
   onCancel: () => void;
 }) {
+  const units = useUnits();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [coords, setCoords] = useState("");
@@ -212,7 +214,7 @@ export function AddWaypointDialog({
               <span>
                 Snapped to{" "}
                 <span className="font-medium text-foreground">{peak.name}</span>{" "}
-                summit — {formatSnapDistance(peak.distanceM)} from your tap ·{" "}
+                summit — {formatSnapDistance(peak.distanceM, units)} from your tap ·{" "}
                 <Button
                   variant="link"
                   size="sm"
@@ -232,7 +234,7 @@ export function AddWaypointDialog({
                 >
                   Snap to {peak.name} summit
                 </Button>{" "}
-                ({formatSnapDistance(peak.distanceM)} away)
+                ({formatSnapDistance(peak.distanceM, units)} away)
               </span>
             )}
           </p>

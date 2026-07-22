@@ -7,6 +7,7 @@
  * the phase coverage up front is the same explainability rule the scoring
  * pages follow — a number without its basis is not an explanation.
  */
+import { formatAltitude, useUnits } from "@/react/lib/units";
 import type { FieldAnalysisBasis } from "./types";
 
 function Fact({ term, children }: { term: string; children: React.ReactNode }) {
@@ -25,6 +26,7 @@ export function AnalysisBasis({
   basis: FieldAnalysisBasis;
   excluded: { pilot_name: string; reason: string }[];
 }) {
+  const units = useUnits();
   return (
     <section aria-label="Analysis basis" className="rounded-lg border p-4">
       <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -35,7 +37,8 @@ export function AnalysisBasis({
           <span className="ml-1 text-xs text-muted-foreground">multi-pilot</span>
         </Fact>
         <Fact term="Working band">
-          {Math.round(basis.workingBandFloor)}–{Math.round(basis.workingBandCeiling)} m
+          {formatAltitude(basis.workingBandFloor, { prefs: units }).formatted}–
+          {formatAltitude(basis.workingBandCeiling, { prefs: units }).withUnit}
           {basis.workingBandFallback ? (
             <span className="ml-1 text-xs text-muted-foreground">(estimated)</span>
           ) : null}

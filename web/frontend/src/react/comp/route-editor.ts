@@ -4,7 +4,8 @@
  * "lat, lon" format), live validation, and xctsk (de)serialization helpers
  * shared with the task detail page. Kept DOM-free so it's unit-testable.
  */
-import type { SSSConfig, Turnpoint, TurnpointType, XCTask } from "@glidecomp/engine";
+import type { SSSConfig, Turnpoint, TurnpointType, UnitPreferences, XCTask } from "@glidecomp/engine";
+import { formatDistance } from "@glidecomp/engine";
 import { utcToZonedHHMM, zoneNameWithOffset } from "../lib/time";
 
 // ---------------------------------------------------------------------------
@@ -138,10 +139,18 @@ export function peakSnapMode(peak: {
  * Human-readable tap→peak distance for the snap status row: metres (rounded to
  * the nearest 10, matching the imprecision) up to 1 km, kilometres to one
  * decimal beyond. E.g. 123 → "120 m", 650 → "650 m", 2130 → "2.1 km".
+ * With a non-metric distance preference the whole range formats in that unit
+ * instead (e.g. 2130 → "1.3 mi").
  */
-export function formatSnapDistance(metres: number): string {
-  if (metres < 1000) return `${Math.round(metres / 10) * 10} m`;
-  return `${(metres / 1000).toFixed(1)} km`;
+export function formatSnapDistance(
+  metres: number,
+  units?: UnitPreferences
+): string {
+  if (!units || units.distance === "km") {
+    if (metres < 1000) return `${Math.round(metres / 10) * 10} m`;
+    return `${(metres / 1000).toFixed(1)} km`;
+  }
+  return formatDistance(metres, { decimals: 1, prefs: units }).withUnit;
 }
 
 /**

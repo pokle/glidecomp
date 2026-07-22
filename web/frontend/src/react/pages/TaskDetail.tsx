@@ -42,6 +42,7 @@ import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { useAdminView, useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
+import { formatAltitude, formatRadius, useUnits } from "../lib/units";
 import { SectionHeader } from "../components/SectionHeader";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { TaskStandings } from "../comp/TaskStandings";
@@ -353,6 +354,7 @@ function TaskDetailContent() {
  */
 function TurnpointsTable({ xctsk }: { xctsk: XCTask }) {
   const directions = useMemo(() => computeTurnpointDirections(xctsk), [xctsk]);
+  const units = useUnits();
   return (
     <Table aria-label="Turnpoints" className="mt-2">
       <TableHeader>
@@ -370,12 +372,14 @@ function TurnpointsTable({ xctsk }: { xctsk: XCTask }) {
           <Row key={i}>
             <Cell className="text-right tabular-nums">{i + 1}</Cell>
             <Cell>{tp.waypoint.name}</Cell>
-            <Cell className="text-right tabular-nums">{tp.radius} m</Cell>
+            <Cell className="text-right tabular-nums">
+              {formatRadius(tp.radius, { prefs: units }).withUnit}
+            </Cell>
             {/* Waypoint altitude — xctsk files without one carry 0, shown as
                 unknown rather than a misleading sea-level reading. */}
             <Cell className="text-right tabular-nums">
               {tp.waypoint.altSmoothed ? (
-                `${tp.waypoint.altSmoothed} m`
+                formatAltitude(tp.waypoint.altSmoothed, { prefs: units }).withUnit
               ) : (
                 <span className="text-muted-foreground">—</span>
               )}
