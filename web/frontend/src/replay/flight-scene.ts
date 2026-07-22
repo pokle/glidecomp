@@ -22,8 +22,18 @@ import * as THREE from 'three';
 import { samplePilot, type LoadedTracks } from './track-data';
 import { type GaggleResult } from './gaggles';
 import { GaggleLayer } from './gaggle-layer';
+import { formatAltitude } from '../analysis/units-browser';
 
 export type ColorMode = 'pilot' | 'altitude' | 'vario' | 'speed' | 'glide';
+
+/**
+ * Font stack for text baked into canvas textures on the map (turnpoint names
+ * and altitudes, gaggle counts) — the project face. The @font-face rules are
+ * registered by replay.css; main.ts awaits `document.fonts.load()` for the
+ * weights used here before the first scene build, else the canvases would
+ * silently rasterise the fallback.
+ */
+export const MAP_LABEL_FONT = '"Atkinson Hyperlegible Next", ui-sans-serif, system-ui, sans-serif';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const WALL_HEIGHT = 1400; // metres, task-cylinder walls (pre vertical exaggeration)
@@ -102,6 +112,9 @@ export class FlightScene {
   // each frame from live member samples (see GaggleLayer).
   private gaggles?: GaggleResult;
   private gaggleLayer?: GaggleLayer;
+
+  /** Turnpoint ground labels, kept so refreshTurnpointLabels() can re-bake them. */
+  private tpLabels: THREE.Mesh[] = [];
 
   /**
    * `light` themes the in-scene furniture for a light backdrop (abstract
@@ -336,16 +349,51 @@ export class FlightScene {
       this.cylinderWalls.push(wall);
       this.group.add(wall);
 
-      // Turnpoint name, laid flat on the ground at the centre. Fixed orientation
-      // (North = up) so it reads upright when the camera faces north.
-      if (tp.name) {
-        const label = makeGroundLabel(tp.name, Math.min(tp.radius * 1.5, this.extentXZ * 0.11), this.light);
-        label.position.set(tp.x, 0, tp.z);
-        label.renderOrder = 5;
-        this.group.add(label);
-      }
+      // Turnpoint name (+ altitude), laid flat on the ground at the centre.
+      // Fixed orientation (North = up) so it reads upright facing north.
+      this.addTurnpointLabel(tp);
     });
     this.applyWallScale();
+  }
+
+  /**
+   * Ground label for one turnpoint: the name with, when the task carries it,
+   * the waypoint altitude on a smaller second line. Tracked in `tpLabels` so
+   * `refreshTurnpointLabels()` can re-bake them (the altitude text is baked
+   * in the user's current unit).
+   */
+  private addTurnpointLabel(tp: {
+    name: string;
+    radius: number;
+    x: number;
+    z: number;
+    alt?: number;
+  }): void {
+    if (!tp.name) return;
+    const sub = tp.alt != null ? formatAltitude(tp.alt).withUnit : undefined;
+    const label = makeGroundLabel(
+      tp.name,
+      Math.min(tp.radius * 1.5, this.extentXZ * 0.11),
+      this.light,
+      sub,
+    );
+    label.position.set(tp.x, 0, tp.z);
+    label.renderOrder = 5;
+    this.group.add(label);
+    this.tpLabels.push(label);
+  }
+
+  /** Re-bake every turnpoint label (call when the altitude unit changes). */
+  refreshTurnpointLabels(): void {
+    for (const mesh of this.tpLabels) {
+      this.group.remove(mesh);
+      mesh.geometry.dispose();
+      const mat = mesh.material as THREE.MeshBasicMaterial;
+      mat.map?.dispose();
+      mat.dispose();
+    }
+    this.tpLabels = [];
+    for (const tp of this.tracks.manifest.task?.turnpoints ?? []) this.addTurnpointLabel(tp);
   }
 
   /**
@@ -358,7 +406,7 @@ export class FlightScene {
    */
   private buildGoalLine(
     goalLine: { x1: number; z1: number; x2: number; z2: number },
-    tp: { name: string; radius: number; x: number; z: number },
+    tp: { name: string; radius: number; x: number; z: number; alt?: number },
     color: number,
   ): void {
     const { x1, z1, x2, z2 } = goalLine;
@@ -441,12 +489,7 @@ export class FlightScene {
     this.cylinderWalls.push(wall);
     this.group.add(wall);
 
-    if (tp.name) {
-      const label = makeGroundLabel(tp.name, Math.min(tp.radius * 1.5, this.extentXZ * 0.11), this.light);
-      label.position.set(tp.x, 0, tp.z);
-      label.renderOrder = 5;
-      this.group.add(label);
-    }
+    this.addTurnpointLabel(tp);
   }
 
   /**
@@ -670,27 +713,54 @@ export class FlightScene {
  * flat with its textured face UP and text drawn normally. Both backends render
  * the same chirality (the mercator model-matrix reflection and Mapbox's own
  * north-up mercator flip cancel out), so no per-backend canvas flip is needed.
+ *
+ * `subText` (e.g. the turnpoint altitude) draws on a second, smaller line under
+ * the name; `worldWidth` still means the plane's world-metre width — the plane
+ * just gets proportionally taller.
  */
-function makeGroundLabel(text: string, worldWidth: number, light = false): THREE.Mesh {
+function makeGroundLabel(
+  text: string,
+  worldWidth: number,
+  light = false,
+  subText?: string,
+): THREE.Mesh {
   const fontPx = 64;
+  const subPx = 44;
   const pad = 28;
+  const nameFont = `bold ${fontPx}px ${MAP_LABEL_FONT}`;
+  const subFont = `${subPx}px ${MAP_LABEL_FONT}`;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d')!;
-  ctx.font = `bold ${fontPx}px system-ui, sans-serif`;
-  const w = Math.ceil(ctx.measureText(text).width + pad * 2);
-  const h = 128;
+  ctx.font = nameFont;
+  let textW = ctx.measureText(text).width;
+  if (subText) {
+    ctx.font = subFont;
+    textW = Math.max(textW, ctx.measureText(subText).width);
+  }
+  const w = Math.ceil(textW + pad * 2);
+  const h = subText ? 208 : 128;
   canvas.width = w;
   canvas.height = h;
-  ctx.font = `bold ${fontPx}px system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
-  ctx.lineWidth = 8;
   // halo + text invert with the backdrop theme
-  ctx.strokeStyle = light ? 'rgba(250,250,246,0.92)' : 'rgba(8,12,22,0.9)';
-  ctx.strokeText(text, w / 2, h / 2);
-  ctx.fillStyle = light ? '#1e293b' : '#f1f5f9';
-  ctx.fillText(text, w / 2, h / 2);
+  const halo = light ? 'rgba(250,250,246,0.92)' : 'rgba(8,12,22,0.9)';
+  const ink = light ? '#1e293b' : '#f1f5f9';
+  ctx.font = nameFont;
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = halo;
+  ctx.strokeText(text, w / 2, 64);
+  ctx.fillStyle = ink;
+  ctx.fillText(text, w / 2, 64);
+  if (subText) {
+    ctx.font = subFont;
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = halo;
+    ctx.strokeText(subText, w / 2, 152);
+    ctx.fillStyle = ink;
+    ctx.fillText(subText, w / 2, 152);
+  }
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;

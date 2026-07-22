@@ -28,7 +28,7 @@ import { MAP_STYLES, DEFAULT_MAP_STYLE } from './map-styles';
 import { GLIDE_HI, GLIDE_LO, SPEED_MAX, SPEED_MIN, VARIO_MAX } from './flight-scene';
 import { GaggleUI } from './gaggle-ui';
 import type { GaggleResult } from './gaggles';
-import type { TrackManifest } from '@glidecomp/engine';
+import { requiredGlideToTarget, type TrackManifest } from '@glidecomp/engine';
 
 /**
  * The replay data now comes from the competition-api Worker as a single packed
@@ -232,6 +232,16 @@ async function main(): Promise<void> {
 
   // the first scene build honours the saved theme (no-op rebuild before load)
   void viewer.setLightTheme(document.documentElement.classList.contains('light'));
+
+  // The scene bakes its map text (turnpoint names/altitudes, gaggle counts)
+  // into canvas textures during loadBundle, and canvas ignores lazy
+  // @font-face rules — resolve the label font's weights first or the first
+  // bake silently uses the fallback. Self-hosted woff2, so this is fast; a
+  // failure just keeps the fallback stack.
+  await Promise.all([
+    document.fonts.load('700 64px "Atkinson Hyperlegible Next"'),
+    document.fonts.load('400 44px "Atkinson Hyperlegible Next"'),
+  ]).catch(() => undefined);
 
   try {
     const tracks = await viewer.loadBundle(bundleUrl());
@@ -685,9 +695,13 @@ async function main(): Promise<void> {
   const leaderLine = $('leaderLine');
   const leaderDot = $('leaderDot');
   const coAlt = $('coAlt');
+  const coAgl = $('coAgl');
+  const coAglVal = $('coAglVal');
   const coClimb = $('coClimb');
   const coSpeed = $('coSpeed');
   const coGlide = $('coGlide');
+  const coReqRow = $('coReqRow');
+  const coReq = $('coReq');
   const calloutClose = $('calloutClose');
   const CALLOUT_POS_KEY = 'replay.calloutPos';
   /** Pilot whose identity the callout header is currently painted for. */
@@ -898,6 +912,53 @@ async function main(): Promise<void> {
     const r = speed / -climb;
     return r > 40 ? '∞' : r.toFixed(1);
   }
+
+  // --- required glide to the next turnpoint (same reading as the 2D analysis
+  // map's HUD) — only when the bundle carries task geometry with altitudes ---
+  const reqGlideAvailable = !!manifest.task?.turnpoints.some((tp) => tp.alt != null);
+  if (reqGlideAvailable) coReqRow.classList.remove('hidden');
+
+  /** ENU metres → WGS84 degrees (inverse of the packer's tangent-plane projection). */
+  const latOfZ = (z: number): number => manifest.origin.lat0 - z / manifest.mPerDegLat;
+  const lonOfX = (x: number): number => manifest.origin.lon0 + x / manifest.mPerDegLon;
+
+  /**
+   * The pilot's next turnpoint at replay time `tRel`, resolved from the packed
+   * per-pilot reach times (before anything is reached, the start is next).
+   * Aims at the optimised-line tagging point when available, like the 2D map.
+   */
+  function nextTurnpointTarget(
+    i: number,
+    tRel: number,
+  ): { name: string; lat: number; lon: number; altitude: number } | null {
+    const task = manifest.task;
+    if (!task) return null;
+    let next = task.sssIndex ?? -1;
+    for (const r of manifest.pilots[i].reached ?? []) {
+      if (r.t > tRel) break;
+      next = r.tp + 1;
+    }
+    if (next < 0 || next >= task.turnpoints.length) return null;
+    const tp = task.turnpoints[next];
+    if (tp.alt == null) return null;
+    const opt = task.optimizedPath?.[next];
+    return {
+      name: tp.name || `TP${next + 1}`,
+      lat: opt ? latOfZ(opt.z) : tp.lat,
+      lon: opt ? lonOfX(opt.x) : tp.lon,
+      altitude: tp.alt,
+    };
+  }
+
+  /** "8.4:1 → Goal", "— → Goal" when below the target, '—' when task done/no data. */
+  function fmtReqGlide(i: number, s: PilotScreenSample): string {
+    const target = nextTurnpointTarget(i, viewer.currentTime);
+    if (!target) return '—';
+    const ratio = requiredGlideToTarget(latOfZ(s.worldZ), lonOfX(s.worldX), s.altMsl, target);
+    if (ratio === undefined) return `— → ${target.name}`;
+    const num = ratio > 99 ? '>99' : ratio.toFixed(ratio < 10 ? 1 : 0);
+    return `${num}:1 → ${target.name}`;
+  }
   // digit-repaint throttle state (see onFrameTick)
   let digitsPilot = -1;
   let digitsAt = 0;
@@ -946,11 +1007,24 @@ async function main(): Promise<void> {
     if (display === digitsPilot && viewer.isPlaying && now - digitsAt < 1000) return;
     digitsPilot = display;
     digitsAt = now;
+    // Height above ground, when the active backend has DEM data (terrain
+    // backdrop only). Clamped at 0 — GPS altitude vs DEM can disagree by a
+    // few metres right at the surface.
+    const ground = flying
+      ? viewer.groundElevationAt(latOfZ(s.worldZ), lonOfX(s.worldX))
+      : null;
+    if (ground != null) {
+      coAglVal.textContent = formatAltitude(Math.max(0, s.altMsl - ground)).withUnit;
+      coAgl.classList.remove('hidden');
+    } else {
+      coAgl.classList.add('hidden');
+    }
     coClimb.textContent = flying ? formatClimbRate(s.climb).withUnit : '—';
     coClimb.classList.toggle('text-lime-400', flying && s.climb >= 0);
     coClimb.classList.toggle('text-sky-400', flying && s.climb < 0);
     coSpeed.textContent = flying ? formatSpeed(s.speed).withUnit : '—';
     coGlide.textContent = flying ? fmtGlide(s.speed, s.climb) : '—';
+    if (reqGlideAvailable) coReq.textContent = flying ? fmtReqGlide(display, s) : '—';
     const p = manifest.pilots[display];
     const status = [
       p.score != null ? `${Math.round(p.score)} pts` : '',
@@ -1017,6 +1091,7 @@ async function main(): Promise<void> {
     syncUnitSelects();
     gauge.redrawScale();
     updateLegend($<HTMLSelectElement>('colorMode').value as ColorMode);
+    viewer.refreshMapLabels(); // turnpoint altitude text is baked in the current unit
     digitsPilot = -1; // repaint the callout digits immediately, skip the 1 s throttle
   });
 

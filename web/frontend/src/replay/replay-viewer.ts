@@ -62,6 +62,10 @@ export interface PilotScreenSample {
   speed: number;
   /** Near-instantaneous climb (±3-fix window), m/s — the gauge needle. */
   climbInst: number;
+  /** ENU position (metres from the manifest origin; East = +X, North = -Z),
+   * un-exaggerated — for geo lookups like the required-glide readout. */
+  worldX: number;
+  worldZ: number;
 }
 
 export interface ViewerCallbacks {
@@ -153,6 +157,8 @@ export class ReplayViewer {
       climb: 0,
       speed: 0,
       climbInst: 0,
+      worldX: 0,
+      worldZ: 0,
     }));
 
     this.scene = new FlightScene(this.tracks, this.gaggles, this.sceneLight('abstract'));
@@ -198,6 +204,25 @@ export class ReplayViewer {
   /** Whether the in-scene furniture should be light-themed for `mode`. */
   private sceneLight(mode: Backdrop): boolean {
     return this.lightTheme && mode === 'abstract';
+  }
+
+  /**
+   * Re-bake the map's baked-text labels (turnpoint name + altitude planes) —
+   * call when the altitude unit changes, so the ground text follows it.
+   */
+  refreshMapLabels(): void {
+    if (!this.scene || this.switching) return;
+    this.scene.refreshTurnpointLabels();
+  }
+
+  /**
+   * Ground elevation (metres MSL) at a WGS84 position, or null when the
+   * active backend has no ground data (abstract backdrop, DEM tile not
+   * loaded yet, or mid backdrop-switch).
+   */
+  groundElevationAt(lat: number, lon: number): number | null {
+    if (this.switching || !this.backend) return null;
+    return this.backend.groundElevation?.(lat, lon) ?? null;
   }
 
   /** Dispose and rebuild the scene + backend for `mode`, re-applying view state. */
@@ -302,6 +327,8 @@ export class ReplayViewer {
       out.climb = s.climb;
       out.speed = s.speed;
       out.climbInst = s.climbInst;
+      out.worldX = s.x;
+      out.worldZ = s.z;
       if (!out.active) {
         out.onScreen = false;
         continue;

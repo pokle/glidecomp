@@ -385,6 +385,12 @@ export class TerrainBackend implements Backend {
     }
   }
 
+  /** Ground elevation from the Mapbox DEM (metres MSL, un-exaggerated). */
+  groundElevation(lat: number, lon: number): number | null {
+    if (!this.map?.getTerrain()) return null;
+    return this.map.queryTerrainElevation([lon, lat], { exaggerated: false }) ?? null;
+  }
+
   resize(): void {
     this.map?.resize();
   }

@@ -90,12 +90,20 @@ export function packTracksFromIgc(input: PackFromIgcInput): PackedTracks {
         params.nominalDistance = calculateOptimizedTaskDistance(task) * 0.7;
       }
       const result = scoreTask(task, flights, params);
-      const byName = new Map(result.pilotScores.map((ps) => [ps.pilotName, ps]));
+      // Pair by trackFile (the stable pilot id we fed in) — names can collide.
+      const byId = new Map(result.pilotScores.map((ps) => [ps.trackFile, ps]));
       for (const p of pilots) {
-        const ps = byName.get(p.name);
+        const ps = byId.get(p.id);
         if (ps) {
           p.rank = ps.rank;
           p.score = ps.totalScore;
+          // Turnpoint reach times (UTC seconds) so the viewer can resolve each
+          // pilot's "next turnpoint" at any replay time — feeds the required-
+          // glide readout in the metrics callout.
+          p.reached = ps.turnpointResult.sequence.map((r) => ({
+            tp: r.taskIndex,
+            t: r.time.getTime() / 1000,
+          }));
         }
       }
     } catch {
