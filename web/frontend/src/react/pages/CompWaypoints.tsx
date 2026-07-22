@@ -83,6 +83,16 @@ function fromRow(r: WpRow): WaypointFileRecord | null {
   };
 }
 
+/**
+ * Rows whose altitude is still unknown (blank, zero or unparseable — waypoint
+ * files without altitudes come through as 0, which toRow renders as ""). Only
+ * these are touched by "Fill altitudes from map".
+ */
+function missingAltitude(r: WpRow): boolean {
+  const alt = Number(r.altitude);
+  return !Number.isFinite(alt) || alt === 0;
+}
+
 // Lucide's map-pin, inlined for Tabulator cell formatters (static markup only).
 const PIN_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>';
@@ -114,6 +124,7 @@ function CompWaypointsContent() {
   );
   const [loading, setLoading] = useState(!initial);
   const [saving, setSaving] = useState(false);
+  const [fillingAlts, setFillingAlts] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [addMode, setAddMode] = useState(false);
   const [fitNonce, setFitNonce] = useState(0);
@@ -305,6 +316,66 @@ function CompWaypointsContent() {
     setAdding(false);
   }
 
+  // Waypoints that would get an altitude from "Fill altitudes from map".
+  const fillableCount = rows.filter(
+    (r) => missingAltitude(r) && parseCoords(r.coords) !== null
+  ).length;
+
+  /**
+   * Fill blank/zero altitudes with ground elevations from the Mapbox terrain
+   * DEM (fetched directly at high zoom — see analysis/elevation.ts for why we
+   * don't read them off the live map). Only missing altitudes are touched;
+   * values the file (or the admin) already set stay as they are, and nothing
+   * is saved until Save.
+   */
+  async function fillAltitudes() {
+    const targets = rows.flatMap((r) => {
+      const c = parseCoords(r.coords);
+      return missingAltitude(r) && c ? [{ id: r.id, lat: c.lat, lon: c.lon }] : [];
+    });
+    if (targets.length === 0) return;
+    setFillingAlts(true);
+    try {
+      // Dynamic import: browser-only module (canvas decoding), keep it out of
+      // the SSR bundle and the page chunk until the button is pressed.
+      const { fetchElevations } = await import("../../analysis/elevation");
+      const elevations = await fetchElevations(targets);
+      const byId = new Map<number, string>();
+      targets.forEach((t, i) => {
+        const e = elevations[i];
+        if (e !== null) byId.set(t.id, String(Math.round(e)));
+      });
+      if (byId.size === 0) {
+        toast.error("Could not read terrain elevations from Mapbox");
+        return;
+      }
+      // Apply against the *current* rows (the grid may have been edited while
+      // the tiles were downloading), and only where the altitude is still
+      // missing so we never clobber a value typed in the meantime.
+      const filled: WpRow[] = [];
+      const next = rowsRef.current.map((r) => {
+        const alt = byId.get(r.id);
+        if (alt === undefined || !missingAltitude(r)) return r;
+        const row = { ...r, altitude: alt };
+        filled.push(row);
+        return row;
+      });
+      setRows(next);
+      void tableRef.current?.updateData(
+        filled.map((r) => ({ id: r.id, altitude: r.altitude }))
+      );
+      const missed = targets.length - filled.length;
+      toast.success(
+        `Filled ${filled.length} altitude${filled.length === 1 ? "" : "s"} from the map terrain` +
+          (missed > 0 ? ` (${missed} unavailable)` : "")
+      );
+    } catch {
+      toast.error("Could not read terrain elevations from Mapbox");
+    } finally {
+      setFillingAlts(false);
+    }
+  }
+
   async function save() {
     const built = rows.map(fromRow);
     if (built.some((r) => r === null)) {
@@ -361,6 +432,18 @@ function CompWaypointsContent() {
             <Button variant="outline" size="sm" onPress={() => openAdd()}>
               Add waypoint
             </Button>
+            {fillableCount > 0 ? (
+              <Button
+                variant="outline"
+                size="sm"
+                isDisabled={fillingAlts}
+                onPress={() => void fillAltitudes()}
+              >
+                {fillingAlts
+                  ? "Filling altitudes…"
+                  : `Fill ${fillableCount} altitude${fillableCount === 1 ? "" : "s"} from map`}
+              </Button>
+            ) : null}
             <Button size="sm" isDisabled={saving || !dirty} onPress={() => void save()}>
               {saving ? "Saving…" : dirty ? "Save" : "Saved"}
             </Button>
