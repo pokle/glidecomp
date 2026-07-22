@@ -60,15 +60,16 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(html).toContain('rel="canonical"');
   });
 
-  test("/comp/:id shows standings and links to pilot narrative pages", async ({ request }) => {
-    const { compId, compName, taskId, pilotId, pilotName } = await discover(request);
+  test("/comp/:id shows the standings summary and links to the scores page", async ({ request }) => {
+    const { compId, compName, pilotName } = await discover(request);
     const res = await request.get(`/comp/${compId}`);
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
     expect(html).toContain(compName);
-    // A standings pilot name and a link to their per-task score explanation.
+    // The top-3 summary carries the leading pilot's name; the full tables
+    // (and per-pilot narrative links) live on the scores page it links to.
     expect(html).toContain(pilotName);
-    expect(html).toContain(`/comp/${compId}/task/${taskId}/pilot/${pilotId}`);
+    expect(html).toContain(`href="/comp/${compId}/scores"`);
     expect(html).toContain(`<title>${compName} — GlideComp</title>`);
   });
 
@@ -150,6 +151,8 @@ test.describe("SSR — isolation and fallback", () => {
     "/comp/anything/analysis/task/anything",
     // The pre-re-nesting URL, redirected client-side — still needs the shell.
     "/comp/anything/task/anything/analysis",
+    // Admin-only roster editor page.
+    "/comp/anything/pilots",
   ]) {
     test(`a hard reload of ${path} serves a noindex app shell`, async ({ request }) => {
       const res = await request.get(path, { failOnStatusCode: false });

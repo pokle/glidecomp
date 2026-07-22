@@ -1,15 +1,17 @@
 /**
- * Whole-competition scores, inline on the comp page (IA v2 #277 — the comp
- * page is the canonical scores surface; the old /scores route redirects
- * here). View transforms (class rollups, top-3, teams) come from the shared
- * scores-views module; the "Results by task" tab reuses the task page's
- * ScoresSection one task at a time. Built on the RAC kit: the view tabs are
- * ARIA tabs, and each view is a sortable ARIA-grid table (RAC sorting with
- * per-column first-click directions — scores read best-first).
+ * Whole-competition scores machinery, shared by the dedicated scores page
+ * (pages/CompScoresPage — the canonical scores surface) and the comp hub's
+ * compact standings summary (CompScoresSummary): the SSR-seedable fetch +
+ * rescore state machine (useCompScores) and the score views (per-class
+ * standings, top-3, teams, results-by-task). View transforms (class rollups,
+ * top-3, teams) come from the shared scores-views module; the "Results by
+ * task" tab reuses the task page's ScoresSection one task at a time. Built on
+ * the RAC kit: the view tabs are ARIA tabs, and each view is a sortable
+ * ARIA-grid table (RAC sorting with per-column first-click directions —
+ * scores read best-first).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link as AriaLink, type SortDescriptor } from "react-aria-components";
-import { Button } from "@/react/rac/button";
 import { Select, SelectItem } from "@/react/rac/select";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { Tabs, TabList, Tab, TabPanel } from "@/react/rac/tabs";
@@ -19,7 +21,6 @@ import {
   computeTop3Rows,
   type ClassStanding,
 } from "../../scores-views";
-import { ScoreFreshness } from "./ScoreFreshness";
 import { ScoresSection } from "./ScoresSection";
 import { toast } from "../lib/toast";
 import { formatScore, formatTaskDate, ordinal } from "../lib/format";
@@ -122,87 +123,6 @@ export function useCompScores(
   }
 
   return { state, rescoring, rescore };
-}
-
-export function CompScoresSection({
-  compId,
-  timezone,
-  tasks,
-  defaultTaskId,
-  initialScores,
-  initialScoresEtag,
-  isAdmin = false,
-}: {
-  compId: string;
-  timezone: string | null;
-  /** The comp's tasks, for the "Results by task" picker. */
-  tasks: TaskSummary[];
-  /** Task pre-selected in "Results by task" (the hero task). */
-  defaultTaskId: string | null;
-  /** SSR-seeded scores so they appear in the first paint (server HTML). */
-  initialScores?: CompScores;
-  initialScoresEtag?: string | null;
-  /** Admins get an actionable empty state (false during SSR/first paint). */
-  isAdmin?: boolean;
-}) {
-  const { state, rescoring, rescore } = useCompScores(
-    compId,
-    initialScores,
-    initialScoresEtag
-  );
-
-  return (
-    <section id="scores" className="scroll-mt-4 break-before-page">
-      <div className="mt-8 flex items-center justify-between gap-4">
-        <h2 className="text-lg font-bold">Scores</h2>
-        {isAdmin && state.kind === "ready" && state.scores.standings.length > 0 ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onPress={() => void rescore()}
-            isDisabled={rescoring}
-          >
-            {rescoring ? "Re-scoring…" : "Recompute scores"}
-          </Button>
-        ) : null}
-      </div>
-      {state.kind === "loading" ? (
-        <p className="mt-2 text-muted-foreground">Loading scores…</p>
-      ) : state.kind === "unavailable" ? (
-        <ScoresEmptyState isAdmin={isAdmin} />
-      ) : (
-        <>
-          <ScoreFreshness
-            computedAt={state.scores.computed_at}
-            stale={state.scores.stale}
-            timezone={timezone}
-            etag={state.etag}
-            pollUrl={`/api/comp/${encodeURIComponent(compId)}/scores`}
-          />
-          {state.scores.standings.length === 0 ? (
-            <ScoresEmptyState isAdmin={isAdmin} />
-          ) : (
-            <>
-              <ScoresViews
-                scores={state.scores}
-                compId={compId}
-                timezone={timezone}
-                tasks={tasks}
-                defaultTaskId={defaultTaskId}
-              />
-              <p className="mt-4 text-sm text-muted-foreground">
-                Click any score for a step-by-step explanation. Questions about a score?{" "}
-                <a href="#admins" className="underline underline-offset-4">
-                  Ask the comp admins
-                </a>
-                .
-              </p>
-            </>
-          )}
-        </>
-      )}
-    </section>
-  );
 }
 
 /**

@@ -49,6 +49,7 @@ export function PilotsSection({
   compClasses,
   isAdmin,
   onPilotsChanged,
+  headingAs = "h2",
 }: {
   compId: string;
   compName: string;
@@ -57,6 +58,8 @@ export function PilotsSection({
   /** Called after a successful pilots save so the parent can refetch data
    * that depends on the roster (e.g. the setup guide's pilot_count). */
   onPilotsChanged?: () => void;
+  /** "h1" when the section is the whole page (/comp/:id/pilots). */
+  headingAs?: "h1" | "h2";
 }) {
   const [pilots, setPilots] = useState<CompPilot[] | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -103,6 +106,8 @@ export function PilotsSection({
   return (
     <section>
       <SectionHeader
+        as={headingAs}
+        className={headingAs === "h1" ? "mt-2" : undefined}
         title={<>Pilots {pilots && pilots.length > 0 ? `(${pilots.length})` : ""}</>}
         action={
           isAdmin ? (

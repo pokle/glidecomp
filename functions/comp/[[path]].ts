@@ -56,6 +56,8 @@ interface HeadTags {
 const NOINDEX_SHELL_ROUTES: RegExp[] = [
   /^\/comp\/[^/]+\/analysis\/?$/,
   /^\/comp\/[^/]+\/analysis\/task\/[^/]+\/?$/,
+  // Pilot roster editor — admin-only management surface, nothing for crawlers.
+  /^\/comp\/[^/]+\/pilots\/?$/,
   // Where the per-task report lived before it was re-nested under the comp
   // report; the SPA redirects it, so it must reach the shell rather than 404.
   /^\/comp\/[^/]+\/task\/[^/]+\/analysis\/?$/,
