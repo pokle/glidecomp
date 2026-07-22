@@ -72,6 +72,12 @@ export interface Backend {
   getBearingDeg(): number;
   /** Keep vertical exaggeration in sync (terrain also drives map terrain). */
   setVScale(v: number): void;
+  /**
+   * Ground elevation (metres MSL, un-exaggerated) at a WGS84 position, or
+   * null when unknown — terrain backend only (reads the Mapbox DEM; returns
+   * null for tiles not yet loaded). The abstract backdrop has no ground data.
+   */
+  groundElevation?(lat: number, lon: number): number | null;
   /** Change the basemap style (terrain only; no-op elsewhere). */
   setMapStyle?(url: string): void;
   /** Mute the basemap imagery's colour, 0 (full colour) – 1 (greyscale) (terrain only; no-op elsewhere). */

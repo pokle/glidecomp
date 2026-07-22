@@ -215,6 +215,16 @@ export class ReplayViewer {
     this.scene.refreshTurnpointLabels();
   }
 
+  /**
+   * Ground elevation (metres MSL) at a WGS84 position, or null when the
+   * active backend has no ground data (abstract backdrop, DEM tile not
+   * loaded yet, or mid backdrop-switch).
+   */
+  groundElevationAt(lat: number, lon: number): number | null {
+    if (this.switching || !this.backend) return null;
+    return this.backend.groundElevation?.(lat, lon) ?? null;
+  }
+
   /** Dispose and rebuild the scene + backend for `mode`, re-applying view state. */
   private async rebuild(mode: Backdrop): Promise<void> {
     this.switching = true;

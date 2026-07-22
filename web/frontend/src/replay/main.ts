@@ -695,6 +695,7 @@ async function main(): Promise<void> {
   const leaderLine = $('leaderLine');
   const leaderDot = $('leaderDot');
   const coAlt = $('coAlt');
+  const coAgl = $('coAgl');
   const coClimb = $('coClimb');
   const coSpeed = $('coSpeed');
   const coGlide = $('coGlide');
@@ -1005,6 +1006,18 @@ async function main(): Promise<void> {
     if (display === digitsPilot && viewer.isPlaying && now - digitsAt < 1000) return;
     digitsPilot = display;
     digitsAt = now;
+    // Height above ground, when the active backend has DEM data (terrain
+    // backdrop only). Clamped at 0 — GPS altitude vs DEM can disagree by a
+    // few metres right at the surface.
+    const ground = flying
+      ? viewer.groundElevationAt(latOfZ(s.worldZ), lonOfX(s.worldX))
+      : null;
+    if (ground != null) {
+      coAgl.textContent = `${formatAltitude(Math.max(0, s.altMsl - ground)).withUnit} AGL`;
+      coAgl.classList.remove('hidden');
+    } else {
+      coAgl.classList.add('hidden');
+    }
     coClimb.textContent = flying ? formatClimbRate(s.climb).withUnit : '—';
     coClimb.classList.toggle('text-lime-400', flying && s.climb >= 0);
     coClimb.classList.toggle('text-sky-400', flying && s.climb < 0);
