@@ -103,6 +103,16 @@ type TurnpointDraft = Pick<
   "name" | "description" | "type" | "coords" | "radius" | "altitude"
 >;
 
+/**
+ * A turnpoint altitude that's still unknown (blank, zero or unparseable —
+ * xctsk files without altitudes come through as altSmoothed 0). Only these are
+ * touched by "Fill altitudes from map".
+ */
+function missingAltitude(altitude: string | number): boolean {
+  const alt = Number(altitude);
+  return !Number.isFinite(alt) || alt === 0;
+}
+
 /** A fresh, empty turnpoint draft (for the "Add turnpoint" flow). */
 function blankDraft(): TurnpointDraft {
   return {
@@ -167,6 +177,11 @@ export function RouteEditorDialog({
   const [rows, setRows] = useState<RouteRow[]>(() =>
     (xctsk?.turnpoints ?? []).map((tp) => turnpointToRow(tp, ++rowIdRef.current))
   );
+  // Latest rows for async flows (fillAltitudes applies its results against the
+  // rows as they are *after* the tile downloads, not a stale closure).
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const [fillingAlts, setFillingAlts] = useState(false);
 
   const updateRow = useCallback((id: number, patch: Partial<RouteRow>) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -610,6 +625,64 @@ export function RouteEditorDialog({
     );
   }
 
+  // Turnpoints that would get an altitude from "Fill altitudes from map".
+  const fillableAltCount = useMemo(
+    () =>
+      rows.filter((r) => missingAltitude(r.altitude) && parseCoords(r.coords) !== null)
+        .length,
+    [rows]
+  );
+
+  /**
+   * Fill blank/zero turnpoint altitudes with ground elevations from the Mapbox
+   * terrain DEM (fetched directly at high zoom — see analysis/elevation.ts for
+   * why we don't read them off the live map). Same behaviour as the waypoints
+   * page: only missing altitudes are touched, and nothing is saved until Save.
+   */
+  async function fillAltitudes() {
+    const targets = rows.flatMap((r) => {
+      const c = parseCoords(r.coords);
+      return missingAltitude(r.altitude) && c
+        ? [{ id: r.id, lat: c.lat, lon: c.lon }]
+        : [];
+    });
+    if (targets.length === 0) return;
+    setFillingAlts(true);
+    try {
+      // Dynamic import: browser-only module (canvas decoding), loaded on press.
+      const { fetchElevations } = await import("../../analysis/elevation");
+      const elevations = await fetchElevations(targets);
+      const byId = new Map<number, number>();
+      targets.forEach((t, i) => {
+        const e = elevations[i];
+        if (e !== null) byId.set(t.id, Math.round(e));
+      });
+      if (byId.size === 0) {
+        toast.error("Could not read terrain elevations from Mapbox");
+        return;
+      }
+      // Apply against the *current* rows, and only where the altitude is still
+      // missing so we never clobber a value edited while tiles downloaded.
+      let filled = 0;
+      const next = rowsRef.current.map((r) => {
+        const alt = byId.get(r.id);
+        if (alt === undefined || !missingAltitude(r.altitude)) return r;
+        filled += 1;
+        return { ...r, altitude: alt };
+      });
+      setRows(next);
+      const missed = targets.length - filled;
+      toast.success(
+        `Filled ${filled} altitude${filled === 1 ? "" : "s"} from the map terrain` +
+          (missed > 0 ? ` (${missed} unavailable)` : "")
+      );
+    } catch {
+      toast.error("Could not read terrain elevations from Mapbox");
+    } finally {
+      setFillingAlts(false);
+    }
+  }
+
   /** Empty the turnpoint grid (start the route over). */
   async function clearTurnpoints() {
     const hasRows = rows.some(
@@ -768,6 +841,20 @@ export function RouteEditorDialog({
             </Button>
             <Button variant="outline" size="sm" onPress={() => void clearTurnpoints()}>
               Clear turnpoints
+            </Button>
+            {/* Always visible so the capability is discoverable; disabled when
+                every turnpoint already has an altitude. */}
+            <Button
+              variant="outline"
+              size="sm"
+              isDisabled={fillingAlts || fillableAltCount === 0}
+              onPress={() => void fillAltitudes()}
+            >
+              {fillingAlts
+                ? "Filling altitudes…"
+                : fillableAltCount > 0
+                  ? `Fill ${fillableAltCount} altitude${fillableAltCount === 1 ? "" : "s"} from map`
+                  : "Fill altitudes from map"}
             </Button>
             {/* Import / export the whole route (moved out of the footer, which
                 now holds only Cancel / Save). */}
@@ -1169,6 +1256,13 @@ function TurnpointCard({
             </Badge>
           ) : null}
           <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+            {/* Waypoint altitude, when known — labelled so it can't be read as
+                the radius beside it. */}
+            {!missingAltitude(row.altitude) ? (
+              <span className="tabular-nums" title="Waypoint altitude (m AMSL)">
+                alt {formatMetres(Number(row.altitude))} m
+              </span>
+            ) : null}
             {coordsMissing ? (
               <span className="text-amber-500">⚠ set coordinates</span>
             ) : (
