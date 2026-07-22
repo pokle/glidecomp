@@ -1,9 +1,11 @@
 ---
 /** Track data cleaning guide — how GlideComp repairs GPS altitude glitches
  * before analysis, and how every repair is disclosed. Sibling of the GAP and
- * open-distance scoring pages. */
+ * open-distance scoring pages. The example figures are generated from real
+ * archive tracklogs by web/scripts/generate-data-cleaning-charts.ts. */
 import Base from "../../layouts/Base.astro";
 import BackLink from "../../components/BackLink.astro";
+import DataCleaningCharts from "../../components/DataCleaningCharts.astro";
 ---
 
 <Base
@@ -43,6 +45,9 @@ import BackLink from "../../components/BackLink.astro";
             <a href="#rate-limits" class="hover:underline">The Fallback: Physical Plausibility</a>
           </li>
           <li>
+            <a href="#examples" class="hover:underline">Real Examples</a>
+          </li>
+          <li>
             <a href="#what-changes" class="hover:underline">What Gets Repaired — and What Never Changes</a>
           </li>
           <li>
@@ -72,11 +77,45 @@ import BackLink from "../../components/BackLink.astro";
           </p>
           <p class="text-muted-foreground">
             Simply treating zero as "missing" is not good enough either: pilots genuinely fly
-            at — and below — sea level. A coastal soaring flight lands on the beach at
-            0&nbsp;m; sites by the Dead Sea sit 400&nbsp;m below it. Cleaning has to
-            distinguish a measurement error from a real altitude, whatever the number.
+            at — and below — sea level. Cleaning has to distinguish a measurement error from a
+            real altitude, whatever the number.
           </p>
         </div>
+
+        <aside
+          aria-label="Flying at and below sea level"
+          class="mt-6 p-5 rounded-lg border border-border bg-card"
+        >
+          <h3 class="text-base font-semibold mb-3">
+            Yes, pilots really do fly at 0&nbsp;m — and below
+          </h3>
+          <div class="space-y-3 text-sm leading-relaxed text-muted-foreground">
+            <p>
+              Flying <em>at</em> zero is routine: every coastal ridge-soaring site does it
+              daily. Pilots scratch single-digit metres above the water at the Torrey Pines
+              cliffs in San Diego, the Danish and Dutch dunes, Wilderness in South Africa, and
+              on Australia's soaring beaches — at Stanwell Park's Bald Hill, where Australian
+              hang gliding more or less grew up, the beach landing is at 0&nbsp;m by
+              definition.
+            </p>
+            <p>
+              Below zero is real flying too. The <strong class="text-foreground">Dead
+              Sea</strong> shoreline sits around −430&nbsp;m — the lowest dry land on Earth —
+              and paragliders fly the Judean Desert escarpment beside it, spending whole
+              descents with the GPS reading negative. Death Valley's Badwater Basin (−86&nbsp;m)
+              borders storied US hang-gliding country, the Salton Sea basin in California
+              (about −70&nbsp;m) has soaring around its edges, and Australia's own
+              below-sea-level point, <strong class="text-foreground">Kati Thanda–Lake
+              Eyre</strong> (about −15&nbsp;m), means an outback cross-country can
+              legitimately log a negative altitude.
+            </p>
+            <p>
+              This is why GlideComp never treats an altitude as wrong just because of its
+              value. A fix is only repaired when the physics says it cannot be real — the
+              barometer disagrees, or the climb rate is beyond any glider.
+            </p>
+          </div>
+        </aside>
       </section>
 
       {/* Two channels */}
@@ -146,6 +185,27 @@ import BackLink from "../../components/BackLink.astro";
             triggers this rule, because every individual step is gentle.
           </p>
         </div>
+      </section>
+
+      {/* Real examples */}
+      <section id="examples" class="mb-14">
+        <h2 class="text-2xl font-bold mb-4">Real Examples</h2>
+        <div class="space-y-4 text-sm leading-relaxed mb-6">
+          <p class="text-muted-foreground">
+            These figures are drawn from genuine competition tracklogs in GlideComp's test
+            archive — segments where the cleaning pass found something to repair. The green
+            shaded band marks the repaired fixes; everywhere else the cleaned line sits
+            exactly on the raw GPS line.
+          </p>
+          <p class="text-muted-foreground">
+            One honest detail they also illustrate: tracklogs re-exported by scoring servers
+            often have the barometric channel stripped — it reads 0 for the whole flight, as
+            here — so on these files the cross-check cannot run and the vertical-speed rule
+            does the work. Tracks uploaded straight from an instrument carry both channels
+            and get the stronger barometer cross-check.
+          </p>
+        </div>
+        <DataCleaningCharts />
       </section>
 
       {/* What changes */}
