@@ -234,8 +234,98 @@ describe('gaggle.departure_winrate', () => {
     expect(metric.explanation).toBe(
       'When a pilot leaves a gaggle that keeps flying, did leaving pay off? We compare the ' +
         "leaver's arrival at the next turnpoint against the median arrival of the pilots who " +
-        'stayed. Win rate > 50% means their departures beat the gaggle.',
+        'stayed. Win rate > 50% means their departures beat the gaggle. Only pilots still in ' +
+        'the gaggle after the split who reached that turnpoint after it count as stayers.',
     );
+  });
+
+  // --- Comparator validity (exit-turnpoint / out-and-return regressions) ---
+  //
+  // These inject a hand-built episode timeline so snapshot membership is
+  // exact; the real detector is exercised by the geometric fixtures above.
+
+  /** Replace the detected gaggles with one episode over the given timeline. */
+  function injectEpisode(
+    field: FieldContext,
+    timeline: { t: number; members: number[] }[],
+  ): void {
+    field.gaggles = {
+      params: field.gaggles.params,
+      episodes: [
+        {
+          id: 1,
+          tStart: timeline[0].t,
+          tEnd: timeline[timeline.length - 1].t,
+          members: [...new Set(timeline.flatMap((s) => s.members))].sort((a, b) => a - b),
+          timeline,
+          peakSize: Math.max(...timeline.map((s) => s.members.length)),
+        },
+      ],
+    };
+  }
+
+  const plainPilot = (
+    name: string,
+    offset: number,
+    reachSeconds: number,
+  ) => ({
+    name,
+    fixes: straightFixes(0, 900, 8_000 + offset, 1500, 8, -0.3),
+    turnpointResult: {
+      sssReaching: reachingAt(1, 0),
+      sequence: [reachingAt(1, 0), reachingAt(2, reachSeconds)],
+    },
+  });
+
+  it('ignores "stayers" who reached the turnpoint before the split (out-and-return)', () => {
+    // s1 and s2 tagged the leaver's next turnpoint BEFORE the departure —
+    // returning pilots sharing a thermal with outbound ones. Their times are
+    // decided by course position, not by the departure, so they must not be
+    // comparators; s3 alone is below MIN_COMPARATORS, so no departure counts.
+    const field = makeTestField([
+      plainPilot('leaver', 0, 800),
+      plainPilot('s1', 30, 50),
+      plainPilot('s2', 60, 60),
+      plainPilot('s3', 90, 1000),
+    ]);
+    injectEpisode(field, [
+      { t: 0, members: [0, 1, 2, 3] },
+      { t: 60, members: [0, 1, 2, 3] },
+      { t: 120, members: [0, 1, 2, 3] },
+      { t: 180, members: [1, 2, 3] },
+      { t: 240, members: [1, 2, 3] },
+      { t: 300, members: [1, 2, 3] },
+      { t: 360, members: [1, 2, 3] },
+    ]);
+    const report = evaluateField(field, GAGGLE_METRICS);
+    expect(valueFor(report, 'gaggle.departure_winrate', 'leaver.igc').value).toBeNull();
+  });
+
+  it('does not count a same-split co-leaver as a stayer', () => {
+    // Pilots 0 and 1 leave in the same split. The co-leaver's (fast) arrival
+    // must not enter the stayers' median: with it the median is 1025 and the
+    // leaver's 1040 reads as a loss; the true stayers' median is 1050 and
+    // the departure is a win.
+    const field = makeTestField([
+      plainPilot('leaver', 0, 1040),
+      plainPilot('co', 30, 900),
+      plainPilot('s2', 60, 1000),
+      plainPilot('s3', 90, 1050),
+      plainPilot('s4', 120, 1100),
+    ]);
+    injectEpisode(field, [
+      { t: 0, members: [0, 1, 2, 3, 4] },
+      { t: 60, members: [0, 1, 2, 3, 4] },
+      { t: 120, members: [0, 1, 2, 3, 4] },
+      { t: 180, members: [2, 3, 4] },
+      { t: 240, members: [2, 3, 4] },
+      { t: 300, members: [2, 3, 4] },
+      { t: 360, members: [2, 3, 4] },
+    ]);
+    const report = evaluateField(field, GAGGLE_METRICS);
+    const leaver = valueFor(report, 'gaggle.departure_winrate', 'leaver.igc');
+    expect(leaver.value).toBe(100);
+    expect(leaver.note).toBe('1W–0L (1 departure)');
   });
 });
 

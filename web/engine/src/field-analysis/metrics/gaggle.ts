@@ -157,11 +157,13 @@ const departureWinrate: MetricComputer = {
   unit: 'pct',
   family: 'gaggle',
   direction: 'neutral',
-  // Verbatim per the plan — this metric must be self-explanatory.
+  // First two sentences verbatim per the plan — this metric must be
+  // self-explanatory; the third states who counts as a stayer.
   explanation:
     'When a pilot leaves a gaggle that keeps flying, did leaving pay off? We compare the ' +
     "leaver's arrival at the next turnpoint against the median arrival of the pilots who " +
-    'stayed. Win rate > 50% means their departures beat the gaggle.',
+    'stayed. Win rate > 50% means their departures beat the gaggle. Only pilots still in the ' +
+    'gaggle after the split who reached that turnpoint after it count as stayers.',
   compute(field: FieldContext): MetricOutput {
     const { grid } = field;
     const wins = field.pilots.map(() => 0);
@@ -203,16 +205,25 @@ const departureWinrate: MetricComputer = {
         );
         if (!next) continue;
 
-        // Comparators: pilots in the departure snapshot (minus the leaver)
-        // who also reached that same turnpoint.
+        // Comparators — "the pilots who stayed" — must genuinely have
+        // stayed AND still have been racing to that turnpoint:
+        //  · in the gaggle both at the departure snapshot and the next one
+        //    (a pilot who left in the same split is a co-leaver, not a
+        //    stayer), and
+        //  · reached the leaver's next turnpoint AFTER the departure. On an
+        //    out-and-return task, outbound and returning pilots share
+        //    thermals while on different legs; a returner who tagged that
+        //    turnpoint before the split would decide the "race" on course
+        //    position, telling us nothing about the departure.
+        const stillThere = new Set(timeline[k + 1].members);
         const comparatorTimes: number[] = [];
         for (const m of timeline[k].members) {
-          if (m === pilotIndex) continue;
+          if (m === pilotIndex || !stillThere.has(m)) continue;
           const stayer = field.pilots[m];
           const r = stayer?.score.turnpointResult.sequence.find(
             (s) => s.taskIndex === next.taskIndex,
           );
-          if (r) comparatorTimes.push(r.time.getTime());
+          if (r && r.time.getTime() > tAbsMs) comparatorTimes.push(r.time.getTime());
         }
         if (comparatorTimes.length < MIN_COMPARATORS) continue;
 

@@ -70,4 +70,13 @@
 //     but does not determine), and its old 'higher' prior flipped sign on
 //     ~half of real tasks. The bump rolls stored reports onto the new
 //     values/id on their next lazy revalidation.
-export const FIELD_ANALYSIS_VERSION = 9;
+// v10: gaggle.departure_winrate comparator validity. Stayers must (a) still
+//     be in the gaggle at the snapshot after the split — a same-split
+//     co-leaver is not a stayer — and (b) have reached the leaver's next
+//     turnpoint AFTER the departure: on out-and-return tasks, outbound and
+//     returning pilots share thermals while on different legs, and a
+//     returner who tagged that turnpoint before the split decided the
+//     "race" on course position, not on the departure. With typical 1–3
+//     departures per pilot, one mislabelled outcome flipped a pilot between
+//     0% and 100%. The bump rolls stored reports on lazy revalidation.
+export const FIELD_ANALYSIS_VERSION = 10;
