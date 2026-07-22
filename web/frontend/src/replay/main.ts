@@ -696,6 +696,7 @@ async function main(): Promise<void> {
   const leaderDot = $('leaderDot');
   const coAlt = $('coAlt');
   const coAgl = $('coAgl');
+  const coAglVal = $('coAglVal');
   const coClimb = $('coClimb');
   const coSpeed = $('coSpeed');
   const coGlide = $('coGlide');
@@ -1013,7 +1014,7 @@ async function main(): Promise<void> {
       ? viewer.groundElevationAt(latOfZ(s.worldZ), lonOfX(s.worldX))
       : null;
     if (ground != null) {
-      coAgl.textContent = `${formatAltitude(Math.max(0, s.altMsl - ground)).withUnit} AGL`;
+      coAglVal.textContent = formatAltitude(Math.max(0, s.altMsl - ground)).withUnit;
       coAgl.classList.remove('hidden');
     } else {
       coAgl.classList.add('hidden');
