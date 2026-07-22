@@ -7,7 +7,7 @@
  */
 
 import type { XCTask } from './xctsk-parser';
-import type { IGCFix } from './igc-parser';
+import { fixAltitude, type IGCFix } from './igc-parser';
 import { andoyerDistance } from './geo';
 import { computeTurnpointDirections, type TurnpointDirection } from './task-optimizer';
 import { distanceToGoalLine } from './goal-line';
@@ -292,7 +292,7 @@ export function computeBestProgress(params: BestProgressParams): BestProgress | 
       ? Math.min(
           geometricDist,
           altitudeBonus.glideRatio *
-            Math.max(0, fix.gnssAltitude - altitudeBonus.goalAltitude),
+            Math.max(0, fixAltitude(fix) - altitudeBonus.goalAltitude),
         )
       : 0;
     const distToGoal = geometricDist - bonus;
@@ -312,7 +312,7 @@ export function computeBestProgress(params: BestProgressParams): BestProgress | 
     longitude: fix.longitude,
     distanceToGoal: bestFix.distToGoal,
     ...(altitudeBonus
-      ? { altitudeBonus: bestFix.bonus, altitude: fix.gnssAltitude }
+      ? { altitudeBonus: bestFix.bonus, altitude: fixAltitude(fix) }
       : {}),
   };
 }

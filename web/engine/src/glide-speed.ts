@@ -4,7 +4,7 @@
  * Calculates speed labels and chevron positions for glide segment visualization.
  */
 
-import type { IGCFix } from './igc-parser';
+import { fixAltitude, type IGCFix } from './igc-parser';
 import { andoyerDistance, calculateBearing, calculateTrackDistance } from './geo';
 
 
@@ -83,7 +83,7 @@ export function calculateGlidePositions(
       const posLat = prevFix.latitude + t * (currFix.latitude - prevFix.latitude);
       const posLon = prevFix.longitude + t * (currFix.longitude - prevFix.longitude);
       const posTime = prevTime + t * (currTime - prevTime);
-      const posAltitude = prevFix.gnssAltitude + t * (currFix.gnssAltitude - prevFix.gnssAltitude);
+      const posAltitude = fixAltitude(prevFix) + t * (fixAltitude(currFix) - fixAltitude(prevFix));
 
       // Calculate local bearing at this point
       const bearing = calculateBearing(
@@ -148,7 +148,7 @@ export function calculateGlideMarkers(fixes: IGCFix[], contextResolver?: GlideCo
 
   const markers: GlideMarker[] = [];
   const startTime = fixes[0].time.getTime();
-  const startAltitude = fixes[0].gnssAltitude;
+  const startAltitude = fixAltitude(fixes[0]);
 
   for (let i = 0; i < positions.length; i++) {
     const pos = positions[i];
@@ -276,7 +276,7 @@ export function calculatePointMetrics(
   const speedMps = totalDistance / timeDiffSeconds;
 
   const altitudeDiff =
-    fixes[endIndex].gnssAltitude - fixes[startIndex].gnssAltitude;
+    fixAltitude(fixes[endIndex]) - fixAltitude(fixes[startIndex]);
   const altitudeLost = -altitudeDiff;
 
   let glideRatio: number | undefined;
@@ -289,12 +289,12 @@ export function calculatePointMetrics(
   let targetName: string | undefined;
   const centerFix = fixes[centerIndex];
   const nextTP = context?.nextTurnpoint;
-  if (nextTP && centerFix.gnssAltitude > nextTP.altitude) {
+  if (nextTP && fixAltitude(centerFix) > nextTP.altitude) {
     const distToTP = andoyerDistance(
       centerFix.latitude, centerFix.longitude,
       nextTP.lat, nextTP.lon,
     );
-    const altDiffToTP = centerFix.gnssAltitude - nextTP.altitude;
+    const altDiffToTP = fixAltitude(centerFix) - nextTP.altitude;
     requiredGlideRatio = distToTP / altDiffToTP;
     targetName = nextTP.name;
   }

@@ -20,7 +20,7 @@
  */
 
 import type { XCTask } from './xctsk-parser';
-import type { IGCFix } from './igc-parser';
+import { fixAltitude, type IGCFix } from './igc-parser';
 import { andoyerDistance, isInsideCylinder } from './geo';
 import { getSSSIndex, getEffectiveSSSIndex, getESSIndex, getEffectiveESSIndex, getGoalIndex } from './xctsk-parser';
 import { calculateOptimizedTaskLine, computeTurnpointDirections } from './task-optimizer';
@@ -421,7 +421,7 @@ function resolveSequenceOnce(
         time: first.time,
         latitude: first.latitude,
         longitude: first.longitude,
-        altitude: first.gnssAltitude,
+        altitude: fixAltitude(first),
         direction: 'exit',
         distanceToCenter: andoyerDistance(
           first.latitude, first.longitude,

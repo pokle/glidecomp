@@ -43,6 +43,7 @@ import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { underTask } from "../lib/crumbs";
 import { Timestamp } from "../components/Timestamp";
 import type {
+  AltitudeCleaningData,
   ClassScore,
   CompDetailData,
   PilotAnalysisData,
@@ -78,6 +79,9 @@ interface DetailData {
   scoreComputedAt: string;
   /** True when a re-score is in flight — the narrative may soon change. */
   scoreStale: boolean;
+  /** What the engine's altitude plausibility pass repaired in this track
+   * (null: manual flight, or a payload cached before the field existed). */
+  altitudeCleaning: AltitudeCleaningData | null;
 }
 
 /**
@@ -277,6 +281,7 @@ function buildDetailData(
         : null,
       scoreComputedAt: score.computed_at,
       scoreStale: score.stale,
+      altitudeCleaning: analysis.altitude_cleaning ?? null,
     };
   }
 
@@ -342,6 +347,7 @@ function buildDetailData(
       openDistanceLine: null,
       scoreComputedAt: score.computed_at,
       scoreStale: score.stale,
+      altitudeCleaning: analysis.altitude_cleaning ?? null,
     };
   }
 
@@ -385,6 +391,7 @@ function buildDetailData(
     openDistanceLine: null,
     scoreComputedAt: score.computed_at,
     scoreStale: score.stale,
+    altitudeCleaning: analysis.altitude_cleaning ?? null,
   };
 }
 
@@ -656,6 +663,10 @@ export function PilotScoreDetail() {
               onItemClick={onItemClick}
             />
           ))}
+          <TrackDataCleaningNote
+            cleaning={data.altitudeCleaning}
+            timezone={data.comp.timezone}
+          />
         </div>
       </div>
     </div>
@@ -737,6 +748,54 @@ function TrackScrubber({
 // ---------------------------------------------------------------------------
 // Explanation rendering
 // ---------------------------------------------------------------------------
+
+/**
+ * Transparency note: what the engine's altitude plausibility pass repaired
+ * in this track before analysis (GPS glitches cross-checked against the
+ * barometric channel, or caught by vertical-speed limits). Rendered only
+ * when something was actually repaired — a clean track needs no disclaimer.
+ * Times are formatted in the comp's zone (SSR-deterministic).
+ */
+function TrackDataCleaningNote({
+  cleaning,
+  timezone,
+}: {
+  cleaning: AltitudeCleaningData | null;
+  timezone: string | null;
+}) {
+  if (!cleaning || cleaning.repairedFixCount === 0) return null;
+  const time = (ms: number) => formatTimeInZone(new Date(ms), timezone ?? undefined);
+  const pct = (100 * cleaning.repairedFixCount) / cleaning.totalFixCount;
+  return (
+    <section className="rounded-lg border p-4">
+      <h2 className="font-semibold">Track data cleaning</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {cleaning.repairedFixCount} of {cleaning.totalFixCount} GPS fixes (
+        {pct < 0.1 ? "<0.1" : pct.toFixed(1)}%) carried an implausible altitude
+        and were repaired before analysis —{" "}
+        {cleaning.crossChecked
+          ? "flagged by cross-checking GPS altitude against the barometric channel"
+          : "flagged by vertical-speed limits (no barometric channel to cross-check)"}
+        . Positions and times are never altered.{" "}
+        <a href="/scoring/data-cleaning" className="underline underline-offset-2">
+          How data cleaning works
+        </a>
+      </p>
+      <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+        {cleaning.ranges.map((r) => (
+          <li key={r.startIndex} className="tabular-nums">
+            {r.startTimeMs === r.endTimeMs
+              ? time(r.startTimeMs)
+              : `${time(r.startTimeMs)}–${time(r.endTimeMs)}`}
+            {" · "}
+            {r.fixCount} fix{r.fixCount === 1 ? "" : "es"}
+            {" · "}up to {Math.round(r.maxCorrectionMeters)} m off
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 function ExplanationSection({
   section,

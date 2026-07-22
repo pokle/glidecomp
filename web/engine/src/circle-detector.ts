@@ -15,7 +15,7 @@
  * Based on research in docs/event-detection/circling-flight-and-thermal-analysis-research.md
  */
 
-import { IGCFix } from './igc-parser';
+import { IGCFix, fixAltitude } from './igc-parser';
 import { calculateBearing, andoyerDistance } from './geo';
 import { TrackSegment } from './event-types';
 
@@ -465,7 +465,7 @@ function buildCircle(params: BuildCircleParams): CircleSegment | null {
   const turnDirection: TurnDirection = cumulativeBearing > 0 ? 'right' : 'left';
 
   // Climb rate
-  const climbRate = (fixes[endIndex].gnssAltitude - fixes[startIndex].gnssAltitude) / duration;
+  const climbRate = (fixAltitude(fixes[endIndex]) - fixAltitude(fixes[startIndex])) / duration;
 
   // Circle fit
   const fittedCircle = fitCircleLeastSquares(fixes, startIndex, endIndex);
@@ -480,7 +480,7 @@ function buildCircle(params: BuildCircleParams): CircleSegment | null {
   for (let i = startIndex; i < endIndex; i++) {
     const dt = (fixes[i + 1].time.getTime() - fixes[i].time.getTime()) / 1000;
     if (dt <= 0) continue;
-    const vario = (fixes[i + 1].gnssAltitude - fixes[i].gnssAltitude) / dt;
+    const vario = (fixAltitude(fixes[i + 1]) - fixAltitude(fixes[i])) / dt;
     totalIntervals++;
     if (vario > 0) liftingCount++;
     if (vario > maxClimb) {

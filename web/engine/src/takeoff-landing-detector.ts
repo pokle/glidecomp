@@ -7,7 +7,7 @@
  * before the pilot leaves the ground — so this runs first.
  */
 
-import { IGCFix } from './igc-parser';
+import { IGCFix, fixAltitude } from './igc-parser';
 import { andoyerDistance } from './geo';
 import type { DetectionThresholds } from './thresholds';
 import type { FlightEvent } from './event-types';
@@ -80,7 +80,7 @@ function evaluateTakeoffCriteria(
   }
 
   // Criteria 2: Current altitude gain above start
-  if (fixes[index].gnssAltitude - startAltitude > config.minAltitudeGain) {
+  if (fixAltitude(fixes[index]) - startAltitude > config.minAltitudeGain) {
     criteriaMetCount++;
   }
 
@@ -89,7 +89,7 @@ function evaluateTakeoffCriteria(
   if (climbWindowSize > 0) {
     const climbStartIdx = index - climbWindowSize;
     const climbDuration = (fixes[index].time.getTime() - fixes[climbStartIdx].time.getTime()) / 1000;
-    const altitudeChange = fixes[index].gnssAltitude - fixes[climbStartIdx].gnssAltitude;
+    const altitudeChange = fixAltitude(fixes[index]) - fixAltitude(fixes[climbStartIdx]);
     if (climbDuration > 0 && altitudeChange / climbDuration > config.minClimbRate) {
       criteriaMetCount++;
     }
@@ -110,12 +110,12 @@ function verifyFlightSustained(
   startAltitude: number,
   config: TakeoffLandingConfig
 ): boolean {
-  if (fixes[endIdx].gnssAltitude - startAltitude > config.minAltitudeGain) {
+  if (fixAltitude(fixes[endIdx]) - startAltitude > config.minAltitudeGain) {
     return true;
   }
 
   const windowDuration = (fixes[endIdx].time.getTime() - fixes[startIdx].time.getTime()) / 1000;
-  const windowAltChange = fixes[endIdx].gnssAltitude - fixes[startIdx].gnssAltitude;
+  const windowAltChange = fixAltitude(fixes[endIdx]) - fixAltitude(fixes[startIdx]);
   if (windowDuration > 0 && windowAltChange / windowDuration > config.minClimbRate) {
     return true;
   }
@@ -146,7 +146,7 @@ function detectTakeoff(fixes: IGCFix[], config: TakeoffLandingConfig): { index: 
   let startAltitude = 0;
   const startSampleSize = Math.min(10, fixes.length);
   for (let i = 0; i < startSampleSize; i++) {
-    startAltitude += fixes[i].gnssAltitude;
+    startAltitude += fixAltitude(fixes[i]);
   }
   startAltitude /= startSampleSize;
 
@@ -192,7 +192,7 @@ function detectLanding(fixes: IGCFix[], config: TakeoffLandingConfig): { index: 
 
     // Check 2: Still descending? (indicates approach, not landed)
     if (!stillFlying) {
-      const altChange = fixes[i].gnssAltitude - fixes[windowStartIndex].gnssAltitude;
+      const altChange = fixAltitude(fixes[i]) - fixAltitude(fixes[windowStartIndex]);
       const timeDiff = (fixes[i].time.getTime() - fixes[windowStartIndex].time.getTime()) / 1000;
       if (timeDiff > 0 && altChange / timeDiff < config.landingDescentThreshold) {
         stillFlying = true;
@@ -227,12 +227,12 @@ export function detectTakeoffLanding(fixes: IGCFix[], thresholds: DetectionThres
       time: fix.time,
       latitude: fix.latitude,
       longitude: fix.longitude,
-      altitude: fix.gnssAltitude,
+      altitude: fixAltitude(fix),
       description: 'Takeoff',
       details: {
         fixIndex: takeoff.index,
         startAltitude: takeoff.startAltitude,
-        altitudeGain: fix.gnssAltitude - takeoff.startAltitude,
+        altitudeGain: fixAltitude(fix) - takeoff.startAltitude,
       },
     });
   }
@@ -246,7 +246,7 @@ export function detectTakeoffLanding(fixes: IGCFix[], thresholds: DetectionThres
       time: fix.time,
       latitude: fix.latitude,
       longitude: fix.longitude,
-      altitude: fix.gnssAltitude,
+      altitude: fixAltitude(fix),
       description: 'Landing',
       details: { fixIndex: landing.index },
     });

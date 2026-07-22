@@ -226,7 +226,14 @@
 //     zero sentinel). Scoring behaviour itself is unchanged — the helper is
 //     consumed by the flight-phase detectors and field analysis, not the
 //     scorers — so this bump is the guard's "harmless extra cache roll".
-export const SCORING_ENGINE_VERSION = 25;
+// 26: altitude cleaning — parseIGC now runs a plausibility pass (GNSS-vs-
+//     baro rolling-residual cross-check, vertical-rate excursion rule for
+//     single-channel tracks) that repairs glitch fixes into
+//     IGCFix.cleanedAltitude, and every altitude consumer (detectors,
+//     turnpoint crossings/altitude bonus, takeoff/landing, glide speed)
+//     reads through fixAltitude(). Scores only move where a track carried a
+//     GPS altitude glitch on a fix that mattered.
+export const SCORING_ENGINE_VERSION = 26;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -234,4 +241,4 @@ export const SCORING_ENGINE_VERSION = 25;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "3b8cd32d9af80a9e1fc4442f9bcd1423e6142123de06582a180f917a4938722d";
+  "08b4435a9098fd65511e4ff5ca1f0f1ff154757cf0827854a008b8192dca59ce";

@@ -19,6 +19,8 @@ import {
   stoppedGlideRatio,
   resolveGoalAltitude,
   SCORING_ENGINE_VERSION,
+  cleanAltitudes,
+  fixAltitude,
   scoreTask,
   buildFieldContext,
   evaluateField,
@@ -34,6 +36,7 @@ import {
   type StoppedTaskScore,
   type StopResolutionOptions,
   type TurnpointSequenceResultJSON,
+  type AltitudeCleaningReport,
 } from "@glidecomp/engine";
 import { encodeId } from "./sqids";
 import { manualFlightToScoringData, manualFlightKey } from "./manual-flight-store";
@@ -1463,6 +1466,13 @@ export interface PilotAnalysisResponse {
     made_goal: boolean;
     route_to_goal: Array<{ lat: number; lon: number }>;
   } | null;
+  /**
+   * What the engine's altitude plausibility pass repaired in this pilot's
+   * track (GPS glitches cross-checked against the barometric channel) —
+   * surfaced on the score-details page so a cleaned track is never silently
+   * different from its raw file. Null for track-less (manual) pilots.
+   */
+  altitude_cleaning: AltitudeCleaningReport | null;
 }
 
 export interface OpenDistanceAnchorPoint {
@@ -1476,7 +1486,7 @@ export interface OpenDistanceAnchorPoint {
 /** The cacheable (comp-pilot-independent) part of {@link PilotAnalysisResponse}. */
 type PilotAnalysisPayload = Pick<
   PilotAnalysisResponse,
-  "turnpoint_result" | "open_distance"
+  "turnpoint_result" | "open_distance" | "altitude_cleaning"
 >;
 
 /**
@@ -1607,6 +1617,7 @@ export async function computePilotAnalysis(
           origin: { latitude: od.origin.lat, longitude: od.origin.lon, time_ms: null, altitude: null },
           furthest: { latitude: od.landing.lat, longitude: od.landing.lon, time_ms: null, altitude: null },
         },
+        altitude_cleaning: null,
       };
     }
 
@@ -1635,6 +1646,7 @@ export async function computePilotAnalysis(
         made_goal: geom.madeGoal,
         route_to_goal: geom.routeToGoal,
       },
+      altitude_cleaning: null,
     };
   }
 
@@ -1715,6 +1727,9 @@ export async function computePilotAnalysis(
   if (!payload) {
     const fixes = await fetchIgcFixes(r2, track.igc_filename);
     if (!fixes) return null;
+    // Idempotent second pass (parseIGC already annotated the fixes): rebuilds
+    // the same repair report so it can ride in the cached payload.
+    const altitudeCleaning = cleanAltitudes(fixes);
 
     const xcTask = parseXCTask(taskRow.xctsk);
     if (scoringFormat === "open_distance") {
@@ -1741,10 +1756,11 @@ export async function computePilotAnalysis(
                 latitude: geometry.furthest.latitude,
                 longitude: geometry.furthest.longitude,
                 time_ms: furthestFix!.time.getTime(),
-                altitude: furthestFix!.gnssAltitude,
+                altitude: fixAltitude(furthestFix!),
               },
             }
           : { distance: 0, origin: null, furthest: null },
+        altitude_cleaning: altitudeCleaning,
       };
     } else {
       const scoringTask = taskForDistanceOrigin(xcTask, distanceOrigin);
@@ -1757,6 +1773,7 @@ export async function computePilotAnalysis(
       payload = {
         turnpoint_result: JSON.parse(JSON.stringify(result)) as TurnpointSequenceResultJSON,
         open_distance: null,
+        altitude_cleaning: altitudeCleaning,
       };
     }
 

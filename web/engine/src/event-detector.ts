@@ -9,7 +9,7 @@
  * - Max altitude, max climb rate, etc.
  */
 
-import { IGCFix } from './igc-parser';
+import { IGCFix, fixAltitude } from './igc-parser';
 import { XCTask, getEffectiveSSSIndex, getEffectiveESSIndex, getGoalIndex } from './xctsk-parser';
 import { resolveTurnpointSequence } from './turnpoint-sequence';
 import { detectCircles, type CircleSegment } from './circle-detector';
@@ -44,7 +44,7 @@ function calculateVario(fix1: IGCFix, fix2: IGCFix): number {
   const timeDiff = (fix2.time.getTime() - fix1.time.getTime()) / 1000;
   if (timeDiff <= 0) return 0;
 
-  const altDiff = fix2.gnssAltitude - fix1.gnssAltitude;
+  const altDiff = fixAltitude(fix2) - fixAltitude(fix1);
   return altDiff / timeDiff;
 }
 
@@ -168,18 +168,18 @@ function detectAltitudeExtremes(fixes: IGCFix[]): FlightEvent[] {
 
   if (fixes.length === 0) return events;
 
-  let maxAlt = fixes[0].gnssAltitude;
-  let minAlt = fixes[0].gnssAltitude;
+  let maxAlt = fixAltitude(fixes[0]);
+  let minAlt = fixAltitude(fixes[0]);
   let maxAltIdx = 0;
   let minAltIdx = 0;
 
   for (let i = 1; i < fixes.length; i++) {
-    if (fixes[i].gnssAltitude > maxAlt) {
-      maxAlt = fixes[i].gnssAltitude;
+    if (fixAltitude(fixes[i]) > maxAlt) {
+      maxAlt = fixAltitude(fixes[i]);
       maxAltIdx = i;
     }
-    if (fixes[i].gnssAltitude < minAlt) {
-      minAlt = fixes[i].gnssAltitude;
+    if (fixAltitude(fixes[i]) < minAlt) {
+      minAlt = fixAltitude(fixes[i]);
       minAltIdx = i;
     }
   }
@@ -243,7 +243,7 @@ function detectVarioExtremes(fixes: IGCFix[], thresholds: DetectionThresholds): 
       time: fixes[maxClimbIdx].time,
       latitude: fixes[maxClimbIdx].latitude,
       longitude: fixes[maxClimbIdx].longitude,
-      altitude: fixes[maxClimbIdx].gnssAltitude,
+      altitude: fixAltitude(fixes[maxClimbIdx]),
       description: `Max climb: +${maxClimb.toFixed(1)}m/s`,
       details: { fixIndex: maxClimbIdx, climbRate: maxClimb },
     });
@@ -256,7 +256,7 @@ function detectVarioExtremes(fixes: IGCFix[], thresholds: DetectionThresholds): 
       time: fixes[maxSinkIdx].time,
       latitude: fixes[maxSinkIdx].latitude,
       longitude: fixes[maxSinkIdx].longitude,
-      altitude: fixes[maxSinkIdx].gnssAltitude,
+      altitude: fixAltitude(fixes[maxSinkIdx]),
       description: `Max sink: ${maxSink.toFixed(1)}m/s`,
       details: { fixIndex: maxSinkIdx, sinkRate: maxSink },
     });
@@ -292,7 +292,7 @@ function circleToEvent(
     time: fixes[startIndex].time,
     latitude: circle.fittedCircle.centerLat,
     longitude: circle.fittedCircle.centerLon,
-    altitude: fixes[startIndex].gnssAltitude,
+    altitude: fixAltitude(fixes[startIndex]),
     description: `Circle #${circle.circleNumber} (${dir}, ${climbStr}m/s, r=${Math.round(circle.fittedCircle.radiusMeters)}m)`,
     details: {
       turnDirection: circle.turnDirection,
