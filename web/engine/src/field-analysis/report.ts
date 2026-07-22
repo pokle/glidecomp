@@ -212,7 +212,11 @@ function renderCorrelationTable(report: FieldAnalysisReport): string[] {
         rows: behavioural,
         footnotes: [
           'Rank 1 is best, so a well-behaved "higher" metric shows NEGATIVE ρ and a "lower" metric positive ρ.',
-          `For "neutral" metrics the sign itself is the finding. Verdicts need n ≥ ${MIN_CORRELATION_N}.`,
+          'For "neutral" metrics the sign itself is the finding.',
+          'Verdicts: strong |ρ| ≥ 0.5, moderate ≥ 0.3, weak below — only after clearing the α = 0.05',
+          `noise floor for that n ("within noise" otherwise); verdicts need n ≥ ${MIN_CORRELATION_N}.`,
+          'With this many metrics ranked on one task, the top rows are partly luck — trust the',
+          'metrics that repeat across tasks (whole-comp report).',
         ],
       }),
     );
@@ -266,6 +270,8 @@ export function renderCompReport(report: CompAggregateReport): string {
     footnotes: [
       'comp ρ correlates each pilot\'s cross-task metric mean against their comp rank (total score).',
       'Read the per-task columns to see which strategies mattered on which day.',
+      'Verdicts: strong |ρ| ≥ 0.5, moderate ≥ 0.3, weak below — only after clearing the α = 0.05',
+      'noise floor for that n ("within noise" otherwise).',
     ],
   };
   lines.push('', ...renderTable(separation));

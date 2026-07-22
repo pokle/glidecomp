@@ -40,3 +40,5 @@ export { renderFieldReport, renderCompReport, formatMetricValue } from './report
 export { aggregateComp } from './aggregate';
 export { ALL_METRICS, FAMILY_ORDER, FAMILY_LABELS } from './registry';
 export { FIELD_ANALYSIS_VERSION } from './version';
+export { spearmanNoiseFloor } from './stats';
+export { correlationVerdict } from './evaluate';

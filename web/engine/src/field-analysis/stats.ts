@@ -79,6 +79,35 @@ export function spearman(a: number[], b: number[]): number {
   return cov / Math.sqrt(va * vb);
 }
 
+/**
+ * Approximate two-tailed α = 0.05 critical |ρ| for a Spearman correlation of
+ * n pairs — the "noise floor": shuffled ranks produce |ρ| this large 5% of
+ * the time, so an observed |ρ| below it is indistinguishable from luck.
+ *
+ * Uses the t-approximation t = ρ·√((n−2)/(1−ρ²)) inverted at t₀.₉₇₅,ₙ₋₂
+ * (Cornish–Fisher expansion for the t quantile; exact small-df values where
+ * the expansion is poor). Within a few percent of exact permutation tables —
+ * fine for a verdict gate, documented as approximate.
+ * NaN for n < 3 (no correlation is computed there at all).
+ */
+export function spearmanNoiseFloor(n: number): number {
+  if (n < 3) return NaN;
+  const df = n - 2;
+  // t quantile at 0.975 for df degrees of freedom.
+  let t: number;
+  if (df === 1) t = 12.706;
+  else if (df === 2) t = 4.303;
+  else {
+    const z = 1.959964; // Φ⁻¹(0.975)
+    t =
+      z +
+      (z ** 3 + z) / (4 * df) +
+      (5 * z ** 5 + 16 * z ** 3 + 3 * z) / (96 * df * df) +
+      (3 * z ** 7 + 19 * z ** 5 + 17 * z ** 3 - 15 * z) / (384 * df ** 3);
+  }
+  return Math.min(1, t / Math.sqrt(df + t * t));
+}
+
 /** A wind sample for {@link circularMeanWind}: speed m/s, direction ° FROM. */
 export interface WindSample {
   speed: number;

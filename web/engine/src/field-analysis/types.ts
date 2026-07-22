@@ -280,7 +280,14 @@ export interface MetricComputer {
 // Evaluation & report model
 // ---------------------------------------------------------------------------
 
-export type CorrelationVerdict = 'strong' | 'moderate' | 'weak' | 'n too small';
+/**
+ * How to read a correlation. 'strong'/'moderate'/'weak' are the |ρ| ≥ 0.5 /
+ * ≥ 0.3 / below conventions — but only AFTER clearing the n-dependent noise
+ * floor: 'within noise' means |ρ| is under what shuffled ranks produce 5% of
+ * the time at this n, whatever its magnitude, and 'n too small' means fewer
+ * than MIN_CORRELATION_N pilots entered at all.
+ */
+export type CorrelationVerdict = 'strong' | 'moderate' | 'weak' | 'within noise' | 'n too small';
 
 /** Spearman correlation of a metric's values against GAP rank (rank 1 = best). */
 export interface MetricCorrelation {
@@ -293,6 +300,12 @@ export interface MetricCorrelation {
   absRho: number;
   /** Pilots with a non-null value that entered the correlation. */
   n: number;
+  /**
+   * The α = 0.05 two-tailed critical |ρ| for this n ({@link
+   * spearmanNoiseFloor}): below it, shuffled ranks do this well 5% of the
+   * time. Optional so reports stored before the field existed still parse.
+   */
+  noiseFloor?: number;
   verdict: CorrelationVerdict;
 }
 

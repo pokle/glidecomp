@@ -9,13 +9,12 @@
  * Classes are never mixed — the caller aggregates one class at a time.
  */
 
-import { mean, spearman } from './stats';
-import { MIN_CORRELATION_N } from './evaluate';
+import { mean, spearman, spearmanNoiseFloor } from './stats';
+import { correlationVerdict } from './evaluate';
 import type {
   CompAggregateReport,
   CompMetricAggregate,
   CompTaskResult,
-  CorrelationVerdict,
   MetricCorrelation,
   MetricReport,
 } from './types';
@@ -97,15 +96,14 @@ export function aggregateComp(tasks: CompTaskResult[]): CompAggregateReport {
     let compRho: MetricCorrelation | null = null;
     if (isFinite(rho)) {
       const absRho = Math.abs(rho);
-      const verdict: CorrelationVerdict =
-        means.length < MIN_CORRELATION_N
-          ? 'n too small'
-          : absRho >= 0.5
-            ? 'strong'
-            : absRho >= 0.3
-              ? 'moderate'
-              : 'weak';
-      compRho = { metricId: id, rho, absRho, n: means.length, verdict };
+      compRho = {
+        metricId: id,
+        rho,
+        absRho,
+        n: means.length,
+        noiseFloor: spearmanNoiseFloor(means.length),
+        verdict: correlationVerdict(absRho, means.length),
+      };
     }
 
     return {
