@@ -39,7 +39,7 @@ interface Rendered {
 interface HeadTags {
   title: string;
   description: string;
-  /** Extra raw tags (canonical, JSON-LD) already HTML-serialized. */
+  /** Extra raw tags (JSON-LD) already HTML-serialized. */
   extra: string;
 }
 
@@ -74,9 +74,7 @@ const ROUTES: Array<{
           title: "Competitions — GlideComp",
           description:
             "Browse hang gliding and paragliding competitions on GlideComp: tasks, live scores and per-pilot score explanations.",
-          extra:
-            canonical(`${origin}/comp`) +
-            jsonLd({
+          extra: jsonLd({
               "@context": "https://schema.org",
               "@type": "ItemList",
               itemListElement: data.comps.map((c, i) => ({
@@ -107,7 +105,6 @@ const ROUTES: Array<{
           title: `${c.name} — GlideComp`,
           description: `${c.name}: ${summary}. Tasks, standings and per-pilot score explanations on GlideComp.`,
           extra:
-            canonical(`${origin}/comp/${compId}`) +
             jsonLd({
               "@context": "https://schema.org",
               "@type": "SportsEvent",
@@ -131,9 +128,7 @@ const ROUTES: Array<{
         head: {
           title: `Waypoints — ${data.comp.name} — GlideComp`,
           description: `The ${n} shared waypoint${n === 1 ? "" : "s"} for ${data.comp.name}: codes, names and coordinates, with downloads for flight instruments.`,
-          extra:
-            canonical(`${origin}/comp/${compId}/waypoints`) +
-            jsonLd(
+          extra: jsonLd(
               breadcrumb(origin, [
                 ["Competitions", "/comp"],
                 [data.comp.name, `/comp/${compId}`],
@@ -156,9 +151,7 @@ const ROUTES: Array<{
         head: {
           title: `${data.task.name} — ${compName}`,
           description: `${data.task.name} (${compName}): route, turnpoints and per-class scores on GlideComp.`,
-          extra:
-            canonical(`${origin}/comp/${compId}/task/${taskId}`) +
-            jsonLd(
+          extra: jsonLd(
               breadcrumb(origin, [
                 ["Competitions", "/comp"],
                 [compName, `/comp/${compId}`],
@@ -182,9 +175,7 @@ const ROUTES: Array<{
         head: {
           title: `${pilotName} — ${data.task.name}, ${data.comp.name}: score explanation`,
           description: `How ${pilotName}'s score for ${data.task.name} (${data.comp.name}) was calculated — a step-by-step GlideComp scoring breakdown.`,
-          extra:
-            canonical(`${origin}/comp/${compId}/task/${taskId}/pilot/${pilotId}`) +
-            jsonLd(
+          extra: jsonLd(
               breadcrumb(origin, [
                 ["Competitions", "/comp"],
                 [data.comp.name, `/comp/${compId}`],
@@ -324,10 +315,11 @@ function injectSsr(
 
 // ── head builders ────────────────────────────────────────────────────────────
 
-function canonical(href: string): string {
-  return `<link rel="canonical" href="${escapeAttr(href)}">\n`;
-}
-
+// Deliberately no <link rel="canonical">: iOS Safari's share sheet copies the
+// canonical URL instead of the address bar, and a canonical injected at SSR
+// time goes stale after client-side navigation (pushState doesn't touch the
+// <head>), so visitors shared the entry page's URL rather than the page they
+// were on. Host dedup (glidecomp.pages.dev) is a 301 in functions/_middleware.ts.
 function jsonLd(obj: unknown): string {
   return `<script type="application/ld+json">${serialize(obj)}</script>\n`;
 }
