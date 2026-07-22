@@ -15,6 +15,9 @@
  */
 import type { DayTimingSeries, WindLegsSeries } from "../../types";
 import { formatTimeRange } from "@/react/lib/time";
+import { useUnits } from "@/react/lib/units";
+import { formatMetricValue } from "../../types";
+import { unitDisplay } from "../../units";
 import type { TimeAxis } from "./time-axis";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
 import {
@@ -49,6 +52,11 @@ export function WindLegsGantt({
   timeZone: string | undefined;
   setReadout: (text: string | null) => void;
 }) {
+  // Wind follows the speed preference; series values are km/h and convert
+  // here at the display boundary. Arrow lengths use the km/h ratio directly
+  // (a linear factor cancels out of speed/maxSpeed).
+  const wind = unitDisplay("km/h", useUnits());
+
   if (series.legs.length === 0) return null;
 
   const rowsBottom = TOP + series.legs.length * ROW_H;
@@ -68,7 +76,7 @@ export function WindLegsGantt({
   const legReadout = (l: WindLegsSeries["legs"][number]): string =>
     l.from !== null && l.to !== null && l.speedKmh !== null && l.directionDeg !== null
       ? `${l.label} — field circled ${formatTimeRange(l.from, l.to, timeZone)}, ` +
-        `${l.speedKmh.toFixed(1)} km/h from ${Math.round(l.directionDeg)}° ` +
+        `${formatMetricValue(wind.unit, l.speedKmh * wind.factor)} ${wind.unit} from ${Math.round(l.directionDeg)}° ` +
         `(${degToCompass(l.directionDeg)}), ${l.n} circle estimate${l.n === 1 ? "" : "s"}`
       : `${l.label} — no circling on this leg, so no wind estimate`;
 
@@ -163,7 +171,7 @@ export function WindLegsGantt({
                   textAnchor={labelRight ? "start" : "end"}
                   className="fill-current stroke-background text-[9px] text-muted-foreground [paint-order:stroke] [stroke-width:3px]"
                 >
-                  {windLabel(l.speedKmh!, l.directionDeg!)}
+                  {windLabel(l.speedKmh! * wind.factor, wind.unit, l.directionDeg!)}
                 </text>
               </>
             ) : (

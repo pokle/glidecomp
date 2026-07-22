@@ -39,6 +39,7 @@ import { NumberField, TextField } from "@/react/rac/field";
 import { Select, SelectItem } from "@/react/rac/select";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
+import { formatDistance, useUnits } from "../lib/units";
 import { parseCoords, formatCoords } from "./route-editor";
 import type { DistanceOriginValue } from "./types";
 import type { ManualFlightEntry } from "./types";
@@ -82,6 +83,7 @@ export function ManualFlightDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const units = useUnits();
   const goalIdx = task.turnpoints.length - 1;
   // Default: the last reached is the previous report's, else the start (SSS or
   // first turnpoint) — the minimum for a pilot who launched.
@@ -238,7 +240,8 @@ export function ManualFlightDialog({
             {madeGood !== null ? (
               <>
                 <span className="font-medium">
-                  {(madeGood / 1000).toFixed(1)} km {openDistance ? "open distance" : "made good"}
+                  {formatDistance(madeGood, { decimals: 1, prefs: units }).withUnit}{" "}
+                  {openDistance ? "open distance" : "made good"}
                 </span>
                 {madeGoal ? <span className="text-muted-foreground"> · in goal</span> : null}
               </>

@@ -52,6 +52,12 @@ describe("formatTickValue", () => {
   it("keeps minutes as 'min', never 'm' (metres)", () => {
     expect(formatTickValue("min", 5)).toBe("5 min");
   });
+  it("suffixes the preferred-unit display tokens", () => {
+    expect(formatTickValue("mph", 37.3)).toBe("37.3 mph");
+    expect(formatTickValue("kts", 32.4)).toBe("32.4 kts");
+    expect(formatTickValue("fpm", 400)).toBe("400 fpm");
+    expect(formatTickValue("ft", 2600)).toBe("2600 ft");
+  });
   it("leaves unitless values bare", () => {
     expect(formatTickValue("count", 3)).toBe("3");
     expect(formatTickValue("ratio", 1.25)).toBe("1.25");

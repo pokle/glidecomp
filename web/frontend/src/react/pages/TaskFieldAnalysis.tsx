@@ -49,6 +49,8 @@ import { TaskDebrief } from "../field-analysis/TaskDebrief";
 import { MetricGlossary } from "../field-analysis/MetricGlossary";
 import { PilotHighlightProvider } from "../field-analysis/PilotHighlightContext";
 import { PercentileHeatmap } from "../field-analysis/charts/PercentileHeatmap";
+import { displayReport } from "../field-analysis/units";
+import { useUnits } from "../lib/units";
 import {
   FAMILY_ORDER,
   FAMILY_LABELS,
@@ -191,20 +193,29 @@ export function TaskFieldAnalysis() {
       : (classes[0]?.pilot_class ?? "");
   const active = classes.find((c) => c.pilot_class === selectedClass);
 
+  // The report with metric values converted to the viewer's preferred units
+  // (display-only: ρ, percentiles and ranks are invariant under the linear
+  // conversion). Everything below renders from this, never active.report.
+  const units = useUnits();
+  const report = useMemo(
+    () => (active ? displayReport(active.report, units) : null),
+    [active, units]
+  );
+
   // Families containing a top-3 metric open by default — the ranking above
   // has just told the reader those are the ones worth opening.
   const topFamilies = useMemo(() => {
-    if (!active) return new Set<string>();
+    if (!report) return new Set<string>();
     return new Set(
-      rankMetrics(active.report.metrics)
+      rankMetrics(report.metrics)
         .slice(0, 3)
         .map((r) => r.metric.family)
     );
-  }, [active]);
+  }, [report]);
 
   const grouped = useMemo(
-    () => (active ? metricsByFamily(active.report.metrics) : new Map()),
-    [active]
+    () => (report ? metricsByFamily(report.metrics) : new Map()),
+    [report]
   );
 
   // Family expansion is page state (not Disclosure-internal) so the TOC can
@@ -409,11 +420,11 @@ export function TaskFieldAnalysis() {
         </div>
       ) : null}
 
-      {active ? (
+      {active && report ? (
         <PilotHighlightProvider>
           <div className="mt-6 space-y-8">
             <div id="analysis-basis" className="scroll-mt-20">
-              <AnalysisBasis basis={active.report.basis} excluded={active.excluded} />
+              <AnalysisBasis basis={report.basis} excluded={active.excluded} />
             </div>
 
             {compId && taskId ? (
@@ -428,14 +439,14 @@ export function TaskFieldAnalysis() {
               <h2 id="separation-heading" className="scroll-mt-20 text-lg font-semibold">
                 What separated the field
               </h2>
-              <SeparationRanking metrics={active.report.metrics} report={active.report} />
+              <SeparationRanking metrics={report.metrics} report={report} />
             </section>
 
             <section aria-labelledby="heatmap-heading" className="space-y-3">
               <h2 id="heatmap-heading" className="scroll-mt-20 text-lg font-semibold">
                 The whole field at a glance
               </h2>
-              <PercentileHeatmap report={active.report} />
+              <PercentileHeatmap report={report} />
             </section>
 
             {/* In print, this whole section starts a fresh page and every
@@ -456,7 +467,7 @@ export function TaskFieldAnalysis() {
                     family={family}
                     familyLabel={FAMILY_LABELS[family]}
                     metrics={grouped.get(family) ?? []}
-                    report={active.report}
+                    report={report}
                     compTimezone={comp?.timezone ?? null}
                     isExpanded={expandedFamilies.has(family)}
                     onExpandedChange={(expanded) => expandFamily(family, expanded)}
@@ -468,7 +479,7 @@ export function TaskFieldAnalysis() {
 
             {/* Every ⓘ popover's method prose, as one skimmable reference —
                 and the printed form of those explanations. */}
-            <MetricGlossary entries={active.report.metrics} />
+            <MetricGlossary entries={report.metrics} />
           </div>
         </PilotHighlightProvider>
       ) : null}

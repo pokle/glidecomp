@@ -40,6 +40,7 @@ import { formatCoords, parseCoords } from "../comp/route-editor";
 import { AddWaypointDialog } from "../comp/AddWaypointDialog";
 import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
 import { useInitialData } from "../lib/initial-data";
+import { formatAltitude, formatRadius, useUnits } from "../lib/units";
 import type { CompWaypointsLoaderData } from "../loaders";
 
 const RouteMap = lazy(() => import("../comp/RouteMap"));
@@ -109,6 +110,7 @@ function CompWaypointsContent() {
   const { compId } = useParams<{ compId: string }>();
   const { user } = useUser();
   const confirm = useConfirm();
+  const units = useUnits();
 
   // SSR seed (null on client boot / SPA navigations, where the effect below
   // fetches instead). Seeding the same states the fetch would set makes the
@@ -557,8 +559,16 @@ function CompWaypointsContent() {
                       <Cell className="font-medium">{r.code}</Cell>
                       <Cell>{r.name || "—"}</Cell>
                       <Cell className="font-mono text-xs">{r.coords}</Cell>
-                      <Cell className="text-right font-mono text-xs">{r.altitude || "—"}</Cell>
-                      <Cell className="text-right font-mono text-xs">{r.radius}</Cell>
+                      <Cell className="text-right font-mono text-xs">
+                        {r.altitude && Number.isFinite(Number(r.altitude))
+                          ? formatAltitude(Number(r.altitude), { prefs: units }).withUnit
+                          : "—"}
+                      </Cell>
+                      <Cell className="text-right font-mono text-xs">
+                        {Number.isFinite(Number(r.radius))
+                          ? formatRadius(Number(r.radius), { prefs: units }).withUnit
+                          : r.radius}
+                      </Cell>
                     </Row>
                   ))}
                 </TableBody>

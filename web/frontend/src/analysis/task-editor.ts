@@ -7,7 +7,7 @@
 
 import type { XCTask, Turnpoint, TurnpointType, WaypointRecord } from '@glidecomp/engine';
 import { getOptimizedSegmentDistances, toXctskJSON, parseXCTask } from '@glidecomp/engine';
-import { formatDistance, formatAltitude } from './units-browser';
+import { formatDistance, formatAltitude, formatRadius } from './units-browser';
 import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
 
 // ---------------------------------------------------------------------------
@@ -690,7 +690,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
         item.innerHTML = `
           <div class="min-w-0">
             <div class="font-medium truncate">${wp.description || wp.name}</div>
-            <div class="text-[10px] text-muted-foreground">${wp.name} \u00b7 ${wp.altitude ? formatAltitude(wp.altitude).withUnit : ''} \u00b7 r=${wp.radius || 400}m</div>
+            <div class="text-[10px] text-muted-foreground">${wp.name} \u00b7 ${wp.altitude ? formatAltitude(wp.altitude).withUnit : ''} \u00b7 r=${formatRadius(wp.radius || 400).withUnit}</div>
           </div>
         `;
         item.addEventListener('click', () => {

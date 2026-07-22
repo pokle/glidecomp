@@ -18,6 +18,9 @@
  */
 import type { ClimbHourlySeries, DayTimingSeries } from "../../types";
 import { formatTimeOfDay, formatTimeRange } from "@/react/lib/time";
+import { useUnits } from "@/react/lib/units";
+import { formatMetricValue } from "../../types";
+import { unitDisplay } from "../../units";
 import { formatTickValue, linearScale, niceTicks, quantileSorted } from "../chart-utils";
 import type { TimeAxis } from "./time-axis";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
@@ -49,11 +52,24 @@ export function ClimbHourlyChart({
   timeZone: string | undefined;
   setReadout: (text: string | null) => void;
 }) {
+  // Climb rates follow the climb preference; series quantiles are m/s and
+  // convert here at the display boundary.
+  const climb = unitDisplay("m/s", useUnits());
+
   if (series.hours.length === 0) return null;
 
   const hours = series.hours.map((h) => {
     const tMs = new Date(h.t).getTime();
-    return { ...h, tMs, cx: axis.x(tMs + HOUR_MS / 2) };
+    return {
+      ...h,
+      median: h.median * climb.factor,
+      p10: h.p10 * climb.factor,
+      p25: h.p25 * climb.factor,
+      p75: h.p75 * climb.factor,
+      p90: h.p90 * climb.factor,
+      tMs,
+      cx: axis.x(tMs + HOUR_MS / 2),
+    };
   });
   const maxN = Math.max(...hours.map((h) => h.n));
   const yMin = Math.min(0, ...hours.map((h) => h.p10));
@@ -98,10 +114,11 @@ export function ClimbHourlyChart({
     : null;
   const takeoffs = (timing?.takeoffs ?? []).map((t) => new Date(t).getTime()).sort((a, b) => a - b);
 
+  const fmtClimb = (v: number) => formatMetricValue(climb.unit, v);
   const hourReadout = (h: (typeof hours)[number]): string =>
     `${formatTimeRange(h.t, new Date(h.tMs + HOUR_MS).toISOString(), timeZone)} — ` +
-    `median ${h.median.toFixed(1)} m/s (p25–p75 ${h.p25.toFixed(1)}–${h.p75.toFixed(1)}, ` +
-    `p10–p90 ${h.p10.toFixed(1)}–${h.p90.toFixed(1)}), ${h.n} climb${h.n === 1 ? "" : "s"}`;
+    `median ${fmtClimb(h.median)} ${climb.unit} (p25–p75 ${fmtClimb(h.p25)}–${fmtClimb(h.p75)}, ` +
+    `p10–p90 ${fmtClimb(h.p10)}–${fmtClimb(h.p90)}), ${h.n} climb${h.n === 1 ? "" : "s"}`;
 
   const takeoffReadout = (): string => {
     if (takeoffs.length === 0) return "";
@@ -122,8 +139,8 @@ export function ClimbHourlyChart({
       role="img"
       aria-label={
         `Climb by hour: median climb rate with p25 to p75 and p10 to p90 bands across ` +
-        `${hours.length} hour${hours.length === 1 ? "" : "s"}, medians ${Math.min(...medians).toFixed(1)} ` +
-        `to ${Math.max(...medians).toFixed(1)} m/s, plus takeoff times and the task clock. ` +
+        `${hours.length} hour${hours.length === 1 ? "" : "s"}, medians ${fmtClimb(Math.min(...medians))} ` +
+        `to ${fmtClimb(Math.max(...medians))} ${climb.unit}, plus takeoff times and the task clock. ` +
         `The Climb by hour and Day timing tables below carry the exact numbers.`
       }
       onMouseLeave={() => setReadout(null)}
@@ -165,7 +182,7 @@ export function ClimbHourlyChart({
       <g aria-hidden className="text-[10px] text-muted-foreground">
         {yTicks.map((t) => (
           <text key={`ty${t}`} x={PLOT_LEFT - 6} y={y(t) + 3} textAnchor="end" className="fill-current">
-            {formatTickValue("m/s", t)}
+            {formatTickValue(climb.unit, t)}
           </text>
         ))}
         <text x={PLOT_LEFT - 6} y={TAKEOFF_LANE.cy + 2} textAnchor="end" className="fill-current text-[9px]">

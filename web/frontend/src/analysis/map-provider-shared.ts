@@ -566,7 +566,7 @@ export function createTrackPointHUD(container: HTMLElement): HTMLElement {
       </details>
       <div class="hud-divider"></div>
       <details open class="hud-group">
-        <summary class="hud-summary">1 km avg</summary>
+        <summary class="hud-summary hud-avg-summary">${formatRadius(1000).withUnit} avg</summary>
         <div class="hud-speed"></div>
         <div class="hud-req"></div>
       </details>
@@ -701,6 +701,11 @@ export function updateTrackPointHUD(
 
   altEl.textContent = `${opts.pointAlt} at ${opts.pointTime}`;
   speedEl.textContent = `${opts.speed}  ${opts.altChange}`;
+
+  // The averaging window is a fixed 1000 m of track; only its label converts.
+  // Refreshed here (not just at creation) so a unit change shows on next hover.
+  const avgEl = el.querySelector('.hud-avg-summary') as HTMLElement | null;
+  if (avgEl) avgEl.textContent = `${formatRadius(1000).withUnit} avg`;
 
   if (opts.req) {
     reqEl.textContent = opts.req;

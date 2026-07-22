@@ -302,6 +302,8 @@ async function bootstrap(): Promise<void> {
     void runUserFilesMigration();
   }
 }
-if (import.meta.env.MODE !== "test") {
+// The window guard keeps this module inert under SSR (workerd), where the
+// React comp pages transitively import it via analysis/config.
+if (import.meta.env.MODE !== "test" && typeof window !== "undefined") {
   void bootstrap();
 }

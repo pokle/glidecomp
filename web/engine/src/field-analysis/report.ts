@@ -52,16 +52,22 @@ function heading(title: string, char: string): string {
   return head + char.repeat(Math.max(0, WIDTH - head.length));
 }
 
-/** Format a metric value for its unit. */
+/** Format a metric value for its unit. The display tokens ('mph', 'kts',
+ * 'fpm', 'ft') are what the UI's preferred-unit conversion rewrites 'km/h',
+ * 'm/s' and 'm' into; the engine itself always emits the metric units. */
 export function formatMetricValue(unit: string, value: number | null): string {
   if (value === null || !isFinite(value)) return '—';
   switch (unit) {
     case 'pct':
     case 'm':
+    case 'ft':
+    case 'fpm':
     case 's':
       return value.toFixed(0);
     case 'm/s':
     case 'km/h':
+    case 'mph':
+    case 'kts':
     case 'min':
     case 'count':
       return value.toFixed(1);
