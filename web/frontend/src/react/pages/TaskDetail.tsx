@@ -45,6 +45,7 @@ import { formatTaskDate } from "../lib/format";
 import { formatAltitude, formatRadius, useUnits } from "../lib/units";
 import { SectionHeader } from "../components/SectionHeader";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
+import { TaskResults } from "../comp/TaskResults";
 import { TaskStandings } from "../comp/TaskStandings";
 import { RouteEditorDialog } from "../comp/RouteEditorDialog";
 import { startConfigSummary } from "../comp/route-editor";
@@ -81,6 +82,9 @@ function TaskDetailContent() {
   const [notFound, setNotFound] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [scoresRefresh, setScoresRefresh] = useState(0);
+  // Bumped when the admin manage grid mutates, so the public results (a
+  // separate component with its own score fetch) pick up the change too.
+  const [resultsRefresh, setResultsRefresh] = useState(0);
   const [replayAvailable, setReplayAvailable] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [routeOpen, setRouteOpen] = useState(false);
@@ -196,8 +200,10 @@ function TaskDetailContent() {
                 month: "long",
                 day: "numeric",
               })}
-            </span>{" "}
-            <span>{task.xctsk ? "Task defined" : "No task defined"}</span>
+            </span>
+            {/* Only the negative case is worth words — a defined route shows
+                itself in the turnpoint table below. */}
+            {!task.xctsk ? <span> · Route not set yet</span> : null}
           </p>
           {task.stop_announcement_time ? (
             // Stopped task (FAI S7F §12.3): surface the stop prominently —
@@ -223,11 +229,14 @@ function TaskDetailContent() {
             ))}
           </TagGroup>
         </div>
-        {isAdmin && comp ? (
-          <Button variant="outline" size="sm" onPress={() => setEditOpen(true)}>
-            Settings
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {comp ? <TaskPrevNext comp={comp} compId={compId} task={task} taskId={taskId} /> : null}
+          {isAdmin && comp ? (
+            <Button variant="outline" size="sm" onPress={() => setEditOpen(true)}>
+              Settings
+            </Button>
+          ) : null}
+        </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {task.xctsk ? (
@@ -288,25 +297,40 @@ function TaskDetailContent() {
         onEditRoute={() => setRouteOpen(true)}
       />
 
-      {/* Unified standings: ranked scorers + per-class did-not-score tail,
-          with per-pilot admin actions (track upload, manual flight, status,
-          restore). Replaces the old Scores + Pilot Status + Tracks sections
-          (issue #306). */}
-      <TaskStandings
+      {/* Public results: top-3 podium per class + the link to the comp's
+          scores page (the canonical results surface), plus pilot self-service
+          (Submit track, your-submission line). The management grid below is
+          admin-only. */}
+      <TaskResults
         compId={compId}
         taskId={taskId}
-        isAdmin={isAdmin}
+        timezone={comp?.timezone ?? null}
+        isOpenDistance={comp?.scoring_format === "open_distance"}
         isAuthenticated={user != null}
         isClosed={isClosed}
         canUploadOnBehalf={canUploadOnBehalf}
-        scoringFormat={comp?.scoring_format === "open_distance" ? "open_distance" : "gap"}
-        distanceOrigin={comp?.gap_params?.distanceOrigin ?? "takeoff"}
-        timezone={comp?.timezone ?? null}
-        taskXctsk={task.xctsk}
-        refresh={scoresRefresh}
+        refresh={scoresRefresh + resultsRefresh}
         onReplayAvailable={setReplayAvailable}
         initialScore={initial && refresh === 0 ? (initial.score ?? undefined) : undefined}
       />
+
+      {/* Admin management grid (statuses, uploads on behalf, manual flights,
+          restores) — the tool the old public "standings" table was secretly
+          doubling as. Admin-only and never server-rendered. */}
+      {isAdmin && comp ? (
+        <TaskStandings
+          compId={compId}
+          taskId={taskId}
+          isAdmin={isAdmin}
+          isClosed={isClosed}
+          scoringFormat={comp.scoring_format === "open_distance" ? "open_distance" : "gap"}
+          distanceOrigin={comp.gap_params?.distanceOrigin ?? "takeoff"}
+          timezone={comp.timezone ?? null}
+          taskXctsk={task.xctsk}
+          refresh={scoresRefresh}
+          onMutated={() => setResultsRefresh((n) => n + 1)}
+        />
+      ) : null}
 
       {isAdmin && comp && editOpen ? (
         <EditTaskDialog
@@ -342,6 +366,66 @@ function TaskDetailContent() {
         />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Prev/next task navigation: walk the comp's tasks that share a pilot class
+ * with this one (classes fly different task sequences — jumping from
+ * "Task 2 (Open)" to "Task 2 (Floater)" would be disorienting), ordered by
+ * date then name. Renders from loader data, so it is in the SSR HTML.
+ */
+function TaskPrevNext({
+  comp,
+  compId,
+  task,
+  taskId,
+}: {
+  comp: CompDetailData;
+  compId: string;
+  task: TaskDetailData;
+  taskId: string;
+}) {
+  const classes = new Set(task.pilot_classes);
+  const seq = comp.tasks
+    .filter(
+      (t) => t.task_id === taskId || t.pilot_classes.some((c) => classes.has(c))
+    )
+    .sort((a, b) =>
+      a.task_date === b.task_date
+        ? a.name.localeCompare(b.name)
+        : a.task_date < b.task_date
+          ? -1
+          : 1
+    );
+  const i = seq.findIndex((t) => t.task_id === taskId);
+  const prev = i > 0 ? seq[i - 1] : null;
+  const next = i >= 0 && i < seq.length - 1 ? seq[i + 1] : null;
+  if (!prev && !next) return null;
+
+  return (
+    <nav aria-label="Task navigation" className="flex items-center gap-2">
+      {prev ? (
+        <LinkButton
+          variant="ghost"
+          size="sm"
+          href={`/comp/${compId}/task/${prev.task_id}`}
+          aria-label={`Previous task: ${prev.name}`}
+        >
+          ← {prev.name}
+        </LinkButton>
+      ) : null}
+      {next ? (
+        <LinkButton
+          variant="ghost"
+          size="sm"
+          href={`/comp/${compId}/task/${next.task_id}`}
+          aria-label={`Next task: ${next.name}`}
+        >
+          {next.name} →
+        </LinkButton>
+      ) : null}
+    </nav>
   );
 }
 
@@ -393,9 +477,16 @@ function TurnpointsTable({ xctsk }: { xctsk: XCTask }) {
               {tp.type === "TAKEOFF" ? (
                 <span className="text-muted-foreground">—</span>
               ) : directions[i] === "exit" ? (
-                <Badge variant="outline">Exit</Badge>
+                <span title="Crossed flying outward — the route reaches this cylinder from inside, so pilots fly out across it">
+                  <Badge variant="outline">Exit</Badge>
+                </span>
               ) : (
-                <span className="text-muted-foreground">Enter</span>
+                <span
+                  className="text-muted-foreground"
+                  title="Crossed flying inward — pilots fly into this cylinder"
+                >
+                  Enter
+                </span>
               )}
             </Cell>
           </Row>

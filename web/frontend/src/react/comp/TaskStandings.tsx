@@ -1,22 +1,19 @@
 /**
- * Unified per-pilot task standings (issue #306).
+ * Admin task management grid — "Manage pilots & tracks" (issues #306, then
+ * split from the public results surface). One row per pilot with their
+ * outcome on the task: ranked scorers first, then a per-class "did not
+ * score" tail (present-not-flown / DNF / absent). Columns: rank · pilot ·
+ * outcome (badge + evidence) · distance · points · Manage.
+ *
+ * This is the management tool, admin-only by design: statuses, uploads on
+ * behalf, manual flights and restores. The PUBLIC results live in
+ * TaskResults (top 3 + link to the comp scores page) — this grid is never
+ * server-rendered and mounts only after the admin check resolves.
  *
  * RAC EXPLORATION: built on react-aria-components (src/react/rac/) — the
- * standings are an ARIA grid (keyboard-navigable rows with onAction for the
- * pilot detail page), per-row admin controls use RAC Select / FileTrigger /
+ * rows are an ARIA grid (keyboard-navigable, onAction opens the pilot
+ * detail page), per-row admin controls use RAC Select / FileTrigger /
  * Tooltip. See pages/TaskDetail.tsx for the experiment's scope.
- *
- * Merges the old Scores + Pilot Status + Tracks sections into one table — the
- * three were three views of one object: a pilot's outcome on a task. Ranked
- * scorers first, then a per-class "did not score" tail (present-not-flown /
- * DNF / absent). Columns: rank · pilot · outcome (badge + evidence) · distance
- * · points · Manage (admins).
- *
- * SSR-safety: the server renders ONLY the control-less scored table from the
- * SSR score seed. The tail and every admin control mount on hydration (`mounted`
- * gate), so the first client render matches the server markup exactly. The
- * roster / status / track / manual-flight data is client-fetched after
- * hydration, exactly as tracks/status already were.
  *
  * Staleness: a status/track/manual change is a whole-task rescore (launch
  * validity ripples to everyone). Score columns grey out while stale; the fresh
@@ -24,7 +21,7 @@
  * pilot leaves the ranked section immediately); ScoreFreshness surfaces a
  * Reload when the rescore lands — no silent resettle.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileTrigger, Link as AriaLink } from "react-aria-components";
 import type { XCTask } from "@glidecomp/engine";
@@ -33,11 +30,9 @@ import { SimpleSelect } from "@/react/rac/select";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { Tooltip, TooltipTrigger } from "@/react/rac/tooltip";
 import { api } from "../../comp/api";
-import { formatInstant } from "../lib/time";
 import { formatDistance, useUnits } from "../lib/units";
 import { toast } from "../lib/toast";
 import { ScoreFreshness } from "./ScoreFreshness";
-import { SubmitTrackDialog } from "./SubmitTrackDialog";
 import { ManualFlightDialog } from "./ManualFlightDialog";
 import { compressIgc } from "./types";
 import type {
@@ -50,36 +45,6 @@ import type {
   TaskScoreData,
   TrackInfo,
 } from "./types";
-
-/**
- * Task-level stopped notice (FAI S7F §12.3): shown above the standings when
- * the task was scored as stopped — the scored-back stop time, and (when the
- * stop came before the minimum scoring time) why every pilot reads 0. The
- * comp zone (or UTC) keeps the SSR markup deterministic.
- */
-function StoppedTaskNotice({
-  score,
-  timezone,
-}: {
-  score: TaskScoreData;
-  timezone: string | null;
-}) {
-  const stopped = score.classes.find((c) => c.stopped)?.stopped;
-  if (!stopped) return null;
-  return (
-    <p className="mt-2 text-sm">
-      <span className="font-medium text-destructive">Task stopped</span>{" "}
-      <span className="text-muted-foreground">
-        — flights scored up to{" "}
-        {formatInstant(new Date(stopped.stop_time_ms), timezone ?? "UTC")} (the
-        stop announcement, scored back per FAI S7F §12.3.1).{" "}
-        {stopped.requirement_met
-          ? "Pilots still flying at the stop keep an altitude bonus for height above goal; a stopped-task validity factor applies."
-          : "The task was stopped before running the minimum scoring time (FAI S7F §12.3.2), so it cannot be scored — every pilot reads 0."}
-      </span>
-    </p>
-  );
-}
 
 type Outcome = "present" | "absent" | "dnf" | "landed";
 
@@ -114,23 +79,18 @@ export function TaskStandings({
   compId,
   taskId,
   isAdmin,
-  isAuthenticated,
   isClosed,
-  canUploadOnBehalf,
   scoringFormat,
   distanceOrigin,
   timezone,
   taskXctsk,
   refresh,
-  onReplayAvailable,
-  initialScore,
+  onMutated,
 }: {
   compId: string;
   taskId: string;
   isAdmin: boolean;
-  isAuthenticated: boolean;
   isClosed: boolean;
-  canUploadOnBehalf: boolean;
   scoringFormat: "gap" | "open_distance";
   distanceOrigin: DistanceOriginValue;
   timezone: string | null;
@@ -138,18 +98,16 @@ export function TaskStandings({
   taskXctsk: XCTask | null;
   /** Parent bump to refetch scores (route edits). */
   refresh: number;
-  onReplayAvailable: (available: boolean) => void;
-  /** SSR-seeded score so the ranked table is in the first paint. */
-  initialScore?: TaskScoreData;
+  /** Notify the parent a mutation happened, so the public results refetch too. */
+  onMutated?: () => void;
 }) {
-  const [uploadOpen, setUploadOpen] = useState(false);
-  // Hydration gate: the server and the first client render show only the
-  // control-less scored table. Everything below (tail, controls) mounts after.
+  // Client-data gate (this grid is never server-rendered, but the roster /
+  // status / track fetches still wait for mount like they always did).
   const [mounted, setMounted] = useState(false);
 
-  const [score, setScore] = useState<TaskScoreData | null>(initialScore ?? null);
+  const [score, setScore] = useState<TaskScoreData | null>(null);
   const [scoreState, setScoreState] = useState<"loading" | "no-route" | "unavailable" | "ok">(
-    initialScore ? "ok" : "loading"
+    "loading"
   );
   const [etag, setEtag] = useState<string | null>(null);
 
@@ -160,8 +118,6 @@ export function TaskStandings({
   // Optimistic "scores are stale" the instant an admin mutates, before the
   // refetched score row reports stale itself.
   const [localDirty, setLocalDirty] = useState(false);
-
-  const seededRef = useRef(initialScore != null);
 
   useEffect(() => setMounted(true), []);
 
@@ -182,14 +138,11 @@ export function TaskStandings({
       setScore(data);
       setEtag(res.headers.get("ETag"));
       setScoreState("ok");
-      onReplayAvailable(data.classes.some((c) => c.pilots.length > 0));
       // A fresh (non-stale) score means the rescore we were waiting on landed.
       if (!data.stale) setLocalDirty(false);
     } catch {
       setScoreState("unavailable");
     }
-    // onReplayAvailable is a stable parent setter.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compId, taskId]);
 
   const fetchAux = useCallback(async () => {
@@ -226,16 +179,9 @@ export function TaskStandings({
     }
   }, [compId, taskId]);
 
-  // Scores: seeded from SSR on first paint; otherwise fetch. Refetch on parent
-  // `refresh` (route edits).
+  // Refetch on parent `refresh` (route edits).
   useEffect(() => {
-    if (seededRef.current && refresh === 0) {
-      seededRef.current = false;
-      onReplayAvailable(initialScore!.classes.some((c) => c.pilots.length > 0));
-      return;
-    }
     void fetchScore();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchScore, refresh]);
 
   // Roster / status / track / manual — client-only, after hydration.
@@ -250,16 +196,27 @@ export function TaskStandings({
     setLocalDirty(true);
     void fetchAux();
     void fetchScore();
+    onMutated?.();
+    // onMutated is a stable parent callback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchAux, fetchScore]);
 
   if (scoreState === "loading") {
-    return <p className="mt-8 text-muted-foreground">Loading standings…</p>;
+    return <p className="mt-8 text-muted-foreground">Loading pilots…</p>;
   }
   if (scoreState === "no-route") {
-    return <p className="mt-8 text-muted-foreground">No scores yet — task route not defined</p>;
+    return (
+      <section>
+        <h2 className="mt-8 text-lg font-bold">Manage pilots &amp; tracks</h2>
+        <p className="mt-2 text-muted-foreground">
+          Set the task route first — pilot statuses and tracks can be managed once
+          the task can be scored.
+        </p>
+      </section>
+    );
   }
   if (scoreState === "unavailable" || !score) {
-    return <p className="mt-8 text-muted-foreground">Standings not available</p>;
+    return <p className="mt-8 text-muted-foreground">Pilot management not available</p>;
   }
 
   const greyed = score.stale || localDirty;
@@ -296,37 +253,11 @@ export function TaskStandings({
 
   return (
     <section>
-      <div className="mt-8 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 className="text-lg font-bold">
-          Standings{" "}
-          <AriaLink
-            className="text-sm font-normal underline underline-offset-4 outline-none data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
-            href={`/comp/${encodeURIComponent(compId)}#scores`}
-          >
-            Full competition scores →
-          </AriaLink>
-        </h2>
-        {/* Self-service upload entry point (replaces the old Tracks section
-            button). A control, so it mounts on hydration. */}
-        {mounted && isAuthenticated && !isClosed ? (
-          <Button variant="outline" size="sm" onPress={() => setUploadOpen(true)}>
-            Submit track
-          </Button>
-        ) : null}
-      </div>
-
-      {uploadOpen ? (
-        <SubmitTrackDialog
-          compId={compId}
-          taskId={taskId}
-          canUploadOnBehalf={canUploadOnBehalf}
-          onClose={() => setUploadOpen(false)}
-          onUploaded={() => {
-            setUploadOpen(false);
-            afterMutation();
-          }}
-        />
-      ) : null}
+      <h2 className="mt-8 text-lg font-bold">Manage pilots &amp; tracks</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Admin tools: pilot statuses, track uploads on behalf, and manual
+        flights. Every change here recomputes the task's scores.
+      </p>
 
       <ScoreFreshness
         computedAt={score.computed_at}
@@ -335,8 +266,6 @@ export function TaskStandings({
         etag={etag}
         pollUrl={`/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/score`}
       />
-
-      <StoppedTaskNotice score={score} timezone={timezone} />
 
       {score.classes.map((cls) => (
         <ClassStandings
