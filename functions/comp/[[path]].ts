@@ -18,6 +18,7 @@ import { render } from "../../web/frontend/dist-ssr/entry-server.js";
 import {
   loadCompetitions,
   loadCompDetail,
+  loadCompScores,
   loadCompWaypoints,
   loadTaskDetail,
   loadPilotScoreDetail,
@@ -116,6 +117,30 @@ const ROUTES: Array<{
               url: `${origin}/comp/${compId}`,
             }) +
             jsonLd(breadcrumb(origin, [["Competitions", "/comp"], [c.name, `/comp/${compId}`]])),
+        },
+      };
+    },
+  },
+  {
+    pattern: /^\/comp\/([^/]+)\/scores\/?$/,
+    async run(f, m, origin) {
+      const compId = decodeURIComponent(m[1]);
+      const data = await loadCompScores(f, compId);
+      const c = data.comp;
+      return {
+        data,
+        head: {
+          title: `Scores — ${c.name} — GlideComp`,
+          description: `Standings for ${c.name}: overall scores per class, top 3 per task, and per-pilot score explanations on GlideComp.`,
+          extra:
+            canonical(`${origin}/comp/${compId}/scores`) +
+            jsonLd(
+              breadcrumb(origin, [
+                ["Competitions", "/comp"],
+                [c.name, `/comp/${compId}`],
+                ["Scores", `/comp/${compId}/scores`],
+              ])
+            ),
         },
       };
     },

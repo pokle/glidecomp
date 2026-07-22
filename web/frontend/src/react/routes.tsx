@@ -23,6 +23,7 @@ import { Onboarding } from "./pages/Onboarding";
 import { SignIn } from "./pages/SignIn";
 import { Competitions } from "./pages/Competitions";
 import { CompDetail } from "./pages/CompDetail";
+import { CompScoresPage } from "./pages/CompScoresPage";
 import { CompWaypoints } from "./pages/CompWaypoints";
 import { TaskDetail } from "./pages/TaskDetail";
 import { CompFieldAnalysis } from "./pages/CompFieldAnalysis";
@@ -94,6 +95,7 @@ export function AppRoutes() {
         <Route path="/u/:username" element={<Dashboard />} />
         <Route path="/comp" element={<Competitions />} />
         <Route path="/comp/:compId" element={<CompDetail />} />
+        <Route path="/comp/:compId/scores" element={<CompScoresPage />} />
         <Route path="/comp/:compId/waypoints" element={<CompWaypoints />} />
         {/* Field analysis (behavioural metrics). One report per competition,
             with a chapter per task NESTED UNDER IT — the per-task page is a

@@ -42,6 +42,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         if (comp.test) continue;
         const base = `${origin}/comp/${comp.comp_id}`;
         urls.push({ loc: base, lastmod: comp.last_task_date ?? comp.creation_date ?? undefined });
+        urls.push({ loc: `${base}/scores`, lastmod: comp.last_task_date ?? comp.creation_date ?? undefined });
         await appendCompUrls(api, comp.comp_id, base, urls).catch(() => {
           // One comp's detail failing must not sink the whole sitemap.
         });
