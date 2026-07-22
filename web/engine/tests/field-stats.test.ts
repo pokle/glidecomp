@@ -6,6 +6,8 @@ import {
   rankWithTies,
   spearman,
   circularMeanWind,
+  spearmanNoiseFloor,
+  correlationVerdict,
 } from '../src/field-analysis';
 
 describe('percentile', () => {
@@ -101,5 +103,50 @@ describe('circularMeanWind', () => {
 
   it('returns null for no samples', () => {
     expect(circularMeanWind([])).toBeNull();
+  });
+});
+
+describe('spearmanNoiseFloor', () => {
+  it('tracks the published two-tailed α=0.05 critical values within a few percent', () => {
+    // Exact table values: n=10 → 0.648, n=15 → 0.521, n=20 → 0.447, n=30 → 0.362.
+    expect(spearmanNoiseFloor(10)).toBeGreaterThan(0.6);
+    expect(spearmanNoiseFloor(10)).toBeLessThan(0.66);
+    expect(spearmanNoiseFloor(15)).toBeGreaterThan(0.49);
+    expect(spearmanNoiseFloor(15)).toBeLessThan(0.53);
+    expect(spearmanNoiseFloor(20)).toBeGreaterThan(0.42);
+    expect(spearmanNoiseFloor(20)).toBeLessThan(0.46);
+    expect(spearmanNoiseFloor(30)).toBeGreaterThan(0.34);
+    expect(spearmanNoiseFloor(30)).toBeLessThan(0.38);
+  });
+  it('shrinks monotonically with n and stays in (0, 1]', () => {
+    let prev = 1.01;
+    for (let n = 3; n <= 200; n++) {
+      const f = spearmanNoiseFloor(n);
+      expect(f).toBeGreaterThan(0);
+      expect(f).toBeLessThanOrEqual(1);
+      expect(f).toBeLessThan(prev);
+      prev = f;
+    }
+  });
+  it('is NaN below the n=3 correlation minimum', () => {
+    expect(spearmanNoiseFloor(2)).toBeNaN();
+  });
+});
+
+describe('correlationVerdict', () => {
+  it('brands sub-floor coefficients "within noise" whatever their magnitude', () => {
+    // |ρ| = 0.55 would read "strong" on thresholds alone, but at n = 10 the
+    // floor is ~0.63 — shuffled ranks do this well routinely.
+    expect(correlationVerdict(0.55, 10)).toBe('within noise');
+    expect(correlationVerdict(0.55, 30)).toBe('strong');
+  });
+  it('applies the magnitude conventions only above the floor', () => {
+    expect(correlationVerdict(0.72, 10)).toBe('strong');
+    expect(correlationVerdict(0.4, 30)).toBe('moderate');
+    expect(correlationVerdict(0.25, 100)).toBe('weak');
+    expect(correlationVerdict(0.15, 100)).toBe('within noise');
+  });
+  it('small samples stay "n too small" regardless of ρ', () => {
+    expect(correlationVerdict(0.95, 7)).toBe('n too small');
   });
 });

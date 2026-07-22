@@ -16,9 +16,9 @@ import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Badge } from "@/react/rac/badge";
 import { SimpleSelect } from "@/react/rac/select";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
-import { DivergingMeter } from "@/react/rac/meter";
 import { Alert, AlertDescription, AlertTitle } from "@/react/ui/alert";
 import { RhoSparkline } from "../field-analysis/charts/RhoSparkline";
+import { VerdictBadge, VerdictLegend } from "../field-analysis/SeparationRanking";
 import { MetricGlossary, type GlossaryEntry } from "../field-analysis/MetricGlossary";
 import { underComp } from "../lib/crumbs";
 import { api } from "../../comp/api";
@@ -291,6 +291,7 @@ export function CompFieldAnalysis() {
               taskLabels={active.aggregate.taskLabels}
               ariaLabel="Metric separation across tasks"
             />
+            <VerdictLegend />
 
             {outcomeMetrics.length > 0 ? (
               <div className="space-y-3 pt-2">
@@ -392,12 +393,13 @@ function SeparationTable({
         <Column className="w-24 text-right" aria-label="Mean absolute rho across tasks">
           mean |ρ|
         </Column>
-        <Column className="w-40" aria-label="Overall correlation, visual">
-          Overall
-        </Column>
         <Column className="w-24 text-right" aria-label="Comp-level rho">
           comp ρ
         </Column>
+        <Column className="w-16 text-right" aria-label="n, pilots in the comp-level correlation">
+          n
+        </Column>
+        <Column className="w-28">Verdict</Column>
       </TableHeader>
       <TableBody>
         {metrics.map((m) => (
@@ -433,15 +435,6 @@ function SeparationTable({
                 m.meanAbsRho.toFixed(2)
               )}
             </Cell>
-            <Cell>
-              {m.compRho ? (
-                <DivergingMeter
-                  value={m.compRho.rho}
-                  label={`${m.label}: correlation against competition rank`}
-                  valueLabel={m.compRho.rho.toFixed(2)}
-                />
-              ) : null}
-            </Cell>
             <Cell className="text-right tabular-nums">
               {m.compRho ? (
                 m.compRho.rho.toFixed(2)
@@ -451,6 +444,16 @@ function SeparationTable({
                 </span>
               )}
             </Cell>
+            <Cell className="text-right tabular-nums">
+              {m.compRho ? (
+                m.compRho.n
+              ) : (
+                <span aria-label="not applicable" className="text-muted-foreground">
+                  —
+                </span>
+              )}
+            </Cell>
+            <Cell>{m.compRho ? <VerdictBadge correlation={m.compRho} /> : null}</Cell>
           </Row>
         ))}
       </TableBody>

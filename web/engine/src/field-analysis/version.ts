@@ -53,4 +53,11 @@
 //     window / goal deadline) — feeding the UI's shared-time-axis day-profile
 //     panel. No metric value changed; the bump rolls stored reports so they
 //     regain the new series on their next lazy revalidation.
-export const FIELD_ANALYSIS_VERSION = 7;
+// v8: correlation verdicts are n-aware. Every MetricCorrelation carries the
+//     α = 0.05 noise floor for its n (spearmanNoiseFloor), and a coefficient
+//     under it earns the new verdict 'within noise' regardless of magnitude —
+//     at n = 10 shuffled ranks routinely produce |ρ| ≈ 0.63, so the old
+//     n-blind thresholds could brand luck "strong". ρ values are unchanged;
+//     the bump rolls stored reports so their verdicts and noise floors
+//     recompute on the next lazy revalidation.
+export const FIELD_ANALYSIS_VERSION = 8;

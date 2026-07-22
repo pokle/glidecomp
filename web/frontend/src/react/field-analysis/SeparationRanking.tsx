@@ -61,7 +61,10 @@ export function bestAbsRho(metrics: MetricReport[]): number | null {
   return values.length > 0 ? Math.max(...values) : null;
 }
 
-function VerdictBadge({ correlation }: { correlation: MetricCorrelation }) {
+/** Shared verdict chip (also used by the comp page). "within noise" and
+ * "n too small" deliberately wear the quietest style — they are warnings
+ * that the number may be luck, not findings. */
+export function VerdictBadge({ correlation }: { correlation: MetricCorrelation }) {
   const variant =
     correlation.verdict === "strong"
       ? "default"
@@ -69,6 +72,21 @@ function VerdictBadge({ correlation }: { correlation: MetricCorrelation }) {
         ? "secondary"
         : "outline";
   return <Badge variant={variant}>{correlation.verdict}</Badge>;
+}
+
+/** The one-sentence basis for every verdict badge — rendered under both the
+ * task ranking and the comp aggregate so the thresholds are never undefined
+ * jargon. */
+export function VerdictLegend() {
+  return (
+    <p className="text-xs text-muted-foreground">
+      Verdicts: <strong>strong</strong> |ρ| ≥ 0.5, <strong>moderate</strong> ≥ 0.3,{" "}
+      <strong>weak</strong> below — but only after clearing the noise floor for that
+      metric's n. <strong>within noise</strong> means shuffled ranks produce a
+      coefficient that size more than 5% of the time, so it is indistinguishable from
+      luck whatever its magnitude.
+    </p>
+  );
 }
 
 export function SeparationRanking({
@@ -206,6 +224,12 @@ export function SeparationRanking({
       </Table>
       )}
 
+      <VerdictLegend />
+      <p className="text-xs text-muted-foreground">
+        With {ranked.length} metrics ranked on this one task, the top rows are
+        partly selection luck — trust the metrics that repeat across tasks in the
+        competition-level analysis.
+      </p>
       {underpowered.length > 0 ? (
         <p className="text-xs text-muted-foreground">
           {underpowered.length} metric{underpowered.length === 1 ? "" : "s"}{" "}

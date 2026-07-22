@@ -8,7 +8,7 @@
  * deserve refinement.
  */
 
-import { spearman } from './stats';
+import { spearman, spearmanNoiseFloor } from './stats';
 import { ALL_METRICS } from './registry';
 import { airborneSeconds } from './context';
 import type {
@@ -25,6 +25,20 @@ import type {
 
 /** Below this many paired values a correlation is shown but not trusted. */
 export const MIN_CORRELATION_N = 8;
+
+/**
+ * The verdict on a correlation of |ρ| = absRho over n pairs. The magnitude
+ * conventions (strong ≥ 0.5, moderate ≥ 0.3) apply only AFTER clearing the
+ * n-dependent noise floor — at small n, shuffled ranks routinely produce
+ * "strong"-sized coefficients, and calling those strong would present luck
+ * as a finding. One function so every surface (per-task eval, comp
+ * aggregate) judges identically.
+ */
+export function correlationVerdict(absRho: number, n: number): CorrelationVerdict {
+  if (n < MIN_CORRELATION_N) return 'n too small';
+  if (absRho < spearmanNoiseFloor(n)) return 'within noise';
+  return absRho >= 0.5 ? 'strong' : absRho >= 0.3 ? 'moderate' : 'weak';
+}
 
 export function evaluateField(
   field: FieldContext,
@@ -116,9 +130,14 @@ function correlate(
   const rho = spearman(values, pairedRanks);
   if (!isFinite(rho)) return null;
   const absRho = Math.abs(rho);
-  const verdict: CorrelationVerdict =
-    n < MIN_CORRELATION_N ? 'n too small' : absRho >= 0.5 ? 'strong' : absRho >= 0.3 ? 'moderate' : 'weak';
-  return { metricId, rho, absRho, n, verdict };
+  return {
+    metricId,
+    rho,
+    absRho,
+    n,
+    noiseFloor: spearmanNoiseFloor(n),
+    verdict: correlationVerdict(absRho, n),
+  };
 }
 
 function buildBasis(field: FieldContext): FieldAnalysisBasis {
