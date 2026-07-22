@@ -27,6 +27,8 @@ export type {
   MetricCorrelation,
   CompAggregateReport,
   CompMetricAggregate,
+  SignSummary,
+  SignConsistency,
   ReportCell,
   ReportTable,
   ReportSeries,

@@ -45,6 +45,7 @@ import {
 import { PageToc, type PageTocItem } from "../components/PageToc";
 import { cn } from "../lib/utils";
 import { AnalysisBasis } from "../field-analysis/AnalysisBasis";
+import { TaskDebrief } from "../field-analysis/TaskDebrief";
 import { MetricGlossary } from "../field-analysis/MetricGlossary";
 import { PilotHighlightProvider } from "../field-analysis/PilotHighlightContext";
 import { PercentileHeatmap } from "../field-analysis/charts/PercentileHeatmap";
@@ -414,6 +415,14 @@ export function TaskFieldAnalysis() {
             <div id="analysis-basis" className="scroll-mt-20">
               <AnalysisBasis basis={active.report.basis} excluded={active.excluded} />
             </div>
+
+            {compId && taskId ? (
+              <TaskDebrief
+                compId={compId}
+                taskId={taskId}
+                pilotClass={active.pilot_class}
+              />
+            ) : null}
 
             <section aria-labelledby="separation-heading" className="space-y-3">
               <h2 id="separation-heading" className="scroll-mt-20 text-lg font-semibold">

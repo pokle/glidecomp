@@ -19,6 +19,8 @@ import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/ta
 import { Alert, AlertDescription, AlertTitle } from "@/react/ui/alert";
 import { RhoSparkline } from "../field-analysis/charts/RhoSparkline";
 import { VerdictBadge, VerdictLegend } from "../field-analysis/SeparationRanking";
+import { ConsistencyChip } from "../field-analysis/ConsistencyChip";
+import { ConsistencyMap } from "../field-analysis/charts/ConsistencyMap";
 import { MetricGlossary, type GlossaryEntry } from "../field-analysis/MetricGlossary";
 import { underComp } from "../lib/crumbs";
 import { api } from "../../comp/api";
@@ -132,17 +134,22 @@ export function CompFieldAnalysis() {
   // Outcome-derived metrics (time behind the leader, …) correlate with rank
   // by construction, so they rank apart from the behaviours — same split as
   // the task page and the CLI report.
+  // Ranked by |mean signed ρ|: flip-flopping tasks cancel, so CONSISTENT
+  // separation leads — matching the intro copy. A metric's per-day power
+  // regardless of direction stays visible in its mean|ρ| column.
+  const signedStrength = (m: CompMetricAggregate) =>
+    m.meanSignedRho === null ? -1 : Math.abs(m.meanSignedRho);
   const rankedMetrics = useMemo(() => {
     if (!active) return [];
     return active.aggregate.metrics
       .filter((m) => !m.outcome)
-      .sort((a, b) => (b.meanAbsRho ?? -1) - (a.meanAbsRho ?? -1));
+      .sort((a, b) => signedStrength(b) - signedStrength(a));
   }, [active]);
   const outcomeMetrics = useMemo(() => {
     if (!active) return [];
     return active.aggregate.metrics
       .filter((m) => m.outcome)
-      .sort((a, b) => (b.meanAbsRho ?? -1) - (a.meanAbsRho ?? -1));
+      .sort((a, b) => signedStrength(b) - signedStrength(a));
   }, [active]);
 
   // The aggregate stores no method descriptions, so the glossary reads them
@@ -291,7 +298,27 @@ export function CompFieldAnalysis() {
               taskLabels={active.aggregate.taskLabels}
               ariaLabel="Metric separation across tasks"
             />
+            <p className="text-xs text-muted-foreground">
+              Ranked by |mean ρ| (n-weighted signed mean), so consistent
+              separation leads — flip-flopping tasks cancel there, while
+              mean |ρ| keeps their per-day power visible; a large gap between
+              the two means the payoff depended on the day.{" "}
+              <strong>Consistency</strong> counts only tasks whose |ρ| cleared
+              their noise floor (the filled sparkline dots; hollow = within
+              noise): − means larger values went with better ranks. A split
+              is a finding — the payoff depended on the day — not a defect.
+            </p>
             <VerdictLegend />
+
+            <div className="space-y-3 pt-2">
+              <h3 className="text-base font-semibold">Consistency map</h3>
+              <p className="text-sm text-muted-foreground">
+                The same table as a picture: how much each behaviour separated
+                the field per day (across) against how consistently it pulled
+                one way (up).
+              </p>
+              <ConsistencyMap metrics={rankedMetrics} />
+            </div>
 
             {outcomeMetrics.length > 0 ? (
               <div className="space-y-3 pt-2">
@@ -390,8 +417,14 @@ function SeparationTable({
             {label}
           </Column>
         ))}
+        <Column className="w-24 text-right" aria-label="Mean signed rho across tasks, n-weighted">
+          mean ρ
+        </Column>
         <Column className="w-24 text-right" aria-label="Mean absolute rho across tasks">
           mean |ρ|
+        </Column>
+        <Column className="w-36" aria-label="Sign consistency across informative tasks">
+          Consistency
         </Column>
         <Column className="w-24 text-right" aria-label="Comp-level rho">
           comp ρ
@@ -411,6 +444,9 @@ function SeparationTable({
             <Cell>
               <RhoSparkline
                 perTaskRho={m.perTaskRho}
+                perTaskInformative={m.perTaskCorrelation.map((c) =>
+                  c === null ? null : Math.abs(c.rho) >= c.noiseFloor
+                )}
                 taskLabels={taskLabels}
                 metricLabel={m.label}
               />
@@ -427,6 +463,15 @@ function SeparationTable({
               </Cell>
             ))}
             <Cell className="text-right tabular-nums">
+              {m.meanSignedRho === null ? (
+                <span aria-label="not applicable" className="text-muted-foreground">
+                  —
+                </span>
+              ) : (
+                m.meanSignedRho.toFixed(2)
+              )}
+            </Cell>
+            <Cell className="text-right tabular-nums">
               {m.meanAbsRho === null ? (
                 <span aria-label="not applicable" className="text-muted-foreground">
                   —
@@ -434,6 +479,9 @@ function SeparationTable({
               ) : (
                 m.meanAbsRho.toFixed(2)
               )}
+            </Cell>
+            <Cell>
+              <ConsistencyChip metric={m} />
             </Cell>
             <Cell className="text-right tabular-nums">
               {m.compRho ? (
