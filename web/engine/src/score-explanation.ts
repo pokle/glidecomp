@@ -24,6 +24,7 @@
  * public entry points and re-exports the vocabulary.
  */
 
+import { fixAltitude } from './igc-parser';
 import type { GAPParameters } from './gap-scoring';
 import { DEFAULT_GAP_PARAMETERS } from './gap-scoring';
 import type { TurnpointSequenceResult } from './turnpoint-sequence';
@@ -177,7 +178,8 @@ export function explainOpenDistanceScore(
     const furthestTimeMs =
       input.anchorInfo?.furthest?.timeMs ?? furthestFix?.time.getTime();
     const furthestAltitude =
-      input.anchorInfo?.furthest?.altitude ?? furthestFix?.gnssAltitude;
+      input.anchorInfo?.furthest?.altitude ??
+      (furthestFix ? fixAltitude(furthestFix) : undefined);
     items.push({
       id: 'origin',
       text: input.manual

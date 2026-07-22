@@ -230,6 +230,26 @@ export interface PilotAnalysisData {
     made_goal: boolean;
     route_to_goal: Array<{ lat: number; lon: number }>;
   } | null;
+  /** What the engine's altitude plausibility pass repaired in this pilot's
+   * track — disclosed on the score-details page. Null for manual flights;
+   * may be absent in payloads cached before the field existed. */
+  altitude_cleaning?: AltitudeCleaningData | null;
+}
+
+/** Wire shape of the engine's AltitudeCleaningReport. */
+export interface AltitudeCleaningData {
+  totalFixCount: number;
+  repairedFixCount: number;
+  crossChecked: boolean;
+  ranges: Array<{
+    startIndex: number;
+    endIndex: number;
+    startTimeMs: number;
+    endTimeMs: number;
+    fixCount: number;
+    maxCorrectionMeters: number;
+    method: "cross-channel" | "rate";
+  }>;
 }
 
 export interface AuditEntry {

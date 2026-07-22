@@ -130,6 +130,60 @@ import BackLink from "../../components/BackLink.astro";
         </span>
       </a>
 
+      {/* Data cleaning */}
+      <a
+        href="/scoring/data-cleaning"
+        class="block mb-6 p-5 rounded-lg border border-border bg-card hover:border-primary/60 transition-colors group"
+      >
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-xl font-bold">
+            Track data cleaning
+            <span class="text-sm font-normal text-muted-foreground">
+              honest inputs to honest scores
+            </span>
+          </h2>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="text-muted-foreground group-hover:text-foreground transition-colors"
+          >
+            <line x1="5" y1="12" x2="19" y2="12" />
+            <polyline points="12 5 19 12 12 19" />
+          </svg>
+        </div>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          Flight recorders occasionally log altitudes no glider could fly — GPS dropouts and
+          multipath spikes. Before analysis, GlideComp repairs these by cross-checking the GPS
+          altitude against the barometric channel, with physical plausibility limits as the
+          fallback. Every repair is disclosed on the pilot's score page; positions, times and
+          the original file are never altered.
+        </p>
+        <span class="inline-flex items-center gap-1 text-sm font-medium mt-3 text-foreground group-hover:underline">
+          Read how data cleaning works
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <line x1="5" y1="12" x2="19" y2="12" />
+            <polyline points="12 5 19 12 12 19" />
+          </svg>
+        </span>
+      </a>
+
     </div>
   </div>
 </Base>

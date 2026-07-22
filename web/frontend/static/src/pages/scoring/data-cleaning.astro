@@ -1,0 +1,190 @@
+---
+/** Track data cleaning guide — how GlideComp repairs GPS altitude glitches
+ * before analysis, and how every repair is disclosed. Sibling of the GAP and
+ * open-distance scoring pages. */
+import Base from "../../layouts/Base.astro";
+import BackLink from "../../components/BackLink.astro";
+---
+
+<Base
+  title="GlideComp - How Track Data Cleaning Works"
+  description="How GlideComp detects and repairs GPS altitude glitches in tracklogs — cross-checking the barometric channel, physical plausibility limits, and full disclosure of every repair."
+>
+  <div class="min-h-screen bg-background text-foreground p-6">
+    <div class="max-w-2xl mx-auto">
+      <header class="mb-10">
+        <BackLink href="/scoring" label="Scoring" />
+        <h1 class="text-3xl font-bold flex items-center gap-3">
+          <img src="/icon.svg" alt="GlideComp logo" class="w-8 h-8" />
+          How Track Data Cleaning Works
+        </h1>
+        <p class="text-muted-foreground mt-1">
+          Repairing GPS altitude glitches before analysis — and telling you exactly what was
+          touched
+        </p>
+      </header>
+
+      {/* Table of Contents */}
+      <nav class="mb-10 p-4 rounded-lg border border-border bg-card">
+        <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+          Contents
+        </h2>
+        <ul class="space-y-1 text-sm">
+          <li>
+            <a href="#why-clean" class="hover:underline">Why Tracklogs Need Cleaning</a>
+          </li>
+          <li>
+            <a href="#two-channels" class="hover:underline">The Two Altitude Channels</a>
+          </li>
+          <li>
+            <a href="#cross-check" class="hover:underline">The Cross-Check: Barometer as Witness</a>
+          </li>
+          <li>
+            <a href="#rate-limits" class="hover:underline">The Fallback: Physical Plausibility</a>
+          </li>
+          <li>
+            <a href="#what-changes" class="hover:underline">What Gets Repaired — and What Never Changes</a>
+          </li>
+          <li>
+            <a href="#disclosure" class="hover:underline">Full Disclosure on the Score Page</a>
+          </li>
+        </ul>
+      </nav>
+
+      {/* Why */}
+      <section id="why-clean" class="mb-14">
+        <h2 class="text-2xl font-bold mb-4">Why Tracklogs Need Cleaning</h2>
+        <div class="space-y-4 text-sm leading-relaxed">
+          <p class="text-muted-foreground">
+            Flight recorders occasionally log altitudes that no aircraft could fly. A GPS
+            receiver re-acquiring satellites after shading, multipath reflections near terrain,
+            or a momentary dropout can produce a fix hundreds of metres above or below the
+            glider — or an altitude of exactly zero, the format's way of writing "no GPS
+            altitude for this fix".
+          </p>
+          <p class="text-muted-foreground">
+            Surveying the real competition tracklogs GlideComp is tested against (3.7 million
+            fixes), transient GPS altitude glitches — a jump faster than any glider can fly,
+            returning to the true altitude within a few seconds — outnumber zero-dropouts
+            roughly 80 to 1. Left in the data, a single glitch reads as a 400&nbsp;m climb or
+            dive that never happened, which would distort climb rates, glide ratios, thermal
+            detection and altitude-band statistics.
+          </p>
+          <p class="text-muted-foreground">
+            Simply treating zero as "missing" is not good enough either: pilots genuinely fly
+            at — and below — sea level. A coastal soaring flight lands on the beach at
+            0&nbsp;m; sites by the Dead Sea sit 400&nbsp;m below it. Cleaning has to
+            distinguish a measurement error from a real altitude, whatever the number.
+          </p>
+        </div>
+      </section>
+
+      {/* Two channels */}
+      <section id="two-channels" class="mb-14">
+        <h2 class="text-2xl font-bold mb-4">The Two Altitude Channels</h2>
+        <div class="space-y-4 text-sm leading-relaxed">
+          <p class="text-muted-foreground">
+            Every fix in an IGC tracklog carries <strong class="text-foreground">two</strong>
+            altitudes: the GPS (GNSS) altitude, and a barometric altitude from the
+            instrument's pressure sensor. They measure the same flight through different
+            physics, so they disagree by a slowly-drifting offset — the day's air pressure,
+            the temperature profile, the local geoid — typically a few tens of metres, and
+            larger at height on hot days.
+          </p>
+          <p class="text-muted-foreground">
+            The key property: that offset changes <em>slowly</em>. Over any one minute of
+            flight it moves by single-digit metres. That makes the barometric channel a
+            reliable witness for the GPS channel — and vice versa.
+          </p>
+        </div>
+      </section>
+
+      {/* Cross-check */}
+      <section id="cross-check" class="mb-14">
+        <h2 class="text-2xl font-bold mb-4">The Cross-Check: Barometer as Witness</h2>
+        <div class="space-y-4 text-sm leading-relaxed">
+          <p class="text-muted-foreground">
+            When both channels are recorded (the normal case), GlideComp tracks the
+            GPS-minus-barometric difference through the flight using a rolling two-minute
+            median. A fix whose difference suddenly departs that baseline by more than
+            150&nbsp;m is flagged as a GPS error, and its altitude is repaired to the
+            barometric reading plus the current baseline offset — the best available estimate
+            of where the glider actually was.
+          </p>
+          <p class="text-muted-foreground">
+            This test is what separates a glitch from real flying. In a genuine rapid descent
+            — a spiral dive, big ears, strong sink — <em>both</em> channels descend together,
+            the difference stays flat, and nothing is flagged. A slow glide to a beach landing
+            at 0&nbsp;m keeps both channels in agreement all the way down, so a genuine sea
+            level fix is left exactly as logged. Only a jump that appears in one channel and
+            not the other is treated as an error — and a zero-dropout is just the extreme case
+            of that.
+          </p>
+        </div>
+      </section>
+
+      {/* Rate limits */}
+      <section id="rate-limits" class="mb-14">
+        <h2 class="text-2xl font-bold mb-4">The Fallback: Physical Plausibility</h2>
+        <div class="space-y-4 text-sm leading-relaxed">
+          <p class="text-muted-foreground">
+            Some instruments record only one altitude channel (a GPS-only tracker, or a
+            barometer-only logger). With no witness to cross-check against, GlideComp falls
+            back to physics: hang gliders and paragliders do not sustain vertical speeds
+            beyond about 25&nbsp;m/s even in a spiral dive, so an altitude step steeper than
+            40&nbsp;m/s between fixes is treated as suspect.
+          </p>
+          <p class="text-muted-foreground">
+            A suspect step is only repaired when the track <em>returns</em> to near the
+            pre-step altitude within 30 seconds — the out-and-back shape of a glitch. The
+            excursion is then bridged by straight-line interpolation. A step that never comes
+            back (a logger restart during retrieve, say) is left untouched: repairing it would
+            be inventing data.
+          </p>
+          <p class="text-muted-foreground">
+            A slow descent through zero and back up — normal flying at a coastal site — never
+            triggers this rule, because every individual step is gentle.
+          </p>
+        </div>
+      </section>
+
+      {/* What changes */}
+      <section id="what-changes" class="mb-14">
+        <h2 class="text-2xl font-bold mb-4">What Gets Repaired — and What Never Changes</h2>
+        <div class="space-y-4 text-sm leading-relaxed">
+          <p class="text-muted-foreground">
+            Cleaning touches <strong class="text-foreground">altitude only</strong>. Positions,
+            times, and the validity flags in the tracklog are never altered, and the original
+            file — including both raw altitude channels — is stored and displayed unchanged.
+            Repairs live in a separate cleaned altitude series that the analysis reads.
+          </p>
+          <p class="text-muted-foreground">
+            Because GAP and open-distance scoring are driven by positions and times, cleaning
+            almost never changes a score. It matters for everything built on altitude: climb
+            rates and thermal detection, glide ratios, takeoff and landing detection, the
+            goal-altitude bonus, and the behavioural field analysis.
+          </p>
+        </div>
+      </section>
+
+      {/* Disclosure */}
+      <section id="disclosure" class="mb-14">
+        <h2 class="text-2xl font-bold mb-4">Full Disclosure on the Score Page</h2>
+        <div class="space-y-4 text-sm leading-relaxed">
+          <p class="text-muted-foreground">
+            Cleaning is never silent. Whenever any fix in a track was repaired, that pilot's
+            score details page shows a <strong class="text-foreground">Track data
+            cleaning</strong> note: how many fixes were repaired, the time range of each
+            incident, how large the correction was, and which test flagged it. A track with
+            nothing repaired shows nothing — most tracks are clean.
+          </p>
+          <p class="text-muted-foreground">
+            This is the same transparency rule the rest of GlideComp scoring follows: every
+            number that reaches a leaderboard must be explainable, and anything the system
+            did on the way there must be visible.
+          </p>
+        </div>
+      </section>
+    </div>
+  </div>
+</Base>

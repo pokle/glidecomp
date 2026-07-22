@@ -72,7 +72,7 @@ export function detectThermals(fixes: IGCFix[], thresholds: DetectionThresholds,
 
     for (let j = i - windowSize; j < i; j++) {
       const dt = (fixes[j + 1].time.getTime() - fixes[j].time.getTime()) / 1000;
-      const da = fixes[j + 1].gnssAltitude - fixes[j].gnssAltitude;
+      const da = fixAltitude(fixes[j + 1]) - fixAltitude(fixes[j]);
       totalClimb += da;
       totalTime += dt;
     }

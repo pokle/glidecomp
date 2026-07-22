@@ -6,6 +6,7 @@
  */
 
 import { sanitizeText } from './sanitize';
+import { cleanAltitudes, type AltitudeCleaningReport } from './altitude-cleaning';
 
 export interface IGCFix {
   time: Date;
@@ -14,16 +15,21 @@ export interface IGCFix {
   pressureAltitude: number;
   gnssAltitude: number;
   valid: boolean;
+  /** Repaired altitude where cleaning flagged this fix as implausible (see
+   * altitude-cleaning.ts). Raw channels above stay exactly as logged. */
+  cleanedAltitude?: number;
 }
 
 /**
- * A fix's altitude for analysis: GNSS, falling back to pressure when the
- * logger wrote the GNSS field as 0 (the IGC "no GPS altitude" sentinel —
- * dropout fixes, pressure-only instruments). THE canonical altitude read;
- * every consumer must use it rather than raw gnssAltitude, or one dropout
- * fix reads as sea level.
+ * A fix's altitude for analysis: the cleaned value where the plausibility
+ * pass repaired this fix (see altitude-cleaning.ts), otherwise GNSS, falling
+ * back to pressure when the logger wrote the GNSS field as 0 (the IGC "no
+ * GPS altitude" sentinel — dropout fixes, pressure-only instruments). THE
+ * canonical altitude read; every consumer must use it rather than raw
+ * gnssAltitude, or one dropout fix reads as sea level.
  */
 export function fixAltitude(fix: IGCFix): number {
+  if (fix.cleanedAltitude !== undefined) return fix.cleanedAltitude;
   return fix.gnssAltitude !== 0 ? fix.gnssAltitude : fix.pressureAltitude;
 }
 
@@ -75,6 +81,9 @@ export interface IGCFile {
   fixes: IGCFix[];
   events: IGCEvent[];
   task?: IGCTask;
+  /** What the altitude plausibility pass repaired (transparency record —
+   * surfaced on the score explainer). */
+  altitudeCleaning: AltitudeCleaningReport;
 }
 
 /**
@@ -399,6 +408,11 @@ export function parseIGC(content: string): IGCFile {
     }
   }
 
-  return { header, fixes, events, task };
+  // Altitude plausibility pass: repairs land in fix.cleanedAltitude (raw
+  // channels untouched) so every consumer downstream of fixAltitude() reads
+  // the cleaned series; the report is the transparency record.
+  const altitudeCleaning = cleanAltitudes(fixes);
+
+  return { header, fixes, events, task, altitudeCleaning };
 }
 

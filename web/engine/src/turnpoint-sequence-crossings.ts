@@ -7,7 +7,7 @@
  */
 
 import type { XCTask } from './xctsk-parser';
-import type { IGCFix } from './igc-parser';
+import { fixAltitude, type IGCFix } from './igc-parser';
 import { andoyerDistance } from './geo';
 import { getGoalIndex } from './xctsk-parser';
 import { computeTurnpointDirections, type TurnpointDirection } from './task-optimizer';
@@ -224,7 +224,7 @@ export function detectCylinderCrossings(
 
         const crossingLat = anchorPrev.latitude + t * (anchorCurr.latitude - anchorPrev.latitude);
         const crossingLon = anchorPrev.longitude + t * (anchorCurr.longitude - anchorPrev.longitude);
-        const crossingAlt = anchorPrev.gnssAltitude + t * (anchorCurr.gnssAltitude - anchorPrev.gnssAltitude);
+        const crossingAlt = fixAltitude(anchorPrev) + t * (fixAltitude(anchorCurr) - fixAltitude(anchorPrev));
 
         const prevTime = anchorPrev.time.getTime();
         const currTime = anchorCurr.time.getTime();
@@ -306,7 +306,7 @@ function detectGoalLineCrossings(
   ): void => {
     const lat = anchorPrev.latitude + t * (anchorCurr.latitude - anchorPrev.latitude);
     const lon = anchorPrev.longitude + t * (anchorCurr.longitude - anchorPrev.longitude);
-    const alt = anchorPrev.gnssAltitude + t * (anchorCurr.gnssAltitude - anchorPrev.gnssAltitude);
+    const alt = fixAltitude(anchorPrev) + t * (fixAltitude(anchorCurr) - fixAltitude(anchorPrev));
     const prevTime = anchorPrev.time.getTime();
     out.push({
       taskIndex,
