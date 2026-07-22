@@ -122,8 +122,14 @@ Frontend (`web/frontend/src/replay.html` + `web/frontend/src/replay/`):
 
 `manifest.json` (tiny): origin (`lat0/lon0/alt0`), `mPerDegLat/Lon`, `t0/t1`,
 `altMin/altMax`, `colors` palette, `timezone`, and `pilots[]` with
-`{id, name, colorIdx, vertexOffset, vertexCount, rank, score}` plus optional
-`task.turnpoints[]` (projected `x/z`, radius, type, name).
+`{id, name, colorIdx, vertexOffset, vertexCount, rank, score, reached}` plus
+optional `task.turnpoints[]` (projected `x/z`, radius, type, name, `alt` from
+the waypoint's altSmoothed) and `task.sssIndex`. `reached` is the pilot's
+turnpoint sequence from GAP scoring — `{tp, t}` pairs on the tRel clock — so
+the viewer can resolve each pilot's *next* turnpoint at any replay time; with
+the turnpoint altitudes it drives the callout's required-glide readout
+(`requiredGlideToTarget` in the engine, the same reading as the 2D analysis
+map's HUD).
 
 `tracks.bin.gz`: gzip of one interleaved `Float32Array`, **4 floats per vertex**
 `[x, y, z, tRel]`, pilots concatenated in `pilots[]` order. Per-vertex pilot

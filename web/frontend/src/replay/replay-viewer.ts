@@ -62,6 +62,10 @@ export interface PilotScreenSample {
   speed: number;
   /** Near-instantaneous climb (±3-fix window), m/s — the gauge needle. */
   climbInst: number;
+  /** ENU position (metres from the manifest origin; East = +X, North = -Z),
+   * un-exaggerated — for geo lookups like the required-glide readout. */
+  worldX: number;
+  worldZ: number;
 }
 
 export interface ViewerCallbacks {
@@ -153,6 +157,8 @@ export class ReplayViewer {
       climb: 0,
       speed: 0,
       climbInst: 0,
+      worldX: 0,
+      worldZ: 0,
     }));
 
     this.scene = new FlightScene(this.tracks, this.gaggles, this.sceneLight('abstract'));
@@ -302,6 +308,8 @@ export class ReplayViewer {
       out.climb = s.climb;
       out.speed = s.speed;
       out.climbInst = s.climbInst;
+      out.worldX = s.x;
+      out.worldZ = s.z;
       if (!out.active) {
         out.onScreen = false;
         continue;
