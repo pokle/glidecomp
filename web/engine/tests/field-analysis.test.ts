@@ -105,7 +105,7 @@ describe('field analysis integration (kosci-loop-t1)', () => {
 
     // Broadly-applicable metrics: ≥ 80% of started pilots.
     for (const id of [
-      'day.launch_timing',
+      'day.airtime_quality',
       'climb.shared_percentile',
       'climb.time_to_core',
       'climb.exit_decay',

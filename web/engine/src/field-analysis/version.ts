@@ -60,4 +60,14 @@
 //     n-blind thresholds could brand luck "strong". ρ values are unchanged;
 //     the bump rolls stored reports so their verdicts and noise floors
 //     recompute on the next lazy revalidation.
-export const FIELD_ANALYSIS_VERSION = 8;
+// v9: two metrics made honest (explanation ↔ computation parity).
+//     glide.track_efficiency now sums only NON-CLIMB path distance per leg —
+//     it previously included every thermal circle, so it mostly re-measured
+//     climb count while claiming line choice; values drop toward 1.0 and the
+//     known constant offset from circling disappears. day.launch_timing is
+//     renamed day.airtime_quality with direction 'neutral': the computed
+//     quantity is the non-sinking airtime share (which launch timing feeds
+//     but does not determine), and its old 'higher' prior flipped sign on
+//     ~half of real tasks. The bump rolls stored reports onto the new
+//     values/id on their next lazy revalidation.
+export const FIELD_ANALYSIS_VERSION = 9;

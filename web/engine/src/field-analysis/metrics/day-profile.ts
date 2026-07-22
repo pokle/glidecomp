@@ -6,7 +6,7 @@
  * #24 day.wind — per-circle wind estimates across all pilots, vector-averaged
  *     for the whole task, per UTC hour, and per speed-section leg.
  * #25 day.climb_by_hour — hourly median/p90 climb over every ThermalUse.
- * #26 day.launch_timing — per pilot, the share of airborne time spent in
+ * #26 day.airtime_quality (formerly day.launch_timing) — per pilot, the share of airborne time spent in
  *     non-sinking air (did they fly the day's window?).
  *
  * See docs/2026-07-18-field-analysis-plan.md §"P6 day profile & wind".
@@ -355,7 +355,7 @@ const dayClimbByHour: MetricComputer = {
 };
 
 // ---------------------------------------------------------------------------
-// #26 day.launch_timing
+// #26 day.airtime_quality
 // ---------------------------------------------------------------------------
 
 /**
@@ -455,7 +455,7 @@ function launchTiming(
   const deadline = resolveTaskDeadline(field.task, refEnd);
 
   const series: DayTimingSeries = {
-    id: 'day.launch_timing.timing',
+    id: 'day.airtime_quality.timing',
     title: 'Day timing',
     kind: 'day-timing',
     bestHour: best
@@ -489,17 +489,24 @@ function launchTiming(
   return { table, series };
 }
 
-const dayLaunchTiming: MetricComputer = {
-  id: 'day.launch_timing',
+const dayAirtimeQuality: MetricComputer = {
+  // Formerly day.launch_timing — renamed because the computed quantity is
+  // the non-sinking airtime share, which launch timing influences but does
+  // not determine (outcome and climb strength move it at least as much),
+  // and because across 27 real comps its "higher is better" prior flipped
+  // sign on ~half of tasks: the sign is genuinely the finding.
+  id: 'day.airtime_quality',
   label: 'Time in non-sinking air',
   shortLabel: 'NonSink%',
   unit: 'pct',
   family: 'day',
-  direction: 'higher',
+  direction: 'neutral',
   explanation:
     'Share of a pilot’s airborne time (on the shared grid) spent in non-sinking air — ' +
-    '30 s-smoothed vario at or above −0.5 m/s. A low share suggests flying outside the ' +
-    'day’s best window (launched too early or too late).',
+    '30 s-smoothed vario at or above −0.5 m/s. Reflects how much of the flight met usable ' +
+    'air: when flown, where the pilot steered, and how the flight ended all feed it, so the ' +
+    'correlation sign is the finding. The timing table relates the day’s best climbs window ' +
+    'to when the field actually launched.',
   compute(field) {
     const timing = launchTiming(field);
     return {
@@ -513,4 +520,4 @@ const dayLaunchTiming: MetricComputer = {
   },
 };
 
-export const DAY_METRICS: MetricComputer[] = [dayWind, dayClimbByHour, dayLaunchTiming];
+export const DAY_METRICS: MetricComputer[] = [dayWind, dayClimbByHour, dayAirtimeQuality];
