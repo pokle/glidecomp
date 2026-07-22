@@ -24,7 +24,7 @@
 import * as THREE from 'three';
 import { roundedHullOutline, type Pt } from './gaggle-hull';
 import { gaggleColor, type GaggleResult } from './gaggles';
-import type { MarkerSample } from './flight-scene';
+import { MAP_LABEL_FONT, type MarkerSample } from './flight-scene';
 
 const ARC_SEG = 6; // corner smoothness of the rounded hull
 
@@ -195,12 +195,14 @@ export class GaggleLayer {
       return false;
     }
 
-    // centroid of the outline (fan apex + label anchor)
+    // centroid of the outline (fan apex) + the hull's northern edge (label anchor)
     let cx = 0;
     let cz = 0;
+    let minZ = Infinity;
     for (const p of ring) {
       cx += p.x;
       cz += p.z;
+      if (p.z < minZ) minZ = p.z;
     }
     cx /= n;
     cz /= n;
@@ -239,9 +241,12 @@ export class GaggleLayer {
     (blob.fill.material as THREE.MeshBasicMaterial).color.setRGB(r, g, b);
     (blob.fill.material as THREE.MeshBasicMaterial).opacity = 0.16 * alpha;
 
-    // count label at the centroid
+    // Count label just NORTH of the bubble (screen-up when facing north), not
+    // at the centroid — top-down, a centred label sits under the very pilots
+    // it's counting and becomes unreadable. minZ tracks the members, so the
+    // label rides the envelope smoothly as the gaggle drifts.
     if (blob.labelCount !== count) this.paintLabel(blob, count);
-    blob.label.position.set(cx, cy + 1, cz);
+    blob.label.position.set(cx, cy + 1, minZ - this.labelWidth * 0.7);
     (blob.label.material as THREE.MeshBasicMaterial).opacity = alpha;
 
     blob.fill.visible = true;
@@ -254,7 +259,7 @@ export class GaggleLayer {
     const ctx = blob.labelCtx;
     const s = ctx.canvas.width;
     ctx.clearRect(0, 0, s, s);
-    ctx.font = `bold 76px system-ui, sans-serif`;
+    ctx.font = `bold 76px ${MAP_LABEL_FONT}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';

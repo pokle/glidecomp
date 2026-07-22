@@ -233,6 +233,16 @@ async function main(): Promise<void> {
   // the first scene build honours the saved theme (no-op rebuild before load)
   void viewer.setLightTheme(document.documentElement.classList.contains('light'));
 
+  // The scene bakes its map text (turnpoint names/altitudes, gaggle counts)
+  // into canvas textures during loadBundle, and canvas ignores lazy
+  // @font-face rules — resolve the label font's weights first or the first
+  // bake silently uses the fallback. Self-hosted woff2, so this is fast; a
+  // failure just keeps the fallback stack.
+  await Promise.all([
+    document.fonts.load('700 64px "Atkinson Hyperlegible Next"'),
+    document.fonts.load('400 44px "Atkinson Hyperlegible Next"'),
+  ]).catch(() => undefined);
+
   try {
     const tracks = await viewer.loadBundle(bundleUrl());
     manifest = tracks.manifest;
@@ -1067,6 +1077,7 @@ async function main(): Promise<void> {
     syncUnitSelects();
     gauge.redrawScale();
     updateLegend($<HTMLSelectElement>('colorMode').value as ColorMode);
+    viewer.refreshMapLabels(); // turnpoint altitude text is baked in the current unit
     digitsPilot = -1; // repaint the callout digits immediately, skip the 1 s throttle
   });
 

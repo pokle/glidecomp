@@ -206,6 +206,15 @@ export class ReplayViewer {
     return this.lightTheme && mode === 'abstract';
   }
 
+  /**
+   * Re-bake the map's baked-text labels (turnpoint name + altitude planes) —
+   * call when the altitude unit changes, so the ground text follows it.
+   */
+  refreshMapLabels(): void {
+    if (!this.scene || this.switching) return;
+    this.scene.refreshTurnpointLabels();
+  }
+
   /** Dispose and rebuild the scene + backend for `mode`, re-applying view state. */
   private async rebuild(mode: Backdrop): Promise<void> {
     this.switching = true;
