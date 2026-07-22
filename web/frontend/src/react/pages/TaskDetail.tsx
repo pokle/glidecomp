@@ -380,7 +380,11 @@ function TurnpointsTable({ xctsk }: { xctsk: XCTask }) {
                 <span className="text-muted-foreground">—</span>
               )}
             </Cell>
-            <Cell>{tp.type ?? "—"}</Cell>
+            {/* The last turnpoint is the goal in GAP scoring even when the
+                xctsk leaves its type unset, so label it rather than "—". */}
+            <Cell>
+              {tp.type ?? (i === xctsk.turnpoints.length - 1 ? "GOAL" : "—")}
+            </Cell>
             <Cell>
               {tp.type === "TAKEOFF" ? (
                 <span className="text-muted-foreground">—</span>

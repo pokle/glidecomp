@@ -824,6 +824,7 @@ export function RouteEditorDialog({
                 key={row.id}
                 row={row}
                 index={rows.indexOf(row)}
+                count={rows.length}
                 leg={derived.legByRowId.get(row.id) ?? null}
                 dir={derived.dirByRowId.get(row.id) ?? null}
                 onEdit={(id) => setTpEditor({ mode: "edit", rowId: id })}
@@ -1201,6 +1202,7 @@ export function RouteEditorDialog({
 function TurnpointCard({
   row,
   index,
+  count,
   leg,
   dir,
   onEdit,
@@ -1208,6 +1210,7 @@ function TurnpointCard({
 }: {
   row: RouteRow;
   index: number;
+  count: number;
   leg: number | null;
   dir: RouteRow["dir"];
   onEdit: (id: number) => void;
@@ -1217,8 +1220,13 @@ function TurnpointCard({
   const label = row.name || `turnpoint ${index + 1}`;
   const coordsMissing = parseCoords(row.coords) == null;
   // Show the type only when it's a special one (Takeoff/SSS/ESS); a plain
-  // turnpoint needs no badge.
-  const typeLabel = row.type ? TYPE_LABELS[row.type] : null;
+  // turnpoint needs no badge — except the last one, which is the goal in
+  // GAP scoring even when its xctsk type is unset.
+  const typeLabel = row.type
+    ? TYPE_LABELS[row.type]
+    : index === count - 1
+      ? "Goal"
+      : null;
   return (
     <GridListItem
       id={row.id}
