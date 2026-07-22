@@ -120,6 +120,7 @@ export function PerPilotMetricTable({
                 direction={m.direction}
                 explanation={m.explanation}
                 perPilot={m.perPilot}
+                pilots={report.pilots}
               />
             </span>
           </Column>

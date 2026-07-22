@@ -19,7 +19,8 @@ import { cn } from "@/react/lib/utils";
 import { DistributionStrip } from "./charts/DistributionStrip";
 import { glossaryEntryId } from "./MetricGlossary";
 import { directionWords, unitWords } from "./units";
-import type { MetricDirection, PilotMetricValue } from "./types";
+import { notableExcludedRanks, notableRanksPhrase } from "./exclusions";
+import type { FieldAnalysisReport, MetricDirection, PilotMetricValue } from "./types";
 
 export { directionWords };
 
@@ -58,6 +59,7 @@ export function MetricExplanation({
   direction,
   explanation,
   perPilot,
+  pilots,
 }: {
   /** When provided, the popover links to this metric's glossary entry —
    * only pass it on pages that render a MetricGlossary. */
@@ -69,7 +71,18 @@ export function MetricExplanation({
   /** When provided, the popover also shows the field's distribution — the
    * method AND where the field actually landed, in one stop. */
   perPilot?: PilotMetricValue[];
+  /** When provided (with perPilot), the popover states how many pilots the
+   * metric is not applicable to — naming any top-3 ranked ones, since a
+   * correlation computed without the winner must say so. */
+  pilots?: FieldAnalysisReport["pilots"];
 }) {
+  const excludedCount =
+    pilots && perPilot
+      ? pilots.length -
+        perPilot.filter((p) => p.value !== null && Number.isFinite(p.value)).length
+      : 0;
+  const notable =
+    pilots && perPilot && excludedCount > 0 ? notableExcludedRanks(pilots, perPilot) : [];
   return (
     <PopoverTrigger>
       <Button
@@ -97,6 +110,14 @@ export function MetricExplanation({
               <div className="mt-2">
                 <DistributionStrip metric={{ label, unit, perPilot }} compact />
               </div>
+            ) : null}
+            {excludedCount > 0 ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Not applicable for {excludedCount} pilot
+                {excludedCount === 1 ? "" : "s"}
+                {notable.length > 0 ? `, including ${notableRanksPhrase(notable)}` : ""}
+                {" — they are excluded from the chart and the correlation."}
+              </p>
             ) : null}
             {metricId ? (
               // A plain hash link: the browser scrolls (honouring the

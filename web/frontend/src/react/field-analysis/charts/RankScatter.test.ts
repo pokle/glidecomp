@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { captionText } from "./RankScatter";
+import { notableExcludedRanks } from "../exclusions";
 import type { MetricReport, MetricCorrelation, MetricDirection } from "../types";
 
 function metric(direction: MetricDirection, rho: number | null): MetricReport {
@@ -66,5 +67,42 @@ describe("captionText", () => {
     expect(captionText(metric("higher", -0.6), 2)).toContain(
       "2 pilots have no value and are not plotted."
     );
+  });
+  it("names top-ranked pilots among the excluded", () => {
+    // The Corryong 2026 T1 case: gaggle.departure_winrate null for the #1
+    // and #2 ranked pilots — the winner stayed in every gaggle to the end,
+    // so the ρ is computed over a subpopulation excluding him. The caption
+    // must say so instead of leaving the absence silent.
+    expect(captionText(metric("neutral", -0.63), 13, [1, 2])).toContain(
+      "13 pilots have no value and are not plotted, including the #1 and #2 ranked pilots."
+    );
+    expect(captionText(metric("neutral", -0.63), 5, [1])).toContain(
+      "including the #1 ranked pilot."
+    );
+    expect(captionText(metric("neutral", -0.63), 5, [1, 2, 3])).toContain(
+      "including the #1, #2 and #3 ranked pilots."
+    );
+  });
+});
+
+describe("notableExcludedRanks", () => {
+  const pilots = [
+    { trackFile: "a.igc", pilotName: "A", rank: 1 },
+    { trackFile: "b.igc", pilotName: "B", rank: 2 },
+    { trackFile: "c.igc", pilotName: "C", rank: 3 },
+    { trackFile: "d.igc", pilotName: "D", rank: 4 },
+  ];
+  it("returns top-3 ranks with no usable value, joined by trackFile", () => {
+    const perPilot = [
+      { trackFile: "b.igc", value: null },
+      { trackFile: "a.igc", value: null },
+      { trackFile: "c.igc", value: 5 },
+      { trackFile: "d.igc", value: null },
+    ];
+    expect(notableExcludedRanks(pilots, perPilot)).toEqual([1, 2]);
+  });
+  it("empty when the top ranks all have values", () => {
+    const perPilot = pilots.map((p) => ({ trackFile: p.trackFile, value: 1 }));
+    expect(notableExcludedRanks(pilots, perPilot)).toEqual([]);
   });
 });

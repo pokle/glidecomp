@@ -38,6 +38,7 @@ import {
   niceTicks,
   spreadLabels,
 } from "./chart-utils";
+import { notableExcludedRanks, notableRanksPhrase } from "../exclusions";
 
 const W = 560;
 const BASE_H = 300;
@@ -53,8 +54,16 @@ interface ScatterPoint {
 }
 
 /** The caption's statistics-in-words, shared with the accessible name.
- * Exported for tests. */
-export function captionText(metric: MetricReport, excluded: number): string {
+ * Exported for tests. `excludedTopRanks` — top-3 leaderboard ranks among the
+ * unplotted pilots — turns a silent absence into information: a ρ over a
+ * subpopulation that excludes the winner must say so, because "not
+ * applicable" for the best pilots is often structural, not random (a race
+ * leader ends gaggles rather than leaving them). */
+export function captionText(
+  metric: MetricReport,
+  excluded: number,
+  excludedTopRanks: number[] = [],
+): string {
   const c = metric.correlation;
   const parts: string[] = [];
   if (c) {
@@ -91,10 +100,14 @@ export function captionText(metric: MetricReport, excluded: number): string {
     parts.push("Too few usable values for a correlation — read the dots, not a trend.");
   }
   if (excluded > 0) {
+    const notable =
+      excludedTopRanks.length > 0
+        ? `, including ${notableRanksPhrase(excludedTopRanks)}`
+        : "";
     parts.push(
       `${excluded} pilot${excluded === 1 ? " has" : "s have"} no value and ${
         excluded === 1 ? "is" : "are"
-      } not plotted.`
+      } not plotted${notable}.`
     );
   }
   return parts.join(" ");
@@ -136,7 +149,7 @@ export function RankScatter({
   const { highlight, setHighlight } = usePilotHighlight();
 
   const excluded = pilots.length - points.length;
-  const caption = captionText(metric, excluded);
+  const caption = captionText(metric, excluded, notableExcludedRanks(pilots, metric.perPilot));
 
   if (points.length === 0) {
     return (
