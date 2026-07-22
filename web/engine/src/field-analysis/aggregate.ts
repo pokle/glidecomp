@@ -17,7 +17,22 @@ import type {
   CompTaskResult,
   MetricCorrelation,
   MetricReport,
+  SignConsistency,
+  SignSummary,
 } from './types';
+
+/**
+ * Classify a metric's informative sign counts. 'leaning' needs at least a
+ * 2:1 majority (minority ≤ ⅓ of informative tasks); anything closer is a
+ * 'split'. With the 3–7 tasks of a typical comp these are descriptions of
+ * the evidence, never significance claims — the consumer states counts.
+ */
+export function signConsistency(s: SignSummary): SignConsistency {
+  const informative = s.negative + s.positive;
+  if (informative < 2) return 'quiet';
+  if (s.negative === 0 || s.positive === 0) return 'consistent';
+  return Math.min(s.negative, s.positive) / informative <= 1 / 3 ? 'leaning' : 'split';
+}
 
 export function aggregateComp(tasks: CompTaskResult[]): CompAggregateReport {
   const taskLabels = tasks.map((t) => t.label);
@@ -59,8 +74,11 @@ export function aggregateComp(tasks: CompTaskResult[]): CompAggregateReport {
     const meta = metricMeta.get(id)!;
 
     const perTaskRho: (number | null)[] = [];
+    const perTaskCorrelation: CompMetricAggregate['perTaskCorrelation'] = [];
     let weightedAbs = 0;
+    let weightedSigned = 0;
     let weightSum = 0;
+    const signSummary: SignSummary = { negative: 0, positive: 0, quiet: 0 };
     // Per-pilot values across tasks, keyed by comp pilot key.
     const valuesByKey = new Map<string, number[]>();
 
@@ -68,8 +86,25 @@ export function aggregateComp(tasks: CompTaskResult[]): CompAggregateReport {
       const m = task.report.metrics.find((x) => x.id === id);
       perTaskRho.push(m?.correlation?.rho ?? null);
       if (m?.correlation) {
-        weightedAbs += m.correlation.absRho * m.correlation.n;
-        weightSum += m.correlation.n;
+        const c = m.correlation;
+        // Reports stored before the noise floor existed lack it; recompute
+        // from n so sign-informativeness never depends on report age.
+        const noiseFloor = c.noiseFloor ?? spearmanNoiseFloor(c.n);
+        perTaskCorrelation.push({ rho: c.rho, n: c.n, noiseFloor });
+        weightedAbs += c.absRho * c.n;
+        weightedSigned += c.rho * c.n;
+        weightSum += c.n;
+        // Only informative tasks vote on the sign — a sub-floor coefficient
+        // is indistinguishable from luck, and a "split" made of those would
+        // be noise wearing a costume.
+        if (c.absRho >= noiseFloor && c.rho !== 0) {
+          if (c.rho < 0) signSummary.negative++;
+          else signSummary.positive++;
+        } else {
+          signSummary.quiet++;
+        }
+      } else {
+        perTaskCorrelation.push(null);
       }
       if (!m) continue;
       for (let i = 0; i < m.perPilot.length; i++) {
@@ -113,6 +148,10 @@ export function aggregateComp(tasks: CompTaskResult[]): CompAggregateReport {
       direction: meta.direction,
       ...(meta.outcome ? { outcome: true as const } : {}),
       perTaskRho,
+      perTaskCorrelation,
+      meanSignedRho: weightSum > 0 ? weightedSigned / weightSum : null,
+      signSummary,
+      consistency: signConsistency(signSummary),
       meanAbsRho: weightSum > 0 ? weightedAbs / weightSum : null,
       compRho,
     };

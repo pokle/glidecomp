@@ -379,11 +379,48 @@ export interface CompMetricAggregate {
   outcome?: true;
   /** Signed per-task ρ, parallel to CompAggregateReport.taskLabels (null = not computed). */
   perTaskRho: (number | null)[];
+  /**
+   * Per-task correlation summary, parallel to taskLabels (null = no
+   * correlation on that task). noiseFloor is the α = 0.05 critical |ρ| for
+   * that task's n — a task is "informative" when |rho| clears it.
+   */
+  perTaskCorrelation: ({ rho: number; n: number; noiseFloor: number } | null)[];
   /** n-weighted mean |ρ| across tasks; null when no task produced one. */
   meanAbsRho: number | null;
+  /**
+   * n-weighted mean of SIGNED per-task ρ; null when no task produced one.
+   * Flip-flopping tasks cancel here, so |meanSignedRho| ranks consistent
+   * separation while meanAbsRho ranks per-day power regardless of
+   * direction — the gap between them is the day-dependence signal.
+   */
+  meanSignedRho: number | null;
+  /** Sign counts over informative tasks (|ρ| ≥ that task's noise floor). */
+  signSummary: SignSummary;
+  /** Classification of signSummary — the finding, not a warning. */
+  consistency: SignConsistency;
   /** Correlation of per-pilot cross-task metric means vs comp rank. */
   compRho: MetricCorrelation | null;
 }
+
+/** Sign counts across a metric's informative tasks. */
+export interface SignSummary {
+  /** Informative tasks with ρ < 0 (larger value ↔ better rank). */
+  negative: number;
+  /** Informative tasks with ρ > 0 (larger value ↔ worse rank). */
+  positive: number;
+  /** Tasks whose |ρ| sat under their noise floor (signs not counted). */
+  quiet: number;
+}
+
+/**
+ * How a metric's informative per-task signs read across the comp:
+ *  - 'consistent': ≥ 2 informative tasks, all one sign — a trait signal.
+ *  - 'leaning': a ≥ 2:1 majority one way.
+ *  - 'split': near-even — the payoff depended on the day (the most
+ *    interesting outcome, not a failure).
+ *  - 'quiet': fewer than 2 informative tasks; nothing to read.
+ */
+export type SignConsistency = 'consistent' | 'leaning' | 'split' | 'quiet';
 
 export interface CompAggregateReport {
   taskLabels: string[];

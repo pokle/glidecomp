@@ -28,6 +28,8 @@ export type {
   CompTaskResult,
   CompMetricAggregate,
   CompAggregateReport,
+  SignSummary,
+  SignConsistency,
 } from './types';
 export { buildFieldContext, airborneSeconds, type BuildFieldContextOptions } from './context';
 export { buildTimeGrid, sampleAt, stepFor, type ResampledSample, type ResampledTrack, type TimeGrid } from './resample';
@@ -42,3 +44,4 @@ export { ALL_METRICS, FAMILY_ORDER, FAMILY_LABELS } from './registry';
 export { FIELD_ANALYSIS_VERSION } from './version';
 export { spearmanNoiseFloor } from './stats';
 export { correlationVerdict } from './evaluate';
+export { signConsistency } from './aggregate';

@@ -243,22 +243,36 @@ export function renderCompReport(report: CompAggregateReport): string {
   // mattered on which day; the standings are context, not the headline.
   // Outcome-derived metrics rank apart, same as the per-task report: they
   // correlate by construction, so they must not top the behavioural ranking.
-  const rankByMeanAbs = (a: CompMetricAggregate, b: CompMetricAggregate): number =>
-    (b.meanAbsRho ?? -1) - (a.meanAbsRho ?? -1);
-  const ranked = report.metrics.filter((m) => !m.outcome).sort(rankByMeanAbs);
-  const outcomeRanked = report.metrics.filter((m) => m.outcome).sort(rankByMeanAbs);
+  // |mean signed ρ| ranks CONSISTENT separation: a metric flip-flopping
+  // +0.5/−0.5 across tasks cancels here instead of ranking beside one that
+  // is consistently −0.5 (its per-day power stays visible in mean|ρ|).
+  const signedStrength = (m: CompMetricAggregate): number =>
+    m.meanSignedRho === null ? -1 : Math.abs(m.meanSignedRho);
+  const rankBySigned = (a: CompMetricAggregate, b: CompMetricAggregate): number =>
+    signedStrength(b) - signedStrength(a);
+  const ranked = report.metrics.filter((m) => !m.outcome).sort(rankBySigned);
+  const outcomeRanked = report.metrics.filter((m) => m.outcome).sort(rankBySigned);
   const compColumns: ReportTable['columns'] = [
     { header: 'Metric', align: 'left' },
     ...report.taskLabels.map((l) => ({ header: l, align: 'right' as const })),
+    { header: 'mean ρ', align: 'right' },
     { header: 'mean|ρ|', align: 'right' },
+    { header: 'signs', align: 'left' },
     { header: 'comp ρ', align: 'right' },
     { header: 'n', align: 'right' },
     { header: 'verdict', align: 'left' },
   ];
+  const signsCell = (m: CompMetricAggregate): string => {
+    const s = m.signSummary;
+    if (s.negative + s.positive === 0) return 'quiet';
+    return `${s.negative}−/${s.positive}+ ${m.consistency}`;
+  };
   const compRow = (m: CompMetricAggregate): ReportCell[] => [
     m.id,
     ...m.perTaskRho.map((r) => (r === null ? '—' : r.toFixed(2))),
+    m.meanSignedRho === null ? '—' : m.meanSignedRho.toFixed(2),
     m.meanAbsRho === null ? '—' : m.meanAbsRho.toFixed(2),
+    signsCell(m),
     m.compRho ? m.compRho.rho.toFixed(2) : '—',
     m.compRho ? String(m.compRho.n) : '—',
     m.compRho?.verdict ?? '—',
@@ -269,7 +283,11 @@ export function renderCompReport(report: CompAggregateReport): string {
     rows: ranked.map(compRow),
     footnotes: [
       'comp ρ correlates each pilot\'s cross-task metric mean against their comp rank (total score).',
-      'Read the per-task columns to see which strategies mattered on which day.',
+      'Ranked by |mean ρ| (n-weighted signed mean): flip-flopping tasks cancel, so consistent',
+      'separation leads. mean|ρ| is per-day power regardless of direction — a large gap between',
+      'the two means the payoff depended on the day.',
+      'signs counts tasks whose |ρ| cleared their noise floor: − = larger value went with better',
+      'ranks. A split is a finding (day-dependent payoff), not a defect.',
       'Verdicts: strong |ρ| ≥ 0.5, moderate ≥ 0.3, weak below — only after clearing the α = 0.05',
       'noise floor for that n ("within noise" otherwise).',
     ],

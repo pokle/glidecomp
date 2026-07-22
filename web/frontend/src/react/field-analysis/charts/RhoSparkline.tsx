@@ -8,9 +8,13 @@
  * per-task cells stay in the same table row — they are the accessible and
  * precise reading, this is the shape of it.
  *
- * A task with no ρ renders as a hollow marker ON the zero line and reads as
- * "not applicable" — never silently skipped, or a 5-dot row over a 6-task
- * comp would misrepresent coverage.
+ * Marker vocabulary:
+ *  - filled dot: an informative ρ (cleared its task's noise floor) — these
+ *    are the dots that vote on sign consistency;
+ *  - hollow dot off the line: a ρ within noise for its n — positioned
+ *    honestly, but not evidence of a direction;
+ *  - hollow marker ON the zero line: no ρ at all — never silently skipped,
+ *    or a 5-dot row over a 6-task comp would misrepresent coverage.
  */
 
 const SLOT = 14;
@@ -22,17 +26,26 @@ const AMPLITUDE = MID - 4;
 
 export function RhoSparkline({
   perTaskRho,
+  perTaskInformative,
   taskLabels,
   metricLabel,
 }: {
   perTaskRho: (number | null)[];
+  /** Whether each task's |ρ| cleared its noise floor; parallel to
+   * perTaskRho. Omitted (older callers/data): every dot draws filled. */
+  perTaskInformative?: (boolean | null)[];
   taskLabels: string[];
   metricLabel: string;
 }) {
   const width = PAD * 2 + SLOT * perTaskRho.length;
 
   const label = `${metricLabel}, ρ by task: ${perTaskRho
-    .map((rho, i) => `${taskLabels[i] ?? `task ${i + 1}`} ${rho === null ? "not applicable" : rho.toFixed(2)}`)
+    .map((rho, i) => {
+      const name = taskLabels[i] ?? `task ${i + 1}`;
+      if (rho === null) return `${name} not applicable`;
+      const noise = perTaskInformative?.[i] === false ? " (within noise)" : "";
+      return `${name} ${rho.toFixed(2)}${noise}`;
+    })
     .join(", ")}`;
 
   return (
@@ -60,11 +73,24 @@ export function RhoSparkline({
           );
         }
         const clamped = Math.max(-1, Math.min(1, rho));
+        const cy = MID - clamped * AMPLITUDE;
+        if (perTaskInformative?.[i] === false) {
+          return (
+            <circle
+              key={i}
+              cx={cx}
+              cy={cy}
+              r={3}
+              className="fill-none stroke-foreground/50"
+              strokeWidth={1.2}
+            />
+          );
+        }
         return (
           <circle
             key={i}
             cx={cx}
-            cy={MID - clamped * AMPLITUDE}
+            cy={cy}
             r={3.5}
             // Same ink as the DivergingMeter bar — sign is encoded by which
             // side of the line, never by colour.
