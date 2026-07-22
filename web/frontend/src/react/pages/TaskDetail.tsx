@@ -361,6 +361,7 @@ function TurnpointsTable({ xctsk }: { xctsk: XCTask }) {
         </Column>
         <Column isRowHeader>Name</Column>
         <Column className="text-right">Radius</Column>
+        <Column className="text-right">Alt</Column>
         <Column>Type</Column>
         <Column>Direction</Column>
       </TableHeader>
@@ -370,6 +371,15 @@ function TurnpointsTable({ xctsk }: { xctsk: XCTask }) {
             <Cell className="text-right tabular-nums">{i + 1}</Cell>
             <Cell>{tp.waypoint.name}</Cell>
             <Cell className="text-right tabular-nums">{tp.radius} m</Cell>
+            {/* Waypoint altitude — xctsk files without one carry 0, shown as
+                unknown rather than a misleading sea-level reading. */}
+            <Cell className="text-right tabular-nums">
+              {tp.waypoint.altSmoothed ? (
+                `${tp.waypoint.altSmoothed} m`
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
+            </Cell>
             {/* The last turnpoint is the goal in GAP scoring even when the
                 xctsk leaves its type unset, so label it rather than "—". */}
             <Cell>
