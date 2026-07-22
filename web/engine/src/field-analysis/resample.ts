@@ -10,7 +10,7 @@
  * x = East, y = Up (altitude), z = South = −north.
  */
 
-import type { IGCFix } from '../igc-parser';
+import { fixAltitude as altOf, type IGCFix } from '../igc-parser';
 import type { Frame, PilotState } from '../cluster-detector';
 import { localEastNorth } from '../geo';
 
@@ -62,11 +62,6 @@ interface PilotTrackSpec {
   fixes: IGCFix[];
   takeoffIndex: number;
   landingIndex: number;
-}
-
-/** GNSS altitude with the same pressure fallback the track packer uses. */
-function altOf(fix: IGCFix): number {
-  return fix.gnssAltitude !== 0 ? fix.gnssAltitude : fix.pressureAltitude;
 }
 
 /**

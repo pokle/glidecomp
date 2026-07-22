@@ -10,7 +10,7 @@
  * 12–15). Metrics only read the FieldContext — no detectors are re-run.
  */
 
-import type { IGCFix } from '../../igc-parser';
+import { fixAltitude as altOf, type IGCFix } from '../../igc-parser';
 import type {
   FieldContext,
   MetricComputer,
@@ -34,11 +34,6 @@ const LOW_SAVE_MIN_GAIN_METERS = 300;
 const MIN_FLOWN_DISTANCE_METERS = 20_000;
 
 // --- Small shared helpers ---------------------------------------------------
-
-/** Altitude of a fix — GNSS, falling back to pressure when the GNSS value is 0. */
-function altOf(fix: IGCFix): number {
-  return fix.gnssAltitude !== 0 ? fix.gnssAltitude : fix.pressureAltitude;
-}
 
 /** A null (not-applicable) per-pilot value. */
 function na(p: PilotAnalysisContext): PilotMetricValue {

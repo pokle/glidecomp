@@ -52,8 +52,9 @@ interface ScatterPoint {
   value: number;
 }
 
-/** The caption's statistics-in-words, shared with the accessible name. */
-function captionText(metric: MetricReport, excluded: number): string {
+/** The caption's statistics-in-words, shared with the accessible name.
+ * Exported for tests. */
+export function captionText(metric: MetricReport, excluded: number): string {
   const c = metric.correlation;
   const parts: string[] = [];
   if (c) {
@@ -67,13 +68,24 @@ function captionText(metric: MetricReport, excluded: number): string {
             } ranks here.`
       );
     } else {
-      // Rank 1 is at the top, so a separating metric gathers the top ranks
-      // toward its better side.
-      parts.push(
-        metric.direction === "higher"
-          ? "More is better here, so separation reads as top ranks gathering to the right."
-          : "Less is better here, so separation reads as top ranks gathering to the left."
-      );
+      // Rank 1 is at the top and numerically smallest, so ρ < 0 means larger
+      // values went with better ranks — the dots gather top-right. The
+      // gathering sentence must follow the OBSERVED sign, not the registry's
+      // higher/lower prior: on the day a metric runs against expectation the
+      // caption has to say so, not describe the day it expected to see.
+      const expected = metric.direction === "higher" ? "More" : "Less";
+      if (c.rho === 0) {
+        parts.push(`${expected} is expected to be better here, but there was no lean either way.`);
+      } else {
+        const gatherRight = c.rho < 0;
+        const side = gatherRight ? "right" : "left";
+        const asExpected = (metric.direction === "higher") === gatherRight;
+        parts.push(
+          asExpected
+            ? `${expected} is expected to be better here, and it was: top ranks gather to the ${side}.`
+            : `${expected} is expected to be better here, but this task ran the other way: top ranks gather to the ${side}.`
+        );
+      }
     }
   } else {
     parts.push("Too few usable values for a correlation — read the dots, not a trend.");

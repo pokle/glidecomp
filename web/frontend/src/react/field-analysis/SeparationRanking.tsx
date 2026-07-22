@@ -38,15 +38,26 @@ interface RankedMetric {
   correlation: MetricCorrelation;
 }
 
+/**
+ * The behavioural ranking. Outcome-derived metrics (time behind the leader,
+ * …) correlate with rank by construction, so they are excluded here — from
+ * the headline table, the top-3 family auto-open, and the auto-selected
+ * scatter — and presented apart as eval sanity checks.
+ */
 export function rankMetrics(metrics: MetricReport[]): RankedMetric[] {
   return metrics
+    .filter((m) => !m.outcome)
     .flatMap((m) => (m.correlation ? [{ metric: m, correlation: m.correlation }] : []))
     .sort((a, b) => b.correlation.absRho - a.correlation.absRho);
 }
 
-/** The strongest |ρ| among a set of metrics — the badge on each family. */
+/** The strongest |ρ| among a set of metrics — the badge on each family.
+ * Outcome-derived metrics don't count: a family must not owe its headline
+ * number to a metric that correlates by construction. */
 export function bestAbsRho(metrics: MetricReport[]): number | null {
-  const values = metrics.flatMap((m) => (m.correlation ? [m.correlation.absRho] : []));
+  const values = metrics.flatMap((m) =>
+    m.correlation && !m.outcome ? [m.correlation.absRho] : []
+  );
   return values.length > 0 ? Math.max(...values) : null;
 }
 
@@ -70,6 +81,13 @@ export function SeparationRanking({
   report?: FieldAnalysisReport;
 }) {
   const ranked = rankMetrics(metrics);
+  // The outcome checks, ranked the same way but shown apart (below the
+  // scatter): they correlate by construction, so a slot in the behavioural
+  // ranking would make the headline a non-finding.
+  const outcomeRanked = metrics
+    .filter((m) => m.outcome)
+    .flatMap((m) => (m.correlation ? [{ metric: m, correlation: m.correlation }] : []))
+    .sort((a, b) => b.correlation.absRho - a.correlation.absRho);
 
   // The user's pick, if it still exists in this class's ranking (class
   // switches swap the metric set out from under it); the top-ranked metric
@@ -87,7 +105,7 @@ export function SeparationRanking({
   const selectedMetric =
     effectiveId !== null ? (metrics.find((m) => m.id === effectiveId) ?? null) : null;
 
-  if (ranked.length === 0) {
+  if (ranked.length === 0 && outcomeRanked.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
         No metric produced a correlation — the field is too small, or too few
@@ -114,6 +132,12 @@ export function SeparationRanking({
         ) : null}
       </p>
 
+      {ranked.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No behavioural metric produced a correlation — the field is too
+          small, or too few pilots had a usable value.
+        </p>
+      ) : (
       <Table
         aria-label="Metric separation ranking"
         scrollLabel="Metric separation ranking"
@@ -180,6 +204,7 @@ export function SeparationRanking({
           ))}
         </TableBody>
       </Table>
+      )}
 
       {underpowered.length > 0 ? (
         <p className="text-xs text-muted-foreground">
@@ -204,6 +229,66 @@ export function SeparationRanking({
       ) : null}
 
       {report ? <StrongMetricPrintCharts ranked={ranked} metrics={metrics} report={report} /> : null}
+
+      {outcomeRanked.length > 0 ? (
+        <div className="space-y-2 pt-2">
+          <h3 className="text-base font-semibold">Outcome checks</h3>
+          <p className="text-sm text-muted-foreground">
+            These metrics are derived from the race outcome itself, so they
+            correlate with rank by construction — a low |ρ| here questions the
+            eval, not the flying. Their per-pilot diagnostics stay in the Race
+            craft section below.
+          </p>
+          <Table aria-label="Outcome checks" scrollLabel="Outcome checks">
+            <TableHeader>
+              <Column isRowHeader className="min-w-56">
+                Metric
+              </Column>
+              <Column className="w-20 text-right">ρ</Column>
+              <Column className="w-40" aria-label="Correlation strength, visual">
+                Strength
+              </Column>
+              <Column className="w-16 text-right" aria-label="n, pilots correlated">
+                n
+              </Column>
+              <Column className="w-28">Verdict</Column>
+            </TableHeader>
+            <TableBody>
+              {outcomeRanked.map(({ metric, correlation }) => (
+                <Row key={metric.id}>
+                  <Cell className="whitespace-normal">
+                    <span className="inline-flex items-center gap-1">
+                      {metric.label}
+                      <MetricExplanation
+                        metricId={metric.id}
+                        label={metric.label}
+                        unit={metric.unit}
+                        direction={metric.direction}
+                        explanation={metric.explanation}
+                        perPilot={metric.perPilot}
+                      />
+                    </span>
+                  </Cell>
+                  <Cell className="text-right tabular-nums">
+                    {correlation.rho.toFixed(2)}
+                  </Cell>
+                  <Cell>
+                    <DivergingMeter
+                      value={correlation.rho}
+                      label={`${metric.label}: Spearman correlation against rank`}
+                      valueLabel={correlation.rho.toFixed(2)}
+                    />
+                  </Cell>
+                  <Cell className="text-right tabular-nums">{correlation.n}</Cell>
+                  <Cell>
+                    <VerdictBadge correlation={correlation} />
+                  </Cell>
+                </Row>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      ) : null}
     </div>
   );
 }

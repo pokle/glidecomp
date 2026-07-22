@@ -222,7 +222,11 @@
 //     remainder (exactly 0 at goal ratio 0). Never a default — selected
 //     explicitly in settings or by the AirScore formula importer — so no
 //     existing comp's scores move; the guard fires on the added branch.
-export const SCORING_ENGINE_VERSION = 24;
+// 25: fixAltitude helper added to igc-parser (GNSS→pressure fallback on the
+//     zero sentinel). Scoring behaviour itself is unchanged — the helper is
+//     consumed by the flight-phase detectors and field analysis, not the
+//     scorers — so this bump is the guard's "harmless extra cache roll".
+export const SCORING_ENGINE_VERSION = 25;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -230,4 +234,4 @@ export const SCORING_ENGINE_VERSION = 24;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "335fd42096da4cb09662dc7a55c5f1afff397d62b4753e4890041f07a43ad141";
+  "3b8cd32d9af80a9e1fc4442f9bcd1423e6142123de06582a180f917a4938722d";

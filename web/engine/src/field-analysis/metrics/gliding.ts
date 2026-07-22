@@ -8,7 +8,7 @@
  * math goes through geo.ts (project rule).
  */
 
-import type { IGCFix } from '../../igc-parser';
+import { fixAltitude as fixAlt, type IGCFix } from '../../igc-parser';
 import type { GlideSegment } from '../../event-types';
 import type { TurnpointReaching } from '../../turnpoint-sequence-types';
 import { calculateTrackDistance } from '../../geo';
@@ -39,11 +39,6 @@ const SMOOTH_HALF_WINDOW_MS = 5_000;
 
 function fixMs(p: PilotAnalysisContext, fixIndex: number): number {
   return p.fixes[fixIndex].time.getTime();
-}
-
-/** GNSS altitude falling back to pressure when 0 (same rule as the resampler). */
-function fixAlt(fix: IGCFix): number {
-  return fix.gnssAltitude !== 0 ? fix.gnssAltitude : fix.pressureAltitude;
 }
 
 function clampIndex(p: PilotAnalysisContext, i: number): number {
