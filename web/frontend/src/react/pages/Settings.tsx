@@ -4,10 +4,12 @@
  * (React port of profile.ts) with the account settings (React port of
  * settings.ts); each concern is its own separated card.
  */
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/react/ui/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -48,6 +50,36 @@ interface ApiKey {
   createdAt: string;
   updatedAt: string;
   lastUsedAt?: string | null;
+}
+
+/**
+ * Transient "Saved ✓" confirmation for the instant-apply sections (Appearance,
+ * Units), sitting in the card's action slot. Those sections persist on every
+ * click, but a moved radio pill is quiet feedback — this makes the model
+ * legible without a toast per click. `nonce` bumps on each save; the label
+ * shows for a moment and fades. The live region stays mounted so screen
+ * readers announce the change ("Saved") politely.
+ */
+function SavedFlash({ nonce }: { nonce: number }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (nonce === 0) return;
+    setVisible(true);
+    const t = setTimeout(() => setVisible(false), 2000);
+    return () => clearTimeout(t);
+  }, [nonce]);
+  return (
+    // Content (not just opacity) tracks visibility so each save re-announces
+    // in the live region — identical text would only be read out once.
+    <span
+      role="status"
+      className={`text-sm text-muted-foreground transition-opacity duration-300 ${
+        visible ? "opacity-100" : "opacity-0"
+      }`}
+    >
+      {visible ? "Saved ✓" : ""}
+    </span>
+  );
 }
 
 export function Settings() {
@@ -132,6 +164,7 @@ const THEME_OPTIONS: { value: ThemePreference; label: string; description: strin
 
 function AppearanceSection() {
   const [theme, setTheme] = useTheme();
+  const [savedNonce, setSavedNonce] = useState(0);
   const idBase = useId();
 
   return (
@@ -139,13 +172,19 @@ function AppearanceSection() {
       <CardHeader>
         <CardTitle>Appearance</CardTitle>
         <CardDescription>
-          Choose how GlideComp looks on this device.
+          Choose how GlideComp looks on this device. Changes apply immediately.
         </CardDescription>
+        <CardAction>
+          <SavedFlash nonce={savedNonce} />
+        </CardAction>
       </CardHeader>
       <CardContent>
         <RadioGroup
           value={theme}
-          onValueChange={(value) => setTheme(value as ThemePreference)}
+          onValueChange={(value) => {
+            setTheme(value as ThemePreference);
+            setSavedNonce((n) => n + 1);
+          }}
           aria-label="Theme"
           className="gap-3"
         >
@@ -223,6 +262,7 @@ const UNIT_GROUPS: {
 
 function UnitsSection() {
   const units = useUnits();
+  const [savedNonce, setSavedNonce] = useState(0);
   const idBase = useId();
 
   return (
@@ -230,9 +270,13 @@ function UnitsSection() {
       <CardHeader>
         <CardTitle>Units</CardTitle>
         <CardDescription>
-          How speeds, altitudes, climb rates and distances are displayed. Saved
-          to your account when you're signed in.
+          How speeds, altitudes, climb rates and distances are displayed.
+          Changes apply immediately, and sync to your account when you're
+          signed in.
         </CardDescription>
+        <CardAction>
+          <SavedFlash nonce={savedNonce} />
+        </CardAction>
       </CardHeader>
       <CardContent>
         <div className="grid gap-4">
@@ -253,9 +297,10 @@ function UnitsSection() {
                 </div>
                 <RadioGroup
                   value={units[group.key]}
-                  onValueChange={(value) =>
-                    setUnit(group.key, value as UnitPreferences[typeof group.key])
-                  }
+                  onValueChange={(value) => {
+                    setUnit(group.key, value as UnitPreferences[typeof group.key]);
+                    setSavedNonce((n) => n + 1);
+                  }}
                   aria-labelledby={labelId}
                   className="flex flex-row gap-2"
                 >
@@ -314,10 +359,15 @@ const EMPTY_VALUES = Object.fromEntries(
 
 function ProfileSection() {
   const [values, setValues] = useState<ProfileValues>(EMPTY_VALUES);
+  // The last-saved values, for dirty tracking: Save only enables (and the
+  // navigation guards only arm) while the form differs from these.
+  const [savedValues, setSavedValues] = useState<ProfileValues>(EMPTY_VALUES);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const idBase = useId();
+  const confirm = useConfirm();
+  const navigate = useNavigate();
 
   useEffect(() => {
     (async () => {
@@ -328,17 +378,83 @@ function ProfileSection() {
           return;
         }
         const profile = (await res.json()) as Record<string, string | null>;
-        setValues(
-          Object.fromEntries(
-            PROFILE_FIELDS.map((f) => [f.key, profile[f.key] ?? ""])
-          ) as ProfileValues
-        );
+        const loaded = Object.fromEntries(
+          PROFILE_FIELDS.map((f) => [f.key, profile[f.key] ?? ""])
+        ) as ProfileValues;
+        setValues(loaded);
+        setSavedValues(loaded);
         setState("ready");
       } catch {
         setState("error");
       }
     })();
   }, []);
+
+  const dirty =
+    state === "ready" &&
+    PROFILE_FIELDS.some((f) => values[f.key] !== savedValues[f.key]);
+
+  // Guard against silently losing edits. Two layers while dirty:
+  // beforeunload covers reloads / tab closes / external links; the
+  // capture-phase click listener covers in-app navigation (BrowserRouter has
+  // no useBlocker, so same-origin link clicks are intercepted before React's
+  // own handlers, confirmed with the app dialog, then re-navigated).
+  //
+  // confirm/navigate go through refs so the effect keys on `dirty` alone —
+  // the confirm context value changes identity on every provider render, and
+  // having it in the deps re-armed the listener mid-dispatch (double dialogs).
+  const guardRef = useRef({ confirm, navigate, prompting: false });
+  guardRef.current.confirm = confirm;
+  guardRef.current.navigate = navigate;
+  useEffect(() => {
+    if (!dirty) return;
+
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+
+    const onClickCapture = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const anchor = (e.target as Element | null)?.closest?.("a[href]");
+      if (!anchor || anchor.getAttribute("target") === "_blank") return;
+      const href = anchor.getAttribute("href") ?? "";
+      const url = new URL(href, window.location.href);
+      // External links fall through to beforeunload; same-page hashes are fine.
+      if (url.origin !== window.location.origin) return;
+      if (url.pathname === window.location.pathname && url.hash) return;
+
+      // Stop the navigation at document level — stopImmediatePropagation so
+      // React's root listeners (and any sibling duplicate) never see the
+      // click — then re-run it iff the user confirms.
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const guard = guardRef.current;
+      if (guard.prompting) return;
+      guard.prompting = true;
+      void guard
+        .confirm({
+          title: "Discard profile changes?",
+          message:
+            "Your profile has unsaved changes. Leaving this page will discard them.",
+          confirmLabel: "Discard changes",
+          cancelLabel: "Keep editing",
+          destructive: true,
+        })
+        .then((ok) => {
+          guard.prompting = false;
+          if (ok) guard.navigate(url.pathname + url.search + url.hash);
+        });
+    };
+    document.addEventListener("click", onClickCapture, true);
+
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      document.removeEventListener("click", onClickCapture, true);
+    };
+  }, [dirty]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -363,6 +479,13 @@ function ProfileSection() {
         setStatus({ kind: "error", message: err.error || "Failed to save profile" });
         return;
       }
+      // What the server stored (trimmed) becomes the new baseline, so the
+      // form is clean again and the Save button disables.
+      const normalized = Object.fromEntries(
+        PROFILE_FIELDS.map((f) => [f.key, values[f.key].trim()])
+      ) as ProfileValues;
+      setValues(normalized);
+      setSavedValues(normalized);
       setStatus({
         kind: "success",
         message:
@@ -385,7 +508,11 @@ function ProfileSection() {
       <Input
         id={`${idBase}-${field.key}`}
         value={values[field.key]}
-        onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
+        onChange={(e) => {
+          setValues((v) => ({ ...v, [field.key]: e.target.value }));
+          // A stale "Profile saved" next to re-edited fields reads as a lie.
+          setStatus(null);
+        }}
         required={field.key === "name"}
       />
     </Field>
@@ -396,7 +523,8 @@ function ProfileSection() {
       <CardHeader>
         <CardTitle>Profile</CardTitle>
         <CardDescription>
-          Your pilot details, used when you register for competitions
+          Your pilot details, used when you register for competitions. Changes
+          take effect when you save.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -435,10 +563,15 @@ function ProfileSection() {
               </p>
             ) : null}
 
-            <div>
-              <Button type="submit" disabled={saving}>
+            <div className="flex items-center gap-3">
+              <Button type="submit" disabled={saving || !dirty}>
                 {saving ? "Saving..." : "Save profile"}
               </Button>
+              {/* The dirty hint doubles as the explanation for why Save is
+                  enabled; role=status so the state change is announced. */}
+              <span role="status" className="text-sm text-muted-foreground">
+                {dirty && !saving ? "Unsaved changes" : ""}
+              </span>
             </div>
           </form>
         )}
