@@ -11,7 +11,7 @@
 import { fixAltitude as fixAlt, type IGCFix } from '../../igc-parser';
 import type { GlideSegment } from '../../event-types';
 import type { TurnpointReaching } from '../../turnpoint-sequence-types';
-import { calculateTrackDistance } from '../../geo';
+import { andoyerDistance, calculateTrackDistance } from '../../geo';
 import { getEffectiveSSSIndex } from '../../xctsk-parser';
 import { mean, median, percentile } from '../stats';
 import type {
@@ -286,9 +286,10 @@ const glideTrackEfficiency: MetricComputer = {
   family: 'gliding',
   direction: 'lower',
   explanation:
-    "Actual track distance flown on each completed speed-section leg ÷ the leg's optimized "
-    + 'distance, averaged with optimized-distance weights. Closer to 1.0 means less deviation '
-    + 'from the optimal course line.',
+    'Route distance flown on each completed speed-section leg — full path outside climbs, '
+    + "each climb counted as its net drift — ÷ the leg's optimized distance, averaged with "
+    + 'optimized-distance weights. Closer to 1.0 means less deviation from the optimal course '
+    + 'line; circling path is excluded, so stopping to climb does not read as bad line choice.',
   compute(field) {
     const sssIdx = Math.max(0, getEffectiveSSSIndex(field.task));
     const optimizedByLeg = new Map<number, number>();
@@ -304,11 +305,30 @@ const glideTrackEfficiency: MetricComputer = {
       for (const { from, to } of completedSpeedSectionLegs(p, sssIdx)) {
         const optimized = optimizedByLeg.get(from.taskIndex);
         if (optimized === undefined || optimized < MIN_LEG_OPTIMIZED_M) continue;
-        actualSum += calculateTrackDistance(
-          p.fixes,
-          clampIndex(p, from.fixIndex),
-          clampIndex(p, to.fixIndex),
-        );
+        // Route distance, not raw path (same phase-clipping as
+        // pilotGlideLDByLeg): a pilot taking 30 turns per thermal used to
+        // log ~300 m of "line deviation" per circle, so the raw path mostly
+        // re-measured climb count — collinear with
+        // decision.climbs_per_100km — while the explanation claimed line
+        // choice. Outside climbs the full path counts; a climb contributes
+        // its entry→exit displacement, because drifting downwind in a
+        // thermal still covers route the pilot doesn't have to glide.
+        const legStart = clampIndex(p, from.fixIndex);
+        const legEnd = clampIndex(p, to.fixIndex);
+        for (const phase of p.phases) {
+          const s = Math.max(phase.startIndex, legStart);
+          const e = Math.min(phase.endIndex, legEnd);
+          if (e <= s) continue;
+          actualSum +=
+            phase.phase === 'climb'
+              ? andoyerDistance(
+                  p.fixes[s].latitude,
+                  p.fixes[s].longitude,
+                  p.fixes[e].latitude,
+                  p.fixes[e].longitude,
+                )
+              : calculateTrackDistance(p.fixes, s, e);
+        }
         optimizedSum += optimized;
         legCount++;
       }

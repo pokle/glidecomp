@@ -1,6 +1,6 @@
 /**
  * P6 day-profile metric family tests (day.wind, day.climb_by_hour,
- * day.launch_timing) — see docs/2026-07-18-field-analysis-plan.md.
+ * day.airtime_quality) — see docs/2026-07-18-field-analysis-plan.md.
  *
  * Synthetic fields via the frozen field-test-helpers factory, plus one smoke
  * test over the real kosci-loop-t1 comp (builder copied from
@@ -35,7 +35,7 @@ import {
   DEG_LON_PER_M,
 } from './field-test-helpers';
 
-const [dayWind, dayClimbByHour, dayLaunchTiming] = DAY_METRICS;
+const [dayWind, dayClimbByHour, dayAirtimeQuality] = DAY_METRICS;
 
 // ---------------------------------------------------------------------------
 // Fix builders
@@ -303,16 +303,16 @@ describe('day.climb_by_hour', () => {
 });
 
 // ---------------------------------------------------------------------------
-// #26 day.launch_timing
+// #26 day.airtime_quality
 // ---------------------------------------------------------------------------
 
-describe('day.launch_timing', () => {
+describe('day.airtime_quality', () => {
   it('scores non-sinking flight near 100 and hard sink near 0', () => {
     const field = makeTestField([
       { name: 'floaty', fixes: straightFixes(0, 600, 0, 1000, 12, 0) },
       { name: 'sinky', fixes: straightFixes(0, 600, 2000, 2000, 12, -2) },
     ]);
-    const out = dayLaunchTiming.compute(field);
+    const out = dayAirtimeQuality.compute(field);
     const byFile = new Map(out.perPilot.map((v) => [v.trackFile, v.value]));
 
     const floaty = byFile.get('floaty.igc');
@@ -342,7 +342,7 @@ describe('day.launch_timing', () => {
     // makeDriftField's climbs are all in the 10:00Z hour, so that hour wins and
     // is reported as the 10:00–11:00 window (not a bare 10:00 instant) — a
     // takeoff inside the window then reads as no contradiction.
-    const out = dayLaunchTiming.compute(makeDriftField());
+    const out = dayAirtimeQuality.compute(makeDriftField());
     const timing = out.extraTables![0];
     const best = timing.rows.find((r) => r[0] === 'Best conditions');
     expect(best).toBeDefined();
@@ -369,7 +369,7 @@ describe('day.launch_timing', () => {
   });
 
   it('emits a day-timing series with best hour, takeoffs, and the task clock', () => {
-    const out = dayLaunchTiming.compute(makeDriftField());
+    const out = dayAirtimeQuality.compute(makeDriftField());
     const series = out.extraSeries![0];
     if (series.kind !== 'day-timing') throw new Error('kind');
 
@@ -396,7 +396,7 @@ describe('day.launch_timing', () => {
     const ghost = field.pilots.find((p) => p.trackFile === 'ghost.igc')!;
     ghost.track = { startStep: -1, endStep: -1, samples: ghost.track.samples.map(() => null) };
 
-    const out = dayLaunchTiming.compute(field);
+    const out = dayAirtimeQuality.compute(field);
     const byFile = new Map(out.perPilot.map((v) => [v.trackFile, v.value]));
     expect(byFile.get('ghost.igc')).toBeNull();
     expect(byFile.get('flies.igc')).not.toBeNull();
@@ -452,7 +452,7 @@ describe('day metrics over kosci-loop-t1 (smoke)', () => {
     expect(climb.extraTables![0].rows.length).toBeGreaterThan(0);
 
     // Launch timing is non-null for most of the field.
-    const timing = report.metrics.find((m) => m.id === 'day.launch_timing')!;
+    const timing = report.metrics.find((m) => m.id === 'day.airtime_quality')!;
     const nonNull = timing.perPilot.filter((v) => v.value !== null).length;
     expect(nonNull).toBeGreaterThan(field.pilots.length / 2);
     for (const v of timing.perPilot) {

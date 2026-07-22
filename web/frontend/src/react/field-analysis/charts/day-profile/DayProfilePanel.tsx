@@ -7,7 +7,7 @@
  * table can say.
  *
  * The series come from THREE different metrics (day.wind,
- * day.climb_by_hour, day.launch_timing); this panel is why SeriesChart
+ * day.climb_by_hour, day.airtime_quality); this panel is why SeriesChart
  * deliberately doesn't render them per-metric. Each chart is a labelled
  * `role="img"`; the metrics' tables below the panel remain the exact,
  * screen-reader-navigable reading, and one shared readout line voices
