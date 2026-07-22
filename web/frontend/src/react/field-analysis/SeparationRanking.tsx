@@ -198,6 +198,7 @@ export function SeparationRanking({
                     direction={metric.direction}
                     explanation={metric.explanation}
                     perPilot={metric.perPilot}
+                    pilots={report?.pilots}
                   />
                 </span>
               </Cell>
@@ -290,6 +291,7 @@ export function SeparationRanking({
                         direction={metric.direction}
                         explanation={metric.explanation}
                         perPilot={metric.perPilot}
+                        pilots={report?.pilots}
                       />
                     </span>
                   </Cell>
