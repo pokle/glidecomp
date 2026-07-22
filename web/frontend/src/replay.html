@@ -149,6 +149,10 @@
         <div>
           <div class="text-[9px] uppercase tracking-wider text-slate-400 leading-none">Altitude</div>
           <div id="coAlt" class="text-[12px] tabular-nums leading-tight mt-0.5 whitespace-nowrap">—</div>
+          <!-- height above ground from the Mapbox terrain DEM — only the
+               terrain backdrop has ground data, so this hides elsewhere.
+               The figure inherits the value ink; grey is for labels. -->
+          <div id="coAgl" class="text-[10px] tabular-nums leading-tight whitespace-nowrap hidden"><span id="coAglVal"></span> <span class="text-[9px] uppercase tracking-wider text-slate-400">AGL</span></div>
         </div>
         <div>
           <div class="text-[9px] uppercase tracking-wider text-slate-400 leading-none">Speed</div>
@@ -157,6 +161,12 @@
         <div>
           <div class="text-[9px] uppercase tracking-wider text-slate-400 leading-none">Glide</div>
           <div id="coGlide" class="text-[12px] tabular-nums leading-tight mt-0.5 whitespace-nowrap">—</div>
+        </div>
+        <!-- glide (L/D over ground) needed to reach the next turnpoint; hidden
+             when the bundle has no task/turnpoint data to compute it from -->
+        <div id="coReqRow" class="col-span-3 mt-1.5 hidden">
+          <div class="text-[9px] uppercase tracking-wider text-slate-400 leading-none">Req. glide</div>
+          <div id="coReq" class="text-[12px] tabular-nums leading-tight mt-0.5 truncate">—</div>
         </div>
       </div>
     </div>

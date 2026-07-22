@@ -4,3 +4,15 @@
  * markup uses plain Tailwind utilities — no shadcn tokens needed.
  */
 @import "tailwindcss";
+
+/* Atkinson Hyperlegible Next — the project face, used for everything drawn
+ * on the map itself: the canvas-textured scene labels (turnpoint names +
+ * altitudes, gaggle counts — see MAP_LABEL_FONT in replay/flight-scene.ts,
+ * which needs these @font-face rules registered) and the DOM rank badges
+ * pinned to the pilot cones. The page chrome keeps the system stack. */
+@import "@fontsource/atkinson-hyperlegible-next/400.css";
+@import "@fontsource/atkinson-hyperlegible-next/700.css";
+
+#badges {
+  font-family: "Atkinson Hyperlegible Next", ui-sans-serif, system-ui, sans-serif;
+}

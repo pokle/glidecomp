@@ -37,6 +37,22 @@ export interface GlideContext {
 export type GlideContextResolver = (timeMs: number) => GlideContext | undefined;
 
 /**
+ * Glide ratio (L/D over ground) needed to reach `target` from a position:
+ * distance to the target divided by the height above it. Undefined when the
+ * position is at or below the target altitude — no finite glide gets there.
+ */
+export function requiredGlideToTarget(
+  lat: number,
+  lon: number,
+  altitude: number,
+  target: { lat: number; lon: number; altitude: number },
+): number | undefined {
+  if (altitude <= target.altitude) return undefined;
+  const dist = andoyerDistance(lat, lon, target.lat, target.lon);
+  return dist / (altitude - target.altitude);
+}
+
+/**
  * Calculate positions along a glide segment at regular intervals.
  * Returns positions at every `interval` meters (e.g., 250m).
  */
@@ -184,11 +200,9 @@ export function calculateGlideMarkers(fixes: IGCFix[], contextResolver?: GlideCo
     let targetName: string | undefined;
     const context = contextResolver?.(pos.time);
     const nextTP = context?.nextTurnpoint;
-    if (nextTP && pos.altitude > nextTP.altitude) {
-      const distToTP = andoyerDistance(pos.lat, pos.lon, nextTP.lat, nextTP.lon);
-      const altDiffToTP = pos.altitude - nextTP.altitude;
-      requiredGlideRatio = distToTP / altDiffToTP;
-      targetName = nextTP.name;
+    if (nextTP) {
+      requiredGlideRatio = requiredGlideToTarget(pos.lat, pos.lon, pos.altitude, nextTP);
+      if (requiredGlideRatio !== undefined) targetName = nextTP.name;
     }
 
     markers.push({
@@ -289,14 +303,11 @@ export function calculatePointMetrics(
   let targetName: string | undefined;
   const centerFix = fixes[centerIndex];
   const nextTP = context?.nextTurnpoint;
-  if (nextTP && fixAltitude(centerFix) > nextTP.altitude) {
-    const distToTP = andoyerDistance(
-      centerFix.latitude, centerFix.longitude,
-      nextTP.lat, nextTP.lon,
+  if (nextTP) {
+    requiredGlideRatio = requiredGlideToTarget(
+      centerFix.latitude, centerFix.longitude, fixAltitude(centerFix), nextTP,
     );
-    const altDiffToTP = fixAltitude(centerFix) - nextTP.altitude;
-    requiredGlideRatio = distToTP / altDiffToTP;
-    targetName = nextTP.name;
+    if (requiredGlideRatio !== undefined) targetName = nextTP.name;
   }
 
   return {

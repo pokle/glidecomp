@@ -22,7 +22,7 @@
  * plane at the origin — accurate to well under a metre over a ~100 km task area.
  */
 
-import type { XCTask } from './xctsk-parser';
+import { getEffectiveSSSIndex, type XCTask } from './xctsk-parser';
 import { calculateOptimizedTaskLine } from './task-optimizer';
 import { computeGoalLine } from './goal-line';
 
@@ -52,6 +52,12 @@ export interface PilotTrackInput {
   score?: number;
   /** 1-based finishing rank, if computed. */
   rank?: number;
+  /**
+   * Turnpoints this pilot reached, in task order: taskIndex + absolute UTC
+   * seconds of the crossing. The packer rebases times onto the manifest's
+   * tRel clock. Lets the viewer know which turnpoint is "next" at any time.
+   */
+  reached?: { tp: number; t: number }[];
 }
 
 export interface PackInput {
@@ -82,6 +88,12 @@ export interface TrackPilotMeta {
   score?: number;
   /** 1-based finishing rank, if computed. */
   rank?: number;
+  /**
+   * Turnpoints this pilot reached, in task order: index into
+   * `task.turnpoints` + crossing time in tRel seconds (same clock as the
+   * vertex data). Absent when the task wasn't scored for this pilot.
+   */
+  reached?: { tp: number; t: number }[];
 }
 
 /** A task turnpoint projected into the viewer's ENU frame. */
@@ -96,6 +108,8 @@ export interface TrackTaskPoint {
   z: number;
   lat: number;
   lon: number;
+  /** Waypoint altitude in metres MSL (altSmoothed), when the task has one. */
+  alt?: number;
 }
 
 export interface TrackManifest {
@@ -124,6 +138,11 @@ export interface TrackManifest {
   /** Optional task geometry in ENU metres. */
   task?: {
     turnpoints: TrackTaskPoint[];
+    /**
+     * Effective start-of-speed-section index (the "next turnpoint" for a
+     * pilot who hasn't reached anything yet — see getEffectiveSSSIndex).
+     */
+    sssIndex?: number;
     /**
      * The optimised (shortest) task path tagging each cylinder edge, in ENU
      * metres (x = East, z = North). Matches `calculateOptimizedTaskLine`, the
@@ -281,6 +300,8 @@ export function packTracks(input: PackInput): PackedTracks {
       vertexCount: p.fixes.length,
       score: p.score,
       rank: p.rank,
+      // Rebase reach times from UTC seconds onto the manifest's tRel clock.
+      reached: p.reached?.map((r) => ({ tp: r.tp, t: Math.round(r.t - t0) })),
     });
   });
 
@@ -295,6 +316,7 @@ export function packTracks(input: PackInput): PackedTracks {
       z: projZ(tp.waypoint.lat),
       lat: tp.waypoint.lat,
       lon: tp.waypoint.lon,
+      alt: tp.waypoint.altSmoothed,
     }));
     // Project the optimised shortest path (lat/lon tagging cylinder edges) into
     // the same ENU frame so the viewer can draw it without re-running the
@@ -313,7 +335,8 @@ export function packTracks(input: PackInput): PackedTracks {
           z2: projZ(gl.end2.lat),
         }
       : undefined;
-    task = { turnpoints, optimizedPath, goalLine };
+    const sss = getEffectiveSSSIndex(input.task);
+    task = { turnpoints, sssIndex: sss >= 0 ? sss : undefined, optimizedPath, goalLine };
   }
 
   const manifest: TrackManifest = {

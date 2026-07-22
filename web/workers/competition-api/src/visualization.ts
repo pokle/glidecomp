@@ -64,9 +64,11 @@ export async function compute3dvisCacheKey(
     .join("")
     .slice(0, 16);
 
-  // v2: manifest format gained task.goalLine (goal LINE endpoints) — the
-  // prefix bump invalidates bundles packed before the field existed.
-  return `3dvis:v2:${taskId}:${hex}`;
+  // v2: manifest format gained task.goalLine (goal LINE endpoints).
+  // v3: gained per-pilot turnpoint reach times, turnpoint altitudes and
+  // task.sssIndex (required-glide readout) — each prefix bump invalidates
+  // bundles packed before the fields existed.
+  return `3dvis:v3:${taskId}:${hex}`;
 }
 
 /**
