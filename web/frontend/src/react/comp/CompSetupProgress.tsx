@@ -137,10 +137,10 @@ export function CompSetupProgress({
           </Link>
         );
       case "pilots":
-        // #edit-pilots opens PilotsSection's edit dialog (same hash pattern
-        // as the task page's #edit-route deep link).
+        // #edit-pilots opens the pilots page's edit dialog on arrival (same
+        // hash pattern as the task page's #edit-route deep link).
         return (
-          <Link className={linkClass} to={{ hash: "#edit-pilots" }} replace>
+          <Link className={linkClass} to={`/comp/${compId}/pilots#edit-pilots`}>
             {step.label}
           </Link>
         );

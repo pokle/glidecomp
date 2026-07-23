@@ -11,7 +11,7 @@
 import { Fragment, useEffect, useId, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { Form } from "react-aria-components";
-import { Button, LinkButton, buttonVariants } from "@/react/rac/button";
+import { Button, LinkButton } from "@/react/rac/button";
 import {
   Dialog,
   DialogFooter,
@@ -33,12 +33,12 @@ import {
   scoringFormatLabel,
 } from "../lib/format";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { Disclosure } from "@/react/rac/disclosure";
 import { compCrumbs } from "../lib/crumbs";
 import { SectionHeader } from "../components/SectionHeader";
 import { ActivitySection } from "../comp/ActivitySection";
-import { CompScoresSection } from "../comp/CompScoresSection";
+import { CompScoresSummary } from "../comp/CompScoresSummary";
 import { CompSetupProgress } from "../comp/CompSetupProgress";
-import { PilotsSection } from "../comp/PilotsSection";
 import { SettingsDialog } from "../comp/SettingsDialog";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
@@ -202,6 +202,48 @@ function CompDetailView({
   }
 
   const hero = pickHeroTasks(comp.tasks, comp.timezone, heroToday);
+  // Once the last task date is behind us the visitor's job flips from "what
+  // am I flying today?" to "who won?" — standings lead, tasks follow.
+  // Derived from the loader-injected "today", so SSR and hydration agree.
+  const finished = hero?.label === "Latest task";
+
+  const tasksSection = (
+    // break-before-page: when printing, each major section starts a fresh page.
+    <section id="tasks" className="scroll-mt-24 break-before-page">
+      <SectionHeader
+        title="Tasks"
+        action={
+          isAdmin ? (
+            <Button variant="outline" size="sm" onPress={() => setCreateOpen(true)}>
+              New Task
+            </Button>
+          ) : null
+        }
+      />
+      {/* Above the list so the row badges' "see Task Warnings above" holds. */}
+      <ClassWarnings warnings={comp.class_coverage_warnings} tasks={comp.tasks} />
+      <TasksList
+        tasks={comp.tasks}
+        hero={hero}
+        compId={compId}
+        canSubmitTrack={canSubmitTrack}
+        canUploadOnBehalf={canUploadOnBehalf}
+        signedOut={!user && !loading}
+        isAdmin={isAdmin}
+        onCreateTask={() => setCreateOpen(true)}
+      />
+    </section>
+  );
+
+  const scoresSection = (
+    <CompScoresSummary
+      compId={compId}
+      timezone={comp.timezone}
+      initialScores={initialScores}
+      initialScoresEtag={initialScoresEtag}
+      isAdmin={isAdmin}
+    />
+  );
 
   return (
     <div>
@@ -223,16 +265,22 @@ function CompDetailView({
       </div>
 
       {/* Counts double as honest signage: "Tasks (0)" says don't bother
-          scrolling; on a populated comp they're at-a-glance facts. Scores and
-          Activity stay uncounted (no cheap or meaningful number). */}
+          scrolling; on a populated comp they're at-a-glance facts. Sticky so
+          the page's map survives scrolling into the long sections; sits under
+          the (sticky) app header on sm+, at the very top where the header is
+          static (phones, short landscape). */}
       <nav
         aria-label="Sections"
-        className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground"
+        className="sticky top-0 z-30 -mx-4 mt-3 flex flex-wrap gap-x-4 gap-y-1 border-b bg-background/90 px-4 py-2 text-sm text-muted-foreground backdrop-blur-sm sm:top-[61px] [@media(max-height:500px)]:static print:hidden"
       >
         <a href="#tasks" className="hover:text-foreground hover:underline underline-offset-4">Tasks ({comp.tasks.length})</a>
-        <a href="#scores" className="hover:text-foreground hover:underline underline-offset-4">Scores</a>
-        <a href="#pilots" className="hover:text-foreground hover:underline underline-offset-4">Pilots ({comp.pilot_count})</a>
+        <Link to={`/comp/${compId}/scores`} className="hover:text-foreground hover:underline underline-offset-4">Scores</Link>
         <Link to={`/comp/${compId}/waypoints`} className="hover:text-foreground hover:underline underline-offset-4">Waypoints ({comp.waypoint_count})</Link>
+        {/* Pilot management moved to its own admin page — visitors find every
+            pilot in the scores, so the roster link is admin-only. */}
+        {isAdmin ? (
+          <Link to={`/comp/${compId}/pilots`} className="hover:text-foreground hover:underline underline-offset-4">Pilots ({comp.pilot_count})</Link>
+        ) : null}
         {/* Field analysis is admin-only while the metrics are being validated,
             and has nothing to measure on an open-distance comp (no legs, no
             speed section). Its own page — it's a long exploratory read. */}
@@ -240,7 +288,6 @@ function CompDetailView({
           <Link to={`/comp/${compId}/analysis`} className="hover:text-foreground hover:underline underline-offset-4">Field analysis</Link>
         ) : null}
         <a href="#activity" className="hover:text-foreground hover:underline underline-offset-4">Activity</a>
-        <a href="#admins" className="hover:text-foreground hover:underline underline-offset-4">Admins ({comp.admins.length})</a>
       </nav>
 
       {/* Admin-only, so absent from SSR markup and the first client paint —
@@ -254,77 +301,39 @@ function CompDetailView({
         />
       ) : null}
 
-      <ClassWarnings warnings={comp.class_coverage_warnings} tasks={comp.tasks} />
+      {finished ? (
+        <>
+          {scoresSection}
+          {tasksSection}
+        </>
+      ) : (
+        <>
+          {tasksSection}
+          {scoresSection}
+        </>
+      )}
 
-      {/* break-before-page: when printing, each major section starts a fresh page. */}
-      <section id="tasks" className="scroll-mt-4 break-before-page">
-        <SectionHeader
-          title="Tasks"
-          action={
-            isAdmin ? (
-              <Button variant="outline" size="sm" onPress={() => setCreateOpen(true)}>
-                New Task
-              </Button>
-            ) : null
-          }
-        />
-        {/* The current task leads the section: it's the one a pilot needs
-            right now, so its card sits under the Tasks heading with the full
-            chronological list below it. */}
-        {hero ? (
-          <TaskHero
-            hero={hero}
-            compId={compId}
-            canSubmitTrack={canSubmitTrack}
-            canUploadOnBehalf={canUploadOnBehalf}
-            signedOut={!user && !loading}
-            isAdmin={isAdmin}
-          />
-        ) : null}
-        <TasksList
-          tasks={comp.tasks}
-          compId={compId}
-          canSubmitTrack={canSubmitTrack}
-          canUploadOnBehalf={canUploadOnBehalf}
-          isAdmin={isAdmin}
-          onCreateTask={() => setCreateOpen(true)}
-        />
-      </section>
-
-      <CompScoresSection
-        compId={compId}
-        timezone={comp.timezone}
-        tasks={comp.tasks}
-        defaultTaskId={hero?.tasks.find((t) => t.has_xctsk)?.task_id ?? null}
-        initialScores={initialScores}
-        initialScoresEtag={initialScoresEtag}
-        isAdmin={isAdmin}
-      />
-
-      <div id="pilots" className="scroll-mt-4 break-before-page">
-        <PilotsSection
-          compId={compId}
-          compName={comp.name}
-          compClasses={comp.pilot_classes}
-          isAdmin={isAdmin}
-          onPilotsChanged={() => setRefresh((n) => n + 1)}
-        />
+      <div id="activity" className="scroll-mt-24 break-before-page">
+        <ActivitySection compId={compId} collapsible />
       </div>
 
-      <div id="activity" className="scroll-mt-4 break-before-page">
-        <ActivitySection compId={compId} />
-      </div>
-
-      <section id="admins" className="scroll-mt-4 break-before-page">
-        <h2 className="mt-8 text-lg font-bold">Admins</h2>
-        <ul className="mt-2 space-y-1 text-sm">
-          {comp.admins.map((admin) => (
-            <li key={admin.email}>
-              {admin.name} <span className="text-muted-foreground">({admin.email})</span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      {/* Organizer credit + contact — a footnote, not a section. The scores
+          page's "Ask the comp admins" links to #admins here. */}
+      <p id="admins" className="mt-10 scroll-mt-24 text-sm text-muted-foreground">
+        Organized by{" "}
+        {comp.admins.map((admin, i) => (
+          <Fragment key={admin.email}>
+            {i > 0 ? (i === comp.admins.length - 1 ? " and " : ", ") : null}
+            <span className="text-foreground">{admin.name}</span>{" "}
+            (
+            <a className="underline underline-offset-4" href={`mailto:${admin.email}`}>
+              {admin.email}
+            </a>
+            )
+          </Fragment>
+        ))}
+        .
+      </p>
 
       {isAdmin && createOpen ? (
         <CreateTaskDialog
@@ -395,12 +404,15 @@ function pickHeroTasks(
 }
 
 /**
- * Hero button order is role-based (issue: task buttons role order):
- *  - Comp/Super Admin: Edit route…, Task details, Submit track, Share task, QR code, 3D replay
- *  - Pilots (signed in, non-admin): QR code, Share task, Submit track, Task details, 3D replay
- *  - Unauthenticated / can't submit: QR code, Share task, Task details, 3D replay
+ * Featured card button order is role-based, with ONE primary action and the
+ * share/QR/download cluster folded into a single Share menu:
+ *  - Comp/Super Admin: Edit route…, Task details, Submit track, Share ▾
+ *  - Pilots (signed in, non-admin): Submit track, Task details, Share ▾
+ *  - Unauthenticated / can't submit: Task details, Share ▾, Sign in
  * Whichever button ends up first is the primary (filled) button; a slot that's
- * hidden for this task (e.g. no route set yet) is skipped, promoting the next one.
+ * hidden for this task (e.g. no route set yet) is skipped, promoting the next
+ * one. Everything else (3D replay, map, per-pilot actions) lives one click
+ * away on the task page — the hub stays scannable.
  */
 interface HeroSlot {
   key: string;
@@ -408,7 +420,7 @@ interface HeroSlot {
   render: (primary: boolean) => React.ReactNode;
 }
 
-function TaskHero({
+function FeaturedTaskGroup({
   hero,
   compId,
   canSubmitTrack,
@@ -424,7 +436,7 @@ function TaskHero({
   isAdmin: boolean;
 }) {
   return (
-    <div className="mt-3 rounded-xl border bg-gradient-to-br from-muted to-card p-5">
+    <div className="rounded-xl border bg-gradient-to-br from-muted to-card p-5">
       <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
         {hero.label} · {formatTaskDate(hero.date)}
       </p>
@@ -467,35 +479,16 @@ function TaskHero({
             />
           ),
         };
-        const exportSlot = (qrFirst: boolean): HeroSlot => ({
-          key: "export",
+        const shareSlot: HeroSlot = {
+          key: "share",
           visible: task.has_xctsk,
-          render: (primary) => (
+          render: () => (
             <TaskExportButtons
               compId={compId}
               taskId={task.task_id}
               taskName={task.name}
-              qrFirst={qrFirst}
-              primary={primary ? (qrFirst ? "qr" : "share") : undefined}
+              asMenu
             />
-          ),
-        });
-        const replaySlot: HeroSlot = {
-          key: "replay",
-          visible: true,
-          render: (primary) => (
-            // /replay is its own Vite entry, not an SPA route — keep it a
-            // plain anchor so RacRouterProvider never client-routes it.
-            <a
-              className={buttonVariants({
-                variant: primary ? "default" : "outline",
-                size: "sm",
-              })}
-              href={`/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(task.task_id)}`}
-              title="Open the 3D flight replay for this task"
-            >
-              3D replay
-            </a>
           ),
         };
         const signInSlot: HeroSlot = {
@@ -513,10 +506,10 @@ function TaskHero({
         };
 
         const slots: HeroSlot[] = isAdmin
-          ? [editRouteSlot, taskDetailsSlot, submitTrackSlot, exportSlot(false), replaySlot]
+          ? [editRouteSlot, taskDetailsSlot, submitTrackSlot, shareSlot]
           : canSubmitTrack
-            ? [exportSlot(true), submitTrackSlot, taskDetailsSlot, replaySlot]
-            : [exportSlot(true), taskDetailsSlot, replaySlot, signInSlot];
+            ? [submitTrackSlot, taskDetailsSlot, shareSlot]
+            : [taskDetailsSlot, shareSlot, signInSlot];
 
         let primaryAssigned = false;
         const buttons = slots
@@ -529,13 +522,18 @@ function TaskHero({
 
         return (
           <div key={task.task_id} className="mt-2 first:mt-1">
-            <h2 className="text-xl font-bold">
-              {task.name}{" "}
+            <h3 className="text-xl font-bold">
+              <Link
+                className="underline-offset-4 hover:underline"
+                to={`/comp/${compId}/task/${task.task_id}`}
+              >
+                {task.name}
+              </Link>{" "}
               <span className="text-sm font-normal text-muted-foreground">
                 {task.pilot_classes.join(", ")}
                 {!task.has_xctsk ? " · route not set yet" : null}
               </span>
-            </h2>
+            </h3>
             <div className="mt-3 flex flex-wrap gap-2">{buttons}</div>
           </div>
         );
@@ -569,10 +567,20 @@ function ClassWarnings({
     .filter((w): w is { name: string; text: string } => w !== null);
 
   if (warnings.length === 0 && setupWarnings.length === 0) return null;
+  const count = warnings.length + setupWarnings.length;
   return (
-    <section>
-      <h2 className="mt-8 text-lg font-bold">Task Warnings</h2>
-      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+    // Collapsed by default inside the Tasks section: the count in the trigger
+    // is the signage; the detail is a drawer, not a section competing with the
+    // task list. (Print expands it — the Disclosure component handles that.)
+    <Disclosure
+      className="mt-3 border-t-0 pt-0"
+      title={
+        <span className="text-amber-600 dark:text-amber-400">
+          Task warnings ({count})
+        </span>
+      }
+    >
+      <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
         {warnings.map((w) => {
           const parts: string[] = [];
           if (w.missing_classes && w.missing_classes.length > 0) {
@@ -594,22 +602,34 @@ function ClassWarnings({
           </li>
         ))}
       </ul>
-    </section>
+    </Disclosure>
   );
 }
 
+/**
+ * The task list, newest date first, with the hero date's group rendered as
+ * the featured card IN PLACE — one list, no duplicate presentation of the
+ * same task (the old page showed the hero tasks twice). Compact rows carry
+ * only the link, setup badges and classes; every action (submit, share,
+ * replay, map) lives on the task page or, for the featured group, on the
+ * card itself.
+ */
 function TasksList({
   tasks,
+  hero,
   compId,
   canSubmitTrack,
   canUploadOnBehalf,
+  signedOut,
   isAdmin,
   onCreateTask,
 }: {
   tasks: TaskSummary[];
+  hero: HeroPick | null;
   compId: string;
   canSubmitTrack: boolean;
   canUploadOnBehalf: boolean;
+  signedOut: boolean;
   isAdmin: boolean;
   onCreateTask: () => void;
 }) {
@@ -628,81 +648,81 @@ function TasksList({
     );
   }
 
-  // Group tasks by date (insertion order preserved, as in the vanilla page)
   const byDate = new Map<string, TaskSummary[]>();
   for (const task of tasks) {
     const list = byDate.get(task.task_date) ?? [];
     list.push(task);
     byDate.set(task.task_date, list);
   }
+  // Newest first: the current/latest task is what a visitor came for, and the
+  // featured (hero) date lands at or near the top of the list.
+  const groups = [...byDate.entries()].sort(([a], [b]) => (a < b ? 1 : -1));
 
   return (
     <div className="mt-3 space-y-5">
-      {[...byDate.entries()].map(([date, dateTasks]) => (
-        <div key={date}>
-          {/* Same label treatment as the hero: the date is a group heading,
-              the indented rows underneath are the tasks. */}
-          <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-            {formatTaskDate(date)}
-          </h3>
-          <ul className="mt-1.5 space-y-1.5 pl-4 text-sm">
-            {dateTasks.map((task) => (
-              <li key={task.task_id} className="flex flex-wrap items-center gap-2">
-                <Link
-                  className="underline-offset-4 hover:underline"
-                  to={`/comp/${compId}/task/${task.task_id}`}
-                >
-                  <strong>{task.name}</strong>{" "}
-                  <span className="text-muted-foreground">
-                    {task.has_xctsk ? "Task set" : "No task"}
-                  </span>{" "}
-                  {task.missing_sss ? (
-                    <span
-                      className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-500"
-                      title="Scoring falls back — see Task Warnings above"
-                    >
-                      No SSS
+      {groups.map(([date, dateTasks]) =>
+        hero && date === hero.date ? (
+          <FeaturedTaskGroup
+            key={date}
+            hero={hero}
+            compId={compId}
+            canSubmitTrack={canSubmitTrack}
+            canUploadOnBehalf={canUploadOnBehalf}
+            signedOut={signedOut}
+            isAdmin={isAdmin}
+          />
+        ) : (
+          <div key={date}>
+            {/* Same label treatment as the featured card: the date is a group
+                heading, the indented rows underneath are the tasks. */}
+            <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+              {formatTaskDate(date)}
+            </h3>
+            <ul className="mt-1.5 space-y-1.5 pl-4 text-sm">
+              {dateTasks.map((task) => (
+                <li key={task.task_id} className="flex flex-wrap items-center gap-2">
+                  <Link
+                    className="underline-offset-4 hover:underline"
+                    to={`/comp/${compId}/task/${task.task_id}`}
+                  >
+                    <strong>{task.name}</strong>{" "}
+                    {!task.has_xctsk ? (
+                      <span className="text-muted-foreground">Route not set yet</span>
+                    ) : null}{" "}
+                    {task.missing_sss ? (
+                      <span
+                        className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-500"
+                        title="Scoring falls back — see Task Warnings above"
+                      >
+                        No SSS
+                      </span>
+                    ) : null}{" "}
+                    {task.missing_ess ? (
+                      <span
+                        className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-500"
+                        title="Scoring falls back — see Task Warnings above"
+                      >
+                        No ESS
+                      </span>
+                    ) : null}{" "}
+                    {task.line_goal ? (
+                      <span
+                        className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary"
+                        title="This task ends at a goal line perpendicular to the final leg"
+                      >
+                        Goal line
+                      </span>
+                    ) : null}{" "}
+                    <span className="text-muted-foreground">
+                      {task.pilot_classes.join(", ")}
                     </span>
-                  ) : null}{" "}
-                  {task.missing_ess ? (
-                    <span
-                      className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-500"
-                      title="Scoring falls back — see Task Warnings above"
-                    >
-                      No ESS
-                    </span>
-                  ) : null}{" "}
-                  {task.line_goal ? (
-                    <span
-                      className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary"
-                      title="This task ends at a goal line perpendicular to the final leg"
-                    >
-                      Goal line
-                    </span>
-                  ) : null}{" "}
-                  <span className="text-muted-foreground">
-                    {task.pilot_classes.join(", ")}
-                  </span>
-                </Link>{" "}
-                {canSubmitTrack ? (
-                  <SubmitTrackButton
-                    compId={compId}
-                    taskId={task.task_id}
-                    canUploadOnBehalf={canUploadOnBehalf}
-                  />
-                ) : null}{" "}
-                <a
-                  className="underline underline-offset-4"
-                  href={`/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(task.task_id)}`}
-                  title="Open the 3D flight replay for this task"
-                >
-                  3D replay
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )
+      )}
     </div>
   );
 }

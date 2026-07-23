@@ -457,13 +457,30 @@ idea unnecessary.
    rac/progress already exist), then the auth/onboarding/admin pages and the
    app chrome (Shell user menu, global confirm). CompDetail and CompWaypoints
    are done (2026-07-21), Competitions is done (PR #401); `/scores` is
-   retired (a redirect to the comp page — nothing to convert). See the
+   retired (a redirect to `/comp/:id/scores` — nothing to convert). See the
    conversion map below for the full inventory.
 
 ## Conversion map (2026-07-21)
 
 Which SPA pages are on which kit, and the dialogs/popups each still owns.
 "rac breadcrumbs only" means the page body is still ui/.
+
+> **Update (2026-07-23, comp/task page UX rework):** the components below are
+> unchanged kit-wise, but several moved host page — the map's "who owns what"
+> is stale where it disagrees with this note:
+>
+> - New `pages/CompScoresPage.tsx` `/comp/:id/scores` (fully RAC) now hosts
+>   `CompScoresSection`'s score views (`ScoresViews`/`useCompScores`) and the
+>   embedded `ScoresSection`; the comp page keeps only the new
+>   `CompScoresSummary` (RAC LinkButton + lists).
+> - New `pages/CompPilotsPage.tsx` `/comp/:id/pilots` (admin-only) now hosts
+>   `PilotsSection` — Tabulator grid still kept by policy.
+> - `pages/Scores.tsx` redirect target is `/comp/:id/scores`, not the comp
+>   page.
+> - Task page: new RAC `comp/TaskResults.tsx` (public top-3 podium +
+>   your-submission line); `TaskStandings` is now the admin-only "Manage
+>   pilots & tracks" grid. `TaskExportButtons` gained an `asMenu` variant
+>   (rac Menu) used by the comp featured card.
 
 **Converted (RAC):**
 

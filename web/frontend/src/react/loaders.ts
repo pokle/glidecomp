@@ -103,6 +103,33 @@ export async function loadCompDetail(
   return { comp, scores, scoresEtag, today: todayInZone(comp.timezone) };
 }
 
+// ── /comp/:compId/scores ─────────────────────────────────────────────────────
+
+export interface CompScoresLoaderData {
+  comp: CompDetailData;
+  /** null when scores are unavailable (no scored tasks yet, or a transient error). */
+  scores: CompScores | null;
+  scoresEtag: string | null;
+}
+
+export async function loadCompScores(
+  f: FetchFn,
+  compId: string
+): Promise<CompScoresLoaderData> {
+  const cid = encodeURIComponent(compId);
+  const [comp, scoresRes] = await Promise.all([
+    getJson<CompDetailData>(f, `/api/comp/${cid}`),
+    f(`/api/comp/${cid}/scores`),
+  ]);
+  let scores: CompScores | null = null;
+  let scoresEtag: string | null = null;
+  if (scoresRes.ok) {
+    scores = (await scoresRes.json()) as CompScores;
+    scoresEtag = scoresRes.headers.get("ETag");
+  }
+  return { comp, scores, scoresEtag };
+}
+
 // ── /comp/:compId/waypoints ──────────────────────────────────────────────────
 
 export interface CompWaypointsLoaderData {

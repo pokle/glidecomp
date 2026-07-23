@@ -36,13 +36,26 @@ async function fetchAuditPage(
   return (await res.json()) as AuditResponse;
 }
 
-export function ActivitySection({ compId }: { compId: string }) {
+export function ActivitySection({
+  compId,
+  collapsible = false,
+}: {
+  compId: string;
+  /**
+   * Start as a 3-entry digest with a "Show all activity" control (the comp
+   * hub) instead of the full filter-tabs UI. The audit log is the
+   * transparency record, so it stays on the page — it just doesn't open at
+   * full length between a newcomer and the content below it.
+   */
+  collapsible?: boolean;
+}) {
   const [filter, setFilter] = useState("");
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [nextBefore, setNextBefore] = useState<number | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
+  const [expanded, setExpanded] = useState(!collapsible);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,6 +97,45 @@ export function ActivitySection({ compId }: { compId: string }) {
   }
 
   const selectedKey = filter === "" ? ALL_KEY : filter;
+
+  // Collapsed digest: the 3 most recent entries + the control to expand into
+  // the full filterable log.
+  if (!expanded) {
+    const digest = entries.slice(0, 3);
+    return (
+      <section>
+        <h2 className="mt-8 text-lg font-bold">Activity</h2>
+        {error ? (
+          <p className="mt-2 text-muted-foreground">Could not load activity</p>
+        ) : loaded && entries.length === 0 ? (
+          <p className="mt-2 text-muted-foreground">No activity yet</p>
+        ) : (
+          <ul className="mt-2 space-y-1">
+            {digest.map((entry) => (
+              <li key={entry.audit_id}>
+                <span className="text-muted-foreground">
+                  {formatAuditTime(entry.timestamp)}
+                </span>{" "}
+                <strong>{entry.actor_name}</strong> <span>{entry.description}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {/* Always offered once loaded (not only when truncated): the full
+            view also carries the filter tabs. */}
+        {!error && loaded ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            onPress={() => setExpanded(true)}
+          >
+            Show all activity
+          </Button>
+        ) : null}
+      </section>
+    );
+  }
 
   return (
     <section>

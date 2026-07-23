@@ -13,15 +13,25 @@ export function SectionHeader({
   title,
   action,
   className,
+  as: Heading = "h2",
 }: {
   title: React.ReactNode;
   /** Right-aligned action, typically a small outline Button. */
   action?: React.ReactNode;
   className?: string;
+  /** Heading level — "h1" when the section IS the page (e.g. /comp/:id/pilots). */
+  as?: "h1" | "h2";
 }) {
   return (
     <div className={cn("mt-8 flex flex-wrap items-center gap-x-4 gap-y-2", className)}>
-      <h2 className="min-w-0 flex-1 text-lg font-bold">{title}</h2>
+      <Heading
+        className={cn(
+          "min-w-0 flex-1 font-bold",
+          Heading === "h1" ? "text-2xl" : "text-lg"
+        )}
+      >
+        {title}
+      </Heading>
       {action}
     </div>
   );
