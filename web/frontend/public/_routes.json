@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Send /api/* to the proxy Functions, /comp + /comp/* to the SSR Function (functions/comp/[[path]].ts — unmatched shapes fall back to the SPA shell), and /sitemap.xml to its Function. Everything else is a static asset. Checked in explicitly because Cloudflare's auto-generated routes manifest has stranded new prefixes (/api/user/, /api/u/) at 404 on preview deployments — see the user-files migration PR.",
-  "include": ["/api/*", "/comp", "/comp/*", "/sitemap.xml"],
+  "description": "Send /api/* to the proxy Functions, /comp + /comp/* to the SSR Function (functions/comp/[[path]].ts — unmatched shapes fall back to the SPA shell), and /sitemap.xml to its Function. The static content pages (/, /about, /legal, /scoring/*) are also included so functions/_middleware.ts can 301 the glidecomp.pages.dev prod alias to glidecomp.com (Pages _redirects can't match hosts); on the real domain the middleware next()s straight through to the static asset. Everything else (JS/CSS/images/fonts, SPA shell rewrites) is a static asset. Checked in explicitly because Cloudflare's auto-generated routes manifest has stranded new prefixes (/api/user/, /api/u/) at 404 on preview deployments — see the user-files migration PR.",
+  "include": ["/api/*", "/comp", "/comp/*", "/sitemap.xml", "/", "/about", "/about/", "/legal", "/legal/", "/scoring", "/scoring/*"],
   "exclude": []
 }

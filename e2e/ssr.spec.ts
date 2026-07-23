@@ -57,7 +57,9 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(html).toContain(compName);
     expect(html).toContain(`href="/comp/${compId}"`);
     expect(html).toContain("<title>Competitions — GlideComp</title>");
-    expect(html).toContain('rel="canonical"');
+    // No canonical by design: iOS Safari's share sheet copies the canonical
+    // URL, which goes stale after client-side navigation.
+    expect(html).not.toContain('rel="canonical"');
   });
 
   test("/comp/:id shows the standings summary and links to the scores page", async ({ request }) => {

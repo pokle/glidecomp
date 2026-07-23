@@ -1,3 +1,8 @@
+# Note: the glidecomp.pages.dev -> glidecomp.com dedup redirect can NOT live
+# here — Pages _redirects only accepts relative sources (wrangler: "Only
+# relative URLs are allowed"). It lives in functions/_middleware.ts, with the
+# indexable pages routed through Functions via _routes.json.
+
 # SPA (React) routes -> the app shell. Target the EXTENSIONLESS /app, not
 # /app.html: Cloudflare Pages' automatic .html clean-URL handling turns a
 # rewrite to /app.html into a 308 redirect to /app, which drops the original

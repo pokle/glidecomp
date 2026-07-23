@@ -8,8 +8,10 @@
   <title>GlideComp</title>
 
   <!-- Default SEO/social tags. The SSR Function overrides title/description
-       and adds a canonical + JSON-LD per public route; these are the fallback
-       for client-rendered SPA routes and link previews. -->
+       and adds JSON-LD per public route; these are the fallback for
+       client-rendered SPA routes and link previews. No canonical link anywhere:
+       iOS Safari's share sheet copies it instead of the address bar, and it
+       goes stale after client-side (pushState) navigation. -->
   <meta name="description"
     content="GlideComp analyses hang gliding and paragliding competition tracks: tasks, GAP scoring, and per-pilot score explanations.">
   <meta property="og:site_name" content="GlideComp">
