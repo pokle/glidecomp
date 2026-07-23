@@ -22,12 +22,13 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { FileTrigger } from "react-aria-components";
+import { FileTrigger, type SortDescriptor } from "react-aria-components";
 import { MapPinIcon } from "lucide-react";
 import { parseWaypointFile, type WaypointFileRecord } from "@glidecomp/engine";
 import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
 import type { MapPickDetails, MapWaypoint } from "../../analysis/map-provider";
 import { Button, ToggleButton } from "@/react/rac/button";
+import { SearchField } from "@/react/rac/field";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { RacConfirmProvider } from "@/react/rac/confirm";
 import { api } from "../../comp/api";
@@ -85,13 +86,68 @@ function fromRow(r: WpRow): WaypointFileRecord | null {
 }
 
 /**
- * Rows whose altitude is still unknown (blank, zero or unparseable — waypoint
- * files without altitudes come through as 0, which toRow renders as ""). Only
- * these are touched by "Fill altitudes from map".
+ * Rows whose altitude is still unknown. "Unknown" is a *blank* (or
+ * unparseable) altitude — NOT a zero. A waypoint genuinely at sea level reads
+ * "0", and once "Fill altitudes from map" writes that 0 it must count as
+ * filled, or the button would forever claim there are altitudes left to fill
+ * (the reported bug). Blank is the only "missing" signal: waypoint files
+ * without altitudes arrive as 0 and toRow renders those as "".
+ *
+ * Consequence of the ambiguity in the file format: a file that genuinely
+ * carries an altitude of 0 also renders as "" (toRow can't tell "no altitude"
+ * from "altitude 0"), so such a point is still treated as missing and gets
+ * filled from the map — which lands on ~0 anyway. Only an explicit "0" already
+ * in a cell (typed, or filled from the map) counts as known.
  */
 function missingAltitude(r: WpRow): boolean {
-  const alt = Number(r.altitude);
-  return !Number.isFinite(alt) || alt === 0;
+  const s = r.altitude.trim();
+  if (s === "") return true;
+  return !Number.isFinite(Number(s));
+}
+
+/**
+ * Case-insensitive substring match across a row's code, name and coordinates —
+ * the filter the search box drives. `query` is expected already lower-cased so
+ * the per-row work stays a plain includes().
+ */
+function matchesFilter(r: WpRow, query: string): boolean {
+  if (!query) return true;
+  return (
+    r.code.toLowerCase().includes(query) ||
+    r.name.toLowerCase().includes(query) ||
+    r.coords.toLowerCase().includes(query)
+  );
+}
+
+/** Numeric value of an altitude/radius cell, or NaN when blank/unparseable. */
+function numField(r: WpRow, field: "altitude" | "radius"): number {
+  const s = r[field].trim();
+  return s === "" ? NaN : Number(s);
+}
+
+/**
+ * Sort a copy of the rows for the read-only table by the RAC sort descriptor.
+ * Alt/Radius sort numerically with blanks pinned last (in both directions);
+ * everything else sorts as locale strings.
+ */
+function sortRows(rows: WpRow[], sort: SortDescriptor): WpRow[] {
+  const dir = sort.direction === "descending" ? -1 : 1;
+  const col = String(sort.column);
+  return [...rows].sort((a, b) => {
+    if (col === "altitude" || col === "radius") {
+      const an = numField(a, col);
+      const bn = numField(b, col);
+      const aNan = Number.isNaN(an);
+      const bNan = Number.isNaN(bn);
+      if (aNan && bNan) return 0;
+      if (aNan) return 1; // blanks always last, regardless of direction
+      if (bNan) return -1;
+      return (an - bn) * dir;
+    }
+    const av = String((a as unknown as Record<string, string>)[col] ?? "");
+    const bv = String((b as unknown as Record<string, string>)[col] ?? "");
+    return av.localeCompare(bv) * dir;
+  });
 }
 
 // Lucide's map-pin, inlined for Tabulator cell formatters (static markup only).
@@ -140,6 +196,14 @@ function CompWaypointsContent() {
   const [adding, setAdding] = useState(false);
   const [seedCoords, setSeedCoords] = useState("");
   const [seedDetails, setSeedDetails] = useState<MapPickDetails | undefined>(undefined);
+
+  // Filter box (narrows a long list) and the read-only table's sort. The admin
+  // grid does its own sorting via Tabulator header clicks; `sort` here only
+  // drives the RAC read-only table.
+  const [filter, setFilter] = useState("");
+  const [sort, setSort] = useState<SortDescriptor | undefined>(undefined);
+  const filterRef = useRef(filter);
+  filterRef.current = filter;
 
   const isAdmin = useAdminView(realIsAdmin);
 
@@ -219,12 +283,17 @@ function CompWaypointsContent() {
         data: rowsRef.current.map((r) => ({ ...r })),
         index: "id",
         columns: waypointGridColumns(locate),
+        // Header-sort defaults off (the pin/remove action columns must stay
+        // unsortable); the data columns opt in individually.
         columnDefaults: { headerSort: false },
         layout: "fitDataStretch",
         height: "100%",
         placeholder:
           "No waypoints yet. Upload a file or add points from the map to get started.",
       });
+      // getData() returns the master row list in insertion order, unaffected by
+      // an active sort or filter, so mirroring it back never reorders React
+      // state or drops filtered-out rows.
       const sync = () => {
         const t = table;
         if (!t) return;
@@ -237,6 +306,10 @@ function CompWaypointsContent() {
         sync();
       });
       table.on("rowDeleted", sync);
+      // A rebuild (admin toggle, reload) drops the filter — re-apply whatever
+      // is in the box so the grid stays consistent with the search field.
+      const q = filterRef.current.trim().toLowerCase();
+      if (q) table.setFilter((data: WpRow) => matchesFilter(data, q));
       tableRef.current = table;
     })();
     return () => {
@@ -246,6 +319,16 @@ function CompWaypointsContent() {
     };
   }, [isAdmin, loading, locate]);
 
+  // Push the filter box into the (already-built) grid. The build effect seeds
+  // the initial filter, so this handles every subsequent keystroke/clear.
+  useEffect(() => {
+    const t = tableRef.current;
+    if (!t) return;
+    const q = filter.trim().toLowerCase();
+    if (q) t.setFilter((data: WpRow) => matchesFilter(data, q));
+    else t.clearFilter(true);
+  }, [filter]);
+
   // Current records + validity, derived from the rows.
   const records = useMemo(() => rows.map(fromRow), [rows]);
   const invalidCount = records.filter((r) => r === null).length;
@@ -254,6 +337,14 @@ function CompWaypointsContent() {
     [records]
   );
   const dirty = serialize(validRecords) !== savedJson;
+
+  // Rows for the read-only table: filter, then sort (a copy — `rows` stays the
+  // canonical order). The admin grid handles its own filter/sort in Tabulator.
+  const query = filter.trim().toLowerCase();
+  const visibleRows = useMemo(() => {
+    const filtered = query ? rows.filter((r) => matchesFilter(r, query)) : rows;
+    return sort ? sortRows(filtered, sort) : filtered;
+  }, [rows, query, sort]);
 
   // Map markers from the rows with valid coordinates.
   const mapWaypoints: MapWaypoint[] = useMemo(
@@ -519,6 +610,25 @@ function CompWaypointsContent() {
 
           {/* Grid (admins: editable Tabulator) / table (everyone else: RAC read-only) */}
           <div className="order-2 min-w-0 lg:order-1">
+            {/* Filter box — narrows a long set. Drives the Tabulator grid
+                (admins) and the read-only table alike; the admin grid also
+                sorts on header clicks, the read-only table via its columns. */}
+            {rows.length > 0 ? (
+              <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <SearchField
+                  aria-label="Filter waypoints"
+                  placeholder="Filter by code, name or coordinates…"
+                  value={filter}
+                  onChange={setFilter}
+                  className="min-w-40 flex-1 sm:max-w-xs"
+                />
+                {query ? (
+                  <span className="text-xs text-muted-foreground" aria-live="polite">
+                    {visibleRows.length} of {rows.length} match
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
             {isAdmin ? (
               <div
                 ref={gridRef}
@@ -528,23 +638,42 @@ function CompWaypointsContent() {
               <p className="rounded border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
                 No waypoints yet.
               </p>
+            ) : visibleRows.length === 0 ? (
+              <p className="rounded border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                No waypoints match “{filter.trim()}”.
+              </p>
             ) : (
-              <Table aria-label="Waypoints" scrollLabel="Waypoints">
+              <Table
+                aria-label="Waypoints"
+                scrollLabel="Waypoints"
+                sortDescriptor={sort}
+                onSortChange={setSort}
+              >
                 <TableHeader>
                   <Column className="w-8">
                     <span className="sr-only">Show on map</span>
                   </Column>
-                  <Column isRowHeader>Code</Column>
-                  <Column>Name</Column>
-                  <Column>Coordinates</Column>
+                  <Column id="code" isRowHeader allowsSorting>
+                    Code
+                  </Column>
+                  <Column id="name" allowsSorting>
+                    Name
+                  </Column>
+                  <Column id="coords" allowsSorting>
+                    Coordinates
+                  </Column>
                   {/* Alt and Radius are plain quantities, so they read right-
                       aligned. Coordinates stays left: it is a "lat, lon"
                       pair, not a single number to compare down the column. */}
-                  <Column className="text-right">Alt</Column>
-                  <Column className="text-right">Radius</Column>
+                  <Column id="altitude" className="text-right" allowsSorting>
+                    Alt
+                  </Column>
+                  <Column id="radius" className="text-right" allowsSorting>
+                    Radius
+                  </Column>
                 </TableHeader>
                 <TableBody>
-                  {rows.map((r) => (
+                  {visibleRows.map((r) => (
                     <Row key={r.id} id={r.id}>
                       <Cell className="p-1 text-center">
                         <Button
@@ -652,7 +781,7 @@ function waypointGridColumns(locate: (r: WpRow) => void): ColumnDefinition[] {
   });
 
   const coords: ColumnDefinition = {
-    ...text("Coordinates", "coords", { minWidth: 150, cssClass: "gc-mono" }),
+    ...text("Coordinates", "coords", { minWidth: 150, cssClass: "gc-mono", headerSort: true }),
     formatter: (cell) => {
       const value = String(cell.getValue() ?? "");
       cell.getElement().classList.toggle("gc-cell-invalid", parseCoords(value) === null);
@@ -672,13 +801,21 @@ function waypointGridColumns(locate: (r: WpRow) => void): ColumnDefinition[] {
     },
   };
 
+  // Numeric header-sort for the quantity columns, with blank altitudes/radii
+  // pinned to the bottom whichever way the sort runs.
+  const numberSort: Partial<ColumnDefinition> = {
+    headerSort: true,
+    sorter: "number",
+    sorterParams: { alignEmptyValues: "bottom" },
+  };
+
   return [
     pin,
-    text("Code", "code", { minWidth: 80, frozen: true }),
-    text("Name", "name", { minWidth: 130 }),
+    text("Code", "code", { minWidth: 80, frozen: true, headerSort: true }),
+    text("Name", "name", { minWidth: 130, headerSort: true }),
     coords,
-    text("Alt", "altitude", { width: 70, hozAlign: "right", headerHozAlign: "right", cssClass: "gc-mono" }),
-    text("Radius", "radius", { width: 80, hozAlign: "right", headerHozAlign: "right", cssClass: "gc-mono" }),
+    text("Alt", "altitude", { width: 70, hozAlign: "right", headerHozAlign: "right", cssClass: "gc-mono", ...numberSort }),
+    text("Radius", "radius", { width: 80, hozAlign: "right", headerHozAlign: "right", cssClass: "gc-mono", ...numberSort }),
     remove,
   ];
 }
