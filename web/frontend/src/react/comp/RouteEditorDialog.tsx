@@ -720,7 +720,12 @@ export function RouteEditorDialog({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      className="flex h-[96vh] max-h-[96vh] w-[96vw] max-w-[96vw] flex-col p-0 sm:max-w-[96vw]"
+      // Height/width in dvh/dvw minus the overlay's p-4: `vh` on mobile Safari
+      // is the URL-bar-hidden height, so a 96vh panel is taller than the
+      // visible viewport — its top ends up above the scroll origin, and
+      // dragging it into view springs straight back. Capped on desktop so the
+      // dialog doesn't stretch across an ultrawide monitor.
+      className="flex h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] w-full max-w-none flex-col p-0 sm:max-w-5xl"
     >
       <Dialog className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
         <DialogHeader>
@@ -964,12 +969,12 @@ export function RouteEditorDialog({
                   + Add gate
                 </Button>
                 {isRace ? (
-                  <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <span className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
                     <NumberField
                       minValue={1}
                       maxValue={100}
                       step={1}
-                      className="w-24"
+                      className="w-28"
                       aria-label="Number of gates"
                       value={genCount}
                       onChange={setGenCount}
@@ -981,7 +986,7 @@ export function RouteEditorDialog({
                       // step must stay 1: RAC snaps to minValue + k·step, so
                       // step 5 with min 1 would corrupt 15 → 16.
                       step={1}
-                      className="w-24"
+                      className="w-28"
                       aria-label="Gate interval (minutes)"
                       value={genInterval}
                       onChange={setGenInterval}
@@ -1184,7 +1189,7 @@ function TurnpointDetailsDialog({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      className="flex max-h-[90vh] w-full max-w-md flex-col p-0 sm:max-w-md"
+      className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col p-0 sm:max-w-md"
     >
       <Dialog className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
         <DialogHeader>
