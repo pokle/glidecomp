@@ -24,7 +24,12 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Link, useParams } from "react-router-dom";
 import { FileTrigger, type SortDescriptor } from "react-aria-components";
 import { MapPinIcon } from "lucide-react";
-import { parseWaypointFile, type WaypointFileRecord } from "@glidecomp/engine";
+import {
+  cleanWaypointCodes,
+  describeCodeChanges,
+  parseWaypointFile,
+  type WaypointFileRecord,
+} from "@glidecomp/engine";
 import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
 import type { MapPickDetails, MapWaypoint } from "../../analysis/map-provider";
 import { Button, ToggleButton } from "@/react/rac/button";
@@ -381,10 +386,16 @@ function CompWaypointsContent() {
         });
         if (!ok) return;
       }
-      replaceRows(waypoints.map(toRow));
+      // Codes can't hold a space or a comma (they separate turnpoints when a
+      // route is written as text), and they have to be unique to name a
+      // turnpoint at all. Clean on the way in, and say what changed.
+      const { waypoints: cleaned, changes } = cleanWaypointCodes(waypoints);
+      replaceRows(cleaned.map(toRow));
       toast.success(
-        `Loaded ${waypoints.length} waypoint${waypoints.length === 1 ? "" : "s"} (${format}) from ${file.name}`
+        `Loaded ${cleaned.length} waypoint${cleaned.length === 1 ? "" : "s"} (${format}) from ${file.name}`
       );
+      const note = describeCodeChanges(changes);
+      if (note) toast.warning(note);
     } catch {
       toast.error(`Could not read ${file.name} as a waypoint file`);
     }
@@ -475,9 +486,17 @@ function CompWaypointsContent() {
       toast.error("Every waypoint needs valid coordinates before saving");
       return;
     }
+    // Backstop for codes typed straight into the grid: clean here rather than
+    // fighting the editor keystroke by keystroke, and show the result in the
+    // grid so what's saved is what's on screen.
+    const { waypoints, changes } = cleanWaypointCodes(built as WaypointFileRecord[]);
+    if (changes.length > 0) {
+      replaceRows(waypoints.map(toRow));
+      const note = describeCodeChanges(changes);
+      if (note) toast.warning(note);
+    }
     setSaving(true);
     try {
-      const waypoints = built as WaypointFileRecord[];
       const res = await api.api.comp[":comp_id"].waypoints.$put({
         param: { comp_id: compId! },
         json: { waypoints },

@@ -515,3 +515,94 @@ export function parseWaypointFile(content: string, filename?: string): ParsedWay
   }));
   return { format: 'csv', waypoints: legacy };
 }
+
+// ---------------------------------------------------------------------------
+// Code hygiene
+// ---------------------------------------------------------------------------
+
+/**
+ * Characters a waypoint code may not contain: whitespace and the comma. They
+ * are what separates one turnpoint from the next when a route is written as
+ * text (the route editor's "Enter task" field), so a code holding one can't be
+ * typed — it would read as two turnpoints. Nothing else is restricted; codes
+ * like "Mt_Buffalo_-_Lookout" and "Gutt_Ridge_No.1" are fine.
+ */
+const ILLEGAL_CODE_CHARS = /[\s,]+/g;
+
+/** Used when a code cleans away to nothing at all. */
+const FALLBACK_CODE = 'WP';
+
+/**
+ * A code with the illegal characters removed. Runs of them collapse rather
+ * than vanish silently: "Break o Day" → "BreakoDay" would hide the word
+ * boundaries, so they become underscores, the separator waypoint files
+ * already use most.
+ */
+export function cleanWaypointCode(code: string): string {
+  const cleaned = code.trim().replace(ILLEGAL_CODE_CHARS, '_').replace(/^_+|_+$/g, '');
+  return cleaned === '' ? FALLBACK_CODE : cleaned;
+}
+
+/** One code the cleaner changed, for telling the user what happened. */
+export interface WaypointCodeChange {
+  from: string;
+  to: string;
+  /** 'cleaned' = illegal characters; 'duplicate' = a digit made it unique. */
+  reason: 'cleaned' | 'duplicate';
+}
+
+/**
+ * Clean a whole set of codes and make them unique, reporting every change.
+ *
+ * Uniqueness matters because a route is written by code: two waypoints sharing
+ * one are indistinguishable in text, and cleaning can create a collision that
+ * wasn't there ("A B" and "A,B" both become "A_B"). Duplicates get a numeric
+ * suffix — the first keeps the plain code, the next is "CODE2".
+ *
+ * Records are returned in their original order, and one that needed no change
+ * is returned as-is (same object), so a set that's already clean is untouched.
+ */
+export function cleanWaypointCodes<T extends { code: string }>(
+  records: T[]
+): { waypoints: T[]; changes: WaypointCodeChange[] } {
+  const changes: WaypointCodeChange[] = [];
+  const taken = new Set<string>();
+
+  const waypoints = records.map((record) => {
+    const cleaned = cleanWaypointCode(record.code);
+    let final = cleaned;
+    if (taken.has(final.toUpperCase())) {
+      for (let n = 2; taken.has(final.toUpperCase()); n++) final = `${cleaned}${n}`;
+    }
+    taken.add(final.toUpperCase());
+
+    if (final === record.code) return record;
+    changes.push({
+      from: record.code,
+      to: final,
+      reason: final === cleaned ? 'cleaned' : 'duplicate',
+    });
+    return { ...record, code: final };
+  });
+
+  return { waypoints, changes };
+}
+
+/**
+ * One line telling the user what the cleaner did, or null when it did nothing.
+ * Names the first few changes and counts the rest — enough to spot a surprise
+ * without burying the toast.
+ */
+export function describeCodeChanges(
+  changes: WaypointCodeChange[],
+  shown = 3
+): string | null {
+  if (changes.length === 0) return null;
+  const examples = changes
+    .slice(0, shown)
+    .map((c) => `"${c.from}" → ${c.to}`)
+    .join(', ');
+  const rest = changes.length - Math.min(shown, changes.length);
+  const count = `${changes.length} waypoint code${changes.length === 1 ? '' : 's'}`;
+  return `Adjusted ${count}: ${examples}${rest > 0 ? `, and ${rest} more` : ''}. Codes can't contain spaces or commas — a route is written by code.`;
+}

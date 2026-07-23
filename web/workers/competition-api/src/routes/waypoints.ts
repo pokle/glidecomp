@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import {
+  cleanWaypointCodes,
   getWaypointExportFormat,
   swapCodeName,
   toXctskJSON,
@@ -198,7 +199,11 @@ export const waypointsRoutes = new Hono<HonoEnv>()
     validated("json", waypointsBodySchema),
     async (c) => {
       const compId = c.var.ids.comp_id!;
-      const { waypoints } = c.req.valid("json");
+      // Codes can't hold a space or a comma — they separate turnpoints when a
+      // route is written as text — and must be unique to name one at all. The
+      // UI cleans before it gets here; this is the guarantee for every other
+      // path (seed script, direct API use), so the stored set is always usable.
+      const { waypoints, changes } = cleanWaypointCodes(c.req.valid("json").waypoints);
 
       const comp = await c.env.DB.prepare("SELECT name FROM comp WHERE comp_id = ?")
         .bind(compId)
@@ -224,11 +229,17 @@ export const waypointsRoutes = new Hono<HonoEnv>()
         subject_id: compId,
         subject_name: comp?.name ?? "Competition",
         description:
-          prevCount === waypoints.length
+          (prevCount === waypoints.length
             ? `Edited competition waypoints (${waypoints.length})`
-            : `Updated competition waypoints (${prevCount} → ${waypoints.length})`,
+            : `Updated competition waypoints (${prevCount} → ${waypoints.length})`) +
+          (changes.length > 0
+            ? `; cleaned ${changes.length} code${changes.length === 1 ? "" : "s"} (${changes
+                .slice(0, 3)
+                .map((ch) => `${ch.from} → ${ch.to}`)
+                .join(", ")}${changes.length > 3 ? ", …" : ""})`
+            : ""),
       });
 
-      return c.json({ ok: true, count: waypoints.length, updated_at: now });
+      return c.json({ ok: true, count: waypoints.length, updated_at: now, changes });
     }
   );
