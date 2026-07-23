@@ -17,8 +17,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileTrigger, useFilter } from "react-aria-components";
 import {
-  computeTurnpointDirections,
-  getOptimizedSegmentDistances,
   parseXCTaskAsync,
   toXctskJSON,
   type GoalConfig,
@@ -35,12 +33,10 @@ import {
   DialogTitle,
   Modal,
 } from "@/react/rac/dialog";
-import { Badge } from "@/react/rac/badge";
 import { Disclosure } from "@/react/rac/disclosure";
 import { NumberField, TextField } from "@/react/rac/field";
 import { ComboBox, ComboBoxItem } from "@/react/rac/combo-box";
 import { SimpleSelect } from "@/react/rac/select";
-import { GridList, GridListItem } from "@/react/rac/grid-list";
 import { TimePicker } from "@/react/ui/date-picker";
 import { api } from "../../comp/api";
 import { fetchTaskByCodeWithRaw } from "../../analysis/xctsk-fetch";
@@ -63,14 +59,9 @@ import {
   type RouteRow,
 } from "./route-editor";
 import { AddWaypointDialog } from "./AddWaypointDialog";
-import {
-  formatAltitude,
-  formatDistance,
-  formatRadius,
-  useUnits,
-  type UnitPreferences,
-} from "../lib/units";
-import { ChevronDownIcon, ChevronUpIcon, PencilIcon, XIcon } from "lucide-react";
+import { QuickTaskField, type QuickTaskPick } from "./QuickTaskField";
+import { TurnpointsTable } from "./TurnpointsTable";
+import { quickTaskText } from "./quick-task";
 
 // Lazy so the map library (mapbox) and its CSS load only when the editor
 // opens and never enter the SSR'd task-detail bundle.
@@ -91,23 +82,6 @@ const TYPE_OPTIONS = Object.entries(TYPE_LABELS).map(([value, label]) => ({
 /** Short radius label for a preset chip: 400 → "400", 1000 → "1 km". */
 function radiusChipLabel(m: number): string {
   return m >= 1000 ? `${m / 1000} km` : `${m}`;
-}
-
-/** Grouped metres for display: 50000 → "50,000". */
-function formatMetres(m: number): string {
-  return m.toLocaleString("en-US");
-}
-
-/** Recap-row altitude in the preferred unit, grouped: "alt 1,234 m" / "alt 4,049 ft". */
-function altitudeRecap(
-  altitude: string | number,
-  units: UnitPreferences
-): { text: string; title: string } {
-  const alt = formatAltitude(Number(altitude), { prefs: units });
-  return {
-    text: `alt ${formatMetres(Math.round(alt.value))} ${alt.unit}`,
-    title: `Waypoint altitude (${alt.unit} AMSL)`,
-  };
 }
 
 /** The editable fields of a turnpoint (everything the details dialog sets). */
@@ -166,7 +140,6 @@ export function RouteEditorDialog({
   onSaved: () => void;
 }) {
   const confirm = useConfirm();
-  const units = useUnits();
 
   // Gate/deadline times are edited in the comp zone when one is set (#274).
   // The xctsk file stores UTC, so times convert on load and on save; all
@@ -197,32 +170,10 @@ export function RouteEditorDialog({
   rowsRef.current = rows;
   const [fillingAlts, setFillingAlts] = useState(false);
 
-  const updateRow = useCallback((id: number, patch: Partial<RouteRow>) => {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  }, []);
-
-  const removeRow = useCallback((id: number) => {
-    setRows((prev) => prev.filter((r) => r.id !== id));
-  }, []);
-
-  // The turnpoint details dialog: which turnpoint (if any) is being added or
-  // edited. Adding is draft-first — nothing joins the route until Save.
-  const [tpEditor, setTpEditor] = useState<
-    { mode: "add" } | { mode: "edit"; rowId: number } | null
-  >(null);
-
-  // Pan the map to a turnpoint when its row is tapped. The key bumps on every
-  // tap so re-tapping the same row re-centres after the user has panned away.
-  const [mapFocus, setMapFocus] = useState<{
-    lat: number;
-    lon: number;
-    key: number;
-  } | null>(null);
-  const focusKeyRef = useRef(0);
-  const focusTurnpoint = useCallback((row: RouteRow) => {
-    const c = parseCoords(row.coords);
-    if (c) setMapFocus({ lat: c.lat, lon: c.lon, key: ++focusKeyRef.current });
-  }, []);
+  // The turnpoint details dialog, for adding one turnpoint by hand (the
+  // listing above is read-only now). Draft-first — nothing joins the route
+  // until Save.
+  const [addingTurnpoint, setAddingTurnpoint] = useState(false);
 
   // The competition's shared waypoints (loaded once on open), shown on the map
   // and in a searchable list. Turnpoints are picked from this set only — the
@@ -323,68 +274,17 @@ export function RouteEditorDialog({
             taskType: baseRef.current?.taskType || "CLASSIC",
             version: baseRef.current?.version ?? 1,
             turnpoints: result.turnpoints,
+            // The SSS panel's direction feeds the Enter/Exit inference the
+            // turnpoint listing shows, so flipping it updates the list live.
+            ...(openDistance ? {} : { sss: { type: sssType, direction } }),
             ...(goal ? { goal } : {}),
           }
         : null;
 
-    const legByRowId = new Map<number, number>();
-    const dirByRowId = new Map<number, RouteRow["dir"]>();
-    let totalKm: number | null = null;
-    if (result.geometryComplete && result.turnpoints.length >= 2) {
-      const task: XCTask = {
-        taskType: baseRef.current?.taskType || "CLASSIC",
-        version: baseRef.current?.version ?? 1,
-        turnpoints: result.turnpoints,
-        // The SSS panel's direction feeds the per-turnpoint direction
-        // inference, so flipping it updates the Dir column live.
-        ...(openDistance ? {} : { sss: { type: sssType, direction } }),
-        ...(goal ? { goal } : {}),
-      };
-      const legs = getOptimizedSegmentDistances(task);
-      totalKm = legs.reduce((sum, d) => sum + d, 0) / 1000;
-      // legs[i] is the segment into turnpoint i+1
-      legs.forEach((d, i) => {
-        const rowId = result.rowIds[i + 1];
-        if (rowId !== undefined) legByRowId.set(rowId, d);
-      });
-      // Directions are derived, not chosen: a cylinder that contains the
-      // previous route point is an exit cylinder (reached by flying out of
-      // it). Recomputed on every edit so enlarging a radius that flips a
-      // turnpoint to Exit is visible before saving.
-      computeTurnpointDirections(task).forEach((d, i) => {
-        const rowId = result.rowIds[i];
-        if (rowId !== undefined) {
-          dirByRowId.set(rowId, result.turnpoints[i].type === "TAKEOFF" ? null : d);
-        }
-      });
-    }
-    return { result, hasSSSTurnpoint, mapTask, legByRowId, dirByRowId, totalKm };
+    return { result, hasSSSTurnpoint, mapTask };
   }, [rows, openDistance, goalType, sssType, direction]);
 
   const { errors, warnings } = derived.result;
-
-  /**
-   * Row reordering: RAC drag-and-drop. Mouse/touch drag the handle; keyboard
-   * users press Enter on the handle, then arrow keys + Enter to drop.
-   */
-  /**
-   * Reorder by one position with the row's up/down arrows. Chosen over
-   * drag-and-drop because the route is set on a phone on the hill (see the
-   * task page's XCTrack-style layout): react-aria's row DnD is native HTML5
-   * drag, which never fires on touch without a long-press, so a normal
-   * press-drag on the handle did nothing. Tappable arrows work the same on
-   * mouse, touch and keyboard — the pattern XCTrack itself uses.
-   */
-  const moveRow = useCallback((id: number, direction: -1 | 1) => {
-    setRows((prev) => {
-      const i = prev.findIndex((r) => r.id === id);
-      const j = i + direction;
-      if (i === -1 || j < 0 || j >= prev.length) return prev;
-      const next = [...prev];
-      [next[i], next[j]] = [next[j], next[i]];
-      return next;
-    });
-  }, []);
 
   // Competition waypoints as map markers (index is the marker id, resolved
   // back to the record on pick so all details carry across).
@@ -423,6 +323,47 @@ export function RouteEditorDialog({
       ]);
     },
     [nextRowId]
+  );
+
+  // Enter task needs waypoints to match names against; without any, the field
+  // would be a dead end (and the empty state must not point at it).
+  const showQuickTask = !wpLoading && waypointRecords.length > 0;
+
+  // The route as a quick-task line, so the field opens showing the task that's
+  // loaded and keeps mirroring it as rows change elsewhere in the editor.
+  const quickText = useMemo(
+    () =>
+      quickTaskText(
+        rows.map((r) => ({
+          name: String(r.name),
+          radius: Number(r.radius) || NEW_ROW_RADIUS,
+          type: r.type,
+        }))
+      ),
+    [rows]
+  );
+
+  /**
+   * Enter task: replace the whole route with the turnpoints parsed from the
+   * one-line field. Each pick carries the waypoint, its radius and the guessed
+   * type; everything else comes from the waypoint record, exactly as picking it
+   * by hand would. Nothing is saved until Save, so this stays undoable by
+   * cancelling the dialog.
+   */
+  const applyQuickTask = useCallback(
+    (picks: QuickTaskPick[]) => {
+      setRows(
+        picks.map((p) => ({
+          id: nextRowId(),
+          ...draftFromRecord(p.record),
+          type: p.type,
+          radius: p.radius,
+          leg: null,
+          dir: null,
+        }))
+      );
+    },
+    [nextRowId, draftFromRecord]
   );
 
   /** Pick from the map: the nearest marker, resolved to its record by id, and
@@ -786,12 +727,15 @@ export function RouteEditorDialog({
           <DialogTitle>Edit route</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Each row is a turnpoint, top-to-bottom like a flight plan — leg
-          distance and Enter/Exit crossing are derived from the optimized route.
-          Use a row&apos;s up/down arrows to reorder it.{" "}
-          <span className="font-medium">Add turnpoint</span> or a row&apos;s{" "}
-          <span className="font-medium">Edit</span> opens its details — load from
-          a competition waypoint, or set them by hand.
+          Waypoint names in order, each with a radius (
+          <span className="font-medium">400m</span>,{" "}
+          <span className="font-medium">5k</span>) and, where position
+          doesn&apos;t already say it, a type (
+          <span className="font-medium">to</span>,{" "}
+          <span className="font-medium">sss</span>,{" "}
+          <span className="font-medium">ess</span>,{" "}
+          <span className="font-medium">tp</span>,{" "}
+          <span className="font-medium">goal</span>).
         </p>
         {openDistance ? (
           <p className="text-sm text-muted-foreground">
@@ -800,51 +744,43 @@ export function RouteEditorDialog({
           </p>
         ) : null}
 
-        {/* Turnpoint list — at the top of the dialog, every row visible (the
-            dialog scrolls; the list itself never does). Each row is a compact
-            flight-plan summary; adding/editing happens in the details dialog. */}
+        {/* Enter task (prototype) — build the whole route by typing the
+            waypoint codes in order. Shown once the competition's waypoints are
+            loaded; without them there'd be nothing to match a name against.
+            Open-distance tasks get it too: one name is one take-off cylinder,
+            which is exactly the route they're allowed. */}
+        {showQuickTask ? (
+          <QuickTaskField
+            waypoints={waypointRecords}
+            defaultRadius={NEW_ROW_RADIUS}
+            routeText={quickText}
+            placeholder={
+              openDistance ? "ell 5k" : "ell 400m ell 5k mitta cudg ncor 1k"
+            }
+            exampleSize={openDistance ? 1 : undefined}
+            onApply={applyQuickTask}
+          />
+        ) : null}
+
+        {/* Turnpoint list — the exact listing the task page shows (shared
+            component), rendered over the route being edited so the editor is a
+            preview of the published task. Read-only: turnpoints are set with
+            Enter task above, or added through the details dialog below. */}
         <div className="flex flex-col gap-2">
-          <GridList
-            aria-label="Turnpoints"
-            selectionMode="none"
-            // Tapping a row pans the map to that turnpoint (the reorder / Edit /
-            // Remove buttons are separate targets and don't trigger it).
-            onAction={(key) => {
-              const row = rows.find((r) => r.id === key);
-              if (row) focusTurnpoint(row);
-            }}
-            items={rows}
-            // RAC caches each item's rendered output by identity, so props
-            // derived from OUTSIDE the item — the # position and the Leg/Dir
-            // summary computed from the whole route — would go stale on
-            // reorder or on edits to other rows. Declaring them as
-            // dependencies invalidates the cache (gotcha #3).
-            dependencies={[rows, derived]}
-            renderEmptyState={() => (
-              <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                No turnpoints yet — use Add turnpoint or import a task
-              </p>
-            )}
-          >
-            {(row) => (
-              <TurnpointCard
-                key={row.id}
-                row={row}
-                index={rows.indexOf(row)}
-                count={rows.length}
-                leg={derived.legByRowId.get(row.id) ?? null}
-                dir={derived.dirByRowId.get(row.id) ?? null}
-                onMove={moveRow}
-                onEdit={(id) => setTpEditor({ mode: "edit", rowId: id })}
-                onRemove={removeRow}
-              />
-            )}
-          </GridList>
+          {derived.mapTask ? (
+            <TurnpointsTable xctsk={derived.mapTask} />
+          ) : (
+            <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+              {showQuickTask
+                ? "No turnpoints yet — type them in Enter task, use Add turnpoint, or import a task"
+                : "No turnpoints yet — use Add turnpoint, or import a task"}
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
-              onPress={() => setTpEditor({ mode: "add" })}
+              onPress={() => setAddingTurnpoint(true)}
             >
               Add turnpoint
             </Button>
@@ -888,12 +824,6 @@ export function RouteEditorDialog({
             <Button variant="outline" size="sm" onPress={exportCsv}>
               Export .csv
             </Button>
-            {derived.totalKm !== null ? (
-              <span className="ml-auto text-sm text-muted-foreground">
-                Optimized total:{" "}
-                {formatDistance(derived.totalKm * 1000, { decimals: 1, prefs: units }).withUnit}
-              </span>
-            ) : null}
           </div>
           <p className="text-xs text-muted-foreground">
             Directions are derived from the route geometry — a cylinder that
@@ -919,7 +849,6 @@ export function RouteEditorDialog({
                 waypoints={mapWaypoints}
                 addMode={addMode}
                 fitNonce={wpFitNonce}
-                focus={mapFocus}
                 onWaypointPick={pickWaypoint}
                 onMapPick={(lat, lon, details) =>
                   openAddPoint(formatCoords(lat, lon), details)
@@ -1152,36 +1081,17 @@ export function RouteEditorDialog({
           </Dialog>
         </Modal>
 
-        {/* Add / edit a single turnpoint. Adding is draft-first: the turnpoint
-            joins the route only on Save. */}
-        {tpEditor ? (
+        {/* Add a single turnpoint by hand. Draft-first: it joins the route
+            only on Save. */}
+        {addingTurnpoint ? (
           <TurnpointDetailsDialog
-            mode={tpEditor.mode}
-            initial={
-              tpEditor.mode === "edit"
-                ? (() => {
-                    const r = rows.find((row) => row.id === tpEditor.rowId);
-                    return r
-                      ? {
-                          name: r.name,
-                          description: r.description,
-                          type: r.type,
-                          coords: r.coords,
-                          radius: r.radius,
-                          altitude: r.altitude,
-                        }
-                      : blankDraft();
-                  })()
-                : blankDraft()
-            }
+            mode="add"
+            initial={blankDraft()}
             waypointRecords={waypointRecords}
             wpLoading={wpLoading}
             compId={compId}
-            onSave={(draft) => {
-              if (tpEditor.mode === "edit") updateRow(tpEditor.rowId, draft);
-              else appendTurnpoint(draft);
-            }}
-            onClose={() => setTpEditor(null)}
+            onSave={appendTurnpoint}
+            onClose={() => setAddingTurnpoint(false)}
           />
         ) : null}
 
@@ -1197,159 +1107,6 @@ export function RouteEditorDialog({
         />
       </Dialog>
     </Modal>
-  );
-}
-
-/** Short role code for a row's leftmost column: "TAKEOFF"/"SSS"/"ESS", or
- *  "GOAL" for the last plain turnpoint (the goal in GAP scoring even when the
- *  xctsk leaves its type unset). Null for a plain intermediate turnpoint. */
-function roleCode(type: RouteRow["type"], isLast: boolean): string | null {
-  if (type) return type;
-  return isLast ? "GOAL" : null;
-}
-
-/**
- * One turnpoint row (RAC GridListItem) — an XCTrack-style flight-plan row,
- * matching the read-only task page: up/down reorder arrows first, then the role
- * (TAKEOFF/SSS/ESS/GOAL), the code · name with radius (and altitude) stacked
- * beneath, the optimized leg distance holding the right edge, then Edit /
- * remove. No inline edit controls: everything is set in the row's Edit dialog,
- * so the list stays scannable top-to-bottom. Leg and Dir are outputs of the
- * dialog's geometry memo (display-only by design).
- */
-function TurnpointCard({
-  row,
-  index,
-  count,
-  leg,
-  dir,
-  onMove,
-  onEdit,
-  onRemove,
-}: {
-  row: RouteRow;
-  index: number;
-  count: number;
-  leg: number | null;
-  dir: RouteRow["dir"];
-  onMove: (id: number, direction: -1 | 1) => void;
-  onEdit: (id: number) => void;
-  onRemove: (id: number) => void;
-}) {
-  const units = useUnits();
-  const radius = Number(row.radius);
-  const label = row.name || `turnpoint ${index + 1}`;
-  const coordsMissing = parseCoords(row.coords) == null;
-  const role = roleCode(row.type, index === count - 1);
-  const alt = !missingAltitude(row.altitude)
-    ? altitudeRecap(row.altitude, units)
-    : null;
-  return (
-    <GridListItem
-      id={row.id}
-      textValue={row.name || `Turnpoint ${index + 1}`}
-      className="px-2 py-1.5"
-    >
-      <div className="flex items-center gap-2">
-        {/* Reorder: up/down arrows (tappable everywhere, unlike drag on touch —
-            see moveRow). Disabled at the ends. */}
-        <div className="flex shrink-0 flex-col">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="size-6"
-            aria-label={`Move ${label} up`}
-            isDisabled={index === 0}
-            onPress={() => onMove(row.id, -1)}
-          >
-            <ChevronUpIcon className="size-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="size-6"
-            aria-label={`Move ${label} down`}
-            isDisabled={index === count - 1}
-            onPress={() => onMove(row.id, 1)}
-          >
-            <ChevronDownIcon className="size-4" />
-          </Button>
-        </div>
-
-        {/* Role column: the type code, with the Exit crossing beneath it (Exit
-            is the notable case; Enter is the norm and left implicit). */}
-        <div className="flex w-14 shrink-0 flex-col items-start gap-1">
-          {role ? (
-            <span className="text-[11px] font-medium tracking-wide text-muted-foreground">
-              {role}
-            </span>
-          ) : null}
-          {dir === "exit" ? (
-            <Badge
-              variant="outline"
-              title="Exit cylinder — reached by flying out of it"
-            >
-              Exit
-            </Badge>
-          ) : null}
-        </div>
-
-        {/* Identity: code (+ name) on top, radius · altitude beneath. */}
-        <div className="flex min-w-0 flex-1 flex-col leading-tight text-sm">
-          <span className="flex min-w-0 items-baseline gap-2">
-            {row.name ? (
-              <span className="font-medium">{row.name}</span>
-            ) : (
-              <span className="text-muted-foreground italic">New turnpoint</span>
-            )}
-            {row.description ? (
-              <span className="min-w-0 truncate text-muted-foreground">
-                {row.description}
-              </span>
-            ) : null}
-          </span>
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {coordsMissing ? (
-              <span className="text-amber-500">⚠ set coordinates</span>
-            ) : (
-              <>
-                {Number.isFinite(radius) && radius > 0
-                  ? formatRadius(radius, { prefs: units }).withUnit
-                  : "radius?"}
-                {alt ? <span title={alt.title}> · {alt.text}</span> : null}
-              </>
-            )}
-          </span>
-        </div>
-
-        {/* Optimized leg distance, holding the right edge before the actions. */}
-        {leg != null ? (
-          <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-            leg {formatDistance(leg, { decimals: 1, prefs: units }).withUnit}
-          </span>
-        ) : null}
-
-        {/* Actions: edit the turnpoint, or remove it. */}
-        <div className="flex shrink-0 items-center gap-1">
-          <Button
-            variant="outline"
-            size="icon-sm"
-            aria-label={`Edit ${label}`}
-            onPress={() => onEdit(row.id)}
-          >
-            <PencilIcon className="size-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Remove ${label}`}
-            onPress={() => onRemove(row.id)}
-          >
-            <XIcon className="size-4 text-muted-foreground" />
-          </Button>
-        </div>
-      </div>
-    </GridListItem>
   );
 }
 

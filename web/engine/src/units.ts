@@ -145,9 +145,11 @@ export function formatRadius(meters: number, opts?: { prefs?: UnitPreferences })
   }
 
   const converted = meters * conv.factor;
-  // Use 0 decimals for values >= 1, 1 decimal for smaller
-  const decimals = converted >= 1 ? 0 : 1;
-  const formatted = converted.toFixed(decimals);
+  // A radius is a stated quantity, not a measurement: a briefing says "2.5 km",
+  // so keep the decimal when there is one rather than rounding a 2,500 m
+  // cylinder to "3km". Whole values stay clean ("5km", not "5.0km").
+  const rounded = Math.round(converted * 10) / 10;
+  const formatted = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 
   return {
     value: converted,

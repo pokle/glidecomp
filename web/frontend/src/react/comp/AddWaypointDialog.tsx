@@ -14,7 +14,7 @@
  * decides where it goes (a grid row, or a PUT plus a new turnpoint).
  */
 import { useEffect, useRef, useState } from "react";
-import type { WaypointFileRecord } from "@glidecomp/engine";
+import { cleanWaypointCodes, type WaypointFileRecord } from "@glidecomp/engine";
 import type { MapPickDetails, PickedPeak } from "../../analysis/map-provider";
 import { Button } from "@/react/rac/button";
 import {
@@ -125,7 +125,17 @@ export function AddWaypointDialog({
       toast.error('Enter coordinates as "lat, lon" decimal degrees');
       return;
     }
-    const finalCode = code.trim() || "WP";
+    // Same hygiene as a loaded waypoint file: no spaces or commas (they
+    // separate turnpoints when a route is written as text) and unique among
+    // the codes already in the competition, disambiguated with a digit.
+    const typed = code.trim() || "WP";
+    const [{ code: finalCode }] = cleanWaypointCodes([
+      ...takenCodes.map((c) => ({ code: c })),
+      { code: typed },
+    ]).waypoints.slice(-1);
+    if (finalCode !== typed) {
+      toast.warning(`Code adjusted: "${typed}" → ${finalCode}. Codes can't contain spaces or commas, and must be unique.`);
+    }
     onAdd({
       code: finalCode,
       name: name.trim() || finalCode,

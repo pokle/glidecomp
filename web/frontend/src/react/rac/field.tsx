@@ -11,6 +11,7 @@ import {
   NumberField as AriaNumberField,
   SearchField as AriaSearchField,
   Input as AriaInput,
+  TextArea as AriaTextArea,
   Label as AriaLabel,
   Text,
   FieldError as AriaFieldError,
@@ -20,6 +21,7 @@ import {
   type NumberFieldProps,
   type SearchFieldProps,
   type InputProps,
+  type TextAreaProps,
   type ValidationResult,
 } from "react-aria-components";
 
@@ -61,8 +63,35 @@ export function FieldError({
   );
 }
 
-export function Input({ className, ...props }: InputProps) {
-  return <AriaInput className={cn(inputClass, className as string)} {...props} />;
+/** `ref` is declared explicitly: RAC's own InputProps omits it (v1 still uses
+ *  forwardRef), and callers need the element for caret work. */
+export function Input({
+  className,
+  ref,
+  ...props
+}: InputProps & { ref?: React.Ref<HTMLInputElement> }) {
+  return (
+    <AriaInput ref={ref} className={cn(inputClass, className as string)} {...props} />
+  );
+}
+
+/**
+ * Multi-line sibling of Input, sharing its box styling. Same `ref` note as
+ * Input. `rows` sets the starting height; callers that grow with the content
+ * drive `style.height` themselves.
+ */
+export function TextArea({
+  className,
+  ref,
+  ...props
+}: TextAreaProps & { ref?: React.Ref<HTMLTextAreaElement> }) {
+  return (
+    <AriaTextArea
+      ref={ref}
+      className={cn(inputClass, "h-auto resize-y", className as string)}
+      {...props}
+    />
+  );
 }
 
 interface FieldExtras {

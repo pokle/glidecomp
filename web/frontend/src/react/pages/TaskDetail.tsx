@@ -14,12 +14,7 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Form } from "react-aria-components";
-import {
-  computeTurnpointDirections,
-  getOptimizedSegmentDistances,
-  xctaskTurnpointsToRecords,
-  type XCTask,
-} from "@glidecomp/engine";
+import { xctaskTurnpointsToRecords, type XCTask } from "@glidecomp/engine";
 import { Badge } from "@/react/rac/badge";
 import { Button, LinkButton, buttonVariants } from "@/react/rac/button";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
@@ -32,7 +27,6 @@ import {
 } from "@/react/rac/dialog";
 import { TextField, Label, Description } from "@/react/rac/field";
 import { Checkbox, CheckboxGroup } from "@/react/rac/checkbox";
-import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { Tag, TagGroup } from "@/react/rac/tag-group";
 import { RacConfirmProvider } from "@/react/rac/confirm";
 import { DatePicker, TimePicker } from "@/react/ui/date-picker";
@@ -49,12 +43,12 @@ import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { useAdminView, useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
-import { formatAltitude, formatDistance, formatRadius, useUnits } from "../lib/units";
 import { SectionHeader } from "../components/SectionHeader";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { TaskResults } from "../comp/TaskResults";
 import { TaskStandings } from "../comp/TaskStandings";
 import { RouteEditorDialog } from "../comp/RouteEditorDialog";
+import { TurnpointsTable } from "../comp/TurnpointsTable";
 import { gateToHHMM, startConfigSummary } from "../comp/route-editor";
 import { useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 import {
@@ -447,97 +441,6 @@ function TaskPrevNext({
  * from the route geometry by the engine — the same inference the scorer uses —
  * so what pilots read here can never disagree with how the task is scored.
  */
-function TurnpointsTable({ xctsk }: { xctsk: XCTask }) {
-  const units = useUnits();
-  const { directions, legs, totalM } = useMemo(() => {
-    const directions = computeTurnpointDirections(xctsk);
-    // legs[i] is the optimized segment INTO turnpoint i+1; turnpoint 0
-    // (take-off) has no incoming leg. Guard the geometry so a half-defined
-    // route (missing coordinates) still renders the identities.
-    let legs: number[] = [];
-    try {
-      if (xctsk.turnpoints.length >= 2) legs = getOptimizedSegmentDistances(xctsk);
-    } catch {
-      legs = [];
-    }
-    const totalM = legs.length > 0 ? legs.reduce((sum, d) => sum + d, 0) : null;
-    return { directions, legs, totalM };
-  }, [xctsk]);
-
-  const lastIndex = xctsk.turnpoints.length - 1;
-
-  return (
-    <div className="mt-2">
-      <Table aria-label="Turnpoints">
-        <TableHeader>
-          {/* Empty visible header for the role column; labelled for AT. */}
-          <Column isRowHeader={false} aria-label="Type" className="w-16" />
-          <Column isRowHeader>Turnpoint</Column>
-          <Column className="text-right">Leg</Column>
-        </TableHeader>
-        <TableBody>
-          {xctsk.turnpoints.map((tp, i) => {
-            // The last turnpoint is the goal in GAP scoring even when the
-            // xctsk leaves its type unset, so label it rather than blank.
-            const role = tp.type ?? (i === lastIndex ? "GOAL" : null);
-            const isExit = tp.type !== "TAKEOFF" && directions[i] === "exit";
-            const legM = i >= 1 ? legs[i - 1] : undefined;
-            const radius = formatRadius(tp.radius, { prefs: units }).withUnit;
-            const alt = tp.waypoint.altSmoothed
-              ? formatAltitude(tp.waypoint.altSmoothed, { prefs: units }).withUnit
-              : null;
-            return (
-              <Row key={i}>
-                <Cell className="align-top">
-                  <div className="flex flex-col gap-1">
-                    {role ? (
-                      <span className="text-[11px] font-medium tracking-wide text-muted-foreground">
-                        {role}
-                      </span>
-                    ) : null}
-                    {isExit ? (
-                      <span title="Crossed flying outward — the route reaches this cylinder from inside, so pilots fly out across it">
-                        <Badge variant="outline">Exit</Badge>
-                      </span>
-                    ) : null}
-                  </div>
-                </Cell>
-                <Cell className="align-top">
-                  <div className="flex flex-col leading-tight">
-                    <span className="font-medium">{tp.waypoint.name}</span>
-                    {/* Radius (always) · altitude (when the xctsk carries one —
-                        files without an altitude come through as 0, shown as
-                        nothing rather than a misleading sea-level reading). */}
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {radius}
-                      {alt ? ` · ${alt}` : ""}
-                    </span>
-                  </div>
-                </Cell>
-                <Cell className="text-right align-top tabular-nums">
-                  {legM !== undefined ? (
-                    formatDistance(legM, { decimals: 1, prefs: units }).withUnit
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </Cell>
-              </Row>
-            );
-          })}
-        </TableBody>
-      </Table>
-      {totalM !== null ? (
-        <div className="flex items-center justify-between border-t px-2 py-2 text-sm">
-          <span className="text-muted-foreground">Optimized total</span>
-          <span className="font-medium tabular-nums">
-            {formatDistance(totalM, { decimals: 1, prefs: units }).withUnit}
-          </span>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 /**
  * Compact start/goal summary above the turnpoint list — the XCTrack "FLY tab"
  * header: the speed-section start on the left, the goal on the right, both
