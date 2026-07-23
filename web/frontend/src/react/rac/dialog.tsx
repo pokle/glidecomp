@@ -116,10 +116,20 @@ export function DialogFooter({ className, ...props }: React.ComponentProps<"div"
   );
 }
 
-/** The top-right ✕. slot="close" wires it to the containing Dialog. */
+/**
+ * The top-right ✕. slot="close" wires it to the containing Dialog. It's
+ * positioned against the panel, so in a dialog whose body scrolls, content
+ * passes underneath it — hence the solid background: the button occludes what
+ * slides behind rather than letting text show through the glyph.
+ */
 export function DialogCloseIcon() {
   return (
-    <Button slot="close" variant="ghost" size="icon-sm" className="absolute top-2 right-2">
+    <Button
+      slot="close"
+      variant="ghost"
+      size="icon-sm"
+      className="absolute top-2 right-2 z-20 bg-popover"
+    >
       <XIcon />
       <span className="sr-only">Close</span>
     </Button>

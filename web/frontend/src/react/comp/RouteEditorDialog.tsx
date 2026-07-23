@@ -728,7 +728,13 @@ export function RouteEditorDialog({
       className="flex h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] w-full max-w-none flex-col p-0 sm:max-w-5xl"
     >
       <Dialog className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-        <DialogHeader>
+        {/* Sticky: this dialog's body is long and scrolls, so the title stays
+            put and the turnpoints slide under a solid bar instead of under a
+            floating ✕. The negative margins undo the body's p-4 so the bar
+            spans the full width, including behind the close button; `-top-4`
+            matches, because a sticky offset is measured from the content box
+            and content would otherwise show through that padding strip. */}
+        <DialogHeader className="sticky -top-4 z-10 -mx-4 -mt-4 bg-popover px-4 pt-4 pb-1">
           <DialogTitle>Edit route</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
