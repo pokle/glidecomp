@@ -49,6 +49,7 @@ export function PilotsSection({
   compClasses,
   isAdmin,
   onPilotsChanged,
+  headingAs = "h2",
 }: {
   compId: string;
   compName: string;
@@ -57,6 +58,8 @@ export function PilotsSection({
   /** Called after a successful pilots save so the parent can refetch data
    * that depends on the roster (e.g. the setup guide's pilot_count). */
   onPilotsChanged?: () => void;
+  /** "h1" when the section is the whole page (/comp/:id/pilots). */
+  headingAs?: "h1" | "h2";
 }) {
   const [pilots, setPilots] = useState<CompPilot[] | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -103,6 +106,8 @@ export function PilotsSection({
   return (
     <section>
       <SectionHeader
+        as={headingAs}
+        className={headingAs === "h1" ? "mt-2" : undefined}
         title={<>Pilots {pilots && pilots.length > 0 ? `(${pilots.length})` : ""}</>}
         action={
           isAdmin ? (
@@ -421,7 +426,16 @@ function EditPilotsDialog({
       }}
       className="h-[min(700px,85vh)] sm:max-w-6xl"
     >
-      <Dialog id="pilots-edit-dialog" className="flex h-full min-h-0 flex-col gap-4">
+      {/* min-w-0: the panel and this Dialog are grid containers, and grid
+          items default to min-width:auto — without the override the Tabulator's
+          natural 13-column width wins over the panel's max-w-6xl and blows the
+          dialog out sideways. Bounding the chain instead hands horizontal
+          overflow to Tabulator's own scroller (which keeps the frozen name
+          column pinned — an outer overflow-x wrapper would scroll it away). */}
+      <Dialog
+        id="pilots-edit-dialog"
+        className="flex h-full min-h-0 w-full min-w-0 max-w-full flex-col gap-4"
+      >
         <DialogHeader>
           <DialogTitle>Edit pilots</DialogTitle>
         </DialogHeader>
@@ -432,7 +446,7 @@ function EditPilotsDialog({
         <div
           ref={gridRef}
           id="pilots-grid"
-          className="gc-grid min-h-0 flex-1 rounded border border-border"
+          className="gc-grid min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden rounded border border-border"
         />
 
         {status ? <p className="text-sm text-muted-foreground">{status}</p> : null}

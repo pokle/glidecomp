@@ -1,15 +1,17 @@
 /**
- * Whole-competition scores, inline on the comp page (IA v2 #277 — the comp
- * page is the canonical scores surface; the old /scores route redirects
- * here). View transforms (class rollups, top-3, teams) come from the shared
- * scores-views module; the "Results by task" tab reuses the task page's
- * ScoresSection one task at a time. Built on the RAC kit: the view tabs are
- * ARIA tabs, and each view is a sortable ARIA-grid table (RAC sorting with
- * per-column first-click directions — scores read best-first).
+ * Whole-competition scores machinery, shared by the dedicated scores page
+ * (pages/CompScoresPage — the canonical scores surface) and the comp hub's
+ * compact standings summary (CompScoresSummary): the SSR-seedable fetch +
+ * rescore state machine (useCompScores) and the score views (per-class
+ * standings, top-3, teams, results-by-task). View transforms (class rollups,
+ * top-3, teams) come from the shared scores-views module; the "Results by
+ * task" tab reuses the task page's ScoresSection one task at a time. Built on
+ * the RAC kit: the view tabs are ARIA tabs, and each view is a sortable
+ * ARIA-grid table (RAC sorting with per-column first-click directions —
+ * scores read best-first).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link as AriaLink, type SortDescriptor } from "react-aria-components";
-import { Button } from "@/react/rac/button";
 import { Select, SelectItem } from "@/react/rac/select";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { Tabs, TabList, Tab, TabPanel } from "@/react/rac/tabs";
@@ -19,7 +21,6 @@ import {
   computeTop3Rows,
   type ClassStanding,
 } from "../../scores-views";
-import { ScoreFreshness } from "./ScoreFreshness";
 import { ScoresSection } from "./ScoresSection";
 import { toast } from "../lib/toast";
 import { formatScore, formatTaskDate, ordinal } from "../lib/format";
@@ -34,32 +35,22 @@ function scoreDetailHref(compId: string, taskId: string, pilotId: string): strin
 const cellLinkClass =
   "underline underline-offset-4 outline-none data-focus-visible:ring-2 data-focus-visible:ring-ring/50";
 
-export function CompScoresSection({
-  compId,
-  timezone,
-  tasks,
-  defaultTaskId,
-  initialScores,
-  initialScoresEtag,
-  isAdmin = false,
-}: {
-  compId: string;
-  timezone: string | null;
-  /** The comp's tasks, for the "Results by task" picker. */
-  tasks: TaskSummary[];
-  /** Task pre-selected in "Results by task" (the hero task). */
-  defaultTaskId: string | null;
-  /** SSR-seeded scores so they appear in the first paint (server HTML). */
-  initialScores?: CompScores;
-  initialScoresEtag?: string | null;
-  /** Admins get an actionable empty state (false during SSR/first paint). */
-  isAdmin?: boolean;
-}) {
-  const [state, setState] = useState<
-    | { kind: "loading" }
-    | { kind: "unavailable" }
-    | { kind: "ready"; scores: CompScores; etag: string | null }
-  >(
+export type CompScoresState =
+  | { kind: "loading" }
+  | { kind: "unavailable" }
+  | { kind: "ready"; scores: CompScores; etag: string | null };
+
+/**
+ * Whole-comp scores state machine: one fetch per compId (skipped when seeded
+ * from SSR), plus the admin "Recompute scores" action. Shared by the dedicated
+ * scores page (pages/CompScores) and the comp page's standings summary.
+ */
+export function useCompScores(
+  compId: string,
+  initialScores?: CompScores,
+  initialScoresEtag?: string | null
+): { state: CompScoresState; rescoring: boolean; rescore: () => Promise<void> } {
+  const [state, setState] = useState<CompScoresState>(
     initialScores
       ? { kind: "ready", scores: initialScores, etag: initialScoresEtag ?? null }
       : { kind: "loading" }
@@ -104,7 +95,7 @@ export function CompScoresSection({
    * ScoreFreshness, which polls and surfaces the "re-scoring… / finished"
    * notice — giving the explicit rescore affordance Tom asked for.
    */
-  async function handleRescore() {
+  async function rescore() {
     setRescoring(true);
     try {
       const res = await fetch(`/api/comp/${encodeURIComponent(compId)}/rescore`, {
@@ -131,58 +122,7 @@ export function CompScoresSection({
     }
   }
 
-  return (
-    <section id="scores" className="scroll-mt-4 break-before-page">
-      <div className="mt-8 flex items-center justify-between gap-4">
-        <h2 className="text-lg font-bold">Scores</h2>
-        {isAdmin && state.kind === "ready" && state.scores.standings.length > 0 ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onPress={() => void handleRescore()}
-            isDisabled={rescoring}
-          >
-            {rescoring ? "Re-scoring…" : "Recompute scores"}
-          </Button>
-        ) : null}
-      </div>
-      {state.kind === "loading" ? (
-        <p className="mt-2 text-muted-foreground">Loading scores…</p>
-      ) : state.kind === "unavailable" ? (
-        <ScoresEmptyState isAdmin={isAdmin} />
-      ) : (
-        <>
-          <ScoreFreshness
-            computedAt={state.scores.computed_at}
-            stale={state.scores.stale}
-            timezone={timezone}
-            etag={state.etag}
-            pollUrl={`/api/comp/${encodeURIComponent(compId)}/scores`}
-          />
-          {state.scores.standings.length === 0 ? (
-            <ScoresEmptyState isAdmin={isAdmin} />
-          ) : (
-            <>
-              <ScoresViews
-                scores={state.scores}
-                compId={compId}
-                timezone={timezone}
-                tasks={tasks}
-                defaultTaskId={defaultTaskId}
-              />
-              <p className="mt-4 text-sm text-muted-foreground">
-                Click any score for a step-by-step explanation. Questions about a score?{" "}
-                <a href="#admins" className="underline underline-offset-4">
-                  Ask the comp admins
-                </a>
-                .
-              </p>
-            </>
-          )}
-        </>
-      )}
-    </section>
-  );
+  return { state, rescoring, rescore };
 }
 
 /**
@@ -190,14 +130,21 @@ export function CompScoresSection({
  * are pointed at the action that produces scores. isAdmin resolves after
  * hydration, so SSR always renders the visitor sentence.
  */
-function ScoresEmptyState({ isAdmin }: { isAdmin: boolean }) {
+export function ScoresEmptyState({
+  isAdmin,
+  tasksHref = "#tasks",
+}: {
+  isAdmin: boolean;
+  /** Where "task's route" points — the inline section anchors, the page links back. */
+  tasksHref?: string;
+}) {
   return (
     <div className="mt-2 text-muted-foreground">
       <p>No scores yet — they appear automatically once pilots submit tracks for a task.</p>
       {isAdmin ? (
         <p className="mt-1">
           Set a{" "}
-          <a href="#tasks" className="underline underline-offset-4">
+          <a href={tasksHref} className="underline underline-offset-4">
             task's route
           </a>{" "}
           and submit tracks to see scores here.
@@ -207,18 +154,26 @@ function ScoresEmptyState({ isAdmin }: { isAdmin: boolean }) {
   );
 }
 
-function ScoresViews({
+export function ScoresViews({
   scores,
   compId,
   timezone,
   tasks,
   defaultTaskId,
+  deepLinkTaskId,
 }: {
   scores: CompScores;
   compId: string;
   timezone: string | null;
   tasks: TaskSummary[];
   defaultTaskId: string | null;
+  /**
+   * ?task= deep link (task pages link "Results" here): opens the
+   * "Results by task" tab on that task. Applied in an effect — the server
+   * renders the pathname only, so query-driven tab selection must not be in
+   * the first client render or hydration mismatches.
+   */
+  deepLinkTaskId?: string | null;
 }) {
   const teams = useMemo(() => aggregateTeams(scores.standings), [scores]);
   const groups = useMemo(() => buildClassGroups(scores.standings), [scores]);
@@ -228,6 +183,15 @@ function ScoresViews({
   const [pickedTaskId, setPickedTaskId] = useState(
     defaultTaskId ?? scorableTasks[0]?.task_id ?? null
   );
+
+  useEffect(() => {
+    if (!deepLinkTaskId) return;
+    if (!scorableTasks.some((t) => t.task_id === deepLinkTaskId)) return;
+    setTab("bytask");
+    setPickedTaskId(deepLinkTaskId);
+    // Re-run only if the link target itself changes, not on task-list refreshes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkTaskId]);
 
   return (
     <Tabs

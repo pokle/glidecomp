@@ -23,6 +23,8 @@ import { Onboarding } from "./pages/Onboarding";
 import { SignIn } from "./pages/SignIn";
 import { Competitions } from "./pages/Competitions";
 import { CompDetail } from "./pages/CompDetail";
+import { CompPilotsPage } from "./pages/CompPilotsPage";
+import { CompScoresPage } from "./pages/CompScoresPage";
 import { CompWaypoints } from "./pages/CompWaypoints";
 import { TaskDetail } from "./pages/TaskDetail";
 import { CompFieldAnalysis } from "./pages/CompFieldAnalysis";
@@ -94,6 +96,10 @@ export function AppRoutes() {
         <Route path="/u/:username" element={<Dashboard />} />
         <Route path="/comp" element={<Competitions />} />
         <Route path="/comp/:compId" element={<CompDetail />} />
+        <Route path="/comp/:compId/scores" element={<CompScoresPage />} />
+        {/* Admin-only roster editor — noindex shell in the SSR Function, like
+            the field-analysis pages. */}
+        <Route path="/comp/:compId/pilots" element={<CompPilotsPage />} />
         <Route path="/comp/:compId/waypoints" element={<CompWaypoints />} />
         {/* Field analysis (behavioural metrics). One report per competition,
             with a chapter per task NESTED UNDER IT — the per-task page is a

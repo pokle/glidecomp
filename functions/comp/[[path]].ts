@@ -18,6 +18,7 @@ import { render } from "../../web/frontend/dist-ssr/entry-server.js";
 import {
   loadCompetitions,
   loadCompDetail,
+  loadCompScores,
   loadCompWaypoints,
   loadTaskDetail,
   loadPilotScoreDetail,
@@ -55,6 +56,8 @@ interface HeadTags {
 const NOINDEX_SHELL_ROUTES: RegExp[] = [
   /^\/comp\/[^/]+\/analysis\/?$/,
   /^\/comp\/[^/]+\/analysis\/task\/[^/]+\/?$/,
+  // Pilot roster editor — admin-only management surface, nothing for crawlers.
+  /^\/comp\/[^/]+\/pilots\/?$/,
   // Where the per-task report lived before it was re-nested under the comp
   // report; the SPA redirects it, so it must reach the shell rather than 404.
   /^\/comp\/[^/]+\/task\/[^/]+\/analysis\/?$/,
@@ -113,6 +116,28 @@ const ROUTES: Array<{
               url: `${origin}/comp/${compId}`,
             }) +
             jsonLd(breadcrumb(origin, [["Competitions", "/comp"], [c.name, `/comp/${compId}`]])),
+        },
+      };
+    },
+  },
+  {
+    pattern: /^\/comp\/([^/]+)\/scores\/?$/,
+    async run(f, m, origin) {
+      const compId = decodeURIComponent(m[1]);
+      const data = await loadCompScores(f, compId);
+      const c = data.comp;
+      return {
+        data,
+        head: {
+          title: `Scores — ${c.name} — GlideComp`,
+          description: `Standings for ${c.name}: overall scores per class, top 3 per task, and per-pilot score explanations on GlideComp.`,
+          extra: jsonLd(
+              breadcrumb(origin, [
+                ["Competitions", "/comp"],
+                [c.name, `/comp/${compId}`],
+                ["Scores", `/comp/${compId}/scores`],
+              ])
+            ),
         },
       };
     },

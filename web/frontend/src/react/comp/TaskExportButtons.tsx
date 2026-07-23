@@ -49,6 +49,7 @@ export function TaskExportButtons({
   size = "sm",
   qrFirst = false,
   primary,
+  asMenu = false,
 }: {
   compId: string;
   taskId: string;
@@ -60,6 +61,12 @@ export function TaskExportButtons({
   qrFirst?: boolean;
   /** Which of the two buttons is the primary action (role-based button order). */
   primary?: "share" | "qr";
+  /**
+   * Collapse the two buttons into ONE "Share" menu (Share / download… + QR
+   * code) — the de-cluttered form the comp and task pages use. The share
+   * dialog and full-screen QR behave identically either way.
+   */
+  asMenu?: boolean;
 }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [swap, setSwap] = useState(false);
@@ -134,7 +141,23 @@ export function TaskExportButtons({
 
   return (
     <>
-      {qrFirst ? (
+      {asMenu ? (
+        <MenuTrigger>
+          <Button variant="outline" size={size}>
+            <Share2Icon className="size-4" aria-hidden />
+            Share
+            <ChevronDownIcon className="size-4 opacity-60" aria-hidden />
+          </Button>
+          <Menu>
+            <MenuItem onAction={() => setShareOpen(true)}>
+              Share / download task…
+            </MenuItem>
+            <MenuItem isDisabled={qrLoading} onAction={() => void showQR()}>
+              QR code
+            </MenuItem>
+          </Menu>
+        </MenuTrigger>
+      ) : qrFirst ? (
         <>
           {qrButton}
           {shareButton}

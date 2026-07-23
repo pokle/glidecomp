@@ -52,23 +52,6 @@ interface CompDetail {
 let compId: string;
 let comp: CompDetail;
 
-/**
- * The task the "Results by task" picker defaults to — same pick as the page's
- * pickHeroTasks(): today's task, else the next upcoming, else the latest.
- * (The page computes "today" in the comp's timezone; the seeded comp's tasks
- * are all in the past, so both sides resolve to the latest date regardless.)
- */
-function heroDefaultTask(tasks: TaskSummary[]): TaskSummary {
-  const today = new Intl.DateTimeFormat("en-CA").format(new Date());
-  const dates = [...new Set(tasks.map((t) => t.task_date))].sort();
-  const date = dates.includes(today)
-    ? today
-    : (dates.find((d) => d > today) ?? dates[dates.length - 1]);
-  const task = tasks.filter((t) => t.task_date === date).find((t) => t.has_xctsk);
-  if (!task) throw new Error("Seeded comp has no scorable task on its hero date");
-  return task;
-}
-
 test.beforeAll(async ({ playwright }) => {
   // Seeding + cold score materialization can take a while on a fresh store.
   test.setTimeout(300_000);
@@ -154,10 +137,14 @@ function trackMutations(page: Page): () => boolean {
   return () => mutated;
 }
 
-test("scores: class tabs, top 3, results-by-task select, sorting", async ({
+test("scores page: class tabs, top 3, results-by-task select, sorting", async ({
   page,
 }) => {
-  const scores = page.locator("#scores");
+  // The full score views live on the dedicated scores page now; the comp page
+  // keeps a compact standings summary linking there.
+  await page.goto(`/comp/${compId}/scores`);
+  await expect(page.getByRole("heading", { level: 1, name: "Scores" })).toBeVisible();
+  const scores = page.locator("main");
   const tablist = scores.getByRole("tablist", { name: "Score views" });
   await expect(tablist).toBeVisible({ timeout: 15_000 });
 
@@ -211,12 +198,13 @@ test("scores: class tabs, top 3, results-by-task select, sorting", async ({
   await expect(overall.getByRole("rowheader", { name: "Total", exact: true })).toBeVisible();
   await expect(scores.getByRole("grid", { name: `Top 3 — ${classA}` })).toBeVisible();
 
-  // ── Results by task: the Select defaults to the hero task; picking a task
-  // flown by the other class swaps the embedded grid (aria-label + rows).
+  // ── Results by task: the Select defaults to the first scorable task;
+  // picking a task flown by the other class swaps the embedded grid
+  // (aria-label + rows).
   await tablist.getByRole("tab", { name: "Results by task" }).click();
   const panel = scores.getByRole("tabpanel");
   const scorable = comp.tasks.filter((t) => t.has_xctsk);
-  const defaultClass = heroDefaultTask(comp.tasks).pilot_classes[0];
+  const defaultClass = scorable[0].pilot_classes[0];
   await expect(
     panel.getByRole("grid", { name: `Scores — ${defaultClass}` })
   ).toBeVisible({ timeout: 15_000 });
@@ -239,9 +227,15 @@ test("scores: class tabs, top 3, results-by-task select, sorting", async ({
   await expect(swapped.locator("tbody tr").first()).toBeVisible();
 });
 
-test("pilots: read-only grid, Tabulator editor, list-editor popup, cancel discards", async ({
+test("pilots page: read-only grid, Tabulator editor, list-editor popup, cancel discards", async ({
   page,
 }) => {
+  // The roster editor is its own admin-only page now.
+  await page.goto(`/comp/${compId}/pilots`);
+  await expect(
+    page.getByRole("heading", { level: 1, name: /Pilots/ })
+  ).toBeVisible({ timeout: 15_000 });
+
   const mutated = trackMutations(page);
 
   // Read-only RAC grid renders the roster.
@@ -289,8 +283,11 @@ test("pilots: read-only grid, Tabulator editor, list-editor popup, cancel discar
   expect(mutated()).toBe(false);
 });
 
-test("activity: filter tabs switch and re-fetch", async ({ page }) => {
+test("activity: collapsed digest expands, filter tabs switch and re-fetch", async ({ page }) => {
   const activity = page.locator("#activity");
+  // The comp hub renders a 3-entry digest; "Show all activity" expands into
+  // the full filterable log.
+  await activity.getByRole("button", { name: "Show all activity" }).click();
   const tablist = activity.getByRole("tablist", { name: "Activity filter" });
   await expect(tablist).toBeVisible();
   const panel = activity.getByRole("tabpanel");

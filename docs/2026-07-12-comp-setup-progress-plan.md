@@ -110,6 +110,11 @@ The guide renders inside `CompDetailView`, so most actions are direct:
   (`#edit-route` on the task page): navigate to `#edit-pilots`, and
   `PilotsSection` opens its dialog when it sees that hash, clearing it on
   close. This also gives admins a shareable deep-link to the pilots editor.
+  *(Update 2026-07-23: the roster moved to the admin-only `/comp/:id/pilots`
+  page, so this step now links to `/comp/:id/pilots#edit-pilots` — same hash
+  pattern, different page. The section nav also changed: it's sticky, Scores
+  points at `/comp/:id/scores`, Pilots is an admin-only link to the new page,
+  and Admins is a footnote rather than a nav entry.)*
 
 ### 2.4 Should the section links merge into the progress bar?
 
