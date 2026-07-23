@@ -33,6 +33,7 @@ import {
   scoringFormatLabel,
 } from "../lib/format";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { Disclosure } from "@/react/rac/disclosure";
 import { compCrumbs } from "../lib/crumbs";
 import { SectionHeader } from "../components/SectionHeader";
 import { ActivitySection } from "../comp/ActivitySection";
@@ -219,6 +220,8 @@ function CompDetailView({
           ) : null
         }
       />
+      {/* Above the list so the row badges' "see Task Warnings above" holds. */}
+      <ClassWarnings warnings={comp.class_coverage_warnings} tasks={comp.tasks} />
       <TasksList
         tasks={comp.tasks}
         hero={hero}
@@ -297,8 +300,6 @@ function CompDetailView({
           onCreateTask={() => setCreateOpen(true)}
         />
       ) : null}
-
-      <ClassWarnings warnings={comp.class_coverage_warnings} tasks={comp.tasks} />
 
       {finished ? (
         <>
@@ -566,10 +567,20 @@ function ClassWarnings({
     .filter((w): w is { name: string; text: string } => w !== null);
 
   if (warnings.length === 0 && setupWarnings.length === 0) return null;
+  const count = warnings.length + setupWarnings.length;
   return (
-    <section>
-      <h2 className="mt-8 text-lg font-bold">Task Warnings</h2>
-      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+    // Collapsed by default inside the Tasks section: the count in the trigger
+    // is the signage; the detail is a drawer, not a section competing with the
+    // task list. (Print expands it — the Disclosure component handles that.)
+    <Disclosure
+      className="mt-3 border-t-0 pt-0"
+      title={
+        <span className="text-amber-600 dark:text-amber-400">
+          Task warnings ({count})
+        </span>
+      }
+    >
+      <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
         {warnings.map((w) => {
           const parts: string[] = [];
           if (w.missing_classes && w.missing_classes.length > 0) {
@@ -591,7 +602,7 @@ function ClassWarnings({
           </li>
         ))}
       </ul>
-    </section>
+    </Disclosure>
   );
 }
 
