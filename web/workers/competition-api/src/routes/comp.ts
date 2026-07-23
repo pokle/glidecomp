@@ -209,9 +209,18 @@ export const compRoutes = new Hono<HonoEnv>()
 
       const scoringFormat = body.scoring_format ?? "gap";
 
+      // New PG GAP comps default to FTV series scoring (the paragliding norm,
+      // S7A §5.2.5.1); HG and open-distance comps default to sum-of-tasks. The
+      // DB column default stays "total", so this only affects newly created
+      // comps — existing comps' published standings never change silently.
+      const seriesScoring =
+        body.series_scoring ??
+        (body.category === "pg" && scoringFormat === "gap" ? "ftv" : "total");
+      const ftvFactor = body.ftv_factor ?? null;
+
       const compResult = await c.env.DB.prepare(
-        `INSERT INTO comp (name, creation_date, close_date, category, test, pilot_classes, default_pilot_class, gap_params, scoring_format, timezone)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO comp (name, creation_date, close_date, category, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
         .bind(
           body.name,
@@ -223,6 +232,8 @@ export const compRoutes = new Hono<HonoEnv>()
           defaultClass,
           body.gap_params ? JSON.stringify(body.gap_params) : null,
           scoringFormat,
+          seriesScoring,
+          ftvFactor,
           body.timezone ?? null
         )
         .run();
@@ -257,6 +268,8 @@ export const compRoutes = new Hono<HonoEnv>()
           default_pilot_class: defaultClass,
           gap_params: body.gap_params ?? null,
           scoring_format: scoringFormat,
+          series_scoring: seriesScoring,
+          ftv_factor: ftvFactor,
           timezone: body.timezone ?? null,
           open_igc_upload: true,
         },
@@ -383,7 +396,7 @@ export const compRoutes = new Hono<HonoEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, timezone, open_igc_upload, settings_reviewed
+        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, settings_reviewed
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -480,6 +493,8 @@ export const compRoutes = new Hono<HonoEnv>()
           ? JSON.parse(comp.gap_params as string)
           : null,
         scoring_format: (comp.scoring_format as string) ?? "gap",
+        series_scoring: (comp.series_scoring as string) ?? "total",
+        ftv_factor: (comp.ftv_factor as number | null) ?? null,
         open_igc_upload: !!(comp.open_igc_upload as number),
         admins: adminList,
         is_admin: isAdmin,
@@ -525,7 +540,7 @@ export const compRoutes = new Hono<HonoEnv>()
 
       // Fetch current state so we can compute audit diffs and validate consistency
       const current = await c.env.DB.prepare(
-        `SELECT name, category, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, timezone, open_igc_upload
+        `SELECT name, category, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -538,6 +553,8 @@ export const compRoutes = new Hono<HonoEnv>()
           default_pilot_class: string;
           gap_params: string | null;
           scoring_format: string;
+          series_scoring: string;
+          ftv_factor: number | null;
           timezone: string | null;
           open_igc_upload: number;
         }>();
@@ -618,6 +635,14 @@ export const compRoutes = new Hono<HonoEnv>()
       if (body.scoring_format !== undefined) {
         updates.push("scoring_format = ?");
         values.push(body.scoring_format);
+      }
+      if (body.series_scoring !== undefined) {
+        updates.push("series_scoring = ?");
+        values.push(body.series_scoring);
+      }
+      if (body.ftv_factor !== undefined) {
+        updates.push("ftv_factor = ?");
+        values.push(body.ftv_factor);
       }
       if (newTimezone !== undefined) {
         updates.push("timezone = ?");
@@ -705,6 +730,35 @@ export const compRoutes = new Hono<HonoEnv>()
         );
         scoringInputsChanged = true;
       }
+      // Series scoring (total ↔ FTV) and the FTV factor change the competition
+      // STANDINGS but not any per-task score: FTV is a pure aggregation over the
+      // stored task scores, computed live in GET /scores (which folds these two
+      // fields into its ETag). So they are audit-logged — they change published
+      // results — but deliberately do NOT set scoringInputsChanged: bumping
+      // every task's materialized score would be wasted work that changes nothing.
+      if (
+        body.series_scoring !== undefined &&
+        body.series_scoring !== current.series_scoring
+      ) {
+        const label = (s: string) => (s === "ftv" ? "FTV" : "Sum of task scores");
+        auditChanges.push(
+          `Changed series scoring from ${label(current.series_scoring)} to ${label(body.series_scoring)}`
+        );
+      }
+      if (
+        body.ftv_factor !== undefined &&
+        (body.ftv_factor ?? null) !== (current.ftv_factor ?? null)
+      ) {
+        const fmt = (f: number | null) =>
+          f === null ? "automatic" : `${Math.round(f * 100)}%`;
+        auditChanges.push(
+          describeChange(
+            "FTV discard factor",
+            fmt(current.ftv_factor),
+            fmt(body.ftv_factor ?? null)
+          )
+        );
+      }
       // Timezone is presentational only (scoring runs on UTC), but the
       // change is audit-logged like every other settings knob.
       if (newTimezone !== undefined && newTimezone !== current.timezone) {
@@ -761,7 +815,7 @@ export const compRoutes = new Hono<HonoEnv>()
 
       // Return updated comp
       const updated = await c.env.DB.prepare(
-        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, timezone, open_igc_upload
+        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -786,6 +840,8 @@ export const compRoutes = new Hono<HonoEnv>()
           ? JSON.parse(updated.gap_params as string)
           : null,
         scoring_format: (updated.scoring_format as string) ?? "gap",
+        series_scoring: (updated.series_scoring as string) ?? "total",
+        ftv_factor: (updated.ftv_factor as number | null) ?? null,
         open_igc_upload: !!(updated.open_igc_upload as number),
         admins: admins.results,
       });

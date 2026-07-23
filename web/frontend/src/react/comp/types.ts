@@ -12,6 +12,11 @@ import type {
 /** How a competition's tasks are scored (see competition-api migration 0009). */
 export type ScoringFormat = "gap" | "open_distance";
 
+/** How a competition's per-task scores are aggregated into standings
+ * (migration 0022). "total" = sum of task scores; "ftv" = Fixed Total
+ * Validity (S7F §15) — best tasks kept up to a fixed validity. */
+export type SeriesScoring = "total" | "ftv";
+
 /** Where scored distance begins (GAPParameters.distanceOrigin). Mirrors the
  * engine's DistanceOrigin; kept local so the UI needn't re-export it. */
 export type DistanceOriginValue = "takeoff" | "start";
@@ -35,6 +40,10 @@ export interface CompDetailData {
   default_pilot_class: string;
   gap_params: CompGapParams | null;
   scoring_format: ScoringFormat;
+  /** Series-scoring method for standings (migration 0022). */
+  series_scoring: SeriesScoring;
+  /** FTV discard fraction (0<f<1); null = auto-derive from task count. */
+  ftv_factor: number | null;
   /**
    * Comp-local IANA zone (e.g. "Australia/Melbourne") for displaying times;
    * scoring runs on UTC regardless. Null until the first saved route derives

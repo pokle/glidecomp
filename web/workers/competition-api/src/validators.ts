@@ -108,6 +108,13 @@ export const timezoneSchema = z
 // by the metres of open distance flown from the take-off exit.
 export const scoringFormatSchema = z.enum(["gap", "open_distance"]);
 
+// Competition series-scoring method — see migration 0022. "total" sums all
+// task scores; "ftv" (Fixed Total Validity, S7F §15) counts only each pilot's
+// best tasks up to a fixed validity. ftv_factor is the discard fraction
+// (0 < f < 1); null auto-derives it from the task count (0.2 for ≤6, 0.25 ≥7).
+export const seriesScoringSchema = z.enum(["total", "ftv"]);
+export const ftvFactorSchema = z.number().gt(0).lt(1);
+
 export const createCompSchema = z.object({
   name: z.string().min(1).max(MAX_TEXT),
   category: z.enum(["hg", "pg"]),
@@ -117,6 +124,8 @@ export const createCompSchema = z.object({
   default_pilot_class: pilotClassString.optional(),
   gap_params: gapParamsSchema.nullable().optional(),
   scoring_format: scoringFormatSchema.optional(),
+  series_scoring: seriesScoringSchema.optional(),
+  ftv_factor: ftvFactorSchema.nullable().optional(),
   timezone: timezoneSchema.nullable().optional(),
 });
 
@@ -129,6 +138,8 @@ export const updateCompSchema = z.object({
   default_pilot_class: pilotClassString.optional(),
   gap_params: gapParamsSchema.nullable().optional(),
   scoring_format: scoringFormatSchema.optional(),
+  series_scoring: seriesScoringSchema.optional(),
+  ftv_factor: ftvFactorSchema.nullable().optional(),
   timezone: timezoneSchema.nullable().optional(),
   open_igc_upload: z.boolean().optional(),
   admin_emails: z.array(z.string().email().max(MAX_TEXT)).min(1).optional(),

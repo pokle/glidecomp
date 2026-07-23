@@ -72,6 +72,10 @@ export interface CompScores {
   standings: ClassStanding[];
   computed_at: string | null;
   stale: boolean;
+  /** Series-scoring method the standings were computed with (migration 0022). */
+  series_scoring: "total" | "ftv";
+  /** FTV comps only: the resolved discard fraction used (0<f<1). */
+  ftv_factor?: number | null;
 }
 
 export interface CompDetailLoaderData {
