@@ -861,7 +861,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Multi-task series scoring</td>
-                  <td class="py-2">Not implemented</td>
+                  <td class="py-2">Implemented — competition totals are the sum of each pilot's task scores, ranked per class, with top-3-per-task and team standings; see the <a href="/comp" class="underline hover:text-foreground">comp scores pages</a></td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">FTV (fixed total validity) for series</td>
@@ -1027,7 +1027,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">Series scoring / FTV</td>
                   <td class="py-2 pr-3">Task ranking and competition totals, optionally FTV (§13–15).</td>
-                  <td class="py-2 pr-3">Single-task scoring only; no series totals or FTV.</td>
+                  <td class="py-2 pr-3">Competition totals by sum of task scores (ranked per class, plus top-3-per-task and teams); FTV not yet implemented.</td>
                   <td class="py-2">Implemented; FTV is the PG preset default (factor 0.75).</td>
                 </tr>
               </tbody>
