@@ -1212,11 +1212,20 @@ export function RouteEditorDialog({
   );
 }
 
+/** Short role code for a row's leftmost column: "TAKEOFF"/"SSS"/"ESS", or
+ *  "GOAL" for the last plain turnpoint (the goal in GAP scoring even when the
+ *  xctsk leaves its type unset). Null for a plain intermediate turnpoint. */
+function roleCode(type: RouteRow["type"], isLast: boolean): string | null {
+  if (type) return type;
+  return isLast ? "GOAL" : null;
+}
+
 /**
- * One turnpoint row (RAC GridListItem) — a compact, single-line flight-plan
- * summary: position · code · name · type, with a derived recap (radius ·
- * Enter/Exit crossing · optimized leg distance) aligned right. No inline edit
- * controls: everything is set in the row's Edit popover, so the list stays
+ * One turnpoint row (RAC GridListItem) — an XCTrack-style flight-plan row,
+ * matching the read-only task page: role (TAKEOFF/SSS/ESS/GOAL) first, then the
+ * code · name with radius (and altitude) stacked beneath, then the optimized
+ * leg distance holding the right edge, then Edit / remove. No inline edit
+ * controls: everything is set in the row's Edit dialog, so the list stays
  * scannable top-to-bottom. Leg and Dir are outputs of the dialog's geometry
  * memo (display-only by design).
  */
@@ -1241,14 +1250,10 @@ function TurnpointCard({
   const radius = Number(row.radius);
   const label = row.name || `turnpoint ${index + 1}`;
   const coordsMissing = parseCoords(row.coords) == null;
-  // Show the type only when it's a special one (Takeoff/SSS/ESS); a plain
-  // turnpoint needs no badge — except the last one, which is the goal in
-  // GAP scoring even when its xctsk type is unset.
-  const typeLabel = row.type
-    ? TYPE_LABELS[row.type]
-    : index === count - 1
-      ? "Goal"
-      : null;
+  const role = roleCode(row.type, index === count - 1);
+  const alt = !missingAltitude(row.altitude)
+    ? altitudeRecap(row.altitude, units)
+    : null;
   return (
     <GridListItem
       id={row.id}
@@ -1264,64 +1269,58 @@ function TurnpointCard({
           <GripVerticalIcon className="size-4" />
         </AriaButton>
 
-        <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium tabular-nums text-muted-foreground">
-          {index + 1}
-        </span>
-
-        {/* Identity + derived recap, all on one line. */}
-        <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
-          {row.name ? (
-            <span className="font-medium">{row.name}</span>
-          ) : (
-            <span className="text-muted-foreground italic">New turnpoint</span>
-          )}
-          {row.description ? (
-            <span className="min-w-0 truncate text-muted-foreground">
-              {row.description}
+        {/* Role column: the type code, with the Exit crossing beneath it (Exit
+            is the notable case; Enter is the norm and left implicit). */}
+        <div className="flex w-14 shrink-0 flex-col items-start gap-1">
+          {role ? (
+            <span className="text-[11px] font-medium tracking-wide text-muted-foreground">
+              {role}
             </span>
           ) : null}
-          {typeLabel ? (
-            <Badge variant="secondary" className="shrink-0">
-              {typeLabel}
+          {dir === "exit" ? (
+            <Badge
+              variant="outline"
+              title="Exit cylinder — reached by flying out of it"
+            >
+              Exit
             </Badge>
           ) : null}
-          <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-            {/* Waypoint altitude, when known — labelled so it can't be read as
-                the radius beside it. */}
-            {!missingAltitude(row.altitude) ? (
-              <span
-                className="tabular-nums"
-                title={altitudeRecap(row.altitude, units).title}
-              >
-                {altitudeRecap(row.altitude, units).text}
-              </span>
-            ) : null}
-            {coordsMissing ? (
-              <span className="text-amber-500">⚠ set coordinates</span>
+        </div>
+
+        {/* Identity: code (+ name) on top, radius · altitude beneath. */}
+        <div className="flex min-w-0 flex-1 flex-col leading-tight text-sm">
+          <span className="flex min-w-0 items-baseline gap-2">
+            {row.name ? (
+              <span className="font-medium">{row.name}</span>
             ) : (
-              <span className="tabular-nums">
-                {Number.isFinite(radius) && radius > 0
-                  ? formatRadius(radius, { prefs: units }).withUnit
-                  : "radius?"}
-              </span>
+              <span className="text-muted-foreground italic">New turnpoint</span>
             )}
-            {dir === "exit" ? (
-              <Badge
-                variant="outline"
-                title="Exit cylinder — reached by flying out of it"
-              >
-                Exit
-              </Badge>
-            ) : dir === "enter" ? (
-              <span>Enter</span>
-            ) : null}
-            {leg != null ? (
-              <span className="tabular-nums">
-                leg {formatDistance(leg, { decimals: 1, prefs: units }).withUnit}
+            {row.description ? (
+              <span className="min-w-0 truncate text-muted-foreground">
+                {row.description}
               </span>
             ) : null}
           </span>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {coordsMissing ? (
+              <span className="text-amber-500">⚠ set coordinates</span>
+            ) : (
+              <>
+                {Number.isFinite(radius) && radius > 0
+                  ? formatRadius(radius, { prefs: units }).withUnit
+                  : "radius?"}
+                {alt ? <span title={alt.title}> · {alt.text}</span> : null}
+              </>
+            )}
+          </span>
         </div>
+
+        {/* Optimized leg distance, holding the right edge before the actions. */}
+        {leg != null ? (
+          <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+            leg {formatDistance(leg, { decimals: 1, prefs: units }).withUnit}
+          </span>
+        ) : null}
 
         {/* Actions: edit the turnpoint, or remove it. */}
         <div className="flex shrink-0 items-center gap-1">
