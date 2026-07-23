@@ -15,13 +15,7 @@
  * audit-logs the change).
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  FileTrigger,
-  useDragAndDrop,
-  useFilter,
-  Button as AriaButton,
-  DropIndicator,
-} from "react-aria-components";
+import { FileTrigger, useFilter } from "react-aria-components";
 import {
   computeTurnpointDirections,
   getOptimizedSegmentDistances,
@@ -76,7 +70,7 @@ import {
   useUnits,
   type UnitPreferences,
 } from "../lib/units";
-import { GripVerticalIcon, PencilIcon, XIcon } from "lucide-react";
+import { ChevronDownIcon, ChevronUpIcon, PencilIcon, XIcon } from "lucide-react";
 
 // Lazy so the map library (mapbox) and its CSS load only when the editor
 // opens and never enter the SSR'd task-detail bundle.
@@ -373,30 +367,24 @@ export function RouteEditorDialog({
    * Row reordering: RAC drag-and-drop. Mouse/touch drag the handle; keyboard
    * users press Enter on the handle, then arrow keys + Enter to drop.
    */
-  const { dragAndDropHooks } = useDragAndDrop({
-    getItems: (keys) =>
-      [...keys].map((key) => {
-        const row = rows.find((r) => r.id === key);
-        return { "text/plain": row ? `${row.name}` : String(key) };
-      }),
-    onReorder(e) {
-      setRows((prev) => {
-        const moved = prev.filter((r) => e.keys.has(r.id));
-        const rest = prev.filter((r) => !e.keys.has(r.id));
-        const targetIdx = rest.findIndex((r) => r.id === e.target.key);
-        if (targetIdx === -1) return prev;
-        const insertAt = e.target.dropPosition === "before" ? targetIdx : targetIdx + 1;
-        return [...rest.slice(0, insertAt), ...moved, ...rest.slice(insertAt)];
-      });
-    },
-    // The insertion line while dragging — RAC's default indicator is unstyled.
-    renderDropIndicator: (target) => (
-      <DropIndicator
-        target={target}
-        className="data-drop-target:outline-2 data-drop-target:outline-primary"
-      />
-    ),
-  });
+  /**
+   * Reorder by one position with the row's up/down arrows. Chosen over
+   * drag-and-drop because the route is set on a phone on the hill (see the
+   * task page's XCTrack-style layout): react-aria's row DnD is native HTML5
+   * drag, which never fires on touch without a long-press, so a normal
+   * press-drag on the handle did nothing. Tappable arrows work the same on
+   * mouse, touch and keyboard — the pattern XCTrack itself uses.
+   */
+  const moveRow = useCallback((id: number, direction: -1 | 1) => {
+    setRows((prev) => {
+      const i = prev.findIndex((r) => r.id === id);
+      const j = i + direction;
+      if (i === -1 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }, []);
 
   // Competition waypoints as map markers (index is the marker id, resolved
   // back to the record on pick so all details carry across).
@@ -800,8 +788,8 @@ export function RouteEditorDialog({
         <p className="text-sm text-muted-foreground">
           Each row is a turnpoint, top-to-bottom like a flight plan — leg
           distance and Enter/Exit crossing are derived from the optimized route.
-          Drag the handle (or press Enter on it) to reorder.{" "}
-          <span className="font-medium">Add turnpoint</span> or a row's{" "}
+          Use a row&apos;s up/down arrows to reorder it.{" "}
+          <span className="font-medium">Add turnpoint</span> or a row&apos;s{" "}
           <span className="font-medium">Edit</span> opens its details — load from
           a competition waypoint, or set them by hand.
         </p>
@@ -819,9 +807,8 @@ export function RouteEditorDialog({
           <GridList
             aria-label="Turnpoints"
             selectionMode="none"
-            dragAndDropHooks={dragAndDropHooks}
-            // Tapping a row pans the map to that turnpoint (the Edit/Remove
-            // buttons and drag handle are separate targets and don't trigger it).
+            // Tapping a row pans the map to that turnpoint (the reorder / Edit /
+            // Remove buttons are separate targets and don't trigger it).
             onAction={(key) => {
               const row = rows.find((r) => r.id === key);
               if (row) focusTurnpoint(row);
@@ -847,6 +834,7 @@ export function RouteEditorDialog({
                 count={rows.length}
                 leg={derived.legByRowId.get(row.id) ?? null}
                 dir={derived.dirByRowId.get(row.id) ?? null}
+                onMove={moveRow}
                 onEdit={(id) => setTpEditor({ mode: "edit", rowId: id })}
                 onRemove={removeRow}
               />
@@ -1212,13 +1200,22 @@ export function RouteEditorDialog({
   );
 }
 
+/** Short role code for a row's leftmost column: "TAKEOFF"/"SSS"/"ESS", or
+ *  "GOAL" for the last plain turnpoint (the goal in GAP scoring even when the
+ *  xctsk leaves its type unset). Null for a plain intermediate turnpoint. */
+function roleCode(type: RouteRow["type"], isLast: boolean): string | null {
+  if (type) return type;
+  return isLast ? "GOAL" : null;
+}
+
 /**
- * One turnpoint row (RAC GridListItem) — a compact, single-line flight-plan
- * summary: position · code · name · type, with a derived recap (radius ·
- * Enter/Exit crossing · optimized leg distance) aligned right. No inline edit
- * controls: everything is set in the row's Edit popover, so the list stays
- * scannable top-to-bottom. Leg and Dir are outputs of the dialog's geometry
- * memo (display-only by design).
+ * One turnpoint row (RAC GridListItem) — an XCTrack-style flight-plan row,
+ * matching the read-only task page: up/down reorder arrows first, then the role
+ * (TAKEOFF/SSS/ESS/GOAL), the code · name with radius (and altitude) stacked
+ * beneath, the optimized leg distance holding the right edge, then Edit /
+ * remove. No inline edit controls: everything is set in the row's Edit dialog,
+ * so the list stays scannable top-to-bottom. Leg and Dir are outputs of the
+ * dialog's geometry memo (display-only by design).
  */
 function TurnpointCard({
   row,
@@ -1226,6 +1223,7 @@ function TurnpointCard({
   count,
   leg,
   dir,
+  onMove,
   onEdit,
   onRemove,
 }: {
@@ -1234,6 +1232,7 @@ function TurnpointCard({
   count: number;
   leg: number | null;
   dir: RouteRow["dir"];
+  onMove: (id: number, direction: -1 | 1) => void;
   onEdit: (id: number) => void;
   onRemove: (id: number) => void;
 }) {
@@ -1241,14 +1240,10 @@ function TurnpointCard({
   const radius = Number(row.radius);
   const label = row.name || `turnpoint ${index + 1}`;
   const coordsMissing = parseCoords(row.coords) == null;
-  // Show the type only when it's a special one (Takeoff/SSS/ESS); a plain
-  // turnpoint needs no badge — except the last one, which is the goal in
-  // GAP scoring even when its xctsk type is unset.
-  const typeLabel = row.type
-    ? TYPE_LABELS[row.type]
-    : index === count - 1
-      ? "Goal"
-      : null;
+  const role = roleCode(row.type, index === count - 1);
+  const alt = !missingAltitude(row.altitude)
+    ? altitudeRecap(row.altitude, units)
+    : null;
   return (
     <GridListItem
       id={row.id}
@@ -1256,72 +1251,83 @@ function TurnpointCard({
       className="px-2 py-1.5"
     >
       <div className="flex items-center gap-2">
-        <AriaButton
-          slot="drag"
-          className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground outline-none data-hovered:text-foreground data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
-          aria-label={`Reorder ${label}`}
-        >
-          <GripVerticalIcon className="size-4" />
-        </AriaButton>
+        {/* Reorder: up/down arrows (tappable everywhere, unlike drag on touch —
+            see moveRow). Disabled at the ends. */}
+        <div className="flex shrink-0 flex-col">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="size-6"
+            aria-label={`Move ${label} up`}
+            isDisabled={index === 0}
+            onPress={() => onMove(row.id, -1)}
+          >
+            <ChevronUpIcon className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="size-6"
+            aria-label={`Move ${label} down`}
+            isDisabled={index === count - 1}
+            onPress={() => onMove(row.id, 1)}
+          >
+            <ChevronDownIcon className="size-4" />
+          </Button>
+        </div>
 
-        <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium tabular-nums text-muted-foreground">
-          {index + 1}
-        </span>
-
-        {/* Identity + derived recap, all on one line. */}
-        <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
-          {row.name ? (
-            <span className="font-medium">{row.name}</span>
-          ) : (
-            <span className="text-muted-foreground italic">New turnpoint</span>
-          )}
-          {row.description ? (
-            <span className="min-w-0 truncate text-muted-foreground">
-              {row.description}
+        {/* Role column: the type code, with the Exit crossing beneath it (Exit
+            is the notable case; Enter is the norm and left implicit). */}
+        <div className="flex w-14 shrink-0 flex-col items-start gap-1">
+          {role ? (
+            <span className="text-[11px] font-medium tracking-wide text-muted-foreground">
+              {role}
             </span>
           ) : null}
-          {typeLabel ? (
-            <Badge variant="secondary" className="shrink-0">
-              {typeLabel}
+          {dir === "exit" ? (
+            <Badge
+              variant="outline"
+              title="Exit cylinder — reached by flying out of it"
+            >
+              Exit
             </Badge>
           ) : null}
-          <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-            {/* Waypoint altitude, when known — labelled so it can't be read as
-                the radius beside it. */}
-            {!missingAltitude(row.altitude) ? (
-              <span
-                className="tabular-nums"
-                title={altitudeRecap(row.altitude, units).title}
-              >
-                {altitudeRecap(row.altitude, units).text}
-              </span>
-            ) : null}
-            {coordsMissing ? (
-              <span className="text-amber-500">⚠ set coordinates</span>
+        </div>
+
+        {/* Identity: code (+ name) on top, radius · altitude beneath. */}
+        <div className="flex min-w-0 flex-1 flex-col leading-tight text-sm">
+          <span className="flex min-w-0 items-baseline gap-2">
+            {row.name ? (
+              <span className="font-medium">{row.name}</span>
             ) : (
-              <span className="tabular-nums">
-                {Number.isFinite(radius) && radius > 0
-                  ? formatRadius(radius, { prefs: units }).withUnit
-                  : "radius?"}
-              </span>
+              <span className="text-muted-foreground italic">New turnpoint</span>
             )}
-            {dir === "exit" ? (
-              <Badge
-                variant="outline"
-                title="Exit cylinder — reached by flying out of it"
-              >
-                Exit
-              </Badge>
-            ) : dir === "enter" ? (
-              <span>Enter</span>
-            ) : null}
-            {leg != null ? (
-              <span className="tabular-nums">
-                leg {formatDistance(leg, { decimals: 1, prefs: units }).withUnit}
+            {row.description ? (
+              <span className="min-w-0 truncate text-muted-foreground">
+                {row.description}
               </span>
             ) : null}
           </span>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {coordsMissing ? (
+              <span className="text-amber-500">⚠ set coordinates</span>
+            ) : (
+              <>
+                {Number.isFinite(radius) && radius > 0
+                  ? formatRadius(radius, { prefs: units }).withUnit
+                  : "radius?"}
+                {alt ? <span title={alt.title}> · {alt.text}</span> : null}
+              </>
+            )}
+          </span>
         </div>
+
+        {/* Optimized leg distance, holding the right edge before the actions. */}
+        {leg != null ? (
+          <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+            leg {formatDistance(leg, { decimals: 1, prefs: units }).withUnit}
+          </span>
+        ) : null}
 
         {/* Actions: edit the turnpoint, or remove it. */}
         <div className="flex shrink-0 items-center gap-1">

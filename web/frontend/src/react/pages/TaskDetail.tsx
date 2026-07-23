@@ -14,7 +14,12 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Form } from "react-aria-components";
-import { computeTurnpointDirections, xctaskTurnpointsToRecords, type XCTask } from "@glidecomp/engine";
+import {
+  computeTurnpointDirections,
+  getOptimizedSegmentDistances,
+  xctaskTurnpointsToRecords,
+  type XCTask,
+} from "@glidecomp/engine";
 import { Badge } from "@/react/rac/badge";
 import { Button, LinkButton, buttonVariants } from "@/react/rac/button";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
@@ -35,20 +40,22 @@ import { api } from "../../comp/api";
 import {
   formatInstant,
   utcISOToZonedDateTimeLocal,
+  utcToZonedHHMM,
   zonedDateTimeLocalToUtcISO,
   zoneLabel,
+  zoneNameWithOffset,
 } from "../lib/time";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { useAdminView, useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
-import { formatAltitude, formatRadius, useUnits } from "../lib/units";
+import { formatAltitude, formatDistance, formatRadius, useUnits } from "../lib/units";
 import { SectionHeader } from "../components/SectionHeader";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { TaskResults } from "../comp/TaskResults";
 import { TaskStandings } from "../comp/TaskStandings";
 import { RouteEditorDialog } from "../comp/RouteEditorDialog";
-import { startConfigSummary } from "../comp/route-editor";
+import { gateToHHMM, startConfigSummary } from "../comp/route-editor";
 import { useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 import {
   fetchWithRetry,
@@ -430,69 +437,159 @@ function TaskPrevNext({
 }
 
 /**
- * The read-only turnpoint table, with each cylinder's crossing direction.
- * Directions are derived from the route geometry by the engine — the same
- * inference the scorer uses — so what pilots read here can never disagree
- * with how the task is scored. Exit is the unusual case (a cylinder the
- * route reaches from inside, crossed flying out), so it gets a badge.
+ * The read-only turnpoint list — an XCTrack-style compact layout that fits a
+ * phone on the hill: role (TAKEOFF/SSS/ESS/GOAL) first, then the waypoint with
+ * its radius (and altitude) stacked beneath, then the optimized leg distance
+ * right-aligned. An optimized-total footer closes it.
+ *
+ * Both the crossing direction (Exit is the unusual case — a cylinder the route
+ * reaches from inside, crossed flying out) and the leg distances are derived
+ * from the route geometry by the engine — the same inference the scorer uses —
+ * so what pilots read here can never disagree with how the task is scored.
  */
 function TurnpointsTable({ xctsk }: { xctsk: XCTask }) {
-  const directions = useMemo(() => computeTurnpointDirections(xctsk), [xctsk]);
   const units = useUnits();
+  const { directions, legs, totalM } = useMemo(() => {
+    const directions = computeTurnpointDirections(xctsk);
+    // legs[i] is the optimized segment INTO turnpoint i+1; turnpoint 0
+    // (take-off) has no incoming leg. Guard the geometry so a half-defined
+    // route (missing coordinates) still renders the identities.
+    let legs: number[] = [];
+    try {
+      if (xctsk.turnpoints.length >= 2) legs = getOptimizedSegmentDistances(xctsk);
+    } catch {
+      legs = [];
+    }
+    const totalM = legs.length > 0 ? legs.reduce((sum, d) => sum + d, 0) : null;
+    return { directions, legs, totalM };
+  }, [xctsk]);
+
+  const lastIndex = xctsk.turnpoints.length - 1;
+
   return (
-    <Table aria-label="Turnpoints" className="mt-2">
-      <TableHeader>
-        <Column isRowHeader={false} className="text-right">
-          #
-        </Column>
-        <Column isRowHeader>Name</Column>
-        <Column className="text-right">Radius</Column>
-        <Column className="text-right">Alt</Column>
-        <Column>Type</Column>
-        <Column>Direction</Column>
-      </TableHeader>
-      <TableBody>
-        {xctsk.turnpoints.map((tp, i) => (
-          <Row key={i}>
-            <Cell className="text-right tabular-nums">{i + 1}</Cell>
-            <Cell>{tp.waypoint.name}</Cell>
-            <Cell className="text-right tabular-nums">
-              {formatRadius(tp.radius, { prefs: units }).withUnit}
-            </Cell>
-            {/* Waypoint altitude — xctsk files without one carry 0, shown as
-                unknown rather than a misleading sea-level reading. */}
-            <Cell className="text-right tabular-nums">
-              {tp.waypoint.altSmoothed ? (
-                formatAltitude(tp.waypoint.altSmoothed, { prefs: units }).withUnit
-              ) : (
-                <span className="text-muted-foreground">—</span>
-              )}
-            </Cell>
-            {/* The last turnpoint is the goal in GAP scoring even when the
-                xctsk leaves its type unset, so label it rather than "—". */}
-            <Cell>
-              {tp.type ?? (i === xctsk.turnpoints.length - 1 ? "GOAL" : "—")}
-            </Cell>
-            <Cell>
-              {tp.type === "TAKEOFF" ? (
-                <span className="text-muted-foreground">—</span>
-              ) : directions[i] === "exit" ? (
-                <span title="Crossed flying outward — the route reaches this cylinder from inside, so pilots fly out across it">
-                  <Badge variant="outline">Exit</Badge>
-                </span>
-              ) : (
-                <span
-                  className="text-muted-foreground"
-                  title="Crossed flying inward — pilots fly into this cylinder"
-                >
-                  Enter
-                </span>
-              )}
-            </Cell>
-          </Row>
-        ))}
-      </TableBody>
-    </Table>
+    <div className="mt-2">
+      <Table aria-label="Turnpoints">
+        <TableHeader>
+          {/* Empty visible header for the role column; labelled for AT. */}
+          <Column isRowHeader={false} aria-label="Type" className="w-16" />
+          <Column isRowHeader>Turnpoint</Column>
+          <Column className="text-right">Leg</Column>
+        </TableHeader>
+        <TableBody>
+          {xctsk.turnpoints.map((tp, i) => {
+            // The last turnpoint is the goal in GAP scoring even when the
+            // xctsk leaves its type unset, so label it rather than blank.
+            const role = tp.type ?? (i === lastIndex ? "GOAL" : null);
+            const isExit = tp.type !== "TAKEOFF" && directions[i] === "exit";
+            const legM = i >= 1 ? legs[i - 1] : undefined;
+            const radius = formatRadius(tp.radius, { prefs: units }).withUnit;
+            const alt = tp.waypoint.altSmoothed
+              ? formatAltitude(tp.waypoint.altSmoothed, { prefs: units }).withUnit
+              : null;
+            return (
+              <Row key={i}>
+                <Cell className="align-top">
+                  <div className="flex flex-col gap-1">
+                    {role ? (
+                      <span className="text-[11px] font-medium tracking-wide text-muted-foreground">
+                        {role}
+                      </span>
+                    ) : null}
+                    {isExit ? (
+                      <span title="Crossed flying outward — the route reaches this cylinder from inside, so pilots fly out across it">
+                        <Badge variant="outline">Exit</Badge>
+                      </span>
+                    ) : null}
+                  </div>
+                </Cell>
+                <Cell className="align-top">
+                  <div className="flex flex-col leading-tight">
+                    <span className="font-medium">{tp.waypoint.name}</span>
+                    {/* Radius (always) · altitude (when the xctsk carries one —
+                        files without an altitude come through as 0, shown as
+                        nothing rather than a misleading sea-level reading). */}
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {radius}
+                      {alt ? ` · ${alt}` : ""}
+                    </span>
+                  </div>
+                </Cell>
+                <Cell className="text-right align-top tabular-nums">
+                  {legM !== undefined ? (
+                    formatDistance(legM, { decimals: 1, prefs: units }).withUnit
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </Cell>
+              </Row>
+            );
+          })}
+        </TableBody>
+      </Table>
+      {totalM !== null ? (
+        <div className="flex items-center justify-between border-t px-2 py-2 text-sm">
+          <span className="text-muted-foreground">Optimized total</span>
+          <span className="font-medium tabular-nums">
+            {formatDistance(totalM, { decimals: 1, prefs: units }).withUnit}
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Compact start/goal summary above the turnpoint list — the XCTrack "FLY tab"
+ * header: the speed-section start on the left, the goal on the right, both
+ * scannable rather than buried in a sentence. Rendered deterministically
+ * (comp-local when a zone is set, UTC otherwise) so the SSR markup matches.
+ */
+function TaskSummaryHeader({
+  xctsk,
+  taskDate,
+  timezone,
+}: {
+  xctsk: XCTask;
+  taskDate: string;
+  timezone: string | null;
+}) {
+  const goal = xctsk.goal;
+  const goalTypeLabel = goal?.type === "LINE" ? "Line" : "Cylinder";
+  // Goal deadline: comp-local when a zone is set, else UTC as stored.
+  const deadlineHHMM = goal?.deadline ? gateToHHMM(goal.deadline) : null;
+  let deadline: string | null = null;
+  if (deadlineHHMM) {
+    const zoned = timezone
+      ? utcToZonedHHMM(taskDate, deadlineHHMM, timezone)
+      : deadlineHHMM;
+    const zoneLbl = timezone
+      ? zoneNameWithOffset(new Date(`${taskDate}T12:00:00Z`), timezone)
+      : "UTC";
+    deadline = `${zoned ?? deadlineHHMM} ${zoneLbl}`;
+  }
+
+  if (!xctsk.sss && !goal) return null;
+
+  return (
+    <dl className="mt-2 grid gap-x-6 gap-y-2 rounded-lg border bg-muted/30 p-3 text-sm sm:grid-cols-2">
+      {xctsk.sss ? (
+        <div>
+          <dt className="text-xs text-muted-foreground">Start of speed section</dt>
+          <dd className="font-medium">
+            {startConfigSummary(xctsk.sss, { timeZone: timezone, taskDate })}
+          </dd>
+        </div>
+      ) : null}
+      {goal ? (
+        <div>
+          <dt className="text-xs text-muted-foreground">Goal</dt>
+          <dd className="font-medium">
+            {goalTypeLabel}
+            {deadline ? ` · deadline ${deadline}` : ""}
+          </dd>
+        </div>
+      ) : null}
+    </dl>
   );
 }
 
@@ -529,15 +626,17 @@ function TurnpointsSection({
         }
       />
       {xctsk && xctsk.turnpoints.length > 0 ? (
-        <TurnpointsTable xctsk={xctsk} />
+        <>
+          <TaskSummaryHeader
+            xctsk={xctsk}
+            taskDate={taskDate}
+            timezone={timezone}
+          />
+          <TurnpointsTable xctsk={xctsk} />
+        </>
       ) : (
         <p className="mt-2 text-muted-foreground">No route defined yet</p>
       )}
-      {xctsk?.sss ? (
-        <p className="mt-2 text-sm text-muted-foreground">
-          {startConfigSummary(xctsk.sss, { timeZone: timezone, taskDate })}
-        </p>
-      ) : null}
     </section>
   );
 }
