@@ -179,7 +179,11 @@ container class). Do NOT plan a GridList/Table rewrite of the pilots grid.
 4. **Drag-and-drop:** the `slot="drag"` button is `pointer-events: none` BY
    DESIGN — mouse/touch drag the row itself (`tr[draggable]`); the button is
    the keyboard/AT path. The default DropIndicator is invisible — pass
-   `renderDropIndicator` with `data-drop-target:outline-*` classes.
+   `renderDropIndicator` with `data-drop-target:outline-*` classes. **Caveat
+   (why the route editor dropped it, 2026-07-23):** row dragging is **native
+   HTML5 drag**, which does not start on touch without a long-press — unusable
+   on a phone. For touch-first reorder, prefer explicit up/down arrow buttons
+   (`moveRow` in RouteEditorDialog) over DnD. No component uses these hooks now.
 5. **Grid focus management redirects programmatic `.focus()`** to the cell's
    cached child — Playwright drives must navigate like a user (click a cell,
    then arrow keys), not `.focus()` + key events.
@@ -353,11 +357,22 @@ narrow column frees width for the map). Verified live (headless admin drive,
   this dialog at all (it moved into `TurnpointDetailsDialog` — see below).
 - **`GridList` with `keyboardNavigationBehavior="tab"`** — arrows move between
   cards, Tab reaches focusable children, so **no CellEditZone** is needed here
-  (contrast the Table, gotcha #2). `selectionMode="none"`; reorder via the same
-  `useDragAndDrop` hooks + `slot="drag"` handle as the Table (unchanged).
-- **Each row is a compact, single-line flight-plan summary** (no inline edit
-  controls): position badge · code · name · type badge, with a right-aligned
-  recap (radius grouped as `50,000 m` · Enter/Exit badge · optimized leg km).
+  (contrast the Table, gotcha #2). `selectionMode="none"`.
+- **Reorder is per-row up/down arrow buttons, NOT drag-and-drop** (changed
+  2026-07-23). The row was `useDragAndDrop`'d with a `slot="drag"` handle, but
+  that handle is `pointer-events:none` (gotcha #4) so the drag lives on the
+  whole row via **native HTML5 drag** — which never fires on touch without a
+  long-press. Since the route is set on a phone on the hill, a normal
+  press-drag did nothing. Replaced with `moveRow(id, ±1)` (swap with neighbour)
+  behind two kit `Button`s per row, disabled at the ends — reliable on mouse,
+  touch AND keyboard, the pattern XCTrack itself uses. The `useDragAndDrop`
+  hooks, `slot="drag"` handle, `DropIndicator` and `GripVerticalIcon` are gone
+  from this dialog; gotcha #4 stays as general RAC knowledge but has no consumer
+  now.
+- **Each row is an XCTrack-style flight-plan row** (no inline edit controls):
+  up/down arrows · role (TAKEOFF/SSS/ESS/GOAL) with an Exit badge beneath · code
+  · name with radius (and altitude) stacked under it · right-aligned optimized
+  leg km · Edit / remove. Matches the read-only task-page turnpoint table.
 - **`TurnpointDetailsDialog`** — a controlled kit `Modal`/`Dialog` (nested
   inside the route-editor Modal) that both **Add turnpoint** and a row's **Edit**
   open. It edits a **local draft** (`TurnpointDraft`) and only commits on Save —
@@ -390,16 +405,16 @@ narrow column frees width for the map). Verified live (headless admin drive,
   call-out so the non-peak prefill is visible.
 - **Tapping a turnpoint row pans the map to it** (GridList `onAction` →
   `RouteMap` `focus={{lat,lon,key}}` → `provider.panTo`; the key bumps each tap
-  so re-tapping re-centres). The Edit/Remove buttons and drag handle are
-  separate targets and don't trigger the row action.
+  so re-tapping re-centres). The reorder/Edit/Remove buttons are separate
+  targets and don't trigger the row action.
 - **Footer holds only Cancel / Save.** Import .xctsk, Load from XContest,
   Export .xctsk/.csv moved up into the Add-turnpoint toolbar row. **Load from
   XContest** is now its own small pop-up (code input + Load) instead of an
   inline field, controlled by `xcImportOpen`; `importXContest` closes it on a
   successful load.
 - Reused unchanged: rows state + `derived` memo, `dependencies={[rows,
-  derived]}` on the GridList (gotcha #3 — position #/legs/dirs would otherwise
-  stale on reorder; verified: drag renumbers and recomputes legs), FileTrigger.
+  derived]}` on the GridList (gotcha #3 — legs/dirs would otherwise stale on
+  reorder; verified: an up/down move recomputes legs), FileTrigger.
 - **Design evolution** (all on request): inline Type+Radius on the card →
   compact row + per-row edit **popover** (live edits, snapshot-revert) →
   the current draft-on-save **Modal** shared by Add and Edit. The popover's
