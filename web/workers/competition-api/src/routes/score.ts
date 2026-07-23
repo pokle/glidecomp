@@ -9,6 +9,7 @@ import { encodeId } from "../sqids";
 import {
   computePilotAnalysis,
   mapWithConcurrency,
+  rankByTotalScore,
   shortHash,
   type TaskScoreResponse,
 } from "../scoring";
@@ -306,14 +307,13 @@ export const scoreRoutes = new Hono<HonoEnv>()
         }
       }
 
-      // Build ranked standings per class
+      // Build ranked standings per class. rankByTotalScore applies S7A
+      // §5.2.5.4 ties (equal published totals share a rank; no tie-break).
       const standings = Object.entries(classStandings).map(
-        ([pilotClass, pilots]) => {
-          const ranked = Object.values(pilots)
-            .sort((a, b) => b.total_score - a.total_score)
-            .map((p, i) => ({ ...p, rank: i + 1 }));
-          return { pilot_class: pilotClass, pilots: ranked };
-        }
+        ([pilotClass, pilots]) => ({
+          pilot_class: pilotClass,
+          pilots: rankByTotalScore(Object.values(pilots)),
+        })
       );
 
       const result = {
