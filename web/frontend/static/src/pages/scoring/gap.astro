@@ -46,6 +46,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
           <li><a href="#arrival-points" class="hover:underline">Arrival Points</a></li>
           <li><a href="#total-score" class="hover:underline">Your Total Score</a></li>
           <li><a href="#stopped-tasks" class="hover:underline">Stopped Tasks</a></li>
+          <li><a href="#ftv" class="hover:underline">Series scoring &amp; FTV</a></li>
           <li><a href="#defaults" class="hover:underline">Default Competition Settings</a></li>
           <li><a href="#glidecomp-notes" class="hover:underline">GlideComp Implementation Notes</a></li>
           <li><a href="#spec-differences" class="hover:underline">Differences from the Official Spec</a></li>
@@ -655,6 +656,55 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         </div>
       </section>
 
+      {/* Fixed Total Validity (FTV) */}
+      <section id="ftv" class="mb-14 scroll-mt-20">
+        <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
+          <h2 class="text-2xl font-bold">Series scoring &amp; Fixed Total Validity</h2>
+          <SpecRef section="13" label="FAI S7F §13–15" class="text-xs font-medium text-muted-foreground shrink-0" />
+        </div>
+        <div class="space-y-4 text-sm leading-relaxed">
+          <p class="text-muted-foreground">
+            A competition's overall standings combine each pilot's task scores. There are two
+            ways to do that, chosen per competition in the scoring settings.
+          </p>
+
+          <div class="ml-2 space-y-4">
+            <div>
+              <h3 class="text-base font-semibold mb-1">Sum of task scores</h3>
+              <p class="text-muted-foreground">
+                The simple total: your competition score is the sum of every task score. Used by
+                most hang-gliding comps and short series. Pilots with the same total share a
+                place (<SpecRef section="5.2.5" label="S7A §5.2.5.4" />: ties are permitted).
+              </p>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold mb-1">FTV — Fixed Total Validity (<SpecRef section="15" label="§15" />)</h3>
+              <p class="text-muted-foreground">
+                The paragliding norm, and the default for new paragliding competitions. FTV
+                scores you on your <strong>best</strong> tasks rather than all of them, so one
+                bad day hurts less. A fixed fraction of the competition's total validity is
+                discarded — <strong>20%</strong> for comps with up to 6 tasks, <strong>25%</strong>
+                for 7 or more.
+              </p>
+              <p class="text-muted-foreground mt-2">
+                Each task is worth a <em>validity</em> (roughly its winning score ÷ 1000). Your
+                tasks are ordered best-performance first, and your scores are added up — along
+                with each task's validity — until the kept validity reaches the fixed cap. The
+                task that tips over the cap counts only in <strong>part</strong>; any tasks
+                beyond it are <strong>discarded</strong>. A pilot who flew too few tasks to reach
+                the cap simply keeps all of them.
+              </p>
+              <p class="text-muted-foreground mt-2">
+                On the scores page, an FTV competition marks each pilot's discarded tasks with a
+                strike-through and part-counted tasks with "(part)"; open a pilot's total for a
+                full breakdown showing which tasks counted, which were dropped, and the
+                arithmetic.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Default Competition Settings */}
       <section id="defaults" class="mb-14 scroll-mt-20">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
@@ -865,7 +915,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">FTV (fixed total validity) for series</td>
-                  <td class="py-2">Not implemented</td>
+                  <td class="py-2">Implemented — an opt-in series-scoring method (the default for new paragliding comps); discards a fixed fraction of total validity (20% for ≤6 tasks, 25% for ≥7) and scores each pilot on their best tasks; see <a href="#ftv" class="underline hover:text-foreground">Fixed Total Validity</a></td>
                 </tr>
               </tbody>
             </table>
@@ -1027,7 +1077,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">Series scoring / FTV</td>
                   <td class="py-2 pr-3">Task ranking and competition totals, optionally FTV (§13–15).</td>
-                  <td class="py-2 pr-3">Competition totals by sum of task scores (ranked per class, plus top-3-per-task and teams); FTV not yet implemented.</td>
+                  <td class="py-2 pr-3">Competition totals by sum of task scores or FTV (S7F §15), ranked per class (S7A ties), plus top-3-per-task and teams. FTV is the default for new PG comps.</td>
                   <td class="py-2">Implemented; FTV is the PG preset default (factor 0.75).</td>
                 </tr>
               </tbody>

@@ -14,6 +14,8 @@ function comp(overrides: Partial<CompDetailData> = {}): CompDetailData {
     default_pilot_class: "open",
     gap_params: null,
     scoring_format: "gap",
+    series_scoring: "total",
+    ftv_factor: null,
     timezone: null,
     open_igc_upload: true,
     tasks: [],

@@ -530,3 +530,139 @@ describe("mutation hooks mark scores stale (via routes)", () => {
     expect(after.classes[0].pilots).toHaveLength(1);
   });
 });
+
+describe("FTV series scoring (S7F §15)", () => {
+  interface ServedFtvScores extends ServedCompScores {
+    series_scoring: "total" | "ftv";
+    ftv_factor?: number;
+    standings: Array<{
+      pilot_class: string;
+      pilots: Array<{
+        pilot_name: string;
+        total_score: number;
+        calculated_ftv?: number;
+        tasks: Array<{
+          task_id: string;
+          score: number;
+          ftv_status?: "full" | "partial" | "discarded";
+          ftv_counted_score?: number;
+          validity?: number;
+        }>;
+      }>;
+    }>;
+  }
+
+  /** Seed a 2-task GAP comp with 3 pilots flying both tasks (rotated tracks so
+   *  each pilot's two day scores differ). Direct writes; scores cold-compute on
+   *  read. Returns the comp handle. */
+  async function seedTwoTaskComp(): Promise<{
+    compIdNum: number;
+    compScoresPath: string;
+  }> {
+    const now = "2026-01-01T00:00:00Z";
+    const comp = await env.DB.prepare(
+      `INSERT INTO comp (name, creation_date, category, scoring_format)
+       VALUES ('FTV Comp', ?, 'pg', 'gap')`
+    )
+      .bind(now)
+      .run();
+    const compIdNum = comp.meta.last_row_id;
+    const entries = sampleIgcEntries().slice(0, 3);
+
+    // Three pilots, registered once for the comp.
+    const pilotIds: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const cp = await env.DB.prepare(
+        `INSERT INTO comp_pilot (comp_id, registered_pilot_name, pilot_class)
+         VALUES (?, ?, 'open')`
+      )
+        .bind(compIdNum, `FTV Pilot ${i + 1}`)
+        .run();
+      pilotIds.push(cp.meta.last_row_id);
+    }
+
+    for (let taskNo = 0; taskNo < 2; taskNo++) {
+      const task = await env.DB.prepare(
+        `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+        .bind(compIdNum, `Task ${taskNo + 1}`, `2026-01-1${taskNo + 5}`, now, env.SAMPLE_TASK_XCTSK)
+        .run();
+      const taskIdNum = task.meta.last_row_id;
+      await env.DB.prepare(
+        `INSERT INTO task_class (task_id, pilot_class) VALUES (?, 'open')`
+      )
+        .bind(taskIdNum)
+        .run();
+      for (let i = 0; i < 3; i++) {
+        // Rotate which track each pilot flies per task so day scores differ.
+        const [, content] = entries[(i + taskNo) % 3];
+        const r2Key = `c/${compIdNum}/t/${taskIdNum}/${pilotIds[i]}.igc`;
+        const gz = await compressText(content);
+        await env.R2.put(r2Key, gz);
+        await env.DB.prepare(
+          `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size)
+           VALUES (?, ?, ?, ?, ?)`
+        )
+          .bind(taskIdNum, pilotIds[i], r2Key, now, gz.byteLength)
+          .run();
+      }
+    }
+
+    return {
+      compIdNum,
+      compScoresPath: `/api/comp/${encodeId(env.SQIDS_ALPHABET, compIdNum)}/scores`,
+    };
+  }
+
+  test("FTV discards weakest results; total ≤ sum; setting folds into the ETag", async () => {
+    const t = await seedTwoTaskComp();
+
+    // Baseline: sum-of-tasks.
+    const sumRes = await request("GET", t.compScoresPath);
+    expect(sumRes.status).toBe(200);
+    const sum = (await sumRes.json()) as ServedFtvScores;
+    expect(sum.series_scoring).toBe("total");
+    const sumByPilot = new Map(
+      sum.standings[0].pilots.map((p) => [p.pilot_name, p.total_score])
+    );
+    const etagTotal = sumRes.headers.get("ETag")!;
+
+    // Switch to FTV — a pure aggregation change, no per-task recompute.
+    await env.DB.prepare("UPDATE comp SET series_scoring='ftv' WHERE comp_id=?")
+      .bind(t.compIdNum)
+      .run();
+
+    const ftvRes = await request("GET", t.compScoresPath);
+    const ftv = (await ftvRes.json()) as ServedFtvScores;
+    expect(ftv.series_scoring).toBe("ftv");
+    expect(ftv.ftv_factor).toBe(0.2); // 2 tasks → ≤6 → 0.2
+    // The series-scoring setting is folded into the comp ETag.
+    expect(ftvRes.headers.get("ETag")).not.toBe(etagTotal);
+
+    for (const p of ftv.standings[0].pilots) {
+      // FTV can only drop points, never add them.
+      expect(p.total_score).toBeLessThanOrEqual(sumByPilot.get(p.pilot_name)! + 1e-6);
+      expect(typeof p.calculated_ftv).toBe("number");
+      // Every task carries an FTV status; at least one counted.
+      for (const task of p.tasks) {
+        expect(["full", "partial", "discarded"]).toContain(task.ftv_status);
+      }
+      expect(
+        p.tasks.some((task) => task.ftv_status !== "discarded")
+      ).toBe(true);
+    }
+  });
+
+  test("a single-task FTV comp falls back to the plain total", async () => {
+    const t = await seedScoredTask(2);
+    await env.DB.prepare("UPDATE comp SET scoring_format='gap', series_scoring='ftv' WHERE comp_id=?")
+      .bind(t.compIdNum)
+      .run();
+    const res = await request("GET", t.compScoresPath);
+    const data = (await res.json()) as ServedFtvScores;
+    // One task can't discard anything → reported as plain total.
+    expect(data.series_scoring).toBe("total");
+    expect(data.standings[0].pilots[0].tasks[0].ftv_status).toBeUndefined();
+  });
+});

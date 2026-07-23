@@ -50,6 +50,9 @@ Tables referenced from the auth-api worker:
   - pilot_classes (TEXT NOT NULL) — JSON array of valid pilot class strings for this comp, e.g. `["open", "sport", "floater"]`. Defines the universe of classes. Must contain at least one entry.
   - default_pilot_class (TEXT NOT NULL) — the class assigned to auto-registered pilots. Must be one of the values in `pilot_classes`.
   - gap_params (TEXT) — JSON object matching the GAPParameters interface
+  - scoring_format (TEXT NOT NULL DEFAULT 'gap') — 'gap' or 'open_distance' (migration 0009).
+  - series_scoring (TEXT NOT NULL DEFAULT 'total') — how per-task scores combine into competition standings (migration 0022): 'total' (sum of task scores) or 'ftv' (Fixed Total Validity, FAI S7F §15). FTV applies only to GAP comps with more than one task. New PG GAP comps are created with 'ftv'; the DB default stays 'total' so existing comps are unchanged.
+  - ftv_factor (REAL) — the FTV discard fraction (0<f<1). NULL auto-derives it from the scoreable-task count per S7A §5.2.5.1 (0.2 for ≤6 tasks, 0.25 for ≥7). Changing series_scoring / ftv_factor is audit-logged but does **not** bump per-task scores (FTV is a pure aggregation over stored task scores, computed live in `/scores`, whose ETag folds these fields in).
   - open_igc_upload (INTEGER NOT NULL DEFAULT 1) — boolean. When 1, any registered pilot in the comp can upload an IGC on behalf of any other pilot. Admins can always upload regardless.
 
 - **comp_admin**: Join table for competition administrators. Replaces the previous `admin_ids` column on comp.
@@ -252,7 +255,7 @@ No separate download endpoint — the list response includes signed R2 URLs that
 |--------|-------|------|-------------|
 | POST | `/api/comp/:comp_id/task/:task_id/reprocess` | Admin | Reprocess all `flight_data` for this task. Enqueues one Cloudflare Queue message per `task_track` — each Queue Consumer fetches the IGC from R2, parses it against the current xctsk, and writes updated `flight_data` back to D1. Use after changing task xctsk. |
 | GET | `/api/comp/:comp_id/task/:task_id/score` | Public | Compute and return scores for a single task on-demand. Loads all `flight_data` + `penalty_points` from `task_track` for matching pilots, runs the GAP formula, returns ranked pilot list with individual point breakdowns. No stored results — computed fresh each request. No auth required. |
-| GET | `/api/comp/:comp_id/scores` | Public | Compute and return competition-level standings on-demand. Runs GAP for each task, aggregates total points per pilot, returns overall rankings plus per-task summaries. No auth required. |
+| GET | `/api/comp/:comp_id/scores` | Public | Compute and return competition-level standings on-demand. Aggregates each task's stored scores into per-class standings (S7A §5.2.5.4 shared ranks on ties). When the comp's `series_scoring` is `ftv`, the total is the Fixed Total Validity result (S7F §15) instead of the plain sum, and each pilot's per-task entries carry `ftv_status` (full/partial/discarded), `ftv_counted_score`, and `validity`. Response includes `series_scoring` and the resolved `ftv_factor`. No auth required. |
 
 **Scoring pipeline:** Scoring is split into two concerns:
 

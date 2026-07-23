@@ -11,15 +11,22 @@
  * scores read best-first).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link as AriaLink, type SortDescriptor } from "react-aria-components";
+import {
+  Link as AriaLink,
+  DialogTrigger,
+  type SortDescriptor,
+} from "react-aria-components";
 import { Select, SelectItem } from "@/react/rac/select";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { Tabs, TabList, Tab, TabPanel } from "@/react/rac/tabs";
+import { Modal, Dialog, DialogHeader, DialogTitle } from "@/react/rac/dialog";
+import { Button } from "@/react/rac/button";
 import {
   aggregateTeams,
   buildClassGroups,
   computeTop3Rows,
   type ClassStanding,
+  type PilotStanding,
 } from "../../scores-views";
 import { ScoresSection } from "./ScoresSection";
 import { toast } from "../lib/toast";
@@ -402,6 +409,8 @@ function StandingsTable({ scores, cls }: { scores: CompScores; cls: ClassStandin
   // Only show columns for tasks flown by this pilot class — classes fly
   // different tasks, so mixing them would leave every off-class cell blank.
   const classTasks = scores.tasks.filter((t) => t.classes.includes(cls.pilot_class));
+  const isFtv = scores.series_scoring === "ftv";
+  const nameById = new Map(classTasks.map((t) => [t.task_id, t.task_name]));
 
   const columns: ColumnSpec[] = [
     { label: "#", defaultDir: "asc", align: "right" },
@@ -421,25 +430,155 @@ function StandingsTable({ scores, cls }: { scores: CompScores; cls: ClassStandin
     ...classTasks.map((task): CellSpec => {
       const entry = p.tasks.find((t) => t.task_id === task.task_id);
       if (!entry) return { sort: "", node: "—" };
+      const discarded = entry.ftv_status === "discarded";
+      const partial = entry.ftv_status === "partial";
+      const ftvTitle = discarded
+        ? `Discarded under FTV — the validity cap was already reached`
+        : partial
+          ? `Counted ${formatScore(entry.ftv_counted_score ?? 0)} of ${formatScore(entry.score)} under FTV`
+          : undefined;
       return {
-        sort: String(entry.score),
+        // Discarded tasks sort as if they contributed nothing to the total.
+        sort: String(discarded ? 0 : entry.score),
         node: (
           <AriaLink
             href={scoreDetailHref(scores.comp_id, task.task_id, p.comp_pilot_id)}
             aria-label={`How ${p.pilot_name}'s score for ${task.task_name} was calculated`}
             className={cellLinkClass}
           >
-            {formatScore(entry.score)}{" "}
-            <span className="text-muted-foreground">({ordinal(entry.rank)})</span>
+            <span
+              title={ftvTitle}
+              className={discarded ? "text-muted-foreground line-through" : undefined}
+            >
+              {formatScore(entry.score)}
+            </span>{" "}
+            {partial ? (
+              <span className="text-amber-600 dark:text-amber-500">
+                (part)
+              </span>
+            ) : (
+              <span className="text-muted-foreground">({ordinal(entry.rank)})</span>
+            )}
           </AriaLink>
         ),
       };
     }),
-    { sort: String(p.total_score), node: <strong>{formatScore(p.total_score)}</strong> },
+    {
+      sort: String(p.total_score),
+      node: isFtv ? (
+        <span className="inline-flex items-center gap-1.5">
+          <strong>{formatScore(p.total_score)}</strong>
+          <FtvBreakdown pilot={p} nameById={nameById} ftvFactor={scores.ftv_factor ?? null} />
+        </span>
+      ) : (
+        <strong>{formatScore(p.total_score)}</strong>
+      ),
+    },
   ]);
 
   return (
-    <SortableTable label={`Standings — ${cls.pilot_class}`} columns={columns} rows={rows} />
+    <>
+      {isFtv ? (
+        <p className="mt-3 text-sm text-muted-foreground">
+          <strong className="font-medium text-foreground">FTV — Fixed Total Validity.</strong>{" "}
+          Each pilot's total counts only their best tasks up to a fixed validity
+          {scores.ftv_factor != null
+            ? ` (${Math.round(scores.ftv_factor * 100)}% discarded)`
+            : ""}
+          ; struck-through scores were discarded, "(part)" scores counted only in
+          part. Open a total's breakdown for the arithmetic.
+        </p>
+      ) : null}
+      <SortableTable label={`Standings — ${cls.pilot_class}`} columns={columns} rows={rows} />
+    </>
+  );
+}
+
+/**
+ * Per-pilot FTV explainer (transparency): which tasks counted (in full or in
+ * part), which were discarded under the validity cap, and the total arithmetic.
+ * Rendered straight from the standings' FTV fields — the same numbers the
+ * scoreboard shows.
+ */
+function FtvBreakdown({
+  pilot,
+  nameById,
+  ftvFactor,
+}: {
+  pilot: PilotStanding;
+  nameById: Map<string, string>;
+  ftvFactor: number | null;
+}) {
+  const kept = pilot.tasks
+    .filter((t) => t.ftv_status !== "discarded")
+    .sort((a, b) => (b.ftv_counted_score ?? 0) - (a.ftv_counted_score ?? 0));
+  const dropped = pilot.tasks
+    .filter((t) => t.ftv_status === "discarded")
+    .sort((a, b) => b.score - a.score);
+  const name = (id: string) => nameById.get(id) ?? id;
+
+  return (
+    <DialogTrigger>
+      <Button
+        variant="ghost"
+        className="h-auto px-1.5 py-0.5 text-xs font-normal text-muted-foreground underline underline-offset-2"
+        aria-label={`FTV breakdown for ${pilot.pilot_name}`}
+      >
+        breakdown
+      </Button>
+      <Modal className="sm:max-w-md">
+        <Dialog>
+          <DialogHeader>
+            <DialogTitle>{pilot.pilot_name} — FTV breakdown</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm">
+            <p className="text-muted-foreground">
+              Best tasks are kept until the fixed validity cap is reached
+              {ftvFactor != null ? ` (${Math.round(ftvFactor * 100)}% of total validity discarded)` : ""}.
+            </p>
+
+            <h4 className="mt-3 mb-1 font-medium">Tasks counted</h4>
+            <ul className="space-y-1">
+              {kept.map((t) => (
+                <li key={t.task_id} className="flex justify-between gap-3">
+                  <span>
+                    {name(t.task_id)}
+                    {t.ftv_status === "partial" ? (
+                      <span className="text-amber-600 dark:text-amber-500"> — counted in part</span>
+                    ) : null}
+                  </span>
+                  <span className="tabular-nums">
+                    {formatScore(t.ftv_counted_score ?? t.score)}
+                    {t.ftv_status === "partial" ? (
+                      <span className="text-muted-foreground"> of {formatScore(t.score)}</span>
+                    ) : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
+
+            {dropped.length > 0 ? (
+              <>
+                <h4 className="mt-3 mb-1 font-medium">Tasks discarded</h4>
+                <ul className="space-y-1">
+                  {dropped.map((t) => (
+                    <li key={t.task_id} className="flex justify-between gap-3 text-muted-foreground">
+                      <span className="line-through">{name(t.task_id)}</span>
+                      <span className="tabular-nums line-through">{formatScore(t.score)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+
+            <div className="mt-3 flex justify-between gap-3 border-t border-border pt-2 font-medium">
+              <span>FTV total</span>
+              <span className="tabular-nums">{formatScore(pilot.total_score)}</span>
+            </div>
+          </div>
+        </Dialog>
+      </Modal>
+    </DialogTrigger>
   );
 }
 
