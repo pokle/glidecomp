@@ -31,7 +31,7 @@ import {
   SimpleSelect,
   TestCompField,
 } from "./fields";
-import { type CompDetailData, type ScoringFormat } from "./types";
+import { type CompDetailData, type ScoringFormat, type SeriesScoring } from "./types";
 
 /**
  * Timezone dropdown options: "auto" plus every zone the runtime knows.
@@ -106,6 +106,14 @@ export function SettingsDialog({
   const [adminsText, setAdminsText] = useState(comp.admins.map((a) => a.email).join(", "));
   const [scoringFormat, setScoringFormat] = useState<ScoringFormat>(
     comp.scoring_format ?? "gap"
+  );
+  const [seriesScoring, setSeriesScoring] = useState<SeriesScoring>(
+    comp.series_scoring ?? "total"
+  );
+  // "" = automatic (derive 0.2/0.25 from the task count); otherwise the stored
+  // discard fraction as a percentage string.
+  const [ftvFactorPct, setFtvFactorPct] = useState(
+    comp.ftv_factor != null ? String(Math.round(comp.ftv_factor * 100)) : ""
   );
 
   // Blank (NaN) = "auto" (the scorer uses 70% of each task's distance). Key
@@ -278,6 +286,12 @@ export function SettingsDialog({
           admin_emails: adminEmails,
           gap_params: gapParams,
           scoring_format: scoringFormat,
+          // FTV is a GAP-only aggregation; open-distance comps sum tasks.
+          series_scoring: scoringFormat === "gap" ? seriesScoring : "total",
+          ftv_factor:
+            scoringFormat === "gap" && seriesScoring === "ftv" && ftvFactorPct
+              ? Number(ftvFactorPct) / 100
+              : null,
         },
       });
 
@@ -386,6 +400,42 @@ export function SettingsDialog({
               single Takeoff turnpoint and no goal.
             </p>
           </div>
+
+          {/* Series (multi-task) scoring — how per-task scores combine into
+              competition standings. FTV is a GAP-only aggregation (S7F §15). */}
+          {scoringFormat === "gap" ? (
+            <div>
+              <h3 className="mb-1.5 text-sm font-medium">Series scoring</h3>
+              <SimpleSelect
+                value={seriesScoring}
+                onChange={(v) => setSeriesScoring(v as SeriesScoring)}
+                options={[
+                  { value: "total", label: "Sum of task scores" },
+                  { value: "ftv", label: "FTV — Fixed Total Validity" },
+                ]}
+                ariaLabel="Series scoring"
+              />
+              <p className="mt-1 text-sm text-muted-foreground">
+                FTV (S7F §15) scores each pilot on their best tasks, discarding a
+                fixed fraction of the total validity — the paragliding norm. Sum of
+                task scores is the simple total.
+              </p>
+              {seriesScoring === "ftv" ? (
+                <div className="mt-2">
+                  <SimpleSelect
+                    value={ftvFactorPct}
+                    onChange={setFtvFactorPct}
+                    options={[
+                      { value: "", label: "Automatic (20% for ≤6 tasks, 25% for ≥7)" },
+                      { value: "20", label: "Discard 20%" },
+                      { value: "25", label: "Discard 25%" },
+                    ]}
+                    ariaLabel="FTV discard fraction"
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           {/* GAP parameters only apply to GAP scoring; hide them for open distance.
               They're walled off behind an Advanced disclosure (issue #343): a new
