@@ -836,6 +836,17 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             <a href="#spec-differences" class="underline hover:text-foreground">next section</a>.
           </p>
 
+          <p class="text-muted-foreground">
+            The tables below group features by the <strong class="text-foreground">FAI competition
+            category</strong> they apply to. Section 7F targets <strong>Category 1</strong> events —
+            FAI World and Continental championships — while organisers of <strong>Category 2</strong>
+            and non-sanctioned events (which includes most local and club competitions) are free to
+            score however they like (<SpecRef section="1.1" label="S7F §1.1" />). GlideComp covers
+            everything a Category 2 or local competition needs; the only unimplemented pieces are
+            Category-1-only championship sub-rankings.
+          </p>
+
+          <h3 class="text-base font-semibold mt-6 mb-2">All competition categories</h3>
           <div class="overflow-x-auto">
             <table class="w-full text-sm border-collapse">
               <thead>
@@ -916,6 +927,37 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">FTV (fixed total validity) for series</td>
                   <td class="py-2">Implemented — an opt-in series-scoring method (the default for new paragliding comps); discards a fixed fraction of total validity (20% for ≤6 tasks, 25% for ≥7) and scores each pilot on their best tasks; see <a href="#ftv" class="underline hover:text-foreground">Fixed Total Validity</a></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="text-base font-semibold mt-8 mb-2">FAI Category 1 (World &amp; Continental championships) only</h3>
+          <p class="text-muted-foreground">
+            These sub-rankings appear only at FAI Category 1 championships — events with national
+            team entries and a separate women's category. GlideComp
+            <strong class="text-foreground">deliberately does not implement them</strong>: they
+            aren't used at Category 2 or local competitions (the definitions live in Sporting Code
+            <a href="https://www.fai.org/sites/default/files/civl/documents/sporting_code_s7_a_-_cross_country_2022.pdf" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">Section 7A</a>
+            §5.2.4–5.2.5), and they change no scores — each is just a filtered re-listing of the
+            same task scores.
+          </p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-border">
+                  <th class="text-left py-2 pr-4 font-semibold">Feature</th>
+                  <th class="text-left py-2 font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody class="text-muted-foreground">
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">Female sub-ranking (S7A §5.2.4.2, §5.2.5.2)</td>
+                  <td class="py-2">Not implemented — by design. Re-lists female pilots with the scores they achieved in the overall ranking; needs pilot gender metadata GlideComp doesn't collect.</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">Nation sub-ranking / national teams (S7A §5.2.4.3, §5.2.5.3)</td>
+                  <td class="py-2">Not implemented — by design. Ranks nations by the sum of their best three pilots (two at the Women's Worlds); needs national-team entries. Distinct from GlideComp's generic <a href="/comp" class="underline hover:text-foreground">team standings</a>, which any competition can use.</td>
                 </tr>
               </tbody>
             </table>
