@@ -184,11 +184,13 @@ ETag makes must-revalidate cheap).
 
 ### UI: make freshness visible
 
-- Every scores surface (`Scores.tsx`, `ScoresSection.tsx`, task detail, and
-  the SSR'd comp page once the SSR plan lands) renders the timestamp next to
-  the tables — e.g. "Scores computed 7 Jul 2026, 14:32 UTC" (absolute, in the
-  comp timezone, so SSR output is deterministic — no relative "2 min ago" on
-  the server-rendered path, per the SSR plan's hydration-mismatch rule).
+- Every scores surface (the `/comp/:id/scores` page and the comp hub's
+  standings summary via `CompScoresSection.tsx`'s shared hook, the task
+  page's results podium `TaskResults.tsx`, and the admin manage grid
+  `TaskStandings.tsx`) renders the timestamp next to the tables — e.g.
+  "Scores computed 7 Jul 2026, 14:32 UTC" (absolute, in the comp timezone,
+  so SSR output is deterministic — no relative "2 min ago" on the
+  server-rendered path, per the SSR plan's hydration-mismatch rule).
 - **Re-score banner (JS frontend only).** When the response has
   `stale: true`, the score list shows a clearly visible notice:
   *"Hold tight, scores are being re-scored…"*. The client then polls the same

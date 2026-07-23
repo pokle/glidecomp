@@ -7,6 +7,33 @@ builds on [issue #277](https://github.com/pokle/glidecomp/issues/277) and the
 review comments there, and aligns with
 [2026-07-06-ssr-public-pages-plan.md](./2026-07-06-ssr-public-pages-plan.md).
 
+> **Update (2026-07-23, comp/task page UX rework):** the hub thesis below was
+> revised — the comp page stays the hub, but the heavyweight surfaces moved off
+> it. Where this doc and the shipped app now differ, the app is right:
+>
+> - **Scores are no longer inline.** `/comp/:id/scores` is the canonical,
+>   SSR'd scores page (per-class tabs, Top 3, Teams, Results by task —
+>   `?task=<id>` deep-links a task's results). The comp page keeps a compact
+>   top-3-per-class Standings summary linking there. `/scores?comp_id=X` now
+>   redirects to `/comp/X/scores`, not `/comp/X#scores`.
+> - **Pilots moved to an admin-only page**, `/comp/:id/pilots` (noindex shell;
+>   `#edit-pilots` opens the editor). The public roster section is gone —
+>   visitors see every pilot in the scores. This is the one deliberate
+>   exception to §7's "stays public" principle: the roster was a management
+>   surface duplicating the score tables.
+> - **The today's-task hero merged into the task list**: one list, newest date
+>   first, the hero date rendered as the featured card in place; Share/QR/
+>   downloads folded into a single Share menu; per-row Submit track / 3D
+>   replay removed (they live on the task page). Finished comps lead with the
+>   standings summary before the task list.
+> - **The task page split public results from management**: a public top-3
+>   podium + link to the scores page; the old standings grid is the admin-only
+>   "Manage pilots & tracks" section.
+> - Activity is a 3-entry digest ("Show all activity" expands); Admins is an
+>   "Organized by …" footnote (the `#admins` anchor survives). The section nav
+>   is sticky. SSR covers **six** public pages (the four here plus
+>   `/comp/:id/scores` and the task page).
+
 **Scope guard: this is a navigation/IA change only.** No permission changes,
 no new backend capabilities (one small exception, §8). Everything public today
 stays public; everything admin-gated stays admin-gated. Pages are role-aware,

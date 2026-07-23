@@ -10,6 +10,14 @@ details evolved in implementation (react-router `StaticRouter` instead of a
 edge build; `/scores` stays a client redirect to `/comp/:id#scores`; the score
 tables already moved onto the comp page in IA v2 before SSR landed).
 
+> **Update (2026-07-23):** SSR now covers **six** public routes — the four
+> above plus the task page and a new `/comp/:id/scores` page, which became the
+> canonical scores surface (the comp page keeps only a top-3 standings
+> summary, so "curl the comp page for full standings" no longer holds — curl
+> `/comp/:id/scores` instead). `/scores?comp_id=X` now redirects to
+> `/comp/X/scores`. The admin-only `/comp/:id/pilots` roster editor joined the
+> noindex-shell routes alongside field analysis.
+
 ## Goal
 
 Make the public competition surfaces crawlable and indexable: the text content
