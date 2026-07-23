@@ -9,6 +9,7 @@ import {
   createTask,
   clearCompData,
 } from "./helpers";
+import { rankByTotalScore } from "../src/scoring";
 
 /** Compress a string to gzip for upload. */
 async function compressText(text: string): Promise<Uint8Array> {
@@ -702,5 +703,59 @@ describe("Manual re-score (POST /rescore)", () => {
     expect(forbidden.status).toBe(403);
     const anon = await request("POST", `/api/comp/${compId}/rescore`);
     expect(anon.status).toBe(401);
+  });
+});
+
+describe("rankByTotalScore — S7A §5.2.5.4 ties", () => {
+  const mk = (name: string, total_score: number) => ({ name, total_score });
+
+  test("assigns 1-based ranks in descending score order", () => {
+    const ranked = rankByTotalScore([mk("a", 500), mk("c", 100), mk("b", 300)]);
+    expect(ranked.map((p) => [p.name, p.rank])).toEqual([
+      ["a", 1],
+      ["b", 2],
+      ["c", 3],
+    ]);
+  });
+
+  test("equal totals share a rank and the next rank skips (1, 2, 2, 4)", () => {
+    const ranked = rankByTotalScore([
+      mk("a", 900),
+      mk("b", 700),
+      mk("c", 700),
+      mk("d", 500),
+    ]);
+    expect(ranked.map((p) => p.rank)).toEqual([1, 2, 2, 4]);
+  });
+
+  test("ties are on the published whole-point total, not the raw sum", () => {
+    // 700.4 and 699.6 both display as 700 (formatScore → Math.round), so they
+    // tie; 699.4 displays as 699 and does not.
+    const ranked = rankByTotalScore([
+      mk("a", 700.4),
+      mk("b", 699.6),
+      mk("c", 699.4),
+    ]);
+    expect(ranked.map((p) => [p.name, p.rank])).toEqual([
+      ["a", 1],
+      ["b", 1],
+      ["c", 3],
+    ]);
+  });
+
+  test("a leading tie both take rank 1", () => {
+    const ranked = rankByTotalScore([mk("a", 800), mk("b", 800), mk("c", 600)]);
+    expect(ranked.map((p) => p.rank)).toEqual([1, 1, 3]);
+  });
+
+  test("does not mutate the input array", () => {
+    const input = [mk("a", 100), mk("b", 200)];
+    const snapshot = input.map((p) => ({ ...p }));
+    rankByTotalScore(input);
+    expect(input).toEqual(snapshot);
+  });
+
+  test("empty field yields no rows", () => {
+    expect(rankByTotalScore([])).toEqual([]);
   });
 });

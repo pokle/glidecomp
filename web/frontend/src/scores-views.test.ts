@@ -230,3 +230,63 @@ describe("aggregateTeams", () => {
     expect(aggregateTeams(standings)).toEqual([]);
   });
 });
+
+// ── Shared ranks on ties (S7A §5.2.4/§5.2.5) ──────────────────────────────────
+
+describe("shared ranks on ties", () => {
+  test("buildClassGroups: equal totals share a rank, next rank skips (1,2,2,4)", () => {
+    const standings: ClassStanding[] = [
+      {
+        pilot_class: "open",
+        pilots: [
+          pilot("A", { t1: 100 }), // 100
+          pilot("B", { t1: 60, t2: 20 }), // 80
+          pilot("C", { t1: 80 }), // 80
+          pilot("D", { t1: 50 }), // 50
+        ],
+      },
+    ];
+    const group = buildClassGroups(standings).find((g) => g.label === "open")!;
+    expect(group.pilots.map((p) => [p.pilot_name, p.rank])).toEqual([
+      ["A", 1],
+      ["B", 2],
+      ["C", 2],
+      ["D", 4],
+    ]);
+  });
+
+  test("buildClassGroups: ties are on the published whole-point total", () => {
+    // 700.4 and 699.6 both display as 700 → tie; 699.4 displays as 699.
+    const standings: ClassStanding[] = [
+      {
+        pilot_class: "open",
+        pilots: [
+          pilot("A", { t1: 700.4 }),
+          pilot("B", { t1: 699.6 }),
+          pilot("C", { t1: 699.4 }),
+        ],
+      },
+    ];
+    const group = buildClassGroups(standings).find((g) => g.label === "open")!;
+    expect(group.pilots.map((p) => p.rank)).toEqual([1, 1, 3]);
+  });
+
+  test("aggregateTeams: teams with equal totals share a rank", () => {
+    const standings: ClassStanding[] = [
+      {
+        pilot_class: "open",
+        pilots: [
+          pilot("A", { t1: 100 }, "Eagles"),
+          pilot("B", { t1: 100 }, "Condors"),
+          pilot("C", { t1: 40 }, "Hawks"),
+        ],
+      },
+    ];
+    const teams = aggregateTeams(standings);
+    expect(Object.fromEntries(teams.map((t) => [t.team_name, t.rank]))).toEqual({
+      Eagles: 1,
+      Condors: 1,
+      Hawks: 3,
+    });
+  });
+});

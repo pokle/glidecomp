@@ -378,6 +378,34 @@ export async function mapWithConcurrency<T, R>(
   return results;
 }
 
+/**
+ * Rank competition standings by total score, sharing ranks on ties.
+ *
+ * S7A §5.2.5.1/§5.2.5.4: the overall competition ranking orders pilots by total
+ * score descending, and "pilots with the same score are ranked in the same
+ * position" — ties are permitted, with no tie-break. Equality is on the
+ * *published* whole-point total (the value the UI shows via `Math.round`,
+ * matching AirScore's `comp_result_decimal`), so two pilots displaying the same
+ * total share a rank even when their raw sums differ by a fraction. Returns a
+ * new array sorted best-first with a 1-based `rank` assigned (e.g. 1, 2, 2, 4),
+ * mirroring the engine's per-task tie handling in gap-scoring.ts.
+ */
+export function rankByTotalScore<T extends { total_score: number }>(
+  pilots: T[]
+): Array<T & { rank: number }> {
+  const ranked = [...pilots]
+    .sort((a, b) => b.total_score - a.total_score)
+    .map((p) => ({ ...p, rank: 0 }));
+  for (let i = 0; i < ranked.length; i++) {
+    ranked[i].rank =
+      i > 0 &&
+      Math.round(ranked[i].total_score) === Math.round(ranked[i - 1].total_score)
+        ? ranked[i - 1].rank
+        : i + 1;
+  }
+  return ranked;
+}
+
 /** How many tracks to fetch/parse from R2 at once on a cache miss. */
 const TRACK_FETCH_CONCURRENCY = 10;
 
