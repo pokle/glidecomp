@@ -16,3 +16,21 @@
 #badges {
   font-family: "Atkinson Hyperlegible Next", ui-sans-serif, system-ui, sans-serif;
 }
+
+/* Reduced motion (WCAG 2.3.3, accessibility-standard §4.4). The replay is a
+   standalone Vite entry that doesn't import globals.css, so it carries its own
+   copy of the app-wide rule: neutralise non-essential DOM transitions and
+   animations for the page chrome when the OS asks to minimise motion. The
+   camera fly-throughs are gated separately in terrain-backend.ts, and the
+   flight playback itself is essential content (user-initiated), so it's left
+   untouched. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

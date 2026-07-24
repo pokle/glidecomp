@@ -174,3 +174,22 @@
   }
 
 }
+
+/* Reduced motion (WCAG 2.3.3, accessibility-standard §4.4). When the user has
+   asked their OS to minimise motion, neutralise non-essential transitions and
+   animations app-wide: collapse durations to a near-zero value (kept non-zero
+   so `transitionend`/`animationend` listeners still fire), stop looping
+   animations after one iteration, and disable smooth scrolling. State changes
+   stay instant rather than animated. Imported by analysis.css and the static
+   pages' global.css, so it covers the SPA, the analysis map and the content
+   pages; the standalone 3D replay carries its own copy in replay.css. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
