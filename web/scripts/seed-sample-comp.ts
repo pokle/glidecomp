@@ -398,7 +398,26 @@ function readTrackLessRows(compDir: string, igcFiles: string[]): TrackLessPilot[
       out.push({ name, kind: 'flew', distance: null }); // 'lo' etc. — min distance
     }
   }
-  return out;
+  // Collapse rows that resolve to the same comp_pilot. Track-less pilots are
+  // keyed by name (they have no distinguishing id), and the registry merges
+  // same-name rows into ONE comp_pilot — so the synthesis has to as well, or a
+  // repeated published name (AirScore lists the odd competitor twice, e.g. two
+  // "James McGinty" land-out rows in Corryong 2017 open T1) would emit two
+  // manual flights / statuses for one comp_pilot and trip its UNIQUE(task_id,
+  // comp_pilot_id) index. Keep the best outcome: a flight beats a DNF, and the
+  // longer distance wins (a real number beats a bare 'lo'/null minimum).
+  const better = (a: TrackLessPilot, b: TrackLessPilot): TrackLessPilot => {
+    if (a.kind !== b.kind) return a.kind === 'flew' ? a : b;
+    if (a.kind === 'dnf') return a;
+    return (b.distance ?? -1) > (a.distance ?? -1) ? b : a;
+  };
+  const merged = new Map<string, TrackLessPilot>();
+  for (const p of out) {
+    const key = p.name.toLowerCase();
+    const prev = merged.get(key);
+    merged.set(key, prev ? better(prev, p) : p);
+  }
+  return [...merged.values()];
 }
 
 /**
