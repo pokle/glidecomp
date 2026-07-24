@@ -59,6 +59,14 @@ const SIGNATURE_MIN_DEVIATION = 15;
 /** At most this many signature metrics are reported per cluster. */
 const MAX_SIGNATURES = 4;
 
+/**
+ * Whether a signature's side of the field is, on the metric author's
+ * documented prior (MetricDirection), expected to help or hurt. Absent for
+ * 'neutral' metrics — there the sign is the finding, and claiming a
+ * direction would invent a prior the metric doesn't have.
+ */
+export type SignatureHint = 'strength' | 'cost';
+
 /** One metric on which a cluster's members collectively sit far from the
  * field's middle — the cluster's style, stated as data. */
 export interface StyleSignature {
@@ -76,6 +84,11 @@ export interface StyleSignature {
   medianValue: number;
   /** medianPercentile − 50: positive = the group runs high on this metric. */
   deviation: number;
+  /** 'strength' when this side of the field is the one the metric's
+   * direction prior expects to pay, 'cost' for the other side; absent for
+   * neutral-direction metrics. Presentation reads "usually": it is a prior,
+   * not this task's verdict — the rank spread is the verdict. */
+  hint?: SignatureHint;
 }
 
 export interface StyleClusterMember {
@@ -92,6 +105,16 @@ export interface StyleClusterMember {
 export interface StyleCluster {
   /** 'A', 'B', … in order of median rank (best group first). */
   id: string;
+  /**
+   * Deterministic nickname derived from the strongest signature — "Lone
+   * wolves", "Committed racers" — via {@link STYLE_NICKNAMES}. No model in
+   * the loop: the same report always earns the same name, and the name is
+   * explainable (it cites labelMetricId). "All-rounders" when the group has
+   * no signature at all.
+   */
+  label: string;
+  /** The signature metric the label came from; null for "All-rounders". */
+  labelMetricId: string | null;
   /** Sorted by rank ascending. */
   members: StyleClusterMember[];
   /** The member with the smallest mean style distance to the rest — "this
@@ -135,6 +158,57 @@ export interface StyleClusterReport {
   clusters: StyleCluster[];
   /** Pilots left out for lack of data — never silently dropped. */
   unclustered: UnclusteredPilot[];
+}
+
+/**
+ * Group nicknames, keyed by metric id, one per side of P50. The strongest
+ * signature names the group ("Lone wolves" = gaggle.affinity, low side).
+ * Curated by hand because the registry is a small fixed set — an LLM here
+ * would trade determinism (and stale-first cacheability) for nothing.
+ * Metrics with no per-pilot values (day.wind, day.climb_by_hour) and
+ * outcome metrics can never produce a signature, so they have no entry.
+ */
+export const STYLE_NICKNAMES: Record<string, { high: string; low: string }> = {
+  'climb.shared_percentile': { high: 'Strong climbers', low: 'Outclimbed in company' },
+  'climb.time_to_core': { high: 'Slow corers', low: 'Quick corers' },
+  'climb.exit_decay': { high: 'Leave-it-lifting climbers', low: 'Thermal milkers' },
+  'climb.selectivity': { high: 'Unfussy climbers', low: 'Choosy climbers' },
+  'climb.departure_band': { high: 'High leavers', low: 'Low leavers' },
+  'climb.circle_smoothness': { high: 'Rough circlers', low: 'Smooth circlers' },
+  'day.airtime_quality': { high: 'Lift keepers', low: 'Sink crossers' },
+  'decision.altitude_floor': { high: 'High-band operators', low: 'Deep diggers' },
+  'decision.low_saves': { high: 'Escape artists', low: 'Never-low flyers' },
+  'decision.climbs_per_100km': { high: 'Stop-often flyers', low: 'Few-stop racers' },
+  'decision.search_fraction': { high: 'Searchers', low: 'Committed racers' },
+  'gaggle.affinity': { high: 'Gaggle flyers', low: 'Lone wolves' },
+  'gaggle.marker_usage': { high: 'Marker followers', low: 'Self-finders' },
+  'gaggle.departure_winrate': { high: 'Bold leavers', low: 'Punished leavers' },
+  'glide.speed': { high: 'Fast gliders', low: 'Slow gliders' },
+  'glide.ld_vs_field': { high: 'Clean gliders', low: 'Glide bleeders' },
+  'glide.stf_proxy': { high: 'Speed-to-fly pilots', low: 'Constant-speed pilots' },
+  'glide.track_efficiency': { high: 'Wanderers', low: 'Line huggers' },
+  'glide.dolphin_fraction': { high: 'Dolphin flyers', low: 'Circle climbers' },
+  'race.start_delay': { high: 'Late starters', low: 'Gate chargers' },
+  'race.ess_margin': { high: 'Safe finishers', low: 'On-the-limit finishers' },
+  'race.final_glide_init': { high: 'Optimistic final gliders', low: 'Conservative final gliders' },
+};
+
+/** The nickname a group's strongest signature earns it. */
+function nicknameFor(top: StyleSignature | undefined): { label: string; metricId: string | null } {
+  if (!top) return { label: 'All-rounders', metricId: null };
+  const entry = STYLE_NICKNAMES[top.metricId];
+  const side = top.deviation > 0 ? 'high' : 'low';
+  if (entry) return { label: entry[side], metricId: top.metricId };
+  // A metric added after this table: fall back to a plain, honest name.
+  const short = top.shortLabel ?? top.label;
+  return { label: `${side === 'high' ? 'High' : 'Low'} ${short.toLowerCase()}`, metricId: top.metricId };
+}
+
+/** The direction-prior hint for one signature; undefined for neutral. */
+function hintFor(direction: MetricDirection, deviation: number): SignatureHint | undefined {
+  if (direction === 'neutral') return undefined;
+  const aligned = direction === 'higher' ? deviation > 0 : deviation < 0;
+  return aligned ? 'strength' : 'cost';
 }
 
 const EXPLANATION =
@@ -446,6 +520,7 @@ export function clusterPilotStyles(report: FieldAnalysisReport): StyleClusterRep
         const medianPercentile = median(pcts);
         const deviation = medianPercentile - 50;
         if (Math.abs(deviation) < SIGNATURE_MIN_DEVIATION) return [];
+        const hint = hintFor(m.direction, deviation);
         return [
           {
             metricId: m.id,
@@ -457,17 +532,25 @@ export function clusterPilotStyles(report: FieldAnalysisReport): StyleClusterRep
             medianPercentile,
             medianValue: median(values),
             deviation,
+            ...(hint !== undefined ? { hint } : {}),
           } satisfies StyleSignature,
         ];
       })
-      .sort(
-        (a, b) =>
-          Math.abs(b.deviation) - Math.abs(a.deviation) || a.metricId.localeCompare(b.metricId),
-      )
+      .sort((a, b) => {
+        // Magnitudes within float noise of each other are a tie — broken by
+        // id so the ordering (and the group's nickname) never hinges on the
+        // last ulp of two medians computed along different paths.
+        const d = Math.abs(b.deviation) - Math.abs(a.deviation);
+        return Math.abs(d) > 1e-9 ? d : a.metricId.localeCompare(b.metricId);
+      })
       .slice(0, MAX_SIGNATURES);
+
+    const nickname = nicknameFor(signatures[0]);
 
     return {
       id: '', // assigned after ordering
+      label: nickname.label,
+      labelMetricId: nickname.metricId,
       members,
       exemplarTrackFile: exemplar.trackFile,
       rankBest: ranks[0],

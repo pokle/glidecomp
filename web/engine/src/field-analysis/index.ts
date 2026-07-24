@@ -42,10 +42,12 @@ export {
   clusterPilotStyles,
   MIN_CLUSTER_PILOTS,
   MIN_COVERAGE,
+  STYLE_NICKNAMES,
   type StyleClusterReport,
   type StyleCluster,
   type StyleClusterMember,
   type StyleSignature,
+  type SignatureHint,
   type UnclusteredPilot,
 } from './clustering';
 export { renderFieldReport, renderCompReport, formatMetricValue } from './report';

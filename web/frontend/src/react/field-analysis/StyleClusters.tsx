@@ -42,7 +42,7 @@ function ClusterCard({ cluster }: { cluster: StyleCluster }) {
     >
       <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h3 id={headingId} className="font-semibold">
-          Group {cluster.id}
+          Group {cluster.id} — {cluster.label}
         </h3>
         <p className="text-xs text-muted-foreground">
           {cluster.members.length} pilots · ranks {cluster.rankBest}–{cluster.rankWorst} · median{" "}
@@ -69,6 +69,13 @@ function ClusterCard({ cluster }: { cluster: StyleCluster }) {
                 <span className="text-muted-foreground">
                   group median P{Math.round(s.medianPercentile)} in this field (
                   {formatMetricValue(s.unit, s.medianValue)} {unitWords(s.unit)})
+                  {/* The metric's direction prior, not this task's verdict —
+                      hence "usually". Neutral metrics get no hint. */}
+                  {s.hint === "strength"
+                    ? " · usually a strength"
+                    : s.hint === "cost"
+                      ? " · usually costly"
+                      : null}
                 </span>
               </span>
             </li>
@@ -124,8 +131,9 @@ export function StyleClusters({ report }: { report: FieldAnalysisReport }) {
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
         Groups are flying <em>style</em>, not score — the rank spread on each
-        shows where that style did and did not pay. ★ marks the pilot most
-        typical of their group.
+        shows where that style did and did not pay. Each group is named after
+        its strongest signature; ★ marks the pilot most typical of their
+        group.
       </p>
       <div className="grid gap-4 lg:grid-cols-2">
         {sc.clusters.map((c) => (

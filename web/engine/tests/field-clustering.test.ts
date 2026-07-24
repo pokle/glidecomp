@@ -133,10 +133,10 @@ describe('clusterPilotStyles', () => {
       // The planted profile: a-metrics high for group with pilot 0, low for the other.
       for (const id of highIds) expect(id.startsWith(isAGroup ? 'a' : 'b')).toBe(true);
       for (const id of lowIds) expect(id.startsWith(isAGroup ? 'b' : 'a')).toBe(true);
-      // Sorted by |deviation| descending.
+      // Sorted by |deviation| descending (ties, within float noise, by id).
       for (let i = 1; i < c.signatures.length; i++) {
         expect(Math.abs(c.signatures[i].deviation)).toBeLessThanOrEqual(
-          Math.abs(c.signatures[i - 1].deviation),
+          Math.abs(c.signatures[i - 1].deviation) + 1e-9,
         );
       }
     }
@@ -238,6 +238,48 @@ describe('clusterPilotStyles', () => {
     expect(clusterPilotStyles(report)).toBeNull();
   });
 
+  it('nicknames groups from the strongest signature, with direction hints', () => {
+    const hi = around(10, 6);
+    const lo = around(1, 6);
+    const ranks = Array.from({ length: 12 }, (_, i) => i + 1);
+    // Three clean splits — all three signatures tie on |deviation|, and the
+    // float-tolerant tie-break names the group by the alphabetically first
+    // metric id: gaggle.affinity.
+    const report = makeReport(ranks, [
+      { id: 'gaggle.affinity', direction: 'neutral', values: [...lo, ...hi] },
+      { id: 'glide.speed', direction: 'higher', values: [...hi, ...lo] },
+      { id: 'glide.track_efficiency', direction: 'lower', values: [...hi, ...lo] },
+    ]);
+    const sc = clusterPilotStyles(report)!;
+    const wolves = sc.clusters.find((c) => c.members.some((m) => m.trackFile === 'p0.igc'))!;
+    const flyers = sc.clusters.find((c) => c !== wolves)!;
+    expect(wolves.label).toBe('Lone wolves');
+    expect(flyers.label).toBe('Gaggle flyers');
+    expect(wolves.labelMetricId).toBe('gaggle.affinity');
+    expect(wolves.labelMetricId).toBe(wolves.signatures[0].metricId);
+
+    const sig = (c: (typeof sc.clusters)[0], id: string) =>
+      c.signatures.find((s) => s.metricId === id)!;
+    // 'higher' metric, group runs high → the prior calls it a strength.
+    expect(sig(wolves, 'glide.speed').hint).toBe('strength');
+    // 'lower' metric, group runs high → usually costly.
+    expect(sig(wolves, 'glide.track_efficiency').hint).toBe('cost');
+    // Mirror group: same metrics, opposite sides, opposite hints.
+    expect(sig(flyers, 'glide.speed').hint).toBe('cost');
+    expect(sig(flyers, 'glide.track_efficiency').hint).toBe('strength');
+    // Neutral metrics carry no prior, so no hint.
+    expect(sig(wolves, 'gaggle.affinity').hint).toBeUndefined();
+  });
+
+  it('falls back to an honest generic nickname for unknown metric ids', () => {
+    const sc = clusterPilotStyles(twoGroupReport())!;
+    // twoGroupReport's synthetic ids (a1…b3) are not in STYLE_NICKNAMES.
+    for (const c of sc.clusters) {
+      expect(c.label).toMatch(/^(High|Low) /);
+      expect(c.labelMetricId).toBe(c.signatures[0].metricId);
+    }
+  });
+
   it('marks each cluster exemplar as one of its own members', () => {
     const sc = clusterPilotStyles(twoGroupReport())!;
     for (const c of sc.clusters) {
@@ -248,7 +290,7 @@ describe('clusterPilotStyles', () => {
   it('renders a style-clusters section in the text report', () => {
     const text = renderFieldReport(twoGroupReport());
     expect(text).toContain('Pilot style clusters');
-    expect(text).toContain('Group A —');
+    expect(text).toContain('Group A "');
     expect(text).toContain('mean silhouette');
   });
 

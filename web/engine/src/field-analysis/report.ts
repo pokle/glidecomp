@@ -202,16 +202,21 @@ function renderStyleClusters(sc: StyleClusterReport | null): string[] {
   for (const c of sc.clusters) {
     lines.push(
       '',
-      `Group ${c.id} — ${c.members.length} pilots · ranks ${c.rankBest}–${c.rankWorst} ` +
+      `Group ${c.id} "${c.label}" — ${c.members.length} pilots · ranks ${c.rankBest}–${c.rankWorst} ` +
         `(median ${fmtRank(c.rankMedian)}, middle half ${fmtRank(c.rankP25)}–${fmtRank(c.rankP75)})`,
     );
     if (c.signatures.length === 0) {
       lines.push('  • no strong signature — near field-typical on every metric');
     }
     for (const s of c.signatures) {
+      // The hint is the metric's documented direction prior, not this task's
+      // verdict — hence "usually". Neutral metrics get none: their sign is
+      // the finding.
+      const hint =
+        s.hint === 'strength' ? ' — usually a strength' : s.hint === 'cost' ? ' — usually costly' : '';
       lines.push(
         `  • ${s.deviation > 0 ? 'high' : 'low'} ${s.label}: group median P${s.medianPercentile.toFixed(0)} ` +
-          `vs field P50 (${formatMetricValue(s.unit, s.medianValue)} ${s.unit})`,
+          `vs field P50 (${formatMetricValue(s.unit, s.medianValue)} ${s.unit})${hint}`,
       );
     }
     // Members wrapped to the report width; '*' marks the group's most
