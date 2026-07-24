@@ -243,6 +243,12 @@ test.describe("sitemap", () => {
     expect(xml).not.toContain("/task/");
     expect(xml).not.toContain("/pilot/");
     expect(xml).not.toContain("/waypoints");
+    // Every lastmod is a bare date (YYYY-MM-DD), never a full datetime — the
+    // creation_date fallback is an ISO timestamp and must be normalized.
+    expect(xml).not.toMatch(/<lastmod>[^<]*T/);
+    for (const m of xml.matchAll(/<lastmod>([^<]*)<\/lastmod>/g)) {
+      expect(m[1]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
   });
 });
 

@@ -52,7 +52,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       for (const comp of comps) {
         if (comp.test) continue;
         const base = `${origin}/comp/${comp.comp_id}`;
-        const lastmod = comp.last_task_date ?? comp.creation_date ?? undefined;
+        // Day-level lastmod, consistently: last_task_date is already
+        // YYYY-MM-DD, but the creation_date fallback is a full ISO timestamp —
+        // slice both to a bare date so the sitemap never mixes the two forms.
+        // (Google reads lastmod at date granularity anyway.)
+        const lastmod = (comp.last_task_date ?? comp.creation_date)?.slice(0, 10);
         urls.push({ loc: base, lastmod });
         urls.push({ loc: `${base}/scores`, lastmod });
         // Field analysis has nothing to measure on an open-distance comp (no
