@@ -32,6 +32,8 @@ import { Tooltip, TooltipTrigger } from "@/react/rac/tooltip";
 import { api } from "../../comp/api";
 import { formatDistance, useUnits } from "../lib/units";
 import { toast } from "../lib/toast";
+import { pilotPath } from "../lib/slug";
+import { useCompName } from "./comp-name-context";
 import { ScoreFreshness } from "./ScoreFreshness";
 import { ManualFlightDialog } from "./ManualFlightDialog";
 import { compressIgc } from "./types";
@@ -78,6 +80,7 @@ interface RowPilot {
 export function TaskStandings({
   compId,
   taskId,
+  taskName = null,
   isAdmin,
   isClosed,
   scoringFormat,
@@ -89,6 +92,8 @@ export function TaskStandings({
 }: {
   compId: string;
   taskId: string;
+  /** Task name, for canonical pilot links. */
+  taskName?: string | null;
   isAdmin: boolean;
   isClosed: boolean;
   scoringFormat: "gap" | "open_distance";
@@ -272,6 +277,7 @@ export function TaskStandings({
           key={cls.pilot_class}
           compId={compId}
           taskId={taskId}
+          taskName={taskName}
           cls={cls}
           showClassName={score.classes.length > 1}
           isOpenDistance={isOpenDistance}
@@ -305,6 +311,7 @@ export function TaskStandings({
 function ClassStandings({
   compId,
   taskId,
+  taskName,
   cls,
   showClassName,
   isOpenDistance,
@@ -325,6 +332,7 @@ function ClassStandings({
 }: {
   compId: string;
   taskId: string;
+  taskName: string | null;
   cls: ClassScore;
   showClassName: boolean;
   isOpenDistance: boolean;
@@ -344,6 +352,7 @@ function ClassStandings({
   onMutated: () => void;
 }) {
   const navigate = useNavigate();
+  const compName = useCompName();
 
   const scoredIds = new Set(cls.pilots.map((p) => p.comp_pilot_id));
 
@@ -400,7 +409,7 @@ function ClassStandings({
   const rows = [...ranked, ...tail];
 
   const detailHref = (row: RowPilot) =>
-    `/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/pilot/${encodeURIComponent(row.compPilotId)}`;
+    pilotPath(compId, compName, taskId, taskName, row.compPilotId, row.name);
 
   return (
     <div className="mt-4">

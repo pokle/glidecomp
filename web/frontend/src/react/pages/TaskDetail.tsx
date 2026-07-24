@@ -46,6 +46,7 @@ import { formatTaskDate } from "../lib/format";
 import { SectionHeader } from "../components/SectionHeader";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { TaskResults } from "../comp/TaskResults";
+import { CompNameProvider } from "../comp/comp-name-context";
 import { TaskStandings } from "../comp/TaskStandings";
 import { RouteEditorDialog } from "../comp/RouteEditorDialog";
 import { TurnpointsTable } from "../comp/TurnpointsTable";
@@ -311,26 +312,31 @@ function TaskDetailContent() {
           scores page (the canonical results surface), plus pilot self-service
           (Submit track, your-submission line). The management grid below is
           admin-only. */}
-      <TaskResults
-        compId={compId}
-        taskId={taskId}
-        timezone={comp?.timezone ?? null}
-        isOpenDistance={comp?.scoring_format === "open_distance"}
-        isAuthenticated={user != null}
-        isClosed={isClosed}
-        canUploadOnBehalf={canUploadOnBehalf}
-        refresh={scoresRefresh + resultsRefresh}
-        onReplayAvailable={setReplayAvailable}
-        initialScore={initial && refresh === 0 ? (initial.score ?? undefined) : undefined}
-      />
+      <CompNameProvider value={comp?.name ?? null}>
+        <TaskResults
+          compId={compId}
+          taskId={taskId}
+          taskName={task.name}
+          timezone={comp?.timezone ?? null}
+          isOpenDistance={comp?.scoring_format === "open_distance"}
+          isAuthenticated={user != null}
+          isClosed={isClosed}
+          canUploadOnBehalf={canUploadOnBehalf}
+          refresh={scoresRefresh + resultsRefresh}
+          onReplayAvailable={setReplayAvailable}
+          initialScore={initial && refresh === 0 ? (initial.score ?? undefined) : undefined}
+        />
+      </CompNameProvider>
 
       {/* Admin management grid (statuses, uploads on behalf, manual flights,
           restores) — the tool the old public "standings" table was secretly
           doubling as. Admin-only and never server-rendered. */}
       {isAdmin && comp ? (
+        <CompNameProvider value={comp.name}>
         <TaskStandings
           compId={compId}
           taskId={taskId}
+          taskName={task.name}
           isAdmin={isAdmin}
           isClosed={isClosed}
           scoringFormat={comp.scoring_format === "open_distance" ? "open_distance" : "gap"}
@@ -340,6 +346,7 @@ function TaskDetailContent() {
           refresh={scoresRefresh}
           onMutated={() => setResultsRefresh((n) => n + 1)}
         />
+        </CompNameProvider>
       ) : null}
 
       {isAdmin && comp && editOpen ? (

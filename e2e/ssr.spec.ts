@@ -87,7 +87,10 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
     expect(html).toContain(pilotName);
-    expect(html).toContain(`/comp/${compId}/task/${taskId}/pilot/${pilotId}`);
+    // The standings pilot links are canonical `${slug}-${id}` at every level.
+    expect(html).toMatch(
+      new RegExp(`/comp/[a-z0-9-]+-${compId}/task/[a-z0-9-]+-${taskId}/pilot/[a-z0-9-]+-${pilotId}`)
+    );
     expect(html).toContain(`<title>Scores — ${compName} — GlideComp</title>`);
   });
 

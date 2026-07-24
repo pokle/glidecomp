@@ -31,13 +31,11 @@ import {
 import { ScoresSection } from "./ScoresSection";
 import { toast } from "../lib/toast";
 import { formatScore, formatTaskDate, ordinal } from "../lib/format";
+import { pilotPath } from "../lib/slug";
+import { CompNameProvider, useCompName } from "./comp-name-context";
 import type { TaskSummary } from "./types";
 // Single source of truth for the /scores response shape, shared with the loader.
 import type { CompScores } from "../loaders";
-
-function scoreDetailHref(compId: string, taskId: string, pilotId: string): string {
-  return `/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/pilot/${encodeURIComponent(pilotId)}`;
-}
 
 const cellLinkClass =
   "underline underline-offset-4 outline-none data-focus-visible:ring-2 data-focus-visible:ring-ring/50";
@@ -164,6 +162,7 @@ export function ScoresEmptyState({
 export function ScoresViews({
   scores,
   compId,
+  compName,
   timezone,
   tasks,
   defaultTaskId,
@@ -171,6 +170,8 @@ export function ScoresViews({
 }: {
   scores: CompScores;
   compId: string;
+  /** Comp name, so the deep score tables can build canonical pilot links. */
+  compName: string | null;
   timezone: string | null;
   tasks: TaskSummary[];
   defaultTaskId: string | null;
@@ -201,6 +202,7 @@ export function ScoresViews({
   }, [deepLinkTaskId]);
 
   return (
+    <CompNameProvider value={compName}>
     <Tabs
       selectedKey={tab}
       onSelectionChange={(key) => setTab(String(key))}
@@ -265,6 +267,7 @@ export function ScoresViews({
             key={pickedTaskId}
             compId={compId}
             taskId={pickedTaskId}
+            taskName={scorableTasks.find((t) => t.task_id === pickedTaskId)?.name ?? null}
             refresh={0}
             timezone={timezone}
             onReplayAvailable={() => {}}
@@ -273,6 +276,7 @@ export function ScoresViews({
         </TabPanel>
       ) : null}
     </Tabs>
+    </CompNameProvider>
   );
 }
 
@@ -406,6 +410,7 @@ function SortableTable({
 // ── Views ─────────────────────────────────────────────────────────────────────
 
 function StandingsTable({ scores, cls }: { scores: CompScores; cls: ClassStanding }) {
+  const compName = useCompName();
   // Only show columns for tasks flown by this pilot class — classes fly
   // different tasks, so mixing them would leave every off-class cell blank.
   const classTasks = scores.tasks.filter((t) => t.classes.includes(cls.pilot_class));
@@ -442,7 +447,7 @@ function StandingsTable({ scores, cls }: { scores: CompScores; cls: ClassStandin
         sort: String(discarded ? 0 : entry.score),
         node: (
           <AriaLink
-            href={scoreDetailHref(scores.comp_id, task.task_id, p.comp_pilot_id)}
+            href={pilotPath(scores.comp_id, compName, task.task_id, task.task_name, p.comp_pilot_id, p.pilot_name)}
             aria-label={`How ${p.pilot_name}'s score for ${task.task_name} was calculated`}
             className={cellLinkClass}
           >
@@ -589,6 +594,7 @@ function Top3Table({
   scores: CompScores;
   group: ReturnType<typeof buildClassGroups>[number];
 }) {
+  const compName = useCompName();
   const rows = computeTop3Rows(group, scores.tasks);
 
   // Left-aligned throughout: the place columns read "PilotName · score", so the
@@ -620,7 +626,7 @@ function Top3Table({
           sort: String(entry.score),
           node: row.task_id ? (
             <AriaLink
-              href={scoreDetailHref(scores.comp_id, row.task_id, entry.comp_pilot_id)}
+              href={pilotPath(scores.comp_id, compName, row.task_id, row.label, entry.comp_pilot_id, entry.pilot_name)}
               aria-label={`How ${entry.pilot_name}'s score for ${row.label} was calculated`}
               className={cellLinkClass}
             >

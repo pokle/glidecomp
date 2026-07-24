@@ -148,6 +148,7 @@ export function CompScoresPage() {
               <ScoresViews
                 scores={state.scores}
                 compId={compId}
+                compName={comp.name}
                 timezone={comp.timezone}
                 tasks={comp.tasks}
                 defaultTaskId={null}
