@@ -65,6 +65,8 @@ import {
 } from '@glidecomp/engine';
 import { timezoneForXctsk } from '@glidecomp/engine/timezone';
 import { SAMPLE_COMP_NAME } from '../workers/competition-api/src/sample';
+import { encodeId } from '../workers/competition-api/src/sqids';
+import { compPath, compScoresPath, compWaypointsPath } from '../frontend/src/react/lib/slug';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 /** Comp-folder root — override with GLIDECOMP_COMPS_DIR to seed from a
@@ -928,6 +930,86 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
   }
 
   console.log(`  Done. comp_id=${compId} — ${tasks.length} tasks, ${totalTracks} tracks total`);
+  if (REMOTE) await purgeCompCache(compId, compName);
+}
+
+// ── Cloudflare edge cache purge (remote seeds only) ─────────────────────────
+// A reseed hands a comp fresh task/pilot ids, but Cloudflare's edge — and
+// visitors' browsers — may still hold the pre-reseed pages, whose embedded
+// links point at the now-deleted ids ("Task not found") until their max-age
+// lapses. Tag/prefix/hostname purges are Enterprise-only (and we emit no
+// Cache-Tag), so we purge by URL. That's tractable because the comp_id — and
+// thus its sqid — is STABLE across reseeds: the stale entries sit at a small,
+// known set of comp-level URLs. Per-task/pilot URLs changed ids, so their old
+// cache entries are unreachable orphans that age out and the new URLs are
+// uncached — neither needs a purge.
+
+const PURGE_ORIGIN = process.env.GLIDECOMP_ORIGIN ?? 'https://glidecomp.com';
+// Production serves sqids under the competition-api default alphabet
+// (web/workers/competition-api/wrangler.toml — encodeId(default, 27) === 'wugh',
+// the live id). Override only if a deploy sets a different SQIDS_ALPHABET.
+const PURGE_SQIDS_ALPHABET =
+  process.env.SQIDS_ALPHABET ?? 'abcdefghijklmnopqrstuvwxyz';
+
+/** The stable, publicly-cacheable comp-level URLs a reseed invalidates: the
+ * three SSR HTML pages plus the one cacheable comp-level API. (Comp-detail and
+ * the waypoints API are `no-store`; per-task score APIs are keyed by the changed
+ * task sqid, so none of those are cached under a stable URL.) */
+function compCacheUrls(compId: number, compName: string): string[] {
+  const sqid = encodeId(PURGE_SQIDS_ALPHABET, compId);
+  return [
+    `${PURGE_ORIGIN}${compPath(sqid, compName)}`,
+    `${PURGE_ORIGIN}${compScoresPath(sqid, compName)}`,
+    `${PURGE_ORIGIN}${compWaypointsPath(sqid, compName)}`,
+    `${PURGE_ORIGIN}/api/comp/${sqid}/scores`,
+  ];
+}
+
+/**
+ * Purge one comp's stable public URLs from Cloudflare's edge cache. Best-effort:
+ * a failure only warns, never fails the seed. No-ops (with a one-line note)
+ * unless BOTH CLOUDFLARE_API_TOKEN (needs the "Cache Purge" permission) and
+ * CLOUDFLARE_ZONE_ID are set, so the credential stays optional. Edge only — the
+ * machine that ran the reseed still holds its own browser copy until max-age
+ * lapses (hard-refresh), but every other visitor gets fresh pages at once.
+ */
+async function purgeCompCache(compId: number, compName: string): Promise<void> {
+  const token = process.env.CLOUDFLARE_API_TOKEN;
+  const zone = process.env.CLOUDFLARE_ZONE_ID;
+  if (!token || !zone) {
+    console.log(
+      '  cache purge skipped (set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ZONE_ID to purge the edge)',
+    );
+    return;
+  }
+  const files = compCacheUrls(compId, compName);
+  try {
+    const res = await fetch(
+      `https://api.cloudflare.com/client/v4/zones/${zone}/purge_cache`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ files }),
+      },
+    );
+    const body = (await res.json().catch(() => null)) as
+      | { success?: boolean; errors?: unknown }
+      | null;
+    if (!res.ok || !body?.success) {
+      console.warn(
+        `  ⚠ cache purge failed (${res.status}): ${JSON.stringify(body?.errors ?? body ?? {})}`,
+      );
+      return;
+    }
+    console.log(`  purged ${files.length} edge URLs for comp ${compId}`);
+  } catch (err) {
+    console.warn(
+      `  ⚠ cache purge error: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 main().catch((err) => {
