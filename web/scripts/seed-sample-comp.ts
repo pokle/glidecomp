@@ -234,31 +234,88 @@ async function createLocalStore(): Promise<SeedStore> {
 
 // -- remote backend: wrangler CLI against real Cloudflare D1 + R2 -------------
 
+const WRANGLER_MAX_ATTEMPTS = 5;
+
+/** Exponential backoff, capped: 1s, 2s, 4s, 8s, 15s… */
+function backoffMs(attempt: number): number {
+  return Math.min(1000 * 2 ** (attempt - 1), 15_000);
+}
+
+/**
+ * Whether a failed wrangler invocation looks like a transient Cloudflare/network
+ * hiccup — a 5xx, a 429, an "internal error" (D1/R2 both surface CF error 10001
+ * "We encountered an internal error. Please try again."), or a dropped socket —
+ * as opposed to a deterministic failure (bad SQL, a UNIQUE violation) that would
+ * fail identically forever. Matched on textual markers rather than a bare status
+ * number so a key/path segment like `.../t/500/…` can't masquerade as a 500.
+ */
+function isTransientWranglerError(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return (
+    m.includes('internal error') ||
+    m.includes('internal server error') ||
+    m.includes('try again') ||
+    m.includes('service unavailable') ||
+    m.includes('too many requests') ||
+    m.includes('rate limit') ||
+    /\b(5\d\d|429)\s*:/.test(m) || // "- 500: Internal Server Error", "429: …"
+    /etimedout|econnreset|eai_again|enotfound|socket hang up|fetch failed|network error/.test(m)
+  );
+}
+
+/** Block the calling thread for `ms` (sync backoff, so the sync D1 path can wait). */
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function warnRetry(args: string[], attempt: number, msg: string): void {
+  const firstLine = (msg.split('\n').find((l) => l.trim()) ?? msg).trim();
+  console.warn(
+    `  ⚠ wrangler ${args.slice(0, 3).join(' ')} failed (attempt ${attempt}/${WRANGLER_MAX_ATTEMPTS}), ` +
+      `retrying in ${backoffMs(attempt) / 1000}s: ${firstLine}`,
+  );
+}
+
 function wrangler(args: string[]): string {
-  const res = spawnSync('bunx', ['wrangler', ...args], {
-    cwd: REPO_ROOT,
-    encoding: 'utf-8',
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  if (res.status !== 0) {
-    throw new Error(`wrangler ${args.join(' ')} failed:\n${res.stderr || res.stdout}`);
+  for (let attempt = 1; ; attempt++) {
+    const res = spawnSync('bunx', ['wrangler', ...args], {
+      cwd: REPO_ROOT,
+      encoding: 'utf-8',
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    if (res.status === 0) return res.stdout;
+    const msg = res.stderr || res.stdout;
+    if (attempt >= WRANGLER_MAX_ATTEMPTS || !isTransientWranglerError(msg)) {
+      throw new Error(`wrangler ${args.join(' ')} failed:\n${msg}`);
+    }
+    warnRetry(args, attempt, msg);
+    sleepSync(backoffMs(attempt));
   }
-  return res.stdout;
 }
 
 /** Async wrangler invocation, so independent R2 calls can run concurrently. */
-function wranglerAsync(args: string[]): Promise<void> {
-  return new Promise((res, rej) => {
-    const child = spawn('bunx', ['wrangler', ...args], { cwd: REPO_ROOT });
-    let stderr = '';
-    let stdout = '';
-    child.stdout?.on('data', (d) => (stdout += d));
-    child.stderr?.on('data', (d) => (stderr += d));
-    child.on('error', rej);
-    child.on('close', (code) =>
-      code === 0 ? res() : rej(new Error(`wrangler ${args.join(' ')} failed:\n${stderr || stdout}`)),
-    );
-  });
+async function wranglerAsync(args: string[]): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await new Promise<void>((res, rej) => {
+        const child = spawn('bunx', ['wrangler', ...args], { cwd: REPO_ROOT });
+        let stderr = '';
+        let stdout = '';
+        child.stdout?.on('data', (d) => (stdout += d));
+        child.stderr?.on('data', (d) => (stderr += d));
+        child.on('error', rej);
+        child.on('close', (code) =>
+          code === 0 ? res() : rej(new Error(`wrangler ${args.join(' ')} failed:\n${stderr || stdout}`)),
+        );
+      });
+      return;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (attempt >= WRANGLER_MAX_ATTEMPTS || !isTransientWranglerError(msg)) throw err;
+      warnRetry(args, attempt, msg);
+      await new Promise((r) => setTimeout(r, backoffMs(attempt)));
+    }
+  }
 }
 
 /**
