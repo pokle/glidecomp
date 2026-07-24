@@ -219,6 +219,33 @@ test.describe("SSR — field analysis (public)", () => {
   });
 });
 
+test.describe("sitemap", () => {
+  test("lists the static pages and each public comp's top-level surfaces", async ({
+    request,
+  }) => {
+    const { compId } = await discover(request);
+    const res = await request.get("/sitemap.xml");
+    expect(res.ok()).toBeTruthy();
+    expect(res.headers()["content-type"]).toContain("xml");
+    const xml = await res.text();
+    const origin = new URL(res.url()).origin;
+
+    // The evergreen static content pages (the SEO-valuable ones).
+    for (const path of ["/", "/about", "/scoring", "/scoring/gap", "/scoring/open-distance"]) {
+      expect(xml).toContain(`<loc>${origin}${path}</loc>`);
+    }
+    // The comp list + this comp's hub, scores, and (GAP) field analysis.
+    expect(xml).toContain(`<loc>${origin}/comp</loc>`);
+    expect(xml).toContain(`<loc>${origin}/comp/${compId}</loc>`);
+    expect(xml).toContain(`<loc>${origin}/comp/${compId}/scores</loc>`);
+    expect(xml).toContain(`<loc>${origin}/comp/${compId}/analysis</loc>`);
+    // Deliberately NOT listed: per-task and per-pilot deep pages, waypoints.
+    expect(xml).not.toContain("/task/");
+    expect(xml).not.toContain("/pilot/");
+    expect(xml).not.toContain("/waypoints");
+  });
+});
+
 test.describe("SSR — hydration is clean (real browser)", () => {
   for (const path of [
     "/comp",
