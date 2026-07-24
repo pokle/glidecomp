@@ -60,6 +60,16 @@ export function Shell() {
     // SSR-safe: it only uses useNavigate/useHref, which work under StaticRouter.
     <RacRouterProvider>
     <div className="flex min-h-dvh flex-col">
+      {/* Skip link (WCAG 2.4.1, accessibility-standard §4.3): the first
+          focusable element, visually hidden until focused, jumping keyboard/AT
+          users past the header straight to <main>. Keep in sync with the static
+          Base.astro skip link. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:border focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-lg focus:ring-3 focus:ring-ring/50"
+      >
+        Skip to main content
+      </a>
       {/* Always-present glass menu bar (Inscribe-style): translucent background
           with backdrop blur, so content scrolls beneath it. On phones
           (max-sm) and short landscape viewports it scrolls away with the
@@ -104,7 +114,13 @@ export function Shell() {
         </nav>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6 pb-12">
+      {/* tabIndex=-1 so the skip link actually lands keyboard focus here (the
+          scroll position alone isn't enough for AT). */}
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6 pb-12 focus:outline-none"
+      >
         <Outlet />
       </main>
 

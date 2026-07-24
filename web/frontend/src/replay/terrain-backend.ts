@@ -28,6 +28,18 @@ import type { TrackManifest } from '@glidecomp/engine';
 import type { Backend, ScreenPoint, ViewState } from './backend';
 import type { FlightScene, MarkerSample } from './flight-scene';
 
+/**
+ * Camera-ease duration honouring `prefers-reduced-motion` (WCAG 2.3.3,
+ * accessibility-standard §4.4): returns 0 (a jump-cut, no fly-through) when the
+ * user has asked their OS to minimise motion, otherwise the requested `ms`.
+ */
+function easeMs(ms: number): number {
+  return typeof window !== 'undefined' &&
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    ? 0
+    : ms;
+}
+
 export class TerrainBackend implements Backend {
   private map!: mapboxgl.Map;
   private renderer3?: THREE.WebGLRenderer;
@@ -265,7 +277,7 @@ export class TerrainBackend implements Backend {
       [lon0 + maxX / mPerDegLon, lat0 - minZ / mPerDegLat],
     );
     this.map.fitBounds(bounds, { padding: 80, bearing: 0, duration: 0 });
-    this.map.easeTo({ pitch: 60, duration: 500 });
+    this.map.easeTo({ pitch: 60, duration: easeMs(500) });
   }
 
   private toGeoParams() {
@@ -277,9 +289,9 @@ export class TerrainBackend implements Backend {
     };
   }
 
-  faceNorth(): void { this.map.easeTo({ bearing: 0, duration: 500 }); }
-  topView(): void { this.map.easeTo({ pitch: 0, bearing: 0, duration: 500 }); }
-  sideView(): void { this.map.easeTo({ pitch: 85, duration: 500 }); }
+  faceNorth(): void { this.map.easeTo({ bearing: 0, duration: easeMs(500) }); }
+  topView(): void { this.map.easeTo({ pitch: 0, bearing: 0, duration: easeMs(500) }); }
+  sideView(): void { this.map.easeTo({ pitch: 85, duration: easeMs(500) }); }
 
   followTo(sample: MarkerSample | null): void {
     if (!sample) {
