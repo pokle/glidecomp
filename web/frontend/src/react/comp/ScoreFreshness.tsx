@@ -113,7 +113,7 @@ const COPY = {
   },
   analysis: {
     computedPrefix: "Analysis computed",
-    pendingTitle: "The analysis is being computed for the first time…",
+    pendingTitle: "The field analysis is pending…",
     staleTitle: "Hold tight, the analysis is being recomputed…",
     staleBody:
       "Something changed (a track, a penalty, or the task). The analysis below was computed before that change and may shift slightly.",
@@ -157,8 +157,9 @@ export function ScoreFreshness({
         <Alert role="status" aria-live="polite">
           <AlertTitle>{copy.pendingTitle}</AlertTitle>
           <AlertDescription>
-            This runs in the background over every pilot's tracklog and usually
-            lands within a minute; this page refreshes itself when it does.
+            {variant === "analysis"
+              ? "It runs in the background over every pilot's tracklog. This page refreshes itself when it lands — usually within a few minutes. If it hasn't appeared, come back and reload in about 10 minutes."
+              : "This runs in the background and usually lands within a minute; this page refreshes itself when it does."}
           </AlertDescription>
         </Alert>
       </div>

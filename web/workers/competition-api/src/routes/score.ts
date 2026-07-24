@@ -24,6 +24,7 @@ import {
   computeAndStoreTaskScore,
   ifNoneMatchMatches,
   isRowStale,
+  publicMaxAgeSeconds,
   readTaskScoreRow,
   readTaskScoreRowsForComp,
   rowHasResult,
@@ -50,12 +51,18 @@ type HonoEnv = { Bindings: Env; Variables: Variables };
  * Cache-Control for score responses (matches the SSR plan): signed-in
  * viewers must never see another session's cached body; anonymous readers
  * and crawlers may cache but must revalidate — the ETag makes that a
- * one-row 304.
+ * one-row 304. The max-age grows with how long the scores have already been
+ * stable (publicMaxAgeSeconds), so a finished comp stops being re-fetched
+ * while a live one stays near-realtime; a stale row always gets 0.
  */
-function cacheControl(c: Context<HonoEnv>): string {
-  return c.var.user
-    ? "private, no-store"
-    : "public, max-age=0, must-revalidate";
+function cacheControl(
+  c: Context<HonoEnv>,
+  computedAt: string | null,
+  stale: boolean
+): string {
+  if (c.var.user) return "private, no-store";
+  const maxAge = publicMaxAgeSeconds(computedAt, stale, Date.now());
+  return `public, max-age=${maxAge}, must-revalidate`;
 }
 
 export const scoreRoutes = new Hono<HonoEnv>()
@@ -123,7 +130,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
         const headers = {
           ETag: toEtag(etagKey),
           "X-Cache": stale ? "HIT-STALE" : "HIT",
-          "Cache-Control": cacheControl(c),
+          "Cache-Control": cacheControl(c, row.computed_at, stale),
         };
         if (ifNoneMatchMatches(c.req.header("If-None-Match"), etagKey)) {
           return c.body(null, 304, headers);
@@ -141,7 +148,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
       return c.json({ ...response, stale: false }, 200, {
         ETag: toEtag(stateKey),
         "X-Cache": "MISS",
-        "Cache-Control": cacheControl(c),
+        "Cache-Control": cacheControl(c, response.computed_at, false),
       });
     }
   )
@@ -281,7 +288,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
       const headers = {
         ETag: toEtag(compEtagKey),
         "X-Cache": anyCold ? "MISS" : anyStale ? "HIT-STALE" : "HIT",
-        "Cache-Control": cacheControl(c),
+        "Cache-Control": cacheControl(c, computedAt, anyStale),
       };
       if (ifNoneMatchMatches(c.req.header("If-None-Match"), compEtagKey)) {
         return c.body(null, 304, headers);

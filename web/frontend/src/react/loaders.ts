@@ -15,11 +15,37 @@ import type {
   TaskScoreData,
   PilotAnalysisData,
 } from "./comp/types";
+import type {
+  CompFieldAnalysisData,
+  TaskFieldAnalysisData,
+} from "./field-analysis/types";
 import type { WaypointFileRecord } from "@glidecomp/engine";
 import type { ClassStanding, TaskInfo } from "../scores-views";
 import { todayInZone } from "./lib/format";
 
 export type FetchFn = (path: string, init?: RequestInit) => Promise<Response>;
+
+/** Three months — the ceiling on how long a stable page may be cached. */
+export const MAX_PUBLIC_MAX_AGE_S = 90 * 24 * 60 * 60;
+
+/**
+ * Age-based cache lifetime (seconds) for a materialized, stale-first SSR page.
+ * Mirror of the worker's score-store.ts:publicMaxAgeSeconds — keep them in
+ * step. A page whose scores/analysis have sat unchanged for a while is
+ * unlikely to change soon, so shared caches may hold it for roughly as long as
+ * it has already been stable (now − computedAt), capped at three months. A
+ * stale or not-yet-computed page gets 0: it must be revalidated every time.
+ */
+export function publicMaxAgeSeconds(
+  computedAt: string | null,
+  stale: boolean,
+  nowMs: number
+): number {
+  if (stale || !computedAt) return 0;
+  const ageMs = nowMs - Date.parse(computedAt);
+  if (!Number.isFinite(ageMs) || ageMs <= 0) return 0;
+  return Math.min(Math.floor(ageMs / 1000), MAX_PUBLIC_MAX_AGE_S);
+}
 
 /** Thrown when an upstream API returns 404 so the SSR layer can emit a real 404. */
 export class NotFoundError extends Error {
@@ -213,4 +239,86 @@ export async function loadPilotScoreDetail(
     ),
   ]);
   return { comp, task, score, analysis };
+}
+
+// ── /comp/:compId/analysis ───────────────────────────────────────────────────
+
+export interface CompFieldAnalysisLoaderData {
+  /** GET /api/comp/:id/field-analysis — the aggregate, or a pending placeholder
+   *  (pending_task_count > 0) while the first per-task computes run. */
+  analysis: CompFieldAnalysisData;
+  analysisEtag: string | null;
+  /** null when the comp fetch fails (cosmetic — name + timezone only). */
+  comp: CompDetailData | null;
+}
+
+export async function loadCompFieldAnalysis(
+  f: FetchFn,
+  compId: string
+): Promise<CompFieldAnalysisLoaderData> {
+  const cid = encodeURIComponent(compId);
+  const [analysisRes, compRes] = await Promise.all([
+    f(`/api/comp/${cid}/field-analysis`),
+    f(`/api/comp/${cid}`),
+  ]);
+  // 404/400 (missing, or a test comp hidden from this visitor) → real 404.
+  if (analysisRes.status === 404 || analysisRes.status === 400)
+    throw new NotFoundError(`/api/comp/${cid}/field-analysis`);
+  if (!analysisRes.ok) throw new Error(`field-analysis -> ${analysisRes.status}`);
+  const analysis = (await analysisRes.json()) as CompFieldAnalysisData;
+  const analysisEtag = analysisRes.headers.get("ETag");
+  const comp = compRes.ok ? ((await compRes.json()) as CompDetailData) : null;
+  return { analysis, analysisEtag, comp };
+}
+
+// ── /comp/:compId/analysis/task/:taskId ──────────────────────────────────────
+
+export interface TaskFieldAnalysisLoaderData {
+  /** GET /api/comp/:id/task/:id/field-analysis. A warm report, a `pending`
+   *  placeholder (cold — a background compute was just scheduled), or an
+   *  `error` body (422: the task has no route to analyse). */
+  analysis: TaskFieldAnalysisData;
+  analysisEtag: string | null;
+  /** null when the fetch fails (cosmetic — heading + breadcrumb names). */
+  task: TaskDetailData | null;
+  comp: CompDetailData | null;
+}
+
+export async function loadTaskFieldAnalysis(
+  f: FetchFn,
+  compId: string,
+  taskId: string
+): Promise<TaskFieldAnalysisLoaderData> {
+  const cid = encodeURIComponent(compId);
+  const tid = encodeURIComponent(taskId);
+  const [analysisRes, taskRes, compRes] = await Promise.all([
+    f(`/api/comp/${cid}/task/${tid}/field-analysis`),
+    f(`/api/comp/${cid}/task/${tid}`),
+    f(`/api/comp/${cid}`),
+  ]);
+  if (analysisRes.status === 404 || analysisRes.status === 400)
+    throw new NotFoundError(`/api/comp/${cid}/task/${tid}/field-analysis`);
+  let analysis: TaskFieldAnalysisData;
+  if (analysisRes.status === 422) {
+    // Task exists but has no route to analyse — a real, renderable page (the
+    // "No analysis for this task" state), not a 404. Mirror the client fetch.
+    const body = (await analysisRes.json()) as { error?: string };
+    analysis = {
+      task_id: taskId,
+      comp_id: compId,
+      classes: [],
+      computed_at: null,
+      stale: false,
+      pending: false,
+      error: body.error ?? "This task cannot be analysed",
+    };
+  } else if (!analysisRes.ok) {
+    throw new Error(`field-analysis -> ${analysisRes.status}`);
+  } else {
+    analysis = (await analysisRes.json()) as TaskFieldAnalysisData;
+  }
+  const analysisEtag = analysisRes.headers.get("ETag");
+  const task = taskRes.ok ? ((await taskRes.json()) as TaskDetailData) : null;
+  const comp = compRes.ok ? ((await compRes.json()) as CompDetailData) : null;
+  return { analysis, analysisEtag, task, comp };
 }

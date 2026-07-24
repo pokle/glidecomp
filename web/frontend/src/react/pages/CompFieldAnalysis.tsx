@@ -8,12 +8,13 @@
  * metric that holds its sign and magnitude across tasks is telling you
  * something about flying; one that swings is telling you about the day.
  *
- * ADMIN-ONLY and NOT SSR'd, same as the task page.
+ * Public and SSR'd, same as the task page (loadCompFieldAnalysis +
+ * functions/comp/[[path]].ts): the server seeds the most-recently-cached
+ * report, or a pending placeholder while the first compute runs.
  */
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
-import { Badge } from "@/react/rac/badge";
 import { SimpleSelect } from "@/react/rac/select";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { Alert, AlertDescription, AlertTitle } from "@/react/ui/alert";
@@ -24,8 +25,9 @@ import { ConsistencyMap } from "../field-analysis/charts/ConsistencyMap";
 import { MetricGlossary, type GlossaryEntry } from "../field-analysis/MetricGlossary";
 import { underComp } from "../lib/crumbs";
 import { api } from "../../comp/api";
-import { useUser } from "../lib/user";
 import { ScoreFreshness } from "../comp/ScoreFreshness";
+import { useInitialData } from "../lib/initial-data";
+import type { CompFieldAnalysisLoaderData } from "../loaders";
 import {
   ALL_METRICS,
   type CompFieldAnalysisData,
@@ -35,14 +37,18 @@ import type { CompDetailData } from "../comp/types";
 
 export function CompFieldAnalysis() {
   const { compId } = useParams<{ compId: string }>();
-  const { user, loading: userLoading } = useUser();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [data, setData] = useState<CompFieldAnalysisData | null>(null);
-  const [etag, setEtag] = useState<string | null>(null);
-  const [comp, setComp] = useState<CompDetailData | null>(null);
+  // SSR seed: the server ran loadCompFieldAnalysis for this URL and embedded
+  // the result. Null on client boot / SPA navigations, where the effect fetches.
+  const initial = useInitialData<CompFieldAnalysisLoaderData>();
+  const [data, setData] = useState<CompFieldAnalysisData | null>(
+    initial?.analysis ?? null
+  );
+  const [etag, setEtag] = useState<string | null>(initial?.analysisEtag ?? null);
+  const [comp, setComp] = useState<CompDetailData | null>(initial?.comp ?? null);
   const [status, setStatus] = useState<"loading" | "ready" | "forbidden" | "error">(
-    "loading"
+    initial ? "ready" : "loading"
   );
 
   const analysisUrl = compId
@@ -56,6 +62,12 @@ export function CompFieldAnalysis() {
 
   useEffect(() => {
     if (!compId || !analysisUrl) return;
+    // Seeded by SSR for the first render — don't refetch on mount, but the
+    // pending-poll effect below still drives refetches (refetchTick > 0).
+    if (initial && refetchTick === 0) {
+      document.title = `GlideComp - Field analysis: ${initial.analysis.comp_name}`;
+      return;
+    }
     let cancelled = false;
     (async () => {
       if (refetchTick === 0) setStatus("loading");
@@ -82,6 +94,8 @@ export function CompFieldAnalysis() {
     return () => {
       cancelled = true;
     };
+    // `initial` is stable for the life of the SSR'd URL; compId is the real key.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compId, analysisUrl, refetchTick]);
 
   // While any task's first analysis computes in the background, refetch so
@@ -107,6 +121,8 @@ export function CompFieldAnalysis() {
 
   useEffect(() => {
     if (!compId) return;
+    // SSR already seeded the comp (name + timezone); skip the cosmetic fetch.
+    if (initial?.comp) return;
     let cancelled = false;
     (async () => {
       try {
@@ -121,6 +137,8 @@ export function CompFieldAnalysis() {
     return () => {
       cancelled = true;
     };
+    // `initial` is stable for the life of the SSR'd URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compId]);
 
   const classes = data?.classes ?? [];
@@ -165,7 +183,11 @@ export function CompFieldAnalysis() {
 
   const crumbs = underComp(compId, comp?.name ?? data?.comp_name);
 
-  if (userLoading || status === "loading") {
+  // Gate on `status` only, never on the user session: the content is public,
+  // and useUser().loading is true throughout SSR + the first hydration render,
+  // so gating on it would make the server emit this skeleton instead of the
+  // seeded report.
+  if (status === "loading") {
     return (
       <div className="mx-auto max-w-6xl px-4 py-6 font-hyperlegible">
         <p className="text-sm text-muted-foreground">Loading field analysis…</p>
@@ -185,9 +207,7 @@ export function CompFieldAnalysis() {
           <AlertDescription>
             {status === "error"
               ? "Please try again in a moment."
-              : user
-                ? "Field analysis is currently limited to competition admins while the metrics are being validated."
-                : "Sign in as a competition admin to view the field analysis."}
+              : "This competition's field analysis isn't available — it may not be published yet."}
           </AlertDescription>
         </Alert>
       </div>
@@ -198,17 +218,12 @@ export function CompFieldAnalysis() {
     <div className="mx-auto max-w-6xl px-4 py-6 font-hyperlegible">
       <Breadcrumbs items={crumbs} current="Field analysis" />
 
-      <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold">Field analysis</h1>
-          <p className="text-sm text-muted-foreground">
-            {data?.comp_name ?? "This competition"} — which behaviours separated
-            the field, task by task.
-          </p>
-        </div>
-        <Badge variant="outline" className="print:hidden">
-          Admins only
-        </Badge>
+      <div className="mt-3 min-w-0">
+        <h1 className="text-2xl font-bold">Field analysis</h1>
+        <p className="text-sm text-muted-foreground">
+          {data?.comp_name ?? "This competition"} — which behaviours separated
+          the field, task by task.
+        </p>
       </div>
 
       {data ? (
