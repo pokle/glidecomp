@@ -307,19 +307,33 @@ describe("field analysis read path", () => {
   });
 });
 
-describe("field analysis visibility (admin-only rollout)", () => {
-  test("anonymous, and a signed-in non-admin, both get 404 — not 403", async () => {
+describe("field analysis visibility (public; test comps admin-only)", () => {
+  test("anyone can read a public (non-test) comp's field analysis", async () => {
     const t = await seedTask();
     await computeAndStoreFieldAnalysis(env, t.taskIdNum, 0);
 
-    const anon = await request("GET", t.path);
-    expect(anon.status).toBe(404);
+    // Anonymous and a signed-in non-admin both get the report now.
+    expect((await request("GET", t.path)).status).toBe(200);
+    expect((await request("GET", t.path, { user: "user-3" })).status).toBe(200);
+    expect((await request("GET", t.compPath)).status).toBe(200);
+  });
 
-    const nonAdmin = await request("GET", t.path, { user: "user-3" });
-    expect(nonAdmin.status).toBe(404);
+  test("a hidden `test` comp stays admin-only — 404 for others, not 403", async () => {
+    const t = await seedTask();
+    await computeAndStoreFieldAnalysis(env, t.taskIdNum, 0);
+    await env.DB.prepare(`UPDATE comp SET test = 1 WHERE comp_id = ?`)
+      .bind(t.compIdNum)
+      .run();
 
-    const compAnon = await request("GET", t.compPath);
-    expect(compAnon.status).toBe(404);
+    expect((await request("GET", t.path)).status).toBe(404);
+    expect((await request("GET", t.path, { user: "user-3" })).status).toBe(404);
+    expect((await request("GET", t.compPath)).status).toBe(404);
+
+    // The comp admin and a super-admin still get it.
+    expect((await adminGet(t.path)).status).toBe(200);
+    expect(
+      (await request("GET", t.path, { user: "user-super" })).status
+    ).toBe(200);
   });
 
   test("the comp admin and a super-admin both get the report", async () => {
@@ -330,6 +344,44 @@ describe("field analysis visibility (admin-only rollout)", () => {
     expect(
       (await request("GET", t.path, { user: "user-super" })).status
     ).toBe(200);
+  });
+});
+
+describe("field analysis cache headers", () => {
+  test("an anonymous reader gets a public, age-based Cache-Control", async () => {
+    const t = await seedTask();
+    await computeAndStoreFieldAnalysis(env, t.taskIdNum, 0);
+
+    const res = await request("GET", t.path);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toMatch(
+      /^public, max-age=\d+, must-revalidate$/
+    );
+
+    // A signed-in viewer is never shared-cached (names every pilot).
+    expect((await adminGet(t.path)).headers.get("Cache-Control")).toBe(
+      "private, no-store"
+    );
+  });
+
+  test("a long-stable report gets a long max-age, capped at three months", async () => {
+    const t = await seedTask();
+    await computeAndStoreFieldAnalysis(env, t.taskIdNum, 0);
+    // Backdate the compute 40 days: a stable report should be cacheable for
+    // roughly that long (well under the 90-day cap).
+    const old = new Date(Date.now() - 40 * 24 * 3600 * 1000).toISOString();
+    await env.DB.prepare(
+      `UPDATE task_field_analysis SET computed_at = ? WHERE task_id = ?`
+    )
+      .bind(old, t.taskIdNum)
+      .run();
+
+    const res = await request("GET", t.path);
+    const maxAge = Number(
+      res.headers.get("Cache-Control")!.match(/max-age=(\d+)/)![1]
+    );
+    expect(maxAge).toBeGreaterThan(30 * 24 * 3600);
+    expect(maxAge).toBeLessThan(90 * 24 * 3600);
   });
 });
 

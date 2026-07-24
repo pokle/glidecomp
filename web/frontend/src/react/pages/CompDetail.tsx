@@ -281,10 +281,10 @@ function CompDetailView({
         {isAdmin ? (
           <Link to={`/comp/${compId}/pilots`} className="hover:text-foreground hover:underline underline-offset-4">Pilots ({comp.pilot_count})</Link>
         ) : null}
-        {/* Field analysis is admin-only while the metrics are being validated,
-            and has nothing to measure on an open-distance comp (no legs, no
-            speed section). Its own page — it's a long exploratory read. */}
-        {isAdmin && comp.scoring_format !== "open_distance" ? (
+        {/* Field analysis has nothing to measure on an open-distance comp (no
+            legs, no speed section), so it's hidden there. Its own page — it's a
+            long exploratory read. */}
+        {comp.scoring_format !== "open_distance" ? (
           <Link to={`/comp/${compId}/analysis`} className="hover:text-foreground hover:underline underline-offset-4">Field analysis</Link>
         ) : null}
         <a href="#activity" className="hover:text-foreground hover:underline underline-offset-4">Activity</a>

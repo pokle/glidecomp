@@ -22,6 +22,9 @@ import {
   loadCompWaypoints,
   loadTaskDetail,
   loadPilotScoreDetail,
+  loadCompFieldAnalysis,
+  loadTaskFieldAnalysis,
+  publicMaxAgeSeconds,
   NotFoundError,
   type FetchFn,
 } from "../../web/frontend/src/react/loaders";
@@ -31,15 +34,27 @@ interface Env {
   ASSETS: Fetcher;
 }
 
+/** When present, the page's stale-first freshness — drives an age-based
+ * Cache-Control on the SSR HTML (see the response builder). */
+interface CacheHint {
+  computedAt: string | null;
+  stale: boolean;
+}
+
 interface Rendered {
   /** The SSR loader result, embedded as window.__SSR_DATA__.data. */
   data: unknown;
   head: HeadTags;
+  /** Freshness of the materialized content, if any (scores / field analysis). */
+  cache?: CacheHint;
 }
 
 interface HeadTags {
   title: string;
   description: string;
+  /** Emit <meta robots noindex> — for pages with no substantive content yet
+   * (a pending or empty field analysis). */
+  noindex?: boolean;
   /** Extra raw tags (JSON-LD) already HTML-serialized. */
   extra: string;
 }
@@ -49,13 +64,11 @@ interface HeadTags {
  * not be indexed: admin-gated, private, and empty without a signed-in
  * admin's API session. Checked before ROUTES.
  *
- * Field analysis (behavioural metrics) lives here while it is admin-only.
- * When it goes public it wants the opposite treatment — a ROUTES entry with
- * a loader — and should move out of this list.
+ * Field analysis (behavioural metrics) is now public and SSR'd — it has ROUTES
+ * entries with loaders below (a pending/empty report is rendered but noindexed
+ * per-request, not shell-noindexed here).
  */
 const NOINDEX_SHELL_ROUTES: RegExp[] = [
-  /^\/comp\/[^/]+\/analysis\/?$/,
-  /^\/comp\/[^/]+\/analysis\/task\/[^/]+\/?$/,
   // Pilot roster editor — admin-only management surface, nothing for crawlers.
   /^\/comp\/[^/]+\/pilots\/?$/,
   // Where the per-task report lived before it was re-nested under the comp
@@ -104,6 +117,9 @@ const ROUTES: Array<{
       ].join(" · ");
       return {
         data,
+        cache: data.scores
+          ? { computedAt: data.scores.computed_at, stale: data.scores.stale }
+          : undefined,
         head: {
           title: `${c.name} — GlideComp`,
           description: `${c.name}: ${summary}. Tasks, standings and per-pilot score explanations on GlideComp.`,
@@ -128,6 +144,9 @@ const ROUTES: Array<{
       const c = data.comp;
       return {
         data,
+        cache: data.scores
+          ? { computedAt: data.scores.computed_at, stale: data.scores.stale }
+          : undefined,
         head: {
           title: `Scores — ${c.name} — GlideComp`,
           description: `Standings for ${c.name}: overall scores per class, top 3 per task, and per-pilot score explanations on GlideComp.`,
@@ -173,6 +192,9 @@ const ROUTES: Array<{
       const compName = data.comp?.name ?? "GlideComp";
       return {
         data,
+        cache: data.score
+          ? { computedAt: data.score.computed_at, stale: data.score.stale }
+          : undefined,
         head: {
           title: `${data.task.name} — ${compName}`,
           description: `${data.task.name} (${compName}): route, turnpoints and per-class scores on GlideComp.`,
@@ -197,6 +219,7 @@ const ROUTES: Array<{
       const pilotName = pilotNameFrom(data.score, pilotId);
       return {
         data,
+        cache: { computedAt: data.score.computed_at, stale: data.score.stale },
         head: {
           title: `${pilotName} — ${data.task.name}, ${data.comp.name}: score explanation`,
           description: `How ${pilotName}'s score for ${data.task.name} (${data.comp.name}) was calculated — a step-by-step GlideComp scoring breakdown.`,
@@ -207,6 +230,70 @@ const ROUTES: Array<{
                 [data.task.name, `/comp/${compId}/task/${taskId}`],
               ])
             ),
+        },
+      };
+    },
+  },
+  {
+    // Comp field analysis (behavioural metrics across the comp's tasks).
+    pattern: /^\/comp\/([^/]+)\/analysis\/?$/,
+    async run(f, m, origin) {
+      const compId = decodeURIComponent(m[1]);
+      const data = await loadCompFieldAnalysis(f, compId);
+      const a = data.analysis;
+      const name = data.comp?.name ?? a.comp_name;
+      // Nothing aggregated yet (all tasks pending, or none analysable) → render
+      // the page but keep it out of the index until it has real content.
+      const hasContent = a.classes.length > 0;
+      return {
+        data,
+        cache: {
+          computedAt: a.computed_at,
+          stale: a.stale || a.pending_task_count > 0,
+        },
+        head: {
+          title: `Field analysis — ${name} — GlideComp`,
+          description: `Which flying behaviours separated the field at ${name} — climbing, gliding, decision-making and race craft, ranked by how strongly each tracks finishing position.`,
+          noindex: !hasContent,
+          extra: jsonLd(
+            breadcrumb(origin, [
+              ["Competitions", "/comp"],
+              [name, `/comp/${compId}`],
+              ["Field analysis", `/comp/${compId}/analysis`],
+            ])
+          ),
+        },
+      };
+    },
+  },
+  {
+    // Per-task field analysis (a chapter of the comp report above).
+    pattern: /^\/comp\/([^/]+)\/analysis\/task\/([^/]+)\/?$/,
+    async run(f, m, origin) {
+      const compId = decodeURIComponent(m[1]);
+      const taskId = decodeURIComponent(m[2]);
+      const data = await loadTaskFieldAnalysis(f, compId, taskId);
+      const a = data.analysis;
+      const compName = data.comp?.name ?? "GlideComp";
+      const taskName = data.task?.name ?? "Task";
+      // Pending (still computing), an error (no route), or no classes → no
+      // substantive content to index yet.
+      const hasContent = a.classes.length > 0 && !a.pending;
+      return {
+        data,
+        cache: { computedAt: a.computed_at, stale: a.stale || a.pending },
+        head: {
+          title: `Field analysis — ${taskName}, ${compName}`,
+          description: `How the field flew ${taskName} at ${compName}, and which behaviours separated the leaderboard — a per-pilot behavioural breakdown on GlideComp.`,
+          noindex: !hasContent,
+          extra: jsonLd(
+            breadcrumb(origin, [
+              ["Competitions", "/comp"],
+              [compName, `/comp/${compId}`],
+              ["Field analysis", `/comp/${compId}/analysis`],
+              [taskName, `/comp/${compId}/analysis/task/${taskId}`],
+            ])
+          ),
         },
       };
     },
@@ -261,13 +348,25 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     status: 200,
     headers: {
       "Content-Type": "text/html; charset=utf-8",
-      // Cookie-forwarded renders are visitor-specific; never shared-cache them.
-      "Cache-Control": cookie
-        ? "private, no-store"
-        : "public, max-age=0, must-revalidate",
+      "Cache-Control": pageCacheControl(cookie, rendered.cache),
     },
   });
 };
+
+/**
+ * Cache-Control for a rendered SSR page. Cookie-forwarded renders are
+ * visitor-specific and never shared-cached. For anonymous renders of
+ * stale-first content (scores / field analysis) the max-age grows with how
+ * long the content has already been stable (publicMaxAgeSeconds) — a finished
+ * comp's pages stop being re-fetched, a live one stays near-realtime — while
+ * pages with no freshness signal keep the always-revalidate default.
+ */
+function pageCacheControl(cookie: string | null, cache?: CacheHint): string {
+  if (cookie) return "private, no-store";
+  if (!cache) return "public, max-age=0, must-revalidate";
+  const maxAge = publicMaxAgeSeconds(cache.computedAt, cache.stale, Date.now());
+  return `public, max-age=${maxAge}, must-revalidate`;
+}
 
 // ── shell helpers ────────────────────────────────────────────────────────────
 
@@ -317,6 +416,7 @@ function injectSsr(
   data: unknown
 ): string {
   const headTags =
+    (head.noindex ? `<meta name="robots" content="noindex">\n` : "") +
     `<title>${escapeHtml(head.title)}</title>\n` +
     `<meta name="description" content="${escapeAttr(head.description)}">\n` +
     `<meta property="og:title" content="${escapeAttr(head.title)}">\n` +
