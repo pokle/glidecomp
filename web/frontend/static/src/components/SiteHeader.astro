@@ -27,8 +27,14 @@ const tab = (isActive: boolean) =>
     class="mx-auto flex min-h-[60px] w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3"
   >
     <a href="/" class="font-brand text-base font-semibold tracking-tight">GlideComp</a>
-    <a href="/comp" class={tab(active === "comp")}>Competitions</a>
-    <a href="/u/me" class={`${tab(active === "flights")} max-sm:hidden`}>My Flights</a>
+    <a
+      href="/comp"
+      class={tab(active === "comp")}
+      aria-current={active === "comp" ? "page" : undefined}>Competitions</a>
+    <a
+      href="/u/me"
+      class={`${tab(active === "flights")} max-sm:hidden`}
+      aria-current={active === "flights" ? "page" : undefined}>My Flights</a>
     <div class="ml-auto">
       <!-- Plain link to the SPA sign-in page (Google + email code) — keeps
            the static chrome zero-JS and every sign-in path on /signin. -->

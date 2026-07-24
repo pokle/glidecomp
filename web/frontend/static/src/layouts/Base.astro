@@ -58,8 +58,21 @@ const metaDescription =
     </script>
   </head>
   <body>
+    <!-- Skip link (WCAG 2.4.1, accessibility-standard §4.3): first focusable
+         element, visually hidden until focused, jumping past the header to
+         <main>. Mirrors the SPA skip link in react/components/Shell.tsx. -->
+    <a
+      href="#main-content"
+      class="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-[60] focus:rounded-md focus:border focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-lg focus:ring-3 focus:ring-ring/50"
+    >
+      Skip to main content
+    </a>
     <SiteHeader active={active} />
-    <slot />
+    <!-- Single <main> landmark for every static page; tabIndex=-1 so the skip
+         link lands focus here, not just the scroll position. -->
+    <main id="main-content" tabindex="-1" class="focus:outline-none">
+      <slot />
+    </main>
     <SiteFooter />
   </body>
 </html>
