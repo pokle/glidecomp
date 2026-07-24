@@ -11,12 +11,18 @@
  * non-critical and may never resolve), so every builder takes a nullable name
  * and falls back to a generic label — the link works either way.
  */
+import { compPath, taskPath, compAnalysisPath } from "./slug";
+
 export type Crumb = { label: string; to: string };
 
 /** The label the field-analysis pages use, as heading and as ancestor crumb. */
 export const FIELD_ANALYSIS_LABEL = "Field analysis";
 
 const COMPETITIONS: Crumb = { label: "Competitions", to: "/comp" };
+
+// The compId passed in is the BARE sqid (pages extract it from the possibly
+// slugged route param via idFromSegment); pairing it with the name here yields
+// the canonical `${slug}-${id}` link.
 
 /** Ancestors of /comp/:compId — the competition list alone. */
 export function compCrumbs(): Crumb[] {
@@ -25,7 +31,10 @@ export function compCrumbs(): Crumb[] {
 
 /** Ancestors of a page directly under a competition (waypoints, tasks, analysis). */
 export function underComp(compId: string | undefined, compName: string | null | undefined): Crumb[] {
-  return [COMPETITIONS, { label: compName || "Competition", to: `/comp/${compId}` }];
+  return [
+    COMPETITIONS,
+    { label: compName || "Competition", to: compId ? compPath(compId, compName) : "/comp" },
+  ];
 }
 
 /** Ancestors of a page directly under a task (pilot score detail). */
@@ -37,7 +46,10 @@ export function underTask(
 ): Crumb[] {
   return [
     ...underComp(compId, compName),
-    { label: taskName || "Task", to: `/comp/${compId}/task/${taskId}` },
+    {
+      label: taskName || "Task",
+      to: compId && taskId ? taskPath(compId, compName, taskId, taskName) : "/comp",
+    },
   ];
 }
 
@@ -56,6 +68,9 @@ export function underCompAnalysis(
 ): Crumb[] {
   return [
     ...underComp(compId, compName),
-    { label: FIELD_ANALYSIS_LABEL, to: `/comp/${compId}/analysis` },
+    {
+      label: FIELD_ANALYSIS_LABEL,
+      to: compId ? compAnalysisPath(compId, compName) : "/comp",
+    },
   ];
 }

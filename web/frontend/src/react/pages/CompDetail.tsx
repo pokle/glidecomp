@@ -35,6 +35,15 @@ import {
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Disclosure } from "@/react/rac/disclosure";
 import { compCrumbs } from "../lib/crumbs";
+import {
+  idFromSegment,
+  compPath,
+  compScoresPath,
+  compWaypointsPath,
+  compAnalysisPath,
+  taskPath,
+} from "../lib/slug";
+import { useCanonicalPath } from "../lib/use-canonical-path";
 import { SectionHeader } from "../components/SectionHeader";
 import { ActivitySection } from "../comp/ActivitySection";
 import { CompScoresSummary } from "../comp/CompScoresSummary";
@@ -60,7 +69,9 @@ export function CompDetail() {
 }
 
 function CompDetailContent() {
-  const { compId } = useParams<{ compId: string }>();
+  const { compId: compParam } = useParams<{ compId: string }>();
+  // The route param may be a `${slug}-${id}` — the id is what the API needs.
+  const compId = idFromSegment(compParam ?? "");
   const { user, loading } = useUser();
   const location = useLocation();
   // SSR seed: the server ran loadCompDetail for this URL, so render the comp in
@@ -71,6 +82,9 @@ function CompDetailContent() {
   const [refresh, setRefresh] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Settle the address bar on the canonical `${slug}-${id}` once the name loads.
+  useCanonicalPath(comp ? compPath(compId, comp.name) : null);
 
   // Deep links like /comp/:id#scores (the old /scores page redirects there):
   // scroll once the sections exist.
@@ -226,6 +240,7 @@ function CompDetailView({
         tasks={comp.tasks}
         hero={hero}
         compId={compId}
+        compName={comp.name}
         canSubmitTrack={canSubmitTrack}
         canUploadOnBehalf={canUploadOnBehalf}
         signedOut={!user && !loading}
@@ -274,18 +289,18 @@ function CompDetailView({
         className="sticky top-0 z-30 -mx-4 mt-3 flex flex-wrap gap-x-4 gap-y-1 border-b bg-background/90 px-4 py-2 text-sm text-muted-foreground backdrop-blur-sm sm:top-[61px] [@media(max-height:500px)]:static print:hidden"
       >
         <a href="#tasks" className="hover:text-foreground hover:underline underline-offset-4">Tasks ({comp.tasks.length})</a>
-        <Link to={`/comp/${compId}/scores`} className="hover:text-foreground hover:underline underline-offset-4">Scores</Link>
-        <Link to={`/comp/${compId}/waypoints`} className="hover:text-foreground hover:underline underline-offset-4">Waypoints ({comp.waypoint_count})</Link>
+        <Link to={compScoresPath(compId, comp.name)} className="hover:text-foreground hover:underline underline-offset-4">Scores</Link>
+        <Link to={compWaypointsPath(compId, comp.name)} className="hover:text-foreground hover:underline underline-offset-4">Waypoints ({comp.waypoint_count})</Link>
         {/* Pilot management moved to its own admin page — visitors find every
             pilot in the scores, so the roster link is admin-only. */}
         {isAdmin ? (
-          <Link to={`/comp/${compId}/pilots`} className="hover:text-foreground hover:underline underline-offset-4">Pilots ({comp.pilot_count})</Link>
+          <Link to={`${compPath(compId, comp.name)}/pilots`} className="hover:text-foreground hover:underline underline-offset-4">Pilots ({comp.pilot_count})</Link>
         ) : null}
-        {/* Field analysis is admin-only while the metrics are being validated,
-            and has nothing to measure on an open-distance comp (no legs, no
-            speed section). Its own page — it's a long exploratory read. */}
-        {isAdmin && comp.scoring_format !== "open_distance" ? (
-          <Link to={`/comp/${compId}/analysis`} className="hover:text-foreground hover:underline underline-offset-4">Field analysis</Link>
+        {/* Field analysis has nothing to measure on an open-distance comp (no
+            legs, no speed section), so it's hidden there. Its own page — it's a
+            long exploratory read. */}
+        {comp.scoring_format !== "open_distance" ? (
+          <Link to={compAnalysisPath(compId, comp.name)} className="hover:text-foreground hover:underline underline-offset-4">Field analysis</Link>
         ) : null}
         <a href="#activity" className="hover:text-foreground hover:underline underline-offset-4">Activity</a>
       </nav>
@@ -423,6 +438,7 @@ interface HeroSlot {
 function FeaturedTaskGroup({
   hero,
   compId,
+  compName,
   canSubmitTrack,
   canUploadOnBehalf,
   signedOut,
@@ -430,6 +446,7 @@ function FeaturedTaskGroup({
 }: {
   hero: HeroPick;
   compId: string;
+  compName: string;
   canSubmitTrack: boolean;
   canUploadOnBehalf: boolean;
   signedOut: boolean;
@@ -448,7 +465,7 @@ function FeaturedTaskGroup({
             <LinkButton
               variant={primary ? "default" : "outline"}
               size="sm"
-              href={`/comp/${compId}/task/${task.task_id}`}
+              href={taskPath(compId, compName, task.task_id, task.name)}
             >
               Task details
             </LinkButton>
@@ -461,7 +478,7 @@ function FeaturedTaskGroup({
             <LinkButton
               variant={primary ? "default" : "ghost"}
               size="sm"
-              href={`/comp/${compId}/task/${task.task_id}#edit-route`}
+              href={`${taskPath(compId, compName, task.task_id, task.name)}#edit-route`}
             >
               Edit route…
             </LinkButton>
@@ -525,7 +542,7 @@ function FeaturedTaskGroup({
             <h3 className="text-xl font-bold">
               <Link
                 className="underline-offset-4 hover:underline"
-                to={`/comp/${compId}/task/${task.task_id}`}
+                to={taskPath(compId, compName, task.task_id, task.name)}
               >
                 {task.name}
               </Link>{" "}
@@ -618,6 +635,7 @@ function TasksList({
   tasks,
   hero,
   compId,
+  compName,
   canSubmitTrack,
   canUploadOnBehalf,
   signedOut,
@@ -627,6 +645,7 @@ function TasksList({
   tasks: TaskSummary[];
   hero: HeroPick | null;
   compId: string;
+  compName: string;
   canSubmitTrack: boolean;
   canUploadOnBehalf: boolean;
   signedOut: boolean;
@@ -666,6 +685,7 @@ function TasksList({
             key={date}
             hero={hero}
             compId={compId}
+            compName={compName}
             canSubmitTrack={canSubmitTrack}
             canUploadOnBehalf={canUploadOnBehalf}
             signedOut={signedOut}
@@ -683,7 +703,7 @@ function TasksList({
                 <li key={task.task_id} className="flex flex-wrap items-center gap-2">
                   <Link
                     className="underline-offset-4 hover:underline"
-                    to={`/comp/${compId}/task/${task.task_id}`}
+                    to={taskPath(compId, compName, task.task_id, task.name)}
                   >
                     <strong>{task.name}</strong>{" "}
                     {!task.has_xctsk ? (

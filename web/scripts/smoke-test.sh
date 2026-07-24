@@ -104,10 +104,14 @@ check_sha || fail=1
 # shell (no content) on any transient loader/render error, so a just-deployed
 # page can serve the contentless shell for a few seconds while it warms — the
 # same propagation race every other check here retries for.
+# `-L` follows redirects: a bare `/comp/{id}` 301s to its canonical
+# `/comp/{slug}-{id}` URL (see functions/comp/[[path]].ts), and we want the
+# content of wherever it lands. (check_route above deliberately does NOT follow
+# redirects — it asserts the SPA-shell routes serve 200 directly.)
 check_contains() {
   local url="$1" needle="$2" label="$3" html attempt
   for attempt in $(seq 1 10); do
-    html=$(curl -s "$url")
+    html=$(curl -sL "$url")
     if grep -qF "$needle" <<<"$html"; then echo "Good — ${label}"; return 0; fi
     echo "${label}: '${needle}' not present yet (attempt ${attempt}/10, retrying in 3s…)"
     sleep 3

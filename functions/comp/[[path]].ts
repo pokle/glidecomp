@@ -22,24 +22,53 @@ import {
   loadCompWaypoints,
   loadTaskDetail,
   loadPilotScoreDetail,
+  loadCompFieldAnalysis,
+  loadTaskFieldAnalysis,
+  publicMaxAgeSeconds,
   NotFoundError,
   type FetchFn,
 } from "../../web/frontend/src/react/loaders";
+import {
+  idFromSegment,
+  compPath,
+  compScoresPath,
+  compWaypointsPath,
+  compAnalysisPath,
+  taskPath,
+  taskAnalysisPath,
+  pilotPath,
+} from "../../web/frontend/src/react/lib/slug";
 
 interface Env {
   COMPETITION_API: Fetcher;
   ASSETS: Fetcher;
 }
 
+/** When present, the page's stale-first freshness — drives an age-based
+ * Cache-Control on the SSR HTML (see the response builder). */
+interface CacheHint {
+  computedAt: string | null;
+  stale: boolean;
+}
+
 interface Rendered {
   /** The SSR loader result, embedded as window.__SSR_DATA__.data. */
   data: unknown;
   head: HeadTags;
+  /** Freshness of the materialized content, if any (scores / field analysis). */
+  cache?: CacheHint;
+  /** The canonical `${slug}-${id}` pathname for this page, once the names are
+   * known. When it differs from the request path, onRequest 301s to it. Absent
+   * for routes with no id (the comp list) or when a name was unavailable. */
+  canonicalPath?: string;
 }
 
 interface HeadTags {
   title: string;
   description: string;
+  /** Emit <meta robots noindex> — for pages with no substantive content yet
+   * (a pending or empty field analysis). */
+  noindex?: boolean;
   /** Extra raw tags (JSON-LD) already HTML-serialized. */
   extra: string;
 }
@@ -49,13 +78,11 @@ interface HeadTags {
  * not be indexed: admin-gated, private, and empty without a signed-in
  * admin's API session. Checked before ROUTES.
  *
- * Field analysis (behavioural metrics) lives here while it is admin-only.
- * When it goes public it wants the opposite treatment — a ROUTES entry with
- * a loader — and should move out of this list.
+ * Field analysis (behavioural metrics) is now public and SSR'd — it has ROUTES
+ * entries with loaders below (a pending/empty report is rendered but noindexed
+ * per-request, not shell-noindexed here).
  */
 const NOINDEX_SHELL_ROUTES: RegExp[] = [
-  /^\/comp\/[^/]+\/analysis\/?$/,
-  /^\/comp\/[^/]+\/analysis\/task\/[^/]+\/?$/,
   // Pilot roster editor — admin-only management surface, nothing for crawlers.
   /^\/comp\/[^/]+\/pilots\/?$/,
   // Where the per-task report lived before it was re-nested under the comp
@@ -84,7 +111,7 @@ const ROUTES: Array<{
                 "@type": "ListItem",
                 position: i + 1,
                 name: c.name,
-                url: `${origin}/comp/${c.comp_id}`,
+                url: `${origin}${compPath(c.comp_id, c.name)}`,
               })),
             }),
         },
@@ -94,9 +121,10 @@ const ROUTES: Array<{
   {
     pattern: /^\/comp\/([^/]+)\/?$/,
     async run(f, m, origin) {
-      const compId = decodeURIComponent(m[1]);
+      const compId = idFromSegment(m[1]);
       const data = await loadCompDetail(f, compId);
       const c = data.comp;
+      const canonical = compPath(compId, c.name);
       const summary = [
         c.category === "hg" ? "HG" : "PG",
         c.scoring_format === "open_distance" ? "Open distance" : "GAP",
@@ -104,6 +132,10 @@ const ROUTES: Array<{
       ].join(" · ");
       return {
         data,
+        canonicalPath: canonical,
+        cache: data.scores
+          ? { computedAt: data.scores.computed_at, stale: data.scores.stale }
+          : undefined,
         head: {
           title: `${c.name} — GlideComp`,
           description: `${c.name}: ${summary}. Tasks, standings and per-pilot score explanations on GlideComp.`,
@@ -113,9 +145,9 @@ const ROUTES: Array<{
               "@type": "SportsEvent",
               name: c.name,
               sport: c.category === "hg" ? "Hang gliding" : "Paragliding",
-              url: `${origin}/comp/${compId}`,
+              url: `${origin}${canonical}`,
             }) +
-            jsonLd(breadcrumb(origin, [["Competitions", "/comp"], [c.name, `/comp/${compId}`]])),
+            jsonLd(breadcrumb(origin, [["Competitions", "/comp"], [c.name, canonical]])),
         },
       };
     },
@@ -123,19 +155,24 @@ const ROUTES: Array<{
   {
     pattern: /^\/comp\/([^/]+)\/scores\/?$/,
     async run(f, m, origin) {
-      const compId = decodeURIComponent(m[1]);
+      const compId = idFromSegment(m[1]);
       const data = await loadCompScores(f, compId);
       const c = data.comp;
+      const canonical = compScoresPath(compId, c.name);
       return {
         data,
+        canonicalPath: canonical,
+        cache: data.scores
+          ? { computedAt: data.scores.computed_at, stale: data.scores.stale }
+          : undefined,
         head: {
           title: `Scores — ${c.name} — GlideComp`,
           description: `Standings for ${c.name}: overall scores per class, top 3 per task, and per-pilot score explanations on GlideComp.`,
           extra: jsonLd(
               breadcrumb(origin, [
                 ["Competitions", "/comp"],
-                [c.name, `/comp/${compId}`],
-                ["Scores", `/comp/${compId}/scores`],
+                [c.name, compPath(compId, c.name)],
+                ["Scores", canonical],
               ])
             ),
         },
@@ -145,19 +182,21 @@ const ROUTES: Array<{
   {
     pattern: /^\/comp\/([^/]+)\/waypoints\/?$/,
     async run(f, m, origin) {
-      const compId = decodeURIComponent(m[1]);
+      const compId = idFromSegment(m[1]);
       const data = await loadCompWaypoints(f, compId);
       const n = data.waypoints.length;
+      const canonical = compWaypointsPath(compId, data.comp.name);
       return {
         data,
+        canonicalPath: canonical,
         head: {
           title: `Waypoints — ${data.comp.name} — GlideComp`,
           description: `The ${n} shared waypoint${n === 1 ? "" : "s"} for ${data.comp.name}: codes, names and coordinates, with downloads for flight instruments.`,
           extra: jsonLd(
               breadcrumb(origin, [
                 ["Competitions", "/comp"],
-                [data.comp.name, `/comp/${compId}`],
-                ["Waypoints", `/comp/${compId}/waypoints`],
+                [data.comp.name, compPath(compId, data.comp.name)],
+                ["Waypoints", canonical],
               ])
             ),
         },
@@ -167,20 +206,29 @@ const ROUTES: Array<{
   {
     pattern: /^\/comp\/([^/]+)\/task\/([^/]+)\/?$/,
     async run(f, m, origin) {
-      const compId = decodeURIComponent(m[1]);
-      const taskId = decodeURIComponent(m[2]);
+      const compId = idFromSegment(m[1]);
+      const taskId = idFromSegment(m[2]);
       const data = await loadTaskDetail(f, compId, taskId);
       const compName = data.comp?.name ?? "GlideComp";
+      // Only canonicalise when the comp name resolved — otherwise we'd 301 to a
+      // URL that strips a good comp slug down to the bare id.
+      const canonical = data.comp
+        ? taskPath(compId, data.comp.name, taskId, data.task.name)
+        : undefined;
       return {
         data,
+        canonicalPath: canonical,
+        cache: data.score
+          ? { computedAt: data.score.computed_at, stale: data.score.stale }
+          : undefined,
         head: {
           title: `${data.task.name} — ${compName}`,
           description: `${data.task.name} (${compName}): route, turnpoints and per-class scores on GlideComp.`,
           extra: jsonLd(
               breadcrumb(origin, [
                 ["Competitions", "/comp"],
-                [compName, `/comp/${compId}`],
-                [data.task.name, `/comp/${compId}/task/${taskId}`],
+                [compName, compPath(compId, data.comp?.name)],
+                [data.task.name, taskPath(compId, data.comp?.name, taskId, data.task.name)],
               ])
             ),
         },
@@ -190,23 +238,106 @@ const ROUTES: Array<{
   {
     pattern: /^\/comp\/([^/]+)\/task\/([^/]+)\/pilot\/([^/]+)\/?$/,
     async run(f, m, origin) {
-      const compId = decodeURIComponent(m[1]);
-      const taskId = decodeURIComponent(m[2]);
-      const pilotId = decodeURIComponent(m[3]);
+      const compId = idFromSegment(m[1]);
+      const taskId = idFromSegment(m[2]);
+      const pilotId = idFromSegment(m[3]);
       const data = await loadPilotScoreDetail(f, compId, taskId, pilotId);
       const pilotName = pilotNameFrom(data.score, pilotId);
+      const canonical = pilotPath(
+        compId,
+        data.comp.name,
+        taskId,
+        data.task.name,
+        pilotId,
+        pilotName
+      );
       return {
         data,
+        canonicalPath: canonical,
+        cache: { computedAt: data.score.computed_at, stale: data.score.stale },
         head: {
           title: `${pilotName} — ${data.task.name}, ${data.comp.name}: score explanation`,
           description: `How ${pilotName}'s score for ${data.task.name} (${data.comp.name}) was calculated — a step-by-step GlideComp scoring breakdown.`,
           extra: jsonLd(
               breadcrumb(origin, [
                 ["Competitions", "/comp"],
-                [data.comp.name, `/comp/${compId}`],
-                [data.task.name, `/comp/${compId}/task/${taskId}`],
+                [data.comp.name, compPath(compId, data.comp.name)],
+                [data.task.name, taskPath(compId, data.comp.name, taskId, data.task.name)],
               ])
             ),
+        },
+      };
+    },
+  },
+  {
+    // Comp field analysis (behavioural metrics across the comp's tasks).
+    pattern: /^\/comp\/([^/]+)\/analysis\/?$/,
+    async run(f, m, origin) {
+      const compId = idFromSegment(m[1]);
+      const data = await loadCompFieldAnalysis(f, compId);
+      const a = data.analysis;
+      const name = data.comp?.name ?? a.comp_name;
+      const canonical = compAnalysisPath(compId, name);
+      // Nothing aggregated yet (all tasks pending, or none analysable) → render
+      // the page but keep it out of the index until it has real content.
+      const hasContent = a.classes.length > 0;
+      return {
+        data,
+        canonicalPath: canonical,
+        cache: {
+          computedAt: a.computed_at,
+          stale: a.stale || a.pending_task_count > 0,
+        },
+        head: {
+          title: `Field analysis — ${name} — GlideComp`,
+          description: `Which flying behaviours separated the field at ${name} — climbing, gliding, decision-making and race craft, ranked by how strongly each tracks finishing position.`,
+          noindex: !hasContent,
+          extra: jsonLd(
+            breadcrumb(origin, [
+              ["Competitions", "/comp"],
+              [name, compPath(compId, name)],
+              ["Field analysis", canonical],
+            ])
+          ),
+        },
+      };
+    },
+  },
+  {
+    // Per-task field analysis (a chapter of the comp report above).
+    pattern: /^\/comp\/([^/]+)\/analysis\/task\/([^/]+)\/?$/,
+    async run(f, m, origin) {
+      const compId = idFromSegment(m[1]);
+      const taskId = idFromSegment(m[2]);
+      const data = await loadTaskFieldAnalysis(f, compId, taskId);
+      const a = data.analysis;
+      const compName = data.comp?.name ?? "GlideComp";
+      const taskName = data.task?.name ?? "Task";
+      // Only canonicalise when both names resolved (the analysis body carries
+      // neither) — otherwise we'd 301 to a URL that strips good slugs.
+      const canonical =
+        data.comp && data.task
+          ? taskAnalysisPath(compId, data.comp.name, taskId, data.task.name)
+          : undefined;
+      // Pending (still computing), an error (no route), or no classes → no
+      // substantive content to index yet.
+      const hasContent = a.classes.length > 0 && !a.pending;
+      return {
+        data,
+        canonicalPath: canonical,
+        cache: { computedAt: a.computed_at, stale: a.stale || a.pending },
+        head: {
+          title: `Field analysis — ${taskName}, ${compName}`,
+          description: `How the field flew ${taskName} at ${compName}, and which behaviours separated the leaderboard — a per-pilot behavioural breakdown on GlideComp.`,
+          noindex: !hasContent,
+          extra: jsonLd(
+            breadcrumb(origin, [
+              ["Competitions", "/comp"],
+              [compName, compPath(compId, data.comp?.name)],
+              ["Field analysis", compAnalysisPath(compId, data.comp?.name)],
+              [taskName, taskAnalysisPath(compId, data.comp?.name, taskId, data.task?.name)],
+            ])
+          ),
         },
       };
     },
@@ -245,6 +376,14 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return fetchShell(env, url);
   }
 
+  // Canonicalise the URL: 301 to `${slug}-${id}` whenever the request path is
+  // not already it (a bare `${id}`, a stale/mis-cased slug, a trailing slash).
+  // The name comes from the loader above, so the target reflects the current
+  // title. Query is preserved; the fragment never reaches the server.
+  if (rendered.canonicalPath && rendered.canonicalPath !== path) {
+    return canonicalRedirect(url.origin + rendered.canonicalPath + url.search, cookie);
+  }
+
   let bodyHtml: string;
   try {
     const stream = await render(path, { path, data: rendered.data });
@@ -261,13 +400,41 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     status: 200,
     headers: {
       "Content-Type": "text/html; charset=utf-8",
-      // Cookie-forwarded renders are visitor-specific; never shared-cache them.
-      "Cache-Control": cookie
-        ? "private, no-store"
-        : "public, max-age=0, must-revalidate",
+      "Cache-Control": pageCacheControl(cookie, rendered.cache),
     },
   });
 };
+
+/**
+ * Cache-Control for a rendered SSR page. Cookie-forwarded renders are
+ * visitor-specific and never shared-cached. For anonymous renders of
+ * stale-first content (scores / field analysis) the max-age grows with how
+ * long the content has already been stable (publicMaxAgeSeconds) — a finished
+ * comp's pages stop being re-fetched, a live one stays near-realtime — while
+ * pages with no freshness signal keep the always-revalidate default.
+ */
+function pageCacheControl(cookie: string | null, cache?: CacheHint): string {
+  if (cookie) return "private, no-store";
+  if (!cache) return "public, max-age=0, must-revalidate";
+  const maxAge = publicMaxAgeSeconds(cache.computedAt, cache.stale, Date.now());
+  return `public, max-age=${maxAge}, must-revalidate`;
+}
+
+/**
+ * 301 to the canonical slugged URL. A permanent redirect so search engines
+ * consolidate on the canonical form. Cached modestly (the target changes only
+ * if the comp/task is renamed); a cookie-forwarded redirect can name a comp
+ * visible only to that admin, so it is never shared-cached.
+ */
+function canonicalRedirect(location: string, cookie: string | null): Response {
+  return new Response(null, {
+    status: 301,
+    headers: {
+      Location: location,
+      "Cache-Control": cookie ? "private, no-store" : "public, max-age=3600",
+    },
+  });
+}
 
 // ── shell helpers ────────────────────────────────────────────────────────────
 
@@ -317,6 +484,7 @@ function injectSsr(
   data: unknown
 ): string {
   const headTags =
+    (head.noindex ? `<meta name="robots" content="noindex">\n` : "") +
     `<title>${escapeHtml(head.title)}</title>\n` +
     `<meta name="description" content="${escapeAttr(head.description)}">\n` +
     `<meta property="og:title" content="${escapeAttr(head.title)}">\n` +

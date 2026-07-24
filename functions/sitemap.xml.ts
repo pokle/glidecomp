@@ -1,38 +1,56 @@
 /**
- * Dynamic sitemap for the public competition pages. Fetches the comp list over
- * the COMPETITION_API service binding, then each comp's detail (tasks) and
- * scores (per-pilot narrative pages), and emits a <urlset>. Test comps are not
- * included (the anonymous list omits them). Short edge cache so new comps and
- * tasks show up within the hour without hammering the API.
+ * Sitemap for the public, indexable pages.
+ *
+ * Two parts: a fixed list of the static content pages (home + the evergreen
+ * scoring explainers, built by the Astro app) and one entry per PUBLIC comp
+ * for its top-level surfaces — the hub, the scores page, and (GAP comps only)
+ * the field analysis page. Deeper pages (per task, per pilot) are deliberately
+ * NOT listed: they are reached by crawlers via links from the comp pages, and
+ * listing every one would bloat the sitemap for little indexing benefit.
+ *
+ * Test comps are excluded (the anonymous list omits them). Short edge cache so
+ * new comps show up within the hour without hammering the API.
  */
+import {
+  compPath,
+  compScoresPath,
+  compAnalysisPath,
+} from "../web/frontend/src/react/lib/slug";
+
 interface Env {
   COMPETITION_API: Fetcher;
 }
 
 interface CompRow {
   comp_id: string;
+  name: string;
   test: boolean;
+  scoring_format?: string;
   last_task_date: string | null;
   creation_date: string;
 }
-interface TaskRow {
-  task_id: string;
-  task_date: string;
-}
-interface StandingPilot {
-  comp_pilot_id: string;
-  tasks: Array<{ task_id: string }>;
-}
-interface ClassStanding {
-  pilots: StandingPilot[];
-}
+
+/** The static pages the Astro app prerenders, in canonical (no-trailing-slash)
+ * form to match how the site links to them. */
+const STATIC_PATHS = [
+  "/",
+  "/about",
+  "/legal",
+  "/scoring",
+  "/scoring/gap",
+  "/scoring/open-distance",
+  "/scoring/data-cleaning",
+];
 
 export const onRequest: PagesFunction<Env> = async (context) => {
   const origin = new URL(context.request.url).origin;
   const api = (path: string) =>
     context.env.COMPETITION_API.fetch(new Request(`https://comp.internal${path}`));
 
-  const urls: Array<{ loc: string; lastmod?: string }> = [{ loc: `${origin}/comp` }];
+  const urls: Array<{ loc: string; lastmod?: string }> = [
+    ...STATIC_PATHS.map((p) => ({ loc: `${origin}${p}` })),
+    { loc: `${origin}/comp` },
+  ];
 
   try {
     const listRes = await api("/api/comp");
@@ -40,16 +58,25 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const { comps } = (await listRes.json()) as { comps: CompRow[] };
       for (const comp of comps) {
         if (comp.test) continue;
-        const base = `${origin}/comp/${comp.comp_id}`;
-        urls.push({ loc: base, lastmod: comp.last_task_date ?? comp.creation_date ?? undefined });
-        urls.push({ loc: `${base}/scores`, lastmod: comp.last_task_date ?? comp.creation_date ?? undefined });
-        await appendCompUrls(api, comp.comp_id, base, urls).catch(() => {
-          // One comp's detail failing must not sink the whole sitemap.
-        });
+        // Canonical slugged URLs (`${slug}-${id}`) — the same form the SSR
+        // Function 301s to, so the sitemap never points at a redirect.
+        // Day-level lastmod, consistently: last_task_date is already
+        // YYYY-MM-DD, but the creation_date fallback is a full ISO timestamp —
+        // slice both to a bare date so the sitemap never mixes the two forms.
+        // (Google reads lastmod at date granularity anyway.)
+        const lastmod = (comp.last_task_date ?? comp.creation_date)?.slice(0, 10);
+        urls.push({ loc: `${origin}${compPath(comp.comp_id, comp.name)}`, lastmod });
+        urls.push({ loc: `${origin}${compScoresPath(comp.comp_id, comp.name)}`, lastmod });
+        // Field analysis has nothing to measure on an open-distance comp (no
+        // legs, no speed section) — its page renders empty + noindex there, so
+        // only GAP comps get a sitemap entry.
+        if (comp.scoring_format !== "open_distance") {
+          urls.push({ loc: `${origin}${compAnalysisPath(comp.comp_id, comp.name)}`, lastmod });
+        }
       }
     }
   } catch {
-    // Fall back to just /comp if the list is unreachable.
+    // Fall back to the static pages + /comp if the list is unreachable.
   }
 
   const body =
@@ -72,42 +99,6 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     },
   });
 };
-
-async function appendCompUrls(
-  api: (path: string) => Promise<Response>,
-  compId: string,
-  base: string,
-  urls: Array<{ loc: string; lastmod?: string }>
-): Promise<void> {
-  const [detailRes, scoresRes] = await Promise.all([
-    api(`/api/comp/${compId}`),
-    api(`/api/comp/${compId}/scores`),
-  ]);
-
-  const taskDate = new Map<string, string>();
-  if (detailRes.ok) {
-    const detail = (await detailRes.json()) as { tasks?: TaskRow[] };
-    for (const t of detail.tasks ?? []) {
-      taskDate.set(t.task_id, t.task_date);
-      urls.push({ loc: `${base}/task/${t.task_id}`, lastmod: t.task_date });
-    }
-  }
-
-  if (scoresRes.ok) {
-    const scores = (await scoresRes.json()) as { standings?: ClassStanding[] };
-    const seen = new Set<string>();
-    for (const cls of scores.standings ?? []) {
-      for (const pilot of cls.pilots) {
-        for (const task of pilot.tasks) {
-          const loc = `${base}/task/${task.task_id}/pilot/${pilot.comp_pilot_id}`;
-          if (seen.has(loc)) continue;
-          seen.add(loc);
-          urls.push({ loc, lastmod: taskDate.get(task.task_id) });
-        }
-      }
-    }
-  }
-}
 
 function escapeXml(s: string): string {
   return s

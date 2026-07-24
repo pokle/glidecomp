@@ -1,4 +1,9 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
+import {
+  compPath,
+  compScoresPath,
+  compAnalysisPath,
+} from "../web/frontend/src/react/lib/slug";
 
 /**
  * SSR verification against the REAL Pages runtime (wrangler pages dev on the
@@ -55,7 +60,8 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
     expect(html).toContain(compName);
-    expect(html).toContain(`href="/comp/${compId}"`);
+    // Links are canonical `${slug}-${id}` (see lib/slug).
+    expect(html).toContain(`href="${compPath(compId, compName)}"`);
     expect(html).toContain("<title>Competitions — GlideComp</title>");
     // No canonical by design: iOS Safari's share sheet copies the canonical
     // URL, which goes stale after client-side navigation.
@@ -71,7 +77,7 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     // The top-3 summary carries the leading pilot's name; the full tables
     // (and per-pilot narrative links) live on the scores page it links to.
     expect(html).toContain(pilotName);
-    expect(html).toContain(`href="/comp/${compId}/scores"`);
+    expect(html).toContain(`href="${compScoresPath(compId, compName)}"`);
     expect(html).toContain(`<title>${compName} — GlideComp</title>`);
   });
 
@@ -81,7 +87,10 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
     expect(html).toContain(pilotName);
-    expect(html).toContain(`/comp/${compId}/task/${taskId}/pilot/${pilotId}`);
+    // The standings pilot links are canonical `${slug}-${id}` at every level.
+    expect(html).toMatch(
+      new RegExp(`/comp/[a-z0-9-]+-${compId}/task/[a-z0-9-]+-${taskId}/pilot/[a-z0-9-]+-${pilotId}`)
+    );
     expect(html).toContain(`<title>Scores — ${compName} — GlideComp</title>`);
   });
 
@@ -143,15 +152,14 @@ test.describe("SSR — isolation and fallback", () => {
   });
 
   /**
-   * Field analysis is admin-only and deliberately client-only, so a hard
-   * reload of its deep URL must still get a usable SPA shell — the Functions
-   * fallback path, which `vite dev` never exercises — and must not be
-   * indexable, since there is nothing in it for a crawler.
+   * A hard reload of an admin-only / redirect-only deep URL must still get a
+   * usable SPA shell — the Functions fallback path, which `vite dev` never
+   * exercises — and must not be indexable, since there is nothing in it for a
+   * crawler. (Field analysis is no longer here — it is SSR'd; see below.)
    */
   for (const path of [
-    "/comp/anything/analysis",
-    "/comp/anything/analysis/task/anything",
-    // The pre-re-nesting URL, redirected client-side — still needs the shell.
+    // The pre-re-nesting field-analysis URL, redirected client-side — still
+    // needs the shell rather than an SSR render or a 404.
     "/comp/anything/task/anything/analysis",
     // Admin-only roster editor page.
     "/comp/anything/pilots",
@@ -167,8 +175,153 @@ test.describe("SSR — isolation and fallback", () => {
   }
 });
 
+test.describe("URL canonicalisation (301 to slug-id)", () => {
+  test("a bare comp id 301s to the lowercase slugged canonical", async ({ request }) => {
+    const { compId, compName } = await discover(request);
+    const res = await request.get(`/comp/${compId}`, { maxRedirects: 0 });
+    expect(res.status()).toBe(301);
+    const loc = new URL(res.headers()["location"]).pathname;
+    expect(loc).toBe(compPath(compId, compName));
+    expect(loc).toBe(loc.toLowerCase());
+    expect(loc.endsWith(`-${compId}`)).toBe(true);
+  });
+
+  test("the canonical comp URL serves 200 (no redirect loop)", async ({ request }) => {
+    const { compId, compName } = await discover(request);
+    const res = await request.get(compPath(compId, compName), { maxRedirects: 0 });
+    expect(res.status()).toBe(200);
+  });
+
+  test("a bare task URL 301s to the fully-slugged canonical", async ({ request }) => {
+    const { compId, taskId } = await discover(request);
+    const res = await request.get(`/comp/${compId}/task/${taskId}`, { maxRedirects: 0 });
+    expect(res.status()).toBe(301);
+    const loc = new URL(res.headers()["location"]).pathname;
+    expect(loc).toMatch(new RegExp(`^/comp/[a-z0-9-]+-${compId}/task/[a-z0-9-]+-${taskId}$`));
+  });
+
+  test("a mixed-case slug 301s back to the lowercase canonical", async ({ request }) => {
+    const { compId, compName } = await discover(request);
+    const canonical = compPath(compId, compName);
+    test.skip(!canonical.includes("-"), "sample comp name has no slug");
+    // Upper-case only the slug portion; the "/comp/" prefix and the id (after
+    // the last dash) stay as-is so the route still matches and the id decodes.
+    const cut = canonical.lastIndexOf("-");
+    const mixed =
+      "/comp/" + canonical.slice("/comp/".length, cut).toUpperCase() + canonical.slice(cut);
+    const res = await request.get(mixed, { maxRedirects: 0 });
+    expect(res.status()).toBe(301);
+    expect(new URL(res.headers()["location"]).pathname).toBe(canonical);
+  });
+
+  test("a trailing slash 301s to the canonical (no slash)", async ({ request }) => {
+    const { compId, compName } = await discover(request);
+    const canonical = compPath(compId, compName);
+    const res = await request.get(canonical + "/", { maxRedirects: 0 });
+    expect(res.status()).toBe(301);
+    expect(new URL(res.headers()["location"]).pathname).toBe(canonical);
+  });
+});
+
+test.describe("SSR — field analysis (public)", () => {
+  test("task field analysis server-renders (warm content or a pending notice)", async ({
+    request,
+  }) => {
+    const { compId, taskId } = await discover(request);
+    // The cold path returns pending and schedules a background compute. Poll
+    // to give it a chance to warm; the assertion below tolerates either state,
+    // so a slow compute never makes this flaky.
+    const apiUrl = `/api/comp/${compId}/task/${taskId}/field-analysis`;
+    for (let i = 0; i < 20; i++) {
+      const r = await request.get(apiUrl);
+      if (r.ok()) {
+        const b = (await r.json()) as { pending: boolean };
+        if (!b.pending) break;
+      }
+      await new Promise((res) => setTimeout(res, 2000));
+    }
+
+    const res = await request.get(`/comp/${compId}/analysis/task/${taskId}`);
+    expect(res.ok()).toBeTruthy();
+    const html = await res.text();
+    // The defining SSR property: the loader data is embedded in the raw HTML.
+    expect(html).toContain("window.__SSR_DATA__");
+    expect(html).toContain("Field analysis —");
+    // Branch on the actual server HTML (race-free): warm renders the ranking
+    // heading and is indexable; cold renders the pending notice and is noindex.
+    if (html.includes("What separated the field")) {
+      expect(html).not.toContain('name="robots" content="noindex"');
+    } else {
+      expect(html.toLowerCase()).toContain("pending");
+      expect(html).toContain('name="robots" content="noindex"');
+    }
+  });
+
+  test("comp field analysis server-renders with a title and SSR data", async ({
+    request,
+  }) => {
+    const { compId, compName } = await discover(request);
+    const res = await request.get(`/comp/${compId}/analysis`);
+    expect(res.ok()).toBeTruthy();
+    const html = await res.text();
+    expect(html).toContain("window.__SSR_DATA__");
+    expect(html).toContain(`Field analysis — ${compName}`);
+  });
+
+  test("field analysis of an invalid comp is a 404 noindex shell", async ({ request }) => {
+    const res = await request.get("/comp/zzznope/analysis", { failOnStatusCode: false });
+    expect(res.status()).toBe(404);
+    const html = await res.text();
+    expect(html).toContain('name="robots" content="noindex"');
+  });
+});
+
+test.describe("sitemap", () => {
+  test("lists the static pages and each public comp's top-level surfaces", async ({
+    request,
+  }) => {
+    const { compId } = await discover(request);
+    const res = await request.get("/sitemap.xml");
+    expect(res.ok()).toBeTruthy();
+    expect(res.headers()["content-type"]).toContain("xml");
+    const xml = await res.text();
+    const origin = new URL(res.url()).origin;
+
+    // The evergreen static content pages (the SEO-valuable ones).
+    for (const path of ["/", "/about", "/scoring", "/scoring/gap", "/scoring/open-distance"]) {
+      expect(xml).toContain(`<loc>${origin}${path}</loc>`);
+    }
+    // The comp list + this comp's hub, scores, and (GAP) field analysis — all
+    // as canonical `${slug}-${id}` URLs (the form the SSR Function 301s to).
+    const { compName } = await discover(request);
+    expect(xml).toContain(`<loc>${origin}/comp</loc>`);
+    expect(xml).toContain(`<loc>${origin}${compPath(compId, compName)}</loc>`);
+    expect(xml).toContain(`<loc>${origin}${compScoresPath(compId, compName)}</loc>`);
+    expect(xml).toContain(`<loc>${origin}${compAnalysisPath(compId, compName)}</loc>`);
+    // Deliberately NOT listed: per-task and per-pilot deep pages, waypoints.
+    expect(xml).not.toContain("/task/");
+    expect(xml).not.toContain("/pilot/");
+    expect(xml).not.toContain("/waypoints");
+    // Every lastmod is a bare date (YYYY-MM-DD), never a full datetime — the
+    // creation_date fallback is an ISO timestamp and must be normalized.
+    expect(xml).not.toMatch(/<lastmod>[^<]*T/);
+    for (const m of xml.matchAll(/<lastmod>([^<]*)<\/lastmod>/g)) {
+      expect(m[1]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+});
+
 test.describe("SSR — hydration is clean (real browser)", () => {
-  for (const path of ["/comp", ":compHub", ":scores", ":waypoints", ":task", ":pilot"] as const) {
+  for (const path of [
+    "/comp",
+    ":compHub",
+    ":scores",
+    ":waypoints",
+    ":task",
+    ":pilot",
+    ":compAnalysis",
+    ":taskAnalysis",
+  ] as const) {
     test(`no hydration mismatch on ${path}`, async ({ page, request }) => {
       const d = await discover(request);
       const url =
@@ -182,7 +335,11 @@ test.describe("SSR — hydration is clean (real browser)", () => {
                 ? `/comp/${d.compId}/waypoints`
                 : path === ":task"
                   ? `/comp/${d.compId}/task/${d.taskId}`
-                  : `/comp/${d.compId}/task/${d.taskId}/pilot/${d.pilotId}`;
+                  : path === ":pilot"
+                    ? `/comp/${d.compId}/task/${d.taskId}/pilot/${d.pilotId}`
+                    : path === ":compAnalysis"
+                      ? `/comp/${d.compId}/analysis`
+                      : `/comp/${d.compId}/analysis/task/${d.taskId}`;
 
       const hydrationErrors: string[] = [];
       page.on("console", (msg) => {

@@ -21,6 +21,8 @@ import { useUser } from "../lib/user";
 import { formatInstant } from "../lib/time";
 import { formatDistance, useUnits } from "../lib/units";
 import { ordinal } from "../lib/format";
+import { pilotPath } from "../lib/slug";
+import { useCompName } from "./comp-name-context";
 import { SectionHeader } from "../components/SectionHeader";
 import { ScoreFreshness } from "./ScoreFreshness";
 import { SubmitTrackDialog } from "./SubmitTrackDialog";
@@ -69,6 +71,7 @@ type MySubmission =
 export function TaskResults({
   compId,
   taskId,
+  taskName = null,
   timezone,
   isOpenDistance,
   isAuthenticated,
@@ -80,6 +83,8 @@ export function TaskResults({
 }: {
   compId: string;
   taskId: string;
+  /** Task name, for canonical pilot links. */
+  taskName?: string | null;
   timezone: string | null;
   isOpenDistance: boolean;
   isAuthenticated: boolean;
@@ -256,6 +261,7 @@ export function TaskResults({
                   key={cls.pilot_class}
                   compId={compId}
                   taskId={taskId}
+                  taskName={taskName}
                   cls={cls}
                   showClassName={score.classes.length > 1}
                   isOpenDistance={isOpenDistance}
@@ -289,17 +295,20 @@ export function TaskResults({
 function ClassPodium({
   compId,
   taskId,
+  taskName,
   cls,
   showClassName,
   isOpenDistance,
 }: {
   compId: string;
   taskId: string;
+  taskName: string | null;
   cls: ClassScore;
   showClassName: boolean;
   isOpenDistance: boolean;
 }) {
   const units = useUnits();
+  const compName = useCompName();
   if (cls.pilots.length === 0) return null;
   const top = cls.pilots.slice(0, 3);
   const more = cls.pilots.length - top.length;
@@ -314,7 +323,7 @@ function ClassPodium({
               {ordinal(p.rank)}
             </span>
             <AriaLink
-              href={`/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/pilot/${encodeURIComponent(p.comp_pilot_id)}`}
+              href={pilotPath(compId, compName, taskId, taskName, p.comp_pilot_id, p.pilot_name)}
               className="underline decoration-muted-foreground/40 underline-offset-4 outline-none data-hovered:decoration-current data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
             >
               {p.pilot_name}

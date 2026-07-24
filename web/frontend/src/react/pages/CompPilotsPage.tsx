@@ -15,14 +15,19 @@ import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { underComp } from "../lib/crumbs";
+import { idFromSegment, compPath } from "../lib/slug";
+import { useCanonicalPath } from "../lib/use-canonical-path";
 import { PilotsSection } from "../comp/PilotsSection";
 import { fetchWithRetry, type CompDetailData } from "../comp/types";
 
 export function CompPilotsPage() {
-  const { compId } = useParams<{ compId: string }>();
+  const { compId: compParam } = useParams<{ compId: string }>();
+  const compId = idFromSegment(compParam ?? "");
   const { user, loading } = useUser();
   const [comp, setComp] = useState<CompDetailData | null>(null);
   const [notFound, setNotFound] = useState(false);
+  // Settle the address bar on the canonical `${slug}-${id}/pilots` once loaded.
+  useCanonicalPath(comp ? `${compPath(compId, comp.name)}/pilots` : null);
 
   useEffect(() => {
     if (!compId) {

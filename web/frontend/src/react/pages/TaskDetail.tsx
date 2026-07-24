@@ -46,6 +46,7 @@ import { formatTaskDate } from "../lib/format";
 import { SectionHeader } from "../components/SectionHeader";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { TaskResults } from "../comp/TaskResults";
+import { CompNameProvider } from "../comp/comp-name-context";
 import { TaskStandings } from "../comp/TaskStandings";
 import { RouteEditorDialog } from "../comp/RouteEditorDialog";
 import { TurnpointsTable } from "../comp/TurnpointsTable";
@@ -60,6 +61,8 @@ import {
 import { useInitialData } from "../lib/initial-data";
 import type { TaskDetailLoaderData } from "../loaders";
 import { underComp } from "../lib/crumbs";
+import { idFromSegment, compPath, taskPath, taskAnalysisPath } from "../lib/slug";
+import { useCanonicalPath } from "../lib/use-canonical-path";
 import { cn } from "../lib/utils";
 
 export function TaskDetail() {
@@ -71,7 +74,9 @@ export function TaskDetail() {
 }
 
 function TaskDetailContent() {
-  const { compId, taskId } = useParams<{ compId: string; taskId: string }>();
+  const { compId: compParam, taskId: taskParam } = useParams<{ compId: string; taskId: string }>();
+  const compId = idFromSegment(compParam ?? "");
+  const taskId = idFromSegment(taskParam ?? "");
   const { user } = useUser();
   const location = useLocation();
   const navigate = useNavigate();
@@ -80,6 +85,12 @@ function TaskDetailContent() {
   const initial = useInitialData<TaskDetailLoaderData>();
   const [task, setTask] = useState<TaskDetailData | null>(initial?.task ?? null);
   const [comp, setComp] = useState<CompDetailData | null>(initial?.comp ?? null);
+
+  // Canonicalise once both names are known (comp is a non-critical fetch, so
+  // wait for it rather than 301-ing to a bare comp segment).
+  useCanonicalPath(
+    comp && task ? taskPath(compId, comp.name, taskId, task.name) : null
+  );
   const [notFound, setNotFound] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [scoresRefresh, setScoresRefresh] = useState(0);
@@ -268,22 +279,21 @@ function TaskDetailContent() {
             3D replay
           </a>
         ) : null}
-        {/* Field analysis: admin-only while the metrics settle, and
-            meaningless without a route or on an open-distance task (which has
-            no legs or speed section to measure against). Requires comp to be
-            LOADED — `comp?.scoring_format !== …` would fail open to a
-            dead-end refusal page whenever the non-critical comp fetch
-            degrades. Unlike the two anchors above this is an SPA route, so
-            it uses a RAC LinkButton through the RouterProvider.
+        {/* Field analysis: meaningless without a route or on an open-distance
+            task (which has no legs or speed section to measure against).
+            Requires comp to be LOADED — `comp?.scoring_format !== …` would
+            fail open to a dead-end refusal page whenever the non-critical comp
+            fetch degrades. Unlike the two anchors above this is an SPA route,
+            so it uses a RAC LinkButton through the RouterProvider.
 
             Cross-links into the comp's field analysis subtree (the per-task
             report is a chapter of that report, not of this page), so from
             there "up" goes to the comp report, not back here. */}
-        {isAdmin && task.xctsk && comp && comp.scoring_format !== "open_distance" ? (
+        {task.xctsk && comp && comp.scoring_format !== "open_distance" ? (
           <LinkButton
             variant="outline"
             size="sm"
-            href={`/comp/${compId}/analysis/task/${taskId}`}
+            href={taskAnalysisPath(compId, comp?.name, taskId, task.name)}
           >
             Field analysis
           </LinkButton>
@@ -302,26 +312,31 @@ function TaskDetailContent() {
           scores page (the canonical results surface), plus pilot self-service
           (Submit track, your-submission line). The management grid below is
           admin-only. */}
-      <TaskResults
-        compId={compId}
-        taskId={taskId}
-        timezone={comp?.timezone ?? null}
-        isOpenDistance={comp?.scoring_format === "open_distance"}
-        isAuthenticated={user != null}
-        isClosed={isClosed}
-        canUploadOnBehalf={canUploadOnBehalf}
-        refresh={scoresRefresh + resultsRefresh}
-        onReplayAvailable={setReplayAvailable}
-        initialScore={initial && refresh === 0 ? (initial.score ?? undefined) : undefined}
-      />
+      <CompNameProvider value={comp?.name ?? null}>
+        <TaskResults
+          compId={compId}
+          taskId={taskId}
+          taskName={task.name}
+          timezone={comp?.timezone ?? null}
+          isOpenDistance={comp?.scoring_format === "open_distance"}
+          isAuthenticated={user != null}
+          isClosed={isClosed}
+          canUploadOnBehalf={canUploadOnBehalf}
+          refresh={scoresRefresh + resultsRefresh}
+          onReplayAvailable={setReplayAvailable}
+          initialScore={initial && refresh === 0 ? (initial.score ?? undefined) : undefined}
+        />
+      </CompNameProvider>
 
       {/* Admin management grid (statuses, uploads on behalf, manual flights,
           restores) — the tool the old public "standings" table was secretly
           doubling as. Admin-only and never server-rendered. */}
       {isAdmin && comp ? (
+        <CompNameProvider value={comp.name}>
         <TaskStandings
           compId={compId}
           taskId={taskId}
+          taskName={task.name}
           isAdmin={isAdmin}
           isClosed={isClosed}
           scoringFormat={comp.scoring_format === "open_distance" ? "open_distance" : "gap"}
@@ -331,6 +346,7 @@ function TaskDetailContent() {
           refresh={scoresRefresh}
           onMutated={() => setResultsRefresh((n) => n + 1)}
         />
+        </CompNameProvider>
       ) : null}
 
       {isAdmin && comp && editOpen ? (
@@ -410,7 +426,7 @@ function TaskPrevNext({
         <LinkButton
           variant="ghost"
           size="sm"
-          href={`/comp/${compId}/task/${prev.task_id}`}
+          href={taskPath(compId, comp?.name, prev.task_id, prev.name)}
           aria-label={`Previous task: ${prev.name}`}
         >
           ← {prev.name}
@@ -420,7 +436,7 @@ function TaskPrevNext({
         <LinkButton
           variant="ghost"
           size="sm"
-          href={`/comp/${compId}/task/${next.task_id}`}
+          href={taskPath(compId, comp?.name, next.task_id, next.name)}
           aria-label={`Next task: ${next.name}`}
         >
           {next.name} →
@@ -647,7 +663,9 @@ function EditTaskDialog({
         return;
       }
 
-      navigate(`/comp/${compId}`);
+      // No comp name in this sub-component's scope; the comp page canonicalises
+      // the URL on arrival.
+      navigate(compPath(compId));
     } catch {
       toast.error("Network error. Please try again.");
     }

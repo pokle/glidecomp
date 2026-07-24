@@ -41,6 +41,8 @@ import { formatTaskDate } from "../lib/format";
 import { formatTimeInZone, zoneNameWithOffset } from "../lib/time";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { underTask } from "../lib/crumbs";
+import { idFromSegment, pilotPath } from "../lib/slug";
+import { useCanonicalPath } from "../lib/use-canonical-path";
 import { Timestamp } from "../components/Timestamp";
 import type {
   AltitudeCleaningData,
@@ -400,11 +402,15 @@ function buildDetailData(
 // ---------------------------------------------------------------------------
 
 export function PilotScoreDetail() {
-  const { compId, taskId, pilotId } = useParams<{
+  const { compId: compParam, taskId: taskParam, pilotId: pilotParam } = useParams<{
     compId: string;
     taskId: string;
     pilotId: string;
   }>();
+  // Route segments may be `${slug}-${id}`; the id is what the API + lookups need.
+  const compId = idFromSegment(compParam ?? "");
+  const taskId = idFromSegment(taskParam ?? "");
+  const pilotId = idFromSegment(pilotParam ?? "");
   // SSR seed: the server fetched comp+task+score+analysis for this URL, so
   // derive the narrative synchronously and render it in the first paint (this
   // is the SEO centerpiece). The map + tracklog still load client-side.
@@ -512,6 +518,22 @@ export function PilotScoreDetail() {
     () =>
       state.kind === "ready" ? [...state.data.eventsByItem.values()] : [],
     [state],
+  );
+
+  // Settle the address bar on the canonical `${slug}-${id}` once the names are
+  // known. Must run before the early returns below (hooks are unconditional).
+  const readyData = state.kind === "ready" ? state.data : null;
+  useCanonicalPath(
+    readyData && compId && taskId && pilotId
+      ? pilotPath(
+          compId,
+          readyData.comp.name,
+          taskId,
+          readyData.task.name,
+          pilotId,
+          readyData.entry.pilot_name
+        )
+      : null
   );
 
   if (!compId || !taskId || !pilotId) return null;

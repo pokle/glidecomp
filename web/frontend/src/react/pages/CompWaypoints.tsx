@@ -42,6 +42,8 @@ import { useConfirm } from "../lib/confirm";
 import { useAdminView, useUser } from "../lib/user";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { underComp } from "../lib/crumbs";
+import { idFromSegment, compWaypointsPath } from "../lib/slug";
+import { useCanonicalPath } from "../lib/use-canonical-path";
 import { formatCoords, parseCoords } from "../comp/route-editor";
 import { AddWaypointDialog } from "../comp/AddWaypointDialog";
 import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
@@ -168,7 +170,8 @@ export function CompWaypoints() {
 }
 
 function CompWaypointsContent() {
-  const { compId } = useParams<{ compId: string }>();
+  const { compId: compParam } = useParams<{ compId: string }>();
+  const compId = idFromSegment(compParam ?? "");
   const { user } = useUser();
   const confirm = useConfirm();
   const units = useUnits();
@@ -178,6 +181,8 @@ function CompWaypointsContent() {
   // first client render match the server markup exactly.
   const initial = useInitialData<CompWaypointsLoaderData>();
   const [compName, setCompName] = useState<string>(initial?.comp.name ?? "");
+  // Settle the address bar on the canonical `${slug}-${id}` once the name loads.
+  useCanonicalPath(compName ? compWaypointsPath(compId, compName) : null);
   const [realIsAdmin, setRealIsAdmin] = useState(!!initial?.comp.is_admin);
   const [rows, setRows] = useState<WpRow[]>(() =>
     initial ? initial.waypoints.map(toRow) : []
