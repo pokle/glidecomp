@@ -1,0 +1,45 @@
+---
+/**
+ * Not-found page. Astro emits this as `404.html`, which Cloudflare Pages serves
+ * with a real HTTP 404 status for any request that matches no static asset,
+ * `_redirects` rule or Function route — replacing the old soft-200 fallback that
+ * served the marketing homepage for unknown URLs (e.g. /lkjasdf/asdf). The six
+ * SSR comp routes and the SPA route rewrites still take precedence; this only
+ * catches genuinely unrouted paths.
+ *
+ * Styled with Tailwind utilities (not the homepage's `.hero`/`.button` classes,
+ * which are bundled only with index.astro), matching the other static pages.
+ */
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="Page not found — GlideComp" description="The page you were looking for doesn't exist.">
+  <div class="min-h-[60vh] bg-background text-foreground px-6 py-24">
+    <div class="max-w-xl mx-auto text-center">
+      <p class="text-sm font-semibold tracking-widest text-muted-foreground uppercase">404</p>
+      <h1 class="mt-2 text-4xl font-bold">Page not found</h1>
+      <p class="mt-4 text-muted-foreground">
+        The page you were looking for doesn't exist, or may have moved. Check the
+        address, or head somewhere useful below.
+      </p>
+      <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
+        <a
+          href="/"
+          class="inline-flex items-center rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity"
+        >
+          Back to home
+        </a>
+        <a
+          href="/comp"
+          class="inline-flex items-center rounded-md border border-border px-5 py-2.5 text-sm font-medium hover:bg-muted transition-colors"
+        >
+          Browse competitions
+        </a>
+      </div>
+      <p class="mt-6 text-sm text-muted-foreground">
+        Looking for how scoring works? See
+        <a href="/scoring" class="underline hover:text-foreground">the scoring guide</a>.
+      </p>
+    </div>
+  </div>
+</Base>

@@ -358,8 +358,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
 
   const match = ROUTES.map((r) => ({ r, m: path.match(r.pattern) })).find((x) => x.m);
-  // Not one of the SSR routes → serve the SPA shell unchanged (today's behavior).
-  if (!match || !match.m) return fetchShell(env, url);
+  // Not one of the SSR routes. Valid SPA-only /comp routes (the pilots roster,
+  // the old task-analysis redirect) were already handled above via
+  // NOINDEX_SHELL_ROUTES, so reaching here means the path matches no known
+  // /comp route at all (e.g. /comp/<id>/asdf) — it is a genuine 404. Render the
+  // SPA shell (react-router shows its NotFound page) but with a real 404 status
+  // + noindex, rather than the old soft-200 that made junk URLs look valid.
+  if (!match || !match.m) return notFoundShell(env, url);
 
   // Forward the cookie so the API answers exactly as it would for this visitor
   // (admins see their test comps; everyone else gets the public view / 404).
