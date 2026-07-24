@@ -143,15 +143,14 @@ test.describe("SSR — isolation and fallback", () => {
   });
 
   /**
-   * Field analysis is admin-only and deliberately client-only, so a hard
-   * reload of its deep URL must still get a usable SPA shell — the Functions
-   * fallback path, which `vite dev` never exercises — and must not be
-   * indexable, since there is nothing in it for a crawler.
+   * A hard reload of an admin-only / redirect-only deep URL must still get a
+   * usable SPA shell — the Functions fallback path, which `vite dev` never
+   * exercises — and must not be indexable, since there is nothing in it for a
+   * crawler. (Field analysis is no longer here — it is SSR'd; see below.)
    */
   for (const path of [
-    "/comp/anything/analysis",
-    "/comp/anything/analysis/task/anything",
-    // The pre-re-nesting URL, redirected client-side — still needs the shell.
+    // The pre-re-nesting field-analysis URL, redirected client-side — still
+    // needs the shell rather than an SSR render or a 404.
     "/comp/anything/task/anything/analysis",
     // Admin-only roster editor page.
     "/comp/anything/pilots",
@@ -167,8 +166,70 @@ test.describe("SSR — isolation and fallback", () => {
   }
 });
 
+test.describe("SSR — field analysis (public)", () => {
+  test("task field analysis server-renders (warm content or a pending notice)", async ({
+    request,
+  }) => {
+    const { compId, taskId } = await discover(request);
+    // The cold path returns pending and schedules a background compute. Poll
+    // to give it a chance to warm; the assertion below tolerates either state,
+    // so a slow compute never makes this flaky.
+    const apiUrl = `/api/comp/${compId}/task/${taskId}/field-analysis`;
+    for (let i = 0; i < 20; i++) {
+      const r = await request.get(apiUrl);
+      if (r.ok()) {
+        const b = (await r.json()) as { pending: boolean };
+        if (!b.pending) break;
+      }
+      await new Promise((res) => setTimeout(res, 2000));
+    }
+
+    const res = await request.get(`/comp/${compId}/analysis/task/${taskId}`);
+    expect(res.ok()).toBeTruthy();
+    const html = await res.text();
+    // The defining SSR property: the loader data is embedded in the raw HTML.
+    expect(html).toContain("window.__SSR_DATA__");
+    expect(html).toContain("Field analysis —");
+    // Branch on the actual server HTML (race-free): warm renders the ranking
+    // heading and is indexable; cold renders the pending notice and is noindex.
+    if (html.includes("What separated the field")) {
+      expect(html).not.toContain('name="robots" content="noindex"');
+    } else {
+      expect(html.toLowerCase()).toContain("pending");
+      expect(html).toContain('name="robots" content="noindex"');
+    }
+  });
+
+  test("comp field analysis server-renders with a title and SSR data", async ({
+    request,
+  }) => {
+    const { compId, compName } = await discover(request);
+    const res = await request.get(`/comp/${compId}/analysis`);
+    expect(res.ok()).toBeTruthy();
+    const html = await res.text();
+    expect(html).toContain("window.__SSR_DATA__");
+    expect(html).toContain(`Field analysis — ${compName}`);
+  });
+
+  test("field analysis of an invalid comp is a 404 noindex shell", async ({ request }) => {
+    const res = await request.get("/comp/zzznope/analysis", { failOnStatusCode: false });
+    expect(res.status()).toBe(404);
+    const html = await res.text();
+    expect(html).toContain('name="robots" content="noindex"');
+  });
+});
+
 test.describe("SSR — hydration is clean (real browser)", () => {
-  for (const path of ["/comp", ":compHub", ":scores", ":waypoints", ":task", ":pilot"] as const) {
+  for (const path of [
+    "/comp",
+    ":compHub",
+    ":scores",
+    ":waypoints",
+    ":task",
+    ":pilot",
+    ":compAnalysis",
+    ":taskAnalysis",
+  ] as const) {
     test(`no hydration mismatch on ${path}`, async ({ page, request }) => {
       const d = await discover(request);
       const url =
@@ -182,7 +243,11 @@ test.describe("SSR — hydration is clean (real browser)", () => {
                 ? `/comp/${d.compId}/waypoints`
                 : path === ":task"
                   ? `/comp/${d.compId}/task/${d.taskId}`
-                  : `/comp/${d.compId}/task/${d.taskId}/pilot/${d.pilotId}`;
+                  : path === ":pilot"
+                    ? `/comp/${d.compId}/task/${d.taskId}/pilot/${d.pilotId}`
+                    : path === ":compAnalysis"
+                      ? `/comp/${d.compId}/analysis`
+                      : `/comp/${d.compId}/analysis/task/${d.taskId}`;
 
       const hydrationErrors: string[] = [];
       page.on("console", (msg) => {

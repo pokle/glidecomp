@@ -3,10 +3,11 @@
  * decision-making, gaggle, race craft, day profile) and the Spearman ranking
  * of which of them actually separate the leaderboard.
  *
- * ADMIN-ONLY FOR NOW. The metrics are exploratory and easy to misread, so the
- * rollout starts with competition admins and super-admins. See
- * canViewFieldAnalysis() below — going public is deliberately a one-function
- * change (plus the notes in "WHEN WE GO PUBLIC" there).
+ * PUBLIC, same visibility rule as scores: readable by anyone for a normal
+ * comp, admin-only for a hidden `test` comp. See canViewFieldAnalysis() below.
+ * (The pages are still served a noindex client shell rather than SSR'd — SSR
+ * is deferred because the cold path can't produce a report synchronously; see
+ * the compute note below and functions/comp/[[path]].ts.)
  *
  * Stale-first like scores (see field-analysis-store.ts), with one deliberate
  * departure: the cold path NEVER computes synchronously. A cold analysis
@@ -25,7 +26,7 @@ import { isCompAdmin } from "../super-admin";
 import { audit } from "../audit";
 import { encodeId } from "../sqids";
 import { shortHash } from "../scoring";
-import { ifNoneMatchMatches, toEtag } from "../score-store";
+import { ifNoneMatchMatches, publicMaxAgeSeconds, toEtag } from "../score-store";
 import {
   bumpFieldAnalysisInputs,
   decodeFieldAnalysisRow,
@@ -46,29 +47,46 @@ type Variables = {
 type HonoEnv = { Bindings: Env; Variables: Variables };
 
 /**
- * Who may read field analysis: competition admins and super-admins
- * (isCompAdmin grants both).
+ * Who may read field analysis. Public for a normal comp; a hidden `test` comp
+ * stays admin-only (competition admins + super-admins — isCompAdmin grants
+ * both). This mirrors the score route's visibility check exactly.
  *
  * The GET routes use `optionalAuth` (not `requireAuth`) so an anonymous
- * request 404s here rather than 401ing in middleware — the endpoint's
- * existence shouldn't be a signal, and it means going public needs no
- * middleware change at all.
+ * request to a test comp 404s here rather than 401ing in middleware — the
+ * endpoint's existence shouldn't be a signal.
  *
- * WHEN WE GO PUBLIC: replace this body with the score route's visibility
- * check — public unless `comp.test`, in which case admin-only. Three further
- * things change at that point, none of them here: the Cache-Control becomes
- * the score route's `cacheControl(c)` (public + must-revalidate); the cold
- * "pending" state needs to be pleasant for anonymous first visitors rather
- * than merely honest; and the pages want SSR + a ROUTES entry in
- * functions/comp/[[path]].ts.
+ * Still deferred (not "done" by making this public): SSR + a ROUTES entry in
+ * functions/comp/[[path]].ts. The pages stay a noindex client shell because
+ * the cold path returns `pending` and computes in the background (see the
+ * file header) — SSR would render an empty shell for any un-warmed report, so
+ * it needs a pre-warming strategy first.
  */
 async function canViewFieldAnalysis(
   c: Context<HonoEnv>,
-  compId: number
+  compId: number,
+  isTest: boolean
 ): Promise<boolean> {
+  if (!isTest) return true;
   const user = c.var.user;
   if (!user) return false;
   return isCompAdmin(c.env.DB, compId, user);
+}
+
+/**
+ * Cache-Control for field-analysis responses — matches the score route.
+ * Signed-in viewers must never see another session's cached body. Anonymous
+ * readers may cache but must revalidate; the max-age grows with how long the
+ * report has already been stable (publicMaxAgeSeconds), so a finished comp's
+ * analysis stops being re-fetched while a live one stays near-realtime.
+ */
+function cacheControl(
+  c: Context<HonoEnv>,
+  computedAt: string | null,
+  stale: boolean
+): string {
+  if (c.var.user) return "private, no-store";
+  const maxAge = publicMaxAgeSeconds(computedAt, stale, Date.now());
+  return `public, max-age=${maxAge}, must-revalidate`;
 }
 
 /** Short per-task label used as a column header in the comp aggregate —
@@ -90,15 +108,16 @@ export const fieldAnalysisRoutes = new Hono<HonoEnv>()
       const taskId = c.var.ids.task_id!;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, test FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number }>();
+        .first<{ comp_id: number; test: number }>();
       if (!comp) return c.json({ error: "Not found" }, 404);
 
-      // 404 rather than 403 for a non-admin — the same way hidden `test`
-      // comps are concealed, so the endpoint's existence isn't a signal.
-      if (!(await canViewFieldAnalysis(c, compId)))
+      // Public for a normal comp; a hidden `test` comp 404s for non-admins —
+      // the same way test comps are concealed, so the endpoint's existence
+      // isn't a signal.
+      if (!(await canViewFieldAnalysis(c, compId, !!comp.test)))
         return c.json({ error: "Not found" }, 404);
 
       const task = await c.env.DB.prepare(
@@ -130,8 +149,7 @@ export const fieldAnalysisRoutes = new Hono<HonoEnv>()
         const headers = {
           ETag: toEtag(etagKey),
           "X-Cache": stale ? "HIT-STALE" : "HIT",
-          // Always private: admin-only, and it names every pilot.
-          "Cache-Control": "private, no-store",
+          "Cache-Control": cacheControl(c, row.computed_at, stale),
         };
         if (ifNoneMatchMatches(c.req.header("If-None-Match"), etagKey)) {
           return c.body(null, 304, headers);
@@ -166,7 +184,7 @@ export const fieldAnalysisRoutes = new Hono<HonoEnv>()
             error: row.error,
           },
           200,
-          { "Cache-Control": "private, no-store" }
+          { "Cache-Control": cacheControl(c, row.computed_at, false) }
         );
       }
 
@@ -184,7 +202,7 @@ export const fieldAnalysisRoutes = new Hono<HonoEnv>()
           error: null,
         },
         200,
-        { "X-Cache": "MISS", "Cache-Control": "private, no-store" }
+        { "X-Cache": "MISS", "Cache-Control": cacheControl(c, null, true) }
       );
     }
   )
@@ -204,12 +222,12 @@ export const fieldAnalysisRoutes = new Hono<HonoEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, name FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, name, test FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; name: string }>();
+        .first<{ comp_id: number; name: string; test: number }>();
       if (!comp) return c.json({ error: "Not found" }, 404);
-      if (!(await canViewFieldAnalysis(c, compId)))
+      if (!(await canViewFieldAnalysis(c, compId, !!comp.test)))
         return c.json({ error: "Not found" }, 404);
 
       const tasks = await c.env.DB.prepare(
@@ -274,9 +292,15 @@ export const fieldAnalysisRoutes = new Hono<HonoEnv>()
       const etagKey = `compfa:${compId}:${await shortHash(
         stateKeys.join("|")
       )}${anyStale ? ":stale" : ""}`;
+      // Any still-pending task means the aggregate is still filling in, so it
+      // must not be long-cached — treat it as stale for freshness purposes.
       const headers = {
         ETag: toEtag(etagKey),
-        "Cache-Control": "private, no-store",
+        "Cache-Control": cacheControl(
+          c,
+          oldestComputedAt,
+          anyStale || pendingCount > 0
+        ),
       };
       if (ifNoneMatchMatches(c.req.header("If-None-Match"), etagKey)) {
         return c.body(null, 304, headers);

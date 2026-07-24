@@ -390,6 +390,36 @@ export async function computeAndStoreTaskScore(
 // ETag helpers
 // ---------------------------------------------------------------------------
 
+/** Three months — the ceiling on how long a stable report may be cached. */
+export const MAX_PUBLIC_MAX_AGE_S = 90 * 24 * 60 * 60;
+
+/**
+ * Age-based cache lifetime (seconds) for a materialized, publicly-cacheable
+ * body. A stale-first row that has sat unchanged for a while is unlikely to
+ * change soon — a finished comp's scores don't move — so we let shared caches
+ * hold a FRESH row for roughly as long as it has ALREADY been stable
+ * (now − computed_at), capped at three months. A row known to be stale (inputs
+ * changed, recompute scheduled) or with no compute yet gets 0: it is about to
+ * change, so clients must revalidate every time.
+ *
+ * The trade-off is deliberate (per product intent): a late correction to a
+ * long-stable report is not seen by caches already holding it until their
+ * lifetime — bounded by that prior stability age and the 3-month cap — expires.
+ *
+ * A mirror of this pure helper lives in the frontend for the SSR page headers
+ * (web/frontend/src/react/loaders.ts:publicMaxAgeSeconds); keep them in step.
+ */
+export function publicMaxAgeSeconds(
+  computedAt: string | null,
+  stale: boolean,
+  nowMs: number
+): number {
+  if (stale || !computedAt) return 0;
+  const ageMs = nowMs - Date.parse(computedAt);
+  if (!Number.isFinite(ageMs) || ageMs <= 0) return 0;
+  return Math.min(Math.floor(ageMs / 1000), MAX_PUBLIC_MAX_AGE_S);
+}
+
 /** Wrap a state key as a quoted HTTP ETag value. */
 export function toEtag(stateKey: string): string {
   return `"${stateKey}"`;

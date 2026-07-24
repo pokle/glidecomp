@@ -2,9 +2,9 @@
  * Task field analysis — the behavioural metrics for one task's field, and
  * which of them actually separated the leaderboard.
  *
- * ADMIN-ONLY while the metrics settle (see canViewFieldAnalysis in the
- * worker's routes/field-analysis.ts; the API 404s for everyone else, and
- * this page reflects that rather than second-guessing it).
+ * PUBLIC (admin-only only for a hidden `test` comp — see canViewFieldAnalysis
+ * in the worker's routes/field-analysis.ts; the API 404s a hidden comp for
+ * non-admins, and this page reflects that rather than second-guessing it).
  *
  * Its own page rather than a section on the task page: it is a long,
  * exploratory read that shouldn't compete with the official standings.
@@ -14,9 +14,10 @@
  * that report and the H1 is the task's name (the section name is already in
  * the trail). The task page is a sibling link in the header.
  *
- * NOT SSR'd — admin-gated and private, so functions/comp/[[path]].ts falls
- * through to the plain SPA shell for this URL (with noindex). Everything
- * here fetches on mount.
+ * SSR'd via loadTaskFieldAnalysis + functions/comp/[[path]].ts: the server
+ * seeds the most-recently-cached report from `useInitialData()`, or a pending
+ * placeholder while the first compute runs; the client hydrates from the same
+ * data and takes over polling.
  *
  * Presentation order mirrors the CLI's text report deliberately: the
  * separation ranking FIRST, then per-family detail. Which metrics have
@@ -25,7 +26,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
-import { Badge } from "@/react/rac/badge";
 import { Button, LinkButton } from "@/react/rac/button";
 import { SimpleSelect } from "@/react/rac/select";
 import { Alert, AlertDescription, AlertTitle } from "@/react/ui/alert";
@@ -34,6 +34,8 @@ import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { toast } from "../lib/toast";
 import { ScoreFreshness } from "../comp/ScoreFreshness";
+import { useInitialData } from "../lib/initial-data";
+import type { TaskFieldAnalysisLoaderData } from "../loaders";
 import { SeparationRanking, rankMetrics } from "../field-analysis/SeparationRanking";
 import {
   MetricFamilySection,
@@ -62,15 +64,20 @@ import type { CompDetailData, TaskDetailData } from "../comp/types";
 
 export function TaskFieldAnalysis() {
   const { compId, taskId } = useParams<{ compId: string; taskId: string }>();
-  const { user, loading: userLoading } = useUser();
+  const { user } = useUser();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [data, setData] = useState<TaskFieldAnalysisData | null>(null);
-  const [etag, setEtag] = useState<string | null>(null);
-  const [task, setTask] = useState<TaskDetailData | null>(null);
-  const [comp, setComp] = useState<CompDetailData | null>(null);
+  // SSR seed: the server ran loadTaskFieldAnalysis for this URL and embedded
+  // the result. Null on client boot / SPA navigations, where the effects fetch.
+  const initial = useInitialData<TaskFieldAnalysisLoaderData>();
+  const [data, setData] = useState<TaskFieldAnalysisData | null>(
+    initial?.analysis ?? null
+  );
+  const [etag, setEtag] = useState<string | null>(initial?.analysisEtag ?? null);
+  const [task, setTask] = useState<TaskDetailData | null>(initial?.task ?? null);
+  const [comp, setComp] = useState<CompDetailData | null>(initial?.comp ?? null);
   const [status, setStatus] = useState<"loading" | "ready" | "forbidden" | "error">(
-    "loading"
+    initial ? "ready" : "loading"
   );
   const [refreshing, setRefreshing] = useState(false);
 
@@ -85,6 +92,14 @@ export function TaskFieldAnalysis() {
 
   useEffect(() => {
     if (!compId || !taskId || !analysisUrl) return;
+    // Seeded by SSR for the first render — don't refetch on mount, but the
+    // pending-poll effect below still drives refetches (refetchTick > 0).
+    if (initial && refetchTick === 0) {
+      if (initial.task) {
+        document.title = `GlideComp - Field analysis: ${initial.task.name}`;
+      }
+      return;
+    }
     let cancelled = false;
     (async () => {
       if (refetchTick === 0) setStatus("loading");
@@ -123,6 +138,8 @@ export function TaskFieldAnalysis() {
     return () => {
       cancelled = true;
     };
+    // `initial` is stable for the life of the SSR'd URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compId, taskId, analysisUrl, refetchTick]);
 
   // While the first-ever compute runs in the background (the cold path never
@@ -153,6 +170,8 @@ export function TaskFieldAnalysis() {
   // analysis renders fine without them.
   useEffect(() => {
     if (!compId || !taskId) return;
+    // SSR already seeded task + comp; skip the cosmetic fetch.
+    if (initial) return;
     let cancelled = false;
     (async () => {
       try {
@@ -181,6 +200,8 @@ export function TaskFieldAnalysis() {
     return () => {
       cancelled = true;
     };
+    // `initial` is stable for the life of the SSR'd URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compId, taskId]);
 
   const isAdmin = useAdminView(
@@ -291,7 +312,11 @@ export function TaskFieldAnalysis() {
   const crumbs = underCompAnalysis(compId, comp?.name);
   const heading = task?.name ?? "Task";
 
-  if (userLoading || status === "loading") {
+  // Gate on `status` only, never on the user session: the content is public,
+  // and useUser().loading is true throughout SSR + the first hydration render,
+  // so gating on it would make the server emit this skeleton instead of the
+  // seeded report.
+  if (status === "loading") {
     return (
       <div className="mx-auto max-w-6xl px-4 py-6 font-hyperlegible">
         <p className="text-sm text-muted-foreground">Loading field analysis…</p>
@@ -307,9 +332,8 @@ export function TaskFieldAnalysis() {
         <Alert className="mt-4">
           <AlertTitle>Not available</AlertTitle>
           <AlertDescription>
-            {user
-              ? "Field analysis is currently limited to competition admins while the metrics are being validated."
-              : "Sign in as a competition admin to view the field analysis."}
+            This field analysis isn't available — it may be part of a
+            competition that hasn't been published.
           </AlertDescription>
         </Alert>
       </div>
@@ -354,7 +378,6 @@ export function TaskFieldAnalysis() {
         </div>
         {/* Pure navigation/actions — meaningless on paper. */}
         <div className="flex items-center gap-2 print:hidden">
-          <Badge variant="outline">Admins only</Badge>
           {/* The trail now goes up to the comp report, so the task page — a
               genuine sibling relationship — gets an explicit link here. */}
           <LinkButton
