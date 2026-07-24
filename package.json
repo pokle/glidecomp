@@ -18,6 +18,7 @@
   "scripts": {
     "dev": "[ -d node_modules ] || bun install; concurrently --kill-others-on-fail -n workers,fe -c blue,cyan 'bun run dev:workers' 'bun run dev:frontend'",
     "dev:workers": "[ -d node_modules ] || bun install; bun run db:migrate && concurrently --kill-others-on-fail -n auth,comp,airscore -c blue,green,yellow 'bun run dev:auth' 'bun run dev:comp' 'bun run dev:airscore'",
+    "preview": "[ -d node_modules ] || bun install; [ -f web/workers/auth-api/.dev.vars ] || cp web/workers/auth-api/.dev.vars.example web/workers/auth-api/.dev.vars; concurrently -k -n workers,pages -c blue,magenta 'bun run dev:workers' 'bash web/scripts/preview-serve.sh'",
     "db:migrate": "CI=true wrangler --config web/workers/auth-api/wrangler.toml d1 migrations apply taskscore-auth --local --persist-to web/.wrangler/state",
     "kill-dev": "bash web/scripts/kill-dev.sh",
     "kill-state": "bash web/scripts/kill-state.sh",
