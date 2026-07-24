@@ -38,6 +38,18 @@ export { partitionPhases, DEFAULT_PHASE_OPTIONS, type FlightPhase, type PhaseInt
 export { estimateWorkingBand, type WorkingBand, type WorkingBandHour } from './working-band';
 export { percentile, median, mean, rankWithTies, spearman, circularMeanWind, type WindSample, type MeanWind } from './stats';
 export { evaluateField, MIN_CORRELATION_N } from './evaluate';
+export {
+  clusterPilotStyles,
+  MIN_CLUSTER_PILOTS,
+  MIN_COVERAGE,
+  STYLE_NICKNAMES,
+  type StyleClusterReport,
+  type StyleCluster,
+  type StyleClusterMember,
+  type StyleSignature,
+  type SignatureHint,
+  type UnclusteredPilot,
+} from './clustering';
 export { renderFieldReport, renderCompReport, formatMetricValue } from './report';
 export { aggregateComp } from './aggregate';
 export { ALL_METRICS, FAMILY_ORDER, FAMILY_LABELS } from './registry';

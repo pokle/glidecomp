@@ -13,6 +13,11 @@ export {
   FAMILY_ORDER,
   FAMILY_LABELS,
   MIN_CORRELATION_N,
+  // Style clustering is computed HERE, at read time, from the stored report —
+  // the same pure function the CLI report uses, so the two can never
+  // disagree about who flew alike.
+  clusterPilotStyles,
+  MIN_CLUSTER_PILOTS,
   // The metric registry itself: the comp aggregate stores no method
   // descriptions, so the comp page's glossary reads them from here — the
   // same definitions the engine computes with.
@@ -38,6 +43,11 @@ export type {
   ClimbHourlySeries,
   DayTimingSeries,
   PilotMetricValue,
+  StyleClusterReport,
+  StyleCluster,
+  StyleClusterMember,
+  StyleSignature,
+  UnclusteredPilot,
 } from "@glidecomp/engine";
 
 import type { FieldAnalysisReport, CompAggregateReport } from "@glidecomp/engine";
