@@ -28,6 +28,7 @@ import {
   scoringFormatLabel,
 } from "../lib/format";
 import { useInitialData } from "../lib/initial-data";
+import { compPath } from "../lib/slug";
 import type { CompListEntry, CompetitionsLoaderData } from "../loaders";
 
 type Comp = CompListEntry;
@@ -143,7 +144,7 @@ export function Competitions() {
           {filteredComps.map((comp) => (
             <li key={comp.comp_id}>
               <AriaLink
-                href={`/comp/${comp.comp_id}`}
+                href={compPath(comp.comp_id, comp.name)}
                 className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-4 py-3 transition-colors outline-none data-hovered:bg-muted data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50"
               >
                 <span>

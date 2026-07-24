@@ -13,6 +13,8 @@ import { api } from "../../comp/api";
 import { formatDuration } from "../lib/format";
 import { formatDistance, useUnits } from "../lib/units";
 import { ScoreFreshness } from "./ScoreFreshness";
+import { pilotPath } from "../lib/slug";
+import { useCompName } from "./comp-name-context";
 import type { ClassScore, ScoringFormat, TaskScoreData } from "./types";
 
 type ScoresState =
@@ -24,6 +26,7 @@ type ScoresState =
 export function ScoresSection({
   compId,
   taskId,
+  taskName = null,
   refresh,
   timezone,
   onReplayAvailable,
@@ -32,6 +35,8 @@ export function ScoresSection({
 }: {
   compId: string;
   taskId: string;
+  /** Task name, for canonical pilot links (falls back to a bare task segment). */
+  taskName?: string | null;
   /** Bump to re-fetch scores (after uploads / penalties / deletes). */
   refresh: number;
   /** Comp-local IANA zone for the computed-at timestamp. */
@@ -130,6 +135,7 @@ export function ScoresSection({
               key={cls.pilot_class}
               compId={compId}
               taskId={taskId}
+              taskName={taskName}
               cls={cls}
               showClassName={state.data.classes.length > 1}
               format={state.data.scoring_format === "open_distance" ? "open_distance" : "gap"}
@@ -150,17 +156,20 @@ export function ScoresSection({
 function ScoreClassTable({
   compId,
   taskId,
+  taskName,
   cls,
   showClassName,
   format,
 }: {
   compId: string;
   taskId: string;
+  taskName: string | null;
   cls: ClassScore;
   showClassName: boolean;
   format: ScoringFormat;
 }) {
   const navigate = useNavigate();
+  const compName = useCompName();
   const units = useUnits();
   const isOpenDistance = format === "open_distance";
   const hasSpeed = cls.pilots.some((p) => p.speed_section_time !== null);
@@ -171,8 +180,8 @@ function ScoreClassTable({
   const v = cls.task_validity;
   const ap = cls.available_points;
 
-  const detailHref = (compPilotId: string) =>
-    `/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/pilot/${encodeURIComponent(compPilotId)}`;
+  const detailHref = (compPilotId: string, pilotName?: string | null) =>
+    pilotPath(compId, compName, taskId, taskName, compPilotId, pilotName);
 
   return (
     <div className="mt-2">
@@ -181,7 +190,10 @@ function ScoreClassTable({
         aria-label={`Scores — ${cls.pilot_class}`}
         // Whole-row activation (click or Enter) opens the score breakdown; the
         // pilot-name link stays a real anchor for middle-click / crawlers.
-        onRowAction={(key) => void navigate(detailHref(String(key)))}
+        onRowAction={(key) => {
+          const pilot = cls.pilots.find((p) => p.comp_pilot_id === String(key));
+          void navigate(detailHref(String(key), pilot?.pilot_name));
+        }}
       >
         <TableHeader>
           {/* Open distance has no goal, speed section, or GAP point split —
@@ -210,7 +222,7 @@ function ScoreClassTable({
                 <Cell className="text-right tabular-nums">{p.rank}</Cell>
                 <Cell>
                   <AriaLink
-                    href={detailHref(p.comp_pilot_id)}
+                    href={detailHref(p.comp_pilot_id, p.pilot_name)}
                     aria-label={`How ${p.pilot_name}'s score was calculated`}
                     className="underline decoration-muted-foreground/40 underline-offset-4 outline-none data-hovered:decoration-current data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
                   >

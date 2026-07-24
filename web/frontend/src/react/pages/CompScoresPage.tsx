@@ -17,6 +17,8 @@ import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { underComp } from "../lib/crumbs";
+import { idFromSegment, compPath, compScoresPath } from "../lib/slug";
+import { useCanonicalPath } from "../lib/use-canonical-path";
 import {
   ScoresEmptyState,
   ScoresViews,
@@ -28,7 +30,8 @@ import { useInitialData } from "../lib/initial-data";
 import type { CompScoresLoaderData } from "../loaders";
 
 export function CompScoresPage() {
-  const { compId } = useParams<{ compId: string }>();
+  const { compId: compParam } = useParams<{ compId: string }>();
+  const compId = idFromSegment(compParam ?? "");
   const { user } = useUser();
   const [searchParams] = useSearchParams();
   // SSR seed: the server ran loadCompScores for this URL. Null on client
@@ -36,6 +39,9 @@ export function CompScoresPage() {
   const initial = useInitialData<CompScoresLoaderData>();
   const [comp, setComp] = useState<CompDetailData | null>(initial?.comp ?? null);
   const [notFound, setNotFound] = useState(false);
+
+  // Settle the address bar on the canonical `${slug}-${id}` once the name loads.
+  useCanonicalPath(comp ? compScoresPath(compId, comp.name) : null);
 
   const { state, rescoring, rescore } = useCompScores(
     compId ?? "",
@@ -125,7 +131,7 @@ export function CompScoresPage() {
       {state.kind === "loading" ? (
         <p className="mt-2 text-muted-foreground">Loading scores…</p>
       ) : state.kind === "unavailable" ? (
-        <ScoresEmptyState isAdmin={isAdmin} tasksHref={`/comp/${compId}#tasks`} />
+        <ScoresEmptyState isAdmin={isAdmin} tasksHref={`${compPath(compId, comp.name)}#tasks`} />
       ) : (
         <>
           <ScoreFreshness
@@ -136,12 +142,13 @@ export function CompScoresPage() {
             pollUrl={`/api/comp/${encodeURIComponent(compId)}/scores`}
           />
           {state.scores.standings.length === 0 ? (
-            <ScoresEmptyState isAdmin={isAdmin} tasksHref={`/comp/${compId}#tasks`} />
+            <ScoresEmptyState isAdmin={isAdmin} tasksHref={`${compPath(compId, comp.name)}#tasks`} />
           ) : (
             <>
               <ScoresViews
                 scores={state.scores}
                 compId={compId}
+                compName={comp.name}
                 timezone={comp.timezone}
                 tasks={comp.tasks}
                 defaultTaskId={null}
@@ -151,7 +158,7 @@ export function CompScoresPage() {
                 Click any score for a step-by-step explanation. Questions about a
                 score?{" "}
                 <Link
-                  to={`/comp/${compId}#admins`}
+                  to={`${compPath(compId, comp.name)}#admins`}
                   className="underline underline-offset-4"
                 >
                   Ask the comp admins
