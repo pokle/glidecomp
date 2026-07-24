@@ -31,7 +31,8 @@ describe("entry-server render (SSR)", () => {
     const html = await renderToString("/comp", data);
     // The content is present in the server HTML — the whole point of SSR.
     expect(html).toContain("Corryong Cup 2026");
-    expect(html).toContain('href="/comp/abc"');
+    // Links are canonical `${slug}-${id}` (see lib/slug).
+    expect(html).toContain('href="/comp/corryong-cup-2026-abc"');
     // Non-content assertion: the page actually rendered (not an empty shell).
     expect(html.length).toBeGreaterThan(500);
   });

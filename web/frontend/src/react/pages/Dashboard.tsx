@@ -19,6 +19,7 @@ import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
 import { goToSignIn, useUser } from "../lib/user";
 import { downloadFile, formatTaskDate, ordinal, relativeTime } from "../lib/format";
+import { compPath, taskPath, pilotPath } from "../lib/slug";
 import { api } from "../../comp/api";
 import { Tree, TreeItem, TreeItemContent, TreeChevron } from "../rac/tree";
 
@@ -427,7 +428,7 @@ function CompetitionFlightsSection() {
             <TreeItemContent>
               <TreeChevron />
               <Link
-                to={`/comp/${g.comp_id}`}
+                to={compPath(g.comp_id, g.comp_name)}
                 className="font-medium underline underline-offset-4"
               >
                 {g.comp_name}
@@ -444,7 +445,7 @@ function CompetitionFlightsSection() {
               >
                 <TreeItemContent>
                   <Link
-                    to={`/comp/${f.comp_id}/task/${f.task_id}`}
+                    to={taskPath(f.comp_id, f.comp_name, f.task_id, f.task_name)}
                     className="underline underline-offset-4"
                   >
                     {f.task_name}
@@ -460,7 +461,7 @@ function CompetitionFlightsSection() {
                   <span className="ml-auto text-sm">
                     {f.rank != null ? (
                       <Link
-                        to={`/comp/${f.comp_id}/task/${f.task_id}/pilot/${f.comp_pilot_id}`}
+                        to={pilotPath(f.comp_id, f.comp_name, f.task_id, f.task_name, f.comp_pilot_id)}
                         className="font-medium underline underline-offset-4"
                         title={`View this flight's score (${f.pilot_class} class)`}
                       >

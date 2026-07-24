@@ -30,6 +30,8 @@ import { Button, LinkButton } from "@/react/rac/button";
 import { SimpleSelect } from "@/react/rac/select";
 import { Alert, AlertDescription, AlertTitle } from "@/react/ui/alert";
 import { underCompAnalysis } from "../lib/crumbs";
+import { idFromSegment, taskPath, taskAnalysisPath } from "../lib/slug";
+import { useCanonicalPath } from "../lib/use-canonical-path";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { toast } from "../lib/toast";
@@ -63,7 +65,9 @@ import {
 import type { CompDetailData, TaskDetailData } from "../comp/types";
 
 export function TaskFieldAnalysis() {
-  const { compId, taskId } = useParams<{ compId: string; taskId: string }>();
+  const { compId: compParam, taskId: taskParam } = useParams<{ compId: string; taskId: string }>();
+  const compId = idFromSegment(compParam ?? "");
+  const taskId = idFromSegment(taskParam ?? "");
   const { user } = useUser();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -80,6 +84,12 @@ export function TaskFieldAnalysis() {
     initial ? "ready" : "loading"
   );
   const [refreshing, setRefreshing] = useState(false);
+
+  // Settle the address bar on the canonical `${slug}-${id}` once both names
+  // load (the analysis body carries neither, so wait for the name fetches).
+  useCanonicalPath(
+    comp && task ? taskAnalysisPath(compId, comp.name, taskId, task.name) : null
+  );
 
   const analysisUrl =
     compId && taskId
@@ -383,7 +393,7 @@ export function TaskFieldAnalysis() {
           <LinkButton
             variant="outline"
             size="sm"
-            href={`/comp/${compId}/task/${taskId}`}
+            href={taskPath(compId, comp?.name, taskId, task?.name)}
           >
             View task
           </LinkButton>

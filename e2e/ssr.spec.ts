@@ -1,4 +1,9 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
+import {
+  compPath,
+  compScoresPath,
+  compAnalysisPath,
+} from "../web/frontend/src/react/lib/slug";
 
 /**
  * SSR verification against the REAL Pages runtime (wrangler pages dev on the
@@ -55,7 +60,8 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
     expect(html).toContain(compName);
-    expect(html).toContain(`href="/comp/${compId}"`);
+    // Links are canonical `${slug}-${id}` (see lib/slug).
+    expect(html).toContain(`href="${compPath(compId, compName)}"`);
     expect(html).toContain("<title>Competitions — GlideComp</title>");
     // No canonical by design: iOS Safari's share sheet copies the canonical
     // URL, which goes stale after client-side navigation.
@@ -71,7 +77,7 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     // The top-3 summary carries the leading pilot's name; the full tables
     // (and per-pilot narrative links) live on the scores page it links to.
     expect(html).toContain(pilotName);
-    expect(html).toContain(`href="/comp/${compId}/scores"`);
+    expect(html).toContain(`href="${compScoresPath(compId, compName)}"`);
     expect(html).toContain(`<title>${compName} — GlideComp</title>`);
   });
 
@@ -166,6 +172,54 @@ test.describe("SSR — isolation and fallback", () => {
   }
 });
 
+test.describe("URL canonicalisation (301 to slug-id)", () => {
+  test("a bare comp id 301s to the lowercase slugged canonical", async ({ request }) => {
+    const { compId, compName } = await discover(request);
+    const res = await request.get(`/comp/${compId}`, { maxRedirects: 0 });
+    expect(res.status()).toBe(301);
+    const loc = new URL(res.headers()["location"]).pathname;
+    expect(loc).toBe(compPath(compId, compName));
+    expect(loc).toBe(loc.toLowerCase());
+    expect(loc.endsWith(`-${compId}`)).toBe(true);
+  });
+
+  test("the canonical comp URL serves 200 (no redirect loop)", async ({ request }) => {
+    const { compId, compName } = await discover(request);
+    const res = await request.get(compPath(compId, compName), { maxRedirects: 0 });
+    expect(res.status()).toBe(200);
+  });
+
+  test("a bare task URL 301s to the fully-slugged canonical", async ({ request }) => {
+    const { compId, taskId } = await discover(request);
+    const res = await request.get(`/comp/${compId}/task/${taskId}`, { maxRedirects: 0 });
+    expect(res.status()).toBe(301);
+    const loc = new URL(res.headers()["location"]).pathname;
+    expect(loc).toMatch(new RegExp(`^/comp/[a-z0-9-]+-${compId}/task/[a-z0-9-]+-${taskId}$`));
+  });
+
+  test("a mixed-case slug 301s back to the lowercase canonical", async ({ request }) => {
+    const { compId, compName } = await discover(request);
+    const canonical = compPath(compId, compName);
+    test.skip(!canonical.includes("-"), "sample comp name has no slug");
+    // Upper-case only the slug portion; the "/comp/" prefix and the id (after
+    // the last dash) stay as-is so the route still matches and the id decodes.
+    const cut = canonical.lastIndexOf("-");
+    const mixed =
+      "/comp/" + canonical.slice("/comp/".length, cut).toUpperCase() + canonical.slice(cut);
+    const res = await request.get(mixed, { maxRedirects: 0 });
+    expect(res.status()).toBe(301);
+    expect(new URL(res.headers()["location"]).pathname).toBe(canonical);
+  });
+
+  test("a trailing slash 301s to the canonical (no slash)", async ({ request }) => {
+    const { compId, compName } = await discover(request);
+    const canonical = compPath(compId, compName);
+    const res = await request.get(canonical + "/", { maxRedirects: 0 });
+    expect(res.status()).toBe(301);
+    expect(new URL(res.headers()["location"]).pathname).toBe(canonical);
+  });
+});
+
 test.describe("SSR — field analysis (public)", () => {
   test("task field analysis server-renders (warm content or a pending notice)", async ({
     request,
@@ -234,11 +288,13 @@ test.describe("sitemap", () => {
     for (const path of ["/", "/about", "/scoring", "/scoring/gap", "/scoring/open-distance"]) {
       expect(xml).toContain(`<loc>${origin}${path}</loc>`);
     }
-    // The comp list + this comp's hub, scores, and (GAP) field analysis.
+    // The comp list + this comp's hub, scores, and (GAP) field analysis — all
+    // as canonical `${slug}-${id}` URLs (the form the SSR Function 301s to).
+    const { compName } = await discover(request);
     expect(xml).toContain(`<loc>${origin}/comp</loc>`);
-    expect(xml).toContain(`<loc>${origin}/comp/${compId}</loc>`);
-    expect(xml).toContain(`<loc>${origin}/comp/${compId}/scores</loc>`);
-    expect(xml).toContain(`<loc>${origin}/comp/${compId}/analysis</loc>`);
+    expect(xml).toContain(`<loc>${origin}${compPath(compId, compName)}</loc>`);
+    expect(xml).toContain(`<loc>${origin}${compScoresPath(compId, compName)}</loc>`);
+    expect(xml).toContain(`<loc>${origin}${compAnalysisPath(compId, compName)}</loc>`);
     // Deliberately NOT listed: per-task and per-pilot deep pages, waypoints.
     expect(xml).not.toContain("/task/");
     expect(xml).not.toContain("/pilot/");

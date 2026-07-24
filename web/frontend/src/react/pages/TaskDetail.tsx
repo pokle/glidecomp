@@ -60,6 +60,8 @@ import {
 import { useInitialData } from "../lib/initial-data";
 import type { TaskDetailLoaderData } from "../loaders";
 import { underComp } from "../lib/crumbs";
+import { idFromSegment, compPath, taskPath, taskAnalysisPath } from "../lib/slug";
+import { useCanonicalPath } from "../lib/use-canonical-path";
 import { cn } from "../lib/utils";
 
 export function TaskDetail() {
@@ -71,7 +73,9 @@ export function TaskDetail() {
 }
 
 function TaskDetailContent() {
-  const { compId, taskId } = useParams<{ compId: string; taskId: string }>();
+  const { compId: compParam, taskId: taskParam } = useParams<{ compId: string; taskId: string }>();
+  const compId = idFromSegment(compParam ?? "");
+  const taskId = idFromSegment(taskParam ?? "");
   const { user } = useUser();
   const location = useLocation();
   const navigate = useNavigate();
@@ -80,6 +84,12 @@ function TaskDetailContent() {
   const initial = useInitialData<TaskDetailLoaderData>();
   const [task, setTask] = useState<TaskDetailData | null>(initial?.task ?? null);
   const [comp, setComp] = useState<CompDetailData | null>(initial?.comp ?? null);
+
+  // Canonicalise once both names are known (comp is a non-critical fetch, so
+  // wait for it rather than 301-ing to a bare comp segment).
+  useCanonicalPath(
+    comp && task ? taskPath(compId, comp.name, taskId, task.name) : null
+  );
   const [notFound, setNotFound] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [scoresRefresh, setScoresRefresh] = useState(0);
@@ -282,7 +292,7 @@ function TaskDetailContent() {
           <LinkButton
             variant="outline"
             size="sm"
-            href={`/comp/${compId}/analysis/task/${taskId}`}
+            href={taskAnalysisPath(compId, comp?.name, taskId, task.name)}
           >
             Field analysis
           </LinkButton>
@@ -409,7 +419,7 @@ function TaskPrevNext({
         <LinkButton
           variant="ghost"
           size="sm"
-          href={`/comp/${compId}/task/${prev.task_id}`}
+          href={taskPath(compId, comp?.name, prev.task_id, prev.name)}
           aria-label={`Previous task: ${prev.name}`}
         >
           ← {prev.name}
@@ -419,7 +429,7 @@ function TaskPrevNext({
         <LinkButton
           variant="ghost"
           size="sm"
-          href={`/comp/${compId}/task/${next.task_id}`}
+          href={taskPath(compId, comp?.name, next.task_id, next.name)}
           aria-label={`Next task: ${next.name}`}
         >
           {next.name} →
@@ -646,7 +656,9 @@ function EditTaskDialog({
         return;
       }
 
-      navigate(`/comp/${compId}`);
+      // No comp name in this sub-component's scope; the comp page canonicalises
+      // the URL on arrival.
+      navigate(compPath(compId));
     } catch {
       toast.error("Network error. Please try again.");
     }

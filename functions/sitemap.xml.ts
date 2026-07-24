@@ -11,12 +11,19 @@
  * Test comps are excluded (the anonymous list omits them). Short edge cache so
  * new comps show up within the hour without hammering the API.
  */
+import {
+  compPath,
+  compScoresPath,
+  compAnalysisPath,
+} from "../web/frontend/src/react/lib/slug";
+
 interface Env {
   COMPETITION_API: Fetcher;
 }
 
 interface CompRow {
   comp_id: string;
+  name: string;
   test: boolean;
   scoring_format?: string;
   last_task_date: string | null;
@@ -51,19 +58,20 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const { comps } = (await listRes.json()) as { comps: CompRow[] };
       for (const comp of comps) {
         if (comp.test) continue;
-        const base = `${origin}/comp/${comp.comp_id}`;
+        // Canonical slugged URLs (`${slug}-${id}`) — the same form the SSR
+        // Function 301s to, so the sitemap never points at a redirect.
         // Day-level lastmod, consistently: last_task_date is already
         // YYYY-MM-DD, but the creation_date fallback is a full ISO timestamp —
         // slice both to a bare date so the sitemap never mixes the two forms.
         // (Google reads lastmod at date granularity anyway.)
         const lastmod = (comp.last_task_date ?? comp.creation_date)?.slice(0, 10);
-        urls.push({ loc: base, lastmod });
-        urls.push({ loc: `${base}/scores`, lastmod });
+        urls.push({ loc: `${origin}${compPath(comp.comp_id, comp.name)}`, lastmod });
+        urls.push({ loc: `${origin}${compScoresPath(comp.comp_id, comp.name)}`, lastmod });
         // Field analysis has nothing to measure on an open-distance comp (no
         // legs, no speed section) — its page renders empty + noindex there, so
         // only GAP comps get a sitemap entry.
         if (comp.scoring_format !== "open_distance") {
-          urls.push({ loc: `${base}/analysis`, lastmod });
+          urls.push({ loc: `${origin}${compAnalysisPath(comp.comp_id, comp.name)}`, lastmod });
         }
       }
     }

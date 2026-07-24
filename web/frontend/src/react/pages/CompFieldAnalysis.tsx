@@ -24,6 +24,8 @@ import { ConsistencyChip } from "../field-analysis/ConsistencyChip";
 import { ConsistencyMap } from "../field-analysis/charts/ConsistencyMap";
 import { MetricGlossary, type GlossaryEntry } from "../field-analysis/MetricGlossary";
 import { underComp } from "../lib/crumbs";
+import { idFromSegment, compAnalysisPath, taskAnalysisPath } from "../lib/slug";
+import { useCanonicalPath } from "../lib/use-canonical-path";
 import { api } from "../../comp/api";
 import { ScoreFreshness } from "../comp/ScoreFreshness";
 import { useInitialData } from "../lib/initial-data";
@@ -36,7 +38,8 @@ import {
 import type { CompDetailData } from "../comp/types";
 
 export function CompFieldAnalysis() {
-  const { compId } = useParams<{ compId: string }>();
+  const { compId: compParam } = useParams<{ compId: string }>();
+  const compId = idFromSegment(compParam ?? "");
   const [searchParams, setSearchParams] = useSearchParams();
 
   // SSR seed: the server ran loadCompFieldAnalysis for this URL and embedded
@@ -50,6 +53,11 @@ export function CompFieldAnalysis() {
   const [status, setStatus] = useState<"loading" | "ready" | "forbidden" | "error">(
     initial ? "ready" : "loading"
   );
+
+  // Settle the address bar on the canonical `${slug}-${id}` once a name is
+  // known (the analysis body carries comp_name even before the comp fetch).
+  const canonicalName = comp?.name ?? data?.comp_name;
+  useCanonicalPath(canonicalName ? compAnalysisPath(compId, canonicalName) : null);
 
   const analysisUrl = compId
     ? `/api/comp/${encodeURIComponent(compId)}/field-analysis`
@@ -262,7 +270,7 @@ export function CompFieldAnalysis() {
           {data.tasks.map((t) => (
             <Link
               key={t.task_id}
-              to={`/comp/${compId}/analysis/task/${t.task_id}`}
+              to={taskAnalysisPath(compId, canonicalName, t.task_id, t.task_name)}
               className="underline underline-offset-4 hover:text-foreground"
             >
               {t.label} {t.task_name}
