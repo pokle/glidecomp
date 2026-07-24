@@ -22,6 +22,7 @@ import type {
 import type { WaypointFileRecord } from "@glidecomp/engine";
 import type { ClassStanding, TaskInfo } from "../scores-views";
 import { todayInZone } from "./lib/format";
+import { retry } from "./lib/retry";
 
 export type FetchFn = (path: string, init?: RequestInit) => Promise<Response>;
 
@@ -229,13 +230,18 @@ export async function loadPilotScoreDetail(
   const cid = encodeURIComponent(compId);
   const tid = encodeURIComponent(taskId);
   const pid = encodeURIComponent(pilotId);
+  // Four concurrent DB-backed calls; retry each through a transient D1 blip so
+  // one hiccup doesn't 404 the whole page (see lib/retry). This page is always
+  // reached via a link that had the pilot, so retrying even a 404 is safe.
   const [comp, task, score, analysis] = await Promise.all([
-    getJson<CompDetailData>(f, `/api/comp/${cid}`),
-    getJson<TaskDetailData>(f, `/api/comp/${cid}/task/${tid}`),
-    getJson<TaskScoreData>(f, `/api/comp/${cid}/task/${tid}/score`),
-    getJson<PilotAnalysisData>(
-      f,
-      `/api/comp/${cid}/task/${tid}/pilot/${pid}/analysis`
+    retry(() => getJson<CompDetailData>(f, `/api/comp/${cid}`)),
+    retry(() => getJson<TaskDetailData>(f, `/api/comp/${cid}/task/${tid}`)),
+    retry(() => getJson<TaskScoreData>(f, `/api/comp/${cid}/task/${tid}/score`)),
+    retry(() =>
+      getJson<PilotAnalysisData>(
+        f,
+        `/api/comp/${cid}/task/${tid}/pilot/${pid}/analysis`
+      )
     ),
   ]);
   return { comp, task, score, analysis };

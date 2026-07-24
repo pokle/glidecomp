@@ -41,6 +41,7 @@ import { formatTaskDate } from "../lib/format";
 import { formatTimeInZone, zoneNameWithOffset } from "../lib/time";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { underTask } from "../lib/crumbs";
+import { retry } from "../lib/retry";
 import { idFromSegment, pilotPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { Timestamp } from "../components/Timestamp";
@@ -471,7 +472,9 @@ export function PilotScoreDetail() {
     setFocus(null);
     setSelectedItem(null);
     setMapExpanded(false);
-    loadDetail(compId, taskId, pilotId)
+    // Retry through a transient D1 blip (the 4 concurrent reads can 404 one
+    // spuriously on a cold DB) so we don't flash a false "not found".
+    retry(() => loadDetail(compId, taskId, pilotId))
       .then((data) => {
         if (!cancelled) setState({ kind: "ready", data });
       })
