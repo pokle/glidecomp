@@ -81,6 +81,9 @@ const GIT_SHA = (() => {
 // the clean page URLs there so everything is seamless on one origin (:3000).
 const ASTRO_ORIGIN = process.env.ASTRO_ORIGIN || 'http://localhost:4321';
 const ASTRO_DEV_BASE = '/_static';
+// Keep in sync with the Astro pages under static/src/pages/ — a page missing
+// here 404s in dev (it still works in prod, where _routes.json hands /scoring/*
+// to the built files).
 const STATIC_PAGE_ROUTES = new Set([
   '/',
   '/about',
@@ -88,6 +91,7 @@ const STATIC_PAGE_ROUTES = new Set([
   '/scoring',
   '/scoring/gap',
   '/scoring/open-distance',
+  '/scoring/data-cleaning',
 ]);
 
 // Root-level Vite dev module URLs that both this server and Astro's dev server
