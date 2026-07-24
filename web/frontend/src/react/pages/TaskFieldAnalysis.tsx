@@ -49,6 +49,7 @@ import { TaskDebrief } from "../field-analysis/TaskDebrief";
 import { MetricGlossary } from "../field-analysis/MetricGlossary";
 import { PilotHighlightProvider } from "../field-analysis/PilotHighlightContext";
 import { PercentileHeatmap } from "../field-analysis/charts/PercentileHeatmap";
+import { StyleClusters } from "../field-analysis/StyleClusters";
 import { displayReport } from "../field-analysis/units";
 import { useUnits } from "../lib/units";
 import {
@@ -238,6 +239,7 @@ export function TaskFieldAnalysis() {
       { id: "analysis-basis", label: "Analysis basis" },
       { id: "separation-heading", label: "What separated the field" },
       { id: "heatmap-heading", label: "The whole field at a glance" },
+      { id: "clusters-heading", label: "Pilot style clusters" },
       { id: "families-heading", label: "The metrics in detail" },
       ...FAMILY_ORDER.filter((family) => (grouped.get(family) ?? []).length > 0).flatMap(
         (family): PageTocItem[] => [
@@ -447,6 +449,13 @@ export function TaskFieldAnalysis() {
                 The whole field at a glance
               </h2>
               <PercentileHeatmap report={report} />
+            </section>
+
+            <section aria-labelledby="clusters-heading" className="space-y-3">
+              <h2 id="clusters-heading" className="scroll-mt-20 text-lg font-semibold">
+                Pilot style clusters
+              </h2>
+              <StyleClusters report={report} />
             </section>
 
             {/* In print, this whole section starts a fresh page and every

@@ -11,6 +11,7 @@
 
 import { FAMILY_LABELS, FAMILY_ORDER } from './registry';
 import { MIN_CORRELATION_N } from './evaluate';
+import { clusterPilotStyles, MIN_CLUSTER_PILOTS, type StyleClusterReport } from './clustering';
 import { timeWithZone, timeRangeWithZone } from './format-time';
 import type {
   CompAggregateReport,
@@ -168,8 +169,74 @@ export function renderFieldReport(
     }
   }
 
+  lines.push('', heading('Pilot style clusters (who flew alike)', '-'));
+  lines.push(...renderStyleClusters(clusterPilotStyles(report)));
+
   lines.push('');
   return lines.join('\n');
+}
+
+/** A rank statistic for display: whole ranks stay whole, an even-count
+ * median shows its half. */
+function fmtRank(r: number): string {
+  return Number.isInteger(r) ? String(r) : r.toFixed(1);
+}
+
+function renderStyleClusters(sc: StyleClusterReport | null): string[] {
+  if (sc === null) {
+    return [
+      `(not clustered: fewer than ${MIN_CLUSTER_PILOTS} pilots with enough metric coverage to compare)`,
+    ];
+  }
+  const lines: string[] = [];
+  lines.push(
+    `Clustered ${sc.pilotCount} pilots on ${sc.metricCount} behavioural metrics into ` +
+      `${sc.k} groups (mean silhouette ${sc.meanSilhouette.toFixed(2)}, k searched ${sc.kMin}–${sc.kMax}).`,
+  );
+  lines.push(
+    'Method: within-field percentile per metric, Gower distance over the metrics both pilots have',
+    '(nothing imputed), Ward-linkage tree cut at the best-silhouette k. Groups are STYLE, the rank',
+    'spread beside each is where that style did and did not pay. Silhouette ≈ 0 means the group',
+    'boundaries are soft; nearer 1 means tight, well-separated groups.',
+  );
+  for (const c of sc.clusters) {
+    lines.push(
+      '',
+      `Group ${c.id} — ${c.members.length} pilots · ranks ${c.rankBest}–${c.rankWorst} ` +
+        `(median ${fmtRank(c.rankMedian)}, middle half ${fmtRank(c.rankP25)}–${fmtRank(c.rankP75)})`,
+    );
+    if (c.signatures.length === 0) {
+      lines.push('  • no strong signature — near field-typical on every metric');
+    }
+    for (const s of c.signatures) {
+      lines.push(
+        `  • ${s.deviation > 0 ? 'high' : 'low'} ${s.label}: group median P${s.medianPercentile.toFixed(0)} ` +
+          `vs field P50 (${formatMetricValue(s.unit, s.medianValue)} ${s.unit})`,
+      );
+    }
+    // Members wrapped to the report width; '*' marks the group's most
+    // typical pilot (smallest mean style distance to the rest).
+    const parts = c.members.map(
+      (m) => `${m.rank}. ${m.pilotName}${m.trackFile === c.exemplarTrackFile ? '*' : ''}`,
+    );
+    let line = ' ';
+    for (const part of parts) {
+      if (line.length + part.length + 3 > WIDTH && line.trim() !== '') {
+        lines.push(line);
+        line = ' ';
+      }
+      line += ` ${part} ·`;
+    }
+    if (line.trim() !== '') lines.push(line.replace(/ ·$/, ''));
+  }
+  lines.push('  * most typical of its group (smallest mean style distance to the rest)');
+  if (sc.unclustered.length > 0) {
+    lines.push('', 'Not clustered:');
+    for (const u of sc.unclustered) {
+      lines.push(`  ${u.rank}. ${u.pilotName} — ${u.reason}`);
+    }
+  }
+  return lines;
 }
 
 const CORRELATION_COLUMNS: ReportTable['columns'] = [
