@@ -783,6 +783,19 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
     );
     await mapPool(oldKeys, R2_CONCURRENCY, (r) => store.r2Delete(String(r.k)));
     await store.exec([
+      // Clear the materialized derived caches FIRST, while the rows they key
+      // off still exist. task_scores / task_field_analysis are served verbatim
+      // and their blobs embed sqid links built from task_id + comp_pilot_id —
+      // a reseed hands out fresh ids, so a surviving blob points readers at
+      // deleted tasks/pilots ("Task not found"). These FK-cascade on task
+      // delete, but only where foreign keys are enforced (local Miniflare D1
+      // often runs with them OFF), so clear them explicitly rather than relying
+      // on the cascade. track_analysis is (geom_hash, uploaded_at)-guarded so a
+      // stale row is never served, but drop it too so a reseed leaves no orphans.
+      `DELETE FROM track_analysis WHERE task_track_id IN
+         (SELECT tt.task_track_id FROM task_track tt JOIN task t ON tt.task_id = t.task_id WHERE t.comp_id = ${compId});`,
+      `DELETE FROM task_scores WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
+      `DELETE FROM task_field_analysis WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
       `DELETE FROM task_track WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
       `DELETE FROM task_manual_flight WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
       `DELETE FROM task_pilot_status WHERE comp_id = ${compId};`,
