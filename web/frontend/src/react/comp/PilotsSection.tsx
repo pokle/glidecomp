@@ -7,8 +7,9 @@
  * header, spreadsheet-style cells, class as a list editor limited to the
  * comp's classes) with CSV import/export. The grid stays Tabulator by policy
  * (docs/2026-07-18-rac-adoption-guide.md — it's excellent at spreadsheet
- * editing and is not part of the RAC conversion); only the dialog shell and
- * buttons around it are RAC. All mutations funnel through
+ * editing and is not part of the RAC conversion) and is declared through the
+ * shared `TabulatorGrid` wrapper, which owns the lazy load and lifecycle; only
+ * the dialog shell and buttons around it are RAC. All mutations funnel through
  * POST /api/comp/:comp_id/pilot/bulk.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -26,6 +27,7 @@ import {
 } from "@/react/rac/dialog";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { Tooltip, TooltipTrigger } from "@/react/rac/tooltip";
+import { TabulatorGrid } from "./TabulatorGrid";
 import { api } from "../../comp/api";
 import { downloadFile } from "../lib/format";
 import {
@@ -268,46 +270,11 @@ function EditPilotsDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const gridRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<Tabulator | null>(null);
   const [gridReady, setGridReady] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    let table: Tabulator | null = null;
-    void (async () => {
-      // Tabulator is admin-only, so it's lazy-loaded to keep it (and its
-      // CSS) out of the comp-detail chunk every visitor downloads.
-      const [{ TabulatorFull }] = await Promise.all([
-        import("tabulator-tables"),
-        import("tabulator-tables/dist/css/tabulator_simple.min.css"),
-        import("./tabulator-grid.css"),
-      ]);
-      if (cancelled || !gridRef.current) return;
-      table = new TabulatorFull(gridRef.current, {
-        data: pilots.map(pilotToRow),
-        columns: gridColumns(compClasses),
-        layout: "fitDataStretch",
-        height: "100%",
-        placeholder: EMPTY_GRID_PLACEHOLDER,
-        // Editor popups (class list) must render inside the modal dialog,
-        // otherwise the dialog paints over them.
-        popupContainer: "#pilots-edit-dialog",
-      });
-      table.on("tableBuilt", () => {
-        if (!cancelled) setGridReady(true);
-      });
-      tableRef.current = table;
-    })();
-    return () => {
-      cancelled = true;
-      table?.destroy();
-      tableRef.current = null;
-    };
-  }, [pilots, compClasses]);
 
   /** Current grid contents, normalised (trimmed, empty optionals → null). */
   function gridRows(): ParsedRow[] {
@@ -443,10 +410,21 @@ function EditPilotsDialog({
           Tap a cell to edit. Rows without a name are ignored on save.
         </p>
 
-        <div
-          ref={gridRef}
+        <TabulatorGrid
           id="pilots-grid"
           className="gc-grid min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden rounded border border-border"
+          initialColumns={() => gridColumns(compClasses)}
+          initialData={() => pilots.map(pilotToRow)}
+          options={{
+            layout: "fitDataStretch",
+            height: "100%",
+            placeholder: EMPTY_GRID_PLACEHOLDER,
+            // Editor popups (class list) must render inside the modal dialog,
+            // otherwise the dialog paints over them.
+            popupContainer: "#pilots-edit-dialog",
+          }}
+          tableRef={tableRef}
+          onReady={() => setGridReady(true)}
         />
 
         {status ? <p className="text-sm text-muted-foreground">{status}</p> : null}

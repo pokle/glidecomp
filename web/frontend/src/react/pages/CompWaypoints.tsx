@@ -9,8 +9,9 @@
  *
  * RAC chrome (buttons, file trigger, read-only table, dialogs) around a
  * **Tabulator** editable grid — the app's standard for editable tables (see
- * the Tabulator policy in docs/2026-07-18-rac-adoption-guide.md). The grid is
- * admin-only and lazy-loaded; React `rows` state stays the source of truth
+ * the Tabulator policy in docs/2026-07-18-rac-adoption-guide.md), declared
+ * through the shared `TabulatorGrid` wrapper — which owns the lazy load and
+ * lifecycle. The grid is admin-only; React `rows` state stays the source of truth
  * for the map markers, dirty check and save — grid edits mirror back into it
  * via cellEdited/rowDeleted, and external changes (file upload, the add
  * dialog) are pushed into the grid imperatively.
@@ -46,6 +47,7 @@ import { idFromSegment, compWaypointsPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { formatCoords, parseCoords } from "../comp/route-editor";
 import { AddWaypointDialog } from "../comp/AddWaypointDialog";
+import { TabulatorGrid } from "../comp/TabulatorGrid";
 import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
 import { useInitialData } from "../lib/initial-data";
 import { formatAltitude, formatRadius, useUnits } from "../lib/units";
@@ -218,9 +220,8 @@ function CompWaypointsContent() {
   const isAdmin = useAdminView(realIsAdmin);
 
   // The Tabulator grid (admin-only). rowsRef always holds the latest rows so
-  // the build effect can read them without depending on `rows` (a dependency
-  // would tear the grid down on every edit).
-  const gridRef = useRef<HTMLDivElement>(null);
+  // async work (filling altitudes) can apply its results against whatever is
+  // in the grid by the time it finishes.
   const tableRef = useRef<Tabulator | null>(null);
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
@@ -273,64 +274,18 @@ function CompWaypointsContent() {
     if (c) setFocus({ lat: c.lat, lon: c.lon, key: ++focusSeq.current });
   }, []);
 
-  // Build the Tabulator grid once the page is loaded and the viewer is an
-  // admin. Tabulator is lazy-loaded to keep it (and its CSS) out of the chunk
-  // every visitor downloads — same pattern as the pilots editor. Grid edits
-  // mirror back into React state (the source of truth for the map, dirty
-  // check and save); the grid itself is never rebuilt per edit.
-  useEffect(() => {
-    if (!isAdmin || loading) return;
-    let cancelled = false;
-    let table: Tabulator | null = null;
-    void (async () => {
-      const [{ TabulatorFull }] = await Promise.all([
-        import("tabulator-tables"),
-        import("tabulator-tables/dist/css/tabulator_simple.min.css"),
-        import("../comp/tabulator-grid.css"),
-      ]);
-      if (cancelled || !gridRef.current) return;
-      table = new TabulatorFull(gridRef.current, {
-        data: rowsRef.current.map((r) => ({ ...r })),
-        index: "id",
-        columns: waypointGridColumns(locate),
-        // Header-sort defaults off (the pin/remove action columns must stay
-        // unsortable); the data columns opt in individually.
-        columnDefaults: { headerSort: false },
-        layout: "fitDataStretch",
-        height: "100%",
-        placeholder:
-          "No waypoints yet. Upload a file or add points from the map to get started.",
-      });
-      // getData() returns the master row list in insertion order, unaffected by
-      // an active sort or filter, so mirroring it back never reorders React
-      // state or drops filtered-out rows.
-      const sync = () => {
-        const t = table;
-        if (!t) return;
-        setRows((t.getData() as WpRow[]).map((r) => ({ ...r })));
-      };
-      table.on("cellEdited", (cell) => {
-        // Re-run the row's formatters so the locate pin picks up the new
-        // coordinate validity.
-        if (cell.getField() === "coords") cell.getRow().reformat();
-        sync();
-      });
-      table.on("rowDeleted", sync);
-      // A rebuild (admin toggle, reload) drops the filter — re-apply whatever
-      // is in the box so the grid stays consistent with the search field.
-      const q = filterRef.current.trim().toLowerCase();
-      if (q) table.setFilter((data: WpRow) => matchesFilter(data, q));
-      tableRef.current = table;
-    })();
-    return () => {
-      cancelled = true;
-      table?.destroy();
-      tableRef.current = null;
-    };
-  }, [isAdmin, loading, locate]);
+  // Mirror the grid's rows back into React state (the source of truth for the
+  // map, dirty check and save). getData() returns the master row list in
+  // insertion order, unaffected by an active sort or filter, so mirroring it
+  // back never reorders state or drops filtered-out rows.
+  const syncFromGrid = useCallback(() => {
+    const t = tableRef.current;
+    if (!t) return;
+    setRows((t.getData() as WpRow[]).map((r) => ({ ...r })));
+  }, []);
 
-  // Push the filter box into the (already-built) grid. The build effect seeds
-  // the initial filter, so this handles every subsequent keystroke/clear.
+  // Push the filter box into the (already-built) grid. `onReady` seeds the
+  // initial filter, so this handles every subsequent keystroke/clear.
   useEffect(() => {
     const t = tableRef.current;
     if (!t) return;
@@ -654,9 +609,37 @@ function CompWaypointsContent() {
               </div>
             ) : null}
             {isAdmin ? (
-              <div
-                ref={gridRef}
+              <TabulatorGrid
                 className="gc-grid h-[420px] rounded border border-border lg:h-[560px]"
+                initialColumns={() => waypointGridColumns(locate)}
+                initialData={() => rows}
+                options={{
+                  index: "id",
+                  // Header-sort defaults off (the pin/remove action columns
+                  // must stay unsortable); data columns opt in individually.
+                  columnDefaults: { headerSort: false },
+                  layout: "fitDataStretch",
+                  height: "100%",
+                  placeholder:
+                    "No waypoints yet. Upload a file or add points from the map to get started.",
+                }}
+                tableRef={tableRef}
+                events={{
+                  cellEdited: (cell) => {
+                    // Re-run the row's formatters so the locate pin picks up
+                    // the new coordinate validity.
+                    if (cell.getField() === "coords") cell.getRow().reformat();
+                    syncFromGrid();
+                  },
+                  rowDeleted: syncFromGrid,
+                }}
+                onReady={(table) => {
+                  // A remount (admin toggle, reload) starts with no filter —
+                  // re-apply whatever is in the box so the grid agrees with
+                  // the search field.
+                  const q = filterRef.current.trim().toLowerCase();
+                  if (q) table.setFilter((data: WpRow) => matchesFilter(data, q));
+                }}
               />
             ) : rows.length === 0 ? (
               <p className="rounded border border-dashed border-border p-6 text-center text-sm text-muted-foreground">

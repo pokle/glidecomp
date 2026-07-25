@@ -38,10 +38,24 @@ new RAC editable tables. Converting a page means converting the chrome
 *around* the grid (dialog shell, buttons, read-only tables) and using
 Tabulator for the grid itself. It coexists happily inside a RAC Modal: give
 the kit `Dialog` an `id` and point Tabulator's `popupContainer` at it so
-editor popups render above the dialog, and keep the lazy
-`import("tabulator-tables")` so it stays out of the public bundle. The
+editor popups render above the dialog. The
 shadcn-token theme lives in `comp/tabulator-grid.css` (shared, `gc-grid`
 container class). Do NOT plan a GridList/Table rewrite of the pilots grid.
+
+**Always go through `comp/TabulatorGrid.tsx`** — the in-repo React wrapper —
+rather than calling `new TabulatorFull(...)` in an effect. It owns the lazy
+`import("tabulator-tables")` (so Tabulator stays out of the public bundle and
+the SSR bundle), the build/destroy lifecycle, row cloning, and
+stale-handler-proof event binding; grids just declare
+`initialColumns`/`initialData`/`options`/`events` and take a `tableRef` for the
+imperative calls. It is **not** the `react-tabulator` npm package the Tabulator
+docs point at (that one pins `tabulator-tables@5.6.1` — we're on 6.x — and
+peers at React <= 17, and we're on 19), and it does not copy that package's
+API. Read the header comment in that file before using it — notably the grid is
+**uncontrolled**: `initialColumns`/`initialData` are thunks called once at
+build (remount via `key` to rebuild, push updates through `tableRef`), and the
+instance only exists a tick after mount, so gate anything that drives it on
+`onReady`.
 
 ## What exists
 
@@ -297,13 +311,17 @@ container class). Do NOT plan a GridList/Table rewrite of the pilots grid.
 16. **Inline Tabulator on a page (not in a dialog) — the waypoints pattern.**
     When an editable grid lives on the page beside other React-driven UI (the
     waypoints map), keep React state as the source of truth and let the grid
-    mirror into it: build Tabulator once in an effect gated on
-    `isAdmin && !loading` (NEVER depending on the rows state — that would tear
-    the grid down per keystroke), reading the current rows through a ref; wire
+    mirror into it: render `<TabulatorGrid>` only where the grid belongs
+    (`isAdmin && !loading` — mount/unmount replaces the old effect gating, and
+    `initialColumns`/`initialData` are thunks the wrapper calls once at build,
+    so passing them inline can't tear the grid down per keystroke or recompute
+    per render); wire
     `cellEdited`/`rowDeleted` → `setRows(table.getData()...)` so the map/dirty
     check/save all read state; push *external* changes (file upload, add
-    dialog) into the grid imperatively (`setData`/`addRow`) beside the
-    `setRows` call. Cell formatters must build DOM nodes and assign
+    dialog) into the grid imperatively via `tableRef` (`setData`/`addRow`)
+    beside the `setRows` call. `initialData` rows are cloned by the wrapper
+    (Tabulator edits row objects in place), so returning React state is safe.
+    Cell formatters must build DOM nodes and assign
     `textContent` — a string return is innerHTML, and grid values come from
     user-supplied waypoint files. Static icon markup (the pin/✕ buttons) as
     HTML strings is fine. `columnDefaults: { headerSort: false }` unless you
