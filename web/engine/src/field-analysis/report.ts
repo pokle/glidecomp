@@ -13,7 +13,9 @@ import { FAMILY_LABELS, FAMILY_ORDER } from './registry';
 import { MIN_CORRELATION_N } from './evaluate';
 import { clusterPilotStyles, MIN_CLUSTER_PILOTS, type StyleClusterReport } from './clustering';
 import { timeWithZone, timeRangeWithZone } from './format-time';
+import { roundPercentagesToHundred } from './stats';
 import type {
+  FieldPhaseSplit,
   CompAggregateReport,
   CompMetricAggregate,
   FieldAnalysisReport,
@@ -104,6 +106,16 @@ function renderTable(t: ReportTable, timeZone?: string): string[] {
   return lines;
 }
 
+/** "38% climb / 23% glide / 39% search" — integers that sum to 100. */
+function formatPhaseSplit(split: FieldPhaseSplit): string {
+  const [climb, glide, search] = roundPercentagesToHundred([
+    split.climbPct,
+    split.glidePct,
+    split.searchPct,
+  ]);
+  return `${climb}% climb / ${glide}% glide / ${search}% search`;
+}
+
 export function renderFieldReport(
   report: FieldAnalysisReport,
   opts: RenderReportOptions = {},
@@ -118,7 +130,7 @@ export function renderFieldReport(
       `${b.sharedThermalCount} shared thermals (${b.multiPilotThermalCount} multi-pilot) · ` +
       `working band ${b.workingBandFloor.toFixed(0)}–${b.workingBandCeiling.toFixed(0)} m` +
       (b.workingBandFallback ? ' (fix-altitude fallback)' : '') +
-      ` · phases cover ${b.phaseCoveragePct.toFixed(1)}% of flight time`,
+      (b.phaseSplit ? ` · ${formatPhaseSplit(b.phaseSplit)}` : ''),
   );
 
   // The separation ranking leads: it tells the reader which strategies

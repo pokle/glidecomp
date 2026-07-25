@@ -144,3 +144,25 @@ export function circularMeanWind(samples: WindSample[]): MeanWind | null {
   const direction = ((Math.atan2(-u, -v) * 180) / Math.PI + 360) % 360;
   return { speed, direction, n: samples.length };
 }
+
+/**
+ * Round percentages to integers that still sum to 100 (largest remainder).
+ *
+ * Rounding each part independently lets a three-way split display as 99% or
+ * 101%, which reads as an arithmetic bug in a part-of-whole figure. Callers
+ * pass parts that already sum to 100; anything else is returned floored with
+ * the same remainder ordering, since there is no correct answer to spread.
+ */
+export function roundPercentagesToHundred(values: number[]): number[] {
+  const out = values.map(Math.floor);
+  let short = Math.round(values.reduce((a, b) => a + b, 0)) - out.reduce((a, b) => a + b, 0);
+  const byRemainder = values
+    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
+    .sort((a, b) => b.frac - a.frac);
+  for (const { i } of byRemainder) {
+    if (short <= 0) break;
+    out[i]++;
+    short--;
+  }
+  return out;
+}

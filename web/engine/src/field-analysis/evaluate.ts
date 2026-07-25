@@ -10,12 +10,13 @@
 
 import { spearman, spearmanNoiseFloor } from './stats';
 import { ALL_METRICS } from './registry';
-import { airborneSeconds } from './context';
+import type { FlightPhase } from './phase-partition';
 import type {
   CorrelationVerdict,
   FieldAnalysisBasis,
   FieldAnalysisReport,
   FieldContext,
+  FieldPhaseSplit,
   MetricComputer,
   MetricCorrelation,
   MetricOutput,
@@ -140,17 +141,30 @@ function correlate(
   };
 }
 
-function buildBasis(field: FieldContext): FieldAnalysisBasis {
-  let coverageSum = 0;
-  let coverageN = 0;
+/**
+ * Share of the field's airborne time in each phase.
+ *
+ * Pooled over the field (total seconds per phase / total seconds), not a mean
+ * of per-pilot shares: the question is what the DAY was like, and a pilot who
+ * landed after ten minutes is ten minutes of evidence about it, not an equal
+ * vote with someone who flew for three hours.
+ */
+function buildPhaseSplit(field: FieldContext): FieldPhaseSplit {
+  const seconds: Record<FlightPhase, number> = { climb: 0, glide: 0, search: 0 };
   for (const p of field.pilots) {
-    const total = airborneSeconds(p);
-    if (total <= 0) continue;
-    let covered = 0;
-    for (const ph of p.phases) covered += ph.durationSeconds;
-    coverageSum += (covered / total) * 100;
-    coverageN++;
+    for (const ph of p.phases) seconds[ph.phase] += ph.durationSeconds;
   }
+  const total = seconds.climb + seconds.glide + seconds.search;
+  const pct = (s: number) => (total > 0 ? (s / total) * 100 : 0);
+  return {
+    climbPct: pct(seconds.climb),
+    glidePct: pct(seconds.glide),
+    searchPct: pct(seconds.search),
+    airborneSeconds: total,
+  };
+}
+
+function buildBasis(field: FieldContext): FieldAnalysisBasis {
   return {
     pilotCount: field.pilots.length,
     gridStepSeconds: field.grid.stepSeconds,
@@ -159,6 +173,6 @@ function buildBasis(field: FieldContext): FieldAnalysisBasis {
     workingBandFloor: field.workingBand.floorMeters,
     workingBandCeiling: field.workingBand.ceilingMeters,
     workingBandFallback: field.workingBand.usedFallback,
-    phaseCoveragePct: coverageN > 0 ? coverageSum / coverageN : 0,
+    phaseSplit: buildPhaseSplit(field),
   };
 }

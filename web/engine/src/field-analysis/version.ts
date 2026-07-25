@@ -79,4 +79,13 @@
 //     "race" on course position, not on the departure. With typical 1–3
 //     departures per pilot, one mislabelled outcome flipped a pilot between
 //     0% and 100%. The bump rolls stored reports on lazy revalidation.
-export const FIELD_ANALYSIS_VERSION = 10;
+// v11: the basis reports a climb/glide/search phase SPLIT instead of
+//     phaseCoveragePct. Coverage was 100% on every task by construction —
+//     partitionPhases tiles takeoff→landing with no gaps or overlaps, so the
+//     fact restated its own invariant (now guarded by the phase-partition
+//     tests alone) rather than describing the day. The split is pooled over
+//     the field: total seconds per phase / total phase seconds. No metric
+//     value changed; the bump rolls stored reports so they carry the new
+//     basis field on their next lazy revalidation. Consumers must tolerate
+//     its absence — a v10 row is served stale while it revalidates.
+export const FIELD_ANALYSIS_VERSION = 11;

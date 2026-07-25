@@ -4,15 +4,25 @@
  * Every metric here is derived from detector output over a sampled grid, so
  * the report is only as trustworthy as its inputs. Stating the pilot count,
  * the grid step, how many thermals were actually shared, the working band and
- * the phase coverage up front is the same explainability rule the scoring
- * pages follow — a number without its basis is not an explanation.
+ * how the field's time divided between flight phases up front is the same
+ * explainability rule the scoring pages follow — a number without its basis is
+ * not an explanation.
  */
 import { formatAltitude, useUnits } from "@/react/lib/units";
+import { PhaseSplitBar } from "./charts/PhaseSplitBar";
 import type { FieldAnalysisBasis } from "./types";
 
-function Fact({ term, children }: { term: string; children: React.ReactNode }) {
+function Fact({
+  term,
+  className,
+  children,
+}: {
+  term: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div>
+    <div className={className}>
       <dt className="text-xs text-muted-foreground">{term}</dt>
       <dd className="text-sm tabular-nums">{children}</dd>
     </div>
@@ -29,7 +39,9 @@ export function AnalysisBasis({
   const units = useUnits();
   return (
     <section aria-label="Analysis basis" className="rounded-lg border p-4">
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-5">
+      {/* Four one-slot facts plus the two-slot phase split fill each row
+          exactly, at every breakpoint. */}
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
         <Fact term="Pilots analysed">{basis.pilotCount}</Fact>
         <Fact term="Sampling">every {basis.gridStepSeconds}s</Fact>
         <Fact term="Shared thermals">
@@ -43,7 +55,13 @@ export function AnalysisBasis({
             <span className="ml-1 text-xs text-muted-foreground">(estimated)</span>
           ) : null}
         </Fact>
-        <Fact term="Phase coverage">{Math.round(basis.phaseCoveragePct)}%</Fact>
+        {/* Absent on reports stored before the split existed (v10 and
+            earlier), which are served stale until they revalidate. */}
+        {basis.phaseSplit ? (
+          <Fact term="Phase split" className="col-span-2">
+            <PhaseSplitBar split={basis.phaseSplit} />
+          </Fact>
+        ) : null}
       </dl>
 
       {excluded.length > 0 ? (

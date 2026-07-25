@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { partitionPhases } from '../src/field-analysis';
+import { partitionPhases, airborneSeconds } from '../src/field-analysis';
 import type { ThermalSegment } from '../src/event-types';
 import type { CircleDetectionResult } from '../src/circle-detector';
 import { createFix, TEST_ORIGIN, DEG_LON_PER_M } from './field-test-helpers';
@@ -55,6 +55,27 @@ describe('partitionPhases', () => {
     }
     const total = phases.reduce((s, p) => s + p.durationSeconds, 0);
     expect(total).toBeCloseTo(800, 6); // full takeoff→landing time, no double counting
+  });
+
+  /**
+   * The basis used to print this ratio as a "phase coverage" percentage; it
+   * was 100% on every task ever analysed, so the display became a phase split
+   * instead (FIELD_ANALYSIS_VERSION 11) and this assertion is now the only
+   * thing standing between a tiling regression and silently wrong splits —
+   * every phase percentage divides by exactly this total.
+   */
+  it('tiles exactly the airborne time the basis divides by', () => {
+    const { fixes, thermal } = threeActFixes();
+    for (const [takeoff, landing] of [
+      [0, 80],
+      [10, 80],
+      [0, 55],
+      [25, 60],
+    ]) {
+      const phases = partitionPhases(fixes, [thermal], NO_CIRCLES, takeoff, landing);
+      const total = phases.reduce((s, p) => s + p.durationSeconds, 0);
+      expect(total).toBeCloseTo(airborneSeconds({ fixes, takeoffIndex: takeoff, landingIndex: landing }), 6);
+    }
   });
 
   it('classifies fast movement overlapping a circling segment as search, not glide', () => {

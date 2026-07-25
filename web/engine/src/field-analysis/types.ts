@@ -333,6 +333,28 @@ export interface MetricReport {
   error?: string;
 }
 
+/**
+ * How the field's airborne time divided between the three flight phases.
+ *
+ * This replaced the old `phaseCoveragePct` fact, which was 100% on every task
+ * by construction: `partitionPhases` tiles takeoff→landing with no gaps and no
+ * overlaps, so coverage restated its own invariant instead of describing the
+ * day (that invariant is now guarded only by the phase-partition tests). The
+ * split moves — a booming day is mostly glide, a broken one is mostly search —
+ * so it characterises the conditions the metrics below were measured in.
+ */
+export interface FieldPhaseSplit {
+  /** Percentages of `airborneSeconds`; sum to 100. */
+  climbPct: number;
+  glidePct: number;
+  searchPct: number;
+  /**
+   * Denominator: phase seconds summed over every analysed pilot. Equal to the
+   * summed takeoff→landing time by the partition invariant above.
+   */
+  airborneSeconds: number;
+}
+
 /** Field-level facts printed in the report header. */
 export interface FieldAnalysisBasis {
   pilotCount: number;
@@ -343,8 +365,12 @@ export interface FieldAnalysisBasis {
   workingBandFloor: number;
   workingBandCeiling: number;
   workingBandFallback: boolean;
-  /** Mean over pilots of (time in any phase) / (takeoff→landing time), %. */
-  phaseCoveragePct: number;
+  /**
+   * Optional so reports stored before FIELD_ANALYSIS_VERSION 11 still parse —
+   * those carry the retired `phaseCoveragePct` instead, and a stale row is
+   * served while it revalidates, so consumers must render without this.
+   */
+  phaseSplit?: FieldPhaseSplit;
 }
 
 export interface FieldAnalysisReport {
