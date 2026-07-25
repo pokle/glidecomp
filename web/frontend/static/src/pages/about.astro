@@ -85,6 +85,50 @@ const build = [
       }
 
       <section class="mb-10">
+        <h2 class="text-xl font-semibold mb-4">Weather Data</h2>
+        <p class="text-muted-foreground mb-4">
+          The conditions shown with each task's field analysis — wind through the day, cloud
+          cover, and how high the thermals went — come from an outside meteorological archive.
+          They are <strong class="font-medium text-foreground">modelled</strong> figures sampled
+          at a grid point near the task, not readings taken at launch, so the organizer's
+          weather notes on each task remain the local ground truth.
+        </p>
+        <ul class="space-y-3">
+          <li>
+            <a href="https://open-meteo.com" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              Open-Meteo
+            </a>
+            <span class="text-muted-foreground"> — Archived forecasts and historical weather, free and open, under </span>
+            <a
+              href="https://creativecommons.org/licenses/by/4.0/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="font-medium hover:underline"
+            >
+              CC BY 4.0
+            </a>
+          </li>
+          <li>
+            <a href="https://www.ecmwf.int" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              ECMWF
+            </a>
+            <span class="text-muted-foreground">
+              — The IFS forecast model, and the ERA5 reanalysis that covers older competitions,
+              produced for the
+            </span>
+            <a
+              href="https://climate.copernicus.eu"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="font-medium hover:underline"
+            >
+              Copernicus Climate Change Service
+            </a>
+          </li>
+        </ul>
+      </section>
+
+      <section class="mb-10">
         <h2 class="text-xl font-semibold mb-4">UI &amp; Styling</h2>
         <ul class="space-y-3">
           <li>
