@@ -45,8 +45,10 @@ container class). Do NOT plan a GridList/Table rewrite of the pilots grid.
 **Always go through `comp/TabulatorGrid.tsx`** — the in-repo React wrapper —
 rather than calling `new TabulatorFull(...)` in an effect. It owns the lazy
 `import("tabulator-tables")` (so Tabulator stays out of the public bundle and
-the SSR bundle), the build/destroy lifecycle, row cloning, and
-stale-handler-proof event binding; grids just declare
+the SSR bundle), the build/destroy lifecycle, row cloning,
+stale-handler-proof event binding, and turning off browser autofill on the
+editor inputs Tabulator builds (Safari was offering saved email addresses over
+the pilots grid); grids just declare
 `initialColumns`/`initialData`/`options`/`events` and take a `tableRef` for the
 imperative calls. It is **not** the `react-tabulator` npm package the Tabulator
 docs point at (that one pins `tabulator-tables@5.6.1` — we're on 6.x — and
