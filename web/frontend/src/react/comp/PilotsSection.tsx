@@ -413,8 +413,8 @@ function EditPilotsDialog({
         <TabulatorGrid
           id="pilots-grid"
           className="gc-grid min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden rounded border border-border"
-          columns={gridColumns(compClasses)}
-          data={pilots.map(pilotToRow)}
+          initialColumns={() => gridColumns(compClasses)}
+          initialData={() => pilots.map(pilotToRow)}
           options={{
             layout: "fitDataStretch",
             height: "100%",

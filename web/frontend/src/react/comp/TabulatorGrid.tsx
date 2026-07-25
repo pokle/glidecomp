@@ -3,16 +3,15 @@
  *
  * Editable tables are Tabulator by policy (see the Tabulator policy in
  * docs/2026-07-18-rac-adoption-guide.md), so this is the one place that knows
- * how to get a Tabulator instance onto the page: grids declare
- * `columns`/`data`/`options`/`events` and nobody hand-rolls the lazy
+ * how to get a Tabulator instance onto the page: grids declare their columns,
+ * rows, options and events, and nobody hand-rolls the lazy
  * import → build → bind → destroy lifecycle again.
  *
- * Deliberately **not** the `react-tabulator` package that tabulator.info's
- * React docs point at: it hard-depends on `tabulator-tables@5.6.1` (we're on
- * 6.x, so it would ship a second, older copy of Tabulator) and peers at
- * React <= 17 (we're on 19). This follows the prop shape that package
- * documents — columns / data / options / events, plus access to the instance —
- * with three deliberate differences:
+ * Informed by the `react-tabulator` package that tabulator.info's React docs
+ * point at, but deliberately not it, and deliberately not its API either. That
+ * package hard-depends on `tabulator-tables@5.6.1` (we're on 6.x, so it would
+ * ship a second, older copy of Tabulator) and peers at React <= 17 (we're on
+ * 19). Where its design would mislead, this diverges:
  *
  *  1. **Lazy.** The library and its CSS load via dynamic `import()` inside an
  *     effect, so Tabulator stays out of the SSR bundle (these grids sit on
@@ -21,16 +20,23 @@
  *     The instance therefore only exists a tick or two after mount: wait for
  *     `onReady` rather than assuming a grid on first render. On the server (and
  *     until the chunk lands) this renders an empty container div.
- *  2. **Uncontrolled.** `columns` and `data` are read once, when the grid is
- *     built — Tabulator owns its rows from then on, which is the whole reason
- *     we keep it for editable tables. Push later changes through the instance
- *     (`setData`, `addRow`, `updateData`, …) and remount via React's `key` to
- *     rebuild from scratch. (react-tabulator instead re-runs its constructor
- *     whenever the `data` prop changes, without destroying the previous
- *     instance — which both leaks and loses scroll/edit state.)
- *  3. **Handlers can't go stale.** `events` handlers are dispatched through a
- *     ref, so a handler closing over current state keeps working without
- *     rebuilding the grid. The set of event *names* is read once at build time,
+ *  2. **Uncontrolled, and typed that way.** Tabulator owns its rows once built
+ *     — which is the whole reason we keep it for editable tables — so there is
+ *     no reactive `data` prop. `initialColumns`/`initialData` are **functions**
+ *     the wrapper calls exactly once, at build: the contract is in the type, a
+ *     caller can't accidentally recompute a big row array on every render, and
+ *     nobody has to wonder whether assigning to a `data` prop re-syncs the
+ *     grid (in `react-tabulator` it re-runs the constructor without destroying
+ *     the previous instance, which leaks and discards in-progress edits).
+ *     Push later changes through `tableRef` (`setData`, `addRow`,
+ *     `updateData`, …) and remount via React's `key` to rebuild from scratch.
+ *  3. **Rows are cloned for you.** Tabulator edits its row objects in place,
+ *     so `initialData`'s rows are shallow-copied before they're handed over —
+ *     a caller can safely return objects straight out of React state. (Rows
+ *     are expected to be flat; nested values stay shared.)
+ *  4. **Handlers can't go stale.** `events` handlers are dispatched through a
+ *     ref, so a handler closing over current state keeps working without the
+ *     grid being rebuilt. The set of event *names* is read once at build time,
  *     so keep the keys of `events` stable across renders.
  */
 import { useEffect, useRef, type RefObject } from "react";
@@ -50,13 +56,16 @@ export type TabulatorGridEvents = {
 };
 
 export interface TabulatorGridProps {
-  /** Column definitions. Read once, when the grid is built (see the header). */
-  columns: ColumnDefinition[];
-  /** Initial rows. Read once, when the grid is built (see the header). */
-  data?: unknown[];
+  /** Column definitions. Called once, when the grid is built. */
+  initialColumns: () => ColumnDefinition[];
+  /**
+   * The rows to build with. Called once, when the grid is built, and the rows
+   * it returns are shallow-copied — so returning React state directly is safe.
+   */
+  initialData?: () => unknown[];
   /**
    * Everything else Tabulator takes, merged last so it wins over the defaults
-   * this wrapper sets. `columns`/`data` are their own props.
+   * this wrapper sets. Columns and rows have their own props.
    */
   options?: Omit<Options, "columns" | "data">;
   /** Tabulator events to bind, e.g. `{ cellEdited: … , rowDeleted: … }`. */
@@ -79,8 +88,8 @@ export interface TabulatorGridProps {
 }
 
 export function TabulatorGrid({
-  columns,
-  data,
+  initialColumns,
+  initialData,
   options,
   events,
   tableRef,
@@ -91,11 +100,10 @@ export function TabulatorGrid({
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Build inputs and callbacks are read through refs rather than closed over:
-  // the grid is built once per mount (see the header), and both call sites
-  // build their columns inline, so depending on prop identity would tear the
-  // grid down on every render.
-  const buildRef = useRef({ columns, data, options });
-  buildRef.current = { columns, data, options };
+  // the grid is built once per mount, so depending on prop identity would tear
+  // it down on every render (every call site builds its columns inline).
+  const buildRef = useRef({ initialColumns, initialData, options });
+  buildRef.current = { initialColumns, initialData, options };
   const eventsRef = useRef(events);
   eventsRef.current = events;
   const onReadyRef = useRef(onReady);
@@ -112,13 +120,16 @@ export function TabulatorGrid({
       ]);
       if (cancelled || !containerRef.current) return;
       const build = buildRef.current;
+      // Cloned: Tabulator edits row objects in place, and these may be the
+      // very objects the caller holds in React state.
+      const rows = build.initialData?.().map((row) => ({ ...(row as object) }));
       table = new TabulatorFull(containerRef.current, {
-        // `fitColumns` is the default the react-tabulator docs document; any
-        // `options.layout` overrides it.
+        // `fitColumns` is Tabulator's own documented default for a React
+        // wrapper; any `options.layout` overrides it.
         layout: "fitColumns",
         ...build.options,
-        columns: build.columns,
-        ...(build.data ? { data: build.data as Options["data"] } : {}),
+        columns: build.initialColumns(),
+        ...(rows ? { data: rows as Options["data"] } : {}),
       });
 
       // Bind a trampoline per event name so the handler is looked up at call

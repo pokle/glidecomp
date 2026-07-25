@@ -611,10 +611,8 @@ function CompWaypointsContent() {
             {isAdmin ? (
               <TabulatorGrid
                 className="gc-grid h-[420px] rounded border border-border lg:h-[560px]"
-                columns={waypointGridColumns(locate)}
-                // Cloned: Tabulator edits its row objects in place, and these
-                // must not be the objects held in React state.
-                data={rows.map((r) => ({ ...r }))}
+                initialColumns={() => waypointGridColumns(locate)}
+                initialData={() => rows}
                 options={{
                   index: "id",
                   // Header-sort defaults off (the pin/remove action columns

@@ -45,14 +45,17 @@ container class). Do NOT plan a GridList/Table rewrite of the pilots grid.
 **Always go through `comp/TabulatorGrid.tsx`** — the in-repo React wrapper —
 rather than calling `new TabulatorFull(...)` in an effect. It owns the lazy
 `import("tabulator-tables")` (so Tabulator stays out of the public bundle and
-the SSR bundle), the build/destroy lifecycle, and stale-handler-proof event
-binding; grids just declare `columns`/`data`/`options`/`events` and take a
-`tableRef` for the imperative calls. It is **not** the `react-tabulator` npm
-package the Tabulator docs point at: that one pins `tabulator-tables@5.6.1`
-(we're on 6.x) and peers at React <= 17 (we're on 19). Read the header comment
-in that file before using it — notably the grid is **uncontrolled** (`columns`
-and `data` are read once, at build; remount via `key` to rebuild) and only
-exists a tick after mount, so gate anything that drives it on `onReady`.
+the SSR bundle), the build/destroy lifecycle, row cloning, and
+stale-handler-proof event binding; grids just declare
+`initialColumns`/`initialData`/`options`/`events` and take a `tableRef` for the
+imperative calls. It is **not** the `react-tabulator` npm package the Tabulator
+docs point at (that one pins `tabulator-tables@5.6.1` — we're on 6.x — and
+peers at React <= 17, and we're on 19), and it does not copy that package's
+API. Read the header comment in that file before using it — notably the grid is
+**uncontrolled**: `initialColumns`/`initialData` are thunks called once at
+build (remount via `key` to rebuild, push updates through `tableRef`), and the
+instance only exists a tick after mount, so gate anything that drives it on
+`onReady`.
 
 ## What exists
 
@@ -310,13 +313,14 @@ exists a tick after mount, so gate anything that drives it on `onReady`.
     waypoints map), keep React state as the source of truth and let the grid
     mirror into it: render `<TabulatorGrid>` only where the grid belongs
     (`isAdmin && !loading` — mount/unmount replaces the old effect gating, and
-    because the wrapper reads `columns`/`data` once at build, passing them
-    inline can't tear the grid down per keystroke); wire
+    `initialColumns`/`initialData` are thunks the wrapper calls once at build,
+    so passing them inline can't tear the grid down per keystroke or recompute
+    per render); wire
     `cellEdited`/`rowDeleted` → `setRows(table.getData()...)` so the map/dirty
     check/save all read state; push *external* changes (file upload, add
     dialog) into the grid imperatively via `tableRef` (`setData`/`addRow`)
-    beside the `setRows` call. Clone rows on the way in — Tabulator edits its
-    row objects in place, and those must not be the objects in React state.
+    beside the `setRows` call. `initialData` rows are cloned by the wrapper
+    (Tabulator edits row objects in place), so returning React state is safe.
     Cell formatters must build DOM nodes and assign
     `textContent` — a string return is innerHTML, and grid values come from
     user-supplied waypoint files. Static icon markup (the pin/✕ buttons) as
