@@ -55,6 +55,7 @@ import { PilotHighlightProvider } from "../field-analysis/PilotHighlightContext"
 import { PercentileHeatmap } from "../field-analysis/charts/PercentileHeatmap";
 import { StyleClusters } from "../field-analysis/StyleClusters";
 import { displayReport } from "../field-analysis/units";
+import { useTaskWeather } from "../weather/use-task-weather";
 import { useUnits } from "../lib/units";
 import {
   FAMILY_ORDER,
@@ -84,6 +85,13 @@ export function TaskFieldAnalysis() {
     initial ? "ready" : "loading"
   );
   const [refreshing, setRefreshing] = useState(false);
+
+  // What the meteorology says the day did — its own request, its own cache,
+  // its own failure mode. A weather-provider outage must never stop the
+  // behavioural metrics from rendering, so this deliberately does not gate
+  // anything below it; the day panel simply omits the weather group when
+  // this comes back empty.
+  const weather = useTaskWeather(compId || null, taskId || null);
 
   // Settle the address bar on the canonical `${slug}-${id}` once both names
   // load (the analysis body carries neither, so wait for the name fetches).
@@ -511,6 +519,8 @@ export function TaskFieldAnalysis() {
                     metrics={grouped.get(family) ?? []}
                     report={report}
                     compTimezone={comp?.timezone ?? null}
+                    weather={weather.data?.weather ?? null}
+                    weatherNotes={weather.data?.notes ?? task?.weather_notes ?? ""}
                     isExpanded={expandedFamilies.has(family)}
                     onExpandedChange={(expanded) => expandFamily(family, expanded)}
                     printBreakBefore={i > 0}
