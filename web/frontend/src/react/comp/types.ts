@@ -90,6 +90,10 @@ export interface TaskDetailData {
   /** Stopped tasks (S7F §12.3): the recorded stop announcement time (ISO
    * UTC), or null when the task ran to completion. */
   stop_announcement_time: string | null;
+  /** The organizer's free-text account of the day's conditions. Public to
+   * read, comp-admin writable. Empty string when unset — never null, so no
+   * caller has to distinguish "no notes" from "not loaded". */
+  weather_notes: string;
   pilot_classes: string[];
   track_count: number;
 }

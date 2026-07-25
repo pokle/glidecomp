@@ -170,7 +170,10 @@ interface TaskWeatherInputs {
 export function queryForTaskRow(task: TaskWeatherInputs) {
   if (!task.xctsk || !task.task_date) return null;
   try {
-    const parsed = parseXCTask(JSON.parse(task.xctsk));
+    // parseXCTask takes the raw JSON TEXT (it also handles the XCTSK: QR
+    // prefix), which is exactly what the `xctsk` column holds — do not
+    // JSON.parse it first.
+    const parsed = parseXCTask(task.xctsk);
     return weatherQueryForTask(parsed, task.task_date);
   } catch (err) {
     console.error("weather query derivation failed", err);

@@ -44,6 +44,7 @@ import { useConfirm } from "../lib/confirm";
 import { useAdminView, useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
 import { SectionHeader } from "../components/SectionHeader";
+import { WeatherNotesSection } from "../weather/WeatherNotesSection";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { TaskResults } from "../comp/TaskResults";
 import { CompNameProvider } from "../comp/comp-name-context";
@@ -311,6 +312,19 @@ function TaskDetailContent() {
         timezone={comp?.timezone ?? null}
         isAdmin={isAdmin}
         onEditRoute={() => setRouteOpen(true)}
+      />
+
+      {/* The organizer's account of the day. Sits directly under the route,
+          above the results: it is context for reading everything below it,
+          and the field-analysis page shows the same text beside its charts. */}
+      <WeatherNotesSection
+        compId={compId}
+        taskId={taskId}
+        notes={task.weather_notes}
+        isAdmin={isAdmin}
+        onSaved={(weather_notes) =>
+          setTask((prev) => (prev ? { ...prev, weather_notes } : prev))
+        }
       />
 
       {/* Public results: top-3 podium per class + the link to the comp's
