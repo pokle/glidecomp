@@ -756,6 +756,7 @@ export function PilotScoreDetail() {
               onItemClick={onItemClick}
             />
           ))}
+          {data.entry.track_excluded ? <TrackValidityDocLink /> : null}
           <TrackDataCleaningNote
             cleaning={data.altitudeCleaning}
             timezone={data.comp.timezone}
@@ -892,7 +893,24 @@ function TrackQualityNote({
           </li>
         ))}
       </ul>
+      <TrackValidityDocLink className="mt-3" />
     </section>
+  );
+}
+
+/**
+ * The public explainer for the validity checks. Rendered inside the note
+ * above for a flagged-but-scored track, and separately under the explanation
+ * for a withheld one — where the note suppresses itself, but the pilot has
+ * just been shown a zero and needs this link most.
+ */
+function TrackValidityDocLink({ className = "" }: { className?: string }) {
+  return (
+    <p className={`text-xs text-muted-foreground ${className}`}>
+      <a href="/scoring/track-validity" className="underline underline-offset-2">
+        How track validity checks work
+      </a>
+    </p>
   );
 }
 

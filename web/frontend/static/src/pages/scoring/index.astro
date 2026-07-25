@@ -184,6 +184,60 @@ import BackLink from "../../components/BackLink.astro";
         </span>
       </a>
 
+      {/* Track validity */}
+      <a
+        href="/scoring/track-validity"
+        class="block mb-6 p-5 rounded-lg border border-border bg-card hover:border-primary/60 transition-colors group"
+      >
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-xl font-bold">
+            Track validity checks
+            <span class="text-sm font-normal text-muted-foreground">
+              is this really your flight of this task?
+            </span>
+          </h2>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="text-muted-foreground group-hover:text-foreground transition-colors"
+          >
+            <line x1="5" y1="12" x2="19" y2="12" />
+            <polyline points="12 5 19 12 12 19" />
+          </svg>
+        </div>
+        <p class="text-sm text-muted-foreground leading-relaxed">
+          Sometimes the wrong file gets uploaded — a flight from another day, or another site.
+          GlideComp checks every tracklog against the task it was submitted to and withholds
+          one that cannot be that flight, rather than scoring it as though it were. Softer
+          observations are only flagged and never change a score, and the scorekeeper can
+          overrule any verdict.
+        </p>
+        <span class="inline-flex items-center gap-1 text-sm font-medium mt-3 text-foreground group-hover:underline">
+          Read how track validity works
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <line x1="5" y1="12" x2="19" y2="12" />
+            <polyline points="12 5 19 12 12 19" />
+          </svg>
+        </span>
+      </a>
+
     </div>
   </div>
 </Base>
