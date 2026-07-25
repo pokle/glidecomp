@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Link as AriaLink } from "react-aria-components";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
+import { Badge } from "@/react/rac/badge";
 import { api } from "../../comp/api";
 import { formatDuration } from "../lib/format";
 import { formatDistance, useUnits } from "../lib/units";
@@ -228,6 +229,19 @@ function ScoreClassTable({
                   >
                     {p.pilot_name}
                   </AriaLink>
+                  {/* Without this, a 0 km / 0 pts row reads as a scoring bug
+                      rather than a withheld tracklog. The row already links
+                      to the explanation, so this is a signpost, not a
+                      dead end. */}
+                  {p.track_excluded ? (
+                    <Badge
+                      variant="destructive"
+                      className="ml-2 align-middle"
+                      title={p.track_excluded.reasons.join("; ")}
+                    >
+                      Excluded
+                    </Badge>
+                  ) : null}
                 </Cell>
                 {!isOpenDistance ? <Cell>{p.made_goal ? "✓" : "—"}</Cell> : null}
                 <Cell className="text-right tabular-nums">

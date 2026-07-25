@@ -45,6 +45,7 @@ import type {
   ScoreExplanation,
   ScoreExplanationSection,
   ScoreExplanationItem,
+  ScoreEntryInput,
   ExplainGapScoreInput,
   ExplainOpenDistanceInput,
   ExplainManualFlightInput,
@@ -331,4 +332,47 @@ export function explainManualFlightScore(
     : `Manual flight — ${km(entry.flown_distance)} made good — ${fmtPoints(entry.total_score)} points`;
 
   return { format: 'gap', headline, sections };
+}
+
+/**
+ * Explain a pilot whose tracklog a HARD data-quality check withheld from
+ * scoring (track-quality.ts, FAI S7A §4.4.2).
+ *
+ * There is nothing to explain about points here — there is no valid flight to
+ * measure — so this deliberately does NOT run the normal turnpoint narrative:
+ * reviving a sequence from a track that isn't this task's produces confident,
+ * meaningless prose ("landed out at 0.0 km") about a file from somewhere else.
+ * The reader needs the findings and the remedy instead.
+ *
+ * Reuses the existing 'flight' and 'total' section ids, so every consumer
+ * (SSR, the SPA, the CLI) renders it with no new cases.
+ */
+export function explainExcludedTrack(input: {
+  entry: ScoreEntryInput;
+  /** The hard findings' titles and details, in detector order. */
+  findings: { title: string; detail: string }[];
+}): ScoreExplanation {
+  const items: ScoreExplanationItem[] = input.findings.map((f, i) => ({
+    id: `quality-${i}`,
+    text: f.title,
+    detail: f.detail,
+    emphasis: 'warning',
+  }));
+  items.push({
+    id: 'quality-remedy',
+    text:
+      'Until this is resolved the flight scores nothing. Upload the correct ' +
+      'tracklog for this task, or ask the scorekeeper to review it — under FAI ' +
+      'S7A §4.4.6 accepting or rejecting a track log is the organiser’s decision, ' +
+      'and they can overrule this check.',
+  });
+
+  return {
+    format: 'gap',
+    headline: `Tracklog excluded from scoring — ${fmtPoints(input.entry.total_score)} points`,
+    sections: [
+      { id: 'flight', title: 'Why this tracklog was excluded', items },
+      buildTotalSection(input.entry),
+    ],
+  };
 }

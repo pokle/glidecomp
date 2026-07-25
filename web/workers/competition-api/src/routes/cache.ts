@@ -100,6 +100,7 @@ async function getScoreStoreStats(db: D1Database): Promise<CacheStats> {
     gap: "Track analyses (GAP)",
     od: "Track analyses (open distance)",
     "pilot-detail": "Track analyses (pilot detail)",
+    quality: "Track analyses (data quality)",
   };
   for (const row of analyses.results) {
     by_prefix[variantLabels[row.variant] ?? `Track analyses (${row.variant})`] =

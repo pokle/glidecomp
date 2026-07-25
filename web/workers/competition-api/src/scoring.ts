@@ -24,8 +24,12 @@ import {
   scoreTask,
   buildFieldContext,
   evaluateField,
+  assessTrackQuality,
   type XCTask,
+  type IGCFile,
   type IGCFix,
+  type TrackQualityContext,
+  type TrackQualityReport,
   type PilotFlight,
   type FieldAnalysisReport,
   type GAPParameters,
@@ -71,6 +75,20 @@ export interface PilotScoreEntry {
   /** Stopped tasks (S7F §12.3.6): altitude-bonus metres folded into
    * flown_distance for a pilot still flying at the stop. Null otherwise. */
   stopped_altitude_bonus: number | null;
+  /**
+   * Set when this pilot's tracklog failed a HARD data-quality check
+   * (track-quality.ts) and was withheld from scoring: they hold a place in
+   * the standings at 0 rather than vanishing from the results. Null for every
+   * normally-scored pilot.
+   */
+  track_excluded?: { reasons: string[] } | null;
+}
+
+/** A pilot whose tracklog was withheld from scoring, to be seated last. */
+export interface ExcludedPilot {
+  comp_pilot_id: number;
+  pilot_name: string;
+  reasons: string[];
 }
 
 /** Whole-class stopped-task outcome (S7F §12.3) — see engine StoppedTaskScore. */
@@ -123,15 +141,19 @@ export async function computeScoreStateKey(
 ): Promise<string> {
   const task = await db
     .prepare(
-      `SELECT t.xctsk, t.stop_announcement_time, c.scoring_format
+      `SELECT t.xctsk, t.task_date, t.stop_announcement_time,
+              c.scoring_format, c.category, c.timezone
        FROM task t JOIN comp c ON c.comp_id = t.comp_id
        WHERE t.task_id = ?`
     )
     .bind(taskId)
     .first<{
       xctsk: string | null;
+      task_date: string | null;
       stop_announcement_time: string | null;
       scoring_format: string | null;
+      category: string | null;
+      timezone: string | null;
     }>();
 
   // Include the pilot roster (comp_pilot_id, name, class) in the hashed state.
@@ -142,7 +164,8 @@ export async function computeScoreStateKey(
   const tracks = await db
     .prepare(
       `SELECT tt.task_track_id, tt.uploaded_at, tt.penalty_points,
-              tt.comp_pilot_id, cp.registered_pilot_name, cp.pilot_class
+              tt.quality_override, tt.comp_pilot_id,
+              cp.registered_pilot_name, cp.pilot_class
        FROM task_track tt
        JOIN comp_pilot cp ON cp.comp_pilot_id = tt.comp_pilot_id
        WHERE tt.task_id = ? AND tt.active = 1 ORDER BY tt.task_track_id`
@@ -152,6 +175,7 @@ export async function computeScoreStateKey(
       task_track_id: number;
       uploaded_at: string;
       penalty_points: number;
+      quality_override: number;
       comp_pilot_id: number;
       registered_pilot_name: string;
       pilot_class: string;
@@ -205,6 +229,18 @@ export async function computeScoreStateKey(
     task?.xctsk ?? "",
     // Stopped tasks (S7F §12.3): the stop announcement reshapes every score.
     `stop:${task?.stop_announcement_time ?? ""}`,
+    // The task's day, the comp's zone and the category became scoring inputs
+    // with track-quality.ts: together they decide whether a tracklog is
+    // scored at all (a mistyped date is the likeliest cause of a wrongly
+    // withheld pilot, so correcting it must invalidate the served body), and
+    // the category sets both the GAP defaults and the speed ceiling.
+    `day:${task?.task_date ?? ""}@${task?.timezone ?? ""}`,
+    `cat:${task?.category ?? ""}`,
+    // A scorekeeper's S7A §4.4.6 override puts a withheld track back into
+    // the scored field.
+    ...tracks.results
+      .filter((t) => t.quality_override)
+      .map((t) => `qo:${t.task_track_id}`),
     ...tracks.results.map(
       (t) =>
         `${t.task_track_id}:${t.uploaded_at}:${t.penalty_points}:${t.comp_pilot_id}:${t.registered_pilot_name}:${t.pilot_class}`
@@ -231,7 +267,9 @@ export async function computeScoreStateKey(
   // v6: added per-task pilot statuses (they now feed launch validity).
   // v7: only active tracks count; added active manual flights (issue #306).
   // v8: added the task stop announcement time (stopped tasks, issue #264).
-  return `score:v8:${taskId}:${hex}`;
+  // v9: added the task date, comp zone, category and per-track quality
+  //     overrides — all became scoring inputs with track-quality.ts.
+  return `score:v9:${taskId}:${hex}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -239,7 +277,7 @@ export async function computeScoreStateKey(
 // ---------------------------------------------------------------------------
 
 /** The kinds of per-track analysis rows `track_analysis` holds. */
-type AnalysisVariant = "gap" | "od" | "pilot-detail";
+type AnalysisVariant = "gap" | "od" | "pilot-detail" | "quality";
 
 /**
  * Load every stored analysis of one variant for a task's tracks that was
@@ -409,13 +447,52 @@ export function rankByTotalScore<T extends { total_score: number }>(
 /** How many tracks to fetch/parse from R2 at once on a cache miss. */
 const TRACK_FETCH_CONCURRENCY = 10;
 
-/** An empty class result — used when a class has no scored tracks. */
-function emptyClassScore(pilotClass: string): ClassScore {
+/**
+ * An empty class result — used when a class has no scored tracks. Any pilot
+ * whose track was withheld for data quality is still seated, at 0: a class
+ * whose ONLY track hard-failed must not silently lose its competitor.
+ */
+function emptyClassScore(pilotClass: string, excluded: ExcludedPilot[] = [], alphabet = ""): ClassScore {
   return {
     pilot_class: pilotClass,
     task_validity: { launch: 0, distance: 0, time: 0, task: 0 },
     available_points: { distance: 0, time: 0, leading: 0, arrival: 0, total: 0 },
-    pilots: [],
+    pilots: excluded.map((e, i) => excludedPilotEntry(e, i + 1, alphabet)),
+  };
+}
+
+/**
+ * The standings row for a pilot whose tracklog was withheld: zero everywhere,
+ * with the reasons attached so the scores table and the score-detail page can
+ * say WHY rather than showing an unexplained 0.
+ */
+function excludedPilotEntry(
+  excluded: ExcludedPilot,
+  rank: number,
+  alphabet: string
+): PilotScoreEntry {
+  return {
+    rank,
+    comp_pilot_id: encodeId(alphabet, excluded.comp_pilot_id),
+    pilot_name: excluded.pilot_name,
+    made_goal: false,
+    reached_ess: false,
+    flown_distance: 0,
+    speed_section_time: null,
+    distance_points: 0,
+    distance_linear_points: 0,
+    distance_difficulty_points: 0,
+    time_points: 0,
+    leading_points: 0,
+    arrival_points: 0,
+    penalty_points: 0,
+    penalty_reason: null,
+    total_score: 0,
+    early_start_seconds: null,
+    early_start_outcome: null,
+    jump_the_gun_penalty: null,
+    stopped_altitude_bonus: null,
+    track_excluded: { reasons: excluded.reasons },
   };
 }
 
@@ -437,7 +514,12 @@ function buildClassScore(
     string,
     { comp_pilot_id: number; penalty_points: number; penalty_reason: string | null }
   >,
-  alphabet: string
+  alphabet: string,
+  // Pilots whose tracklogs a HARD data-quality finding withheld from
+  // scoring. Appended AFTER the sort, so the scored field's ranks are exactly
+  // what they would be if these tracks had never been uploaded, and the
+  // withheld pilots take the places below them.
+  excluded: ExcludedPilot[] = []
 ): ClassScore {
   const withPenalties = result.pilotScores.map((ps) => {
     const pilot = pilotMeta.get(ps.trackFile)!;
@@ -479,7 +561,12 @@ function buildClassScore(
     early_start_outcome: p.pilotScore.earlyStartOutcome ?? null,
     jump_the_gun_penalty: p.pilotScore.jumpTheGunPenalty ?? null,
     stopped_altitude_bonus: p.pilotScore.stoppedAltitudeBonus ?? null,
+    track_excluded: null,
   }));
+
+  for (const e of excluded) {
+    pilots.push(excludedPilotEntry(e, pilots.length + 1, alphabet));
+  }
 
   return {
     pilot_class: pilotClass,
@@ -533,6 +620,10 @@ export interface ScoredTrackRow {
   penalty_reason: string | null;
   pilot_name: string;
   pilot_class: string;
+  /** 1 when a scorekeeper has ruled this track valid despite a HARD
+   * data-quality finding (S7A §4.4.6 makes rejection the organiser's call,
+   * so the automatic verdict must be overridable). */
+  quality_override: number;
 }
 
 /**
@@ -550,6 +641,7 @@ export interface TaskScoringConfig {
     comp_id: number;
     task_date: string;
     category: string;
+    timezone: string | null;
     xctsk: string;
     stop_announcement_time: string | null;
     gap_params: string | null;
@@ -572,6 +664,75 @@ export interface TaskScoringConfig {
   scoredTracks: ScoredTrackRow[];
   /** Per class: pilots marked DNF with neither a track nor a manual flight. */
   dnfByClass: Map<string, number>;
+  /**
+   * Per-track data-quality verdicts (engine track-quality.ts), by
+   * task_track_id.
+   *
+   * A MUTABLE memo, and the same "pass cfg through so both passes provably
+   * agree" contract as the rest of this type: resolveTaskScoringConfig seeds
+   * it from track_analysis (pure D1, no R2), computeTaskScore fills the
+   * misses — it is the only pass that already has the parsed IGC in hand —
+   * and computeTaskFieldAnalysis reads it afterwards for free, because it
+   * calls computeTaskScore first. A track absent from `byTrackId` has an
+   * UNKNOWN verdict, never an assumed-good one.
+   */
+  quality: {
+    geomHash: string;
+    byTrackId: Map<number, TrackQualityReport>;
+    context: TrackQualityContext;
+  };
+}
+
+/**
+ * Split a class's tracks into those that may be scored and those a HARD
+ * data-quality finding withholds (S7A §4.4.2/§4.4.6 — see track-quality.ts).
+ *
+ * A track whose verdict is not yet known stays in `scored`: the per-track
+ * pass below assesses it while it has the fixes open and drops it there. A
+ * stale or missing verdict must never silently withhold a pilot.
+ */
+export function partitionByQuality(
+  tracks: ScoredTrackRow[],
+  quality: TaskScoringConfig["quality"]
+): {
+  scored: ScoredTrackRow[];
+  excluded: { track: ScoredTrackRow; report: TrackQualityReport }[];
+} {
+  const scored: ScoredTrackRow[] = [];
+  const excluded: { track: ScoredTrackRow; report: TrackQualityReport }[] = [];
+  for (const track of tracks) {
+    const report = quality.byTrackId.get(track.task_track_id);
+    if (report?.hardFailed && !track.quality_override) excluded.push({ track, report });
+    else scored.push(track);
+  }
+  return { scored, excluded };
+}
+
+/** The hard findings' titles — what the standings and the analysis basis show
+ * as the reason a track was withheld. */
+export function hardFindingTitles(report: TrackQualityReport): string[] {
+  return report.findings.filter((f) => f.severity === "hard").map((f) => f.title);
+}
+
+/**
+ * The withheld pilots of each class, ready to be seated at the bottom of the
+ * standings. Call AFTER the per-track pass has filled `quality.byTrackId`.
+ */
+function excludedPilotsByClass(
+  quality: TaskScoringConfig["quality"],
+  tracks: ScoredTrackRow[]
+): Map<string, ExcludedPilot[]> {
+  const byClass = new Map<string, ExcludedPilot[]>();
+  for (const { track, report } of partitionByQuality(tracks, quality).excluded) {
+    const list = byClass.get(track.pilot_class) ?? [];
+    list.push({
+      comp_pilot_id: track.comp_pilot_id,
+      pilot_name: track.pilot_name,
+      reasons: hardFindingTitles(report),
+    });
+    byClass.set(track.pilot_class, list);
+  }
+  return byClass;
 }
 
 /** Resolve a task's scoring parameters, roster and tracks. Throws when the
@@ -585,7 +746,7 @@ export async function resolveTaskScoringConfig(
     .prepare(
       `SELECT t.task_id, t.comp_id, t.task_date, t.xctsk, t.stop_announcement_time,
               t.gap_params AS task_gap_params,
-              c.category, c.gap_params, c.scoring_format, c.creation_date
+              c.category, c.timezone, c.gap_params, c.scoring_format, c.creation_date
        FROM task t
        JOIN comp c ON t.comp_id = c.comp_id
        WHERE t.task_id = ?`
@@ -596,6 +757,7 @@ export async function resolveTaskScoringConfig(
       comp_id: number;
       task_date: string;
       category: string;
+      timezone: string | null;
       xctsk: string;
       stop_announcement_time: string | null;
       task_gap_params: string | null;
@@ -675,7 +837,7 @@ export async function resolveTaskScoringConfig(
   const tracks = await db
     .prepare(
       `SELECT tt.task_track_id, tt.comp_pilot_id, tt.igc_filename, tt.uploaded_at,
-              tt.penalty_points, tt.penalty_reason,
+              tt.penalty_points, tt.penalty_reason, tt.quality_override,
               cp.registered_pilot_name AS pilot_name,
               cp.pilot_class
        FROM task_track tt
@@ -725,6 +887,31 @@ export async function resolveTaskScoringConfig(
     .all<{ pilot_class: string; n: number }>();
   const dnfByClass = new Map(dnfRows.results.map((r) => [r.pilot_class, r.n]));
 
+  // Data-quality verdicts (track-quality.ts). Seeded from track_analysis so
+  // this function stays pure-D1 — the misses are filled by computeTaskScore,
+  // which is already holding the parsed IGC. The hash carries only what the
+  // verdict depends on: the route, the task's day and zone, and the class.
+  // Deliberately NOT distanceOrigin/leading/stop — a stop announcement must
+  // not re-fetch every track just to redo quality.
+  const qualityContext: TrackQualityContext = {
+    task: xcTask,
+    taskDate: taskRow.task_date,
+    timeZone: taskRow.timezone ?? undefined,
+    category,
+  };
+  const qualityHash = await shortHash(
+    `${taskRow.xctsk} date:${taskRow.task_date} cat:${category} ` +
+      `tz:${taskRow.timezone ?? ""} engine:${SCORING_ENGINE_VERSION}`
+  );
+  const storedQuality = await loadTrackAnalyses(db, taskId, "quality", qualityHash);
+  const uploadedAtById = new Map(scoredTracks.map((t) => [t.task_track_id, t.uploaded_at]));
+  const qualityByTrackId = new Map<number, TrackQualityReport>();
+  for (const [trackId, row] of storedQuality) {
+    // A re-uploaded track invalidates only its own verdict.
+    if (row.uploaded_at !== uploadedAtById.get(trackId)) continue;
+    qualityByTrackId.set(trackId, JSON.parse(row.payload_json) as TrackQualityReport);
+  }
+
   return {
     taskRow,
     xcTask,
@@ -741,15 +928,18 @@ export async function resolveTaskScoringConfig(
     scoredClasses,
     scoredTracks,
     dnfByClass,
+    quality: { geomHash: qualityHash, byTrackId: qualityByTrackId, context: qualityContext },
   };
 }
 
 /** Fetch, decompress and parse one track's IGC from R2 (null on failure —
- * missing object, unparseable file, or no fixes). */
-export async function fetchIgcFixes(
+ * missing object, unparseable file, or no fixes). Returns the WHOLE parsed
+ * file: the data-quality checks (track-quality.ts) need the header's date,
+ * which fetchIgcFixes used to discard. */
+export async function fetchIgcFile(
   r2: R2Bucket,
   igcFilename: string
-): Promise<IGCFix[] | null> {
+): Promise<IGCFile | null> {
   const object = await r2.get(igcFilename);
   if (!object) return null;
   const compressed = await object.arrayBuffer();
@@ -767,7 +957,17 @@ export async function fetchIgcFixes(
     return null;
   }
   if (igc.fixes.length === 0) return null;
-  return igc.fixes;
+  return igc;
+}
+
+/** Just the fixes. Kept for the callers that genuinely want nothing else —
+ * notably field analysis, which holds a whole field's tracklogs at once and
+ * should drop the IGCFile wrapper immediately. */
+export async function fetchIgcFixes(
+  r2: R2Bucket,
+  igcFilename: string
+): Promise<IGCFix[] | null> {
+  return (await fetchIgcFile(r2, igcFilename))?.fixes ?? null;
 }
 
 /**
@@ -796,6 +996,12 @@ export async function computeTaskScore(
   // doesn't pay the 4 D1 queries twice.
   cfg?: TaskScoringConfig
 ): Promise<TaskScoreResponse> {
+  // Kept as one object, not just destructured: `config.quality` is a mutable
+  // memo this pass FILLS (it is the only one holding the parsed IGCs), and
+  // computeTaskFieldAnalysis reads it back from the very same object after
+  // calling us. Destructuring away the config would drop those verdicts on
+  // the floor whenever the caller didn't supply a cfg.
+  const config = cfg ?? (await resolveTaskScoringConfig(taskId, db));
   const {
     taskRow,
     xcTask,
@@ -810,7 +1016,7 @@ export async function computeTaskScore(
     scoredClasses,
     scoredTracks,
     dnfByClass,
-  } = cfg ?? (await resolveTaskScoringConfig(taskId, db));
+  } = config;
 
   // Open distance: score each pilot on how far they flew from the take-off
   // exit. Each pilot's open distance is field-independent, so — like the GAP
@@ -839,14 +1045,35 @@ export async function computeTaskScore(
       TRACK_FETCH_CONCURRENCY,
       async (track): Promise<AnalyzedOpenPilot | null> => {
         let distance: number | null = null;
+
+        // Same interlock as the GAP path: a known hard failure skips the R2
+        // read entirely, and an unknown verdict forces the read even when the
+        // distance is cached, so the verdict gets learned exactly once.
+        const known = config.quality.byTrackId.get(track.task_track_id);
+        if (known?.hardFailed && !track.quality_override) return null;
+
         const hit = stored.get(track.task_track_id);
-        if (hit && hit.uploaded_at === track.uploaded_at) {
+        if (known && hit && hit.uploaded_at === track.uploaded_at) {
           distance = (JSON.parse(hit.payload_json) as { distance: number }).distance;
         }
 
         if (distance === null) {
-          const fixes = await fetchIgcFixes(r2, track.igc_filename);
-          if (!fixes) return null;
+          const igc = await fetchIgcFile(r2, track.igc_filename);
+          if (!igc) return null;
+          const fixes = igc.fixes;
+
+          if (!known) {
+            const report = assessTrackQuality(fixes, igc.header, config.quality.context);
+            config.quality.byTrackId.set(track.task_track_id, report);
+            analysisWrites.push({
+              task_track_id: track.task_track_id,
+              variant: "quality",
+              geom_hash: config.quality.geomHash,
+              uploaded_at: track.uploaded_at,
+              payload_json: JSON.stringify(report),
+            });
+            if (report.hardFailed && !track.quality_override) return null;
+          }
 
           distance = openDistanceForFlight(xcTask, {
             pilotName: track.pilot_name,
@@ -920,11 +1147,13 @@ export async function computeTaskScore(
       });
     }
 
+    const odExcludedByClass = excludedPilotsByClass(config.quality, scoredTracks);
     const classScores: ClassScore[] = [];
     for (const pilotClass of scoredClasses) {
       const classPilots = analyzedPilots.filter((p) => p.pilot_class === pilotClass);
+      const excludedInClass = odExcludedByClass.get(pilotClass) ?? [];
       if (classPilots.length === 0) {
-        classScores.push(emptyClassScore(pilotClass));
+        classScores.push(emptyClassScore(pilotClass, excludedInClass, alphabet));
         continue;
       }
       const numPresent =
@@ -943,7 +1172,9 @@ export async function computeTaskScore(
           },
         ])
       );
-      classScores.push(buildClassScore(pilotClass, result, pilotMeta, alphabet));
+      classScores.push(
+        buildClassScore(pilotClass, result, pilotMeta, alphabet, excludedInClass)
+      );
     }
 
     return {
@@ -1022,8 +1253,14 @@ export async function computeTaskScore(
     async (track): Promise<AnalyzedPilot | null> => {
       let flight: FlightScoringData | null = null;
 
+      // Data quality first. A known hard failure costs no R2 read at all; an
+      // UNKNOWN verdict must force the fetch below even when the scoring
+      // analysis is warm, or the verdict would never be learned.
+      const known = config.quality.byTrackId.get(track.task_track_id);
+      if (known?.hardFailed && !track.quality_override) return null;
+
       const hit = stored.get(track.task_track_id);
-      if (hit && hit.uploaded_at === track.uploaded_at) {
+      if (known && hit && hit.uploaded_at === track.uploaded_at) {
         const cached = JSON.parse(hit.payload_json) as CachedFlightAnalysis;
         flight = {
           pilotName: track.pilot_name,
@@ -1033,8 +1270,23 @@ export async function computeTaskScore(
       }
 
       if (!flight) {
-        const fixes = await fetchIgcFixes(r2, track.igc_filename);
-        if (!fixes) return null;
+        const igc = await fetchIgcFile(r2, track.igc_filename);
+        if (!igc) return null;
+        const fixes = igc.fixes;
+
+        if (!known) {
+          const report = assessTrackQuality(fixes, igc.header, config.quality.context);
+          config.quality.byTrackId.set(track.task_track_id, report);
+          analysisWrites.push({
+            task_track_id: track.task_track_id,
+            variant: "quality",
+            geom_hash: config.quality.geomHash,
+            uploaded_at: track.uploaded_at,
+            payload_json: JSON.stringify(report),
+          });
+          if (report.hardFailed && !track.quality_override) return null;
+        }
+
         flight = resolveGapFlight(track, fixes, stopBase);
 
         // Store the compact, field-independent analysis for reuse. Only the
@@ -1134,6 +1386,7 @@ export async function computeTaskScore(
   }
 
   // Score each class separately
+  const gapExcludedByClass = excludedPilotsByClass(config.quality, scoredTracks);
   const classScores: ClassScore[] = [];
 
   for (const pilotClass of scoredClasses) {
@@ -1141,8 +1394,10 @@ export async function computeTaskScore(
       (p) => p.pilot_class === pilotClass
     );
 
+    const excludedInClass = gapExcludedByClass.get(pilotClass) ?? [];
+
     if (classPilots.length === 0) {
-      classScores.push(emptyClassScore(pilotClass));
+      classScores.push(emptyClassScore(pilotClass, excludedInClass, alphabet));
       continue;
     }
 
@@ -1180,6 +1435,21 @@ export async function computeTaskScore(
       }
     }
 
+    // Launch validity (S7F §9.1) deliberately EXCLUDES pilots whose tracklog
+    // was withheld — they count as neither flying nor present-but-did-not-fly.
+    //
+    // Both §9.1 buckets assert a fact about this task, at this site, on this
+    // day. A tracklog that is not this flight establishes neither, so counting
+    // it would be inventing a fact. The decisive argument is blast radius:
+    // this is an automatic heuristic, not a scorekeeper's ruling, and if a
+    // withheld pilot moved into numPresent then a single false positive would
+    // reduce EVERY other pilot's points. Kept out of both counts, the detector
+    // can only ever change the one pilot's own score.
+    //
+    // The scorekeeper keeps the S7F lever, already built and audited: marking
+    // the pilot Did Not Fly puts them into dnfByClass; Absent leaves them out.
+    // To count them as present instead, the change is one term here
+    // (+ excludedInClass.length) — see the AirScore parity run before doing it.
     const numPresent =
       classPilots.length + (dnfByClass.get(pilotClass) ?? 0);
     const result = scoreFlights(
@@ -1199,7 +1469,9 @@ export async function computeTaskScore(
         },
       ])
     );
-    classScores.push(buildClassScore(pilotClass, result, pilotMeta, alphabet));
+    classScores.push(
+      buildClassScore(pilotClass, result, pilotMeta, alphabet, excludedInClass)
+    );
   }
 
   return {
@@ -1322,16 +1594,43 @@ export async function computeTaskFieldAnalysis(
   const classes: FieldAnalysisClass[] = [];
 
   for (const pilotClass of cfg.scoredClasses) {
-    const classTracks = cfg.scoredTracks.filter((t) => t.pilot_class === pilotClass);
-    if (classTracks.length === 0) continue;
+    const allClassTracks = cfg.scoredTracks.filter((t) => t.pilot_class === pilotClass);
+    if (allClassTracks.length === 0) continue;
+
+    // computeTaskScore above has filled cfg.quality for every track, so the
+    // verdicts are free here. A tracklog from another day or another country
+    // corrupts far more than its own row: its hour buckets and takeoff
+    // instants stretch every absolute-time surface in the report — one track
+    // ten days out widened the shared day-profile axis from 5 hours to 262 —
+    // and its air pollutes the wind and working-band estimates.
+    const { scored: classTracks, excluded: qualityExcluded } = partitionByQuality(
+      allClassTracks,
+      cfg.quality
+    );
+    const qualityExcludedIds = new Set(
+      qualityExcluded.map((e) => encodeId(alphabet, e.track.comp_pilot_id))
+    );
 
     const officialClass = official.classes.find((c) => c.pilot_class === pilotClass);
     const excluded: { pilot_name: string; reason: string }[] = [];
+    for (const e of qualityExcluded) {
+      excluded.push({
+        pilot_name: e.track.pilot_name,
+        reason: `track failed a data-quality check: ${hardFindingTitles(e.report).join("; ")}`,
+      });
+    }
     // Officially-ranked pilots with no track (manual flight reports). They
     // can't be analysed, but they DID count toward the official launch
     // validity — remembered so the re-score's numPresent matches.
+    //
+    // A withheld pilot is ALSO absent from trackFileByPilotId, but must not
+    // land here: they are neither a manual flight nor part of numPresent (see
+    // the launch-validity note in computeTaskScore), so counting them would
+    // both mislabel them and put this pass's numPresent out of step with the
+    // official one.
     let trackless = 0;
     for (const entry of officialClass?.pilots ?? []) {
+      if (qualityExcludedIds.has(entry.comp_pilot_id)) continue;
       if (!trackFileByPilotId.has(entry.comp_pilot_id)) {
         trackless++;
         excluded.push({
@@ -1501,6 +1800,14 @@ export interface PilotAnalysisResponse {
    * different from its raw file. Null for track-less (manual) pilots.
    */
   altitude_cleaning: AltitudeCleaningReport | null;
+  /**
+   * What the data-quality checks made of this tracklog (track-quality.ts).
+   * Present for every tracked pilot, findings empty when clean, so the page
+   * can surface SOFT findings too. Null for track-less (manual) pilots.
+   * Optional on the wire because rows cached before the field existed are
+   * still valid.
+   */
+  track_quality?: TrackQualityReport | null;
 }
 
 export interface OpenDistanceAnchorPoint {
@@ -1514,7 +1821,7 @@ export interface OpenDistanceAnchorPoint {
 /** The cacheable (comp-pilot-independent) part of {@link PilotAnalysisResponse}. */
 type PilotAnalysisPayload = Pick<
   PilotAnalysisResponse,
-  "turnpoint_result" | "open_distance" | "altitude_cleaning"
+  "turnpoint_result" | "open_distance" | "altitude_cleaning" | "track_quality"
 >;
 
 /**
@@ -1578,8 +1885,10 @@ export async function computePilotAnalysis(
 ): Promise<PilotAnalysisResponse | null> {
   const taskRow = await db
     .prepare(
-      `SELECT t.xctsk, t.stop_announcement_time, t.gap_params AS task_gap_params,
-              c.gap_params, c.scoring_format, c.category, c.creation_date
+      `SELECT t.xctsk, t.task_date, t.stop_announcement_time,
+              t.gap_params AS task_gap_params,
+              c.gap_params, c.scoring_format, c.category, c.timezone,
+              c.creation_date
        FROM task t
        JOIN comp c ON t.comp_id = c.comp_id
        WHERE t.task_id = ?`
@@ -1587,11 +1896,13 @@ export async function computePilotAnalysis(
     .bind(taskId)
     .first<{
       xctsk: string;
+      task_date: string;
       stop_announcement_time: string | null;
       task_gap_params: string | null;
       gap_params: string | null;
       scoring_format: string | null;
       category: string;
+      timezone: string | null;
       creation_date: string;
     }>();
   if (!taskRow || !taskRow.xctsk) return null;
@@ -1732,12 +2043,17 @@ export async function computePilotAnalysis(
     }
   }
 
+  // The day/zone/category terms are here because the cached payload now
+  // carries the data-quality verdict, which depends on them: without them, an
+  // admin correcting a mistyped task date would leave every pilot's page
+  // showing the old "wrong day" finding forever.
   const geomHash = await shortHash(
     `${taskRow.xctsk} ${scoringFormat} ${distanceOrigin}${
       stopOptions
         ? ` stop:${stopOptions.stopTimeMs}:${stopOptions.glideRatio}:${stopOptions.windowEndMs ?? ""}`
         : ""
-    } engine:${SCORING_ENGINE_VERSION}`
+    } day:${taskRow.task_date}@${taskRow.timezone ?? ""} cat:${taskRow.category}` +
+      ` engine:${SCORING_ENGINE_VERSION}`
   );
 
   let payload: PilotAnalysisPayload | null = null;
@@ -1753,13 +2069,24 @@ export async function computePilotAnalysis(
   }
 
   if (!payload) {
-    const fixes = await fetchIgcFixes(r2, track.igc_filename);
-    if (!fixes) return null;
+    const igc = await fetchIgcFile(r2, track.igc_filename);
+    if (!igc) return null;
+    const fixes = igc.fixes;
     // Idempotent second pass (parseIGC already annotated the fixes): rebuilds
     // the same repair report so it can ride in the cached payload.
     const altitudeCleaning = cleanAltitudes(fixes);
 
     const xcTask = parseXCTask(taskRow.xctsk);
+    // Recomputed rather than read from the "quality" variant: this endpoint
+    // resolves its own task row and never runs resolveTaskScoringConfig, and
+    // the assessment is cheap next to the turnpoint scan it sits beside. Both
+    // paths call the same pure function on the same inputs, so they agree.
+    const trackQuality = assessTrackQuality(fixes, igc.header, {
+      task: xcTask,
+      taskDate: taskRow.task_date,
+      timeZone: taskRow.timezone ?? undefined,
+      category: taskRow.category === "pg" ? "pg" : "hg",
+    });
     if (scoringFormat === "open_distance") {
       const geometry = openDistanceGeometryForFlight(xcTask, {
         pilotName: "",
@@ -1789,6 +2116,7 @@ export async function computePilotAnalysis(
             }
           : { distance: 0, origin: null, furthest: null },
         altitude_cleaning: altitudeCleaning,
+        track_quality: trackQuality,
       };
     } else {
       const scoringTask = taskForDistanceOrigin(xcTask, distanceOrigin);
@@ -1802,6 +2130,7 @@ export async function computePilotAnalysis(
         turnpoint_result: JSON.parse(JSON.stringify(result)) as TurnpointSequenceResultJSON,
         open_distance: null,
         altitude_cleaning: altitudeCleaning,
+        track_quality: trackQuality,
       };
     }
 

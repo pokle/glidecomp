@@ -79,4 +79,16 @@
 //     "race" on course position, not on the departure. With typical 1–3
 //     departures per pilot, one mislabelled outcome flipped a pilot between
 //     0% and 100%. The bump rolls stored reports on lazy revalidation.
-export const FIELD_ANALYSIS_VERSION = 10;
+// v11: tracklogs that fail a HARD data-quality check (engine
+//     track-quality.ts) are excluded from the analysed field and listed in
+//     the report's basis with the reason, alongside the manual-flight and
+//     unreadable-track entries. Such a track corrupts far more than its own
+//     row: the hour-bucketed metrics and the 'day-timing' series work in
+//     ABSOLUTE instants, so one track ten days off its task stretched the
+//     shared day-profile axis from ~5 hours to 262 (the resample grid was
+//     already capped by MAX_GRID_HOURS, so the fault is in those metrics, not
+//     the grid — fix the right layer), and its air polluted the wind and
+//     working-band estimates. Every metric's n drops by the excluded pilots,
+//     so the correlations move; the bump rolls stored reports onto the new
+//     values on their next lazy revalidation.
+export const FIELD_ANALYSIS_VERSION = 11;

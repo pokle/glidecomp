@@ -158,6 +158,10 @@ export interface PilotScoreEntry {
   /** Stopped tasks (S7F §12.3.6): altitude-bonus metres folded into
    * flown_distance for a pilot still flying at the stop. */
   stopped_altitude_bonus?: number | null;
+  /** Set when a HARD data-quality check withheld this pilot's tracklog from
+   * scoring: they hold a place in the standings at 0 rather than vanishing.
+   * Null/absent for every normally-scored pilot. */
+  track_excluded?: { reasons: string[] } | null;
 }
 
 /** Whole-class stopped-task outcome (S7F §12.3) — see the API's ClassStoppedInfo. */
@@ -243,6 +247,23 @@ export interface PilotAnalysisData {
    * track — disclosed on the score-details page. Null for manual flights;
    * may be absent in payloads cached before the field existed. */
   altitude_cleaning?: AltitudeCleaningData | null;
+  /** What the data-quality checks made of this tracklog. Findings empty when
+   * clean. Null for manual flights; may be absent in payloads cached before
+   * the field existed. */
+  track_quality?: TrackQualityData | null;
+}
+
+/** Wire shape of the engine's TrackQualityReport (track-quality.ts). */
+export interface TrackQualityData {
+  hardFailed: boolean;
+  findings: Array<{
+    id: string;
+    severity: "hard" | "soft";
+    title: string;
+    /** The reader's sentence, rendered server-side so SSR and the client
+     * agree byte for byte. */
+    detail: string;
+  }>;
 }
 
 /** Wire shape of the engine's AltitudeCleaningReport. */

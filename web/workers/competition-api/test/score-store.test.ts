@@ -19,6 +19,7 @@ import {
   createComp,
   createTask,
   clearCompData,
+  SAMPLE_TASK_DATE,
 } from "./helpers";
 import { decodeId, encodeId } from "../src/sqids";
 import {
@@ -88,7 +89,7 @@ async function seedScoredTask(nTracks = 1): Promise<{
   const compIdNum = comp.meta.last_row_id;
   const task = await env.DB.prepare(
     `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk)
-     VALUES (?, 'Store Test Task', '2026-01-15', ?, ?)`
+     VALUES (?, 'Store Test Task', '2026-01-05', ?, ?)`
   )
     .bind(compIdNum, now, env.SAMPLE_TASK_XCTSK)
     .run();
@@ -586,7 +587,7 @@ describe("FTV series scoring (S7F §15)", () => {
         `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk)
          VALUES (?, ?, ?, ?, ?)`
       )
-        .bind(compIdNum, `Task ${taskNo + 1}`, `2026-01-1${taskNo + 5}`, now, env.SAMPLE_TASK_XCTSK)
+        .bind(compIdNum, `Task ${taskNo + 1}`, SAMPLE_TASK_DATE, now, env.SAMPLE_TASK_XCTSK)
         .run();
       const taskIdNum = task.meta.last_row_id;
       await env.DB.prepare(
