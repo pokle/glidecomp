@@ -57,7 +57,7 @@ function makeReport(ranks: number[], specs: MetricSpec[]): FieldAnalysisReport {
       workingBandFloor: 500,
       workingBandCeiling: 2500,
       workingBandFallback: false,
-      phaseCoveragePct: 100,
+      phaseSplit: { climbPct: 40, glidePct: 40, searchPct: 20, airborneSeconds: 3600 },
     },
     pilots,
     metrics,
