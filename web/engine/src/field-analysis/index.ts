@@ -24,6 +24,7 @@ export type {
   MetricCorrelation,
   MetricReport,
   FieldAnalysisBasis,
+  FieldPhaseSplit,
   FieldAnalysisReport,
   CompTaskResult,
   CompMetricAggregate,
@@ -54,6 +55,6 @@ export { renderFieldReport, renderCompReport, formatMetricValue } from './report
 export { aggregateComp } from './aggregate';
 export { ALL_METRICS, FAMILY_ORDER, FAMILY_LABELS } from './registry';
 export { FIELD_ANALYSIS_VERSION } from './version';
-export { spearmanNoiseFloor } from './stats';
+export { spearmanNoiseFloor, roundPercentagesToHundred } from './stats';
 export { correlationVerdict } from './evaluate';
 export { signConsistency } from './aggregate';

@@ -8,6 +8,7 @@ import {
   circularMeanWind,
   spearmanNoiseFloor,
   correlationVerdict,
+  roundPercentagesToHundred,
 } from '../src/field-analysis';
 
 describe('percentile', () => {
@@ -148,5 +149,29 @@ describe('correlationVerdict', () => {
   });
   it('small samples stay "n too small" regardless of ρ', () => {
     expect(correlationVerdict(0.95, 7)).toBe('n too small');
+  });
+});
+
+describe('roundPercentagesToHundred', () => {
+  it('keeps a three-way split summing to 100 where naive rounding would not', () => {
+    // The real Corryong Task 3 (Open) split: independent rounding gives
+    // 38 + 23 + 40 = 101.
+    expect(roundPercentagesToHundred([37.6, 23.4, 39.0])).toEqual([38, 23, 39]);
+    // ...and the 99 case: 33.3 each rounds down three times.
+    expect(roundPercentagesToHundred([33.4, 33.3, 33.3])).toEqual([34, 33, 33]);
+  });
+
+  it('gives the spare point to the largest remainder', () => {
+    expect(roundPercentagesToHundred([50.6, 49.4])).toEqual([51, 49]);
+    expect(roundPercentagesToHundred([0.7, 99.3])).toEqual([1, 99]);
+  });
+
+  it('passes exact integers through untouched', () => {
+    expect(roundPercentagesToHundred([40, 40, 20])).toEqual([40, 40, 20]);
+    expect(roundPercentagesToHundred([100, 0, 0])).toEqual([100, 0, 0]);
+  });
+
+  it('handles an all-zero split (no airborne time) without inventing a point', () => {
+    expect(roundPercentagesToHundred([0, 0, 0])).toEqual([0, 0, 0]);
   });
 });

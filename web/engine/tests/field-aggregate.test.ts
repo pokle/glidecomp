@@ -15,7 +15,7 @@ const BASIS: FieldAnalysisBasis = {
   workingBandFloor: 0,
   workingBandCeiling: 1,
   workingBandFallback: false,
-  phaseCoveragePct: 100,
+  phaseSplit: { climbPct: 40, glidePct: 40, searchPct: 20, airborneSeconds: 3600 },
 };
 
 /** One-metric task result with an injected correlation (or none). */

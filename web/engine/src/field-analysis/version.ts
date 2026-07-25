@@ -79,7 +79,16 @@
 //     "race" on course position, not on the departure. With typical 1–3
 //     departures per pilot, one mislabelled outcome flipped a pilot between
 //     0% and 100%. The bump rolls stored reports on lazy revalidation.
-// v11: tracklogs that fail a HARD data-quality check (engine
+// v11: the basis reports a climb/glide/search phase SPLIT instead of
+//     phaseCoveragePct. Coverage was 100% on every task by construction —
+//     partitionPhases tiles takeoff→landing with no gaps or overlaps, so the
+//     fact restated its own invariant (now guarded by the phase-partition
+//     tests alone) rather than describing the day. The split is pooled over
+//     the field: total seconds per phase / total phase seconds. No metric
+//     value changed; the bump rolls stored reports so they carry the new
+//     basis field on their next lazy revalidation. Consumers must tolerate
+//     its absence — a v10 row is served stale while it revalidates.
+// v12: tracklogs that fail a HARD data-quality check (engine
 //     track-quality.ts) are excluded from the analysed field and listed in
 //     the report's basis with the reason, alongside the manual-flight and
 //     unreadable-track entries. Such a track corrupts far more than its own
@@ -91,4 +100,4 @@
 //     working-band estimates. Every metric's n drops by the excluded pilots,
 //     so the correlations move; the bump rolls stored reports onto the new
 //     values on their next lazy revalidation.
-export const FIELD_ANALYSIS_VERSION = 11;
+export const FIELD_ANALYSIS_VERSION = 12;
