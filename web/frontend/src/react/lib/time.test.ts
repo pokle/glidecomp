@@ -118,6 +118,23 @@ describe("zoneLabel", () => {
     expect(zoneLabel(winter, "UTC")).toBe("UTC");
     expect(zoneLabel(winter, "Etc/UTC")).toBe("UTC");
   });
+
+  // The `enriched=false` path is the SSR / first-client-render contract: it must
+  // NEVER emit the ICU `short` abbreviation, because that value differs between
+  // the workerd SSR runtime and the browser (e.g. Europe/Bucharest is "EEST" on
+  // workerd but "GMT+3" in some browsers) and would cause a hydration mismatch.
+  // Only the tzdata-derived numeric offset — identical everywhere — is allowed.
+  test("unenriched (SSR) renders the numeric offset alone, never an abbreviation", () => {
+    expect(zoneLabel(winter, MEL, false)).toBe("GMT+10");
+    expect(zoneLabel(summer, MEL, false)).toBe("GMT+11");
+    expect(zoneLabel(winter, "America/Los_Angeles", false)).toBe("GMT-7");
+    expect(zoneLabel(winter, "Europe/London", false)).toBe("GMT+1");
+    // The reported bug's zone: enriched diverges across runtimes, unenriched
+    // is the stable offset both sides agree on.
+    expect(zoneLabel(winter, "Europe/Bucharest", false)).toBe("GMT+3");
+    // Zero offset still collapses to UTC.
+    expect(zoneLabel(winter, "UTC", false)).toBe("UTC");
+  });
 });
 
 describe("formatInstant", () => {
@@ -127,6 +144,12 @@ describe("formatInstant", () => {
     expect(formatInstant(d, "UTC")).toBe("7 Jul 2026, 14:32 UTC");
     // 14:32 UTC = 00:32 the next day in AEST.
     expect(formatInstant(d, MEL)).toBe("8 Jul 2026, 00:32 AEST (GMT+10)");
+  });
+
+  test("unenriched (SSR) keeps the date/time but drops the abbreviation", () => {
+    // Date/time is deterministic already; only the zone suffix defers to the
+    // offset so the server markup and first client render match exactly.
+    expect(formatInstant(d, MEL, false)).toBe("8 Jul 2026, 00:32 GMT+10");
   });
 });
 
@@ -161,5 +184,20 @@ describe("buildZoneCycle", () => {
     expect(choices[0].kind).toBe("comp");
     expect(choices[0].text).toBe("7 Jul 2026, 14:32 UTC");
     expect(choices.every((c) => c.kind !== "utc")).toBe(true);
+  });
+
+  // This is exactly the render the Timestamp component emits during SSR and its
+  // first client render (mounted=false). It must be abbreviation-free and must
+  // NOT include the viewer's local zone — the two things that differ between the
+  // server and the browser. This is the direct regression guard for the reported
+  // Europe/Bucharest "EEST (GMT+3)" vs "GMT+3" hydration mismatch.
+  test("unmounted (SSR) omits the local zone and any zone abbreviation", () => {
+    const choices = buildZoneCycle(d, "Europe/Bucharest", false);
+    expect(choices.every((c) => c.kind !== "local")).toBe(true);
+    expect(choices[0].kind).toBe("comp");
+    expect(choices[0].text).toBe("7 Jul 2026, 17:32 GMT+3");
+    // The named abbreviation ("EEST") — the token that diverges across runtimes
+    // — appears in no choice.
+    expect(choices.some((c) => c.text.includes("EEST"))).toBe(false);
   });
 });

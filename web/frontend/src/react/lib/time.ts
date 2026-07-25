@@ -230,28 +230,40 @@ function zoneToken(
  * "AEST (GMT+10)", "PDT (GMT-7)" — or just the offset when the zone has no
  * named abbreviation ("GMT+5:30"), or "UTC" for zero offset. The offset is
  * resolved for `date` itself so DST is the one in force on the day.
+ *
+ * **SSR safety.** The named abbreviation comes from `timeZoneName: "short"`,
+ * whose value is drawn from ICU timezone-name tables that DIFFER between the
+ * workerd SSR runtime and the browser (e.g. workerd renders Europe/Bucharest
+ * as "EEST" while some browsers render "GMT+3"). Emitting it in server markup
+ * therefore risks a hydration mismatch. The numeric offset ("GMT+3") is derived
+ * from tzdata and is identical everywhere. So `enriched` gates the abbreviation:
+ * pass `false` during SSR and the first client render (offset-only, guaranteed
+ * to match), then `true` after mount to upgrade to the named form — the same
+ * progressive-enhancement contract {@link buildZoneCycle} uses for the local
+ * zone. Callers not on an SSR path can leave it defaulted.
  */
-export function zoneLabel(date: Date, timeZone: string | undefined): string {
+export function zoneLabel(
+  date: Date,
+  timeZone: string | undefined,
+  enriched = true
+): string {
   const offset = zoneToken(date, timeZone, "en-GB", "shortOffset");
-  let abbr: string | null = null;
-  for (const loc of ABBR_LOCALES) {
-    const s = zoneToken(date, timeZone, loc, "short");
-    if (s && !NUMERIC_OFFSET.test(s)) {
-      abbr = s;
-      break;
-    }
-  }
   const zero = !offset || ZERO_OFFSET.test(offset);
-  if (abbr) {
-    // Named zone (AEST/PDT/BST/UTC/GMT…). Pair it with the numeric offset
-    // unless that would be redundant (identical strings, or UTC/GMT at +0).
-    if (!offset || abbr === offset || ((abbr === "UTC" || abbr === "GMT") && zero)) {
-      return abbr;
+  if (enriched) {
+    for (const loc of ABBR_LOCALES) {
+      const abbr = zoneToken(date, timeZone, loc, "short");
+      if (abbr && !NUMERIC_OFFSET.test(abbr)) {
+        // Named zone (AEST/PDT/BST/UTC/GMT…). Pair it with the numeric offset
+        // unless that would be redundant (identical strings, or UTC/GMT at +0).
+        if (!offset || abbr === offset || ((abbr === "UTC" || abbr === "GMT") && zero)) {
+          return abbr;
+        }
+        return `${abbr} (${offset})`;
+      }
     }
-    return `${abbr} (${offset})`;
   }
-  // No named abbreviation in our locales: show the offset, rendering a bare
-  // zero as the familiar "UTC".
+  // No named abbreviation (or deliberately withheld for SSR): show the offset,
+  // rendering a bare zero as the familiar "UTC".
   return zero ? "UTC" : (offset as string);
 }
 
@@ -261,8 +273,16 @@ export function zoneLabel(date: Date, timeZone: string | undefined): string {
  * "8 Jul 2026, 00:32 AEST (GMT+10)". Always absolute (never a relative
  * "2 min ago"); the en-GB date shape keeps the look consistent for every
  * viewer while the zone adapts.
+ *
+ * `enriched` flows straight to {@link zoneLabel}: pass `false` on the SSR /
+ * first-render path so the zone shows as its offset alone (hydration-safe),
+ * `true` (the default) once mounted to include the named abbreviation.
  */
-export function formatInstant(date: Date, timeZone: string | undefined): string {
+export function formatInstant(
+  date: Date,
+  timeZone: string | undefined,
+  enriched = true
+): string {
   const dateTime = new Intl.DateTimeFormat("en-GB", {
     timeZone,
     day: "numeric",
@@ -272,7 +292,7 @@ export function formatInstant(date: Date, timeZone: string | undefined): string 
     minute: "2-digit",
     hourCycle: "h23",
   }).format(date);
-  return `${dateTime} ${zoneLabel(date, timeZone)}`;
+  return `${dateTime} ${zoneLabel(date, timeZone, enriched)}`;
 }
 
 /**
@@ -374,29 +394,33 @@ const KIND_LABELS: Record<ZoneChoice["kind"], string> = {
  * twice. The first choice is the default shown (comp when present, else the
  * viewer's local zone). Empty when `date` is invalid.
  *
- * `includeLocal` is false during SSR and the first client render: the viewer's
- * local zone is `undefined`→runtime-local, which is UTC on the server but the
- * real zone in the browser, so including it would make the server and client
- * markup disagree (a hydration mismatch). The Timestamp component flips it on
- * after mount, adding the local zone as a progressive enhancement.
+ * `mounted` is false during SSR and the first client render, then flipped on
+ * after mount by the Timestamp component. It gates two things that can't be
+ * identical on server and client, both as progressive enhancements:
+ *   - the viewer's local zone (`undefined`→runtime-local, which is UTC on the
+ *     server but the real zone in the browser), added to the cycle; and
+ *   - the ICU `short` zone abbreviation in each label (see {@link zoneLabel}),
+ *     which differs between the workerd SSR runtime and the browser.
+ * Keeping both off until mounted guarantees the server markup and the first
+ * client render agree (no hydration mismatch), then upgrades in place.
  */
 export function buildZoneCycle(
   date: Date,
   compTimezone: string | null,
-  includeLocal = true
+  mounted = true
 ): ZoneChoice[] {
   if (Number.isNaN(date.getTime())) return [];
   const candidates: Array<Pick<ZoneChoice, "kind" | "timeZone">> = [];
   if (compTimezone && isValidTimeZone(compTimezone)) {
     candidates.push({ kind: "comp", timeZone: compTimezone });
   }
-  if (includeLocal) candidates.push({ kind: "local", timeZone: undefined });
+  if (mounted) candidates.push({ kind: "local", timeZone: undefined });
   candidates.push({ kind: "utc", timeZone: "UTC" });
 
   const seen = new Set<string>();
   const choices: ZoneChoice[] = [];
   for (const { kind, timeZone } of candidates) {
-    const text = formatInstant(date, timeZone);
+    const text = formatInstant(date, timeZone, mounted);
     if (seen.has(text)) continue;
     seen.add(text);
     choices.push({ kind, kindLabel: KIND_LABELS[kind], timeZone, text });

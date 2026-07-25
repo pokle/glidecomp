@@ -15,11 +15,12 @@
  * for keyboard or touch users). Kept inline — no button chrome — so it reads
  * as tappable text, not a control.
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "react-aria-components";
 import { cn } from "@/react/lib/utils";
 import { Tooltip, TooltipTrigger } from "../rac/tooltip";
 import { buildZoneCycle } from "../lib/time";
+import { useMounted } from "../lib/use-mounted";
 
 export function Timestamp({
   value,
@@ -33,10 +34,10 @@ export function Timestamp({
   className?: string;
 }) {
   const [index, setIndex] = useState(0);
-  // The viewer's local zone is only knowable in the browser; add it after
-  // mount so the server and first client render agree (no hydration mismatch).
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  // The viewer's local zone and the ICU zone abbreviation are only knowable /
+  // stable in the browser; both are added after mount so the server and first
+  // client render agree (no hydration mismatch). See useMounted / buildZoneCycle.
+  const mounted = useMounted();
   const date = new Date(value);
   const choices = buildZoneCycle(date, compTimezone, mounted);
   if (choices.length === 0) return null;

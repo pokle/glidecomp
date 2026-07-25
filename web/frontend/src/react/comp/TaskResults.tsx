@@ -19,6 +19,7 @@ import { Button, LinkButton } from "@/react/rac/button";
 import { api } from "../../comp/api";
 import { useUser } from "../lib/user";
 import { formatInstant } from "../lib/time";
+import { useMounted } from "../lib/use-mounted";
 import { formatDistance, useUnits } from "../lib/units";
 import { ordinal } from "../lib/format";
 import { pilotPath } from "../lib/slug";
@@ -46,6 +47,9 @@ function StoppedTaskNotice({
   score: TaskScoreData;
   timezone: string | null;
 }) {
+  // Offset-only zone label until mounted so this SSR-rendered notice hydrates
+  // cleanly regardless of the comp zone (see useMounted / formatInstant).
+  const mounted = useMounted();
   const stopped = score.classes.find((c) => c.stopped)?.stopped;
   if (!stopped) return null;
   return (
@@ -53,7 +57,7 @@ function StoppedTaskNotice({
       <span className="font-medium text-destructive">Task stopped</span>{" "}
       <span className="text-muted-foreground">
         — flights scored up to{" "}
-        {formatInstant(new Date(stopped.stop_time_ms), timezone ?? "UTC")} (the
+        {formatInstant(new Date(stopped.stop_time_ms), timezone ?? "UTC", mounted)} (the
         stop announcement, scored back per FAI S7F §12.3.1).{" "}
         {stopped.requirement_met
           ? "Pilots still flying at the stop keep an altitude bonus for height above goal; a stopped-task validity factor applies."
@@ -97,7 +101,7 @@ export function TaskResults({
   initialScore?: TaskScoreData;
 }) {
   const { user } = useUser();
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
   const [uploadOpen, setUploadOpen] = useState(false);
 
   const [score, setScore] = useState<TaskScoreData | null>(initialScore ?? null);
@@ -108,8 +112,6 @@ export function TaskResults({
   const [mySubmission, setMySubmission] = useState<MySubmission | null>(null);
 
   const seededRef = useRef(initialScore != null);
-
-  useEffect(() => setMounted(true), []);
 
   const fetchScore = useCallback(async () => {
     try {
