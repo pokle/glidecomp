@@ -27,12 +27,15 @@ import type { TimeAxis } from "./time-axis";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
 import { MetSourceTag, sourceSentence } from "./MetSourceTag";
 import { PLOT_LEFT, PLOT_RIGHT, W } from "./shared";
-import { usableCeilingM } from "./met-shared";
+import { separateLabels, usableCeilingM } from "./met-shared";
 
 const HOUR_MS = 3_600_000;
 const H = 168;
 const PLOT = { top: 30, bottom: H - 26 };
 const TICK_LABEL_Y = H - 10;
+
+/** The band inline series labels must stay inside. */
+const LABEL_BAND: [number, number] = [PLOT.top + 8, PLOT.bottom - 3];
 
 interface Point {
   tMs: number;
@@ -79,6 +82,9 @@ export function MetThermalChart({
   const yMax = Math.max(...values) * 1.1;
   const y = linearScale([0, yMax], [PLOT.bottom, PLOT.top]);
   const yTicks = niceTicks([0, yMax], 3);
+
+  const clampLabel = (v: number) =>
+    Math.min(LABEL_BAND[1], Math.max(LABEL_BAND[0], v));
 
   /** Line through the available points, lifting the pen across gaps. */
   const path = (pick: (p: Point) => number | null): string => {
@@ -132,6 +138,20 @@ export function MetThermalChart({
     if (p.capeJkg !== null) parts.push(`CAPE ${Math.round(p.capeJkg)} J/kg`);
     return `${when} — ${parts.join(", ")}`;
   };
+
+  // Label positions for the two line ends, separated so they stay readable.
+  const lastBl = points.at(-1)?.blTop ?? null;
+  const lastBase = points.at(-1)?.base ?? null;
+  const endLabels: { key: string; text: string; y: number }[] = [];
+  if (hasBl && lastBl !== null && hasBase && lastBase !== null) {
+    const [yBl, yBase] = separateLabels(y(lastBl) - 5, y(lastBase) + 11, LABEL_BAND);
+    endLabels.push({ key: "bl", text: "thermal top", y: yBl });
+    endLabels.push({ key: "base", text: "cloud base", y: yBase });
+  } else if (hasBl && lastBl !== null) {
+    endLabels.push({ key: "bl", text: "thermal top", y: clampLabel(y(lastBl) - 5) });
+  } else if (hasBase && lastBase !== null) {
+    endLabels.push({ key: "base", text: "cloud base", y: clampLabel(y(lastBase) + 11) });
+  }
 
   return (
     <svg
@@ -224,27 +244,16 @@ export function MetThermalChart({
         />
       ) : null}
 
+      {/* Inline labels, pushed apart where the two lines converge — which is
+          exactly the interesting day (cloud base crossing the thermal top is
+          blue turning to cumulus), so overlap here is the common case, not
+          an edge one. */}
       <g aria-hidden className="text-[9px] text-muted-foreground">
-        {hasBl && points.at(-1)?.blTop != null ? (
-          <text
-            x={PLOT_RIGHT - 2}
-            y={y(points.at(-1)!.blTop!) - 5}
-            textAnchor="end"
-            className="fill-current"
-          >
-            thermal top
+        {endLabels.map(({ key, text, y: ly }) => (
+          <text key={key} x={PLOT_RIGHT - 2} y={ly} textAnchor="end" className="fill-current">
+            {text}
           </text>
-        ) : null}
-        {hasBase && points.at(-1)?.base != null ? (
-          <text
-            x={PLOT_RIGHT - 2}
-            y={y(points.at(-1)!.base!) + 11}
-            textAnchor="end"
-            className="fill-current"
-          >
-            cloud base
-          </text>
-        ) : null}
+        ))}
       </g>
 
       {points.map((p) => (

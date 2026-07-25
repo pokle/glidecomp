@@ -3,6 +3,7 @@ import { buildTimeAxis } from "./time-axis";
 import {
   coverOpacity,
   isBlueHour,
+  separateLabels,
   usableCeilingM,
   weatherInstants,
 } from "./met-shared";
@@ -121,5 +122,51 @@ describe("weatherInstants", () => {
     expect(axis.domainEnd).toBeGreaterThanOrEqual(T("2026-01-10T07:00:00Z"));
     // Same axis object, so both series map an instant to the same x.
     expect(axis.x(T("2026-01-10T04:00:00Z"))).toBeGreaterThan(axis.x(T("2026-01-10T03:00:00Z")));
+  });
+});
+
+describe("separateLabels", () => {
+  const BAND: [number, number] = [10, 100];
+
+  it("leaves labels alone when they already clear each other", () => {
+    expect(separateLabels(30, 60, BAND)).toEqual([30, 60]);
+  });
+
+  it("pushes converging labels apart, keeping their order", () => {
+    // The interesting day: cloud base meeting the thermal top. Both labels
+    // land on the same pixel and would overprint into mush.
+    const [a, b] = separateLabels(50, 52, BAND);
+    expect(b - a).toBeGreaterThanOrEqual(11);
+    expect(a).toBeLessThan(b);
+    // Centred on where they were, so neither label wanders off its line.
+    expect((a + b) / 2).toBeCloseTo(51, 5);
+  });
+
+  it("separates even when the inputs arrive crossed", () => {
+    const [a, b] = separateLabels(60, 58, BAND);
+    expect(b - a).toBeGreaterThanOrEqual(11);
+  });
+
+  it("keeps both inside the band at the top edge", () => {
+    const [a, b] = separateLabels(4, 6, BAND);
+    expect(a).toBeGreaterThanOrEqual(BAND[0]);
+    expect(b).toBeLessThanOrEqual(BAND[1]);
+    expect(b - a).toBeGreaterThanOrEqual(11);
+  });
+
+  it("keeps both inside the band at the bottom edge", () => {
+    // A line ending at zero must not push its label onto the shared axis
+    // tick labels below the plot.
+    const [a, b] = separateLabels(110, 112, BAND);
+    expect(a).toBeGreaterThanOrEqual(BAND[0]);
+    expect(b).toBeLessThanOrEqual(BAND[1]);
+    expect(b - a).toBeGreaterThanOrEqual(11);
+  });
+
+  it("stays inside a band too short for the gap, overlap and all", () => {
+    const tight: [number, number] = [20, 25];
+    const [a, b] = separateLabels(22, 23, tight);
+    expect(a).toBeGreaterThanOrEqual(20);
+    expect(b).toBeLessThanOrEqual(25);
   });
 });

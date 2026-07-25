@@ -29,6 +29,7 @@ import { formatTickValue, linearScale, niceTicks } from "../chart-utils";
 import type { TimeAxis } from "./time-axis";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
 import { MetSourceTag, sourceSentence } from "./MetSourceTag";
+import { separateLabels } from "./met-shared";
 import {
   PLOT_LEFT,
   PLOT_RIGHT,
@@ -43,6 +44,11 @@ const H = 170;
 const LANE_Y = 26; // direction-arrow lane centreline
 const PLOT = { top: 42, bottom: H - 26 };
 const TICK_LABEL_Y = H - 10;
+
+/** The band inline series labels must stay inside, so a line ending at the
+ * top or bottom of the range can't push its label onto the axis labels the
+ * whole stack shares. */
+const LABEL_BAND: [number, number] = [PLOT.top + 8, PLOT.bottom - 3];
 
 interface Point {
   tMs: number;
@@ -164,6 +170,33 @@ export function MetWindChart({
     return `${when} — ${parts.join(", ")}`;
   };
 
+  // Label positions for the two line ends, separated where they converge.
+  const clampLabel = (v: number) => Math.min(LABEL_BAND[1], Math.max(LABEL_BAND[0], v));
+  const lastLevel = points.at(-1)?.levelSpeed ?? null;
+  const lastSurface = points.at(-1)?.surfaceSpeed ?? null;
+  const endLabels: { key: string; text: string; y: number }[] = [];
+  if (hasLevels && lastLevel !== null && lastSurface !== null) {
+    const [yLevel, ySurface] = separateLabels(
+      y(lastLevel) - 5,
+      y(lastSurface) + 11,
+      LABEL_BAND
+    );
+    endLabels.push({ key: "level", text: `flying height ${levelLabel}`, y: yLevel });
+    endLabels.push({ key: "surface", text: "surface (10 m)", y: ySurface });
+  } else if (hasLevels && lastLevel !== null) {
+    endLabels.push({
+      key: "level",
+      text: `flying height ${levelLabel}`,
+      y: clampLabel(y(lastLevel) - 5),
+    });
+  } else if (lastSurface !== null) {
+    endLabels.push({
+      key: "surface",
+      text: "surface (10 m)",
+      y: clampLabel(y(lastSurface) + 11),
+    });
+  }
+
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
@@ -245,29 +278,16 @@ export function MetWindChart({
         />
       ) : null}
 
-      {/* Inline series labels rather than a legend box: at this size a
-          legend costs more room than the two words it explains. */}
+      {/* Inline series labels rather than a legend box: at this size a legend
+          costs more room than the two words it explains. Separated where the
+          two lines converge (a calm day aloft) and clamped into the plot
+          band, so neither lands on the shared axis labels. */}
       <g aria-hidden className="text-[9px] text-muted-foreground">
-        {hasLevels && points.at(-1)?.levelSpeed != null ? (
-          <text
-            x={PLOT_RIGHT - 2}
-            y={y(points.at(-1)!.levelSpeed!) - 5}
-            textAnchor="end"
-            className="fill-current"
-          >
-            flying height {levelLabel}
+        {endLabels.map(({ key, text, y: ly }) => (
+          <text key={key} x={PLOT_RIGHT - 2} y={ly} textAnchor="end" className="fill-current">
+            {text}
           </text>
-        ) : null}
-        {points.at(-1)?.surfaceSpeed != null ? (
-          <text
-            x={PLOT_RIGHT - 2}
-            y={y(points.at(-1)!.surfaceSpeed!) + 11}
-            textAnchor="end"
-            className="fill-current"
-          >
-            surface (10 m)
-          </text>
-        ) : null}
+        ))}
       </g>
 
       {/* Direction lane, same convention as the pilot-derived chart above:
