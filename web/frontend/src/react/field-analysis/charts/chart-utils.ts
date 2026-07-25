@@ -130,6 +130,158 @@ export function spreadLabels(
   return out;
 }
 
+/** One sample of a fitted trend, in DATA space (not pixels). */
+export interface TrendPoint {
+  x: number;
+  y: number;
+}
+
+/** Fewer pairs than this and a local fit is just joining the dots. */
+export const MIN_TREND_POINTS = 4;
+
+/**
+ * Neighbourhood width as a fraction of n. Small fields get every point (so
+ * the fit degenerates to one robust straight line — with 10 pilots there is
+ * no local structure to find, only noise to trace); bigger fields settle at
+ * 60%, which is stiff enough to stay a *trend* rather than a wiggle chasing
+ * individual gaggles. Tuned by eye against Corryong 2026 fields of 29–46
+ * pilots: 50% traced visible bumps that the dots did not support.
+ */
+function defaultBandwidth(n: number): number {
+  return Math.min(1, Math.max(0.6, 18 / n));
+}
+
+/**
+ * LOESS — locally weighted linear regression — sampled across the x range.
+ * The curve that follows the general trend of a scatter without asserting the
+ * trend is a straight line.
+ *
+ * Why not a plain least-squares line: the relationships here are ranked by
+ * *Spearman* ρ, which only claims monotonicity, and several are visibly
+ * curved (the leaders and the tail both climb slowly, the middle does not).
+ * A straight line would misdescribe those, and a single landed-out pilot at
+ * an extreme value would tilt it. LOESS handles both: each sample point is
+ * fitted from its q nearest neighbours with tricube distance weights, and
+ * `robustIterations` bisquare passes down-weight points the fit keeps missing
+ * (Cleveland 1979), so an outlier bends the curve near itself instead of
+ * levering the whole thing.
+ *
+ * Returns null when there is nothing fittable: too few pairs, or every x
+ * identical (a vertical stack has no trend, only a value).
+ *
+ * NOTE: local linear regression EXTRAPOLATES at the edges — with one pilot
+ * far out on the right, the curve there is an extension of the field's trend,
+ * not evidence about that pilot. Callers plotting against a bounded axis
+ * (rank) should clamp the fitted y into the axis domain.
+ */
+export function loessTrend(
+  xs: number[],
+  ys: number[],
+  {
+    bandwidth,
+    steps = 48,
+    robustIterations = 2,
+  }: { bandwidth?: number; steps?: number; robustIterations?: number } = {}
+): TrendPoint[] | null {
+  const pairs: TrendPoint[] = [];
+  for (let i = 0; i < Math.min(xs.length, ys.length); i++) {
+    if (Number.isFinite(xs[i]) && Number.isFinite(ys[i])) pairs.push({ x: xs[i], y: ys[i] });
+  }
+  pairs.sort((a, b) => a.x - b.x);
+  const n = pairs.length;
+  if (n < MIN_TREND_POINTS) return null;
+  const px = pairs.map((p) => p.x);
+  const py = pairs.map((p) => p.y);
+  if (!(px[n - 1] > px[0])) return null;
+
+  const q = Math.min(n, Math.max(3, Math.round((bandwidth ?? defaultBandwidth(n)) * n)));
+  const robust = new Array<number>(n).fill(1);
+  for (let it = 0; it < robustIterations; it++) {
+    const residuals = px.map((x, i) => Math.abs(py[i] - localLinear(px, py, robust, x, q)));
+    // 6 × the median absolute residual is Cleveland's scale: a point off by
+    // more than that is treated as an outlier and drops out entirely.
+    const scale = 6 * quantileSorted([...residuals].sort((a, b) => a - b), 0.5);
+    if (!(scale > 0)) break; // a perfect fit — nothing to down-weight
+    for (let i = 0; i < n; i++) {
+      const u = residuals[i] / scale;
+      robust[i] = u >= 1 ? 0 : (1 - u * u) ** 2;
+    }
+  }
+
+  // Sample the fit WHERE THE DATA IS, falling back to an even grid only when
+  // the observations outnumber it. This matters for the count metrics (0, 1,
+  // 2, 3 thermals): on an even grid the curve draws a flat plateau across
+  // x ∈ [0, 0.7] and then a near-vertical wall up to x = 1, implying both
+  // that fractional values exist and that something happens at 0.75. Sampled
+  // at the observed values it is one straight segment from the fit at 0 to
+  // the fit at 1 — which is all a polyline between two points ever claimed.
+  const distinct = px.filter((x, i) => i === 0 || x !== px[i - 1]);
+  const at =
+    distinct.length <= steps
+      ? distinct
+      : Array.from({ length: steps + 1 }, (_, s) => px[0] + ((px[n - 1] - px[0]) * s) / steps);
+  return at.map((x) => ({ x, y: localLinear(px, py, robust, x, q) }));
+}
+
+/**
+ * The LOESS fit at one x: weighted least squares over the q nearest
+ * neighbours, tricube-weighted by distance and scaled by the caller's
+ * robustness weights. `px` must be ascending.
+ */
+function localLinear(
+  px: number[],
+  py: number[],
+  robust: number[],
+  x: number,
+  q: number
+): number {
+  const n = px.length;
+  // Slide the q-wide window right while the point past its right edge is
+  // nearer to x than the one at its left edge.
+  let lo = 0;
+  let hi = q - 1;
+  while (hi < n - 1 && x - px[lo] > px[hi + 1] - x) {
+    lo++;
+    hi++;
+  }
+  const far = Math.max(x - px[lo], px[hi] - x);
+
+  const w: number[] = [];
+  let sw = 0;
+  let swx = 0;
+  let swy = 0;
+  for (let i = lo; i <= hi; i++) {
+    const t = far > 0 ? Math.abs(px[i] - x) / far : 0;
+    const wi = (t >= 1 ? 0 : (1 - t ** 3) ** 3) * robust[i];
+    w.push(wi);
+    sw += wi;
+    swx += wi * px[i];
+    swy += wi * py[i];
+  }
+  if (!(sw > 0)) {
+    // Every neighbour was zeroed (all robustness weights gone, or a
+    // single-point window at its own tricube edge): fall back to the plain
+    // mean of the window rather than dividing by zero.
+    let sum = 0;
+    for (let i = lo; i <= hi; i++) sum += py[i];
+    return sum / (hi - lo + 1);
+  }
+
+  // Centred second pass — E[x²] − E[x]² loses precision when the values are
+  // large and their spread is small (e.g. altitudes in metres).
+  const mx = swx / sw;
+  const my = swy / sw;
+  let sxx = 0;
+  let sxy = 0;
+  for (let i = lo; i <= hi; i++) {
+    const dx = px[i] - mx;
+    sxx += w[i - lo] * dx * dx;
+    sxy += w[i - lo] * dx * (py[i] - my);
+  }
+  const slope = sxx > 1e-12 ? sxy / sxx : 0;
+  return my + slope * (x - mx);
+}
+
 /**
  * The p-quantile (0 ≤ p ≤ 1) of an ASCENDING-sorted array, linearly
  * interpolated (R-7, the same rule d3 and numpy default to).
