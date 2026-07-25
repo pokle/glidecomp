@@ -59,8 +59,8 @@ describe('partitionPhases', () => {
 
   /**
    * The basis used to print this ratio as a "phase coverage" percentage; it
-   * was 100% on every task ever analysed, so the display became a phase split
-   * instead (FIELD_ANALYSIS_VERSION 11) and this assertion is now the only
+   * was 100% on every task ever analysed, so the display became an airtime
+   * split instead (FIELD_ANALYSIS_VERSION 11) and this assertion is now the only
    * thing standing between a tiling regression and silently wrong splits —
    * every phase percentage divides by exactly this total.
    */

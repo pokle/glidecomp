@@ -334,7 +334,12 @@ export interface MetricReport {
 }
 
 /**
- * How the field's airborne time divided between the three flight phases.
+ * How the field's airborne TIME divided between the three flight phases.
+ *
+ * Named for the measure, not the partition: a "phase split" over a set of
+ * flights could as easily be a split of distance, and on a page full of
+ * distance-derived metrics that ambiguity is live. Percentages here are
+ * always seconds over seconds.
  *
  * This replaced the old `phaseCoveragePct` fact, which was 100% on every task
  * by construction: `partitionPhases` tiles takeoff→landing with no gaps and no
@@ -343,7 +348,7 @@ export interface MetricReport {
  * split moves — a booming day is mostly glide, a broken one is mostly search —
  * so it characterises the conditions the metrics below were measured in.
  */
-export interface FieldPhaseSplit {
+export interface FieldAirtimeSplit {
   /** Percentages of `airborneSeconds`; sum to 100. */
   climbPct: number;
   glidePct: number;
@@ -366,11 +371,12 @@ export interface FieldAnalysisBasis {
   workingBandCeiling: number;
   workingBandFallback: boolean;
   /**
-   * Optional so reports stored before FIELD_ANALYSIS_VERSION 11 still parse —
-   * those carry the retired `phaseCoveragePct` instead, and a stale row is
-   * served while it revalidates, so consumers must render without this.
+   * Optional so reports stored before FIELD_ANALYSIS_VERSION 12 still parse —
+   * those carry the retired `phaseCoveragePct` (≤ 10) or the same data under
+   * its old name `phaseSplit` (11). A stale row is served while it
+   * revalidates, so consumers must render without this.
    */
-  phaseSplit?: FieldPhaseSplit;
+  airtimeSplit?: FieldAirtimeSplit;
 }
 
 export interface FieldAnalysisReport {

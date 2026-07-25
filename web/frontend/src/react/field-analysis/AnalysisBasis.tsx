@@ -4,12 +4,12 @@
  * Every metric here is derived from detector output over a sampled grid, so
  * the report is only as trustworthy as its inputs. Stating the pilot count,
  * the grid step, how many thermals were actually shared, the working band and
- * how the field's time divided between flight phases up front is the same
+ * how the field's airtime divided between flight phases up front is the same
  * explainability rule the scoring pages follow — a number without its basis is
  * not an explanation.
  */
 import { formatAltitude, useUnits } from "@/react/lib/units";
-import { PhaseSplitBar } from "./charts/PhaseSplitBar";
+import { AirtimeSplitBar } from "./charts/AirtimeSplitBar";
 import type { FieldAnalysisBasis } from "./types";
 
 function Fact({
@@ -39,7 +39,7 @@ export function AnalysisBasis({
   const units = useUnits();
   return (
     <section aria-label="Analysis basis" className="rounded-lg border p-4">
-      {/* Four one-slot facts plus the two-slot phase split fill each row
+      {/* Four one-slot facts plus the two-slot airtime split fill each row
           exactly, at every breakpoint. */}
       <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
         <Fact term="Pilots analysed">{basis.pilotCount}</Fact>
@@ -55,11 +55,11 @@ export function AnalysisBasis({
             <span className="ml-1 text-xs text-muted-foreground">(estimated)</span>
           ) : null}
         </Fact>
-        {/* Absent on reports stored before the split existed (v10 and
+        {/* Absent on reports stored before this field existed (v11 and
             earlier), which are served stale until they revalidate. */}
-        {basis.phaseSplit ? (
-          <Fact term="Phase split" className="col-span-2">
-            <PhaseSplitBar split={basis.phaseSplit} />
+        {basis.airtimeSplit ? (
+          <Fact term="Airtime split" className="col-span-2">
+            <AirtimeSplitBar split={basis.airtimeSplit} />
           </Fact>
         ) : null}
       </dl>

@@ -16,7 +16,7 @@ import type {
   FieldAnalysisBasis,
   FieldAnalysisReport,
   FieldContext,
-  FieldPhaseSplit,
+  FieldAirtimeSplit,
   MetricComputer,
   MetricCorrelation,
   MetricOutput,
@@ -149,7 +149,7 @@ function correlate(
  * landed after ten minutes is ten minutes of evidence about it, not an equal
  * vote with someone who flew for three hours.
  */
-function buildPhaseSplit(field: FieldContext): FieldPhaseSplit {
+function buildAirtimeSplit(field: FieldContext): FieldAirtimeSplit {
   const seconds: Record<FlightPhase, number> = { climb: 0, glide: 0, search: 0 };
   for (const p of field.pilots) {
     for (const ph of p.phases) seconds[ph.phase] += ph.durationSeconds;
@@ -173,6 +173,6 @@ function buildBasis(field: FieldContext): FieldAnalysisBasis {
     workingBandFloor: field.workingBand.floorMeters,
     workingBandCeiling: field.workingBand.ceilingMeters,
     workingBandFallback: field.workingBand.usedFallback,
-    phaseSplit: buildPhaseSplit(field),
+    airtimeSplit: buildAirtimeSplit(field),
   };
 }

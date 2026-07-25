@@ -88,4 +88,12 @@
 //     value changed; the bump rolls stored reports so they carry the new
 //     basis field on their next lazy revalidation. Consumers must tolerate
 //     its absence — a v10 row is served stale while it revalidates.
-export const FIELD_ANALYSIS_VERSION = 11;
+// v12: the v11 basis field is renamed `phaseSplit` → `airtimeSplit` (type
+//     FieldPhaseSplit → FieldAirtimeSplit), and both surfaces label it
+//     "airtime split" with gerund phase names ("38% climbing"). "Phase" named
+//     the partition rather than the measure, so nothing said the percentages
+//     were of TIME — on a page this full of distance-derived metrics, a split
+//     of distance is an equally plausible reading. No value changed; the bump
+//     rolls stored reports onto the new field name, and v11 rows render
+//     without the split until they revalidate.
+export const FIELD_ANALYSIS_VERSION = 12;

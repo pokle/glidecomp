@@ -15,7 +15,7 @@ import { clusterPilotStyles, MIN_CLUSTER_PILOTS, type StyleClusterReport } from 
 import { timeWithZone, timeRangeWithZone } from './format-time';
 import { roundPercentagesToHundred } from './stats';
 import type {
-  FieldPhaseSplit,
+  FieldAirtimeSplit,
   CompAggregateReport,
   CompMetricAggregate,
   FieldAnalysisReport,
@@ -106,14 +106,22 @@ function renderTable(t: ReportTable, timeZone?: string): string[] {
   return lines;
 }
 
-/** "38% climb / 23% glide / 39% search" — integers that sum to 100. */
-function formatPhaseSplit(split: FieldPhaseSplit): string {
+/**
+ * "airtime split 38% climbing / 23% gliding / 39% searching" — integers that
+ * sum to 100.
+ *
+ * Labelled and in gerunds for the same reason the UI is: unlabelled bare
+ * percentages on a line that also carries distances invite reading as a
+ * distance split, and "38% climb" can be heard as a count of climbs where
+ * "38% climbing" can only be time spent.
+ */
+function formatAirtimeSplit(split: FieldAirtimeSplit): string {
   const [climb, glide, search] = roundPercentagesToHundred([
     split.climbPct,
     split.glidePct,
     split.searchPct,
   ]);
-  return `${climb}% climb / ${glide}% glide / ${search}% search`;
+  return `airtime split ${climb}% climbing / ${glide}% gliding / ${search}% searching`;
 }
 
 export function renderFieldReport(
@@ -130,7 +138,7 @@ export function renderFieldReport(
       `${b.sharedThermalCount} shared thermals (${b.multiPilotThermalCount} multi-pilot) · ` +
       `working band ${b.workingBandFloor.toFixed(0)}–${b.workingBandCeiling.toFixed(0)} m` +
       (b.workingBandFallback ? ' (fix-altitude fallback)' : '') +
-      (b.phaseSplit ? ` · ${formatPhaseSplit(b.phaseSplit)}` : ''),
+      (b.airtimeSplit ? ` · ${formatAirtimeSplit(b.airtimeSplit)}` : ''),
   );
 
   // The separation ranking leads: it tells the reader which strategies
