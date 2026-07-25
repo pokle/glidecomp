@@ -48,6 +48,29 @@ export function taskCentroid(task: XCTask): { lat: number; lon: number } | null 
 }
 
 /**
+ * Mean elevation of a task's turnpoints in metres AMSL, or null when the
+ * route carries no altitudes.
+ *
+ * Worth deriving rather than leaning on the provider's own grid elevation,
+ * which is routinely hundreds of metres out: a model cell kilometres wide
+ * averages a ridge and its valley into one figure. Corryong's Task 1 runs
+ * from a 932 m launch down to a 276 m goal, mean 543 m — while the grid
+ * point reports 298 m.
+ *
+ * The MEAN, matching the centroid: the query asks about one representative
+ * point over the whole course, so the elevation should describe the same
+ * thing. Launch alone would overstate the terrain for a task that spends
+ * most of its distance over the flats.
+ */
+export function taskElevationM(task: XCTask): number | null {
+  const alts = (task.turnpoints ?? [])
+    .map((tp) => tp.waypoint.altSmoothed)
+    .filter((a): a is number => typeof a === "number" && Number.isFinite(a));
+  if (alts.length === 0) return null;
+  return alts.reduce((sum, a) => sum + a, 0) / alts.length;
+}
+
+/**
  * Build the weather query for a task.
  *
  * The window runs from the earliest of (launch window open, first start
@@ -101,7 +124,11 @@ export function weatherQueryForTask(
   return {
     lat: centre.lat,
     lon: centre.lon,
-    elevationM: opts?.elevationM ?? null,
+    // The route's own terrain, unless the caller knows better. Providers use
+    // it to pick which level counts as flying height, so taking it from the
+    // task rather than from the provider's smoothed grid keeps that pick
+    // honest.
+    elevationM: opts?.elevationM ?? taskElevationM(task),
     fromMs,
     toMs,
   };

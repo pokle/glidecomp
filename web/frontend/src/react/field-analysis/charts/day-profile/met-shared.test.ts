@@ -3,11 +3,12 @@ import { buildTimeAxis } from "./time-axis";
 import {
   coverOpacity,
   isBlueHour,
+  sampleOffset,
   separateLabels,
   usableCeilingM,
   weatherInstants,
 } from "./met-shared";
-import type { WeatherHour } from "@/react/weather/types";
+import type { TaskWeather, WeatherHour } from "@/react/weather/types";
 
 const T = (iso: string) => new Date(iso).getTime();
 
@@ -168,5 +169,63 @@ describe("separateLabels", () => {
     const [a, b] = separateLabels(22, 23, tight);
     expect(a).toBeGreaterThanOrEqual(20);
     expect(b).toBeLessThanOrEqual(25);
+  });
+});
+
+describe("sampleOffset", () => {
+  /** A stored answer whose grid point and elevation differ from the ask. */
+  function weather(
+    src: Partial<TaskWeather["source"]> = {},
+    resolved: Partial<TaskWeather["resolved"]> = {}
+  ): TaskWeather {
+    return {
+      source: {
+        providerId: "p",
+        model: "m",
+        attribution: "a",
+        attributionUrl: "https://example.invalid/",
+        license: "CC BY 4.0",
+        kind: "model",
+        resolutionKm: null,
+        variables: [],
+        pointLat: -36.168716,
+        pointLon: 147.85713,
+        pointElevationM: 298,
+        ...src,
+      },
+      resolved: { lat: -36.2, lon: 147.9, elevationM: 543, fromMs: 0, toMs: 0, ...resolved },
+      hours: [],
+      provisional: false,
+      fetchedAt: "2026-01-10T00:00:00.000Z",
+    };
+  }
+
+  it("measures how far the grid point sits from the point asked about", () => {
+    const { distanceKm } = sampleOffset(weather());
+    // Real Corryong numbers: a few km off the task centroid.
+    expect(distanceKm).toBeGreaterThan(1);
+    expect(distanceKm).toBeLessThan(10);
+  });
+
+  it("reports the grid's elevation error against the real terrain", () => {
+    // The caveat that matters: every AGL height is measured from the grid's
+    // datum, which here sits 245 m below the ground the pilots flew over.
+    expect(sampleOffset(weather()).elevationDeltaM).toBe(298 - 543);
+  });
+
+  it("is signed, so a grid above the terrain reads differently", () => {
+    expect(sampleOffset(weather({ pointElevationM: 900 })).elevationDeltaM).toBe(900 - 543);
+  });
+
+  it("returns null, not zero, when an elevation is unknown", () => {
+    // Zero would assert "the grid is exactly right", which is a claim we
+    // cannot make from missing data.
+    expect(sampleOffset(weather({ pointElevationM: null })).elevationDeltaM).toBeNull();
+    expect(sampleOffset(weather({}, { elevationM: null })).elevationDeltaM).toBeNull();
+  });
+
+  it("is ~0 km when the grid point is the point asked about", () => {
+    const same = weather({ pointLat: -36.2, pointLon: 147.9 });
+    expect(sampleOffset(same).distanceKm).toBeCloseTo(0, 3);
   });
 });

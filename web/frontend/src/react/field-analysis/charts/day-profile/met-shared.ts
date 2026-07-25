@@ -7,9 +7,41 @@
  * cannot drift apart.
  */
 
-import type { WeatherHour } from "@/react/weather/types";
+import { andoyerDistance } from "@glidecomp/engine";
+import type { TaskWeather, WeatherHour } from "@/react/weather/types";
 
 const HOUR_MS = 3_600_000;
+
+/**
+ * How far the provider's grid point sits from the point we asked about, in
+ * km, and how far its terrain is from the task's own.
+ *
+ * Both numbers are provenance a reader needs and neither is guessable from
+ * the charts. A model cell kilometres wide averages a ridge and its valley
+ * into one elevation: Corryong's Task 1 spans a 932 m launch to a 276 m
+ * goal (mean 543 m) while the grid point reports 298 m. Every AGL height on
+ * the thermal chart is measured from THAT datum, so a reader comparing them
+ * against a pilot's altitude deserves to know the gap.
+ *
+ * Returns nulls rather than zeros where the inputs are missing, so the UI
+ * can omit a clause instead of asserting "0 m away".
+ */
+export function sampleOffset(weather: TaskWeather): {
+  distanceKm: number | null;
+  elevationDeltaM: number | null;
+} {
+  const { source, resolved } = weather;
+  // Project rule: never hand-roll geo maths — geo.ts owns the WGS84 formulas.
+  const distanceKm =
+    Number.isFinite(source.pointLat) && Number.isFinite(resolved.lat)
+      ? andoyerDistance(resolved.lat, resolved.lon, source.pointLat, source.pointLon) / 1000
+      : null;
+  const elevationDeltaM =
+    source.pointElevationM !== null && resolved.elevationM !== null
+      ? source.pointElevationM - resolved.elevationM
+      : null;
+  return { distanceKm, elevationDeltaM };
+}
 
 /**
  * Cloud cover percentage → fill opacity for a lane cell.

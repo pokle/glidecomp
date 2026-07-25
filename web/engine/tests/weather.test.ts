@@ -11,6 +11,7 @@ import {
   heightToPressureHpa,
   selectProviders,
   taskCentroid,
+  taskElevationM,
   weatherQueryForTask,
   weatherQueryKey,
   type TaskWeather,
@@ -164,6 +165,34 @@ describe('flyingHeightLevel', () => {
 // ---------------------------------------------------------------------------
 // Task → query
 // ---------------------------------------------------------------------------
+
+describe('taskElevationM', () => {
+  it('averages the turnpoint altitudes', () => {
+    // 800, 800, 700, 300 → 650
+    expect(taskElevationM(racetask())).toBe(650);
+  });
+
+  it('is null when the route carries no altitudes', () => {
+    const bare = {
+      ...racetask(),
+      turnpoints: racetask().turnpoints.map((tp) => ({
+        ...tp,
+        waypoint: { name: tp.waypoint.name, lat: tp.waypoint.lat, lon: tp.waypoint.lon },
+      })),
+    } as XCTask;
+    expect(taskElevationM(bare)).toBeNull();
+  });
+
+  it("rides into the query, so the terrain datum isn't the provider's smoothed grid", () => {
+    // The reason this exists: a model cell kilometres wide averages a ridge
+    // and its valley, and reports terrain hundreds of metres out.
+    expect(weatherQueryForTask(racetask(), '2026-01-10')!.elevationM).toBe(650);
+    // An explicit caller override still wins.
+    expect(
+      weatherQueryForTask(racetask(), '2026-01-10', { elevationM: 900 })!.elevationM
+    ).toBe(900);
+  });
+});
 
 describe('weatherQueryForTask', () => {
   it('centres on the turnpoint mean', () => {
@@ -380,6 +409,33 @@ describe('open-meteo adapter', () => {
       nowMs: NOW_MS,
     });
     expect(settled.provisional).toBe(false);
+  });
+
+  it('echoes the task elevation so a consumer can compare it to the grid', async () => {
+    const w = await openMeteoHistoricalForecastProvider().fetch(query, {
+      fetchImpl: stubFetch(openMeteoBody()),
+      nowMs: NOW_MS,
+    });
+    expect(w.resolved.elevationM).toBe(650);
+    // The gap this makes visible: the grid says 298 m for 650 m of terrain.
+    expect(w.source.pointElevationM).toBe(298);
+  });
+
+  it('states a resolution only where one is honestly knowable', async () => {
+    // ERA5 is a single global 0.25 degree grid — a fact.
+    const era5 = await openMeteoEra5Provider().fetch(query, {
+      fetchImpl: stubFetch(openMeteoBody()),
+      nowMs: NOW_MS,
+    });
+    expect(era5.source.resolutionKm).toBe(25);
+
+    // best_match picks a different model per location and the API does not
+    // report which, so null is the correct answer, not a placeholder.
+    const best = await openMeteoHistoricalForecastProvider().fetch(query, {
+      fetchImpl: stubFetch(openMeteoBody()),
+      nowMs: NOW_MS,
+    });
+    expect(best.source.resolutionKm).toBeNull();
   });
 
   it('carries the grid point and the licence to the caller', async () => {

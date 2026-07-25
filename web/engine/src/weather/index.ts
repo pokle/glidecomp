@@ -48,4 +48,9 @@ export {
   openMeteoHistoricalForecastProvider,
   openMeteoProviders,
 } from "./open-meteo";
-export { taskCentroid, weatherQueryForTask, weatherQueryKey } from "./task-query";
+export {
+  taskCentroid,
+  taskElevationM,
+  weatherQueryForTask,
+  weatherQueryKey,
+} from "./task-query";

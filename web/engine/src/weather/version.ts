@@ -13,5 +13,8 @@
  * re-fetches on next view, with no migration step.
  *
  * 1 — initial: Open-Meteo archived-forecast + ERA5 providers.
+ * 2 — added WeatherSource.resolutionKm and resolved.elevationM, so the UI can
+ *     state the grid's cell size and how far its elevation is from the task's
+ *     real terrain. Rows written at v1 lack both and re-fetch.
  */
-export const WEATHER_SCHEMA_VERSION = 1;
+export const WEATHER_SCHEMA_VERSION = 2;

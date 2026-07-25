@@ -83,12 +83,31 @@ export interface WeatherSource {
   /** Licence short name, e.g. "CC BY 4.0" — CC BY *requires* we show this. */
   license: string;
   kind: WeatherSourceKind;
+  /**
+   * Nominal grid spacing in km, or null when the dataset cannot honestly
+   * state one.
+   *
+   * Null is a real answer, not a gap to fill in later. Open-Meteo's
+   * "best match" selects a different underlying model per location and does
+   * NOT report which one it chose — verified against the live API, including
+   * a multi-model request, which shows best_match returning values matching
+   * none of the named candidates. Printing a number we inferred from the
+   * region would be a guess presented as provenance, which is worse than
+   * saying the resolution varies.
+   */
+  resolutionKm: number | null;
   /** Variables this dataset carries; anything absent is null in every row. */
   variables: WeatherVariable[];
   /** The grid point actually served, which is rarely the point asked for. */
   pointLat: number;
   pointLon: number;
-  /** Grid elevation in metres AMSL — the datum for AGL fields below. */
+  /**
+   * Grid elevation in metres AMSL — the datum for the AGL fields below, and
+   * routinely hundreds of metres off the real terrain, because a model cell
+   * kilometres wide averages a ridge and its valley into one number. Compare
+   * it against `TaskWeather.resolved.elevationM` before reading any AGL
+   * height as a height above launch.
+   */
   pointElevationM: number | null;
 }
 
@@ -142,8 +161,22 @@ export interface WeatherHour {
 /** A provider's answer: the rows, plus who says so and how confidently. */
 export interface TaskWeather {
   source: WeatherSource;
-  /** The query as resolved (hours rounded out), echoed for the cache key. */
-  resolved: { lat: number; lon: number; fromMs: number; toMs: number };
+  /**
+   * The query as resolved (hours rounded out), echoed so a consumer can say
+   * how far the answer is from what was asked — the offset between this
+   * point and `source.pointLat/Lon`, and between this elevation and
+   * `source.pointElevationM`, are the two numbers that tell a reader how
+   * much to trust the series.
+   */
+  resolved: {
+    lat: number;
+    lon: number;
+    /** Real terrain elevation of the task in metres AMSL, from its
+     * turnpoints; null when the route carries no altitudes. */
+    elevationM: number | null;
+    fromMs: number;
+    toMs: number;
+  };
   /** Ascending by time, one row per hour, gaps included as all-null rows. */
   hours: WeatherHour[];
   /**

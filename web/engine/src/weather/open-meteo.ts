@@ -130,6 +130,7 @@ async function fetchOpenMeteo(
     model: string;
     attribution: string;
     kind: "model" | "reanalysis";
+    resolutionKm: number | null;
     variables: WeatherVariable[];
     /** Publication lag in ms; a fetch inside it may still be revised. */
     settleMs: number;
@@ -273,12 +274,19 @@ async function fetchOpenMeteo(
       attributionUrl: "https://open-meteo.com/",
       license: "CC BY 4.0",
       kind: opts.kind,
+      resolutionKm: opts.resolutionKm,
       variables,
       pointLat: body.latitude ?? query.lat,
       pointLon: body.longitude ?? query.lon,
       pointElevationM: typeof body.elevation === "number" ? body.elevation : null,
     },
-    resolved: { lat: query.lat, lon: query.lon, fromMs, toMs },
+    resolved: {
+      lat: query.lat,
+      lon: query.lon,
+      elevationM: query.elevationM ?? null,
+      fromMs,
+      toMs,
+    },
     hours,
     provisional: ctx.nowMs - toMs < opts.settleMs,
     fetchedAt: new Date(ctx.nowMs).toISOString(),
@@ -312,6 +320,10 @@ export function openMeteoHistoricalForecastProvider(): WeatherProvider {
           model: "Open-Meteo best-match (ECMWF/regional)",
           attribution: "Open-Meteo archived forecast",
           kind: "model",
+          // Null, and staying null: best_match picks a different underlying
+          // model per location (1 km to 25 km) and the API does not report
+          // which. See the field's doc comment in types.ts.
+          resolutionKm: null,
           variables: [
             "surface_wind",
             "surface_gust",
@@ -353,9 +365,12 @@ export function openMeteoEra5Provider(): WeatherProvider {
           pressureLevels: [],
           extraVariables: [],
           providerId: "open-meteo-era5",
-          model: "ERA5 reanalysis ~25 km",
+          model: "ERA5 reanalysis",
           attribution: "Open-Meteo ERA5 reanalysis",
           kind: "reanalysis",
+          // ERA5 is a single global 0.25° grid — a resolution we can state
+          // as fact rather than infer.
+          resolutionKm: 25,
           variables: [
             "surface_wind",
             "surface_gust",

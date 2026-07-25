@@ -65,12 +65,15 @@ interface Point {
 export function MetWindChart({
   hours,
   source,
+  terrainElevationM,
   axis,
   timeZone,
   setReadout,
 }: {
   hours: WeatherHour[];
   source: WeatherSource;
+  /** The task's own terrain elevation (AMSL) — see the datum note below. */
+  terrainElevationM: number | null;
   axis: TimeAxis;
   timeZone: string | undefined;
   setReadout: (text: string | null) => void;
@@ -82,10 +85,14 @@ export function MetWindChart({
 
   if (hours.length === 0) return null;
 
-  // The grid's own elevation is the right datum for "flying height": it is
-  // the terrain the model thinks is under this point, so terrain + 1000 m
-  // lands in the air the pilots were actually working.
-  const terrainM = source.pointElevationM;
+  // Datum for "flying height" = terrain + 1000 m. Prefer the TASK's terrain
+  // over the provider's grid elevation: a cell kilometres wide averages a
+  // ridge and its valley, and at Corryong reports 298 m for a course whose
+  // turnpoints mean 543 m. Picking the level off the smoothed figure would
+  // systematically choose air lower than the pilots were working. The grid
+  // elevation remains the fallback, since it is at least self-consistent
+  // with the AGL fields.
+  const terrainM = terrainElevationM ?? source.pointElevationM;
 
   const points: Point[] = hours.map((h) => {
     const tMs = new Date(h.t).getTime();
