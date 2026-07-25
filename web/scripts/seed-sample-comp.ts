@@ -65,6 +65,8 @@ import {
 } from '@glidecomp/engine';
 import { timezoneForXctsk } from '@glidecomp/engine/timezone';
 import { SAMPLE_COMP_NAME } from '../workers/competition-api/src/sample';
+import { encodeId } from '../workers/competition-api/src/sqids';
+import { compPath, compScoresPath, compWaypointsPath } from '../frontend/src/react/lib/slug';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 /** Comp-folder root — override with GLIDECOMP_COMPS_DIR to seed from a
@@ -234,31 +236,88 @@ async function createLocalStore(): Promise<SeedStore> {
 
 // -- remote backend: wrangler CLI against real Cloudflare D1 + R2 -------------
 
+const WRANGLER_MAX_ATTEMPTS = 5;
+
+/** Exponential backoff, capped: 1s, 2s, 4s, 8s, 15s… */
+function backoffMs(attempt: number): number {
+  return Math.min(1000 * 2 ** (attempt - 1), 15_000);
+}
+
+/**
+ * Whether a failed wrangler invocation looks like a transient Cloudflare/network
+ * hiccup — a 5xx, a 429, an "internal error" (D1/R2 both surface CF error 10001
+ * "We encountered an internal error. Please try again."), or a dropped socket —
+ * as opposed to a deterministic failure (bad SQL, a UNIQUE violation) that would
+ * fail identically forever. Matched on textual markers rather than a bare status
+ * number so a key/path segment like `.../t/500/…` can't masquerade as a 500.
+ */
+function isTransientWranglerError(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return (
+    m.includes('internal error') ||
+    m.includes('internal server error') ||
+    m.includes('try again') ||
+    m.includes('service unavailable') ||
+    m.includes('too many requests') ||
+    m.includes('rate limit') ||
+    /\b(5\d\d|429)\s*:/.test(m) || // "- 500: Internal Server Error", "429: …"
+    /etimedout|econnreset|eai_again|enotfound|socket hang up|fetch failed|network error/.test(m)
+  );
+}
+
+/** Block the calling thread for `ms` (sync backoff, so the sync D1 path can wait). */
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function warnRetry(args: string[], attempt: number, msg: string): void {
+  const firstLine = (msg.split('\n').find((l) => l.trim()) ?? msg).trim();
+  console.warn(
+    `  ⚠ wrangler ${args.slice(0, 3).join(' ')} failed (attempt ${attempt}/${WRANGLER_MAX_ATTEMPTS}), ` +
+      `retrying in ${backoffMs(attempt) / 1000}s: ${firstLine}`,
+  );
+}
+
 function wrangler(args: string[]): string {
-  const res = spawnSync('bunx', ['wrangler', ...args], {
-    cwd: REPO_ROOT,
-    encoding: 'utf-8',
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  if (res.status !== 0) {
-    throw new Error(`wrangler ${args.join(' ')} failed:\n${res.stderr || res.stdout}`);
+  for (let attempt = 1; ; attempt++) {
+    const res = spawnSync('bunx', ['wrangler', ...args], {
+      cwd: REPO_ROOT,
+      encoding: 'utf-8',
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    if (res.status === 0) return res.stdout;
+    const msg = res.stderr || res.stdout;
+    if (attempt >= WRANGLER_MAX_ATTEMPTS || !isTransientWranglerError(msg)) {
+      throw new Error(`wrangler ${args.join(' ')} failed:\n${msg}`);
+    }
+    warnRetry(args, attempt, msg);
+    sleepSync(backoffMs(attempt));
   }
-  return res.stdout;
 }
 
 /** Async wrangler invocation, so independent R2 calls can run concurrently. */
-function wranglerAsync(args: string[]): Promise<void> {
-  return new Promise((res, rej) => {
-    const child = spawn('bunx', ['wrangler', ...args], { cwd: REPO_ROOT });
-    let stderr = '';
-    let stdout = '';
-    child.stdout?.on('data', (d) => (stdout += d));
-    child.stderr?.on('data', (d) => (stderr += d));
-    child.on('error', rej);
-    child.on('close', (code) =>
-      code === 0 ? res() : rej(new Error(`wrangler ${args.join(' ')} failed:\n${stderr || stdout}`)),
-    );
-  });
+async function wranglerAsync(args: string[]): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await new Promise<void>((res, rej) => {
+        const child = spawn('bunx', ['wrangler', ...args], { cwd: REPO_ROOT });
+        let stderr = '';
+        let stdout = '';
+        child.stdout?.on('data', (d) => (stdout += d));
+        child.stderr?.on('data', (d) => (stderr += d));
+        child.on('error', rej);
+        child.on('close', (code) =>
+          code === 0 ? res() : rej(new Error(`wrangler ${args.join(' ')} failed:\n${stderr || stdout}`)),
+        );
+      });
+      return;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (attempt >= WRANGLER_MAX_ATTEMPTS || !isTransientWranglerError(msg)) throw err;
+      warnRetry(args, attempt, msg);
+      await new Promise((r) => setTimeout(r, backoffMs(attempt)));
+    }
+  }
 }
 
 /**
@@ -398,7 +457,26 @@ function readTrackLessRows(compDir: string, igcFiles: string[]): TrackLessPilot[
       out.push({ name, kind: 'flew', distance: null }); // 'lo' etc. — min distance
     }
   }
-  return out;
+  // Collapse rows that resolve to the same comp_pilot. Track-less pilots are
+  // keyed by name (they have no distinguishing id), and the registry merges
+  // same-name rows into ONE comp_pilot — so the synthesis has to as well, or a
+  // repeated published name (AirScore lists the odd competitor twice, e.g. two
+  // "James McGinty" land-out rows in Corryong 2017 open T1) would emit two
+  // manual flights / statuses for one comp_pilot and trip its UNIQUE(task_id,
+  // comp_pilot_id) index. Keep the best outcome: a flight beats a DNF, and the
+  // longer distance wins (a real number beats a bare 'lo'/null minimum).
+  const better = (a: TrackLessPilot, b: TrackLessPilot): TrackLessPilot => {
+    if (a.kind !== b.kind) return a.kind === 'flew' ? a : b;
+    if (a.kind === 'dnf') return a;
+    return (b.distance ?? -1) > (a.distance ?? -1) ? b : a;
+  };
+  const merged = new Map<string, TrackLessPilot>();
+  for (const p of out) {
+    const key = p.name.toLowerCase();
+    const prev = merged.get(key);
+    merged.set(key, prev ? better(prev, p) : p);
+  }
+  return [...merged.values()];
 }
 
 /**
@@ -707,6 +785,19 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
     );
     await mapPool(oldKeys, R2_CONCURRENCY, (r) => store.r2Delete(String(r.k)));
     await store.exec([
+      // Clear the materialized derived caches FIRST, while the rows they key
+      // off still exist. task_scores / task_field_analysis are served verbatim
+      // and their blobs embed sqid links built from task_id + comp_pilot_id —
+      // a reseed hands out fresh ids, so a surviving blob points readers at
+      // deleted tasks/pilots ("Task not found"). These FK-cascade on task
+      // delete, but only where foreign keys are enforced (local Miniflare D1
+      // often runs with them OFF), so clear them explicitly rather than relying
+      // on the cascade. track_analysis is (geom_hash, uploaded_at)-guarded so a
+      // stale row is never served, but drop it too so a reseed leaves no orphans.
+      `DELETE FROM track_analysis WHERE task_track_id IN
+         (SELECT tt.task_track_id FROM task_track tt JOIN task t ON tt.task_id = t.task_id WHERE t.comp_id = ${compId});`,
+      `DELETE FROM task_scores WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
+      `DELETE FROM task_field_analysis WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
       `DELETE FROM task_track WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
       `DELETE FROM task_manual_flight WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
       `DELETE FROM task_pilot_status WHERE comp_id = ${compId};`,
@@ -839,6 +930,86 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
   }
 
   console.log(`  Done. comp_id=${compId} — ${tasks.length} tasks, ${totalTracks} tracks total`);
+  if (REMOTE) await purgeCompCache(compId, compName);
+}
+
+// ── Cloudflare edge cache purge (remote seeds only) ─────────────────────────
+// A reseed hands a comp fresh task/pilot ids, but Cloudflare's edge — and
+// visitors' browsers — may still hold the pre-reseed pages, whose embedded
+// links point at the now-deleted ids ("Task not found") until their max-age
+// lapses. Tag/prefix/hostname purges are Enterprise-only (and we emit no
+// Cache-Tag), so we purge by URL. That's tractable because the comp_id — and
+// thus its sqid — is STABLE across reseeds: the stale entries sit at a small,
+// known set of comp-level URLs. Per-task/pilot URLs changed ids, so their old
+// cache entries are unreachable orphans that age out and the new URLs are
+// uncached — neither needs a purge.
+
+const PURGE_ORIGIN = process.env.GLIDECOMP_ORIGIN ?? 'https://glidecomp.com';
+// Production serves sqids under the competition-api default alphabet
+// (web/workers/competition-api/wrangler.toml — encodeId(default, 27) === 'wugh',
+// the live id). Override only if a deploy sets a different SQIDS_ALPHABET.
+const PURGE_SQIDS_ALPHABET =
+  process.env.SQIDS_ALPHABET ?? 'abcdefghijklmnopqrstuvwxyz';
+
+/** The stable, publicly-cacheable comp-level URLs a reseed invalidates: the
+ * three SSR HTML pages plus the one cacheable comp-level API. (Comp-detail and
+ * the waypoints API are `no-store`; per-task score APIs are keyed by the changed
+ * task sqid, so none of those are cached under a stable URL.) */
+function compCacheUrls(compId: number, compName: string): string[] {
+  const sqid = encodeId(PURGE_SQIDS_ALPHABET, compId);
+  return [
+    `${PURGE_ORIGIN}${compPath(sqid, compName)}`,
+    `${PURGE_ORIGIN}${compScoresPath(sqid, compName)}`,
+    `${PURGE_ORIGIN}${compWaypointsPath(sqid, compName)}`,
+    `${PURGE_ORIGIN}/api/comp/${sqid}/scores`,
+  ];
+}
+
+/**
+ * Purge one comp's stable public URLs from Cloudflare's edge cache. Best-effort:
+ * a failure only warns, never fails the seed. No-ops (with a one-line note)
+ * unless BOTH CLOUDFLARE_API_TOKEN (needs the "Cache Purge" permission) and
+ * CLOUDFLARE_ZONE_ID are set, so the credential stays optional. Edge only — the
+ * machine that ran the reseed still holds its own browser copy until max-age
+ * lapses (hard-refresh), but every other visitor gets fresh pages at once.
+ */
+async function purgeCompCache(compId: number, compName: string): Promise<void> {
+  const token = process.env.CLOUDFLARE_API_TOKEN;
+  const zone = process.env.CLOUDFLARE_ZONE_ID;
+  if (!token || !zone) {
+    console.log(
+      '  cache purge skipped (set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ZONE_ID to purge the edge)',
+    );
+    return;
+  }
+  const files = compCacheUrls(compId, compName);
+  try {
+    const res = await fetch(
+      `https://api.cloudflare.com/client/v4/zones/${zone}/purge_cache`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ files }),
+      },
+    );
+    const body = (await res.json().catch(() => null)) as
+      | { success?: boolean; errors?: unknown }
+      | null;
+    if (!res.ok || !body?.success) {
+      console.warn(
+        `  ⚠ cache purge failed (${res.status}): ${JSON.stringify(body?.errors ?? body ?? {})}`,
+      );
+      return;
+    }
+    console.log(`  purged ${files.length} edge URLs for comp ${compId}`);
+  } catch (err) {
+    console.warn(
+      `  ⚠ cache purge error: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 main().catch((err) => {
