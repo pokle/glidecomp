@@ -39,9 +39,12 @@ export function AnalysisBasis({
   const units = useUnits();
   return (
     <section aria-label="Analysis basis" className="rounded-lg border p-4">
-      {/* Four one-slot facts plus the two-slot airtime split fill each row
-          exactly, at every breakpoint. */}
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
+      {/* Four scalar facts, then the airtime split on a full row of its own at
+          every breakpoint — the bar is a proportion of one whole, so it reads
+          best spanning the width rather than boxed into a column beside the
+          scalars. Column counts are 2 and 4 (both divide the four facts) so no
+          breakpoint leaves a fact orphaned beside empty slots. */}
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 lg:grid-cols-4">
         <Fact term="Pilots analysed">{basis.pilotCount}</Fact>
         <Fact term="Sampling">every {basis.gridStepSeconds}s</Fact>
         <Fact term="Shared thermals">
@@ -58,7 +61,7 @@ export function AnalysisBasis({
         {/* Absent on reports stored before this field existed (v11 and
             earlier), which are served stale until they revalidate. */}
         {basis.airtimeSplit ? (
-          <Fact term="Airtime split" className="col-span-2">
+          <Fact term="Airtime split" className="col-span-2 lg:col-span-4">
             <AirtimeSplitBar split={basis.airtimeSplit} />
           </Fact>
         ) : null}
