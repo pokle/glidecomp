@@ -59,6 +59,7 @@ import {
   type TaskDetailData,
 } from "../comp/types";
 import { useInitialData } from "../lib/initial-data";
+import { useMounted } from "../lib/use-mounted";
 import type { TaskDetailLoaderData } from "../loaders";
 import { underComp } from "../lib/crumbs";
 import { idFromSegment, compPath, taskPath, taskAnalysisPath } from "../lib/slug";
@@ -80,6 +81,9 @@ function TaskDetailContent() {
   const { user } = useUser();
   const location = useLocation();
   const navigate = useNavigate();
+  // Gate the ICU zone abbreviation in SSR-rendered instants (the stop notice
+  // below) until mounted, so the server markup and first client render agree.
+  const mounted = useMounted();
   // SSR seed for the public half of the page (header, route, scores). Null on
   // client boot / SPA navigations, where the effect below fetches instead.
   const initial = useInitialData<TaskDetailLoaderData>();
@@ -227,7 +231,8 @@ function TaskDetailContent() {
                 Stop announced{" "}
                 {formatInstant(
                   new Date(task.stop_announcement_time),
-                  comp?.timezone ?? "UTC"
+                  comp?.timezone ?? "UTC",
+                  mounted
                 )}{" "}
                 — scored as a stopped task (FAI S7F §12.3)
               </span>

@@ -311,6 +311,18 @@ test.describe("sitemap", () => {
   });
 });
 
+/**
+ * These assert no hydration mismatch on the real hydrated pages. NOTE the
+ * corpus caveat: the seeded sample comp is Australian, and `AEST`/`AEDT`
+ * resolve identically on the workerd SSR runtime and in the browser, so this
+ * harness alone would NOT catch a zone whose ICU `timeZoneName: "short"`
+ * abbreviation diverges between the two runtimes (e.g. Europe/Bucharest →
+ * "EEST" on workerd but "GMT+3" in some browsers — the bug that motivated the
+ * deferred-enrichment fix). That whole class is instead prevented structurally:
+ * SSR-rendered instants render the tzdata offset alone until mounted (see
+ * lib/time.ts `zoneLabel`/`buildZoneCycle` + lib/use-mounted.ts), pinned by the
+ * "unenriched (SSR)" cases in lib/time.test.ts. Keep both guards.
+ */
 test.describe("SSR — hydration is clean (real browser)", () => {
   for (const path of [
     "/comp",
