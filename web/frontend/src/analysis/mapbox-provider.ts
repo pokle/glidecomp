@@ -665,7 +665,7 @@ export function createMapBoxProvider(
             'line-cap': 'round',
           },
           paint: {
-            'line-color': '#6366f1',
+            'line-color': '#f97316',
             'line-width': 2,
             'line-dasharray': [4, 4],
             'line-opacity': 0.8,
@@ -679,13 +679,13 @@ export function createMapBoxProvider(
           canvas.width = size;
           canvas.height = size;
           const ctx = canvas.getContext('2d')!;
-          // Draw arrow matching track line style: orange fill with black outline
+          // Orange arrow matching the optimized route line color
           ctx.beginPath();
           ctx.moveTo(size, size / 2);     // right tip
           ctx.lineTo(1, 1);               // top-left
           ctx.lineTo(1, size - 1);        // bottom-left
           ctx.closePath();
-          ctx.fillStyle = '#6366f1';
+          ctx.fillStyle = '#f97316';
           ctx.globalAlpha = 0.8;
           ctx.fill();
           const imageData = ctx.getImageData(0, 0, size, size);
@@ -974,7 +974,7 @@ export function createMapBoxProvider(
             'text-anchor': 'center',
           },
           paint: {
-            'text-color': '#6366f1',
+            'text-color': '#f97316',
             'text-halo-color': '#eeeeee',
             'text-halo-width': 2,
           },
@@ -990,7 +990,7 @@ export function createMapBoxProvider(
             'line-cap': 'round',
           },
           paint: {
-            'line-color': '#6366f1',
+            'line-color': '#f97316',
             'line-width': 2,
             'line-dasharray': [4, 4],
             'line-opacity': 0.8,
@@ -1009,7 +1009,7 @@ export function createMapBoxProvider(
             'text-offset': [0, -0.8],
           },
           paint: {
-            'text-color': '#6366f1',
+            'text-color': '#f97316',
             'text-halo-color': '#eeeeee',
             'text-halo-width': 2,
           },
@@ -1017,7 +1017,7 @@ export function createMapBoxProvider(
 
         // 9c. Landed-out routed distance-to-goal line (best-progress point →
         // un-reached turnpoints → goal). Solid amber so it reads as distinct
-        // from the dashed indigo task line it runs alongside.
+        // from the dashed orange task line it runs alongside.
         map.addLayer({
           id: 'best-progress-route-line',
           type: 'line',
