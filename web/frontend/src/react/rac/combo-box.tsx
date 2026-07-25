@@ -74,8 +74,15 @@ export function ComboBox<T extends object>({
         )}
       >
         <SearchIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+        {/* Same reasoning as SearchField (see the note there), and it matters
+            more here: this input already owns a suggestion popover, so a
+            browser autofill panel would fight it for the same screen space. */}
         <AriaInput
           placeholder={placeholder}
+          autoComplete="off"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           className="w-full min-w-0 bg-transparent py-1 text-base outline-none placeholder:text-muted-foreground md:text-sm"
         />
         {/* Deliberately no trailing toggle/clear button. react-aria's

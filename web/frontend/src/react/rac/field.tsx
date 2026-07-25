@@ -197,8 +197,21 @@ export function SearchField({
         )}
       >
         <SearchIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+        {/* A filter-the-page box is never a field to autofill or "correct".
+            Without autoComplete, Safari classifies the input from its
+            placeholder/label text and will offer Contacts — the waypoints
+            filter ("Filter by code, name or coordinates…") popped up the
+            address book over the grid. `off` is honoured for Contacts autofill
+            (the "Safari ignores autocomplete=off" caveat is about passwords).
+            autoCapitalize/autoCorrect/spellCheck are the iOS half: stop it
+            capitalising the first letter and autocorrecting codes like
+            CUDGWE. */}
         <AriaInput
           placeholder={placeholder}
+          autoComplete="off"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           className="w-full min-w-0 bg-transparent py-1 text-base outline-none placeholder:text-muted-foreground md:text-sm [&::-webkit-search-cancel-button]:hidden"
         />
         <AriaButton className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground outline-none group-data-empty:invisible data-hovered:text-foreground data-focus-visible:ring-2 data-focus-visible:ring-ring/50">
