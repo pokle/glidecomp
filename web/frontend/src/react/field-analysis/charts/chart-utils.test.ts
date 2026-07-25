@@ -4,6 +4,7 @@ import {
   extent,
   formatTickValue,
   linearScale,
+  loessTrend,
   niceTicks,
   percentileRank,
   quantileSorted,
@@ -171,5 +172,92 @@ describe("quantileSorted", () => {
   });
   it("empty input is NaN", () => {
     expect(quantileSorted([], 0.5)).toBeNaN();
+  });
+});
+
+describe("loessTrend", () => {
+  /** 0, 1, … n−1 */
+  const seq = (n: number) => Array.from({ length: n }, (_, i) => i);
+
+  it("recovers a straight line", () => {
+    const xs = seq(30);
+    const ys = xs.map((x) => 3 * x + 5);
+    const fit = loessTrend(xs, ys)!;
+    expect(fit).not.toBeNull();
+    for (const p of fit) expect(p.y).toBeCloseTo(3 * p.x + 5, 6);
+  });
+
+  it("spans exactly the data's x range, in ascending order", () => {
+    const xs = [4, 1, 9, 7, 2, 6, 3, 8];
+    const fit = loessTrend(xs, xs.map((x) => x * 2))!;
+    expect(fit[0].x).toBe(1);
+    expect(fit[fit.length - 1].x).toBe(9);
+    for (let i = 1; i < fit.length; i++) expect(fit[i].x).toBeGreaterThan(fit[i - 1].x);
+  });
+
+  it("follows a curve instead of straightening it", () => {
+    // A U-shape: a least-squares line through this is flat and says
+    // "no relationship"; the local fit has to bend.
+    const xs = seq(41).map((i) => i - 20);
+    const fit = loessTrend(xs, xs.map((x) => x * x))!;
+    const at = (x: number) => fit.reduce((a, b) => (Math.abs(b.x - x) < Math.abs(a.x - x) ? b : a));
+    expect(at(0).y).toBeLessThan(at(-20).y / 2);
+    expect(at(0).y).toBeLessThan(at(20).y / 2);
+  });
+
+  it("is not levered by a lone outlier", () => {
+    // One pilot 100× off the trend must bend the curve near itself, not tilt
+    // the whole line — the case a plain regression gets wrong.
+    const xs = seq(30);
+    const clean = loessTrend(xs, xs.map((x) => 2 * x))!;
+    const ys = xs.map((x) => (x === 15 ? 2000 : 2 * x));
+    const dirty = loessTrend(xs, ys)!;
+    expect(dirty[0].y).toBeCloseTo(clean[0].y, 1);
+    expect(dirty[dirty.length - 1].y).toBeCloseTo(clean[clean.length - 1].y, 1);
+  });
+
+  it("tracks a monotone trend downward as x rises", () => {
+    // The chart's own shape: better metric value → numerically better rank.
+    const xs = seq(24);
+    const fit = loessTrend(xs, xs.map((x) => 40 - 1.5 * x))!;
+    expect(fit[0].y).toBeGreaterThan(fit[fit.length - 1].y);
+  });
+
+  it("returns null when there is nothing to fit", () => {
+    expect(loessTrend([1, 2, 3], [1, 2, 3])).toBeNull(); // too few pairs
+    expect(loessTrend([5, 5, 5, 5, 5], [1, 2, 3, 4, 5])).toBeNull(); // no x spread
+    expect(loessTrend([], [])).toBeNull();
+  });
+
+  it("ignores non-finite pairs rather than poisoning the fit", () => {
+    const xs = [0, 1, 2, NaN, 3, 4, 5];
+    const ys = [0, 2, 4, 99, 6, Infinity, 10];
+    const fit = loessTrend(xs, ys)!;
+    expect(fit).not.toBeNull();
+    for (const p of fit) expect(Number.isFinite(p.y)).toBe(true);
+    expect(fit[fit.length - 1].y).toBeCloseTo(10, 6);
+  });
+
+  it("survives duplicated x values", () => {
+    const xs = [0, 0, 0, 1, 1, 2, 2, 2, 3];
+    const fit = loessTrend(xs, xs.map((x) => x * 4))!;
+    for (const p of fit) expect(Number.isFinite(p.y)).toBe(true);
+  });
+
+  it("samples a discrete metric only at the values it can take", () => {
+    // Count metrics (0, 1, 2, 3 thermals) sampled on an even grid draw a
+    // plateau and a wall between the integers, implying values that cannot
+    // exist. Sampled at the observed values it is one segment per gap.
+    const xs = [0, 0, 0, 0, 1, 1, 1, 2, 2, 3];
+    const fit = loessTrend(xs, [30, 28, 25, 22, 15, 13, 11, 6, 5, 2])!;
+    expect(fit.map((p) => p.x)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("falls back to an even grid when observations outnumber it", () => {
+    const xs = seq(200);
+    const fit = loessTrend(xs, xs.map((x) => -x), { steps: 20 })!;
+    expect(fit).toHaveLength(21);
+    expect(fit[0].x).toBe(0);
+    expect(fit[fit.length - 1].x).toBe(199);
   });
 });

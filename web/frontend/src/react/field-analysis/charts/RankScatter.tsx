@@ -9,6 +9,13 @@
  * Rank 1 renders at the TOP so "up is better" everywhere on the page. Hand-
  * rolled SVG, no chart library: see charts/chart-utils.ts for why.
  *
+ * Trend curve: a LOESS fit (chart-utils `loessTrend`) traces the shape the ρ
+ * is claiming — but ONLY where ρ clears its noise floor. A curve is a strong
+ * claim: the eye follows it and stops reading the dots, so drawing one
+ * through scatter that shuffled ranks reproduce would manufacture a finding.
+ * Where it is withheld the caption says why, rather than leaving a silent
+ * absence.
+ *
  * Labelling: the best/worst three pilots and the value extremes are named
  * permanently (selective direct labels); the focused dot is named in place
  * while focused (click, tap, or arrow keys); and an opt-in checkbox labels
@@ -35,6 +42,7 @@ import {
   extent,
   formatTickValue,
   linearScale,
+  loessTrend,
   niceTicks,
   spreadLabels,
 } from "./chart-utils";
@@ -53,6 +61,13 @@ interface ScatterPoint {
   value: number;
 }
 
+/** Where the drawn trend curve starts and ends, in ranks (already clamped to
+ * the rank axis and rounded). Null when no curve is drawn. */
+export interface TrendEnds {
+  startRank: number;
+  endRank: number;
+}
+
 /** The caption's statistics-in-words, shared with the accessible name.
  * Exported for tests. `excludedTopRanks` — top-3 leaderboard ranks among the
  * unplotted pilots — turns a silent absence into information: a ρ over a
@@ -63,6 +78,7 @@ export function captionText(
   metric: MetricReport,
   excluded: number,
   excludedTopRanks: number[] = [],
+  trend: TrendEnds | null = null,
 ): string {
   const c = metric.correlation;
   const parts: string[] = [];
@@ -98,6 +114,23 @@ export function captionText(
     }
   } else {
     parts.push("Too few usable values for a correlation — read the dots, not a trend.");
+  }
+  // The curve, and — just as important — why there isn't one. A curve fitted
+  // through dots whose ρ is indistinguishable from shuffled ranks would draw
+  // a shape out of luck and be believed, so the absence gets stated rather
+  // than left for the reader to notice.
+  if (trend) {
+    parts.push(
+      `The curve is a trend fitted through the dots: left to right it runs from about rank ${
+        trend.startRank
+      } to about rank ${trend.endRank}.`
+    );
+  } else if (c && (c.verdict === "within noise" || c.verdict === "n too small")) {
+    parts.push(
+      c.verdict === "n too small"
+        ? "No trend curve is drawn — too few pilots to fit one that would mean anything."
+        : "No trend curve is drawn — ρ does not clear the noise floor, so any curve would be following luck."
+    );
   }
   if (excluded > 0) {
     const notable =
@@ -140,6 +173,24 @@ export function RankScatter({
       .sort((a, b) => a.rank - b.rank);
   }, [metric, pilots]);
 
+  // The trend curve, in data space (value → rank) — memoised because it is
+  // real arithmetic and every hover re-renders this component.
+  //
+  // The noise floor is the gate: a curve is a strong claim (the eye follows
+  // it and stops reading the dots), so one is only drawn where ρ says there
+  // is a monotone relationship to follow. 'within noise' and 'n too small'
+  // get dots alone — a shape traced through scatter that shuffled ranks
+  // reproduce 5% of the time is an invitation to see a finding that isn't
+  // there. The caption says why it is missing (captionText).
+  const trend = useMemo(() => {
+    const c = metric.correlation;
+    if (!c || c.verdict === "within noise" || c.verdict === "n too small") return null;
+    return loessTrend(
+      points.map((p) => p.value),
+      points.map((p) => p.rank)
+    );
+  }, [metric.correlation, points]);
+
   const [focusIndex, setFocusIndex] = useState(0);
   const [focusedTrack, setFocusedTrack] = useState<string | null>(null);
   const [readout, setReadout] = useState<ScatterPoint | null>(null);
@@ -149,7 +200,24 @@ export function RankScatter({
   const { highlight, setHighlight } = usePilotHighlight();
 
   const excluded = pilots.length - points.length;
-  const caption = captionText(metric, excluded, notableExcludedRanks(pilots, metric.perPilot));
+  const maxRank = Math.max(...pilots.map((p) => p.rank), 1);
+  // Clamped into the rank axis: local linear regression extrapolates at the
+  // edges, and "rank 0.4" is not a thing that exists.
+  const trendRanks = trend?.map((p) => ({
+    x: p.x,
+    y: Math.min(maxRank, Math.max(1, p.y)),
+  }));
+  const caption = captionText(
+    metric,
+    excluded,
+    notableExcludedRanks(pilots, metric.perPilot),
+    trendRanks && trendRanks.length > 0
+      ? {
+          startRank: Math.round(trendRanks[0].y),
+          endRank: Math.round(trendRanks[trendRanks.length - 1].y),
+        }
+      : null
+  );
 
   if (points.length === 0) {
     return (
@@ -173,8 +241,12 @@ export function RankScatter({
 
   const xDomain = extent(points.map((p) => p.value))!;
   const x = linearScale(xDomain, [plot.left + 10, plot.right - 10]);
-  const maxRank = Math.max(...pilots.map((p) => p.rank), 1);
   const y = linearScale([1, maxRank], [plot.top + 8, plot.bottom - 8]);
+
+  const trendPath = trendRanks
+    ? `M${trendRanks.map((p) => `${x(p.x).toFixed(1)},${y(p.y).toFixed(1)}`).join("L")}`
+    : null;
+  const trendEnd = trendRanks?.[trendRanks.length - 1];
 
   const xTicks = niceTicks(xDomain, 5);
   // Rank ticks: always show 1 (it is the whole point of the axis), then
@@ -392,6 +464,58 @@ export function RankScatter({
             );
           })}
         </g>
+
+        {/* The trend curve LAST, over the dots and the names, and — unlike
+            every other mark here — with NO background casing. Both of the
+            obvious alternatives are worse: underneath, the pilot labels'
+            casing punches gaps through it and an interrupted line reads as a
+            dashed one (a different encoding entirely — projected, uncertain);
+            on top WITH a casing, it erases glyphs out of the names it
+            crosses, which in label-every-pilot mode is most of them. A bare
+            2px line crosses a letter or a dot without destroying either, and
+            ink-vs-series-colour keeps the two apart.
+
+            Foreground ink, NOT a chart colour: the curve is an annotation
+            over the one series, not a second series, and the same convention
+            the labels follow ("the dot carries identity") applies. It is also
+            the only choice that passes on both counts — --chart-3 sits at
+            2.2:1 on the light background, under the 3:1 non-text-contrast bar
+            (accessibility standard §3.1), and orange/blue is a colour-only
+            distinction where ink/colour is not.
+
+            aria-hidden: the caption states the trend in words. */}
+        {trendPath ? (
+          <path
+            aria-hidden
+            d={trendPath}
+            fill="none"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="stroke-foreground"
+          />
+        ) : null}
+
+        {/* Direct label rather than a legend box: with one curve, a legend
+            would be a whole extra element to explain a single line, and this
+            names it where the eye already is. It sits on the side of the
+            curve's end AWAY from rank 1, because the permanent top-3 names
+            live up there and the curve's better-ranked end usually points
+            straight at them. Drawn last, over both dots and pilot names. */}
+        {trendEnd ? (
+          <text
+            aria-hidden
+            x={x(trendEnd.x) - 6}
+            y={Math.min(
+              plot.bottom - 3,
+              Math.max(plot.top + 9, y(trendEnd.y) + (trendEnd.y < maxRank / 2 ? 15 : -9))
+            )}
+            textAnchor="end"
+            className="fill-current stroke-background text-[10px] font-medium text-foreground [paint-order:stroke] [stroke-width:3px]"
+          >
+            trend
+          </text>
+        ) : null}
       </svg>
 
       {onShowAllLabelsChange ? (

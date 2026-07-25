@@ -3,11 +3,15 @@ import { captionText } from "./RankScatter";
 import { notableExcludedRanks } from "../exclusions";
 import type { MetricReport, MetricCorrelation, MetricDirection } from "../types";
 
-function metric(direction: MetricDirection, rho: number | null): MetricReport {
+function metric(
+  direction: MetricDirection,
+  rho: number | null,
+  verdict: MetricCorrelation["verdict"] = "strong",
+): MetricReport {
   const correlation: MetricCorrelation | null =
     rho === null
       ? null
-      : { metricId: "test.metric", rho, absRho: Math.abs(rho), n: 20, verdict: "strong" };
+      : { metricId: "test.metric", rho, absRho: Math.abs(rho), n: 20, verdict };
   return {
     id: "test.metric",
     label: "Test metric",
@@ -67,6 +71,27 @@ describe("captionText", () => {
     expect(captionText(metric("higher", -0.6), 2)).toContain(
       "2 pilots have no value and are not plotted."
     );
+  });
+  it("states where a drawn trend curve starts and ends", () => {
+    expect(captionText(metric("lower", 0.65), 0, [], { startRank: 8, endRank: 38 })).toContain(
+      "left to right it runs from about rank 8 to about rank 38."
+    );
+  });
+  it("says why no curve is drawn when ρ is within noise", () => {
+    const text = captionText(metric("higher", -0.2, "within noise"), 0);
+    expect(text).toContain("No trend curve is drawn");
+    expect(text).toContain("does not clear the noise floor");
+  });
+  it("says why no curve is drawn when n is too small", () => {
+    expect(captionText(metric("higher", -0.9, "n too small"), 0)).toContain(
+      "too few pilots to fit one that would mean anything"
+    );
+  });
+  it("stays silent about the curve when one is drawn for a real correlation", () => {
+    // A trend was fitted and passed in — no "no curve" apology anywhere.
+    expect(
+      captionText(metric("higher", -0.6), 0, [], { startRank: 3, endRank: 17 })
+    ).not.toContain("No trend curve");
   });
   it("names top-ranked pilots among the excluded", () => {
     // The Corryong 2026 T1 case: gaggle.departure_winrate null for the #1
