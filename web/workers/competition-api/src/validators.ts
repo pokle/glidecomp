@@ -25,6 +25,10 @@ export function validated<T extends z.ZodType, Target extends keyof ValidationTa
 
 const MAX_TEXT = 128;
 
+/** Character cap on a task's weather notes. Room for a few paragraphs of
+ * debrief prose without letting the field become a document store. */
+export const MAX_WEATHER_NOTES = 4000;
+
 const pilotClassString = z.string().min(1).max(MAX_TEXT);
 
 const pilotClassesArray = z
@@ -376,4 +380,8 @@ export const updateTaskSchema = z.object({
     .refine((v) => !Number.isNaN(Date.parse(v)), "Must be an ISO 8601 datetime")
     .nullable()
     .optional(),
+  // The organizer's free-text account of the day's conditions — "overdeveloped
+  // by 2pm, glass off at 3". Longer than MAX_TEXT because this is prose, not a
+  // label; not a scoring input, so no format is imposed beyond a length cap.
+  weather_notes: z.string().max(MAX_WEATHER_NOTES).optional(),
 });

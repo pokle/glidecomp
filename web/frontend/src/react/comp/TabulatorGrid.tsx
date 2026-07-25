@@ -38,14 +38,70 @@
  *     ref, so a handler closing over current state keeps working without the
  *     grid being rebuilt. The set of event *names* is read once at build time,
  *     so keep the keys of `events` stable across renders.
+ *  5. **Editors don't autofill.** Every column gets `elementAttributes`
+ *     turning off autocomplete/autocapitalize/autocorrect/spellcheck on the
+ *     `<input>` Tabulator builds — see EDITOR_ELEMENT_ATTRIBUTES below.
  */
 import { useEffect, useRef, type RefObject } from "react";
 import type {
+  CellComponent,
   ColumnDefinition,
+  EditorParams,
   EventCallBackMethods,
   Options,
   Tabulator,
 } from "tabulator-tables";
+
+/**
+ * Forced onto every editor input Tabulator builds.
+ *
+ * Tabulator creates those `<input>`s itself, so no JSX can reach them, and
+ * left bare Safari classifies them from their surroundings and offers
+ * autofill: clicking any cell in the pilots grid popped up the user's saved
+ * email addresses over the table (that grid has an email column). A grid cell
+ * is never a field to autofill — it's already bound to a data field.
+ *
+ * `elementAttributes` is Tabulator's supported hook for this: a
+ * `SharedEditorParams` honoured by the input/number/textarea/list/… editors,
+ * copied onto the editor element with setAttribute.
+ */
+const EDITOR_ELEMENT_ATTRIBUTES = {
+  autocomplete: "off",
+  autocapitalize: "none",
+  autocorrect: "off",
+  spellcheck: "false",
+} as const;
+
+/**
+ * Merge the forced attributes into one column's editorParams, which Tabulator
+ * lets a column supply either as an object or as a per-cell function.
+ */
+function withEditorAttributes(params: EditorParams | undefined): EditorParams {
+  if (typeof params === "function") {
+    return (cell: CellComponent) => mergeAttributes(params(cell));
+  }
+  return mergeAttributes(params) as EditorParams;
+}
+
+/** Caller-supplied attributes win, so a column can still opt back in. */
+function mergeAttributes(params: object | undefined): Record<string, unknown> {
+  const existing = (params as { elementAttributes?: Record<string, unknown> } | undefined)
+    ?.elementAttributes;
+  return { ...params, elementAttributes: { ...EDITOR_ELEMENT_ATTRIBUTES, ...existing } };
+}
+
+/**
+ * Apply the editor attributes across a column tree (recursing through column
+ * groups). Columns without an editor get them too — the attributes are simply
+ * never read there, and that covers editors set via `columnDefaults`.
+ */
+function hardenColumns(columns: ColumnDefinition[]): ColumnDefinition[] {
+  return columns.map((column) => ({
+    ...column,
+    ...(column.columns ? { columns: hardenColumns(column.columns) } : {}),
+    editorParams: withEditorAttributes(column.editorParams),
+  }));
+}
 
 /**
  * `{ eventName: handler }`, typed against Tabulator's own event map — so
@@ -128,7 +184,7 @@ export function TabulatorGrid({
         // wrapper; any `options.layout` overrides it.
         layout: "fitColumns",
         ...build.options,
-        columns: build.initialColumns(),
+        columns: hardenColumns(build.initialColumns()),
         ...(rows ? { data: rows as Options["data"] } : {}),
       });
 

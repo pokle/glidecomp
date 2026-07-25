@@ -3,35 +3,93 @@
 import Base from "../layouts/Base.astro";
 import BackLink from "../components/BackLink.astro";
 
-// Simple "name — description" acknowledgement sections, in display order. The
-// "UI & Styling" section has a nested link so it stays inline below.
+// Simple "name — description (licence)" acknowledgement sections, in display
+// order. The licence label is the one the project itself publishes; keep it in
+// step with the dependency when it is upgraded. The "UI & Styling" section has
+// nested links so it stays hand-written below.
 const sections = [
   {
     heading: "Mapping & Geospatial",
     items: [
-      { href: "https://github.com/mapbox/mapbox-gl-js", name: "Mapbox GL JS", desc: " — Interactive vector maps" },
-      { href: "https://github.com/Turfjs/turf", name: "Turf.js", desc: " — Geospatial analysis (distance, bearing, bounding boxes)" },
-      { href: "https://github.com/peterqliu/threebox", name: "Threebox", desc: " — Three.js integration for Mapbox GL" },
+      {
+        href: "https://github.com/mapbox/mapbox-gl-js",
+        name: "Mapbox GL JS",
+        desc: " — Interactive vector maps, terrain elevation and satellite imagery",
+        lic: "Mapbox Terms of Service",
+      },
+      {
+        href: "https://www.openstreetmap.org/copyright",
+        name: "OpenStreetMap",
+        desc: " — The base map data behind the Mapbox styles, © OpenStreetMap contributors",
+        lic: "ODbL 1.0",
+      },
+      {
+        href: "https://github.com/Turfjs/turf",
+        name: "Turf.js",
+        desc: " — Geospatial analysis (distance, bearing, bounding boxes)",
+        lic: "MIT",
+      },
+      {
+        href: "https://github.com/peterqliu/threebox",
+        name: "Threebox",
+        desc: " — Three.js integration for Mapbox GL",
+        lic: "MIT",
+      },
+      {
+        href: "https://github.com/darkskyapp/tz-lookup",
+        name: "tz-lookup",
+        desc: " — Timezone from coordinates, so each task reads in its own local time. Its database is built from Evan Siroky's timezone-boundary-builder, itself derived from OpenStreetMap",
+        lic: "CC0 1.0",
+      },
     ],
   },
   {
     heading: "3D & Rendering",
-    items: [{ href: "https://github.com/mrdoob/three.js", name: "Three.js", desc: " — 3D graphics library" }],
+    items: [
+      { href: "https://github.com/mrdoob/three.js", name: "Three.js", desc: " — 3D graphics library", lic: "MIT" },
+    ],
+  },
+];
+
+// The tasks, tracks and official results that GlideComp replays for past
+// competitions, and the scoring specification it implements.
+const compData = [
+  {
+    href: "https://xc.highcloud.net",
+    name: "xc.highcloud.net",
+    desc: " — The AirScore instance the Australian competitions here were scored on, and the source of their tasks, track logs and official results. Those flights remain the work of the pilots who flew them and the organisers who ran the events",
+    lic: null,
+  },
+  {
+    href: "https://github.com/geoffwong/airscore",
+    name: "AirScore",
+    desc: " — The GAP scoring software behind that site. GlideComp's scoring is checked task by task against the results AirScore published, so a score here can be traced back to the one that was flown for",
+    lic: "GPL 2.0",
+  },
+  {
+    href: "https://www.fai.org/sites/default/files/civl/documents/sporting_code_s7_f_-_xc_scoring_2024.pdf",
+    name: "FAI / CIVL Sporting Code Section 7F",
+    desc: " — The GAP cross-country scoring specification that GlideComp implements and explains",
+    lic: null,
   },
 ];
 
 const backend = [
-  { href: "https://hono.dev", name: "Hono", desc: " — Web framework for Cloudflare Workers" },
-  { href: "https://www.better-auth.com", name: "Better Auth", desc: " — Authentication library" },
-  { href: "https://kysely.dev", name: "Kysely", desc: " — Type-safe SQL query builder" },
+  { href: "https://hono.dev", name: "Hono", desc: " — Web framework for Cloudflare Workers", lic: "MIT" },
+  { href: "https://www.better-auth.com", name: "Better Auth", desc: " — Authentication library", lic: "MIT" },
+  { href: "https://kysely.dev", name: "Kysely", desc: " — Type-safe SQL query builder, with kysely-d1 for Cloudflare D1", lic: "MIT" },
+  { href: "https://zod.dev", name: "Zod", desc: " — Schema validation for the API request bodies", lic: "MIT" },
+  { href: "https://sqids.org", name: "Sqids", desc: " — Short, non-sequential public ids for competitions and tasks", lic: "MIT" },
 ];
 
 const build = [
-  { href: "https://vite.dev", name: "Vite", desc: " — Build tool and dev server" },
-  { href: "https://astro.build", name: "Astro", desc: " — Static site builder for the content pages" },
-  { href: "https://www.typescriptlang.org", name: "TypeScript", desc: " — Typed JavaScript" },
-  { href: "https://bun.sh", name: "Bun", desc: " — JavaScript runtime and package manager" },
-  { href: "https://www.cloudflare.com", name: "Cloudflare", desc: " — Pages, Workers, and D1 hosting" },
+  { href: "https://vite.dev", name: "Vite", desc: " — Build tool and dev server", lic: "MIT" },
+  { href: "https://astro.build", name: "Astro", desc: " — Static site builder for the content pages", lic: "MIT" },
+  { href: "https://www.typescriptlang.org", name: "TypeScript", desc: " — Typed JavaScript", lic: "Apache 2.0" },
+  { href: "https://bun.sh", name: "Bun", desc: " — JavaScript runtime and package manager", lic: "MIT" },
+  { href: "https://vitest.dev", name: "Vitest", desc: " — Unit test runner for the engine and the workers", lic: "MIT" },
+  { href: "https://playwright.dev", name: "Playwright", desc: " — End-to-end browser tests", lic: "Apache 2.0" },
+  { href: "https://www.cloudflare.com", name: "Cloudflare", desc: " — Pages, Workers, D1 and R2 hosting", lic: null },
 ];
 ---
 
@@ -61,9 +119,10 @@ const build = [
         <p class="text-sm text-muted-foreground mt-2">— Tushar Pokle (Summer 2026)</p>
       </section>
 
-      <h2 class="text-xl font-semibold mb-4">About the tooling</h2>
+      <h2 class="text-xl font-semibold mb-4">Acknowledgements</h2>
       <p class="text-muted-foreground mb-6">
-        GlideComp would not have been possible without these libraries, tools and resources
+        GlideComp would not have been possible without these libraries, tools, data sources and
+        resources
       </p>
 
       {
@@ -77,6 +136,7 @@ const build = [
                     {item.name}
                   </a>
                   <span class="text-muted-foreground">{item.desc}</span>
+                  {item.lic && <span class="text-muted-foreground"> ({item.lic})</span>}
                 </li>
               ))}
             </ul>
@@ -85,19 +145,94 @@ const build = [
       }
 
       <section class="mb-10">
+        <h2 class="text-xl font-semibold mb-4">Competition Data</h2>
+        <p class="text-muted-foreground mb-4">
+          The past competitions on this site were not scored here first. They were flown at real
+          events, scored by their organisers, and published; GlideComp re-scores the same tracks so
+          it can show its working and be checked against the official result.
+        </p>
+        <ul class="space-y-3">
+          {
+            compData.map((item) => (
+              <li>
+                <a href={item.href} target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+                  {item.name}
+                </a>
+                <span class="text-muted-foreground">{item.desc}</span>
+                {item.lic && <span class="text-muted-foreground"> ({item.lic})</span>}
+              </li>
+            ))
+          }
+        </ul>
+      </section>
+
+      <section class="mb-10">
+        <h2 class="text-xl font-semibold mb-4">Weather Data</h2>
+        <p class="text-muted-foreground mb-4">
+          The conditions shown with each task's field analysis — wind through the day, cloud
+          cover, and how high the thermals went — come from an outside meteorological archive.
+          They are <strong class="font-medium text-foreground">modelled</strong> figures sampled
+          at a grid point near the task, not readings taken at launch, so the organizer's
+          weather notes on each task remain the local ground truth.
+        </p>
+        <ul class="space-y-3">
+          <li>
+            <a href="https://open-meteo.com" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              Open-Meteo
+            </a>
+            <span class="text-muted-foreground"> — Archived forecasts and historical weather, free and open, under </span>
+            <a
+              href="https://creativecommons.org/licenses/by/4.0/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="font-medium hover:underline"
+            >
+              CC BY 4.0
+            </a>
+          </li>
+          <li>
+            <a href="https://www.ecmwf.int" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              ECMWF
+            </a>
+            <span class="text-muted-foreground">
+              — The IFS forecast model, and the ERA5 reanalysis that covers older competitions,
+              produced for the
+            </span>
+            <a
+              href="https://climate.copernicus.eu"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="font-medium hover:underline"
+            >
+              Copernicus Climate Change Service
+            </a>
+          </li>
+        </ul>
+      </section>
+
+      <section class="mb-10">
         <h2 class="text-xl font-semibold mb-4">UI &amp; Styling</h2>
         <ul class="space-y-3">
           <li>
-            <a href="https://katex.org" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
-              KaTeX
+            <a href="https://react.dev" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              React
             </a>
-            <span class="text-muted-foreground"> — Fast math typesetting</span>
+            <span class="text-muted-foreground">
+              {" "}— The app itself, rendered with React DOM and routed with{" "}
+            </span>
+            <a href="https://reactrouter.com" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              React Router
+            </a>
+            <span class="text-muted-foreground"> (MIT)</span>
           </li>
           <li>
-            <a href="https://tailwindcss.com" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
-              Tailwind CSS
+            <a href="https://react-spectrum.adobe.com/react-aria/" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              React Aria Components
             </a>
-            <span class="text-muted-foreground"> — Utility-first CSS framework</span>
+            <span class="text-muted-foreground">
+              {" "}— Adobe's accessible component primitives, with @internationalized/date for
+              time zone–correct dates (Apache 2.0)
+            </span>
           </li>
           <li>
             <a href="https://ui.shadcn.com" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
@@ -107,12 +242,62 @@ const build = [
             <a href="https://base-ui.com" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
               Base UI
             </a>
+            <span class="text-muted-foreground"> (MIT)</span>
+          </li>
+          <li>
+            <a href="https://tabulator.info" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              Tabulator
+            </a>
+            <span class="text-muted-foreground"> — The editable pilot, task and results grids (MIT)</span>
+          </li>
+          <li>
+            <a href="https://lucide.dev" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              Lucide
+            </a>
+            <span class="text-muted-foreground"> — Icon set (ISC)</span>
+          </li>
+          <li>
+            <a href="https://sonner.emilkowal.ski" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              Sonner
+            </a>
+            <span class="text-muted-foreground"> — Toast notifications (MIT)</span>
+          </li>
+          <li>
+            <a href="https://tailwindcss.com" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              Tailwind CSS
+            </a>
+            <span class="text-muted-foreground">
+              {" "}— Utility-first CSS framework, with clsx, tailwind-merge, class-variance-authority
+              and tw-animate-css (MIT)
+            </span>
+          </li>
+          <li>
+            <a href="https://katex.org" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              KaTeX
+            </a>
+            <span class="text-muted-foreground"> — Fast math typesetting for the scoring formulas (MIT)</span>
+          </li>
+          <li>
+            <a href="https://github.com/guilhermerodz/input-otp" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              input-otp
+            </a>
+            <span class="text-muted-foreground"> — One-time-code field for sign-in (MIT), and </span>
+            <a href="https://github.com/zpao/qrcode.react" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              qrcode.react
+            </a>
+            <span class="text-muted-foreground"> for two-factor setup (ISC)</span>
           </li>
           <li>
             <a href="https://github.com/fontsource/fontsource" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
               Fontsource / Atkinson Hyperlegible Next
             </a>
-            <span class="text-muted-foreground"> — Self-hosted web font designed for readability</span>
+            <span class="text-muted-foreground">
+              {" "}— Self-hosted web font designed for readability, © the Atkinson Hyperlegible Next
+              Project Authors, under the{" "}
+            </span>
+            <a href="https://openfontlicense.org" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
+              SIL Open Font License 1.1
+            </a>
           </li>
         </ul>
       </section>
@@ -127,6 +312,7 @@ const build = [
                   {item.name}
                 </a>
                 <span class="text-muted-foreground">{item.desc}</span>
+                {item.lic && <span class="text-muted-foreground"> ({item.lic})</span>}
               </li>
             ))
           }
@@ -143,6 +329,7 @@ const build = [
                   {item.name}
                 </a>
                 <span class="text-muted-foreground">{item.desc}</span>
+                {item.lic && <span class="text-muted-foreground"> ({item.lic})</span>}
               </li>
             ))
           }

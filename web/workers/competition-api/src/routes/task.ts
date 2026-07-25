@@ -19,6 +19,14 @@ type HonoEnv = { Bindings: Env; Variables: Variables };
 
 const MAX_TASKS_PER_COMP = 50;
 
+/** First line (or 80 characters) of a block of prose, whitespace collapsed —
+ * enough for an audit reader to recognise the change without the log entry
+ * becoming the document. */
+function excerpt(text: string, max = 80): string {
+  const oneLine = text.replace(/\s+/g, " ").trim();
+  return oneLine.length <= max ? oneLine : `${oneLine.slice(0, max - 1)}…`;
+}
+
 /**
  * Validate a task's geometry against the competition's scoring format.
  *
@@ -221,7 +229,7 @@ export const taskRoutes = new Hono<HonoEnv>()
 
       const task = await c.env.DB.prepare(
         `SELECT task_id, comp_id, name, task_date, creation_date, xctsk,
-                stop_announcement_time
+                stop_announcement_time, weather_notes
          FROM task WHERE task_id = ? AND comp_id = ?`
       )
         .bind(taskId, compId)
@@ -253,6 +261,10 @@ export const taskRoutes = new Hono<HonoEnv>()
         creation_date: task.creation_date,
         xctsk: task.xctsk ? JSON.parse(task.xctsk as string) : null,
         stop_announcement_time: (task.stop_announcement_time as string | null) ?? null,
+        // Public: the organizer's account of the day's conditions is the
+        // ground truth pilots read the modelled weather and the field
+        // analysis against, so everyone who can see the task can see it.
+        weather_notes: (task.weather_notes as string | null) ?? "",
         pilot_classes: tc.results.map((r) => r.pilot_class),
         track_count: trackCount?.cnt ?? 0,
       });
@@ -274,7 +286,8 @@ export const taskRoutes = new Hono<HonoEnv>()
 
       // Verify task exists and belongs to comp; capture current state for audit
       const task = await c.env.DB.prepare(
-        `SELECT task_id, name, task_date, xctsk, stop_announcement_time
+        `SELECT task_id, name, task_date, xctsk, stop_announcement_time,
+                weather_notes
          FROM task WHERE task_id = ? AND comp_id = ?`
       )
         .bind(taskId, compId)
@@ -284,6 +297,7 @@ export const taskRoutes = new Hono<HonoEnv>()
           task_date: string;
           xctsk: string | null;
           stop_announcement_time: string | null;
+          weather_notes: string | null;
         }>();
 
       if (!task) {
@@ -366,6 +380,14 @@ export const taskRoutes = new Hono<HonoEnv>()
       if (newStopTime !== undefined) {
         updates.push("stop_announcement_time = ?");
         values.push(newStopTime);
+      }
+      // Weather notes. NOT a scoring input — prose about the day changes no
+      // score, so this deliberately does not set scoreInputsChanged below.
+      // It IS audit-logged, because it is published text attributed to the
+      // organizers and readers deserve to see when it changed.
+      if (body.weather_notes !== undefined) {
+        updates.push("weather_notes = ?");
+        values.push(body.weather_notes);
       }
 
       if (updates.length > 0) {
@@ -462,6 +484,24 @@ export const taskRoutes = new Hono<HonoEnv>()
         }
       }
 
+      // Weather notes are prose, so the audit line quotes an EXCERPT rather
+      // than the field: a 4000-character debrief pasted verbatim into the
+      // public audit log would bury every other entry around it.
+      if (
+        body.weather_notes !== undefined &&
+        body.weather_notes !== (task.weather_notes ?? "")
+      ) {
+        const had = (task.weather_notes ?? "").trim().length > 0;
+        const now = body.weather_notes.trim();
+        if (now.length === 0) {
+          auditChanges.push("Cleared the weather notes");
+        } else {
+          auditChanges.push(
+            `${had ? "Updated" : "Added"} the weather notes: "${excerpt(now)}"`
+          );
+        }
+      }
+
       if (scoreInputsChanged) {
         await bumpAndRevalidateScores(c, [taskId]);
       }
@@ -483,7 +523,7 @@ export const taskRoutes = new Hono<HonoEnv>()
       // Return updated task
       const updated = await c.env.DB.prepare(
         `SELECT task_id, comp_id, name, task_date, creation_date, xctsk,
-                stop_announcement_time
+                stop_announcement_time, weather_notes
          FROM task WHERE task_id = ?`
       )
         .bind(taskId)
@@ -506,6 +546,7 @@ export const taskRoutes = new Hono<HonoEnv>()
         xctsk: updated.xctsk ? JSON.parse(updated.xctsk as string) : null,
         stop_announcement_time:
           (updated.stop_announcement_time as string | null) ?? null,
+        weather_notes: (updated.weather_notes as string | null) ?? "",
         pilot_classes: tc.results.map((r) => r.pilot_class),
       });
     }
