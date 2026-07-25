@@ -56,6 +56,7 @@ import type {
 } from "../comp/types";
 import type { MapFocus } from "../comp/ScoreDetailMap";
 import { useInitialData } from "../lib/initial-data";
+import { useUser } from "../lib/user";
 import type { PilotScoreLoaderData } from "../loaders";
 
 // Lazy so mapbox (and its CSS) loads only with this page's map.
@@ -443,6 +444,17 @@ export function PilotScoreDetail() {
   const [mapExpanded, setMapExpanded] = useState(false);
   // Time scrubber: draw the track only up to this fix (null = whole flight).
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
+  // Deep-link into the standalone analysis viewer, which loads the whole
+  // field's tracks (this pilot pre-focused) with the full glide/thermal tools.
+  const analysisUrl = `/analysis?compId=${encodeURIComponent(
+    compId,
+  )}&taskId=${encodeURIComponent(taskId)}&pilotId=${encodeURIComponent(pilotId)}`;
+  // The analysis viewer is sign-in gated (it's the personal-library tool), so
+  // only offer the link to signed-in visitors — an anonymous reader of this
+  // public page would just hit the login wall. `user` is null during SSR and
+  // the first client paint (loading), so this stays hydration-safe: the button
+  // appears only after /api/auth/me resolves, matching TaskDetail's admin gate.
+  const { user } = useUser();
 
   // While the map is expanded to fill the viewport: Esc restores it, and the
   // page behind it must not scroll.
@@ -643,9 +655,24 @@ export function PilotScoreDetail() {
                 bestProgressRoute={data.bestProgressRoute}
               />
             </Suspense>
-            {/* Styled like the providers' own controls (white regardless of
-                theme) and kept clear of them: bottom-right, above the
-                attribution line. */}
+            {/* Map controls, styled like the providers' own controls (white
+                regardless of theme) and kept clear of them: bottom-right, above
+                the attribution line. The analysis link opens the full track in
+                the standalone analysis viewer (`/analysis?compId=…`), which
+                loads the whole field's tracks with the deeper glide/thermal
+                tooling. */}
+            {user != null ? (
+              <a
+                href={analysisUrl}
+                target="_blank"
+                rel="noopener"
+                title="Open full track in the analysis map"
+                aria-label="Open full track in the analysis map (opens in a new tab)"
+                className="absolute bottom-20 right-2 z-20 flex size-10 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md"
+              >
+                <AnalysisMapIcon />
+              </a>
+            ) : null}
             <button
               type="button"
               onClick={() => setMapExpanded((v) => !v)}
@@ -936,6 +963,29 @@ function MaximizeIcon() {
       <polyline points="9 21 3 21 3 15" />
       <line x1="21" y1="3" x2="14" y2="10" />
       <line x1="3" y1="21" x2="10" y2="14" />
+    </svg>
+  );
+}
+
+function AnalysisMapIcon() {
+  // A map/track glyph with an "open in new" arrow in the corner.
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 11V5l-6 2-4-2-7 3v13l7-3 4 2 2-.667" />
+      <path d="M10 5v13M7 3.5v13" />
+      <polyline points="16 14 21 14 21 19" />
+      <line x1="21" y1="14" x2="14" y2="21" />
     </svg>
   );
 }

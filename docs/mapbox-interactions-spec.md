@@ -67,11 +67,11 @@ When multiple tracks are loaded (competition mode), single-track layers are hidd
 ## Task
 
 - **Optimized route line**
-  - Dashed line: `#6366f1` (indigo), width 2, dash pattern `[4, 4]`, opacity 0.8
+  - Dashed line: `#f97316` (orange), width 2, dash pattern `[4, 4]`, opacity 0.8
   - Line join/cap: round
 
 - **Directional arrows on route**
-  - Canvas-drawn triangle icon 20x20, filled `#6366f1`, opacity 0.8
+  - Canvas-drawn triangle icon 20x20, filled `#f97316`, opacity 0.8
   - Placed along line every 40px symbol spacing, icon size 0.55
   - Rotation alignment: map
 
@@ -127,7 +127,7 @@ When multiple tracks are loaded (competition mode), single-track layers are hidd
 - **Segment distance labels**
   - Positioned at midpoint of each leg
   - Text size: 16, rotated to follow leg bearing (normalized so never upside-down)
-  - Color: `#6366f1` (indigo), halo: `#eeeeee`, 2px width
+  - Color: `#f97316` (orange), halo: `#eeeeee`, 2px width
   - Content: `"Leg N (X.Xkm)"`
 
 - **Interactions**
@@ -153,8 +153,8 @@ Loaded from a competition waypoint file (`.wpt` / `.cup` / `.csv`) so the route 
 
 Shown for open-distance tasks (single TAKEOFF turnpoint): one line per visible pilot from the point they exit the take-off cylinder to the furthest fix they reached — the geometry of the scored distance.
 
-- **Line** (`open-distance-line` layer): `#6366f1` (indigo), width 2, dash `[4, 4]`, opacity 0.8 — same style as the task route line
-- **Distance label** (`open-distance-labels` layer): the scored distance (e.g. `"42.3 km"`), placed along the line (`symbol-placement: line-center`, offset `[0, -0.8]`), text size 16, color `#6366f1`, halo `#eeeeee` 2px
+- **Line** (`open-distance-line` layer): `#f97316` (orange), width 2, dash `[4, 4]`, opacity 0.8 — same style as the task route line
+- **Distance label** (`open-distance-labels` layer): the scored distance (e.g. `"42.3 km"`), placed along the line (`symbol-placement: line-center`, offset `[0, -0.8]`), text size 16, color `#f97316`, halo `#eeeeee` 2px
 - Pilots who never leave the take-off cylinder score 0 and have no line
 - Set via `setOpenDistanceLines(lines)` / cleared via `clearOpenDistanceLines()`; re-applied on style reload
 - With multiple pilots selected, one line + label is drawn per selected pilot (Mapbox symbol collision hides overlapping labels)

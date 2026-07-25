@@ -376,9 +376,9 @@ The viewer draws the same optimised (shortest) task line as the 2D analysis map.
 edge, but the runtime has no lat/lon task (only the ENU manifest), so we run the
 optimiser in `packTracks()` and store the result pre-projected into ENU as
 `manifest.task.optimizedPath: {x,z}[]` (same `projX/projZ` as the turnpoints).
-`FlightScene.buildOptimizedPath()` then draws it as a flat `#6366f1` dashed
-`LineDashedMaterial` (call `computeLineDistances()` or the dash pattern is
-inert), with flat indigo arrowheads at each leg midpoint rotated by
+`FlightScene.buildOptimizedPath()` then draws it as a flat line in the
+regular-turnpoint amber (`regularTurnpointColor`, `0xfbbf24`/`0xb45309`), with
+flat amber chevron arrowheads at each leg midpoint rotated by
 `rotation.y = −atan2(dz, dx)` to show course direction (legs shorter than the
 arrow are skipped). It lives in the shared `FlightScene.group`, so both backends
 get it for free; `depthTest: false` keeps it over the terrain like the rings.

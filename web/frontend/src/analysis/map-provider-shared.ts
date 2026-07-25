@@ -27,7 +27,7 @@ export const GLIDE_LABEL_DETAILS_MIN_ZOOM = 13;
 
 export const TRACK_OUTLINE_COLOR = '#000000';
 export const HIGHLIGHT_COLOR = '#00ffff';
-export const TASK_COLOR = '#6366f1';
+export const TASK_COLOR = '#f97316';
 
 export const TURNPOINT_COLORS: Record<string, string> = {
   SSS: '#22c55e',
