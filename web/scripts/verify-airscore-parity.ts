@@ -28,9 +28,11 @@ import {
   parseXCTask,
   scoreTask,
   resolveCompGapParams,
+  assessTrackQuality,
   type GAPParameters,
   type PilotFlight,
 } from '@glidecomp/engine';
+import { timezoneForXctsk } from '@glidecomp/engine/timezone';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 /** Comp-folder root — override with GLIDECOMP_COMPS_DIR to verify comps in
@@ -65,11 +67,15 @@ interface TaskReport {
   max: number;
   flagged: boolean;
   note?: string;
+  /** Tracks a HARD data-quality check withheld from scoring, as the worker
+   * does — reported so a parity run says out loud what it dropped. */
+  excluded: { file: string; reasons: string }[];
 }
 
 function verifyTask(
   taskEntry: {
     dir: string;
+    date?: string;
     gap_params?: Partial<GAPParameters>;
     airscore_formula?: { formula?: string };
     formula_warnings?: string[];
@@ -77,6 +83,7 @@ function verifyTask(
   category: 'hg' | 'pg',
   compGapParams: Partial<GAPParameters> | undefined,
   root: string,
+  timezone: string | undefined,
 ): TaskReport | null {
   const dir = join(root, taskEntry.dir);
   const rawPath = join(dir, 'airscore-result-raw.json');
@@ -92,6 +99,7 @@ function verifyTask(
     mean: NaN,
     max: NaN,
     flagged: false,
+    excluded: [],
   };
   if (raw.task?.stopped) {
     report.note = 'stopped task — engine stop context not driven by this script; not verified';
@@ -99,14 +107,35 @@ function verifyTask(
   }
 
   const xctsk = parseXCTask(readFileSync(join(dir, 'task.xctsk'), 'utf-8'));
-  const pilots: PilotFlight[] = readdirSync(dir)
-    .filter((f) => f.toLowerCase().endsWith('.igc'))
-    .map((f) => ({
-      pilotName: surnameFromFilename(f),
-      trackFile: f,
-      fixes: parseIGC(readFileSync(join(dir, f), 'utf-8')).fixes,
-    }))
-    .filter((p) => p.fixes.length > 0);
+
+  // Mirror the worker's read path: a track a HARD data-quality check withholds
+  // is not scored at all (see competition-api scoring.ts). Without this the
+  // parity run would score a file the production path refuses, and diverge
+  // from both AirScore and our own app — the New Zealand track in Corryong
+  // Cup 2025 task 4 is the case that matters, and AirScore also gives it 0.
+  const qualityContext = {
+    task: xctsk,
+    taskDate: taskEntry.date,
+    timeZone: timezone,
+    category,
+  };
+  const pilots: PilotFlight[] = [];
+  for (const f of readdirSync(dir).filter((n) => n.toLowerCase().endsWith('.igc'))) {
+    const igc = parseIGC(readFileSync(join(dir, f), 'utf-8'));
+    if (igc.fixes.length === 0) continue;
+    const quality = assessTrackQuality(igc.fixes, igc.header, qualityContext);
+    if (quality.hardFailed) {
+      report.excluded.push({
+        file: f,
+        reasons: quality.findings
+          .filter((q) => q.severity === 'hard')
+          .map((q) => q.title)
+          .join('; '),
+      });
+      continue;
+    }
+    pilots.push({ pilotName: surnameFromFilename(f), trackFile: f, fixes: igc.fixes });
+  }
 
   // The same parameter resolution the seed → scorer path produces: task
   // overrides merged over the comp's mapped base, defaults filled per
@@ -177,11 +206,20 @@ function verifyComp(arg: string): boolean {
   }
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
   const category: 'hg' | 'pg' = manifest.category === 'pg' ? 'pg' : 'hg';
-  console.log(`\n=== ${manifest.name} (${slug}, ${category}) ===`);
+  // The comp's zone, derived from the first task's route exactly as the seed
+  // and the route-save path do — the "wrong day" check builds the task's LOCAL
+  // day in it.
+  const firstTask = manifest.tasks.find((t: { dir: string }) =>
+    existsSync(join(root, t.dir, 'task.xctsk')),
+  );
+  const timezone = firstTask
+    ? timezoneForXctsk(readFileSync(join(root, firstTask.dir, 'task.xctsk'), 'utf-8'))
+    : undefined;
+  console.log(`\n=== ${manifest.name} (${slug}, ${category}, ${timezone ?? 'no zone'}) ===`);
 
   let anyFlagged = false;
   for (const t of manifest.tasks) {
-    const r = verifyTask(t, category, manifest.gap_params, root);
+    const r = verifyTask(t, category, manifest.gap_params, root, timezone);
     if (!r) {
       console.log(`  ${t.dir}: no airscore-result-raw.json (curated fixture?) — skipped`);
       continue;
@@ -196,6 +234,11 @@ function verifyComp(arg: string): boolean {
         `mean |Δtotal| ${r.mean.toFixed(1)}, max ${r.max.toFixed(1)}${flag}`,
     );
     if (r.note) console.log(`      note: ${r.note}`);
+    // Never let an exclusion be silent: a parity number computed over a
+    // narrowed field has to say what it narrowed.
+    for (const e of r.excluded) {
+      console.log(`      excluded ${e.file}: ${e.reasons}`);
+    }
     for (const w of r.warnings) console.log(`      warning: ${w}`);
     anyFlagged ||= r.flagged;
   }

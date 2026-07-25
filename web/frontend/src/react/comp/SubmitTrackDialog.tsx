@@ -189,13 +189,35 @@ export function SubmitTrackDialog({
         return;
       }
 
-      const data = (await res.json()) as { replaced: boolean };
-      setStatus({
-        message: data.replaced
-          ? "Track replaced successfully"
-          : "Track uploaded successfully",
-        isError: false,
-      });
+      const data = (await res.json()) as {
+        replaced: boolean;
+        track_quality?: {
+          hard_failed: boolean;
+          findings: { title: string; detail: string }[];
+        };
+      };
+      const findings = data.track_quality?.findings ?? [];
+      const uploaded = data.replaced
+        ? "Track replaced successfully"
+        : "Track uploaded successfully";
+
+      if (findings.length > 0) {
+        // The upload succeeded — the file is stored either way — but the
+        // reader has to see WHY it may not score. Deliberately no auto-close:
+        // the dialog would take the warning away before it was read.
+        setStatus({
+          message: `${uploaded}, but ${
+            data.track_quality?.hard_failed
+              ? "it will not be scored"
+              : "it needs checking"
+          }. ${findings.map((f) => f.detail).join(" ")}`,
+          isError: data.track_quality?.hard_failed ?? false,
+        });
+        onUploaded();
+        return;
+      }
+
+      setStatus({ message: uploaded, isError: false });
       onUploaded();
       // Close after a brief delay so the user sees success
       setTimeout(() => onClose(), 1000);

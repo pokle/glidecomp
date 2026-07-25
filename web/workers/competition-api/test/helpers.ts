@@ -50,6 +50,17 @@ export async function createComp(
   return data.comp_id;
 }
 
+/**
+ * The day the bundled sample tracks were actually flown — Corryong Cup 2026
+ * task 1, which vitest.config.ts loads as SAMPLE_IGC_FILES/SAMPLE_TASK_XCTSK.
+ *
+ * The default MUST match those tracks' HFDTE. Since track-quality.ts, the task
+ * date is a scoring input: a task dated ten days off its own tracklogs is
+ * exactly the fault the data-quality checks exist to catch, and every scoring
+ * test would score a field of withheld pilots at zero.
+ */
+export const SAMPLE_TASK_DATE = "2026-01-05";
+
 /** Create a task in a comp and return its encoded ID. */
 export async function createTask(
   compId: string,
@@ -57,7 +68,7 @@ export async function createTask(
 ): Promise<string> {
   const res = await authRequest("POST", `/api/comp/${compId}/task`, {
     name: "Test Task",
-    task_date: "2026-01-15",
+    task_date: SAMPLE_TASK_DATE,
     pilot_classes: ["open"],
     ...overrides,
   });

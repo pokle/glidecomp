@@ -40,6 +40,7 @@ const STATIC_PATHS = [
   "/scoring/gap",
   "/scoring/open-distance",
   "/scoring/data-cleaning",
+  "/scoring/track-validity",
 ];
 
 export const onRequest: PagesFunction<Env> = async (context) => {

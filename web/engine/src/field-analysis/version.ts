@@ -88,4 +88,16 @@
 //     value changed; the bump rolls stored reports so they carry the new
 //     basis field on their next lazy revalidation. Consumers must tolerate
 //     its absence — a v10 row is served stale while it revalidates.
-export const FIELD_ANALYSIS_VERSION = 11;
+// v12: tracklogs that fail a HARD data-quality check (engine
+//     track-quality.ts) are excluded from the analysed field and listed in
+//     the report's basis with the reason, alongside the manual-flight and
+//     unreadable-track entries. Such a track corrupts far more than its own
+//     row: the hour-bucketed metrics and the 'day-timing' series work in
+//     ABSOLUTE instants, so one track ten days off its task stretched the
+//     shared day-profile axis from ~5 hours to 262 (the resample grid was
+//     already capped by MAX_GRID_HOURS, so the fault is in those metrics, not
+//     the grid — fix the right layer), and its air polluted the wind and
+//     working-band estimates. Every metric's n drops by the excluded pilots,
+//     so the correlations move; the bump rolls stored reports onto the new
+//     values on their next lazy revalidation.
+export const FIELD_ANALYSIS_VERSION = 12;

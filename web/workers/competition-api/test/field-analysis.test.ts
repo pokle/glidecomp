@@ -106,7 +106,7 @@ async function seedTask(
 
   const task = await env.DB.prepare(
     `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk)
-     VALUES (?, 'Task 1', '2026-01-15', ?, ?)`
+     VALUES (?, 'Task 1', '2026-01-05', ?, ?)`
   )
     .bind(compIdNum, now, env.SAMPLE_TASK_XCTSK)
     .run();
@@ -561,7 +561,7 @@ describe("comp-level aggregate", () => {
     // reported pending, not silently dropped from the comp page forever.
     const second = await env.DB.prepare(
       `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk)
-       VALUES (?, 'Task 2', '2026-01-16', '2026-01-01T00:00:00Z', ?)`
+       VALUES (?, 'Task 2', '2026-01-05', '2026-01-01T00:00:00Z', ?)`
     )
       .bind(t.compIdNum, env.SAMPLE_TASK_XCTSK)
       .run();
@@ -619,7 +619,7 @@ describe("comp-level aggregate", () => {
     // A second task in the same comp, left cold on purpose.
     const second = await env.DB.prepare(
       `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk)
-       VALUES (?, 'Task 2', '2026-01-16', '2026-01-01T00:00:00Z', ?)`
+       VALUES (?, 'Task 2', '2026-01-05', '2026-01-01T00:00:00Z', ?)`
     )
       .bind(t.compIdNum, env.SAMPLE_TASK_XCTSK)
       .run();

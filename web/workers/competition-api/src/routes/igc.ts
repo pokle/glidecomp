@@ -4,8 +4,13 @@ import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
-import { updatePenaltySchema, validated } from "../validators";
-import { parseIGC } from "@glidecomp/engine";
+import {
+  updatePenaltySchema,
+  trackQualityOverrideSchema,
+  validated,
+} from "../validators";
+import { parseIGC, parseXCTask, assessTrackQuality } from "@glidecomp/engine";
+import type { TrackQualityReport } from "@glidecomp/engine";
 import { audit } from "../audit";
 import { bumpAndRevalidateScores } from "../score-store";
 import { linkExistingRegistrations } from "../pilot-linker";
@@ -32,6 +37,88 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** The wire shape the upload routes return alongside the stored track. */
+export interface TrackQualityUploadResult {
+  hard_failed: boolean;
+  findings: { id: string; severity: string; title: string; detail: string }[];
+}
+
+/**
+ * Assess an uploaded tracklog against its task (engine track-quality.ts).
+ *
+ * Upload NEVER blocks on the result — this is not igc-validation.ts, which
+ * rejects (SEC-11 size/gzip guards) and returns 400. A data-quality finding is
+ * information: the file is kept, the flags are surfaced to the uploader and
+ * the scorekeeper, and a HARD verdict withholds the track from scoring on the
+ * read path, where an admin can overrule it (FAI S7A §4.4.6). Do not merge
+ * the two concerns.
+ *
+ * The verdict is deliberately NOT written to track_analysis here: this handler
+ * has no resolveTaskScoringConfig and duplicating that geometry hash is how
+ * the two paths drift. The bumpAndRevalidateScores this route already calls
+ * recomputes and caches it within seconds.
+ *
+ * Returns null when there is nothing to assess (no route saved yet, or an
+ * unparseable file — the latter is already handled downstream).
+ */
+async function assessUploadedTrack(
+  db: D1Database,
+  taskId: number,
+  igcText: string
+): Promise<TrackQualityReport | null> {
+  const row = await db
+    .prepare(
+      `SELECT t.xctsk, t.task_date, c.category, c.timezone
+       FROM task t JOIN comp c ON c.comp_id = t.comp_id
+       WHERE t.task_id = ?`
+    )
+    .bind(taskId)
+    .first<{
+      xctsk: string | null;
+      task_date: string;
+      category: string;
+      timezone: string | null;
+    }>();
+  if (!row) return null;
+
+  try {
+    const igc = parseIGC(igcText);
+    if (igc.fixes.length === 0) return null;
+    return assessTrackQuality(igc.fixes, igc.header, {
+      task: row.xctsk ? parseXCTask(row.xctsk) : undefined,
+      taskDate: row.task_date,
+      timeZone: row.timezone ?? undefined,
+      category: row.category === "pg" ? "pg" : "hg",
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** The wire form of a report, always present so the client has one shape. */
+function toUploadResult(report: TrackQualityReport | null): TrackQualityUploadResult {
+  return {
+    hard_failed: report?.hardFailed ?? false,
+    findings: (report?.findings ?? []).map((f) => ({
+      id: f.id,
+      severity: f.severity,
+      title: f.title,
+      detail: f.detail,
+    })),
+  };
+}
+
+/** The audit sentence for a flagged upload — the audit log is the public
+ * transparency record, so a silent flag is worse than a noisy one. */
+function qualityAuditLine(pilotName: string, report: TrackQualityReport): string | null {
+  if (report.findings.length === 0) return null;
+  const detail = report.findings.map((f) => `${f.title}: ${f.detail}`).join(" ");
+  return report.hardFailed
+    ? `Uploaded track for ${pilotName} was flagged and excluded from scoring — ${detail} ` +
+        `It scores 0 until a correct tracklog is uploaded or the scorekeeper accepts it.`
+    : `Uploaded track for ${pilotName} was flagged for review — ${detail} It is still scored.`;
 }
 
 /**
@@ -243,6 +330,9 @@ export const igcRoutes = new Hono<HonoEnv>()
         // Unparseable IGC — store null, scoring will skip it too
       }
 
+      // Data quality (FAI S7A §4.4.2). Never blocks the upload.
+      const quality = await assessUploadedTrack(c.env.DB, taskId, igcText);
+
       // Upload to R2 with gzip content-encoding
       await c.env.R2.put(r2Key, body, {
         httpMetadata: {
@@ -282,15 +372,30 @@ export const igcRoutes = new Hono<HonoEnv>()
           subject_name: user.name,
           description: `Replaced IGC for ${user.name} (${formatBytes(body.byteLength)})`,
         });
+        const qualityLine = quality && qualityAuditLine(user.name, quality);
+        if (qualityLine) {
+          await audit(c.env.DB, c.var.user, compId, {
+            subject_type: "track",
+            subject_id: existingTrack.task_track_id,
+            subject_name: user.name,
+            description: qualityLine,
+          });
+        }
 
-        await applyStatusOnTrackUpload(
-          c.env.DB,
-          user,
-          compId,
-          taskId,
-          compPilotId,
-          user.name
-        );
+        // A hard-failed file is not evidence that this pilot flew this task,
+        // so it must not stamp them "Landed" — and, critically, must not
+        // supersede an existing scorekeeper-entered manual flight, which
+        // would destroy a real result on the strength of a rejected upload.
+        if (!quality?.hardFailed) {
+          await applyStatusOnTrackUpload(
+            c.env.DB,
+            user,
+            compId,
+            taskId,
+            compPilotId,
+            user.name
+          );
+        }
 
         return c.json({
           task_track_id: encodeId(alphabet, existingTrack.task_track_id),
@@ -299,6 +404,7 @@ export const igcRoutes = new Hono<HonoEnv>()
           uploaded_at: now,
           file_size: body.byteLength,
           replaced: true,
+          track_quality: toUploadResult(quality),
         });
       }
 
@@ -328,15 +434,27 @@ export const igcRoutes = new Hono<HonoEnv>()
         subject_name: user.name,
         description: `Uploaded IGC for ${user.name} (${formatBytes(body.byteLength)})`,
       });
+      const qualityLine = quality && qualityAuditLine(user.name, quality);
+      if (qualityLine) {
+        await audit(c.env.DB, c.var.user, compId, {
+          subject_type: "track",
+          subject_id: newTrackId,
+          subject_name: user.name,
+          description: qualityLine,
+        });
+      }
 
-      await applyStatusOnTrackUpload(
-        c.env.DB,
-        user,
-        compId,
-        taskId,
-        compPilotId,
-        user.name
-      );
+      // See the note above: a hard-failed file must not claim the pilot flew.
+      if (!quality?.hardFailed) {
+        await applyStatusOnTrackUpload(
+          c.env.DB,
+          user,
+          compId,
+          taskId,
+          compPilotId,
+          user.name
+        );
+      }
 
       return c.json(
         {
@@ -346,6 +464,7 @@ export const igcRoutes = new Hono<HonoEnv>()
           uploaded_at: now,
           file_size: body.byteLength,
           replaced: false,
+          track_quality: toUploadResult(quality),
         },
         201
       );
@@ -493,6 +612,9 @@ export const igcRoutes = new Hono<HonoEnv>()
         // Ignore — store null
       }
 
+      // Data quality (FAI S7A §4.4.2). Never blocks the upload.
+      const quality = await assessUploadedTrack(c.env.DB, taskId, igcText);
+
       await c.env.R2.put(r2Key, body, {
         httpMetadata: {
           contentType: "application/octet-stream",
@@ -529,15 +651,28 @@ export const igcRoutes = new Hono<HonoEnv>()
           subject_name: targetPilotName,
           description: `Replaced IGC for ${targetPilotName} on behalf (${formatBytes(body.byteLength)})`,
         });
+        const qualityLine = quality && qualityAuditLine(targetPilotName, quality);
+        if (qualityLine) {
+          await audit(c.env.DB, c.var.user, compId, {
+            subject_type: "track",
+            subject_id: existingTrack.task_track_id,
+            subject_name: targetPilotName,
+            description: qualityLine,
+          });
+        }
 
-        await applyStatusOnTrackUpload(
-          c.env.DB,
-          user,
-          compId,
-          taskId,
-          compPilotId,
-          targetPilotName
-        );
+        // See the note in the self-upload route: a hard-failed file must not
+        // stamp the pilot "Landed" or supersede a manual flight.
+        if (!quality?.hardFailed) {
+          await applyStatusOnTrackUpload(
+            c.env.DB,
+            user,
+            compId,
+            taskId,
+            compPilotId,
+            targetPilotName
+          );
+        }
 
         return c.json({
           task_track_id: encodeId(alphabet, existingTrack.task_track_id),
@@ -546,6 +681,7 @@ export const igcRoutes = new Hono<HonoEnv>()
           uploaded_at: now,
           file_size: body.byteLength,
           replaced: true,
+          track_quality: toUploadResult(quality),
         });
       }
 
@@ -574,15 +710,27 @@ export const igcRoutes = new Hono<HonoEnv>()
         subject_name: targetPilotName,
         description: `Uploaded IGC for ${targetPilotName} on behalf (${formatBytes(body.byteLength)})`,
       });
+      const qualityLine = quality && qualityAuditLine(targetPilotName, quality);
+      if (qualityLine) {
+        await audit(c.env.DB, c.var.user, compId, {
+          subject_type: "track",
+          subject_id: newTrackId,
+          subject_name: targetPilotName,
+          description: qualityLine,
+        });
+      }
 
-      await applyStatusOnTrackUpload(
-        c.env.DB,
-        user,
-        compId,
-        taskId,
-        compPilotId,
-        targetPilotName
-      );
+      // See the note in the self-upload route.
+      if (!quality?.hardFailed) {
+        await applyStatusOnTrackUpload(
+          c.env.DB,
+          user,
+          compId,
+          taskId,
+          compPilotId,
+          targetPilotName
+        );
+      }
 
       return c.json(
         {
@@ -592,6 +740,7 @@ export const igcRoutes = new Hono<HonoEnv>()
           uploaded_at: now,
           file_size: body.byteLength,
           replaced: false,
+          track_quality: toUploadResult(quality),
         },
         201
       );
@@ -820,6 +969,68 @@ export const igcRoutes = new Hono<HonoEnv>()
       });
 
       return c.json({ success: true });
+    }
+  )
+
+  // ── PATCH …/igc/:comp_pilot_id/quality-override ── Scorekeeper's ruling on
+  // a tracklog that an automatic data-quality check withheld from scoring.
+  //
+  // FAI S7A §4.4.6 (Rejection of Track Log) makes this the ORGANISER's
+  // judgement, not the software's — the automatic verdict is a default, and
+  // this is how a scorekeeper overrules it. Setting the override scores and
+  // analyses the track normally; its findings still show on the pilot's page.
+  .patch(
+    "/api/comp/:comp_id/task/:task_id/igc/:comp_pilot_id/quality-override",
+    requireAuth,
+    sqidsMiddleware,
+    requireCompAdmin,
+    validated("json", trackQualityOverrideSchema),
+    async (c) => {
+      const compId = c.var.ids.comp_id!;
+      const taskId = c.var.ids.task_id!;
+      const compPilotId = c.var.ids.comp_pilot_id!;
+      const { quality_override } = c.req.valid("json");
+
+      const track = await c.env.DB.prepare(
+        `SELECT tt.task_track_id, tt.quality_override AS old_override,
+                cp.registered_pilot_name
+         FROM task_track tt
+         JOIN task t ON tt.task_id = t.task_id
+         JOIN comp_pilot cp ON tt.comp_pilot_id = cp.comp_pilot_id
+         WHERE tt.task_id = ? AND tt.comp_pilot_id = ? AND t.comp_id = ?
+           AND tt.active = 1`
+      )
+        .bind(taskId, compPilotId, compId)
+        .first<{
+          task_track_id: number;
+          old_override: number;
+          registered_pilot_name: string;
+        }>();
+
+      if (!track) {
+        return c.json({ error: "Track not found" }, 404);
+      }
+
+      await c.env.DB.prepare(
+        "UPDATE task_track SET quality_override = ? WHERE task_track_id = ?"
+      )
+        .bind(quality_override ? 1 : 0, track.task_track_id)
+        .run();
+
+      await bumpAndRevalidateScores(c, [taskId]);
+
+      await audit(c.env.DB, c.var.user, compId, {
+        subject_type: "track",
+        subject_id: track.task_track_id,
+        subject_name: track.registered_pilot_name,
+        description: quality_override
+          ? `Accepted ${track.registered_pilot_name}'s tracklog despite a failed ` +
+            `data-quality check — it is scored and analysed normally (FAI S7A §4.4.6)`
+          : `Withdrew the data-quality acceptance of ${track.registered_pilot_name}'s ` +
+            `tracklog — it returns to being withheld from scoring`,
+      });
+
+      return c.json({ success: true, quality_override });
     }
   )
 
