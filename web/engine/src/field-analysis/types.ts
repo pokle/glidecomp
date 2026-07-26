@@ -334,7 +334,12 @@ export interface MetricReport {
 }
 
 /**
- * How the field's airborne time divided between the three flight phases.
+ * How the field's airborne TIME divided between the three flight phases.
+ *
+ * Named for the measure, not the partition: a "phase split" over a set of
+ * flights could as easily be a split of distance, and on a page full of
+ * distance-derived metrics that ambiguity is live. Percentages here are
+ * always seconds over seconds.
  *
  * This replaced the old `phaseCoveragePct` fact, which was 100% on every task
  * by construction: `partitionPhases` tiles takeoff→landing with no gaps and no
@@ -343,7 +348,7 @@ export interface MetricReport {
  * split moves — a booming day is mostly glide, a broken one is mostly search —
  * so it characterises the conditions the metrics below were measured in.
  */
-export interface FieldPhaseSplit {
+export interface FieldAirtimeSplit {
   /** Percentages of `airborneSeconds`; sum to 100. */
   climbPct: number;
   glidePct: number;
@@ -366,11 +371,22 @@ export interface FieldAnalysisBasis {
   workingBandCeiling: number;
   workingBandFallback: boolean;
   /**
-   * Optional so reports stored before FIELD_ANALYSIS_VERSION 11 still parse —
-   * those carry the retired `phaseCoveragePct` instead, and a stale row is
-   * served while it revalidates, so consumers must render without this.
+   * Optional so reports stored before FIELD_ANALYSIS_VERSION 13 still parse —
+   * those carry the retired `phaseCoveragePct` (≤ 10) or the same data under
+   * its old name `phaseSplit` (11–12). A stale row is served while it
+   * revalidates, so consumers must render without this.
    */
-  phaseSplit?: FieldPhaseSplit;
+  airtimeSplit?: FieldAirtimeSplit;
+  /**
+   * When the field was flying: first takeoff → last landing across the
+   * analysed pilots, as ISO instants. The CONSUMER renders the zone (comp
+   * time on the web, task-local on the CLI) — same rule as {@link ReportCell},
+   * the engine never bakes one in.
+   *
+   * Optional: added in FIELD_ANALYSIS_VERSION 14, and stored reports from
+   * before it are served stale while they revalidate.
+   */
+  analysisWindow?: { from: string; to: string };
 }
 
 export interface FieldAnalysisReport {

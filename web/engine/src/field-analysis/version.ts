@@ -100,4 +100,21 @@
 //     working-band estimates. Every metric's n drops by the excluded pilots,
 //     so the correlations move; the bump rolls stored reports onto the new
 //     values on their next lazy revalidation.
-export const FIELD_ANALYSIS_VERSION = 12;
+// v13: the v11 basis field is renamed `phaseSplit` → `airtimeSplit` (type
+//     FieldPhaseSplit → FieldAirtimeSplit), and both surfaces label it
+//     "airtime split" with gerund phase names ("38% climbing"). "Phase" named
+//     the partition rather than the measure, so nothing said the percentages
+//     were of TIME — on a page this full of distance-derived metrics, a split
+//     of distance is an equally plausible reading. No value changed; the bump
+//     rolls stored reports onto the new field name, and v11/v12 rows render
+//     without the split until they revalidate.
+// v14: the basis gains `analysisWindow` (first takeoff → last landing, ISO
+//     instants, zone rendered by the consumer) and both surfaces pair it with
+//     the airtime total: "82 h (13:05–18:40 AEDT)". A bare total can't say
+//     whether 80 hours was a long day or a crowded one. The grid step moves
+//     out of the UI's basis box to the metric glossary — it is fixed at 10 s
+//     for every task and comp, so it was permanent furniture saying nothing,
+//     but it is still part of how the numbers were made and so still stated.
+//     No metric value changed; the bump rolls stored reports so they gain the
+//     window on their next lazy revalidation.
+export const FIELD_ANALYSIS_VERSION = 14;

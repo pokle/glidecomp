@@ -24,7 +24,7 @@ export type {
   MetricCorrelation,
   MetricReport,
   FieldAnalysisBasis,
-  FieldPhaseSplit,
+  FieldAirtimeSplit,
   FieldAnalysisReport,
   CompTaskResult,
   CompMetricAggregate,

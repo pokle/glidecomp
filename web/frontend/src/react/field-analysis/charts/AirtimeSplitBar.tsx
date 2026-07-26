@@ -1,12 +1,19 @@
 /**
- * The field's airborne time as one 100% stacked bar: climb / glide / search.
+ * The field's airborne time as one 100% stacked bar: climbing / gliding /
+ * searching.
  *
  * This replaced the "Phase coverage" fact, which read 100% on every task
  * because `partitionPhases` tiles takeoff→landing exactly — a number that
  * restated its own invariant. The split actually moves with the day: a strong
- * day runs glide-heavy, a broken one piles up search (circling that never
+ * day runs glide-heavy, a broken one piles up searching (circling that never
  * became a climb, wandering, sink-dodging), and that is the context every
  * metric below was measured in.
+ *
+ * "Airtime", and gerunds, on purpose. Nothing about "phase split" said the
+ * percentages were of TIME, and this page is otherwise full of distance —
+ * a reader could fairly take it for a split of kilometres. Gerunds close the
+ * same gap one level down: "38% climb" can be heard as a count of climbs,
+ * "38% climbing" can only be time spent.
  *
  * The bar is aria-hidden decoration — the percentages beside it are the
  * accessible and exact reading, which also satisfies the direct-labelling
@@ -14,20 +21,20 @@
  * band. Colours are the shared --chart-N tokens in fixed order, so a phase
  * keeps its hue across every chart on the page.
  */
-import { roundPercentagesToHundred, type FieldPhaseSplit } from "@glidecomp/engine";
+import { roundPercentagesToHundred, type FieldAirtimeSplit } from "@glidecomp/engine";
 
 type Slice = { label: string; pct: number; fill: string; dot: string };
 
-export function PhaseSplitBar({ split }: { split: FieldPhaseSplit }) {
+export function AirtimeSplitBar({ split }: { split: FieldAirtimeSplit }) {
   const [climb, glide, search] = roundPercentagesToHundred([
     split.climbPct,
     split.glidePct,
     split.searchPct,
   ]);
   const slices: Slice[] = [
-    { label: "climb", pct: climb, fill: "bg-chart-1", dot: "bg-chart-1" },
-    { label: "glide", pct: glide, fill: "bg-chart-2", dot: "bg-chart-2" },
-    { label: "search", pct: search, fill: "bg-chart-3", dot: "bg-chart-3" },
+    { label: "climbing", pct: climb, fill: "bg-chart-1", dot: "bg-chart-1" },
+    { label: "gliding", pct: glide, fill: "bg-chart-2", dot: "bg-chart-2" },
+    { label: "searching", pct: search, fill: "bg-chart-3", dot: "bg-chart-3" },
   ];
 
   return (

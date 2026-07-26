@@ -35,10 +35,19 @@ export function glossaryEntryId(metricId: string): string {
 export function MetricGlossary({
   entries,
   intro = "How every metric on this page is measured. On screen, the ⓘ next to a metric opens the same description in place; in print, this section is the reference for all of them.",
+  method,
 }: {
   entries: GlossaryEntry[];
   /** The line under the heading — override on pages without ⓘ popovers. */
   intro?: string;
+  /**
+   * Method notes that apply to every metric rather than to one — the shared
+   * resampling grid, say. They live here, at the foot of the reference, and
+   * not in the basis box: constant across every task and comp, they are worth
+   * stating once where a reader has come looking for how a number was made,
+   * and not worth a permanent tile up top.
+   */
+  method?: React.ReactNode;
 }) {
   if (entries.length === 0) return null;
 
@@ -98,6 +107,15 @@ export function MetricGlossary({
           </div>
         )
       )}
+
+      {method ? (
+        <div className="break-inside-avoid border-t pt-3">
+          <h3 className="text-sm font-semibold text-muted-foreground">
+            How the field is compared
+          </h3>
+          <p className="mt-1 text-sm text-foreground/90">{method}</p>
+        </div>
+      ) : null}
     </section>
   );
 }

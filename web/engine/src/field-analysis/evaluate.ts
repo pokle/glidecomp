@@ -16,7 +16,7 @@ import type {
   FieldAnalysisBasis,
   FieldAnalysisReport,
   FieldContext,
-  FieldPhaseSplit,
+  FieldAirtimeSplit,
   MetricComputer,
   MetricCorrelation,
   MetricOutput,
@@ -149,7 +149,7 @@ function correlate(
  * landed after ten minutes is ten minutes of evidence about it, not an equal
  * vote with someone who flew for three hours.
  */
-function buildPhaseSplit(field: FieldContext): FieldPhaseSplit {
+function buildAirtimeSplit(field: FieldContext): FieldAirtimeSplit {
   const seconds: Record<FlightPhase, number> = { climb: 0, glide: 0, search: 0 };
   for (const p of field.pilots) {
     for (const ph of p.phases) seconds[ph.phase] += ph.durationSeconds;
@@ -164,7 +164,28 @@ function buildPhaseSplit(field: FieldContext): FieldPhaseSplit {
   };
 }
 
+/**
+ * First takeoff → last landing across the analysed pilots.
+ *
+ * The pair the airtime total needs to mean anything: 80 hours over 30 pilots
+ * is a long day or a crowded one, and only the window says which. Null when no
+ * pilot has a usable flight window (every pilot's phases are empty too, so the
+ * whole basis is degenerate).
+ */
+function buildAnalysisWindow(field: FieldContext): { from: string; to: string } | undefined {
+  let from = Infinity;
+  let to = -Infinity;
+  for (const p of field.pilots) {
+    if (p.landingIndex <= p.takeoffIndex) continue;
+    from = Math.min(from, p.fixes[p.takeoffIndex].time.getTime());
+    to = Math.max(to, p.fixes[p.landingIndex].time.getTime());
+  }
+  if (!isFinite(from) || !isFinite(to)) return undefined;
+  return { from: new Date(from).toISOString(), to: new Date(to).toISOString() };
+}
+
 function buildBasis(field: FieldContext): FieldAnalysisBasis {
+  const analysisWindow = buildAnalysisWindow(field);
   return {
     pilotCount: field.pilots.length,
     gridStepSeconds: field.grid.stepSeconds,
@@ -173,6 +194,7 @@ function buildBasis(field: FieldContext): FieldAnalysisBasis {
     workingBandFloor: field.workingBand.floorMeters,
     workingBandCeiling: field.workingBand.ceilingMeters,
     workingBandFallback: field.workingBand.usedFallback,
-    phaseSplit: buildPhaseSplit(field),
+    airtimeSplit: buildAirtimeSplit(field),
+    ...(analysisWindow ? { analysisWindow } : {}),
   };
 }
