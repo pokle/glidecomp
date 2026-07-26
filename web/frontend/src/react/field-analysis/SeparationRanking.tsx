@@ -20,6 +20,7 @@ import { DivergingMeter, ProportionMeter } from "@/react/rac/meter";
 import { Badge } from "@/react/rac/badge";
 import { cn } from "@/react/lib/utils";
 import { MetricExplanation } from "./MetricExplanation";
+import { verdictWords } from "./units";
 import { MetricDetailPanel } from "./charts/MetricDetailPanel";
 import {
   FAMILY_LABELS,
@@ -61,8 +62,8 @@ export function bestAbsRho(metrics: MetricReport[]): number | null {
   return values.length > 0 ? Math.max(...values) : null;
 }
 
-/** Shared verdict chip (also used by the comp page). "within noise" and
- * "n too small" deliberately wear the quietest style — they are warnings
+/** Shared verdict chip (also used by the comp page). "could be chance" and
+ * "too few pilots" deliberately wear the quietest style — they are warnings
  * that the number may be luck, not findings. */
 export function VerdictBadge({ correlation }: { correlation: MetricCorrelation }) {
   const variant =
@@ -71,20 +72,24 @@ export function VerdictBadge({ correlation }: { correlation: MetricCorrelation }
       : correlation.verdict === "moderate"
         ? "secondary"
         : "outline";
-  return <Badge variant={variant}>{correlation.verdict}</Badge>;
+  return <Badge variant={variant}>{verdictWords(correlation.verdict)}</Badge>;
 }
 
-/** The one-sentence basis for every verdict badge — rendered under both the
- * task ranking and the comp aggregate so the thresholds are never undefined
- * jargon. */
+/** What every verdict chip means, in the thresholds behind it — rendered
+ * under both the task ranking and the comp aggregate. The chips read as plain
+ * English ("could be chance"); this is where the statistics they stand for are
+ * spelled out, so the plain words are never the whole story a curious reader
+ * can get. */
 export function VerdictLegend() {
   return (
     <p className="text-xs text-muted-foreground">
-      Verdicts: <strong>strong</strong> |ρ| ≥ 0.5, <strong>moderate</strong> ≥ 0.3,{" "}
-      <strong>weak</strong> below — but only after clearing the noise floor for that
-      metric's n. <strong>within noise</strong> means shuffled ranks produce a
-      coefficient that size more than 5% of the time, so it is indistinguishable from
-      luck whatever its magnitude.
+      <strong>clear pattern</strong> is |ρ| ≥ 0.5, <strong>some pattern</strong> ≥ 0.3
+      and <strong>faint pattern</strong> below — each only once |ρ| clears the noise
+      floor for that metric's n. <strong>could be chance</strong> (in the statistics:
+      within noise) means shuffled ranks produce a coefficient that size more than 5%
+      of the time, so it is indistinguishable from luck whatever its magnitude.{" "}
+      <strong>too few pilots</strong> is fewer than {MIN_CORRELATION_N} pilots with a
+      value — not enough to tell either way.
     </p>
   );
 }
@@ -143,8 +148,12 @@ export function SeparationRanking({
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        Each metric's Spearman correlation against the published rank. Rank 1
-        is best, so a metric where more is better shows a{" "}
+        {/* Lead with the question the table answers, not with the statistic
+            that answers it — the column names promise a reading ("what it
+            means"), so the intro has to say a reading of WHAT. */}
+        Which behaviours went with better placings, and how much to trust each
+        one. Every row correlates one metric against the published rank
+        (Spearman ρ); rank 1 is best, so a metric where more is better shows a{" "}
         <strong>negative</strong> ρ. Bigger bars mean the metric separated the
         field more sharply on this task, and{" "}
         <strong>pilots measured</strong> is how much of the analysed field the
@@ -287,8 +296,8 @@ function RankingTable({
             replaced were named "ρ" and "n", symbols a screen reader can only
             spell out. "Strength" and "Pilots measured" say themselves, and an
             aria-label would override the visible name for no gain. */}
-        <Column className="w-56">Strength</Column>
-        <Column className="w-28">Verdict</Column>
+        <Column className="w-48">Strength</Column>
+        <Column className="w-32">What it means</Column>
         <Column className="w-36">Pilots measured</Column>
       </TableHeader>
       <TableBody>
@@ -387,7 +396,7 @@ function StrongMetricPrintCharts({
   return (
     <div className="hidden print:block print:break-before-page">
       <h3 className="text-base font-semibold">
-        Metrics with a strong verdict, plotted against rank
+        Metrics with a clear pattern, plotted against rank
       </h3>
       {strong.map(({ metric }, i) => {
         const full = metrics.find((m) => m.id === metric.id);

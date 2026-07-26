@@ -11,7 +11,8 @@
  * Marker vocabulary:
  *  - filled dot: an informative ρ (cleared its task's noise floor) — these
  *    are the dots that vote on sign consistency;
- *  - hollow dot off the line: a ρ within noise for its n — positioned
+ *  - hollow dot off the line: a ρ within noise for its n ("could be chance"
+ *    in the chip vocabulary) — positioned
  *    honestly, but not evidence of a direction;
  *  - hollow marker ON the zero line: no ρ at all — never silently skipped,
  *    or a 5-dot row over a 6-task comp would misrepresent coverage.
@@ -43,7 +44,7 @@ export function RhoSparkline({
     .map((rho, i) => {
       const name = taskLabels[i] ?? `task ${i + 1}`;
       if (rho === null) return `${name} not applicable`;
-      const noise = perTaskInformative?.[i] === false ? " (within noise)" : "";
+      const noise = perTaskInformative?.[i] === false ? " (could be chance)" : "";
       return `${name} ${rho.toFixed(2)}${noise}`;
     })
     .join(", ")}`;

@@ -327,8 +327,8 @@ export function CompFieldAnalysis() {
               mean |ρ| keeps their per-day power visible; a large gap between
               the two means the payoff depended on the day.{" "}
               <strong>Consistency</strong> counts only tasks whose |ρ| cleared
-              their noise floor (the filled sparkline dots; hollow = within
-              noise): − means larger values went with better ranks. A split
+              their noise floor (the filled sparkline dots; hollow = could be
+              chance): − means larger values went with better ranks. A split
               is a finding — the payoff depended on the day — not a defect.
             </p>
             <VerdictLegend />
@@ -455,7 +455,7 @@ function SeparationTable({
         <Column className="w-16 text-right" aria-label="n, pilots in the comp-level correlation">
           n
         </Column>
-        <Column className="w-28">Verdict</Column>
+        <Column className="w-32">What it means</Column>
       </TableHeader>
       <TableBody>
         {metrics.map((m) => (

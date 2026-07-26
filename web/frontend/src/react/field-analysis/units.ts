@@ -9,6 +9,7 @@
  */
 import type { UnitPreferences } from "@glidecomp/engine";
 import type {
+  CorrelationVerdict,
   FieldAnalysisReport,
   MetricDirection,
   MetricReport,
@@ -119,6 +120,37 @@ export function displayReport(
     } satisfies MetricReport;
   });
   return changed ? { ...report, metrics } : report;
+}
+
+/**
+ * How a correlation's verdict reads to a pilot rather than to a statistician.
+ *
+ * The engine's `CorrelationVerdict` tokens are stored in every report blob and
+ * printed by the CLI, so they stay as they are; these are their display forms
+ * on the public pages. Note they collapse two axes on purpose — how clear the
+ * pattern is (strong/moderate/weak) and whether there is one to read at all
+ * (within noise, n too small) — because that is the one question the reader
+ * has: how seriously to take this row.
+ *
+ * "within noise" was the worst offender: it names a statistical procedure
+ * rather than a conclusion. "could be chance" says the conclusion. Every
+ * threshold behind these words is still spelled out in VerdictLegend.
+ */
+export function verdictWords(verdict: CorrelationVerdict): string {
+  switch (verdict) {
+    case "strong":
+      return "clear pattern";
+    case "moderate":
+      return "some pattern";
+    case "weak":
+      return "faint pattern";
+    case "within noise":
+      return "could be chance";
+    case "n too small":
+      return "too few pilots";
+    default:
+      return verdict;
+  }
 }
 
 /**
