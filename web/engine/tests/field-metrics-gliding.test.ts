@@ -4,7 +4,8 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { parseIGC, type IGCFix } from '../src/igc-parser';
 import { parseXCTask } from '../src/xctsk-parser';
-import { calculateOptimizedTaskDistance } from '../src/task-optimizer';
+import { calculateOptimizedTaskDistance, calculateOptimizedTaskLine } from '../src/task-optimizer';
+import { andoyerDistance } from '../src/geo';
 import { scoreTask, resolveCompGapParams, type PilotFlight } from '../src/gap-scoring';
 import {
   buildFieldContext,
@@ -16,6 +17,7 @@ import { GLIDING_METRICS } from '../src/field-analysis/metrics/gliding';
 import type { TurnpointReaching } from '../src/turnpoint-sequence-types';
 import {
   makeTestField,
+  makeTestTask,
   straightFixes,
   circlingFixes,
   createFix,
@@ -242,14 +244,23 @@ describe('glide.stf_proxy', () => {
 // glide.extra_distance
 // ---------------------------------------------------------------------------
 
-/** Zigzag east-bound track: each 10 s step is (+120 m E, ±90 m N) → path ×1.25. */
-function zigzagFixes(): IGCFix[] {
+/**
+ * Dog-legging east-bound track: each 10 s step is (+120 m E, ±90 m N) → path
+ * ×1.25, but the north/south sense flips only every 30 fixes. The bearing is
+ * constant inside a block, so the circle detector stays out of it and the
+ * phase partition calls this a GLIDE — which is the point. A per-fix sawtooth
+ * instead reads as circling, lands in a `search` phase, and is deliberately
+ * NOT counted as line deviation (see the search-meander test above).
+ */
+function doglegFixes(): IGCFix[] {
   const fixes: IGCFix[] = [];
+  let north = 0;
   for (let i = 0; i <= 120; i++) {
+    if (i > 0) north += (Math.floor((i - 1) / 30) % 2 === 0 ? 1 : -1) * 90;
     fixes.push(
       createFix(
         i * 10,
-        TEST_ORIGIN.lat + (i % 2) * 90 * DEG_LAT_PER_M,
+        TEST_ORIGIN.lat + north * DEG_LAT_PER_M,
         TEST_ORIGIN.lon + i * 120 * DEG_LON_PER_M,
         2500 - i,
       ),
@@ -259,11 +270,128 @@ function zigzagFixes(): IGCFix[] {
 }
 
 describe('glide.extra_distance', () => {
-  it('is ~0% for a straight-line pilot and higher for a zigzagger; pre-SSS legs excluded', () => {
+  // THE ZERO POINT. This metric claims "0% = flew the optimised line", so the
+  // pilot who literally flies `calculateOptimizedTaskLine` must score 0 — if
+  // this drifts, every absolute reading on the page is quietly wrong and the
+  // only honest thing left to say would be "compare pilots, not absolutes".
+  it('reads 0% for a pilot who flies the optimizer’s own line', () => {
+    const task = makeTestTask();
+    const line = calculateOptimizedTaskLine(task);
+    expect(line.length).toBe(task.turnpoints.length);
+
+    // Straight-line interpolation between consecutive tag points at ~50 km/h,
+    // one fix every 2 s, descending gently so the phase partition calls it a
+    // glide throughout. tagFixIndex[i] is the fix that sits ON tag point i.
+    const SPEED_MPS = 50 / 3.6;
+    const STEP_S = 2;
+    const fixes: IGCFix[] = [];
+    const tagFixIndex: number[] = [];
+    let t = 0;
+    let alt = 3000;
+    for (let i = 0; i + 1 < line.length; i++) {
+      const a = line[i];
+      const b = line[i + 1];
+      const d = andoyerDistance(a.lat, a.lon, b.lat, b.lon);
+      const steps = Math.max(1, Math.round(d / (SPEED_MPS * STEP_S)));
+      tagFixIndex.push(fixes.length);
+      for (let k = 0; k < steps; k++) {
+        const f = k / steps;
+        fixes.push(
+          createFix(t, a.lat + (b.lat - a.lat) * f, a.lon + (b.lon - a.lon) * f, alt),
+        );
+        t += STEP_S;
+        alt -= 0.4 * STEP_S;
+      }
+    }
+    const last = line[line.length - 1];
+    tagFixIndex.push(fixes.length);
+    fixes.push(createFix(t, last.lat, last.lon, alt));
+
+    // Reachings anchored exactly on the tag points: this pilot's legs and the
+    // optimizer's legs are then the same two endpoints, so any excess the
+    // metric reports is excess the pilot actually flew.
+    const sequence = line.map((_, i) => reachingAt(fixes, i, tagFixIndex[i]));
+    const field = makeTestField(
+      [
+        {
+          name: 'optimal',
+          fixes,
+          turnpointResult: { sssReaching: sequence[1], sequence },
+        },
+      ],
+      { task },
+    );
+
+    const value = valueFor(metric('glide.extra_distance').compute(field), 'optimal');
+    expect(value).not.toBeNull();
+    expect(Math.abs(value!)).toBeLessThan(0.5); // percent
+  });
+
+  // Scratching is not a line choice. A pilot who wanders while SEARCHING for
+  // lift must read the same as one who flew straight between the same points
+  // — otherwise this metric re-measures decision.search_fraction (the v9
+  // mistake with circles, repeated).
+  it('ignores meander inside search phases, counting only their displacement', () => {
+    // Descend hard enough (and slowly enough) that partitionPhases calls it
+    // 'search' rather than 'glide': low ground speed, no circling.
+    const straightSearch: IGCFix[] = [];
+    const wanderSearch: IGCFix[] = [];
+    for (let i = 0; i <= 300; i++) {
+      const east = 3000 + i * 30;
+      straightSearch.push(
+        createFix(i * 10, TEST_ORIGIN.lat, TEST_ORIGIN.lon + east * DEG_LON_PER_M, 2500 - i * 2),
+      );
+      // Same east progress, but sawtoothing ±200 m north — pure meander.
+      wanderSearch.push(
+        createFix(
+          i * 10,
+          TEST_ORIGIN.lat + (i % 2 ? 200 : -200) * DEG_LAT_PER_M,
+          TEST_ORIGIN.lon + east * DEG_LON_PER_M,
+          2500 - i * 2,
+        ),
+      );
+    }
+    const legFor = (f: IGCFix[]) => [
+      reachingAt(f, 1, indexAtEast(f, 3000)),
+      reachingAt(f, 2, indexAtEast(f, 11000)),
+    ];
+    const field = makeTestField([
+      {
+        name: 'straight',
+        fixes: straightSearch,
+        turnpointResult: { sssReaching: legFor(straightSearch)[0], sequence: legFor(straightSearch) },
+      },
+      {
+        name: 'wander',
+        fixes: wanderSearch,
+        turnpointResult: { sssReaching: legFor(wanderSearch)[0], sequence: legFor(wanderSearch) },
+      },
+    ]);
+    const out = metric('glide.extra_distance').compute(field);
+    const straight = valueFor(out, 'straight');
+    const wander = valueFor(out, 'wander');
+    expect(straight).not.toBeNull();
+    expect(wander).not.toBeNull();
+    // The wanderer's raw path is ~4x longer; only the phases the partition
+    // calls 'glide' may differ between them.
+    const searchSeconds = (name: string) => {
+      const p = field.pilots.find((x) => x.trackFile === `${name}.igc`)!;
+      return p.phases
+        .filter((ph) => ph.phase !== 'glide')
+        .reduce((acc, ph) => acc + (p.fixes[ph.endIndex].time.getTime()
+          - p.fixes[ph.startIndex].time.getTime()) / 1000, 0);
+    };
+    // Guard the fixture itself: if these tracks came out as pure glides the
+    // assertion below would pass for the wrong reason.
+    expect(searchSeconds('wander')).toBeGreaterThan(0);
+    expect(Math.abs(wander! - straight!)).toBeLessThan(5);
+  });
+
+  it('rises with glide-path deviation between the same leg endpoints; pre-SSS legs excluded', () => {
     // makeTestTask: SSS r2000 @5 km E, ESS r1000 @15 km E. The SSS→ESS leg runs
     // roughly east 3000 → east 14000 along the course line.
     const straight = straightFixes(0, 1200, 0, 2500, 12, -0.5);
-    const zigzag = zigzagFixes();
+    const dogleg = doglegFixes();
     const legFor = (fixes: IGCFix[]) => [
       reachingAt(fixes, 1, indexAtEast(fixes, 3000)),
       reachingAt(fixes, 2, indexAtEast(fixes, 14000)),
@@ -284,9 +412,9 @@ describe('glide.extra_distance', () => {
         },
       },
       {
-        name: 'zigzag',
-        fixes: zigzag,
-        turnpointResult: { sssReaching: legFor(zigzag)[0], sequence: legFor(zigzag) },
+        name: 'dogleg',
+        fixes: dogleg,
+        turnpointResult: { sssReaching: legFor(dogleg)[0], sequence: legFor(dogleg) },
       },
       { name: 'nolegs', fixes: straightFixes(0, 900, 0, 2000, 12, -1) },
     ]);
@@ -295,26 +423,25 @@ describe('glide.extra_distance', () => {
 
     const straightV = valueFor(out, 'straight');
     const withpreV = valueFor(out, 'withpre');
-    const zigzagV = valueFor(out, 'zigzag');
+    const doglegV = valueFor(out, 'dogleg');
     expect(straightV).not.toBeNull();
-    expect(zigzagV).not.toBeNull();
+    expect(doglegV).not.toBeNull();
 
     // The metric reports percentage EXCESS over the optimized line; compare
     // pilots on the underlying distance ratio it is derived from.
     const asRatio = (pct: number) => 1 + pct / 100;
 
-    // The reaching fixes sit on the near cylinder boundaries while the
-    // optimizer tags the far/near edges that minimize the whole route, so the
-    // straight flier's ratio carries a constant geometric offset (> 1). It is
-    // the same for every pilot on the leg — assert a sane band plus the
-    // pilot-to-pilot discrimination.
+    // NOTE: these pilots' reachings are pinned at arbitrary east offsets, NOT
+    // at the optimizer's tag points, so they fly a different route from the
+    // optimized one and read well above 0% — a property of THIS FIXTURE, not
+    // of the metric. The zero point is pinned by the optimizer's-own-line test
+    // above; this test only asserts pilot-to-pilot discrimination.
     expect(asRatio(straightV!)).toBeGreaterThan(0.9);
-    expect(asRatio(straightV!)).toBeLessThan(1.8);
     // Pre-SSS leg contributes nothing.
     expect(withpreV!).toBeCloseTo(straightV!, 5);
-    // Zigzag path is ~25% longer than the straight one on the same leg.
-    expect(asRatio(zigzagV!) / asRatio(straightV!)).toBeGreaterThan(1.15);
-    expect(asRatio(zigzagV!) / asRatio(straightV!)).toBeLessThan(1.4);
+    // The dog-leg's glide path is ~25% longer over the same leg endpoints.
+    expect(asRatio(doglegV!) / asRatio(straightV!)).toBeGreaterThan(1.15);
+    expect(asRatio(doglegV!) / asRatio(straightV!)).toBeLessThan(1.4);
 
     expect(valueFor(out, 'nolegs')).toBeNull();
   });

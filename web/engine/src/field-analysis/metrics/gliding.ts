@@ -289,14 +289,14 @@ const glideExtraDistance: MetricComputer = {
   family: 'gliding',
   direction: 'lower',
   explanation:
-    'How much further the pilot flew than the optimised course line demanded. Route distance on '
-    + 'each completed speed-section leg (full path outside climbs, each climb counted as its '
-    + "net drift) is compared with the leg's optimized distance, weighted by optimized distance. "
-    + 'Circling path is excluded, so stopping to climb does not read as flying wide. READ THIS '
-    + 'BETWEEN PILOTS, NOT AS AN ABSOLUTE: a fixed geometric offset is baked in, because a '
-    + "pilot's leg is measured between their cylinder crossings while the optimized distance "
-    + 'runs between the optimizer’s tag points, so even a perfectly flown line reads above 0%. '
-    + 'The offset is the same for everyone on a leg — the gap between two pilots is the finding.',
+    'How much further the pilot flew on glide than the optimised course line demanded — 0% is '
+    + 'flying the line exactly, 12% is gliding 12% further than they had to. On each completed '
+    + "speed-section leg, the pilot's route is compared with the leg's optimized distance, "
+    + 'weighted by optimized distance. Only glides are measured at their full path length; '
+    + 'circling and searching contribute their entry-to-exit displacement instead, so neither '
+    + 'stopping to climb nor scratching for lift reads as flying wide — a line is only chosen '
+    + 'on glide. 0% is a real, reachable value: a pilot who flies the optimizer’s own line '
+    + 'scores exactly zero.',
   compute(field) {
     const sssIdx = Math.max(0, getEffectiveSSSIndex(field.task));
     const optimizedByLeg = new Map<number, number>();
@@ -312,17 +312,22 @@ const glideExtraDistance: MetricComputer = {
       for (const { from, to } of completedSpeedSectionLegs(p, sssIdx)) {
         const optimized = optimizedByLeg.get(from.taskIndex);
         if (optimized === undefined || optimized < MIN_LEG_OPTIMIZED_M) continue;
-        // Route distance, not raw path (same phase-clipping as
-        // pilotGlideLDByLeg): a pilot taking 30 turns per thermal used to
-        // log ~300 m of "line deviation" per circle, so the raw path mostly
-        // re-measured climb count — collinear with
-        // decision.km_between_climbs — while the explanation claimed line
-        // choice. Outside climbs the full path counts; a climb contributes
-        // its entry→exit displacement, because drifting downwind in a
-        // thermal still covers route the pilot doesn't have to glide.
-        // (Reported as a percentage EXCESS over the optimized line, not as
-        // the raw ratio: "flew 12% further than they had to" is graspable in
-        // a way "1.12" is not. Monotone in the ratio, so ρ is unchanged.)
+        // ROUTE distance, not raw path: the full path counts only where the
+        // pilot was GLIDING — that is where a line is chosen — and every
+        // other phase contributes its entry→exit displacement, because a
+        // pilot who circles or scratches still covers the route they drift
+        // across without having to glide it.
+        //
+        // Both exclusions were found the same way, by a metric quietly
+        // re-measuring its neighbour. Circling went first (v9): 30 turns per
+        // thermal logged ~300 m of "line deviation" each, so the raw path
+        // mostly counted climbs — collinear with decision.km_between_climbs.
+        // Searching is the same error and the bigger one (v16): a scratching
+        // pilot's path runs 1.6–2.0× its own displacement and search fills
+        // 17–44% of a leg, so most of the excess this metric reported was
+        // hunting for lift — collinear with decision.search_fraction — while
+        // the name promised line choice. The rule that survives both: only a
+        // glide can be flown wide.
         const legStart = clampIndex(p, from.fixIndex);
         const legEnd = clampIndex(p, to.fixIndex);
         for (const phase of p.phases) {
@@ -330,14 +335,14 @@ const glideExtraDistance: MetricComputer = {
           const e = Math.min(phase.endIndex, legEnd);
           if (e <= s) continue;
           actualSum +=
-            phase.phase === 'climb'
-              ? andoyerDistance(
+            phase.phase === 'glide'
+              ? calculateTrackDistance(p.fixes, s, e)
+              : andoyerDistance(
                   p.fixes[s].latitude,
                   p.fixes[s].longitude,
                   p.fixes[e].latitude,
                   p.fixes[e].longitude,
-                )
-              : calculateTrackDistance(p.fixes, s, e);
+                );
         }
         optimizedSum += optimized;
         legCount++;

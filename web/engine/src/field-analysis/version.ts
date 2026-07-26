@@ -138,4 +138,25 @@
 //         instead of a bare ratio (1.12). Monotone linear, so ρ is unchanged.
 //     The bump rolls stored reports onto the new labels/ids on their next lazy
 //     revalidation.
-export const FIELD_ANALYSIS_VERSION = 15;
+// v16: glide.extra_distance stops counting SEARCH meander as line deviation.
+//     Only a glide is measured at its full path length now; every other phase
+//     (climb and search alike) contributes its entry-to-exit displacement.
+//     This is the v9 fix finished — v9 removed circling path for exactly this
+//     reason and left searching in, which turned out to be the larger half: a
+//     scratching pilot's path runs 1.6–2.0× its own displacement and search
+//     fills 17–44% of a leg, so most of the "extra distance" the metric
+//     reported was hunting for lift (collinear with decision.search_fraction)
+//     rather than the line choice the name promised. On Corryong 2021 open T1
+//     the field's readings drop from 24–220% to 9–78% and |ρ| against rank
+//     RISES 0.62 → 0.64: the removed distance was noise, not signal. Metric
+//     values change, so the bump rolls stored reports on lazy revalidation.
+//
+//     Note for the record, since v15's shipped text said otherwise: the
+//     metric's ZERO POINT was never offset. A pilot flown down
+//     calculateOptimizedTaskLine scores 0.00%, and there is now a test that
+//     says so ("reads 0% for a pilot who flies the optimizer's own line").
+//     The ">1 even for a straight flier" offset noted in the plan doc is a
+//     property of the synthetic TEST FIXTURE, whose reachings are pinned at
+//     arbitrary east offsets instead of the optimizer's tag points — not of
+//     the measurement. Absolute readings are meaningful.
+export const FIELD_ANALYSIS_VERSION = 16;
