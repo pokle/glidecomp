@@ -78,7 +78,7 @@ describe('GLIDING_METRICS registry', () => {
       'glide.speed',
       'glide.ld_vs_field',
       'glide.stf_proxy',
-      'glide.track_efficiency',
+      'glide.extra_distance',
       'glide.dolphin_fraction',
     ]);
     for (const m of GLIDING_METRICS) {
@@ -89,7 +89,7 @@ describe('GLIDING_METRICS registry', () => {
     expect(metric('glide.speed').direction).toBe('higher');
     expect(metric('glide.ld_vs_field').direction).toBe('higher');
     expect(metric('glide.stf_proxy').direction).toBe('higher');
-    expect(metric('glide.track_efficiency').direction).toBe('lower');
+    expect(metric('glide.extra_distance').direction).toBe('lower');
     expect(metric('glide.dolphin_fraction').direction).toBe('neutral');
   });
 });
@@ -239,7 +239,7 @@ describe('glide.stf_proxy', () => {
 });
 
 // ---------------------------------------------------------------------------
-// glide.track_efficiency
+// glide.extra_distance
 // ---------------------------------------------------------------------------
 
 /** Zigzag east-bound track: each 10 s step is (+120 m E, ±90 m N) → path ×1.25. */
@@ -258,8 +258,8 @@ function zigzagFixes(): IGCFix[] {
   return fixes;
 }
 
-describe('glide.track_efficiency', () => {
-  it('is ~1 for a straight-line pilot and higher for a zigzagger; pre-SSS legs excluded', () => {
+describe('glide.extra_distance', () => {
+  it('is ~0% for a straight-line pilot and higher for a zigzagger; pre-SSS legs excluded', () => {
     // makeTestTask: SSS r2000 @5 km E, ESS r1000 @15 km E. The SSS→ESS leg runs
     // roughly east 3000 → east 14000 along the course line.
     const straight = straightFixes(0, 1200, 0, 2500, 12, -0.5);
@@ -290,7 +290,7 @@ describe('glide.track_efficiency', () => {
       },
       { name: 'nolegs', fixes: straightFixes(0, 900, 0, 2000, 12, -1) },
     ]);
-    const out = metric('glide.track_efficiency').compute(field);
+    const out = metric('glide.extra_distance').compute(field);
     expect(out.perPilot.length).toBe(4);
 
     const straightV = valueFor(out, 'straight');
@@ -299,18 +299,22 @@ describe('glide.track_efficiency', () => {
     expect(straightV).not.toBeNull();
     expect(zigzagV).not.toBeNull();
 
+    // The metric reports percentage EXCESS over the optimized line; compare
+    // pilots on the underlying distance ratio it is derived from.
+    const asRatio = (pct: number) => 1 + pct / 100;
+
     // The reaching fixes sit on the near cylinder boundaries while the
     // optimizer tags the far/near edges that minimize the whole route, so the
     // straight flier's ratio carries a constant geometric offset (> 1). It is
     // the same for every pilot on the leg — assert a sane band plus the
     // pilot-to-pilot discrimination.
-    expect(straightV!).toBeGreaterThan(0.9);
-    expect(straightV!).toBeLessThan(1.8);
+    expect(asRatio(straightV!)).toBeGreaterThan(0.9);
+    expect(asRatio(straightV!)).toBeLessThan(1.8);
     // Pre-SSS leg contributes nothing.
     expect(withpreV!).toBeCloseTo(straightV!, 5);
     // Zigzag path is ~25% longer than the straight one on the same leg.
-    expect(zigzagV! / straightV!).toBeGreaterThan(1.15);
-    expect(zigzagV! / straightV!).toBeLessThan(1.4);
+    expect(asRatio(zigzagV!) / asRatio(straightV!)).toBeGreaterThan(1.15);
+    expect(asRatio(zigzagV!) / asRatio(straightV!)).toBeLessThan(1.4);
 
     expect(valueFor(out, 'nolegs')).toBeNull();
   });
@@ -423,12 +427,13 @@ describe('gliding metrics over kosci-loop-t1 (smoke)', () => {
     // leg metrics need at least one completed speed-section leg.
     expect(nonNullCount('glide.speed')).toBeGreaterThanOrEqual(0.6 * started);
     expect(nonNullCount('glide.dolphin_fraction')).toBeGreaterThanOrEqual(0.5 * started);
-    expect(nonNullCount('glide.track_efficiency')).toBeGreaterThanOrEqual(0.3 * started);
+    expect(nonNullCount('glide.extra_distance')).toBeGreaterThanOrEqual(0.3 * started);
 
-    // Sanity: track efficiency is a distance ratio ≥ ~1 for real tracks.
-    const eff = report.metrics.find((m) => m.id === 'glide.track_efficiency')!;
-    for (const v of eff.perPilot) {
-      if (v.value !== null) expect(v.value).toBeGreaterThan(0.8);
+    // Sanity: real tracks fly at least the optimized line, so the excess over
+    // it sits at or a little above 0% (never far below).
+    const extra = report.metrics.find((m) => m.id === 'glide.extra_distance')!;
+    for (const v of extra.perPilot) {
+      if (v.value !== null) expect(v.value).toBeGreaterThan(-20);
     }
   }, 120_000);
 });

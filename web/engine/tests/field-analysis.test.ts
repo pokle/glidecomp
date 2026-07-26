@@ -124,7 +124,7 @@ describe('field analysis integration (kosci-loop-t1)', () => {
     // (or sharing marked thermals) qualify — ≥ 55% of started pilots here.
     for (const id of [
       'glide.ld_vs_field',
-      'glide.track_efficiency',
+      'glide.extra_distance',
       'race.leg_time_lost',
       'gaggle.marker_usage',
     ]) {
@@ -136,7 +136,7 @@ describe('field analysis integration (kosci-loop-t1)', () => {
     // Fixture-exempt on kosci (documented in the plan doc): the synthetic
     // triangle-wave tracks yield zero detected circles (selectivity,
     // circle_smoothness, day.wind samples), sub-20 km flights
-    // (climbs_per_100km), uniform climbs (stf_proxy sparse), and no
+    // (km_between_climbs), uniform climbs (stf_proxy sparse), and no
     // qualifying gaggle departures or final-glide initiations. No coverage
     // gate for those — corryong is their exercise.
 

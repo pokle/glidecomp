@@ -117,4 +117,25 @@
 //     but it is still part of how the numbers were made and so still stated.
 //     No metric value changed; the bump rolls stored reports so they gain the
 //     window on their next lazy revalidation.
-export const FIELD_ANALYSIS_VERSION = 14;
+// v15: every metric renamed to say what it MEANS rather than how it is
+//     computed (issue #454), and two metrics reshaped because no name could
+//     rescue their units. Names now lead with the family's own vocabulary
+//     ("Gliding wide of the optimal course line", "Climbing faster than the
+//     pilots sharing the thermal") and carry no parenthesised explainer — a
+//     name that needs a gloss in brackets is a name that has not landed. Each
+//     explanation now opens with the insight in pilots' own words (coring,
+//     topping out, marker, low save, speed to fly, dolphin flying, final
+//     glide) before the method. The two reshaped metrics:
+//       · decision.climbs_per_100km → decision.km_between_climbs. "Climbs per
+//         100 km" made the reader do arithmetic to reach the question it was
+//         answering — how far do you get between stops? That is now the value
+//         itself, in km, direction 'higher'. Reciprocal, so |ρ| is unchanged
+//         and the sign flips with the direction. Zero climbs after the start
+//         is now null (a glide-out with nothing to measure) instead of 0,
+//         which under the old 'lower is better' read as the BEST score.
+//       · glide.track_efficiency → glide.extra_distance, a percentage EXCESS
+//         over the optimised line (12% = flew 12% further than required)
+//         instead of a bare ratio (1.12). Monotone linear, so ρ is unchanged.
+//     The bump rolls stored reports onto the new labels/ids on their next lazy
+//     revalidation.
+export const FIELD_ANALYSIS_VERSION = 15;

@@ -117,15 +117,17 @@ function speedSectionLegTimes(
 
 const startDelay: MetricComputer = {
   id: 'race.start_delay',
-  label: 'Start delay (gate to crossing)',
+  label: 'How long after the gate opened the pilot started',
   shortLabel: 'StartDly',
   unit: 's',
   family: 'racecraft',
   direction: 'lower',
   explanation:
-    'Seconds from the start gate taken (or the pilot’s own crossing on elapsed-time tasks, ' +
-    'where the delay is 0 by definition) to the scored SSS crossing. The start table adds ' +
-    'crossing altitude and how far behind the leading already-started pilot each start was.',
+    'Every second between the gate opening and actually crossing the start line is a second ' +
+    'given away for nothing. Seconds from the start gate taken (or the pilot’s own crossing on ' +
+    'elapsed-time tasks, where the delay is 0 by definition) to the scored SSS crossing. The ' +
+    'start table adds crossing altitude and how far behind the leading already-started pilot ' +
+    'each start was.',
   compute(field): MetricOutput {
     const sssIdx = getEffectiveSSSIndex(field.task);
     const nextIdx = sssIdx >= 0 && sssIdx + 1 < field.task.turnpoints.length ? sssIdx + 1 : -1;
@@ -207,8 +209,8 @@ const startDelay: MetricComputer = {
 
 const legTimeLost: MetricComputer = {
   id: 'race.leg_time_lost',
-  label: 'Time lost on speed-section legs',
-  shortLabel: 'LegLost',
+  label: 'Race time lost against the fastest pilots, leg by leg',
+  shortLabel: 'TimeLost',
   unit: 's',
   family: 'racecraft',
   direction: 'lower',
@@ -340,7 +342,7 @@ const legTimeLost: MetricComputer = {
 
 const timeBehind: MetricComputer = {
   id: 'race.time_behind',
-  label: 'Time behind the leader at ESS',
+  label: 'Race time behind the leader at ESS',
   shortLabel: 'Behind',
   unit: 'min',
   family: 'racecraft',
@@ -445,14 +447,16 @@ const timeBehind: MetricComputer = {
 
 const essMargin: MetricComputer = {
   id: 'race.ess_margin',
-  label: 'Altitude margin over final glide at ESS',
-  shortLabel: 'ESSMargin',
+  label: 'Arriving at ESS with height to spare',
+  shortLabel: 'Spare m',
   unit: 'm',
   family: 'racecraft',
   direction: 'lower',
   explanation:
-    'Altitude at ESS minus the altitude needed to glide to goal at the sport’s standard glide ' +
-    'ratio (S7F §12.3.6: 5.0 HG / 4.0 PG). A big positive margin is altitude — i.e. time — left unspent.',
+    'Height still in hand at ESS that the pilot no longer needed — altitude they could have ' +
+    'traded for speed and did not. Altitude at ESS minus the altitude needed to glide to goal ' +
+    'at the sport’s standard glide ratio, 5.0 for HG and 4.0 for PG per S7F §12.3.6. A big ' +
+    'positive margin means arriving too high; near zero means the final glide was flown tight.',
   compute(field): MetricOutput {
     const goalIdx = getGoalIndex(field.task);
     const goalWp = goalIdx >= 0 ? field.task.turnpoints[goalIdx].waypoint : null;
@@ -501,15 +505,18 @@ const essMargin: MetricComputer = {
 
 const finalGlideInit: MetricComputer = {
   id: 'race.final_glide_init',
-  label: 'Required glide ratio when leaving the last climb',
+  label: 'Final glide committed to when leaving the last climb',
   shortLabel: 'FinalGl',
   unit: 'ratio',
   family: 'racecraft',
   direction: 'neutral',
   explanation:
-    'At the pilot’s last climb before ESS (or landing): distance to goal divided by height above ' +
-    'goal — the glide ratio they committed to. Only counted when that climb ended within 1.5× the ' +
-    'final leg’s distance of goal.',
+    'How optimistic the pilot was about their final glide — leaving the last climb at exactly ' +
+    'the right height is where tasks are won and thrown away. At the pilot’s last climb before ' +
+    'ESS (or landing), the distance to goal divided by their height above goal: the glide ratio ' +
+    'they committed to. 8 means they left needing 8:1 to make goal. Only counted when that ' +
+    'climb ended within 1.5× the final leg’s distance of goal. No expected direction: pushing ' +
+    'on a marginal glide wins if it connects and loses if it does not.',
   compute(field): MetricOutput {
     const goalIdx = getGoalIndex(field.task);
     const goalWp = goalIdx >= 0 ? field.task.turnpoints[goalIdx].waypoint : null;

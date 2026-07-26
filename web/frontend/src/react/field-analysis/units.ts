@@ -28,6 +28,12 @@ export function unitWords(unit: string): string {
       return "feet per minute";
     case "km/h":
       return "kilometres per hour";
+    case "km":
+      return "kilometres";
+    case "mi":
+      return "miles";
+    case "nmi":
+      return "nautical miles";
     case "mph":
       return "miles per hour";
     case "kts":
@@ -50,8 +56,9 @@ export function unitWords(unit: string): string {
  * units. The engine always computes and stores metric units; the UI converts
  * numbers at the display boundary. Horizontal speeds ('km/h') follow the
  * speed preference, vertical rates ('m/s') the climb preference, heights
- * ('m') the altitude preference; everything else ('pct', 's', 'min', …) is
- * dimensionless or time and passes through.
+ * ('m') the altitude preference, ground distances ('km') the distance
+ * preference; everything else ('pct', 's', 'min', …) is dimensionless or time
+ * and passes through.
  */
 export interface UnitDisplay {
   /** Display token in the metric-unit vocabulary ('mph', 'kts', 'fpm', 'ft',
@@ -74,6 +81,10 @@ export function unitDisplay(engineUnit: string, units: UnitPreferences): UnitDis
     case "m":
       if (units.altitude === "ft") return { unit: "ft", factor: 3.281 };
       return { unit: "m", factor: 1 };
+    case "km":
+      if (units.distance === "mi") return { unit: "mi", factor: 0.621371 };
+      if (units.distance === "nmi") return { unit: "nmi", factor: 0.539957 };
+      return { unit: "km", factor: 1 };
     default:
       return { unit: engineUnit, factor: 1 };
   }

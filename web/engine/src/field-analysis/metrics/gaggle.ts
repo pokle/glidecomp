@@ -43,15 +43,16 @@ const MIN_COMPARATORS = 2;
  */
 const affinity: MetricComputer = {
   id: 'gaggle.affinity',
-  label: 'Gaggle affinity (post-start time in a gaggle)',
-  shortLabel: 'Affinity',
+  label: 'Time spent flying with a gaggle',
+  shortLabel: 'InGaggle%',
   unit: 'pct',
   family: 'gaggle',
   direction: 'neutral',
   explanation:
-    "Share of a pilot's post-start flying time spent inside a detected gaggle " +
-    '(clustered with at least one other racing pilot on the shared time grid). ' +
-    'Neutral: the correlation sign says whether sticking with company paid on the day.',
+    'Whether the pilot raced with company or went it alone. Share of their flying time after ' +
+    'the start spent inside a detected gaggle — clustered with at least one other racing pilot ' +
+    'on the shared time grid. No expected direction: a gaggle multiplies your search power, but ' +
+    'it also drags you along at its own pace. The correlation sign says which happened here.',
   compute(field: FieldContext): MetricOutput {
     const { grid, gaggles } = field;
 
@@ -103,15 +104,17 @@ const affinity: MetricComputer = {
  */
 const markerUsage: MetricComputer = {
   id: 'gaggle.marker_usage',
-  label: "Marker usage (climbs entered on another pilot's climb)",
+  label: "Climbs joined on another pilot's marker",
   shortLabel: 'Marked%',
   unit: 'pct',
   family: 'gaggle',
   direction: 'neutral',
   explanation:
-    "Share of a pilot's post-start climbs where another pilot was already established " +
-    '(at least 30 s) and still climbing in the same thermal when they joined. ' +
-    "High = climbs on others' markers; low = finds their own lift.",
+    'How much of the pilot’s lift was found for them. Share of their climbs after the start ' +
+    'where another pilot was already established — at least 30 s in, and still climbing — in ' +
+    "the same thermal when they arrived. High means they mostly climb on other pilots' markers; " +
+    'low means they find their own air. No expected direction: using markers is free ' +
+    'information, but it puts you where the last pilot was, not where the next climb is.',
   compute(field: FieldContext): MetricOutput {
     const uses = field.pilots.map(() => 0);
     const marked = field.pilots.map(() => 0);
@@ -152,8 +155,8 @@ const markerUsage: MetricComputer = {
  */
 const departureWinrate: MetricComputer = {
   id: 'gaggle.departure_winrate',
-  label: 'Gaggle departure win rate',
-  shortLabel: 'DepartWin',
+  label: 'How often leaving the gaggle paid off',
+  shortLabel: 'LeaveWin%',
   unit: 'pct',
   family: 'gaggle',
   direction: 'neutral',

@@ -140,14 +140,15 @@ function smoothedAltitudes(
 
 const glideSpeed: MetricComputer = {
   id: 'glide.speed',
-  label: 'Glide speed (post-start)',
+  label: 'Gliding speed between climbs',
   shortLabel: 'GlideSpd',
   unit: 'km/h',
   family: 'gliding',
   direction: 'higher',
   explanation:
-    'Duration-weighted mean ground speed over post-start glide segments (glide distance ÷ '
-    + 'glide time). Higher means the pilot covers ground faster between climbs.',
+    'How fast the pilot moves down the course when they are not circling. Duration-weighted '
+    + 'mean ground speed over every glide after the start (glide distance ÷ glide time). Higher '
+    + 'means more ground covered per minute between climbs.',
   compute(field) {
     const perPilot: PilotMetricValue[] = field.pilots.map((p) => {
       const glides = postSssGlides(p);
@@ -183,16 +184,17 @@ const glideSpeed: MetricComputer = {
 
 const glideLdVsField: MetricComputer = {
   id: 'glide.ld_vs_field',
-  label: 'Glide L/D vs field (per leg)',
-  shortLabel: 'L/D vs f',
+  label: 'Gliding further per metre lost than the rest of the field',
+  shortLabel: 'GlideL/D',
   unit: 'ratio',
   family: 'gliding',
   direction: 'higher',
   explanation:
-    "For each completed speed-section leg, the pilot's glide-phase L/D (path distance ÷ net "
+    'Whether the pilot found better air on glide than everyone else flying the same leg. For '
+    + "each completed speed-section leg, the pilot's glide-phase L/D (path distance ÷ net "
     + `altitude lost while gliding; legs losing under ${MIN_LEG_GLIDE_LOSS_M} m skipped) is `
-    + "divided by the field's median L/D on that same leg, then averaged over legs. Above 1.0 "
-    + 'means the pilot found better glide lines than the field on the same legs.',
+    + "divided by the field's median L/D on that same leg, then averaged over legs. 1.10 means "
+    + 'the pilot glided 10% further per metre lost than the typical pilot on those legs.',
   compute(field) {
     const sssIdx = Math.max(0, getEffectiveSSSIndex(field.task));
     const perPilotLegs = field.pilots.map((p) => pilotGlideLDByLeg(p, sssIdx));
@@ -231,16 +233,17 @@ const glideLdVsField: MetricComputer = {
 
 const glideStfProxy: MetricComputer = {
   id: 'glide.stf_proxy',
-  label: 'Speed-to-fly proxy',
-  shortLabel: 'STFproxy',
+  label: 'Gliding faster when the next climb is stronger',
+  shortLabel: 'SpeedToFly',
   unit: 'km/h',
   family: 'gliding',
   direction: 'higher',
   explanation:
-    'A speed-to-fly PROXY — no glider polar data exists. Each post-start glide is paired with '
-    + 'the climb rate of the next thermal starting within 5 minutes; the value is the mean glide '
-    + 'speed flown before stronger-than-median climbs minus the mean before weaker ones. '
-    + 'Positive means the pilot speeds up when the next climb justifies it.',
+    'Speed to fly: racing on when a good climb is waiting, easing off when it is not. Each '
+    + 'glide after the start is paired with the climb rate of the next thermal starting within '
+    + '5 minutes; the value is the mean glide speed flown before stronger-than-median climbs '
+    + 'minus the mean before weaker ones, so +8 km/h means the pilot pushed 8 km/h harder into '
+    + 'the good climbs. A PROXY, not true speed to fly — no glider polar data exists.',
   compute(field) {
     const perPilot: PilotMetricValue[] = field.pilots.map((p) => {
       if (p.sssMs === null) return { trackFile: p.trackFile, value: null };
@@ -276,20 +279,24 @@ const glideStfProxy: MetricComputer = {
   },
 };
 
-// --- Metric 10: glide.track_efficiency ---
+// --- Metric 10: glide.extra_distance ---
 
-const glideTrackEfficiency: MetricComputer = {
-  id: 'glide.track_efficiency',
-  label: 'Track efficiency (actual ÷ optimized leg distance)',
-  shortLabel: 'TrackEff',
-  unit: 'ratio',
+const glideExtraDistance: MetricComputer = {
+  id: 'glide.extra_distance',
+  label: 'Gliding wide of the optimal course line',
+  shortLabel: 'Wide%',
+  unit: 'pct',
   family: 'gliding',
   direction: 'lower',
   explanation:
-    'Route distance flown on each completed speed-section leg — full path outside climbs, '
-    + "each climb counted as its net drift — ÷ the leg's optimized distance, averaged with "
-    + 'optimized-distance weights. Closer to 1.0 means less deviation from the optimal course '
-    + 'line; circling path is excluded, so stopping to climb does not read as bad line choice.',
+    'How much further the pilot flew than the optimised course line demanded. Route distance on '
+    + 'each completed speed-section leg (full path outside climbs, each climb counted as its '
+    + "net drift) is compared with the leg's optimized distance, weighted by optimized distance. "
+    + 'Circling path is excluded, so stopping to climb does not read as flying wide. READ THIS '
+    + 'BETWEEN PILOTS, NOT AS AN ABSOLUTE: a fixed geometric offset is baked in, because a '
+    + "pilot's leg is measured between their cylinder crossings while the optimized distance "
+    + 'runs between the optimizer’s tag points, so even a perfectly flown line reads above 0%. '
+    + 'The offset is the same for everyone on a leg — the gap between two pilots is the finding.',
   compute(field) {
     const sssIdx = Math.max(0, getEffectiveSSSIndex(field.task));
     const optimizedByLeg = new Map<number, number>();
@@ -309,10 +316,13 @@ const glideTrackEfficiency: MetricComputer = {
         // pilotGlideLDByLeg): a pilot taking 30 turns per thermal used to
         // log ~300 m of "line deviation" per circle, so the raw path mostly
         // re-measured climb count — collinear with
-        // decision.climbs_per_100km — while the explanation claimed line
+        // decision.km_between_climbs — while the explanation claimed line
         // choice. Outside climbs the full path counts; a climb contributes
         // its entry→exit displacement, because drifting downwind in a
         // thermal still covers route the pilot doesn't have to glide.
+        // (Reported as a percentage EXCESS over the optimized line, not as
+        // the raw ratio: "flew 12% further than they had to" is graspable in
+        // a way "1.12" is not. Monotone in the ratio, so ρ is unchanged.)
         const legStart = clampIndex(p, from.fixIndex);
         const legEnd = clampIndex(p, to.fixIndex);
         for (const phase of p.phases) {
@@ -333,10 +343,11 @@ const glideTrackEfficiency: MetricComputer = {
         legCount++;
       }
       if (optimizedSum <= 0) return { trackFile: p.trackFile, value: null };
-      // Optimized-distance-weighted mean of per-leg ratios = Σ actual ÷ Σ optimized.
+      // Optimized-distance-weighted mean of per-leg ratios = Σ actual ÷ Σ optimized,
+      // expressed as the percentage excess over the line.
       return {
         trackFile: p.trackFile,
-        value: actualSum / optimizedSum,
+        value: 100 * (actualSum / optimizedSum - 1),
         note: `${legCount} leg${legCount === 1 ? '' : 's'} completed`,
       };
     });
@@ -348,15 +359,16 @@ const glideTrackEfficiency: MetricComputer = {
 
 const glideDolphinFraction: MetricComputer = {
   id: 'glide.dolphin_fraction',
-  label: 'Dolphin climb fraction',
+  label: 'Gliding through lift instead of stopping to circle',
   shortLabel: 'Dolphin%',
   unit: 'pct',
   family: 'gliding',
   direction: 'neutral',
   explanation:
-    'Share of post-start altitude gain (10 s-smoothed) made outside detected thermals — '
-    + 'climbing on the run instead of stopping to circle. Neutral: the correlation sign shows '
-    + 'whether dolphin climbing paid on this day.',
+    'Dolphin flying: how much of the height the pilot gained came on the run rather than from '
+    + 'stopping to turn. Share of altitude gain after the start (10 s-smoothed) made outside '
+    + 'detected thermals. No expected direction — the correlation sign shows whether dolphining '
+    + 'paid on this day.',
   compute(field) {
     const perPilot: PilotMetricValue[] = field.pilots.map((p) => {
       const sss = p.sssMs;
@@ -399,6 +411,6 @@ export const GLIDING_METRICS: MetricComputer[] = [
   glideSpeed,
   glideLdVsField,
   glideStfProxy,
-  glideTrackEfficiency,
+  glideExtraDistance,
   glideDolphinFraction,
 ];

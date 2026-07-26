@@ -72,6 +72,9 @@ export function formatMetricValue(unit: string, value: number | null): string {
     case 'km/h':
     case 'mph':
     case 'kts':
+    case 'km':
+    case 'mi':
+    case 'nmi':
     case 'min':
     case 'count':
       return value.toFixed(1);
