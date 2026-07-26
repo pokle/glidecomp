@@ -51,6 +51,13 @@ import { cn } from "../lib/utils";
 import { AnalysisBasis } from "../field-analysis/AnalysisBasis";
 import { TaskDebrief } from "../field-analysis/TaskDebrief";
 import { MetricGlossary } from "../field-analysis/MetricGlossary";
+import {
+  ExcludedPilots,
+  Footnotes,
+  MethodNote,
+  EXCLUDED_PILOTS_ID,
+  METHOD_NOTE_ID,
+} from "../field-analysis/Footnotes";
 import { PilotHighlightProvider } from "../field-analysis/PilotHighlightContext";
 import { PercentileHeatmap } from "../field-analysis/charts/PercentileHeatmap";
 import { StyleClusters } from "../field-analysis/StyleClusters";
@@ -272,10 +279,18 @@ export function TaskFieldAnalysis() {
       return next;
     });
 
+  // TaskDebrief decides for itself whether it has anything to say, so it
+  // tells us — see its onRenderedChange.
+  const [hasDebrief, setHasDebrief] = useState(false);
+
   const tocItems = useMemo<PageTocItem[]>(() => {
     if (!active) return [];
     return [
       { id: "analysis-basis", label: "Analysis basis" },
+      // TaskDebrief renders only when it has findings; a TOC entry pointing at
+      // a missing id would scroll nowhere, so it is conditional on the same
+      // data the section is.
+      ...(hasDebrief ? [{ id: "debrief-heading", label: "Task debrief" }] : []),
       { id: "separation-heading", label: "What separated the field" },
       { id: "heatmap-heading", label: "The whole field at a glance" },
       { id: "clusters-heading", label: "Pilot style clusters" },
@@ -301,9 +316,20 @@ export function TaskFieldAnalysis() {
           ),
         ]
       ),
-      { id: "glossary-heading", label: "Metric glossary" },
+      { id: "footnotes-heading", label: "Footnotes" },
+      ...(active.excluded.length > 0
+        ? [
+            {
+              id: EXCLUDED_PILOTS_ID,
+              label: "Pilots not analysed",
+              depth: 1 as const,
+            },
+          ]
+        : []),
+      { id: METHOD_NOTE_ID, label: "How the field is compared", depth: 1 },
+      { id: "glossary-heading", label: "Metric glossary", depth: 1 },
     ];
-  }, [active, grouped, topFamilies]);
+  }, [active, grouped, topFamilies, hasDebrief]);
 
   async function handleRefresh() {
     if (!compId || !taskId) return;
@@ -479,6 +505,7 @@ export function TaskFieldAnalysis() {
                 compId={compId}
                 taskId={taskId}
                 pilotClass={active.pilot_class}
+                onRenderedChange={setHasDebrief}
               />
             ) : null}
 
@@ -533,24 +560,17 @@ export function TaskFieldAnalysis() {
               )}
             </section>
 
-            {/* Every ⓘ popover's method prose, as one skimmable reference —
-                and the printed form of those explanations. The shared-grid
-                note rides along: it applies to every metric rather than to
-                one, and is the same on every task, so it belongs in the
-                reference and not in the basis box. */}
-            <MetricGlossary
-              entries={report.metrics}
-              method={
-                <>
-                  Anything comparing pilots to each other — gaggles, shared
-                  thermals, who was where at the same moment — is measured on one
-                  shared clock: every track is resampled onto a common{" "}
-                  {report.basis.gridStepSeconds}-second grid, so two pilots are
-                  only ever compared at the same instant, whatever rate their
-                  instruments logged at.
-                </>
-              }
-            />
+            {/* Everything a reader consults once rather than reads: who
+                couldn't be analysed, how the field is compared, and every
+                ⓘ popover's method prose (which is also the printed form of
+                those explanations). */}
+            <Footnotes>
+              {active.excluded.length > 0 ? (
+                <ExcludedPilots excluded={active.excluded} />
+              ) : null}
+              <MethodNote gridStepSeconds={report.basis.gridStepSeconds} />
+              <MetricGlossary entries={report.metrics} nested />
+            </Footnotes>
           </div>
         </PilotHighlightProvider>
       ) : null}
