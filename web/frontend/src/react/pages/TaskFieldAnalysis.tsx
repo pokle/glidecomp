@@ -304,7 +304,7 @@ export function TaskFieldAnalysis() {
       ...(hasWeatherSection
         ? [{ id: "weather-heading", label: "What the weather did" }]
         : []),
-      { id: "separation-heading", label: "What separated the field" },
+      { id: "separation-heading", label: "Which behaviours went with better results" },
       { id: "heatmap-heading", label: "The whole field at a glance" },
       { id: "clusters-heading", label: "Pilot style clusters" },
       { id: "families-heading", label: "The metrics in detail" },
@@ -545,7 +545,7 @@ export function TaskFieldAnalysis() {
 
             <section aria-labelledby="separation-heading" className="space-y-3">
               <h2 id="separation-heading" className="scroll-mt-20 text-lg font-semibold">
-                What separated the field
+                Which behaviours went with better results
               </h2>
               <SeparationRanking metrics={report.metrics} report={report} />
             </section>

@@ -29,6 +29,7 @@ export type {
   MetricReport,
   MetricFamily,
   MetricDirection,
+  CorrelationVerdict,
   MetricCorrelation,
   CompAggregateReport,
   CompMetricAggregate,

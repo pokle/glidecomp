@@ -96,9 +96,14 @@ export function AnalysisBasis({
                 )}
           </Fact>
         ) : null}
-        <Fact term="Shared thermals">
-          {basis.multiPilotThermalCount} of {basis.sharedThermalCount}
-          <span className="ml-1 text-xs text-muted-foreground">multi-pilot</span>
+        {/* "82 of 308 multi-pilot" read as though 82 pilots were meant. The
+            count of thermals is the fact; how many had company in them is the
+            qualifier, and "shared by 2+ pilots" says which. */}
+        <Fact term="Thermals">
+          {basis.sharedThermalCount}
+          <span className="ml-1 text-xs text-muted-foreground">
+            {basis.multiPilotThermalCount} shared by 2+ pilots
+          </span>
         </Fact>
         <Fact term="Working band">
           {formatAltitude(basis.workingBandFloor, { prefs: units }).formatted}–

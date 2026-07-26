@@ -249,7 +249,7 @@ test.describe("SSR — field analysis (public)", () => {
     expect(html).toContain("Field analysis —");
     // Branch on the actual server HTML (race-free): warm renders the ranking
     // heading and is indexable; cold renders the pending notice and is noindex.
-    if (html.includes("What separated the field")) {
+    if (html.includes("Which behaviours went with better results")) {
       expect(html).not.toContain('name="robots" content="noindex"');
     } else {
       expect(html.toLowerCase()).toContain("pending");

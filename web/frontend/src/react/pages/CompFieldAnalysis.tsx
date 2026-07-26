@@ -308,18 +308,19 @@ export function CompFieldAnalysis() {
         <div className="mt-6 space-y-8">
           <section aria-labelledby="consistency-heading" className="space-y-3">
             <h2 id="consistency-heading" className="text-lg font-semibold">
-              What separated the field, across tasks
+              Which behaviours went with better results, across tasks
             </h2>
             <p className="text-sm text-muted-foreground">
-              A metric that holds its sign and magnitude across every task is
+              A behaviour that holds its sign and size across every task is
               telling you about flying. One that swings between tasks is telling
-              you about the weather on those days. Rank 1 is best, so a metric
-              where more is better shows a <strong>negative</strong> ρ.
+              you about the weather on those days. Rank 1 is best, so a
+              behaviour where more is better shows a <strong>negative</strong> ρ.
             </p>
             <SeparationTable
               metrics={rankedMetrics}
               taskLabels={active.aggregate.taskLabels}
-              ariaLabel="Metric separation across tasks"
+              ariaLabel="Behaviour ranking across tasks"
+              subjectLabel="Behaviour"
             />
             <p className="text-xs text-muted-foreground">
               Ranked by |mean ρ| (n-weighted signed mean), so consistent
@@ -327,8 +328,8 @@ export function CompFieldAnalysis() {
               mean |ρ| keeps their per-day power visible; a large gap between
               the two means the payoff depended on the day.{" "}
               <strong>Consistency</strong> counts only tasks whose |ρ| cleared
-              their noise floor (the filled sparkline dots; hollow = within
-              noise): − means larger values went with better ranks. A split
+              their noise floor (the filled sparkline dots; hollow = could be
+              chance): − means larger values went with better ranks. A split
               is a finding — the payoff depended on the day — not a defect.
             </p>
             <VerdictLegend />
@@ -347,14 +348,16 @@ export function CompFieldAnalysis() {
               <div className="space-y-3 pt-2">
                 <h3 className="text-base font-semibold">Outcome checks</h3>
                 <p className="text-sm text-muted-foreground">
-                  These metrics are derived from the race outcome itself, so
-                  they correlate with rank by construction — a low |ρ| here
-                  questions the eval, not the flying.
+                  These are not behaviours — they measure the result itself, so
+                  of course they follow the placings. They are here as a check
+                  on the analysis: a weak pattern means something is off in the
+                  numbers, not in anyone's flying.
                 </p>
                 <SeparationTable
                   metrics={outcomeMetrics}
                   taskLabels={active.aggregate.taskLabels}
                   ariaLabel="Outcome checks across tasks"
+                  subjectLabel="Outcome"
                 />
               </div>
             ) : null}
@@ -417,16 +420,20 @@ function SeparationTable({
   metrics,
   taskLabels,
   ariaLabel,
+  subjectLabel,
 }: {
   metrics: CompMetricAggregate[];
   taskLabels: string[];
   ariaLabel: string;
+  /** First column's header — "Behaviour" for the ranking, "Outcome" for the
+   * checks, same distinction the task page draws. */
+  subjectLabel: string;
 }) {
   return (
     <Table aria-label={ariaLabel} scrollLabel={ariaLabel}>
       <TableHeader>
         <Column isRowHeader className="min-w-56">
-          Metric
+          {subjectLabel}
         </Column>
         <Column className="w-28" aria-label="Per-task correlation trend, visual">
           Trend
@@ -455,7 +462,7 @@ function SeparationTable({
         <Column className="w-16 text-right" aria-label="n, pilots in the comp-level correlation">
           n
         </Column>
-        <Column className="w-28">Verdict</Column>
+        <Column className="w-32">What it means</Column>
       </TableHeader>
       <TableBody>
         {metrics.map((m) => (

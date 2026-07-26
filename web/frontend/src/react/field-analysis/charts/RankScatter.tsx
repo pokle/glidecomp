@@ -36,7 +36,7 @@ import {
   type FieldAnalysisReport,
   type MetricReport,
 } from "../types";
-import { unitWords } from "../units";
+import { unitWords, verdictWords } from "../units";
 import { usePilotHighlight } from "../PilotHighlightContext";
 import {
   extent,
@@ -83,7 +83,9 @@ export function captionText(
   const c = metric.correlation;
   const parts: string[] = [];
   if (c) {
-    parts.push(`ρ = ${c.rho.toFixed(2)} (${c.verdict}, n = ${c.n}).`);
+    // verdictWords, not the raw token: this caption sits under the chart the
+    // ranking's chip links to, and the two must say the same thing.
+    parts.push(`ρ = ${c.rho.toFixed(2)} (${verdictWords(c.verdict)}, n = ${c.n}).`);
     if (metric.direction === "neutral") {
       parts.push(
         c.rho === 0
@@ -536,7 +538,7 @@ export function RankScatter({
       </p>
 
       <figcaption className="text-xs text-muted-foreground">
-        Each dot is a pilot: across is the metric's value, up is a better rank.{" "}
+        Each dot is a pilot: across is what was measured, up is a better rank.{" "}
         {caption}
       </figcaption>
     </figure>
