@@ -176,17 +176,19 @@ function exitDecayRate(fixes: IGCFix[], seg: ThermalSegment): number | null {
 
 const exitDecay: MetricComputer = {
   id: 'climb.exit_decay',
-  label: 'How weak the climb had become when the pilot left it',
+  label: 'Leaving good lift vs milking it until it dies',
   shortLabel: 'LeaveRate',
   unit: 'm/s',
   family: 'climbing',
   direction: 'neutral',
   explanation:
-    'Does the pilot leave while the climb is still working, or milk it until it dies? For each ' +
-    'thermal of at least 90 s, the climb rate over its final 30 s — the "give-up rate" — and the ' +
-    'value is the median. Low means they abandon weakening lift early and move on; high means ' +
-    'they ride climbs to the end. No expected direction: the correlation sign says which paid ' +
-    'on this task.',
+    'The climb rate the pilot walked away from. For each thermal of at least 90 s, the climb ' +
+    'rate over its final 30 s — the "give-up rate" — and the value is the median. High means ' +
+    'they leave lift that is still working and go; low means they ride climbs until nothing is ' +
+    'left. Read it against the day: this is an absolute rate, so compare it with the median ' +
+    'climb in "How strong the day’s climbs were" — leaving at 1.5 m/s is walking away from a ' +
+    'good climb on a 1 m/s day and scraping the bottom of a 4 m/s one. No expected direction: ' +
+    'the correlation sign says which paid on this task.',
   compute(field) {
     return {
       perPilot: field.pilots.map((p): PilotMetricValue => {
