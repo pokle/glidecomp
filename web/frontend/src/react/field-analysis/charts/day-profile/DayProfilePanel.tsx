@@ -53,22 +53,24 @@ import { weatherInstants } from "./met-shared";
 
 const HOUR_MS = 3_600_000;
 
+/** How far the axis extends past the field's own flying, each side. Enough
+ * to show the morning that set the day up and the glass-off after the last
+ * landing, without the whole-day weather answer dragging the axis out to
+ * midnight. */
+const WINDOW_PAD_MS = 2 * HOUR_MS;
+
 /**
- * Every instant a set of day-profile series mentions, as epoch ms.
- *
- * The weather hours are included, so the whole stack — pilot-derived and
- * modelled alike — shares one domain. Excluding them would be the subtle
- * kind of wrong: each chart would still LOOK aligned while a weather hour
- * sat at a different x than the flight hour beside it. The cost is that the
- * task's ±1 h of weather padding widens the axis a little, which is a fair
- * trade for showing the morning that set the day up.
+ * Every instant the FLOWN evidence occupies, as epoch ms: the pilot-derived
+ * hour buckets (start and end of each), the per-leg spans, and every
+ * takeoff. Deliberately NOT the task-clock markers (window open, gates,
+ * deadline) or the weather hours — the axis window is framed by when the
+ * field actually flew, and everything else is clamped into it.
  */
-function collectInstants(
+function flownInstants(
   wind: WindHourlySeries | null,
   climb: ClimbHourlySeries | null,
   legs: WindLegsSeries | null,
-  timing: DayTimingSeries | null,
-  weatherHours: readonly { t: string }[]
+  timing: DayTimingSeries | null
 ): number[] {
   const out: number[] = [];
   const push = (iso: string | null | undefined) => {
@@ -88,15 +90,7 @@ function collectInstants(
     push(l.from);
     push(l.to);
   }
-  if (timing) {
-    timing.takeoffs.forEach(push);
-    timing.startGates.forEach(push);
-    push(timing.launchOpen);
-    push(timing.deadline);
-    push(timing.bestHour?.from);
-    push(timing.bestHour?.to);
-  }
-  out.push(...weatherInstants(weatherHours));
+  timing?.takeoffs.forEach(push);
   return out.filter((t) => Number.isFinite(t));
 }
 
@@ -142,23 +136,52 @@ export function DayProfilePanel({
     };
   }, [metrics]);
 
-  const weatherHours = weather?.hours ?? [];
+  // The axis window: when the field actually flew, plus two hours either
+  // side. The task's clock markers and the weather answer (which can span a
+  // whole day when the task defines no times) are clamped INTO this window
+  // rather than allowed to stretch it — an axis running to midnight is dead
+  // space on a chart about a flying day. With no flown series at all, the
+  // weather hours are the only evidence and frame the window themselves.
+  const { windowStartMs, windowEndMs, shownWeatherHours } = useMemo(() => {
+    const flown = flownInstants(wind, climb, legs, timing);
+    const allWeather = weather?.hours ?? [];
+    if (flown.length === 0) {
+      const instants = weatherInstants(allWeather);
+      if (instants.length === 0)
+        return { windowStartMs: NaN, windowEndMs: NaN, shownWeatherHours: [] };
+      return {
+        windowStartMs: Math.min(...instants),
+        windowEndMs: Math.max(...instants),
+        shownWeatherHours: allWeather,
+      };
+    }
+    const start = Math.min(...flown) - WINDOW_PAD_MS;
+    const end = Math.max(...flown) + WINDOW_PAD_MS;
+    return {
+      windowStartMs: start,
+      windowEndMs: end,
+      // Whole hour cells only: a partially-inside hour would draw past the
+      // plot edge.
+      shownWeatherHours: allWeather.filter((h) => {
+        const t = new Date(h.t).getTime();
+        return Number.isFinite(t) && t >= start && t + HOUR_MS <= end;
+      }),
+    };
+  }, [wind, climb, legs, timing, weather]);
 
   const axis = useMemo(
     () =>
-      buildTimeAxis(
-        collectInstants(wind, climb, legs, timing, weatherHours),
-        timeZone,
-        [PLOT_LEFT, PLOT_RIGHT]
-      ),
-    [wind, climb, legs, timing, weatherHours, timeZone]
+      Number.isFinite(windowStartMs)
+        ? buildTimeAxis([windowStartMs, windowEndMs], timeZone, [PLOT_LEFT, PLOT_RIGHT])
+        : null,
+    [windowStartMs, windowEndMs, timeZone]
   );
 
   const showWind = wind !== null && wind.hours.length > 0;
   const showClimb = climb !== null && climb.hours.length > 0;
   const showLegs = legs !== null && legs.legs.some((l) => l.n > 0);
   const showFlown = showWind || showClimb || showLegs;
-  const showWeather = weather !== null && weatherHours.length > 0;
+  const showWeather = weather !== null && shownWeatherHours.length > 0;
   // Whether the modelled group occupies the top slot (charts or the pending
   // placeholder) — the flown group only draws its dividing rule beneath one.
   const showModelGroup = showWeather || weatherPending;
@@ -187,7 +210,13 @@ export function DayProfilePanel({
             title="From the weather model"
             detail={`Independent of the tracklogs: ${sourceKindLabel(weather.source.kind)} conditions for the task area from ${weather.source.attribution}.`}
           />
-          <MetChartsGroup weather={weather} axis={axis} timeZone={timeZone} setReadout={setReadout} />
+          <MetChartsGroup
+            weather={weather}
+            hours={shownWeatherHours}
+            axis={axis}
+            timeZone={timeZone}
+            setReadout={setReadout}
+          />
         </>
       ) : weatherPending ? (
         <>

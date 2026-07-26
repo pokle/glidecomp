@@ -90,6 +90,11 @@ export function ClimbHourlyChart({
   // rows so adjacent labels don't overprint. Only the FIRST gate gets a
   // full rule — a 15-minute gate sequence is 18 rules, which buries the
   // fan — the rest become short ticks at the top of the plot.
+  // The axis window is framed by the field's own flying (±2 h), so a clock
+  // marker can legitimately fall outside it — an early launch window, a
+  // deadline hours after the last landing. Drop those rather than draw into
+  // the chart's margin.
+  const inDomain = (ms: number) => ms >= axis.domainStart && ms <= axis.domainEnd;
   const rules: RuleMark[] = [];
   const gateTicks: number[] = [];
   if (timing) {
@@ -107,7 +112,9 @@ export function ClimbHourlyChart({
     if (timing.deadline) rules.push({ ms: new Date(timing.deadline).getTime(), label: "deadline" });
     rules.sort((a, b) => a.ms - b.ms);
   }
-  const labelledRules = rules.filter((r) => r.label !== null);
+  const shownRules = rules.filter((r) => inDomain(r.ms));
+  const shownGateTicks = gateTicks.filter(inDomain);
+  const labelledRules = shownRules.filter((r) => r.label !== null);
 
   const bestHour = timing?.bestHour
     ? { fromMs: new Date(timing.bestHour.from).getTime(), toMs: new Date(timing.bestHour.to).getTime() }
@@ -244,7 +251,7 @@ export function ClimbHourlyChart({
       {/* The task clock: labelled dashed rules through the plot and lanes;
           later gates are quiet ticks along the top. */}
       <g aria-hidden>
-        {rules.map((r, i) => (
+        {shownRules.map((r, i) => (
           <line
             key={`r${r.ms}-${i}`}
             x1={axis.x(r.ms)}
@@ -256,7 +263,7 @@ export function ClimbHourlyChart({
             strokeDasharray="3 3"
           />
         ))}
-        {gateTicks.map((ms) => (
+        {shownGateTicks.map((ms) => (
           <line
             key={`gt${ms}`}
             x1={axis.x(ms)}

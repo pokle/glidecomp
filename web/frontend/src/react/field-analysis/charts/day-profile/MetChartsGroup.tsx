@@ -10,7 +10,7 @@
  * the pilot-derived ones, while the task page builds an axis from the
  * weather hours alone.
  */
-import type { TaskWeather } from "@/react/weather/types";
+import type { TaskWeather, WeatherHour } from "@/react/weather/types";
 import { sourceKindLabel } from "@/react/weather/types";
 import type { TimeAxis } from "./time-axis";
 import { MetWindChart } from "./MetWindChart";
@@ -20,11 +20,17 @@ import { sampleOffset } from "./met-shared";
 
 export function MetChartsGroup({
   weather,
+  hours,
   axis,
   timeZone,
   setReadout,
 }: {
   weather: TaskWeather;
+  /** The hours to draw — the caller's clamp of `weather.hours` to its own
+   * display window (daylight on the task page, the flown window on the
+   * field-analysis page). Explicit rather than defaulted so a caller cannot
+   * accidentally chart hours its axis was not built for. */
+  hours: WeatherHour[];
   axis: TimeAxis;
   timeZone: string | undefined;
   setReadout: (text: string | null) => void;
@@ -32,7 +38,7 @@ export function MetChartsGroup({
   return (
     <>
       <MetWindChart
-        hours={weather.hours}
+        hours={hours}
         source={weather.source}
         terrainElevationM={weather.resolved.elevationM}
         axis={axis}
@@ -43,14 +49,14 @@ export function MetChartsGroup({
           top — so the stack reads the way the sky is stacked: cirrus, then
           the cloud base and thermal top beneath it. */}
       <MetSkyChart
-        hours={weather.hours}
+        hours={hours}
         source={weather.source}
         axis={axis}
         timeZone={timeZone}
         setReadout={setReadout}
       />
       <MetThermalChart
-        hours={weather.hours}
+        hours={hours}
         source={weather.source}
         axis={axis}
         timeZone={timeZone}

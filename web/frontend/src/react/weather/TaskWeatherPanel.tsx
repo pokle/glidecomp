@@ -10,6 +10,7 @@
  * can compare the predicted day against the day the field actually flew.
  */
 import { useMemo, useState } from "react";
+import { bestDaylightWindow } from "@glidecomp/engine";
 import type { TaskWeather } from "./types";
 import { zoneAbbrev } from "@/react/lib/time";
 import { buildTimeAxis } from "@/react/field-analysis/charts/day-profile/time-axis";
@@ -19,6 +20,8 @@ import {
   MetAttribution,
 } from "@/react/field-analysis/charts/day-profile/MetChartsGroup";
 import { weatherInstants } from "@/react/field-analysis/charts/day-profile/met-shared";
+
+const HOUR_MS = 3_600_000;
 
 export function TaskWeatherPanel({
   weather,
@@ -38,7 +41,24 @@ export function TaskWeatherPanel({
   const timeZone = compTimezone ?? undefined;
   const [readout, setReadout] = useState<string | null>(null);
 
-  const hours = weather?.hours ?? [];
+  // Only the flying day's daylight hours. A task with no launch-window or
+  // deadline times falls back to a whole-day weather query (see the
+  // engine's task-query.ts), and charting that raw runs the axis through
+  // local midnight into the next dawn — dead space on a chart about flying
+  // weather. `bestDaylightWindow` picks the ONE sunrise-to-sunset span the
+  // answer mostly covers; in polar day/night there is none, and everything
+  // shows.
+  const hours = useMemo(() => {
+    if (!weather) return [];
+    const { lat, lon, fromMs, toMs } = weather.resolved;
+    const win = bestDaylightWindow(lat, lon, fromMs, toMs);
+    if (!win) return weather.hours;
+    return weather.hours.filter((h) => {
+      const t = new Date(h.t).getTime();
+      return Number.isFinite(t) && t + HOUR_MS > win.sunriseMs && t < win.sunsetMs;
+    });
+  }, [weather]);
+
   const axis = useMemo(
     () => buildTimeAxis(weatherInstants(hours), timeZone, [PLOT_LEFT, PLOT_RIGHT]),
     [hours, timeZone]
@@ -58,7 +78,13 @@ export function TaskWeatherPanel({
 
   return (
     <figure className="space-y-1">
-      <MetChartsGroup weather={weather} axis={axis} timeZone={timeZone} setReadout={setReadout} />
+      <MetChartsGroup
+        weather={weather}
+        hours={hours}
+        axis={axis}
+        timeZone={timeZone}
+        setReadout={setReadout}
+      />
       <p aria-hidden className="min-h-4 text-xs text-muted-foreground print:hidden">
         {readout ?? "Hover a chart for exact figures."}
       </p>
