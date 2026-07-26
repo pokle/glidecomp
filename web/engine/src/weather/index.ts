@@ -45,7 +45,10 @@ export {
 } from "./registry";
 export { bestDaylightWindow, sunTimes, type SunTimes } from "./sun";
 export {
+  FORECAST_HORIZON_DAYS,
+  beyondForecastHorizon,
   openMeteoEra5Provider,
+  openMeteoForecastProvider,
   openMeteoHistoricalForecastProvider,
   openMeteoProviders,
 } from "./open-meteo";

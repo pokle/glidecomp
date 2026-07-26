@@ -132,7 +132,13 @@ interface ServedWeather {
   weather: TaskWeather | null;
   stale: boolean;
   pending: boolean;
+  too_far_ahead: boolean;
   error: string | null;
+}
+
+/** An ISO date this many days from today, for the future-dated task tests. */
+function dateDaysAhead(days: number): string {
+  return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
 }
 
 beforeEach(async () => {
@@ -494,6 +500,38 @@ describe("GET /weather", () => {
     const body = (await res.json()) as ServedWeather;
     expect(body.pending).toBe(false);
     expect(body.error).toMatch(/failed/i);
+  });
+
+  test("a task set tomorrow is fetched like any other — the forecast covers it", async () => {
+    const soon = await createTask(compId, {
+      xctsk: xctsk(),
+      task_date: dateDaysAhead(1),
+    });
+    const res = await request("GET", `/api/comp/${compId}/task/${soon}/weather`);
+    const body = (await res.json()) as ServedWeather;
+    expect(body.too_far_ahead).toBe(false);
+    expect(body.pending).toBe(true);
+    expect(body.error).toBeNull();
+  });
+
+  test("a task set beyond the forecast horizon says 'not yet' instead of spinning", async () => {
+    // A comp laid out weeks in advance. Nothing can answer, so scheduling a
+    // fetch would only earn a failure row and a backoff of up to a day —
+    // exactly the window in which the forecast starts existing.
+    const distant = await createTask(compId, {
+      xctsk: xctsk(),
+      task_date: dateDaysAhead(60),
+    });
+    const res = await request("GET", `/api/comp/${compId}/task/${distant}/weather`);
+    const body = (await res.json()) as ServedWeather;
+    expect(body.too_far_ahead).toBe(true);
+    expect(body.pending).toBe(false);
+    expect(body.weather).toBeNull();
+    expect(body.error).toMatch(/days ahead/i);
+
+    // ...and no row was written, so the day it comes into range it fetches.
+    const distantId = await taskIdOf(distant);
+    expect(await readWeatherRow(env.DB, distantId)).toBeNull();
   });
 
   test("a hidden test comp 404s anonymously but serves its admin", async () => {

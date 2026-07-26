@@ -2,6 +2,10 @@
  * The modelled weather for a task's day — wind, sky, thermal ceiling — on one
  * shared time axis, with the provider credit and grid-cell provenance.
  *
+ * Works the same for a day already flown and a day still to come: the engine's
+ * registry picks an archive or a live forecast, and the difference reaches the
+ * reader through `source.kind`, which every chart stamps into its own plot.
+ *
  * This is the TASK PAGE's weather surface: modelled charts alone, because the
  * task page has no pilot-derived series to set them against. The
  * field-analysis page instead stacks the same charts (via MetChartsGroup)
@@ -27,6 +31,7 @@ export function TaskWeatherPanel({
   weather,
   compTimezone,
   pending = false,
+  tooFarAhead = false,
 }: {
   /** Modelled conditions for the task window; null while loading, when the
    * task has no route or date, or when every provider failed. */
@@ -37,6 +42,10 @@ export function TaskWeatherPanel({
    * server's background fetch) — renders a placeholder line rather than
    * nothing, so the section doesn't pop into an already-read page. */
   pending?: boolean;
+  /** The task is set beyond the forecast horizon. Worth a sentence rather
+   * than silence: an organizer who laid the comp out in advance is looking at
+   * a page that will fill itself in, and should be told so. */
+  tooFarAhead?: boolean;
 }) {
   const timeZone = compTimezone ?? undefined;
   const [readout, setReadout] = useState<string | null>(null);
@@ -65,8 +74,16 @@ export function TaskWeatherPanel({
   );
 
   if (!weather || hours.length === 0 || !axis) {
-    // Deterministic (no zone abbreviation, no dates), so it is safe to
-    // server-render while the client takes over the fetch.
+    // Deterministic (no zone abbreviation, no dates), so both branches are
+    // safe to server-render while the client takes over the fetch.
+    if (tooFarAhead) {
+      return (
+        <p className="text-sm text-muted-foreground">
+          This task is further ahead than the forecast reaches. The conditions
+          will appear here about two weeks out.
+        </p>
+      );
+    }
     return pending ? (
       <p className="text-sm text-muted-foreground">
         Fetching the day&rsquo;s weather — it will appear here in a moment.

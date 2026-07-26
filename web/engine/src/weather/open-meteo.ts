@@ -1,12 +1,12 @@
 // Copyright (c) 2026, Tushar Pokle.  All rights reserved.
 
 /**
- * Open-Meteo adapters — the first two `WeatherProvider`s.
+ * Open-Meteo adapters — the three `WeatherProvider`s shipped today.
  *
  * Open-Meteo is the starting source because it needs no API key, publishes
- * under CC BY 4.0, and covers everywhere GlideComp has comps. It exposes two
- * archives with genuinely different capabilities, so it becomes two
- * providers rather than one with a mode flag:
+ * under CC BY 4.0, and covers everywhere GlideComp has comps. It exposes
+ * datasets with genuinely different capabilities and different eras, so it
+ * becomes three providers rather than one with a mode flag:
  *
  *   Historical Forecast (2022→)  Archived runs of the operational models,
  *                                1–25 km, initialised from real observations
@@ -21,10 +21,21 @@
  *                                Verified against the live API, not assumed:
  *                                requesting them returns units "undefined"
  *                                and a column of nulls.
+ *   Forecast (→ today + 15)      The live operational run: the only source
+ *                                that can answer for a task day that hasn't
+ *                                happened yet. Same variables as the
+ *                                archived forecast, and the same model — it
+ *                                IS that model, before the day it describes.
  *
- * That asymmetry is exactly why `WeatherSource.variables` exists. An older
- * comp gets a thinner report and the charts drop the panels they have no
- * data for, rather than drawing an empty axis or, worse, a fabricated one.
+ * The capability asymmetry is exactly why `WeatherSource.variables` exists.
+ * An older comp gets a thinner report and the charts drop the panels they
+ * have no data for, rather than drawing an empty axis or, worse, a
+ * fabricated one.
+ *
+ * The ERA-boundary asymmetry is why `WeatherSource.kind` exists, and why the
+ * archives refuse an unelapsed window (see `requireElapsedWindow`): a
+ * prediction and a record of what happened must never reach a pilot wearing
+ * the same label.
  *
  * Attribution is not optional: CC BY 4.0 requires the credit that
  * `WeatherSource.attribution` carries to the chart. The free tier is also
@@ -40,6 +51,7 @@ import type {
   WeatherLevel,
   WeatherProvider,
   WeatherQuery,
+  WeatherSourceKind,
   WeatherVariable,
 } from "./types";
 
@@ -179,7 +191,7 @@ async function fetchOpenMeteo(
     providerId: string;
     model: string;
     attribution: string;
-    kind: "model" | "reanalysis";
+    kind: WeatherSourceKind;
     resolutionKm: number | null;
     variables: WeatherVariable[];
     /** Publication lag in ms; a fetch inside it may still be revised. */
@@ -342,6 +354,69 @@ async function fetchOpenMeteo(
 const HISTORICAL_FORECAST_FROM_MS = Date.UTC(2022, 0, 1);
 
 /**
+ * How many whole UTC days ahead a forecast reaches.
+ *
+ * Open-Meteo publishes 16 forecast days counting today, so `start_date` may
+ * be at most today + 15. Probed against the live API on 2026-07-26, which
+ * answered anything later with "Parameter 'start_date' is out of allowed
+ * range from 2026-04-24 to 2026-08-10". Whole DAYS rather than a duration
+ * because that is the shape of the API's own rule: it validates the date we
+ * send, not the instant.
+ */
+export const FORECAST_HORIZON_DAYS = 15;
+
+/** Whole-day index of an instant in UTC — the unit the API's range works in. */
+function utcDayIndex(ms: number): number {
+  return Math.floor(ms / DAY_MS);
+}
+
+/**
+ * True when a query starts further ahead than anything can see.
+ *
+ * Exported for the read path, which uses it to tell a reader "not yet" about
+ * a task set up weeks in advance, rather than scheduling a fetch that can
+ * only fail and then sit out a backoff. Named for the question it answers
+ * rather than for Open-Meteo: it describes OUR forward reach, and it lives
+ * beside the constant only because Open-Meteo is what sets that reach today.
+ * The day a longer-range provider joins the registry, both move.
+ */
+export function beyondForecastHorizon(query: WeatherQuery, nowMs: number): boolean {
+  return utcDayIndex(query.fromMs) - utcDayIndex(nowMs) > FORECAST_HORIZON_DAYS;
+}
+
+/**
+ * The archives answer for elapsed time only.
+ *
+ * Both archive endpoints will happily serve a FUTURE day — verified against
+ * the live API, which returned, for a date days ahead, the current forecast
+ * run byte-for-byte identical to what api.open-meteo.com gives. That is the
+ * trap this guard closes. Served through the archived-forecast adapter, a
+ * prediction would reach the reader stamped "archived forecast, modelled",
+ * indistinguishable from a run initialised on the day it describes — and
+ * `WeatherSource.kind` exists precisely so that confusion is impossible.
+ *
+ * The split is by the window's END, so a task still being flown counts as a
+ * prediction until its last hour is behind us. Conservative in the safe
+ * direction (calling real data a forecast misleads nobody; the reverse
+ * does), and self-healing: once the day is over, the archives take the row
+ * back on its next refresh and the label settles into "archived".
+ *
+ * It lives in `fetch` rather than `supports` because `supports` sees only the
+ * query — the clock is ambient and arrives with the context.
+ */
+function requireElapsedWindow(
+  providerId: string,
+  query: WeatherQuery,
+  ctx: WeatherFetchContext
+): void {
+  if (query.toMs > ctx.nowMs) {
+    throw new Error(
+      `${providerId}: the task's window has not elapsed — the forecast provider owns it`
+    );
+  }
+}
+
+/**
  * Open-Meteo's archived operational forecasts — the preferred source for any
  * comp from 2022 on. Priority 50 leaves room beneath it for a global
  * fallback and above it for regional sources added later (a BOM adapter for
@@ -361,8 +436,9 @@ export function openMeteoHistoricalForecastProvider(): WeatherProvider {
     label: "Open-Meteo archived forecast",
     priority: 50,
     supports: (q) => q.fromMs >= HISTORICAL_FORECAST_FROM_MS,
-    fetch: (q, ctx) =>
-      fetchOpenMeteo(
+    fetch: async (q, ctx) => {
+      requireElapsedWindow("open-meteo-historical-forecast", q, ctx);
+      return fetchOpenMeteo(
         {
           baseUrl: "https://historical-forecast-api.open-meteo.com/v1/forecast",
           pressureLevels: PRESSURE_LEVELS_HPA,
@@ -392,7 +468,8 @@ export function openMeteoHistoricalForecastProvider(): WeatherProvider {
         },
         q,
         ctx
-      ),
+      );
+    },
   };
 }
 
@@ -409,8 +486,9 @@ export function openMeteoEra5Provider(): WeatherProvider {
     label: "Open-Meteo ERA5 reanalysis",
     priority: 10,
     supports: () => true,
-    fetch: (q, ctx) =>
-      fetchOpenMeteo(
+    fetch: async (q, ctx) => {
+      requireElapsedWindow("open-meteo-era5", q, ctx);
+      return fetchOpenMeteo(
         {
           baseUrl: "https://archive-api.open-meteo.com/v1/archive",
           pressureLevels: [],
@@ -436,11 +514,97 @@ export function openMeteoEra5Provider(): WeatherProvider {
         },
         q,
         ctx
-      ),
+      );
+    },
   };
 }
 
-/** Both Open-Meteo providers, for the default registry. */
+/**
+ * Open-Meteo's LIVE forecast — the only source that can answer for a task day
+ * that hasn't happened yet.
+ *
+ * Tasks are routinely set the evening before, and sometimes the whole comp is
+ * laid out days ahead; a task page with no weather on it is at its least
+ * useful exactly when a pilot most wants to look, which is before they fly.
+ *
+ * Same model and same variables as the archived forecast — it IS that model,
+ * caught before the day it describes — so what separates them is not
+ * capability but `kind`. This one says `forecast`, and everything downstream
+ * (the in-plot source tag, the attribution line, a screen reader's chart
+ * label) repeats that word, so nobody reads a prediction as a record. The
+ * archives refuse an unelapsed window for the same reason.
+ *
+ * The era split is a clean partition, enforced in `fetch` on both sides
+ * because `supports` cannot see the clock: the archives take windows that
+ * have ended, this takes windows that have not. No gap, no overlap, and no
+ * ordering subtlety — the priority below the archived forecast only says
+ * where the fall-through goes if that partition is ever relaxed.
+ *
+ * Every answer here is provisional by construction (`nowMs - toMs` is
+ * negative for any window this provider accepts), so the store re-fetches on
+ * its six-hour TTL as new model runs land, and the row collapses into the
+ * archived truth on the first refresh after the day is flown.
+ */
+export function openMeteoForecastProvider(): WeatherProvider {
+  return {
+    id: "open-meteo-forecast",
+    label: "Open-Meteo forecast",
+    priority: 40,
+    supports: () => true,
+    fetch: async (q, ctx) => {
+      if (q.toMs <= ctx.nowMs) {
+        throw new Error(
+          "open-meteo-forecast: the task's window has elapsed — the archives own it"
+        );
+      }
+      if (beyondForecastHorizon(q, ctx.nowMs)) {
+        // Refused here rather than left to the API's 400, so a comp laid out
+        // a month ahead costs no outbound requests and no failure backoff.
+        throw new Error(
+          `open-meteo-forecast: the task starts more than ${FORECAST_HORIZON_DAYS} days ` +
+            `ahead, past the forecast horizon`
+        );
+      }
+      return fetchOpenMeteo(
+        {
+          baseUrl: "https://api.open-meteo.com/v1/forecast",
+          pressureLevels: PRESSURE_LEVELS_HPA,
+          extraVariables: ["cape"],
+          providerId: "open-meteo-forecast",
+          model: "Open-Meteo best-match (ECMWF/regional)",
+          attribution: "Open-Meteo forecast",
+          kind: "forecast",
+          // Same story as the archived forecast: best_match picks a model per
+          // location and the API does not report which.
+          resolutionKm: null,
+          variables: [
+            "surface_wind",
+            "surface_gust",
+            "surface_temp",
+            "level_wind",
+            "cloud_cover",
+            "boundary_layer",
+            "cape",
+            "radiation",
+            "precipitation",
+          ],
+          // Nominal only: a window this provider accepts always ends in the
+          // future, so the answer is provisional whatever this says. A
+          // prediction never settles — it gets superseded by the archives.
+          settleMs: 3 * DAY_MS,
+        },
+        q,
+        ctx
+      );
+    },
+  };
+}
+
+/** All three Open-Meteo providers, for the default registry. */
 export function openMeteoProviders(): WeatherProvider[] {
-  return [openMeteoHistoricalForecastProvider(), openMeteoEra5Provider()];
+  return [
+    openMeteoHistoricalForecastProvider(),
+    openMeteoEra5Provider(),
+    openMeteoForecastProvider(),
+  ];
 }

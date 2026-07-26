@@ -67,6 +67,11 @@ export function WeatherSection({
   const weather = useTaskWeather(compId || null, taskId || null);
   const weatherPending = weather.loading || weather.data?.pending === true;
   const hasWeather = weatherPending || weather.data?.weather != null;
+  // A task set beyond the forecast horizon explains itself in the panel, but
+  // it doesn't open the section on its own: for a reader with nothing else to
+  // see here, "no weather yet" is noise. The admin who scheduled the comp
+  // that far ahead always has the section open, and gets the explanation.
+  const tooFarAhead = weather.data?.too_far_ahead === true;
 
   if (!hasNotes && !hasWeather && !isAdmin) return null;
 
@@ -90,12 +95,13 @@ export function WeatherSection({
           flew in are context the scores can&rsquo;t show.
         </p>
       ) : null}
-      {hasWeather ? (
+      {hasWeather || tooFarAhead ? (
         <div className="mt-3">
           <TaskWeatherPanel
             weather={weather.data?.weather ?? null}
             compTimezone={compTimezone}
             pending={weatherPending}
+            tooFarAhead={tooFarAhead}
           />
         </div>
       ) : null}
