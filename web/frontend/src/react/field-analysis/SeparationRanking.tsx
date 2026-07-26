@@ -16,10 +16,11 @@
 import { useState } from "react";
 import type { Key, Selection } from "react-aria-components";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
-import { DivergingMeter } from "@/react/rac/meter";
+import { DivergingMeter, ProportionMeter } from "@/react/rac/meter";
 import { Badge } from "@/react/rac/badge";
 import { cn } from "@/react/lib/utils";
 import { MetricExplanation } from "./MetricExplanation";
+import { verdictWords } from "./units";
 import { MetricDetailPanel } from "./charts/MetricDetailPanel";
 import {
   FAMILY_LABELS,
@@ -51,18 +52,24 @@ export function rankMetrics(metrics: MetricReport[]): RankedMetric[] {
     .sort((a, b) => b.correlation.absRho - a.correlation.absRho);
 }
 
-/** The strongest |ρ| among a set of metrics — the badge on each family.
- * Outcome-derived metrics don't count: a family must not owe its headline
- * number to a metric that correlates by construction. */
-export function bestAbsRho(metrics: MetricReport[]): number | null {
-  const values = metrics.flatMap((m) =>
-    m.correlation && !m.outcome ? [m.correlation.absRho] : []
-  );
-  return values.length > 0 ? Math.max(...values) : null;
+/** The strongest correlation among a set of metrics — the badge on each
+ * family, which needs the whole correlation (not just |ρ|) to name its
+ * verdict. Outcome-derived metrics don't count: a family must not owe its
+ * headline to a metric that correlates by construction. */
+export function bestCorrelation(metrics: MetricReport[]): MetricCorrelation | null {
+  return metrics.reduce<MetricCorrelation | null>((best, m) => {
+    if (!m.correlation || m.outcome) return best;
+    return best === null || m.correlation.absRho > best.absRho ? m.correlation : best;
+  }, null);
 }
 
-/** Shared verdict chip (also used by the comp page). "within noise" and
- * "n too small" deliberately wear the quietest style — they are warnings
+/** Just the magnitude of {@link bestCorrelation}. */
+export function bestAbsRho(metrics: MetricReport[]): number | null {
+  return bestCorrelation(metrics)?.absRho ?? null;
+}
+
+/** Shared verdict chip (also used by the comp page). "could be chance" and
+ * "too few pilots" deliberately wear the quietest style — they are warnings
  * that the number may be luck, not findings. */
 export function VerdictBadge({ correlation }: { correlation: MetricCorrelation }) {
   const variant =
@@ -71,20 +78,25 @@ export function VerdictBadge({ correlation }: { correlation: MetricCorrelation }
       : correlation.verdict === "moderate"
         ? "secondary"
         : "outline";
-  return <Badge variant={variant}>{correlation.verdict}</Badge>;
+  return <Badge variant={variant}>{verdictWords(correlation.verdict)}</Badge>;
 }
 
-/** The one-sentence basis for every verdict badge — rendered under both the
- * task ranking and the comp aggregate so the thresholds are never undefined
- * jargon. */
+/** What every verdict chip means, in the thresholds behind it — rendered
+ * under both the task ranking and the comp aggregate. The chips read as plain
+ * English ("could be chance"); this is where the statistics they stand for are
+ * spelled out, so the plain words are never the whole story a curious reader
+ * can get. */
 export function VerdictLegend() {
   return (
     <p className="text-xs text-muted-foreground">
-      Verdicts: <strong>strong</strong> |ρ| ≥ 0.5, <strong>moderate</strong> ≥ 0.3,{" "}
-      <strong>weak</strong> below — but only after clearing the noise floor for that
-      metric's n. <strong>within noise</strong> means shuffled ranks produce a
-      coefficient that size more than 5% of the time, so it is indistinguishable from
-      luck whatever its magnitude.
+      <strong>clear pattern</strong> is |ρ| ≥ 0.5, <strong>some pattern</strong> ≥ 0.3
+      and <strong>faint pattern</strong> below — each only once the coefficient is
+      bigger than chance alone produces at that many pilots (its noise floor).{" "}
+      <strong>could be chance</strong> (in the statistics: within noise) means
+      shuffling the placings produces a coefficient that size more than 5% of the
+      time, so it cannot be told apart from luck however big it looks.{" "}
+      <strong>too few pilots</strong> is fewer than {MIN_CORRELATION_N} pilots with a
+      value — not enough to tell either way.
     </p>
   );
 }
@@ -133,109 +145,72 @@ export function SeparationRanking({
   }
 
   const underpowered = ranked.filter((r) => r.correlation.n < MIN_CORRELATION_N);
+  // The denominator behind every "19 of 29": the pilots this report analysed.
+  // Without the report (metrics-only callers) the widest correlation is the
+  // best available stand-in for the field size.
+  const fieldSize =
+    report?.pilots.length ??
+    Math.max(0, ...[...ranked, ...outcomeRanked].map((r) => r.correlation.n));
 
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        Each metric's Spearman correlation against the published rank. Rank 1
-        is best, so a metric where more is better shows a{" "}
-        <strong>negative</strong> ρ. Bigger bars mean the metric separated the
-        field more sharply on this task.
+        {/* The heading now asks the question ("which behaviours went with
+            better results"), so this says how the answer was arrived at —
+            in that order, and in a pilot's words before the statistician's. */}
+        Every row is one behaviour, measured for each pilot and then compared
+        against the published placings (Spearman's rank correlation, ρ). Rank 1
+        is best, so a behaviour where more is better shows a{" "}
+        <strong>negative</strong> ρ. A bigger bar means the behaviour tracked
+        the placings more closely on this task, and{" "}
+        <strong>pilots measured</strong> is how much of the analysed field the
+        behaviour applied to — a reading drawn from half the field is thinner
+        than one drawn from all of it.
         {report ? (
           // An instruction to interact — meaningless on paper.
           <span className="print:hidden">
             {" "}
-            Select a row to see that metric plotted against rank.
+            Select a row to see that behaviour plotted against rank.
           </span>
         ) : null}
       </p>
 
       {ranked.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No behavioural metric produced a correlation — the field is too
-          small, or too few pilots had a usable value.
+          No behaviour produced a correlation — the field is too small, or too
+          few pilots had a usable value.
         </p>
       ) : (
-      <Table
-        aria-label="Metric separation ranking"
-        scrollLabel="Metric separation ranking"
-        {...(report
-          ? {
-              selectionMode: "single" as const,
-              selectionBehavior: "replace" as const,
-              disallowEmptySelection: true,
-              selectedKeys: effectiveId !== null ? [effectiveId] : [],
-              onSelectionChange: (keys: Selection) => {
-                if (keys !== "all") setSelectedId([...keys][0] ?? null);
-              },
-            }
-          : {})}
-      >
-        <TableHeader>
-          <Column isRowHeader className="min-w-56">
-            Metric
-          </Column>
-          <Column className="w-20 text-right">ρ</Column>
-          <Column className="w-40" aria-label="Correlation strength, visual">
-            Strength
-          </Column>
-          <Column className="w-16 text-right" aria-label="n, pilots correlated">
-            n
-          </Column>
-          <Column className="w-28">Verdict</Column>
-          <Column className="w-40">Family</Column>
-        </TableHeader>
-        <TableBody>
-          {ranked.map(({ metric, correlation }) => (
-            <Row key={metric.id} id={metric.id}>
-              <Cell className="whitespace-normal">
-                <span className="inline-flex items-center gap-1">
-                  {metric.label}
-                  <MetricExplanation
-                    metricId={metric.id}
-                    label={metric.label}
-                    unit={metric.unit}
-                    direction={metric.direction}
-                    explanation={metric.explanation}
-                    perPilot={metric.perPilot}
-                    pilots={report?.pilots}
-                  />
-                </span>
-              </Cell>
-              <Cell className="text-right tabular-nums">
-                {correlation.rho.toFixed(2)}
-              </Cell>
-              <Cell>
-                <DivergingMeter
-                  value={correlation.rho}
-                  label={`${metric.label}: Spearman correlation against rank`}
-                  valueLabel={correlation.rho.toFixed(2)}
-                />
-              </Cell>
-              <Cell className="text-right tabular-nums">{correlation.n}</Cell>
-              <Cell>
-                <VerdictBadge correlation={correlation} />
-              </Cell>
-              <Cell className="text-muted-foreground">
-                {FAMILY_LABELS[metric.family]}
-              </Cell>
-            </Row>
-          ))}
-        </TableBody>
-      </Table>
+        <RankingTable
+          ranked={ranked}
+          ariaLabel="Behaviour ranking"
+          subjectLabel="Behaviour"
+          fieldSize={fieldSize}
+          pilots={report?.pilots}
+          selection={
+            report
+              ? {
+                  selectedKeys: effectiveId !== null ? [effectiveId] : [],
+                  onSelectionChange: (keys: Selection) => {
+                    if (keys !== "all") setSelectedId([...keys][0] ?? null);
+                  },
+                }
+              : undefined
+          }
+        />
       )}
 
       <VerdictLegend />
       <p className="text-xs text-muted-foreground">
-        With {ranked.length} metrics ranked on this one task, the top rows are
-        partly selection luck — trust the metrics that repeat across tasks in the
-        competition-level analysis.
+        Rank {ranked.length} behaviours against one day's results and a few will
+        look strong on luck alone — the ones worth believing are those that
+        repeat across tasks in the competition-level analysis.
       </p>
       {underpowered.length > 0 ? (
         <p className="text-xs text-muted-foreground">
-          {underpowered.length} metric{underpowered.length === 1 ? "" : "s"}{" "}
-          correlated fewer than {MIN_CORRELATION_N} pilots — treat those rows as
-          indicative only.
+          {underpowered.length} behaviour{underpowered.length === 1 ? " was" : "s were"}{" "}
+          measured on fewer than {MIN_CORRELATION_N} pilots — too few to tell
+          either way, so read those rows as a hint at most.
         </p>
       ) : null}
 
@@ -259,63 +234,153 @@ export function SeparationRanking({
         <div className="space-y-2 pt-2">
           <h3 className="text-base font-semibold">Outcome checks</h3>
           <p className="text-sm text-muted-foreground">
-            These metrics are derived from the race outcome itself, so they
-            correlate with rank by construction — a low |ρ| here questions the
-            eval, not the flying. Their per-pilot diagnostics stay in the Race
-            craft section below.
+            These are not behaviours — they measure the result itself (time
+            behind the leader, race time lost), so of course they follow the
+            placings. They are here as a check on the analysis: a weak pattern
+            in this table means something is off in the numbers, not in anyone's
+            flying. Their per-pilot tables stay in the Race craft section below.
           </p>
-          <Table aria-label="Outcome checks" scrollLabel="Outcome checks">
-            <TableHeader>
-              <Column isRowHeader className="min-w-56">
-                Metric
-              </Column>
-              <Column className="w-20 text-right">ρ</Column>
-              <Column className="w-40" aria-label="Correlation strength, visual">
-                Strength
-              </Column>
-              <Column className="w-16 text-right" aria-label="n, pilots correlated">
-                n
-              </Column>
-              <Column className="w-28">Verdict</Column>
-            </TableHeader>
-            <TableBody>
-              {outcomeRanked.map(({ metric, correlation }) => (
-                <Row key={metric.id}>
-                  <Cell className="whitespace-normal">
-                    <span className="inline-flex items-center gap-1">
-                      {metric.label}
-                      <MetricExplanation
-                        metricId={metric.id}
-                        label={metric.label}
-                        unit={metric.unit}
-                        direction={metric.direction}
-                        explanation={metric.explanation}
-                        perPilot={metric.perPilot}
-                        pilots={report?.pilots}
-                      />
-                    </span>
-                  </Cell>
-                  <Cell className="text-right tabular-nums">
-                    {correlation.rho.toFixed(2)}
-                  </Cell>
-                  <Cell>
-                    <DivergingMeter
-                      value={correlation.rho}
-                      label={`${metric.label}: Spearman correlation against rank`}
-                      valueLabel={correlation.rho.toFixed(2)}
-                    />
-                  </Cell>
-                  <Cell className="text-right tabular-nums">{correlation.n}</Cell>
-                  <Cell>
-                    <VerdictBadge correlation={correlation} />
-                  </Cell>
-                </Row>
-              ))}
-            </TableBody>
-          </Table>
+          <RankingTable
+            ranked={outcomeRanked}
+            ariaLabel="Outcome checks"
+            subjectLabel="Outcome"
+            fieldSize={fieldSize}
+            pilots={report?.pilots}
+          />
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * One ranking table, shared by the behavioural ranking and the outcome checks
+ * so the two can never drift in layout.
+ *
+ * Four columns, not six. ρ is printed inside the Strength cell it describes —
+ * the bar is what carries at a glance, and a column of two-decimal
+ * coefficients ahead of it was a wall to get past before reading any of them.
+ * n is a bar too, reading "19 of 29": the bare count meant nothing without the
+ * field size, which lived far up the page in the analysis basis. And the
+ * family column is gone — the metric names say what they measure, and each
+ * metric's family is one ⓘ away as well as being the heading of the chapter it
+ * belongs to further down the page.
+ */
+function RankingTable({
+  ranked,
+  ariaLabel,
+  subjectLabel,
+  fieldSize,
+  pilots,
+  selection,
+}: {
+  ranked: RankedMetric[];
+  ariaLabel: string;
+  /** First column's header. "Behaviour" for the ranking, "Outcome" for the
+   * checks below it — the engine calls both a metric, but the reader is owed
+   * the distinction: one is something a pilot did, the other is the result
+   * they got. */
+  subjectLabel: string;
+  /** Pilots analysed — the denominator of the coverage column. */
+  fieldSize: number;
+  /** Passed to each ⓘ so it can name the pilots a metric skipped. */
+  pilots?: FieldAnalysisReport["pilots"];
+  /** When provided, rows are single-selectable (drives the chart below). */
+  selection?: {
+    selectedKeys: Key[];
+    onSelectionChange: (keys: Selection) => void;
+  };
+}) {
+  return (
+    <Table
+      aria-label={ariaLabel}
+      scrollLabel={ariaLabel}
+      {...(selection
+        ? {
+            selectionMode: "single" as const,
+            selectionBehavior: "replace" as const,
+            disallowEmptySelection: true,
+            ...selection,
+          }
+        : {})}
+    >
+      <TableHeader>
+        <Column isRowHeader className="min-w-56">
+          {subjectLabel}
+        </Column>
+        {/* No aria-labels on these headers any more: the columns they
+            replaced were named "ρ" and "n", symbols a screen reader can only
+            spell out. "Strength" and "Pilots measured" say themselves, and an
+            aria-label would override the visible name for no gain. */}
+        <Column className="w-48">Strength</Column>
+        <Column className="w-32">What it means</Column>
+        <Column className="w-36">Pilots measured</Column>
+      </TableHeader>
+      <TableBody>
+        {ranked.map(({ metric, correlation }) => (
+          <Row key={metric.id} id={metric.id}>
+            <Cell className="whitespace-normal">
+              <span className="inline-flex items-center gap-1">
+                {metric.label}
+                <MetricExplanation
+                  metricId={metric.id}
+                  label={metric.label}
+                  unit={metric.unit}
+                  direction={metric.direction}
+                  family={FAMILY_LABELS[metric.family]}
+                  explanation={metric.explanation}
+                  perPilot={metric.perPilot}
+                  pilots={pilots}
+                />
+              </span>
+            </Cell>
+            <Cell>
+              {/* min-w-24 on the bar, not just a column width: a percentage
+                  width contributes nothing to a table's min-content, so on a
+                  narrow screen the column would squeeze the bar — the actual
+                  reading — down to a few pixels instead of letting the table
+                  scroll (which its wrapper is set up for). */}
+              <div className="flex items-center gap-2">
+                <DivergingMeter
+                  className="min-w-24 flex-1"
+                  value={correlation.rho}
+                  label={`${metric.label}: Spearman correlation against rank`}
+                  valueLabel={correlation.rho.toFixed(2)}
+                />
+                {/* aria-hidden: the meter already announces this exact
+                    number as its value text. */}
+                <span
+                  aria-hidden
+                  className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground"
+                >
+                  {correlation.rho.toFixed(2)}
+                </span>
+              </div>
+            </Cell>
+            <Cell>
+              <VerdictBadge correlation={correlation} />
+            </Cell>
+            <Cell>
+              <div className="flex items-center gap-2">
+                <ProportionMeter
+                  className="w-16 shrink-0"
+                  value={correlation.n}
+                  total={fieldSize}
+                  label={`${metric.label}: pilots measured`}
+                  valueLabel={`${correlation.n} of ${fieldSize} pilots`}
+                />
+                <span
+                  aria-hidden
+                  className="text-xs tabular-nums text-muted-foreground"
+                >
+                  {correlation.n} of {fieldSize}
+                </span>
+              </div>
+            </Cell>
+          </Row>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
@@ -347,7 +412,7 @@ function StrongMetricPrintCharts({
   return (
     <div className="hidden print:block print:break-before-page">
       <h3 className="text-base font-semibold">
-        Metrics with a strong verdict, plotted against rank
+        Metrics with a clear pattern, plotted against rank
       </h3>
       {strong.map(({ metric }, i) => {
         const full = metrics.find((m) => m.id === metric.id);

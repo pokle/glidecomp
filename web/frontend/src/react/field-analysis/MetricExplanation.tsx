@@ -57,6 +57,7 @@ export function MetricExplanation({
   label,
   unit,
   direction,
+  family,
   explanation,
   perPilot,
   pilots,
@@ -67,6 +68,10 @@ export function MetricExplanation({
   label: string;
   unit: string;
   direction: MetricDirection;
+  /** The family label, for tables that don't group by family — it names the
+   * section further down the page where this metric is detailed. Omitted
+   * inside a family's own section, where it would only restate the heading. */
+  family?: string;
   explanation: string;
   /** When provided, the popover also shows the field's distribution — the
    * method AND where the field actually landed, in one stop. */
@@ -103,7 +108,10 @@ export function MetricExplanation({
           <>
             <p className="font-medium">{label}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Measured in {unit} · {directionWords(direction)}
+              {/* unitWords, matching MetricMethod above: "Measured in pct"
+                  was the raw token leaking into prose. */}
+              Measured in {unitWords(unit)} · {directionWords(direction)}
+              {family ? ` · detailed under ${family}` : ""}
             </p>
             <p className="mt-2">{explanation}</p>
             {perPilot && perPilot.some((p) => p.value !== null) ? (

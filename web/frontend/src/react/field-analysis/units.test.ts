@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { UnitPreferences } from "@glidecomp/engine";
 import type { FieldAnalysisReport } from "./types";
-import { displayReport, unitDisplay, unitWords } from "./units";
+import { displayReport, unitDisplay, unitWords, verdictWords } from "./units";
 
 const METRIC: UnitPreferences = {
   speed: "km/h",
@@ -79,5 +79,19 @@ describe("unitWords", () => {
     expect(unitWords("kts")).toBe("knots");
     expect(unitWords("fpm")).toBe("feet per minute");
     expect(unitWords("ft")).toBe("feet");
+  });
+});
+
+describe("verdictWords", () => {
+  it("says what each verdict means rather than how it was reached", () => {
+    expect(verdictWords("strong")).toBe("clear pattern");
+    expect(verdictWords("moderate")).toBe("some pattern");
+    expect(verdictWords("weak")).toBe("faint pattern");
+    expect(verdictWords("n too small")).toBe("too few pilots");
+  });
+  it("turns the statistical 'within noise' into a conclusion", () => {
+    // The one that sent a reader to a glossary: it named the test, not the
+    // finding.
+    expect(verdictWords("within noise")).toBe("could be chance");
   });
 });

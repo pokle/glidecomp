@@ -66,17 +66,17 @@ async function main() {
   for (let i = 0; i < 40; i++) {
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForTimeout(1200);
-    const ranking = await page.getByRole("heading", { name: /What separated the field/i }).count();
+    const ranking = await page.getByRole("heading", { name: /Which behaviours went with better results/i }).count();
     if (ranking > 0) break;
   }
 
   const heading = await page
-    .getByRole("heading", { name: /What separated the field/i })
+    .getByRole("heading", { name: /Which behaviours went with better results/i })
     .count();
   if (heading === 0) throw new Error("separation ranking never rendered");
 
   const rankingRows = await page
-    .getByRole("grid", { name: "Metric separation ranking" })
+    .getByRole("grid", { name: "Behaviour ranking" })
     .getByRole("row")
     .count();
   console.log(`separation ranking rows (incl. header): ${rankingRows}`);
