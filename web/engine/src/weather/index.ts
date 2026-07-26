@@ -43,6 +43,7 @@ export {
   selectProviders,
   type FetchTaskWeatherOptions,
 } from "./registry";
+export { bestDaylightWindow, sunTimes, type SunTimes } from "./sun";
 export {
   openMeteoEra5Provider,
   openMeteoHistoricalForecastProvider,
