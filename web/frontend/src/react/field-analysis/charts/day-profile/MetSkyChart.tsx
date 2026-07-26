@@ -1,6 +1,6 @@
 /**
- * Cloud cover by hour — three lanes (low, mid, high), each hour a cell whose
- * shading is that layer's cover.
+ * Cloud cover by hour — three lanes stacked as the sky is (high at the top,
+ * low at the bottom), each hour a cell whose shading is that layer's cover.
  *
  * Lanes rather than a stacked area, because the three figures do not sum:
  * they are three independent covers of the same sky, and stacking them would
@@ -34,11 +34,18 @@ const LANE_H = 17;
 const LANE_GAP = 2;
 const TICK_LABEL_Y = H - 8;
 
+/** Layers in the pilot's order — low first — which is how the readout reads
+ * them out. */
 const LAYERS = [
   { key: "lowPct", label: "low", description: "low cloud, below about 2 km" },
   { key: "midPct", label: "mid", description: "mid cloud, 2 to 6 km" },
   { key: "highPct", label: "high", description: "high cloud, above 6 km" },
 ] as const;
+
+/** The same layers in DRAWING order: high at the top, low at the bottom, so
+ * the lanes are stacked the way the sky is — and so this chart sitting above
+ * the ceiling chart reads as one continuous column of air. */
+const LANES = [...LAYERS].reverse();
 
 export function MetSkyChart({
   hours,
@@ -85,7 +92,7 @@ export function MetSkyChart({
       className="h-auto w-full"
       role="img"
       aria-label={
-        `Cloud cover by hour in three layers — low, mid and high — across ` +
+        `Cloud cover by hour in three layers — high, mid and low, top to bottom — across ` +
         `${cells.length} hour${cells.length === 1 ? "" : "s"}; darker means more cover. ` +
         `Low cloud peaks at ${Math.round(peakLow)} percent. ` +
         sourceSentence(source)
@@ -102,7 +109,7 @@ export function MetSkyChart({
       </text>
       <MetSourceTag source={source} y={12} />
 
-      {LAYERS.map(({ key, label }, i) => (
+      {LANES.map(({ key, label }, i) => (
         <g key={key}>
           <text
             aria-hidden

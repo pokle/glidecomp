@@ -358,8 +358,9 @@ The plan above was explicitly "engine + CLI only", with a forward note that any
 future surface should follow the same presentation order. That surface now
 exists, and it does.
 
-**Where it lives.** Two admin-only pages, linked from the comp page's section
-nav and the task page's button row:
+**Where it lives.** Two pages, linked from the comp page's section nav and the
+task page's button row (admin-only when this shipped; public since — see the
+rollout note below):
 
 | Route | Page | Content |
 |---|---|---|
@@ -378,12 +379,21 @@ re-export the engine's `formatMetricValue` / `FAMILY_ORDER` / `FAMILY_LABELS`
 rather than reimplementing them, so the pages and the CLI text report can never
 disagree about a number.
 
-**Rollout is admin + super-admin only**, deliberately — these metrics are
-exploratory and easy to misread. The gate is one function,
+**Rollout was admin + super-admin only** at first, deliberately — these metrics
+are exploratory and easy to misread. The gate is one function,
 `canViewFieldAnalysis()` in `web/workers/competition-api/src/routes/field-analysis.ts`,
-which carries a "WHEN WE GO PUBLIC" note listing the four things that change
+which carried a "WHEN WE GO PUBLIC" note listing the four things that change
 (the gate, Cache-Control, a pleasant anonymous cold path, and SSR + a `ROUTES`
-entry in `functions/comp/[[path]].ts`). Non-admins get **404**, not 403.
+entry in `functions/comp/[[path]].ts`).
+
+> **Update — these pages are PUBLIC.** The gate now mirrors the score route:
+> anyone may read a normal comp's report, and only a hidden `test` comp is
+> still admin-gated. Non-viewers get **404**, not 403. Cache-Control and the
+> anonymous cold path moved with it; SSR did **not** — the pages are still a
+> noindex client shell (`NOINDEX_SHELL_ROUTES`), because a cold report returns
+> `pending` and computes in the background, leaving nothing to render on a
+> first visit. Read `canViewFieldAnalysis()` for the current rule; this
+> section is the 2026-07-19 snapshot.
 
 **Storage: stale-first, like scores.** `task_field_analysis` (migration 0019)
 materializes one gzipped report per task, following the `task_scores` contract:

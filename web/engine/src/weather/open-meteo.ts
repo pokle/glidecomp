@@ -120,6 +120,56 @@ function isEmptyHour(h: WeatherHour): boolean {
   return !h.levels.some((l) => l.windSpeedKmh !== null);
 }
 
+/**
+ * Does a mapped answer actually CARRY each variable, one predicate per
+ * variable? Asked of the rows, not of the request.
+ */
+const DELIVERED: Record<WeatherVariable, (hours: WeatherHour[]) => boolean> = {
+  surface_wind: (hs) =>
+    hs.some((h) => h.surface.windSpeedKmh !== null || h.surface.windDirectionDeg !== null),
+  surface_gust: (hs) => hs.some((h) => h.surface.windGustKmh !== null),
+  surface_temp: (hs) =>
+    hs.some((h) => h.surface.temperatureC !== null || h.surface.dewPointC !== null),
+  level_wind: (hs) => hs.some((h) => h.levels.some((l) => l.windSpeedKmh !== null)),
+  cloud_cover: (hs) =>
+    hs.some(
+      (h) =>
+        h.cloud.totalPct !== null ||
+        h.cloud.lowPct !== null ||
+        h.cloud.midPct !== null ||
+        h.cloud.highPct !== null
+    ),
+  boundary_layer: (hs) => hs.some((h) => h.boundaryLayerDepthM !== null),
+  cape: (hs) => hs.some((h) => h.capeJkg !== null),
+  radiation: (hs) => hs.some((h) => h.shortwaveWm2 !== null),
+  precipitation: (hs) => hs.some((h) => h.precipitationMm !== null),
+};
+
+/**
+ * The variables a provider ADVERTISED, narrowed to the ones this particular
+ * answer delivered.
+ *
+ * `WeatherSource.variables` is the contract a consumer degrades against —
+ * "this dataset has no upper wind, so don't draw an empty axis" — and a
+ * static per-provider list cannot keep that promise, because coverage varies
+ * by date within one dataset. Open-Meteo's archived forecast is the case that
+ * forced this: it advertises `boundary_layer`, and honours it, but only from
+ * around September 2024. Every earlier day returns a column of nulls, so a
+ * 2024 competition drew a cloud-base line with no thermal top beside it and
+ * nothing on the chart able to say why. Asking the rows makes the claim true
+ * per answer, and lets the UI distinguish "this dataset hasn't got it" from
+ * "the fetch failed".
+ *
+ * Order follows the provider's own list, so the field stays stable and
+ * comparable between answers.
+ */
+function deliveredVariables(
+  claimed: readonly WeatherVariable[],
+  hours: WeatherHour[]
+): WeatherVariable[] {
+  return claimed.filter((v) => DELIVERED[v](hours));
+}
+
 /** Shared query builder + response mapper for both Open-Meteo archives. */
 async function fetchOpenMeteo(
   opts: {
@@ -259,13 +309,6 @@ async function fetchOpenMeteo(
   }
   hours.sort((a, b) => a.t.localeCompare(b.t));
 
-  // ERA5 with no pressure levels reports level_wind up front; strip the claim
-  // if the response in fact carried none, so the charts believe the data.
-  const gotLevels = hours.some((h) => h.levels.some((l) => l.windSpeedKmh !== null));
-  const variables = gotLevels
-    ? opts.variables
-    : opts.variables.filter((v) => v !== "level_wind");
-
   return {
     source: {
       providerId: opts.providerId,
@@ -275,7 +318,7 @@ async function fetchOpenMeteo(
       license: "CC BY 4.0",
       kind: opts.kind,
       resolutionKm: opts.resolutionKm,
-      variables,
+      variables: deliveredVariables(opts.variables, hours),
       pointLat: body.latitude ?? query.lat,
       pointLon: body.longitude ?? query.lon,
       pointElevationM: typeof body.elevation === "number" ? body.elevation : null,
@@ -303,6 +346,14 @@ const HISTORICAL_FORECAST_FROM_MS = Date.UTC(2022, 0, 1);
  * comp from 2022 on. Priority 50 leaves room beneath it for a global
  * fallback and above it for regional sources added later (a BOM adapter for
  * Australian comps would sit at, say, 80 and win without touching callers).
+ *
+ * `variables` below is what this dataset carries AT ITS BEST; coverage varies
+ * by date inside it and `deliveredVariables()` narrows the claim to each
+ * answer. `boundary_layer` is the known gap — populated from around
+ * September 2024, null for every earlier day (verified against the live API
+ * for 2022-12, 2024-01, 2024-08 → null; 2024-09 on → present, and null for
+ * every named model, not just best_match). Comps before then get no thermal
+ * top, and the chart says so rather than leaving the reader to wonder.
  */
 export function openMeteoHistoricalForecastProvider(): WeatherProvider {
   return {
