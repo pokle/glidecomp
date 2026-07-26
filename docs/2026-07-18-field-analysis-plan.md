@@ -172,6 +172,8 @@ Floor = p10 of all field thermal ENTRY altitudes; ceiling = p90 of EXIT altitude
 
 Conventions: **post-SSS** = at/after `sssMs` (never started → null unless stated). **Speed section** = `[sssMs, essMs ?? landing]`. The scalar `value` feeds the eval; richer breakdowns go in `fieldSummary`/`extraTables`. Every metric's `explanation` states its method.
 
+> **Naming revision, 2026-07-26 (issue #454).** The user-facing `label` of every metric was rewritten to say what it *means* rather than how it is computed, leading with the family's own vocabulary and carrying no parenthesised explainer; each `explanation` now opens with the insight in pilots' words before the method. Two metrics changed shape because no name could rescue their units — `decision.climbs_per_100km` → **`decision.km_between_climbs`** (km, higher — "how far do you get between stops?" is the question the old form made you invert; zero climbs is now null, not the best-possible 0) and `glide.track_efficiency` → **`glide.extra_distance`** (pct excess over the optimised line, not a bare ratio). Both transforms are monotone, so |ρ| and n are unchanged; the km one flips sign with its direction. The ids and labels below are the pre-revision ones — read `metrics/*.ts` for current names.
+
 ### P1 climbing — `metrics/climbing.ts`
 
 1. **`climb.shared_percentile`** (pct, higher) — For each `SharedThermal` with `pilotCount ≥ 2`, rank `uses` by `avgClimbRate`; a use's percentile = 100·(#strictly slower)/(n−1). Value = duration-weighted mean percentile across the pilot's shared uses. Null if none. This is centering skill isolated from thermal selection.
@@ -186,14 +188,14 @@ Conventions: **post-SSS** = at/after `sssMs` (never started → null unless stat
 7. **`glide.speed`** (km/h, higher) — Duration-weighted mean of post-SSS glide `distance/duration` × 3.6. `fieldSummary`: field median/p90.
 8. **`glide.ld_vs_field`** (ratio, higher) — Per completed speed-section leg (between consecutive `TurnpointReaching`s): pilot leg L/D = Σ fix-path distance in `glide` phases within the leg ÷ net altitude lost in those phases (skip legs losing < 100 m). Value = mean over legs of pilot L/D ÷ field median leg L/D. Captures "found a better line" without a map.
 9. **`glide.stf_proxy`** (km/h, higher) — Speed-to-fly proxy (no polars exist; explanation says so). Pair each post-SSS glide with the next thermal ≤ 5 min later: (glide speed, next climb rate). Value = mean glide speed before stronger-than-median climbs − mean before weaker (null if < 4 pairs). Positive = flies faster when the day/next climb justifies it.
-10. **`glide.track_efficiency`** (ratio, lower) — Per completed leg: actual path distance (`calculateTrackDistance` on the fix slice between reachings) ÷ optimized leg meters (`FieldContext.legs`). Value = distance-weighted mean.
+10. **`glide.extra_distance`** (pct, lower; was `glide.track_efficiency`, a ratio) — Per completed leg: actual path distance (`calculateTrackDistance` on the fix slice between reachings) ÷ optimized leg meters (`FieldContext.legs`). Value = distance-weighted mean.
 11. **`glide.dolphin_fraction`** (pct, neutral) — Total gain = Σ positive 10 s-smoothed altitude deltas post-SSS; dolphin gain = same restricted to fixes outside every `ThermalSegment`. Value = 100·dolphin/total (null if total < 200 m). Showcases pilots reading the air without stopping to circle.
 
 ### P3 decision-making — `metrics/decision.ts`
 
 12. **`decision.altitude_floor`** (pct, higher) — Post-SSS local minima of 30 s-smoothed altitude with ≥ 100 m prominence; value = median as band % (null if < 2 minima).
 13. **`decision.low_saves`** (count, neutral) — Post-SSS thermal with `entryAltitude` < floor + 0.15·span AND gain ≥ 300 m. Value = count (0 is valid for started pilots); `note` = deepest save.
-14. **`decision.climbs_per_100km`** (count, lower) — Post-SSS thermal count ÷ (flownDistance/100 km); null if < 20 km. `note`: pilot's mean shared-climb percentile, so the report shows "few stops AND strong climbs".
+14. **`decision.km_between_climbs`** (km, higher; was `decision.climbs_per_100km`, count/100 km, lower) — Post-SSS thermal count ÷ (flownDistance/100 km); null if < 20 km. `note`: pilot's mean shared-climb percentile, so the report shows "few stops AND strong climbs".
 15. **`decision.search_fraction`** (pct, lower) — 100·search/(climb+glide+search) within the speed section. `fieldSummary`: field median/p25/p75 for all three phase shares.
 
 ### P4 gaggle — `metrics/gaggle.ts`
@@ -313,7 +315,7 @@ Cross-package needs (shared thermals for P1+P4, grid for P4+P5, working band for
 **Synthetic-comp caveat (user, 2026-07-19): kosci-loop and big-chip are fully artificial fixtures** — kosci exists to test out-and-return/exit-turnpoint scoring, big-chip open-distance scoring. Their correlation values exercise the *machinery* (coverage, sanity ordering) and must never be read as behavioural findings. Only real comps (Corryong, and future imports) inform which metrics matter.
 
 **Stage 1 as-built notes (deviations & findings, from the package agents):**
-- `glide.track_efficiency` reads a constant per-leg offset above 1 (~1.25–1.56 on the synthetic task): reachings sit on cylinder crossing points while `optimizedMeters` uses optimizer tag points. Identical for all pilots on a leg, so correlation is unaffected; subtract per-leg crossing-to-tag geometry if absolute ≈1.0 readings are wanted.
+- ~~`glide.track_efficiency` reads a constant per-leg offset above 1 (~1.25–1.56 on the synthetic task): reachings sit on cylinder crossing points while `optimizedMeters` uses optimizer tag points.~~ **Retracted 2026-07-26 (v16).** Measured directly: a pilot flown down `calculateOptimizedTaskLine` scores exactly 0% (now a regression test). The offset above is a property of the synthetic test fixture — whose reachings are pinned at arbitrary east offsets rather than at the optimizer's tag points — not of the measurement, and no crossing-to-tag correction is needed. The real inflation was `search`-phase meander being counted at full path length; `glide.extra_distance` now counts full path only inside glides.
 - `race.leg_time_lost`'s scalar is censored: pilots who bomb early complete few legs and so "lose" little time (Corryong T1 ρ ≈ 0). The waterfall table is right; the scalar needs a per-leg normalisation or completed-legs weighting to be a fair separator.
 - `race.start_delay` stays signed (early starters negative). `glide.stf_proxy` returns null when next-climb rates are too uniform to split.
 - `gaggle.marker_usage` has an O(uses²)-per-thermal scan — fine at ≲1k uses.

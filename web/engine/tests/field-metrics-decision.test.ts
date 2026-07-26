@@ -164,10 +164,10 @@ describe('decision.low_saves', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Metric 14 — decision.climbs_per_100km
+// Metric 14 — decision.km_between_climbs
 // ---------------------------------------------------------------------------
 
-describe('decision.climbs_per_100km', () => {
+describe('decision.km_between_climbs', () => {
   // fast + slow share one thermal (same place, same time, different rates).
   const climbAndGlide = (rate: number) => [
     ...circlingFixes(0, 300, 0, 1000, rate),
@@ -197,25 +197,43 @@ describe('decision.climbs_per_100km', () => {
     { name: 'ns', fixes: straightFixes(0, 600, 0, 1500, 12, -1) },
   ]);
 
-  it('divides post-start thermal count by flown distance per 100 km', () => {
+  it('divides flown distance by the post-start thermal count', () => {
     const fastCtx = field.pilots.find((p) => p.trackFile === 'fast.igc')!;
     expect(fastCtx.thermals.length).toBeGreaterThan(0);
-    // 50 km flown → count / 0.5.
-    expect(valueFor(field, 'decision.climbs_per_100km', 'fast')).toBe(
-      fastCtx.thermals.length * 2,
+    // 50 km flown → 50 / count km per climb.
+    expect(valueFor(field, 'decision.km_between_climbs', 'fast')).toBe(
+      50 / fastCtx.thermals.length,
     );
   });
 
   it('notes the shared-thermal climb percentile (faster climber ranks above slower)', () => {
     // The two pilots' thermals overlap in space and time → one shared thermal.
     expect(field.sharedThermals.some((s) => s.pilotCount >= 2)).toBe(true);
-    expect(noteFor(field, 'decision.climbs_per_100km', 'fast')).toContain('pctile 100%');
-    expect(noteFor(field, 'decision.climbs_per_100km', 'slow')).toContain('pctile 0%');
+    expect(noteFor(field, 'decision.km_between_climbs', 'fast')).toContain('pctile 100%');
+    expect(noteFor(field, 'decision.km_between_climbs', 'slow')).toContain('pctile 0%');
   });
 
   it('is null below 20 km flown and for never-started pilots', () => {
-    expect(valueFor(field, 'decision.climbs_per_100km', 'short')).toBeNull();
-    expect(valueFor(field, 'decision.climbs_per_100km', 'ns')).toBeNull();
+    expect(valueFor(field, 'decision.km_between_climbs', 'short')).toBeNull();
+    expect(valueFor(field, 'decision.km_between_climbs', 'ns')).toBeNull();
+  });
+
+  it('is null, not zero, for a started pilot who never climbed', () => {
+    // A long glide-out with no thermals has no distance-per-climb to report.
+    // As climbs-per-100 km this scored 0 — the BEST value under 'lower is
+    // better' — which said the opposite of what happened.
+    const noClimb = makeTestField([
+      {
+        name: 'glideout',
+        fixes: straightFixes(0, 1200, 0, 3000, 12, -1.5),
+        turnpointResult: startedAt(0),
+        score: { flownDistance: 40_000 },
+      },
+    ]);
+    const ctx = noClimb.pilots.find((p) => p.trackFile === 'glideout.igc')!;
+    expect(ctx.thermals.length).toBe(0);
+    expect(valueFor(noClimb, 'decision.km_between_climbs', 'glideout')).toBeNull();
+    expect(noteFor(noClimb, 'decision.km_between_climbs', 'glideout')).toContain('no climbs');
   });
 });
 
@@ -320,10 +338,10 @@ describe('decision metrics over kosci-loop-t1 (smoke)', () => {
         if (v.value !== null) expect(Number.isFinite(v.value)).toBe(true);
       }
       // Lenient coverage: at least half the ELIGIBLE started field gets a
-      // value. climbs_per_100km additionally requires ≥ 20 km flown (kosci
+      // value. km_between_climbs additionally requires ≥ 20 km flown (kosci
       // T1 is a ~19.6 km task, so its eligible set can legitimately be empty).
       const eligible =
-        m.id === 'decision.climbs_per_100km'
+        m.id === 'decision.km_between_climbs'
           ? started.filter((p) => p.score.flownDistance >= 20_000)
           : started;
       const nonNull = m.perPilot.filter((v) => v.value !== null).length;

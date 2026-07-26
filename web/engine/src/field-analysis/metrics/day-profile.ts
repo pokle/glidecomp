@@ -159,16 +159,17 @@ const WIND_METHOD_FOOTNOTE =
 
 const dayWind: MetricComputer = {
   id: 'day.wind',
-  label: 'Wind (by hour and by leg)',
+  label: 'The day’s wind, hour by hour and leg by leg',
   shortLabel: 'Wind',
   unit: 'km/h',
   family: 'day',
   direction: 'neutral',
   explanation:
-    'Wind estimated from every pilot’s circling (centre drift preferred, ground-speed ' +
-    'modulation as fallback), vector-averaged two ways: by hour of day (how the wind built ' +
-    'and shifted through the day) and by speed-section leg (the wind each part of the course ' +
-    'saw). Field-level only — no per-pilot value.',
+    'What the air was doing, read from the field itself: wind estimated from every pilot’s ' +
+    'circling (centre drift preferred, ground-speed modulation as fallback), vector-averaged ' +
+    'two ways. By hour of day shows how the wind built and shifted through the day; by ' +
+    'speed-section leg shows the wind each part of the course saw. Describes the day, so there ' +
+    'is no per-pilot value.',
   compute(field) {
     const winds = collectCircleWinds(field);
 
@@ -300,15 +301,16 @@ function hourlyClimbBuckets(field: FieldContext): Map<number, number[]> {
 
 const dayClimbByHour: MetricComputer = {
   id: 'day.climb_by_hour',
-  label: 'Climb by hour',
+  label: 'How strong the day’s climbs were, hour by hour',
   shortLabel: 'Climb/hr',
   unit: 'm/s',
   family: 'day',
   direction: 'neutral',
   explanation:
-    'All pilots’ thermal climbs bucketed by the hour the climb started (labelled in the ' +
-    'competition’s time zone): median and 90th-percentile average climb rate per hour show ' +
-    'how the day’s lift developed. Field-level only — no per-pilot value.',
+    'When the day switched on, peaked and died. All pilots’ thermal climbs bucketed by the ' +
+    'hour the climb started (labelled in the competition’s time zone); the median and ' +
+    '90th-percentile average climb rate per hour show how the lift developed. Describes the ' +
+    'day, so there is no per-pilot value.',
   compute(field) {
     const buckets = hourlyClimbBuckets(field);
     const rows: ReportCell[][] = [];
@@ -496,17 +498,17 @@ const dayAirtimeQuality: MetricComputer = {
   // and because across 27 real comps its "higher is better" prior flipped
   // sign on ~half of tasks: the sign is genuinely the finding.
   id: 'day.airtime_quality',
-  label: 'Time in non-sinking air',
+  label: 'Share of the flight spent in air that wasn’t sinking',
   shortLabel: 'NonSink%',
   unit: 'pct',
   family: 'day',
   direction: 'neutral',
   explanation:
-    'Share of a pilot’s airborne time (on the shared grid) spent in non-sinking air — ' +
-    '30 s-smoothed vario at or above −0.5 m/s. Reflects how much of the flight met usable ' +
-    'air: when flown, where the pilot steered, and how the flight ended all feed it, so the ' +
-    'correlation sign is the finding. The timing table relates the day’s best climbs window ' +
-    'to when the field actually launched.',
+    'How much of the flight met air worth being in. Share of a pilot’s airborne time (on the ' +
+    'shared grid) with a 30 s-smoothed vario at or above −0.5 m/s. When they flew, where they ' +
+    'steered and how the flight ended all feed this, so it is as much a reading of the day as ' +
+    'of the pilot — no expected direction, the correlation sign is the finding. The timing ' +
+    'table relates the day’s best climbs window to when the field actually launched.',
   compute(field) {
     const timing = launchTiming(field);
     return {
