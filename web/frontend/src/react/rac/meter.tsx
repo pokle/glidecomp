@@ -17,8 +17,12 @@ import { Meter as AriaMeter } from "react-aria-components";
 import { cn } from "@/react/lib/utils";
 
 /** Floor width of a diverging bar: what an all-but-zero reading still draws,
- * so the centre stays marked without a rule of its own. */
+ * so the centre stays marked without a rule of its own. A hollow bar needs a
+ * wider floor than a solid one — its 1px border on each side would otherwise
+ * meet in the middle and draw the outline as a solid tick, which is the one
+ * thing `hollow` exists to say it is not. */
 const ZERO_TICK = "2px";
+const ZERO_TICK_HOLLOW = "5px";
 
 /**
  * A bar growing left or right from the centre — zero.
@@ -52,6 +56,7 @@ export function DivergingMeter({
   const clamped = Math.max(-maxMagnitude, Math.min(maxMagnitude, value));
   const magnitude = Math.abs(clamped) / maxMagnitude;
   const text = valueLabel ?? clamped.toFixed(2);
+  const floor = hollow ? ZERO_TICK_HOLLOW : ZERO_TICK;
 
   return (
     <AriaMeter
@@ -91,10 +96,10 @@ export function DivergingMeter({
           )}
           style={
             magnitude === 0
-              ? { left: "50%", width: ZERO_TICK, transform: "translateX(-50%)" }
+              ? { left: "50%", width: floor, transform: "translateX(-50%)" }
               : clamped < 0
-                ? { right: "50%", width: `max(${ZERO_TICK}, ${magnitude * 50}%)` }
-                : { left: "50%", width: `max(${ZERO_TICK}, ${magnitude * 50}%)` }
+                ? { right: "50%", width: `max(${floor}, ${magnitude * 50}%)` }
+                : { left: "50%", width: `max(${floor}, ${magnitude * 50}%)` }
           }
         />
       </div>
