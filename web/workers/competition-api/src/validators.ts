@@ -208,6 +208,16 @@ export const updatePenaltySchema = z.object({
   penalty_reason: z.string().max(MAX_TEXT).nullable().optional(),
 });
 
+/**
+ * The scorekeeper's ruling on a tracklog that failed an automatic
+ * data-quality check. FAI S7A §4.4.6 makes rejecting a track log the
+ * organiser's judgement, so the automatic verdict must be overrulable:
+ * `true` scores and analyses the track normally, findings and all.
+ */
+export const trackQualityOverrideSchema = z.object({
+  quality_override: z.boolean(),
+});
+
 // ── Comp pilot validators ──
 
 const optionalText = z.string().max(MAX_TEXT).nullable().optional();

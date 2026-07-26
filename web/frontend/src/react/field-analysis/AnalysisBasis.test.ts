@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { FieldAnalysisBasis } from "@glidecomp/engine";
 import { AnalysisBasis } from "./AnalysisBasis";
 
-/** A basis with neither airtime field — what a stored v11-or-earlier report gives us. */
+/** A basis with neither airtime field — what a stored v12-or-earlier report gives us. */
 const OLD_BASIS: FieldAnalysisBasis = {
   pilotCount: 37,
   gridStepSeconds: 10,
@@ -31,7 +31,7 @@ describe("AnalysisBasis", () => {
    * simply omit the fact. Getting this wrong takes down the whole page for
    * every reader until the background recompute lands.
    */
-  it("renders without airtime or window (stored pre-v12 report)", () => {
+  it("renders without airtime or window (stored pre-v13 report)", () => {
     const out = html(OLD_BASIS);
     expect(out).not.toContain("Airtime");
     // The rest of the basis is unaffected.

@@ -59,6 +59,7 @@ import {
   destinationPoint,
   parseIGC,
   parseXCTask,
+  assessTrackQuality,
   xctaskTurnpointsToRecords,
   type GAPParameters,
   type WaypointFileRecord,
@@ -398,6 +399,11 @@ interface SamplePilot {
   id: string | null;
   gz: Buffer;
   fileSize: number;
+  /** True when a HARD data-quality check withholds this track from scoring
+   * (engine track-quality.ts). The track is still seeded — it is a real
+   * archive file and the regression fixture — but the pilot must not be
+   * stamped "Landed" on the strength of it. */
+  qualityHardFailed: boolean;
 }
 
 /**
@@ -581,7 +587,12 @@ interface CompManifest {
  * the engine's tz-lookup helper — the same derivation the competition-api
  * runs on route save) so the caller can stamp it on the comp row.
  */
-function readTask(spec: TaskSpec, tzOut: { value?: string }, root: string): SampleTask {
+function readTask(
+  spec: TaskSpec,
+  tzOut: { value?: string },
+  root: string,
+  category: string,
+): SampleTask {
   const compDir = join(root, spec.dir);
   const entries = readdirSync(compDir);
   const igcFiles = entries.filter((f) => f.toLowerCase().endsWith('.igc')).sort();
@@ -594,6 +605,18 @@ function readTask(spec: TaskSpec, tzOut: { value?: string }, root: string): Samp
     tzOut.value = timezoneForXctsk(xctsk);
   }
 
+  // Assess every track against the task it is being seeded into, the same way
+  // the upload route and the read path do. Deliberately does NOT skip the
+  // file: a hard-failed track (Corryong Cup 2025 task 4 has one — a New
+  // Zealand flight from ten days later) is the regression fixture, and
+  // dropping it here would hide the very case this exists to catch.
+  const qualityContext = {
+    task: parseXCTask(xctsk),
+    taskDate: spec.date,
+    timeZone: tzOut.value ?? undefined,
+    category: category === 'pg' ? ('pg' as const) : ('hg' as const),
+  };
+
   const pilots: SamplePilot[] = [];
   const nonEmptyIgc: string[] = [];
   for (const file of igcFiles) {
@@ -603,7 +626,21 @@ function readTask(spec: TaskSpec, tzOut: { value?: string }, root: string): Samp
     nonEmptyIgc.push(file);
     const name = (igc.header.pilot || basename(file, '.igc')).replace(/\s+/g, ' ').trim();
     const gz = gzipSync(Buffer.from(text, 'utf-8'), { level: 9 });
-    pilots.push({ name, id: idFromFilename(file), gz, fileSize: gz.byteLength });
+    const quality = assessTrackQuality(igc.fixes, igc.header, qualityContext);
+    if (quality.hardFailed) {
+      const why = quality.findings
+        .filter((f) => f.severity === 'hard')
+        .map((f) => f.title)
+        .join('; ');
+      console.warn(`  ! ${file}: withheld from scoring — ${why}`);
+    }
+    pilots.push({
+      name,
+      id: idFromFilename(file),
+      gz,
+      fileSize: gz.byteLength,
+      qualityHardFailed: quality.hardFailed,
+    });
   }
 
   // Published pilots with no (non-empty) IGC — they seed as DNF statuses or
@@ -731,6 +768,7 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
       { dir: t.dir, name: t.name, date: t.date, pilotClass: t.pilot_class, gapParams: t.gap_params },
       tzOut,
       ref.root,
+      manifest.category ?? 'hg',
     ),
   );
   for (const t of tasks) {
@@ -891,10 +929,14 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
         `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name)
          VALUES (${taskId}, ${compPilotId}, ${q(key)}, ${q(now)}, ${p.fileSize}, ${q(p.name)});`,
       );
-      trackInserts.push(
-        `INSERT INTO task_pilot_status (comp_id, task_id, comp_pilot_id, status_key, note, set_by_user_id, set_by_name, set_at)
-         VALUES (${compId}, ${taskId}, ${compPilotId}, 'landed', NULL, NULL, 'Sample data', ${q(now)});`,
-      );
+      // A withheld track is not evidence the pilot flew this task, so it must
+      // not claim "Landed" — the same rule the upload route follows.
+      if (!p.qualityHardFailed) {
+        trackInserts.push(
+          `INSERT INTO task_pilot_status (comp_id, task_id, comp_pilot_id, status_key, note, set_by_user_id, set_by_name, set_at)
+           VALUES (${compId}, ${taskId}, ${compPilotId}, 'landed', NULL, NULL, 'Sample data', ${q(now)});`,
+        );
+      }
     }
     // Track-less published pilots (see TrackLessPilot): DNF rows become a
     // DNF status (launch validity, S7F §9.1); flown rows become a manual

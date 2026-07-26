@@ -20,6 +20,7 @@ import {
   explainGapScore,
   explainOpenDistanceScore,
   explainManualFlightScore,
+  explainExcludedTrack,
   parseIGC,
   resolveCompGapParams,
   reviveTurnpointSequenceResult,
@@ -53,7 +54,9 @@ import type {
   PilotScoreEntry,
   TaskDetailData,
   TaskScoreData,
+  TrackQualityData,
 } from "../comp/types";
+import { Badge } from "@/react/rac/badge";
 import type { MapFocus } from "../comp/ScoreDetailMap";
 import { useInitialData } from "../lib/initial-data";
 import { useUser } from "../lib/user";
@@ -86,6 +89,9 @@ interface DetailData {
   /** What the engine's altitude plausibility pass repaired in this track
    * (null: manual flight, or a payload cached before the field existed). */
   altitudeCleaning: AltitudeCleaningData | null;
+  /** What the data-quality checks made of this tracklog — soft findings show
+   * on an otherwise normal page, so this is set on every path. */
+  trackQuality: TrackQualityData | null;
 }
 
 /**
@@ -229,6 +235,34 @@ function buildDetailData(
   }
   if (!cls || !entry) throw new Error("No score found for this pilot");
 
+  const trackQuality = analysis.track_quality ?? null;
+
+  // A tracklog a HARD check withheld gets its own narrative. Running the
+  // normal one would revive a turnpoint sequence from a file that is not this
+  // task's flight and state confidently that the pilot "landed out at 0.0 km"
+  // — and it would trip assertAnalysisMatchesScore, whose whole job is to
+  // shout when the score and the analysis genuinely disagree.
+  if (entry.track_excluded) {
+    return {
+      comp,
+      task,
+      entry,
+      pilotClass: cls.pilot_class,
+      explanation: explainExcludedTrack({
+        entry,
+        findings: (trackQuality?.findings ?? []).filter((f) => f.severity === "hard"),
+      }),
+      mapTask: task.xctsk,
+      eventsByItem: new Map(),
+      openDistanceLine: null,
+      bestProgressRoute: null,
+      scoreComputedAt: score.computed_at,
+      scoreStale: score.stale,
+      altitudeCleaning: null,
+      trackQuality,
+    };
+  }
+
   if (score.scoring_format === "open_distance") {
     const od = analysis.open_distance;
     const geometry =
@@ -286,6 +320,7 @@ function buildDetailData(
       scoreComputedAt: score.computed_at,
       scoreStale: score.stale,
       altitudeCleaning: analysis.altitude_cleaning ?? null,
+      trackQuality,
     };
   }
 
@@ -352,6 +387,7 @@ function buildDetailData(
       scoreComputedAt: score.computed_at,
       scoreStale: score.stale,
       altitudeCleaning: analysis.altitude_cleaning ?? null,
+      trackQuality,
     };
   }
 
@@ -396,6 +432,7 @@ function buildDetailData(
     scoreComputedAt: score.computed_at,
     scoreStale: score.stale,
     altitudeCleaning: analysis.altitude_cleaning ?? null,
+    trackQuality,
   };
 }
 
@@ -706,6 +743,10 @@ export function PilotScoreDetail() {
 
         {/* The explanation — the primary content. */}
         <div className="space-y-4 lg:order-1">
+          <TrackQualityNote
+            quality={data.trackQuality}
+            inExplanation={data.entry.track_excluded != null}
+          />
           {explanation.sections.map((section) => (
             <ExplanationSection
               key={section.id}
@@ -715,6 +756,7 @@ export function PilotScoreDetail() {
               onItemClick={onItemClick}
             />
           ))}
+          {data.entry.track_excluded ? <TrackValidityDocLink /> : null}
           <TrackDataCleaningNote
             cleaning={data.altitudeCleaning}
             timezone={data.comp.timezone}
@@ -800,6 +842,77 @@ function TrackScrubber({
 // ---------------------------------------------------------------------------
 // Explanation rendering
 // ---------------------------------------------------------------------------
+
+/**
+ * What the data-quality checks made of this tracklog (engine
+ * track-quality.ts, FAI S7A §4.4.2).
+ *
+ * Renders ABOVE the explanation, unlike TrackDataCleaningNote below it,
+ * because it changes the meaning of everything under it. A hard verdict says
+ * the file is not this flight; a soft one is information for a scorekeeper
+ * about a flight that is still scored — the two must not read the same, and
+ * the soft wording is deliberately not accusatory, because soft findings fire
+ * routinely on legitimate 0-scoring tracks.
+ *
+ * Every string comes from the engine already rendered, so there is nothing
+ * here to format and no hydration surface. Static content, so it is a plain
+ * labelled section rather than an alert live region, and the badge carries
+ * text so colour is never the only signal.
+ */
+function TrackQualityNote({
+  quality,
+  /** True when the explanation itself is the excluded-track narrative, which
+   * already lists these findings — showing them twice on one page reads as a
+   * bug. The note still carries them for an OVERRIDDEN track, where the
+   * explanation is the normal one and this is the only place they appear. */
+  inExplanation,
+}: {
+  quality: TrackQualityData | null;
+  inExplanation: boolean;
+}) {
+  if (!quality || quality.findings.length === 0 || inExplanation) return null;
+  const hard = quality.hardFailed;
+  return (
+    <section
+      aria-labelledby="track-quality-heading"
+      className={`rounded-lg border p-4 ${hard ? "border-destructive/50" : ""}`}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 id="track-quality-heading" className="font-semibold">
+          {hard ? "Tracklog excluded from scoring" : "Check this tracklog"}
+        </h2>
+        <Badge variant={hard ? "destructive" : "outline"} className="shrink-0">
+          {hard ? "Excluded" : "Flagged"}
+        </Badge>
+      </div>
+      <ul className="mt-2 space-y-2">
+        {quality.findings.map((f) => (
+          <li key={f.id}>
+            <p className={`text-sm ${hard ? "font-medium" : ""}`}>{f.title}</p>
+            <p className="text-xs text-muted-foreground">{f.detail}</p>
+          </li>
+        ))}
+      </ul>
+      <TrackValidityDocLink className="mt-3" />
+    </section>
+  );
+}
+
+/**
+ * The public explainer for the validity checks. Rendered inside the note
+ * above for a flagged-but-scored track, and separately under the explanation
+ * for a withheld one — where the note suppresses itself, but the pilot has
+ * just been shown a zero and needs this link most.
+ */
+function TrackValidityDocLink({ className = "" }: { className?: string }) {
+  return (
+    <p className={`text-xs text-muted-foreground ${className}`}>
+      <a href="/scoring/track-validity" className="underline underline-offset-2">
+        How track validity checks work
+      </a>
+    </p>
+  );
+}
 
 /**
  * Transparency note: what the engine's altitude plausibility pass repaired

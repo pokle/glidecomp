@@ -92,6 +92,7 @@ const STATIC_PAGE_ROUTES = new Set([
   '/scoring/gap',
   '/scoring/open-distance',
   '/scoring/data-cleaning',
+  '/scoring/track-validity',
 ]);
 
 // Root-level Vite dev module URLs that both this server and Astro's dev server

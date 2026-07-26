@@ -759,9 +759,12 @@ export const compRoutes = new Hono<HonoEnv>()
           )
         );
       }
-      // Timezone is presentational only (scoring runs on UTC), but the
-      // change is audit-logged like every other settings knob.
+      // The timezone stopped being presentational with track-quality.ts: the
+      // "wrong day" check builds the task's LOCAL calendar day in this zone
+      // to decide whether a tracklog belongs to the task at all (FAI S7A
+      // §4.4.2), so changing it can change which pilots are scored.
       if (newTimezone !== undefined && newTimezone !== current.timezone) {
+        scoringInputsChanged = true;
         if (body.timezone === null) {
           auditChanges.push(
             newTimezone

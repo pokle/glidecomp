@@ -77,7 +77,7 @@ export function AnalysisBasis({
           breakpoint leaves a fact orphaned beside empty slots. */}
       <dl className="grid grid-cols-2 gap-x-6 gap-y-3 lg:grid-cols-4">
         <Fact term="Pilots">{basis.pilotCount}</Fact>
-        {/* Both halves are optional (v11 / v12 rows) — fall back to whichever
+        {/* Both halves are optional (≤ v12 / v13 rows) — fall back to whichever
             half a stale report carries rather than dropping the fact. */}
         {basis.airtimeSplit || basis.analysisWindow ? (
           <Fact term="Airtime">
@@ -105,7 +105,7 @@ export function AnalysisBasis({
             <span className="ml-1 text-xs text-muted-foreground">(estimated)</span>
           ) : null}
         </Fact>
-        {/* Absent on reports stored before this field existed (v11 and
+        {/* Absent on reports stored before this field existed (v12 and
             earlier), which are served stale until they revalidate. */}
         {basis.airtimeSplit ? (
           <Fact term="Airtime split" className="col-span-2 lg:col-span-4">

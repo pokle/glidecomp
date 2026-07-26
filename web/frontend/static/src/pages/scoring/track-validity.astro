@@ -1,0 +1,229 @@
+---
+/** Track validity guide — how GlideComp checks that a submitted tracklog is
+ * plausibly the pilot's flight of that task, which checks withhold a track
+ * from scoring, and how a scorekeeper overrules the automatic verdict.
+ * Sibling of the GAP, open-distance and data-cleaning pages.
+ *
+ * The thresholds quoted here are the constants in engine track-quality.ts —
+ * keep them in step. */
+import Base from "../../layouts/Base.astro";
+import BackLink from "../../components/BackLink.astro";
+import SpecRef from "../../components/SpecRef.astro";
+
+const S7A_PDF =
+  "https://www.fai.org/sites/default/files/civl/documents/sporting_code_s7_a_-_cross_country_2025.pdf";
+---
+
+<Base
+  title="GlideComp - How Track Validity Checks Work"
+  description="How GlideComp checks that a tracklog is really that pilot's flight of that task — which checks withhold a track from scoring, which only flag it, and how a scorekeeper overrules the verdict."
+>
+  <div class="min-h-screen bg-background text-foreground p-6">
+    <div class="max-w-2xl mx-auto">
+      <header class="mb-10">
+        <BackLink href="/scoring" label="Scoring" />
+        <h1 class="text-3xl font-bold flex items-center gap-3">
+          <img src="/icon.svg" alt="GlideComp logo" class="w-8 h-8" />
+          How Track Validity Checks Work
+        </h1>
+        <p class="text-muted-foreground mt-1">
+          Checking that a tracklog is really your flight of this task
+        </p>
+      </header>
+
+      {/* Table of Contents */}
+      <nav class="mb-10 p-4 rounded-lg border border-border bg-card">
+        <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+          Contents
+        </h2>
+        <ul class="space-y-1 text-sm">
+          <li><a href="#why" class="hover:underline">Why Tracks Get Checked</a></li>
+          <li><a href="#withheld" class="hover:underline">The Two Checks That Withhold a Track</a></li>
+          <li><a href="#flags" class="hover:underline">The Three Flags That Never Change a Score</a></li>
+          <li><a href="#score" class="hover:underline">What It Does to the Score</a></li>
+          <li><a href="#override" class="hover:underline">The Scorekeeper Decides</a></li>
+          <li><a href="#calibration" class="hover:underline">Where the Thresholds Come From</a></li>
+          <li><a href="#disclosure" class="hover:underline">Nothing Happens Silently</a></li>
+        </ul>
+      </nav>
+
+      {/* Why */}
+      <section id="why" class="mb-14">
+        <h2 class="text-2xl font-bold mb-4">Why Tracks Get Checked</h2>
+        <div class="space-y-4 text-sm leading-relaxed">
+          <p class="text-muted-foreground">
+            Sometimes the wrong file gets uploaded — a flight from another day, or another
+            site. It is an easy mistake and a hard one to spot: the file is valid IGC, it
+            opens, and it looks like flying.
+          </p>
+          <p class="text-muted-foreground">
+            Scoring cannot catch it. Tasks often run across UTC midnight, so GlideComp resolves
+            start gates and deadlines <em>relative to the flight being scored</em> rather than
+            to a fixed date. A tracklog from another day therefore carries the whole task onto
+            its own day and scores as though nothing were wrong.
+          </p>
+          <p class="text-muted-foreground">
+            <a href={S7A_PDF} target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">FAI S7A §4.4.2</a>
+            makes this the software's job: the points used to verify a flight must have
+            "occurred at reasonable times (e.g. on the day in question)".
+          </p>
+        </div>
+      </section>
+
+      {/* Withheld */}
+      <section id="withheld" class="mb-14">
+        <h2 class="text-2xl font-bold mb-4">The Two Checks That Withhold a Track</h2>
+        <div class="space-y-4 text-sm leading-relaxed">
+          <p class="text-muted-foreground">
+            Both ask one question — <strong class="text-foreground">is this file this
+            flight?</strong> — with margins no honest entry can reach.
+          </p>
+
+          <div class="p-4 rounded-lg border border-border bg-card">
+            <h3 class="text-base font-semibold mb-1">Wrong day</h3>
+            <p class="text-muted-foreground">
+              Fixes are compared against the task's calendar day in the competition's time
+              zone, widened four hours at each end. It fails only if
+              <strong class="text-foreground">every</strong> fix falls outside, so an overnight
+              recorder, a dawn launch or a flight across local midnight all pass. Being out by
+              up to a day is flagged, not withheld — a recorder set one day wrong is a common
+              fault on a genuine flight.
+            </p>
+          </div>
+
+          <div class="p-4 rounded-lg border border-border bg-card">
+            <h3 class="text-base font-semibold mb-1">Wrong location</h3>
+            <p class="text-muted-foreground">
+              No fix comes within <strong class="text-foreground">100 km</strong> of any
+              turnpoint. A long course does not make this stricter: turnpoints are spread along
+              it, and anyone who launched starts metres from one.
+            </p>
+          </div>
+
+          <p class="text-muted-foreground">
+            A track failing either is kept out of scoring and out of the field analysis, where
+            its clock and its air would distort the day's statistics for everyone else.
+          </p>
+        </div>
+      </section>
+
+      {/* Flags */}
+      <section id="flags" class="mb-14">
+        <h2 class="text-2xl font-bold mb-4">The Three Flags That Never Change a Score</h2>
+        <div class="space-y-4 text-sm leading-relaxed">
+          <p class="text-muted-foreground">
+            These describe the flying, not the file. Each one fires on legitimate flights too,
+            so they are shown for a human to judge and
+            <strong class="text-foreground">never affect a score</strong>.
+          </p>
+          <ul class="space-y-3 text-muted-foreground">
+            <li>
+              <strong class="text-foreground">Never left the take-off cylinder.</strong> What a
+              pilot who launches and sinks straight back looks like — correctly scored the
+              minimum distance — and also what a recorder left running on launch looks like.
+            </li>
+            <li>
+              <strong class="text-foreground">No sign of flight.</strong> No sustained climb
+              (1.5 m/s for two minutes) and no sustained glide (90 seconds descending at
+              0.8 m/s, never below 4 m/s over the ground, roughly straight). This is what
+              catches a vario recording the drive up to launch — speed alone cannot, since a
+              retrieve vehicle outpaces a paraglider.
+            </li>
+            <li>
+              <strong class="text-foreground">Implausible speed.</strong> Ground speed held for
+              a full minute above about 119 km/h for paragliders or 162 km/h for hang gliders,
+              tailwind included. The minute-long window keeps GPS jitter out. It is looking for
+              something that is not a glider at all.
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      {/* Score */}
+      <section id="score" class="mb-14">
+        <h2 class="text-2xl font-bold mb-4">What It Does to the Score</h2>
+        <div class="space-y-4 text-sm leading-relaxed">
+          <p class="text-muted-foreground">
+            A pilot who launches and lands short is scored the
+            <a href="/scoring/gap#minimum-distance" class="underline hover:text-foreground">minimum distance</a>,
+            about 5 km. That is unchanged — a short, unlucky flight still earns it.
+          </p>
+          <p class="text-muted-foreground">
+            A withheld tracklog is different: it is not evidence the pilot flew this task. Those
+            pilots keep their place in the results with
+            <strong class="text-foreground">zero points</strong> and the reasons beside their
+            name. They are never dropped from the standings.
+          </p>
+          <p class="text-muted-foreground">
+            Nobody else's score moves. The pilot is left out of the launch-validity count
+            (<SpecRef section="9.1" label="S7F §9.1" />) rather than counted as having flown, so
+            a wrong verdict can only ever cost that one pilot.
+          </p>
+        </div>
+      </section>
+
+      {/* Override */}
+      <section id="override" class="mb-14">
+        <h2 class="text-2xl font-bold mb-4">The Scorekeeper Decides</h2>
+        <div class="space-y-4 text-sm leading-relaxed">
+          <p class="text-muted-foreground">
+            Under
+            <a href={S7A_PDF} target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">S7A §4.4.6</a>
+            rejecting a track log is the <strong class="text-foreground">organiser's</strong>
+            call, not the software's. A scorekeeper can accept a flagged tracklog in one action:
+            it is then scored normally, its findings stay visible, and the decision goes into the
+            competition's public audit log.
+          </p>
+          <p class="text-muted-foreground">
+            If your track was withheld, the fix is usually to upload the right file. If it
+            <em>is</em> the right file, ask the scorekeeper.
+          </p>
+        </div>
+      </section>
+
+      {/* Calibration */}
+      <section id="calibration" class="mb-14">
+        <h2 class="text-2xl font-bold mb-4">Where the Thresholds Come From</h2>
+        <div class="space-y-4 text-sm leading-relaxed">
+          <p class="text-muted-foreground">
+            Wrongly zeroing a pilot is worse than missing a bad file, so the thresholds come
+            from real competition data.
+          </p>
+          <p class="text-muted-foreground">
+            Across <strong class="text-foreground">4,762</strong> archived tracks, the typical
+            flight passes within 70 m of a turnpoint, and the furthest any honest track stayed
+            from every turnpoint was 45 km. The 100 km threshold is more than twice that.
+          </p>
+          <p class="text-muted-foreground">
+            The one-day grace has the same origin. One archived task has three pilots (of
+            eighty) whose recorders were stamped a day late; all three flew the task and were
+            scored normally, one finishing fourth, in goal. Treating a one-day offset as
+            disqualifying would have zeroed a podium flight.
+          </p>
+          <p class="text-muted-foreground">
+            Over all <strong class="text-foreground">5,112</strong> tracks GlideComp holds, the
+            checks withhold exactly one: a New Zealand flight submitted to a Victorian task ten
+            days later.
+          </p>
+        </div>
+      </section>
+
+      {/* Disclosure */}
+      <section id="disclosure" class="mb-14">
+        <h2 class="text-2xl font-bold mb-4">Nothing Happens Silently</h2>
+        <div class="space-y-4 text-sm leading-relaxed">
+          <p class="text-muted-foreground">
+            When a check fires, the pilot's score page names it, shows the numbers behind it,
+            and says what to do next. A withheld track is labelled in the results table too, so
+            a zero never looks like a bug.
+          </p>
+          <p class="text-muted-foreground">
+            Same rule as
+            <a href="/scoring/data-cleaning" class="underline hover:text-foreground">track data cleaning</a>:
+            anything the system did on the way to a score must be visible.
+          </p>
+        </div>
+      </section>
+    </div>
+  </div>
+</Base>

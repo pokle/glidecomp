@@ -371,9 +371,9 @@ export interface FieldAnalysisBasis {
   workingBandCeiling: number;
   workingBandFallback: boolean;
   /**
-   * Optional so reports stored before FIELD_ANALYSIS_VERSION 12 still parse —
+   * Optional so reports stored before FIELD_ANALYSIS_VERSION 13 still parse —
    * those carry the retired `phaseCoveragePct` (≤ 10) or the same data under
-   * its old name `phaseSplit` (11). A stale row is served while it
+   * its old name `phaseSplit` (11–12). A stale row is served while it
    * revalidates, so consumers must render without this.
    */
   airtimeSplit?: FieldAirtimeSplit;
@@ -383,7 +383,7 @@ export interface FieldAnalysisBasis {
    * time on the web, task-local on the CLI) — same rule as {@link ReportCell},
    * the engine never bakes one in.
    *
-   * Optional: added in FIELD_ANALYSIS_VERSION 13, and stored reports from
+   * Optional: added in FIELD_ANALYSIS_VERSION 14, and stored reports from
    * before it are served stale while they revalidate.
    */
   analysisWindow?: { from: string; to: string };

@@ -88,15 +88,27 @@
 //     value changed; the bump rolls stored reports so they carry the new
 //     basis field on their next lazy revalidation. Consumers must tolerate
 //     its absence — a v10 row is served stale while it revalidates.
-// v12: the v11 basis field is renamed `phaseSplit` → `airtimeSplit` (type
+// v12: tracklogs that fail a HARD data-quality check (engine
+//     track-quality.ts) are excluded from the analysed field and listed in
+//     the report's basis with the reason, alongside the manual-flight and
+//     unreadable-track entries. Such a track corrupts far more than its own
+//     row: the hour-bucketed metrics and the 'day-timing' series work in
+//     ABSOLUTE instants, so one track ten days off its task stretched the
+//     shared day-profile axis from ~5 hours to 262 (the resample grid was
+//     already capped by MAX_GRID_HOURS, so the fault is in those metrics, not
+//     the grid — fix the right layer), and its air polluted the wind and
+//     working-band estimates. Every metric's n drops by the excluded pilots,
+//     so the correlations move; the bump rolls stored reports onto the new
+//     values on their next lazy revalidation.
+// v13: the v11 basis field is renamed `phaseSplit` → `airtimeSplit` (type
 //     FieldPhaseSplit → FieldAirtimeSplit), and both surfaces label it
 //     "airtime split" with gerund phase names ("38% climbing"). "Phase" named
 //     the partition rather than the measure, so nothing said the percentages
 //     were of TIME — on a page this full of distance-derived metrics, a split
 //     of distance is an equally plausible reading. No value changed; the bump
-//     rolls stored reports onto the new field name, and v11 rows render
+//     rolls stored reports onto the new field name, and v11/v12 rows render
 //     without the split until they revalidate.
-// v13: the basis gains `analysisWindow` (first takeoff → last landing, ISO
+// v14: the basis gains `analysisWindow` (first takeoff → last landing, ISO
 //     instants, zone rendered by the consumer) and both surfaces pair it with
 //     the airtime total: "82 h (13:05–18:40 AEDT)". A bare total can't say
 //     whether 80 hours was a long day or a crowded one. The grid step moves
@@ -105,4 +117,4 @@
 //     but it is still part of how the numbers were made and so still stated.
 //     No metric value changed; the bump rolls stored reports so they gain the
 //     window on their next lazy revalidation.
-export const FIELD_ANALYSIS_VERSION = 13;
+export const FIELD_ANALYSIS_VERSION = 14;

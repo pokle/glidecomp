@@ -257,7 +257,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             (see below).
           </p>
 
-          <div class="ml-2">
+          <div class="ml-2" id="minimum-distance">
             <h3 class="text-base font-semibold mb-1">Minimum Distance</h3>
             <p class="text-muted-foreground">
               There is a <strong>minimum scored distance</strong> (typically 5 km). If you
@@ -265,6 +265,12 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               km. Pilots sometimes call these "bomb-out points" — the system is designed to
               encourage you to at least launch and give it a go rather than sitting out a task
               entirely.
+            </p>
+            <p class="text-muted-foreground mt-2">
+              The one case that doesn't earn it is a tracklog that isn't a flight of this task
+              at all — one recorded on another day or at another site. That is not evidence
+              the pilot took off, so it scores zero rather than the minimum, with the reason
+              shown. See <a href="/scoring/track-validity" class="underline hover:text-foreground">how track validity checks work</a>.
             </p>
           </div>
 
