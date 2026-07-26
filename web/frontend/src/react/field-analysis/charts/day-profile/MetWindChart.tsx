@@ -30,6 +30,7 @@ import type { TimeAxis } from "./time-axis";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
 import { MetSourceTag, sourceSentence } from "./MetSourceTag";
 import { separateLabels } from "./met-shared";
+import { SeriesEndLabels, type SeriesEndLabel } from "./SeriesEndLabels";
 import {
   PLOT_LEFT,
   PLOT_RIGHT,
@@ -49,6 +50,16 @@ const TICK_LABEL_Y = H - 10;
  * top or bottom of the range can't push its label onto the axis labels the
  * whole stack shares. */
 const LABEL_BAND: [number, number] = [PLOT.top + 8, PLOT.bottom - 3];
+
+/** One stroke definition per series, shared by the line and its label swatch
+ * so the swatch cannot come to describe a line that has since changed. */
+const LEVEL_STROKE = { stroke: "var(--chart-4)", strokeWidth: 2 };
+const SURFACE_STROKE = {
+  stroke: "var(--chart-4)",
+  strokeWidth: 1.5,
+  dash: "3 2",
+  opacity: 0.75,
+};
 
 interface Point {
   tMs: number;
@@ -181,26 +192,38 @@ export function MetWindChart({
   const clampLabel = (v: number) => Math.min(LABEL_BAND[1], Math.max(LABEL_BAND[0], v));
   const lastLevel = points.at(-1)?.levelSpeed ?? null;
   const lastSurface = points.at(-1)?.surfaceSpeed ?? null;
-  const endLabels: { key: string; text: string; y: number }[] = [];
+  const endLabels: SeriesEndLabel[] = [];
   if (hasLevels && lastLevel !== null && lastSurface !== null) {
     const [yLevel, ySurface] = separateLabels(
       y(lastLevel) - 5,
       y(lastSurface) + 11,
       LABEL_BAND
     );
-    endLabels.push({ key: "level", text: `flying height ${levelLabel}`, y: yLevel });
-    endLabels.push({ key: "surface", text: "surface (10 m)", y: ySurface });
+    endLabels.push({
+      key: "level",
+      text: `flying height ${levelLabel}`,
+      y: yLevel,
+      ...LEVEL_STROKE,
+    });
+    endLabels.push({
+      key: "surface",
+      text: "surface (10 m)",
+      y: ySurface,
+      ...SURFACE_STROKE,
+    });
   } else if (hasLevels && lastLevel !== null) {
     endLabels.push({
       key: "level",
       text: `flying height ${levelLabel}`,
       y: clampLabel(y(lastLevel) - 5),
+      ...LEVEL_STROKE,
     });
   } else if (lastSurface !== null) {
     endLabels.push({
       key: "surface",
       text: "surface (10 m)",
       y: clampLabel(y(lastSurface) + 11),
+      ...SURFACE_STROKE,
     });
   }
 
@@ -267,35 +290,31 @@ export function MetWindChart({
       <path
         d={path((p) => p.surfaceSpeed)}
         fill="none"
-        style={{ stroke: "var(--chart-4)" }}
-        strokeWidth={1.5}
-        strokeDasharray="3 2"
+        style={{ stroke: SURFACE_STROKE.stroke }}
+        strokeWidth={SURFACE_STROKE.strokeWidth}
+        strokeDasharray={SURFACE_STROKE.dash}
         strokeLinejoin="round"
         strokeLinecap="round"
-        opacity={0.75}
+        opacity={SURFACE_STROKE.opacity}
       />
       {hasLevels ? (
         <path
           d={path((p) => p.levelSpeed)}
           fill="none"
-          style={{ stroke: "var(--chart-4)" }}
-          strokeWidth={2}
+          style={{ stroke: LEVEL_STROKE.stroke }}
+          strokeWidth={LEVEL_STROKE.strokeWidth}
           strokeLinejoin="round"
           strokeLinecap="round"
         />
       ) : null}
 
       {/* Inline series labels rather than a legend box: at this size a legend
-          costs more room than the two words it explains. Separated where the
-          two lines converge (a calm day aloft) and clamped into the plot
-          band, so neither lands on the shared axis labels. */}
-      <g aria-hidden className="text-[9px] text-muted-foreground">
-        {endLabels.map(({ key, text, y: ly }) => (
-          <text key={key} x={PLOT_RIGHT - 2} y={ly} textAnchor="end" className="fill-current">
-            {text}
-          </text>
-        ))}
-      </g>
+          costs more room than the words it explains. Each carries a sample of
+          its own stroke, since the two lines are the same colour and only the
+          dash tells them apart. Separated where they converge (a calm day
+          aloft) and clamped into the plot band, so neither lands on the
+          shared axis labels. */}
+      <SeriesEndLabels x={PLOT_RIGHT - 2} labels={endLabels} />
 
       {/* Direction lane, same convention as the pilot-derived chart above:
           arrows fly WITH the wind. */}

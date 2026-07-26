@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildTimeAxis } from "./time-axis";
 import {
+  approxTextWidth,
   coverOpacity,
   isBlueHour,
   sampleOffset,
@@ -227,5 +228,39 @@ describe("sampleOffset", () => {
   it("is ~0 km when the grid point is the point asked about", () => {
     const same = weather({ pointLat: -36.2, pointLon: 147.9 });
     expect(sampleOffset(same).distanceKm).toBeCloseTo(0, 3);
+  });
+});
+
+describe("approxTextWidth", () => {
+  it("scales with the font size", () => {
+    expect(approxTextWidth("cloud base", 18)).toBeCloseTo(
+      approxTextWidth("cloud base", 9) * 2,
+      6
+    );
+  });
+
+  it("runs slightly wide of the real labels, never short", () => {
+    // Measured with getComputedTextLength() at 9 px in the UI sans. A short
+    // estimate would print the swatch under the text; a long one only opens
+    // the gap a little, so every one of these must land just OVER.
+    const measured: [string, number][] = [
+      ["thermal top", 50.7],
+      ["cloud base", 48.0],
+      ["surface (10 m)", 63.9],
+      ["flying height ~1500 m", 95.7],
+    ];
+    for (const [text, real] of measured) {
+      const est = approxTextWidth(text, 9);
+      expect(est).toBeGreaterThanOrEqual(real);
+      expect(est - real).toBeLessThan(6);
+    }
+  });
+
+  it("charges narrow glyphs less than wide ones", () => {
+    expect(approxTextWidth("iii", 9)).toBeLessThan(approxTextWidth("mmm", 9));
+  });
+
+  it("is empty for an empty string", () => {
+    expect(approxTextWidth("", 9)).toBe(0);
   });
 });

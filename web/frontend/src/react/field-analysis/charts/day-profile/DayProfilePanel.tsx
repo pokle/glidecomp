@@ -244,14 +244,17 @@ export function DayProfilePanel({
                 timeZone={timeZone}
                 setReadout={setReadout}
               />
-              <MetThermalChart
+              {/* Cloud sits ABOVE the ceiling chart, and its lanes run high
+                  at the top — so the stack reads the way the sky is stacked:
+                  cirrus, then the cloud base and thermal top beneath it. */}
+              <MetSkyChart
                 hours={weather.hours}
                 source={weather.source}
                 axis={axis}
                 timeZone={timeZone}
                 setReadout={setReadout}
               />
-              <MetSkyChart
+              <MetThermalChart
                 hours={weather.hours}
                 source={weather.source}
                 axis={axis}

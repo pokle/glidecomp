@@ -124,6 +124,36 @@ export function separateLabels(
   return [clamp(ya), clamp(yb)];
 }
 
+/** Per-character widths as a fraction of the font size, for the UI sans at
+ * label sizes. Four buckets is enough: the caller only needs to know roughly
+ * where a right-anchored label starts. */
+const CHAR_EM: { chars: string; em: number }[] = [
+  { chars: "iltfIj.,:;'`!|()[]{}", em: 0.33 },
+  { chars: " ", em: 0.3 },
+  { chars: "mwMW@", em: 0.92 },
+  { chars: "ABCDEFGHJKLNOPQRSTUVXYZ0123456789%°", em: 0.65 },
+];
+const DEFAULT_EM = 0.6;
+
+/**
+ * How wide `text` will render at `fontPx`, near enough to place something
+ * beside it.
+ *
+ * SVG has no layout, so the only exact answer needs a live DOM measurement —
+ * which these charts deliberately avoid (they render identically in a test,
+ * on a server, and in a browser). The table is calibrated against
+ * `getComputedTextLength()` for the labels these charts actually draw, and
+ * deliberately tuned to run a hair WIDE (0–3 units on those strings), so the
+ * error shows up as a slightly generous gap rather than as an overlap.
+ */
+export function approxTextWidth(text: string, fontPx: number): number {
+  let em = 0;
+  for (const ch of text) {
+    em += CHAR_EM.find((bucket) => bucket.chars.includes(ch))?.em ?? DEFAULT_EM;
+  }
+  return em * fontPx;
+}
+
 /**
  * Every instant a weather series occupies — each hour's start AND end, so
  * the shared time axis spans the full width of the last hour's column rather
