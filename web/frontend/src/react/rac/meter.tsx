@@ -23,18 +23,26 @@ import { cn } from "@/react/lib/utils";
  * @param label      what is being measured — becomes the accessible name
  * @param valueLabel how the number reads aloud (e.g. "-0.62"); defaults to
  *                   the value fixed to 2dp
+ * @param hollow     draw the bar as an outline rather than a solid fill: the
+ *                   reading is positioned honestly but is not evidence (the
+ *                   comp page's per-task cells use it for a ρ that did not
+ *                   clear its noise floor). Outline vs fill is a shape
+ *                   difference, so it survives greyscale and print; the
+ *                   caller still has to say so in `valueLabel`.
  */
 export function DivergingMeter({
   value,
   label,
   valueLabel,
   maxMagnitude = 1,
+  hollow = false,
   className,
 }: {
   value: number;
   label: string;
   valueLabel?: string;
   maxMagnitude?: number;
+  hollow?: boolean;
   className?: string;
 }) {
   const clamped = Math.max(-maxMagnitude, Math.min(maxMagnitude, value));
@@ -67,7 +75,12 @@ export function DivergingMeter({
             "no correlation" rather than as a rendering glitch. */}
         <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border" />
         <div
-          className="absolute inset-y-0 rounded-full bg-foreground/60"
+          className={cn(
+            "absolute inset-y-0 rounded-full",
+            hollow
+              ? "border border-foreground/50 bg-background/60"
+              : "bg-foreground/60"
+          )}
           style={
             clamped < 0
               ? { right: "50%", width: `${magnitude * 50}%` }
