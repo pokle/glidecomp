@@ -2,6 +2,90 @@
 
 This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
 
+## 2026-07-26
+
+### Security Vulnerabilities Fixed
+
+| Package | Severity | Advisory | Description |
+|---------|----------|----------|-------------|
+| postcss | HIGH | [GHSA-r28c-9q8g-f849](https://github.com/advisories/GHSA-r28c-9q8g-f849) | Path traversal in previous source map auto-loading (`sourceMappingURL`) leads to arbitrary `.map` file disclosure. Fixed by bumping override from ^8.5.13 to ^8.5.18. |
+| shell-quote | HIGH | [GHSA-395f-4hp3-45gv](https://github.com/advisories/GHSA-395f-4hp3-45gv) | Quadratic-complexity DoS in `parse()` (CWE-407). Fixed by bumping override from ^1.8.4 to ^1.9.0. |
+| fast-uri | HIGH | [GHSA-v2hh-gcrm-f6hx](https://github.com/advisories/GHSA-v2hh-gcrm-f6hx) | Host confusion via literal backslash authority delimiter. Fixed by adding override ^3.1.4. |
+| brace-expansion | HIGH | [GHSA-mh99-v99m-4gvg](https://github.com/advisories/GHSA-mh99-v99m-4gvg) | DoS via unbounded expansion length causing out-of-memory process crash. Fixed by adding override ^5.0.8. |
+| svgo | HIGH | [GHSA-2p49-hgcm-8545](https://github.com/advisories/GHSA-2p49-hgcm-8545) | `removeScripts` plugin leaves some executable scripts intact. Fixed by adding override ^4.0.2. |
+| @hono/node-server | MODERATE | [GHSA-frvp-7c67-39w9](https://github.com/advisories/GHSA-frvp-7c67-39w9) | Path traversal in `serve-static` on Windows via encoded backslash (`%5C`). Fixed by adding override ^2.0.5. Windows-only — not exploitable in our environment. |
+| better-auth | MODERATE | (v1.6.24–1.6.25) | Magic-link/email-OTP send endpoints now validate `Origin` header on cookieless requests (v1.6.24). Session `get-session` endpoint adds `no-store` cache-control to prevent stale session data. Google One Tap was creating new users even when sign-up was disabled (v1.6.25). Apple OAuth PKCE code challenge fix. |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **wrangler** | 4.112.0 | 4.114.0 | root, frontend, auth-api, competition-api, airscore-api | 4.113.0: Email Routing rules auto-sync on deploy, `exclude_packages` config option, Queue Artifacts sources, headless dev prints Local Explorer API URL. workerd 1.20260721.1. 4.114.0: local dev observability (tracing/spans/logs across Worker and DO boundaries, off by default via `X_LOCAL_OBSERVABILITY=true`), better D1 database-limit errors, fixed silent hangs on dev proxy network errors. workerd 1.20260722.1. No breaking changes. |
+| **@cloudflare/vitest-pool-workers** | 0.18.6 | 0.18.8 | auth-api, competition-api | Test reliability fix: errors raised while disposing test Workers are now logged instead of overriding the test result. Dependency alignment with wrangler 4.114.0. |
+| **hono** | 4.12.31 | 4.12.32 | frontend, auth-api, competition-api (+ root override) | SSE helper now properly emits empty `id` field to reset `Last-Event-ID`; query/header/param parsing uses `Object.create(null)` (avoids prototype pollution); CSP callback scoping tightened. No security CVEs, no breaking changes. |
+| **better-auth** | 1.6.23 | 1.6.25 | frontend, auth-api | Security: Origin header validation on magic-link/OTP endpoints, session no-store cache-control, Google One Tap sign-up bypass fix, Apple OAuth PKCE fix. Bug fixes: `organization.listMembers` for large orgs, adapter query routing with colliding schema keys, AsyncLocalStorage race on serverless cold starts. No breaking changes. |
+| **@better-auth/api-key** | 1.6.23 | 1.6.25 | auth-api | Aligned with better-auth 1.6.25. |
+| **@playwright/test** | 1.61.1 | 1.62.0 | root | Component testing overhauled to "stories and galleries" model; `AbortSignal` cancellation on most operations; WebP lossless screenshots; `retryStrategy` option; bundled MCP server. Browser pins: Chromium 151.0.7922.34 (rev 1234), Firefox 153.0, WebKit 26.5. Drops Debian 11 support. |
+| **lucide-react** | 1.25.0 | 1.27.0 | frontend | New icons (`shield-keyhole`, `pending-cw`, `square-off`, etc.). Several icon redesigns (`zap`, `feather`, `book-open`, `trophy`). Brand names removed from tags. No breaking changes. |
+| **shadcn** | 4.13.1 | 4.15.0 | frontend | 4.14.0: icon migration support. 4.14.1: Base UI Toast. 4.15.0: programmatic `addRegistryItems` API. No breaking changes. |
+| **react** | 19.2.7 | 19.2.8 | frontend | Performance improvement when decoding React Server Components. No security fixes, no breaking changes. |
+| **react-dom** | 19.2.7 | 19.2.8 | frontend | Aligned with react 19.2.8. |
+
+### Code Changes Required
+
+None. All upgrades are drop-in replacements with no API changes affecting our usage.
+
+### Overrides Added / Updated
+
+| Override | Action | Reason |
+|----------|--------|--------|
+| `postcss` (^8.5.13 → ^8.5.18) | **Updated** | Clears HIGH path traversal advisory GHSA-r28c-9q8g-f849. |
+| `shell-quote` (^1.8.4 → ^1.9.0) | **Updated** | Clears HIGH quadratic DoS advisory GHSA-395f-4hp3-45gv. Note: version jumps from 1.8.4 to 1.9.0 (no 1.8.5 exists). |
+| `hono` (^4.12.31 → ^4.12.32) | **Updated** | Keeps override aligned with workspace versions. |
+| `fast-uri` (^3.1.4) | **Added** | Clears HIGH host confusion advisory GHSA-v2hh-gcrm-f6hx. Transitive via shadcn. |
+| `brace-expansion` (^5.0.8) | **Added** | Clears HIGH DoS advisory GHSA-mh99-v99m-4gvg. Transitive via shadcn. |
+| `svgo` (^4.0.2) | **Added** | Clears HIGH removeScripts bypass advisory GHSA-2p49-hgcm-8545. Transitive via astro. |
+| `@hono/node-server` (^2.0.5) | **Added** | Clears MODERATE Windows path traversal advisory GHSA-frvp-7c67-39w9. Transitive via shadcn. |
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| @cloudflare/workers-types | 4.20260702.1 | 5.20260726.1 | **Major (5.x).** No newer 4.x release available. Evaluate in a focused PR. |
+| typescript | 7.0.2 | 7.0.2 | Already at latest within range. |
+| zod | 3.25.76 | 4.4.3 | Major. Standalone task now — `@hono/zod-validator` 0.9.0 accepts both. |
+| vite | 7.3.6 | 8.1.5 | Major. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. |
+| @vitejs/plugin-react | 5.2.0 | 6.0.4 | Major. Pairs with Vite 8. |
+| astro | 6.4.8 | 7.1.3 | **Major.** Has 3 XSS advisories (GHSA-4g3v-8h47-v7g6, GHSA-f48w-9m4c-m7f5, GHSA-7pw4-f3q4-r2p2) fixed in 7.0.10+. Our static pages don't use View Transitions or dynamic spread attributes, so not exploitable. Rust compiler enforces strict HTML — needs focused evaluation. |
+| @astrojs/mdx | 6.0.3 | 7.0.3 | Major. Pairs with Astro 7. |
+| kysely | 0.28.17 | 0.29.4 | Pre-1.0 minor bump (equivalent to major). Defer to a focused PR. |
+| jsdom | 25.0.1 | 29.1.1 | Major version jump. Defer. |
+| katex | 0.17.0 | 0.18.1 | Pre-1.0 minor bump (equivalent to major). Defer. |
+| concurrently | 9.2.4 | 10.0.4 | Major. ESM-only, drops `--name-separator`. Low priority. |
+| @types/node | 25.9.5 | 26.1.1 | Major. Stay on 25.x. |
+| react-router | 7.18.1 | 8.3.0 | Has HIGH RSC CSRF advisory (GHSA-qwww-vcr4-c8h2) fixed in 8.3.0, but RSC mode only — not exploitable (we use client-side React). Major version to fix. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+
+### Verification
+
+- `bun run typecheck:all` — all 5 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api).
+- `bun run test:all` — 1101 root/engine tests + 92 auth-api (6 todo) + 440 competition-api all pass.
+- `bun run test:e2e` — 24/24 chromium specs pass. Clean run, no flakes.
+- `bun audit` — 5 remaining vulnerabilities, all requiring major version bumps (react-router 8.x for RSC CSRF, Astro 7.x for XSS, sharp 0.35.x for libvips CVEs). None exploitable in our context.
+
+### Lessons / Notes for Future Sessions
+
+- **6 new security overrides added this cycle.** `postcss`, `shell-quote`, `fast-uri`, `brace-expansion`, `svgo`, and `@hono/node-server` all had transitive advisories cleared via overrides. Full override list is now: `@babel/core`, `@hono/node-server`, `brace-expansion`, `defu`, `esbuild`, `fast-uri`, `form-data`, `hono`, `kysely`, `postcss`, `protocol-buffers-schema`, `shell-quote`, `svgo`, `undici`, `vite`, `ws`.
+- **`fast-uri` override re-added.** It was removed in the 2026-07-19 cycle as dead (only pulled by the removed `@modelcontextprotocol/sdk`), but shadcn pulls a vulnerable 3.x version. The 4.x line exists but `^3.1.4` is the correct override since shadcn requires the 3.x range.
+- **`shell-quote` has no 1.8.5 — jumps 1.8.4 → 1.9.0.** The advisory covers <=1.8.4. The override was bumped to `^1.9.0`. `concurrently` (which uses shell-quote) is on ^9.2.4 and resolves fine with shell-quote 1.9.0+.
+- **Playwright 1.62.0 pins chromium rev 1234** (up from 1228). The pre-installed environment has rev 1194, so `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` remains necessary. Playwright 1.62.0 also drops Debian 11 support (our environment is not Debian 11).
+- **`@cloudflare/vitest-pool-workers` 0.18.8 bundles wrangler 4.114.0.** Continue upgrading these two together.
+- **Astro 6.4.8 has 3 XSS advisories** (2 moderate, 1 low) fixed in 7.0.10+. All involve View Transitions or dynamic spread attributes in `renderHTMLElement` — our Astro static pages use neither. When the Astro 7 migration happens, these clear automatically.
+- **react-router 7.18.1 has a HIGH RSC CSRF advisory** fixed in 8.3.0, but it only affects RSC (React Server Components) mode, which we don't use. The fix requires react-router 8.x (major).
+- **sharp <0.35.0 libvips CVEs** are transitive via astro, wrangler, and vitest-pool-workers. Can't easily override without breaking consumers. All three pull sharp only at build/test time, not in production Workers.
+- **better-auth 1.6.25 fixes Google One Tap sign-up bypass.** If Google One Tap is enabled with sign-up disabled, users could still create accounts. Also fixes Apple OAuth PKCE.
+
 ## 2026-07-19
 
 ### Security Vulnerabilities Fixed
