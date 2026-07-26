@@ -1,22 +1,23 @@
 /**
- * The task page's "Weather notes" section — the organizer's account of what
- * the day actually did.
+ * The task page's "Weather" section: the organizer's notes on what the day
+ * actually did, followed by the modelled conditions (TaskWeatherPanel) —
+ * the same charts the field-analysis report leads with. The conditions are
+ * context for reading everything below them on the page, which is why this
+ * sits under the route and above the results.
  *
- * Public to READ (anyone who can see the task sees the notes), admin-only to
- * WRITE. That asymmetry is the point of the feature: the modelled weather on
- * the field-analysis page is a grid cell kilometres wide, and the people who
- * ran the day know things it cannot — that the cycle went through at one,
- * that the valley wind switched, that half the field got flushed off launch.
- * Pilots reading the analysis need that context; only organizers can supply
- * it.
+ * Notes are public to READ (anyone who can see the task sees them),
+ * admin-only to WRITE. That asymmetry is the point of the feature: the
+ * modelled weather is a grid cell kilometres wide, and the people who ran
+ * the day know things it cannot — that the cycle went through at one, that
+ * the valley wind switched, that half the field got flushed off launch.
  *
- * Rendered for admins even when empty, so there is somewhere to click to add
- * the first note; hidden entirely from everyone else when there is nothing to
- * read, rather than showing a permanently empty section.
+ * Rendered for admins even when there is nothing yet, so there is somewhere
+ * to click to add the first note; hidden from everyone else only when there
+ * is nothing to read at all — no notes, no charts, and no answer on its way.
  *
- * Not a scoring input. Saving goes through the task PATCH like every other
- * task field, which audit-logs the change (with an excerpt, since this is
- * prose) and deliberately does NOT mark scores stale.
+ * Notes are not a scoring input. Saving goes through the task PATCH like
+ * every other task field, which audit-logs the change (with an excerpt,
+ * since this is prose) and deliberately does NOT mark scores stale.
  */
 import { useState } from "react";
 import { Form } from "react-aria-components";
@@ -34,33 +35,45 @@ import { SectionHeader } from "@/react/components/SectionHeader";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { WeatherNotesBlock } from "./WeatherNotesBlock";
+import { TaskWeatherPanel } from "./TaskWeatherPanel";
+import { useTaskWeather } from "./use-task-weather";
 
 /** Mirrors MAX_WEATHER_NOTES in the worker's validators — the server is the
  * authority; this stops a paste that would only be rejected on save. */
 const MAX_NOTES = 4000;
 
-export function WeatherNotesSection({
+export function WeatherSection({
   compId,
   taskId,
   notes,
   isAdmin,
+  compTimezone,
   onSaved,
 }: {
   compId: string;
   taskId: string;
   notes: string;
   isAdmin: boolean;
+  /** Competition IANA zone; the charts' axis ticks in it. */
+  compTimezone: string | null;
   onSaved: (notes: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const hasNotes = notes.trim().length > 0;
 
-  if (!hasNotes && !isAdmin) return null;
+  // Its own fetch, its own failure mode: a weather-provider outage must not
+  // touch the rest of the task page, and when there is nothing to show the
+  // whole section simply stays hidden (for non-admins).
+  const weather = useTaskWeather(compId || null, taskId || null);
+  const weatherPending = weather.loading || weather.data?.pending === true;
+  const hasWeather = weatherPending || weather.data?.weather != null;
+
+  if (!hasNotes && !hasWeather && !isAdmin) return null;
 
   return (
     <section>
       <SectionHeader
-        title="Weather notes"
+        title="Weather"
         action={
           isAdmin ? (
             <Button variant="outline" size="sm" onPress={() => setEditing(true)}>
@@ -71,12 +84,21 @@ export function WeatherNotesSection({
       />
       {hasNotes ? (
         <WeatherNotesBlock notes={notes} className="mt-2 text-sm whitespace-pre-line" />
-      ) : (
+      ) : isAdmin ? (
         <p className="mt-2 text-muted-foreground">
           No weather notes yet. Record what the day did — the conditions pilots
           flew in are context the scores can&rsquo;t show.
         </p>
-      )}
+      ) : null}
+      {hasWeather ? (
+        <div className="mt-3">
+          <TaskWeatherPanel
+            weather={weather.data?.weather ?? null}
+            compTimezone={compTimezone}
+            pending={weatherPending}
+          />
+        </div>
+      ) : null}
       {editing ? (
         <EditWeatherNotesDialog
           compId={compId}
