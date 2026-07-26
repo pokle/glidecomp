@@ -17,6 +17,12 @@
  * This is the panel's most direct answer to a question the tracklogs raise
  * but cannot settle: the climb chart above says when the climbs were
  * strongest; this says whether the sky was letting anyone get high.
+ *
+ * Either line can be absent, and the chart SAYS SO rather than quietly
+ * drawing the other one — a lone line under a heading of "height" reads as
+ * the whole answer. The case that matters in practice is the archived
+ * forecast having no boundary-layer height before ~Sept 2024, which is every
+ * competition scored from it up to then.
  */
 import type { WeatherHour, WeatherSource } from "@/react/weather/types";
 import { formatTimeRange } from "@/react/lib/time";
@@ -127,6 +133,18 @@ export function MetThermalChart({
   const hasBase = points.some((p) => p.base !== null);
   const hasBl = points.some((p) => p.blTop !== null);
 
+  // A missing line is a fact about the DATASET, and one line on a chart
+  // captioned "height" reads as the whole answer unless it says otherwise.
+  // `variables` distinguishes the two ways it can go missing: the dataset
+  // never carried a boundary-layer height (Open-Meteo's archived forecast
+  // before ~Sept 2024, and every comp scored from it), or it carries one but
+  // not for these hours.
+  const missingNote = hasBl
+    ? null
+    : source.variables.includes("boundary_layer")
+      ? "no thermal top in these hours"
+      : "no thermal top — this dataset carries no boundary-layer height";
+
   const readout = (p: Point): string => {
     const when = formatTimeRange(
       new Date(p.tMs).toISOString(),
@@ -183,6 +201,7 @@ export function MetThermalChart({
           .filter(Boolean)
           .join(" and ") +
         `, peaking at ${Math.max(...values).toFixed(0)} ${alt.unit}. ` +
+        (missingNote ? `${missingNote}. ` : "") +
         sourceSentence(source)
       }
       onMouseLeave={() => setReadout(null)}
@@ -196,6 +215,16 @@ export function MetThermalChart({
         Weather: height
       </text>
       <MetSourceTag source={source} y={12} />
+      {missingNote ? (
+        <text
+          aria-hidden
+          x={PLOT_LEFT - 38}
+          y={24}
+          className="fill-current text-[9px] text-muted-foreground"
+        >
+          {missingNote}
+        </text>
+      ) : null}
 
       <TimeGridColumns axis={axis} top={PLOT.top} bottom={PLOT.bottom} />
       {yTicks.map((t) => (

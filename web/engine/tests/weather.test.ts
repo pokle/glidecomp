@@ -384,6 +384,53 @@ describe('open-meteo adapter', () => {
     expect(w.hours[0].levels).toEqual([]);
   });
 
+  it('drops boundary_layer when the archive returned a null column', async () => {
+    // The real defect this guards: Open-Meteo's archived forecast advertises
+    // boundary_layer but only populates it from ~Sept 2024, so every earlier
+    // competition got a null column behind a claim that it had one — and the
+    // thermal chart could not tell "no data" from "fetch failed".
+    const noBlh = openMeteoBody({ boundary_layer_height: [null, null, null, null] });
+    const w = await openMeteoHistoricalForecastProvider().fetch(query, {
+      fetchImpl: stubFetch(noBlh),
+      nowMs: NOW_MS,
+    });
+    expect(w.source.variables).not.toContain('boundary_layer');
+    // Only that claim goes; the rest of the answer is untouched.
+    expect(w.source.variables).toContain('cape');
+    expect(w.source.variables).toContain('level_wind');
+    expect(w.hours[0].boundaryLayerDepthM).toBeNull();
+  });
+
+  it('keeps every variable the answer actually delivered', async () => {
+    const w = await openMeteoHistoricalForecastProvider().fetch(query, {
+      fetchImpl: stubFetch(openMeteoBody()),
+      nowMs: NOW_MS,
+    });
+    expect(w.source.variables).toEqual([
+      'surface_wind',
+      'surface_gust',
+      'surface_temp',
+      'level_wind',
+      'cloud_cover',
+      'boundary_layer',
+      'cape',
+      'radiation',
+      'precipitation',
+    ]);
+  });
+
+  it('narrows one variable at a time, not the whole list', async () => {
+    // cape is the historical forecast's own extra column, so this is a real
+    // retraction rather than a variable it never claimed.
+    const w = await openMeteoHistoricalForecastProvider().fetch(query, {
+      fetchImpl: stubFetch(openMeteoBody({ cape: [null, null, null, null] })),
+      nowMs: NOW_MS,
+    });
+    expect(w.source.variables).not.toContain('cape');
+    expect(w.source.variables).toContain('boundary_layer');
+    expect(w.source.variables).toContain('level_wind');
+  });
+
   it('drops all-null hours so an unpublished day reads as no data', async () => {
     const empty = openMeteoBody(
       Object.fromEntries(
