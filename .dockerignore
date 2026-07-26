@@ -1,3 +1,21 @@
-node_modules
-.wrangler
-.claude/worktrees
+# Build context excludes for `container build` (Containerfile). Apple's
+# container(1) builds with BuildKit under the hood, which reads .dockerignore.
+#
+# Patterns MUST be `**/`-prefixed: a bare `node_modules` matches only the repo
+# root, which silently left ~490 MB of web/frontend/{dist,node_modules,dist-ssr}
+# and web/.wrangler in the context and stalled the build for 20 minutes. With
+# these, the context is ~85 MB — essentially just the tracked files.
+**/node_modules
+**/.wrangler
+**/dist
+**/dist-ssr
+.git
+.claude
+test-results
+playwright-report
+
+# Secrets — passed in at build time as --build-arg instead, never COPYed.
+.env
+.env.*
+!.env.example
+**/.dev.vars
