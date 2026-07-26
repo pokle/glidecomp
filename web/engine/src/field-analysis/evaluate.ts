@@ -164,7 +164,28 @@ function buildAirtimeSplit(field: FieldContext): FieldAirtimeSplit {
   };
 }
 
+/**
+ * First takeoff → last landing across the analysed pilots.
+ *
+ * The pair the airtime total needs to mean anything: 80 hours over 30 pilots
+ * is a long day or a crowded one, and only the window says which. Null when no
+ * pilot has a usable flight window (every pilot's phases are empty too, so the
+ * whole basis is degenerate).
+ */
+function buildAnalysisWindow(field: FieldContext): { from: string; to: string } | undefined {
+  let from = Infinity;
+  let to = -Infinity;
+  for (const p of field.pilots) {
+    if (p.landingIndex <= p.takeoffIndex) continue;
+    from = Math.min(from, p.fixes[p.takeoffIndex].time.getTime());
+    to = Math.max(to, p.fixes[p.landingIndex].time.getTime());
+  }
+  if (!isFinite(from) || !isFinite(to)) return undefined;
+  return { from: new Date(from).toISOString(), to: new Date(to).toISOString() };
+}
+
 function buildBasis(field: FieldContext): FieldAnalysisBasis {
+  const analysisWindow = buildAnalysisWindow(field);
   return {
     pilotCount: field.pilots.length,
     gridStepSeconds: field.grid.stepSeconds,
@@ -174,5 +195,6 @@ function buildBasis(field: FieldContext): FieldAnalysisBasis {
     workingBandCeiling: field.workingBand.ceilingMeters,
     workingBandFallback: field.workingBand.usedFallback,
     airtimeSplit: buildAirtimeSplit(field),
+    ...(analysisWindow ? { analysisWindow } : {}),
   };
 }

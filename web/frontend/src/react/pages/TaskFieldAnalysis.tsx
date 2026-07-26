@@ -467,7 +467,11 @@ export function TaskFieldAnalysis() {
         <PilotHighlightProvider>
           <div className="mt-6 space-y-8">
             <div id="analysis-basis" className="scroll-mt-20">
-              <AnalysisBasis basis={report.basis} excluded={active.excluded} />
+              <AnalysisBasis
+                basis={report.basis}
+                excluded={active.excluded}
+                timeZone={comp?.timezone ?? undefined}
+              />
             </div>
 
             {compId && taskId ? (
@@ -530,8 +534,23 @@ export function TaskFieldAnalysis() {
             </section>
 
             {/* Every ⓘ popover's method prose, as one skimmable reference —
-                and the printed form of those explanations. */}
-            <MetricGlossary entries={report.metrics} />
+                and the printed form of those explanations. The shared-grid
+                note rides along: it applies to every metric rather than to
+                one, and is the same on every task, so it belongs in the
+                reference and not in the basis box. */}
+            <MetricGlossary
+              entries={report.metrics}
+              method={
+                <>
+                  Anything comparing pilots to each other — gaggles, shared
+                  thermals, who was where at the same moment — is measured on one
+                  shared clock: every track is resampled onto a common{" "}
+                  {report.basis.gridStepSeconds}-second grid, so two pilots are
+                  only ever compared at the same instant, whatever rate their
+                  instruments logged at.
+                </>
+              }
+            />
           </div>
         </PilotHighlightProvider>
       ) : null}

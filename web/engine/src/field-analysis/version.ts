@@ -96,4 +96,13 @@
 //     of distance is an equally plausible reading. No value changed; the bump
 //     rolls stored reports onto the new field name, and v11 rows render
 //     without the split until they revalidate.
-export const FIELD_ANALYSIS_VERSION = 12;
+// v13: the basis gains `analysisWindow` (first takeoff → last landing, ISO
+//     instants, zone rendered by the consumer) and both surfaces pair it with
+//     the airtime total: "82 h (13:05–18:40 AEDT)". A bare total can't say
+//     whether 80 hours was a long day or a crowded one. The grid step moves
+//     out of the UI's basis box to the metric glossary — it is fixed at 10 s
+//     for every task and comp, so it was permanent furniture saying nothing,
+//     but it is still part of how the numbers were made and so still stated.
+//     No metric value changed; the bump rolls stored reports so they gain the
+//     window on their next lazy revalidation.
+export const FIELD_ANALYSIS_VERSION = 13;

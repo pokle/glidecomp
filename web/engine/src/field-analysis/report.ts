@@ -16,6 +16,7 @@ import { timeWithZone, timeRangeWithZone } from './format-time';
 import { roundPercentagesToHundred } from './stats';
 import type {
   FieldAirtimeSplit,
+  FieldAnalysisBasis,
   CompAggregateReport,
   CompMetricAggregate,
   FieldAnalysisReport,
@@ -107,13 +108,12 @@ function renderTable(t: ReportTable, timeZone?: string): string[] {
 }
 
 /**
- * "airtime split 38% climbing / 23% gliding / 39% searching" — integers that
- * sum to 100.
+ * "38% climbing / 23% gliding / 39% searching" — integers that sum to 100.
  *
- * Labelled and in gerunds for the same reason the UI is: unlabelled bare
- * percentages on a line that also carries distances invite reading as a
- * distance split, and "38% climb" can be heard as a count of climbs where
- * "38% climbing" can only be time spent.
+ * Gerunds because "38% climb" can be heard as a count of climbs where "38%
+ * climbing" can only be time spent. The line these percentages sit on opens
+ * with "airtime", which is what says they are shares of TIME and not of the
+ * distances alongside them.
  */
 function formatAirtimeSplit(split: FieldAirtimeSplit): string {
   const [climb, glide, search] = roundPercentagesToHundred([
@@ -121,7 +121,38 @@ function formatAirtimeSplit(split: FieldAirtimeSplit): string {
     split.glidePct,
     split.searchPct,
   ]);
-  return `airtime split ${climb}% climbing / ${glide}% gliding / ${search}% searching`;
+  return `${climb}% climbing / ${glide}% gliding / ${search}% searching`;
+}
+
+/**
+ * The basis's second line: "airtime 82 h (13:05–18:40 AEDT) · 38% climbing …".
+ *
+ * Split off the first line because that one already runs past the 100-column
+ * width on its own, and because these facts belong together — the total, the
+ * window it was flown in, and how it divided.
+ */
+function renderAirtimeLine(b: FieldAnalysisBasis, timeZone?: string): string | null {
+  const parts: string[] = [];
+  if (b.airtimeSplit) {
+    const hours = b.airtimeSplit.airborneSeconds / 3600;
+    const window = b.analysisWindow
+      ? ` (${timeRangeWithZone(
+          new Date(b.analysisWindow.from).getTime(),
+          new Date(b.analysisWindow.to).getTime(),
+          timeZone,
+        )})`
+      : '';
+    parts.push(`airtime ${hours.toFixed(0)} h${window}`, formatAirtimeSplit(b.airtimeSplit));
+  } else if (b.analysisWindow) {
+    parts.push(
+      `flying ${timeRangeWithZone(
+        new Date(b.analysisWindow.from).getTime(),
+        new Date(b.analysisWindow.to).getTime(),
+        timeZone,
+      )}`,
+    );
+  }
+  return parts.length > 0 ? '       ' + parts.join(' · ') : null;
 }
 
 export function renderFieldReport(
@@ -137,9 +168,10 @@ export function renderFieldReport(
     `Basis: ${b.pilotCount} scored pilots · grid ${b.gridStepSeconds} s · ` +
       `${b.sharedThermalCount} shared thermals (${b.multiPilotThermalCount} multi-pilot) · ` +
       `working band ${b.workingBandFloor.toFixed(0)}–${b.workingBandCeiling.toFixed(0)} m` +
-      (b.workingBandFallback ? ' (fix-altitude fallback)' : '') +
-      (b.airtimeSplit ? ` · ${formatAirtimeSplit(b.airtimeSplit)}` : ''),
+      (b.workingBandFallback ? ' (fix-altitude fallback)' : ''),
   );
+  const airtimeLine = renderAirtimeLine(b, timeZone);
+  if (airtimeLine) lines.push(airtimeLine);
 
   // The separation ranking leads: it tells the reader which strategies
   // actually mattered on this task, and so how to read everything below.

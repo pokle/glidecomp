@@ -377,6 +377,16 @@ export interface FieldAnalysisBasis {
    * revalidates, so consumers must render without this.
    */
   airtimeSplit?: FieldAirtimeSplit;
+  /**
+   * When the field was flying: first takeoff → last landing across the
+   * analysed pilots, as ISO instants. The CONSUMER renders the zone (comp
+   * time on the web, task-local on the CLI) — same rule as {@link ReportCell},
+   * the engine never bakes one in.
+   *
+   * Optional: added in FIELD_ANALYSIS_VERSION 13, and stored reports from
+   * before it are served stale while they revalidate.
+   */
+  analysisWindow?: { from: string; to: string };
 }
 
 export interface FieldAnalysisReport {
