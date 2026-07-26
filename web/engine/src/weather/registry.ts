@@ -27,9 +27,14 @@ import type {
 
 /**
  * The providers shipped today, in no particular order — `selectProviders`
- * sorts by priority. Open-Meteo contributes two: the archived
- * high-resolution forecast for recent comps, and ERA5 reanalysis for the
- * back-catalogue that predates it.
+ * sorts by priority. Open-Meteo contributes three: the archived
+ * high-resolution forecast for flown comps, ERA5 reanalysis for the
+ * back-catalogue that predates it, and the live forecast for task days that
+ * haven't happened yet.
+ *
+ * Past and future are partitioned inside the adapters, not here, because
+ * `supports` is given the query and not the clock — see the archives'
+ * `requireElapsedWindow`.
  */
 export const DEFAULT_WEATHER_PROVIDERS: readonly WeatherProvider[] = [
   ...openMeteoProviders(),

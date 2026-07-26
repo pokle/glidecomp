@@ -1,11 +1,15 @@
 import { describe, it, expect } from 'bun:test';
 import {
   DEFAULT_FLYING_HEIGHT_AGL_M,
+  DEFAULT_WEATHER_PROVIDERS,
+  FORECAST_HORIZON_DAYS,
   NoWeatherAvailable,
+  beyondForecastHorizon,
   fetchTaskWeather,
   flyingHeightLevel,
   lclHeightAglM,
   openMeteoEra5Provider,
+  openMeteoForecastProvider,
   openMeteoHistoricalForecastProvider,
   pressureToHeightM,
   heightToPressureHpa,
@@ -88,6 +92,8 @@ function openMeteoBody(overrides: Record<string, unknown> = {}) {
 }
 
 const NOW_MS = Date.UTC(2026, 5, 1); // long after the fixture day: not provisional
+/** The day before the fixture day — makes the same window a FORECAST. */
+const BEFORE_MS = Date.UTC(2026, 0, 9);
 
 // ---------------------------------------------------------------------------
 // Derived quantities
@@ -239,13 +245,21 @@ describe('selectProviders', () => {
 
   it('prefers the archived forecast for recent comps', () => {
     const picked = selectProviders(q(Date.UTC(2026, 0, 10)));
-    expect(picked[0].id).toBe('open-meteo-historical-forecast');
-    expect(picked[1].id).toBe('open-meteo-era5');
+    expect(picked.map((p) => p.id)).toEqual([
+      'open-meteo-historical-forecast',
+      'open-meteo-forecast',
+      'open-meteo-era5',
+    ]);
   });
 
-  it('leaves only ERA5 for the pre-2022 back-catalogue', () => {
+  it('leaves only ERA5 and the forecast for the pre-2022 back-catalogue', () => {
+    // The forecast provider is listed for EVERY query because `supports` is
+    // given the query and not the clock, so it cannot tell a 2020 window from
+    // a window next week. It refuses in `fetch` instead, which is where the
+    // clock arrives — being selected here costs a rejected promise, not a
+    // request.
     const picked = selectProviders(q(Date.UTC(2020, 0, 10)));
-    expect(picked.map((p) => p.id)).toEqual(['open-meteo-era5']);
+    expect(picked.map((p) => p.id)).toEqual(['open-meteo-forecast', 'open-meteo-era5']);
   });
 
   it('lets a regional provider outrank the global default', () => {
@@ -509,6 +523,127 @@ describe('open-meteo adapter', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Past and future: the era partition
+// ---------------------------------------------------------------------------
+
+describe('the past/future partition', () => {
+  const query = weatherQueryForTask(racetask(), '2026-01-10')!;
+  /** Fails the test if a provider that should have refused made a request. */
+  const noRequests: WeatherFetchFn = async () => {
+    throw new Error('should not have reached the network');
+  };
+
+  it('refuses to serve an unelapsed window from either archive', async () => {
+    // The trap: both archive endpoints DO answer for a future date, with the
+    // current forecast run verbatim. Served through them it would reach the
+    // reader stamped "archived forecast, modelled" — a prediction wearing the
+    // label of a record.
+    await expect(
+      openMeteoHistoricalForecastProvider().fetch(query, {
+        fetchImpl: noRequests,
+        nowMs: BEFORE_MS,
+      })
+    ).rejects.toThrow(/has not elapsed/);
+    await expect(
+      openMeteoEra5Provider().fetch(query, { fetchImpl: noRequests, nowMs: BEFORE_MS })
+    ).rejects.toThrow(/has not elapsed/);
+  });
+
+  it('counts a task still being flown as unelapsed', async () => {
+    // Mid-window: the hours after `now` have not happened, so the whole
+    // answer is a prediction until the last one is behind us.
+    const midway = Date.UTC(2026, 0, 10, 5);
+    await expect(
+      openMeteoHistoricalForecastProvider().fetch(query, {
+        fetchImpl: noRequests,
+        nowMs: midway,
+      })
+    ).rejects.toThrow(/has not elapsed/);
+    const w = await openMeteoForecastProvider().fetch(query, {
+      fetchImpl: stubFetch(openMeteoBody()),
+      nowMs: midway,
+    });
+    expect(w.source.kind).toBe('forecast');
+  });
+
+  it('refuses to serve an elapsed window from the forecast', async () => {
+    // The other half of the partition. Without it, a row revived after the
+    // day was flown would re-fetch a "forecast" for a day that is history.
+    await expect(
+      openMeteoForecastProvider().fetch(query, { fetchImpl: noRequests, nowMs: NOW_MS })
+    ).rejects.toThrow(/has elapsed/);
+  });
+
+  it('refuses a task set beyond the forecast horizon, without asking', async () => {
+    // A comp laid out a month in advance: no request, no failure backoff.
+    const wayEarly = query.fromMs - (FORECAST_HORIZON_DAYS + 2) * 86_400_000;
+    await expect(
+      openMeteoForecastProvider().fetch(query, { fetchImpl: noRequests, nowMs: wayEarly })
+    ).rejects.toThrow(/horizon/);
+
+    // The boundary is whole UTC days, matching the API's own rule, which
+    // validates the date we send rather than the instant.
+    expect(beyondForecastHorizon(query, query.fromMs - FORECAST_HORIZON_DAYS * 86_400_000)).toBe(
+      false
+    );
+    expect(
+      beyondForecastHorizon(query, query.fromMs - (FORECAST_HORIZON_DAYS + 1) * 86_400_000)
+    ).toBe(true);
+  });
+});
+
+describe('open-meteo forecast adapter', () => {
+  const query = weatherQueryForTask(racetask(), '2026-01-10')!;
+
+  it('answers for a day that has not happened yet', async () => {
+    const w = await openMeteoForecastProvider().fetch(query, {
+      fetchImpl: stubFetch(openMeteoBody()),
+      nowMs: BEFORE_MS,
+    });
+    expect(w.hours).toHaveLength(4);
+    expect(w.hours[1].surface.windSpeedKmh).toBe(11);
+    expect(w.hours[1].boundaryLayerDepthM).toBe(1600);
+    expect(w.source.providerId).toBe('open-meteo-forecast');
+  });
+
+  it('says it is a forecast, everywhere a reader could look', async () => {
+    const w = await openMeteoForecastProvider().fetch(query, {
+      fetchImpl: stubFetch(openMeteoBody()),
+      nowMs: BEFORE_MS,
+    });
+    // `kind` is what the in-plot source tag and the chart's accessible name
+    // both print; getting this wrong is how a prediction reads as a record.
+    expect(w.source.kind).toBe('forecast');
+    expect(w.source.attribution).toBe('Open-Meteo forecast');
+    expect(w.source.license).toBe('CC BY 4.0');
+  });
+
+  it('is always provisional, so the store keeps up with the model runs', async () => {
+    const w = await openMeteoForecastProvider().fetch(query, {
+      fetchImpl: stubFetch(openMeteoBody()),
+      nowMs: BEFORE_MS,
+    });
+    expect(w.provisional).toBe(true);
+  });
+
+  it('asks the live endpoint for the pilot variables the archive has', async () => {
+    let seen = '';
+    await openMeteoForecastProvider().fetch(query, {
+      nowMs: BEFORE_MS,
+      fetchImpl: async (url) => {
+        seen = url;
+        return { ok: true, status: 200, json: async () => openMeteoBody(), text: async () => '' };
+      },
+    });
+    expect(seen).toContain('https://api.open-meteo.com/v1/forecast');
+    expect(seen).toContain('start_date=2026-01-10');
+    expect(seen).toContain('cape');
+    expect(seen).toContain('wind_speed_850hPa');
+    expect(seen).toContain('boundary_layer_height');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Registry fall-through
 // ---------------------------------------------------------------------------
 
@@ -583,6 +718,41 @@ describe('fetchTaskWeather', () => {
   it('refuses a query no provider covers', async () => {
     await expect(
       fetchTaskWeather(query, { nowMs: NOW_MS, fetchImpl: stubFetch({}), providers: [] })
+    ).rejects.toThrow(NoWeatherAvailable);
+  });
+
+  it('picks the archive for a flown day and the forecast for one still to come', async () => {
+    // The whole feature in one assertion, over the REAL registry: the same
+    // task, the same canned payload, and the era decides who answers — and
+    // therefore whether the charts say "modelled" or "forecast".
+    const flown = await fetchTaskWeather(query, {
+      nowMs: NOW_MS,
+      fetchImpl: stubFetch(openMeteoBody()),
+      providers: DEFAULT_WEATHER_PROVIDERS,
+    });
+    expect(flown.source.providerId).toBe('open-meteo-historical-forecast');
+    expect(flown.source.kind).toBe('model');
+
+    const ahead = await fetchTaskWeather(query, {
+      nowMs: BEFORE_MS,
+      fetchImpl: stubFetch(openMeteoBody()),
+      providers: DEFAULT_WEATHER_PROVIDERS,
+    });
+    expect(ahead.source.providerId).toBe('open-meteo-forecast');
+    expect(ahead.source.kind).toBe('forecast');
+    expect(ahead.provisional).toBe(true);
+  });
+
+  it('has nothing to offer a task set beyond the forecast horizon', async () => {
+    const wayEarly = query.fromMs - (FORECAST_HORIZON_DAYS + 2) * 86_400_000;
+    await expect(
+      fetchTaskWeather(query, {
+        nowMs: wayEarly,
+        fetchImpl: async () => {
+          throw new Error('should not have reached the network');
+        },
+        providers: DEFAULT_WEATHER_PROVIDERS,
+      })
     ).rejects.toThrow(NoWeatherAvailable);
   });
 });
