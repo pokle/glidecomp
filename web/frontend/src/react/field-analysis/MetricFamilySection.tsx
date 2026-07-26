@@ -14,7 +14,6 @@ import { MetricMethod } from "./MetricExplanation";
 import { PerPilotMetricTable } from "./PerPilotMetricTable";
 import { ReportTableView, ReportTableTitle } from "./ReportTableView";
 import { SeriesChart } from "./charts/SeriesChart";
-import { DayProfilePanel } from "./charts/day-profile/DayProfilePanel";
 import { bestCorrelation } from "./SeparationRanking";
 import { verdictWords } from "./units";
 import type { FieldAnalysisReport, MetricReport, MetricFamily } from "./types";
@@ -111,12 +110,11 @@ export function MetricFamilySection({
           </p>
         ))}
 
-        {/* The day family opens with its series composed onto one shared
-            time axis — the panel is why SeriesChart skips these kinds. */}
-        {family === "day" ? (
-          <DayProfilePanel metrics={metrics} compTimezone={compTimezone} />
-        ) : null}
-
+        {/* The day family's charting series are NOT rendered here: the
+            page's "What the weather did" section composes them (via
+            DayProfilePanel) onto one axis with the modelled weather, which
+            is also why SeriesChart skips those kinds. This family keeps the
+            exact tables. */}
         {perPilotMetrics.length > 0 ? (
           <PerPilotMetricTable
             report={report}

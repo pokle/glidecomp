@@ -63,7 +63,7 @@ import { PercentileHeatmap } from "../field-analysis/charts/PercentileHeatmap";
 import { StyleClusters } from "../field-analysis/StyleClusters";
 import { displayReport } from "../field-analysis/units";
 import { useTaskWeather } from "../weather/use-task-weather";
-import { TaskWeatherPanel } from "../weather/TaskWeatherPanel";
+import { DayProfilePanel } from "../field-analysis/charts/day-profile/DayProfilePanel";
 import { WeatherNotesBlock } from "../weather/WeatherNotesBlock";
 import { useUnits } from "../lib/units";
 import {
@@ -103,11 +103,6 @@ export function TaskFieldAnalysis() {
   const weather = useTaskWeather(compId || null, taskId || null);
   const weatherNotes = weather.data?.notes ?? task?.weather_notes ?? "";
   const weatherPending = weather.loading || weather.data?.pending === true;
-  // The section leads the report (conditions are the grounding for reading
-  // every metric), so it renders whenever there is — or may yet be —
-  // something to say: notes, charts, or an answer still on its way.
-  const hasWeatherSection =
-    weatherNotes.trim().length > 0 || weatherPending || weather.data?.weather != null;
 
   // Settle the address bar on the canonical `${slug}-${id}` once both names
   // load (the analysis body carries neither, so wait for the name fetches).
@@ -273,6 +268,19 @@ export function TaskFieldAnalysis() {
     () => (report ? metricsByFamily(report.metrics) : new Map()),
     [report]
   );
+
+  // The day family's charting series render in the weather section (composed
+  // with the modelled charts on one axis), not in the family below.
+  const dayMetrics: MetricReport[] = grouped.get("day") ?? [];
+  // The section leads the report (conditions are the grounding for reading
+  // every metric), so it renders whenever there is — or may yet be —
+  // something to say: flown charts, notes, modelled charts, or an answer
+  // still on its way.
+  const hasWeatherSection =
+    dayMetrics.some((m) => (m.extraSeries?.length ?? 0) > 0) ||
+    weatherNotes.trim().length > 0 ||
+    weatherPending ||
+    weather.data?.weather != null;
 
   // Family expansion is page state (not Disclosure-internal) so the TOC can
   // open a collapsed family before scrolling to it. Until the user touches
@@ -526,7 +534,10 @@ export function TaskFieldAnalysis() {
                 metrics matter depends on what the day was. On a windy day
                 glide speed decides the task; on a weak day it's catching
                 every climb. The reader needs this grounding before the
-                separation ranking asks them to interpret anything. */}
+                separation ranking asks them to interpret anything. The panel
+                stacks the flown (track-derived) and modelled charts on one
+                time axis so the predicted day can be read against the day
+                the field actually flew. */}
             {hasWeatherSection ? (
               <section aria-labelledby="weather-heading" className="space-y-3">
                 <h2 id="weather-heading" className="scroll-mt-20 text-lg font-semibold">
@@ -535,10 +546,11 @@ export function TaskFieldAnalysis() {
                 {/* The organizer's own account first — a human who was there
                     outranks a grid cell. */}
                 <WeatherNotesBlock notes={weatherNotes} />
-                <TaskWeatherPanel
-                  weather={weather.data?.weather ?? null}
+                <DayProfilePanel
+                  metrics={dayMetrics}
                   compTimezone={comp?.timezone ?? null}
-                  pending={weatherPending}
+                  weather={weather.data?.weather ?? null}
+                  weatherPending={weatherPending}
                 />
               </section>
             ) : null}
