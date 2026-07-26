@@ -16,10 +16,17 @@ export function TaskDebrief({
   compId,
   taskId,
   pilotClass,
+  onRenderedChange,
 }: {
   compId: string;
   taskId: string;
   pilotClass: string;
+  /**
+   * Whether this section ended up on the page. It decides that itself, from
+   * data it fetches itself, so the page's table of contents has no other way
+   * to know — and a TOC entry whose target does not exist scrolls nowhere.
+   */
+  onRenderedChange?: (rendered: boolean) => void;
 }) {
   const [findings, setFindings] = useState<DebriefFinding[] | null>(null);
 
@@ -52,7 +59,12 @@ export function TaskDebrief({
     };
   }, [compId, taskId, pilotClass]);
 
-  if (!findings || findings.length === 0) return null;
+  const rendered = !!findings && findings.length > 0;
+  useEffect(() => {
+    onRenderedChange?.(rendered);
+  }, [rendered, onRenderedChange]);
+
+  if (!rendered) return null;
 
   return (
     <section aria-labelledby="debrief-heading" className="space-y-3">

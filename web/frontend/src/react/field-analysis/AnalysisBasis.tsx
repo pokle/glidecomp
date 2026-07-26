@@ -8,14 +8,16 @@
  * phases up front is the same explainability rule the scoring pages follow — a
  * number without its basis is not an explanation.
  *
- * The one basis fact NOT here is the 10 s resampling grid: it is the same for
- * every task and every comp, so it was permanent furniture in a box where
- * space is the scarce thing. It still has to be stated, so it moved to the
- * metric glossary at the foot of the page (see TaskFieldAnalysis).
+ * What is NOT here is anything a reader consults once: the 10 s resampling
+ * grid (identical on every task of every comp) and the names and reasons
+ * behind the excluded pilots. Both moved to the Footnotes section at the foot
+ * of the page. This box is meant to be a glance at what was evaluated, and it
+ * stops being one the moment a caveat list outgrows the facts.
  */
 import { formatTimeRange } from "@/react/lib/time";
 import { formatAltitude, useUnits } from "@/react/lib/units";
 import { AirtimeSplitBar } from "./charts/AirtimeSplitBar";
+import { EXCLUDED_PILOTS_ID } from "./Footnotes";
 import type { FieldAnalysisBasis } from "./types";
 
 function Fact({
@@ -114,26 +116,23 @@ export function AnalysisBasis({
         ) : null}
       </dl>
 
+      {/* The names and reasons are a footnote, not a headline — on a task where
+          eight pilots flew without tracklogs the list was longer than every
+          fact above it put together, and it is reference material a reader
+          consults once. The count still belongs here: it qualifies the pilot
+          count directly above it. */}
       {excluded.length > 0 ? (
-        <div className="mt-4 border-t pt-3">
-          <p className="text-sm">
-            <strong>{excluded.length}</strong> pilot
-            {excluded.length === 1 ? " is" : "s are"} in the standings but not in
-            this analysis:
-          </p>
-          <ul className="mt-1 space-y-0.5">
-            {excluded.map((e, i) => (
-              <li key={`${e.pilot_name}-${i}`} className="text-sm text-muted-foreground">
-                {e.pilot_name} — {e.reason}
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Correlations are measured against the published ranks, which include
-            these pilots; their behaviour simply cannot be measured without a
-            tracklog.
-          </p>
-        </div>
+        <p className="mt-4 border-t pt-3 text-sm">
+          <strong>{excluded.length}</strong> pilot
+          {excluded.length === 1 ? " is" : "s are"} in the standings but not in
+          this analysis.{" "}
+          <a
+            href={`#${EXCLUDED_PILOTS_ID}`}
+            className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          >
+            Which, and why
+          </a>
+        </p>
       ) : null}
     </section>
   );

@@ -18,9 +18,12 @@ const OLD_BASIS: FieldAnalysisBasis = {
 const WINDOW = { from: "2026-01-07T02:05:00Z", to: "2026-01-07T07:40:00Z" };
 const SPLIT = { climbPct: 37.6, glidePct: 23.4, searchPct: 39.0, airborneSeconds: 294_840 };
 
-function html(basis: FieldAnalysisBasis): string {
+function html(
+  basis: FieldAnalysisBasis,
+  excluded: { pilot_name: string; reason: string }[] = []
+): string {
   return renderToStaticMarkup(
-    createElement(AnalysisBasis, { basis, excluded: [], timeZone: "Australia/Sydney" })
+    createElement(AnalysisBasis, { basis, excluded, timeZone: "Australia/Sydney" })
   );
 }
 
@@ -82,5 +85,37 @@ describe("AnalysisBasis", () => {
     expect(out).toContain("38%");
     expect(out).toContain("23%");
     expect(out).toContain("39%");
+  });
+});
+
+describe("AnalysisBasis excluded pilots", () => {
+  const EIGHT = Array.from({ length: 8 }, (_, i) => ({
+    pilot_name: `Pilot ${i}`,
+    reason: "scored from a manual flight report — no tracklog to analyse",
+  }));
+
+  /**
+   * The box is a glance at what was evaluated. Eight names and their reasons
+   * ran longer than every fact above them put together, which is how the
+   * caveats came to be the first thing a reader met.
+   */
+  it("keeps the count but sends the names to the footnote", () => {
+    const out = html(OLD_BASIS, EIGHT);
+    expect(out).toContain("8");
+    expect(out).toContain("in the standings but not in this analysis");
+    expect(out).not.toContain("Pilot 0");
+    expect(out).not.toContain("no tracklog to analyse");
+    // ...via a link that lands on the footnote's heading.
+    expect(out).toContain('href="#excluded-pilots"');
+  });
+
+  it("says nothing at all when every pilot was analysed", () => {
+    const out = html(OLD_BASIS, []);
+    expect(out).not.toContain("in the standings");
+    expect(out).not.toContain("excluded-pilots");
+  });
+
+  it("keeps the singular readable for one pilot", () => {
+    expect(html(OLD_BASIS, EIGHT.slice(0, 1))).toContain("pilot is in the standings");
   });
 });
