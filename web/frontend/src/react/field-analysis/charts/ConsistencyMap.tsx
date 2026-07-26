@@ -10,13 +10,26 @@
  *
  * Axes are FIXED [0, 1] — both statistics are bounded, and a fixed frame
  * keeps maps comparable across comps instead of zooming noise into drama.
- * The separation table's "mean ρ" and "mean |ρ|" columns are the exact
- * reading behind every dot. Hand-rolled SVG per charts/chart-utils.ts.
+ * This is now the only place mean |ρ| is quoted: the table dropped that
+ * column, because it equals |mean ρ| except where the per-task signs disagree
+ * — the vertical drop from the diagonal here, and the "depended on the day"
+ * chip there. Hand-rolled SVG per charts/chart-utils.ts.
  */
 import { useRef, useState } from "react";
 import { cn } from "@/react/lib/utils";
-import type { CompMetricAggregate } from "../types";
+import { ALL_METRICS, type CompMetricAggregate } from "../types";
 import { linearScale, spreadLabels } from "./chart-utils";
+import { consistencyWords } from "../ConsistencyChip";
+
+/**
+ * The compact name for a dot. These labels used to be the engine's metric IDS
+ * ("glide.speed", "decision.search_fraction") — internal identifiers, on a
+ * public page, for metrics that were deliberately renamed into English. The
+ * registry's shortLabel is the same compact vocabulary the metric glossary
+ * defines ('"GlideSpd" in tables'), and the full label is one hover away in
+ * the readout line below the chart.
+ */
+const SHORT_LABELS = new Map(ALL_METRICS.map((m) => [m.id, m.shortLabel ?? m.label]));
 
 const W = 560;
 const H = 340;
@@ -29,9 +42,12 @@ interface MapPoint {
 }
 
 function pointLabel(p: MapPoint): string {
+  const s = p.metric.signSummary;
   return (
     `${p.metric.label}: per-day power ${p.x.toFixed(2)}, ` +
-    `consistent separation ${p.y.toFixed(2)}, ${p.metric.consistency}`
+    `consistent separation ${p.y.toFixed(2)}, ` +
+    // The table's words, not the engine's token — one vocabulary per page.
+    `${consistencyWords(p.metric.consistency, s.negative + s.positive)}`
   );
 }
 
@@ -65,7 +81,7 @@ export function ConsistencyMap({ metrics }: { metrics: CompMetricAggregate[] }) 
   const caption =
     "Dots on the diagonal separate the field the same way every task; dots far " +
     "below it are strong per day but flip direction — the payoff depended on the " +
-    "day. The table's mean ρ and mean |ρ| columns are the exact values.";
+    "day. The table's Across tasks column is the up axis to the exact value.";
 
   return (
     <figure className="max-w-xl space-y-1">
@@ -215,14 +231,14 @@ export function ConsistencyMap({ metrics }: { metrics: CompMetricAggregate[] }) 
               y={labelYs[k]}
               className="fill-current"
             >
-              {p.metric.id}
+              {SHORT_LABELS.get(p.metric.id) ?? p.metric.label}
             </text>
           ))}
         </g>
       </svg>
 
       <p aria-hidden className="min-h-4 text-xs text-muted-foreground print:hidden">
-        {readout ? pointLabel(readout) : "Hover or focus a dot to name the metric."}
+        {readout ? pointLabel(readout) : "Hover or focus a dot to name the behaviour."}
       </p>
 
       <figcaption className="text-xs text-muted-foreground">{caption}</figcaption>
