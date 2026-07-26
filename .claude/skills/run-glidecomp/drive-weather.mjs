@@ -106,15 +106,17 @@ async function main() {
   for (let i = 0; i < 40; i++) {
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForTimeout(1500);
-    if (await page.getByRole("heading", { name: /What separated the field/i }).count()) {
+    if (await page.getByRole("heading", { name: /Which behaviours went with better results/i }).count()) {
       ready = true;
       break;
     }
   }
   if (!ready) throw new Error("field analysis never finished computing");
 
-  // Open the Day family and find the panel.
-  const dayFamily = page.getByRole("button", { name: /Day/i }).first();
+  // Open the Day family and find the panel. Anchor the name: /Day/i also
+  // matches the ranking table's ⓘ buttons ("How high in the day's band …"),
+  // which come first in the DOM, so the loose match clicked a popover.
+  const dayFamily = page.getByRole("button", { name: /^Day profile/ }).first();
   if (await dayFamily.count()) await dayFamily.click();
   await page.getByRole("heading", { name: /What the weather did/i }).waitFor({ timeout: 20000 });
   console.log("field analysis: weather group present");

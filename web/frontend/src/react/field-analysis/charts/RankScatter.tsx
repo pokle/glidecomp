@@ -538,7 +538,7 @@ export function RankScatter({
       </p>
 
       <figcaption className="text-xs text-muted-foreground">
-        Each dot is a pilot: across is the metric's value, up is a better rank.{" "}
+        Each dot is a pilot: across is what was measured, up is a better rank.{" "}
         {caption}
       </figcaption>
     </figure>

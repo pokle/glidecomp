@@ -52,14 +52,20 @@ export function rankMetrics(metrics: MetricReport[]): RankedMetric[] {
     .sort((a, b) => b.correlation.absRho - a.correlation.absRho);
 }
 
-/** The strongest |ρ| among a set of metrics — the badge on each family.
- * Outcome-derived metrics don't count: a family must not owe its headline
- * number to a metric that correlates by construction. */
+/** The strongest correlation among a set of metrics — the badge on each
+ * family, which needs the whole correlation (not just |ρ|) to name its
+ * verdict. Outcome-derived metrics don't count: a family must not owe its
+ * headline to a metric that correlates by construction. */
+export function bestCorrelation(metrics: MetricReport[]): MetricCorrelation | null {
+  return metrics.reduce<MetricCorrelation | null>((best, m) => {
+    if (!m.correlation || m.outcome) return best;
+    return best === null || m.correlation.absRho > best.absRho ? m.correlation : best;
+  }, null);
+}
+
+/** Just the magnitude of {@link bestCorrelation}. */
 export function bestAbsRho(metrics: MetricReport[]): number | null {
-  const values = metrics.flatMap((m) =>
-    m.correlation && !m.outcome ? [m.correlation.absRho] : []
-  );
-  return values.length > 0 ? Math.max(...values) : null;
+  return bestCorrelation(metrics)?.absRho ?? null;
 }
 
 /** Shared verdict chip (also used by the comp page). "could be chance" and
@@ -84,10 +90,11 @@ export function VerdictLegend() {
   return (
     <p className="text-xs text-muted-foreground">
       <strong>clear pattern</strong> is |ρ| ≥ 0.5, <strong>some pattern</strong> ≥ 0.3
-      and <strong>faint pattern</strong> below — each only once |ρ| clears the noise
-      floor for that metric's n. <strong>could be chance</strong> (in the statistics:
-      within noise) means shuffled ranks produce a coefficient that size more than 5%
-      of the time, so it is indistinguishable from luck whatever its magnitude.{" "}
+      and <strong>faint pattern</strong> below — each only once the coefficient is
+      bigger than chance alone produces at that many pilots (its noise floor).{" "}
+      <strong>could be chance</strong> (in the statistics: within noise) means
+      shuffling the placings produces a coefficient that size more than 5% of the
+      time, so it cannot be told apart from luck however big it looks.{" "}
       <strong>too few pilots</strong> is fewer than {MIN_CORRELATION_N} pilots with a
       value — not enough to tell either way.
     </p>
@@ -148,35 +155,36 @@ export function SeparationRanking({
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        {/* Lead with the question the table answers, not with the statistic
-            that answers it — the column names promise a reading ("what it
-            means"), so the intro has to say a reading of WHAT. */}
-        Which behaviours went with better placings, and how much to trust each
-        one. Every row correlates one metric against the published rank
-        (Spearman ρ); rank 1 is best, so a metric where more is better shows a{" "}
-        <strong>negative</strong> ρ. Bigger bars mean the metric separated the
-        field more sharply on this task, and{" "}
+        {/* The heading now asks the question ("which behaviours went with
+            better results"), so this says how the answer was arrived at —
+            in that order, and in a pilot's words before the statistician's. */}
+        Every row is one behaviour, measured for each pilot and then compared
+        against the published placings (Spearman's rank correlation, ρ). Rank 1
+        is best, so a behaviour where more is better shows a{" "}
+        <strong>negative</strong> ρ. A bigger bar means the behaviour tracked
+        the placings more closely on this task, and{" "}
         <strong>pilots measured</strong> is how much of the analysed field the
-        metric applied to — a coefficient drawn from half the field is a
-        thinner finding than one drawn from all of it.
+        behaviour applied to — a reading drawn from half the field is thinner
+        than one drawn from all of it.
         {report ? (
           // An instruction to interact — meaningless on paper.
           <span className="print:hidden">
             {" "}
-            Select a row to see that metric plotted against rank.
+            Select a row to see that behaviour plotted against rank.
           </span>
         ) : null}
       </p>
 
       {ranked.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No behavioural metric produced a correlation — the field is too
-          small, or too few pilots had a usable value.
+          No behaviour produced a correlation — the field is too small, or too
+          few pilots had a usable value.
         </p>
       ) : (
         <RankingTable
           ranked={ranked}
-          ariaLabel="Metric separation ranking"
+          ariaLabel="Behaviour ranking"
+          subjectLabel="Behaviour"
           fieldSize={fieldSize}
           pilots={report?.pilots}
           selection={
@@ -194,15 +202,15 @@ export function SeparationRanking({
 
       <VerdictLegend />
       <p className="text-xs text-muted-foreground">
-        With {ranked.length} metrics ranked on this one task, the top rows are
-        partly selection luck — trust the metrics that repeat across tasks in the
-        competition-level analysis.
+        Rank {ranked.length} behaviours against one day's results and a few will
+        look strong on luck alone — the ones worth believing are those that
+        repeat across tasks in the competition-level analysis.
       </p>
       {underpowered.length > 0 ? (
         <p className="text-xs text-muted-foreground">
-          {underpowered.length} metric{underpowered.length === 1 ? "" : "s"}{" "}
-          correlated fewer than {MIN_CORRELATION_N} pilots — treat those rows as
-          indicative only.
+          {underpowered.length} behaviour{underpowered.length === 1 ? " was" : "s were"}{" "}
+          measured on fewer than {MIN_CORRELATION_N} pilots — too few to tell
+          either way, so read those rows as a hint at most.
         </p>
       ) : null}
 
@@ -226,14 +234,16 @@ export function SeparationRanking({
         <div className="space-y-2 pt-2">
           <h3 className="text-base font-semibold">Outcome checks</h3>
           <p className="text-sm text-muted-foreground">
-            These metrics are derived from the race outcome itself, so they
-            correlate with rank by construction — a low |ρ| here questions the
-            eval, not the flying. Their per-pilot diagnostics stay in the Race
-            craft section below.
+            These are not behaviours — they measure the result itself (time
+            behind the leader, race time lost), so of course they follow the
+            placings. They are here as a check on the analysis: a weak pattern
+            in this table means something is off in the numbers, not in anyone's
+            flying. Their per-pilot tables stay in the Race craft section below.
           </p>
           <RankingTable
             ranked={outcomeRanked}
             ariaLabel="Outcome checks"
+            subjectLabel="Outcome"
             fieldSize={fieldSize}
             pilots={report?.pilots}
           />
@@ -259,12 +269,18 @@ export function SeparationRanking({
 function RankingTable({
   ranked,
   ariaLabel,
+  subjectLabel,
   fieldSize,
   pilots,
   selection,
 }: {
   ranked: RankedMetric[];
   ariaLabel: string;
+  /** First column's header. "Behaviour" for the ranking, "Outcome" for the
+   * checks below it — the engine calls both a metric, but the reader is owed
+   * the distinction: one is something a pilot did, the other is the result
+   * they got. */
+  subjectLabel: string;
   /** Pilots analysed — the denominator of the coverage column. */
   fieldSize: number;
   /** Passed to each ⓘ so it can name the pilots a metric skipped. */
@@ -290,7 +306,7 @@ function RankingTable({
     >
       <TableHeader>
         <Column isRowHeader className="min-w-56">
-          Metric
+          {subjectLabel}
         </Column>
         {/* No aria-labels on these headers any more: the columns they
             replaced were named "ρ" and "n", symbols a screen reader can only

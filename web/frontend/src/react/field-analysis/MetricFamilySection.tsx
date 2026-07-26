@@ -15,7 +15,8 @@ import { PerPilotMetricTable } from "./PerPilotMetricTable";
 import { ReportTableView, ReportTableTitle } from "./ReportTableView";
 import { SeriesChart } from "./charts/SeriesChart";
 import { DayProfilePanel } from "./charts/day-profile/DayProfilePanel";
-import { bestAbsRho } from "./SeparationRanking";
+import { bestCorrelation } from "./SeparationRanking";
+import { verdictWords } from "./units";
 import type { FieldAnalysisReport, MetricReport, MetricFamily } from "./types";
 import type { TaskWeather } from "@/react/weather/types";
 
@@ -84,7 +85,7 @@ export function MetricFamilySection({
 
   if (metrics.length === 0) return null;
 
-  const best = bestAbsRho(metrics);
+  const best = bestCorrelation(metrics);
   const failed = metrics.filter((m) => m.error);
 
   return (
@@ -101,9 +102,14 @@ export function MetricFamilySection({
       defaultExpanded={defaultExpanded}
       isExpanded={isExpanded}
       onExpandedChange={onExpandedChange}
+      // The badge says how much the strongest thing in here mattered, in the
+      // ranking's own words — "strongest |ρ| 0.53" told a pilot nothing, and
+      // it is the reason to open a family or leave it shut.
       badge={
         best !== null ? (
-          <Badge variant="outline">strongest |ρ| {best.toFixed(2)}</Badge>
+          <Badge variant="outline">
+            best: {verdictWords(best.verdict)} ({best.absRho.toFixed(2)})
+          </Badge>
         ) : null
       }
     >

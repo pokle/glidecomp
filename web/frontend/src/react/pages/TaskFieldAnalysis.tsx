@@ -291,7 +291,7 @@ export function TaskFieldAnalysis() {
       // a missing id would scroll nowhere, so it is conditional on the same
       // data the section is.
       ...(hasDebrief ? [{ id: "debrief-heading", label: "Task debrief" }] : []),
-      { id: "separation-heading", label: "What separated the field" },
+      { id: "separation-heading", label: "Which behaviours went with better results" },
       { id: "heatmap-heading", label: "The whole field at a glance" },
       { id: "clusters-heading", label: "Pilot style clusters" },
       { id: "families-heading", label: "The metrics in detail" },
@@ -511,7 +511,7 @@ export function TaskFieldAnalysis() {
 
             <section aria-labelledby="separation-heading" className="space-y-3">
               <h2 id="separation-heading" className="scroll-mt-20 text-lg font-semibold">
-                What separated the field
+                Which behaviours went with better results
               </h2>
               <SeparationRanking metrics={report.metrics} report={report} />
             </section>
