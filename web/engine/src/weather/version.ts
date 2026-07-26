@@ -16,5 +16,10 @@
  * 2 — added WeatherSource.resolutionKm and resolved.elevationM, so the UI can
  *     state the grid's cell size and how far its elevation is from the task's
  *     real terrain. Rows written at v1 lack both and re-fetch.
+ * 3 — WeatherSource.variables is now narrowed to what an answer actually
+ *     delivered rather than what its provider advertises (the archived
+ *     forecast claims boundary_layer for dates it has none). Stored rows
+ *     carry the old over-claim, which is exactly the thing the UI now reads,
+ *     so they must re-fetch.
  */
-export const WEATHER_SCHEMA_VERSION = 2;
+export const WEATHER_SCHEMA_VERSION = 3;

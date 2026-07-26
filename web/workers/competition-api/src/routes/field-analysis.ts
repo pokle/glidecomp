@@ -98,7 +98,7 @@ function taskLabel(name: string, index: number): string {
 
 export const fieldAnalysisRoutes = new Hono<HonoEnv>()
 
-  // ── GET /api/comp/:comp_id/task/:task_id/field-analysis ── (admin only)
+  // ── GET /api/comp/:comp_id/task/:task_id/field-analysis ── (public)
   .get(
     "/api/comp/:comp_id/task/:task_id/field-analysis",
     optionalAuth,
@@ -207,7 +207,7 @@ export const fieldAnalysisRoutes = new Hono<HonoEnv>()
     }
   )
 
-  // ── GET /api/comp/:comp_id/field-analysis ── Comp aggregate (admin only)
+  // ── GET /api/comp/:comp_id/field-analysis ── Comp aggregate (public)
   //
   // Pure aggregation over the per-task rows — aggregateComp is arithmetic
   // over already-stored reports, so there is nothing comp-level to

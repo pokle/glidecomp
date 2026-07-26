@@ -17,6 +17,12 @@
  * This is the panel's most direct answer to a question the tracklogs raise
  * but cannot settle: the climb chart above says when the climbs were
  * strongest; this says whether the sky was letting anyone get high.
+ *
+ * Either line can be absent, and the chart SAYS SO rather than quietly
+ * drawing the other one — a lone line under a heading of "height" reads as
+ * the whole answer. The case that matters in practice is the archived
+ * forecast having no boundary-layer height before ~Sept 2024, which is every
+ * competition scored from it up to then.
  */
 import type { WeatherHour, WeatherSource } from "@/react/weather/types";
 import { formatTimeRange } from "@/react/lib/time";
@@ -28,6 +34,7 @@ import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
 import { MetSourceTag, sourceSentence } from "./MetSourceTag";
 import { PLOT_LEFT, PLOT_RIGHT, W } from "./shared";
 import { separateLabels, usableCeilingM } from "./met-shared";
+import { SeriesEndLabels, type SeriesEndLabel } from "./SeriesEndLabels";
 
 const HOUR_MS = 3_600_000;
 const H = 168;
@@ -36,6 +43,11 @@ const TICK_LABEL_Y = H - 10;
 
 /** The band inline series labels must stay inside. */
 const LABEL_BAND: [number, number] = [PLOT.top + 8, PLOT.bottom - 3];
+
+/** One stroke definition per series, used by BOTH the line and its label
+ * swatch — the swatch is only trustworthy if it cannot drift from the line. */
+const BL_STROKE = { stroke: "var(--chart-3)", strokeWidth: 2 };
+const BASE_STROKE = { stroke: "var(--chart-5)", strokeWidth: 1.75, dash: "5 3" };
 
 interface Point {
   tMs: number;
@@ -121,6 +133,18 @@ export function MetThermalChart({
   const hasBase = points.some((p) => p.base !== null);
   const hasBl = points.some((p) => p.blTop !== null);
 
+  // A missing line is a fact about the DATASET, and one line on a chart
+  // captioned "height" reads as the whole answer unless it says otherwise.
+  // `variables` distinguishes the two ways it can go missing: the dataset
+  // never carried a boundary-layer height (Open-Meteo's archived forecast
+  // before ~Sept 2024, and every comp scored from it), or it carries one but
+  // not for these hours.
+  const missingNote = hasBl
+    ? null
+    : source.variables.includes("boundary_layer")
+      ? "no thermal top in these hours"
+      : "no thermal top — this dataset carries no boundary-layer height";
+
   const readout = (p: Point): string => {
     const when = formatTimeRange(
       new Date(p.tMs).toISOString(),
@@ -142,15 +166,25 @@ export function MetThermalChart({
   // Label positions for the two line ends, separated so they stay readable.
   const lastBl = points.at(-1)?.blTop ?? null;
   const lastBase = points.at(-1)?.base ?? null;
-  const endLabels: { key: string; text: string; y: number }[] = [];
+  const endLabels: SeriesEndLabel[] = [];
   if (hasBl && lastBl !== null && hasBase && lastBase !== null) {
     const [yBl, yBase] = separateLabels(y(lastBl) - 5, y(lastBase) + 11, LABEL_BAND);
-    endLabels.push({ key: "bl", text: "thermal top", y: yBl });
-    endLabels.push({ key: "base", text: "cloud base", y: yBase });
+    endLabels.push({ key: "bl", text: "thermal top", y: yBl, ...BL_STROKE });
+    endLabels.push({ key: "base", text: "cloud base", y: yBase, ...BASE_STROKE });
   } else if (hasBl && lastBl !== null) {
-    endLabels.push({ key: "bl", text: "thermal top", y: clampLabel(y(lastBl) - 5) });
+    endLabels.push({
+      key: "bl",
+      text: "thermal top",
+      y: clampLabel(y(lastBl) - 5),
+      ...BL_STROKE,
+    });
   } else if (hasBase && lastBase !== null) {
-    endLabels.push({ key: "base", text: "cloud base", y: clampLabel(y(lastBase) + 11) });
+    endLabels.push({
+      key: "base",
+      text: "cloud base",
+      y: clampLabel(y(lastBase) + 11),
+      ...BASE_STROKE,
+    });
   }
 
   return (
@@ -167,6 +201,7 @@ export function MetThermalChart({
           .filter(Boolean)
           .join(" and ") +
         `, peaking at ${Math.max(...values).toFixed(0)} ${alt.unit}. ` +
+        (missingNote ? `${missingNote}. ` : "") +
         sourceSentence(source)
       }
       onMouseLeave={() => setReadout(null)}
@@ -180,6 +215,16 @@ export function MetThermalChart({
         Weather: height
       </text>
       <MetSourceTag source={source} y={12} />
+      {missingNote ? (
+        <text
+          aria-hidden
+          x={PLOT_LEFT - 38}
+          y={24}
+          className="fill-current text-[9px] text-muted-foreground"
+        >
+          {missingNote}
+        </text>
+      ) : null}
 
       <TimeGridColumns axis={axis} top={PLOT.top} bottom={PLOT.bottom} />
       {yTicks.map((t) => (
@@ -226,8 +271,8 @@ export function MetThermalChart({
         <path
           d={path((p) => p.blTop)}
           fill="none"
-          style={{ stroke: "var(--chart-3)" }}
-          strokeWidth={2}
+          style={{ stroke: BL_STROKE.stroke }}
+          strokeWidth={BL_STROKE.strokeWidth}
           strokeLinejoin="round"
           strokeLinecap="round"
         />
@@ -236,25 +281,20 @@ export function MetThermalChart({
         <path
           d={path((p) => p.base)}
           fill="none"
-          style={{ stroke: "var(--chart-5)" }}
-          strokeWidth={1.75}
-          strokeDasharray="5 3"
+          style={{ stroke: BASE_STROKE.stroke }}
+          strokeWidth={BASE_STROKE.strokeWidth}
+          strokeDasharray={BASE_STROKE.dash}
           strokeLinejoin="round"
           strokeLinecap="round"
         />
       ) : null}
 
-      {/* Inline labels, pushed apart where the two lines converge — which is
-          exactly the interesting day (cloud base crossing the thermal top is
-          blue turning to cumulus), so overlap here is the common case, not
-          an edge one. */}
-      <g aria-hidden className="text-[9px] text-muted-foreground">
-        {endLabels.map(({ key, text, y: ly }) => (
-          <text key={key} x={PLOT_RIGHT - 2} y={ly} textAnchor="end" className="fill-current">
-            {text}
-          </text>
-        ))}
-      </g>
+      {/* Inline labels, each behind a sample of its own stroke — solid for
+          the thermal top, dashed for cloud base — and pushed apart where the
+          two lines converge, which is exactly the interesting day (cloud base
+          crossing the thermal top is blue turning to cumulus), so overlap
+          here is the common case, not an edge one. */}
+      <SeriesEndLabels x={PLOT_RIGHT - 2} labels={endLabels} />
 
       {points.map((p) => (
         <rect
