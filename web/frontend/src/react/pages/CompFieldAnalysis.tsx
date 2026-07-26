@@ -17,8 +17,9 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { SimpleSelect } from "@/react/rac/select";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
+import { DivergingMeter } from "@/react/rac/meter";
 import { Alert, AlertDescription, AlertTitle } from "@/react/ui/alert";
-import { RhoSparkline } from "../field-analysis/charts/RhoSparkline";
+import { cn } from "@/react/lib/utils";
 import { VerdictBadge, VerdictLegend } from "../field-analysis/SeparationRanking";
 import { ConsistencyChip } from "../field-analysis/ConsistencyChip";
 import { ConsistencyMap } from "../field-analysis/charts/ConsistencyMap";
@@ -161,22 +162,32 @@ export function CompFieldAnalysis() {
   // by construction, so they rank apart from the behaviours — same split as
   // the task page and the CLI report.
   // Ranked by |mean signed ρ|: flip-flopping tasks cancel, so CONSISTENT
-  // separation leads — matching the intro copy. A metric's per-day power
-  // regardless of direction stays visible in its mean|ρ| column.
+  // separation leads — matching the intro copy, and matching the CLI's comp
+  // report so the two can't disagree about the order. The bar column plots
+  // that same mean, so the bars descend with the rows.
   const signedStrength = (m: CompMetricAggregate) =>
     m.meanSignedRho === null ? -1 : Math.abs(m.meanSignedRho);
   const rankedMetrics = useMemo(() => {
     if (!active) return [];
     return active.aggregate.metrics
-      .filter((m) => !m.outcome)
+      .filter((m) => !m.outcome && hasAnyCorrelation(m))
       .sort((a, b) => signedStrength(b) - signedStrength(a));
   }, [active]);
   const outcomeMetrics = useMemo(() => {
     if (!active) return [];
     return active.aggregate.metrics
-      .filter((m) => m.outcome)
+      .filter((m) => m.outcome && hasAnyCorrelation(m))
       .sort((a, b) => signedStrength(b) - signedStrength(a));
   }, [active]);
+  // The day-describing metrics (wind by hour, climb strength by hour) have no
+  // per-pilot value, so every cell of their row was an em dash — a row of
+  // nothing to read, three deep at the bottom of the table. They are counted
+  // in a footnote instead and still carry their full method prose in the
+  // glossary below.
+  const uncorrelated = useMemo(
+    () => (active ? active.aggregate.metrics.filter((m) => !hasAnyCorrelation(m)) : []),
+    [active]
+  );
 
   // The aggregate stores no method descriptions, so the glossary reads them
   // from the engine's registry by metric id — the current definitions, which
@@ -314,25 +325,42 @@ export function CompFieldAnalysis() {
               A behaviour that holds its sign and size across every task is
               telling you about flying. One that swings between tasks is telling
               you about the weather on those days. Rank 1 is best, so a
-              behaviour where more is better shows a <strong>negative</strong> ρ.
+              behaviour where more is better shows a <strong>negative</strong> ρ
+              — bars left of centre. Each row reads left to right: how the
+              behaviour averaged over the tasks, whether it held day to day,
+              how it looks against the overall standings, then task by task.
             </p>
             <SeparationTable
               metrics={rankedMetrics}
               taskLabels={active.aggregate.taskLabels}
               ariaLabel="Behaviour ranking across tasks"
               subjectLabel="Behaviour"
+              fieldSize={active.aggregate.pilots.length}
             />
             <p className="text-xs text-muted-foreground">
-              Ranked by |mean ρ| (n-weighted signed mean), so consistent
-              separation leads — flip-flopping tasks cancel there, while
-              mean |ρ| keeps their per-day power visible; a large gap between
-              the two means the payoff depended on the day.{" "}
-              <strong>Consistency</strong> counts only tasks whose |ρ| cleared
-              their noise floor (the filled sparkline dots; hollow = could be
-              chance): − means larger values went with better ranks. A split
-              is a finding — the payoff depended on the day — not a defect.
+              <strong>Across tasks</strong> is the average of the per-task
+              coefficients (n-weighted, signs kept) and the order of the table:
+              a behaviour that pulled the same way every day leads, because days
+              that pull opposite ways cancel each other there.{" "}
+              <strong>Day to day</strong> reads only the tasks whose coefficient
+              cleared its own noise floor — the solid bars; a{" "}
+              <strong>hollow bar</strong> is a day whose coefficient could be
+              chance. Depending on the day is a finding, not a defect.{" "}
+              <strong>Against comp standings</strong> is a separate reading:
+              each pilot's own average for that behaviour over the whole
+              competition, correlated against their overall placing. The verdict
+              and the pilot count belong to that one.
             </p>
             <VerdictLegend />
+            {uncorrelated.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {uncorrelated.length} more metric
+                {uncorrelated.length === 1 ? "" : "s"} describe the day rather
+                than a pilot (the wind, how strong the climbs were), so there is
+                no per-pilot value to correlate and no row here — they are in the
+                glossary below, and on each task's own analysis.
+              </p>
+            ) : null}
 
             <div className="space-y-3 pt-2">
               <h3 className="text-base font-semibold">Consistency map</h3>
@@ -358,6 +386,7 @@ export function CompFieldAnalysis() {
                   taskLabels={active.aggregate.taskLabels}
                   ariaLabel="Outcome checks across tasks"
                   subjectLabel="Outcome"
+                  fieldSize={active.aggregate.pilots.length}
                 />
               </div>
             ) : null}
@@ -414,13 +443,54 @@ export function CompFieldAnalysis() {
   );
 }
 
-/** One separation table — rendered once for the behavioural ranking and once
- * for the outcome checks, so the two can never drift in layout. */
+/** Whether a metric produced any coefficient at all — comp-level or on a
+ * single task. The day-describing metrics (wind, climb strength) never do:
+ * they have no per-pilot value. */
+function hasAnyCorrelation(m: CompMetricAggregate): boolean {
+  return m.compRho !== null || m.perTaskRho.some((rho) => rho !== null);
+}
+
+/** Did this task's coefficient clear its own noise floor? Null when the task
+ * produced no coefficient at all. */
+function taskInformative(m: CompMetricAggregate, i: number): boolean | null {
+  const c = m.perTaskCorrelation[i];
+  return c === null || c === undefined ? null : Math.abs(c.rho) >= c.noiseFloor;
+}
+
+/**
+ * One separation table — rendered once for the behavioural ranking and once
+ * for the outcome checks, so the two can never drift in layout.
+ *
+ * Every coefficient here is a bar with its number, the way the task page's
+ * ranking reads (#453): five columns of bare signed decimals — three tasks
+ * plus two different means — was a wall, and the one thing a reader wants from
+ * it (did this behaviour pull the same way every day?) was the hardest thing
+ * to see in it.
+ *
+ * What changed, and why:
+ *  - the per-task cells carry the bars this table was missing, so the row
+ *    reads left to right as the competition unfolded. A HOLLOW bar is a task
+ *    whose coefficient did not clear its noise floor — the same fill/outline
+ *    vocabulary the old sparkline used;
+ *  - that sparkline is gone: it existed to give a shape to a row of decimals,
+ *    and the per-task bars are now that shape, at full precision;
+ *  - "mean |ρ|" is gone too. It equals |mean ρ| except where the per-task
+ *    signs disagree, which is exactly what the "Day to day" chip reports in
+ *    words — and the consistency map below plots both to the pixel;
+ *  - comp ρ, its n and its verdict were three columns describing ONE reading.
+ *    They are one cell now, and the cell says whose reading it is: the
+ *    coefficient against the comp standings, not the average of the tasks.
+ *
+ * The bar column is the n-weighted signed mean, which is also the sort key, so
+ * the bars descend with the rows. Ranking by comp ρ instead would have let a
+ * strong comp-level row sit low with a long bar and read as a sorting bug.
+ */
 function SeparationTable({
   metrics,
   taskLabels,
   ariaLabel,
   subjectLabel,
+  fieldSize,
 }: {
   metrics: CompMetricAggregate[];
   taskLabels: string[];
@@ -428,6 +498,8 @@ function SeparationTable({
   /** First column's header — "Behaviour" for the ranking, "Outcome" for the
    * checks, same distinction the task page draws. */
   subjectLabel: string;
+  /** Pilots in the comp standings — the denominator for "39 of 44 pilots". */
+  fieldSize: number;
 }) {
   return (
     <Table aria-label={ariaLabel} scrollLabel={ariaLabel}>
@@ -435,34 +507,21 @@ function SeparationTable({
         <Column isRowHeader className="min-w-56">
           {subjectLabel}
         </Column>
-        <Column className="w-28" aria-label="Per-task correlation trend, visual">
-          Trend
-        </Column>
-        {taskLabels.map((label) => (
+        <Column className="w-44">Across tasks</Column>
+        <Column className="w-40">Day to day</Column>
+        <Column className="w-44">Against comp standings</Column>
+        {taskLabels.map((label, i) => (
           <Column
             key={label}
-            className="w-20 text-right"
-            aria-label={`${label}, Spearman rho for that task`}
+            // The border groups everything from here right as "one column per
+            // task", without a colspan header row the grid semantics would
+            // have to carry.
+            className={cn("w-20 text-right", i === 0 && "border-l")}
+            aria-label={`${label}, coefficient for that task`}
           >
             {label}
           </Column>
         ))}
-        <Column className="w-24 text-right" aria-label="Mean signed rho across tasks, n-weighted">
-          mean ρ
-        </Column>
-        <Column className="w-24 text-right" aria-label="Mean absolute rho across tasks">
-          mean |ρ|
-        </Column>
-        <Column className="w-36" aria-label="Sign consistency across informative tasks">
-          Consistency
-        </Column>
-        <Column className="w-24 text-right" aria-label="Comp-level rho">
-          comp ρ
-        </Column>
-        <Column className="w-16 text-right" aria-label="n, pilots in the comp-level correlation">
-          n
-        </Column>
-        <Column className="w-32">What it means</Column>
       </TableHeader>
       <TableBody>
         {metrics.map((m) => (
@@ -472,69 +531,89 @@ function SeparationTable({
                 for this page, in the glossary at the bottom). */}
             <Cell className="whitespace-normal">{m.label}</Cell>
             <Cell>
-              <RhoSparkline
-                perTaskRho={m.perTaskRho}
-                perTaskInformative={m.perTaskCorrelation.map((c) =>
-                  c === null ? null : Math.abs(c.rho) >= c.noiseFloor
-                )}
-                taskLabels={taskLabels}
-                metricLabel={m.label}
-              />
-            </Cell>
-            {m.perTaskRho.map((rho, i) => (
-              <Cell key={i} className="text-right tabular-nums">
-                {rho === null ? (
-                  <span aria-label="not applicable" className="text-muted-foreground">
-                    —
-                  </span>
-                ) : (
-                  rho.toFixed(2)
-                )}
-              </Cell>
-            ))}
-            <Cell className="text-right tabular-nums">
               {m.meanSignedRho === null ? (
-                <span aria-label="not applicable" className="text-muted-foreground">
-                  —
-                </span>
+                <Dash />
               ) : (
-                m.meanSignedRho.toFixed(2)
-              )}
-            </Cell>
-            <Cell className="text-right tabular-nums">
-              {m.meanAbsRho === null ? (
-                <span aria-label="not applicable" className="text-muted-foreground">
-                  —
-                </span>
-              ) : (
-                m.meanAbsRho.toFixed(2)
+                <div className="flex items-center gap-2">
+                  <DivergingMeter
+                    className="min-w-20 flex-1"
+                    value={m.meanSignedRho}
+                    label={`${m.label}: average coefficient across tasks`}
+                    valueLabel={m.meanSignedRho.toFixed(2)}
+                  />
+                  <span
+                    aria-hidden
+                    className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground"
+                  >
+                    {m.meanSignedRho.toFixed(2)}
+                  </span>
+                </div>
               )}
             </Cell>
             <Cell>
               <ConsistencyChip metric={m} />
             </Cell>
-            <Cell className="text-right tabular-nums">
+            <Cell>
               {m.compRho ? (
-                m.compRho.rho.toFixed(2)
+                <div className="space-y-0.5">
+                  <VerdictBadge correlation={m.compRho} />
+                  <p className="text-xs tabular-nums text-muted-foreground">
+                    ρ {m.compRho.rho.toFixed(2)} · {m.compRho.n} of {fieldSize}{" "}
+                    pilots
+                  </p>
+                </div>
               ) : (
-                <span aria-label="not applicable" className="text-muted-foreground">
-                  —
-                </span>
+                <Dash />
               )}
             </Cell>
-            <Cell className="text-right tabular-nums">
-              {m.compRho ? (
-                m.compRho.n
-              ) : (
-                <span aria-label="not applicable" className="text-muted-foreground">
-                  —
-                </span>
-              )}
-            </Cell>
-            <Cell>{m.compRho ? <VerdictBadge correlation={m.compRho} /> : null}</Cell>
+            {m.perTaskRho.map((rho, i) => {
+              const informative = taskInformative(m, i);
+              const label = taskLabels[i] ?? `task ${i + 1}`;
+              return (
+                <Cell key={i} className={i === 0 ? "border-l" : undefined}>
+                  {rho === null ? (
+                    <div className="text-right">
+                      <Dash label={`${label}: not applicable`} />
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <p
+                        aria-hidden
+                        className={cn(
+                          "text-right text-xs tabular-nums",
+                          informative === false && "text-muted-foreground"
+                        )}
+                      >
+                        {rho.toFixed(2)}
+                      </p>
+                      <DivergingMeter
+                        value={rho}
+                        hollow={informative === false}
+                        label={`${m.label}, ${label}`}
+                        valueLabel={
+                          informative === false
+                            ? `${rho.toFixed(2)}, could be chance`
+                            : rho.toFixed(2)
+                        }
+                      />
+                    </div>
+                  )}
+                </Cell>
+              );
+            })}
           </Row>
         ))}
       </TableBody>
     </Table>
+  );
+}
+
+/** The "no reading here" cell — never a blank, which reads as a rendering
+ * failure rather than as an absence. */
+function Dash({ label = "not applicable" }: { label?: string }) {
+  return (
+    <span aria-label={label} className="text-muted-foreground">
+      —
+    </span>
   );
 }

@@ -6,8 +6,8 @@
  * screen reader so.
  *
  * The consumers so far are both in the field-analysis separation ranking:
- * DivergingMeter for a signed Spearman ρ in [-1, 1], which renders from a
- * centred zero axis, and ProportionMeter for a part of a whole (how much of
+ * DivergingMeter for a signed Spearman ρ in [-1, 1], which grows from the
+ * centre of its track, and ProportionMeter for a part of a whole (how much of
  * the field a correlation actually measured). Sign is encoded by WHICH SIDE
  * the bar grows toward, never by colour alone, and the number is always
  * printed beside the bar (WCAG 1.4.1 Use of Color).
@@ -16,30 +16,47 @@ import { Meter as AriaMeter } from "react-aria-components";
 
 import { cn } from "@/react/lib/utils";
 
+/** Floor width of a diverging bar: what an all-but-zero reading still draws,
+ * so the centre stays marked without a rule of its own. A hollow bar needs a
+ * wider floor than a solid one — its 1px border on each side would otherwise
+ * meet in the middle and draw the outline as a solid tick, which is the one
+ * thing `hollow` exists to say it is not. */
+const ZERO_TICK = "2px";
+const ZERO_TICK_HOLLOW = "5px";
+
 /**
- * A bar growing left or right from a centred zero axis.
+ * A bar growing left or right from the centre — zero.
  *
  * @param value      signed, in [-maxMagnitude, maxMagnitude]
  * @param label      what is being measured — becomes the accessible name
  * @param valueLabel how the number reads aloud (e.g. "-0.62"); defaults to
  *                   the value fixed to 2dp
+ * @param hollow     draw the bar as an outline rather than a solid fill: the
+ *                   reading is positioned honestly but is not evidence (the
+ *                   comp page's per-task cells use it for a ρ that did not
+ *                   clear its noise floor). Outline vs fill is a shape
+ *                   difference, so it survives greyscale and print; the
+ *                   caller still has to say so in `valueLabel`.
  */
 export function DivergingMeter({
   value,
   label,
   valueLabel,
   maxMagnitude = 1,
+  hollow = false,
   className,
 }: {
   value: number;
   label: string;
   valueLabel?: string;
   maxMagnitude?: number;
+  hollow?: boolean;
   className?: string;
 }) {
   const clamped = Math.max(-maxMagnitude, Math.min(maxMagnitude, value));
   const magnitude = Math.abs(clamped) / maxMagnitude;
   const text = valueLabel ?? clamped.toFixed(2);
+  const floor = hollow ? ZERO_TICK_HOLLOW : ZERO_TICK;
 
   return (
     <AriaMeter
@@ -63,15 +80,26 @@ export function DivergingMeter({
         // strip the backgrounds and print an empty track.
         className="relative h-2 w-full rounded-full bg-foreground/10 [print-color-adjust:exact]"
       >
-        {/* The zero axis. Always visible, so a near-zero bar still reads as
-            "no correlation" rather than as a rendering glitch. */}
-        <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border" />
+        {/* There is deliberately no separate zero-axis rule. The bar always
+            starts at the centre, so its inner edge already marks zero — and a
+            1px axis there could only ever peek out from behind the bar's
+            rounded end (Safari and Chrome both drew a hairline beside the
+            pill). Instead the bar itself carries a floor width, so a near-zero
+            reading still shows a tick at the centre rather than nothing at
+            all: "no correlation", not a rendering glitch. */}
         <div
-          className="absolute inset-y-0 rounded-full bg-foreground/60"
+          className={cn(
+            "absolute inset-y-0 rounded-full",
+            hollow
+              ? "border border-foreground/50 bg-background/60"
+              : "bg-foreground/60"
+          )}
           style={
-            clamped < 0
-              ? { right: "50%", width: `${magnitude * 50}%` }
-              : { left: "50%", width: `${magnitude * 50}%` }
+            magnitude === 0
+              ? { left: "50%", width: floor, transform: "translateX(-50%)" }
+              : clamped < 0
+                ? { right: "50%", width: `max(${floor}, ${magnitude * 50}%)` }
+                : { left: "50%", width: `max(${floor}, ${magnitude * 50}%)` }
           }
         />
       </div>
