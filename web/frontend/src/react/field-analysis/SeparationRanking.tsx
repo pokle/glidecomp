@@ -16,7 +16,7 @@
 import { useState } from "react";
 import type { Key, Selection } from "react-aria-components";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
-import { DivergingMeter } from "@/react/rac/meter";
+import { DivergingMeter, ProportionMeter } from "@/react/rac/meter";
 import { Badge } from "@/react/rac/badge";
 import { cn } from "@/react/lib/utils";
 import { MetricExplanation } from "./MetricExplanation";
@@ -133,6 +133,12 @@ export function SeparationRanking({
   }
 
   const underpowered = ranked.filter((r) => r.correlation.n < MIN_CORRELATION_N);
+  // The denominator behind every "19 of 29": the pilots this report analysed.
+  // Without the report (metrics-only callers) the widest correlation is the
+  // best available stand-in for the field size.
+  const fieldSize =
+    report?.pilots.length ??
+    Math.max(0, ...[...ranked, ...outcomeRanked].map((r) => r.correlation.n));
 
   return (
     <div className="space-y-3">
@@ -140,7 +146,10 @@ export function SeparationRanking({
         Each metric's Spearman correlation against the published rank. Rank 1
         is best, so a metric where more is better shows a{" "}
         <strong>negative</strong> ρ. Bigger bars mean the metric separated the
-        field more sharply on this task.
+        field more sharply on this task, and{" "}
+        <strong>pilots measured</strong> is how much of the analysed field the
+        metric applied to — a coefficient drawn from half the field is a
+        thinner finding than one drawn from all of it.
         {report ? (
           // An instruction to interact — meaningless on paper.
           <span className="print:hidden">
@@ -156,73 +165,22 @@ export function SeparationRanking({
           small, or too few pilots had a usable value.
         </p>
       ) : (
-      <Table
-        aria-label="Metric separation ranking"
-        scrollLabel="Metric separation ranking"
-        {...(report
-          ? {
-              selectionMode: "single" as const,
-              selectionBehavior: "replace" as const,
-              disallowEmptySelection: true,
-              selectedKeys: effectiveId !== null ? [effectiveId] : [],
-              onSelectionChange: (keys: Selection) => {
-                if (keys !== "all") setSelectedId([...keys][0] ?? null);
-              },
-            }
-          : {})}
-      >
-        <TableHeader>
-          <Column isRowHeader className="min-w-56">
-            Metric
-          </Column>
-          <Column className="w-20 text-right">ρ</Column>
-          <Column className="w-40" aria-label="Correlation strength, visual">
-            Strength
-          </Column>
-          <Column className="w-16 text-right" aria-label="n, pilots correlated">
-            n
-          </Column>
-          <Column className="w-28">Verdict</Column>
-          <Column className="w-40">Family</Column>
-        </TableHeader>
-        <TableBody>
-          {ranked.map(({ metric, correlation }) => (
-            <Row key={metric.id} id={metric.id}>
-              <Cell className="whitespace-normal">
-                <span className="inline-flex items-center gap-1">
-                  {metric.label}
-                  <MetricExplanation
-                    metricId={metric.id}
-                    label={metric.label}
-                    unit={metric.unit}
-                    direction={metric.direction}
-                    explanation={metric.explanation}
-                    perPilot={metric.perPilot}
-                    pilots={report?.pilots}
-                  />
-                </span>
-              </Cell>
-              <Cell className="text-right tabular-nums">
-                {correlation.rho.toFixed(2)}
-              </Cell>
-              <Cell>
-                <DivergingMeter
-                  value={correlation.rho}
-                  label={`${metric.label}: Spearman correlation against rank`}
-                  valueLabel={correlation.rho.toFixed(2)}
-                />
-              </Cell>
-              <Cell className="text-right tabular-nums">{correlation.n}</Cell>
-              <Cell>
-                <VerdictBadge correlation={correlation} />
-              </Cell>
-              <Cell className="text-muted-foreground">
-                {FAMILY_LABELS[metric.family]}
-              </Cell>
-            </Row>
-          ))}
-        </TableBody>
-      </Table>
+        <RankingTable
+          ranked={ranked}
+          ariaLabel="Metric separation ranking"
+          fieldSize={fieldSize}
+          pilots={report?.pilots}
+          selection={
+            report
+              ? {
+                  selectedKeys: effectiveId !== null ? [effectiveId] : [],
+                  onSelectionChange: (keys: Selection) => {
+                    if (keys !== "all") setSelectedId([...keys][0] ?? null);
+                  },
+                }
+              : undefined
+          }
+        />
       )}
 
       <VerdictLegend />
@@ -264,58 +222,140 @@ export function SeparationRanking({
             eval, not the flying. Their per-pilot diagnostics stay in the Race
             craft section below.
           </p>
-          <Table aria-label="Outcome checks" scrollLabel="Outcome checks">
-            <TableHeader>
-              <Column isRowHeader className="min-w-56">
-                Metric
-              </Column>
-              <Column className="w-20 text-right">ρ</Column>
-              <Column className="w-40" aria-label="Correlation strength, visual">
-                Strength
-              </Column>
-              <Column className="w-16 text-right" aria-label="n, pilots correlated">
-                n
-              </Column>
-              <Column className="w-28">Verdict</Column>
-            </TableHeader>
-            <TableBody>
-              {outcomeRanked.map(({ metric, correlation }) => (
-                <Row key={metric.id}>
-                  <Cell className="whitespace-normal">
-                    <span className="inline-flex items-center gap-1">
-                      {metric.label}
-                      <MetricExplanation
-                        metricId={metric.id}
-                        label={metric.label}
-                        unit={metric.unit}
-                        direction={metric.direction}
-                        explanation={metric.explanation}
-                        perPilot={metric.perPilot}
-                        pilots={report?.pilots}
-                      />
-                    </span>
-                  </Cell>
-                  <Cell className="text-right tabular-nums">
-                    {correlation.rho.toFixed(2)}
-                  </Cell>
-                  <Cell>
-                    <DivergingMeter
-                      value={correlation.rho}
-                      label={`${metric.label}: Spearman correlation against rank`}
-                      valueLabel={correlation.rho.toFixed(2)}
-                    />
-                  </Cell>
-                  <Cell className="text-right tabular-nums">{correlation.n}</Cell>
-                  <Cell>
-                    <VerdictBadge correlation={correlation} />
-                  </Cell>
-                </Row>
-              ))}
-            </TableBody>
-          </Table>
+          <RankingTable
+            ranked={outcomeRanked}
+            ariaLabel="Outcome checks"
+            fieldSize={fieldSize}
+            pilots={report?.pilots}
+          />
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * One ranking table, shared by the behavioural ranking and the outcome checks
+ * so the two can never drift in layout.
+ *
+ * Four columns, not six. ρ is printed inside the Strength cell it describes —
+ * the bar is what carries at a glance, and a column of two-decimal
+ * coefficients ahead of it was a wall to get past before reading any of them.
+ * n is a bar too, reading "19 of 29": the bare count meant nothing without the
+ * field size, which lived far up the page in the analysis basis. And the
+ * family column is gone — the metric names say what they measure, and each
+ * metric's family is one ⓘ away as well as being the heading of the chapter it
+ * belongs to further down the page.
+ */
+function RankingTable({
+  ranked,
+  ariaLabel,
+  fieldSize,
+  pilots,
+  selection,
+}: {
+  ranked: RankedMetric[];
+  ariaLabel: string;
+  /** Pilots analysed — the denominator of the coverage column. */
+  fieldSize: number;
+  /** Passed to each ⓘ so it can name the pilots a metric skipped. */
+  pilots?: FieldAnalysisReport["pilots"];
+  /** When provided, rows are single-selectable (drives the chart below). */
+  selection?: {
+    selectedKeys: Key[];
+    onSelectionChange: (keys: Selection) => void;
+  };
+}) {
+  return (
+    <Table
+      aria-label={ariaLabel}
+      scrollLabel={ariaLabel}
+      {...(selection
+        ? {
+            selectionMode: "single" as const,
+            selectionBehavior: "replace" as const,
+            disallowEmptySelection: true,
+            ...selection,
+          }
+        : {})}
+    >
+      <TableHeader>
+        <Column isRowHeader className="min-w-56">
+          Metric
+        </Column>
+        {/* No aria-labels on these headers any more: the columns they
+            replaced were named "ρ" and "n", symbols a screen reader can only
+            spell out. "Strength" and "Pilots measured" say themselves, and an
+            aria-label would override the visible name for no gain. */}
+        <Column className="w-56">Strength</Column>
+        <Column className="w-28">Verdict</Column>
+        <Column className="w-36">Pilots measured</Column>
+      </TableHeader>
+      <TableBody>
+        {ranked.map(({ metric, correlation }) => (
+          <Row key={metric.id} id={metric.id}>
+            <Cell className="whitespace-normal">
+              <span className="inline-flex items-center gap-1">
+                {metric.label}
+                <MetricExplanation
+                  metricId={metric.id}
+                  label={metric.label}
+                  unit={metric.unit}
+                  direction={metric.direction}
+                  family={FAMILY_LABELS[metric.family]}
+                  explanation={metric.explanation}
+                  perPilot={metric.perPilot}
+                  pilots={pilots}
+                />
+              </span>
+            </Cell>
+            <Cell>
+              {/* min-w-24 on the bar, not just a column width: a percentage
+                  width contributes nothing to a table's min-content, so on a
+                  narrow screen the column would squeeze the bar — the actual
+                  reading — down to a few pixels instead of letting the table
+                  scroll (which its wrapper is set up for). */}
+              <div className="flex items-center gap-2">
+                <DivergingMeter
+                  className="min-w-24 flex-1"
+                  value={correlation.rho}
+                  label={`${metric.label}: Spearman correlation against rank`}
+                  valueLabel={correlation.rho.toFixed(2)}
+                />
+                {/* aria-hidden: the meter already announces this exact
+                    number as its value text. */}
+                <span
+                  aria-hidden
+                  className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground"
+                >
+                  {correlation.rho.toFixed(2)}
+                </span>
+              </div>
+            </Cell>
+            <Cell>
+              <VerdictBadge correlation={correlation} />
+            </Cell>
+            <Cell>
+              <div className="flex items-center gap-2">
+                <ProportionMeter
+                  className="w-16 shrink-0"
+                  value={correlation.n}
+                  total={fieldSize}
+                  label={`${metric.label}: pilots measured`}
+                  valueLabel={`${correlation.n} of ${fieldSize} pilots`}
+                />
+                <span
+                  aria-hidden
+                  className="text-xs tabular-nums text-muted-foreground"
+                >
+                  {correlation.n} of {fieldSize}
+                </span>
+              </div>
+            </Cell>
+          </Row>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
