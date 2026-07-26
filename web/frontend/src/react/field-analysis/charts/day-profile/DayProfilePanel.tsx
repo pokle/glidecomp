@@ -4,15 +4,16 @@
  *
  * TWO labelled groups, stacked deliberately rather than overlaid:
  *
- * 1. "From the pilots' tracks" — the day family's charting series: wind by
+ * 1. "From the weather model" — what an outside provider says the day did
+ *    (wind, cloud, thermal ceiling); see the engine's weather/ module. The
+ *    forecast leads: it is the day as predicted, before any pilot flew it.
+ *
+ * 2. "From the pilots' tracks" — the day family's charting series: wind by
  *    hour on top, the climb quantile fan (with the day-timing overlays) in
  *    the middle, the per-leg wind Gantt at the bottom. The series come from
  *    THREE different metrics (day.wind, day.climb_by_hour,
  *    day.airtime_quality); this panel is why SeriesChart deliberately
  *    doesn't render them per-metric.
- *
- * 2. "From the weather model" — what an outside provider says the day did
- *    (wind, cloud, thermal ceiling); see the engine's weather/ module.
  *
  * The two answer the same questions from incompatible evidence (a field of
  * tracklogs versus a grid cell kilometres wide), and overlaying them would
@@ -158,6 +159,9 @@ export function DayProfilePanel({
   const showLegs = legs !== null && legs.legs.some((l) => l.n > 0);
   const showFlown = showWind || showClimb || showLegs;
   const showWeather = weather !== null && weatherHours.length > 0;
+  // Whether the modelled group occupies the top slot (charts or the pending
+  // placeholder) — the flown group only draws its dividing rule beneath one.
+  const showModelGroup = showWeather || weatherPending;
   if (!axis || (!showFlown && !showWeather)) return null;
 
   const zone = zoneAbbrev(new Date(axis.domainStart), timeZone);
@@ -176,9 +180,32 @@ export function DayProfilePanel({
 
   return (
     <figure className="space-y-1">
-      {/* ── Group 1: measured ─────────────────────────────────────────── */}
-      {showFlown ? (
+      {/* ── Group 1: modelled — the day as predicted ──────────────────── */}
+      {showWeather && weather ? (
         <>
+          <GroupHeading
+            title="From the weather model"
+            detail={`Independent of the tracklogs: ${sourceKindLabel(weather.source.kind)} conditions for the task area from ${weather.source.attribution}.`}
+          />
+          <MetChartsGroup weather={weather} axis={axis} timeZone={timeZone} setReadout={setReadout} />
+        </>
+      ) : weatherPending ? (
+        <>
+          <GroupHeading
+            title="From the weather model"
+            detail="Independent of the tracklogs: modelled conditions for the task area."
+          />
+          <p className="text-sm text-muted-foreground">
+            Fetching the day&rsquo;s weather — it will appear here in a moment.
+          </p>
+        </>
+      ) : null}
+
+      {/* ── Group 2: measured, on the same clock ──────────────────────────
+          A labelled break, because everything above is modelled and
+          everything below is measured from the pilots' own tracks. */}
+      {showFlown ? (
+        <div className={showModelGroup ? "space-y-1 border-t" : "space-y-1"}>
           <GroupHeading
             title="From the pilots' tracks"
             detail="What the field actually flew — wind, climb strength and leg timing measured from every pilot's tracklog."
@@ -207,29 +234,6 @@ export function DayProfilePanel({
           {showLegs && legs ? (
             <WindLegsGantt series={legs} timing={timing} axis={axis} timeZone={timeZone} setReadout={setReadout} />
           ) : null}
-        </>
-      ) : null}
-
-      {/* ── Group 2: modelled, on the same clock ──────────────────────────
-          A labelled break, because everything above is measured from the
-          pilots' own tracks and everything below is not. */}
-      {showWeather && weather ? (
-        <div className="space-y-1 border-t">
-          <GroupHeading
-            title="From the weather model"
-            detail={`Independent of the tracklogs: ${sourceKindLabel(weather.source.kind)} conditions for the task area from ${weather.source.attribution}.`}
-          />
-          <MetChartsGroup weather={weather} axis={axis} timeZone={timeZone} setReadout={setReadout} />
-        </div>
-      ) : weatherPending ? (
-        <div className="space-y-1 border-t">
-          <GroupHeading
-            title="From the weather model"
-            detail="Independent of the tracklogs: modelled conditions for the task area."
-          />
-          <p className="text-sm text-muted-foreground">
-            Fetching the day&rsquo;s weather — it will appear here in a moment.
-          </p>
         </div>
       ) : null}
 

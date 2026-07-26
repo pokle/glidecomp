@@ -1,6 +1,6 @@
 /**
- * Modelled wind by hour — the meteorological counterpart to WindHourlyChart
- * directly above it in the stack.
+ * Modelled wind by hour — the meteorological counterpart to the
+ * track-derived WindHourlyChart beneath it in the combined stack.
  *
  * Drawn in the SAME visual language as the pilot-derived chart (speed line,
  * direction-arrow lane, arrows flying WITH the wind) precisely so the two
