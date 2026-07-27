@@ -5,25 +5,36 @@ import { execSync } from 'child_process';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 
-function airscoreWorkerCheck(): Plugin {
+// Where /api/* is proxied in dev: the dev-router Worker started by
+// `bun run dev:workers` (all Workers, one wrangler session — see
+// web/scripts/dev-workers.sh). DEV_API_ORIGIN overrides it, which is how the
+// docker-compose frontend container reaches the `workers` container.
+const DEV_API_ORIGIN =
+  process.env.DEV_API_ORIGIN || `http://localhost:${process.env.DEV_API_PORT || 8790}`;
+
+function workersCheck(): Plugin {
   return {
-    name: 'airscore-worker-check',
+    name: 'workers-check',
     configureServer() {
-      if (process.env.VITE_AIRSCORE_URL) {
-        console.log(`\n  AirScore API → ${process.env.VITE_AIRSCORE_URL}\n`);
-        return;
-      }
-      const workerUrl = 'http://localhost:8787/';
-      fetch(workerUrl).then(() => {
-        console.log(`\n  AirScore API worker running at ${workerUrl}\n`);
-      }).catch(() => {
+      // Vite is ready in under a second; a cold `wrangler dev` session takes
+      // ~20, so a single probe under `bun run dev` (which starts both at once)
+      // would always cry wolf. Poll for a while before complaining.
+      void (async () => {
+        for (let i = 0; i < 40; i++) {
+          try {
+            await fetch(`${DEV_API_ORIGIN}/api/comp`);
+            console.log(`\n  API Workers running at ${DEV_API_ORIGIN}\n`);
+            return;
+          } catch {
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+        }
         console.warn(
-          `\n  ⚠ AirScore API worker is not running at ${workerUrl}` +
-          `\n  AirScore features will not work. To fix, either:` +
-          `\n    • Start the worker:  bun run --filter airscore-api dev` +
-          `\n    • Use production:    VITE_AIRSCORE_URL=https://glidecomp.com/api/airscore bun run dev\n`
+          `\n  ⚠ API Workers are not running at ${DEV_API_ORIGIN}` +
+          `\n  Sign-in, competitions and AirScore features will not work. To fix:` +
+          `\n    • Start them:  bun run dev:workers   (or just \`bun run dev\`)\n`
         );
-      });
+      })();
     },
   };
 }
@@ -152,7 +163,7 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     react(),
-    airscoreWorkerCheck(),
+    workersCheck(),
     sampleCompFiles(),
     copySampleComps(),
     {
@@ -264,35 +275,15 @@ export default defineConfig({
         searchForWorkspaceRoot(process.cwd()),
       ],
     },
+    // One rule for the whole API surface: it all goes to the dev-router Worker,
+    // which dispatches to auth-api / competition-api / airscore-api over
+    // service bindings exactly as the Pages Functions in functions/api/ do in
+    // production. There is no /api/* path this dev server serves itself, and
+    // the per-prefix table this replaced was a second place to forget to update
+    // (`/api/u/` — public track links — was once missing from it). See
+    // web/scripts/dev-workers.sh for why there is only one target now.
     proxy: {
-      '/api/auth': {
-        target: process.env.AUTH_API_URL || 'http://localhost:8788',
-        changeOrigin: true,
-      },
-      '/api/comp': {
-        target: process.env.COMP_API_URL || 'http://localhost:8789',
-        changeOrigin: true,
-      },
-      '/api/user': {
-        target: process.env.COMP_API_URL || 'http://localhost:8789',
-        changeOrigin: true,
-      },
-      '/api/u/': {
-        target: process.env.COMP_API_URL || 'http://localhost:8789',
-        changeOrigin: true,
-      },
-      '/api/admin': {
-        target: process.env.COMP_API_URL || 'http://localhost:8789',
-        changeOrigin: true,
-      },
-      // When AIRSCORE_API_URL is set (e.g. in Docker), proxy airscore through
-      // Vite so the browser doesn't need direct access to the worker.
-      ...(process.env.AIRSCORE_API_URL ? {
-        '/api/airscore': {
-          target: process.env.AIRSCORE_API_URL,
-          changeOrigin: true,
-        },
-      } : {}),
+      '/api': { target: DEV_API_ORIGIN, changeOrigin: true },
     },
   },
 });

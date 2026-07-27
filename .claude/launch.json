@@ -8,22 +8,14 @@
       "port": 3000
     },
     {
-      "name": "auth-api",
+      // auth-api, competition-api and airscore-api all run in this one
+      // wrangler session (see web/scripts/dev-workers.sh) and are reached
+      // through the dev-router on 8790. There is no per-worker port to attach
+      // to any more; the session's inspector covers all of them.
+      "name": "workers",
       "runtimeExecutable": "/Users/tushar/.bun/bin/bun",
-      "runtimeArgs": ["run", "dev:auth"],
-      "port": 8788
-    },
-    {
-      "name": "competition-api",
-      "runtimeExecutable": "/Users/tushar/.bun/bin/bun",
-      "runtimeArgs": ["run", "dev:comp"],
-      "port": 8789
-    },
-    {
-      "name": "airscore-api",
-      "runtimeExecutable": "/Users/tushar/.bun/bin/bun",
-      "runtimeArgs": ["run", "--cwd", "web/workers/airscore-api", "dev"],
-      "port": 8787
+      "runtimeArgs": ["run", "dev:workers"],
+      "port": 8790
     }
   ]
 }

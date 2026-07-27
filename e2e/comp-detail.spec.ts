@@ -29,10 +29,10 @@
  */
 import { execSync } from "node:child_process";
 import { test, expect, type Page } from "@playwright/test";
+import { FRONTEND_URL, SUPER_ADMIN } from "./fixtures/stack";
 
-const BASE_URL = "http://localhost:3000";
+const BASE_URL = FRONTEND_URL;
 const COMP_NAME = "Corryong Cup 2026";
-const SUPER_ADMIN = { name: "Tushar Pokle", email: "tushar.pokle@gmail.com" };
 
 interface TaskSummary {
   task_id: string;

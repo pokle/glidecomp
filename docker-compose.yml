@@ -23,29 +23,26 @@ services:
     env_file:
       - .env
     environment:
-      AUTH_API_URL: http://workers:8788
-      COMP_API_URL: http://workers:8789
-      AIRSCORE_API_URL: http://workers:8787
-      VITE_AIRSCORE_URL: /api/airscore
+      # Every /api/* prefix goes to the dev-router Worker in the `workers`
+      # container, which dispatches to auth / competition / airscore over
+      # service bindings. See web/scripts/dev-workers.sh.
+      DEV_API_ORIGIN: http://workers:8790
     command: >
       sh -c "bun install &&
              cd web/frontend &&
              exec bunx --bun vite --host 0.0.0.0 --port 3000"
 
-  # All Cloudflare workers run in a single container so they share the
-  # same localhost — wrangler's dev registry (used to wire up service bindings
-  # like competition-api → auth-api) is localhost-only and won't span
-  # containers. Each wrangler dev runs in its own working directory so it
-  # picks up its own wrangler.toml and ignores the Pages config at the repo
-  # root.
+  # All Cloudflare Workers run in ONE wrangler dev session (and so one
+  # Miniflare instance) inside this container — service bindings resolve within
+  # the session, and the shared D1 SQLite file has a single writer. Only the
+  # primary config's port is exposed, which is the dev-router's; it dispatches
+  # /api/* to the right Worker. See web/scripts/dev-workers.sh.
   workers:
     build:
       context: .
       dockerfile: Dockerfile.dev
     ports:
-      - "8787:8787"  # airscore-api
-      - "8788:8788"  # auth-api
-      - "8789:8789"  # competition-api
+      - "8790:8790"  # dev-router → auth-api / competition-api / airscore-api
     volumes:
       - .:/app
       - node_modules:/app/node_modules

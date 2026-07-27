@@ -6,9 +6,11 @@ description: Build, launch, and drive the GlideComp web app (Vite frontend + Clo
 # Run GlideComp
 
 GlideComp is a Cloudflare monorepo: a Vite multi-page frontend (Cloudflare
-Pages, port **3000**) that proxies `/api/*` to three local Workers — auth
-(**8788**), competition-api (**8789**), airscore (**8787**) — backed by
-local D1 + R2. Track analysis and **open-distance scoring run client-side in
+Pages, port **3000**) that proxies `/api/*` to the **dev-router** Worker on
+port **8790**, which dispatches to auth-api, competition-api and airscore-api
+over service bindings — all three in ONE `wrangler dev` session, backed by
+local D1 + R2. (One session because separate Miniflare processes raced on the
+shared D1 file; see `web/scripts/dev-workers.sh`.) Track analysis and **open-distance scoring run client-side in
 the browser**, so a real check means loading a page and reading the rendered
 scores, not just curling an API.
 
@@ -179,8 +181,9 @@ cd web/frontend && bunx vitest run     # or: bun run --filter '@glidecomp/fronte
   .../chromium_headless_shell-<N>`. The cache had older builds than the pinned
   version — `bunx playwright install chromium` fixes it. This is the same
   install CI does with `--with-deps`.
-- **Frontend proxies `/api`** to the Workers; hitting comp-api directly on
-  `:8789` works too, but the driver uses `:3000` so it exercises the proxy.
+- **Frontend proxies `/api`** to the Workers; hitting the dev-router directly
+  on `:8790` works too, but the driver uses `:3000` so it exercises the proxy.
+  There are no longer per-worker ports — `:8788`/`:8789` are dead.
 - **`playwright` isn't directly resolvable**, but `@playwright/test` is — the
   driver imports `{ chromium }` from `@playwright/test`.
 
@@ -193,3 +196,15 @@ cd web/frontend && bunx vitest run     # or: bun run --filter '@glidecomp/fronte
   pointing `COMP_MATCH` at Big Chip or Kosciuszko Loop will always fail.
 - Auth/sign-in 404s or every e2e test fails at sign-in → missing
   `web/workers/auth-api/.dev.vars` (see Prerequisites).
+- **Don't trust a long list of unrelated e2e failures.** If the local stack
+  dies mid-run, everything scheduled afterwards fails against a dead port. The
+  stack-health reporter (`e2e/reporters/stack-health.ts`) now detects that,
+  prints a banner and stops the run — so if you see one, believe it: only the
+  first failure can be real. Reading an older report? The same tell is a page
+  snapshot showing the app **signed out** where an admin control was expected —
+  that's dev-login failing, not a UI regression.
+- **Every failing spec passes in isolation** is the other classic tell. It
+  used to mean accumulated test data in `web/.wrangler/state`; specs clean up
+  after themselves now and each run sweeps leftovers, but `bun run kill-state`
+  (then `bun run seed`) is still the reset button if local results look
+  impossible.

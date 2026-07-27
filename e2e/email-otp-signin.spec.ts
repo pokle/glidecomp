@@ -11,6 +11,13 @@
  * header the worker trusts only when isLocalDev() (see auth.ts) — giving
  * every test (and every re-run) its own per-IP bucket at the real
  * production limits.
+ *
+ * Per-run email addresses (issue #477 asked every spec to stop growing the
+ * local database): kept deliberately here, unlike the other specs. What these
+ * tests exercise IS first-contact sign-up by OTP, and the rate-limit test needs
+ * distinct addresses within a single run. They leave a `user` row per run and
+ * no more — no comp, no track, nothing public — so `bun run kill-state` remains
+ * the way to clear them.
  */
 import { test, expect } from "@playwright/test";
 
@@ -27,10 +34,11 @@ test.beforeEach(async ({ page }) => {
 
 /**
  * Assert the browser context holds a real session for `email`, then that the
- * UI reflects it. The session check polls /api/auth/me: under local parallel
- * e2e load, D1 contention can 500 a single read (the same documented race
- * that forces workers:1 in CI), and the SPA renders one failed /me as
- * signed-out — retrying separates "no session" from that transient failure.
+ * UI reflects it. The session check polls /api/auth/me because the SPA renders
+ * a single failed /me as signed-out; retrying separates "no session" from a
+ * transient failure. (The cross-process D1 race this originally guarded against
+ * is fixed — all the Workers share one Miniflare instance now, issue #477 — but
+ * the retry is still the right shape for a poll against a live server.)
  */
 async function expectSignedIn(
   page: import("@playwright/test").Page,

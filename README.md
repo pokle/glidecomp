@@ -78,10 +78,19 @@ Start the frontend and all API workers together:
 bun run dev
 ```
 
-This starts three services:
+This starts two processes:
 - **Frontend** — Vite dev server at http://localhost:3000
-- **Auth API** — authentication worker at http://localhost:8788
-- **Competition API** — competition management worker at http://localhost:8789
+- **API Workers** — auth-api, competition-api and airscore-api, all in ONE
+  `wrangler dev` session, reached through the `dev-router` Worker at
+  http://localhost:8790
+
+Every worker shares a single Miniflare instance, so the D1 database has one
+writer — running them as separate processes on separate ports raced on the
+shared SQLite file (issue #477). Only the router's port is exposed; it
+dispatches `/api/auth/*`, `/api/comp/*`, `/api/airscore/*` and friends to the
+right worker over service bindings, exactly as the Pages Functions do in
+production. Vite proxies all of `/api` there, so the browser only ever talks to
+:3000. To start the workers on their own: `bun run dev:workers`.
 
 The auth worker requires a `.dev.vars` file in `web/workers/auth-api/` — see [docs/auth.md](docs/auth.md) for setup.
 
@@ -91,13 +100,8 @@ To start only the frontend (without any workers):
 bun run dev:frontend
 ```
 
-To use AirScore features, also start the AirScore API worker (http://localhost:8787) in a separate terminal:
-
-```bash
-bun run --filter airscore-api dev
-```
-
-The frontend automatically detects the local worker. If you'd rather skip the worker and use the production API instead:
+AirScore features are served by the same router; nothing extra to start. If
+you'd rather use the production AirScore API instead of the local worker:
 
 ```bash
 VITE_AIRSCORE_URL=https://glidecomp.com/api/airscore bun run dev
@@ -113,6 +117,12 @@ bun run test:e2e         # Run Playwright end-to-end tests
 bun run typecheck        # Type check root project
 bun run typecheck:all    # Type check everything (frontend + engine + workers)
 ```
+
+The e2e suite writes to the *persistent* local D1 state in `web/.wrangler/state`.
+Specs clean up after themselves and each run sweeps anything a killed run left
+behind, so this should stay tidy on its own — but if local e2e results ever look
+inexplicable, `bun run kill-state` resets the database to empty (then
+`bun run seed` to put the sample comps back).
 
 ### Chrome MCP server set up
 

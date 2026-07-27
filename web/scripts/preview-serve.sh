@@ -5,10 +5,11 @@
 # Workers. Unlike `bun run dev` (Vite), this exercises everything Pages does in
 # production; the trade-off is no HMR (a code change needs a re-run).
 #
-# `bun run preview` runs this alongside `dev:workers` (which starts + migrates
-# the auth / competition / airscore Workers). This half does the one-off build +
-# seed, then hands off to `wrangler pages dev`, which reaches the Workers by
-# name via `--service` (they register in wrangler's local dev registry).
+# `bun run preview` runs this alongside `dev:workers` (which migrates D1 and
+# starts the auth / competition / airscore Workers in one wrangler session).
+# This half does the one-off build + seed, then hands off to `wrangler pages
+# dev`, which reaches the Workers by name via `--service` (every worker in a
+# multi-config session registers in wrangler's local dev registry).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -20,10 +21,12 @@ echo "preview: building web/frontend/dist…"
 bun run build
 
 # The competition Worker owns the D1 schema; wait for it before seeding (seed
-# writes local D1 state directly and needs the tables to exist).
-echo "preview: waiting for competition-api on :8789…"
+# writes local D1 state directly and needs the tables to exist). All the Workers
+# share one wrangler dev session behind the dev-router on :8790 — see
+# web/scripts/dev-workers.sh.
+echo "preview: waiting for the API Workers on :8790…"
 for _ in $(seq 1 120); do
-  if curl -s -o /dev/null "http://localhost:8789/api/comp"; then break; fi
+  if curl -s -o /dev/null "http://localhost:8790/api/comp"; then break; fi
   sleep 1
 done
 

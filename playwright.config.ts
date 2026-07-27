@@ -1,4 +1,5 @@
 import { defineConfig } from "@playwright/test";
+import { FRONTEND_URL, API_URL } from "./e2e/fixtures/stack";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -8,23 +9,31 @@ export default defineConfig({
   testIgnore: ["**/ssr.spec.ts"],
   timeout: 60_000,
   retries: process.env.CI ? 1 : 0,
-  // Force sequential runs everywhere. auth-api and competition-api are two
-  // separate wrangler/Miniflare processes that open the SAME D1 SQLite file
-  // (shared --persist-to), and concurrent cross-process access intermittently
-  // surfaces as a 500 "D1_ERROR: internal error" from dev-login or
-  // GET /api/comp/:id. Parallel test workers multiply that concurrency —
-  // locally ~1 in 4 full runs lost a test to it (worst on a cold start),
-  // while single-worker CI runs green without retries. The suite is
-  // startup-dominated, so sequential costs only a few seconds over parallel
-  // (~37s vs ~32s). Don't restore parallelism without moving both workers
-  // into one Miniflare instance (needs a dev-router primary worker, since
-  // multi-config `wrangler dev -c … -c …` only exposes the primary's port).
+  // Sequential. The original reason was the cross-process D1 race (two
+  // Miniflare processes on one SQLite file) — that's fixed: `dev:workers` now
+  // runs every Worker in ONE session behind the dev-router (issue #477,
+  // web/scripts/dev-workers.sh). What still argues for one worker is test
+  // isolation, not the database: these specs share mutable fixtures — the
+  // seeded "Corryong Cup 2026" comp (comp-waypoints saves and restores its
+  // waypoints; comp-detail asserts against them) and the single super-admin
+  // account. Running them concurrently would have one spec observing another's
+  // half-applied edit. The suite is startup-dominated, so sequential costs only
+  // a few seconds (~37s vs ~32s) — not worth buying flakiness back. Give the
+  // shared specs their own fixtures before raising this.
   workers: 1,
-  reporter: process.env.CI
-    ? [["html", { open: "never" }], ["list"]]
-    : [["list"]],
+  // Sweeps comps left behind by a killed run before anything else — see the
+  // file for why the local database needs sweeping at all.
+  globalSetup: "./e2e/global-setup.ts",
+  reporter: [
+    // Always first: it turns "the stack died" into one honest line and stops
+    // the run, instead of a dozen unrelated-looking product failures.
+    ["./e2e/reporters/stack-health.ts"],
+    ...(process.env.CI
+      ? ([["html", { open: "never" }], ["list"]] as const)
+      : ([["list"]] as const)),
+  ],
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: FRONTEND_URL,
     headless: true,
     launchOptions: {
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
@@ -41,22 +50,20 @@ export default defineConfig({
       name: "chromium",
     },
   ],
+  // One entry, not three: every Worker lives in a single wrangler session
+  // behind the dev-router on :8790. /api/comp is the readiness probe because it
+  // is a real D1 read through competition-api — it proves the database is
+  // reachable, not just that a port is open.
   webServer: [
     {
-      command: "bun run dev:auth",
-      url: "http://localhost:8788/api/auth/me",
-      reuseExistingServer: !process.env.CI,
-      timeout: 60_000,
-    },
-    {
-      command: "bun run dev:comp",
-      url: "http://localhost:8789/api/comp",
+      command: "bun run dev:workers",
+      url: `${API_URL}/api/comp`,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
     },
     {
       command: "bun run dev:frontend",
-      url: "http://localhost:3000",
+      url: FRONTEND_URL,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
     },

@@ -1,23 +1,14 @@
 #!/bin/sh
-# Starts all Cloudflare workers in the docker-compose `workers` container.
-# All wrangler dev processes share the same localhost so service bindings
-# (e.g. competition-api → auth-api) resolve through Wrangler's localhost dev
-# registry. Each worker runs in its own directory so wrangler picks up its own
-# wrangler.toml and ignores the Pages config at the repo root.
+# Starts every Cloudflare Worker in the docker-compose `workers` container.
+#
+# One wrangler session for all of them (dev-workers.sh explains why: issue #477
+# — separate Miniflare processes on one shared D1 file race each other). Service
+# bindings resolve inside that session, so nothing depends on the localhost dev
+# registry spanning containers either. Only the dev-router's port is exposed;
+# the frontend container reaches it via DEV_API_ORIGIN.
 set -e
 
 bun install
 
-# Apply D1 migrations for the shared taskscore-auth database (auth-api owns
-# auth tables, competition-api owns comp/task/pilot/track tables).
-(cd web/workers/auth-api && bunx wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state)
-(cd web/workers/competition-api && bunx wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state)
-
-# Each wrangler dev binds its own workerd inspector port. Default is 9229,
-# which collides when multiple workers run on the same host.
-exec bunx concurrently --kill-others-on-fail \
-  -n auth,comp,airscore \
-  -c blue,green,yellow \
-  'cd web/workers/auth-api && bunx wrangler dev --persist-to ../../.wrangler/state --ip 0.0.0.0 --inspector-port 9229' \
-  'cd web/workers/competition-api && bunx wrangler dev --persist-to ../../.wrangler/state --ip 0.0.0.0 --inspector-port 9230' \
-  'cd web/workers/airscore-api && bunx wrangler dev --ip 0.0.0.0 --inspector-port 9231'
+# dev-workers.sh applies the D1 migrations before starting wrangler.
+exec bash web/scripts/dev-workers.sh --ip 0.0.0.0

@@ -4,6 +4,7 @@ import { gzipSync } from "zlib";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { API_KEY_RATE_LIMIT } from "../web/workers/auth-api/src/rate-limit";
+import { e2eCompName } from "./fixtures/stack";
 
 // ── What this guards ─────────────────────────────────────────────────────────
 // docs/api.md is hand-written, but every curl example in it is *executed* here
@@ -14,6 +15,9 @@ import { API_KEY_RATE_LIMIT } from "../web/workers/auth-api/src/rate-limit";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const API_DOC = resolve(__dirname, "..", "docs/api.md");
+
+/** Stable account this spec drives the documented API as. */
+const API_DOC_BOT = { name: "API Doc Bot", email: "api-doc-bot@test.local" };
 const SAMPLE_IGC = resolve(
   __dirname,
   "..",
@@ -139,9 +143,12 @@ function parseBlock(raw: string, subst: () => Record<string, string>): DocCall {
 
 /** Dev-login on this context; its cookie jar keeps the session for later calls. */
 async function devLogin(ctx: APIRequestContext): Promise<string> {
-  const suffix = String(Date.now()).slice(-6) + Math.floor(Math.random() * 100);
+  // A STABLE identity, not a per-run one. dev-login signs up-or-in, so this
+  // creates the user on the first run ever and reuses the row after that —
+  // where a `api-doc-${Date.now()}@test.local` minted one more account, and one
+  // more set of rows, on every single run (issue #477).
   const res = await ctx.post("/api/auth/dev-login", {
-    data: { name: "API Doc Bot", email: `api-doc-${suffix}@test.local` },
+    data: { name: API_DOC_BOT.name, email: API_DOC_BOT.email },
   });
   if (!res.ok()) {
     throw new Error(`dev-login failed: ${res.status()} ${await res.text()}`);
@@ -151,6 +158,37 @@ async function devLogin(ctx: APIRequestContext): Promise<string> {
   if (!match) throw new Error("dev-login response missing session cookie");
   return `better-auth.session_token=${match[1]}`;
 }
+
+// ── Cleanup ──────────────────────────────────────────────────────────────────
+// The local D1 file persists between runs, so anything this spec creates and
+// leaves behind is still there next time — and a public comp per run is what
+// made the suite rot (issue #477). Recorded as the test creates them and
+// removed in afterEach, which runs whether the test passed, failed or timed out.
+let createdCompId: string | null = null;
+let createdKeyId: string | null = null;
+
+test.afterEach(async ({ playwright, baseURL }) => {
+  if (!createdCompId && !createdKeyId) return;
+  const ctx = await playwright.request.newContext({ baseURL: baseURL! });
+  try {
+    const cookie = await devLogin(ctx);
+    const headers = { cookie, origin: baseURL! };
+    if (createdCompId) {
+      // Cascades to the task, pilots and tracks created underneath it.
+      await ctx.delete(`/api/comp/${createdCompId}`, { headers });
+      createdCompId = null;
+    }
+    if (createdKeyId) {
+      await ctx.post("/api/auth/api-key/delete", {
+        headers,
+        data: { keyId: createdKeyId },
+      });
+      createdKeyId = null;
+    }
+  } finally {
+    await ctx.dispose();
+  }
+});
 
 test("every curl example in docs/api.md works against the live API", async ({
   playwright,
@@ -189,7 +227,9 @@ test("every curl example in docs/api.md works against the live API", async ({
     data: { name: "api-doc-test" },
   });
   expect(keyRes.ok(), await keyRes.text()).toBeTruthy();
-  const apiKey = ((await keyRes.json()) as { key: string }).key;
+  const created = (await keyRes.json()) as { key: string; id: string };
+  const apiKey = created.key;
+  createdKeyId = created.id;
   await keyCtx.dispose();
 
   // One empty-jar client for the rest: authed setup calls pass authHeaders; the
@@ -197,12 +237,19 @@ test("every curl example in docs/api.md works against the live API", async ({
   // so key-auth is exercised on its own exactly as a reader would.
   const client = await playwright.request.newContext({ baseURL: baseURL! });
 
+  // Public (not `test: true`) on purpose: several documented curls read this
+  // comp with no credentials at all, and a hidden comp 404s anonymously. So it
+  // IS in the public comp list for the length of this test — which is why the
+  // afterEach above deletes it and the name goes through e2eCompName(), the
+  // marker the leftover sweep looks for. An undeleted public comp here is
+  // exactly what broke SSR discovery in issue #477.
   const compRes = await client.post("/api/comp", {
     headers: authHeaders,
-    data: { name: `API Doc Comp ${Date.now()}`, category: "hg" },
+    data: { name: e2eCompName(`API Doc Comp ${Date.now()}`), category: "hg" },
   });
   expect(compRes.ok(), await compRes.text()).toBeTruthy();
   const compId = ((await compRes.json()) as { comp_id: string }).comp_id;
+  createdCompId = compId;
 
   const taskRes = await client.post(`/api/comp/${compId}/task`, {
     headers: authHeaders,

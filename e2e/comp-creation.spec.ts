@@ -1,12 +1,37 @@
 import { test, expect } from "@playwright/test";
+import { idFromSegment } from "../web/frontend/src/react/lib/slug";
+import { e2eCompName } from "./fixtures/stack";
+
+// A STABLE identity, not a per-run one: dev-login signs up-or-in, so this
+// account is created on the first run ever and reused after that. Minting
+// `e2e-${Date.now()}@test.local` added a user (and their comp) to the
+// persistent local database on every single run — issue #477.
+const TEST_USER = {
+  name: "E2E Test Pilot",
+  email: "e2e-comp-creation@test.local",
+};
+// The comp this spec creates. e2eCompName() stamps the marker the leftover
+// sweep looks for, so a run killed before the cleanup below still gets tidied
+// up by e2e/global-setup.ts.
+const COMP_NAME = e2eCompName("Test Competition");
+
+/** Set by the test as soon as the comp exists, so afterEach can remove it. */
+let createdCompId: string | null = null;
+
+test.afterEach(async ({ page }) => {
+  if (!createdCompId) return;
+  // The creating user is this comp's admin, and the session cookie is still on
+  // the page context. DELETE cascades to the task created underneath it.
+  const res = await page.request.delete(`/api/comp/${createdCompId}`);
+  // Assert, don't hope: a silently-failing cleanup is how the local database
+  // filled up in the first place (issue #477). The global-setup sweep would
+  // still catch it next run, but the leak would go unnoticed until then.
+  expect(res.status(), `cleanup: DELETE /api/comp/${createdCompId}`).toBe(200);
+  createdCompId = null;
+});
 
 test("dev login, create competition and task", async ({ page }) => {
-  // Unique per run so the derived username doesn't collide across runs.
-  const suffix = String(Date.now()).slice(-6);
-  const testUser = {
-    name: `E2E Test Pilot ${suffix}`,
-    email: `e2e-${suffix}@test.local`,
-  };
+  const testUser = TEST_USER;
 
   // Step 1: Dev login — POST sets session cookie
   const loginRes = await page.request.post("/api/auth/dev-login", {
@@ -37,8 +62,8 @@ test("dev login, create competition and task", async ({ page }) => {
     }
   }
 
-  // Step 2: A brand-new user gets a username auto-derived at sign-up, so there
-  // is no onboarding gate to clear — landing on /comp stays on /comp instead of
+  // Step 2: the user gets a username auto-derived at sign-up, so there is no
+  // onboarding gate to clear — landing on /comp stays on /comp instead of
   // bouncing to /onboarding. The user-menu button rendering is the sync point
   // that the signed-in user has resolved.
   await page.goto("/comp");
@@ -49,7 +74,7 @@ test("dev login, create competition and task", async ({ page }) => {
   // once the signed-in user resolves; click auto-waits.
   await page.getByRole("button", { name: "Start a new competition" }).click();
   const createDialog = page.getByRole("dialog");
-  await createDialog.getByLabel("Name").fill("E2E Test Competition");
+  await createDialog.getByLabel("Name").fill(COMP_NAME);
   // Category defaults to HG — no change needed. Mark it hidden (admins only).
   // RAC checkboxes visually hide the real <input>, so clicking the checkbox
   // role times out on actionability — click the visible label like a user.
@@ -60,9 +85,11 @@ test("dev login, create competition and task", async ({ page }) => {
   // Client-side navigation to the competition detail page; the heading
   // assertion polls until the comp fetch resolves.
   await page.waitForURL("**/comp/*");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "E2E Test Competition"
-  );
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(COMP_NAME);
+  // Capture the id for afterEach's cleanup. The path segment is the canonical
+  // `${name-slug}-${id}` form, so take the id off the end rather than the whole
+  // segment — the API only accepts the bare sqid.
+  createdCompId = idFromSegment(new URL(page.url()).pathname.split("/")[2]);
 
   // Step 3b: The admin-only setup guide shows on a fresh comp with step 1
   // ("Create the competition") pre-checked. The progress count is over the
