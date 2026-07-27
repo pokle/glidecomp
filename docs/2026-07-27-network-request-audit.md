@@ -54,7 +54,7 @@ handful of duplicated calls, and (c) bytes.
 
 ## 2. Findings, in priority order
 
-### F1 — Content-hashed assets are not marked immutable (biggest win, zero code)
+### F1 — Content-hashed assets are not marked immutable (biggest win, zero code) — **FIXED**
 
 Production serves every `/assets/*` and `/_astro/*` file with:
 
@@ -92,7 +92,15 @@ hub), one browser context, normal navigations:
 Safe because both directories contain only build-hashed filenames — a content
 change produces a new URL. Do **not** extend this to `/screenshots/*`,
 `/icon.svg`, `/manifest.webmanifest` or `/data/*`, which are unhashed; those
-want a moderate `max-age` instead.
+want a moderate `max-age` instead. (Screenshots are best handled alongside F4,
+which changes those filenames anyway.)
+
+**Landed** in `web/frontend/public/_headers`. Verified against a fresh
+production build: all 130 files in `dist/assets` (48) and `dist/_astro` (82) are
+content-hashed and are `.js`/`.css`/`.woff2`/`.woff`/`.ttf` only; the unhashed
+paths and the HTML pages keep the default; and the `/*` security headers still
+merge onto `/assets/*` (Pages applies every matching rule). Re-measured journey:
+61 wire requests, zero 304s.
 
 ### F2 — `/api/auth/me` is fetched twice on every page load
 
@@ -217,7 +225,7 @@ mistaken for a bug when it appears in a trace.
 
 | # | Change | Effort | Effect |
 |---|---|---|---|
-| 1 | `_headers`: `immutable` on `/assets/*`, `/_astro/*` | trivial | **−44% requests** on a repeat-visit journey (measured) |
+| 1 | ~~`_headers`: `immutable` on `/assets/*`, `/_astro/*`~~ **done** | trivial | **−44% requests** on a repeat-visit journey (measured) |
 | 2 | Dedupe `/api/auth/me`; embed user in `__SSR_DATA__` | small | −9 to −18 requests per journey; removes a boot round trip from every public page |
 | 3 | AVIF/WebP + `srcset` + lazy on home screenshots | small | **−2.6 MB** on the primary SEO page |
 | 4 | Variable font + one `preload` | small | −3 to −5 requests/page, earlier text paint |
