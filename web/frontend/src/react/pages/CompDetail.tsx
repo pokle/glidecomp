@@ -52,7 +52,7 @@ import { CompSetupProgress } from "../comp/CompSetupProgress";
 import { SettingsDialog } from "../comp/SettingsDialog";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
-import { TaskDiagramPopover } from "../comp/TaskDiagramPopover";
+import { TaskDiagramOverlay } from "../comp/TaskDiagramOverlay";
 import {
   fetchWithRetry,
   isPastCloseDate,
@@ -557,7 +557,7 @@ function FeaturedTaskGroup({
             {/* The day's task shape, right where a pilot looks first — and
                 tappable for the readable version, same as the rows below. */}
             {task.route ? (
-              <TaskDiagramPopover
+              <TaskDiagramOverlay
                 task={task.route}
                 taskName={task.name}
                 size="sm"
@@ -763,7 +763,7 @@ function TasksList({
                       phone (or against a comp-api that predates the `route`
                       field) turns the whole list into dead space. */}
                   {task.route ? (
-                    <TaskDiagramPopover
+                    <TaskDiagramOverlay
                       task={task.route}
                       taskName={task.name}
                     />
