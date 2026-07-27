@@ -37,7 +37,6 @@ import { Button, ToggleButton } from "@/react/rac/button";
 import { Loading } from "@/react/rac/progress";
 import { SearchField } from "@/react/rac/field";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
-import { RacConfirmProvider } from "@/react/rac/confirm";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
@@ -165,14 +164,6 @@ const PIN_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>';
 
 export function CompWaypoints() {
-  return (
-    <RacConfirmProvider>
-      <CompWaypointsContent />
-    </RacConfirmProvider>
-  );
-}
-
-function CompWaypointsContent() {
   const { compId: compParam } = useParams<{ compId: string }>();
   const compId = idFromSegment(compParam ?? "");
   const { user } = useUser();
