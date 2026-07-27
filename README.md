@@ -118,11 +118,19 @@ start, so a source edit needs a restart (Ctrl-C, re-run), not an image rebuild.
 There's no HMR — `preview` serves a production build, same as on the host. Use
 `bun run dev` for a fast edit loop.
 
+The image holds only the dependency tree, and the script rebuilds it for you
+when it needs to: it hashes the files that layer is built from (`bun.lock`, the
+workspace manifests, `patches/`) and compares against a stamp beside the image,
+printing the reason when it rebuilds. Editing source never triggers one. Even a
+missed rebuild is only ever slower, not wrong — the entrypoint runs
+`bun install --frozen-lockfile` after staging, which reconciles `node_modules`
+to whatever lockfile the mount brought in.
+
 | variable | default | when you need it |
 | --- | --- | --- |
 | `PORT` | `3200` | run more than one instance |
 | `SKIP_SEED` | `0` | keep an instance's existing data instead of reseeding |
-| `REBUILD` | `0` | **only** after a `bun.lock` / workspace-manifest change |
+| `REBUILD` | `0` | force an image rebuild — normally detected for you |
 | `CPUS` / `MEMORY` | `6` / `8G` | `vite build` is OOM-killed below ~4G |
 
 The default port is 3200 because 3000 (vite), 3100 (SSR e2e), 4321 (astro),

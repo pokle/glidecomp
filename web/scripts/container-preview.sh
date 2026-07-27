@@ -71,11 +71,42 @@ if [ -f .env ]; then
 fi
 [ -n "$mapbox_token" ] || echo "warning: no VITE_MAPBOX_TOKEN — maps will not render." >&2
 
-# The image is just the dependency tree, so this is rare: only a changed
-# bun.lock or workspace manifest needs it. Source changes never do.
-if [ "${REBUILD:-0}" = "1" ] || ! container image inspect "$IMAGE" >/dev/null 2>&1; then
-  echo "preview: building dependency image ${IMAGE}…"
+# The image is just the dependency tree, so a rebuild is rare: only a changed
+# bun.lock, workspace manifest or patch needs one. Source changes never do.
+#
+# We detect that by hashing exactly the files the image's dependency layer is
+# built from — the same list the Containerfile COPYs — and stamping it beside
+# the image. Drift => rebuild, automatically.
+#
+# Note this is a SPEED optimisation, not a correctness one. The entrypoint runs
+# `bun install --frozen-lockfile` after staging, which reconciles /app/node_modules
+# to whatever lockfile the mount brought in — verified by deleting a package and
+# watching it come back. So a missed rebuild costs a slower start, never wrong
+# dependencies. That is why the stamp living on the host (and so being able to
+# go stale if the image is rebuilt elsewhere) is an acceptable trade for not
+# paying a container spin-up on every invocation.
+deps_hash=$(cat bun.lock package.json \
+                web/engine/package.json web/frontend/package.json \
+                web/samples/package.json web/workers/*/package.json \
+                patches/* 2>/dev/null | shasum -a 256 | cut -c1-16)
+stamp="web/.wrangler/container-preview-${IMAGE}.deps"
+
+rebuild_reason=""
+if [ "${REBUILD:-0}" = "1" ]; then
+  rebuild_reason="REBUILD=1"
+elif ! container image inspect "$IMAGE" >/dev/null 2>&1; then
+  rebuild_reason="no ${IMAGE} image yet"
+elif [ ! -f "$stamp" ]; then
+  rebuild_reason="no dependency stamp — image provenance unknown"
+elif [ "$(cat "$stamp")" != "$deps_hash" ]; then
+  rebuild_reason="dependencies changed since the image was built"
+fi
+
+if [ -n "$rebuild_reason" ]; then
+  echo "preview: rebuilding dependency image ${IMAGE} (${rebuild_reason})…"
   container build -t "$IMAGE" -f Containerfile --progress plain .
+  mkdir -p "$(dirname "$stamp")"
+  printf '%s' "$deps_hash" > "$stamp"
 fi
 
 # D1 + R2 live on this volume, NOT in your host checkout's web/.wrangler/state.
