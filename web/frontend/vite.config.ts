@@ -185,6 +185,41 @@ export default defineConfig({
       },
     },
     {
+      // Preload the body face. It is declared in CSS (src/fonts.css), so
+      // without a hint the browser only learns the URL once the stylesheet has
+      // parsed — two serial round trips before any text can paint. The
+      // filename is content-hashed, so the name is only knowable from the
+      // finished bundle; hence a plugin rather than a literal in app.html.
+      // Build-only: in dev there is no bundle and the unhashed path is served
+      // directly, so the hint would be redundant.
+      //
+      // Only the `latin` upright file is preloaded. Preloading italic or
+      // latin-ext would download faces most pages never use, which costs more
+      // than the discovery it saves — unicode-range keeps them on demand.
+      name: 'preload-body-font',
+      enforce: 'post' as const,
+      transformIndexHtml(_html: string, ctx: { bundle?: Record<string, unknown> }) {
+        if (!ctx.bundle) return;
+        const file = Object.keys(ctx.bundle).find((f) =>
+          /atkinson-hyperlegible-next-latin-wght-normal-[^/]*\.woff2$/.test(f)
+        );
+        if (!file) return;
+        return [
+          {
+            tag: 'link',
+            attrs: {
+              rel: 'preload',
+              href: `/${file}`,
+              as: 'font',
+              type: 'font/woff2',
+              crossorigin: '',
+            },
+            injectTo: 'head' as const,
+          },
+        ];
+      },
+    },
+    {
       // Dev routing (mirrors the production _redirects + Astro/Vite split):
       //   /_static/* and the static page URLs  -> Astro dev server
       //   SPA routes                            -> the React app shell (app.html)
