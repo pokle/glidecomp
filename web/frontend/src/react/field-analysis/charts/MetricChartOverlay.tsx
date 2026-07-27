@@ -6,22 +6,17 @@
  * pile into 190px of rank axis. It reads as a smudge. This is the way out:
  * one tap and the same chart gets the whole viewport.
  *
- * Full-screen, following TaskDiagramOverlay (#476) and FullScreenQR (#312):
- * RAC's modal primitives directly rather than the kit's `Modal`, whose
- * `className` styles the PANEL and leaves the overlay's padding and centering
- * hardcoded — no use to a full-bleed sheet. Focus trapping, focus restore,
- * Escape and body scroll-locking all come from react-aria rather than
- * hand-rolled listeners. The sheet uses the app's own surface, not the QR
- * overlay's black backdrop: the scatter is drawn in themed colours and would
- * be near-invisible on black in light mode.
+ * Full-screen via rac/full-screen-sheet.tsx, the shell shared with the task
+ * route glyph (#476) and the waypoint QR (#312), on the app's own surface
+ * because the scatter is drawn in themed colours.
  *
- * It departs from both in one way that matters. Those overlays make the whole
- * sheet one big close target, because a QR and a route glyph are pictures —
- * nothing inside them is clickable. This chart is the opposite: every dot is
- * focusable and names its pilot on tap, and there is a "Label every pilot"
- * checkbox. A tap-anywhere-to-close wrapper would fire on all of it. So
- * dismissal here is Escape (from `isDismissable`) and a real Close button,
- * and nothing else.
+ * It is the sheet's one non-`dismissOnPress` caller, and the reason that is a
+ * prop. Those overlays make the whole sheet a close target because a QR and a
+ * route glyph are pictures — nothing inside them is clickable. This chart is
+ * the opposite: every dot is focusable and names its pilot on tap, and there
+ * is a "Label every pilot" checkbox. A tap-anywhere wrapper would fire on all
+ * of it. So dismissal here is Escape and a real Close button, and nothing
+ * else.
  *
  * Why it measures itself: the plot is always W units wide and scales to its
  * CSS width, so its ASPECT decides how much of a tall box it can fill. Left
@@ -36,12 +31,8 @@
  * only the trigger, and the measuring effect never runs there.
  */
 import { useCallback, useState } from "react";
-import {
-  Dialog as AriaDialog,
-  Modal as AriaModal,
-  ModalOverlay,
-} from "react-aria-components";
 import { Button } from "@/react/rac/button";
+import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
 import type { FieldAnalysisReport, MetricReport } from "../types";
 import { RankScatter, SCATTER_WIDTH } from "./RankScatter";
 
@@ -95,29 +86,19 @@ export function MetricChartOverlay({
       </Button>
 
       {open ? (
-        <ModalOverlay
-          isOpen
-          isDismissable
-          onOpenChange={(next) => {
-            if (!next) setOpen(false);
-          }}
-          className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-sm"
+        <FullScreenSheet
+          label={`${metric.label}, plotted against rank`}
+          onClose={() => setOpen(false)}
+          className="flex flex-col gap-2 p-3 sm:p-4"
         >
-          <AriaModal className="h-full w-full outline-none">
-            <AriaDialog
-              aria-label={`${metric.label}, plotted against rank`}
-              className="h-full w-full outline-none"
-            >
-              <FullScreenChart
-                metric={metric}
-                pilots={pilots}
-                showAllLabels={showAllLabels}
-                onShowAllLabelsChange={onShowAllLabelsChange}
-                onClose={() => setOpen(false)}
-              />
-            </AriaDialog>
-          </AriaModal>
-        </ModalOverlay>
+          <FullScreenChart
+            metric={metric}
+            pilots={pilots}
+            showAllLabels={showAllLabels}
+            onShowAllLabelsChange={onShowAllLabelsChange}
+            onClose={() => setOpen(false)}
+          />
+        </FullScreenSheet>
       ) : null}
     </>
   );
@@ -175,7 +156,7 @@ function FullScreenChart({
   // beats a chart that got smaller when you asked to expand it.
 
   return (
-    <div className="flex h-full w-full flex-col gap-2 p-3 sm:p-4">
+    <>
       <div className="flex items-start justify-between gap-3">
         <h2 className="min-w-0 truncate text-base font-semibold">{metric.label}</h2>
         {/* autoFocus so a keyboard user lands on the way out rather than on
@@ -203,7 +184,7 @@ function FullScreenChart({
           />
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
