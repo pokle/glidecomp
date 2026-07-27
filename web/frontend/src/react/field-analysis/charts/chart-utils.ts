@@ -9,7 +9,7 @@
  * then; these helpers are scoped to field-analysis and are not a chart
  * framework.
  */
-import { formatMetricValue } from "../types";
+import { formatMetricValue, type MetricReport } from "../types";
 
 /**
  * An axis/strip tick label: the engine's number formatting plus a unit
@@ -325,4 +325,27 @@ export function directionAdjustedPercentile(
 ): number {
   const pct = percentileRank(values, v);
   return direction === "lower" ? 100 - pct : pct;
+}
+
+/**
+ * ρ re-expressed against {@link directionAdjustedPercentile}'s orientation:
+ * POSITIVE when the end of the metric that scores 100 there is the end that
+ * went with better placings, negative when it ran the other way, ~0 when the
+ * metric said nothing. 0 when the metric earned no coefficient at all.
+ *
+ * `MetricCorrelation.rho` is signed against rank, where rank 1 is best, so a
+ * 'higher'-is-better metric that behaved as advertised earns a NEGATIVE ρ —
+ * hence the flip. 'neutral' metrics keep the raw percentile, whose high end is
+ * the high value, so they orient the same way as 'higher'.
+ *
+ * This is a presentation ORDER key, not a re-orientation of anyone's values:
+ * it says where to put a column, never what a cell means. Shading a cell by
+ * the observed ρ sign is the thing `directionAdjustedPercentile` refuses to
+ * do, and this must not become a back door to it.
+ */
+export function orientedRho(
+  metric: Pick<MetricReport, "direction" | "correlation">
+): number {
+  if (!metric.correlation) return 0;
+  return (metric.direction === "lower" ? 1 : -1) * metric.correlation.rho;
 }
