@@ -459,6 +459,41 @@ export function placeLabels(
   });
 }
 
+/**
+ * Where to draw the ESS timing gate: a point on the incoming leg, set back
+ * `offset` units from the turnpoint, plus the leg's angle so the tick can be
+ * drawn across it.
+ *
+ * Set BACK rather than through the marker because an ESS is very often the
+ * last turnpoint too, and a tick through the goal's ring reads as a
+ * strike-through — a "prohibited" symbol on the one place a pilot is trying
+ * to reach.
+ *
+ * The offset is capped at 40% of the leg, so a short final leg (an ESS ring
+ * nearly concentric with its goal — the ordinary out-and-return shape) still
+ * puts the gate on the leg rather than back past the previous turnpoint.
+ * Returns null for a zero-length leg, which has no direction to be
+ * perpendicular to.
+ */
+export function gateTickPlacement(
+  point: DiagramPoint,
+  from: DiagramPoint,
+  offset: number
+): { x: number; y: number; angle: number } | null {
+  const legX = point.x - from.x;
+  const legY = point.y - from.y;
+  const legLength = Math.hypot(legX, legY);
+  if (legLength < 1e-6) return null;
+
+  const back = Math.min(offset, legLength * 0.4);
+  return {
+    x: round(point.x - (legX / legLength) * back),
+    y: round(point.y - (legY / legLength) * back),
+    // Perpendicular to the leg — the gate is crossed, not followed.
+    angle: Math.atan2(legY, legX) + Math.PI / 2,
+  };
+}
+
 /** Signed distance from a label's anchor point to its box centre, in half-widths. */
 function anchorOffset(anchor: TaskDiagramLabel["anchor"]): number {
   return anchor === "start" ? 1 : anchor === "end" ? -1 : 0;
