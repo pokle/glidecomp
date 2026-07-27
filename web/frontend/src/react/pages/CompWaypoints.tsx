@@ -46,6 +46,7 @@ import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { underComp } from "../lib/crumbs";
 import { idFromSegment, compWaypointsPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
+import { fetchWithRetry } from "../comp/types";
 import { formatCoords, parseCoords } from "../comp/route-editor";
 import { AddWaypointDialog } from "../comp/AddWaypointDialog";
 import { TabulatorGrid } from "../comp/TabulatorGrid";
@@ -236,9 +237,16 @@ function CompWaypointsContent() {
     void (async () => {
       setLoading(true);
       try {
+        // Both go through fetchWithRetry: a dropped comp GET used to leave
+        // this page with no name, no waypoints and no admin controls, and a
+        // bare rejection nobody caught (issue #481).
         const [compRes, wpRes] = await Promise.all([
-          api.api.comp[":comp_id"].$get({ param: { comp_id: compId } }),
-          api.api.comp[":comp_id"].waypoints.$get({ param: { comp_id: compId } }),
+          fetchWithRetry(() =>
+            api.api.comp[":comp_id"].$get({ param: { comp_id: compId } })
+          ),
+          fetchWithRetry(() =>
+            api.api.comp[":comp_id"].waypoints.$get({ param: { comp_id: compId } })
+          ),
         ]);
         if (cancelled) return;
         if (!compRes.ok) {
@@ -259,6 +267,10 @@ function CompWaypointsContent() {
         setRows(wpData.waypoints.map(toRow));
         setSavedJson(baselineJson(wpData.waypoints));
         setFitNonce((n) => n + 1);
+      } catch {
+        // Every retry was dropped. Say so, rather than rendering an empty
+        // waypoint list that looks like a comp with no waypoints.
+        if (!cancelled) setNotFound(true);
       } finally {
         if (!cancelled) setLoading(false);
       }

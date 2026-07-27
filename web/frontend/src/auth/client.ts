@@ -58,18 +58,43 @@ export function writeAccountHint(user: AuthUser | null) {
   }
 }
 
+const ME_ATTEMPTS = 3;
+const ME_RETRY_DELAY_MS = 200;
+
+/**
+ * Who is signed in — asked once per page load (see UserProvider).
+ *
+ * **A failure to ask is not an answer (issue #481).** This runs exactly once,
+ * and everything downstream keys off it: the header, and every admin control
+ * on every comp page. So a single dropped request or 5xx used to render the
+ * app permanently signed out — no retry, no recovery short of a reload, and
+ * no sign to the user that anything had gone wrong. Transient failures are
+ * therefore retried, and only a real 2xx answer decides.
+ *
+ * A 4xx is a real answer (it includes the 429 an over-limit API key gets) and
+ * is not retried. After the last attempt this still resolves `null` rather
+ * than throwing: "we couldn't tell" has to render as *something*, and the
+ * signed-out chrome is the safe thing to show.
+ */
 export async function getCurrentUser(): Promise<AuthUser | null> {
-  try {
-    const res = await fetch("/api/auth/me", { credentials: "include" });
-    if (!res.ok) return null;
-    const data: { user: AuthUser | null } = await res.json();
-    const user = data.user ?? null;
-    writeAccountHint(user);
-    return user;
-  } catch {
-    // A network blip is not evidence of being signed out — leave the hint be.
-    return null;
+  for (let attempt = 0; attempt < ME_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch("/api/auth/me", { credentials: "include" });
+      if (res.status >= 500) throw new Error(`/api/auth/me responded ${res.status}`);
+      if (!res.ok) return null;
+      const data: { user: AuthUser | null } = await res.json();
+      const user = data.user ?? null;
+      writeAccountHint(user);
+      return user;
+    } catch {
+      // A network blip is not evidence of being signed out — leave the hint
+      // be, wait a moment, and ask again.
+      if (attempt < ME_ATTEMPTS - 1) {
+        await new Promise((r) => setTimeout(r, ME_RETRY_DELAY_MS * (attempt + 1)));
+      }
+    }
   }
+  return null;
 }
 
 export async function deleteAccount(): Promise<{ success: boolean; error?: string }> {
