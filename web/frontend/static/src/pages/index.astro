@@ -153,7 +153,13 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         real lesson from a quirk of one day's weather. Each pilot's score comes
         with the same treatment: a plain-English timeline of the flight, on the
         map and in 3D.
-        <a href="/comp">See a competition report →</a>
+        {/* A real, warm report on a real comp. The `bqlf` task id is assigned
+            by D1 and is NOT stable across a reseed of Corryong Cup 2026 (the
+            comp sqid `voqc` is) — if that comp is reseeded, re-read the task
+            id from /api/comp/voqc and update this href. */}
+        <a href="/comp/corryong-cup-2026-voqc/analysis/task/task-1-open-bqlf">
+          See the report for Corryong Cup 2026, Task 1&nbsp;→
+        </a>
       </p>
     </div>
   </section>
@@ -319,8 +325,8 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
           </button>
           <div class="faq-answer">
             <p>
-              GlideComp is free to use. It's an open project — the source is
-              on
+              GlideComp is free to use, and sponsored by Tushar Pokle. It's an
+              open project — the source is on
               <a href="https://github.com/pokle/glidecomp" target="_blank" rel="noopener noreferrer">GitHub</a>.
             </p>
           </div>
@@ -582,7 +588,6 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     /* Underlined, like the FAQ links — never colour alone (WCAG 1.4.1). */
     text-decoration: underline;
     text-underline-offset: 2px;
-    white-space: nowrap;
   }
 
   /* ---- FAQ ---- */
