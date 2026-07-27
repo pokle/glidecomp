@@ -329,20 +329,43 @@ export interface PilotListEntry {
   pilot_class: string;
 }
 
+const FETCH_ATTEMPTS = 3;
+const FETCH_RETRY_DELAY_MS = 400;
+
 /**
  * The comp/task GET right after this same session's create/update write can
  * transiently 500 (e.g. D1 lock contention under the write that just
- * happened) even though the write itself succeeded. Retry once before
- * treating it as a real failure — a 404 is left alone since that's a
- * genuine "not found", not a transient error.
+ * happened) even though the write itself succeeded. Retry before treating it
+ * as a real failure — a 404 is left alone since that's a genuine "not found",
+ * not a transient error.
+ *
+ * A *dropped* request is retried too (issue #481). It used to escape as a
+ * rejected promise: every caller wraps this in a try/catch that renders
+ * "Competition not found", so a blip on the way to the API was reported to
+ * the user as a missing competition — and stayed that way, since nothing
+ * re-fetches.
  */
 export async function fetchWithRetry<T extends { ok: boolean; status: number }>(
   fetcher: () => Promise<T>
 ): Promise<T> {
-  const res = await fetcher();
-  if (res.ok || res.status === 404) return res;
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  return fetcher();
+  let lastRes: T | undefined;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, FETCH_RETRY_DELAY_MS));
+    }
+    try {
+      const res = await fetcher();
+      if (res.ok || res.status === 404) return res;
+      lastRes = res;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  // Out of attempts. Prefer handing back the last real response — callers
+  // read its status — and only re-raise when every attempt was dropped.
+  if (lastRes !== undefined) return lastRes;
+  throw lastErr;
 }
 
 export async function compressIgc(file: File): Promise<ArrayBuffer> {

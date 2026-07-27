@@ -211,6 +211,7 @@ Errors are JSON with an `error` message and a matching HTTP status:
 | `404`  | Not found (also returned for test comps you can't see) |
 | `422`  | Understood but unprocessable — e.g. scoring a task with no definition |
 | `429`  | Rate limited — see `Retry-After` |
+| `503`  | We couldn't check your credentials — the request was never authorized either way, so retrying is safe |
 
 ```json
 { "error": "Not authenticated" }
