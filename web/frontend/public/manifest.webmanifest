@@ -1,7 +1,7 @@
 {
   "name": "GlideComp",
   "short_name": "GlideComp",
-  "description": "Competition track log analysis for hanggliding and paragliding",
+  "description": "Competition scoring and track log analysis for hanggliding and paragliding",
   "start_url": "/analysis.html",
   "display": "standalone",
   "background_color": "#ffffff",
