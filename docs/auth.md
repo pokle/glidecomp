@@ -143,14 +143,17 @@ compatibility_flags = ["nodejs_compat"]
 ## Local Development
 
 ```bash
-# Terminal 1: Auth worker on port 8788
-bun run dev:auth
-
-# Terminal 2: Frontend on port 3000 (proxies /api/auth → 8788)
+# Everything — Vite on :3000 plus all the Workers on :8790
 bun run dev
+
+# Or just the Workers (auth-api among them), e.g. in their own terminal
+bun run dev:workers
 ```
 
-The Vite dev server proxies `/api/auth` requests to the auth worker, so cookies work on the same origin.
+The auth worker has no port of its own: every Worker runs in one `wrangler dev`
+session behind the `dev-router` Worker on :8790, which dispatches `/api/auth/*`
+to auth-api over a service binding (see `web/scripts/dev-workers.sh` for why).
+The Vite dev server proxies `/api` there, so cookies work on the same origin.
 
 ### First-time local setup
 

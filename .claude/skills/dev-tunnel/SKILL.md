@@ -13,8 +13,8 @@ reload (HMR) working over the public URL.
 
 `bun run dev` starts Vite on **:3000** plus the Workers and Astro. The phone
 only needs to reach **Vite** — all `/api/*` and Astro traffic is proxied
-**server-side** (`localhost:8788/8789/4321`), so those ports never need
-exposing.
+**server-side** (`localhost:8790` for the Workers, `localhost:4321` for Astro),
+so those ports never need exposing.
 
 Two Vite settings in [`web/frontend/vite.config.ts`](../../../web/frontend/vite.config.ts)
 make the tunnel work, both **gated behind the `TUNNEL` env var** so normal

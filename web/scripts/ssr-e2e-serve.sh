@@ -11,10 +11,14 @@ cd "$(dirname "$0")/../.."
 ( cd web/frontend && bunx vite build && bunx vite build --config vite.ssr.config.ts )
 
 # The comp Worker owns the D1 schema; wait for it before seeding (seed writes
-# local D1 state directly and needs the tables to exist).
-echo "ssr-e2e: waiting for competition-api on :8789…"
+# local D1 state directly and needs the tables to exist). All the Workers share
+# one wrangler dev session behind the dev-router on :8790 — see
+# web/scripts/dev-workers.sh.
+echo "ssr-e2e: waiting for the API Workers on :8790 (/__ready)…"
 for _ in $(seq 1 60); do
-  if curl -s -o /dev/null "http://localhost:8789/api/comp"; then break; fi
+  # -f so the 503 that /__ready returns while a Worker is still loading
+  # counts as "not yet", not as "answered".
+  if curl -sf -o /dev/null "http://localhost:8790/__ready"; then break; fi
   sleep 1
 done
 # Just the one comp: these tests only need a single public comp, and seeding the

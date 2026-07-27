@@ -23,14 +23,44 @@ interface TestUser {
   username: string;
 }
 
-function newTestUser(prefix: string): TestUser {
-  const suffix = String(Date.now()).slice(-6) + Math.floor(Math.random() * 100);
+/**
+ * A STABLE account per scenario. dev-login signs up-or-in, so each of these is
+ * created on the first run ever and reused after that — minting
+ * `e2e-${prefix}-${Date.now()}@test.local` added a fresh user (plus their
+ * uploaded tracks in D1 and R2) on every single run, and the local database
+ * persists between runs (issue #477).
+ *
+ * Reuse only works because every test here asserts an EMPTY dashboard, and
+ * emptyUserStorage() below puts each account back that way afterwards.
+ */
+function testUser(prefix: string): TestUser {
   return {
-    // Suffix in the name so the auto-derived username is unique per run.
-    name: `E2E ${prefix} ${suffix}`,
-    email: `e2e-${prefix}-${suffix}@test.local`,
+    name: `E2E ${prefix}`,
+    email: `e2e-${prefix}@test.local`,
     username: "", // resolved from /api/auth/me after sign-in
   };
+}
+
+/**
+ * Delete every track and task the signed-in account holds. Runs after each
+ * test, so the next run's sign-in starts from the same empty dashboard the
+ * assertions expect — and nothing accumulates in D1 or R2.
+ */
+async function emptyUserStorage(request: APIRequestContext): Promise<void> {
+  const tracks = await request.get("/api/user/tracks");
+  if (tracks.ok()) {
+    const { tracks: rows } = (await tracks.json()) as {
+      tracks: Array<{ track_id: string }>;
+    };
+    for (const t of rows) await request.delete(`/api/user/tracks/${t.track_id}`);
+  }
+  const tasks = await request.get("/api/user/tasks");
+  if (tasks.ok()) {
+    const { tasks: rows } = (await tasks.json()) as {
+      tasks: Array<{ task_code: string }>;
+    };
+    for (const t of rows) await request.delete(`/api/user/tasks/${t.task_code}`);
+  }
 }
 
 /**
@@ -79,8 +109,15 @@ async function signInAndOnboard(
   await expect(page.getByText("No flight tracks yet")).toBeVisible();
 }
 
+// `request` carries the session cookie from whichever account the test signed
+// in as, so this empties exactly that account. A test that failed before
+// signing in gets 401s here, which are ignored.
+test.afterEach(async ({ request }) => {
+  await emptyUserStorage(request);
+});
+
 test("upload IGC file via the My Flights dashboard", async ({ page, request }) => {
-  const user = newTestUser("igc");
+  const user = testUser("igc");
   await signInAndOnboard(request, page, user);
 
   // setInputFiles fires the change event the dashboard listens for. Use the
@@ -96,7 +133,7 @@ test("upload IGC file via the My Flights dashboard", async ({ page, request }) =
 });
 
 test("upload XCTSK file via the Tasks tab", async ({ page, request }) => {
-  const user = newTestUser("xctsk");
+  const user = testUser("xctsk");
   await signInAndOnboard(request, page, user);
 
   // Base UI only mounts the active tab panel, so the .xctsk input exists
@@ -112,7 +149,7 @@ test("upload XCTSK file via the Tasks tab", async ({ page, request }) => {
 });
 
 test("delete an uploaded track", async ({ page, request }) => {
-  const user = newTestUser("del");
+  const user = testUser("del");
   await signInAndOnboard(request, page, user);
 
   await page.setInputFiles('input[accept=".igc"]', SAMPLE_IGC);
@@ -128,7 +165,7 @@ test("delete an uploaded track", async ({ page, request }) => {
 });
 
 test("delete an uploaded task", async ({ page, request }) => {
-  const user = newTestUser("tdel");
+  const user = testUser("tdel");
   await signInAndOnboard(request, page, user);
 
   await page.getByRole("tab", { name: /Tasks/ }).click();
@@ -151,7 +188,7 @@ test("public-link viewer can read a track uploaded by another user", async ({
   // Owner uploads a track, then we open it as a separate, unauthenticated
   // browser context to make sure the public-link endpoint (/api/u/…) actually
   // serves it without the owner's session cookie.
-  const owner = newTestUser("own");
+  const owner = testUser("own");
   const ownerCtx = await browser.newContext();
   const ownerPage = await ownerCtx.newPage();
   await signInAndOnboard(request, ownerPage, owner);

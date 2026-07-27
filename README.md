@@ -64,10 +64,19 @@ Start the frontend and all API workers together:
 bun run dev
 ```
 
-This starts three services:
+This starts two processes:
 - **Frontend** — Vite dev server at http://localhost:3000
-- **Auth API** — authentication worker at http://localhost:8788
-- **Competition API** — competition management worker at http://localhost:8789
+- **API Workers** — auth-api, competition-api and airscore-api, all in ONE
+  `wrangler dev` session, reached through the `dev-router` Worker at
+  http://localhost:8790
+
+Every worker shares a single Miniflare instance, so the D1 database has one
+writer — running them as separate processes on separate ports raced on the
+shared SQLite file (issue #477). Only the router's port is exposed; it
+dispatches `/api/auth/*`, `/api/comp/*`, `/api/airscore/*` and friends to the
+right worker over service bindings, exactly as the Pages Functions do in
+production. Vite proxies all of `/api` there, so the browser only ever talks to
+:3000. To start the workers on their own: `bun run dev:workers`.
 
 The auth worker requires a `.dev.vars` file in `web/workers/auth-api/` — see [docs/auth.md](docs/auth.md) for setup.
 
@@ -77,13 +86,8 @@ To start only the frontend (without any workers):
 bun run dev:frontend
 ```
 
-To use AirScore features, also start the AirScore API worker (http://localhost:8787) in a separate terminal:
-
-```bash
-bun run --filter airscore-api dev
-```
-
-The frontend automatically detects the local worker. If you'd rather skip the worker and use the production API instead:
+AirScore features are served by the same router; nothing extra to start. If
+you'd rather use the production AirScore API instead of the local worker:
 
 ```bash
 VITE_AIRSCORE_URL=https://glidecomp.com/api/airscore bun run dev
@@ -101,8 +105,8 @@ bun run preview          # http://localhost:3000
 
 ### Running isolated, in a container
 
-`bun run preview` opens eight listeners on your Mac (pages dev, three Workers,
-three inspectors) and keeps D1 + R2 in `web/.wrangler/state`, so a second copy
+`bun run preview` binds ports on your Mac (pages dev, the Workers' dev-router,
+a workerd inspector) and keeps D1 + R2 in `web/.wrangler/state`, so a second copy
 collides with the first. To run one that can't, put it in a container — the
 stock ports stay inside the VM and only one is published:
 
@@ -136,7 +140,8 @@ to whatever lockfile the mount brought in.
 | `CPUS` / `MEMORY` | `6` / `8G` | `vite build` is OOM-killed below ~4G |
 
 The default port is 3200 because 3000 (vite), 3100 (SSR e2e), 4321 (astro),
-8787-8789 (workers) and 9229-9231 (inspectors) are all already spoken for — and
+8790 (the Workers' dev-router) and 9232 (its inspector) are all already spoken
+for — and
 because a native `bun run dev` binds Vite to `[::1]:3000` while a published
 container port binds `127.0.0.1:3000`. macOS treats those as *different sockets*,
 so both bind happily and `localhost` quietly serves you whichever one the
@@ -144,8 +149,9 @@ resolver picked. The script refuses a port anything already holds, on either
 stack, rather than let that happen.
 
 The browser only ever talks to the published port. The one thing that doesn't
-work in the container is the analysis page's AirScore import, which bypasses the
-proxy and calls `localhost:8787` directly.
+work in the container is the analysis page's AirScore import — it calls
+same-origin `/api/airscore`, and there's no Pages Function proxying that, so it
+404s here exactly as it does in production.
 
 ### Tests and type checking
 
@@ -157,6 +163,12 @@ bun run test:e2e         # Run Playwright end-to-end tests
 bun run typecheck        # Type check root project
 bun run typecheck:all    # Type check everything (frontend + engine + workers)
 ```
+
+The e2e suite writes to the *persistent* local D1 state in `web/.wrangler/state`.
+Specs clean up after themselves and each run sweeps anything a killed run left
+behind, so this should stay tidy on its own — but if local e2e results ever look
+inexplicable, `bun run kill-state` resets the database to empty (then
+`bun run seed` to put the sample comps back).
 
 ### Chrome MCP server set up
 

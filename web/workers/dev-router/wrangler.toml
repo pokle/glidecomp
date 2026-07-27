@@ -1,0 +1,35 @@
+# dev-router — LOCAL DEVELOPMENT ONLY. There is deliberately no `deploy`
+# script: in production the Pages Functions in `functions/api/` do this job.
+#
+# This is the PRIMARY config of the multi-worker dev session started by
+# `bun run dev:workers`:
+#
+#   wrangler dev -c web/workers/dev-router/wrangler.toml \
+#                -c web/workers/auth-api/wrangler.toml \
+#                -c web/workers/competition-api/wrangler.toml \
+#                -c web/workers/airscore-api/wrangler.toml
+#
+# Every worker in that session shares ONE Miniflare instance, so the D1 SQLite
+# file has a single writer — the fix for the cross-process `D1_ERROR: internal
+# error` flake in issue #477. Only the primary's port is exposed, which is why
+# this worker exists at all.
+name = "dev-router"
+main = "src/index.ts"
+compatibility_date = "2025-03-10"
+compatibility_flags = ["nodejs_compat"]
+
+[[services]]
+binding = "AUTH_API"
+service = "auth-api"
+
+[[services]]
+binding = "COMPETITION_API"
+service = "competition-api"
+
+[[services]]
+binding = "AIRSCORE_API"
+service = "airscore-api"
+
+[dev]
+port = 8790
+inspector_port = 9232

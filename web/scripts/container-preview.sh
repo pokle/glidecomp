@@ -19,20 +19,21 @@
 # ONE PORT IS ENOUGH. The browser never talks to anything but the published
 # port: /api/auth, /api/comp, /api/admin, /api/u, /api/user and the SSR /comp
 # pages are all same-origin Pages Functions that reach the Workers over service
-# bindings, in-process. The Workers' own ports (8787-8789) and the workerd
-# inspectors (9229-9231) stay inside the VM.
+# bindings, in-process. The Workers share one wrangler session behind the
+# dev-router (:8790, issue #477) and its workerd inspector (9232) stays inside
+# the VM.
 #
 # The one exception is the analysis page's AirScore import
-# (web/frontend/src/analysis/airscore-client.ts), which hardcodes
-# http://localhost:8787 whenever the hostname is localhost. There is no
-# functions/api/airscore/ proxy to route it through, so that one button is
-# inert in the container. Everything else works.
+# (web/frontend/src/analysis/airscore-client.ts). It calls same-origin
+# /api/airscore, but there is no functions/api/airscore/ proxy to route that
+# through, so the request 404s and that one button is inert here — exactly as it
+# is in production. Everything else works.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 REPO="$PWD"
 
 # Clear of every port this project already uses: 3000 (vite), 3100 (the SSR e2e
-# harness), 4321 (astro), 8787-8789 (workers), 9229-9231 (workerd inspectors).
+# harness), 4321 (astro), 8790 (the Workers' dev-router), 9232 (its inspector).
 #
 # Deliberately NOT 3000 for a second reason. A native `bun run dev` binds Vite to
 # [::1]:3000 while a published container port binds 127.0.0.1:3000 — macOS treats

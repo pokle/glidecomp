@@ -2,11 +2,11 @@
 # host driver: web/scripts/container-preview.sh). Built for Apple's container(1),
 # but it's a plain OCI image — `docker build` works too.
 #
-# Why a container: `bun run preview` opens eight listeners (pages dev :3000,
-# airscore :8787, auth :8788, comp :8789, three workerd inspectors), coordinates
-# them through wrangler's *localhost* dev registry, and keeps D1 + R2 in
-# web/.wrangler/state. All three collide with a second copy. Inside a container
-# they're private, so only one port needs publishing.
+# Why a container: `bun run preview` binds pages dev :3000, the Workers'
+# dev-router :8790 and a workerd inspector, coordinates them through wrangler's
+# *localhost* dev registry, and keeps D1 + R2 in web/.wrangler/state. All three
+# collide with a second copy. Inside a container they're private, so only one
+# port needs publishing.
 #
 # This image holds ONLY the dependency tree — no app source. The source is
 # bind-mounted read-only at /src on each run and rsync'd into /app by the

@@ -7,9 +7,10 @@
 # `bun run preview` does: build, migrate, start the Workers, seed, serve.
 #
 # Everything binds to the container's own loopback except `wrangler pages dev`,
-# which binds 0.0.0.0:3000 so the published port reaches it. The three Workers
-# stay on localhost by design: nothing outside needs them, because pages dev
-# reaches them over service bindings, in-process.
+# which binds 0.0.0.0:3000 so the published port reaches it. The Workers stay on
+# localhost by design: nothing outside needs them, because pages dev reaches
+# them over service bindings, in-process. They share ONE wrangler session behind
+# the dev-router on :8790 (issue #477) — there is no per-Worker port any more.
 set -euo pipefail
 
 # Stage the source. The excludes matter for three different reasons:
@@ -52,8 +53,8 @@ BETTER_AUTH_SECRET=dev-secret-not-for-production
 BETTER_AUTH_URL=${PUBLIC_ORIGIN}
 EOF
 
-# `dev:workers` applies the D1 migrations before starting the three Workers, so
-# by the time the comp Worker answers, the tables the seeder needs are there.
+# `dev:workers` applies the D1 migrations before starting the Workers, so by the
+# time they answer, the tables the seeder needs are there.
 if [ "${SKIP_SEED:-0}" = "1" ]; then
   seed_step="echo 'preview: SKIP_SEED=1 — leaving existing data alone.'"
 else
@@ -61,8 +62,12 @@ else
 fi
 
 pages_cmd="
-  echo 'preview: waiting for competition-api…'
-  until curl -sf -o /dev/null http://localhost:8789/api/comp; do sleep 1; done
+  echo 'preview: waiting for the API Workers…'
+  # /__ready is 200 only once EVERY Worker in the session answers, and 503 until
+  # then — so -f keeps this loop waiting rather than racing ahead on a partly
+  # loaded stack. (Waiting on a single Worker's own port is what this used to
+  # do; those ports no longer exist.)
+  until curl -sf -o /dev/null http://localhost:8790/__ready; do sleep 1; done
   ${seed_step}
   echo 'preview: serving ${PUBLIC_ORIGIN}'
   exec bunx wrangler pages dev web/frontend/dist --ip 0.0.0.0 --port 3000 \
