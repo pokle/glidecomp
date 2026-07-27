@@ -68,7 +68,11 @@ function copySampleComps(): Plugin {
   };
 }
 
+// GIT_SHA env wins so builds that run without the .git directory — the
+// container preview stages source over a read-only mount — can still stamp the
+// real commit rather than falling back to 'unknown'.
 const GIT_SHA = (() => {
+  if (process.env.GIT_SHA) return process.env.GIT_SHA;
   try { return execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim(); }
   catch { return 'unknown'; }
 })();
