@@ -17,6 +17,7 @@ import {
 } from "react-router-dom";
 import { ConfirmProvider } from "./rac/confirm";
 import { UserProvider } from "./lib/user";
+import type { AuthUser } from "../auth/client";
 import { Shell } from "./components/Shell";
 import { Dashboard } from "./pages/Dashboard";
 import { Onboarding } from "./pages/Onboarding";
@@ -35,10 +36,20 @@ import { Settings } from "./pages/Settings";
 import { AdminUsers } from "./pages/AdminUsers";
 import { AdminCache } from "./pages/AdminCache";
 
-/** App-wide context providers. SSR-safe (no portals rendered here). */
-export function AppProviders({ children }: { children: React.ReactNode }) {
+/** App-wide context providers. SSR-safe (no portals rendered here).
+ *
+ * `initialUser` carries the visitor the SSR Function already resolved from the
+ * forwarded cookie. Both entries must pass the same value or the UserProvider's
+ * first render differs between server and client. `undefined` = not known. */
+export function AppProviders({
+  children,
+  initialUser,
+}: {
+  children: React.ReactNode;
+  initialUser?: AuthUser | null;
+}) {
   return (
-    <UserProvider>
+    <UserProvider initialUser={initialUser}>
       <ConfirmProvider>{children}</ConfirmProvider>
     </UserProvider>
   );

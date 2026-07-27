@@ -102,7 +102,7 @@ paths and the HTML pages keep the default; and the `/*` security headers still
 merge onto `/assets/*` (Pages applies every matching rule). Re-measured journey:
 61 wire requests, zero 304s.
 
-### F2 — `/api/auth/me` is fetched twice on every page load
+### F2 — `/api/auth/me` is fetched twice on every page load — **FIXED**
 
 After F1, this is **18 of the 61 remaining wire requests (30%)** in that journey
 — two per page, on every page, including fully public ones.
@@ -129,6 +129,36 @@ Two fixes, worth doing both:
   to **zero** auth round trips. This does not harm edge caching: an anonymous
   visitor sends no cookie, so `pageCacheControl()` still returns the public
   value and the embedded user is simply `null`.
+
+**Landed**, both parts, plus the analysis page's two further independent
+resolvers (`analysis/main.ts` and the storage layer's own `init()`), which made
+that page ask three times. The shared flight now lives in `auth/client.ts` and
+is seeded at module load from `__SSR_DATA__`, so it is answered before the
+preferences-sync bootstrap — which runs during import — can race ahead of the
+entry point.
+
+Three encoding/ordering details are load-bearing:
+
+- **Absent `user` ≠ `"user":null`.** `undefined` (a classic SPA boot, or an
+  auth-worker blip) means *unknown, go and ask*; `null` means a known
+  signed-out visitor. `JSON.stringify` drops the key for `undefined`, which is
+  exactly the wire format wanted. Collapsing the two would render signed-in
+  visitors as signed out whenever the auth call failed.
+- **The seed lives in `auth/client.ts` at module scope, not in the entry.**
+  `preferences-sync` bootstraps on import, so an entry-point seed would
+  sometimes lose the race. Window-guarded so it stays inert in workerd.
+- **`user` is deliberately not read by `InitialDataProvider`**, which retires
+  its value on the first client-side navigation. Who you are outlives the page
+  you landed on.
+
+Measured: the ten-page journey drops from 61 wire requests to **43**, with
+**zero** `/api/auth/me`. Verified separately that a signed-in visitor gets
+their identity server-rendered (no signed-out flash), `private, no-store`, no
+auth round trip and no hydration error; that an anonymous visitor keeps a
+public, cacheable page carrying `"user":null`; and that the non-SSR routes
+(`/settings`, `/signin`) correctly still make exactly one call. Full
+`test:e2e:ssr` (27 tests incl. 8 hydration checks), `test:e2e` (24) and
+`bun run test` (1121) pass.
 
 ### F3 — Four to six separate font files on every page
 
@@ -226,7 +256,7 @@ mistaken for a bug when it appears in a trace.
 | # | Change | Effort | Effect |
 |---|---|---|---|
 | 1 | ~~`_headers`: `immutable` on `/assets/*`, `/_astro/*`~~ **done** | trivial | **−44% requests** on a repeat-visit journey (measured) |
-| 2 | Dedupe `/api/auth/me`; embed user in `__SSR_DATA__` | small | −9 to −18 requests per journey; removes a boot round trip from every public page |
+| 2 | ~~Dedupe `/api/auth/me`; embed user in `__SSR_DATA__`~~ **done** | small | **61 → 43 requests** on the journey; zero auth round trips on public pages (measured) |
 | 3 | AVIF/WebP + `srcset` + lazy on home screenshots | small | **−2.6 MB** on the primary SEO page |
 | 4 | Variable font + one `preload` | small | −3 to −5 requests/page, earlier text paint |
 | 5 | `navigate()` instead of `location.assign()` in `goToSignIn` | trivial | removes a full SPA re-boot from the signed-out path |

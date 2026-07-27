@@ -12,7 +12,7 @@
 
 import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistance, calculateTrackDistance, igcTaskToXCTask, resolveTurnpointSequence, scoreTask, scoreOpenDistance, openDistanceGeometryForFlight, isOpenDistanceTask, maxBy, parseThresholdInput, formatThresholdForDisplay, DEFAULT_THRESHOLDS, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord, type DetectionThresholds, type PartialThresholds, type ThresholdDimension, type PilotFlight, type TaskScoreResult, type GAPParameters } from '@glidecomp/engine';
 import { SAMPLE_COMPS } from '@glidecomp/samples';
-import { getCurrentUser } from '../auth/client';
+import { getCurrentUserOnce } from '../auth/client';
 import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
 import { createMapProvider, type MapProvider, type LoadedTrack, type OpenDistanceLine } from './map-provider';
 import { createAnalysisPanel, AnalysisPanel, FlightInfo, type OpenDistancePilotStats } from './analysis-panel';
@@ -93,7 +93,7 @@ interface FeatureToggleConfig {
  * Initialize the application
  */
 async function init(): Promise<void> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserOnce();
   if (!user) {
     window.location.href = "/u/me/";
     return;
