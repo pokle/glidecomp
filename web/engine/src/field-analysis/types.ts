@@ -176,19 +176,45 @@ export interface WindHourlySeries extends ReportSeriesBase {
 
 /**
  * Per-leg wind — the data twin of the "Wind by leg" table. Legs are in
- * course order; `from`/`to` bound the field's circling window on the leg
- * (null when nobody circled there, in which case speed/direction are null
- * too and n is 0).
+ * course order.
+ *
+ * TWO windows per leg, and confusing them is the whole reason both are here.
+ * `flownFrom`/`flownTo` bound when the FIELD WAS ON the leg (first entry to
+ * last exit); `from`/`to` bound only the circles the wind was estimated from.
+ * Glides produce no estimate, so the circling window can be a sliver of the
+ * flown one — a final leg the leaders glide but one pilot thermals on gets a
+ * two-minute circling window that, drawn alone, reads as the leg happening
+ * before the leg preceding it. Circle attribution counts only legs a pilot
+ * completed, so the circling window is always INSIDE the flown one.
+ *
+ * `n` counts circle estimates and `pilotsWithEstimates` the distinct pilots
+ * behind them: a leg's wind can be one pilot's two minutes, and nothing else
+ * in the row says so.
  */
 export interface WindLegsSeries extends ReportSeriesBase {
   kind: 'wind-legs';
   legs: {
     label: string;
+    /** Circling window — null when nobody circled there, in which case
+     * speed/direction are null too and n is 0. */
     from: string | null;
     to: string | null;
+    /**
+     * Flown (occupancy) window over pilots who started and completed the
+     * leg; null when nobody did. Optional so reports stored before
+     * FIELD_ANALYSIS_VERSION 17 still parse — a stale row is served while it
+     * revalidates, so consumers must fall back to `from`/`to` without it.
+     */
+    flownFrom?: string | null;
+    flownTo?: string | null;
+    /** Pilots who flew the whole leg (the flown window's population). */
+    pilotsOnLeg?: number;
     speedKmh: number | null;
     directionDeg: number | null;
+    /** Circle wind-estimates behind this leg's figure. */
     n: number;
+    /** Distinct pilots those estimates came from (see the note above). */
+    pilotsWithEstimates?: number;
   }[];
 }
 
