@@ -89,6 +89,11 @@ function flownInstants(
   for (const l of legs?.legs ?? []) {
     push(l.from);
     push(l.to);
+    // The flown window outruns the circling one — a leg's last pilot leaves
+    // it after the last circle on it — so the axis must cover it or the
+    // Gantt's outer bars clip at the plot edge.
+    push(l.flownFrom);
+    push(l.flownTo);
   }
   timing?.takeoffs.forEach(push);
   return out.filter((t) => Number.isFinite(t));
@@ -272,8 +277,11 @@ export function DayProfilePanel({
       <p className="text-xs text-muted-foreground">
         All charts — measured and modelled alike — share one time axis ({zone}), so a vertical scan
         compares the two at the same moment. Arrows fly WITH the wind — direction figures are
-        degrees the wind blows from; arrow length and opacity track speed and sample count. Exact
-        numbers are in the day family&rsquo;s tables under &ldquo;The metrics in detail&rdquo;.
+        degrees the wind blows from; arrow length and opacity track speed and sample count. On the
+        per-leg chart the pale bar is when the field flew that leg and the solid band inside it is
+        the circling its wind was measured from — a leg the field glided is measured in a sliver of
+        the time it was flown. Exact numbers are in the day family&rsquo;s tables under &ldquo;The
+        metrics in detail&rdquo;.
       </p>
       {showWeather && weather ? <MetAttribution weather={weather} /> : null}
     </figure>

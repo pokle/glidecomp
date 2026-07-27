@@ -159,4 +159,20 @@
 //     property of the synthetic TEST FIXTURE, whose reachings are pinned at
 //     arbitrary east offsets instead of the optimizer's tag points — not of
 //     the measurement. Absolute readings are meaningful.
-export const FIELD_ANALYSIS_VERSION = 16;
+// v17: day.wind's per-leg view carries the leg's FLOWN window beside its
+//     circling window, plus the pilot count behind each. The two were
+//     conflated: one window ("When") bounded the circle estimates, and the
+//     Gantt drew it in the visual grammar of occupancy — so on Corryong 2026
+//     open T1 the final leg into ESS drew at 16:28–16:30 while the leg before
+//     it drew at 16:56–18:01, reading as the course flown out of order. Both
+//     were right: the leaders glided KANGCK→CUDG without circling, and the
+//     whole ESS-leg bar was ONE pilot's four circles over 112 seconds, shown
+//     with the same weight as an 807-estimate leg. Legs now emit flownFrom/
+//     flownTo/pilotsOnLeg (first entry → last exit, over pilots who started
+//     and completed the leg, so the circling window always nests inside it)
+//     and pilotsWithEstimates; the table splits "When" into "Flown" +
+//     "Circling" with both counts. No wind value changed; the bump rolls
+//     stored reports so they gain the windows on their next lazy
+//     revalidation, and a v16 row renders with the circling window alone
+//     until it does.
+export const FIELD_ANALYSIS_VERSION = 17;

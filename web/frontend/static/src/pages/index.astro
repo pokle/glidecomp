@@ -223,7 +223,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
               <div class="chart-plate">
                 <img
                   src={`${base}/screenshots/analysis-wind-legs.png`}
-                  alt="Gantt-style chart: one bar per task leg placed on a time axis, each carrying an arrow for wind direction and a label giving wind speed and compass point."
+                  alt="Gantt-style chart: one row per task leg on a time axis. Each row has a pale bar spanning when the field flew that leg and a solid band inside it spanning the circling its wind was measured from, with an arrow for wind direction and a label giving speed and compass point."
                   width="1712"
                   height="590"
                   loading="lazy"
@@ -232,8 +232,9 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
               </div>
               <figcaption class="chart-note">
                 <strong>What the wind did on each leg.</strong>
-                One bar per leg, placed where the field actually flew it, with
-                the wind estimated from the pilots' own circling.
+                The pale bar is when the field flew the leg; the solid band
+                inside it is the circling the wind was estimated from — on a
+                leg everyone glided, that's a sliver of it.
               </figcaption>
             </figure>
           </section>
