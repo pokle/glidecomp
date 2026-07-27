@@ -15,29 +15,52 @@ type Variables = {
 
 type HonoEnv = { Bindings: Env; Variables: Variables };
 
-const BUNDLE_HEADERS = {
-  "Content-Type": "application/octet-stream",
-  // The bundle is content-addressed by the cache key; safe to cache a while.
-  "Cache-Control": "public, max-age=300",
-} as const;
+/**
+ * These bundles are multi-megabyte (the bundled sample is ~3 MB), so the
+ * expensive thing is re-sending one that hasn't changed.
+ *
+ * The URL is stable but the content is not — upload a track and the same URL
+ * must answer differently — so a long max-age would serve a stale replay
+ * through a live comp. The cache key already content-addresses the bundle, so
+ * it makes a perfect ETag: a repeat view revalidates and gets a ~200-byte 304
+ * instead of megabytes. That is the win; max-age stays short so freshness is
+ * unchanged, and stale-while-revalidate keeps the revalidation off the
+ * critical path.
+ */
+function bundleHeaders(cacheKey: string) {
+  return {
+    "Content-Type": "application/octet-stream",
+    "Cache-Control": "public, max-age=300, stale-while-revalidate=86400",
+    ETag: `"${cacheKey}"`,
+  };
+}
 
 /**
  * Produce (or serve from KV) the 3D-replay bundle for a task. Shared by the
  * id-addressed and the sample routes.
+ *
+ * `body` is null when the caller's If-None-Match already matches: the bundle
+ * is then never read out of KV at all, so a 304 costs one D1 key computation
+ * rather than a multi-megabyte KV read.
  */
 async function serve3dvis(
   env: Env,
-  taskId: number
-): Promise<{ body: ArrayBuffer; cache: "HIT" | "MISS" }> {
+  taskId: number,
+  ifNoneMatch?: string | null
+): Promise<{ body: ArrayBuffer | null; cache: "HIT" | "MISS" | "304"; cacheKey: string }> {
   const t0 = performance.now();
   const cacheKey = await compute3dvisCacheKey(taskId, env.DB);
+  if (ifNoneMatch && etagMatches(ifNoneMatch, cacheKey)) {
+    console.log(`[3dvis] task ${taskId}: not modified (${cacheKey})`);
+    return { body: null, cache: "304", cacheKey };
+  }
   const cached = await env.glidecomp_scores_cache.get(cacheKey, "arrayBuffer");
   if (cached) {
     console.log(
       `[3dvis] task ${taskId}: cache HIT (${cacheKey}, ${cached.byteLength}B) ` +
         `in ${(performance.now() - t0).toFixed(0)}ms`
     );
-    return { body: cached, cache: "HIT" };
+    return { body: cached, cache: "HIT", cacheKey };
   }
   console.log(`[3dvis] task ${taskId}: cache MISS (${cacheKey}) — building bundle`);
 
@@ -52,7 +75,19 @@ async function serve3dvis(
     `[3dvis] task ${taskId}: cached bundle (${(performance.now() - tPutStart).toFixed(0)}ms KV put) — ` +
       `total serve time ${(performance.now() - t0).toFixed(0)}ms`
   );
-  return { body, cache: "MISS" };
+  return { body, cache: "MISS", cacheKey };
+}
+
+/**
+ * Does an If-None-Match header cover this key? Handles the comma-separated
+ * list, the `W/` weak prefix a proxy may add, and `*`.
+ */
+function etagMatches(ifNoneMatch: string, cacheKey: string): boolean {
+  const mine = `"${cacheKey}"`;
+  return ifNoneMatch
+    .split(",")
+    .map((t) => t.trim().replace(/^W\//, ""))
+    .some((t) => t === mine || t === "*");
 }
 
 export const visualizationRoutes = new Hono<HonoEnv>()
@@ -75,8 +110,14 @@ export const visualizationRoutes = new Hono<HonoEnv>()
       .first<{ task_id: number }>();
     if (!task) return c.json({ error: "Sample competition has no task" }, 404);
 
-    const { body, cache } = await serve3dvis(c.env, task.task_id);
-    return c.body(body, 200, { ...BUNDLE_HEADERS, "X-Cache": cache });
+    const { body, cache, cacheKey } = await serve3dvis(
+      c.env,
+      task.task_id,
+      c.req.header("If-None-Match")
+    );
+    const headers = { ...bundleHeaders(cacheKey), "X-Cache": cache };
+    if (!body) return c.body(null, 304, headers);
+    return c.body(body, 200, headers);
   })
 
   // ── GET /api/comp/:comp_id/task/:task_id/3dvis ── packed replay bundle for a
@@ -111,7 +152,13 @@ export const visualizationRoutes = new Hono<HonoEnv>()
       if (!task) return c.json({ error: "Task not found" }, 404);
       if (!task.xctsk) return c.json({ error: "Task has no xctsk defined" }, 422);
 
-      const { body, cache } = await serve3dvis(c.env, taskId);
-      return c.body(body, 200, { ...BUNDLE_HEADERS, "X-Cache": cache });
+      const { body, cache, cacheKey } = await serve3dvis(
+        c.env,
+        taskId,
+        c.req.header("If-None-Match")
+      );
+      const headers = { ...bundleHeaders(cacheKey), "X-Cache": cache };
+      if (!body) return c.body(null, 304, headers);
+      return c.body(body, 200, headers);
     }
   );
