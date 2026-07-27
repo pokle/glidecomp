@@ -52,7 +52,7 @@ import { CompSetupProgress } from "../comp/CompSetupProgress";
 import { SettingsDialog } from "../comp/SettingsDialog";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
-import { TaskDiagram } from "../comp/TaskDiagram";
+import { TaskDiagramPopover } from "../comp/TaskDiagramPopover";
 import {
   fetchWithRetry,
   isPastCloseDate,
@@ -554,11 +554,14 @@ function FeaturedTaskGroup({
               </h3>
               <div className="mt-3 flex flex-wrap gap-2">{buttons}</div>
             </div>
-            {/* The day's task shape, right where a pilot looks first. Decorative
-                here: the heading beside it already names the task, and the task
-                page carries the route as a table. */}
+            {/* The day's task shape, right where a pilot looks first — and
+                tappable for the readable version, same as the rows below. */}
             {task.route ? (
-              <TaskDiagram task={task.route} size="sm" label={null} />
+              <TaskDiagramPopover
+                task={task.route}
+                taskName={task.name}
+                size="sm"
+              />
             ) : null}
           </div>
         );
@@ -751,16 +754,19 @@ function TasksList({
                   </Link>
                   </div>
                   {/* Tiny route glyph: enough to tell one day's task from
-                      another's at a glance. Decorative — the link beside it
-                      names the task. Nothing is reserved when a task has no
+                      another's at a glance, and tappable for the readable
+                      version — at this size the shape is all it can carry, so
+                      "which turnpoints is that?" is one press away instead of
+                      a page load. Nothing is reserved when a task has no
                       route: the glyphs are right-aligned, so an empty box
                       buys no alignment and only pads the row — which on a
                       phone (or against a comp-api that predates the `route`
                       field) turns the whole list into dead space. */}
                   {task.route ? (
-                    <span aria-hidden="true" className="shrink-0">
-                      <TaskDiagram task={task.route} size="xs" label={null} />
-                    </span>
+                    <TaskDiagramPopover
+                      task={task.route}
+                      taskName={task.name}
+                    />
                   ) : null}
                 </li>
               ))}
