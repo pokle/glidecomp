@@ -40,7 +40,7 @@ differs. Know which surface you're touching:
 | Surface | Where | Foundation | Accessibility posture |
 |---|---|---|---|
 | **Main app (SPA)** | `web/frontend/src/react/` served from `src/app.html` | React + shadcn/ui on Base UI | Full AA. Use the primitives — they carry the ARIA. |
-| **Content pages (static)** | `web/frontend/static/` (Astro, prerendered) | Semantic HTML, zero client JS | Full AA, and the *easiest* place to hit it — it's just HTML. No JS means no focus traps to manage. |
+| **Content pages (static)** | `web/frontend/static/` (Astro, prerendered) | Semantic HTML + hand-written vanilla enhancement | Full AA, and the *easiest* place to hit it — mostly it's just HTML. There are no framework primitives here, so anything interactive (the header's account menu, the FAQ accordion, the "For pilots" tablist) carries its own ARIA and keyboard handling; write it to the WAI-ARIA pattern by hand and test it with the keyboard. |
 | **Analysis map** | `/analysis.html` (vanilla TS) | Imperative map app, `analysis.css` | AA for all controls/panels. The map canvas itself follows §9 (non-text-content rules for interactive graphics). |
 | **3D replay** | `/replay` (vanilla TS + WebGL) | Own `replay.css` + inline theme | AA for the control chrome. The 3D scene follows §9. |
 

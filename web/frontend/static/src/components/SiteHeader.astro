@@ -1,13 +1,20 @@
 ---
 /**
  * Global glass menu bar for the static pages (Inscribe-style): sticky,
- * translucent, backdrop-blurred, with a right-aligned Sign in pill.
+ * translucent, backdrop-blurred, with a right-aligned account slot.
  * min-h-[60px] matches the SPA header's height so the chrome doesn't jump
  * when crossing between static and SPA pages.
  *
  * On phones (max-sm) and short landscape viewports the bar scrolls away
  * with the page instead of pinning — vertical space is too precious there.
  * Keep this in sync with the SPA header in react/components/Shell.tsx.
+ *
+ * The account slot is the one scripted part of the static chrome. These pages
+ * are prerendered and edge-cached, so the build can't know who's visiting;
+ * the small inline script below decides between "Sign in" and the account
+ * menu from the localStorage hint the SPA writes (auth/client.ts), then
+ * reconciles it against /api/auth/me. Signed-out visitors and crawlers make
+ * no API call at all and see the markup exactly as prerendered.
  */
 interface Props {
   /** Which tab to highlight, if any. */
@@ -19,6 +26,10 @@ const tab = (isActive: boolean) =>
   `text-sm font-medium transition-colors hover:text-foreground ${
     isActive ? "text-foreground" : "text-muted-foreground"
   }`;
+
+/** Mirrors the SPA dropdown's item styling (react/ui/dropdown-menu.tsx). */
+const menuItem =
+  "flex w-full cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground";
 ---
 
 <header class="sticky top-0 z-50 border-b bg-background/70 backdrop-blur-xl backdrop-saturate-150 max-sm:static [@media(max-height:500px)]:static">
@@ -35,15 +46,239 @@ const tab = (isActive: boolean) =>
       href="/u/me"
       class={`${tab(active === "flights")} max-sm:hidden`}
       aria-current={active === "flights" ? "page" : undefined}>My Flights</a>
-    <div class="ml-auto">
-      <!-- Plain link to the SPA sign-in page (Google + email code) — keeps
-           the static chrome zero-JS and every sign-in path on /signin. -->
+    <!-- Fixed h-8 either way, so swapping the pill for the avatar can't shift
+         the bar. `relative` anchors the menu popover. -->
+    <div class="relative ml-auto h-8" data-account>
+      <!-- Plain link to the SPA sign-in page (Google + email code) — every
+           sign-in path stays on /signin. This is what a signed-out visitor,
+           a crawler and a no-JS browser get, unchanged from the prerender. -->
       <a
         href="/signin"
+        data-account-signin
         class="inline-flex h-8 cursor-pointer items-center justify-center rounded-full bg-primary px-4 text-sm font-medium whitespace-nowrap text-primary-foreground transition-colors select-none hover:bg-primary/85"
       >
         Sign in
       </a>
+      <!-- Account menu, revealed only once we know there's a session. Mirrors
+           the SPA's UserMenu (avatar initials → name, Settings, Sign out). -->
+      <div data-account-menu hidden>
+        <button
+          type="button"
+          aria-label="Account menu"
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-controls="account-menu-panel"
+          data-account-trigger
+          class="flex size-8 items-center justify-center rounded-full border bg-muted text-xs font-semibold hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"></button>
+        <div
+          id="account-menu-panel"
+          role="menu"
+          aria-label="Account"
+          data-account-panel
+          hidden
+          class="absolute right-0 z-50 mt-1 min-w-40 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
+        >
+          <p
+            data-account-name
+            class="max-w-56 truncate px-1.5 py-1 text-xs font-medium text-muted-foreground"
+          >
+          </p>
+          <div class="-mx-1 my-1 h-px bg-border"></div>
+          <a href="/settings" role="menuitem" tabindex="-1" class={menuItem}>Settings</a>
+          <button type="button" role="menuitem" tabindex="-1" data-account-signout class={menuItem}>
+            Sign out
+          </button>
+        </div>
+      </div>
     </div>
   </nav>
 </header>
+
+<script is:inline>
+  // Account slot: pick "Sign in" vs the account menu without a server render.
+  //
+  // The hint (localStorage `glidecomp:account`, written by the SPA in
+  // auth/client.ts) is what makes this flash-free in both directions: a
+  // signed-in visitor gets their avatar on first paint, a signed-out one keeps
+  // the prerendered pill and costs us no request. The hint is only ever a
+  // guess about a session — it authorises nothing — so we confirm it against
+  // /api/auth/me and correct the header if the session has since expired.
+  (function () {
+    var root = document.querySelector("[data-account]");
+    if (!root) return;
+    var signinLink = root.querySelector("[data-account-signin]");
+    var menu = root.querySelector("[data-account-menu]");
+    var trigger = root.querySelector("[data-account-trigger]");
+    var panel = root.querySelector("[data-account-panel]");
+    var nameEl = root.querySelector("[data-account-name]");
+    var items = panel ? panel.querySelectorAll('[role="menuitem"]') : [];
+
+    function read(storage, key) {
+      try {
+        return storage.getItem(key);
+      } catch (e) {
+        return null; // Storage blocked (Safari private mode).
+      }
+    }
+
+    function initials(name) {
+      var parts = String(name).split(/\s+/).filter(Boolean).slice(0, 2);
+      var s = parts
+        .map(function (w) {
+          return w[0];
+        })
+        .join("")
+        .toUpperCase();
+      return s || "?";
+    }
+
+    /** null = signed out (show the pill); a name = show the account menu. */
+    function render(name) {
+      if (name) {
+        trigger.textContent = initials(name);
+        nameEl.textContent = name;
+      } else {
+        close();
+      }
+      signinLink.hidden = !!name;
+      menu.hidden = !name;
+    }
+
+    function hint() {
+      // The SPA's superadmin "Preview as: signed out" is presentation-only,
+      // but it should hold across the static pages too or the preview lies.
+      if (read(sessionStorage, "glidecomp:preview-role") === "out") return null;
+      var raw = read(localStorage, "glidecomp:account");
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw).name || null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /* ---- Menu open/close (WAI-ARIA menu button behaviour) ---- */
+    function isOpen() {
+      return !panel.hidden;
+    }
+
+    /** focus: "first" | "last" | undefined (leave focus on the trigger). */
+    function open(focus) {
+      panel.hidden = false;
+      trigger.setAttribute("aria-expanded", "true");
+      if (!focus || !items.length) return;
+      items[focus === "last" ? items.length - 1 : 0].focus();
+    }
+
+    function close(refocus) {
+      if (!panel || panel.hidden) return;
+      panel.hidden = true;
+      trigger.setAttribute("aria-expanded", "false");
+      if (refocus) trigger.focus();
+    }
+
+    trigger.addEventListener("click", function () {
+      if (isOpen()) close();
+      else open();
+    });
+
+    // Arrow keys open the menu onto an end item, per the WAI-ARIA menu-button
+    // pattern (Down → first, Up → last).
+    trigger.addEventListener("keydown", function (e) {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      e.preventDefault();
+      // Don't let this reach the container's arrow handler below — the menu is
+      // open by then, so it would read the same keypress a second time and
+      // step straight past the item we just focused.
+      e.stopPropagation();
+      open(e.key === "ArrowUp" ? "last" : "first");
+    });
+
+    root.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && isOpen()) {
+        e.preventDefault();
+        close(true);
+        return;
+      }
+      if (!isOpen() || (e.key !== "ArrowDown" && e.key !== "ArrowUp")) return;
+      e.preventDefault();
+      var list = Array.prototype.slice.call(items);
+      var i = list.indexOf(document.activeElement);
+      var next = e.key === "ArrowDown" ? i + 1 : i - 1;
+      list[(next + list.length) % list.length].focus();
+    });
+
+    // Click or tab away closes it. focusout fires before the new element takes
+    // focus, so check on the next tick.
+    document.addEventListener("pointerdown", function (e) {
+      if (isOpen() && !root.contains(e.target)) close();
+    });
+    root.addEventListener("focusout", function () {
+      setTimeout(function () {
+        if (isOpen() && !root.contains(document.activeElement)) close();
+      }, 0);
+    });
+
+    root.querySelector("[data-account-signout]").addEventListener("click", function () {
+      // Better Auth's own endpoint, the one the SPA's signOut() wraps. It
+      // rejects a POST without this Content-Type (415) — the header would
+      // otherwise *look* signed out while the session stayed alive.
+      fetch("/api/auth/sign-out", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+        credentials: "include",
+      })
+        .then(function (res) {
+          // Only drop the hint once the session is really gone. If the request
+          // failed the pilot is still signed in, and keeping the hint means the
+          // header keeps telling them so instead of quietly lying.
+          if (!res.ok) return;
+          try {
+            localStorage.removeItem("glidecomp:account");
+          } catch (err) {
+            /* storage blocked */
+          }
+        })
+        .catch(function () {})
+        .then(function () {
+          window.location.assign("/");
+        });
+    });
+
+    /* ---- Decide what to show ---- */
+    var guess = hint();
+    render(guess);
+    // Only a visitor we believe is signed in costs an API round trip; for
+    // everyone else the prerendered "Sign in" is already correct.
+    if (!guess) return;
+    fetch("/api/auth/me", { credentials: "include" })
+      .then(function (res) {
+        return res.ok ? res.json() : null;
+      })
+      .then(function (data) {
+        var user = data && data.user;
+        if (user) {
+          var name = user.name || user.email;
+          try {
+            localStorage.setItem("glidecomp:account", JSON.stringify({ name: name }));
+          } catch (e) {
+            /* storage blocked */
+          }
+          render(name);
+        } else {
+          // Session gone (expired or signed out elsewhere) — fix the header.
+          try {
+            localStorage.removeItem("glidecomp:account");
+          } catch (e) {
+            /* storage blocked */
+          }
+          render(null);
+        }
+      })
+      .catch(function () {
+        // Offline or the API is down: leave the optimistic render alone rather
+        // than telling a signed-in pilot they're signed out.
+      });
+  })();
+</script>
