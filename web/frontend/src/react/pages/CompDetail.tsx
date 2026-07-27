@@ -707,21 +707,13 @@ function TasksList({
             <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
               {formatTaskDate(date)}
             </h3>
-            <ul className="mt-1.5 space-y-1 pl-4 text-sm">
+            {/* pr-5 matches the featured card's p-5, so every route glyph on
+                the page — the card's and the rows' — lines up on one right
+                edge instead of the card's sitting alone. */}
+            <ul className="mt-1.5 space-y-1 pr-5 pl-4 text-sm">
               {dateTasks.map((task) => (
-                <li key={task.task_id} className="flex items-center gap-2.5">
-                  {/* Tiny route glyph: enough to tell one day's task from
-                      another's at a glance. Decorative — the link beside it
-                      names the task. A route-less task keeps the row aligned
-                      with an empty box of the same size. */}
-                  <span
-                    aria-hidden="true"
-                    className="inline-flex h-[50px] w-[72px] shrink-0 items-center justify-center"
-                  >
-                    {task.route ? (
-                      <TaskDiagram task={task.route} size="xs" label={null} />
-                    ) : null}
-                  </span>
+                <li key={task.task_id} className="flex items-center gap-4">
+                  <div className="min-w-0 flex-1">
                   <Link
                     className="underline-offset-4 hover:underline"
                     to={taskPath(compId, compName, task.task_id, task.name)}
@@ -758,6 +750,19 @@ function TasksList({
                       {task.pilot_classes.join(", ")}
                     </span>
                   </Link>
+                  </div>
+                  {/* Tiny route glyph: enough to tell one day's task from
+                      another's at a glance. Decorative — the link beside it
+                      names the task. A route-less task still reserves the box,
+                      so the rows stay on one grid. */}
+                  <span
+                    aria-hidden="true"
+                    className="inline-flex h-[50px] w-[72px] shrink-0 items-center justify-center"
+                  >
+                    {task.route ? (
+                      <TaskDiagram task={task.route} size="xs" label={null} />
+                    ) : null}
+                  </span>
                 </li>
               ))}
             </ul>
