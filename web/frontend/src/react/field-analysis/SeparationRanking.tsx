@@ -8,16 +8,25 @@
  * have any explanatory power at all on this day.
  *
  * When given the full report, the table is single-selectable and the
- * selected metric renders as a rank scatter below it — the coefficient says
+ * selected metric renders as a rank scatter beside it — the coefficient says
  * a metric separated the field; the scatter shows whether that is a clean
  * trend, two clusters, or one outlier. The top-ranked metric starts
  * selected, so the strongest finding is visualized on first paint.
+ *
+ * Table and chart are a MASTER/DETAIL PAIR (issue #455) and are laid out as
+ * one, following the pilot score explainer (pages/PilotScoreDetail.tsx): the
+ * chart pins to the top of the viewport on a narrow screen and sits beside
+ * the table on a wide one. Everything that used to sit between them — the
+ * verdict legend, the caveat paragraphs — is below the pair now, because a
+ * row and the chart it selects have to be readable without scrolling between
+ * them. See {@link MasterDetail} for why the split is a container query.
  */
-import { useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import type { Key, Selection } from "react-aria-components";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { DivergingMeter, ProportionMeter } from "@/react/rac/meter";
 import { Badge } from "@/react/rac/badge";
+import { Button } from "@/react/rac/button";
 import { cn } from "@/react/lib/utils";
 import { MetricExplanation } from "./MetricExplanation";
 import { verdictWords } from "./units";
@@ -126,6 +135,12 @@ export function SeparationRanking({
   // Owned here, not in the scatter, so ticking "label every pilot" survives
   // switching metrics (per-session only; a refresh resets it).
   const [showAllLabels, setShowAllLabels] = useState(false);
+  // Only meaningful stacked (narrow): the pinned chart costs screen, so a
+  // reader scanning the ranking can fold it away. Side by side there is
+  // nothing to reclaim, so the control — and this state — do not apply.
+  const [detailCollapsed, setDetailCollapsed] = useState(false);
+  const detailId = useId();
+  const detailHeadingId = `${detailId}-heading`;
   const effectiveId =
     report && ranked.length > 0
       ? ranked.some((r) => r.metric.id === selectedId)
@@ -170,7 +185,8 @@ export function SeparationRanking({
           // An instruction to interact — meaningless on paper.
           <span className="print:hidden">
             {" "}
-            Select a row to see that behaviour plotted against rank.
+            Select a row to see that behaviour plotted against rank — the
+            chart stays in view while you work down the table.
           </span>
         ) : null}
       </p>
@@ -181,22 +197,47 @@ export function SeparationRanking({
           few pilots had a usable value.
         </p>
       ) : (
-        <RankingTable
-          ranked={ranked}
-          ariaLabel="Behaviour ranking"
-          subjectLabel="Behaviour"
-          fieldSize={fieldSize}
-          pilots={report?.pilots}
-          selection={
-            report
-              ? {
-                  selectedKeys: effectiveId !== null ? [effectiveId] : [],
-                  onSelectionChange: (keys: Selection) => {
-                    if (keys !== "all") setSelectedId([...keys][0] ?? null);
-                  },
-                }
-              : undefined
+        <MasterDetail
+          table={
+            <RankingTable
+              ranked={ranked}
+              ariaLabel="Behaviour ranking"
+              subjectLabel="Behaviour"
+              fieldSize={fieldSize}
+              pilots={report?.pilots}
+              selection={
+                report
+                  ? {
+                      selectedKeys: effectiveId !== null ? [effectiveId] : [],
+                      onSelectionChange: (keys: Selection) => {
+                        if (keys !== "all") setSelectedId([...keys][0] ?? null);
+                      },
+                    }
+                  : undefined
+              }
+            />
           }
+          detail={
+            report && selectedMetric ? (
+              <MetricDetailPanel
+                metric={selectedMetric}
+                report={report}
+                headingId={detailHeadingId}
+                showAllLabels={showAllLabels}
+                onShowAllLabelsChange={setShowAllLabels}
+                methodClassName="hidden @5xl:block"
+                className="rounded-none border-0"
+              />
+            ) : null
+          }
+          detailId={detailId}
+          detailHeadingId={detailHeadingId}
+          collapsed={detailCollapsed}
+          onCollapsedChange={setDetailCollapsed}
+          // On paper the print-only strong-metric panels below replace the
+          // interactive one — printing both would duplicate a chart. When no
+          // metric earned "strong", this pane is all print gets, so it stays.
+          hideDetailInPrint={strongMetrics(ranked).length > 0}
         />
       )}
 
@@ -212,20 +253,6 @@ export function SeparationRanking({
           measured on fewer than {MIN_CORRELATION_N} pilots — too few to tell
           either way, so read those rows as a hint at most.
         </p>
-      ) : null}
-
-      {report && selectedMetric ? (
-        // On paper the print-only strong-metric panels below replace this
-        // interactive one — printing it too would duplicate a chart. When no
-        // metric earned "strong", this panel is all print gets, so it stays.
-        <div className={strongMetrics(ranked).length > 0 ? "print:hidden" : undefined}>
-          <MetricDetailPanel
-            metric={selectedMetric}
-            report={report}
-            showAllLabels={showAllLabels}
-            onShowAllLabelsChange={setShowAllLabels}
-          />
-        </div>
       ) : null}
 
       {report ? <StrongMetricPrintCharts ranked={ranked} metrics={metrics} report={report} /> : null}
@@ -249,6 +276,126 @@ export function SeparationRanking({
           />
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The ranking table and the chart of the row you picked, laid out as the one
+ * thing they are (issue #455). Before this they were a flat stack with three
+ * paragraphs of legend between them, so choosing a row updated a chart that
+ * was off screen — read it, scroll back up, pick the next row, repeat.
+ *
+ * The shape is lifted from the pilot score explainer
+ * (pages/PilotScoreDetail.tsx): one grid, `items-start` (without it the grid
+ * item stretches to full height and `position: sticky` never engages), the
+ * detail pane sticky, and the source order flipped at the wide breakpoint.
+ * The pane is FIRST in the DOM because that is the only way it can pin to the
+ * TOP of a stacked layout — sticky holds an element where it is, it cannot
+ * pull one up from below. Being read before the table it details is why it
+ * carries its own heading and `role="region"`.
+ *
+ * The split is a CONTAINER query, not `lg:`, because the width this section
+ * gets is not a function of the viewport alone: at `xl` the page gives 12rem
+ * to the PageToc rail, and only a page carrying `data-wide-page` is allowed
+ * past Shell's 6xl measure at all (TaskFieldAnalysis.tsx). 64rem (`@5xl`) is
+ * the smallest container that still leaves the ranking table its ~675px of
+ * min-content at the 5fr share below — under that the table would go back to
+ * scrolling sideways, which is the complaint issue #453 was closed on.
+ *
+ * Sticky offsets are dictated by whatever already owns the top of the
+ * viewport: below `xl` that is PageToc's `fixed top-0 z-50` bar (60px, up as
+ * soon as you have scrolled 160px — long before this section), and at the
+ * wide end it is the Shell's 60px glass header.
+ */
+function MasterDetail({
+  table,
+  detail,
+  detailId,
+  detailHeadingId,
+  collapsed,
+  onCollapsedChange,
+  hideDetailInPrint,
+}: {
+  table: ReactNode;
+  /** null when the caller has no report (the non-interactive table). */
+  detail: ReactNode;
+  detailId: string;
+  detailHeadingId: string;
+  collapsed: boolean;
+  onCollapsedChange: (value: boolean) => void;
+  hideDetailInPrint: boolean;
+}) {
+  if (detail === null) return <>{table}</>;
+
+  return (
+    <div className="@container">
+      <div className="grid items-start gap-4 @5xl:grid-cols-[minmax(0,5fr)_minmax(0,3fr)] @5xl:gap-6 print:block">
+        <div
+          className={cn(
+            // Full-bleed while pinned so rows scrolling under it are covered
+            // edge to edge (the page's own px-4/px-6 is cancelled and
+            // re-applied inside); all of it reset once side by side.
+            "sticky top-[60px] z-10 -mx-4 bg-background px-4 pb-3 sm:-mx-6 sm:px-6",
+            "@5xl:top-20 @5xl:order-2 @5xl:m-0 @5xl:p-0",
+            // Paper has no viewport to pin to.
+            "print:static print:z-auto print:m-0 print:p-0",
+            hideDetailInPrint && "print:hidden"
+          )}
+        >
+          <div className="mx-auto flex max-w-[35rem] justify-end pb-1 @5xl:hidden print:hidden">
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-expanded={!collapsed}
+              aria-controls={detailId}
+              onPress={() => onCollapsedChange(!collapsed)}
+            >
+              {collapsed ? "Show chart" : "Hide chart"}
+            </Button>
+          </div>
+          <div
+            id={detailId}
+            // A region, not a bare div: it is read before the table it
+            // belongs to, so it has to say what it is. tabIndex makes the
+            // capped, scrollable box reachable without a mouse (WCAG 2.1.1).
+            role="region"
+            aria-labelledby={detailHeadingId}
+            tabIndex={0}
+            className={cn(
+              "overflow-y-auto rounded-lg border bg-background outline-none",
+              // Stacked, the pane is as wide as the page — and the scatter
+              // is drawn on a 560-unit viewBox, so past that width it is
+              // only magnified. Cap and centre it; side by side the column
+              // is already narrower than the cap.
+              "mx-auto max-w-[35rem] @5xl:max-w-none",
+              "max-h-[19rem] sm:max-h-[23rem] @5xl:max-h-[calc(100vh-7rem)]",
+              "focus-visible:ring-2 focus-visible:ring-ring/50",
+              "print:max-h-none print:overflow-visible",
+              // Folded away only while stacked — side by side there is no
+              // screen to reclaim, and the control that unfolds it is hidden.
+              collapsed && "hidden @5xl:block"
+            )}
+          >
+            {detail}
+          </div>
+        </div>
+        <div
+          className={cn(
+            "min-w-0 @5xl:order-1",
+            // Focus must not end up behind the pinned pane (WCAG 2.4.11).
+            // The pane's stacked height is a constant cap, so its bottom
+            // edge is a constant too: 60px sticky offset + the ~2rem toggle
+            // row + the cap. Rows AND cells, because RAC's grid navigation
+            // scrolls whichever it moved focus to.
+            "[&_tr]:scroll-mt-[25rem] [&_td]:scroll-mt-[25rem] [&_th]:scroll-mt-[25rem]",
+            "sm:[&_tr]:scroll-mt-[29rem] sm:[&_td]:scroll-mt-[29rem] sm:[&_th]:scroll-mt-[29rem]",
+            "@5xl:[&_tr]:scroll-mt-24 @5xl:[&_td]:scroll-mt-24 @5xl:[&_th]:scroll-mt-24"
+          )}
+        >
+          {table}
+        </div>
+      </div>
     </div>
   );
 }
@@ -428,7 +575,7 @@ function StrongMetricPrintCharts({
               i % 2 === 1 && "print:break-after-page"
             )}
           >
-            <MetricDetailPanel metric={full} report={report} />
+            <MetricDetailPanel metric={full} report={report} headingLevel={4} />
           </div>
         );
       })}

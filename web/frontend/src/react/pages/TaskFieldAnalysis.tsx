@@ -424,7 +424,10 @@ export function TaskFieldAnalysis() {
     // With a TOC, wide screens get the docs layout: a narrow left rail
     // column and the content column, centred together. Below xl (and on the
     // TOC-less error/pending states) this is exactly the old single column.
+    // `data-wide-page` is what lets the 87rem actually happen — Shell's
+    // <main> is 6xl otherwise, which the rail would eat a fifth of.
     <div
+      {...(tocItems.length > 0 ? { "data-wide-page": "" } : {})}
       className={cn(
         "mx-auto max-w-6xl px-4 py-6 font-hyperlegible",
         tocItems.length > 0 &&
