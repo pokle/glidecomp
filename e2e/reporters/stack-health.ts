@@ -24,7 +24,7 @@ import type {
   TestResult,
   FullResult,
 } from "@playwright/test/reporter";
-import { API_URL, FRONTEND_URL } from "../fixtures/stack";
+import { API_URL, API_READY_URL, FRONTEND_URL } from "../fixtures/stack";
 
 /** One probe with a short timeout — a hung port must not stall the report. */
 async function reachable(url: string): Promise<boolean> {
@@ -66,7 +66,7 @@ export default class StackHealthReporter implements Reporter {
   private async diagnose(): Promise<void> {
     try {
       const [api, frontend] = await Promise.all([
-        reachable(`${API_URL}/api/comp`),
+        reachable(API_READY_URL),
         reachable(this.frontendUrl),
       ]);
       if (api && frontend) return; // Failure is real. Carry on.

@@ -22,9 +22,13 @@ function workersCheck(): Plugin {
       void (async () => {
         for (let i = 0; i < 40; i++) {
           try {
-            await fetch(`${DEV_API_ORIGIN}/api/comp`);
-            console.log(`\n  API Workers running at ${DEV_API_ORIGIN}\n`);
-            return;
+            // /__ready is 503 until every Worker in the session answers.
+            const res = await fetch(`${DEV_API_ORIGIN}/__ready`);
+            if (res.ok) {
+              console.log(`\n  API Workers running at ${DEV_API_ORIGIN}\n`);
+              return;
+            }
+            await new Promise((r) => setTimeout(r, 1000));
           } catch {
             await new Promise((r) => setTimeout(r, 1000));
           }

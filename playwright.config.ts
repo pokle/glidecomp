@@ -1,5 +1,5 @@
 import { defineConfig } from "@playwright/test";
-import { FRONTEND_URL, API_URL } from "./e2e/fixtures/stack";
+import { FRONTEND_URL, API_URL, API_READY_URL } from "./e2e/fixtures/stack";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -51,13 +51,15 @@ export default defineConfig({
     },
   ],
   // One entry, not three: every Worker lives in a single wrangler session
-  // behind the dev-router on :8790. /api/comp is the readiness probe because it
-  // is a real D1 read through competition-api — it proves the database is
-  // reachable, not just that a port is open.
+  // behind the dev-router on :8790. The readiness URL is the router's /__ready,
+  // which answers 200 only once EVERY Worker responds — with three ports we got
+  // that guarantee for free by waiting on each; behind one port a probe of any
+  // single route would let the run start while a sibling was still loading, and
+  // a request landing on a loading Worker takes `wrangler dev` down with it.
   webServer: [
     {
       command: "bun run dev:workers",
-      url: `${API_URL}/api/comp`,
+      url: API_READY_URL,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
     },

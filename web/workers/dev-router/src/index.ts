@@ -35,6 +35,15 @@ interface Env {
  * without also swallowing `/api/user/tracks`. Written without trailing slashes
  * for that reason — `/api/u/` as a prefix would only ever match `/api/u//…`.
  */
+/**
+ * Where to ask "is the whole stack up?". Not under `/api`, so it can never
+ * shadow a real route. Deliberately NOT exported: workerd rejects a module
+ * whose named exports aren't handlers ("Incorrect type for map entry"). The
+ * callers keep their own copy — `API_READY_URL` in e2e/fixtures/stack.ts and a
+ * literal in the two serve scripts — and test/routes.test.ts pins the path.
+ */
+const READINESS_PATH = "/__ready";
+
 const ROUTES: Array<[string, keyof Env]> = [
   ["/api/auth", "AUTH_API"],
   ["/api/airscore", "AIRSCORE_API"],
@@ -44,9 +53,54 @@ const ROUTES: Array<[string, keyof Env]> = [
   ["/api/admin", "COMPETITION_API"],
 ];
 
+/**
+ * Readiness probe for every Worker in the session, not just one.
+ *
+ * This matters because of what the single port took away. With a Worker per
+ * port, Playwright waited on `:8788/api/auth/me` AND `:8789/api/comp` and so
+ * proved both were loaded. Behind one port, a probe of `/api/comp` proves only
+ * that competition-api is up — auth-api can still be loading, and a request
+ * that lands on a Worker mid-load makes wrangler's ProxyWorker report
+ * `Error: Network connection lost.`, which its ProxyController treats as fatal
+ * and exits `wrangler dev` on. That is the same "the dev server died 35 s in"
+ * failure as issue #477's, reached by a different route.
+ *
+ * So: 200 only when every binding answers. Anything less is 503, which
+ * Playwright reads as "not ready yet" and keeps polling (it accepts 200–403).
+ */
+async function readiness(env: Env): Promise<Response> {
+  const probes: Array<[keyof Env, string]> = [
+    ["AUTH_API", "/api/auth/me"],
+    ["COMPETITION_API", "/api/comp"],
+    ["AIRSCORE_API", "/api/airscore"],
+  ];
+
+  const workers = Object.fromEntries(
+    await Promise.all(
+      probes.map(async ([binding, path]) => {
+        try {
+          const res = await env[binding].fetch(
+            new Request(`http://dev-router${path}`)
+          );
+          // Any HTTP answer means the Worker is loaded and serving; airscore
+          // 404s its own root, which is a perfectly good sign of life.
+          return [binding, res.status < 500 ? "ok" : `status ${res.status}`];
+        } catch (err) {
+          return [binding, (err as Error).message];
+        }
+      })
+    )
+  );
+
+  const ready = Object.values(workers).every((v) => v === "ok");
+  return Response.json({ ready, workers }, { status: ready ? 200 : 503 });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const { pathname } = new URL(request.url);
+
+    if (pathname === READINESS_PATH) return readiness(env);
 
     for (const [prefix, binding] of ROUTES) {
       if (pathname === prefix || pathname.startsWith(prefix + "/")) {

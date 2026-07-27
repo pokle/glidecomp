@@ -84,3 +84,89 @@ describe("dev-router dispatch", () => {
     expect(await routeOf("/api/unknown")).toBe("404");
   });
 });
+
+/**
+ * The readiness contract, which the Playwright configs and the serve scripts
+ * depend on: 200 ONLY when every Worker answers. A probe that goes green while
+ * a sibling is still loading lets a test hit a loading Worker, and that kills
+ * `wrangler dev` outright — see the comment on readiness() in src/index.ts.
+ */
+describe("dev-router readiness", () => {
+  /** Bindings where each named worker fails instead of answering. */
+  function envWith(broken: string[] = []) {
+    const make = (binding: string) => ({
+      fetch: () =>
+        broken.includes(binding)
+          ? Promise.reject(new Error("Network connection lost."))
+          : Promise.resolve(new Response("ok")),
+    });
+    return {
+      AUTH_API: make("AUTH_API"),
+      COMPETITION_API: make("COMPETITION_API"),
+      AIRSCORE_API: make("AIRSCORE_API"),
+    };
+  }
+
+  async function probe(broken: string[] = []) {
+    const res = await router.fetch(
+      new Request("http://localhost:8790/__ready"),
+      envWith(broken) as never
+    );
+    return { status: res.status, body: await res.json() };
+  }
+
+  it("200s when all three Workers answer", async () => {
+    const { status, body } = await probe();
+    expect(status).toBe(200);
+    expect(body).toEqual({
+      ready: true,
+      workers: { AUTH_API: "ok", COMPETITION_API: "ok", AIRSCORE_API: "ok" },
+    });
+  });
+
+  it("503s while ANY single Worker is still loading, and names it", async () => {
+    for (const worker of ["AUTH_API", "COMPETITION_API", "AIRSCORE_API"]) {
+      const { status, body } = await probe([worker]);
+      // 503 matters specifically: Playwright treats 200–403 as "server is up",
+      // so anything in that range would end the wait early.
+      expect(status).toBe(503);
+      expect((body as { ready: boolean }).ready).toBe(false);
+      expect((body as { workers: Record<string, string> }).workers[worker]).toBe(
+        "Network connection lost."
+      );
+    }
+  });
+
+  it("treats a Worker's own 4xx as a sign of life, not a failure", async () => {
+    // airscore-api 404s its own root; that still proves it is loaded.
+    const env = {
+      AUTH_API: { fetch: () => Promise.resolve(new Response("ok")) },
+      COMPETITION_API: { fetch: () => Promise.resolve(new Response("ok")) },
+      AIRSCORE_API: {
+        fetch: () => Promise.resolve(new Response("nope", { status: 404 })),
+      },
+    };
+    const res = await router.fetch(
+      new Request("http://localhost:8790/__ready"),
+      env as never
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("503s when a Worker answers but is erroring", async () => {
+    const env = {
+      AUTH_API: { fetch: () => Promise.resolve(new Response("ok")) },
+      COMPETITION_API: {
+        fetch: () => Promise.resolve(new Response("boom", { status: 500 })),
+      },
+      AIRSCORE_API: { fetch: () => Promise.resolve(new Response("ok")) },
+    };
+    const res = await router.fetch(
+      new Request("http://localhost:8790/__ready"),
+      env as never
+    );
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { workers: Record<string, string> };
+    expect(body.workers.COMPETITION_API).toBe("status 500");
+  });
+});

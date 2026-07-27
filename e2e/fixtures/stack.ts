@@ -26,6 +26,15 @@ export const FRONTEND_URL = "http://localhost:3000";
  */
 export const API_URL = process.env.DEV_API_ORIGIN || "http://localhost:8790";
 
+/**
+ * "Is the whole stack up?" — 200 only once EVERY Worker in the session answers,
+ * not just whichever one a given path happens to hit. Probing a single route
+ * instead let tests start against a Worker that was still loading, and a
+ * request landing mid-load kills `wrangler dev` outright (see the readiness
+ * comment in web/workers/dev-router/src/index.ts).
+ */
+export const API_READY_URL = `${API_URL}/__ready`;
+
 /** Super admin — administers every comp, so it can clean up anything. */
 export const SUPER_ADMIN = {
   name: "Tushar Pokle",

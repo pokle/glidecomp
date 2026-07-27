@@ -1,5 +1,5 @@
 import { defineConfig } from "@playwright/test";
-import { API_URL } from "./e2e/fixtures/stack";
+import { API_URL, API_READY_URL } from "./e2e/fixtures/stack";
 
 const SSR_URL = "http://localhost:3100";
 
@@ -43,7 +43,7 @@ export default defineConfig({
   webServer: [
     {
       command: "bun run dev:workers",
-      url: `${API_URL}/api/comp`,
+      url: API_READY_URL,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
     },
