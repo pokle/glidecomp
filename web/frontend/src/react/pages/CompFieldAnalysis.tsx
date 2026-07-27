@@ -15,6 +15,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { Loading } from "@/react/rac/progress";
 import { SimpleSelect } from "@/react/rac/select";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { DivergingMeter } from "@/react/rac/meter";
@@ -209,7 +210,7 @@ export function CompFieldAnalysis() {
   if (status === "loading") {
     return (
       <div className="mx-auto max-w-6xl px-4 py-6 font-hyperlegible">
-        <p className="text-sm text-muted-foreground">Loading field analysis…</p>
+        <Loading className="text-sm">Loading field analysis…</Loading>
       </div>
     );
   }

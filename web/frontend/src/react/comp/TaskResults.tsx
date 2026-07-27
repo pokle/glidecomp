@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link as AriaLink } from "react-aria-components";
 import { Button, LinkButton } from "@/react/rac/button";
+import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
 import { useUser } from "../lib/user";
 import { formatInstant } from "../lib/time";
@@ -235,7 +236,7 @@ export function TaskResults({
       ) : null}
 
       {scoreState === "loading" ? (
-        <p className="mt-2 text-muted-foreground">Loading results…</p>
+        <Loading className="mt-2">Loading results…</Loading>
       ) : scoreState === "no-route" ? (
         <p className="mt-2 text-muted-foreground">
           No results yet — the task route hasn't been set.

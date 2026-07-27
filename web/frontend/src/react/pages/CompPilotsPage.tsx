@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { underComp } from "../lib/crumbs";
@@ -75,9 +76,7 @@ export function CompPilotsPage() {
 
   if (!comp || loading) {
     return (
-      <p role="status" aria-label="Loading pilots" className="text-muted-foreground">
-        Loading pilots…
-      </p>
+      <Loading>Loading pilots…</Loading>
     );
   }
 

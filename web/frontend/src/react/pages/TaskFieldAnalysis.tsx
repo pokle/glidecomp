@@ -26,6 +26,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { Loading } from "@/react/rac/progress";
 import { Button, LinkButton } from "@/react/rac/button";
 import { SimpleSelect } from "@/react/rac/select";
 import { Alert, AlertDescription, AlertTitle } from "@/react/ui/alert";
@@ -384,7 +385,7 @@ export function TaskFieldAnalysis() {
   if (status === "loading") {
     return (
       <div className="mx-auto max-w-6xl px-4 py-6 font-hyperlegible">
-        <p className="text-sm text-muted-foreground">Loading field analysis…</p>
+        <Loading className="text-sm">Loading field analysis…</Loading>
       </div>
     );
   }

@@ -12,6 +12,7 @@ import { Fragment, useEffect, useId, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { Form } from "react-aria-components";
 import { Button, LinkButton } from "@/react/rac/button";
+import { Loading } from "@/react/rac/progress";
 import {
   Dialog,
   DialogFooter,
@@ -141,9 +142,7 @@ function CompDetailContent() {
 
   if (!comp) {
     return (
-      <p role="status" aria-label="Loading competition" className="text-muted-foreground">
-        Loading competition…
-      </p>
+      <Loading>Loading competition…</Loading>
     );
   }
 

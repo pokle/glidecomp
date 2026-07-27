@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/react/ui/alert";
 import { Button } from "@/react/rac/button";
+import { ProgressBar } from "@/react/rac/progress";
 import { Timestamp } from "../components/Timestamp";
 
 /** Poll cadence: every ~4s backing off to ~15s, giving up after ~2 minutes
@@ -151,6 +152,21 @@ export function ScoreFreshness({
   const copy = COPY[variant];
   const rescore = useRescorePoll(stale, etag, pollUrl);
 
+  /* The visual half of "work is in flight". It is `aria-hidden` on purpose:
+     these Alerts are already polite live regions carrying a complete sentence
+     (see the COPY note above — the wording is deliberate), and an announced
+     progressbar beside it would say the same thing a second time. The
+     aria-label is only there to keep react-aria's "label your progressbar"
+     dev warning quiet. */
+  const busyBar = (
+    <ProgressBar
+      isIndeterminate
+      aria-hidden
+      aria-label={copy.pendingTitle}
+      className="mt-3"
+    />
+  );
+
   if (pending) {
     return (
       <div className="mt-2">
@@ -160,6 +176,7 @@ export function ScoreFreshness({
             {variant === "analysis"
               ? "It runs in the background over every pilot's tracklog. This page refreshes itself when it lands — usually within a few minutes. If it hasn't appeared, come back and reload in about 10 minutes."
               : "This runs in the background and usually lands within a minute; this page refreshes itself when it does."}
+            {busyBar}
           </AlertDescription>
         </Alert>
       </div>
@@ -177,7 +194,10 @@ export function ScoreFreshness({
       {rescore === "rescoring" ? (
         <Alert role="status" aria-live="polite">
           <AlertTitle>{copy.staleTitle}</AlertTitle>
-          <AlertDescription>{copy.staleBody}</AlertDescription>
+          <AlertDescription>
+            {copy.staleBody}
+            {busyBar}
+          </AlertDescription>
         </Alert>
       ) : null}
       {rescore === "landed" ? (

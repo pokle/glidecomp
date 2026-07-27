@@ -16,6 +16,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Form } from "react-aria-components";
 import { xctaskTurnpointsToRecords, type XCTask } from "@glidecomp/engine";
 import { Badge } from "@/react/rac/badge";
+import { Loading } from "@/react/rac/progress";
 import { Button, LinkButton, buttonVariants } from "@/react/rac/button";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import {
@@ -193,9 +194,7 @@ function TaskDetailContent() {
 
   if (!task) {
     return (
-      <p role="status" aria-label="Loading task" className="text-muted-foreground">
-        Loading task…
-      </p>
+      <Loading>Loading task…</Loading>
     );
   }
 
@@ -769,8 +768,8 @@ function EditTaskDialog({
             <Button slot="close" variant="outline">
               Cancel
             </Button>
-            <Button type="submit" isDisabled={saving}>
-              {saving ? "Saving..." : "Save"}
+            <Button type="submit" isPending={saving} pendingLabel="Saving">
+              Save
             </Button>
           </DialogFooter>
         </Form>

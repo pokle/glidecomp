@@ -92,10 +92,11 @@ instance only exists a tick after mount, so gate anything that drives it on
   grouping), `tabs` (Tabs/TabList/Tab/TabPanel — styled like ui/tabs' default
   pill variant; controlled via `selectedKey`/`onSelectionChange`, panels pair
   with tabs by `id`, and tab keys can't be `""` — map an "All" filter through
-  a sentinel key, see ActivitySection), `progress` (ProgressBar — **task
-  completion**, role="progressbar"; the mirror of `meter`'s "measurement"
-  distinction. Label row + thin track like ui/progress; pass a heading node
-  as `label` and point `aria-labelledby` at it), `badge` (static span — RAC
+  a sentinel key, see ActivitySection), `progress` (ProgressBar/Spinner/
+  Loading — **task completion**, role="progressbar"; the mirror of `meter`'s
+  "measurement" distinction. Label row + thin track like ui/progress; pass a
+  heading node as `label` and point `aria-labelledby` at it. Also the app's
+  **loading-state family** — see the section below), `badge` (static span — RAC
   has no presentational components), `confirm` (RacConfirmProvider — supplies
   the same ConfirmContext as lib/confirm.tsx so `useConfirm()` inside a
   wrapped subtree gets the RAC alertdialog), `router` (RacRouterProvider —
@@ -150,6 +151,51 @@ instance only exists a tick after mount, so gate anything that drives it on
   for unconverted pages.
 - The date/time pickers (`ui/date-picker.tsx`) were already RAC and are used
   as-is by both kits.
+
+## Loading and in-flight states (2026-07-27)
+
+Anything waiting on an API response gets visible feedback, and the shape of
+the wait picks the component — all three live in `rac/progress.tsx`:
+
+| The wait | Use | What it renders |
+| --- | --- | --- |
+| A page **section** is fetching | `<Loading>Loading scores…</Loading>` | `role="status"` (polite live region) + the sentence + a decorative spinner |
+| An **action** is in flight | `<Button isPending pendingLabel="Saving">` | Spinner before the unchanged label |
+| A **known background job** is running | `<ProgressBar isIndeterminate>` | The travelling stripe (ScoreFreshness's re-score/pending alerts) |
+
+Points worth knowing before you reach for one:
+
+- **Indeterminate IS the ARIA answer to "busy".** A progressbar with no
+  `aria-valuenow` is what says "working, duration unknown"; the spinner is a
+  circular skin over the same thing, not a separate concept. That's why
+  `Spinner` is an `AriaProgressBar` whenever it carries a label.
+- **`isPending` beats `isDisabled={saving}` + a "Saving…" label swap** and has
+  replaced it at every converted call site (task/settings/route/pilots Save,
+  Submit-track Upload, Record flight, Recompute scores). RAC keeps the button
+  **focusable** while refusing presses — a plain `disabled` drops focus to the
+  body mid-action — flips `type="submit"` to `"button"` so Enter can't
+  double-submit, and announces the transition assertively. Keeping the visible
+  label also keeps the button's width, so the footer doesn't jump.
+- **`pendingLabel` is a real accessible name, not decoration.** RAC publishes a
+  `ProgressBarContext` id around the button's children and folds a nested
+  progressbar's label into the button's `aria-labelledby` while pending — that
+  label is the text it announces. A bare `<svg>` there announces nothing.
+- **Spinner has two modes and picking wrong is the bug.** With a `label` it's
+  an announced progressbar; without one it's `aria-hidden` decoration. Inside
+  `Loading` it must be decoration — the sentence is already in the live
+  region, and a labelled spinner would read it twice. Same reason
+  ScoreFreshness's bar is `aria-hidden`: those Alerts already carry deliberate,
+  hand-written copy (see the COPY note in that file).
+- **Reduced motion is designed, not inherited.** globals.css collapses every
+  animation app-wide under `prefers-reduced-motion`, which would park the
+  travelling stripe mid-track and read as "stuck at 40%". So
+  `.gc-progress-indeterminate` has an explicit fallback: a static striped fill
+  across the whole track (striped, because a solid full bar reads as "100%,
+  done"). The spinner simply stops, and its ring gap keeps it legible as an
+  indicator — in both modes a label or adjacent sentence carries the meaning.
+- Contracts are covered by `rac/progress.test.ts` (the absence of
+  `aria-valuenow`, the absence of a second accessible name, aria-disabled
+  without `disabled`) — the failure modes all render identically.
 
 ## Conventions
 
@@ -332,6 +378,19 @@ instance only exists a tick after mount, so gate anything that drives it on
     builds client-side; the anonymous/crawler variant stays a real RAC
     `<table>` so the page keeps its SSR content (the ssr.spec.ts waypoints
     test asserts a waypoint code appears in the raw HTML).
+
+17. **`isPending` does NOT set `data-disabled` — style `data-pending`
+    separately.** RAC reports `isDisabled: props.isDisabled || isPending` to
+    the *render props* but writes the DOM attribute from `props.isDisabled`
+    alone, so the kit's `data-disabled:opacity-50` never fires on a pending
+    button. `rac/button.tsx` carries its own `data-pending:opacity-70` for
+    exactly that reason — don't "fix" it by passing `isDisabled` as well,
+    which would take the button out of the tab order and undo the whole point
+    of `isPending`. Press/hover ARE already neutralised by RAC, so only the
+    visuals are yours. Also note `isPending` renders `aria-disabled="true"`
+    with **no** `disabled` attribute, so a test that asserts on the `disabled`
+    property will read the button as enabled. Assert `aria-disabled` and that
+    the press handler never fired (what `rac/progress.test.ts` does).
 
 ## Verification playbook (all part of "done" for RAC work)
 

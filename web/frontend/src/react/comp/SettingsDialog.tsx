@@ -700,8 +700,8 @@ export function SettingsDialog({
             <Button slot="close" variant="outline">
               Cancel
             </Button>
-            <Button type="submit" isDisabled={saving}>
-              {saving ? "Saving..." : "Save"}
+            <Button type="submit" isPending={saving} pendingLabel="Saving">
+              Save
             </Button>
           </DialogFooter>
         </Form>
