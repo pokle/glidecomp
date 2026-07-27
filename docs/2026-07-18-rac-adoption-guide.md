@@ -122,7 +122,16 @@ instance only exists a tick after mount, so gate anything that drives it on
   MenuSection/MenuHeader/MenuSeparator — a Header must sit inside a
   MenuSection to name the group, and `placement` forwards to the popover),
   `router` (RacRouterProvider — bridges RAC `href` links to react-router;
-  SSR-safe).
+  SSR-safe), `full-screen-sheet` (FullScreenSheet — the **full-bleed** modal,
+  `dialog`'s Modal being a centered panel whose overlay
+  padding/background/centering are not overridable. Render it when open and
+  not when closed: there is no `isOpen`, so a closed sheet costs nothing and a
+  lazily-imported one stays unimported. `dismissOnPress` makes the whole sheet
+  a close target and is **only** for content that is a picture — anything
+  interactive inside would dismiss on the way to being pressed; without it,
+  give the sheet an `autoFocus` Close button, since Escape alone isn't a
+  discoverable affordance. Callers: the waypoint QR, the task route glyph, the
+  field-analysis metric chart).
 - **Converted files:** `pages/TaskDetail.tsx` (page + EditTaskDialog +
   turnpoints table), `comp/TaskStandings.tsx`, `comp/RouteEditorDialog.tsx`
   (Tabulator grid → RAC **GridList** card list, see below — was a RAC Table),

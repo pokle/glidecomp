@@ -113,7 +113,13 @@ export function Shell() {
       <main
         id="main-content"
         tabIndex={-1}
-        className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6 pb-12 focus:outline-none"
+        // A page opts into a wider measure by putting `data-wide-page` on
+        // anything it renders. Only the task field-analysis report does: it
+        // spends 12rem of its width on the PageToc rail and then lays its
+        // ranking table out beside a chart, which does not fit inside 6xl.
+        // Without this its own `xl:max-w-[87rem]` was silently clamped here
+        // and the docs layout came out NARROWER than the plain one.
+        className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6 pb-12 focus:outline-none [&:has([data-wide-page])]:max-w-[89rem]"
       >
         <Outlet />
       </main>

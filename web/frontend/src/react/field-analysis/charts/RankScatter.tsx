@@ -49,6 +49,10 @@ import {
 import { notableExcludedRanks, notableRanksPhrase } from "../exclusions";
 
 const W = 560;
+/** The plot's viewBox width — the unit `minHeight` is expressed in, so a
+ * caller sizing the chart against a measured box can ask for the matching
+ * aspect without hardcoding this number twice. */
+export const SCATTER_WIDTH = W;
 const BASE_H = 300;
 const MARGIN = { top: 10, right: 16, bottom: 26, left: 40 };
 /** Vertical room per label when naming every pilot (labels spread at 11). */
@@ -153,6 +157,7 @@ export function RankScatter({
   pilots,
   showAllLabels = false,
   onShowAllLabelsChange,
+  minHeight,
 }: {
   metric: MetricReport;
   pilots: FieldAnalysisReport["pilots"];
@@ -160,6 +165,20 @@ export function RankScatter({
    * choice survives switching metrics. */
   showAllLabels?: boolean;
   onShowAllLabelsChange?: (value: boolean) => void;
+  /**
+   * Floor for the viewBox height, in the same units as {@link W}. The plot is
+   * always drawn {@link W} wide and scales to whatever CSS width it is given,
+   * so its aspect ratio decides how much of a tall box it can use: at the
+   * default {@link BASE_H} a phone-width chart is ~190px tall no matter how
+   * much screen is free, which is exactly what makes the full-screen overlay
+   * (MetricChartOverlay) worth having. That overlay measures its box and
+   * passes the height that matches its aspect, so the rank axis gets the
+   * whole screen instead of a letterboxed strip.
+   *
+   * A floor, never a cap: below BASE_H the axis labels and the spread-out
+   * pilot names stop fitting, so a smaller request is ignored.
+   */
+  minHeight?: number;
 }) {
   // Join by trackFile, never by array index (project rule) — and sort by
   // rank so arrow keys read the leaderboard top-down.
@@ -230,10 +249,14 @@ export function RankScatter({
   }
 
   // Naming everyone needs a row of vertical space per pilot, so the chart
-  // grows instead of the labels compressing into an unreadable pile.
-  const height = showAllLabels
-    ? Math.max(BASE_H, MARGIN.top + MARGIN.bottom + points.length * LABEL_ROW + 16)
-    : BASE_H;
+  // grows instead of the labels compressing into an unreadable pile. The
+  // caller's floor (the full-screen overlay's measured aspect) comes in on
+  // the same max(): whichever wants more room wins.
+  const height = Math.max(
+    BASE_H,
+    minHeight ?? 0,
+    showAllLabels ? MARGIN.top + MARGIN.bottom + points.length * LABEL_ROW + 16 : 0
+  );
   const plot = {
     left: MARGIN.left,
     right: W - MARGIN.right,

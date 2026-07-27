@@ -26,6 +26,11 @@ import { XIcon } from "lucide-react";
  * overrides land here, like DialogContent before). Dismissable by outside
  * click/Esc by default, matching the Base UI dialogs it replaces — pass
  * isDismissable={false} for must-decide dialogs (see rac/confirm.tsx).
+ *
+ * This is a centered panel and cannot be talked into being anything else —
+ * the overlay's padding, background and centering below are not overridable.
+ * For a modal that fills the screen edge to edge, use
+ * rac/full-screen-sheet.tsx.
  */
 export function Modal({
   className,
