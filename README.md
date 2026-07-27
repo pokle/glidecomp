@@ -56,21 +56,7 @@ cp .env.example .env
 # Edit .env and set VITE_MAPBOX_TOKEN=your_token_here
 ```
 
-### Running locally (Docker)
-
-The easiest way to start everything. Only the frontend port is exposed:
-
-```bash
-docker compose up --build
-```
-
-To run multiple worktrees side-by-side, override the port:
-
-```bash
-PORT=3001 docker compose up --build
-```
-
-### Running locally (native)
+### Running locally
 
 Start the frontend and all API workers together:
 
@@ -106,6 +92,66 @@ you'd rather use the production AirScore API instead of the local worker:
 ```bash
 VITE_AIRSCORE_URL=https://glidecomp.com/api/airscore bun run dev
 ```
+
+### Previewing through the real Pages runtime
+
+`bun run preview` builds the site and serves it through `wrangler pages dev`, so
+you exercise the SSR Functions, the sitemap and the Astro pages exactly as
+production does — no HMR, so a code change needs a re-run.
+
+```bash
+bun run preview          # http://localhost:3000
+```
+
+### Running isolated, in a container
+
+`bun run preview` binds ports on your Mac (pages dev, the Workers' dev-router,
+a workerd inspector) and keeps D1 + R2 in `web/.wrangler/state`, so a second copy
+collides with the first. To run one that can't, put it in a container — the
+stock ports stay inside the VM and only one is published:
+
+```bash
+bun run preview:container            # http://localhost:3200
+PORT=3201 bun run preview:container  # a second, wholly independent instance
+```
+
+Requires [Apple's `container`](https://github.com/apple/container) (macOS 26+,
+Apple silicon): `brew install container`. Each `PORT` gets its own named volume
+for D1 + R2, so instances never see each other's data — or your host checkout's.
+
+Your checkout is bind-mounted **read-only** and staged into the container on
+start, so a source edit needs a restart (Ctrl-C, re-run), not an image rebuild.
+There's no HMR — `preview` serves a production build, same as on the host. Use
+`bun run dev` for a fast edit loop.
+
+The image holds only the dependency tree, and the script rebuilds it for you
+when it needs to: it hashes the files that layer is built from (`bun.lock`, the
+workspace manifests, `patches/`) and compares against a stamp beside the image,
+printing the reason when it rebuilds. Editing source never triggers one. Even a
+missed rebuild is only ever slower, not wrong — the entrypoint runs
+`bun install --frozen-lockfile` after staging, which reconciles `node_modules`
+to whatever lockfile the mount brought in.
+
+| variable | default | when you need it |
+| --- | --- | --- |
+| `PORT` | `3200` | run more than one instance |
+| `SKIP_SEED` | `0` | keep an instance's existing data instead of reseeding |
+| `REBUILD` | `0` | force an image rebuild — normally detected for you |
+| `CPUS` / `MEMORY` | `6` / `8G` | `vite build` is OOM-killed below ~4G |
+
+The default port is 3200 because 3000 (vite), 3100 (SSR e2e), 4321 (astro),
+8790 (the Workers' dev-router) and 9232 (its inspector) are all already spoken
+for — and
+because a native `bun run dev` binds Vite to `[::1]:3000` while a published
+container port binds `127.0.0.1:3000`. macOS treats those as *different sockets*,
+so both bind happily and `localhost` quietly serves you whichever one the
+resolver picked. The script refuses a port anything already holds, on either
+stack, rather than let that happen.
+
+The browser only ever talks to the published port. The one thing that doesn't
+work in the container is the analysis page's AirScore import — it calls
+same-origin `/api/airscore`, and there's no Pages Function proxying that, so it
+404s here exactly as it does in production.
 
 ### Tests and type checking
 

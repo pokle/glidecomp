@@ -7,8 +7,8 @@ import react from '@vitejs/plugin-react';
 
 // Where /api/* is proxied in dev: the dev-router Worker started by
 // `bun run dev:workers` (all Workers, one wrangler session — see
-// web/scripts/dev-workers.sh). DEV_API_ORIGIN overrides it, which is how the
-// docker-compose frontend container reaches the `workers` container.
+// web/scripts/dev-workers.sh). DEV_API_ORIGIN / DEV_API_PORT override it for a
+// setup that puts the Workers somewhere else.
 const DEV_API_ORIGIN =
   process.env.DEV_API_ORIGIN || `http://localhost:${process.env.DEV_API_PORT || 8790}`;
 
@@ -83,7 +83,11 @@ function copySampleComps(): Plugin {
   };
 }
 
+// GIT_SHA env wins so builds that run without the .git directory — the
+// container preview stages source over a read-only mount — can still stamp the
+// real commit rather than falling back to 'unknown'.
 const GIT_SHA = (() => {
+  if (process.env.GIT_SHA) return process.env.GIT_SHA;
   try { return execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim(); }
   catch { return 'unknown'; }
 })();

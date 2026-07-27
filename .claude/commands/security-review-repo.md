@@ -23,7 +23,7 @@ Before reading code, write down (in your head or as TaskCreate items) what you i
 - Pages Functions under `functions/api/`.
 - Frontend under `web/frontend/src/` — the main UI is a React SPA under `src/react/` (grep it for `dangerouslySetInnerHTML`, ref-based DOM HTML writes, and unencoded interpolation into `href`/`src`/`location.*`); the vanilla analysis page (`src/analysis/**`) and 3D replay (`src/replay/**`) are where `innerHTML`-style sinks still live. Across both: data flow from untrusted files (IGC, XCTask, share-target uploads) and API strings (pilot/team/comp/task names) into the DOM.
 - Engine package under `web/engine/src/` — parsers (`igc-parser.ts`, `xctsk-parser.ts`) and any `eval`/`Function`-style constructs.
-- Infrastructure: every `wrangler.toml` (especially `[[routes]]` blocks and binding IDs), `Dockerfile.dev`, `docker-compose.yml`, `web/frontend/public/_redirects`, `web/frontend/public/_headers` (if present), `web/frontend/public/sw.js`.
+- Infrastructure: every `wrangler.toml` (especially `[[routes]]` blocks and binding IDs), `Containerfile`, `web/frontend/public/_redirects`, `web/frontend/public/_headers` (if present), `web/frontend/public/sw.js`.
 - `package.json` + `bun.lock` via `bun audit`.
 
 Carry forward the prior round's scope gaps — if the last round flagged "wrangler.toml binding cross-environment audit" or a similar deferred item, do it this round unless you have a reason not to.
