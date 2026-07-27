@@ -256,8 +256,13 @@ export function ManualFlightDialog({
             <Button slot="close" variant="outline">
               Cancel
             </Button>
-            <Button type="submit" isDisabled={saving || !coordsValid}>
-              {saving ? "Saving…" : "Record flight"}
+            <Button
+              type="submit"
+              isDisabled={!coordsValid}
+              isPending={saving}
+              pendingLabel="Saving"
+            >
+              Record flight
             </Button>
           </DialogFooter>
         </Form>

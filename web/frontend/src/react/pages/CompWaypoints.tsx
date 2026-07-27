@@ -34,6 +34,7 @@ import {
 import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
 import type { MapPickDetails, MapWaypoint } from "../../analysis/map-provider";
 import { Button, ToggleButton } from "@/react/rac/button";
+import { Loading } from "@/react/rac/progress";
 import { SearchField } from "@/react/rac/field";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { RacConfirmProvider } from "@/react/rac/confirm";
@@ -548,7 +549,7 @@ function CompWaypointsContent() {
       ) : null}
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading waypoints…</p>
+        <Loading className="text-sm">Loading waypoints…</Loading>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           {/* Map */}

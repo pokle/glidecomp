@@ -17,6 +17,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { FileTrigger, Link as AriaLink } from "react-aria-components";
 import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
 import { Button } from "@/react/rac/button";
+import { Loading } from "@/react/rac/progress";
 import { SectionHeader } from "../components/SectionHeader";
 import {
   Dialog,
@@ -123,7 +124,7 @@ export function PilotsSection({
       {loadError ? (
         <p className="mt-2 text-muted-foreground">Could not load pilots</p>
       ) : pilots === null ? (
-        <p className="mt-2 text-muted-foreground">Loading pilots…</p>
+        <Loading className="mt-2">Loading pilots…</Loading>
       ) : pilots.length === 0 ? (
         <div className="mt-2 text-muted-foreground">
           <p>No pilots registered yet — pilots appear here when the organizers add them or when they submit a track.</p>
@@ -488,8 +489,13 @@ function EditPilotsDialog({
           <Button slot="close" variant="outline">
             Cancel
           </Button>
-          <Button isDisabled={saving || !gridReady} onPress={() => void save()}>
-            {saving ? "Saving..." : "Save"}
+          <Button
+            isDisabled={!gridReady}
+            isPending={saving}
+            pendingLabel="Saving"
+            onPress={() => void save()}
+          >
+            Save
           </Button>
         </DialogFooter>
       </Dialog>

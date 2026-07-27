@@ -1044,8 +1044,13 @@ export function RouteEditorDialog({
           <Button slot="close" variant="outline">
             Cancel
           </Button>
-          <Button isDisabled={saving || errors.length > 0} onPress={() => void save()}>
-            {saving ? "Saving..." : "Save"}
+          <Button
+            isDisabled={errors.length > 0}
+            isPending={saving}
+            pendingLabel="Saving"
+            onPress={() => void save()}
+          >
+            Save
           </Button>
         </DialogFooter>
 

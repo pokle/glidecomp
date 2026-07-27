@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Link as AriaLink, useFilter } from "react-aria-components";
 import { Button } from "@/react/rac/button";
+import { Loading } from "@/react/rac/progress";
 import {
   Dialog,
   DialogFooter,
@@ -130,9 +131,7 @@ export function Competitions() {
           Failed to load competitions. Please reload the page.
         </p>
       ) : filteredComps === null ? (
-        <p role="status" className="mt-4 text-muted-foreground">
-          Loading competitions…
-        </p>
+        <Loading className="mt-4">Loading competitions…</Loading>
       ) : filteredComps.length === 0 ? (
         <p className="mt-4 text-muted-foreground">
           {words.length > 0
