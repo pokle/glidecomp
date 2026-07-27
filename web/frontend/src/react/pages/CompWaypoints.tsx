@@ -22,6 +22,7 @@
  * streams the map's "Loading map…" fallback and an empty grid container.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useInView } from "../lib/use-in-view";
 import { Link, useParams } from "react-router-dom";
 import { FileTrigger, type SortDescriptor } from "react-aria-components";
 import { MapPinIcon } from "lucide-react";
@@ -189,6 +190,8 @@ export function CompWaypoints() {
   const [saving, setSaving] = useState(false);
   const [fillingAlts, setFillingAlts] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  // Mapbox (764 KB) waits until the panel nears the viewport — see use-in-view.
+  const [mapRef, mapInView] = useInView<HTMLDivElement>();
   const [addMode, setAddMode] = useState(false);
   const [fitNonce, setFitNonce] = useState(0);
   // Fly-to-waypoint request from a grid row click (see `locate`).
@@ -557,7 +560,15 @@ export function CompWaypoints() {
         <div className="grid gap-4 lg:grid-cols-2">
           {/* Map */}
           <div className="order-1 lg:order-2 lg:sticky lg:top-4 lg:self-start">
-            <div className="h-64 overflow-hidden rounded border border-border sm:h-80 lg:h-[520px]">
+            <div
+              ref={mapRef}
+              className="h-64 overflow-hidden rounded border border-border sm:h-80 lg:h-[520px]"
+            >
+              {!mapInView ? (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  Loading map…
+                </div>
+              ) : (
               <Suspense
                 fallback={
                   <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -575,6 +586,7 @@ export function CompWaypoints() {
                   onMapPick={(lat, lon, details) => openAdd(formatCoords(lat, lon), details)}
                 />
               </Suspense>
+              )}
             </div>
             {isAdmin ? (
               <div className="mt-2 flex items-center gap-2">
