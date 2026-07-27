@@ -29,7 +29,7 @@ import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Loading } from "@/react/rac/progress";
 import { Button, LinkButton } from "@/react/rac/button";
 import { SimpleSelect } from "@/react/rac/select";
-import { Alert, AlertDescription, AlertTitle } from "@/react/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { underCompAnalysis } from "../lib/crumbs";
 import { idFromSegment, taskPath, taskAnalysisPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";

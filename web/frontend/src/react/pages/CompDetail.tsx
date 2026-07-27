@@ -22,7 +22,6 @@ import {
 } from "@/react/rac/dialog";
 import { TextField, Label } from "@/react/rac/field";
 import { Checkbox, CheckboxGroup } from "@/react/rac/checkbox";
-import { RacConfirmProvider } from "@/react/rac/confirm";
 import { DatePicker } from "@/react/ui/date-picker";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
@@ -63,14 +62,6 @@ import { useInitialData } from "../lib/initial-data";
 import type { CompDetailLoaderData, CompScores } from "../loaders";
 
 export function CompDetail() {
-  return (
-    <RacConfirmProvider>
-      <CompDetailContent />
-    </RacConfirmProvider>
-  );
-}
-
-function CompDetailContent() {
   const { compId: compParam } = useParams<{ compId: string }>();
   // The route param may be a `${slug}-${id}` — the id is what the API needs.
   const compId = idFromSegment(compParam ?? "");

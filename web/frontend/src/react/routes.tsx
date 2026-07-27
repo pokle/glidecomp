@@ -15,7 +15,7 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
-import { ConfirmProvider } from "./lib/confirm";
+import { ConfirmProvider } from "./rac/confirm";
 import { UserProvider } from "./lib/user";
 import { Shell } from "./components/Shell";
 import { Dashboard } from "./pages/Dashboard";
