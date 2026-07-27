@@ -9,13 +9,14 @@
  * page in the app chrome. SSR-note: this file is imported by the shared
  * route tree, so no window/document at module scope.
  */
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
-import { Button } from "@/react/ui/button";
-import { Field, FieldLabel } from "@/react/ui/field";
-import { Input } from "@/react/ui/input";
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/react/ui/input-otp";
+import { Button } from "@/react/rac/button";
+import { TextField } from "@/react/rac/field";
+// Not a kit component at all: RAC has no one-time-code field, so this stays a
+// thin wrapper over the `input-otp` package (hence react/vendor/, not rac/).
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/react/vendor/input-otp";
 import {
   sendSignInOtp,
   signInWithGoogle,
@@ -46,7 +47,6 @@ export function SignIn() {
   /** Announced via aria-live; also the "code sent" confirmation. */
   const [status, setStatus] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
-  const emailId = useId();
   const otpRef = useRef<HTMLInputElement>(null);
   // The emailed deep link is single-shot: consume it once, then behave like
   // a normal manual visit (a failed link degrades to the code form).
@@ -148,11 +148,9 @@ export function SignIn() {
         </p>
 
         <div className="mt-6 flex flex-col gap-2">
-          <Button type="button" onClick={() => void signInWithGoogle(next)}>
-            Continue with Google
-          </Button>
+          <Button onPress={() => void signInWithGoogle(next)}>Continue with Google</Button>
           {DEV_SIGN_IN_ENABLED ? (
-            <Button type="button" variant="outline" onClick={() => void signInAsDev()}>
+            <Button variant="outline" onPress={() => void signInAsDev()}>
               Sign in (dev)
             </Button>
           ) : null}
@@ -178,20 +176,28 @@ export function SignIn() {
             }}
             className="flex flex-col gap-4"
           >
-            <Field>
-              <FieldLabel htmlFor={emailId}>Email</FieldLabel>
-              <Input
-                id={emailId}
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-              />
-            </Field>
-            <Button type="submit" variant="outline" disabled={busy}>
-              {busy ? "Sending…" : "Email me a sign-in code"}
+            {/* Send/verify failures stay in the page-level `error` below
+                rather than becoming the field's own errorMessage: they cover
+                both steps, and a field-level isInvalid would set a custom
+                validity that blocks the retry submit (guide gotcha #18). */}
+            <TextField
+              label="Email"
+              type="email"
+              autoComplete="email"
+              isRequired
+              value={email}
+              onChange={setEmail}
+              placeholder="you@example.com"
+            />
+            {/* The only feedback while the code is being sent — this step has
+                no visible status line — so isPending, not a disabled swap. */}
+            <Button
+              type="submit"
+              variant="outline"
+              isPending={busy}
+              pendingLabel="Sending your code"
+            >
+              Email me a sign-in code
             </Button>
             <p className="text-xs text-muted-foreground">
               No password needed — we'll email you a 6-digit code.
@@ -222,11 +228,10 @@ export function SignIn() {
             </InputOTP>
             <div className="flex items-center justify-between gap-2">
               <Button
-                type="button"
                 variant="ghost"
                 size="sm"
-                disabled={busy}
-                onClick={() => {
+                isDisabled={busy}
+                onPress={() => {
                   setStep("email");
                   setStatus(null);
                   setError(null);
@@ -235,12 +240,15 @@ export function SignIn() {
               >
                 Use a different email
               </Button>
+              {/* isDisabled, not isPending: `busy` here is usually the
+                  auto-verify started by the last digit, and a spinner on
+                  Resend would claim a wait this button didn't start. The
+                  visible "Checking code…" status above owns that feedback. */}
               <Button
-                type="button"
                 variant="outline"
                 size="sm"
-                disabled={busy || cooldown > 0}
-                onClick={() => void send(email, true)}
+                isDisabled={busy || cooldown > 0}
+                onPress={() => void send(email, true)}
               >
                 {cooldown > 0 ? `Resend code (${cooldown}s)` : "Resend code"}
               </Button>

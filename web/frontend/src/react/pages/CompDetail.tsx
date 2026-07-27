@@ -22,7 +22,7 @@ import {
 } from "@/react/rac/dialog";
 import { TextField, Label } from "@/react/rac/field";
 import { Checkbox, CheckboxGroup } from "@/react/rac/checkbox";
-import { DatePicker } from "@/react/ui/date-picker";
+import { DatePicker } from "@/react/rac/date-picker";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { goToSignIn, useAdminView, useUser } from "../lib/user";

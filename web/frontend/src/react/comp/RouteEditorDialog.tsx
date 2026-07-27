@@ -37,7 +37,7 @@ import { Disclosure } from "@/react/rac/disclosure";
 import { NumberField, TextField } from "@/react/rac/field";
 import { ComboBox, ComboBoxItem } from "@/react/rac/combo-box";
 import { SimpleSelect } from "@/react/rac/select";
-import { TimePicker } from "@/react/ui/date-picker";
+import { TimePicker } from "@/react/rac/date-picker";
 import { api } from "../../comp/api";
 import { fetchTaskByCodeWithRaw } from "../../analysis/xctsk-fetch";
 import { toast } from "../lib/toast";

@@ -1,49 +1,61 @@
 # React Aria Components (RAC) adoption — status, gotchas, and continuation guide
 
-**Audience:** agents/developers continuing the RAC exploration in later sessions.
-**Status (2026-07-21):** the task detail page (`/comp/:id/task/:id`) and every
-dialog it opens is fully converted to react-aria-components and verified
-(typecheck, unit tests, production build, SSR e2e suite green with clean
-hydration, headless admin drives with zero console errors). The route
-editor's turnpoint grid has since been rebuilt as a **GridList card list**
-(2026-07-18, see that section). RAC has since spread beyond the exploration
-page: the two field-analysis pages were built RAC-native, the comp list page
-converted (PR #401), **the comp detail page `/comp/:id` and every section and
-dialog it owns converted (2026-07-21** — sortable score tables, tabs, setup
-guide, Create Task, Settings, pilots section; new kit pieces `rac/tabs` and
-`rac/progress`; retired `ui/select` + `ui/combobox`), `rac/breadcrumbs` is
-the app-wide breadcrumb, `RacRouterProvider` is mounted globally in `Shell`,
-and shared chrome (`PageToc`, `Timestamp`) and the Dashboard's flights `Tree`
-use rac/ components. The waypoints page `/comp/:id/waypoints` converted
-(2026-07-21): RAC chrome + read-only table, and its hand-rolled editable
-grid **replaced with an inline Tabulator grid** per the policy below.
+**Audience:** agents/developers working on the SPA's UI.
 
-**Update (2026-07-27) — the shared chrome converted (wave 1 of
-[#483](https://github.com/pokle/glidecomp/issues/483), the plan for finishing
-the migration).** The **global confirm** is now the RAC alertdialog: the
-provider lives in `rac/confirm.tsx` and is mounted app-wide by routes.tsx, so
-`lib/confirm.tsx` is context-and-types only, with no UI import at all — that
-split is what lets a plain non-RAC page call `useConfirm()` without pulling in
-the kit. The three pages that wrapped themselves in `RacConfirmProvider` to
-escape the old Base UI one (TaskDetail, CompDetail, CompWaypoints) dropped
-their wrappers. `components/Shell.tsx` is RAC: the **account menu** is
-`rac/menu` (with its Settings item a real `href` anchor), the sign-in buttons
-and the super-admin preview pill are rac Buttons/ToggleButtons. New kit pieces
-`rac/alert` and `rac/separator`. Retired `ui/alert-dialog`, `ui/dropdown-menu`
-and `ui/alert` (deleted); `ui/separator` survives only because `ui/field`
-still imports it.
+**Status (2026-07-27): the migration is FINISHED.** Every page and dialog in
+the SPA is react-aria-components, `src/react/ui/` is deleted, and
+`src/react/one-kit.test.ts` fails the build if anything imports from it again.
+There is no `components.json` any more either, so `bunx shadcn add` is not the
+route to a missing component — add it to `rac/`. A static styled element is a
+perfectly good kit member when there's no behaviour to own (`rac/badge.tsx`,
+`rac/alert.tsx`). Thin wrappers over third-party widgets RAC doesn't provide
+live in `src/react/vendor/`: today the `input-otp` sign-in field and the
+`sonner` toaster.
 
-**Wave 2 (also 2026-07-27)** converted the three small pages — AdminCache,
-AdminUsers and Onboarding — which retires nothing on its own (every kit file
-they used has another consumer) but leaves **SignIn, Dashboard and Settings**
-as the whole of the remaining migration. It cost one real bug, now gotcha #18:
-a server-rejected value on a RAC TextField blocks every later submit unless
-the error is cleared on change.
+Read the **gotchas** section before touching kit code — nineteen of them, each
+one something that cost real debugging. The rest of this doc is history: how
+the migration went, what was decided and why. It is worth keeping because the
+reasoning still applies to new UI.
 
-The remaining pages still use the shadcn/Base UI kit in `src/react/ui/` — see
-the conversion map at the end of this doc. The decision so far: **keep going
-with RAC** — it earned its keep everywhere except editable tables, which are
-Tabulator's job (see the policy below).
+**How it went.** The exploration converted the task detail page first
+(2026-07-18), then the route editor's turnpoint grid to a **GridList card
+list**, then the field-analysis pages (built RAC-native), the comp list
+(PR #401), and — 2026-07-21 — the comp detail page with all its sections and
+dialogs, plus the waypoints page (whose hand-rolled editable table became an
+inline Tabulator grid per the policy below). That left the remaining work
+planned as six waves in
+[#483](https://github.com/pokle/glidecomp/issues/483), all landed 2026-07-27:
+
+1. **Shared chrome.** The global confirm became the RAC alertdialog — the
+   provider lives in `rac/confirm.tsx`, mounted app-wide by routes.tsx, which
+   leaves `lib/confirm.tsx` as context and types with no UI import at all.
+   That split is what lets any page call `useConfirm()` without importing a
+   kit, and it deleted the `RacConfirmProvider` wrappers three pages had been
+   carrying. `Shell` followed: account menu → `rac/menu` (Settings is a real
+   `href` anchor now, not a div calling navigate), sign-in buttons and the
+   super-admin preview pill → rac Button/ToggleButton. New: `rac/alert`,
+   `rac/separator`.
+2. **AdminCache, AdminUsers, Onboarding.** Small, no dialogs, no SSR. The
+   users table gained a `scrollLabel` focusable scroll region — seven columns
+   that a keyboard-only admin previously could not reach.
+3. **SignIn.** `input-otp` stayed (RAC has no one-time-code field) and moved
+   to `vendor/`.
+4. **Dashboard.** Tabs, `FileTrigger` for the hidden file inputs, and the
+   storage bar became a **Meter, not a ProgressBar** — quota used is a
+   measurement, not a task running to completion.
+5. **Settings.** The last two ui/ dialogs, both radio groups, the API-key
+   table. `ui/card` had exactly one consumer, so it became a local
+   `SettingsCard` helper rather than a kit component.
+6. **Teardown.** Fourteen dead files deleted, `date-picker` moved to `rac/`
+   (it was already RAC inside), `input-otp` + `sonner` to `vendor/`, the guard
+   test added, `components.json` removed.
+
+**The decision, in hindsight: RAC earned its keep.** The conversions kept
+finding real accessibility defects rather than just moving code — unreachable
+table columns, `title` attributes standing in for tooltips, focus dumped to
+the body mid-action by `disabled` swaps, a `role="progressbar"` on something
+that was never a task. The one place it did not earn its keep is editable
+tables, which are Tabulator's job.
 
 **Tabulator policy (2026-07-21, owner preference): editable tables are
 Tabulator, full stop.** The project owner prefers Tabulator for every
@@ -444,6 +456,25 @@ Points worth knowing before you reach for one:
     the native `required` enforcement too — only reach for it on a field with
     no native constraints.)
 
+19. **RAC's `Button` has no `title` prop — that's the library refusing the
+    attribute, not an oversight.** A `title` hint is invisible to keyboard
+    users, unreliable for screen readers, and unreachable on touch, so RAC
+    simply doesn't type it. TypeScript catches every one at conversion time
+    (four on the Dashboard's row actions), and the fix is a `TooltipTrigger`
+    wrapper from `rac/tooltip.tsx`:
+
+    ```tsx
+    <TooltipTrigger>
+      <Button variant="outline" size="sm" onPress={…}>Download</Button>
+      <Tooltip>Download IGC</Tooltip>
+    </TooltipTrigger>
+    ```
+
+    Only for *supplementary* hints on a control that already has a visible
+    label. If the hint is the only name the control has, it belongs in the
+    accessible name (`aria-label`), and if it's prose, use `rac/popover` —
+    tooltips are hover-only and dismiss before a sentence can be read.
+
 ## Verification playbook (all part of "done" for RAC work)
 
 ```bash
@@ -571,96 +602,47 @@ mobile (today it's a fitted floating panel). The map now sits below the list
 (so it never obscures it), which made the earlier "collapsible map preview"
 idea unnecessary.
 
-## Converting other pages (recipe)
+## Adding or changing UI (recipe)
+
+The migration is over, so this is now "how to build a page with the kit"
+rather than "how to convert one".
 
 1. Nothing to wrap: `RacRouterProvider` is mounted globally in
-   `components/Shell.tsx`, and since 2026-07-27 the global `ConfirmProvider`
-   (`rac/confirm.tsx`, mounted in routes.tsx) is the RAC alertdialog, so
-   `useConfirm()` already resolves to it anywhere. Both are SSR-safe.
-2. Swap imports ui/ → rac/ mechanically: Button (`onClick`→`onPress`,
-   `disabled`→`isDisabled`), Dialog→Modal/Dialog (drop DialogClose for
-   `slot="close"`), Input+Field+useId→TextField (self-labelling), Base UI
-   Select→rac Select/SimpleSelect, checkbox groups→CheckboxGroup, hidden file
-   inputs→FileTrigger, `title=` hints→TooltipTrigger.
-3. Tables: read-only ones convert 1:1 (add `aria-label`; `isRowHeader` on one
-   column; row `id`s). Row-click navigation = `onRowAction` + a real AriaLink
-   in the name cell (keeps a crawlable anchor). Editable ones: prefer the
-   GridList card pattern above; if it must be a Table, use CellEditZone and
-   read gotchas #2/#3 first.
-4. Verify per the playbook; SSR pages additionally must pass `test:e2e:ssr`
+   `components/Shell.tsx` and the global `ConfirmProvider` (`rac/confirm.tsx`,
+   mounted in routes.tsx) means `useConfirm()` already resolves to the RAC
+   alertdialog anywhere. Both are SSR-safe.
+2. Reach for the kit piece, not the DOM element: Button (`onPress`,
+   `isDisabled`, `isPending`), Modal/Dialog, TextField (self-labelling — no
+   `useId` plumbing), Select/SimpleSelect, CheckboxGroup, RadioGroup,
+   FileTrigger for file inputs, TooltipTrigger instead of `title=` (RAC's
+   Button has no `title` prop at all — see gotcha #19).
+3. Tables: read-only ones are Table/TableHeader/Column/Row/Cell — give the
+   Table an `aria-label`, one column `isRowHeader`, rows an `id`, and a
+   `scrollLabel` if it can overflow. Row-click navigation = `onRowAction` plus
+   a real AriaLink in the name cell (keeps a crawlable anchor).
+4. **Editable grids are Tabulator** (policy at the top of this doc). Inside a
+   dialog, give the kit `Dialog` an `id` and point Tabulator's
+   `popupContainer` at it. The shared theme is `comp/tabulator-grid.css`
+   (`gc-grid` container class).
+5. Measurement vs completion: `rac/meter` for a reading within a range,
+   `rac/progress` for a task running to completion. They document the split
+   from both sides.
+6. Verify per the playbook; SSR pages additionally must pass `test:e2e:ssr`
    before "done".
-5. **Editable grids are Tabulator** (policy at the top of this doc): convert
-   the shell around an existing grid and keep it; convert a hand-rolled
-   editable table TO Tabulator (gotcha #16 for the inline-on-page wiring).
-   Inside a dialog, give the kit `Dialog` an `id` and point Tabulator's
-   `popupContainer` at it — editor popups (e.g. the class list) render fine
-   inside the RAC modal, and focus containment doesn't fight the grid's
-   dynamically-created cell editors. The shared shadcn-token theme is
-   `comp/tabulator-grid.css` (`gc-grid` container class).
-6. Order and hour estimates for what's left live in
-   [#483](https://github.com/pokle/glidecomp/issues/483), as a wave-by-wave
-   todo list. Wave 1 (shared chrome) is done — 2026-07-27; next up are the
-   small pages (AdminCache, AdminUsers, Onboarding), then SignIn, then
-   Dashboard's tabs/progress, then Settings and its two API-key dialogs (the
-   last consumer of `ui/radio-group`, and the domino that frees `ui/button`).
-   CompDetail and CompWaypoints are done (2026-07-21), Competitions is done
-   (PR #401); `/scores` is retired (a redirect to `/comp/:id/scores` —
-   nothing to convert). See the
-   conversion map below for the full inventory.
 
-## Conversion map (2026-07-21)
+## Where the UI lives (2026-07-27, post-migration)
 
-Which SPA pages are on which kit, and the dialogs/popups each still owns.
-"rac breadcrumbs only" means the page body is still ui/.
-
-> **Update (2026-07-23, comp/task page UX rework):** the components below are
-> unchanged kit-wise, but several moved host page — the map's "who owns what"
-> is stale where it disagrees with this note:
->
-> - New `pages/CompScoresPage.tsx` `/comp/:id/scores` (fully RAC) now hosts
->   `CompScoresSection`'s score views (`ScoresViews`/`useCompScores`) and the
->   embedded `ScoresSection`; the comp page keeps only the new
->   `CompScoresSummary` (RAC LinkButton + lists).
-> - New `pages/CompPilotsPage.tsx` `/comp/:id/pilots` (admin-only) now hosts
->   `PilotsSection` — Tabulator grid still kept by policy.
-> - `pages/Scores.tsx` redirect target is `/comp/:id/scores`, not the comp
->   page.
-> - Task page: new RAC `comp/TaskResults.tsx` (public top-3 podium +
->   your-submission line); `TaskStandings` is now the admin-only "Manage
->   pilots & tracks" grid. `TaskExportButtons` gained an `asMenu` variant
->   (rac Menu) used by the comp featured card.
-
-**Converted (RAC):**
-
-| Page | Notes |
+| Directory | What's in it |
 |---|---|
-| `pages/TaskDetail.tsx` `/comp/:id/task/:id` | Fully RAC, incl. every dialog it opens (EditTaskDialog, RouteEditorDialog + TurnpointDetailsDialog + XContest pop-up, SubmitTrackDialog, ManualFlightDialog, TaskExportButtons, AddWaypointDialog). Only ui/ import left is `date-picker` (itself RAC under the hood). |
-| `pages/Competitions.tsx` `/comp` | RAC since PR #401 — Link cards, create-comp dialog on the kit, SearchField filter. |
-| `pages/CompFieldAnalysis.tsx`, `pages/TaskFieldAnalysis.tsx` + `field-analysis/` | RAC-native from the start (table, meter, popover, disclosure, select, checkbox, badge). Fully rac since 2026-07-27 — the residual `ui/alert` moved to `rac/alert`. |
-| `pages/PilotScoreDetail.tsx` | Bespoke narrative/map markup; kit pieces (breadcrumbs, Timestamp tooltip) are rac. No dialogs. Done. |
-| `pages/Scores.tsx` | Retired — pure redirect, nothing to convert. |
-| `pages/CompDetail.tsx` `/comp/:id` + its sections (2026-07-21) | Fully RAC: hero LinkButtons (the `/replay` link stays a plain `<a className={buttonVariants(...)}>` — non-SPA entry), Create Task dialog, `SettingsDialog` (NumberFields, rac SimpleSelect + select-like SearchableSelect), `CompScoresSection` (rac tabs + sortable RAC-grid tables), `ScoresSection`, `ActivitySection` (rac tabs), `CompSetupProgress` (rac ProgressBar), `PilotsSection` (RAC table + dialog shell). The pilots editor's **Tabulator grid is kept by policy** — only its chrome converted. Only ui/ import left is `date-picker` (itself RAC under the hood). |
-| `pages/CompWaypoints.tsx` `/comp/:id/waypoints` (2026-07-21) | RAC chrome (FileTrigger upload, ToggleButton add-from-map) around an **inline Tabulator grid** for admins (the hand-rolled editable `<table>` became Tabulator per the policy — gotcha #16); non-admins/crawlers get a read-only RAC table (SSR content preserved). `WaypointDeviceExport` → rac Menu/Checkbox/ToggleButton (retired `ui/checkbox`); `FullScreenQR` → RAC modal primitives. AddWaypointDialog was already RAC. |
-| `components/Shell.tsx` + `lib/confirm.tsx` (app chrome, 2026-07-27) | Account menu → `rac/menu` (`MenuSection` + `MenuHeader` for the name, Settings as an `href` MenuItem so it stays a real anchor), sign-in buttons and the super-admin preview pill → rac `Button`/`ToggleButton` (the pill's hand-rolled `aria-pressed` is now RAC's). The global `ConfirmProvider` moved to `rac/confirm.tsx`, leaving `lib/confirm.tsx` as context-and-types only. Both are in the SSR tree, so `test:e2e:ssr` is part of done here. |
-| `pages/AdminCache.tsx`, `pages/AdminUsers.tsx`, `pages/Onboarding.tsx` (2026-07-27) | Wave 2 of #483. Cache: rac Button with `isPending` (the separate "Clearing…" live region went with it — the pending button already announces). Users: the read-only table converted 1:1 to the RAC grid (`isRowHeader` on User, row `id`s, `scrollLabel` so the seven columns are keyboard-reachable) and the super-admin pill became a rac `Badge`. Onboarding: four `TextField`s replacing Field+Label+Input+useId, and `isPending` on Continue. **Gotcha #18** — a server-side rejection on a TextField must be cleared on change. |
+| `src/react/rac/` | **The kit.** One component family per file. Includes `date-picker` (RAC under the hood, lazy-loaded so it stays out of the SSR bundle) and two behaviour-free static pieces, `badge` and `alert`. |
+| `src/react/vendor/` | Thin wrappers over third-party widgets RAC doesn't provide: `input-otp` (the sign-in code field) and `sonner` (the toaster). Not a kit — don't grow it without a reason of that kind. |
+| `src/react/comp/`, `pages/`, `field-analysis/`, `weather/` | Feature code. Uses the kit; owns no primitives. Local one-page helpers are fine (`SettingsCard` in Settings.tsx, which is all `ui/card` ever was). |
+| Tabulator grids | Editable grids only, per the policy above: the comp pilots editor and the waypoints admin grid, both through `comp/TabulatorGrid.tsx`. |
+| `src/analysis/`, `src/replay/` | Vanilla TS entries — own styling, no React, deliberately outside all of this. |
+| `web/frontend/static/` | The prerendered Astro content pages. No framework by design. |
 
-**Not converted (ui/shadcn) — with their dialogs/popups:**
-
-| Page / surface | ui/ usage | Dialogs & popups still on ui/ |
-|---|---|---|
-| `pages/Settings.tsx` | card, dialog, field, input, radio-group, table, button | **"Create API key" dialog**; **"API key created" dialog**. Last consumer of `ui/radio-group` (rac/radio-group exists). |
-| `pages/Dashboard.tsx` (partial — rac Tree) | tabs, progress, button | No dialogs. Tabs/progress remain ui/. |
-| `pages/SignIn.tsx` | button, field, input, input-otp | No dialogs. `input-otp` stays — RAC has no OTP field. |
-
-Shared ui/ leaf modules that only die with their last consumer:
-`ui/tabs` + `ui/progress` (Dashboard), `ui/table` (Settings, AdminUsers),
-`ui/card` (Settings), `ui/separator` (only `ui/field` now, so it dies with
-it), `ui/button` (everything left — the last domino). `ui/select` and
-`ui/combobox` died with the CompDetail conversion (deleted 2026-07-21);
-`ui/checkbox` died with the CompWaypoints conversion (deleted 2026-07-21);
-`ui/alert-dialog`, `ui/dropdown-menu` and `ui/alert` died with the shared
-chrome (deleted 2026-07-27). `ui/badge`, `ui/input-group` and `ui/textarea`
-have no consumers outside `ui/` at all and can go in the final sweep.
+`src/react/one-kit.test.ts` enforces the first rule of this table: no
+`src/react/ui/` directory, and nothing importing from one.
 
 ## Reference
 
