@@ -39,9 +39,35 @@ import {
   pilotPath,
 } from "../../web/frontend/src/react/lib/slug";
 
+import type { AuthUser } from "../../web/frontend/src/auth/client";
+
 interface Env {
   COMPETITION_API: Fetcher;
+  AUTH_API: Fetcher;
   ASSETS: Fetcher;
+}
+
+/**
+ * Resolve the visitor from the forwarded cookie so the rendered page already
+ * knows who they are and the client can skip /api/auth/me entirely — it was
+ * two round trips on every page load, ~30% of all requests on a public page.
+ *
+ * Only called when a cookie is present: an anonymous visitor is signed out by
+ * definition, so the cacheable path stays free of an extra hop. `undefined`
+ * on failure means "unknown" and the client falls back to asking, so an auth
+ * blip can never render a signed-in visitor as signed out.
+ */
+async function fetchVisitor(env: Env, cookie: string): Promise<AuthUser | null | undefined> {
+  try {
+    const res = await env.AUTH_API.fetch(
+      new Request("https://auth.internal/api/auth/me", { headers: { Cookie: cookie } })
+    );
+    if (!res.ok) return undefined;
+    const body = (await res.json()) as { user: AuthUser | null };
+    return body.user ?? null;
+  } catch {
+    return undefined;
+  }
 }
 
 /** When present, the page's stale-first freshness — drives an age-based
@@ -371,6 +397,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const fetcher: FetchFn = (p, init) =>
     env.COMPETITION_API.fetch(new Request(`https://comp.internal${p}`, mergeCookie(init, cookie)));
 
+  // In flight alongside the loader — the render needs both, and neither
+  // depends on the other. An anonymous visitor resolves to null for free.
+  const visitorPromise: Promise<AuthUser | null | undefined> = cookie
+    ? fetchVisitor(env, cookie)
+    : Promise.resolve(null);
+
   let rendered: Rendered;
   try {
     rendered = await match.r.run(fetcher, match.m, url.origin);
@@ -389,9 +421,16 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return canonicalRedirect(url.origin + rendered.canonicalPath + url.search, cookie);
   }
 
+  const user = await visitorPromise;
+  const ssrData = { path, data: rendered.data, user };
+
   let bodyHtml: string;
   try {
-    const stream = await render(path, { path, data: rendered.data });
+    // Render with the query string: it is part of the location the client
+    // hydrates from, and pages read view state out of it (`?class=`, `?task=`).
+    // `ssrData.path` stays the PATHNAME — useInitialData matches it against
+    // location.pathname, which a query-bearing string would never equal.
+    const stream = await render(path + url.search, ssrData);
     bodyHtml = await new Response(stream as ReadableStream).text();
   } catch (err) {
     console.error("SSR render error for", path, err);
@@ -399,7 +438,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
 
   const template = await (await fetchShell(env, url)).text();
-  const html = injectSsr(template, path, bodyHtml, rendered.head, rendered.data);
+  const html = injectSsr(template, path, bodyHtml, rendered.head, ssrData);
 
   return new Response(html, {
     status: 200,
@@ -486,7 +525,7 @@ function injectSsr(
   path: string,
   bodyHtml: string,
   head: HeadTags,
-  data: unknown
+  ssrData: { path: string; data: unknown; user: AuthUser | null | undefined }
 ): string {
   const headTags =
     (head.noindex ? `<meta name="robots" content="noindex">\n` : "") +
@@ -503,7 +542,10 @@ function injectSsr(
 
   // __SSR_DATA__ must run before the client entry module (which sits after the
   // root div in app.html), so the client hydrates from the same loader data.
-  const ssrScript = `<script>window.__SSR_DATA__=${serialize({ path, data })}</script>`;
+  // JSON.stringify drops an `undefined` value entirely, which is exactly the
+  // encoding the client wants: no `user` key means "unknown, go and ask",
+  // distinct from `"user":null` meaning a known signed-out visitor.
+  const ssrScript = `<script>window.__SSR_DATA__=${serialize(ssrData)}</script>`;
   out = out.replace(
     '<div id="root"></div>',
     `<div id="root">${bodyHtml}</div>${ssrScript}`

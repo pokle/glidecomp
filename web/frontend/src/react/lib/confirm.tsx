@@ -1,18 +1,15 @@
 /**
- * Promise-based confirm/alert dialogs on the shadcn AlertDialog — the React
- * equivalent of feedback.ts's confirmDialog()/alertDialog(). Pages call
- * `const confirm = useConfirm()` and `await confirm({...})`.
+ * Promise-based confirm/alert dialogs — the React equivalent of feedback.ts's
+ * confirmDialog()/alertDialog(). Pages call `const confirm = useConfirm()` and
+ * `await confirm({...})`.
+ *
+ * This module is the CONTEXT only, deliberately free of any UI imports: the
+ * provider that renders the dialog lives in `rac/confirm.tsx` (mounted once,
+ * app-wide, by routes.tsx). Keeping the two apart is what lets the provider be
+ * a react-aria-components alertdialog without every `useConfirm()` caller —
+ * including plain non-RAC pages — importing the kit.
  */
-import { createContext, useContext, useRef, useState } from "react";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/react/ui/alert-dialog";
-import { Button } from "@/react/ui/button";
+import { createContext, useContext } from "react";
 
 export interface ConfirmOptions {
   title: string;
@@ -26,67 +23,9 @@ export interface ConfirmOptions {
 
 export type ConfirmFn = (opts: ConfirmOptions) => Promise<boolean>;
 
-/** Exported so an inner provider (e.g. rac/confirm.tsx) can shadow it. */
+/** Supplied by rac/confirm.tsx's ConfirmProvider. */
 export const ConfirmContext = createContext<ConfirmFn>(() => Promise.resolve(false));
 
 export function useConfirm(): ConfirmFn {
   return useContext(ConfirmContext);
-}
-
-export function ConfirmProvider({ children }: { children: React.ReactNode }) {
-  const [opts, setOpts] = useState<ConfirmOptions | null>(null);
-  const resolveRef = useRef<(value: boolean) => void>(() => {});
-
-  const confirm: ConfirmFn = (options) =>
-    new Promise<boolean>((resolve) => {
-      resolveRef.current = resolve;
-      setOpts(options);
-    });
-
-  function finish(value: boolean) {
-    resolveRef.current(value);
-    setOpts(null);
-  }
-
-  return (
-    <ConfirmContext.Provider value={confirm}>
-      {children}
-      <AlertDialog
-        open={opts !== null}
-        onOpenChange={(open) => {
-          if (!open) finish(false);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{opts?.title}</AlertDialogTitle>
-            {opts?.message ? (
-              <AlertDialogDescription>{opts.message}</AlertDialogDescription>
-            ) : null}
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            {opts?.alert ? (
-              <Button type="button" autoFocus onClick={() => finish(true)}>
-                OK
-              </Button>
-            ) : (
-              <>
-                <Button type="button" variant="outline" onClick={() => finish(false)}>
-                  {opts?.cancelLabel ?? "Cancel"}
-                </Button>
-                <Button
-                  type="button"
-                  autoFocus
-                  variant={opts?.destructive ? "destructive" : "default"}
-                  onClick={() => finish(true)}
-                >
-                  {opts?.confirmLabel ?? "Confirm"}
-                </Button>
-              </>
-            )}
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </ConfirmContext.Provider>
-  );
 }

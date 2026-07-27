@@ -16,6 +16,7 @@
 
 import type { XCTask, IGCFile } from '@glidecomp/engine';
 import { parseXCTask } from '@glidecomp/engine';
+import { getCurrentUserOnce } from '../auth/client';
 
 export class AuthRequiredError extends Error {
   constructor() {
@@ -266,18 +267,14 @@ class StorageService {
     if (this.initPromise) return this.initPromise;
     this.initPromise = (async () => {
       try {
-        const res = await fetch('/api/auth/me', { credentials: 'include' });
-        if (res.ok) {
-          const data = (await res.json()) as {
-            user: { username: string | null } | null;
-          };
-          this.session = {
-            signedIn: !!data.user,
-            username: data.user?.username ?? null,
-          };
-        } else {
-          this.session = { signedIn: false, username: null };
-        }
+        // Shared with every other consumer on the page (see auth/client) —
+        // this used to be its own /api/auth/me, so the analysis page asked
+        // the same question three times on load.
+        const user = await getCurrentUserOnce();
+        this.session = {
+          signedIn: !!user,
+          username: user?.username ?? null,
+        };
       } catch {
         this.session = { signedIn: false, username: null };
       }

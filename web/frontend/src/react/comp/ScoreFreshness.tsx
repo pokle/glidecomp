@@ -10,7 +10,7 @@
  * than an explicit reload.
  */
 import { useEffect, useState } from "react";
-import { Alert, AlertDescription, AlertTitle } from "@/react/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { Button } from "@/react/rac/button";
 import { ProgressBar } from "@/react/rac/progress";
 import { Timestamp } from "../components/Timestamp";

@@ -51,6 +51,9 @@ const SAMPLE_IGC_FILES = JSON.stringify(
   )
 );
 
+/** Remaining forced auth-hop failures, per "test-auth-fail" key. */
+const authFailures = new Map<string, number>();
+
 export default defineConfig(async () => {
   const migrations = await readD1Migrations(path.join(__dirname, "../../db/migrations"));
 
@@ -67,8 +70,24 @@ export default defineConfig(async () => {
           serviceBindings: {
             // Mock AUTH_API: reads a "test-user" cookie to determine which user
             // is authenticated. No cookie or "test-user=none" → unauthenticated.
+            //
+            // A "test-auth-fail=<key>:<n>" cookie makes the first n calls
+            // bearing that key answer 500 instead, so a test can prove the
+            // caller rides out a transient auth hop rather than silently
+            // downgrading the request to anonymous (issue #481). The key
+            // scopes the countdown to one test; this callback runs on the
+            // Node host, so the Map survives across calls within a run.
             AUTH_API(request: Request): Response {
               const cookie = request.headers.get("cookie") ?? "";
+              const fail = cookie.match(/test-auth-fail=([^;:]+):(\d+)/);
+              if (fail) {
+                const [, key, count] = fail;
+                const remaining = authFailures.get(key) ?? Number(count);
+                if (remaining > 0) {
+                  authFailures.set(key, remaining - 1);
+                  return new Response("auth-api blew up", { status: 500 });
+                }
+              }
               const match = cookie.match(/test-user=([^;]+)/);
               const userId = match?.[1];
               const user =

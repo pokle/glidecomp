@@ -19,7 +19,7 @@ import { Loading } from "@/react/rac/progress";
 import { SimpleSelect } from "@/react/rac/select";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { DivergingMeter } from "@/react/rac/meter";
-import { Alert, AlertDescription, AlertTitle } from "@/react/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { cn } from "@/react/lib/utils";
 import { VerdictBadge, VerdictLegend } from "../field-analysis/SeparationRanking";
 import { ConsistencyChip } from "../field-analysis/ConsistencyChip";

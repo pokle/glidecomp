@@ -23,10 +23,16 @@ export async function render(
   url: string,
   initialData: InitialData
 ): Promise<ReadableStream<Uint8Array>> {
-  const pathname = new URL(url, "http://ssr.local").pathname;
+  // Pathname AND search: several public pages read view state from the query
+  // (`?class=` on both analysis pages, `?task=` on the scores page), and the
+  // client's first render always sees it. Rendering the pathname alone made
+  // the server pick the default view and the client hydrate a different one —
+  // a mismatch on every shared deep link. The fragment never reaches a
+  // server, so there is nothing to carry there.
+  const { pathname, search } = new URL(url, "http://ssr.local");
   return renderToReadableStream(
-    <AppProviders>
-      <StaticRouter location={pathname}>
+    <AppProviders initialUser={initialData.user}>
+      <StaticRouter location={pathname + search}>
         <InitialDataProvider value={initialData}>
           <AppRoutes />
         </InitialDataProvider>

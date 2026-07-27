@@ -37,7 +37,6 @@ import { Button, ToggleButton } from "@/react/rac/button";
 import { Loading } from "@/react/rac/progress";
 import { SearchField } from "@/react/rac/field";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
-import { RacConfirmProvider } from "@/react/rac/confirm";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
@@ -46,6 +45,7 @@ import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { underComp } from "../lib/crumbs";
 import { idFromSegment, compWaypointsPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
+import { fetchWithRetry } from "../comp/types";
 import { formatCoords, parseCoords } from "../comp/route-editor";
 import { AddWaypointDialog } from "../comp/AddWaypointDialog";
 import { TabulatorGrid } from "../comp/TabulatorGrid";
@@ -165,14 +165,6 @@ const PIN_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>';
 
 export function CompWaypoints() {
-  return (
-    <RacConfirmProvider>
-      <CompWaypointsContent />
-    </RacConfirmProvider>
-  );
-}
-
-function CompWaypointsContent() {
   const { compId: compParam } = useParams<{ compId: string }>();
   const compId = idFromSegment(compParam ?? "");
   const { user } = useUser();
@@ -236,9 +228,16 @@ function CompWaypointsContent() {
     void (async () => {
       setLoading(true);
       try {
+        // Both go through fetchWithRetry: a dropped comp GET used to leave
+        // this page with no name, no waypoints and no admin controls, and a
+        // bare rejection nobody caught (issue #481).
         const [compRes, wpRes] = await Promise.all([
-          api.api.comp[":comp_id"].$get({ param: { comp_id: compId } }),
-          api.api.comp[":comp_id"].waypoints.$get({ param: { comp_id: compId } }),
+          fetchWithRetry(() =>
+            api.api.comp[":comp_id"].$get({ param: { comp_id: compId } })
+          ),
+          fetchWithRetry(() =>
+            api.api.comp[":comp_id"].waypoints.$get({ param: { comp_id: compId } })
+          ),
         ]);
         if (cancelled) return;
         if (!compRes.ok) {
@@ -259,6 +258,10 @@ function CompWaypointsContent() {
         setRows(wpData.waypoints.map(toRow));
         setSavedJson(baselineJson(wpData.waypoints));
         setFitNonce((n) => n + 1);
+      } catch {
+        // Every retry was dropped. Say so, rather than rendering an empty
+        // waypoint list that looks like a comp with no waypoints.
+        if (!cancelled) setNotFound(true);
       } finally {
         if (!cancelled) setLoading(false);
       }

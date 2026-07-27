@@ -24,6 +24,8 @@ interface Discovered {
   taskId: string;
   pilotId: string;
   pilotName: string;
+  /** Every pilot class in the comp — the `?class=` cases need a real one. */
+  pilotClasses: string[];
 }
 
 /**
@@ -47,7 +49,7 @@ async function discover(request: APIRequestContext): Promise<Discovered> {
   const listRes = await request.get("/api/comp");
   expect(listRes.ok()).toBeTruthy();
   const { comps } = (await listRes.json()) as {
-    comps: Array<{ comp_id: string; name: string; test: boolean }>;
+    comps: Array<{ comp_id: string; name: string; test: boolean; pilot_classes?: string[] }>;
   };
   const publicComps = comps.filter((c) => !c.test);
   if (publicComps.length === 0) {
@@ -84,6 +86,7 @@ async function discover(request: APIRequestContext): Promise<Discovered> {
       taskId: pilot.tasks[0].task_id,
       pilotId: pilot.comp_pilot_id,
       pilotName: pilot.pilot_name,
+      pilotClasses: comp.pilot_classes ?? [],
     };
   }
 
@@ -264,23 +267,33 @@ test.describe("URL canonicalisation (301 to slug-id)", () => {
   });
 });
 
+/**
+ * The cold field-analysis path returns `pending` and schedules a background
+ * compute, so poll to give it a chance to warm. Callers must still tolerate a
+ * pending result — a slow compute must never make a test flaky.
+ */
+async function warmTaskAnalysis(
+  request: APIRequestContext,
+  compId: string,
+  taskId: string
+): Promise<void> {
+  const apiUrl = `/api/comp/${compId}/task/${taskId}/field-analysis`;
+  for (let i = 0; i < 20; i++) {
+    const r = await request.get(apiUrl);
+    if (r.ok()) {
+      const b = (await r.json()) as { pending: boolean };
+      if (!b.pending) break;
+    }
+    await new Promise((res) => setTimeout(res, 2000));
+  }
+}
+
 test.describe("SSR — field analysis (public)", () => {
   test("task field analysis server-renders (warm content or a pending notice)", async ({
     request,
   }) => {
     const { compId, taskId } = await discover(request);
-    // The cold path returns pending and schedules a background compute. Poll
-    // to give it a chance to warm; the assertion below tolerates either state,
-    // so a slow compute never makes this flaky.
-    const apiUrl = `/api/comp/${compId}/task/${taskId}/field-analysis`;
-    for (let i = 0; i < 20; i++) {
-      const r = await request.get(apiUrl);
-      if (r.ok()) {
-        const b = (await r.json()) as { pending: boolean };
-        if (!b.pending) break;
-      }
-      await new Promise((res) => setTimeout(res, 2000));
-    }
+    await warmTaskAnalysis(request, compId, taskId);
 
     const res = await request.get(`/comp/${compId}/analysis/task/${taskId}`);
     expect(res.ok()).toBeTruthy();
@@ -314,6 +327,59 @@ test.describe("SSR — field analysis (public)", () => {
     expect(res.status()).toBe(404);
     const html = await res.text();
     expect(html).toContain('name="robots" content="noindex"');
+  });
+
+  /**
+   * The query string is part of the rendered location, not just a client-side
+   * afterthought. The server used to render the pathname alone, so `?class=`
+   * came back as the FIRST class no matter what the link asked for — and the
+   * client, which does read the query, then hydrated a different tree.
+   *
+   * The COMP report, not a task's: the sample comp's classes fly different
+   * tasks, so a task report only ever has the one class and `?class=` there
+   * can never differ from the default. The comp aggregate carries every class
+   * that has a warm task report, so this warms until a second one appears.
+   *
+   * Asserted on the print-only "Pilot class: X" line, which states the
+   * selection as markup (the select itself carries it only as a DOM property).
+   */
+  test("a ?class= deep link server-renders that class, not the default", async ({
+    request,
+  }) => {
+    test.slow(); // warms several task reports before it can assert anything
+    const { compId } = await discover(request);
+
+    // Reading the comp endpoint schedules revalidation for each cold task, so
+    // polling it is also what warms it.
+    let classes: string[] = [];
+    for (let i = 0; i < 45; i++) {
+      const r = await request.get(`/api/comp/${compId}/field-analysis`);
+      if (r.ok()) {
+        const b = (await r.json()) as {
+          classes: Array<{ pilot_class: string }>;
+          pending_task_count: number;
+        };
+        classes = b.classes.map((c) => c.pilot_class);
+        // Two is all this needs; and once nothing is pending, no further
+        // polling can add a class.
+        if (classes.length >= 2 || b.pending_task_count === 0) break;
+      }
+      await new Promise((res) => setTimeout(res, 2000));
+    }
+    test.skip(
+      classes.length < 2,
+      `comp has ${classes.length} warm class(es) — nothing to switch to`
+    );
+
+    // The second class: asking for the first proves nothing, since that is
+    // what the broken server rendered too.
+    const wanted = classes[1];
+    const res = await request.get(
+      `/comp/${compId}/analysis?class=${encodeURIComponent(wanted)}`
+    );
+    expect(res.ok()).toBeTruthy();
+    const html = await res.text();
+    expect(html).toContain(`<strong>${wanted}</strong>`);
   });
 });
 
@@ -374,25 +440,34 @@ test.describe("SSR — hydration is clean (real browser)", () => {
     ":pilot",
     ":compAnalysis",
     ":taskAnalysis",
+    // WITH a query string. Not the guard for the pathname-only SSR bug — both
+    // of these passed while it was live (the "?class= deep link" test above is
+    // what catches that). They are here because no URL in this list carried a
+    // query at all, so the whole "a query-bearing URL hydrates cleanly" case
+    // was unexercised — and the next query-driven view will need it.
+    ":scoresByTask",
+    ":compAnalysisByClass",
   ] as const) {
     test(`no hydration mismatch on ${path}`, async ({ page, request }) => {
       const d = await discover(request);
-      const url =
-        path === "/comp"
-          ? "/comp"
-          : path === ":compHub"
-            ? `/comp/${d.compId}`
-            : path === ":scores"
-              ? `/comp/${d.compId}/scores`
-              : path === ":waypoints"
-                ? `/comp/${d.compId}/waypoints`
-                : path === ":task"
-                  ? `/comp/${d.compId}/task/${d.taskId}`
-                  : path === ":pilot"
-                    ? `/comp/${d.compId}/task/${d.taskId}/pilot/${d.pilotId}`
-                    : path === ":compAnalysis"
-                      ? `/comp/${d.compId}/analysis`
-                      : `/comp/${d.compId}/analysis/task/${d.taskId}`;
+      // A class the comp actually has, so the query is not silently discarded
+      // as unknown by both sides (which would agree, and prove nothing).
+      const cls = d.pilotClasses[d.pilotClasses.length - 1];
+      const urls: Record<typeof path, string> = {
+        "/comp": "/comp",
+        ":compHub": `/comp/${d.compId}`,
+        ":scores": `/comp/${d.compId}/scores`,
+        ":waypoints": `/comp/${d.compId}/waypoints`,
+        ":task": `/comp/${d.compId}/task/${d.taskId}`,
+        ":pilot": `/comp/${d.compId}/task/${d.taskId}/pilot/${d.pilotId}`,
+        ":compAnalysis": `/comp/${d.compId}/analysis`,
+        ":taskAnalysis": `/comp/${d.compId}/analysis/task/${d.taskId}`,
+        ":scoresByTask": `/comp/${d.compId}/scores?task=${d.taskId}`,
+        ":compAnalysisByClass": `/comp/${d.compId}/analysis${
+          cls ? `?class=${encodeURIComponent(cls)}` : ""
+        }`,
+      };
+      const url = urls[path];
 
       const hydrationErrors: string[] = [];
       page.on("console", (msg) => {

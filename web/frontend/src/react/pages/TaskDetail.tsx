@@ -29,7 +29,6 @@ import {
 import { TextField, Label, Description } from "@/react/rac/field";
 import { Checkbox, CheckboxGroup } from "@/react/rac/checkbox";
 import { Tag, TagGroup } from "@/react/rac/tag-group";
-import { RacConfirmProvider } from "@/react/rac/confirm";
 import { DatePicker, TimePicker } from "@/react/ui/date-picker";
 import { api } from "../../comp/api";
 import {
@@ -70,14 +69,6 @@ import { useCanonicalPath } from "../lib/use-canonical-path";
 import { cn } from "../lib/utils";
 
 export function TaskDetail() {
-  return (
-    <RacConfirmProvider>
-      <TaskDetailContent />
-    </RacConfirmProvider>
-  );
-}
-
-function TaskDetailContent() {
   const { compId: compParam, taskId: taskParam } = useParams<{ compId: string; taskId: string }>();
   const compId = idFromSegment(compParam ?? "");
   const taskId = idFromSegment(taskParam ?? "");

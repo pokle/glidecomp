@@ -294,8 +294,8 @@ export const preferencesSync = new PreferencesSync(
 // Skipped under vitest (MODE === 'test') so tests get a quiet module — they
 // instantiate PreferencesSync directly with mocked fetch.
 async function bootstrap(): Promise<void> {
-  const { getCurrentUser } = await import("./client");
-  const user = await getCurrentUser();
+  const { getCurrentUserOnce } = await import("./client");
+  const user = await getCurrentUserOnce();
   await preferencesSync.hydrate(user);
   if (user) {
     const { runUserFilesMigration } = await import("./user-files-migration");
