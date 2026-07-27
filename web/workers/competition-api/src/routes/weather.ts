@@ -1,5 +1,10 @@
 /**
- * Task weather endpoints — what the sky was doing while the task was flown.
+ * Task weather endpoints — what the sky was doing while the task was flown,
+ * or what it is expected to do for a task that hasn't been flown yet. Tasks
+ * are commonly set the day before, so the FUTURE case is a first-class one:
+ * the engine's registry answers it from a live forecast, and this route only
+ * has to know that a task set beyond the forecast horizon gets a "not yet"
+ * instead of a spinner (`too_far_ahead`).
  *
  * Two independent things travel together here because a reader wants both at
  * once and they answer each other:
@@ -45,7 +50,11 @@ import {
   weatherRowHasResult,
   type TaskWeatherRow,
 } from "../weather-store";
-import { weatherQueryKey } from "@glidecomp/engine";
+import {
+  FORECAST_HORIZON_DAYS,
+  beyondForecastHorizon,
+  weatherQueryKey,
+} from "@glidecomp/engine";
 
 type Variables = {
   user: AuthUser;
@@ -140,6 +149,7 @@ export const weatherRoutes = new Hono<HonoEnv>()
             weather: null,
             stale: false,
             pending: false,
+            too_far_ahead: false,
             error: "Task has no route or date — nothing to look up the weather for",
           },
           200,
@@ -150,7 +160,13 @@ export const weatherRoutes = new Hono<HonoEnv>()
       const key = weatherQueryKey(query);
       const row = await readWeatherRow(c.env.DB, taskId);
       const nowMs = Date.now();
-      const wantsFetch = shouldFetchWeather(row, key, nowMs);
+
+      // A comp can be laid out weeks ahead, and no forecast reaches that far.
+      // Saying so is both kinder and cheaper than scheduling a fetch that can
+      // only fail and then hold the task in a backoff of up to a day — which
+      // is precisely the window in which the forecast becomes available.
+      const tooFarAhead = beyondForecastHorizon(query, nowMs);
+      const wantsFetch = !tooFarAhead && shouldFetchWeather(row, key, nowMs);
       if (wantsFetch) scheduleWeatherFetch(c, [taskId]);
 
       if (row && weatherRowHasResult(row)) {
@@ -165,6 +181,7 @@ export const weatherRoutes = new Hono<HonoEnv>()
               // stale case is a provisional same-day answer firming up.
               stale: wantsFetch,
               pending: false,
+              too_far_ahead: false,
               error: row.error || null,
             },
             200,
@@ -180,21 +197,27 @@ export const weatherRoutes = new Hono<HonoEnv>()
         scheduleWeatherFetch(c, [taskId]);
       }
 
-      // No servable answer. Either it has never been fetched (pending, the
-      // fetch is scheduled above) or every attempt failed and we're inside
-      // the backoff — in which case report the failure rather than a
-      // spinner that will never resolve.
+      // No servable answer. Either the task is further ahead than anyone can
+      // forecast, or it has never been fetched (pending, the fetch is
+      // scheduled above), or every attempt failed and we're inside the
+      // backoff — in which case report the failure rather than a spinner that
+      // will never resolve.
       const failing = row?.error && !wantsFetch;
       return c.json(
         {
           ...base,
           weather: null,
-          stale: true,
-          pending: !failing,
-          error: failing ? row!.error : null,
+          stale: !tooFarAhead,
+          pending: !failing && !tooFarAhead,
+          too_far_ahead: tooFarAhead,
+          error: tooFarAhead
+            ? `No forecast reaches more than ${FORECAST_HORIZON_DAYS} days ahead`
+            : failing
+              ? row!.error
+              : null,
         },
         200,
-        { "X-Cache": "MISS", "Cache-Control": cacheControl(c, true) }
+        { "X-Cache": "MISS", "Cache-Control": cacheControl(c, !tooFarAhead) }
       );
     }
   )

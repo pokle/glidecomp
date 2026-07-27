@@ -21,5 +21,11 @@
  *     forecast claims boundary_layer for dates it has none). Stored rows
  *     carry the old over-claim, which is exactly the thing the UI now reads,
  *     so they must re-fetch.
+ * 4 — added the live-forecast provider, and the archives now refuse a window
+ *     that hasn't elapsed. Rows written at v3 for a future or still-running
+ *     task carry the archived forecast's "modelled" stamp on what was
+ *     actually a prediction, and future-dated tasks whose fetch failed hold
+ *     an error row that would sit out a backoff of up to 24 hours. Both are
+ *     wrong now, so every row re-fetches.
  */
-export const WEATHER_SCHEMA_VERSION = 3;
+export const WEATHER_SCHEMA_VERSION = 4;

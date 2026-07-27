@@ -65,13 +65,16 @@ export function WindLegsGantt({
 
   // Just the race's bookends here — the first gate and the deadline. The
   // full gate sequence is labelled on the climb chart above; repeating all
-  // of it would bury the bars.
-  const rules = timing
-    ? [
-        ...timing.startGates.slice(0, 1).map((g) => new Date(g).getTime()),
-        ...(timing.deadline ? [new Date(timing.deadline).getTime()] : []),
-      ]
-    : [];
+  // of it would bury the bars. Dropped when they fall outside the axis
+  // window (which is framed by the field's own flying, ±2 h).
+  const rules = (
+    timing
+      ? [
+          ...timing.startGates.slice(0, 1).map((g) => new Date(g).getTime()),
+          ...(timing.deadline ? [new Date(timing.deadline).getTime()] : []),
+        ]
+      : []
+  ).filter((ms) => ms >= axis.domainStart && ms <= axis.domainEnd);
 
   const legReadout = (l: WindLegsSeries["legs"][number]): string =>
     l.from !== null && l.to !== null && l.speedKmh !== null && l.directionDeg !== null

@@ -36,6 +36,14 @@ export interface TaskWeatherData {
   stale: boolean;
   /** Never fetched yet; one is being fetched in the background. Poll. */
   pending: boolean;
+  /**
+   * The task is set further ahead than any forecast reaches — a real state of
+   * a comp laid out weeks in advance, and the only "no weather" case that
+   * resolves itself with the passage of time. Distinct from `error` because
+   * it is the one the UI can safely put in its own words; the rest are
+   * provider failures, whose text is for an admin, not a reader.
+   */
+  too_far_ahead: boolean;
   /** Why there is no weather (no route, or every provider failed). */
   error: string | null;
 }
@@ -50,6 +58,11 @@ export function sourceKindLabel(kind: string): string {
   switch (kind) {
     case "model":
       return "modelled";
+    // A day that hasn't happened (or hasn't finished). Same model as
+    // "modelled", opposite side of the event — which is the one distinction a
+    // reader must never have to work out for themselves.
+    case "forecast":
+      return "forecast";
     case "reanalysis":
       return "reanalysis";
     case "observation":

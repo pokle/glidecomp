@@ -8,8 +8,9 @@
  * `whitespace-pre-line`, which is the only formatting a note like
  * "overdeveloped by 2pm / glass off at 3" actually needs.
  *
- * Shared by the task page and the field-analysis day panel so the two can
- * never drift into showing the same text differently.
+ * Shared by the task page's Weather section and the field-analysis page's
+ * weather section so the two can never drift into showing the same text
+ * differently.
  */
 export function WeatherNotesBlock({
   notes,

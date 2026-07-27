@@ -14,11 +14,9 @@ import { MetricMethod } from "./MetricExplanation";
 import { PerPilotMetricTable } from "./PerPilotMetricTable";
 import { ReportTableView, ReportTableTitle } from "./ReportTableView";
 import { SeriesChart } from "./charts/SeriesChart";
-import { DayProfilePanel } from "./charts/day-profile/DayProfilePanel";
 import { bestCorrelation } from "./SeparationRanking";
 import { verdictWords } from "./units";
 import type { FieldAnalysisReport, MetricReport, MetricFamily } from "./types";
-import type { TaskWeather } from "@/react/weather/types";
 
 /** DOM id of a family's section — the TOC's scroll target. */
 export function familySectionId(family: MetricFamily): string {
@@ -45,8 +43,6 @@ export function MetricFamilySection({
   metrics,
   report,
   compTimezone = null,
-  weather = null,
-  weatherNotes = "",
   defaultExpanded,
   isExpanded,
   onExpandedChange,
@@ -58,12 +54,6 @@ export function MetricFamilySection({
   report: FieldAnalysisReport;
   /** Competition IANA zone; report time cells render in it. */
   compTimezone?: string | null;
-  /** Modelled conditions for the task window — the day family stacks them
-   * under its own charts on the shared axis. Null everywhere else (the comp
-   * aggregate has no single task, so no single day's weather). */
-  weather?: TaskWeather | null;
-  /** The organizer's account of the day, shown with those charts. */
-  weatherNotes?: string;
   defaultExpanded?: boolean;
   /** Controlled expansion (the task page owns it so the TOC can open a
    * collapsed family before scrolling to it). */
@@ -120,17 +110,11 @@ export function MetricFamilySection({
           </p>
         ))}
 
-        {/* The day family opens with its series composed onto one shared
-            time axis — the panel is why SeriesChart skips these kinds. */}
-        {family === "day" ? (
-          <DayProfilePanel
-            metrics={metrics}
-            compTimezone={compTimezone}
-            weather={weather}
-            weatherNotes={weatherNotes}
-          />
-        ) : null}
-
+        {/* The day family's charting series are NOT rendered here: the
+            page's "What the weather did" section composes them (via
+            DayProfilePanel) onto one axis with the modelled weather, which
+            is also why SeriesChart skips those kinds. This family keeps the
+            exact tables. */}
         {perPilotMetrics.length > 0 ? (
           <PerPilotMetricTable
             report={report}

@@ -44,7 +44,7 @@ import { useConfirm } from "../lib/confirm";
 import { useAdminView, useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
 import { SectionHeader } from "../components/SectionHeader";
-import { WeatherNotesSection } from "../weather/WeatherNotesSection";
+import { WeatherSection } from "../weather/WeatherSection";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { TaskResults } from "../comp/TaskResults";
 import { CompNameProvider } from "../comp/comp-name-context";
@@ -314,14 +314,16 @@ function TaskDetailContent() {
         onEditRoute={() => setRouteOpen(true)}
       />
 
-      {/* The organizer's account of the day. Sits directly under the route,
-          above the results: it is context for reading everything below it,
-          and the field-analysis page shows the same text beside its charts. */}
-      <WeatherNotesSection
+      {/* The day's weather — the organizer's notes plus the modelled
+          conditions (the same charts the field-analysis report leads with).
+          Sits directly under the route, above the results: the conditions
+          are context for reading everything below them. */}
+      <WeatherSection
         compId={compId}
         taskId={taskId}
         notes={task.weather_notes}
         isAdmin={isAdmin}
+        compTimezone={comp?.timezone ?? null}
         onSaved={(weather_notes) =>
           setTask((prev) => (prev ? { ...prev, weather_notes } : prev))
         }

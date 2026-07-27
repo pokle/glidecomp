@@ -64,6 +64,13 @@ export type WeatherVariable =
 export type WeatherSourceKind =
   /** An operational forecast model run, archived. Closest to "what happened". */
   | "model"
+  /**
+   * A LIVE forecast: a day that has not happened yet, or has not finished.
+   * The same model as "model" above, caught on the other side of the event —
+   * which is the whole reason it is a separate kind. A reader must be able to
+   * tell a prediction from a record without checking the date.
+   */
+  | "forecast"
   /** A reanalysis (ERA5 and friends): consistent, coarse, hindsight-fitted. */
   | "reanalysis"
   /** Actual instrument readings (METAR, AWS, radiosonde). */

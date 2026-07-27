@@ -1,28 +1,36 @@
 /**
- * The day at a glance: the day family's charting series composed onto ONE
- * shared time axis — wind by hour on top, the climb quantile fan (with the
- * day-timing overlays) in the middle, the per-leg wind Gantt at the bottom.
- * A vertical scan through the stack reads "at 2pm: wind 18 km/h NW, climbs
- * at their best, most of the field on leg 3" — which no single chart or
- * table can say.
+ * The day, flown and modelled, on ONE shared time axis — the body of the
+ * field-analysis page's "What the weather did" section.
  *
- * The series come from THREE different metrics (day.wind,
- * day.climb_by_hour, day.airtime_quality); this panel is why SeriesChart
- * deliberately doesn't render them per-metric. Each chart is a labelled
- * `role="img"`; the metrics' tables below the panel remain the exact,
- * screen-reader-navigable reading, and one shared readout line voices
- * whatever the pointer is over.
+ * TWO labelled groups, stacked deliberately rather than overlaid:
  *
- * Below those sits a SECOND group on the same axis: what the meteorology
- * says the day did (wind, cloud, thermal ceiling), from an outside provider
- * — see the engine's weather/ module. Stacked rather than overlaid onto the
- * pilot-derived charts, deliberately: the two answer the same questions from
- * incompatible evidence (a field of tracklogs versus a grid cell kilometres
- * wide), and overlaying them would imply one is a correction of the other.
- * Side by side on a shared clock, a disagreement stays legible as a
- * disagreement. Every weather chart carries its source inside the plot, and
- * the group is fronted by the organizer's own notes, which are the only
- * local ground truth on the page.
+ * 1. "From the weather model" — what an outside provider says the day did
+ *    (wind, cloud, thermal ceiling); see the engine's weather/ module. The
+ *    forecast leads: it is the day as predicted, before any pilot flew it.
+ *
+ * 2. "From the pilots' tracks" — the day family's charting series: wind by
+ *    hour on top, the climb quantile fan (with the day-timing overlays) in
+ *    the middle, the per-leg wind Gantt at the bottom. The series come from
+ *    THREE different metrics (day.wind, day.climb_by_hour,
+ *    day.airtime_quality); this panel is why SeriesChart deliberately
+ *    doesn't render them per-metric.
+ *
+ * The two answer the same questions from incompatible evidence (a field of
+ * tracklogs versus a grid cell kilometres wide), and overlaying them would
+ * imply one is a correction of the other. Side by side on a shared clock, a
+ * vertical scan reads "at 2pm: the model had 30 km/h NW, the field's circles
+ * said 24; climbs at their best, most of the field on leg 3" — and a
+ * disagreement stays legible as a disagreement. Each group carries an
+ * explicit source label so a reader always knows which evidence they are
+ * looking at; every modelled chart additionally carries its provider inside
+ * the plot.
+ *
+ * Each chart is a labelled `role="img"`; the day metrics' tables further
+ * down the page remain the exact, screen-reader-navigable reading, and one
+ * shared readout line voices whatever the pointer is over.
+ *
+ * The task page shows the modelled group alone (TaskWeatherPanel) — it has
+ * no per-pilot series to set against the model.
  */
 import { useMemo, useState } from "react";
 import type {
@@ -40,30 +48,29 @@ import { PLOT_LEFT, PLOT_RIGHT } from "./shared";
 import { WindHourlyChart } from "./WindHourlyChart";
 import { ClimbHourlyChart } from "./ClimbHourlyChart";
 import { WindLegsGantt } from "./WindLegsGantt";
-import { MetWindChart } from "./MetWindChart";
-import { MetSkyChart } from "./MetSkyChart";
-import { MetThermalChart } from "./MetThermalChart";
-import { sampleOffset, weatherInstants } from "./met-shared";
-import { WeatherNotesBlock } from "@/react/weather/WeatherNotesBlock";
+import { MetChartsGroup, MetAttribution } from "./MetChartsGroup";
+import { weatherInstants } from "./met-shared";
 
 const HOUR_MS = 3_600_000;
 
+/** How far the axis extends past the field's own flying, each side. Enough
+ * to show the morning that set the day up and the glass-off after the last
+ * landing, without the whole-day weather answer dragging the axis out to
+ * midnight. */
+const WINDOW_PAD_MS = 2 * HOUR_MS;
+
 /**
- * Every instant a set of day-profile series mentions, as epoch ms.
- *
- * The weather hours are included, so the whole stack — pilot-derived and
- * modelled alike — shares one domain. Excluding them would be the subtle
- * kind of wrong: each chart would still LOOK aligned while a weather hour
- * sat at a different x than the flight hour beside it. The cost is that the
- * task's ±1 h of weather padding widens the axis a little, which is a fair
- * trade for showing the morning that set the day up.
+ * Every instant the FLOWN evidence occupies, as epoch ms: the pilot-derived
+ * hour buckets (start and end of each), the per-leg spans, and every
+ * takeoff. Deliberately NOT the task-clock markers (window open, gates,
+ * deadline) or the weather hours — the axis window is framed by when the
+ * field actually flew, and everything else is clamped into it.
  */
-function collectInstants(
+function flownInstants(
   wind: WindHourlySeries | null,
   climb: ClimbHourlySeries | null,
   legs: WindLegsSeries | null,
-  timing: DayTimingSeries | null,
-  weatherHours: readonly { t: string }[] = []
+  timing: DayTimingSeries | null
 ): number[] {
   const out: number[] = [];
   const push = (iso: string | null | undefined) => {
@@ -83,76 +90,38 @@ function collectInstants(
     push(l.from);
     push(l.to);
   }
-  if (timing) {
-    timing.takeoffs.forEach(push);
-    timing.startGates.forEach(push);
-    push(timing.launchOpen);
-    push(timing.deadline);
-    push(timing.bestHour?.from);
-    push(timing.bestHour?.to);
-  }
-  out.push(...weatherInstants(weatherHours));
+  timing?.takeoffs.forEach(push);
   return out.filter((t) => Number.isFinite(t));
 }
 
-/**
- * The provenance clause after the grid coordinates: cell size, how far the
- * sample sits from the task, and how far its terrain is from the real
- * terrain.
- *
- * Assembled here rather than inline because each part is independently
- * omittable — a provider that cannot honestly state its resolution (see
- * `WeatherSource.resolutionKm`) simply doesn't get that clause, rather than
- * printing a guess.
- */
-function sampleProvenance(weather: TaskWeather): string {
-  const { distanceKm, elevationDeltaM } = sampleOffset(weather);
-  const parts: string[] = [];
-
-  if (weather.source.resolutionKm !== null) {
-    parts.push(`~${weather.source.resolutionKm} km grid`);
-  } else {
-    // Honest about the gap: best-match picks a model per location and the
-    // API does not say which, so the cell size genuinely isn't knowable here.
-    parts.push("grid size varies by location");
-  }
-  if (distanceKm !== null && distanceKm >= 0.1) {
-    parts.push(`${distanceKm.toFixed(1)} km from the task centre`);
-  }
-  if (weather.source.pointElevationM !== null) {
-    const grid = Math.round(weather.source.pointElevationM);
-    if (elevationDeltaM !== null && Math.abs(elevationDeltaM) >= 50) {
-      // The caveat worth spelling out: heights on the thermal chart are AGL
-      // from THIS datum, which a smoothed grid can put hundreds of metres
-      // below the ground the pilots actually flew over.
-      const delta = Math.round(elevationDeltaM);
-      parts.push(
-        `grid elevation ${grid} m, ${Math.abs(delta)} m ${delta < 0 ? "below" : "above"} the task's terrain`
-      );
-    } else {
-      parts.push(`grid elevation ${grid} m`);
-    }
-  }
-
-  return parts.length > 0 ? ` (${parts.join("; ")}).` : ".";
+/** A group's source label: the one line that says which evidence the charts
+ * beneath it are drawn from. h3 because the panel lives inside the page's
+ * h2 "What the weather did" section. */
+function GroupHeading({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="space-y-0.5 pt-2">
+      <h3 className="text-sm font-semibold">{title}</h3>
+      <p className="text-xs text-muted-foreground">{detail}</p>
+    </div>
+  );
 }
 
 export function DayProfilePanel({
   metrics,
   compTimezone,
   weather = null,
-  weatherNotes = "",
+  weatherPending = false,
 }: {
   metrics: MetricReport[];
   /** Competition IANA zone; the axis ticks in it (viewer-local when null). */
   compTimezone: string | null;
   /** Modelled conditions for the task window; null while loading, when the
    * task has no route, or when every provider failed. The panel degrades to
-   * the pilot-derived charts alone rather than showing an empty section. */
+   * the pilot-derived charts alone rather than showing an empty group. */
   weather?: TaskWeather | null;
-  /** The organizer's account of the day. Shown above the weather charts
-   * because a human who was there outranks a grid cell. */
-  weatherNotes?: string;
+  /** True while an answer is still on its way — the modelled group shows a
+   * placeholder line rather than vanishing and popping in. */
+  weatherPending?: boolean;
 }) {
   const timeZone = compTimezone ?? undefined;
   const [readout, setReadout] = useState<string | null>(null);
@@ -167,29 +136,62 @@ export function DayProfilePanel({
     };
   }, [metrics]);
 
-  const weatherHours = weather?.hours ?? [];
+  // The axis window: when the field actually flew, plus two hours either
+  // side. The task's clock markers and the weather answer (which can span a
+  // whole day when the task defines no times) are clamped INTO this window
+  // rather than allowed to stretch it — an axis running to midnight is dead
+  // space on a chart about a flying day. With no flown series at all, the
+  // weather hours are the only evidence and frame the window themselves.
+  const { windowStartMs, windowEndMs, shownWeatherHours } = useMemo(() => {
+    const flown = flownInstants(wind, climb, legs, timing);
+    const allWeather = weather?.hours ?? [];
+    if (flown.length === 0) {
+      const instants = weatherInstants(allWeather);
+      if (instants.length === 0)
+        return { windowStartMs: NaN, windowEndMs: NaN, shownWeatherHours: [] };
+      return {
+        windowStartMs: Math.min(...instants),
+        windowEndMs: Math.max(...instants),
+        shownWeatherHours: allWeather,
+      };
+    }
+    const start = Math.min(...flown) - WINDOW_PAD_MS;
+    const end = Math.max(...flown) + WINDOW_PAD_MS;
+    return {
+      windowStartMs: start,
+      windowEndMs: end,
+      // Whole hour cells only: a partially-inside hour would draw past the
+      // plot edge.
+      shownWeatherHours: allWeather.filter((h) => {
+        const t = new Date(h.t).getTime();
+        return Number.isFinite(t) && t >= start && t + HOUR_MS <= end;
+      }),
+    };
+  }, [wind, climb, legs, timing, weather]);
 
   const axis = useMemo(
     () =>
-      buildTimeAxis(
-        collectInstants(wind, climb, legs, timing, weatherHours),
-        timeZone,
-        [PLOT_LEFT, PLOT_RIGHT]
-      ),
-    [wind, climb, legs, timing, weatherHours, timeZone]
+      Number.isFinite(windowStartMs)
+        ? buildTimeAxis([windowStartMs, windowEndMs], timeZone, [PLOT_LEFT, PLOT_RIGHT])
+        : null,
+    [windowStartMs, windowEndMs, timeZone]
   );
 
   const showWind = wind !== null && wind.hours.length > 0;
   const showClimb = climb !== null && climb.hours.length > 0;
   const showLegs = legs !== null && legs.legs.some((l) => l.n > 0);
-  const showWeather = weather !== null && weatherHours.length > 0;
-  if (!axis || (!showWind && !showClimb && !showLegs && !showWeather)) return null;
+  const showFlown = showWind || showClimb || showLegs;
+  const showWeather = weather !== null && shownWeatherHours.length > 0;
+  // Whether the modelled group occupies the top slot (charts or the pending
+  // placeholder) — the flown group only draws its dividing rule beneath one.
+  const showModelGroup = showWeather || weatherPending;
+  if (!axis || (!showFlown && !showWeather)) return null;
 
   const zone = zoneAbbrev(new Date(axis.domainStart), timeZone);
 
   // The ⓘ text of every metric whose series is actually drawn, inline under
-  // the heading — the panel composes several metrics, so each line carries
-  // its metric's name. Reads with the charts on screen and in print alike.
+  // the group label — the panel composes several metrics, so each line
+  // carries its metric's name. Reads with the charts on screen and in print.
   const shownKinds = new Set<string>([
     ...(showWind ? ["wind-hourly"] : []),
     ...(showClimb ? ["climb-hourly", "day-timing"] : []),
@@ -201,67 +203,65 @@ export function DayProfilePanel({
 
   return (
     <figure className="space-y-1">
-      <figcaption className="text-sm font-medium">The day at a glance</figcaption>
-      {contributors.length > 0 ? (
-        <div className="space-y-0.5 pb-1">
-          {contributors.map((m) => (
-            <p key={m.id} className="text-xs text-muted-foreground">
-              <span className="font-medium">{m.label}.</span> {m.explanation}
-            </p>
-          ))}
-        </div>
-      ) : null}
-      {showWind ? (
-        <WindHourlyChart series={wind} axis={axis} timeZone={timeZone} setReadout={setReadout} />
-      ) : null}
-      {showClimb ? (
-        <ClimbHourlyChart
-          series={climb}
-          timing={timing}
-          axis={axis}
-          timeZone={timeZone}
-          setReadout={setReadout}
-        />
-      ) : null}
-      {showLegs && legs ? (
-        <WindLegsGantt series={legs} timing={timing} axis={axis} timeZone={timeZone} setReadout={setReadout} />
+      {/* ── Group 1: modelled — the day as predicted ──────────────────── */}
+      {showWeather && weather ? (
+        <>
+          <GroupHeading
+            title="From the weather model"
+            detail={`Independent of the tracklogs: ${sourceKindLabel(weather.source.kind)} conditions for the task area from ${weather.source.attribution}.`}
+          />
+          <MetChartsGroup
+            weather={weather}
+            hours={shownWeatherHours}
+            axis={axis}
+            timeZone={timeZone}
+            setReadout={setReadout}
+          />
+        </>
+      ) : weatherPending ? (
+        <>
+          <GroupHeading
+            title="From the weather model"
+            detail="Independent of the tracklogs: modelled conditions for the task area."
+          />
+          <p className="text-sm text-muted-foreground">
+            Fetching the day&rsquo;s weather — it will appear here in a moment.
+          </p>
+        </>
       ) : null}
 
-      {/* ── What the meteorology says, on the same clock ──────────────────
-          A labelled break, because everything above is measured from the
-          pilots' own tracks and everything below is not. */}
-      {weatherNotes.trim() || showWeather ? (
-        <div className="space-y-1 border-t pt-3">
-          <h4 className="text-sm font-medium">What the weather did</h4>
-          <WeatherNotesBlock notes={weatherNotes} />
-          {showWeather && weather ? (
-            <>
-              <MetWindChart
-                hours={weather.hours}
-                source={weather.source}
-                terrainElevationM={weather.resolved.elevationM}
-                axis={axis}
-                timeZone={timeZone}
-                setReadout={setReadout}
-              />
-              {/* Cloud sits ABOVE the ceiling chart, and its lanes run high
-                  at the top — so the stack reads the way the sky is stacked:
-                  cirrus, then the cloud base and thermal top beneath it. */}
-              <MetSkyChart
-                hours={weather.hours}
-                source={weather.source}
-                axis={axis}
-                timeZone={timeZone}
-                setReadout={setReadout}
-              />
-              <MetThermalChart
-                hours={weather.hours}
-                source={weather.source}
-                axis={axis}
-                timeZone={timeZone}
-                setReadout={setReadout}
-              />
-            </>
+      {/* ── Group 2: measured, on the same clock ──────────────────────────
+          A labelled break, because everything above is modelled and
+          everything below is measured from the pilots' own tracks. */}
+      {showFlown ? (
+        <div className={showModelGroup ? "space-y-1 border-t" : "space-y-1"}>
+          <GroupHeading
+            title="From the pilots' tracks"
+            detail="What the field actually flew — wind, climb strength and leg timing measured from every pilot's tracklog."
+          />
+          {contributors.length > 0 ? (
+            <div className="space-y-0.5 pb-1">
+              {contributors.map((m) => (
+                <p key={m.id} className="text-xs text-muted-foreground">
+                  <span className="font-medium">{m.label}.</span> {m.explanation}
+                </p>
+              ))}
+            </div>
+          ) : null}
+          {showWind ? (
+            <WindHourlyChart series={wind} axis={axis} timeZone={timeZone} setReadout={setReadout} />
+          ) : null}
+          {showClimb ? (
+            <ClimbHourlyChart
+              series={climb}
+              timing={timing}
+              axis={axis}
+              timeZone={timeZone}
+              setReadout={setReadout}
+            />
+          ) : null}
+          {showLegs && legs ? (
+            <WindLegsGantt series={legs} timing={timing} axis={axis} timeZone={timeZone} setReadout={setReadout} />
           ) : null}
         </div>
       ) : null}
@@ -270,32 +270,12 @@ export function DayProfilePanel({
         {readout ?? "Hover a chart for exact figures."}
       </p>
       <p className="text-xs text-muted-foreground">
-        All charts share one time axis ({zone}). Arrows fly WITH the wind — the tables' direction
-        figures are degrees the wind blows from; arrow length and opacity track speed and sample
-        count. Exact numbers are in the tables below.
+        All charts — measured and modelled alike — share one time axis ({zone}), so a vertical scan
+        compares the two at the same moment. Arrows fly WITH the wind — direction figures are
+        degrees the wind blows from; arrow length and opacity track speed and sample count. Exact
+        numbers are in the day family&rsquo;s tables under &ldquo;The metrics in detail&rdquo;.
       </p>
-      {/* Full credit, once. CC BY 4.0 requires the attribution; the grid
-          point requires the caveat, because a reader comparing these
-          numbers against the tracklogs above deserves to know the weather
-          was sampled kilometres away and possibly hundreds of metres off in
-          elevation. */}
-      {showWeather && weather ? (
-        <p className="text-xs text-muted-foreground">
-          Weather charts: {sourceKindLabel(weather.source.kind)} data from{" "}
-          <a
-            href={weather.source.attributionUrl}
-            className="underline"
-            target="_blank"
-            rel="noreferrer"
-          >
-            {weather.source.attribution}
-          </a>{" "}
-          ({weather.source.model}, {weather.source.license}). Sampled at{" "}
-          {weather.source.pointLat.toFixed(3)}, {weather.source.pointLon.toFixed(3)}
-          {sampleProvenance(weather)} A grid cell, not a reading at launch — the
-          notes above are the local ground truth.
-        </p>
-      ) : null}
+      {showWeather && weather ? <MetAttribution weather={weather} /> : null}
     </figure>
   );
 }
