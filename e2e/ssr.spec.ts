@@ -30,8 +30,9 @@ interface Discovered {
  * Find the seeded sample comp — BY NAME, never by list position.
  *
  * These tests share one local D1 with the rest of the suite, and other public
- * comps end up in it: the comp-creation e2e test leaves an "API Doc Comp …"
- * behind, and a developer may have seeded the whole bundled set. Taking
+ * comps end up in it: api-doc.spec.ts creates an "API Doc Comp <timestamp>"
+ * on every run and never deletes it, and a developer may have seeded the
+ * whole bundled set. Taking
  * `comps[0]` meant the entire SSR suite could fail on somebody else's fixture
  * with "Sample comp has no scored pilots" — a data-pollution artifact that
  * reads exactly like a broken SSR page.
