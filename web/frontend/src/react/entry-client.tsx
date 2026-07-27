@@ -38,7 +38,7 @@ const initialData = window.__SSR_DATA__ ?? null;
 // store, not React context, so the Toaster lives in its own root below.
 const app = (
   <StrictMode>
-    <AppProviders>
+    <AppProviders initialUser={initialData ? initialData.user : undefined}>
       <BrowserRouter>
         <InitialDataProvider value={initialData}>
           <AppRoutes />

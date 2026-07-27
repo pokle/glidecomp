@@ -8,7 +8,7 @@
  * the real superadmin, so nothing here grants or removes any actual access.
  */
 import { createContext, useContext, useEffect, useState } from "react";
-import { getCurrentUser, type AuthUser } from "../../auth/client";
+import { getCurrentUserOnce, type AuthUser } from "../../auth/client";
 import { safeNext } from "./safe-next";
 
 /**
@@ -64,18 +64,6 @@ const UserContext = createContext<UserState>({
   isSuperAdmin: false,
   setPreviewRole: () => {},
 });
-
-/**
- * One /api/auth/me round trip per page load, shared across StrictMode's
- * double effect run. Two concurrent calls aren't just wasteful — under
- * load the local auth worker can answer one of them with user:null, and
- * whichever response lands last would win.
- */
-let mePromise: Promise<AuthUser | null> | null = null;
-function fetchCurrentUserOnce(): Promise<AuthUser | null> {
-  mePromise ??= getCurrentUser();
-  return mePromise;
-}
 
 /** One whoami round trip per page load, only made once a user is known. */
 let whoamiPromise: Promise<boolean> | null = null;
@@ -160,25 +148,48 @@ export async function signInAsDev(
   window.location.href = "/comp";
 }
 
-export function UserProvider({ children }: { children: React.ReactNode }) {
-  const [me, setMe] = useState<{ user: AuthUser | null; loading: boolean }>({
-    user: null,
-    loading: true,
-  });
+export function UserProvider({
+  children,
+  initialUser,
+}: {
+  children: React.ReactNode;
+  /**
+   * The visitor as the server already resolved them, for the server-rendered
+   * comp pages. `undefined` means "unknown" (a classic SPA boot) and triggers
+   * the round trip; `null` means a known signed-out visitor and does not.
+   * Distinguishing the two is the whole point — treating unknown as signed
+   * out would render the wrong chrome and then flip.
+   */
+  initialUser?: AuthUser | null;
+}) {
+  const knownUpFront = initialUser !== undefined;
+  const [me, setMe] = useState<{ user: AuthUser | null; loading: boolean }>(
+    // Seeded state must be identical on server and client or hydration
+    // mismatches: both read the same value out of __SSR_DATA__.
+    knownUpFront ? { user: initialUser ?? null, loading: false } : { user: null, loading: true }
+  );
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [previewRole, setPreviewRoleState] = useState<PreviewRole>(readPreviewRole);
 
   useEffect(() => {
     let cancelled = false;
-    fetchCurrentUserOnce().then((user) => {
-      if (cancelled) return;
-      setMe({ user, loading: false });
+    const settle = (user: AuthUser | null) => {
       if (user) {
         fetchIsSuperAdminOnce().then((isSuper) => {
           if (!cancelled) setIsSuperAdmin(isSuper);
         });
       }
-    });
+    };
+    if (knownUpFront) {
+      // The server already answered; asking again would undo the saving.
+      settle(initialUser ?? null);
+    } else {
+      getCurrentUserOnce().then((user) => {
+        if (cancelled) return;
+        setMe({ user, loading: false });
+        settle(user);
+      });
+    }
     return () => {
       cancelled = true;
     };

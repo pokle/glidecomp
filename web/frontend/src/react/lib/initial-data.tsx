@@ -10,11 +10,20 @@
  */
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
+import type { AuthUser } from "../../auth/client";
 
 /** The loader result plus the pathname it was rendered for. */
 export interface InitialData {
   path: string;
   data: unknown;
+  /**
+   * The visitor the SSR Function resolved from the forwarded cookie, so the
+   * client needn't ask /api/auth/me again. Consumed by AppProviders and by
+   * auth/client's module-load seed — deliberately NOT by this provider, which
+   * retires its value on navigation; who you are outlives the page you landed
+   * on. Absent (not null) on a classic SPA boot: unknown, not signed out.
+   */
+  user?: AuthUser | null;
 }
 
 const InitialDataContext = createContext<InitialData | null>(null);

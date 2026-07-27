@@ -97,6 +97,45 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   return null;
 }
 
+/**
+ * The one answer to "who is this visitor", shared by every caller on the page.
+ *
+ * Two concurrent calls aren't merely wasteful: under load the auth worker can
+ * answer one of them with `user: null`, and whichever response lands last
+ * wins. This used to be deduped inside UserProvider, which left the
+ * preferences-sync bootstrap — imported by every React page via
+ * analysis/config — making a second, independent round trip on every single
+ * page load. Keeping the promise here means there is one flight per page no
+ * matter who asks or in what order.
+ */
+let mePromise: Promise<AuthUser | null> | null = null;
+
+export function getCurrentUserOnce(): Promise<AuthUser | null> {
+  mePromise ??= getCurrentUser();
+  return mePromise;
+}
+
+/**
+ * Answer `getCurrentUserOnce()` from a value the server already resolved,
+ * with no round trip at all. The server-rendered comp pages forward the
+ * visitor's cookie while loading the page, so they know the answer before the
+ * browser could even ask for it.
+ */
+export function seedCurrentUser(user: AuthUser | null): void {
+  mePromise = Promise.resolve(user);
+  writeAccountHint(user);
+}
+
+// Seed at module load, before any consumer can ask — the preferences-sync
+// bootstrap runs during import and would otherwise race ahead of the entry.
+// `user` is absent on a classic SPA boot, which means "unknown, go and ask"
+// and must NOT be read as "signed out". Window-guarded because the SSR comp
+// pages import this module and it has to stay inert in workerd.
+if (typeof window !== "undefined") {
+  const ssr = (window as { __SSR_DATA__?: { user?: AuthUser | null } }).__SSR_DATA__;
+  if (ssr && "user" in ssr) seedCurrentUser(ssr.user ?? null);
+}
+
 export async function deleteAccount(): Promise<{ success: boolean; error?: string }> {
   try {
     const res = await fetch("/api/auth/delete-account", {
