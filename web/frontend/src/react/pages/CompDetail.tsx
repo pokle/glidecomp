@@ -51,6 +51,7 @@ import { CompSetupProgress } from "../comp/CompSetupProgress";
 import { SettingsDialog } from "../comp/SettingsDialog";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
+import { TaskDiagram } from "../comp/TaskDiagram";
 import {
   fetchWithRetry,
   isPastCloseDate,
@@ -538,20 +539,28 @@ function FeaturedTaskGroup({
           });
 
         return (
-          <div key={task.task_id} className="mt-2 first:mt-1">
-            <h3 className="text-xl font-bold">
-              <Link
-                className="underline-offset-4 hover:underline"
-                to={taskPath(compId, compName, task.task_id, task.name)}
-              >
-                {task.name}
-              </Link>{" "}
-              <span className="text-sm font-normal text-muted-foreground">
-                {task.pilot_classes.join(", ")}
-                {!task.has_xctsk ? " · route not set yet" : null}
-              </span>
-            </h3>
-            <div className="mt-3 flex flex-wrap gap-2">{buttons}</div>
+          <div key={task.task_id} className="mt-2 flex flex-wrap items-start gap-x-4 gap-y-2 first:mt-1">
+            <div className="min-w-0 flex-1">
+              <h3 className="text-xl font-bold">
+                <Link
+                  className="underline-offset-4 hover:underline"
+                  to={taskPath(compId, compName, task.task_id, task.name)}
+                >
+                  {task.name}
+                </Link>{" "}
+                <span className="text-sm font-normal text-muted-foreground">
+                  {task.pilot_classes.join(", ")}
+                  {!task.has_xctsk ? " · route not set yet" : null}
+                </span>
+              </h3>
+              <div className="mt-3 flex flex-wrap gap-2">{buttons}</div>
+            </div>
+            {/* The day's task shape, right where a pilot looks first. Decorative
+                here: the heading beside it already names the task, and the task
+                page carries the route as a table. */}
+            {task.route ? (
+              <TaskDiagram task={task.route} size="sm" label={null} />
+            ) : null}
           </div>
         );
       })}
@@ -698,9 +707,21 @@ function TasksList({
             <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
               {formatTaskDate(date)}
             </h3>
-            <ul className="mt-1.5 space-y-1.5 pl-4 text-sm">
+            <ul className="mt-1.5 space-y-1 pl-4 text-sm">
               {dateTasks.map((task) => (
-                <li key={task.task_id} className="flex flex-wrap items-center gap-2">
+                <li key={task.task_id} className="flex items-center gap-2.5">
+                  {/* Tiny route glyph: enough to tell one day's task from
+                      another's at a glance. Decorative — the link beside it
+                      names the task. A route-less task keeps the row aligned
+                      with an empty box of the same size. */}
+                  <span
+                    aria-hidden="true"
+                    className="inline-flex h-[50px] w-[72px] shrink-0 items-center justify-center"
+                  >
+                    {task.route ? (
+                      <TaskDiagram task={task.route} size="xs" label={null} />
+                    ) : null}
+                  </span>
                   <Link
                     className="underline-offset-4 hover:underline"
                     to={taskPath(compId, compName, task.task_id, task.name)}

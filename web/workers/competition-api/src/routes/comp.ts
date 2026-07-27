@@ -7,7 +7,7 @@ import { isCompAdmin, isSuperAdmin } from "../super-admin";
 import { createCompSchema, updateCompSchema, validated } from "../validators";
 import { audit, describeChange } from "../audit";
 import { bumpAndRevalidateScores, taskIdsForComp } from "../score-store";
-import { speedSectionTypeWarnings, hasLineGoal } from "../xctsk-summary";
+import { speedSectionTypeWarnings, hasLineGoal, taskRouteSummary } from "../xctsk-summary";
 import { DEFAULT_GAP_PARAMETERS, resolveTimePointsExponent, type GAPParameters } from "@glidecomp/engine";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
 
@@ -516,6 +516,9 @@ export const compRoutes = new Hono<HonoEnv>()
             missing_sss: speedSection.missing_sss,
             missing_ess: speedSection.missing_ess,
             line_goal: isGap && hasLineGoal(t.xctsk as string | null),
+            // Enough geometry for the task list's compact route diagrams —
+            // a trim of the stored xctsk, not the whole thing.
+            route: taskRouteSummary(t.xctsk as string | null),
           };
         }),
         pilot_count: pilotCount?.cnt ?? 0,

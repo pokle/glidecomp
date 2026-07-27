@@ -22,7 +22,18 @@ import { Badge } from "@/react/rac/badge";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { formatAltitude, formatDistance, formatRadius, useUnits } from "../lib/units";
 
-export function TurnpointsTable({ xctsk }: { xctsk: XCTask }) {
+export function TurnpointsTable({
+  xctsk,
+  highlightIndex = null,
+}: {
+  xctsk: XCTask;
+  /**
+   * Turnpoint to mark as the one under the reader's attention — the task
+   * diagram above the table sets this when a turnpoint is hovered, tapped or
+   * tabbed to, so the picture and the numbers point at the same thing.
+   */
+  highlightIndex?: number | null;
+}) {
   const units = useUnits();
   const { directions, legs, totalM } = useMemo(() => {
     const directions = computeTurnpointDirections(xctsk);
@@ -62,7 +73,7 @@ export function TurnpointsTable({ xctsk }: { xctsk: XCTask }) {
               ? formatAltitude(tp.waypoint.altSmoothed, { prefs: units }).withUnit
               : null;
             return (
-              <Row key={i}>
+              <Row key={i} className={i === highlightIndex ? "bg-muted" : undefined}>
                 <Cell className="align-top">
                   <div className="flex flex-col gap-1">
                     {role ? (

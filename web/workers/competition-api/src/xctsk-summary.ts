@@ -64,6 +64,76 @@ export function speedSectionTypeWarnings(
 }
 
 /**
+ * The minimum of a task's route needed to *draw* it. Shaped as a valid
+ * (trimmed) XCTask so the frontend hands it straight to the engine — see
+ * TaskDiagram / task-diagram-layout in web/frontend.
+ */
+export interface TaskRouteSummary {
+  taskType: string;
+  version: 1;
+  turnpoints: Array<{
+    type?: string;
+    radius: number;
+    waypoint: { name: string; lat: number; lon: number };
+  }>;
+  sss?: { type: string; direction: string };
+  goal?: { type: string };
+}
+
+/**
+ * Route geometry for the comp page's per-task diagrams.
+ *
+ * The comp detail response is server-rendered on a public page, so this is a
+ * deliberate trim rather than the stored xctsk echoed back: coordinates,
+ * radii, turnpoint types, and the two flags that change the drawn shape (the
+ * start's crossing direction and whether the goal is a line). Everything the
+ * diagram doesn't draw — altitudes, descriptions, start gates, deadlines — is
+ * dropped, which keeps a ten-task comp's payload in the low kilobytes.
+ *
+ * Returns null for a task with no route set (or an unparseable one), which is
+ * how the UI decides there is nothing to draw.
+ */
+export function taskRouteSummary(
+  xctskJson: string | null
+): TaskRouteSummary | null {
+  const task = safeParse(xctskJson);
+  const tps = task?.turnpoints ?? [];
+  if (tps.length === 0) return null;
+
+  const turnpoints = tps
+    .filter(
+      (tp) =>
+        typeof tp?.waypoint?.lat === "number" &&
+        typeof tp?.waypoint?.lon === "number"
+    )
+    .map((tp) => ({
+      ...(tp.type ? { type: tp.type } : {}),
+      radius: typeof tp.radius === "number" ? tp.radius : 400,
+      waypoint: {
+        name: tp.waypoint?.name ?? "Unnamed",
+        lat: tp.waypoint!.lat!,
+        lon: tp.waypoint!.lon!,
+      },
+    }));
+  if (turnpoints.length === 0) return null;
+
+  return {
+    taskType: task?.taskType ?? "CLASSIC",
+    version: 1,
+    turnpoints,
+    ...(task?.sss
+      ? {
+          sss: {
+            type: task.sss.type ?? "RACE",
+            direction: task.sss.direction ?? "ENTER",
+          },
+        }
+      : {}),
+    ...(task?.goal?.type ? { goal: { type: task.goal.type } } : {}),
+  };
+}
+
+/**
  * True when the task declares a LINE goal. The engine scores a LINE goal
  * against the goal line (perpendicular to the final leg, with its control
  * semicircle — S7F §6.3.1), so this is purely informational: the task list
