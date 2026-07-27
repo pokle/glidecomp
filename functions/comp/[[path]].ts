@@ -103,7 +103,7 @@ const ROUTES: Array<{
         head: {
           title: "Competitions — GlideComp",
           description:
-            "Browse hang gliding and paragliding competitions on GlideComp: tasks, live scores and per-pilot score explanations.",
+            "Browse hang gliding and paragliding competitions on GlideComp: tasks, live scores, per-pilot score explanations, and the field analysis of how each day was flown.",
           extra: jsonLd({
               "@context": "https://schema.org",
               "@type": "ItemList",
