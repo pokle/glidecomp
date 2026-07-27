@@ -13,6 +13,7 @@ import { Badge } from "@/react/rac/badge";
 import { MetricMethod } from "./MetricExplanation";
 import { PerPilotMetricTable } from "./PerPilotMetricTable";
 import { ReportTableView, ReportTableTitle } from "./ReportTableView";
+import { MetricLanes } from "./charts/MetricLanes";
 import { SeriesChart } from "./charts/SeriesChart";
 import { bestCorrelation } from "./SeparationRanking";
 import { verdictWords } from "./units";
@@ -115,6 +116,16 @@ export function MetricFamilySection({
             DayProfilePanel) onto one axis with the modelled weather, which
             is also why SeriesChart skips those kinds. This family keeps the
             exact tables. */}
+        {/* The shape of the family first, then the exact numbers — the same
+            "charts before their tables" order the metric blocks below use.
+            MetricLanes renders nothing when fewer than two of these metrics
+            can be a lane, so the gate lives in one place rather than here. */}
+        <MetricLanes
+          metrics={metrics}
+          pilots={report.pilots}
+          subject={familyLabel}
+        />
+
         {perPilotMetrics.length > 0 ? (
           <PerPilotMetricTable
             report={report}
