@@ -136,8 +136,12 @@ function mean(values: number[]): number {
   return values.reduce((sum, v) => sum + v, 0) / values.length;
 }
 
-/** Role for a turnpoint, matching TurnpointsTable's rule exactly. */
-function roleOf(task: XCTask, index: number): TaskDiagramRole {
+/**
+ * Role for a turnpoint, matching TurnpointsTable's rule exactly: the declared
+ * type, or GOAL for the last turnpoint of a task that leaves it unset. Shared
+ * with the strip and profile views so all four disagree about nothing.
+ */
+export function turnpointRole(task: XCTask, index: number): TaskDiagramRole {
   const type = task.turnpoints[index]?.type;
   if (type) return type;
   return index === task.turnpoints.length - 1 ? "GOAL" : null;
@@ -260,7 +264,7 @@ export function buildTaskDiagram(
 
   const turnpoints: TaskDiagramTurnpoint[] = tps.map((tp, i) => {
     const radius = round(tp.radius * scale);
-    const role = roleOf(task, i);
+    const role = turnpointRole(task, i);
     return {
       index: i,
       name: tp.waypoint.name,
@@ -507,7 +511,7 @@ function anchorOffset(anchor: TaskDiagramLabel["anchor"]): number {
  */
 export function describeTaskRoute(task: XCTask): string {
   const names = (task.turnpoints ?? []).map((tp, i) => {
-    const role = roleOf(task, i);
+    const role = turnpointRole(task, i);
     return role ? `${tp.waypoint.name} (${role})` : tp.waypoint.name;
   });
   if (names.length === 0) return "Task route: no turnpoints set";

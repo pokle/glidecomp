@@ -53,6 +53,7 @@ import { TaskStandings } from "../comp/TaskStandings";
 import { RouteEditorDialog } from "../comp/RouteEditorDialog";
 import { TurnpointsTable } from "../comp/TurnpointsTable";
 import { TaskDiagram } from "../comp/TaskDiagram";
+import { TaskStrip } from "../comp/TaskStrip";
 import { gateToHHMM, startConfigSummary } from "../comp/route-editor";
 import { useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 import {
@@ -581,6 +582,11 @@ function TurnpointsSection({
               highlightIndex={focused}
             />
           </div>
+          {/* Two views of one route: the diagram is the shape on the ground,
+              the strip is the order and the winding with geography
+              straightened out. The table underneath is the numbers, and the
+              accessible equivalent for both. */}
+          <TaskStrip xctsk={xctsk} />
           <TurnpointsTable xctsk={xctsk} highlightIndex={focused} />
         </>
       ) : (
