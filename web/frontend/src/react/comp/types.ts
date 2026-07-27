@@ -78,6 +78,13 @@ export interface TaskSummary {
   missing_ess: boolean;
   /** GAP task with a LINE goal — informational (scored against the goal line). */
   line_goal: boolean;
+  /**
+   * Enough of the route to draw the task's compact diagram (TaskDiagram) in
+   * the comp's task list: a trimmed XCTask carrying turnpoint coordinates,
+   * radii and types plus the start direction and goal type. Null when no
+   * route is set. May be absent from responses cached before it existed.
+   */
+  route?: XCTask | null;
 }
 
 export interface TaskDetailData {

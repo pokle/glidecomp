@@ -4,6 +4,7 @@ import {
   compScoresPath,
   compAnalysisPath,
 } from "../web/frontend/src/react/lib/slug";
+import { SAMPLE_COMP_NAME } from "../web/workers/competition-api/src/sample";
 
 /**
  * SSR verification against the REAL Pages runtime (wrangler pages dev on the
@@ -25,32 +26,71 @@ interface Discovered {
   pilotName: string;
 }
 
+/**
+ * Find the seeded sample comp — BY NAME, never by list position.
+ *
+ * These tests share one local D1 with the rest of the suite, and other public
+ * comps end up in it: the comp-creation e2e test leaves an "API Doc Comp …"
+ * behind, and a developer may have seeded the whole bundled set. Taking
+ * `comps[0]` meant the entire SSR suite could fail on somebody else's fixture
+ * with "Sample comp has no scored pilots" — a data-pollution artifact that
+ * reads exactly like a broken SSR page.
+ *
+ * So: the fixture the serve script actually seeds
+ * (web/scripts/ssr-e2e-serve.sh → `bun run seed corryong-cup-2026`) is tried
+ * first by name, then any other public comp as a fallback, and a comp without
+ * scored pilots is skipped rather than fatal. The error, if every candidate
+ * fails, names what was tried and how to fix it.
+ */
 async function discover(request: APIRequestContext): Promise<Discovered> {
   const listRes = await request.get("/api/comp");
   expect(listRes.ok()).toBeTruthy();
   const { comps } = (await listRes.json()) as {
     comps: Array<{ comp_id: string; name: string; test: boolean }>;
   };
-  const comp = comps.find((c) => !c.test);
-  if (!comp) throw new Error("No public sample comp seeded — run `bun run seed corryong-cup-2026`.");
+  const publicComps = comps.filter((c) => !c.test);
+  if (publicComps.length === 0) {
+    throw new Error("No public sample comp seeded — run `bun run seed corryong-cup-2026`.");
+  }
 
-  const scoresRes = await request.get(`/api/comp/${comp.comp_id}/scores`);
-  expect(scoresRes.ok()).toBeTruthy();
-  const scores = (await scoresRes.json()) as {
-    standings: Array<{
-      pilots: Array<{ comp_pilot_id: string; pilot_name: string; tasks: Array<{ task_id: string }> }>;
-    }>;
-  };
-  const pilot = scores.standings.flatMap((s) => s.pilots).find((p) => p.tasks.length > 0);
-  if (!pilot) throw new Error("Sample comp has no scored pilots.");
+  // Named fixture first; everything else only as a fallback.
+  const candidates = [
+    ...publicComps.filter((c) => c.name === SAMPLE_COMP_NAME),
+    ...publicComps.filter((c) => c.name !== SAMPLE_COMP_NAME),
+  ];
 
-  return {
-    compId: comp.comp_id,
-    compName: comp.name,
-    taskId: pilot.tasks[0].task_id,
-    pilotId: pilot.comp_pilot_id,
-    pilotName: pilot.pilot_name,
-  };
+  const skipped: string[] = [];
+  for (const comp of candidates) {
+    const scoresRes = await request.get(`/api/comp/${comp.comp_id}/scores`);
+    if (!scoresRes.ok()) {
+      skipped.push(`${comp.name} (scores HTTP ${scoresRes.status()})`);
+      continue;
+    }
+    const scores = (await scoresRes.json()) as {
+      standings: Array<{
+        pilots: Array<{ comp_pilot_id: string; pilot_name: string; tasks: Array<{ task_id: string }> }>;
+      }>;
+    };
+    const pilot = scores.standings.flatMap((s) => s.pilots).find((p) => p.tasks.length > 0);
+    if (!pilot) {
+      skipped.push(`${comp.name} (no scored pilots)`);
+      continue;
+    }
+
+    return {
+      compId: comp.comp_id,
+      compName: comp.name,
+      taskId: pilot.tasks[0].task_id,
+      pilotId: pilot.comp_pilot_id,
+      pilotName: pilot.pilot_name,
+    };
+  }
+
+  throw new Error(
+    `No public comp with scored pilots. Tried: ${skipped.join("; ")}. ` +
+      `Expected "${SAMPLE_COMP_NAME}" — seed it with \`bun run seed corryong-cup-2026\`. ` +
+      "If a previous `bun run test:e2e` left comps behind, reset with `bun run kill-state`."
+  );
 }
 
 test.describe("SSR — content is in the server HTML (no JS)", () => {

@@ -37,6 +37,7 @@ import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { toast } from "../lib/toast";
 import { ScoreFreshness } from "../comp/ScoreFreshness";
+import { TaskDiagram } from "../comp/TaskDiagram";
 import { useInitialData } from "../lib/initial-data";
 import type { TaskFieldAnalysisLoaderData } from "../loaders";
 import { SeparationRanking, rankMetrics } from "../field-analysis/SeparationRanking";
@@ -465,6 +466,22 @@ export function TaskFieldAnalysis() {
           ) : null}
         </div>
       </div>
+
+      {/* What the field was asked to fly. Everything below is about how they
+          flew it, and none of it means much without the shape in front of
+          you — a long final glide into a headwind reads differently from a
+          short one. Server-rendered with the rest of the page. */}
+      {task?.xctsk && task.xctsk.turnpoints.length > 0 ? (
+        <figure className="mt-4 rounded-lg border bg-muted/20 p-3">
+          <div className="flex justify-center overflow-x-auto">
+            <TaskDiagram task={task.xctsk} size="md" className="shrink-0" />
+          </div>
+          <figcaption className="mt-1 text-center text-xs text-muted-foreground">
+            The optimised route, flown in the direction of the arrows. Radii,
+            leg distances and start times are on the task page.
+          </figcaption>
+        </figure>
+      ) : null}
 
       {data?.error ? (
         <Alert className="mt-4">
