@@ -191,9 +191,12 @@ are satisfied by the existing save path.
   config*, and `quickTaskText(parse(text))` is a fixed point — this is the test
   that guards the convergence rule in §2.
 
-`route-editor.test.ts`: display ↔ UTC gate conversion round-trips through the
-grammar for a comp zone (an Australian morning is the previous UTC evening —
-the existing `startConfigSummary` zone tests cover the same trap).
+No new timezone test is needed, and on implementation this turned out to be
+because the grammar adds **no timezone code at all**: gates in the line are
+comp-local, which is already the domain the panel's `gates` state holds, so the
+only conversion is the `toUtcTime` boundary in `assembleTask` that gates have
+always gone through. The existing `route-editor.test.ts` zone tests still cover
+it.
 
 Manual/e2e: none required — the route editor is admin-only and not SSR'd, so
 `test:e2e:ssr` is untouched. `bun run test` and `bun run typecheck:all` are the

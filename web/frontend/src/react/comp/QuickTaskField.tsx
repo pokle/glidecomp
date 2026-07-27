@@ -8,6 +8,10 @@
  * radius (see quick-task.ts for the grammar). While you type, the token under
  * the caret offers its best matches as tappable chips.
  *
+ * The start settings ride the same line ("mitta sss enter 13:15"), so the
+ * direction and the gates are text you can see and edit rather than defaults
+ * applied silently in a collapsed panel further down (#436).
+ *
  * The line and the route are one thing seen two ways: the text round-trips
  * exactly (see quickTaskText), so the field shows the loaded task as text, and
  * editing the text rebuilds the route — no button, and no preview, because the
@@ -30,7 +34,9 @@ import {
   quickTaskText,
   randomExampleRoute,
   resolveTypes,
+  startConfigFromItems,
   suggestionsFor,
+  type QuickStartConfig,
   type QuickType,
 } from "./quick-task";
 
@@ -39,6 +45,17 @@ export interface QuickTaskPick {
   record: WaypointFileRecord;
   radius: number;
   type: QuickType;
+}
+
+/** The whole task the line describes: its turnpoints and its start settings. */
+export interface QuickTaskApply {
+  picks: QuickTaskPick[];
+  /**
+   * What the line says about the start, or null when the route has no start
+   * turnpoint — the editor leaves its Start panel alone in that case rather
+   * than applying a configuration the route can't hold.
+   */
+  start: QuickStartConfig | null;
 }
 
 const SUGGESTION_LIMIT = 6;
@@ -52,6 +69,7 @@ export function QuickTaskField({
   routeText,
   placeholder = "ell 400m ell 5k mitta cudg ncor 1k",
   exampleSize,
+  timeZoneLabel,
   isDisabled,
   onApply,
 }: {
@@ -64,8 +82,14 @@ export function QuickTaskField({
   placeholder?: string;
   /** Turnpoints in the offered example (open distance allows exactly one). */
   exampleSize?: number;
+  /**
+   * Zone the start gates in the line are read in ("Australia/Melbourne
+   * (GMT+11)"). Shown beside the field so "13:15" is never ambiguous; omitted
+   * where the line can't carry gates at all (open distance).
+   */
+  timeZoneLabel?: string;
   isDisabled?: boolean;
-  onApply: (picks: QuickTaskPick[]) => void;
+  onApply: (task: QuickTaskApply) => void;
 }) {
   const [text, setText] = useState(routeText);
   const [caret, setCaret] = useState(routeText.length);
@@ -117,14 +141,24 @@ export function QuickTaskField({
     radius: p.radius,
     type: p.type,
   }));
+  // The start settings the line states, read over the *matched* turnpoints only
+  // — the same set the route is built from, so the start it reports is the
+  // start the route actually has (a half-typed name takes its role with it).
+  const { start, problems } = startConfigFromItems(
+    matched.map((r) => r.item),
+    matched.map((r) => r.type)
+  );
   // The shortest text that rebuilds this route — compared against the editor's
-  // own rendering of the route to decide whether there's anything to push.
-  const builtText = quickTaskText(route);
-  // The same route with every role named. What Enter writes: it turns what the
-  // line only implied into something on screen you can see and edit.
-  const spelledText = quickTaskText(route, { types: "all" });
-  const picksRef = useRef(picks);
-  picksRef.current = picks;
+  // own rendering of the route to decide whether there's anything to push. The
+  // start has to be part of both renderings or the two would never agree.
+  const builtText = quickTaskText(route, { start });
+  // The same route with every role named and the start written out in full.
+  // What Enter writes: it turns what the line only implied into something on
+  // screen you can see and edit — which is the whole point for a start
+  // direction that would otherwise be an invisible default.
+  const spelledText = quickTaskText(route, { types: "all", start });
+  const applyRef = useRef<QuickTaskApply>({ picks, start });
+  applyRef.current = { picks, start };
 
   /**
    * Set the line as a user edit — which is what makes the route follow it.
@@ -191,7 +225,7 @@ export function QuickTaskField({
     if (builtText === routeText) return;
     const timer = setTimeout(() => {
       syncedRef.current = builtText;
-      onApply(picksRef.current);
+      onApply(applyRef.current);
     }, APPLY_DELAY_MS);
     return () => clearTimeout(timer);
   }, [builtText, routeText, onApply]);
@@ -289,7 +323,10 @@ export function QuickTaskField({
           onClick={syncCaret}
           onKeyUp={syncCaret}
         />
-        <Description>Type your waypoint names, and hit enter</Description>
+        <Description>
+          Type your waypoint names, and hit enter
+          {timeZoneLabel ? ` · start gate times are ${timeZoneLabel}` : ""}
+        </Description>
       </AriaTextField>
 
       {/* Autocomplete for the token under the caret. A horizontal strip rather
@@ -337,17 +374,32 @@ export function QuickTaskField({
       ) : null}
 
       {/* Status, not a preview: the route itself is the read-back — it's
-          right below, in the same listing the task page shows. */}
-      <p
-        aria-live="polite"
-        className={unmatched > 0 ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
-      >
-        {unmatched > 0
-          ? `${unmatched} name${unmatched === 1 ? "" : "s"} didn't match a competition waypoint — skipped`
-          : items.length > 0
-            ? `${matched.length} turnpoint${matched.length === 1 ? "" : "s"} · the route below updates as you type`
-            : "The route below updates as you type"}
-      </p>
+          right below, in the same listing the task page shows. One live region
+          for the count and the start problems together, so a screen reader
+          hears one update rather than two racing announcements. */}
+      <div aria-live="polite" className="flex flex-col gap-1">
+        <p
+          className={
+            unmatched > 0 ? "text-xs text-destructive" : "text-xs text-muted-foreground"
+          }
+        >
+          {unmatched > 0
+            ? `${unmatched} name${unmatched === 1 ? "" : "s"} didn't match a competition waypoint — skipped`
+            : items.length > 0
+              ? `${matched.length} turnpoint${matched.length === 1 ? "" : "s"} · the route below updates as you type`
+              : "The route below updates as you type"}
+        </p>
+        {/* Anything the line says about the start that the route can't use.
+            Amber, not red: none of these block a save, and the turnpoints are
+            still good — it's the start setting that didn't land. */}
+        {problems.length > 0 ? (
+          <ul className="flex flex-col gap-0.5 text-xs text-amber-500">
+            {problems.map((problem, i) => (
+              <li key={i}>⚠ {problem}</li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
     </div>
   );
 }
