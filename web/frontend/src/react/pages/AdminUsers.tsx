@@ -1,14 +1,8 @@
 /** Super-admin user list — React port of admin-users.ts/admin-users.html. */
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/react/ui/table";
+import { Badge } from "@/react/rac/badge";
+import { Cell, Column, Row, Table, TableBody, TableHeader } from "@/react/rac/table";
 import { goToSignIn, useUser } from "../lib/user";
 
 interface AdminUser {
@@ -93,64 +87,61 @@ export function AdminUsers() {
         </p>
       </div>
 
-      <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>User</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Joined</TableHead>
-              <TableHead className="text-right">Tracks</TableHead>
-              <TableHead className="text-right">Tasks</TableHead>
-              <TableHead className="text-right">Admin of</TableHead>
-              <TableHead className="text-right">Pilot in</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.map((u) => (
-              <TableRow key={u.id}>
-                <TableCell>
-                  <div className="font-medium">
-                    {u.name}
-                    {u.is_super_admin ? (
-                      <span className="ml-2 inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                        super admin
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {u.username ? (
-                      <Link to={`/u/${encodeURIComponent(u.username)}`} className="hover:underline">
-                        @{u.username}
-                      </Link>
-                    ) : (
-                      <span className="italic">no username</span>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {u.email}
-                  {u.email_verified ? null : (
-                    <>
-                      {" "}
-                      <span className="text-xs text-amber-600 dark:text-amber-400">
-                        (unverified)
-                      </span>
-                    </>
+      {/* scrollLabel: seven columns overflow on anything narrow, and without a
+          focusable scroll region a keyboard-only admin can never reach the
+          right-hand counts (WCAG 2.1.1). The kit's Table owns the wrapper. */}
+      <Table aria-label="All users" scrollLabel="All users">
+        <TableHeader>
+          <Column isRowHeader>User</Column>
+          <Column>Email</Column>
+          <Column>Joined</Column>
+          <Column className="text-right">Tracks</Column>
+          <Column className="text-right">Tasks</Column>
+          <Column className="text-right">Admin of</Column>
+          <Column className="text-right">Pilot in</Column>
+        </TableHeader>
+        <TableBody>
+          {users.map((u) => (
+            <Row key={u.id} id={u.id}>
+              <Cell>
+                <div className="font-medium">
+                  {u.name}
+                  {u.is_super_admin ? (
+                    <Badge className="ml-2 bg-primary/10 text-primary">super admin</Badge>
+                  ) : null}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {u.username ? (
+                    <Link to={`/u/${encodeURIComponent(u.username)}`} className="hover:underline">
+                      @{u.username}
+                    </Link>
+                  ) : (
+                    <span className="italic">no username</span>
                   )}
-                </TableCell>
-                <TableCell className="text-muted-foreground whitespace-nowrap">
-                  {new Date(u.created_at).toLocaleDateString()}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{u.track_count}</TableCell>
-                <TableCell className="text-right tabular-nums">{u.task_count}</TableCell>
-                <TableCell className="text-right tabular-nums">{u.admin_comp_count}</TableCell>
-                <TableCell className="text-right tabular-nums">{u.pilot_comp_count}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+                </div>
+              </Cell>
+              <Cell className="text-muted-foreground">
+                {u.email}
+                {u.email_verified ? null : (
+                  <>
+                    {" "}
+                    <span className="text-xs text-amber-600 dark:text-amber-400">
+                      (unverified)
+                    </span>
+                  </>
+                )}
+              </Cell>
+              <Cell className="text-muted-foreground whitespace-nowrap">
+                {new Date(u.created_at).toLocaleDateString()}
+              </Cell>
+              <Cell className="text-right tabular-nums">{u.track_count}</Cell>
+              <Cell className="text-right tabular-nums">{u.task_count}</Cell>
+              <Cell className="text-right tabular-nums">{u.admin_comp_count}</Cell>
+              <Cell className="text-right tabular-nums">{u.pilot_comp_count}</Cell>
+            </Row>
+          ))}
+        </TableBody>
+      </Table>
     </section>
   );
 }

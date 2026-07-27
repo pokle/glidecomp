@@ -30,8 +30,15 @@ their wrappers. `components/Shell.tsx` is RAC: the **account menu** is
 `rac/menu` (with its Settings item a real `href` anchor), the sign-in buttons
 and the super-admin preview pill are rac Buttons/ToggleButtons. New kit pieces
 `rac/alert` and `rac/separator`. Retired `ui/alert-dialog`, `ui/dropdown-menu`
-and `ui/alert` (deleted). `ui/separator` survives only because `ui/field`
+and `ui/alert` (deleted); `ui/separator` survives only because `ui/field`
 still imports it.
+
+**Wave 2 (also 2026-07-27)** converted the three small pages — AdminCache,
+AdminUsers and Onboarding — which retires nothing on its own (every kit file
+they used has another consumer) but leaves **SignIn, Dashboard and Settings**
+as the whole of the remaining migration. It cost one real bug, now gotcha #18:
+a server-rejected value on a RAC TextField blocks every later submit unless
+the error is cleared on change.
 
 The remaining pages still use the shadcn/Base UI kit in `src/react/ui/` — see
 the conversion map at the end of this doc. The decision so far: **keep going
@@ -414,6 +421,29 @@ Points worth knowing before you reach for one:
     property will read the button as enabled. Assert `aria-disabled` and that
     the press handler never fired (what `rac/progress.test.ts` does).
 
+18. **A server-rejected value must be cleared on change, or the form can
+    never be submitted again.** RAC's default `validationBehavior` is
+    `"native"`, so `isInvalid` on a TextField is not merely an ARIA state —
+    RAC calls `setCustomValidity()` on the real input. The browser then blocks
+    `submit` outright, and your `onSubmit` handler (where you'd normally clear
+    the error) never runs. Onboarding hit this exactly: enter a taken
+    username, get "Username is already taken", type a free one — and Continue
+    silently does nothing, forever. Clear the server error in the field's
+    `onChange`, not in the submit handler:
+
+    ```tsx
+    onChange={(value) => { setUsernameValue(value); setUsernameError(null); }}
+    isInvalid={usernameError !== null}
+    errorMessage={usernameError ?? undefined}
+    ```
+
+    The Base UI version had no such trap — its `<FieldError>` was inert
+    markup — so this is a hazard the conversion *introduces*, and it is
+    invisible to typecheck, unit tests and a first-attempt click-through.
+    Drive the retry path. (The alternative, `validationBehavior="aria"`, drops
+    the native `required` enforcement too — only reach for it on a field with
+    no native constraints.)
+
 ## Verification playbook (all part of "done" for RAC work)
 
 ```bash
@@ -612,6 +642,7 @@ Which SPA pages are on which kit, and the dialogs/popups each still owns.
 | `pages/CompDetail.tsx` `/comp/:id` + its sections (2026-07-21) | Fully RAC: hero LinkButtons (the `/replay` link stays a plain `<a className={buttonVariants(...)}>` — non-SPA entry), Create Task dialog, `SettingsDialog` (NumberFields, rac SimpleSelect + select-like SearchableSelect), `CompScoresSection` (rac tabs + sortable RAC-grid tables), `ScoresSection`, `ActivitySection` (rac tabs), `CompSetupProgress` (rac ProgressBar), `PilotsSection` (RAC table + dialog shell). The pilots editor's **Tabulator grid is kept by policy** — only its chrome converted. Only ui/ import left is `date-picker` (itself RAC under the hood). |
 | `pages/CompWaypoints.tsx` `/comp/:id/waypoints` (2026-07-21) | RAC chrome (FileTrigger upload, ToggleButton add-from-map) around an **inline Tabulator grid** for admins (the hand-rolled editable `<table>` became Tabulator per the policy — gotcha #16); non-admins/crawlers get a read-only RAC table (SSR content preserved). `WaypointDeviceExport` → rac Menu/Checkbox/ToggleButton (retired `ui/checkbox`); `FullScreenQR` → RAC modal primitives. AddWaypointDialog was already RAC. |
 | `components/Shell.tsx` + `lib/confirm.tsx` (app chrome, 2026-07-27) | Account menu → `rac/menu` (`MenuSection` + `MenuHeader` for the name, Settings as an `href` MenuItem so it stays a real anchor), sign-in buttons and the super-admin preview pill → rac `Button`/`ToggleButton` (the pill's hand-rolled `aria-pressed` is now RAC's). The global `ConfirmProvider` moved to `rac/confirm.tsx`, leaving `lib/confirm.tsx` as context-and-types only. Both are in the SSR tree, so `test:e2e:ssr` is part of done here. |
+| `pages/AdminCache.tsx`, `pages/AdminUsers.tsx`, `pages/Onboarding.tsx` (2026-07-27) | Wave 2 of #483. Cache: rac Button with `isPending` (the separate "Clearing…" live region went with it — the pending button already announces). Users: the read-only table converted 1:1 to the RAC grid (`isRowHeader` on User, row `id`s, `scrollLabel` so the seven columns are keyboard-reachable) and the super-admin pill became a rac `Badge`. Onboarding: four `TextField`s replacing Field+Label+Input+useId, and `isPending` on Continue. **Gotcha #18** — a server-side rejection on a TextField must be cleared on change. |
 
 **Not converted (ui/shadcn) — with their dialogs/popups:**
 
@@ -619,8 +650,7 @@ Which SPA pages are on which kit, and the dialogs/popups each still owns.
 |---|---|---|
 | `pages/Settings.tsx` | card, dialog, field, input, radio-group, table, button | **"Create API key" dialog**; **"API key created" dialog**. Last consumer of `ui/radio-group` (rac/radio-group exists). |
 | `pages/Dashboard.tsx` (partial — rac Tree) | tabs, progress, button | No dialogs. Tabs/progress remain ui/. |
-| `pages/Onboarding.tsx`, `pages/SignIn.tsx` | button, field, input (+ input-otp on SignIn) | No dialogs. |
-| `pages/AdminUsers.tsx`, `pages/AdminCache.tsx` | table / button | No dialogs. |
+| `pages/SignIn.tsx` | button, field, input, input-otp | No dialogs. `input-otp` stays — RAC has no OTP field. |
 
 Shared ui/ leaf modules that only die with their last consumer:
 `ui/tabs` + `ui/progress` (Dashboard), `ui/table` (Settings, AdminUsers),
