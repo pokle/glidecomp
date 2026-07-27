@@ -12,6 +12,7 @@ import { Fragment, useEffect, useId, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { Form } from "react-aria-components";
 import { Button, LinkButton } from "@/react/rac/button";
+import { Loading } from "@/react/rac/progress";
 import {
   Dialog,
   DialogFooter,
@@ -51,6 +52,7 @@ import { CompSetupProgress } from "../comp/CompSetupProgress";
 import { SettingsDialog } from "../comp/SettingsDialog";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
+import { TaskDiagram } from "../comp/TaskDiagram";
 import {
   fetchWithRetry,
   isPastCloseDate,
@@ -141,9 +143,7 @@ function CompDetailContent() {
 
   if (!comp) {
     return (
-      <p role="status" aria-label="Loading competition" className="text-muted-foreground">
-        Loading competition…
-      </p>
+      <Loading>Loading competition…</Loading>
     );
   }
 
@@ -538,20 +538,28 @@ function FeaturedTaskGroup({
           });
 
         return (
-          <div key={task.task_id} className="mt-2 first:mt-1">
-            <h3 className="text-xl font-bold">
-              <Link
-                className="underline-offset-4 hover:underline"
-                to={taskPath(compId, compName, task.task_id, task.name)}
-              >
-                {task.name}
-              </Link>{" "}
-              <span className="text-sm font-normal text-muted-foreground">
-                {task.pilot_classes.join(", ")}
-                {!task.has_xctsk ? " · route not set yet" : null}
-              </span>
-            </h3>
-            <div className="mt-3 flex flex-wrap gap-2">{buttons}</div>
+          <div key={task.task_id} className="mt-2 flex flex-wrap items-start gap-x-4 gap-y-2 first:mt-1">
+            <div className="min-w-0 flex-1">
+              <h3 className="text-xl font-bold">
+                <Link
+                  className="underline-offset-4 hover:underline"
+                  to={taskPath(compId, compName, task.task_id, task.name)}
+                >
+                  {task.name}
+                </Link>{" "}
+                <span className="text-sm font-normal text-muted-foreground">
+                  {task.pilot_classes.join(", ")}
+                  {!task.has_xctsk ? " · route not set yet" : null}
+                </span>
+              </h3>
+              <div className="mt-3 flex flex-wrap gap-2">{buttons}</div>
+            </div>
+            {/* The day's task shape, right where a pilot looks first. Decorative
+                here: the heading beside it already names the task, and the task
+                page carries the route as a table. */}
+            {task.route ? (
+              <TaskDiagram task={task.route} size="sm" label={null} />
+            ) : null}
           </div>
         );
       })}
@@ -698,9 +706,13 @@ function TasksList({
             <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
               {formatTaskDate(date)}
             </h3>
-            <ul className="mt-1.5 space-y-1.5 pl-4 text-sm">
+            {/* pr-5 matches the featured card's p-5, so every route glyph on
+                the page — the card's and the rows' — lines up on one right
+                edge instead of the card's sitting alone. */}
+            <ul className="mt-1.5 space-y-1 pr-5 pl-4 text-sm">
               {dateTasks.map((task) => (
-                <li key={task.task_id} className="flex flex-wrap items-center gap-2">
+                <li key={task.task_id} className="flex items-center gap-4">
+                  <div className="min-w-0 flex-1">
                   <Link
                     className="underline-offset-4 hover:underline"
                     to={taskPath(compId, compName, task.task_id, task.name)}
@@ -737,6 +749,19 @@ function TasksList({
                       {task.pilot_classes.join(", ")}
                     </span>
                   </Link>
+                  </div>
+                  {/* Tiny route glyph: enough to tell one day's task from
+                      another's at a glance. Decorative — the link beside it
+                      names the task. Nothing is reserved when a task has no
+                      route: the glyphs are right-aligned, so an empty box
+                      buys no alignment and only pads the row — which on a
+                      phone (or against a comp-api that predates the `route`
+                      field) turns the whole list into dead space. */}
+                  {task.route ? (
+                    <span aria-hidden="true" className="shrink-0">
+                      <TaskDiagram task={task.route} size="xs" label={null} />
+                    </span>
+                  ) : null}
                 </li>
               ))}
             </ul>

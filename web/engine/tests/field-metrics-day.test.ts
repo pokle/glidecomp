@@ -113,6 +113,46 @@ function makeDriftField(): FieldContext {
   ]);
 }
 
+/**
+ * The reported symptom, reproduced: a leader who glides most of leg 1 and
+ * circles EARLY on leg 2, plus a tail pilot still circling leg 1 long after
+ * the leader has left it. The legs' circling windows then come out of course
+ * order — which is honest about where the wind was measured, and reads as the
+ * course being flown out of order unless the flown windows are drawn too.
+ */
+function makeGlidedLastLegField(): FieldContext {
+  const leader = [
+    ...straightFixes(0, 390, 0, 1600, 12, -0.5),
+    ...driftingCirclingFixes(400, 100, 4800, 1400, 2, 4), // inside leg 2 (300–1400 s)
+    ...straightFixes(510, 890, 6000, 1600, 12, -0.5),
+  ];
+  const tail = [
+    ...straightFixes(0, 790, 0, 1600, 12, -0.5),
+    ...driftingCirclingFixes(800, 100, 9600, 1400, 2, 4), // inside leg 1 (0–1000 s)
+    ...straightFixes(910, 90, 10800, 1600, 12, -0.5),
+  ];
+  return makeTestField([
+    {
+      name: 'leader',
+      fixes: leader,
+      turnpointResult: {
+        sssReaching: reaching(1, 0),
+        sequence: [reaching(1, 0), reaching(2, 300), reaching(3, 1400)],
+        lastTurnpointReached: 3,
+      },
+    },
+    {
+      name: 'tail',
+      fixes: tail,
+      turnpointResult: {
+        sssReaching: reaching(1, 0),
+        sequence: [reaching(1, 0), reaching(2, 1000)],
+        lastTurnpointReached: 2,
+      },
+    },
+  ]);
+}
+
 /** Field where nobody circles — no circles, no thermals. */
 function makeStraightField(): FieldContext {
   return makeTestField([
@@ -163,25 +203,39 @@ describe('day.wind', () => {
     expect(hourRow).toBeDefined();
     expect(Number(hourRow![3])).toBe(n); // every sample falls in that hour
 
-    // By-leg table: labelled by waypoint name + role, with a "When" range.
-    expect(byLeg.columns.map((c) => c.header)).toEqual(['Leg', 'When', 'Speed (km/h)', 'Dir (°)', 'n']);
+    // By-leg table: labelled by waypoint name + role, with the leg's flown
+    // window and the narrower window its wind was measured in.
+    expect(byLeg.columns.map((c) => c.header)).toEqual([
+      'Leg', 'Flown', 'Pilots', 'Circling', 'Speed (km/h)', 'Dir (°)', 'n', 'From pilots',
+    ]);
     const legRow = byLeg.rows.find((r) => r[0] === 'START (SSS)→END (ESS)');
     expect(legRow).toBeDefined();
-    expect(Number(legRow![4])).toBeGreaterThan(0); // n is the 5th column now
-    // Circling happened on this leg, so "When" is an instant range.
-    const when = legRow![1];
-    expect(typeof when).toBe('object');
-    expect('from' in (when as object) && 'to' in (when as object)).toBe(true);
+    expect(Number(legRow![6])).toBeGreaterThan(0); // n
+    expect(legRow![7]).toBe('1'); // one pilot behind those estimates
+    // The circler flew the whole leg (SSS at t=80 s → next TP at t=600 s).
+    expect(legRow![2]).toBe('1');
+    const flownWhen = legRow![1] as { from: string; to: string };
+    expect(typeof flownWhen).toBe('object');
+    expect('from' in flownWhen && 'to' in flownWhen).toBe(true);
+    // Circling happened on this leg, so it too is an instant range — and it
+    // sits INSIDE the flown window, which is the invariant the chart nests on.
+    const circling = legRow![3] as { from: string; to: string };
+    expect(typeof circling).toBe('object');
+    expect(new Date(circling.from).getTime()).toBeGreaterThanOrEqual(new Date(flownWhen.from).getTime());
+    expect(new Date(circling.to).getTime()).toBeLessThanOrEqual(new Date(flownWhen.to).getTime());
 
-    // A leg no one circled on: n=0 and When "—".
+    // A leg no one flew or circled on: every window "—" and both counts 0.
     const laterLeg = byLeg.rows.find((r) => r[0] === 'END (ESS)→GOAL (GOAL)');
     expect(laterLeg).toBeDefined();
-    expect(Number(laterLeg![4])).toBe(0);
+    expect(Number(laterLeg![6])).toBe(0);
     expect(laterLeg![1]).toBe('—');
+    expect(laterLeg![3]).toBe('—');
+    expect(laterLeg![7]).toBe('0');
 
-    // Footnotes explain method, direction convention, and the "When" window.
+    // Footnotes explain method, direction convention, and both windows.
     expect(byHour.footnotes!.join(' ')).toContain('FROM');
-    expect(byLeg.footnotes!.join(' ')).toContain('whole field');
+    expect(byLeg.footnotes!.join(' ')).toContain('when the field was ON the leg');
+    expect(byLeg.footnotes!.join(' ')).toContain('EARLIER than the leg before it');
   });
 
   it('handles a field that produced no circles', () => {
@@ -192,12 +246,12 @@ describe('day.wind', () => {
     expect(byHour.rows.length).toBe(1);
     expect(byHour.rows[0]).toEqual(['Whole task', '—', '—', '0']);
 
-    // By-leg: both speed-section legs, zero samples, "When" dashed.
+    // By-leg: both speed-section legs, zero samples, both windows dashed.
     expect(byLeg.rows.map((r) => r[0])).toEqual([
       'START (SSS)→END (ESS)',
       'END (ESS)→GOAL (GOAL)',
     ]);
-    expect(byLeg.rows.every((r) => r[1] === '—' && r[4] === '0')).toBe(true);
+    expect(byLeg.rows.every((r) => r[1] === '—' && r[3] === '—' && r[6] === '0')).toBe(true);
   });
 
   it('emits wind-hourly and wind-legs series that agree with the tables', () => {
@@ -218,21 +272,66 @@ describe('day.wind', () => {
     expect(hourly.hours[0].t).toBe('2024-01-15T10:00:00.000Z');
     expect(hourly.hours[0].n).toBe(hourly.wholeTask!.n);
 
-    // Legs: the circled leg carries a window + wind; the empty leg is null/0.
+    // Legs: the circled leg carries both windows + wind; the empty leg is null/0.
     const circled = legs.legs.find((l) => l.label === 'START (SSS)→END (ESS)')!;
     expect(circled.n).toBeGreaterThan(0);
     expect(circled.from).not.toBeNull();
     expect(circled.to).not.toBeNull();
     expect(circled.speedKmh!).toBeGreaterThan(5);
+    // The flown window contains the circling window, and both counts are the
+    // one pilot who flew the leg.
+    expect(new Date(circled.flownFrom!).getTime()).toBeLessThanOrEqual(new Date(circled.from!).getTime());
+    expect(new Date(circled.flownTo!).getTime()).toBeGreaterThanOrEqual(new Date(circled.to!).getTime());
+    expect(circled.pilotsOnLeg).toBe(1);
+    expect(circled.pilotsWithEstimates).toBe(1);
     const empty = legs.legs.find((l) => l.label === 'END (ESS)→GOAL (GOAL)')!;
     expect(empty).toEqual({
       label: 'END (ESS)→GOAL (GOAL)',
       from: null,
       to: null,
+      flownFrom: null,
+      flownTo: null,
+      pilotsOnLeg: 0,
       speedKmh: null,
       directionDeg: null,
       n: 0,
+      pilotsWithEstimates: 0,
     });
+  });
+
+  it('gives a later leg an earlier circling window, but never an earlier flown one', () => {
+    const out = dayWind.compute(makeGlidedLastLegField());
+    const legs = out.extraSeries!.find((s) => s.kind === 'wind-legs')!;
+    if (legs.kind !== 'wind-legs') throw new Error('kind');
+    const [leg1, leg2] = legs.legs;
+    expect([leg1.label, leg2.label]).toEqual([
+      'START (SSS)→END (ESS)',
+      'END (ESS)→GOAL (GOAL)',
+    ]);
+    expect(leg1.n).toBeGreaterThan(0);
+    expect(leg2.n).toBeGreaterThan(0);
+
+    // The symptom: leg 2's wind was measured and done before leg 1's was
+    // taken at all, because the leader glided leg 1 and the tail pilot's
+    // circles on it came late.
+    expect(new Date(leg2.to!).getTime()).toBeLessThan(new Date(leg1.from!).getTime());
+
+    // The fix: the flown windows are in course order and each contains its
+    // own circling window, so the chart can nest one inside the other.
+    expect(new Date(leg1.flownFrom!).getTime()).toBeLessThanOrEqual(
+      new Date(leg2.flownFrom!).getTime(),
+    );
+    for (const l of [leg1, leg2]) {
+      expect(new Date(l.flownFrom!).getTime()).toBeLessThanOrEqual(new Date(l.from!).getTime());
+      expect(new Date(l.flownTo!).getTime()).toBeGreaterThanOrEqual(new Date(l.to!).getTime());
+    }
+
+    // Both pilots flew leg 1; only the leader flew leg 2, and one pilot's
+    // circles are the whole of its wind.
+    expect(leg1.pilotsOnLeg).toBe(2);
+    expect(leg2.pilotsOnLeg).toBe(1);
+    expect(leg1.pilotsWithEstimates).toBe(1);
+    expect(leg2.pilotsWithEstimates).toBe(1);
   });
 
   it('emits times as instants the consumer renders in its zone', () => {
@@ -244,7 +343,7 @@ describe('day.wind', () => {
 
     // The CLI renderer formats those in the zone it is given: Melbourne (AEDT,
     // +11) reads 21:00 for BASE_TIME's 10:00Z hour; the default is UTC. The leg
-    // "When" renders as a range with a single trailing token.
+    // leg windows render as a range with a single trailing token.
     const report = evaluateField(makeDriftField(), DAY_METRICS);
     const zoned = renderFieldReport(report, { timeZone: 'Australia/Melbourne' });
     expect(zoned).toContain('21:00 AEDT');

@@ -41,6 +41,7 @@ import type { BestProgressRoute, OpenDistanceLine } from "../../analysis/map-pro
 import { formatTaskDate } from "../lib/format";
 import { formatTimeInZone, zoneNameWithOffset } from "../lib/time";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { Loading } from "@/react/rac/progress";
 import { underTask } from "../lib/crumbs";
 import { retry } from "../lib/retry";
 import { idFromSegment, pilotPath } from "../lib/slug";
@@ -603,7 +604,7 @@ export function PilotScoreDetail() {
     return (
       <div>
         {breadcrumbs}
-        <p className="mt-4 text-muted-foreground">Loading score details...</p>
+        <Loading className="mt-4">Loading score details…</Loading>
       </div>
     );
   }

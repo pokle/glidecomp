@@ -296,8 +296,12 @@ export function SubmitTrackDialog({
           <Button slot="close" variant="outline">
             Cancel
           </Button>
-          <Button isDisabled={uploading} onPress={() => void upload()}>
-            {uploading ? "Uploading..." : "Upload"}
+          <Button
+            isPending={uploading}
+            pendingLabel="Uploading"
+            onPress={() => void upload()}
+          >
+            Upload
           </Button>
         </DialogFooter>
       </Dialog>

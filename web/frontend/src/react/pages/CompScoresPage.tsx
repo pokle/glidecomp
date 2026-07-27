@@ -13,6 +13,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/react/rac/button";
+import { Loading } from "@/react/rac/progress";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
@@ -101,9 +102,7 @@ export function CompScoresPage() {
 
   if (!comp) {
     return (
-      <p role="status" aria-label="Loading scores" className="text-muted-foreground">
-        Loading scores…
-      </p>
+      <Loading>Loading scores…</Loading>
     );
   }
 
@@ -121,15 +120,16 @@ export function CompScoresPage() {
             variant="outline"
             size="sm"
             onPress={() => void rescore()}
-            isDisabled={rescoring}
+            isPending={rescoring}
+            pendingLabel="Re-scoring"
           >
-            {rescoring ? "Re-scoring…" : "Recompute scores"}
+            Recompute scores
           </Button>
         ) : null}
       </div>
 
       {state.kind === "loading" ? (
-        <p className="mt-2 text-muted-foreground">Loading scores…</p>
+        <Loading className="mt-2">Loading scores…</Loading>
       ) : state.kind === "unavailable" ? (
         <ScoresEmptyState isAdmin={isAdmin} tasksHref={`${compPath(compId, comp.name)}#tasks`} />
       ) : (

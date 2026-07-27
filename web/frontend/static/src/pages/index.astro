@@ -13,21 +13,22 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 ---
 
 <Base
-  title="GlideComp — score your club comp, every point explained"
-  description="GlideComp scores hang gliding and paragliding competitions in the browser: import the task, let pilots upload IGC tracks, and publish GAP or open-distance results with a step-by-step explanation any pilot can follow."
+  title="GlideComp — score your comp, learn from the field"
+  description="GlideComp scores hang gliding and paragliding competitions in the browser — GAP or open distance, every point explained — and analyses every track flown on the day, so pilots can see how the fast pilots climbed, glided and chose their lines in the same air."
 >
   <!-- ===================== Hero ===================== -->
   <section class="hero">
     <div class="container">
       <h1 class="hero-title fade-in">
-          Scoring a Comp?
-          <span class="accent">Easy.</span>
+          Score the comp.
+          <span class="accent">Learn from the field.</span>
       </h1>
       <p class="hero-description fade-in" style="--delay:.05s">
-        GlideComp scores hang gliding and paragliding comps right here in
-        your browser. No software to install. Set a task, let pilots
-        upload their own IGC track logs, and get GAP or open-distance
-        standings with a step-by-step explanation any pilot can follow.
+        A competition is the one place you fly the same air as pilots better
+        than you. GlideComp scores the day in your browser — GAP or open
+        distance, every point explained — then compares every track flown, so
+        you can see what the fast pilots did differently and take it to the
+        next comp.
       </p>
       <div class="hero-cta fade-in" style="--delay:.1s">
         <button type="button" class="button button-primary" data-signin>
@@ -36,7 +37,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         <a class="button button-secondary" href="/comp">Browse competitions</a>
       </div>
       <p class="hero-note fade-in" style="--delay:.15s">
-        Free · Results are public — pilots don't need an account to follow along
+        Free · Scores and analysis are public — no account needed to read them
       </p>
     </div>
     <div class="hero-stage fade-in" style="--delay:.2s">
@@ -63,6 +64,10 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         </div>
         <div class="trust-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>
+          <span>Field analysis across every pilot</span>
+        </div>
+        <div class="trust-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>
           <span>IGC files from any instrument</span>
         </div>
         <div class="trust-item">
@@ -77,6 +82,272 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>
           <span>Nothing to install</span>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== Learn (the pilot pitch) ===================== -->
+  <section class="section-pad" id="learn">
+    <div class="container">
+      <div class="section-header fade-in">
+        <span class="eyebrow">For pilots</span>
+        <h2>Everyone flew the same air. Why were they faster?</h2>
+        <p>
+          The scores tell you who won. GlideComp's analysis tells you what
+          separated the field — by measuring every track flown on the task
+          against every other one.
+        </p>
+      </div>
+
+      <!-- Chart tabs. Every panel is in the DOM and the track scrolls
+           natively, so with JS off (or before it runs) all six are still
+           readable by swiping — the script below only adds the tab
+           affordance on top. Names in these charts are pseudonymised. -->
+      <div class="charts fade-in" id="charts">
+        <div class="chart-tabs-shell">
+          <div class="chart-tabs" role="tablist" aria-label="Field analysis charts">
+            <button role="tab" type="button" id="ct-0" aria-controls="cp-0" aria-selected="true" tabindex="0">Behind the leader</button>
+            <button role="tab" type="button" id="ct-1" aria-controls="cp-1" aria-selected="false" tabindex="-1">The whole field</button>
+            <button role="tab" type="button" id="ct-2" aria-controls="cp-2" aria-selected="false" tabindex="-1">Speed vs result</button>
+            <button role="tab" type="button" id="ct-3" aria-controls="cp-3" aria-selected="false" tabindex="-1">How high it went</button>
+            <button role="tab" type="button" id="ct-4" aria-controls="cp-4" aria-selected="false" tabindex="-1">When it switched on</button>
+            <button role="tab" type="button" id="ct-5" aria-controls="cp-5" aria-selected="false" tabindex="-1">Wind, leg by leg</button>
+          </div>
+          <div class="chart-indicator" aria-hidden="true"></div>
+        </div>
+
+        <div class="chart-track" id="chart-track">
+          <section role="tabpanel" id="cp-0" aria-labelledby="ct-0" tabindex="0">
+            <figure class="chart-card">
+              <div class="chart-plate">
+                <img
+                  src={`${base}/screenshots/analysis-behind-leader.png`}
+                  alt="Line chart: minutes behind the fastest pilot at each of seven turnpoints. The leader runs flat along zero at the top, the next four are picked out in colour, and the rest of the field fans downward in grey with several lines stopping early."
+                  width="1668"
+                  height="954"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
+              <figcaption class="chart-note">
+                <strong>Minutes behind the leader, turnpoint by turnpoint.</strong>
+                Every pilot's race against the fastest one. Lines that stop early
+                are pilots who landed out.
+              </figcaption>
+            </figure>
+          </section>
+
+          <section role="tabpanel" id="cp-1" aria-labelledby="ct-1" tabindex="0">
+            <figure class="chart-card">
+              <div class="chart-plate">
+                <img
+                  src={`${base}/screenshots/analysis-field-heatmap.png`}
+                  alt="Heatmap: 32 pilots down the side in finishing order, 24 behavioural metrics across the top grouped by family, each cell shaded by percentile. The top rows are visibly darker across most columns."
+                  width="1712"
+                  height="1326"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
+              <figcaption class="chart-note">
+                <strong>Every pilot against every metric.</strong>
+                Rows are pilots in finishing order, columns are the measures,
+                darker is a better percentile. The dark band along the top is
+                what winning looked like.
+              </figcaption>
+            </figure>
+          </section>
+
+          <section role="tabpanel" id="cp-2" aria-labelledby="ct-2" tabindex="0">
+            <figure class="chart-card">
+              <div class="chart-plate">
+                <img
+                  src={`${base}/screenshots/analysis-speed-rank.png`}
+                  alt="Scatter plot: each dot is a pilot, gliding speed on the horizontal axis from 38 to 72 km/h, finishing rank up the vertical axis with rank 1 at the top, and a fitted trend curve rising left to right."
+                  width="1644"
+                  height="882"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
+              <figcaption class="chart-note">
+                <strong>Gliding speed against finishing rank.</strong>
+                One dot per pilot. The strongest separator on this task: the
+                pilots who glided faster between climbs finished ahead.
+              </figcaption>
+            </figure>
+          </section>
+
+          <section role="tabpanel" id="cp-3" aria-labelledby="ct-3" tabindex="0">
+            <figure class="chart-card">
+              <div class="chart-plate">
+                <img
+                  src={`${base}/screenshots/analysis-thermal-top.png`}
+                  alt="Height against time: a filled orange thermal-top line and a dashed pink cloud-base line, both climbing to about 3000 metres by mid-afternoon before the orange line drops away after 18:30."
+                  width="1712"
+                  height="516"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
+              <figcaption class="chart-note">
+                <strong>Thermal top against cloud base.</strong>
+                The working band through the day, from the weather model. The
+                orange line falling away is the day shutting down.
+              </figcaption>
+            </figure>
+          </section>
+
+          <section role="tabpanel" id="cp-4" aria-labelledby="ct-4" tabindex="0">
+            <figure class="chart-card">
+              <div class="chart-plate">
+                <img
+                  src={`${base}/screenshots/analysis-climb-strength.png`}
+                  alt="Climb rate by hour: a median line around 1 to 2 metres per second with shaded percentile bands, start gates and the task deadline marked with vertical rules, and rows beneath showing takeoff times and climb counts."
+                  width="1712"
+                  height="662"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
+              <figcaption class="chart-note">
+                <strong>How strong the climbs were, hour by hour.</strong>
+                Measured from the field's own tracks, not a model — so you can
+                see the day weakening under the pilots still on course.
+              </figcaption>
+            </figure>
+          </section>
+
+          <section role="tabpanel" id="cp-5" aria-labelledby="ct-5" tabindex="0">
+            <figure class="chart-card">
+              <div class="chart-plate">
+                <img
+                  src={`${base}/screenshots/analysis-wind-legs.png`}
+                  alt="Gantt-style chart: one row per task leg on a time axis. Each row has a pale bar spanning when the field flew that leg and a solid band inside it spanning the circling its wind was measured from, with an arrow for wind direction and a label giving speed and compass point."
+                  width="1712"
+                  height="590"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
+              <figcaption class="chart-note">
+                <strong>What the wind did on each leg.</strong>
+                The pale bar is when the field flew the leg; the solid band
+                inside it is the circling the wind was estimated from — on a
+                leg everyone glided, that's a sliver of it.
+              </figcaption>
+            </figure>
+          </section>
+        </div>
+
+        <p class="chart-source">
+          From Corryong Cup 2026, Task 1 — 32 pilots. Names are shortened to
+          letters here, in finishing order.
+        </p>
+      </div>
+
+      <div class="feature-grid fade-in">
+        <article class="feature-card">
+          <h3>Climbing</h3>
+          <p>
+            Whether you out-climbed the pilots sharing your thermal, how long
+            you took to find the core, how high in the day's band you topped
+            out, and whether you left good lift or milked it until it died.
+          </p>
+        </article>
+        <article class="feature-card">
+          <h3>Gliding</h3>
+          <p>
+            Speed between climbs, glide angle against the rest of the field,
+            how far you drifted off the course line, and whether you pushed
+            harder when the next climb was stronger.
+          </p>
+        </article>
+        <article class="feature-card">
+          <h3>Decision-making</h3>
+          <p>
+            How low you were willing to go before committing to the next
+            climb, the low saves you dug out, distance covered between
+            thermals, and how much of the race you spent hunting.
+          </p>
+        </article>
+        <article class="feature-card">
+          <h3>Gaggle</h3>
+          <p>
+            Time spent flying with others, climbs you joined on someone else's
+            marker, and how often going it alone actually paid off.
+          </p>
+        </article>
+        <article class="feature-card">
+          <h3>Race craft</h3>
+          <p>
+            How long after the gate opened you started, where race time went
+            leg by leg, how far behind the leader you reached ESS, and what
+            height you had left when you got there.
+          </p>
+        </article>
+        <article class="feature-card">
+          <h3>The day itself</h3>
+          <p>
+            Wind and climb strength hour by hour, drawn from the field's own
+            tracks and read against the weather model — because half of what
+            looks like skill is really the day you got.
+          </p>
+        </article>
+      </div>
+      <p class="section-footnote fade-in">
+        Every metric is ranked by how strongly it actually separated the field
+        that day, and checked across the comp's other tasks — so you can tell a
+        real lesson from a quirk of one day's weather. Each pilot's score comes
+        with the same treatment: a plain-English timeline of the flight, on the
+        map and in 3D.
+        {/* A real, warm report on a real comp. The `bqlf` task id is assigned
+            by D1 and is NOT stable across a reseed of Corryong Cup 2026 (the
+            comp sqid `voqc` is) — if that comp is reseeded, re-read the task
+            id from /api/comp/voqc and update this href. */}
+        <a href="/comp/corryong-cup-2026-voqc/analysis/task/task-1-open-bqlf">
+          See the report for Corryong Cup 2026, Task 1&nbsp;→
+        </a>
+      </p>
+    </div>
+  </section>
+
+  <!-- ===================== Organisers ===================== -->
+  <section class="section-pad bg-soft" id="organisers">
+    <div class="container">
+      <div class="section-header fade-in">
+        <span class="eyebrow">For organisers &amp; scorers</span>
+        <h2>The scoring runs itself</h2>
+        <p>
+          No software to install, no spreadsheet to babysit, and nobody
+          waiting on the scorer at the end of the day.
+        </p>
+      </div>
+      <div class="feature-grid fade-in">
+        <article class="feature-card">
+          <h3>Set the task</h3>
+          <p>
+            Import or build the task in the browser, then share it — pilots
+            scan a QR code to load it straight into XCTrack, Flyskyhy or
+            SeeYou Navigator.
+          </p>
+        </article>
+        <article class="feature-card">
+          <h3>Pilots upload their own tracks</h3>
+          <p>
+            IGC from any instrument, submitted by the pilot or by you on their
+            behalf. Scores recompute as tracks land, and every task page is
+            public the moment it exists.
+          </p>
+        </article>
+        <article class="feature-card">
+          <h3>Every point explained</h3>
+          <p>
+            GAP to the CIVL formulas or a simple open-distance format, with
+            penalties, corrections and task edits all recorded in a public
+            audit log. Nobody has to take the numbers on trust.
+          </p>
+        </article>
       </div>
     </div>
   </section>
@@ -116,6 +387,39 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
               them. There's also a simpler open-distance format for club XC
               days. The <a href="/scoring">scoring guide</a> explains both in
               detail.
+            </p>
+          </div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" type="button" aria-expanded="false">
+            <h3>What can I actually learn from the analysis?</h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+          </button>
+          <div class="faq-answer">
+            <p>
+              Where your day went, compared against everyone who flew the same
+              task. GlideComp measures each pilot's climbing, gliding,
+              decision-making, gaggle flying and race craft from the track
+              logs, then ranks those measures by how strongly they separated
+              the field — so the report leads with what mattered on the day
+              rather than a wall of numbers. Read it beside your own score
+              explanation and you have something concrete to work on before
+              the next comp.
+            </p>
+          </div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" type="button" aria-expanded="false">
+            <h3>Who can see my track?</h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+          </button>
+          <div class="faq-answer">
+            <p>
+              Anyone following the competition. A track submitted for scoring
+              becomes part of the public record of that task — that's what
+              makes the comparison possible, and it's the same deal every
+              pilot in the field takes. Flights you analyse privately, outside
+              a competition, stay yours.
             </p>
           </div>
         </div>
@@ -169,8 +473,8 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
           </button>
           <div class="faq-answer">
             <p>
-              GlideComp is free to use. It's an open project — the source is
-              on
+              GlideComp is free to use, and sponsored by Tushar Pokle. It's an
+              open project — the source is on
               <a href="https://github.com/pokle/glidecomp" target="_blank" rel="noopener noreferrer">GitHub</a>.
             </p>
           </div>
@@ -183,10 +487,10 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
   <section class="cta-section bg-soft" id="start">
     <div class="container">
       <div class="fade-in">
-        <h2>Ready to score your next comp?</h2>
+        <h2>Fly it, score it, learn from it</h2>
         <p>
-          Create a competition, import your task, and see the first scores
-          land before the retrieve gets back.
+          Create a competition, import your task, and have the standings — and
+          the day's analysis — waiting before the retrieve gets back.
         </p>
         <div class="cta-buttons">
           <button type="button" class="button button-primary button-large" data-signin>
@@ -298,6 +602,9 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     text-wrap: balance;
   }
   .hero-title .accent {
+    /* Own line at every width — the two halves are a pair of sentences, and
+       letting "Learn" wrap up beside "comp." reads as one run-on. */
+    display: block;
     color: var(--primary);
   }
   .hero-description {
@@ -389,6 +696,207 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     flex-shrink: 0;
   }
 
+  /* ---- Feature cards (learn / organisers) ---- */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 22px;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+  .feature-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 26px 24px;
+  }
+  .feature-card h3 {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+  .feature-card p {
+    margin-top: 10px;
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--muted-foreground);
+  }
+  .section-footnote {
+    max-width: 760px;
+    margin: 44px auto 0;
+    text-align: center;
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--muted-foreground);
+    text-wrap: pretty;
+  }
+  .section-footnote a {
+    color: var(--primary);
+    font-weight: 500;
+    /* Underlined, like the FAQ links — never colour alone (WCAG 1.4.1). */
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* ---- Chart tabs (vanilla: no component library on the static pages) ---- */
+  .charts {
+    max-width: 1000px;
+    margin: 0 auto 56px;
+  }
+
+  .chart-tabs-shell {
+    position: relative;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 22px;
+  }
+
+  .chart-tabs {
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .chart-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chart-tabs [role="tab"] {
+    flex: 0 0 auto;
+    appearance: none;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--muted-foreground);
+    padding: 11px 15px;
+    cursor: pointer;
+    white-space: nowrap;
+    border-radius: 8px 8px 0 0;
+    transition: color 0.18s ease, background 0.18s ease;
+  }
+  .chart-tabs [role="tab"]:hover {
+    color: var(--foreground);
+    background: color-mix(in srgb, var(--primary) 8%, transparent);
+  }
+  .chart-tabs [role="tab"][aria-selected="true"] {
+    color: var(--primary);
+  }
+  .chart-tabs [role="tab"]:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+  }
+
+  /* Sits under the selected tab and slides between them. Sized by the script;
+     with JS off it stays 0-wide and the tabs simply read as a list. */
+  .chart-indicator {
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: var(--primary);
+    border-radius: 2px;
+    transition:
+      transform 0.28s cubic-bezier(0.32, 0.72, 0, 1),
+      width 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+    pointer-events: none;
+  }
+
+  /* The track is the scroll container — swipe and trackpad gestures are the
+     browser's own, so there is no drag code to ship. */
+  .chart-track {
+    display: flex;
+    gap: 20px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+  .chart-track::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chart-track [role="tabpanel"] {
+    flex: 0 0 100%;
+    min-width: 0;
+    scroll-snap-align: center;
+    scroll-snap-stop: always;
+  }
+  .chart-track [role="tabpanel"]:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 4px;
+    border-radius: 16px;
+  }
+
+  .chart-card {
+    margin: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .chart-plate {
+    /* The charts are captured on white, so the plate stays white in dark mode
+       too — otherwise the image sits on a mismatched ground. A fixed height
+       keeps the card from jumping as you move between tabs. */
+    --plate-h: min(46vh, 430px);
+    background: #fff;
+    height: var(--plate-h);
+    display: grid;
+    place-items: center;
+    padding: 18px;
+  }
+
+  .chart-plate img {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    /* Absolute, not 100%: a percentage max-height against an auto-sized grid
+       row is circular, so browsers drop it and the tall charts overflow. */
+    max-height: calc(var(--plate-h) - 36px);
+    object-fit: contain;
+  }
+
+  .chart-note {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--muted-foreground);
+  }
+  .chart-note strong {
+    color: var(--foreground);
+    font-weight: 600;
+  }
+
+  .chart-source {
+    margin-top: 16px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted-foreground);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chart-indicator,
+    .chart-tabs [role="tab"] {
+      transition: none;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .charts { margin-bottom: 44px; }
+    /* Let the plate hug its chart: at this width a fixed height leaves the
+       wide, short charts floating in dead space. */
+    .chart-plate { height: auto; padding: 12px; }
+    .chart-plate img { max-height: 46vh; }
+    .chart-track { align-items: start; }
+    .chart-note { padding: 14px 16px; font-size: 14px; }
+  }
+
   /* ---- FAQ ---- */
   .faq-grid {
     max-width: 820px;
@@ -432,7 +940,9 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     transition: max-height 0.35s ease;
   }
   .faq-item.active .faq-answer {
-    max-height: 420px;
+    /* Generous cap: the longest answer wraps to ~15 lines on a narrow phone,
+       and a max-height that clips would swallow the end of it. */
+    max-height: 640px;
   }
   .faq-answer p {
     padding: 0 4px 26px;
@@ -547,5 +1057,82 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       const open = item.classList.toggle("active");
       button.setAttribute("aria-expanded", String(open));
     });
+  }
+
+  // Chart tabs (ARIA tabs pattern, ~40 lines of plain DOM — no component
+  // library on the static pages). The panels are already scrollable without
+  // this: all it adds is the tab affordance, the sliding indicator, and
+  // keyboard support.
+  const chartTabs = /** @type {HTMLButtonElement[]} */ ([
+    ...document.querySelectorAll('.chart-tabs [role="tab"]'),
+  ]);
+  if (chartTabs.length) {
+    const track = document.getElementById("chart-track");
+    const panels = /** @type {HTMLElement[]} */ ([
+      ...document.querySelectorAll('.chart-track [role="tabpanel"]'),
+    ]);
+    const indicator = document.querySelector(".chart-indicator");
+    const smooth = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? "auto"
+      : "smooth";
+    let current = 0;
+
+    const moveIndicator = () => {
+      const tab = chartTabs[current];
+      indicator.style.width = tab.offsetWidth + "px";
+      indicator.style.transform = "translateX(" + tab.offsetLeft + "px)";
+    };
+
+    const paint = (i) => {
+      current = i;
+      chartTabs.forEach((t, n) => {
+        t.setAttribute("aria-selected", String(n === i));
+        t.tabIndex = n === i ? 0 : -1;
+      });
+      moveIndicator();
+      // Keep the selected tab visible when the tab strip itself has scrolled.
+      chartTabs[i].scrollIntoView({ block: "nearest", inline: "nearest", behavior: smooth });
+    };
+
+    const goTo = (i, focusTab) => {
+      i = Math.max(0, Math.min(chartTabs.length - 1, i));
+      panels[i].scrollIntoView({ block: "nearest", inline: "center", behavior: smooth });
+      paint(i);
+      if (focusTab) chartTabs[i].focus();
+    };
+
+    chartTabs.forEach((tab, i) => tab.addEventListener("click", () => goTo(i)));
+
+    document.querySelector(".chart-tabs").addEventListener("keydown", (e) => {
+      const next = {
+        ArrowRight: current + 1,
+        ArrowLeft: current - 1,
+        Home: 0,
+        End: chartTabs.length - 1,
+      }[e.key];
+      if (next === undefined) return;
+      e.preventDefault();
+      goTo(next, true);
+    });
+
+    // A swipe is just a scroll — watch which panel settles and let the tabs
+    // follow it, rather than listening for pointer drags.
+    const panelObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting && entry.intersectionRatio > 0.55) {
+            const i = panels.indexOf(entry.target);
+            if (i !== -1 && i !== current) paint(i);
+          }
+        }
+      },
+      { root: track, threshold: [0.55, 0.9] }
+    );
+    for (const panel of panels) panelObserver.observe(panel);
+
+    window.addEventListener("resize", moveIndicator);
+    // Web fonts land after first paint and change the tab widths.
+    document.fonts?.ready.then(moveIndicator);
+    moveIndicator();
   }
 </script>

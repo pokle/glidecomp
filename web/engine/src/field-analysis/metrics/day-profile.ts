@@ -139,6 +139,49 @@ function legIndexAt(pilot: PilotAnalysisContext, tMs: number): number | null {
   return seq[last].taskIndex;
 }
 
+/** When the field was ON a leg, and how many pilots that window covers. */
+interface LegOccupancy {
+  /** First entry onto the leg, epoch ms. */
+  fromMs: number;
+  /** Last exit off it, epoch ms. */
+  toMs: number;
+  /** Pilots who flew the whole leg. */
+  pilots: number;
+}
+
+/**
+ * Per-leg occupancy windows, keyed by the leg's from-turnpoint task index:
+ * first pilot entering → last pilot leaving.
+ *
+ * Counts only pilots who STARTED and COMPLETED the leg — exactly the
+ * population {@link legIndexAt} attributes circles to, so a leg's circling
+ * window can never fall outside its occupancy window. That containment is
+ * what lets a consumer draw one inside the other; widen this population and
+ * the two stop being commensurable. A pilot still on the leg when they landed
+ * is therefore absent: their exit time is unknowable, same reason their
+ * circles are not attributed.
+ */
+function legOccupancies(field: FieldContext): Map<number, LegOccupancy> {
+  const out = new Map<number, LegOccupancy>();
+  for (const pilot of field.pilots) {
+    if (pilot.sssMs === null) continue;
+    const seq = pilot.score.turnpointResult.sequence;
+    for (let i = 0; i < seq.length - 1; i++) {
+      const fromMs = seq[i].time.getTime();
+      const toMs = seq[i + 1].time.getTime();
+      const cur = out.get(seq[i].taskIndex);
+      if (cur) {
+        cur.fromMs = Math.min(cur.fromMs, fromMs);
+        cur.toMs = Math.max(cur.toMs, toMs);
+        cur.pilots += 1;
+      } else {
+        out.set(seq[i].taskIndex, { fromMs, toMs, pilots: 1 });
+      }
+    }
+  }
+  return out;
+}
+
 /** Speed (km/h, 1 dp) / Dir (° FROM) / n cells for a vector-mean wind. */
 function windCells(w: MeanWind | null): [string, string, string] {
   return [
@@ -229,6 +272,7 @@ const dayWind: MetricComputer = {
         if (list) list.push(w);
         else byLeg.set(legIndex, [w]);
       }
+      const occupancy = legOccupancies(field);
       const legRows: ReportCell[][] = [];
       const legSeries: WindLegsSeries = {
         id: 'day.wind.legs',
@@ -243,15 +287,28 @@ const dayWind: MetricComputer = {
         const wind = circularMeanWind(legWinds.map((w) => w.sample));
         const fromMs = legWinds.length ? Math.min(...legWinds.map((w) => w.tMs)) : null;
         const toMs = legWinds.length ? Math.max(...legWinds.map((w) => w.tMs)) : null;
-        const when: ReportCell = fromMs !== null && toMs !== null ? rangeCell(fromMs, toMs) : '—';
-        legRows.push([label, when, ...windCells(wind)]);
+        const flown = occupancy.get(leg.fromTaskIndex) ?? null;
+        const pilotsWithEstimates = new Set(legWinds.map((w) => w.pilot.trackFile)).size;
+        const circling: ReportCell = fromMs !== null && toMs !== null ? rangeCell(fromMs, toMs) : '—';
+        legRows.push([
+          label,
+          flown ? rangeCell(flown.fromMs, flown.toMs) : '—',
+          String(flown?.pilots ?? 0),
+          circling,
+          ...windCells(wind),
+          String(pilotsWithEstimates),
+        ]);
         legSeries.legs.push({
           label,
           from: fromMs !== null ? new Date(fromMs).toISOString() : null,
           to: toMs !== null ? new Date(toMs).toISOString() : null,
+          flownFrom: flown ? new Date(flown.fromMs).toISOString() : null,
+          flownTo: flown ? new Date(flown.toMs).toISOString() : null,
+          pilotsOnLeg: flown?.pilots ?? 0,
           speedKmh: wind ? wind.speed * 3.6 : null,
           directionDeg: wind ? wind.direction : null,
           n: wind?.n ?? 0,
+          pilotsWithEstimates,
         });
       }
       series.push(legSeries);
@@ -259,17 +316,24 @@ const dayWind: MetricComputer = {
         title: 'Wind by leg',
         columns: [
           { header: 'Leg', align: 'left' },
-          { header: 'When', align: 'left' },
+          { header: 'Flown', align: 'left' },
+          { header: 'Pilots', align: 'right' },
+          { header: 'Circling', align: 'left' },
           { header: 'Speed (km/h)', align: 'right' },
           { header: 'Dir (°)', align: 'right' },
           { header: 'n', align: 'right' },
+          { header: 'From pilots', align: 'right' },
         ],
         rows: legRows,
         footnotes: [
           WIND_METHOD_FOOTNOTE,
-          '“When” is the whole field’s circling window for the leg — from the first to the ' +
-            'last circle wind-estimate any pilot logged while on it (the exact times behind ' +
-            'that leg’s wind). Glides produce no estimate, so a leg no one circled on shows “—”.',
+          '“Flown” is when the field was ON the leg — the first pilot entering to the last ' +
+            'leaving — over the “Pilots” who started and flew the whole leg.',
+          '“Circling” is the narrower window the wind was actually measured in: first to last ' +
+            'circle estimate any pilot logged while on the leg, from “From pilots” pilots. ' +
+            'Glides produce no estimate, so a leg the field mostly glided shows a sliver of its ' +
+            'flown window (or “—” where no one circled at all) — and a late leg the leaders ' +
+            'glided can be measured EARLIER than the leg before it without either being wrong.',
         ],
       });
     }

@@ -1,11 +1,12 @@
 # <img src="web/frontend/public/icon.svg" alt="GlideComp logo" width="32" height="32" /> GlideComp
 
-**GlideComp** is a web application for analyzing hanggliding and paragliding competition flights.
+**GlideComp** scores hanggliding and paragliding competitions — and analyses the whole field's flights, so pilots can learn from the people they flew the day with.
 
 **What it does:**
 - Pilots (or competition organizers) load IGC track log files and XCTask task files in the browser
 - The app analyzes flights: task completion, scoring explanations, glide performance, thermal/climb analysis
 - Full **CIVL GAP scoring** implementation (FAI Sporting Code Section 7F) — distance, time, leading, and arrival points for both PG and HG
+- **Field analysis** — every track on a task measured against every other one across climbing, gliding, decision-making, gaggle and race craft, ranked by how strongly each behaviour separated the field, and read against the day's weather
 - Includes 2D (Mapbox) and 3D (Three.js globe) map visualization of flight tracks
 - Competition management features: pilot registration, task setup, scoring, penalties, with a full audit log for transparency
 
@@ -28,6 +29,7 @@ The app is live at **[glidecomp.com](https://glidecomp.com)**.
 - **Thermal analysis** — entry/exit times, altitude gain, average climb rate
 - **Glide analysis** — distance, altitude lost, L/D ratio, plus sink detection for poor glides
 - **GAP scoring** — CIVL GAP scoring with distance, time, leading, and arrival points
+- **Field analysis** — 26 cross-pilot behavioural metrics per task, ranked by Spearman correlation against finishing position, with per-comp consistency across tasks
 - **Competition management** — create competitions, register pilots, upload IGC tracks, manage tasks, apply penalties, with full audit logging
 - **Authentication** — Google OAuth login with user profiles
 - **Task editor** — create and edit tasks with drag-to-reorder turnpoints, waypoint database search, and click-on-map placement

@@ -18,6 +18,7 @@ import {
 import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/react/lib/utils";
+import { Spinner } from "./progress";
 
 const buttonVariants = cva(
   "inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50 data-pressed:translate-y-px data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -52,18 +53,55 @@ const buttonVariants = cva(
 
 type ButtonVariants = VariantProps<typeof buttonVariants>;
 
+/**
+ * `isPending` is RAC's own in-flight state and is preferred over
+ * `isDisabled={saving}` + swapping the label to "Saving…": it blocks presses
+ * (and implicit form submission) while keeping the button FOCUSABLE, so focus
+ * isn't dumped to the body mid-action, and it announces the flip assertively.
+ * RAC leaves the visuals to us; this adds the spinner and dims the label.
+ *
+ * The spinner is a labelled `Spinner` (a real progressbar) rather than a bare
+ * icon on purpose — RAC folds its label into the button's accessible name
+ * while pending, which is the text it announces. `pendingLabel` says what is
+ * happening ("Saving"); it never replaces the visible label, so the button
+ * keeps its width and the reader keeps their place.
+ */
 export function Button({
   className,
   variant,
   size,
+  children,
+  pendingLabel = "In progress",
   ...props
-}: Omit<AriaButtonProps, "className"> & ButtonVariants & { className?: string }) {
+}: Omit<AriaButtonProps, "className"> &
+  ButtonVariants & {
+    className?: string;
+    /** Accessible name for the pending spinner. Not shown visually. */
+    pendingLabel?: string;
+  }) {
   return (
     <AriaButton
       data-slot="button"
-      className={cn(buttonVariants({ variant, size }), className)}
+      className={cn(
+        buttonVariants({ variant, size }),
+        // RAC sets data-disabled from isDisabled ONLY, so pending needs its
+        // own dimming; press/hover are already neutralised by RAC.
+        "data-pending:cursor-default data-pending:opacity-70",
+        className
+      )}
       {...props}
-    />
+    >
+      {(renderProps) => (
+        <>
+          {renderProps.isPending ? (
+            <Spinner label={pendingLabel} className="shrink-0" />
+          ) : null}
+          {typeof children === "function"
+            ? children(renderProps)
+            : (children ?? renderProps.defaultChildren)}
+        </>
+      )}
+    </AriaButton>
   );
 }
 

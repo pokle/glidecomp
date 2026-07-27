@@ -175,6 +175,51 @@
 
 }
 
+/* Indeterminate progress fill — the moving part of `rac/progress.tsx`'s
+   ProgressBar when `isIndeterminate` (work is in flight, duration unknown).
+   Tailwind has no keyframes of its own, so the animation lives here.
+
+   The reduced-motion fallback is DESIGNED, not inherited: the global rule at
+   the bottom of this file collapses durations to ~0 and stops looping, which
+   would park the stripe at an arbitrary spot and read as "stuck at 40%". A
+   static striped fill spanning the whole track says "busy, no idea how long"
+   without moving a pixel — the same thing the animation says. */
+@keyframes gc-progress-indeterminate {
+  0% {
+    left: 0;
+    right: 100%;
+  }
+  50% {
+    left: 25%;
+    right: 25%;
+  }
+  100% {
+    left: 100%;
+    right: 0;
+  }
+}
+
+.gc-progress-indeterminate {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  animation: gc-progress-indeterminate 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gc-progress-indeterminate {
+    animation: none;
+    left: 0;
+    right: 0;
+    /* Stripes, not a solid fill: a full solid bar reads as "100%, done". */
+    background-image: repeating-linear-gradient(
+      135deg,
+      transparent 0 4px,
+      var(--background) 4px 8px
+    );
+  }
+}
+
 /* Reduced motion (WCAG 2.3.3, accessibility-standard §4.4). When the user has
    asked their OS to minimise motion, neutralise non-essential transitions and
    animations app-wide: collapse durations to a near-zero value (kept non-zero

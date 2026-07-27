@@ -16,6 +16,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Form } from "react-aria-components";
 import { xctaskTurnpointsToRecords, type XCTask } from "@glidecomp/engine";
 import { Badge } from "@/react/rac/badge";
+import { Loading } from "@/react/rac/progress";
 import { Button, LinkButton, buttonVariants } from "@/react/rac/button";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import {
@@ -51,6 +52,7 @@ import { CompNameProvider } from "../comp/comp-name-context";
 import { TaskStandings } from "../comp/TaskStandings";
 import { RouteEditorDialog } from "../comp/RouteEditorDialog";
 import { TurnpointsTable } from "../comp/TurnpointsTable";
+import { TaskDiagram } from "../comp/TaskDiagram";
 import { gateToHHMM, startConfigSummary } from "../comp/route-editor";
 import { useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 import {
@@ -193,9 +195,7 @@ function TaskDetailContent() {
 
   if (!task) {
     return (
-      <p role="status" aria-label="Loading task" className="text-muted-foreground">
-        Loading task…
-      </p>
+      <Loading>Loading task…</Loading>
     );
   }
 
@@ -552,6 +552,11 @@ function TurnpointsSection({
   isAdmin: boolean;
   onEditRoute: () => void;
 }) {
+  // Which turnpoint the diagram is pointing at, mirrored into the table below
+  // so the shape and the numbers stay tied together. Client-only state, so it
+  // does not affect the server-rendered markup.
+  const [focused, setFocused] = useState<number | null>(null);
+
   if (!xctsk && !isAdmin) return null;
   return (
     <section>
@@ -572,7 +577,20 @@ function TurnpointsSection({
             taskDate={taskDate}
             timezone={timezone}
           />
-          <TurnpointsTable xctsk={xctsk} />
+          {/* The task's shape, drawn from the same optimised line the table
+              measures and the scorer uses. Not a map — "View on map" above is
+              for that; this is the at-a-glance read. */}
+          <div className="mt-3 flex justify-center overflow-x-auto rounded-lg border bg-muted/20 p-2">
+            <TaskDiagram
+              task={xctsk}
+              size="md"
+              className="shrink-0"
+              onTurnpointHover={(tp) => setFocused(tp?.index ?? null)}
+              onTurnpointSelect={(tp) => setFocused(tp.index)}
+              highlightIndex={focused}
+            />
+          </div>
+          <TurnpointsTable xctsk={xctsk} highlightIndex={focused} />
         </>
       ) : (
         <p className="mt-2 text-muted-foreground">No route defined yet</p>
@@ -769,8 +787,8 @@ function EditTaskDialog({
             <Button slot="close" variant="outline">
               Cancel
             </Button>
-            <Button type="submit" isDisabled={saving}>
-              {saving ? "Saving..." : "Save"}
+            <Button type="submit" isPending={saving} pendingLabel="Saving">
+              Save
             </Button>
           </DialogFooter>
         </Form>
