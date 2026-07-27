@@ -16,6 +16,13 @@
  *   3. narrow → the pane stays on screen while the table scrolls under it,
  *      and keyboard focus never lands behind it (WCAG 2.4.11).
  *
+ * A second group covers the full-screen overlay (MetricChartOverlay): the
+ * pinned chart is only a few hundred pixels on a phone, so "Expand" is what
+ * makes it readable, and the assertion that matters is that the chart really
+ * does get bigger — the plot scales to its CSS width, so a full-screen sheet
+ * that did not also grow the viewBox would render the same size in portrait
+ * and the feature would be a no-op.
+ *
  * READ-ONLY against the seeded "Corryong Cup 2026" sample comp: nothing is
  * created, so there is nothing to clean up (an e2e-created comp is exactly
  * what breaks the SSR suite's discover()). The page is public — no sign-in.
@@ -174,6 +181,62 @@ test("narrow: keyboard focus never lands behind the pinned chart", async ({ page
     });
     expect(obscured).toBe(false);
   }
+});
+
+test("expanding the chart makes it very much bigger, in both orientations", async ({
+  page,
+}) => {
+  for (const [label, width, height] of [
+    ["portrait", 390, 780],
+    ["landscape", 780, 390],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await openRanking(page);
+
+    const inline = (await page.locator('svg[role="group"]').first().boundingBox())!;
+    await page.getByRole("button", { name: /full screen$/ }).first().click();
+
+    const dialog = page.getByRole("dialog");
+    await dialog.waitFor();
+    // One frame for the ResizeObserver to report the sheet's box.
+    await page.waitForTimeout(400);
+    const expanded = (await dialog.locator('svg[role="group"]').boundingBox())!;
+
+    // Not a token increase: the plot is drawn on a fixed-width viewBox, so
+    // filling the sheet has to grow the viewBox too or portrait gets the same
+    // strip it already had.
+    const growth = (expanded.width * expanded.height) / (inline.width * inline.height);
+    expect(growth, `${label} should be a real expansion`).toBeGreaterThan(1.8);
+    expect(expanded.width).toBeGreaterThanOrEqual(inline.width);
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  }
+});
+
+test("the expanded chart stays open when you tap a dot, and returns focus on close", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 780 });
+  await openRanking(page);
+
+  const trigger = page.getByRole("button", { name: /full screen$/ }).first();
+  await trigger.click();
+  const dialog = page.getByRole("dialog");
+  await dialog.waitFor();
+
+  // RAC focuses the Close button, so Escape is not the only way out.
+  await expect(page.locator(":focus")).toHaveText("Close");
+
+  // The deliberate departure from the QR / task-glyph overlays: those make the
+  // whole sheet a close target because their content is a picture. Every dot
+  // here is interactive, so tapping one must NOT dismiss.
+  await dialog.locator("svg g[tabindex]").first().click({ force: true });
+  await expect(dialog).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(trigger).toBeFocused();
 });
 
 test("narrow: the chart can be folded away to read the table", async ({ page }) => {

@@ -31,6 +31,7 @@ import { cn } from "@/react/lib/utils";
 import { MetricExplanation } from "./MetricExplanation";
 import { verdictWords } from "./units";
 import { MetricDetailPanel } from "./charts/MetricDetailPanel";
+import { MetricChartOverlay } from "./charts/MetricChartOverlay";
 import {
   FAMILY_LABELS,
   MIN_CORRELATION_N,
@@ -227,6 +228,17 @@ export function SeparationRanking({
                 onShowAllLabelsChange={setShowAllLabels}
                 methodClassName="hidden @5xl:block"
                 className="rounded-none border-0"
+                // The pinned pane is a few hundred pixels on a phone, which
+                // is not enough chart to read; this is the way to the whole
+                // screen. Useful at every width, so it is not narrow-only.
+                headerAction={
+                  <MetricChartOverlay
+                    metric={selectedMetric}
+                    pilots={report.pilots}
+                    showAllLabels={showAllLabels}
+                    onShowAllLabelsChange={setShowAllLabels}
+                  />
+                }
               />
             ) : null
           }

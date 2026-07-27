@@ -17,6 +17,7 @@
  * lets it pin to the top of a narrow viewport), so it has to announce what it
  * is rather than rely on following the table that explains it.
  */
+import type { ReactNode } from "react";
 import { cn } from "@/react/lib/utils";
 import { MetricMethod } from "../MetricExplanation";
 import type { FieldAnalysisReport, MetricReport } from "../types";
@@ -30,6 +31,7 @@ export function MetricDetailPanel({
   onShowAllLabelsChange,
   headingId,
   headingLevel = 3,
+  headerAction,
   methodClassName,
   className,
 }: {
@@ -45,6 +47,9 @@ export function MetricDetailPanel({
    * heading of its own (the print block), 3 when it is the section's own
    * first level. */
   headingLevel?: 3 | 4;
+  /** Control rendered opposite the metric name — the full-screen trigger.
+   * Absent in print, which has no screen to fill. */
+  headerAction?: ReactNode;
   /** Extra classes on the method prose. The pinned pane drops it on a narrow
    * screen (`hidden @5xl:block`): pinned, the panel gets a few hundred
    * pixels, and a paragraph of method spends all of them before the chart —
@@ -56,16 +61,19 @@ export function MetricDetailPanel({
   const Heading = headingLevel === 4 ? "h4" : "h3";
   return (
     <div className={cn("space-y-3 rounded-lg border p-4", className)}>
-      <div>
-        <Heading id={headingId} className="font-medium">
-          {metric.label}
-        </Heading>
-        <MetricMethod
-          unit={metric.unit}
-          direction={metric.direction}
-          explanation={metric.explanation}
-          className={cn("mt-1", methodClassName)}
-        />
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <Heading id={headingId} className="font-medium">
+            {metric.label}
+          </Heading>
+          <MetricMethod
+            unit={metric.unit}
+            direction={metric.direction}
+            explanation={metric.explanation}
+            className={cn("mt-1", methodClassName)}
+          />
+        </div>
+        {headerAction}
       </div>
       <RankScatter
         metric={metric}
