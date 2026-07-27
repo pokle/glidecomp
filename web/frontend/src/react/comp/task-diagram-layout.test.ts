@@ -3,6 +3,7 @@ import type { XCTask } from "@glidecomp/engine";
 import {
   buildTaskDiagram,
   describeTaskRoute,
+  gateTickPlacement,
   placeArrows,
   type TaskDiagramOptions,
 } from "./task-diagram-layout";
@@ -218,6 +219,37 @@ describe("placeArrows", () => {
 
   it("has nothing to point at with fewer than two points", () => {
     expect(placeArrows([{ x: 1, y: 1 }], 10)).toEqual([]);
+  });
+});
+
+describe("gateTickPlacement", () => {
+  const goal = { x: 100, y: 0 };
+
+  it("sets the gate back from the turnpoint, not through it", () => {
+    // The whole point: an ESS that is also the goal must not get a tick
+    // struck across its ring, which reads as a "prohibited" symbol.
+    const at = gateTickPlacement(goal, { x: 0, y: 0 }, 15)!;
+    expect(at.x).toBe(85);
+    expect(at.y).toBe(0);
+    // Perpendicular to a due-east leg.
+    expect(at.angle).toBeCloseTo(Math.PI / 2);
+  });
+
+  it("caps the setback at 40% of a short leg", () => {
+    // A near-concentric ESS/goal: honouring the full offset would put the
+    // gate back past the previous turnpoint.
+    const at = gateTickPlacement({ x: 20, y: 0 }, { x: 0, y: 0 }, 15)!;
+    expect(at.x).toBe(12); // 20 − min(15, 8)
+  });
+
+  it("stays on the leg whatever its direction", () => {
+    const at = gateTickPlacement({ x: 0, y: 100 }, { x: 0, y: 0 }, 15)!;
+    expect(at).toMatchObject({ x: 0, y: 85 });
+    expect(at.angle).toBeCloseTo(Math.PI);
+  });
+
+  it("draws nothing for a zero-length leg", () => {
+    expect(gateTickPlacement(goal, { ...goal }, 15)).toBeNull();
   });
 });
 

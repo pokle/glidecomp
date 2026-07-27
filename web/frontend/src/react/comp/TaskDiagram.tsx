@@ -29,6 +29,7 @@ import { cn } from "@/react/lib/utils";
 import {
   buildTaskDiagram,
   describeTaskRoute,
+  gateTickPlacement,
   type TaskDiagramTurnpoint,
 } from "./task-diagram-layout";
 
@@ -382,10 +383,15 @@ function TurnpointMarker({
       )}
 
       {turnpoint.isEss && incoming ? (
-        // End of speed section: a timing gate drawn across the incoming leg.
+        // End of speed section: a timing gate across the incoming leg, set
+        // BACK from the marker rather than drawn through it. An ESS is very
+        // often the last turnpoint too (this task's NCORGL is), and a tick
+        // through the goal's ring reads as a strike-through — a "prohibited"
+        // symbol on the one place the pilot is trying to reach.
         <GateTick
           point={tag}
           from={incoming}
+          offset={round2(ringR * 1.9)}
           length={round2(ringR * 2.1)}
           width={round2(preset.routeWidth * 1.2)}
         />
@@ -409,27 +415,35 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-/** A short line through `point`, perpendicular to the leg arriving from `from`. */
+/**
+ * The ESS timing gate: a short line across the incoming leg, positioned by
+ * `gateTickPlacement` (which is where the "set back, capped to the leg" rules
+ * live, and where they are tested).
+ */
 function GateTick({
   point,
   from,
+  offset,
   length,
   width,
 }: {
   point: { x: number; y: number };
   from: { x: number; y: number };
+  offset: number;
   length: number;
   width: number;
 }) {
-  const angle = Math.atan2(point.y - from.y, point.x - from.x) + Math.PI / 2;
-  const dx = (Math.cos(angle) * length) / 2;
-  const dy = (Math.sin(angle) * length) / 2;
+  const at = gateTickPlacement(point, from, offset);
+  if (!at) return null;
+
+  const dx = (Math.cos(at.angle) * length) / 2;
+  const dy = (Math.sin(at.angle) * length) / 2;
   return (
     <line
-      x1={round2(point.x - dx)}
-      y1={round2(point.y - dy)}
-      x2={round2(point.x + dx)}
-      y2={round2(point.y + dy)}
+      x1={round2(at.x - dx)}
+      y1={round2(at.y - dy)}
+      x2={round2(at.x + dx)}
+      y2={round2(at.y + dy)}
       strokeWidth={width}
       strokeLinecap="round"
     />
