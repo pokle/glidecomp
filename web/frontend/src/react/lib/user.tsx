@@ -7,7 +7,8 @@
  * changing their real session. Presentation-only — the API still authenticates
  * the real superadmin, so nothing here grants or removes any actual access.
  */
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getCurrentUserOnce, type AuthUser } from "../../auth/client";
 import { safeNext } from "./safe-next";
 
@@ -95,23 +96,38 @@ export function useAdminView(realIsAdmin: boolean): boolean {
  * into Google OAuth. Pass `next` (an internal path) to return the user where
  * they started after signing in.
  */
-export function goToSignIn(next?: string) {
-  // While a superadmin previews a signed-out/pilot view, "Sign in" means
-  // "back to my real self", not a real sign-in round trip.
-  if (readPreviewRole() !== "actual") {
-    writePreviewRole("actual");
-    window.location.reload();
-    return;
-  }
-  // Validate `next` down to a same-origin path with the same parser the
-  // browser uses (safeNext) — the naive startsWith("/") guard let a
-  // backslash-folded "/\\host" through (see safe-next.ts). Empty fallback so
-  // an off-origin `next` degrades to a plain /signin rather than a bogus link.
-  const validated = safeNext(next, "");
-  const target = validated
-    ? `/signin?next=${encodeURIComponent(validated)}`
-    : "/signin";
-  window.location.assign(target);
+export function useGoToSignIn(): (next?: string) => void {
+  const navigate = useNavigate();
+  return useCallback(
+    (next?: string) => {
+      // While a superadmin previews a signed-out/pilot view, "Sign in" means
+      // "back to my real self", not a real sign-in round trip. This one stays
+      // a real reload: the preview role is read out of sessionStorage at boot.
+      if (readPreviewRole() !== "actual") {
+        writePreviewRole("actual");
+        window.location.reload();
+        return;
+      }
+      // Validate `next` down to a same-origin path with the same parser the
+      // browser uses (safeNext) — the naive startsWith("/") guard let a
+      // backslash-folded "/\\host" through (see safe-next.ts). Empty fallback
+      // so an off-origin `next` degrades to a plain /signin rather than a
+      // bogus link.
+      const validated = safeNext(next, "");
+      // A client-side hop, not window.location: /signin is a route in this
+      // same SPA, so a real navigation threw away the loaded app and re-booted
+      // it — bundle re-parse, providers remounted, every boot fetch repeated.
+      //
+      // Safe in this direction only. The reverse (SignIn -> `next`, after a
+      // successful sign-in) must stay a full page load, because the current
+      // user is resolved once per page load and a client-side hop would carry
+      // the stale signed-out answer into the signed-in page. See SignIn.tsx.
+      navigate(
+        validated ? `/signin?next=${encodeURIComponent(validated)}` : "/signin"
+      );
+    },
+    [navigate]
+  );
 }
 
 /**

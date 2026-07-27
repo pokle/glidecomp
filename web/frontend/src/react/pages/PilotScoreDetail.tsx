@@ -15,6 +15,7 @@
  * IGC is fetched separately, only to draw the track on the map.
  */
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { useInView } from "../lib/use-in-view";
 import { useParams } from "react-router-dom";
 import {
   explainGapScore,
@@ -480,6 +481,9 @@ export function PilotScoreDetail() {
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [mapExpanded, setMapExpanded] = useState(false);
+  // Mapbox (764 KB) waits until the map panel nears the viewport — the page's
+  // narrative is what the visitor came for. See lib/use-in-view.
+  const [mapRef, mapInView] = useInView<HTMLDivElement>();
   // Time scrubber: draw the track only up to this fix (null = whole flight).
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
   // Deep-link into the standalone analysis viewer, which loads the whole
@@ -670,12 +674,18 @@ export function PilotScoreDetail() {
           }
         >
           <div
+            ref={mapRef}
             className={`relative overflow-hidden ${
               mapExpanded
                 ? "min-h-0 w-full flex-1"
                 : "h-56 rounded-lg border sm:h-72 lg:h-[calc(100vh-8rem)]"
             }`}
           >
+            {!mapInView ? (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                Loading map...
+              </div>
+            ) : (
             <Suspense
               fallback={
                 <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -693,6 +703,7 @@ export function PilotScoreDetail() {
                 bestProgressRoute={data.bestProgressRoute}
               />
             </Suspense>
+            )}
             {/* Map controls, styled like the providers' own controls (white
                 regardless of theme) and kept clear of them: bottom-right, above
                 the attribution line. The analysis link opens the full track in

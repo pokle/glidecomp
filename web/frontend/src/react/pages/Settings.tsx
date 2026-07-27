@@ -40,7 +40,7 @@ import { deleteAccount } from "../../auth/client";
 import { storage } from "../../analysis/storage";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
-import { goToSignIn, useUser } from "../lib/user";
+import { useGoToSignIn, useUser } from "../lib/user";
 import { type ThemePreference, useTheme } from "../lib/theme";
 import { setUnit, useUnits, type UnitPreferences } from "../lib/units";
 
@@ -84,6 +84,7 @@ function SavedFlash({ nonce }: { nonce: number }) {
 
 export function Settings() {
   const { user, loading, isSuperAdmin, previewRole } = useUser();
+  const goToSignIn = useGoToSignIn();
 
   useEffect(() => {
     document.title = "GlideComp - Settings";

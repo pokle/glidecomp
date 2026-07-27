@@ -6,6 +6,10 @@
 import "../styles/global.css";
 import SiteHeader from "../components/SiteHeader.astro";
 import SiteFooter from "../components/SiteFooter.astro";
+// The body face, preloaded. Without the hint it is CSS-discovered — the
+// browser only learns the URL once global.css has parsed, so first paint
+// waits on two serial round trips. `?url` gives the hashed build path.
+import bodyFont from "@fontsource-variable/atkinson-hyperlegible-next/files/atkinson-hyperlegible-next-latin-wght-normal.woff2?url";
 
 interface Props {
   title: string;
@@ -26,6 +30,13 @@ const metaDescription =
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="/icon.svg" />
+    <link
+      rel="preload"
+      href={bodyFont}
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <title>{title}</title>
     <meta name="description" content={metaDescription} />
     <meta property="og:site_name" content="GlideComp" />

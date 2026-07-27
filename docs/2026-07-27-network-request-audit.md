@@ -160,7 +160,7 @@ public, cacheable page carrying `"user":null`; and that the non-SSR routes
 `test:e2e:ssr` (27 tests incl. 8 hydration checks), `test:e2e` (24) and
 `bun run test` (1121) pass.
 
-### F3 — Four to six separate font files on every page
+### F3 — Four to six separate font files on every page — **FIXED**
 
 Every page fetches 4 woff2 files (~50 KB); the task field-analysis page fetches
 6 (~75 KB). They are CSS-discovered, so they start late — on the comp hub the
@@ -175,7 +175,28 @@ runtime, but the two blocks have diverging comments and one of them should go.
 to it collapses 4–5 requests into 1 and, with a single `preload` hint in
 `app.html` and the Astro `Base` layout, removes the late-discovery stall.
 
-### F4 — The home page ships 2.85 MB of PNG (97% of the page)
+
+**Landed.** One variable file (`@fontsource-variable`) spans the whole 200–800
+axis, declared in a shared `src/fonts.css` that both `react/globals.css` (which
+Astro and the analysis page also reuse) and `replay.css` import.
+
+The `@font-face` rules are hand-written rather than an `@import` of the
+package's CSS so the family keeps its **existing name**. @fontsource-variable
+publishes as "Atkinson Hyperlegible Next Variable", and the name is referenced
+from places a rename breaks *silently*: the 3D replay's canvas labels, the two
+`document.fonts.load()` calls, the Mapbox label font and the analysis HUD. A
+mistyped family in a canvas context does not throw — it just renders in a
+fallback face.
+
+Also preloaded, since a CSS-declared font is only discovered once the
+stylesheet has parsed. Astro gets it via a `?url` import; the SPA shell needs a
+small Vite plugin, because the filename is content-hashed and therefore only
+knowable from the finished bundle. Only the upright latin file is preloaded —
+preloading italic and latin-ext would fetch faces most pages never use.
+
+Measured: 4–6 font requests per page → **1** (2 on a page that uses italics).
+
+### F4 — The home page ships 2.85 MB of PNG (97% of the page) — **FIXED**
 
 `static/public/screenshots/pilot-explain.png` is **2400×1600, 2.44 MB**, marked
 `fetchpriority="high"` in `static/src/pages/index.astro:47`. It is the LCP
@@ -190,7 +211,23 @@ are fetched eagerly with no `loading="lazy"` despite being below the fold.
 - Give `/screenshots/*` a real `max-age` in `_headers` (they are unhashed, so
   something like a day, not a year).
 
-### F5 — Unauthenticated `/u/me` does a full page reload to reach `/signin`
+
+**Landed.** The screenshots moved from `static/public/` into
+`static/src/assets/` so Astro's image pipeline can transcode them, and the page
+now uses `<Picture>` — AVIF with a WebP fallback and a srcset per display
+width. Still prerendered: `<picture>` needs no JavaScript.
+
+Two traps worth recording. Astro **upscales** if a requested width exceeds the
+source, and a re-encoded upscale is bigger than the original — a 1712px chart
+asked for at 2048 came out larger than the file it came from, so the widths are
+clamped per image against its own intrinsic width. And the default PNG fallback
+variants were the biggest files in the whole build (2.7 MB for one hero
+variant); `fallbackFormat="webp"` drops them.
+
+Measured, the whole page: **2917 KB → 151 KB, 10 requests → 7.** The hero alone
+is 2440 KB → 48 KB.
+
+### F5 — Unauthenticated `/u/me` does a full page reload to reach `/signin` — **FIXED**
 
 `goToSignIn()` in `src/react/lib/user.tsx` calls `window.location.assign()`.
 `/signin` is a route in the *same* SPA, so this discards the loaded application
@@ -204,7 +241,18 @@ A react-router `navigate()` makes the transition free and drops the auth calls
 to (post-F2) one. The `window.location.reload()` in the preview-role branch
 above it is legitimate and should stay.
 
-### F6 — Mapbox costs 764 KB on two public pages
+
+**Landed** as a `useGoToSignIn()` hook (the callers are all components under
+the router). The preview-role branch keeps its `window.location.reload()` — the
+role is read from sessionStorage at boot.
+
+Safe in this direction **only**. The reverse hop, SignIn → `next` after a
+successful sign-in, must stay a full page load: the current user is resolved
+once per page load, so a client-side navigation would carry the stale
+signed-out answer into the signed-in page. That asymmetry is now commented at
+both ends.
+
+### F6 — Mapbox costs 764 KB on two public pages — **PARTLY FIXED**
 
 `/comp/:id/waypoints` (1312 KB) and `…/pilot/:id` (1401 KB) against a ~545 KB
 SPA baseline. `mapbox-gl` (508 KB br) plus `mapbox-provider` (250 KB br) are
@@ -215,7 +263,28 @@ Gate the dynamic import on an `IntersectionObserver` (or an explicit "show map"
 control) so the majority of readers who never scroll to the map never pay for
 it. The route map is already a `<Suspense>` boundary, so the change is local.
 
-### F7 — `app.js` is 1.4 MB raw / 429 KB Brotli and is not route-split
+
+**Partly landed, and the audit over-promised here.** The maps are now gated
+behind an IntersectionObserver (`lib/use-in-view.ts`, latching and SSR-safe).
+
+But the predicted "−764 KB on two public pages" **does not materialise**, and
+measurement says so plainly: mapbox loads at both a 1280px and a 390px
+viewport, on both pages. The audit assumed the maps were below the fold. They
+are not — the pilot page's map is a full-height side panel, and the waypoints
+map is `order-1` on mobile, i.e. the *first* thing on the page. A gate cannot
+skip what the visitor is looking at.
+
+What it does deliver is real but smaller: the map can no longer contend with
+first paint, because an observer can only fire after layout. On the pilot page
+FCP is 212 ms and mapbox now starts at 325 ms — after the content, where
+before it was requested as soon as the component mounted.
+
+Getting the bytes back needs a **product** decision, not a technical one:
+require an explicit tap to open the map on small screens. That trades a
+core feature's immediacy for ~764 KB and is the owner's call, so it is left
+open here.
+
+### F7 — `app.js` is 1.4 MB raw / 429 KB Brotli and is not route-split — **FIXED**
 
 `src/react/routes.tsx` statically imports all twenty page components, and the
 whole SPA contains only two `lazy()` calls (both map components, F6). So an
@@ -235,12 +304,30 @@ anonymous visitor needs.
 Tabulator (450 KB) and the date picker (134 KB) are *already* separate chunks —
 that part is working.
 
-### F8 — `/replay` fetches a 3.0 MB JSON payload with `max-age=300`
+
+**Landed** for the eight non-SSR routes — dashboard, settings, onboarding,
+sign-in, the two admin screens, the Tabulator-backed pilots roster and
+`/scores`. The eight server-rendered routes stay static imports, with a comment
+saying why: a lazy boundary the server resolved but the client hasn't fetched
+is what makes hydration discard the SSR markup.
+
+Entry bundle **1399 KB → 1146 KB raw, 439 KB → 358 KB gzip**.
+
+### F8 — `/replay` fetches a 3.0 MB JSON payload with `max-age=300` — **FIXED**
 
 `/api/comp/sample-3dvis` is a fixed sample dataset served with a five-minute
 TTL, so a returning viewer re-downloads 3 MB. Since the payload is derived from
 a specific task, a longer TTL (or a URL keyed by the task id, which is then
 effectively immutable) makes repeat views free.
+
+
+**Landed**, but as an **ETag rather than a longer TTL**. The audit's suggestion
+was wrong on inspection: the URL is stable while the content is not — upload a
+track and the same URL must answer differently — so a long max-age would serve
+a stale replay through a live comp. The bundle is already content-addressed by
+a cache key, which makes a perfect ETag: a repeat view revalidates and gets a
+~200-byte 304 instead of 3 MB, with freshness unchanged. A matching
+If-None-Match also skips the multi-megabyte KV read entirely.
 
 ### F9 — Minor: bare comp ids 301-redirect
 
@@ -253,20 +340,27 @@ mistaken for a bug when it appears in a trace.
 
 ## 3. Recommended order
 
-| # | Change | Effort | Effect |
+| # | Change | Status | Measured effect |
 |---|---|---|---|
-| 1 | ~~`_headers`: `immutable` on `/assets/*`, `/_astro/*`~~ **done** | trivial | **−44% requests** on a repeat-visit journey (measured) |
-| 2 | ~~Dedupe `/api/auth/me`; embed user in `__SSR_DATA__`~~ **done** | small | **61 → 43 requests** on the journey; zero auth round trips on public pages (measured) |
-| 3 | AVIF/WebP + `srcset` + lazy on home screenshots | small | **−2.6 MB** on the primary SEO page |
-| 4 | Variable font + one `preload` | small | −3 to −5 requests/page, earlier text paint |
-| 5 | `navigate()` instead of `location.assign()` in `goToSignIn` | trivial | removes a full SPA re-boot from the signed-out path |
-| 6 | Route-`lazy()` the non-SSR routes | medium | cuts the 429 KB entry bundle for anonymous visitors |
-| 7 | Defer Mapbox until the map is in view | medium | −764 KB on two public pages |
-| 8 | Longer TTL for `/api/comp/*/3dvis` | small | −3 MB on repeat replay views |
+| 1 | `_headers`: `immutable` on `/assets/*`, `/_astro/*` | done | −47 requests on the journey; all 47 were 304s returning no data |
+| 2 | Dedupe `/api/auth/me`; embed user in `__SSR_DATA__` | done | 61 → 43 requests; zero auth round trips on public pages |
+| 3 | AVIF/WebP + `srcset` on the home screenshots | done | home page **2917 KB → 151 KB**, 10 requests → 7 |
+| 4 | Variable font + preload | done | 4–6 font requests per page → 1 |
+| 5 | `navigate()` instead of `location.assign()` | done | removes a full SPA re-boot from the signed-out path |
+| 6 | Route-`lazy()` the non-SSR routes | done | entry bundle 439 → 358 KB gzip |
+| 7 | Defer Mapbox until in view | partial | off the critical path (FCP 212 ms, map starts 325 ms) — but **not** the predicted −764 KB; see F6 |
+| 8 | ETag on the 3dvis bundle | done | repeat replay views revalidate for ~200 bytes instead of 3 MB |
 
-Items 1–5 are low-risk and independently shippable. Items 6–7 touch the SSR
-hydration boundary and the map lifecycle, so each wants its own PR and an
-`bun run test:e2e:ssr` pass.
+Cumulative on the ten-page journey: **108 → 38 wire requests**, and the home
+page — the one that decides whether a visitor tries GlideComp — went from
+2.9 MB to 151 KB.
+
+The one thing left open is F6's remaining bytes, which needs a product
+decision rather than a technical one.
+
+Every item above shipped with `bun run test:e2e:ssr` passing (30 tests,
+including 10 hydration checks) — route-splitting and the SSR tree are the two
+places where a regression would be silent rather than loud.
 
 ## 4. Reproducing
 

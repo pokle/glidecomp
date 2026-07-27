@@ -21,7 +21,7 @@ import { SearchField } from "@/react/rac/field";
 import { api } from "../../comp/api";
 import { CategoryField, NameField, PilotClassesField, TestCompField } from "../comp/fields";
 import { toast } from "../lib/toast";
-import { goToSignIn, useUser } from "../lib/user";
+import { useGoToSignIn, useUser } from "../lib/user";
 import {
   formatDate,
   formatTaskDateRange,
@@ -36,6 +36,7 @@ type Comp = CompListEntry;
 
 export function Competitions() {
   const { user, previewRole } = useUser();
+  const goToSignIn = useGoToSignIn();
   const navigate = useNavigate();
   // SSR: seed from the server loader so the list is in the first paint and the
   // client hydrates the same markup. Client boot / SPA navigations start null.

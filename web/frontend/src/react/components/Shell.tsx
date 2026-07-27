@@ -23,7 +23,7 @@ import { signOut } from "../../auth/client";
 import {
   DEV_SIGN_IN_ENABLED,
   signInAsDev,
-  goToSignIn,
+  useGoToSignIn,
   useUser,
   type PreviewRole,
 } from "../lib/user";
@@ -39,6 +39,7 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 export function Shell() {
   const { user, loading } = useUser();
+  const goToSignIn = useGoToSignIn();
   const navigate = useNavigate();
   useScrollRestoration();
   const flightsHref = user?.username ? `/u/${user.username}` : "/u/me";

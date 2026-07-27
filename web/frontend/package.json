@@ -17,6 +17,7 @@
   "devDependencies": {
     "@astrojs/mdx": "^6",
     "@cloudflare/workers-types": "^4.20260702.1",
+    "@fontsource-variable/atkinson-hyperlegible-next": "^5.3.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.1",
@@ -26,6 +27,7 @@
     "jsdom": "^25.0.1",
     "rehype-katex": "^7.0.1",
     "remark-math": "^6.0.0",
+    "sharp": "^0.35.3",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^7.3.6",
