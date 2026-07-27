@@ -25,7 +25,7 @@ import { Checkbox, CheckboxGroup } from "@/react/rac/checkbox";
 import { DatePicker } from "@/react/ui/date-picker";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
-import { goToSignIn, useAdminView, useUser } from "../lib/user";
+import { useGoToSignIn, useAdminView, useUser } from "../lib/user";
 import {
   categoryLabel,
   formatTaskDate,
@@ -443,6 +443,7 @@ function FeaturedTaskGroup({
   signedOut: boolean;
   isAdmin: boolean;
 }) {
+  const goToSignIn = useGoToSignIn();
   return (
     <div className="rounded-xl border bg-gradient-to-br from-muted to-card p-5">
       <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">

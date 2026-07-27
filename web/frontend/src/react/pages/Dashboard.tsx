@@ -17,7 +17,7 @@ import {
 } from "../../analysis/storage";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
-import { goToSignIn, useUser } from "../lib/user";
+import { useGoToSignIn, useUser } from "../lib/user";
 import { downloadFile, formatTaskDate, ordinal, relativeTime } from "../lib/format";
 import { compPath, taskPath, pilotPath } from "../lib/slug";
 import { api } from "../../comp/api";
@@ -32,6 +32,7 @@ const MAX_USER_BYTES = 200 * 1024 * 1024;
 export function Dashboard() {
   const { username } = useParams<{ username: string }>();
   const { user, loading, previewingSignedOut } = useUser();
+  const goToSignIn = useGoToSignIn();
   const navigate = useNavigate();
   const confirm = useConfirm();
 
@@ -70,7 +71,7 @@ export function Dashboard() {
       await refreshLists();
       setReady(true);
     })();
-  }, [user, loading, previewingSignedOut, username, navigate, refreshLists]);
+  }, [user, loading, previewingSignedOut, username, navigate, refreshLists, goToSignIn]);
 
   const handleFiles = useCallback(
     async (files: FileList | File[]) => {

@@ -9,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/react/ui/table";
-import { goToSignIn, useUser } from "../lib/user";
+import { useGoToSignIn, useUser } from "../lib/user";
 
 interface AdminUser {
   id: string;
@@ -27,6 +27,7 @@ interface AdminUser {
 
 export function AdminUsers() {
   const { user, loading: userLoading } = useUser();
+  const goToSignIn = useGoToSignIn();
   const [state, setState] = useState<
     | { kind: "loading" }
     | { kind: "error"; message: string }
@@ -60,7 +61,7 @@ export function AdminUsers() {
         setState({ kind: "error", message: "Network error loading users." });
       }
     })();
-  }, [user, userLoading]);
+  }, [user, userLoading, goToSignIn]);
 
   if (userLoading || state.kind === "loading") {
     return (

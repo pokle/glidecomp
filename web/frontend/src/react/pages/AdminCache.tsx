@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/react/ui/button";
 import { useConfirm } from "../lib/confirm";
 import { toast } from "../lib/toast";
-import { goToSignIn, useUser } from "../lib/user";
+import { useGoToSignIn, useUser } from "../lib/user";
 
 interface NamespaceStats {
   name: string;
@@ -37,6 +37,7 @@ async function loadStats(): Promise<LoadResult> {
 
 export function AdminCache() {
   const { user, loading: userLoading } = useUser();
+  const goToSignIn = useGoToSignIn();
   const confirm = useConfirm();
   const [state, setState] = useState<{ kind: "loading" } | LoadResult>({ kind: "loading" });
   const [clearing, setClearing] = useState(false);
@@ -58,7 +59,7 @@ export function AdminCache() {
     return () => {
       cancelled = true;
     };
-  }, [user, userLoading]);
+  }, [user, userLoading, goToSignIn]);
 
   async function handleClear() {
     const confirmed = await confirm({
