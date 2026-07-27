@@ -98,6 +98,153 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
           against every other one.
         </p>
       </div>
+
+      <!-- Chart tabs. Every panel is in the DOM and the track scrolls
+           natively, so with JS off (or before it runs) all six are still
+           readable by swiping — the script below only adds the tab
+           affordance on top. Names in these charts are pseudonymised. -->
+      <div class="charts fade-in" id="charts">
+        <div class="chart-tabs-shell">
+          <div class="chart-tabs" role="tablist" aria-label="Field analysis charts">
+            <button role="tab" type="button" id="ct-0" aria-controls="cp-0" aria-selected="true" tabindex="0">Behind the leader</button>
+            <button role="tab" type="button" id="ct-1" aria-controls="cp-1" aria-selected="false" tabindex="-1">The whole field</button>
+            <button role="tab" type="button" id="ct-2" aria-controls="cp-2" aria-selected="false" tabindex="-1">Speed vs result</button>
+            <button role="tab" type="button" id="ct-3" aria-controls="cp-3" aria-selected="false" tabindex="-1">How high it went</button>
+            <button role="tab" type="button" id="ct-4" aria-controls="cp-4" aria-selected="false" tabindex="-1">When it switched on</button>
+            <button role="tab" type="button" id="ct-5" aria-controls="cp-5" aria-selected="false" tabindex="-1">Wind, leg by leg</button>
+          </div>
+          <div class="chart-indicator" aria-hidden="true"></div>
+        </div>
+
+        <div class="chart-track" id="chart-track">
+          <section role="tabpanel" id="cp-0" aria-labelledby="ct-0" tabindex="0">
+            <figure class="chart-card">
+              <div class="chart-plate">
+                <img
+                  src={`${base}/screenshots/analysis-behind-leader.png`}
+                  alt="Line chart: minutes behind the fastest pilot at each of seven turnpoints. The leader runs flat along zero at the top, the next four are picked out in colour, and the rest of the field fans downward in grey with several lines stopping early."
+                  width="1668"
+                  height="954"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
+              <figcaption class="chart-note">
+                <strong>Minutes behind the leader, turnpoint by turnpoint.</strong>
+                Every pilot's race against the fastest one. Lines that stop early
+                are pilots who landed out.
+              </figcaption>
+            </figure>
+          </section>
+
+          <section role="tabpanel" id="cp-1" aria-labelledby="ct-1" tabindex="0">
+            <figure class="chart-card">
+              <div class="chart-plate">
+                <img
+                  src={`${base}/screenshots/analysis-field-heatmap.png`}
+                  alt="Heatmap: 32 pilots down the side in finishing order, 24 behavioural metrics across the top grouped by family, each cell shaded by percentile. The top rows are visibly darker across most columns."
+                  width="1712"
+                  height="1326"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
+              <figcaption class="chart-note">
+                <strong>Every pilot against every metric.</strong>
+                Rows are pilots in finishing order, columns are the measures,
+                darker is a better percentile. The dark band along the top is
+                what winning looked like.
+              </figcaption>
+            </figure>
+          </section>
+
+          <section role="tabpanel" id="cp-2" aria-labelledby="ct-2" tabindex="0">
+            <figure class="chart-card">
+              <div class="chart-plate">
+                <img
+                  src={`${base}/screenshots/analysis-speed-rank.png`}
+                  alt="Scatter plot: each dot is a pilot, gliding speed on the horizontal axis from 38 to 72 km/h, finishing rank up the vertical axis with rank 1 at the top, and a fitted trend curve rising left to right."
+                  width="1644"
+                  height="882"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
+              <figcaption class="chart-note">
+                <strong>Gliding speed against finishing rank.</strong>
+                One dot per pilot. The strongest separator on this task: the
+                pilots who glided faster between climbs finished ahead.
+              </figcaption>
+            </figure>
+          </section>
+
+          <section role="tabpanel" id="cp-3" aria-labelledby="ct-3" tabindex="0">
+            <figure class="chart-card">
+              <div class="chart-plate">
+                <img
+                  src={`${base}/screenshots/analysis-thermal-top.png`}
+                  alt="Height against time: a filled orange thermal-top line and a dashed pink cloud-base line, both climbing to about 3000 metres by mid-afternoon before the orange line drops away after 18:30."
+                  width="1712"
+                  height="516"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
+              <figcaption class="chart-note">
+                <strong>Thermal top against cloud base.</strong>
+                The working band through the day, from the weather model. The
+                orange line falling away is the day shutting down.
+              </figcaption>
+            </figure>
+          </section>
+
+          <section role="tabpanel" id="cp-4" aria-labelledby="ct-4" tabindex="0">
+            <figure class="chart-card">
+              <div class="chart-plate">
+                <img
+                  src={`${base}/screenshots/analysis-climb-strength.png`}
+                  alt="Climb rate by hour: a median line around 1 to 2 metres per second with shaded percentile bands, start gates and the task deadline marked with vertical rules, and rows beneath showing takeoff times and climb counts."
+                  width="1712"
+                  height="662"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
+              <figcaption class="chart-note">
+                <strong>How strong the climbs were, hour by hour.</strong>
+                Measured from the field's own tracks, not a model — so you can
+                see the day weakening under the pilots still on course.
+              </figcaption>
+            </figure>
+          </section>
+
+          <section role="tabpanel" id="cp-5" aria-labelledby="ct-5" tabindex="0">
+            <figure class="chart-card">
+              <div class="chart-plate">
+                <img
+                  src={`${base}/screenshots/analysis-wind-legs.png`}
+                  alt="Gantt-style chart: one bar per task leg placed on a time axis, each carrying an arrow for wind direction and a label giving wind speed and compass point."
+                  width="1712"
+                  height="590"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
+              <figcaption class="chart-note">
+                <strong>What the wind did on each leg.</strong>
+                One bar per leg, placed where the field actually flew it, with
+                the wind estimated from the pilots' own circling.
+              </figcaption>
+            </figure>
+          </section>
+        </div>
+
+        <p class="chart-source">
+          From Corryong Cup 2026, Task 1 — 32 pilots. Names are shortened to
+          letters here, in finishing order.
+        </p>
+      </div>
+
       <div class="feature-grid fade-in">
         <article class="feature-card">
           <h3>Climbing</h3>
@@ -590,6 +737,165 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     text-underline-offset: 2px;
   }
 
+  /* ---- Chart tabs (vanilla: no component library on the static pages) ---- */
+  .charts {
+    max-width: 1000px;
+    margin: 0 auto 56px;
+  }
+
+  .chart-tabs-shell {
+    position: relative;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 22px;
+  }
+
+  .chart-tabs {
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .chart-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chart-tabs [role="tab"] {
+    flex: 0 0 auto;
+    appearance: none;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--muted-foreground);
+    padding: 11px 15px;
+    cursor: pointer;
+    white-space: nowrap;
+    border-radius: 8px 8px 0 0;
+    transition: color 0.18s ease, background 0.18s ease;
+  }
+  .chart-tabs [role="tab"]:hover {
+    color: var(--foreground);
+    background: color-mix(in srgb, var(--primary) 8%, transparent);
+  }
+  .chart-tabs [role="tab"][aria-selected="true"] {
+    color: var(--primary);
+  }
+  .chart-tabs [role="tab"]:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+  }
+
+  /* Sits under the selected tab and slides between them. Sized by the script;
+     with JS off it stays 0-wide and the tabs simply read as a list. */
+  .chart-indicator {
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: var(--primary);
+    border-radius: 2px;
+    transition:
+      transform 0.28s cubic-bezier(0.32, 0.72, 0, 1),
+      width 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+    pointer-events: none;
+  }
+
+  /* The track is the scroll container — swipe and trackpad gestures are the
+     browser's own, so there is no drag code to ship. */
+  .chart-track {
+    display: flex;
+    gap: 20px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+  .chart-track::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chart-track [role="tabpanel"] {
+    flex: 0 0 100%;
+    min-width: 0;
+    scroll-snap-align: center;
+    scroll-snap-stop: always;
+  }
+  .chart-track [role="tabpanel"]:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 4px;
+    border-radius: 16px;
+  }
+
+  .chart-card {
+    margin: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .chart-plate {
+    /* The charts are captured on white, so the plate stays white in dark mode
+       too — otherwise the image sits on a mismatched ground. A fixed height
+       keeps the card from jumping as you move between tabs. */
+    --plate-h: min(46vh, 430px);
+    background: #fff;
+    height: var(--plate-h);
+    display: grid;
+    place-items: center;
+    padding: 18px;
+  }
+
+  .chart-plate img {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    /* Absolute, not 100%: a percentage max-height against an auto-sized grid
+       row is circular, so browsers drop it and the tall charts overflow. */
+    max-height: calc(var(--plate-h) - 36px);
+    object-fit: contain;
+  }
+
+  .chart-note {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--muted-foreground);
+  }
+  .chart-note strong {
+    color: var(--foreground);
+    font-weight: 600;
+  }
+
+  .chart-source {
+    margin-top: 16px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted-foreground);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chart-indicator,
+    .chart-tabs [role="tab"] {
+      transition: none;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .charts { margin-bottom: 44px; }
+    /* Let the plate hug its chart: at this width a fixed height leaves the
+       wide, short charts floating in dead space. */
+    .chart-plate { height: auto; padding: 12px; }
+    .chart-plate img { max-height: 46vh; }
+    .chart-track { align-items: start; }
+    .chart-note { padding: 14px 16px; font-size: 14px; }
+  }
+
   /* ---- FAQ ---- */
   .faq-grid {
     max-width: 820px;
@@ -750,5 +1056,82 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       const open = item.classList.toggle("active");
       button.setAttribute("aria-expanded", String(open));
     });
+  }
+
+  // Chart tabs (ARIA tabs pattern, ~40 lines of plain DOM — no component
+  // library on the static pages). The panels are already scrollable without
+  // this: all it adds is the tab affordance, the sliding indicator, and
+  // keyboard support.
+  const chartTabs = /** @type {HTMLButtonElement[]} */ ([
+    ...document.querySelectorAll('.chart-tabs [role="tab"]'),
+  ]);
+  if (chartTabs.length) {
+    const track = document.getElementById("chart-track");
+    const panels = /** @type {HTMLElement[]} */ ([
+      ...document.querySelectorAll('.chart-track [role="tabpanel"]'),
+    ]);
+    const indicator = document.querySelector(".chart-indicator");
+    const smooth = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? "auto"
+      : "smooth";
+    let current = 0;
+
+    const moveIndicator = () => {
+      const tab = chartTabs[current];
+      indicator.style.width = tab.offsetWidth + "px";
+      indicator.style.transform = "translateX(" + tab.offsetLeft + "px)";
+    };
+
+    const paint = (i) => {
+      current = i;
+      chartTabs.forEach((t, n) => {
+        t.setAttribute("aria-selected", String(n === i));
+        t.tabIndex = n === i ? 0 : -1;
+      });
+      moveIndicator();
+      // Keep the selected tab visible when the tab strip itself has scrolled.
+      chartTabs[i].scrollIntoView({ block: "nearest", inline: "nearest", behavior: smooth });
+    };
+
+    const goTo = (i, focusTab) => {
+      i = Math.max(0, Math.min(chartTabs.length - 1, i));
+      panels[i].scrollIntoView({ block: "nearest", inline: "center", behavior: smooth });
+      paint(i);
+      if (focusTab) chartTabs[i].focus();
+    };
+
+    chartTabs.forEach((tab, i) => tab.addEventListener("click", () => goTo(i)));
+
+    document.querySelector(".chart-tabs").addEventListener("keydown", (e) => {
+      const next = {
+        ArrowRight: current + 1,
+        ArrowLeft: current - 1,
+        Home: 0,
+        End: chartTabs.length - 1,
+      }[e.key];
+      if (next === undefined) return;
+      e.preventDefault();
+      goTo(next, true);
+    });
+
+    // A swipe is just a scroll — watch which panel settles and let the tabs
+    // follow it, rather than listening for pointer drags.
+    const panelObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting && entry.intersectionRatio > 0.55) {
+            const i = panels.indexOf(entry.target);
+            if (i !== -1 && i !== current) paint(i);
+          }
+        }
+      },
+      { root: track, threshold: [0.55, 0.9] }
+    );
+    for (const panel of panels) panelObserver.observe(panel);
+
+    window.addEventListener("resize", moveIndicator);
+    // Web fonts land after first paint and change the tab widths.
+    document.fonts?.ready.then(moveIndicator);
+    moveIndicator();
   }
 </script>
