@@ -177,9 +177,16 @@ export function ScoresViews({
   defaultTaskId: string | null;
   /**
    * ?task= deep link (task pages link "Results" here): opens the
-   * "Results by task" tab on that task. Applied in an effect — the server
-   * renders the pathname only, so query-driven tab selection must not be in
-   * the first client render or hydration mismatches.
+   * "Results by task" tab on that task. Applied in an effect, so the first
+   * render is the default tab on both sides and only then switches.
+   *
+   * That used to be forced: the server rendered the pathname alone, so a
+   * query-driven tab in the first render was guaranteed to mismatch. The
+   * server now renders the query too (entry-server.tsx), so selecting the tab
+   * in the first render would be safe — and would put the deep-linked task's
+   * results in the server HTML, which is the reason to do it. Deliberately not
+   * done here: it is a behaviour change to the tab logic, not part of the SSR
+   * fix.
    */
   deepLinkTaskId?: string | null;
 }) {

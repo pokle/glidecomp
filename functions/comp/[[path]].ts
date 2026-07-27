@@ -391,7 +391,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   let bodyHtml: string;
   try {
-    const stream = await render(path, { path, data: rendered.data });
+    // Render with the query string: it is part of the location the client
+    // hydrates from, and pages read view state out of it (`?class=`, `?task=`).
+    // `initialData.path` stays the PATHNAME — useInitialData matches it against
+    // location.pathname, which a query-bearing string would never equal.
+    const stream = await render(path + url.search, { path, data: rendered.data });
     bodyHtml = await new Response(stream as ReadableStream).text();
   } catch (err) {
     console.error("SSR render error for", path, err);
