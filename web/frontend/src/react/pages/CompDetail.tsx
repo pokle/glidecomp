@@ -753,16 +753,16 @@ function TasksList({
                   </div>
                   {/* Tiny route glyph: enough to tell one day's task from
                       another's at a glance. Decorative — the link beside it
-                      names the task. A route-less task still reserves the box,
-                      so the rows stay on one grid. */}
-                  <span
-                    aria-hidden="true"
-                    className="inline-flex h-[50px] w-[72px] shrink-0 items-center justify-center"
-                  >
-                    {task.route ? (
+                      names the task. Nothing is reserved when a task has no
+                      route: the glyphs are right-aligned, so an empty box
+                      buys no alignment and only pads the row — which on a
+                      phone (or against a comp-api that predates the `route`
+                      field) turns the whole list into dead space. */}
+                  {task.route ? (
+                    <span aria-hidden="true" className="shrink-0">
                       <TaskDiagram task={task.route} size="xs" label={null} />
-                    ) : null}
-                  </span>
+                    </span>
+                  ) : null}
                 </li>
               ))}
             </ul>
