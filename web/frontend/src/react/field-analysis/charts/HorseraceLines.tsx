@@ -16,10 +16,14 @@ import { cn } from "@/react/lib/utils";
 import type { CategoricalReportSeries, FieldAnalysisReport } from "../types";
 import { usePilotHighlight } from "../PilotHighlightContext";
 import { formatTickValue, linearScale, niceTicks, spreadLabels } from "./chart-utils";
+import { XAxisTitle, YAxisTitle } from "./AxisTitle";
+import { unitWords } from "../units";
 
 const W = 560;
-const H = 320;
-const MARGIN = { top: 10, right: 116, bottom: 28, left: 44 };
+// H and the left/bottom margins grew together when the axes were titled, so
+// the plot keeps the height and width it always had.
+const H = 336;
+const MARGIN = { top: 10, right: 116, bottom: 44, left: 56 };
 const PLOT = {
   left: MARGIN.left,
   right: W - MARGIN.right,
@@ -201,9 +205,6 @@ export function HorseraceLines({
               {formatTickValue(series.yUnit, t)}
             </text>
           ))}
-          <text x={PLOT.left - 6} y={PLOT.top - 1} textAnchor="end" className="fill-current">
-            behind
-          </text>
           {series.xLabels.map((label, i) => (
             <text
               key={`tx${i}`}
@@ -216,6 +217,16 @@ export function HorseraceLines({
             </text>
           ))}
         </g>
+
+        {/* The axes, named — replacing a bare "behind" in the top-left corner
+            that named neither the quantity nor its unit. Which end is better
+            is carried by the ticks: 0 sits at the top. */}
+        <YAxisTitle x={12} top={PLOT.top} bottom={PLOT.bottom}>
+          {`behind the leader (${unitWords(series.yUnit)})`}
+        </YAxisTitle>
+        <XAxisTitle left={PLOT.left} right={PLOT.right} y={PLOT.bottom + 34}>
+          speed-section turnpoints, in order
+        </XAxisTitle>
 
         {/* Muted field first, coloured leaders after, so leaders draw on top.
             Each line is one focusable element; a fat invisible stroke is the

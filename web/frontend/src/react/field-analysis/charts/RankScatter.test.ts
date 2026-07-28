@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { captionText } from "./RankScatter";
+import { axisTitleFor, captionText } from "./RankScatter";
 import { notableExcludedRanks } from "../exclusions";
 import type { MetricReport, MetricCorrelation, MetricDirection } from "../types";
 
@@ -129,5 +129,31 @@ describe("notableExcludedRanks", () => {
   it("empty when the top ranks all have values", () => {
     const perPilot = pilots.map((p) => ({ trackFile: p.trackFile, value: 1 }));
     expect(notableExcludedRanks(pilots, perPilot)).toEqual([]);
+  });
+});
+
+describe("axisTitleFor", () => {
+  // The x axis names the metric AND the unit it is measured in — the caption
+  // used to be the only place either was stated.
+  it("names the metric and spells its unit out in words", () => {
+    expect(axisTitleFor({ label: "Gliding speed between climbs", unit: "km/h" })).toBe(
+      "Gliding speed between climbs (kilometres per hour)"
+    );
+  });
+  it("converted display units come through as themselves", () => {
+    expect(axisTitleFor({ label: "Climb rate", unit: "fpm" })).toBe(
+      "Climb rate (feet per minute)"
+    );
+  });
+  // 'count' and 'ratio' are the engine's two unitless tokens — formatTickValue
+  // leaves their ticks bare for the same reason, and "(count)" would be noise
+  // dressed as information.
+  it("unitless metrics get no parenthetical", () => {
+    expect(axisTitleFor({ label: "Thermals connected with", unit: "count" })).toBe(
+      "Thermals connected with"
+    );
+    expect(axisTitleFor({ label: "Track efficiency", unit: "ratio" })).toBe(
+      "Track efficiency"
+    );
   });
 });

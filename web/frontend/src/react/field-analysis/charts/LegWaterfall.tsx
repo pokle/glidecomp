@@ -14,11 +14,14 @@ import { useMemo, useState } from "react";
 import { SimpleSelect } from "@/react/rac/select";
 import type { CategoricalReportSeries, FieldAnalysisReport } from "../types";
 import { linearScale } from "./chart-utils";
+import { XAxisTitle, YAxisTitle } from "./AxisTitle";
 
 const W = 560;
-const H = 252;
-// bottom fits two staggered rows of leg labels.
-const MARGIN = { top: 22, right: 12, bottom: 40, left: 12 };
+const H = 268;
+// bottom fits two staggered rows of leg labels AND the x-axis title beneath
+// them; left fits the rotated y-axis title. H grew with them, so the plot
+// itself is the size it always was.
+const MARGIN = { top: 22, right: 12, bottom: 56, left: 26 };
 const PLOT = {
   left: MARGIN.left,
   right: W - MARGIN.right,
@@ -113,6 +116,17 @@ export function LegWaterfall({
           className="stroke-border"
           strokeWidth={1}
         />
+
+        {/* The axes, named. This chart had no y ticks at all — only a zero
+            line and the signed bar labels — so nothing said what the height
+            of a bar meant, nor which side of the line was the bad one. */}
+        <YAxisTitle x={10} top={PLOT.top} bottom={PLOT.bottom}>
+          time against the winner (m:ss)
+        </YAxisTitle>
+        <XAxisTitle left={PLOT.left} right={PLOT.right} y={PLOT.bottom + 42}>
+          speed-section legs, in order
+        </XAxisTitle>
+
         {series.xLabels.map((label, i) => {
           const cx = PLOT.left + slot * i + slot / 2;
           const v = selected.points[i];

@@ -24,13 +24,20 @@ import { unitDisplay } from "../../units";
 import { formatTickValue, linearScale, niceTicks, quantileSorted } from "../chart-utils";
 import type { TimeAxis } from "./time-axis";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
+import { ChartTitle } from "../AxisTitle";
 import { PLOT_LEFT, PLOT_RIGHT, W } from "./shared";
 
 const HOUR_MS = 3_600_000;
-const H = 216;
-const PLOT = { top: 26, bottom: 140 };
-const TAKEOFF_LANE = { top: 146, cy: 153, bottom: 160 };
-const N_STRIP = { top: 166, bottom: 192 };
+// Everything sits 30 lower than it used to, and H grew with it, so the head of
+// the chart can carry FOUR stacked rows without any of them landing on each
+// other whatever the day's timings are: the chart title (y 10), then the task
+// clock's labelled rules alternating on two rows (24 / 36 — they alternate
+// because gates crowd each other horizontally), then the "best climbs" marker
+// at PLOT.top - 8. The plot itself is the height it always was.
+const H = 246;
+const PLOT = { top: 56, bottom: 170 };
+const TAKEOFF_LANE = { top: 176, cy: 183, bottom: 190 };
+const N_STRIP = { top: 196, bottom: 222 };
 const TICK_LABEL_Y = H - 8;
 
 /** A labelled vertical rule (gate / window / deadline). */
@@ -152,6 +159,11 @@ export function ClimbHourlyChart({
       }
       onMouseLeave={() => setReadout(null)}
     >
+      {/* Named in-plot, matching the modelled charts in the same stack. */}
+      <ChartTitle x={PLOT_LEFT - 38} y={10}>
+        From tracks: climb
+      </ChartTitle>
+
       {/* Best-conditions hour: shaded band behind everything — it derives
           from these very buckets, so it sits on the median line's hump. */}
       {bestHour ? (
@@ -278,7 +290,7 @@ export function ClimbHourlyChart({
           <text
             key={`rl${r.ms}`}
             x={axis.x(r.ms)}
-            y={i % 2 === 0 ? 10 : 20}
+            y={i % 2 === 0 ? 24 : 36}
             textAnchor="middle"
             className="fill-current text-[9px] text-muted-foreground"
           >

@@ -33,6 +33,7 @@ import { formatMetricValue } from "../../types";
 import { unitDisplay } from "../../units";
 import type { TimeAxis } from "./time-axis";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
+import { ChartTitle } from "../AxisTitle";
 import {
   PLOT_LEFT,
   PLOT_RIGHT,
@@ -43,7 +44,9 @@ import {
   windLabel,
 } from "./shared";
 
-const TOP = 6;
+/** Rows start below the chart title; H is derived from it, so the whole
+ * chart simply grows by the title's height. */
+const TOP = 20;
 const ROW_H = 28;
 const BAR_H = 9;
 /** Speed→arrow-length range; bounded so a rotated arrow stays in its row. */
@@ -161,6 +164,11 @@ export function WindLegsGantt({
       }
       onMouseLeave={() => setReadout(null)}
     >
+      {/* Named in-plot, matching the modelled charts in the same stack. */}
+      <ChartTitle x={PLOT_LEFT - 38} y={12}>
+        From tracks: wind by leg
+      </ChartTitle>
+
       <TimeGridColumns axis={axis} top={TOP} bottom={rowsBottom} />
       {/* Row separators. */}
       {series.legs.map((_, i) => (

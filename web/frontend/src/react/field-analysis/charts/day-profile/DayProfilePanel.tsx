@@ -45,6 +45,7 @@ import { sourceKindLabel } from "@/react/weather/types";
 import { zoneAbbrev } from "@/react/lib/time";
 import { buildTimeAxis } from "./time-axis";
 import { PLOT_LEFT, PLOT_RIGHT } from "./shared";
+import { TimeAxisTitle } from "./TimeAxisParts";
 import { WindHourlyChart } from "./WindHourlyChart";
 import { ClimbHourlyChart } from "./ClimbHourlyChart";
 import { WindLegsGantt } from "./WindLegsGantt";
@@ -271,11 +272,14 @@ export function DayProfilePanel({
         </div>
       ) : null}
 
+      {/* The axis all of them share, named once at the foot of the stack. */}
+      <TimeAxisTitle zone={zone} />
+
       <p aria-hidden className="min-h-4 text-xs text-muted-foreground print:hidden">
         {readout ?? "Hover a chart for exact figures."}
       </p>
       <p className="text-xs text-muted-foreground">
-        All charts — measured and modelled alike — share one time axis ({zone}), so a vertical scan
+        All charts — measured and modelled alike — share that one time axis, so a vertical scan
         compares the two at the same moment. Arrows fly WITH the wind — direction figures are
         degrees the wind blows from; arrow length and opacity track speed and sample count. On the
         per-leg chart the pale bar is when the field flew that leg and the solid band inside it is
