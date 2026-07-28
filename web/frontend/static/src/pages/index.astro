@@ -15,6 +15,7 @@
 import Base from "../layouts/Base.astro";
 import { Picture } from "astro:assets";
 import pilotExplain from "../assets/screenshots/pilot-explain.png";
+import pilotPoints from "../assets/screenshots/pilot-points.png";
 import behindLeader from "../assets/screenshots/analysis-behind-leader.png";
 import fieldHeatmap from "../assets/screenshots/analysis-field-heatmap.png";
 import speedRank from "../assets/screenshots/analysis-speed-rank.png";
@@ -36,6 +37,9 @@ const widthsFor = (img: { width: number }, widths: number[]) => {
 };
 const HERO_WIDTHS = [490, 980, 1470, 1960];
 const HERO_SIZES = "(max-width: 1065px) 92vw, 980px";
+// The points card renders at min(660px, 100%) inside the same stage.
+const POINTS_WIDTHS = [330, 660, 990, 1240];
+const POINTS_SIZES = "(max-width: 718px) 92vw, 660px";
 const CHART_WIDTHS = [512, 1024, 1536];
 const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
 ---
@@ -80,13 +84,25 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
       <figure class="shot shot-hero">
         <Picture
           src={pilotExplain}
-          alt="A pilot's score explanation in GlideComp: a plain-English timeline of start-cylinder crossings and turnpoints beside a terrain map of the flight"
+          alt="A pilot's score explanation in GlideComp: a plain-English timeline of five start-cylinder crossings, the turnpoints reached, and where the pilot landed out 52.5 km short of goal — beside a terrain map of the flight"
           widths={widthsFor(pilotExplain, HERO_WIDTHS)}
           sizes={HERO_SIZES}
           formats={["avif"]}
           fallbackFormat="webp"
           loading="eager"
           fetchpriority="high"
+        />
+      </figure>
+      <figure class="shot shot-points">
+        <Picture
+          src={pilotPoints}
+          alt="GlideComp's points breakdown for the same pilot: distance points split into a linear half and a difficulty half, each with the arithmetic shown, and time points at zero with the reason — only pilots who reach the end of the speed section earn them"
+          widths={widthsFor(pilotPoints, POINTS_WIDTHS)}
+          sizes={POINTS_SIZES}
+          formats={["avif"]}
+          fallbackFormat="webp"
+          loading="lazy"
+          decoding="async"
         />
       </figure>
     </div>
@@ -732,6 +748,14 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
   }
   .shot-hero {
     z-index: 1;
+  }
+  /* The points breakdown is the second half of the same story, so it sits in
+     the same stage — narrower, so the wide shot above stays the primary read. */
+  .shot-points {
+    position: relative;
+    z-index: 1;
+    width: min(660px, 100%);
+    margin: 22px auto 0;
   }
 
   /* ---- Trust strip ---- */
