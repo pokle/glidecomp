@@ -61,6 +61,24 @@ export function idFromSegment(segment: string): string {
   return i === -1 ? s : s.slice(i + 1);
 }
 
+/**
+ * The name half of a `${slug}-${id}` segment — the inverse of idFromSegment.
+ * Empty for a bare `${id}` segment (there is no name in it to recover).
+ *
+ * Lossy on purpose: it is a slug, not the name. It exists so a dead URL can be
+ * searched for by the words it still carries (see the 404 page's suggestions).
+ */
+export function nameSlugFromSegment(segment: string): string {
+  let s = segment;
+  try {
+    s = decodeURIComponent(segment);
+  } catch {
+    // Malformed percent-encoding — fall back to the raw segment.
+  }
+  const i = s.lastIndexOf("-");
+  return i === -1 ? "" : s.slice(0, i);
+}
+
 // ── Canonical path builders ──────────────────────────────────────────────────
 // Each takes the bare id(s) plus the name(s) and returns the canonical path.
 // A missing name degrades to a bare-id segment (still a working URL).

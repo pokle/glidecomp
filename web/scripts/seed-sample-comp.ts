@@ -13,8 +13,20 @@
  *
  * Idempotent: each comp is identified by name (its manifest's `comp_name`, else
  * SAMPLE_COMP_NAME). On a rerun the existing comp's tasks / pilots / tracks (D1)
- * and IGC objects (R2) are wiped and rebuilt under the SAME comp_id, so if users
- * have messed with a loaded sample it gets fixed back up.
+ * and IGC objects (R2) are rebuilt, so if users have messed with a loaded sample
+ * it gets fixed back up.
+ *
+ * **Every id that appears in a URL survives a re-seed.** `/comp/:comp/task/:task
+ * /pilot/:pilot` is a shareable, indexable link, so a rebuild that deleted and
+ * reinserted those rows handed out fresh auto-increment ids and 404'd every link
+ * anyone had saved. The comp row was always matched by name and reused; tasks
+ * and pilots now match the same way one level down (see lib/seed-identity.ts):
+ * a task by its seeded name within the comp, a pilot registration by the same
+ * (class, id-or-name) key that already collapses a pilot's tasks onto one
+ * comp_pilot row. Matched rows are UPDATEd in place; only what the source no
+ * longer describes is deleted. As a bonus, a pilot who linked their account to
+ * a seeded registration keeps that link, and the task's cached weather (keyed by
+ * route + date, not by revision) survives instead of being re-fetched.
  *
  * Usage:
  *   bun run seed                      # every bundled comp → local dev state
@@ -67,7 +79,14 @@ import {
 import { timezoneForXctsk } from '@glidecomp/engine/timezone';
 import { SAMPLE_COMP_NAME } from '../workers/competition-api/src/sample';
 import { encodeId } from '../workers/competition-api/src/sqids';
-import { compPath, compScoresPath, compWaypointsPath } from '../frontend/src/react/lib/slug';
+import {
+  compPath,
+  compScoresPath,
+  compWaypointsPath,
+  pilotPath,
+  taskPath,
+} from '../frontend/src/react/lib/slug';
+import { matchExisting, pilotKey, taskSeedName } from './lib/seed-identity';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 /** Comp-folder root — override with GLIDECOMP_COMPS_DIR to seed from a
@@ -653,29 +672,6 @@ function readTask(
 // --- seed ------------------------------------------------------------------
 
 /**
- * Registry key for a pilot within a class: CIVL id when known (the primary
- * match key), else the display name, scoped by pilot class. A pilot who flew in
- * two classes (e.g. floater one day, open the next) gets one comp_pilot row per
- * class; within a class, all their tasks share a single row.
- *
- * The `|` separator only has to be absent from `pilotClass`: the second field is
- * last and self-describing (`id:` / `name:`), so nothing a pilot name contains
- * can shift the parse. Classes come from the checked-in comp.json manifests
- * ("open" / "floater"), so `|` can't collide. This key is in-memory only — the
- * DB stores name / id / class as separate columns — so the separator is free to
- * change. (It used to be a literal NUL, which made the whole file read as binary
- * to grep/rg and git's word-diff; don't reintroduce one.)
- */
-function pilotKey(pilotClass: string, id: string | null, name: string): string {
-  return `${pilotClass}|${id ? `id:${id}` : `name:${name}`}`;
-}
-
-/** "open" → "Open", so task names read "Task 1 (Open)". */
-function classLabel(pilotClass: string): string {
-  return pilotClass.charAt(0).toUpperCase() + pilotClass.slice(1);
-}
-
-/**
  * Build the comp's waypoint database as the union of every task's turnpoints.
  * A comp waypoint set is a database of named points that tasks pick from, so
  * we key by the waypoint `code` and keep the first occurrence — the same
@@ -810,13 +806,88 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
   const closeDate = manifest.tasks.map((t) => t.date).sort().at(-1)!;
   console.log(`  close date: ${closeDate}`);
 
+  const registrations = [...registry.values()];
+
   // 1) Find or create the comp (stable comp_id across reruns).
   const existing = await store.rows(`SELECT comp_id FROM comp WHERE name = ${q(compName)};`);
   let compId: number;
+  /** Seeded task name → the existing task_id to rebuild in place. Empty for a
+   *  comp we're creating, so every task below takes the INSERT path. */
+  let reusedTaskIds = new Map<string, number>();
   if (existing.length > 0) {
     compId = Number(existing[0].comp_id);
-    console.log(`  reusing comp_id ${compId} — wiping its tasks/pilots/tracks`);
+
+    // Match what we're about to seed against what is already stored, so every
+    // id that appears in a URL survives the rebuild (see the header comment and
+    // lib/seed-identity.ts). Tasks match on their seeded name, pilots on the
+    // same (class, id-or-name) registry key built above; whatever the source no
+    // longer describes is an orphan and is deleted below.
+    const existingTaskRows = await store.rows(
+      `SELECT task_id, name FROM task WHERE comp_id = ${compId};`,
+    );
+    const taskMatch = matchExisting(
+      tasks.map((t) => taskSeedName(t.name, t.pilotClass)),
+      existingTaskRows.map((r) => ({ id: Number(r.task_id), key: String(r.name) })),
+    );
+    reusedTaskIds = taskMatch.reused;
+
+    const existingPilotRows = await store.rows(
+      `SELECT comp_pilot_id, registered_pilot_name, ${idColumn} AS id, pilot_class
+         FROM comp_pilot WHERE comp_id = ${compId};`,
+    );
+    const pilotMatch = matchExisting(
+      registrations.map((p) => pilotKey(p.pilotClass, p.id, p.name)),
+      existingPilotRows.map((r) => ({
+        id: Number(r.comp_pilot_id),
+        key: pilotKey(
+          String(r.pilot_class),
+          r.id ? String(r.id) : null,
+          String(r.registered_pilot_name),
+        ),
+      })),
+    );
+
+    // A registration matched on its federation id can have been published under
+    // a different display name since the last seed. Bringing the stored name
+    // back in line is not cosmetic: the read-back below re-derives each row's
+    // key from its columns, so a stale name would fail to match the key its own
+    // tracks are looked up under and the pilot would seed with no flights.
+    const wantedByKey = new Map(
+      registrations.map((p) => [pilotKey(p.pilotClass, p.id, p.name), p] as const),
+    );
+    const pilotNameFixes: string[] = [];
+    for (const r of existingPilotRows) {
+      const id = Number(r.comp_pilot_id);
+      const key = pilotKey(
+        String(r.pilot_class),
+        r.id ? String(r.id) : null,
+        String(r.registered_pilot_name),
+      );
+      const wanted = wantedByKey.get(key);
+      // Skip the duplicate rows of a key — they are orphans, deleted below.
+      if (!wanted || pilotMatch.reused.get(key) !== id) continue;
+      if (String(r.registered_pilot_name) !== wanted.name) {
+        pilotNameFixes.push(
+          `UPDATE comp_pilot SET registered_pilot_name = ${q(wanted.name)} WHERE comp_pilot_id = ${id};`,
+        );
+      }
+    }
+
+    console.log(
+      `  reusing comp_id ${compId} — ${reusedTaskIds.size}/${tasks.length} task(s) and ` +
+        `${pilotMatch.reused.size}/${registrations.length} pilot(s) keep their ids`,
+    );
+    if (taskMatch.orphanIds.length > 0 || pilotMatch.orphanIds.length > 0) {
+      console.log(
+        `  removing ${taskMatch.orphanIds.length} task(s) and ` +
+          `${pilotMatch.orphanIds.length} pilot registration(s) the source no longer describes`,
+      );
+    }
+
     // Delete R2 objects for the comp's tracks first (need the keys from D1).
+    // Every track is re-uploaded below, so this is a delete-then-put over the
+    // same keys for the pilots that survive, and a real removal for those that
+    // don't.
     const oldKeys = await store.rows(
       `SELECT tt.igc_filename AS k FROM task_track tt
        JOIN task t ON tt.task_id = t.task_id WHERE t.comp_id = ${compId};`,
@@ -825,13 +896,18 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
     await store.exec([
       // Clear the materialized derived caches FIRST, while the rows they key
       // off still exist. task_scores / task_field_analysis are served verbatim
-      // and their blobs embed sqid links built from task_id + comp_pilot_id —
-      // a reseed hands out fresh ids, so a surviving blob points readers at
-      // deleted tasks/pilots ("Task not found"). These FK-cascade on task
+      // and their blobs embed sqid links built from task_id + comp_pilot_id;
+      // the tracks behind them are all being rebuilt, so every blob is stale
+      // even where the ids it names still resolve. These FK-cascade on task
       // delete, but only where foreign keys are enforced (local Miniflare D1
-      // often runs with them OFF), so clear them explicitly rather than relying
-      // on the cascade. track_analysis is (geom_hash, uploaded_at)-guarded so a
-      // stale row is never served, but drop it too so a reseed leaves no orphans.
+      // often runs with them OFF) — and a reused task is never deleted, so the
+      // cascade would not fire for it at all. track_analysis is (geom_hash,
+      // uploaded_at)-guarded so a stale row is never served, but drop it too so
+      // a reseed leaves no orphans.
+      //
+      // task_weather is deliberately NOT cleared: it is keyed by the task's
+      // route and date rather than by a revision, so an unchanged task keeps
+      // the answer it already has and a moved one re-fetches by itself.
       `DELETE FROM track_analysis WHERE task_track_id IN
          (SELECT tt.task_track_id FROM task_track tt JOIN task t ON tt.task_id = t.task_id WHERE t.comp_id = ${compId});`,
       `DELETE FROM task_scores WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
@@ -840,8 +916,20 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
       `DELETE FROM task_manual_flight WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
       `DELETE FROM task_pilot_status WHERE comp_id = ${compId};`,
       `DELETE FROM task_class WHERE task_id IN (SELECT task_id FROM task WHERE comp_id = ${compId});`,
-      `DELETE FROM task WHERE comp_id = ${compId};`,
-      `DELETE FROM comp_pilot WHERE comp_id = ${compId};`,
+      // Only the unmatched rows go — the matched ones are rebuilt in place by
+      // the task loop and the pilot upsert below, keeping their ids. A deleted
+      // task takes its weather with it (the one derived table not cleared
+      // comp-wide above), explicitly, for the same foreign-keys-off reason.
+      ...(taskMatch.orphanIds.length > 0
+        ? [
+            `DELETE FROM task_weather WHERE task_id IN (${taskMatch.orphanIds.join(',')});`,
+            `DELETE FROM task WHERE task_id IN (${taskMatch.orphanIds.join(',')});`,
+          ]
+        : []),
+      ...(pilotMatch.orphanIds.length > 0
+        ? [`DELETE FROM comp_pilot WHERE comp_pilot_id IN (${pilotMatch.orphanIds.join(',')});`]
+        : []),
+      ...pilotNameFixes,
       `DELETE FROM comp_waypoints WHERE comp_id = ${compId};`,
       `DELETE FROM audit_log WHERE comp_id = ${compId};`,
       `UPDATE comp SET category=${q(category)}, test=${testFlag}, scoring_format=${q(scoringFormat)},
@@ -872,10 +960,29 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
   );
   console.log(`  seeded ${waypoints.length} competition waypoints (union of task turnpoints)`);
 
-  // 2) comp_pilot rows (one per registration), then read back ids by our key.
-  const registrations = [...registry.values()];
+  // 2) comp_pilot rows: insert only the registrations that have no row yet
+  //    (matched ones kept their comp_pilot_id — and with it their URL, and any
+  //    account a real pilot has linked to it), then read back ids by our key.
+  //    The read-back covers reused and new rows alike, so nothing downstream
+  //    has to know which was which.
+  const cpBefore = await store.rows(
+    `SELECT comp_pilot_id, registered_pilot_name, ${idColumn} AS id, pilot_class
+       FROM comp_pilot WHERE comp_id = ${compId};`,
+  );
+  const existingPilotKeys = new Set(
+    cpBefore.map((r) =>
+      pilotKey(
+        String(r.pilot_class),
+        r.id ? String(r.id) : null,
+        String(r.registered_pilot_name),
+      ),
+    ),
+  );
+  const newRegistrations = registrations.filter(
+    (p) => !existingPilotKeys.has(pilotKey(p.pilotClass, p.id, p.name)),
+  );
   await store.exec(
-    registrations.map(
+    newRegistrations.map(
       (p) =>
         `INSERT INTO comp_pilot (comp_id, registered_pilot_name, ${idColumn}, pilot_class)
          VALUES (${compId}, ${q(p.name)}, ${q(p.id)}, ${q(p.pilotClass)});`,
@@ -893,23 +1000,55 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
       return [key, Number(r.comp_pilot_id)];
     }),
   );
+  console.log(
+    `  ${cpRows.length} comp_pilot rows (${newRegistrations.length} newly registered, ` +
+      `${cpRows.length - newRegistrations.length} keeping their ids)`,
+  );
 
   // 3) Per task: insert the task + its single scored class, then upload each IGC
   //    to R2 and insert its task_track row (linked to the class's comp_pilot).
   //    Open and floater "Task 1" share a date but are distinct rows, named by
   //    class so the app's task list disambiguates them.
   let totalTracks = 0;
+  let reusedTasks = 0;
+  /** Everything a `--remote` seed needs to purge this comp's now-stable public
+   *  URLs from the edge (see purgeCompCache). */
+  const seededTasks: SeededTask[] = [];
   for (const t of tasks) {
-    const taskName = `${t.name} (${classLabel(t.pilotClass)})`;
-    await store.exec(
-      `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk, gap_params)
-       VALUES (${compId}, ${q(taskName)}, ${q(t.date)}, ${q(today)}, ${q(t.xctsk)},
-               ${q(t.gapParams ? JSON.stringify(t.gapParams) : null)});`,
-    );
-    const taskId = Number(
-      (await store.rows(`SELECT task_id FROM task WHERE comp_id = ${compId} AND name = ${q(taskName)};`))[0]
-        .task_id,
-    );
+    const taskName = taskSeedName(t.name, t.pilotClass);
+    const gapParamsJson = t.gapParams ? JSON.stringify(t.gapParams) : null;
+    const reusedTaskId = reusedTaskIds.get(taskName);
+    let taskId: number;
+    if (reusedTaskId !== undefined) {
+      // Rebuild the task's definition in place so the row — and every URL under
+      // it — keeps its id. `creation_date` stays as it was (it only breaks
+      // same-date ordering ties). The two organizer-owned fields the source
+      // can't describe are reset to their defaults, so a re-seed still lands on
+      // a clean sample, exactly as the old delete-and-reinsert did.
+      taskId = reusedTaskId;
+      reusedTasks++;
+      await store.exec(
+        `UPDATE task SET task_date = ${q(t.date)}, xctsk = ${q(t.xctsk)},
+           gap_params = ${q(gapParamsJson)}, stop_announcement_time = NULL, weather_notes = ''
+         WHERE task_id = ${taskId};`,
+      );
+    } else {
+      await store.exec(
+        `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk, gap_params)
+         VALUES (${compId}, ${q(taskName)}, ${q(t.date)}, ${q(today)}, ${q(t.xctsk)},
+                 ${q(gapParamsJson)});`,
+      );
+      // Newest first: the row we just wrote, even if a manifest ever repeats a
+      // task name within one comp.
+      taskId = Number(
+        (
+          await store.rows(
+            `SELECT task_id FROM task WHERE comp_id = ${compId} AND name = ${q(taskName)}
+               ORDER BY task_id DESC LIMIT 1;`,
+          )
+        )[0].task_id,
+      );
+    }
     await store.exec(`INSERT INTO task_class (task_id, pilot_class) VALUES (${taskId}, ${q(t.pilotClass)});`);
 
     // Resolve every pilot that has a comp_pilot row into its R2 object + its two
@@ -920,9 +1059,11 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
     // every seeded pilot "Present". Pilots with no track keep the default.)
     const uploads: Array<{ key: string; gz: Buffer }> = [];
     const trackInserts: string[] = [];
+    const scoredPilots: SeededTask['pilots'] = [];
     for (const p of t.pilots) {
       const compPilotId = cpByKey.get(pilotKey(t.pilotClass, p.id, p.name));
       if (compPilotId === undefined) continue;
+      scoredPilots.push({ compPilotId, name: p.name });
       const key = `c/${compId}/t/${taskId}/${compPilotId}.igc`;
       uploads.push({ key, gz: p.gz });
       trackInserts.push(
@@ -946,6 +1087,7 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
     for (const p of t.trackless) {
       const compPilotId = cpByKey.get(pilotKey(t.pilotClass, null, p.name));
       if (compPilotId === undefined) continue;
+      scoredPilots.push({ compPilotId, name: p.name });
       if (p.kind === 'dnf') {
         trackInserts.push(
           `INSERT INTO task_pilot_status (comp_id, task_id, comp_pilot_id, status_key, note, set_by_user_id, set_by_name, set_at)
@@ -966,25 +1108,34 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
 
     await mapPool(uploads, R2_CONCURRENCY, (u) => store.r2Put(u.key, u.gz));
     await store.exec(trackInserts);
+    seededTasks.push({ taskId, taskName, pilots: scoredPilots });
     totalTracks += uploads.length;
     const extras = t.trackless.length > 0 ? `, ${t.trackless.length} track-less published pilot(s)` : '';
-    console.log(`  seeded ${taskName}: task_id=${taskId}, ${uploads.length} tracks${extras}`);
+    const how = reusedTaskId !== undefined ? 'rebuilt' : 'created';
+    console.log(`  ${how} ${taskName}: task_id=${taskId}, ${uploads.length} tracks${extras}`);
   }
 
-  console.log(`  Done. comp_id=${compId} — ${tasks.length} tasks, ${totalTracks} tracks total`);
-  if (REMOTE) await purgeCompCache(compId, compName);
+  console.log(
+    `  Done. comp_id=${compId} — ${tasks.length} tasks (${reusedTasks} kept their ids), ` +
+      `${totalTracks} tracks total`,
+  );
+  if (REMOTE) await purgeCompCache(compId, compName, seededTasks);
 }
 
 // ── Cloudflare edge cache purge (remote seeds only) ─────────────────────────
-// A reseed hands a comp fresh task/pilot ids, but Cloudflare's edge — and
-// visitors' browsers — may still hold the pre-reseed pages, whose embedded
-// links point at the now-deleted ids ("Task not found") until their max-age
-// lapses. Tag/prefix/hostname purges are Enterprise-only (and we emit no
-// Cache-Tag), so we purge by URL. That's tractable because the comp_id — and
-// thus its sqid — is STABLE across reseeds: the stale entries sit at a small,
-// known set of comp-level URLs. Per-task/pilot URLs changed ids, so their old
-// cache entries are unreachable orphans that age out and the new URLs are
-// uncached — neither needs a purge.
+// A reseed rebuilds a comp's scores from scratch, but Cloudflare's edge — and
+// visitors' browsers — may still hold the pre-reseed pages until their max-age
+// lapses, which for a settled comp is up to three months (publicMaxAgeSeconds
+// grows with how long the content has been stable). Tag/prefix/hostname purges
+// are Enterprise-only (and we emit no Cache-Tag), so we purge by URL.
+//
+// That used to mean comp-level URLs ONLY: the comp sqid was stable but task and
+// pilot ids changed on every reseed, so their old cache entries were unreachable
+// orphans and the new URLs were uncached. Now that every id in a URL survives a
+// reseed, those entries stay reachable and would serve pre-reseed content — so
+// the purge follows the ids and covers each task page, each task's score API and
+// each pilot's score page too. The API caps a purge at 30 URLs per call, hence
+// the chunking.
 
 const PURGE_ORIGIN = process.env.GLIDECOMP_ORIGIN ?? 'https://glidecomp.com';
 // Production serves sqids under the competition-api default alphabet
@@ -993,18 +1144,58 @@ const PURGE_ORIGIN = process.env.GLIDECOMP_ORIGIN ?? 'https://glidecomp.com';
 const PURGE_SQIDS_ALPHABET =
   process.env.SQIDS_ALPHABET ?? 'abcdefghijklmnopqrstuvwxyz';
 
-/** The stable, publicly-cacheable comp-level URLs a reseed invalidates: the
- * three SSR HTML pages plus the one cacheable comp-level API. (Comp-detail and
- * the waypoints API are `no-store`; per-task score APIs are keyed by the changed
- * task sqid, so none of those are cached under a stable URL.) */
-function compCacheUrls(compId: number, compName: string): string[] {
-  const sqid = encodeId(PURGE_SQIDS_ALPHABET, compId);
-  return [
-    `${PURGE_ORIGIN}${compPath(sqid, compName)}`,
-    `${PURGE_ORIGIN}${compScoresPath(sqid, compName)}`,
-    `${PURGE_ORIGIN}${compWaypointsPath(sqid, compName)}`,
-    `${PURGE_ORIGIN}/api/comp/${sqid}/scores`,
+/** Cloudflare's per-call limit for a purge-by-URL request. */
+const PURGE_CHUNK = 30;
+/** Safety rail on a very large comp: at 30 URLs a call this is 100 requests.
+ * Anything beyond it is reported rather than silently dropped. */
+const MAX_PURGE_URLS = 3000;
+
+/** What a seeded task contributes to the purge list: its own page, its score
+ * API, and one score page per pilot who has a result on it. */
+interface SeededTask {
+  taskId: number;
+  taskName: string;
+  pilots: Array<{ compPilotId: number; name: string }>;
+}
+
+/**
+ * The stable, publicly-cacheable URLs a reseed invalidates. Comp level: the
+ * three SSR HTML pages plus the one cacheable comp-level API (comp-detail and
+ * the waypoints API are `no-store`). Then, per task, the task page and its score
+ * API, and one page per pilot with a result — all reachable at the same URLs as
+ * before the reseed now that the ids are preserved.
+ */
+function compCacheUrls(
+  compId: number,
+  compName: string,
+  seededTasks: SeededTask[],
+): string[] {
+  const sqid = (id: number) => encodeId(PURGE_SQIDS_ALPHABET, id);
+  const comp = sqid(compId);
+  const urls = [
+    `${PURGE_ORIGIN}${compPath(comp, compName)}`,
+    `${PURGE_ORIGIN}${compScoresPath(comp, compName)}`,
+    `${PURGE_ORIGIN}${compWaypointsPath(comp, compName)}`,
+    `${PURGE_ORIGIN}/api/comp/${comp}/scores`,
   ];
+  for (const t of seededTasks) {
+    const task = sqid(t.taskId);
+    urls.push(`${PURGE_ORIGIN}${taskPath(comp, compName, task, t.taskName)}`);
+    urls.push(`${PURGE_ORIGIN}/api/comp/${comp}/task/${task}/score`);
+    for (const p of t.pilots) {
+      urls.push(
+        `${PURGE_ORIGIN}${pilotPath(comp, compName, task, t.taskName, sqid(p.compPilotId), p.name)}`,
+      );
+    }
+  }
+  return urls;
+}
+
+/** Split `items` into consecutive runs of at most `size`. */
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
 }
 
 /**
@@ -1015,7 +1206,11 @@ function compCacheUrls(compId: number, compName: string): string[] {
  * machine that ran the reseed still holds its own browser copy until max-age
  * lapses (hard-refresh), but every other visitor gets fresh pages at once.
  */
-async function purgeCompCache(compId: number, compName: string): Promise<void> {
+async function purgeCompCache(
+  compId: number,
+  compName: string,
+  seededTasks: SeededTask[],
+): Promise<void> {
   const token = process.env.CLOUDFLARE_API_TOKEN;
   const zone = process.env.CLOUDFLARE_ZONE_ID;
   if (!token || !zone) {
@@ -1024,34 +1219,46 @@ async function purgeCompCache(compId: number, compName: string): Promise<void> {
     );
     return;
   }
-  const files = compCacheUrls(compId, compName);
-  try {
-    const res = await fetch(
-      `https://api.cloudflare.com/client/v4/zones/${zone}/purge_cache`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ files }),
-      },
+  const all = compCacheUrls(compId, compName, seededTasks);
+  const files = all.slice(0, MAX_PURGE_URLS);
+  if (all.length > files.length) {
+    console.warn(
+      `  ⚠ ${all.length - files.length} of ${all.length} cacheable URLs left unpurged ` +
+        `(cap ${MAX_PURGE_URLS}); they revalidate when their max-age lapses`,
     );
-    const body = (await res.json().catch(() => null)) as
-      | { success?: boolean; errors?: unknown }
-      | null;
-    if (!res.ok || !body?.success) {
+  }
+  let purged = 0;
+  for (const batch of chunk(files, PURGE_CHUNK)) {
+    try {
+      const res = await fetch(
+        `https://api.cloudflare.com/client/v4/zones/${zone}/purge_cache`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ files: batch }),
+        },
+      );
+      const body = (await res.json().catch(() => null)) as
+        | { success?: boolean; errors?: unknown }
+        | null;
+      if (!res.ok || !body?.success) {
+        console.warn(
+          `  ⚠ cache purge failed (${res.status}): ${JSON.stringify(body?.errors ?? body ?? {})}`,
+        );
+        return;
+      }
+      purged += batch.length;
+    } catch (err) {
       console.warn(
-        `  ⚠ cache purge failed (${res.status}): ${JSON.stringify(body?.errors ?? body ?? {})}`,
+        `  ⚠ cache purge error: ${err instanceof Error ? err.message : String(err)}`,
       );
       return;
     }
-    console.log(`  purged ${files.length} edge URLs for comp ${compId}`);
-  } catch (err) {
-    console.warn(
-      `  ⚠ cache purge error: ${err instanceof Error ? err.message : String(err)}`,
-    );
   }
+  console.log(`  purged ${purged} edge URLs for comp ${compId}`);
 }
 
 main().catch((err) => {
