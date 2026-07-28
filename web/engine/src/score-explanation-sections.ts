@@ -39,6 +39,7 @@ import {
   kmEq,
   trimZeros,
   pctValidity,
+  pctWeight,
   availableTotalDetail,
 } from './score-explanation-format';
 
@@ -212,6 +213,40 @@ function buildStartItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
           emphasis: 'muted',
         });
       }
+      // Why THIS crossing, for THIS flight. The rule above is general; a
+      // pilot looking at five crossings wants the specific consequence, and
+      // the sequence already knows what had been reached by the time of each
+      // later crossing.
+      const later = startCrossings.filter(
+        (c) => c.time.getTime() > sss.time.getTime(),
+      );
+      if (later.length === 0) {
+        out.push({
+          id: 'start-chosen',
+          text: `The ${fmt(sss.time)} crossing is the scored start — the last one made, so it supersedes every earlier crossing.`,
+          emphasis: 'muted',
+        });
+      } else {
+        const doneBefore = result.sequence.filter(
+          (r) =>
+            r.taskIndex > sssIdx && r.time.getTime() < later[0].time.getTime(),
+        );
+        const last = doneBefore[doneBefore.length - 1];
+        const reachedDesc = last
+          ? `${turnpointLabel(task, last.taskIndex)}${
+              turnpointName(task, last.taskIndex)
+                ? ` (${turnpointName(task, last.taskIndex)})`
+                : ''
+            }`
+          : null;
+        out.push({
+          id: 'start-chosen',
+          text: reachedDesc
+            ? `The ${fmt(sss.time)} crossing is the scored start. By the ${fmt(later[0].time)} crossing the flight had already reached ${reachedDesc}, so treating that as a re-start would mean flying the course again from there — a shorter, later run that scores less.`
+            : `The ${fmt(sss.time)} crossing is the scored start — starting from any of the later crossings would leave less of the course flown.`,
+          emphasis: 'muted',
+        });
+      }
     } else if (sss.selectionReason === 'track_start') {
       out.push({
         id: 'start',
@@ -258,15 +293,39 @@ function buildStartItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
 function buildTurnpointReachingItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
   const { task, result, entry, fmt, essIdx, directions } = ctx;
   const out: ScoreExplanationItem[] = [];
+  const goalIndex = getGoalIndex(task);
   // Turnpoints after the start, in scored order.
   for (const reaching of result.sequence) {
     if (result.sssReaching && reaching.taskIndex <= result.sssReaching.taskIndex) {
       continue; // start handled above; pre-start TPs don't shape the score
     }
+    // A separate ESS turnpoint co-located with goal (the common "ESS ring
+    // around the goal cylinder" shape) is two task indices reached at one
+    // instant. A row each printed the same time and the same "first of 11
+    // crossings" twice for one event — which reads as a rendering fault at
+    // the very moment the pilot finished the task. Fold the two into the
+    // goal row, which is the one that also carries the speed-section time.
+    const coLocatedWithGoal =
+      essIdx !== goalIndex &&
+      result.sequence.some(
+        (r) =>
+          r.taskIndex === goalIndex &&
+          r.time.getTime() === reaching.time.getTime(),
+      );
+    if (reaching.taskIndex === essIdx && coLocatedWithGoal) continue;
+
     const label = turnpointLabel(task, reaching.taskIndex);
     const name = turnpointName(task, reaching.taskIndex);
-    const isESS = reaching.taskIndex === essIdx;
-    const isGoal = reaching.taskIndex === getGoalIndex(task);
+    const isGoal = reaching.taskIndex === goalIndex;
+    // The folded goal row inherits the ESS treatment: the speed-section time
+    // and the ESS anchor kind belong on the row that survived.
+    const foldedEss =
+      isGoal &&
+      essIdx !== goalIndex &&
+      result.sequence.some(
+        (r) => r.taskIndex === essIdx && r.time.getTime() === reaching.time.getTime(),
+      );
+    const isESS = reaching.taskIndex === essIdx || foldedEss;
     // Non-null when this task ends at a goal LINE (S7F §6.3.1) — the goal
     // reaching is then a line crossing (or a semicircle fix), not a
     // cylinder entry, and the wording must say so.
@@ -317,7 +376,9 @@ function buildTurnpointReachingItems(ctx: FlightNarrativeCtx): ScoreExplanationI
 
     out.push({
       id: `reaching-${reaching.taskIndex}`,
-      text: `${isGoal ? 'Goal' : label}${name ? ` — ${name}` : ''}${isExitTP ? ' (exit cylinder)' : ''}`,
+      text: `${foldedEss ? 'ESS + Goal' : isGoal ? 'Goal' : label}${
+        name ? ` — ${name}` : ''
+      }${isExitTP ? ' (exit cylinder)' : ''}`,
       value: fmt(reaching.time),
       detail,
       anchor: reachingAnchor(reaching, isGoal ? 'goal' : isESS ? 'ess' : 'turnpoint'),
@@ -510,33 +571,124 @@ export function buildFlightSection(
     id: 'flight',
     title: 'The flight',
     summary: 'What the tracklog shows, and which crossings scored.',
+    docHref: result.stopInfo
+      ? '/scoring/gap#stopped-tasks'
+      : '/scoring/gap#how-a-task-works',
     items,
   };
 }
 
+/**
+ * The inputs behind each validity factor, as a detail sentence.
+ *
+ * Every other section on the page states a rule, names its inputs, and prints
+ * the arithmetic; before these existed the validity section stated a rule and
+ * asserted a percentage, which is the one thing a reader cannot check. The
+ * numbers come from the published `validity_inputs`; when a payload predates
+ * them (the stale-first store still serves those) each returns undefined and
+ * the row falls back to the bare percentage it always showed.
+ *
+ * The ratio is printed, not the cubic: the S7F curves have no intuition to
+ * offer in coefficient form, and the ratio — "the winner got round in 71% of
+ * the nominal time" — is the fact the reader can act on. The curve itself is
+ * one click away on /scoring/gap.
+ */
+function launchValidityDetail(
+  vi: ClassContextInput['validity_inputs'],
+  params: GAPParameters | undefined,
+): string | undefined {
+  if (!vi || !params) return undefined;
+  // Whole pilots: the threshold is fractional (96% of 32 is 30.72) and
+  // "30.7 pilots" reads like a unit error. Ceil, because 30 would not clear it.
+  const target = Math.ceil(vi.num_present * params.nominalLaunch);
+  const pilots = (n: number) => `${n} pilot${n === 1 ? '' : 's'}`;
+  return (
+    `${pilots(vi.num_flying)} flew out of ${vi.num_present} present. ` +
+    `Nominal launch is ${trimZeros((params.nominalLaunch * 100).toFixed(1), 0)}%, ` +
+    `so launch validity is full once ${pilots(target)} are in the air.`
+  );
+}
+
+function distanceValidityDetail(
+  vi: ClassContextInput['validity_inputs'],
+  params: GAPParameters | undefined,
+): string | undefined {
+  if (!vi || !params) return undefined;
+  return (
+    `Measured against a ${km(params.nominalDistance)} nominal distance, ` +
+    `a ${trimZeros((params.nominalGoal * 100).toFixed(1), 0)}% nominal goal ` +
+    `and a ${km(params.minimumDistance)} minimum distance. ` +
+    `The field flew ${km(vi.mean_distance_over_minimum)} past the minimum on average, ` +
+    `with a best of ${km(vi.best_distance)}.`
+  );
+}
+
+function timeValidityDetail(
+  vi: ClassContextInput['validity_inputs'],
+  params: GAPParameters | undefined,
+): string | undefined {
+  if (!vi || !params) return undefined;
+  // No best time means nobody completed the speed section, and the spec falls
+  // back to the distance ratio — a different comparison, so it must not be
+  // described as a time one.
+  if (vi.best_time === null || vi.best_time <= 0) {
+    return (
+      `Nobody completed the speed section, so the spec compares distance instead: ` +
+      `the best distance of ${km(vi.best_distance)} against the ` +
+      `${km(params.nominalDistance)} nominal distance.`
+    );
+  }
+  const ratio = vi.best_time / params.nominalTime;
+  const against =
+    `The fastest pilot took ${duration(vi.best_time)} against a nominal task time of ` +
+    `${duration(params.nominalTime)}`;
+  // The spec's ratio is min(1, best ÷ nominal), so a winning time at or over
+  // nominal is simply a full day. Printing the clamped "100% of nominal" beside
+  // a time visibly LONGER than nominal reads as an arithmetic error.
+  return ratio >= 1
+    ? `${against} — the task took as long as it was meant to, so no time devaluation applies.`
+    : `${against} — ${trimZeros((ratio * 100).toFixed(1), 0)}% of nominal.`;
+}
+
+/** "12 of 41 pilots made goal → goal ratio 0.29", the input to the weights. */
+function goalRatioPhrase(vi: NonNullable<ClassContextInput['validity_inputs']>): string {
+  return (
+    `${vi.num_in_goal} of ${vi.num_flying} pilot${vi.num_flying === 1 ? '' : 's'} made goal ` +
+    `— a goal ratio of ${trimZeros(vi.goal_ratio.toFixed(2), 2)}`
+  );
+}
+
 export function buildValiditySection(
   classContext: ClassContextInput,
+  params?: GAPParameters,
 ): ScoreExplanationSection {
   const v = classContext.task_validity;
   const ap = classContext.available_points;
+  const vi = classContext.validity_inputs;
   // One precision for the whole section, so the three factor rows, the task
   // validity in the summary and the equation all visibly agree.
   const decimals = validityFactorDecimals(v, ap.total);
   const items: ScoreExplanationItem[] = [
     {
       id: 'launch-validity',
-      text: 'Launch validity — did enough registered pilots launch?',
+      text: 'Launch validity — the day counts for less if much of the field never got into the air.',
       value: pctValidity(v.launch, decimals),
+      detail: launchValidityDetail(vi, params),
     },
     {
       id: 'distance-validity',
-      text: 'Distance validity — did the field fly far enough relative to the nominal distance?',
+      text: 'Distance validity — the day counts for less if the field as a whole did not get far.',
       value: pctValidity(v.distance, decimals),
+      detail: distanceValidityDetail(vi, params),
     },
     {
+      // Deliberately not "was the winning time long enough": pilots read that
+      // as a long winning time being the problem. The rule is that a day
+      // nobody could stretch out was not a full day's task.
       id: 'time-validity',
-      text: 'Time validity — was the winning time long enough relative to the nominal time?',
+      text: 'Time validity — the day counts for less if the fastest pilot got round much quicker than the task was meant to take.',
       value: pctValidity(v.time, decimals),
+      detail: timeValidityDetail(vi, params),
     },
     // Stopped tasks (S7F §12.3.3): the fourth validity factor.
     ...(v.stopped !== undefined
@@ -558,7 +710,12 @@ export function buildValiditySection(
     },
     {
       id: 'available-split',
-      text: 'Split between the components by the goal ratio',
+      // How many pilots got there decides the split, so say so — "the goal
+      // ratio" alone names a term the reader has met nowhere else and gives
+      // them no value to attach to it.
+      text: vi
+        ? `Split between the components: ${goalRatioPhrase(vi)}`
+        : 'Split between the components by the goal ratio',
       // 0.1 precision like the total above, so the split visibly sums to it
       // ("distance 855.9 · time 143.4" for a 999.3 day, not "856 · 144").
       detail: [
@@ -569,11 +726,36 @@ export function buildValiditySection(
       ].join(' · '),
       emphasis: 'muted',
     },
+    // The weights are the actual mechanism, and they explain why two pilots
+    // with the same distance and different times separate the way they do.
+    ...(vi
+      ? [{
+          id: 'available-weights',
+          text: 'The share each component takes of the day',
+          detail: [
+            `distance ${pctWeight(vi.weights.distance)}`,
+            `time ${pctWeight(vi.weights.time)}`,
+            ...(vi.weights.leading > 0 ? [`leading ${pctWeight(vi.weights.leading)}`] : []),
+            ...(vi.weights.arrival > 0 ? [`arrival ${pctWeight(vi.weights.arrival)}`] : []),
+          ].join(' · '),
+          emphasis: 'muted' as const,
+        }]
+      : []),
+    // The PG leading-weight generation belongs HERE, where the weights are
+    // decided, not down in the leading section where it used to sit.
+    ...(params && leadingWeightDetail(params)
+      ? [{
+          id: 'weight-formula',
+          text: leadingWeightDetail(params)!,
+          emphasis: 'muted' as const,
+        }]
+      : []),
   ];
   return {
     id: 'validity',
     title: 'Day quality — points on offer',
     summary: `Task validity ${pctValidity(v.task, decimals)} of a perfect day, so ${fmtPoints(ap.total)} of 1000 points were available.`,
+    docHref: '/scoring/gap#task-validity',
     items,
   };
 }
@@ -636,6 +818,18 @@ export function buildDistanceSection(
     });
   }
 
+  // The scale everything else in this section is a fraction of. Without it a
+  // goal pilot has to infer the task length from their own scored distance,
+  // and a landed-out pilot is told they were "12.3 km short" of nothing.
+  if (classContext.validity_inputs && classContext.validity_inputs.task_distance > 0) {
+    items.push({
+      id: 'task-distance',
+      text: 'Task distance',
+      value: km(classContext.validity_inputs.task_distance),
+      detail: 'The optimized task line — the shortest legal way round the turnpoints.',
+      emphasis: 'muted',
+    });
+  }
   items.push({
     id: 'scored-distance',
     text: 'Scored distance',
@@ -701,6 +895,9 @@ export function buildDistanceSection(
     id: 'distance',
     title: 'Distance points',
     points: entry.distance_points,
+    docHref: useDifficulty
+      ? '/scoring/gap#distance-difficulty'
+      : '/scoring/gap#distance-points',
     items,
   };
 }
@@ -866,7 +1063,132 @@ export function buildTimeSection(
     id: 'time',
     title: 'Time points',
     points: entry.time_points,
+    docHref: '/scoring/gap#time-points',
     items,
+  };
+}
+
+/**
+ * Leading points, with the arithmetic that produced them.
+ *
+ * Before this the section printed a sentence and a number, in a page where
+ * every other component substitutes its formula — and leading is both the
+ * least intuitive component in GAP and the one pilots most often dispute.
+ * The gate is the leading coefficient: without it (leading not scored, or a
+ * payload cached before it was published) the section stays as it was rather
+ * than asserting arithmetic it cannot show.
+ *
+ * The coefficient is an area under the pilot's distance-over-time curve, so
+ * its absolute value means nothing to a reader — only the comparison does.
+ * That is why the best-in-class figure is printed beside it and why the
+ * sentence says "lower is better" rather than leaving the reader to infer a
+ * direction from two bare numbers.
+ */
+export function buildLeadingSection(
+  entry: ScoreEntryInput,
+  classContext: ClassContextInput,
+  params: GAPParameters,
+): ScoreExplanationSection {
+  const ap = classContext.available_points;
+  const items: ScoreExplanationItem[] = [
+    {
+      id: 'leading',
+      text: 'Leading points reward flying out front during the speed section — the pilot with the best leading coefficient takes all available leading points, others fall off with the gap.',
+      value: pts(entry.leading_points),
+    },
+  ];
+
+  const lc = entry.leading_coefficient;
+  const allLCs = classContext.pilots
+    .map((p) => p.leading_coefficient)
+    .filter((v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0);
+  const minLC = allLCs.length > 0 ? Math.min(...allLCs) : null;
+
+  if (typeof lc === 'number' && Number.isFinite(lc) && minLC !== null) {
+    items.push({
+      id: 'leading-coefficient',
+      text: 'Your leading coefficient — the area under your distance-over-time curve, so lower means further ahead for longer',
+      value: trimZeros(lc.toFixed(3), 1),
+      detail:
+        lc <= minLC
+          ? 'The best in the class — no one spent more of the race out front, so this takes the full available leading points.'
+          : `Best in class ${trimZeros(minLC.toFixed(3), 1)}.`,
+    });
+    if (lc > minLC) {
+      // Mirrors calculateLeadingPoints exactly, including its degenerate
+      // guard: a non-positive best coefficient has no defined normalisation
+      // and the engine scores 0 rather than dividing by it.
+      const factor =
+        minLC > 0 ? Math.max(0, 1 - Math.cbrt(((lc - minLC) * (lc - minLC)) / minLC)) : 0;
+      const { availStr, decimals, reconciles } = reconcileWithAvailable(
+        ap.leading, 3, 6, entry.leading_points,
+        (d, avail) => Number(factor.toFixed(d)) * avail,
+      );
+      items.push({
+        id: 'leading-formula',
+        text: 'Leading points fall off with the gap to the best coefficient',
+        value: pts(entry.leading_points),
+        detail: `leading factor = max(0, 1 − ((LC − LCbest)² ÷ LCbest)^1⁄3) = ${trimZeros(
+          factor.toFixed(decimals),
+          3,
+        )}; × ${availStr} available ${
+          reconciles
+            ? `= ${fmtPoints(entry.leading_points)}`
+            : `≈ ${fmtPoints(entry.leading_points)} — the figures are shown rounded; the points come from their full precision`
+        }`,
+      });
+    }
+  }
+
+  items.push({
+    id: 'leading-variant',
+    text: leadingVariantSentence(params.leadingFormula),
+    emphasis: 'muted',
+  });
+
+  return {
+    id: 'leading',
+    title: 'Leading points',
+    points: entry.leading_points,
+    docHref: '/scoring/gap#leading-points',
+    items,
+  };
+}
+
+/**
+ * Arrival points.
+ *
+ * Deliberately NOT given substituted arithmetic yet: the §11.4 cubic is a
+ * function of arrival POSITION at the end of the speed section, and the
+ * published payload carries no ESS arrival times to derive one from
+ * (`speed_section_time` is a duration, and each pilot's clock starts at their
+ * own gate). Printing a formula whose inputs we would have to guess would be
+ * worse than the sentence it replaced. What we can state honestly is the size
+ * of the group being ranked, which is the other half of the ratio.
+ */
+export function buildArrivalSection(
+  entry: ScoreEntryInput,
+  classContext: ClassContextInput,
+  params: GAPParameters,
+): ScoreExplanationSection {
+  const atEss = classContext.pilots.filter((p) => p.reached_ess).length;
+  return {
+    id: 'arrival',
+    title: 'Arrival points',
+    points: entry.arrival_points,
+    docHref: '/scoring/gap#arrival-points',
+    items: [
+      {
+        id: 'arrival',
+        text: 'Arrival points reward crossing the end of the speed section early relative to the other pilots who reached it.',
+        value: pts(entry.arrival_points),
+        detail:
+          atEss > 0
+            ? `${atEss} pilot${atEss === 1 ? '' : 's'} reached the end of the speed section on this task; the points scale with where in that group you crossed it (FAI S7F §11.4).`
+            : undefined,
+      },
+      ...buildArrivalEssNotGoalItems(entry, params),
+    ],
   };
 }
 
@@ -953,6 +1275,7 @@ export function buildTotalSection(entry: ScoreEntryInput): ScoreExplanationSecti
     id: 'total',
     title: 'Total',
     points: entry.total_score,
+    docHref: '/scoring/gap#total-score',
     items: [
       {
         id: 'total-sum',
@@ -961,6 +1284,118 @@ export function buildTotalSection(entry: ScoreEntryInput): ScoreExplanationSecti
         detail,
       },
     ],
+  };
+}
+
+/**
+ * "Where the points went" — this pilot against the best score in the class,
+ * component by component.
+ *
+ * The header says "ranked #9" and the page then never mentions it again, so
+ * the reader's actual question — why am I 9th and not 3rd — goes unanswered
+ * beside a full accounting of points they cannot compare to anything. Every
+ * number here is already in the class context; nothing is recomputed.
+ *
+ * The comparison is against the class LEADER, not the best value per
+ * component. A per-component best would assemble a pilot who does not exist
+ * and whose "total" no one scored — the honest question is what separates
+ * this pilot from the person who won the day.
+ *
+ * Returns null when there is nobody to compare against: a one-pilot class, or
+ * this pilot IS the leader (they have no gap, and a table of zeroes is noise).
+ */
+export function buildComparisonSection(
+  entry: ScoreEntryInput,
+  classContext: ClassContextInput,
+): ScoreExplanationSection | null {
+  // Only pilots the payload carries point components for — older cached
+  // bodies narrow to the four validity fields and cannot be compared.
+  const scored = classContext.pilots.filter(
+    (p) => p.total_score !== undefined && !p.track_excluded,
+  );
+  if (scored.length < 2) return null;
+  const leader = scored.reduce((best, p) =>
+    (p.total_score ?? 0) > (best.total_score ?? 0) ? p : best,
+  );
+  const leaderTotal = leader.total_score ?? 0;
+  const gap = leaderTotal - entry.total_score;
+  // A leading pilot (or a tie at the top) has nothing to compare.
+  if (gap <= 0.05) return null;
+
+  const rows: Array<{ id: string; label: string; mine: number; theirs: number }> = [
+    {
+      id: 'distance',
+      label: 'Distance',
+      mine: entry.distance_points,
+      theirs: leader.distance_points ?? 0,
+    },
+    {
+      id: 'time',
+      label: 'Time',
+      mine: entry.time_points,
+      theirs: leader.time_points ?? 0,
+    },
+  ];
+  if (classContext.available_points.leading > 0) {
+    rows.push({
+      id: 'leading',
+      label: 'Leading',
+      mine: entry.leading_points,
+      theirs: leader.leading_points ?? 0,
+    });
+  }
+  if (classContext.available_points.arrival > 0) {
+    rows.push({
+      id: 'arrival',
+      label: 'Arrival',
+      mine: entry.arrival_points,
+      theirs: leader.arrival_points ?? 0,
+    });
+  }
+
+  const items: ScoreExplanationItem[] = rows.map((r) => {
+    const diff = r.mine - r.theirs;
+    return {
+      id: `gap-${r.id}`,
+      text: r.label,
+      value:
+        Math.abs(diff) < 0.05
+          ? 'level'
+          : `${diff > 0 ? '+' : '−'}${fmtPoints(Math.abs(diff))} pts`,
+      detail: `you ${fmtPoints(r.mine)}, the leader ${fmtPoints(r.theirs)}`,
+      emphasis: Math.abs(diff) < 0.05 ? 'muted' : undefined,
+    };
+  });
+
+  // Name the component that cost the most, when one clearly dominates. This
+  // is the sentence the reader came for, and it is a fact about the
+  // arithmetic — not advice about how to fly.
+  const losses = rows
+    .map((r) => ({ label: r.label.toLowerCase(), lost: r.theirs - r.mine }))
+    .filter((r) => r.lost > 0.05)
+    .sort((a, b) => b.lost - a.lost);
+  const dominant =
+    losses.length > 0 && losses[0].lost >= 0.75 * gap ? losses[0] : null;
+
+  items.push({
+    id: 'gap-total',
+    text: `Behind ${leader.pilot_name ?? 'the class leader'}`,
+    value: `−${fmtPoints(gap)} pts`,
+    detail: dominant
+      ? losses.length === 1
+        ? `All of the gap is ${dominant.label}.`
+        : `Most of the gap — ${fmtPoints(dominant.lost)} of ${fmtPoints(gap)} points — is ${dominant.label}.`
+      : `Spread across ${losses.length} components.`,
+  });
+
+  return {
+    id: 'comparison',
+    title: 'Where the points went',
+    summary: `Your ${fmtPoints(entry.total_score)} against the ${fmtPoints(
+      leaderTotal,
+    )} that won the class.`,
+    docHref: '/scoring/gap#scoring-components',
+    items,
   };
 }
 
