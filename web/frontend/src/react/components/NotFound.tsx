@@ -7,6 +7,11 @@
  * the id. So rather than only apologising, this page reads the words out of the
  * dead path, asks the API which competitions / tasks / pilots carry those words
  * *now*, and offers the closest URLs that actually resolve — "did you mean …".
+ * The dead URL rebuilt as itself (same page, live ids) leads the list: that is
+ * the page the visitor asked for, and everything else is a consolation prize.
+ *
+ * Deliberately no "elsewhere on GlideComp" list of standing links: the header
+ * nav and the footer already carry them on every page, this one included.
  *
  * That is defence in depth, not the fix: the seed script preserves the ids that
  * appear in URLs (web/scripts/lib/seed-identity.ts), so a re-seed no longer
@@ -131,7 +136,7 @@ export function NotFound({
       <p className="text-muted-foreground">
         {message ??
           "The page you're looking for doesn't exist or may have moved."}{" "}
-        Search for it below, or try one of the links.
+        Search for it below.
       </p>
 
       <SearchField
@@ -169,19 +174,6 @@ export function NotFound({
             : "Nothing in the address matched a competition, task or pilot."}
         </p>
       ) : null}
-
-      <section aria-labelledby="nf-elsewhere" className="w-full">
-        <h2 id="nf-elsewhere" className="text-sm font-medium">
-          Elsewhere on GlideComp
-        </h2>
-        <ul className="mt-2 flex flex-col gap-2 text-sm">
-          {/* Home and Scoring are static (Astro) pages — full navigation. */}
-          <li><Link to="/comp" className={linkClass}>Competitions</Link></li>
-          <li><Link to="/u/me" className={linkClass}>My Flights</Link></li>
-          <li><a href="/scoring" className={linkClass}>How scoring works</a></li>
-          <li><a href="/" className={linkClass}>Home</a></li>
-        </ul>
-      </section>
     </div>
   );
 }

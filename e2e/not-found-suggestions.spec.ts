@@ -12,7 +12,7 @@
  */
 import { test, expect, type APIRequestContext } from "@playwright/test";
 import { FRONTEND_URL } from "./fixtures/stack";
-import { pilotPath, taskPath } from "../web/frontend/src/react/lib/slug";
+import { compScoresPath, pilotPath, taskPath } from "../web/frontend/src/react/lib/slug";
 
 const BASE_URL = FRONTEND_URL;
 
@@ -109,6 +109,29 @@ test.describe("404 → did you mean", () => {
     await expect(page.getByRole("heading", { name: live.pilotName })).toBeVisible();
   });
 
+  test("a suggestion pointing back at the SAME route still navigates", async ({ page }) => {
+    // Regression: react-router keeps the page component mounted when only the
+    // id in the path changes, and the comp pages never cleared a previous
+    // "not found". So the scores page's own "Scores" suggestion — which is the
+    // same route with a live id — changed the URL and left the 404 on screen.
+    // The pilot/task cases above navigate BETWEEN routes and so never caught it.
+    await page.goto(`${BASE_URL}${compScoresPath(DEAD_ID, live.compName)}`);
+    await expect(page.getByRole("heading", { name: /not found/i })).toBeVisible();
+
+    const wanted = compScoresPath(live.compId, live.compName);
+    const suggestion = page.getByRole("link", { name: "Scores", exact: true });
+    await expect(suggestion).toHaveAttribute("href", wanted);
+    // …and it leads the list: a URL differing only by its id is the same
+    // request, so the page asked for outranks anything else in the comp.
+    const first = page.locator('section[aria-labelledby="nf-did-you-mean"] a').first();
+    await expect(first).toHaveAttribute("href", wanted);
+
+    await suggestion.click();
+    await expect(page).toHaveURL(new RegExp(`${wanted}$`));
+    // The real page, not the 404 it replaced.
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Scores");
+  });
+
   test("a dead task link offers the task, and the comp behind it", async ({ page }) => {
     await page.goto(`${BASE_URL}${taskPath(DEAD_ID, live.compName, DEAD_ID, live.taskName)}`);
 
@@ -137,13 +160,13 @@ test.describe("404 → did you mean", () => {
     ).toBeVisible();
   });
 
-  test("a URL that matches nothing says so, and still offers the way out", async ({ page }) => {
+  test("a URL that matches nothing says so, and offers the search box", async ({ page }) => {
     // Bare ids: well-formed, resolve to nothing, and carry no words to search.
     await page.goto(`${BASE_URL}/comp/${DEAD_ID}/task/${DEAD_ID}`);
     await expect(page.getByRole("heading", { name: /not found/i })).toBeVisible();
-    // Scoped to the page's own list — the header nav has a "Competitions" link
-    // of its own.
-    const elsewhere = page.getByRole("region", { name: "Elsewhere on GlideComp" });
-    await expect(elsewhere.getByRole("link", { name: "Competitions" })).toBeVisible();
+    await expect(page.getByRole("searchbox")).toBeVisible();
+    // No standing link list of its own — the header nav and footer carry those
+    // on every page, so repeating them here was noise.
+    await expect(page.getByRole("heading", { name: "Elsewhere on GlideComp" })).toHaveCount(0);
   });
 });

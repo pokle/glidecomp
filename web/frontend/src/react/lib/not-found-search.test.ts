@@ -16,34 +16,55 @@ const DEAD_PILOT_URL =
 const EMPTY: LookupResults = { comps: [], tasks: [], pilots: [] };
 
 describe("parsePathIdentity", () => {
+  const COMP = { id: "voqc", slug: "corryong-cup-2026" };
+  const TASK = { id: "bqlf", slug: "task-1-open" };
+
   test("splits every segment of a pilot score URL", () => {
     expect(parsePathIdentity(DEAD_PILOT_URL)).toEqual({
-      comp: { id: "voqc", slug: "corryong-cup-2026" },
-      task: { id: "bqlf", slug: "task-1-open" },
+      comp: COMP,
+      task: TASK,
       pilot: { id: "zujf", slug: "harrison-rowntree" },
+      page: "pilot",
     });
   });
 
-  test("reads a task URL, in both the current and the superseded analysis shape", () => {
-    const expected = {
-      comp: { id: "voqc", slug: "corryong-cup-2026" },
-      task: { id: "bqlf", slug: "task-1-open" },
-    };
-    expect(parsePathIdentity("/comp/corryong-cup-2026-voqc/task/task-1-open-bqlf")).toEqual(
-      expected
-    );
-    expect(
-      parsePathIdentity("/comp/corryong-cup-2026-voqc/analysis/task/task-1-open-bqlf")
-    ).toEqual(expected);
-    expect(
-      parsePathIdentity("/comp/corryong-cup-2026-voqc/task/task-1-open-bqlf/analysis")
-    ).toEqual(expected);
+  test("reads a task URL", () => {
+    expect(parsePathIdentity("/comp/corryong-cup-2026-voqc/task/task-1-open-bqlf")).toEqual({
+      comp: COMP,
+      task: TASK,
+      page: "task",
+    });
   });
 
-  test("reads the comp-level pages", () => {
-    const comp = { comp: { id: "voqc", slug: "corryong-cup-2026" } };
-    for (const suffix of ["", "/", "/scores", "/waypoints", "/analysis", "/pilots"]) {
-      expect(parsePathIdentity(`/comp/corryong-cup-2026-voqc${suffix}`)).toEqual(comp);
+  test("both per-task analysis URLs — current and superseded — mean the report", () => {
+    // The old shape redirects when it resolves, so a dead one is still asking
+    // for the report, not for the task page.
+    for (const path of [
+      "/comp/corryong-cup-2026-voqc/analysis/task/task-1-open-bqlf",
+      "/comp/corryong-cup-2026-voqc/task/task-1-open-bqlf/analysis",
+    ]) {
+      expect(parsePathIdentity(path)).toEqual({
+        comp: COMP,
+        task: TASK,
+        page: "taskAnalysis",
+      });
+    }
+  });
+
+  test("each comp-level page is told apart, so it can be rebuilt as itself", () => {
+    const cases = [
+      ["", "comp"],
+      ["/", "comp"],
+      ["/scores", "scores"],
+      ["/waypoints", "waypoints"],
+      ["/analysis", "compAnalysis"],
+      ["/pilots", "pilots"],
+    ] as const;
+    for (const [suffix, page] of cases) {
+      expect(parsePathIdentity(`/comp/corryong-cup-2026-voqc${suffix}`)).toEqual({
+        comp: COMP,
+        page,
+      });
     }
   });
 
@@ -51,6 +72,7 @@ describe("parsePathIdentity", () => {
     expect(parsePathIdentity("/comp/voqc/task/bqlf")).toEqual({
       comp: { id: "voqc", slug: "" },
       task: { id: "bqlf", slug: "" },
+      page: "task",
     });
   });
 
@@ -116,10 +138,10 @@ describe("matchScore", () => {
 
 describe("buildSuggestions", () => {
   const results: LookupResults = {
-    comps: [{ comp_id: "voqc", name: "Corryong Cup 2026", category: "hg" }],
+    comps: [{ comp_id: "newc", name: "Corryong Cup 2026", category: "hg" }],
     tasks: [
       {
-        comp_id: "voqc",
+        comp_id: "newc",
         comp_name: "Corryong Cup 2026",
         task_id: "newt",
         name: "Task 1 (Open)",
@@ -128,7 +150,7 @@ describe("buildSuggestions", () => {
     ],
     pilots: [
       {
-        comp_id: "voqc",
+        comp_id: "newc",
         comp_name: "Corryong Cup 2026",
         task_id: "newt",
         task_name: "Task 1 (Open)",
@@ -141,10 +163,10 @@ describe("buildSuggestions", () => {
 
   test("rebuilds the dead URL with the ids that exist now", () => {
     const suggestions = buildSuggestions(parsePathIdentity(DEAD_PILOT_URL), results);
-    // Deepest first: the pilot page the visitor was actually after.
+    // The page that was asked for, first.
     expect(suggestions[0]).toEqual({
       kind: "pilot",
-      path: "/comp/corryong-cup-2026-voqc/task/task-1-open-newt/pilot/harrison-rowntree-newp",
+      path: "/comp/corryong-cup-2026-newc/task/task-1-open-newt/pilot/harrison-rowntree-newp",
       label: "Harrison Rowntree",
       context: "Task 1 (Open) · Corryong Cup 2026",
     });
@@ -156,6 +178,53 @@ describe("buildSuggestions", () => {
       "scores",
       "analysis",
     ]);
+  });
+
+  // A URL differing from a live one ONLY by its id is the same request, so the
+  // page it names must lead — not merely something nearby in the same comp.
+  // The reported bug was landing on a dead /scores and being offered the comp
+  // hub first, with Scores buried below it.
+  test.each([
+    ["scores", "/comp/corryong-cup-2026-voqc/scores", "/comp/corryong-cup-2026-newc/scores", "Scores"],
+    ["waypoints", "/comp/corryong-cup-2026-voqc/waypoints", "/comp/corryong-cup-2026-newc/waypoints", "Waypoints"],
+    ["field analysis", "/comp/corryong-cup-2026-voqc/analysis", "/comp/corryong-cup-2026-newc/analysis", "Field analysis"],
+  ])("a dead %s URL is rebuilt as itself, first", (_what, dead, live, label) => {
+    const suggestions = buildSuggestions(parsePathIdentity(dead), results);
+    // Same page, live id — not merely something nearby in the same comp.
+    expect(suggestions[0]).toMatchObject({ label, path: live });
+  });
+
+  test("a dead per-task analysis URL leads with the report, not the task page", () => {
+    const suggestions = buildSuggestions(
+      parsePathIdentity("/comp/corryong-cup-2026-voqc/analysis/task/task-1-open-bqlf"),
+      results
+    );
+    expect(suggestions[0]).toEqual({
+      kind: "analysis",
+      path: "/comp/corryong-cup-2026-newc/analysis/task/task-1-open-newt",
+      label: "Field analysis",
+      context: "Task 1 (Open) · Corryong Cup 2026",
+    });
+  });
+
+  test("a dead comp URL leads with the comp", () => {
+    const suggestions = buildSuggestions(
+      parsePathIdentity("/comp/corryong-cup-2026-voqc"),
+      results
+    );
+    expect(suggestions[0]).toEqual({
+      kind: "comp",
+      path: "/comp/corryong-cup-2026-newc",
+      label: "Corryong Cup 2026",
+    });
+  });
+
+  test("the admin roster has no public page, so it falls back to the comp", () => {
+    const suggestions = buildSuggestions(
+      parsePathIdentity("/comp/corryong-cup-2026-voqc/pilots"),
+      results
+    );
+    expect(suggestions[0].kind).toBe("comp");
   });
 
   test("ranks the candidate whose name matches the dead slug first", () => {
@@ -186,14 +255,14 @@ describe("buildSuggestions", () => {
         category: "hg",
       })),
       tasks: Array.from({ length: 10 }, (_, i) => ({
-        comp_id: "voqc",
+        comp_id: "newc",
         comp_name: "Corryong Cup 2026",
         task_id: `t${i}`,
         name: `Task ${i} (Open)`,
         task_date: "2026-01-05",
       })),
       pilots: Array.from({ length: 10 }, (_, i) => ({
-        comp_id: "voqc",
+        comp_id: "newc",
         comp_name: "Corryong Cup 2026",
         task_id: "newt",
         task_name: "Task 1 (Open)",

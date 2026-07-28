@@ -88,6 +88,12 @@ export function CompDetail() {
   }, [comp, location.hash]);
 
   useEffect(() => {
+    // Clear any previous verdict first. react-router keeps this component
+    // mounted when only the id in the path changes, so a "not found" left over
+    // from the old id would mask whatever the new one loads. That is not
+    // hypothetical: the 404 page's own "did you mean" links point back at this
+    // very route, so clicking one changed the URL and nothing else.
+    setNotFound(false);
     if (!compId) {
       setNotFound(true);
       return;
