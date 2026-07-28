@@ -23,7 +23,8 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInView } from "../lib/use-in-view";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { NotFound } from "@/react/components/NotFound";
 import { FileTrigger, type SortDescriptor } from "react-aria-components";
 import { MapPinIcon } from "lucide-react";
 import {
@@ -223,6 +224,12 @@ export function CompWaypoints() {
   rowsRef.current = rows;
 
   useEffect(() => {
+    // Clear any previous verdict first. react-router keeps this component
+    // mounted when only the id in the path changes, so a "not found" left over
+    // from the old id would mask whatever the new one loads. That is not
+    // hypothetical: the 404 page's own "did you mean" links point back at this
+    // very route, so clicking one changed the URL and nothing else.
+    setNotFound(false);
     if (!compId) return;
     // Seeded from SSR — skip the fetch. The seed is retired on any client-side
     // navigation (see lib/initial-data.tsx), so a return visit fetches fresh.
@@ -484,12 +491,7 @@ export function CompWaypoints() {
 
   if (notFound) {
     return (
-      <main className="mx-auto max-w-md py-12">
-        <h1 className="text-2xl font-bold">Competition not found</h1>
-        <Link to="/comp" className="mt-4 inline-block underline">
-          Back to competitions
-        </Link>
-      </main>
+      <NotFound title="Competition not found" />
     );
   }
 

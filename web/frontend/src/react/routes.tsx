@@ -8,7 +8,6 @@
  * only by the client entry.
  */
 import {
-  Link,
   Navigate,
   Route,
   Routes,
@@ -21,6 +20,9 @@ import { UserProvider } from "./lib/user";
 import type { AuthUser } from "../auth/client";
 import { Loading } from "./rac/progress";
 import { Shell } from "./components/Shell";
+/* Static, like the SSR'd pages: the public comp pages render it from their own
+   not-found branches, so a lazy boundary here would suspend during hydration. */
+import { NotFound } from "./components/NotFound";
 
 /*
  * The eight server-rendered public routes are STATIC imports and must stay
@@ -102,25 +104,6 @@ function TaskAnalysisRedirect() {
       replace
       to={`/comp/${compId}/analysis/task/${taskId}${query ? `?${query}` : ""}`}
     />
-  );
-}
-
-function NotFound() {
-  const linkClass = "underline underline-offset-4 hover:text-foreground";
-  return (
-    <main className="mx-auto flex max-w-md flex-col items-start gap-4 py-12">
-      <h1 className="text-2xl font-bold">Page not found</h1>
-      <p className="text-muted-foreground">
-        The page you're looking for doesn't exist or may have moved. Try one of these:
-      </p>
-      <ul className="flex flex-col gap-2 text-sm">
-        {/* Home and Scoring are static (Astro) pages — full navigation. */}
-        <li><Link to="/comp" className={linkClass}>Competitions</Link></li>
-        <li><Link to="/u/me" className={linkClass}>My Flights</Link></li>
-        <li><a href="/scoring" className={linkClass}>How scoring works</a></li>
-        <li><a href="/" className={linkClass}>Home</a></li>
-      </ul>
-    </main>
   );
 }
 

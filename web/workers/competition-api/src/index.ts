@@ -4,6 +4,7 @@ import { bodyLimit } from "hono/body-limit";
 import { MAX_BODY_BYTES } from "./igc-validation";
 import type { Env, AuthUser } from "./env";
 import { compRoutes } from "./routes/comp";
+import { lookupRoutes } from "./routes/lookup";
 import { taskRoutes } from "./routes/task";
 import { waypointsRoutes } from "./routes/waypoints";
 import { igcRoutes } from "./routes/igc";
@@ -93,6 +94,8 @@ const routes = app
   .route("/", pilotRoutes)
   .route("/", pilotStatusRoutes)
   .route("/", manualFlightRoutes)
+  // Ahead of compRoutes: /api/comp/lookup must win over /api/comp/:comp_id.
+  .route("/", lookupRoutes)
   .route("/", compRoutes)
   .route("/", taskRoutes)
   .route("/", waypointsRoutes)

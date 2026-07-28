@@ -13,6 +13,7 @@
  */
 import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { NotFound } from "@/react/components/NotFound";
 import { Form } from "react-aria-components";
 import { xctaskTurnpointsToRecords, type XCTask } from "@glidecomp/engine";
 import { Badge } from "@/react/rac/badge";
@@ -100,6 +101,12 @@ export function TaskDetail() {
   const [routeOpen, setRouteOpen] = useState(false);
 
   useEffect(() => {
+    // Clear any previous verdict first. react-router keeps this component
+    // mounted when only the id in the path changes, so a "not found" left over
+    // from the old id would mask whatever the new one loads. That is not
+    // hypothetical: the 404 page's own "did you mean" links point back at this
+    // very route, so clicking one changed the URL and nothing else.
+    setNotFound(false);
     if (!compId || !taskId) {
       setNotFound(true);
       return;
@@ -174,14 +181,7 @@ export function TaskDetail() {
   );
 
   if (notFound || !compId || !taskId) {
-    return (
-      <div>
-        <p>Competition not found</p>
-        <Link className="underline underline-offset-4" to="/comp">
-          Back to Competitions
-        </Link>
-      </div>
-    );
+    return <NotFound title="Task not found" />;
   }
 
   if (!task) {
