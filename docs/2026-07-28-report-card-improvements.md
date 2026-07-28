@@ -304,6 +304,142 @@ discarded" is information a pilot very much wants on the page that explains it.
 
 ---
 
+## Charts
+
+Several of the items above are curves or field comparisons, and prose is the
+wrong medium for both. The strongest single idea: **for every point component,
+draw the formula as a curve and put each pilot on it as a dot.** For the point
+components this is not an approximation — every pilot sits *exactly* on the
+curve by construction, because the curve **is** the function that produced their
+points.
+
+### The governing principle: these are emphasis charts, not field charts
+
+The field-analysis charts treat every pilot as equally the subject: `RankScatter`
+paints all dots one colour and permanently labels the top and bottom three. **The
+report card is about one pilot**, so the same marks need a different colour job —
+one accent dot for you, de-emphasis grey for the field. Anyone reusing
+`RankScatter` unchanged here would bury the reader in the crowd they came to
+locate themselves in.
+
+State this up front in whatever component gets built, because the temptation to
+"just reuse the scatter" is strong and the result would be subtly wrong.
+
+### Where dots-on-a-curve genuinely works
+
+**Time points** — the best candidate on the page, and the one that answers the
+reference pilot's actual question ("why did 20 minutes cost 195 points?").
+
+- x = speed-section time, y = time points
+- the curve is the S7F §11.2 speed fraction × available points, drawn from the
+  fastest time out to where the fraction reaches 0
+- one dot per pilot who reached ESS, all sitting exactly on the curve; yours in
+  the accent, ringed
+- it shows at a glance how steep the falloff is, how bunched the field was, and
+  how much of the curve lies between you and the leader
+
+Pilots who never reached ESS must **not** be plotted at y = 0 — they have no x,
+and a row of dots on the floor would read as "on the curve, scoring zero", which
+is a different and false statement. Count them in the caption instead.
+
+**Distance points** — same construction, and it gets something valuable for free.
+On a PG comp the curve is a straight line from (0, 0) to (best distance,
+available) and the dots show the field's spread. On an HG comp with distance
+difficulty the total is linear-half + difficulty-half, so the plotted curve has
+visible kinks where the field landed out in clusters — which makes the
+distance-difficulty concept, close to unexplainable in a sentence, legible for
+nothing: *the steep sections are where lots of pilots landed, and getting past
+them was worth more.*
+
+**Leading points** — x = leading coefficient, y = leading points, curve is the
+§11.3 falloff, dots are the field. Worth doing precisely because leading is the
+component pilots understand least; seeing that the LC scale is compressed at the
+good end and where you sat on it is more use than any sentence. Needs
+`leadingCoefficient` surfaced (§3 above).
+
+**Arrival points** — the §11.4 cubic, but its domain is *integer arrival position
+at ESS*, so the honest form is a small column chart with your column emphasized,
+not a curve with dots. Lowest value on the list (HG only, small point values).
+
+### Where it does *not* work — worth writing down
+
+The three **validity** curves are day facts, not pilot facts. Time validity is a
+cubic in `bestTime ÷ nominalTime` and has exactly **one** point on it — the day's.
+Scattering the field's times along that curve would be a category error: those
+pilots' times are not inputs to it, and the chart would invite everyone to read
+their own validity off it.
+
+They are still worth drawing, small: a sparkline-scale curve with the day's
+single point marked and a dropline to each axis, sitting beside the validity row
+it explains. That makes "the winner got round in 71% of nominal, so the day is
+worth 90.2%" visible, and shows what would have had to change — without implying
+anything per-pilot.
+
+**Distance validity is the exception, and it wants a different form entirely.**
+It is driven by the spread of the whole field's distances over the minimum, so
+the informative picture is not the formula but the **distribution**: a strip or
+histogram of the field's flown distances with nominal distance, minimum distance
+and your own distance marked. `charts/DistributionStrip.tsx` already does exactly
+this shape and already takes an `emphasizeTrackFile` prop.
+
+### The field comparison (item 4) as a chart
+
+Keep the table — it is the exact, accessible reading — and put the gaps beside it
+as a small diverging bar per component (distance 0, time −195.4). "Δ to target"
+is the diverging bar's job. A dumbbell (you ↔ best, per component) is the
+alternative; the diverging bar wins because the reader's question is *what did I
+give away*, and it puts every component's answer on one shared zero.
+
+Separately, a one-line strip of every class score in the task with your dot
+ringed answers "where am I in this field" faster than the rank number in the
+header does.
+
+### Conventions to inherit, and one to change
+
+`RankScatter` and `chart-utils.ts` have already settled the hard parts, and these
+charts should follow them rather than reinvent:
+
+- hand-rolled inline SVG, no chart library (so it **server-renders** — which
+  matters here more than on the field-analysis pages, since the report card is
+  the SEO centrepiece)
+- `fill-chart-*` tokens for data, `stroke-foreground` for the curve — the curve
+  is an annotation over one series, not a second series, and the existing comment
+  in `RankScatter` documents why the chart hues fail the 3:1 non-text contrast bar
+  for that role
+- a 24px invisible halo over each dot (accessibility standard §4.5, WCAG 2.5.8),
+  focusable dots, arrow-key walk in rank order, a readout line mirroring
+  hover/focus, tick labels `aria-hidden` because the caption carries the reading
+- `MetricChartOverlay`'s full-screen pattern for phones, where a pinned chart is
+  a smudge
+
+**The one thing that must change is the caption vocabulary.** `RankScatter` says
+*"the curve is a trend fitted through the dots"* and withholds it below a noise
+floor, because a fitted curve is a claim about data. These curves are the
+opposite: they are the formula itself, exact, and every dot is on one by
+definition. The caption must say so — *"the curve is the scoring formula; every
+pilot sits exactly on it"* — because that distinction is the entire reason the
+chart is trustworthy, and reusing the trend-line wording would quietly downgrade
+a fact into a fit.
+
+Tables stay. The field-analysis rule (tables are the accessible exact reading,
+charts sit alongside) applies here too — and on this page the existing
+item/value/detail lines already *are* the table, so charts are additive and never
+replace a line.
+
+### Practical note
+
+`chart-utils.ts` (`linearScale`, `niceTicks`, `extent`, `spreadLabels`,
+`quantileSorted`) is exactly what these charts need and its own header says it is
+"scoped to field-analysis and not a chart framework". Using it from the report
+card means promoting it to something like `src/react/charts/` — a deliberate
+scope decision to make explicitly rather than by quietly importing across.
+
+Keep them small inline (~160px) inside the section each explains, with the
+full-screen overlay for a proper look. The page is already long; four full-size
+charts would bury the prose that currently carries it.
+
+---
+
 ## Suggested order
 
 1. **Effective GAP params in the score payload** (blocker; also fixes shipping
@@ -311,13 +447,18 @@ discarded" is information a pilot very much wants on the page that explains it.
 2. **Doc links per section** (small, high value, independent of everything else)
 3. **`validity_inputs` + the day-quality detail lines** (the reported issue)
 4. **Goal-ratio / weights split** (same payload block, same section)
-5. **"Where the points went" comparison** (no API change)
-6. Leading/arrival arithmetic
-7. Terminology pass + task distance + start-crossing reason + ESS/goal collapse
-8. Standings link
+5. **"Where the points went" comparison + its gap bars** (no API change)
+6. **The time-points curve** — the single highest-value chart, and it needs no
+   payload change either: every pilot's speed-section time and time points are
+   already in the class entries on the page
+7. Leading/arrival arithmetic, then the leading curve
+8. The distance-points curve, the validity sparklines, the distance distribution
+9. Terminology pass + task distance + start-crossing reason + ESS/goal collapse
+10. Standings link
 
-Items 1, 3, 4 and 6 share one API/payload change and one `SCORING_ENGINE_VERSION`
-bump, so they are cheaper together than apart.
+Items 1, 3, 4 and 7 share one API/payload change and one `SCORING_ENGINE_VERSION`
+bump, so they are cheaper together than apart. Items 5 and 6 are independent of
+all of it and could ship first.
 
 ## Testing notes
 
@@ -330,3 +471,11 @@ bump, so they are cheaper together than apart.
 - These pages are SSR'd. `bun run test:e2e:ssr` (clean hydration) is part of
   "done" for any change here, and all new copy must render deterministically —
   no runtime locale, no runtime "today".
+- Charts are inline SVG with no browser API, so they server-render and are
+  covered by the same SSR check. Anything measured from the DOM (the full-screen
+  overlay's aspect) must stay behind the open state, as `MetricChartOverlay`
+  already does.
+- Chart accessibility is measured against `docs/accessibility-standard.md` like
+  the rest of the UI: caption states the reading in words, dots are focusable
+  with a 24px target, and the section's existing item/value lines remain the full
+  data equivalent.
