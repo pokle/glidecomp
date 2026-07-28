@@ -5,7 +5,7 @@
  */
 import { createPortal } from "react-dom";
 import { toast as sonnerToast } from "sonner";
-import { Toaster } from "@/react/ui/sonner";
+import { Toaster } from "@/react/vendor/sonner";
 
 // Coerce whatever a caller passes into a renderable string. API error
 // handlers do `toast.error(err.error || fallback)` and `err.error` is only

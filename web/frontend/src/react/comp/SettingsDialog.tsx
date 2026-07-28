@@ -18,7 +18,7 @@ import {
   Modal,
 } from "@/react/rac/dialog";
 import { Label, NumberField, TextField } from "@/react/rac/field";
-import { DatePicker } from "@/react/ui/date-picker";
+import { DatePicker } from "@/react/rac/date-picker";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";

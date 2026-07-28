@@ -1,6 +1,6 @@
 /** Super-admin KV cache stats + clear — React port of admin-cache.ts/admin-cache.html. */
 import { useEffect, useState } from "react";
-import { Button } from "@/react/ui/button";
+import { Button } from "@/react/rac/button";
 import { useConfirm } from "../lib/confirm";
 import { toast } from "../lib/toast";
 import { useGoToSignIn, useUser } from "../lib/user";
@@ -125,13 +125,16 @@ export function AdminCache() {
             AirScore proxy cache
           </p>
         </div>
+        {/* isPending, not isDisabled + a label swap: the button stays
+            focusable while the request is in flight, so focus isn't dumped to
+            the body mid-action, and RAC announces the flip. */}
         <Button
-          type="button"
           variant="destructive"
           size="sm"
           className="shrink-0"
-          disabled={clearing}
-          onClick={handleClear}
+          isPending={clearing}
+          pendingLabel="Clearing the cache"
+          onPress={() => void handleClear()}
         >
           Clear entire cache
         </Button>
@@ -166,10 +169,6 @@ export function AdminCache() {
           </div>
         ))}
       </div>
-
-      <p className="mt-6 text-sm text-muted-foreground" role="status" aria-live="polite">
-        {clearing ? "Clearing…" : ""}
-      </p>
     </section>
   );
 }

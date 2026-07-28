@@ -30,7 +30,7 @@ import {
 import { TextField, Label, Description } from "@/react/rac/field";
 import { Checkbox, CheckboxGroup } from "@/react/rac/checkbox";
 import { Tag, TagGroup } from "@/react/rac/tag-group";
-import { DatePicker, TimePicker } from "@/react/ui/date-picker";
+import { DatePicker, TimePicker } from "@/react/rac/date-picker";
 import { api } from "../../comp/api";
 import {
   formatInstant,

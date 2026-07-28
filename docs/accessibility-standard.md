@@ -217,12 +217,12 @@ differs. Know which surface you're touching:
 
 ## 6. Robust (WCAG 4.1.2, 4.1.3)
 
-- **Prefer the primitive.** On RAC-converted pages (see the conversion map in
-  [2026-07-18-rac-adoption-guide.md](2026-07-18-rac-adoption-guide.md)) that
-  means the react-aria-components kit in `src/react/rac/`; on the remaining
-  pages, the shadcn/Base UI components in `src/react/ui/` (add missing ones
-  with `bunx shadcn@latest add <name>`). Both carry the correct roles, states,
-  and keyboard behaviour — use them before hand-rolling. A hand-rolled widget
+- **Prefer the primitive.** In the SPA that means the react-aria-components
+  kit in `src/react/rac/` — the app's only component kit since 2026-07-27 (see
+  [2026-07-18-rac-adoption-guide.md](2026-07-18-rac-adoption-guide.md)). Its
+  components carry the correct roles, states, and keyboard behaviour — use
+  them before hand-rolling, and add what's missing to `rac/` rather than
+  reaching for another library. A hand-rolled widget
   must expose the same name/role/value and states (`aria-expanded`,
   `aria-pressed`, `aria-selected`, `aria-current`) — the
   `aria-pressed`/`aria-current` usage in `Shell.tsx` is the reference.
