@@ -13,11 +13,19 @@
  * Latches: once true it stays true, so scrolling away never tears down a live
  * map.
  *
+ * The ref it hands back is a CALLBACK ref, and that is load-bearing rather
+ * than a style choice: both map pages render a loading state first and only
+ * render the map's container once their data arrives. An effect that reads a
+ * `useRef` object sees null on mount and has no reason to run again, so the
+ * element that appears a moment later is never observed and the panel says
+ * "Loading map…" forever. React calls a callback ref when the node attaches,
+ * whenever that happens.
+ *
  * SSR-safe by construction. It returns false on the first render in every
  * environment, so the server's markup and the client's first render agree; the
  * observer is wired up in an effect, which the server never runs.
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export interface InViewOptions {
   /** Start loading before the element is strictly on screen. */
@@ -26,13 +34,14 @@ export interface InViewOptions {
 
 export function useInView<T extends HTMLElement>(
   { rootMargin = "300px" }: InViewOptions = {}
-): [React.RefObject<T | null>, boolean] {
-  const ref = useRef<T>(null);
+): [(node: T | null) => void, boolean] {
+  const [el, setEl] = useState<T | null>(null);
   const [inView, setInView] = useState(false);
+  // Identity-stable, so attaching it never detaches on a re-render.
+  const ref = useCallback((node: T | null) => setEl(node), []);
 
   useEffect(() => {
     if (inView) return;
-    const el = ref.current;
     if (!el) return;
     // No IntersectionObserver (very old browser, or a jsdom test): show the
     // thing rather than hide it forever. Degrading to "load it" is the safe
@@ -49,7 +58,7 @@ export function useInView<T extends HTMLElement>(
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [inView, rootMargin]);
+  }, [el, inView, rootMargin]);
 
   return [ref, inView];
 }
