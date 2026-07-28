@@ -70,6 +70,13 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
     </div>
     <div class="hero-stage fade-in" style="--delay:.2s">
       <div class="hero-glow"></div>
+      <div class="stage-caption">
+        <h2 class="eyebrow">Pilot's GAP scores explained</h2>
+        <p>
+          GlideComp explains why your pilot scored the way they did. Distance
+          points, time points, all explained in plain English.
+        </p>
+      </div>
       <figure class="shot shot-hero">
         <Picture
           src={pilotExplain}
@@ -676,6 +683,21 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
     margin: 64px auto 0;
     width: min(980px, 92vw);
     padding-bottom: 96px;
+  }
+  /* Sits between the hero copy and the screenshot, so it needs to clear the
+     glow the same way .shot-hero does. */
+  .stage-caption {
+    position: relative;
+    z-index: 1;
+    max-width: 620px;
+    margin: 0 auto 30px;
+    text-align: center;
+  }
+  .stage-caption p {
+    font-size: clamp(16px, 2vw, 19px);
+    line-height: 1.45;
+    color: var(--muted-foreground);
+    text-wrap: pretty;
   }
   .hero-glow {
     position: absolute;
