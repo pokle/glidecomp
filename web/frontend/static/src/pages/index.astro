@@ -34,8 +34,10 @@ const widthsFor = (img: { width: number }, widths: number[]) => {
   const within = widths.filter((w) => w < img.width);
   return within.length === widths.length ? within : [...within, img.width];
 };
-const HERO_WIDTHS = [490, 980, 1470, 1960];
-const HERO_SIZES = "(max-width: 1065px) 92vw, 980px";
+// The report card sits in the right half of the stage split — ~460px at full
+// width, the whole page scaled down to an impression rather than a read.
+const HERO_WIDTHS = [340, 460, 690, 920];
+const HERO_SIZES = "(max-width: 820px) 74vw, 460px";
 const CHART_WIDTHS = [512, 1024, 1536];
 const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
 ---
@@ -70,18 +72,40 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
     </div>
     <div class="hero-stage fade-in" style="--delay:.2s">
       <div class="hero-glow"></div>
-      <figure class="shot shot-hero">
-        <Picture
-          src={pilotExplain}
-          alt="A pilot's score explanation in GlideComp: a plain-English timeline of start-cylinder crossings and turnpoints beside a terrain map of the flight"
-          widths={widthsFor(pilotExplain, HERO_WIDTHS)}
-          sizes={HERO_SIZES}
-          formats={["avif"]}
-          fallbackFormat="webp"
-          loading="eager"
-          fetchpriority="high"
-        />
-      </figure>
+      <div class="stage-split">
+        <div class="stage-caption">
+          <h2 class="eyebrow">Pilot's GAP scores explained</h2>
+          <p>
+            GlideComp explains why your pilot scored the way they did. Distance
+            points, time points, all explained in plain English.
+          </p>
+          <ul class="stage-list">
+            <li>Every start-cylinder crossing, and which one scored</li>
+            <li>The day's validity — how many points were on offer at all</li>
+            <li>Distance split into its linear and difficulty halves</li>
+            <li>Why the time points were zero</li>
+          </ul>
+          <a
+            class="stage-link"
+            href="/comp/corryong-cup-2026-voqc/task/task-1-open-bqlf/pilot/harrison-rowntree-zujf"
+          >
+            Read the full report card
+            <span aria-hidden="true">→</span>
+          </a>
+        </div>
+        <figure class="shot shot-hero">
+          <Picture
+            src={pilotExplain}
+            alt="A whole pilot score page in GlideComp, scaled down: the flight's start-cylinder crossings and turnpoints beside a map of the task, then the day's validity, then distance, time, leading and arrival points each broken out with their arithmetic, down to the total"
+            widths={widthsFor(pilotExplain, HERO_WIDTHS)}
+            sizes={HERO_SIZES}
+            formats={["avif"]}
+            fallbackFormat="webp"
+            loading="eager"
+            fetchpriority="high"
+          />
+        </figure>
+      </div>
     </div>
   </section>
 
@@ -677,6 +701,78 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
     width: min(980px, 92vw);
     padding-bottom: 96px;
   }
+  /* Copy left, the whole score page scaled down on the right — legibility is
+     not the point, the shape of a filled-in report card is. Sits above the
+     glow the same way .shot-hero does. */
+  .stage-split {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.92fr);
+    gap: 48px;
+    align-items: start;
+    text-align: left;
+  }
+  .stage-caption {
+    max-width: 440px;
+  }
+  .stage-caption p {
+    margin-top: 4px;
+    font-size: clamp(16px, 2vw, 19px);
+    line-height: 1.45;
+    color: var(--muted-foreground);
+    text-wrap: pretty;
+  }
+  /* Names what the card beside it contains, since at that scale it can only
+     be recognised, not read. */
+  .stage-list {
+    margin: 22px 0 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 10px;
+  }
+  .stage-list li {
+    position: relative;
+    padding-left: 26px;
+    font-size: 16px;
+    line-height: 1.4;
+    color: var(--muted-foreground);
+  }
+  .stage-list li::before {
+    content: "";
+    position: absolute;
+    left: 6px;
+    top: 0.55em;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--primary);
+  }
+  .stage-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 22px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--primary);
+    text-decoration: none;
+  }
+  .stage-link:hover {
+    text-decoration: underline;
+  }
+  .stage-link span {
+    transition: transform 0.2s ease;
+  }
+  .stage-link:hover span {
+    transform: translateX(3px);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .stage-link span {
+      transition: none;
+    }
+  }
   .hero-glow {
     position: absolute;
     inset: -12% -6% auto;
@@ -1055,6 +1151,27 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
   @media (max-width: 860px) {
     .section-pad {
       padding: 84px 0;
+    }
+  }
+  @media (max-width: 820px) {
+    /* Stack the split: copy first, then the card centred under it. */
+    .stage-split {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 28px;
+      justify-items: center;
+      text-align: center;
+    }
+    .stage-caption {
+      max-width: 560px;
+    }
+    /* The column centres, but a bulleted list has to stay left-aligned to
+       read as a list. */
+    .stage-list {
+      text-align: left;
+      justify-self: start;
+    }
+    .shot-hero {
+      width: min(74%, 380px);
     }
   }
   @media (max-width: 560px) {

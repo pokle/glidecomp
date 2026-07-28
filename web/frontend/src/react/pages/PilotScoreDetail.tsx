@@ -2,6 +2,13 @@
  * Pilot score details — the explanation-first view of one pilot's score
  * for one task.
  *
+ * TERMINOLOGY (July 2026): the owner has started calling this page a
+ * pilot's "report card", and the homepage hero now shows the whole page
+ * scaled down under that name. Nothing in the code or the UI has been
+ * renamed — treat "report card" as the emerging user-facing term for
+ * this page and prefer it in new copy; if it sticks, the rename to make
+ * is the visible wording, not the route or the component.
+ *
  * Clicking a score anywhere in the app lands here. The page leads with
  * the explanation (the flight narrative and every step of the points
  * calculation) and treats the map as supporting evidence: clicking any
