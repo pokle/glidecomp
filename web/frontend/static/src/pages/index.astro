@@ -79,6 +79,19 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
             GlideComp explains why your pilot scored the way they did. Distance
             points, time points, all explained in plain English.
           </p>
+          <ul class="stage-list">
+            <li>Every start-cylinder crossing, and which one scored</li>
+            <li>The day's validity — how many points were on offer at all</li>
+            <li>Distance split into its linear and difficulty halves</li>
+            <li>Why the time points were zero</li>
+          </ul>
+          <a
+            class="stage-link"
+            href="/comp/corryong-cup-2026-voqc/task/task-1-open-bqlf/pilot/harrison-rowntree-zujf"
+          >
+            Read the full report card
+            <span aria-hidden="true">→</span>
+          </a>
         </div>
         <figure class="shot shot-hero">
           <Picture
@@ -710,6 +723,56 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
     color: var(--muted-foreground);
     text-wrap: pretty;
   }
+  /* Names what the card beside it contains, since at that scale it can only
+     be recognised, not read. */
+  .stage-list {
+    margin: 22px 0 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 10px;
+  }
+  .stage-list li {
+    position: relative;
+    padding-left: 26px;
+    font-size: 16px;
+    line-height: 1.4;
+    color: var(--muted-foreground);
+  }
+  .stage-list li::before {
+    content: "";
+    position: absolute;
+    left: 6px;
+    top: 0.55em;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--primary);
+  }
+  .stage-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 22px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--primary);
+    text-decoration: none;
+  }
+  .stage-link:hover {
+    text-decoration: underline;
+  }
+  .stage-link span {
+    transition: transform 0.2s ease;
+  }
+  .stage-link:hover span {
+    transform: translateX(3px);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .stage-link span {
+      transition: none;
+    }
+  }
   .hero-glow {
     position: absolute;
     inset: -12% -6% auto;
@@ -1100,6 +1163,12 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
     }
     .stage-caption {
       max-width: 560px;
+    }
+    /* The column centres, but a bulleted list has to stay left-aligned to
+       read as a list. */
+    .stage-list {
+      text-align: left;
+      justify-self: start;
     }
     .shot-hero {
       width: min(74%, 380px);
