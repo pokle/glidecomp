@@ -85,13 +85,16 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
             <li>Distance split into its linear and difficulty halves</li>
             <li>Why the time points were zero</li>
           </ul>
-          <a
-            class="stage-link"
-            href="/comp/corryong-cup-2026-voqc/task/task-1-open-bqlf/pilot/harrison-rowntree-zujf"
-          >
-            Read the full report card
+          <!-- Comp-level, not per-pilot: only the comp sqid survives a reseed,
+               so a task/pilot URL here would 404 the next time the sample comp
+               is seeded. -->
+          <a class="stage-link" href="/comp/corryong-cup-2026-voqc/scores">
+            See a real comp's scores
             <span aria-hidden="true">→</span>
           </a>
+          <p class="stage-hint">
+            Click any score to open that pilot's report card.
+          </p>
         </div>
         <figure class="shot shot-hero">
           <Picture
@@ -767,6 +770,14 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
   }
   .stage-link:hover span {
     transform: translateX(3px);
+  }
+  /* Scoped past `.stage-caption p` above, which would otherwise win on
+     specificity and hand this its 19px size and 4px top margin. */
+  .stage-caption .stage-hint {
+    margin-top: 8px;
+    font-size: 15px;
+    line-height: 1.4;
+    color: var(--muted-foreground);
   }
   @media (prefers-reduced-motion: reduce) {
     .stage-link span {
