@@ -11,6 +11,7 @@
  */
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { NotFound } from "@/react/components/NotFound";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
@@ -64,14 +65,7 @@ export function CompPilotsPage() {
   );
 
   if (notFound || !compId) {
-    return (
-      <div>
-        <p>Competition not found</p>
-        <Link className="underline underline-offset-4" to="/comp">
-          Back to Competitions
-        </Link>
-      </div>
-    );
+    return <NotFound title="Competition not found" />;
   }
 
   if (!comp || loading) {

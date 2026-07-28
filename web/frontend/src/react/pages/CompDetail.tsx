@@ -10,6 +10,7 @@
  */
 import { Fragment, useEffect, useId, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
+import { NotFound } from "@/react/components/NotFound";
 import { Form } from "react-aria-components";
 import { Button, LinkButton } from "@/react/rac/button";
 import { Loading } from "@/react/rac/progress";
@@ -122,14 +123,7 @@ export function CompDetail() {
   }, [compId, refresh]);
 
   if (notFound || !compId) {
-    return (
-      <div>
-        <p>Competition not found</p>
-        <Link className="underline underline-offset-4" to="/comp">
-          Back to Competitions
-        </Link>
-      </div>
-    );
+    return <NotFound title="Competition not found" />;
   }
 
   if (!comp) {

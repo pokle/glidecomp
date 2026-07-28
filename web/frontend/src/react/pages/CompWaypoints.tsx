@@ -23,7 +23,8 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInView } from "../lib/use-in-view";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { NotFound } from "@/react/components/NotFound";
 import { FileTrigger, type SortDescriptor } from "react-aria-components";
 import { MapPinIcon } from "lucide-react";
 import {
@@ -484,12 +485,7 @@ export function CompWaypoints() {
 
   if (notFound) {
     return (
-      <main className="mx-auto max-w-md py-12">
-        <h1 className="text-2xl font-bold">Competition not found</h1>
-        <Link to="/comp" className="mt-4 inline-block underline">
-          Back to competitions
-        </Link>
-      </main>
+      <NotFound title="Competition not found" />
     );
   }
 

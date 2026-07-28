@@ -48,6 +48,7 @@ import { retry } from "../lib/retry";
 import { idFromSegment, pilotPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { Timestamp } from "../components/Timestamp";
+import { NotFound } from "../components/NotFound";
 import type {
   AltitudeCleaningData,
   ClassScore,
@@ -113,8 +114,24 @@ function assertAnalysisMatchesScore(analysedDistance: number, scoredDistance: nu
 
 type DetailState =
   | { kind: "loading" }
-  | { kind: "error"; message: string }
+  | { kind: "error"; message: string; notFound?: boolean }
   | { kind: "ready"; data: DetailData };
+
+/**
+ * The comp, task or pilot in the URL doesn't resolve — as opposed to the page
+ * failing to load for some other reason. Worth separating, because a dead id is
+ * the one failure the 404 page can do something about: its slug still names what
+ * the visitor wanted, so it can offer the ids that exist now.
+ */
+class DetailNotFoundError extends Error {
+  readonly notFound = true;
+}
+
+/** True for the statuses that mean "no such thing": a real 404, or a 400 from
+ *  an id sqid that doesn't decode at all. */
+function isMissing(status: number): boolean {
+  return status === 404 || status === 400;
+}
 
 const ANCHOR_EVENT_TYPE: Record<ExplanationAnchor["kind"], FlightEventType> = {
   start: "start_reaching",
@@ -198,8 +215,14 @@ async function loadDetail(
     }),
   ]);
 
+  if (isMissing(compRes.status) || isMissing(taskRes.status))
+    throw new DetailNotFoundError("Task not found");
   if (!compRes.ok || !taskRes.ok) throw new Error("Task not found");
   if (!scoreRes.ok) throw new Error("Scores are not available for this task");
+  // A missing analysis means this pilot has no result on this task — either the
+  // id is dead or they never flew it. Both are "no such page", not a failure.
+  if (isMissing(analysisRes.status))
+    throw new DetailNotFoundError("No score for this pilot on this task");
   if (!analysisRes.ok)
     throw new Error("The analysis of the pilot's track is not available");
 
@@ -473,6 +496,7 @@ export function PilotScoreDetail() {
       return {
         kind: "error",
         message: err instanceof Error ? err.message : "Failed to load score details",
+        notFound: err instanceof DetailNotFoundError,
       };
     }
   });
@@ -537,6 +561,7 @@ export function PilotScoreDetail() {
           setState({
             kind: "error",
             message: err instanceof Error ? err.message : "Failed to load score details",
+            notFound: err instanceof DetailNotFoundError,
           });
       });
     return () => {
@@ -614,6 +639,12 @@ export function PilotScoreDetail() {
   }
 
   if (state.kind === "error") {
+    // A dead id gets the 404 page, which searches the URL's own slugs for the
+    // pilot/task/comp that exist now. Any other failure is a failure, not a
+    // wrong address, so it says what went wrong and keeps the breadcrumbs.
+    if (state.notFound) {
+      return <NotFound title="Page not found" message={`${state.message}.`} />;
+    }
     return (
       <div>
         {breadcrumbs}

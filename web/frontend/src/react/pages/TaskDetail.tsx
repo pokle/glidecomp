@@ -13,6 +13,7 @@
  */
 import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { NotFound } from "@/react/components/NotFound";
 import { Form } from "react-aria-components";
 import { xctaskTurnpointsToRecords, type XCTask } from "@glidecomp/engine";
 import { Badge } from "@/react/rac/badge";
@@ -174,14 +175,7 @@ export function TaskDetail() {
   );
 
   if (notFound || !compId || !taskId) {
-    return (
-      <div>
-        <p>Competition not found</p>
-        <Link className="underline underline-offset-4" to="/comp">
-          Back to Competitions
-        </Link>
-      </div>
-    );
+    return <NotFound title="Task not found" />;
   }
 
   if (!task) {
