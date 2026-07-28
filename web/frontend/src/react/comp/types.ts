@@ -169,10 +169,30 @@ export interface PilotScoreEntry {
   /** Stopped tasks (S7F §12.3.6): altitude-bonus metres folded into
    * flown_distance for a pilot still flying at the stop. */
   stopped_altitude_bonus?: number | null;
+  /** The pilot's leading coefficient (S7F §11.3), lower is better — the sole
+   * input to leading points. Null when leading isn't scored; absent on
+   * payloads cached before it was published. */
+  leading_coefficient?: number | null;
   /** Set when a HARD data-quality check withheld this pilot's tracklog from
    * scoring: they hold a place in the standings at 0 rather than vanishing.
    * Null/absent for every normally-scored pilot. */
   track_excluded?: { reasons: string[] } | null;
+}
+
+/** The numbers behind a class's validity factors and weight split — see the
+ * API's ClassValidityInputs. Absent for open distance and on payloads cached
+ * before it existed, so every consumer must degrade without it. */
+export interface ClassValidityInputs {
+  num_present: number;
+  num_flying: number;
+  num_in_goal: number;
+  num_reached_ess: number;
+  best_distance: number;
+  best_time: number | null;
+  goal_ratio: number;
+  task_distance: number;
+  mean_distance_over_minimum: number;
+  weights: { distance: number; time: number; leading: number; arrival: number };
 }
 
 /** Whole-class stopped-task outcome (S7F §12.3) — see the API's ClassStoppedInfo. */
@@ -204,6 +224,17 @@ export interface ClassScore {
     total: number;
   };
   pilots: PilotScoreEntry[];
+  /** The numbers behind `task_validity` and the available-points split. */
+  validity_inputs?: ClassValidityInputs;
+  /**
+   * The fully-resolved GAP parameters this class was actually scored with —
+   * comp settings AND the task's own overrides (migration 0021), merged as
+   * the scorer merged them, with "auto" nominal distance resolved. Prefer
+   * this over re-deriving params from the comp record: on an imported
+   * AirScore comp the two genuinely differ per task. Absent for open
+   * distance and on payloads cached before it was published.
+   */
+  gap_params?: GAPParameters;
   /** Present when the task was scored as stopped (S7F §12.3). */
   stopped?: ClassStoppedInfo;
 }

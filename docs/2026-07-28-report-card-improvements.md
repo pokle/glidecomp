@@ -4,8 +4,9 @@ Date: 2026-07-28
 Subject: `/comp/:id/task/:id/pilot/:id` — the pilot score details page ("report card")
 Reference page reviewed: [Rory Duncan, Task 1 (Open), Corryong Cup 2025](https://glidecomp.com/comp/corryong-cup-2025-wugh/task/task-1-open-mzet/pilot/rory-duncan-wgmy)
 
-Status: **proposal**. Nothing here is implemented yet. Sizes are rough; each item
-is independently shippable.
+Status: **partly implemented.** Everything except the charts landed in the first
+PR off this review; the Charts section below is still a proposal. Items are
+marked ✅ / ⬜ in "Suggested order" at the foot.
 
 ---
 
@@ -442,23 +443,25 @@ charts would bury the prose that currently carries it.
 
 ## Suggested order
 
-1. **Effective GAP params in the score payload** (blocker; also fixes shipping
+1. ✅ **Effective GAP params in the score payload** (blocker; also fixes shipping
    wrong prose on imported comps)
-2. **Doc links per section** (small, high value, independent of everything else)
-3. **`validity_inputs` + the day-quality detail lines** (the reported issue)
-4. **Goal-ratio / weights split** (same payload block, same section)
-5. **"Where the points went" comparison + its gap bars** (no API change)
-6. **The time-points curve** — the single highest-value chart, and it needs no
+2. ✅ **Doc links per section** (small, high value, independent of everything else)
+3. ✅ **`validity_inputs` + the day-quality detail lines** (the reported issue)
+4. ✅ **Goal-ratio / weights split** (same payload block, same section)
+5. ✅ **"Where the points went" comparison** — the gap bars are the chart half,
+   still to come
+6. ⬜ **The time-points curve** — the single highest-value chart, and it needs no
    payload change either: every pilot's speed-section time and time points are
    already in the class entries on the page
-7. Leading/arrival arithmetic, then the leading curve
-8. The distance-points curve, the validity sparklines, the distance distribution
-9. Terminology pass + task distance + start-crossing reason + ESS/goal collapse
-10. Standings link
+7. ✅ Leading arithmetic (arrival's is deferred — see §3, the payload carries no
+   ESS arrival position to substitute); ⬜ the leading curve
+8. ⬜ The distance-points curve, the validity sparklines, the distance distribution
+9. ✅ Task distance + start-crossing reason + ESS/goal collapse; ⬜ the full
+   terminology/glossary pass
+10. ⬜ Standings link
 
-Items 1, 3, 4 and 7 share one API/payload change and one `SCORING_ENGINE_VERSION`
-bump, so they are cheaper together than apart. Items 5 and 6 are independent of
-all of it and could ship first.
+Items 1, 3, 4 and 7 shared one API/payload change and one `SCORING_ENGINE_VERSION`
+bump (v28 — a payload roll, no behaviour change), so they shipped together.
 
 ## Testing notes
 
