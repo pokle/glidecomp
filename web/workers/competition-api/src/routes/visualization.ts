@@ -26,11 +26,18 @@ type HonoEnv = { Bindings: Env; Variables: Variables };
  * instead of megabytes. That is the win; max-age stays short so freshness is
  * unchanged, and stale-while-revalidate keeps the revalidation off the
  * critical path.
+ *
+ * A signed-in viewer's bundle is `private`: the same URL answers differently
+ * for an admin (a hidden `test` comp's bundle) than for everyone else (404),
+ * so a shared cache holding the admin's copy would serve it to callers the
+ * route itself would refuse — the same rule as the score route's
+ * cacheControl(). `private` still lets the viewer's own browser cache and
+ * revalidate, so the ETag saving is kept.
  */
-function bundleHeaders(cacheKey: string) {
+export function bundleHeaders(cacheKey: string, signedIn: boolean) {
   return {
     "Content-Type": "application/octet-stream",
-    "Cache-Control": "public, max-age=300, stale-while-revalidate=86400",
+    "Cache-Control": `${signedIn ? "private" : "public"}, max-age=300, stale-while-revalidate=86400`,
     ETag: `"${cacheKey}"`,
   };
 }
@@ -115,7 +122,9 @@ export const visualizationRoutes = new Hono<HonoEnv>()
       task.task_id,
       c.req.header("If-None-Match")
     );
-    const headers = { ...bundleHeaders(cacheKey), "X-Cache": cache };
+    // No auth middleware on this route: the sample comp is public by
+    // definition (test = 0 enforced in the lookup), so shared-cacheable.
+    const headers = { ...bundleHeaders(cacheKey, false), "X-Cache": cache };
     if (!body) return c.body(null, 304, headers);
     return c.body(body, 200, headers);
   })
@@ -157,7 +166,10 @@ export const visualizationRoutes = new Hono<HonoEnv>()
         taskId,
         c.req.header("If-None-Match")
       );
-      const headers = { ...bundleHeaders(cacheKey), "X-Cache": cache };
+      const headers = {
+        ...bundleHeaders(cacheKey, user != null),
+        "X-Cache": cache,
+      };
       if (!body) return c.body(null, 304, headers);
       return c.body(body, 200, headers);
     }
