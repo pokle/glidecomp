@@ -12,7 +12,8 @@
  *
  *  1. **The curve is the formula, not a fit.** Every sample comes from the
  *     scorer's own function (calculateSpeedFraction, calculateLeadingPoints,
- *     calculateArrivalPoints) — never a regression through the dots. The
+ *     calculateArrivalPoints, calculateDistanceDifficulty) — never a
+ *     regression through the dots. The
  *     field-analysis scatter draws a LOESS trend and withholds it below a
  *     noise floor because there a curve is a claim about data; here it is the
  *     definition, so it is always drawn and never gated.
@@ -37,6 +38,7 @@
 import type { GAPParameters } from './gap-scoring';
 import {
   calculateArrivalPoints,
+  calculateDistanceDifficulty,
   calculateLeadingPoints,
   calculateSpeedFraction,
   resolveTimePointsExponent,
@@ -330,14 +332,32 @@ export function buildArrivalChart(
 /**
  * Distance points against scored distance.
  *
- * Only drawn when distance points are the plain linear share (PG, or HG with
- * difficulty off). With HG distance difficulty on, the total is a linear half
- * plus a difficulty half built from where the whole field landed out — a step
- * function this module cannot evaluate, because the engine does not expose
- * it as a function of distance. Rather than draw the linear half and label it
- * "distance points", the chart is withheld; the section's prose still names
- * both halves. (Exposing the difficulty curve would make this the most
- * interesting chart of the four — its kinks are where the field landed.)
+ * Two shapes, because the spec has two.
+ *
+ * Without difficulty (PG, or HG with it switched off) the function is a
+ * straight line from nothing to the best distance flown. The line carries no
+ * surprise, but the DOTS do: where the field bunched, and how far into the
+ * tail this pilot sits.
+ *
+ * With HG distance difficulty (S7F §11.1.1) the total is a linear half plus a
+ * difficulty half built from where the whole field landed out — and that is
+ * the chart worth having, because the difficulty half is close to
+ * unexplainable in a sentence and completely obvious as a shape. Its steep
+ * sections are the stretches many pilots did not get past; flying through one
+ * is worth more than the same kilometres somewhere easy, and the curve simply
+ * shows you that.
+ *
+ * Reconstructing it needs the whole field, which is exactly what the class
+ * context is: `calculateDistanceDifficulty` is handed the same scored
+ * distances, goal flags and minimum distance the scorer gave it, and the
+ * `fractionFor` it returns is a genuine function of distance. Excluded
+ * tracklogs are filtered out, because they were never in the field the engine
+ * scored — they are appended afterwards at zero.
+ *
+ * The reconstruction is not taken on trust. placeField checks every pilot's
+ * published points against this curve, so getting it wrong cannot draw a
+ * plausible-looking wrong picture: the dots stop matching and the chart
+ * suppresses itself.
  */
 export function buildDistanceChart(
   entry: ScoreEntryInput,
@@ -346,12 +366,27 @@ export function buildDistanceChart(
 ): ScoreChart | null {
   const available = classContext.available_points.distance;
   if (available <= 0) return null;
-  if (params.scoring === 'HG' && params.useDistanceDifficulty) return null;
 
-  const best = Math.max(...classContext.pilots.map((p) => p.flown_distance), 0);
+  // The field as the scorer saw it: withheld tracklogs are seated at 0 after
+  // scoring and were not part of the distribution the difficulty is built on.
+  const scored = classContext.pilots.filter((p) => !p.track_excluded);
+  const best = Math.max(...scored.map((p) => p.flown_distance), 0);
   if (best <= 0) return null;
 
-  const f = (d: number) => (d / best) * available;
+  const useDifficulty = params.scoring === 'HG' && params.useDistanceDifficulty;
+  let f: (d: number) => number;
+  if (useDifficulty) {
+    const difficulty = calculateDistanceDifficulty(
+      scored.map((p) => p.flown_distance),
+      scored.map((p) => p.made_goal),
+      params.minimumDistance,
+    );
+    f = (d: number) =>
+      ((0.5 * d) / best) * available + difficulty.fractionFor(d) * available;
+  } else {
+    f = (d: number) => (d / best) * available;
+  }
+
   const placed = placeField(
     classContext,
     entry,
@@ -361,8 +396,13 @@ export function buildDistanceChart(
   );
   if (!placed) return null;
 
-  const curve = sampleCurve(0, best, 2, f);
+  // The difficulty curve is a step function over 100 m slots, so it needs real
+  // samples; the plain linear case is a line and two points draw it exactly.
+  const curve = useDifficulty
+    ? sampleCurve(0, best, CURVE_SAMPLES * 2, f)
+    : sampleCurve(0, best, 2, f);
   const you = placed.pilots.find((p) => p.you)!;
+
   return {
     xLabel: 'Scored distance',
     xUnit: 'distance',
@@ -370,7 +410,9 @@ export function buildDistanceChart(
     pilots: placed.pilots,
     omitted: placed.omitted,
     caption:
-      `Distance points are a straight line from nothing to the best distance flown — every dot is a pilot, sitting exactly on it. ` +
+      (useDifficulty
+        ? `The curve is the distance-points formula, half of it built from where the field landed out (FAI S7F §11.1.1) — every dot is a pilot, sitting exactly on it. Its steepest stretches are the ones fewest pilots got past, so flying through one is worth more than the same distance somewhere easy. `
+        : `Distance points are a straight line from nothing to the best distance flown — every dot is a pilot, sitting exactly on it. `) +
       `You flew ${km(you.x)} of the class best ${km(best)}, worth ${fmtPoints(
         you.y,
       )} of ${fmtPoints(available)}.` +

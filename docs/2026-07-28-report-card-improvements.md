@@ -423,12 +423,29 @@ honest omission instead of a wrong picture — and if the *viewing* pilot is the
 omitted one, the chart is suppressed entirely, because a chart whose whole job is
 to locate you is worse than nothing when it cannot.
 
-The distance chart draws only where distance points are the plain linear share.
-With HG distance difficulty on, the total is a linear half plus a difficulty half
-built from where the field landed out, which the engine does not expose as a
-function of distance — so the chart is withheld rather than drawn from the linear
-half and mislabelled. Exposing that curve would make it the most interesting of
-the four; its kinks are where the field landed.
+**The HG difficulty case turned out to be reachable.** `calculateDistanceDifficulty`
+already returns a `fractionFor(distance)` closure, so the total is a genuine
+function of distance after all: `0.5·(d ÷ best)·available + fractionFor(d)·available`.
+The chart builder reconstructs it from the class context — the same scored
+distances, goal flags and minimum distance the scorer used — and it is the most
+informative of the four, because its steep sections are literally the stretches
+few pilots got past.
+
+That reconstruction is not taken on trust. Every pilot is checked against it, so
+getting it wrong cannot draw a plausible-looking wrong picture — the dots stop
+matching and the chart suppresses itself. `web/scripts/audit-score-charts.ts`
+reads that signal across a whole comp library: **184 archive tasks, 4,762
+pilot-views, 4,727 distance charts drawn and zero unexplained pilots.** No spec
+reduction applies to distance points, so any omission there at all would mean the
+reconstruction is wrong; that is the assertion the script fails on.
+
+**Naming.** The subject is named rather than labelled "You" — the report card is
+public and read by everyone, not only by its pilot — alongside the three best at
+that component, the last, and the median (only when the field is big enough for
+"the middle one" to mean anything). Names are ranked by the component's own
+points, not the class standings, which is what makes the arrival chart's story
+legible: the pilot who won the day is not necessarily among the three named at
+the top of it.
 
 ### Conventions to inherit, and one to change
 
@@ -492,8 +509,9 @@ charts would bury the prose that currently carries it.
    the scorer's `essPositionMap` was being discarded, so `arrivalPosition` and
    `essTimeMs` are now published and the §11.4 formula substitutes like every
    other component); ✅ the leading curve; ✅ the arrival curve
-8. ✅ The distance-points curve (linear case only — see below); ⬜ the validity
-   sparklines, the distance distribution
+8. ✅ The distance-points curve, both cases (linear, and the HG difficulty
+   step function reconstructed from the field); ⬜ the validity sparklines, the
+   distance distribution
 9. ✅ Task distance + start-crossing reason + ESS/goal collapse; ⬜ the full
    terminology/glossary pass
 10. ⬜ Standings link

@@ -9,6 +9,7 @@ import {
 } from '../src/score-explanation';
 import {
   calculateArrivalPoints,
+  calculateDistanceDifficulty,
   calculateSpeedFraction,
   speedExponentValue,
 } from '../src/gap-scoring';
@@ -1599,15 +1600,67 @@ describe('explainGapScore — component charts', () => {
     expect(ex.sections.find((s) => s.id === 'arrival')).toBeUndefined();
   });
 
-  it('withholds the distance chart when HG difficulty makes it not a line', () => {
-    const ctx = chartContext();
-    const ex = explainGapScore({
-      task: makeTask(),
-      result: makeReentryResult(),
-      entry: { ...makeGoalEntry(), comp_pilot_id: 'c' },
-      classContext: ctx,
-      params: { scoring: 'HG', useDistanceDifficulty: true },
-    });
-    expect(section(ex, 'distance').chart).toBeUndefined();
+  // The HG difficulty half is a step function built from where the whole field
+  // landed out. It is reconstructed from the class context rather than taken
+  // from the payload, so the interesting assertion is that the reconstruction
+  // reproduces the published points — if it did not, placeField would omit
+  // every pilot and the chart would vanish. (The archive-wide check is
+  // web/scripts/audit-score-charts.ts, which runs the same path over every
+  // task in the comp library and demands zero unexplained pilots.)
+  it('draws the HG difficulty curve, reconstructed from where the field landed', () => {
+    const available = 400;
+    const dists = [60_000, 52_000, 41_000, 33_000, 21_000, 12_000, 7_000];
+    const goals = [true, false, false, false, false, false, false];
+    const difficulty = calculateDistanceDifficulty(dists, goals, 5_000);
+    const best = Math.max(...dists);
+    const pointsFor = (d: number) =>
+      ((0.5 * d) / best) * available + difficulty.fractionFor(d) * available;
+
+    const ctx = makeClassContext();
+    ctx.available_points = { ...ctx.available_points, distance: available };
+    ctx.pilots = dists.map((d, i) => ({
+      comp_pilot_id: `p${i}`,
+      pilot_name: `Pilot ${i}`,
+      flown_distance: d,
+      speed_section_time: null,
+      made_goal: goals[i],
+      reached_ess: goals[i],
+      distance_points: pointsFor(d),
+      time_points: 0,
+      leading_points: 0,
+      arrival_points: 0,
+      total_score: pointsFor(d),
+    }));
+
+    const chart = section(
+      explainGapScore({
+        task: makeTask(),
+        result: makeReentryResult(),
+        entry: {
+          ...makeGoalEntry(),
+          comp_pilot_id: 'p3',
+          flown_distance: 33_000,
+          distance_points: pointsFor(33_000),
+          made_goal: false,
+        },
+        classContext: ctx,
+        params: { scoring: 'HG', useDistanceDifficulty: true, minimumDistance: 5_000 },
+      }),
+      'distance',
+    ).chart!;
+
+    // Every pilot explained — the reconstruction matches the published points.
+    expect(chart.pilots).toHaveLength(dists.length);
+    expect(chart.omitted).toBe(0);
+    // A step function needs real samples; the linear case is drawn with two.
+    expect(chart.curve.length).toBeGreaterThan(50);
+    expect(chart.caption).toContain('where the field landed out');
+    expect(chart.caption).toContain('§11.1.1');
+  });
+
+  it('draws the plain linear distance line when difficulty is off', () => {
+    const chart = section(chartsFor(chartContext()), 'distance').chart!;
+    expect(chart.curve).toHaveLength(2);
+    expect(chart.caption).toContain('straight line');
   });
 });

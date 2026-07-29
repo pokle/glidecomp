@@ -40,8 +40,64 @@ import { cn } from "@/react/lib/utils";
 import { extent, linearScale, niceTicks } from "./scale";
 
 const W = 520;
-const H = 200;
-const MARGIN = { top: 12, right: 14, bottom: 28, left: 44 };
+const H = 210;
+const MARGIN = { top: 14, right: 14, bottom: 28, left: 44 };
+
+/**
+ * Below this many plotted pilots the median is not worth naming: with a small
+ * field the best three and the last are most of it already, and "the middle
+ * one of five" is a label, not a finding.
+ */
+const MEDIAN_MIN_FIELD = 7;
+
+/** Rough width of a label, for collision testing. The names are proportional
+ *  text at 10px; 5.4px per character over-estimates slightly, which is the
+ *  safe direction — it drops a marginal label rather than overlapping one. */
+function labelWidth(name: string): number {
+  return name.length * 5.4;
+}
+
+/**
+ * Vertical offsets from a dot to try for its label, in order.
+ *
+ * These curves are steep at one end, which is exactly where the best pilots
+ * bunch — on a real task the three fastest sat within four minutes and twenty
+ * points of each other, so their labels cannot all sit above their own dots.
+ * Rather than drop two of the three, walk outwards until one fits and draw a
+ * leader line back to the dot.
+ */
+const LABEL_OFFSETS = [-12, 19, -27, 34, -42, 49];
+
+/** Beyond this displacement a label no longer obviously belongs to the dot
+ *  under it, so it earns a leader line. */
+const LEADER_THRESHOLD = 22;
+
+/**
+ * Two dots closer than this are one dot to the eye, so only the first of them
+ * is named.
+ *
+ * Not a nicety: on the distance chart every pilot who made goal sits at the
+ * same (best distance, full points), so "the best three" are one point. Three
+ * names stacked beside it, with three leader lines into the same pixel, says
+ * there are three things there when there is one.
+ */
+const SAME_DOT_PX = 6;
+
+interface PlacedLabel {
+  key: string;
+  name: string;
+  x: number;
+  y: number;
+  /** The dot this names, for the leader line. */
+  dotX: number;
+  dotY: number;
+  you: boolean;
+  box: { x0: number; x1: number; y0: number; y1: number };
+}
+
+function overlaps(a: PlacedLabel["box"], b: PlacedLabel["box"]): boolean {
+  return a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+}
 
 /** Format an x value for a tick or a readout, by what the axis measures. */
 function formatX(unit: ScoreChart["xUnit"], v: number): string {
@@ -110,6 +166,65 @@ export function ScoreCurve({ chart }: { chart: ScoreChart }) {
   const path = `M${curve.map((c) => `${x(c.x).toFixed(1)},${y(c.y).toFixed(1)}`).join("L")}`;
   const xTicks = niceTicks(xDomain, 4);
   const yTicks = niceTicks([0, yMax || 1], 3);
+
+  // Who gets named. A lone accent dot tells you where you are but not what
+  // that is worth — the field needs anchors, so the best three, the last and
+  // (in a field big enough for it to mean anything) the median are named too.
+  //
+  // Ranked by THIS component's points — the y axis — not by the class
+  // standings. That is what "the best three" means on a chart about one
+  // component, and it is the reading that makes the arrival chart's story
+  // legible: the pilot who won the day is not necessarily among the three
+  // named at the top of it.
+  const byPoints = [...points].sort((a, b) => b.y - a.y);
+  const candidates: ScoreChartPilot[] = [];
+  const consider = (p: ScoreChartPilot | undefined) => {
+    if (p && !candidates.includes(p)) candidates.push(p);
+  };
+  // Priority order, because collisions are resolved by dropping the later
+  // label: the subject of the page can never be the one that gets dropped.
+  if (you) consider(you);
+  byPoints.slice(0, 3).forEach(consider);
+  consider(byPoints[byPoints.length - 1]);
+  if (byPoints.length >= MEDIAN_MIN_FIELD) {
+    consider(byPoints[Math.floor(byPoints.length / 2)]);
+  }
+
+  // Greedy placement: each name takes the first offset that collides with
+  // nothing already placed, so a bunched leader board stacks outwards instead
+  // of losing everyone after the first. A name that fits nowhere is dropped
+  // rather than drawn over another — an unreadable pile helps no one — and
+  // the priority order above means the subject is never the one dropped.
+  const labels: PlacedLabel[] = [];
+  for (const p of candidates) {
+    const dotX = x(p.x);
+    const dotY = y(p.y);
+    // One name per visible dot — see SAME_DOT_PX.
+    if (
+      labels.some(
+        (l) => Math.hypot(l.dotX - dotX, l.dotY - dotY) < SAME_DOT_PX
+      )
+    ) {
+      continue;
+    }
+    const half = labelWidth(p.name) / 2;
+    // Clamp by the label's OWN width — a fixed inset lets a long name run off
+    // the right edge, which is where the best pilots sit on a rising curve.
+    // Asymmetric on purpose: the right margin is empty so a label may use it,
+    // but the LEFT margin holds the y-axis numbers, and a name pushed into it
+    // sits on top of them. Displacement is what the leader lines are for.
+    const cx = Math.min(W - half - 2, Math.max(plot.left + half + 2, dotX));
+    for (const dy of LABEL_OFFSETS) {
+      const ly = dotY + dy;
+      // Keep it inside the plot: a label pushed off the top or bottom is as
+      // lost as one that collided.
+      if (ly < plot.top + 9 || ly > plot.bottom - 2) continue;
+      const box = { x0: cx - half, x1: cx + half, y0: ly - 9, y1: ly + 3 };
+      if (labels.some((l) => overlaps(l.box, box))) continue;
+      labels.push({ key: p.key, name: p.name, x: cx, y: ly, dotX, dotY, you: p.you, box });
+      break;
+    }
+  }
 
   const label = (p: ScoreChartPilot) =>
     `${p.name}, ${formatX(xUnit, p.x)}, ${Math.round(p.y * 10) / 10} points`;
@@ -247,32 +362,55 @@ export function ScoreCurve({ chart }: { chart: ScoreChart }) {
               r={6}
               className="fill-chart-1 stroke-background stroke-2"
             />
-            {/* Direct label rather than a legend: with one highlighted mark a
-                legend box would be a whole extra element to name a single dot.
-                Centred above the dot and clamped inside the plot — a
-                left/right anchor flips at the midpoint and pushes the label
-                off the edge for exactly the extreme-value pilots. Cased
-                against the background so it stays legible over the curve and
-                any neighbouring dots. */}
-            <text
-              aria-hidden
-              x={Math.min(plot.right - 14, Math.max(plot.left + 14, x(you.x)))}
-              // Above the dot, or below it when the dot is near the ceiling —
-              // clamping "above" against the plot top instead just parks the
-              // label on top of the dot it is naming, which is the case for
-              // any pilot on full points.
-              y={
-                y(you.y) - 12 >= plot.top + 9
-                  ? y(you.y) - 12
-                  : y(you.y) + 19
-              }
-              textAnchor="middle"
-              className="fill-current stroke-background text-[10px] font-medium text-foreground [paint-order:stroke] [stroke-width:3px]"
-            >
-              You
-            </text>
           </g>
         ) : null}
+
+        {/* Direct labels rather than a legend: a legend box would be a whole
+            extra element to name five dots that can name themselves. Drawn
+            last, over every dot, with a background-coloured stroke halo
+            (paint-order) so a name crossing the curve or a neighbouring dot
+            still reads.
+            The subject wears foreground ink and medium weight; the anchors
+            around them stay muted, so the emphasis survives having company.
+            aria-hidden throughout — every dot already announces its own
+            pilot, name included. */}
+        {/* Leader lines for the displaced names, under the text so the halo
+            trims them where they meet it. Hairline and muted: they are
+            plumbing, and must not read as a second data series. */}
+        <g aria-hidden>
+          {labels
+            .filter((l) => Math.abs(l.y - l.dotY) > LEADER_THRESHOLD)
+            .map((l) => (
+              <line
+                key={`lead-${l.key}`}
+                x1={l.x}
+                y1={l.y + (l.y < l.dotY ? 3 : -8)}
+                x2={l.dotX}
+                y2={l.dotY + (l.y < l.dotY ? -7 : 7)}
+                className="stroke-muted-foreground/40"
+                strokeWidth={1}
+              />
+            ))}
+        </g>
+        <g
+          aria-hidden
+          className="stroke-background text-[10px] [paint-order:stroke] [stroke-width:3px]"
+        >
+          {labels.map((l) => (
+            <text
+              key={l.key}
+              x={l.x}
+              y={l.y}
+              textAnchor="middle"
+              className={cn(
+                "fill-current",
+                l.you ? "font-medium text-foreground" : "text-muted-foreground"
+              )}
+            >
+              {l.name}
+            </text>
+          ))}
+        </g>
       </svg>
 
       {/* Mirrors hover/focus for sighted users. No aria-live: every dot
