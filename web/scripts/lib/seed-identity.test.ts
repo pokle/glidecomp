@@ -1,10 +1,13 @@
 // Copyright (c) 2026, Tushar Pokle.  All rights reserved.
 import { describe, expect, test } from "bun:test";
 import {
+  buildTrackedNameIndex,
   classLabel,
   matchExisting,
   pilotKey,
+  pilotNameKey,
   taskSeedName,
+  trackLessPilotKey,
 } from "./seed-identity";
 
 describe("pilotKey", () => {
@@ -129,5 +132,83 @@ describe("matchExisting", () => {
       ],
     );
     expect(orphanIds).toEqual([2, 5, 9]);
+  });
+});
+
+describe("trackLessPilotKey", () => {
+  const tracked = [
+    { pilotClass: "floater", name: "Hayden Emms", id: "84258" },
+    { pilotClass: "floater", name: "Dustan Hansen", id: "15046" },
+    { pilotClass: "open", name: "Hayden Emms", id: "84258" },
+  ];
+
+  test("a published row joins the same pilot's ID-keyed registration", () => {
+    // The whole point: Emms flew task 3 with a tracklog and task 1 with a
+    // header-only "Failed security check" file, so task 1 reaches us as a
+    // track-less published row. One pilot, one comp_pilot row.
+    const index = buildTrackedNameIndex(tracked);
+    expect(trackLessPilotKey("floater", "Hayden Emms", index)).toBe(
+      pilotKey("floater", "84258", "Hayden Emms"),
+    );
+  });
+
+  test("matching is per class, so it can't merge across classes", () => {
+    const index = buildTrackedNameIndex(tracked);
+    expect(trackLessPilotKey("floater", "Hayden Emms", index)).not.toBe(
+      trackLessPilotKey("open", "Hayden Emms", index),
+    );
+  });
+
+  test("case and whitespace differences between the sources still match", () => {
+    // AirScore's results table and the IGC header disagree about both.
+    const index = buildTrackedNameIndex(tracked);
+    expect(trackLessPilotKey("floater", "  hayden   EMMS ", index)).toBe(
+      pilotKey("floater", "84258", "Hayden Emms"),
+    );
+  });
+
+  test("an unknown name keeps its own name-keyed row", () => {
+    // A pilot who never uploaded a track anywhere in the comp is a real
+    // registration of their own, not a merge candidate.
+    const index = buildTrackedNameIndex(tracked);
+    expect(trackLessPilotKey("floater", "Brianna Piazza", index)).toBe(
+      pilotKey("floater", null, "Brianna Piazza"),
+    );
+  });
+
+  test("two different pilots sharing a name is ambiguous — no guess", () => {
+    // Same name, two federation ids: the comp really does have two people.
+    // Guessing which one the published row belongs to would corrupt both, so
+    // it falls back to a name-keyed row (the pre-merge behaviour).
+    const index = buildTrackedNameIndex([
+      { pilotClass: "open", name: "John Smith", id: "111" },
+      { pilotClass: "open", name: "John Smith", id: "222" },
+    ]);
+    expect(index.get(pilotNameKey("open", "John Smith"))).toBeNull();
+    expect(trackLessPilotKey("open", "John Smith", index)).toBe(
+      pilotKey("open", null, "John Smith"),
+    );
+  });
+
+  test("a pilot with no federation id is not a join target", () => {
+    // They are name-keyed already; indexing them would map a name to itself
+    // and claim a match that adds nothing.
+    const index = buildTrackedNameIndex([
+      { pilotClass: "open", name: "Jane Lamb", id: null },
+    ]);
+    expect(index.size).toBe(0);
+    expect(trackLessPilotKey("open", "Jane Lamb", index)).toBe(
+      pilotKey("open", null, "Jane Lamb"),
+    );
+  });
+
+  test("the same pilot tracked on several tasks indexes once, not ambiguously", () => {
+    const index = buildTrackedNameIndex([
+      { pilotClass: "open", name: "Jane Lamb", id: "18239" },
+      { pilotClass: "open", name: "Jane Lamb", id: "18239" },
+    ]);
+    expect(trackLessPilotKey("open", "Jane Lamb", index)).toBe(
+      pilotKey("open", "18239", "Jane Lamb"),
+    );
   });
 });

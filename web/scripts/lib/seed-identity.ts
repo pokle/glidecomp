@@ -40,6 +40,66 @@ export function pilotKey(
   return `${pilotClass}|${id ? `id:${id}` : `name:${name}`}`;
 }
 
+/**
+ * Match key for a pilot's DISPLAY NAME within a class, normalised the two ways
+ * the same person's name differs between our two sources: the IGC header
+ * (`HFPLTPILOT:`) and AirScore's published results table. Whitespace runs
+ * collapse and case is dropped; nothing else is touched, because anything more
+ * aggressive starts merging different people.
+ */
+export function pilotNameKey(pilotClass: string, name: string): string {
+  return `${pilotClass}|${name.replace(/\s+/g, " ").trim().toLowerCase()}`;
+}
+
+/**
+ * Index from (class, name) to the registry key of the pilot's ID-keyed
+ * registration — the lookup that lets a TRACK-LESS published row join the
+ * comp_pilot row its own tracked days already have.
+ *
+ * It is needed because the two sources identify a pilot differently: a task
+ * folder's IGC filename carries their federation id (`emms_84258_050126.igc`),
+ * while AirScore's published results table carries only a name. Keyed
+ * separately, a pilot who flew one day and had an unusable tracklog on another
+ * — a header-only "Failed security check" file, or none at all — split into TWO
+ * comp_pilot rows: they appeared twice in the standings with a share of their
+ * tasks each, and counted twice in the S7F §9.1 launch-validity buckets. The
+ * Corryong Cup 2026 floater class publishes a block of 13 such rows; 15 of that
+ * comp's 80 registrations were one person seeded twice.
+ *
+ * A name held by two DIFFERENT ids in one class is genuinely ambiguous — the
+ * comp really does have two people of that name — and maps to null, so the
+ * caller falls back to a name-keyed row rather than guessing which one flew.
+ */
+export function buildTrackedNameIndex(
+  tracked: Iterable<{ pilotClass: string; name: string; id: string | null }>,
+): Map<string, string | null> {
+  const index = new Map<string, string | null>();
+  for (const p of tracked) {
+    if (!p.id) continue; // name-keyed already — nothing to join onto
+    const nameKey = pilotNameKey(p.pilotClass, p.name);
+    const key = pilotKey(p.pilotClass, p.id, p.name);
+    if (!index.has(nameKey)) index.set(nameKey, key);
+    else if (index.get(nameKey) !== key) index.set(nameKey, null); // ambiguous
+  }
+  return index;
+}
+
+/**
+ * The registry key for a track-less published pilot: their own ID-keyed
+ * registration when the name resolves to exactly one, else a name-keyed row
+ * (the historical behaviour, and the only safe answer when it's ambiguous).
+ */
+export function trackLessPilotKey(
+  pilotClass: string,
+  name: string,
+  trackedByName: ReadonlyMap<string, string | null>,
+): string {
+  return (
+    trackedByName.get(pilotNameKey(pilotClass, name)) ??
+    pilotKey(pilotClass, null, name)
+  );
+}
+
 /** "open" → "Open", so task names read "Task 1 (Open)". */
 export function classLabel(pilotClass: string): string {
   return pilotClass.charAt(0).toUpperCase() + pilotClass.slice(1);
