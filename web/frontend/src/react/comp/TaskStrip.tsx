@@ -21,14 +21,28 @@
  */
 import type { XCTask } from "@glidecomp/engine";
 import { cn } from "@/react/lib/utils";
-import { formatDistance, useUnits } from "../lib/units";
+import { formatDistance, useUnits, type UnitPreferences } from "../lib/units";
+import { unitDisplay } from "../field-analysis/units";
 import {
   buildTaskStrip,
   type TaskStripLeg,
   type TaskStripStation,
 } from "./task-strip-layout";
+import { legWind, legWindWord, type TaskWind } from "./task-wind";
 
-export function TaskStrip({ xctsk }: { xctsk: XCTask }) {
+export function TaskStrip({
+  xctsk,
+  wind = null,
+}: {
+  xctsk: XCTask;
+  /**
+   * The day's wind, when the task page has it. Optional and arriving late: the
+   * weather is a separate client fetch with its own pending state, so the strip
+   * renders complete without it and the per-leg components appear when they
+   * land. Never blocks the route.
+   */
+  wind?: TaskWind | null;
+}) {
   const units = useUnits();
   const strip = buildTaskStrip(xctsk);
   if (!strip) return null;
@@ -51,7 +65,9 @@ export function TaskStrip({ xctsk }: { xctsk: XCTask }) {
           // a horizontal scrollbar (§3.2). Measured: 1533px of body scroll on
           // a 390px viewport.
           <li key={i} className="relative flex shrink-0 items-stretch">
-            {i > 0 ? <Leg leg={strip.legs[i - 1]} units={units} /> : null}
+            {i > 0 ? (
+              <Leg leg={strip.legs[i - 1]} units={units} wind={wind} />
+            ) : null}
             <Station station={station} position={i + 1} />
           </li>
         ))}
@@ -62,7 +78,15 @@ export function TaskStrip({ xctsk }: { xctsk: XCTask }) {
         <span className="whitespace-nowrap">
           Total {formatDistance(strip.totalMeters, { decimals: 1, prefs: units }).withUnit}
         </span>
-        .
+        .{" "}
+        {wind ? (
+          <>
+            Wind is the modelled mean over the task window
+            {wind.heightM !== null ? ` at about ${wind.heightM} m` : " at the surface"},
+            from {Math.round(wind.fromDeg)}° — one figure for the whole task, since
+            an unflown task has no per-leg timing to hang hourly wind on.
+          </>
+        ) : null}
       </p>
     </div>
   );
@@ -127,17 +151,23 @@ function Station({
   );
 }
 
-/** One leg: a rule with a bearing arrow, its distance and heading beneath. */
+/** One leg: a rule with a bearing arrow, its distance, heading and wind. */
 function Leg({
   leg,
   units,
+  wind,
 }: {
   leg: TaskStripLeg;
-  units: ReturnType<typeof useUnits>;
+  units: UnitPreferences;
+  wind: TaskWind | null;
 }) {
   const heading = `${Math.round(leg.bearingDeg).toString().padStart(3, "0")}°`;
+  const resolved = wind ? legWind(wind, leg.bearingDeg) : null;
+  // Wind follows the speed preference; the module works in km/h and converts
+  // at the display boundary, as the other weather charts do.
+  const speed = unitDisplay("km/h", units);
   return (
-    <div className="flex w-[5.5rem] flex-col items-center px-1 text-center">
+    <div className="flex w-[6.75rem] flex-col items-center px-1 text-center">
       <div className="flex h-4 w-full items-center gap-0.5">
         <span className="h-px flex-1 bg-foreground/40" aria-hidden="true" />
         {/* The arrow points where the leg actually points — the one piece of
@@ -170,6 +200,35 @@ function Leg({
       <span className="text-[11px] text-muted-foreground tabular-nums">
         {heading} {leg.compass}
       </span>
+      {/* The wind resolved against THIS leg — the reason a pilot reads a task
+          strip at all. The magnitude shown is the dominant component, so a
+          headwind leg reports how much wind is in its face rather than the
+          raw wind speed, which would overstate every leg but a straight
+          upwind one. Emphasised for head and tail because those are the legs
+          that change a plan; a crosswind is a fact to know, not a slog. */}
+      {resolved ? (
+        <span
+          className={cn(
+            "mt-0.5 text-[11px] tabular-nums",
+            resolved.kind === "cross"
+              ? "text-muted-foreground"
+              : "font-medium text-foreground"
+          )}
+        >
+          <span aria-hidden="true">
+            {resolved.kind === "head" ? "▲" : resolved.kind === "tail" ? "▼" : "↔"}
+          </span>{" "}
+          {Math.round(
+            (resolved.kind === "cross"
+              ? resolved.crossKmh
+              : Math.abs(resolved.alongKmh)) * speed.factor
+          )}{" "}
+          {speed.unit} <span className="sr-only">{legWindWord(resolved.kind)}</span>
+          <span aria-hidden="true">
+            {resolved.kind === "head" ? "head" : resolved.kind === "tail" ? "tail" : "cross"}
+          </span>
+        </span>
+      ) : null}
       <span className="sr-only"> to </span>
     </div>
   );

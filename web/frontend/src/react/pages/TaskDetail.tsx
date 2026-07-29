@@ -46,6 +46,8 @@ import { useAdminView, useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
 import { SectionHeader } from "../components/SectionHeader";
 import { WeatherSection } from "../weather/WeatherSection";
+import { useTaskWeather } from "../weather/use-task-weather";
+import { taskWindFromWeather, type TaskWind } from "../comp/task-wind";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { TaskResults } from "../comp/TaskResults";
 import { CompNameProvider } from "../comp/comp-name-context";
@@ -181,6 +183,15 @@ export function TaskDetail() {
     isAdmin
   );
 
+  // Fetched ONCE here and handed down, rather than in each consumer: the
+  // weather section and the route views both want it, and the endpoint can
+  // schedule a background provider fetch, so asking twice is not free.
+  const weather = useTaskWeather(compId || null, taskId || null);
+  const wind = useMemo(
+    () => taskWindFromWeather(weather.data?.weather ?? null),
+    [weather.data]
+  );
+
   if (notFound || !compId || !taskId) {
     return <NotFound title="Task not found" />;
   }
@@ -302,6 +313,7 @@ export function TaskDetail() {
         xctsk={task.xctsk}
         taskDate={task.task_date}
         timezone={comp?.timezone ?? null}
+        wind={wind}
         isAdmin={isAdmin}
         onEditRoute={() => setRouteOpen(true)}
       />
@@ -313,6 +325,7 @@ export function TaskDetail() {
       <WeatherSection
         compId={compId}
         taskId={taskId}
+        weather={weather}
         notes={task.weather_notes}
         isAdmin={isAdmin}
         compTimezone={comp?.timezone ?? null}
@@ -534,6 +547,7 @@ function TurnpointsSection({
   xctsk,
   taskDate,
   timezone,
+  wind,
   isAdmin,
   onEditRoute,
 }: {
@@ -541,6 +555,8 @@ function TurnpointsSection({
   taskDate: string;
   /** Comp-local IANA zone; gate times in the summary show comp-local when set. */
   timezone: string | null;
+  /** The day's modelled wind, once the weather lands. Null until then. */
+  wind: TaskWind | null;
   isAdmin: boolean;
   onEditRoute: () => void;
 }) {
@@ -580,13 +596,14 @@ function TurnpointsSection({
               onTurnpointHover={(tp) => setFocused(tp?.index ?? null)}
               onTurnpointSelect={(tp) => setFocused(tp.index)}
               highlightIndex={focused}
+              wind={wind}
             />
           </div>
           {/* Two views of one route: the diagram is the shape on the ground,
               the strip is the order and the winding with geography
               straightened out. The table underneath is the numbers, and the
               accessible equivalent for both. */}
-          <TaskStrip xctsk={xctsk} />
+          <TaskStrip xctsk={xctsk} wind={wind} />
           <TurnpointsTable xctsk={xctsk} highlightIndex={focused} />
         </>
       ) : (

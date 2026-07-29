@@ -36,7 +36,7 @@ import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { WeatherNotesBlock } from "./WeatherNotesBlock";
 import { TaskWeatherPanel } from "./TaskWeatherPanel";
-import { useTaskWeather } from "./use-task-weather";
+import type { TaskWeatherState } from "./use-task-weather";
 
 /** Mirrors MAX_WEATHER_NOTES in the worker's validators — the server is the
  * authority; this stops a paste that would only be rejected on save. */
@@ -45,6 +45,7 @@ const MAX_NOTES = 4000;
 export function WeatherSection({
   compId,
   taskId,
+  weather,
   notes,
   isAdmin,
   compTimezone,
@@ -52,6 +53,12 @@ export function WeatherSection({
 }: {
   compId: string;
   taskId: string;
+  /**
+   * Fetched by the page and handed down, not fetched here. The task page's
+   * route views want the same answer for their wind, and the endpoint can
+   * schedule a background provider fetch — so it is asked once.
+   */
+  weather: TaskWeatherState;
   notes: string;
   isAdmin: boolean;
   /** Competition IANA zone; the charts' axis ticks in it. */
@@ -61,10 +68,6 @@ export function WeatherSection({
   const [editing, setEditing] = useState(false);
   const hasNotes = notes.trim().length > 0;
 
-  // Its own fetch, its own failure mode: a weather-provider outage must not
-  // touch the rest of the task page, and when there is nothing to show the
-  // whole section simply stays hidden (for non-admins).
-  const weather = useTaskWeather(compId || null, taskId || null);
   const weatherPending = weather.loading || weather.data?.pending === true;
   const hasWeather = weatherPending || weather.data?.weather != null;
   // A task set beyond the forecast horizon explains itself in the panel, but
