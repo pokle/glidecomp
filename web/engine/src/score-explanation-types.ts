@@ -145,11 +145,14 @@ export interface ScoreValidityChart {
   caption: string;
 }
 
-/** One bar of a distribution: a half-open [x0, x1) bucket and its count. */
-export interface ScoreDistributionBin {
-  x0: number;
-  x1: number;
-  count: number;
+/** One pilot's place on a distribution strip. */
+export interface ScoreDistributionPoint {
+  /** Stable key within the chart (the API's comp_pilot_id where known). */
+  key: string;
+  name: string;
+  x: number;
+  /** True for the pilot whose report card this is. */
+  you: boolean;
 }
 
 /** A labelled vertical reference on a distribution. */
@@ -165,15 +168,23 @@ export interface ScoreDistributionMarker {
  *
  * Distance validity asks whether the field as a whole got far enough, and its
  * formula is a ratio of areas — printing that arithmetic is honest but tells
- * a reader nothing they can picture. The distribution is the picture: how many
- * pilots landed where, against the minimum distance they must beat to score
- * at all, the nominal distance the day is measured against, and their own.
+ * a reader nothing they can picture. The strip is the picture: one dot per
+ * pilot, against the minimum distance they must beat to score at all, the
+ * nominal distance the day is measured against, and their own.
+ *
+ * A strip of individual dots rather than binned bars, matching the takeoff
+ * lane on the field-analysis day profile. Bars force a bucket width, and at
+ * this scale the buckets read as an arbitrary grid rather than as the shape of
+ * the field — you see the container, not the data. One dot per pilot has no
+ * such parameter: where the field bunched, the dots overlap and darken, and
+ * "how many are near me" is answered by looking rather than by counting bars.
  */
 export interface ScoreDistributionChart {
   kind: 'distribution';
   xLabel: string;
   xUnit: ScoreChartXUnit;
-  bins: ScoreDistributionBin[];
+  /** Every flying pilot, one dot each. */
+  points: ScoreDistributionPoint[];
   markers: ScoreDistributionMarker[];
   caption: string;
 }

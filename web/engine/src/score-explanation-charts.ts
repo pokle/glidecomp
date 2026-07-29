@@ -54,6 +54,7 @@ import type {
   ScoreChartPilot,
   ScoreChartPoint,
   ScoreDistributionMarker,
+  ScoreDistributionPoint,
   ScoreEntryInput,
 } from './score-explanation-types';
 
@@ -511,20 +512,23 @@ function pctOf(fraction: number): string {
 // Distance validity — a distribution, not a curve
 // ---------------------------------------------------------------------------
 
-/** Target number of buckets across the field's distance range. */
-const DISTRIBUTION_BINS = 16;
-
 /**
  * How far the field actually got, with the thresholds that judge it.
  *
  * Distance validity is the one factor whose curve says nothing: the S7F ratio
  * is used as-is (clamped to 1), so plotting it would draw the identity
  * function and call it an explanation. What the reader needs is the shape the
- * ratio is computed FROM — how many pilots landed where — against the minimum
+ * ratio is computed FROM — how far each pilot got — against the minimum
  * distance below which a flight scores the minimum anyway, the nominal
  * distance the day is measured against, and their own.
  *
- * Every flying pilot is binned, including those the component charts leave
+ * A strip of one dot per pilot, not a histogram. Bars force a bucket width,
+ * and at this size the buckets read as an arbitrary grid laid over the data
+ * rather than as the shape of it. Dots have no such parameter: overlap is the
+ * density, which is the same encoding the field-analysis day profile uses for
+ * its takeoff lane.
+ *
+ * Every flying pilot gets a dot, including those the component charts leave
  * off: this is a picture of the field, not a claim that a formula explains
  * each of them.
  */
@@ -537,27 +541,29 @@ export function buildDistanceValidityChart(
   const scored = classContext.pilots.filter((p) => !p.track_excluded);
   if (scored.length < 4) return null;
 
-  const distances = scored.map((p) => p.flown_distance).filter((d) => Number.isFinite(d));
-  if (distances.length === 0) return null;
+  const points: ScoreDistributionPoint[] = [];
+  scored.forEach((p, i) => {
+    if (!Number.isFinite(p.flown_distance)) return;
+    points.push({
+      key: p.comp_pilot_id ?? `${i}-${p.pilot_name ?? ''}`,
+      name: p.pilot_name ?? 'Pilot',
+      x: p.flown_distance,
+      you:
+        entry.comp_pilot_id !== undefined && p.comp_pilot_id === entry.comp_pilot_id,
+    });
+  });
+  if (points.length === 0) return null;
+
   // The reader's own distance is folded into the axis extent, not just the
   // field's. It should already be inside it — the entry is one of these
   // pilots — but the "you" marker is the one mark that must never be dropped
   // for falling off the end, so the axis is defined to contain it.
-  const best = Math.max(...distances, params.nominalDistance, entry.flown_distance);
+  const best = Math.max(
+    ...points.map((p) => p.x),
+    params.nominalDistance,
+    entry.flown_distance,
+  );
   if (best <= 0) return null;
-
-  const width = best / DISTRIBUTION_BINS;
-  const bins = Array.from({ length: DISTRIBUTION_BINS }, (_, i) => ({
-    x0: i * width,
-    x1: (i + 1) * width,
-    count: 0,
-  }));
-  for (const d of distances) {
-    // The final bucket is closed at the top so the best distance lands in it
-    // rather than falling off the end.
-    const i = Math.min(DISTRIBUTION_BINS - 1, Math.floor(d / width));
-    bins[i].count++;
-  }
 
   const markers: ScoreDistributionMarker[] = [
     { x: params.minimumDistance, label: 'minimum' },
@@ -565,16 +571,17 @@ export function buildDistanceValidityChart(
     { x: entry.flown_distance, label: 'you', you: true },
   ].filter((m) => m.x > 0 && m.x <= best);
 
-  const beat = distances.filter((d) => d < entry.flown_distance).length;
+  const beat = points.filter((p) => p.x < entry.flown_distance).length;
   return {
     kind: 'distribution',
     xLabel: 'Distance flown',
     xUnit: 'distance',
-    bins,
+    points,
     markers,
     caption:
-      `How far the field got — the spread distance validity is computed from. ` +
-      `${distances.length} pilots flew; you flew ${km(entry.flown_distance)}, ` +
+      `How far the field got — the spread distance validity is computed from, ` +
+      `one dot per pilot. ` +
+      `${points.length} pilots flew; you flew ${km(entry.flown_distance)}, ` +
       `further than ${beat} of them.` +
       (vi
         ? ` The day averaged ${km(vi.mean_distance_over_minimum)} past the ${km(
