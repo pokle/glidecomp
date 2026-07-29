@@ -78,7 +78,7 @@ export type {
   ScoreCurveChart,
   ScoreValidityChart,
   ScoreDistributionChart,
-  ScoreDistributionBin,
+  ScoreDistributionPoint,
   ScoreDistributionMarker,
   ScoreChartPilot,
   ScoreChartPoint,
