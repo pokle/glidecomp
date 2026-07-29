@@ -42,6 +42,12 @@ import {
   buildPenaltySection,
   buildManualFlightSection,
 } from './score-explanation-sections';
+import {
+  buildTimeChart,
+  buildLeadingChart,
+  buildArrivalChart,
+  buildDistanceChart,
+} from './score-explanation-charts';
 import type {
   ScoreExplanation,
   ScoreExplanationSection,
@@ -65,8 +71,27 @@ export type {
   OpenDistanceAnchorInfo,
   ExplainOpenDistanceInput,
   ExplainManualFlightInput,
+  ScoreChart,
+  ScoreChartPilot,
+  ScoreChartPoint,
+  ScoreChartXUnit,
 } from './score-explanation-types';
 export { turnpointLabel } from './score-explanation-sections';
+
+/**
+ * Attach a chart to a section, when there is one to attach.
+ *
+ * A null chart is the normal case, not a failure: a component whose curve
+ * would not explain this pilot's own points (the §12.1 or §12.3.5 reductions)
+ * deliberately gets no chart, and the section's prose still explains the
+ * score. See score-explanation-charts.ts.
+ */
+function withChart(
+  section: ScoreExplanationSection,
+  chart: ScoreExplanationSection['chart'] | null,
+): ScoreExplanationSection {
+  return chart ? { ...section, chart } : section;
+}
 
 /**
  * Explain a GAP-scored pilot's result.
@@ -83,16 +108,32 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
   const sections: ScoreExplanationSection[] = [
     buildFlightSection(task, result, entry, fmt),
     buildValiditySection(classContext, params),
-    buildDistanceSection(entry, classContext, result, params),
-    buildTimeSection(entry, classContext, params, result, fmt),
+    withChart(
+      buildDistanceSection(entry, classContext, result, params),
+      buildDistanceChart(entry, classContext, params),
+    ),
+    withChart(
+      buildTimeSection(entry, classContext, params, result, fmt),
+      buildTimeChart(entry, classContext, params),
+    ),
   ];
 
   if (classContext.available_points.leading > 0 || entry.leading_points > 0) {
-    sections.push(buildLeadingSection(entry, classContext, params));
+    sections.push(
+      withChart(
+        buildLeadingSection(entry, classContext, params),
+        buildLeadingChart(entry, classContext),
+      ),
+    );
   }
 
   if (classContext.available_points.arrival > 0 || entry.arrival_points > 0) {
-    sections.push(buildArrivalSection(entry, classContext, params, fmt));
+    sections.push(
+      withChart(
+        buildArrivalSection(entry, classContext, params, fmt),
+        buildArrivalChart(entry, classContext),
+      ),
+    );
   }
 
   const penalty = buildPenaltySection(entry, params.jumpTheGunFactor);
