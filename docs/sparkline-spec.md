@@ -8,7 +8,7 @@ The altitude sparkline is an interactive miniature altitude profile displayed in
 
 - **File**: `web/frontend/src/analysis/analysis-panel.ts`
 - **Position**: Fixed above the scrollable event list, below the count bar
-- **Visibility**: Shown on Events, Glides, Climbs, and Sinks tabs; hidden on the Task tab
+- **Visibility**: Shown on the Events, Glides, Climbs, and Sinks tabs; hidden on the Task, Score, and Competition Score tabs (it is a single flight's profile, and those three are not about one flight's altitude trace)
 
 ## Layout
 
@@ -112,7 +112,7 @@ Clicking the sparkline selects the nearest event **within the current tab** with
 | **Glides** | Find the glide whose segment contains the fix index, or the glide with the nearest segment boundary |
 | **Climbs** | Find the climb whose segment contains the fix index, or the climb with the nearest segment boundary |
 | **Sinks** | Find the sink whose segment contains the fix index, or the sink with the nearest segment boundary |
-| **Task** | Sparkline is hidden; no click interaction |
+| **Task** / **Score** / **Competition Score** | Sparkline is hidden; no click interaction |
 
 ### Nearest segment algorithm (`findNearestSegmentEvent`)
 For segment-based tabs (Glides, Climbs, Sinks):
@@ -120,7 +120,7 @@ For segment-based tabs (Glides, Climbs, Sinks):
 2. Otherwise, find the segment whose start or end index is closest to the clicked fix index
 
 ### External selection (`selectByFixIndex`)
-The public `selectByFixIndex` method (used when clicking the track on the map) does switch tabs — it finds the best-matching event type and switches to the appropriate tab (glides, climbs, sinks, or events). This is distinct from sparkline clicks which stay on the current tab.
+The public `selectByFixIndex(fixIndex: number, options?: { skipPan?: boolean })` method (used when clicking the track on the map) does switch tabs — it finds the best-matching event type and switches to the appropriate tab (glides, climbs, sinks, or events). This is distinct from sparkline clicks which stay on the current tab.
 
 ### After selection
 - The sparkline marker updates to the clicked/selected position

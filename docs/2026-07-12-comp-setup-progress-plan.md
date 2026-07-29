@@ -1,6 +1,14 @@
 # Competition setup guide — progress bar for not-yet-set-up comps
 
-*2026-07-12. Status: Accepted.*
+*2026-07-12. Status: ✅ Implemented — all three phases shipped.*
+`web/frontend/src/react/comp/CompSetupProgress.tsx` (with the pure
+`deriveSetupSteps` and its `comp-setup-progress.test.ts`), `settings_reviewed`
++ `waypoint_count` on the comp-detail payload (migration
+`web/db/migrations/0016_comp_settings_reviewed.sql`), the phase-2 nav counts
+(`web/frontend/src/react/pages/CompDetail.tsx` — `Tasks ({comp.tasks.length})`,
+`Waypoints ({comp.waypoint_count})`, admin-only `Pilots ({comp.pilot_count})`),
+and the phase-3 role-aware empty states (same file, the tasks section's
+"The organizers haven't published any tasks yet." + admin CTA).
 
 ## 1. Problem
 
@@ -39,7 +47,9 @@ only when **both** hold:
 - at least one step is incomplete.
 
 It shows the five steps as an ordered checklist with a thin progress bar
-("2 of 5 steps") using the existing `ui/progress.tsx`. Completed steps get
+("2 of 5 steps") using the existing progress bar
+(`web/frontend/src/react/rac/progress.tsx` — the `src/react/ui/` kit this
+originally named was retired in the RAC migration). Completed steps get
 a check mark; the **first incomplete step is the highlighted "next" step**
 with its action inline. Every step row is also a link/button to the place
 where you do it, so the guide doubles as navigation while it's visible.
@@ -245,23 +255,27 @@ feature, the client's `admins`-array check stays.)
 
 ## 5. Implementation phases
 
-Each phase ships independently.
+Each phase ships independently. **All three have shipped.**
 
-1. **API + guide** — migration 0016, `waypoint_count` +
+1. ✅ **API + guide** — migration 0016, `waypoint_count` +
    `settings_reviewed` on comp detail, PATCH flag write,
    `CompSetupProgress` + `deriveSetupSteps`, `#edit-pilots` hash in
    `PilotsSection`, wire into `CompDetailView`.
-2. **Nav counts** — counts on Tasks / Pilots / Waypoints / Admins links.
-3. **Role-aware empty states** — Tasks, Scores, Pilots sections.
+2. ✅ **Nav counts** — counts on Tasks / Pilots / Waypoints links. (Admins
+   went uncounted in the end: the 2026-07-23 nav change demoted Admins to a
+   footnote rather than a nav entry — see §2.3.)
+3. ✅ **Role-aware empty states** — the Tasks section renders the visitor
+   sentence plus, for admins, the New Task CTA in the body.
 
 ## 6. Accessibility (per docs/accessibility-standard.md)
 
 - The guide is a `<section aria-labelledby>` containing an `<ol>`; each
   completed step carries a visually-hidden "Completed:" prefix (the check
   mark alone is not conveyed to screen readers).
-- The progress bar uses `ui/progress.tsx` (base-ui `Progress` with proper
-  `progressbar` semantics + `ProgressLabel`/`ProgressValue`), as on the
-  Dashboard quota bar.
+- The progress bar uses the kit's progress component with proper
+  `progressbar` semantics, as on the Dashboard quota bar. *(As shipped that
+  is `ProgressBar` from `web/frontend/src/react/rac/progress.tsx`; the
+  base-ui `ui/progress.tsx` this plan named no longer exists.)*
 - Step actions are real `<button>`/`<Link>` elements; the whole row may be
   a click target but the accessible name lives on the control.
 - Completion-state color pairs with the icon shape (check vs circle), never

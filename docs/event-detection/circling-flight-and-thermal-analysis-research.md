@@ -2,7 +2,17 @@
 
 Research into algorithms for detecting circling flight, extracting per-circle parameters, and estimating wind from thermal circles in GPS tracklogs (IGC files).
 
-This document collects algorithms, thresholds, and references to inform implementation. The current thermal detector (`event-detector.ts`) uses climb rate only and does not detect circular flight — see `thermal-detection-spec.md` "Known Limitations".
+> **Status: this proposal shipped.** The document below was written before circle detection existed and is kept as the research record — the survey of algorithms, thresholds and sources that the implementation was chosen from. What it describes as future work is now `web/engine/src/circle-detector.ts`, wired into the detection run at `event-detector.ts:15` (import) and `:384` (`detectCircles(...)`), emitting `circle_complete` events:
+>
+> - **Bearing rates** — `computeBearingRates()`, 5-second lookback, clamped to ±50 deg/s
+> - **Circling segments** — the XCSoar-style four-state machine (`detectCirclingSegments()`), `minTurnRate` 4.0 deg/s, `t1Seconds` 8, `t2Seconds` 15
+> - **Individual circles** — cumulative heading change, one circle per 360°, `minFixesPerCircle` 8
+> - **Per-circle parameters** — `fitCircleLeastSquares()` (Kasa algebraic fit) for centre/radius/RMS error, plus climb rate, quality (fraction of intervals with positive vario) and strongest-lift bearing
+> - **Wind** — both methods, per circle: `estimateWindFromGroundSpeed()` (GS max/min) and `estimateWindFromCenterDrift()` (drift between consecutive circle centres)
+>
+> Every threshold above is a default in `web/engine/src/thresholds.ts` (`DEFAULT_THRESHOLDS.circle`), overridable via `resolveThresholds()` and from the analysis page's Settings dialog.
+>
+> Two things the reader should not carry away from the older text: thermal detection now lives in `flight-phase-detectors.ts` (`detectThermals`), not `event-detector.ts`, which only orchestrates; and it **still keys off climb rate alone** — the Phase 1 idea of gating thermals on "circling AND climbing" was not adopted. Circle detection runs as a parallel stream, so the ridge-lift limitation in `thermal-detection-spec.md` stands.
 
 ---
 
@@ -304,14 +314,17 @@ Only positive lift values contribute. A "center angle" is displayed showing the 
 
 ## 6. Key Threshold Comparison
 
-| Parameter | XCSoar | igc_lib | ArduSoar | Current GlideComp |
-|-----------|--------|---------|----------|-------------------|
-| Turn rate threshold | 4 deg/s | 6 deg/s | N/A (uses vario) | Not implemented |
-| Bearing lookback window | Adjacent fixes (smoothed) | 5 seconds | N/A | Not implemented |
+The GlideComp column is as shipped (`DEFAULT_THRESHOLDS` in `web/engine/src/thresholds.ts`); it read "Not implemented" in the original research.
+
+| Parameter | XCSoar | igc_lib | ArduSoar | GlideComp (shipped) |
+|-----------|--------|---------|----------|---------------------|
+| Turn rate threshold | 4 deg/s | 6 deg/s | N/A (uses vario) | 4.0 deg/s (`circle.minTurnRate`) |
+| Bearing lookback window | Adjacent fixes (smoothed) | 5 seconds | N/A | 5 seconds (`circle.lookbackSeconds`) |
 | Min climb rate | N/A (separate) | N/A | SOAR_VSPEED (configurable) | 0.5 m/s |
 | Min thermal duration | Via mode switch delays | 60 s | Via EKF convergence | 20 s |
-| Smoothing method | Low-pass filter (0.3) | Viterbi HMM | Netto vario filter (tau=0.03) | Sliding window (10 fixes) |
-| Circle min samples | 8 fixes | N/A | N/A | N/A |
+| Smoothing method | Low-pass filter (0.3) | Viterbi HMM | Netto vario filter (tau=0.03) | Sliding window (10 fixes) for thermals; state-machine hysteresis (`t1Seconds` 8 / `t2Seconds` 15) for circling |
+| Circle min samples | 8 fixes | N/A | N/A | 8 fixes (`circle.minFixesPerCircle`) |
+| Bearing rate clamp | ±50 deg/s | N/A | N/A | ±50 deg/s (`circle.maxBearingRate`) |
 
 ---
 
@@ -355,7 +368,7 @@ Only positive lift values contribute. A "center angle" is displayed showing the 
 
 ## 9. Recommended Implementation Approach
 
-Practical upgrade path for GlideComp, leveraging existing `geo.ts` primitives (`calculateBearing`, `andoyerDistance`):
+The phased upgrade path proposed for GlideComp, leveraging existing `geo.ts` primitives (`calculateBearing`, `andoyerDistance`). Phases 1–4 have since been built; each is annotated with what shipped, all of it in `web/engine/src/circle-detector.ts`.
 
 ### Phase 1: Circling Detection
 
@@ -363,17 +376,27 @@ Add bearing rate computation with 3-5 second lookback window. Use XCSoar-style t
 
 Combine with existing climb rate check: **thermal = circling AND climbing**. This solves the documented limitation of ridge lift being classified as thermals.
 
+> **Shipped as** `computeBearingRates()` (5 s lookback, ±50 deg/s clamp) and `detectCirclingSegments()` — the four-state machine `CRUISE → POSSIBLE_CLIMB → CLIMB → POSSIBLE_CRUISE`, `minTurnRate` 4.0 deg/s with `t1Seconds` 8 / `t2Seconds` 15 hysteresis.
+>
+> The second half was **not** adopted: `detectThermals()` in `flight-phase-detectors.ts` still keys off climb rate alone, and circling is a parallel signal rather than a gate on it. The ridge-lift limitation therefore remains open.
+
 ### Phase 2: Individual Circle Extraction
 
 Use cumulative heading change (Section 1.3) to segment each thermal into individual circles. Record start/end fixes, turn direction, and duration per circle.
+
+> **Shipped as** the cumulative-heading pass inside `detectCircles()` — one `CircleSegment` emitted per 360° of accumulated turn (remainder carried into the next circle), each carrying `turnDirection`, `duration` and a 1-based `circleNumber` within its parent circling segment. Circles below `minFixesPerCircle` (8) are rejected. Surfaces as `circle_complete` events.
 
 ### Phase 3: Per-Circle Parameters
 
 Add least-squares circle fitting (Section 2.2) for each circle to get center point and radius. Compute climb rate, quality (% lifting), and duration per circle.
 
+> **Shipped as** `fitCircleLeastSquares()` — the Kasa algebraic fit over fixes projected to local metres — returning centre, radius and `fitErrorRMS`. Each circle also carries `climbRate`, `quality` (fraction of fix intervals with positive vario) and `strongestLiftBearing` / `strongestLiftFixIndex`.
+
 ### Phase 4: Wind Estimation
 
 Use circle center drift (Section 3.2) between consecutive circles for wind speed and direction estimates. Cross-check with ground speed min/max method (Section 3.1).
+
+> **Shipped as** both, per circle and side by side rather than one cross-checking the other: `windFromGroundSpeed` (GS max/min, `estimateWindFromGroundSpeed()`) and `windFromCenterDrift` (drift between consecutive circle centres in the same circling segment, `estimateWindFromCenterDrift()`). Either may be absent — a circle with too little ground-speed variation, or no previous circle to drift from, yields none. Estimates above `maxReasonableWindSpeed` (30 m/s) are discarded. The map HUD prefers the ground-speed estimate and falls back to drift.
 
 ### Phase 5: Comparison & Tuning
 
@@ -381,3 +404,5 @@ Implement multiple detection methods side-by-side and compare results on real IG
 - Bearing rate threshold: try 4, 5, 6 deg/s
 - State machine vs Viterbi HMM
 - Circle drift vs sinusoidal fit for wind
+
+> **Not done as a study.** The shipped thresholds are the XCSoar values from Section 6, exposed as `DEFAULT_THRESHOLDS.circle` and adjustable per run through `resolveThresholds()` (and from the analysis page's Settings dialog), so tuning is a user-facing knob rather than a one-off comparison. The Viterbi HMM and sinusoidal-fit alternatives were never implemented.

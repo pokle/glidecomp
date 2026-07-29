@@ -65,8 +65,9 @@ still credited by the crossing search (`first_crossing`), exactly as before
 
 ## Where things live
 
-- Fix: `buildForwardPath` in `web/engine/src/turnpoint-sequence.ts` (presence
-  check + `'already_inside'` selection reason), scoring engine bumped to v7 in
+- Fix: `buildForwardPath` in `web/engine/src/turnpoint-sequence-path.ts`
+  (presence check + `'already_inside'` selection reason), called from
+  `web/engine/src/turnpoint-sequence.ts`; scoring engine bumped to v7 in
   `web/engine/src/scoring-version.ts`.
 - Tests: "turnpoint nested inside a larger following cylinder" describe block
   in `web/engine/tests/turnpoint-sequence.test.ts` — one test per case above.

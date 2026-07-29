@@ -4,10 +4,11 @@ Extracted from `web/frontend/src/analysis/mapbox-provider.ts` and `map-provider-
 
 ## Map Controls
 
-- **Panel toggle** — custom control (top-right, topmost), sidebar-icon SVG button, fires `onPanelToggleClick` callback
+- **Panel toggle** — custom control (top-right, topmost), bar-chart SVG icon plus the text label "Analysis" (label hidden on mobile via `.mapctl-label`), 36px high, fires `onPanelToggleClick` callback
 - **Navigation control** — zoom +/-, compass, pitch visualizer (top-right, below panel toggle)
 - **Fullscreen control** — toggle button (top-right)
 - **Scale bar** — max width 200px
+- **Compass overlay** (`createCompass()`) — a large 160×160 `/compass.svg` image anchored bottom-right, transformed to match the map view (`rotateZ(-bearing)` plus `rotateX(pitch × 0.8)` under a 300px perspective) and draggable anywhere inside the map container (clamped to it). Analysis-page chrome only: embedded maps (score details) get `appControls: false` and rely on `NavigationControl`'s small built-in compass. Re-created after a style reload.
 - **Menu button** — custom control (top-left, topmost), hamburger-icon SVG button `(⌘K)`, fires `onMenuButtonClick` callback
 - **Style selector** — `<select>` dropdown (top-left, below menu button), font 12px, white background, text `#1e293b`. Options: Outdoors (default custom style), Satellite, Streets, Light, Dark
 - **Map location** — center, zoom, pitch, bearing persisted to localStorage (debounced 5s after moveend). Restored on next load. Default pitch 45, max pitch 85
@@ -139,10 +140,10 @@ When multiple tracks are loaded (competition mode), single-track layers are hidd
 
 ## Pickable Waypoint Markers (task route editor)
 
-Loaded from a competition waypoint file (`.wpt` / `.cup` / `.csv`) so the route editor can show turnpoints on the map and let the user pick them. Set via `setWaypoints(waypoints)` / cleared via `clearWaypoints()`; each `MapWaypoint` carries `{ id, name, lat, lon }`. Re-applied on style reload (Mapbox `restoreData()`).
+Loaded from a competition waypoint file (`.wpt` / `.cup` / `.csv`) so the route editor can show turnpoints on the map and let the user pick them. Set via `setWaypoints(waypoints)` / cleared via `clearWaypoints()`; each `MapWaypoint` carries `{ id, code, name, lat, lon }` — `code` is the short label (e.g. `"A01"`), `name` the long descriptive one (e.g. `"BORDANO LANDING"`). Re-applied on style reload (Mapbox `restoreData()`).
 
 - **Marker dots** (`waypoints` layer): circle radius 5, fill slate `#64748b` opacity 0.9, 1.5px white stroke — deliberately secondary to the type-coloured turnpoint dots (radius 6) so a loaded database reads as "available to pick", not "part of the route".
-- **Marker labels** (`waypoint-labels` layer): the waypoint name, text size 11, offset `[0, 1.1]`, top anchor, colour `#475569`, white halo 1.5px. Shown only at **zoom ≥ 10** so a whole regional database doesn't clutter when zoomed out.
+- **Marker labels** (`waypoint-labels` layer): the waypoint **code** (`text-field: ['get', 'code']` — the short form, so a dense database stays readable; the long name is hover/table material), text size 11, offset `[0, 1.1]`, top anchor, colour `#475569`, white halo 1.5px. Shown only at **zoom ≥ 10** so a whole regional database doesn't clutter when zoomed out.
 - **Picking (select mode = `view`)**: a map tap picks the **nearest** loaded waypoint within a **44 px** tolerance (a finger width — no exact aim at the small marker, which is what made picking impossible on touch) and fires `onWaypointClick(waypoint)`. A tap with no waypoint inside the tolerance does nothing (you can't accidentally drop a point). The nearest is computed by projecting each waypoint to screen space.
 - **Placing a new point (`add-waypoint` mode)**: a tap reports its ground coordinates via `onMapClick(lat, lon, details?)` — the editor opens a dialog to name it, set an altitude, and adjust the coordinates before adding. Crosshair cursor. `details` (`MapPickDetails`) carries best-effort pre-fill context: Mapbox supplies `elevation` (metres AMSL from the terrain DEM, queried `{ exaggerated: false }`; omitted — never 0 — when the DEM tile isn't loaded) and `placeName` (nearest named `Point`-geometry label rendered within **56 px** of the tap; on classic styles these are the streets-v8 source layers `natural_label` / `poi_label` / `place_label` / `airport_label`, on Mapbox-Standard-based styles they're featureset results with no source — app-added layers, which always carry a source id, are excluded; best-effort by design — only labels the current style renders at the current zoom).
 - **Snap to peak (`add-waypoint` mode)**: when the nearest label in that same 56 px search is a **peak** (`natural-point`/`landform` — classic `natural_label` points with `class: 'landform'`, or Standard featuresets with `group: 'natural-point'`; towns/POIs contribute names but never snap), `details.peak` carries `{ name, lat, lon, distanceM, elevation?, withinTapPx }` — the summit's own Point geometry, the ground distance tap→summit (engine `andoyerDistance`), the surveyed `elevation_m` where the style has it else the terrain DEM re-read *at the summit*, and whether the label sat within the **44 px** auto-snap tolerance (`PEAK_AUTO_SNAP_RADIUS_PX`, the same finger width as picking). The dialog **auto-snaps** — adopts the summit coordinates + elevation, revertible via a "Use tapped point" link — only when *both* guards pass: `withinTapPx` **and** ground distance ≤ **300 m** (`AUTO_SNAP_MAX_DISTANCE_M`, route-editor's `peakSnapMode`); each covers the other's blind spot (the metre cap stops multi-km snaps 44 px allows when zoomed out; the pixel guard stops snapping a deliberate 200 m-off tap when zoomed in). A peak that clears the 56 px search but fails the auto rule becomes an opt-in **offer** ("Snap to <peak> summit (650 m away)") under the Coordinates field instead. The coordinates field stays a plain editable input — the snap only sets its initial value; typing, or a later table edit, always wins, and nothing commits until Add.
@@ -158,6 +159,14 @@ Shown for open-distance tasks (single TAKEOFF turnpoint): one line per visible p
 - Pilots who never leave the take-off cylinder score 0 and have no line
 - Set via `setOpenDistanceLines(lines)` / cleared via `clearOpenDistanceLines()`; re-applied on style reload
 - With multiple pilots selected, one line + label is drawn per selected pilot (Mapbox symbol collision hides overlapping labels)
+
+## Best-Progress Route (landed-out distance to goal)
+
+A landed-out pilot's routed remaining distance, drawn on the report card's map (`ScoreDetailMap`) so the "measured along the task, X km short of goal" wording is visible rather than implied by a lone pin. The polyline runs from the pilot's best-progress point, through each un-reached turnpoint's optimal tag point, to goal.
+
+- Set via `setBestProgressRoute(route)` / cleared via `clearBestProgressRoute()`; `BestProgressRoute` carries `coords` (ordered `{ lat, lon }` vertices) and `distanceToGoal` (metres). Fewer than two vertices renders nothing. Re-applied on style reload
+- **Line** (`best-progress-route-line` layer): solid amber `#f59e0b`, width 2.5, opacity 0.9, round join/cap — solid and amber so it reads as distinct from the dashed orange task line it runs alongside
+- **Label** (`best-progress-route-label` layer): `"X.X km short of goal"`, placed along the line (`symbol-placement: line-center`, offset `[0, -0.8]`), text size 15, colour `#b45309`, white halo 2px
 
 ## Event Markers
 
@@ -210,14 +219,15 @@ Shown for open-distance tasks (single TAKEOFF turnpoint): one line per visible p
     - White text-shadow outline (4-direction 1px)
     - Content: speed (formatted), glide ratio (`↘N:1`), altitude change, required glide ratio to next turnpoint (`↘N:1 to NAME`)
     - Line-height: 1.3, centered, no-wrap
-    - Zoom-dependent visibility:
-      - Below zoom 11: hidden entirely
-      - Zoom 11–13: speed only
-      - Zoom 13+: speed + glide ratio + altitude change + required GR (if applicable)
+    - Zoom-dependent visibility (`GLIDE_LABEL_*_MIN_ZOOM` in `map-provider-shared.ts`):
+      - Below zoom 10 (`GLIDE_LABEL_SPARSE_MIN_ZOOM`): hidden entirely
+      - Zoom 10–11: sparse — only every 3rd label is drawn (`isSparseHidden`); the fastest glide is exempt and always shown
+      - Zoom 11–13 (`GLIDE_LABEL_SPEED_MIN_ZOOM`): every label, speed + altitude change only
+      - Zoom 13+ (`GLIDE_LABEL_DETAILS_MIN_ZOOM`): speed + glide ratio + altitude change + required GR (if applicable)
   - Glide legend `?` button appears (bottom of map container)
   - **Screen-space collision detection** — labels are projected to screen coordinates and hidden if they overlap higher-priority labels:
     - Priority: fastest glide first, then by original index (earlier in flight = higher priority)
-    - Label bounding boxes are zoom-dependent: 160×30px compact (zoom <15), 180×65px detail (zoom ≥15), with 10px horizontal / 6px vertical padding
+    - Label bounding boxes are zoom-dependent, on the same `GLIDE_LABEL_DETAILS_MIN_ZOOM` threshold as the text: 160×30px compact (zoom <13), 180×65px detail (zoom ≥13), with 10px horizontal / 6px vertical padding
     - Paired chevron markers are also hidden when their label is hidden
     - Recalculated on every viewport change (zoom, pan, rotate)
 
@@ -270,19 +280,23 @@ When enabled via the "Show Track Metrics" command palette option, displays glide
 6. `task-goal-line` — goal line (LINE goals only)
 7. `track-line-outline` — black track shadow
 8. `track-line` — altitude-colored track
-9. `highlight-segment` — cyan highlight for selected events
-10. `speed-fastest-segment` — red overlay for fastest speed segment
-11. `task-points` — turnpoint dots
-12. `task-labels` — turnpoint name labels
-13. `waypoints` — pickable waypoint marker dots (route editor)
-14. `waypoint-labels` — pickable waypoint name labels (route editor, zoom ≥ 10)
-15. `task-segment-labels` — leg distance labels
-16. `open-distance-line` — dashed scored open-distance line per pilot
-17. `open-distance-labels` — distance label along each open-distance line
-18. `multi-track-name-labels` — pilot name at each track's landing point
-19. `annotation-strokes-layer` — committed annotation strokes
-20. `annotation-live-layer` — in-progress annotation stroke preview
-21. `threebox-layer` — 3D custom rendering layer (Threebox)
+9. `multi-track-outline` — black shadow behind every pilot's track (competition view)
+10. `multi-track-line` — rank-colored per-pilot tracks (competition view)
+11. `highlight-segment` — cyan highlight for selected events
+12. `speed-fastest-segment` — red overlay for fastest speed segment
+13. `task-points` — turnpoint dots
+14. `task-labels` — turnpoint name labels
+15. `waypoints` — pickable waypoint marker dots (route editor)
+16. `waypoint-labels` — pickable waypoint code labels (route editor, zoom ≥ 10)
+17. `task-segment-labels` — leg distance labels
+18. `open-distance-line` — dashed scored open-distance line per pilot
+19. `open-distance-labels` — distance label along each open-distance line
+20. `best-progress-route-line` — solid amber routed line from the best-progress point to goal
+21. `best-progress-route-label` — remaining-distance label along that line
+22. `multi-track-name-labels` — pilot name at each track's landing point
+23. `annotation-strokes-layer` — committed annotation strokes
+24. `annotation-live-layer` — in-progress annotation stroke preview
+25. `threebox-layer` — 3D custom rendering layer (Threebox)
 
 ## 3D Drone Follow Camera
 
@@ -307,7 +321,7 @@ Activated when 3D track mode is enabled. Provides a cinematic perspective that f
 
 ## Annotation Overlay
 
-Freehand drawing overlay for scrawling on the map. Strokes are geo-anchored (persist through pan/zoom/pitch/bearing) and stored in IndexedDB. Rendered as native Mapbox GeoJSON line layers so they sit flat on the map surface (including terrain).
+Freehand drawing overlay for scrawling on the map. Strokes are geo-anchored (persist through pan/zoom/pitch/bearing) and stored server-side in D1. Rendered as native Mapbox GeoJSON line layers so they sit flat on the map surface (including terrain).
 
 - **Rendering** — native Mapbox `line` layers over GeoJSON sources (no canvas overlay)
   - `annotation-strokes` source/layer: committed strokes with round caps/joins
@@ -327,7 +341,7 @@ Freehand drawing overlay for scrawling on the map. Strokes are geo-anchored (per
   - **Erase**: pointer cursor, strokes within 12px of eraser path are removed
 
 - **Toolbar** — floating bar (bottom-left, above scale bar, `z-index: 11`), white semi-transparent background, 8px border-radius
-  - Buttons: Draw (P), Erase (E), Undo, Redo, Clear All (red trash icon)
+  - Buttons: Draw (D), Erase (E), Undo, Redo, Clear All (red trash icon)
   - Active tool highlighted with `#e8e8e8` background
   - Appears/disappears with annotation mode toggle
 
@@ -336,16 +350,16 @@ Freehand drawing overlay for scrawling on the map. Strokes are geo-anchored (per
 - **Keyboard shortcuts** (Excalidraw-compatible)
   | Action | Shortcut |
   |--------|----------|
-  | Toggle annotation mode | `P` |
+  | Toggle annotation mode | `D` |
   | Switch to eraser | `E` |
   | Exit annotation mode | `Escape` or `V` |
   | Undo | `Cmd/Ctrl+Z` (annotation mode only) |
   | Redo | `Cmd/Ctrl+Shift+Z` or `Cmd/Ctrl+Y` (annotation mode only) |
   | Clear all | `Cmd/Ctrl+Shift+Delete` (annotation mode only) |
 
-- **Persistence** — strokes stored in IndexedDB `annotations` store, independent of tracks/tasks; loaded on map initialization
+- **Persistence** — strokes are scoped to a (user, track) pair and stored in **D1 via the API**, not in the browser: `map-annotations.ts` calls `storage.storeAnnotation` / `listAnnotations` / `deleteAnnotation` / `clearAnnotations`, which are HTTP calls to `/api/user/tracks/:id/annotations` (read-only `/api/u/:username/track/:id/annotations` in public-link mode, where writes are no-ops). Loaded on map initialization; anonymous or track-less sessions persist nothing. See `docs/browser-storage-spec.md` for the superseded IndexedDB design
 
-- **Command palette** — "Annotate Map" item in Display Options group, toggles annotation mode, shows `(on)/(off) P` status
+- **Command palette** — "Annotate Map" item in Display Options group, toggles annotation mode, shows `(on)/(off) D` status
 
 ## Style Reload Behaviour
 

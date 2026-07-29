@@ -2,6 +2,14 @@
 
 Date: 2026-06-12
 
+> **Reading note (added 2026-07-29):** this is a point-in-time snapshot of the
+> *pre-React* frontend. The main UI has since been rebuilt as a React SPA under
+> `web/frontend/src/react/`, so the vanilla-TS file/line citations below
+> (`comp-detail.ts`, `comp.ts`, `settings.ts`, `dashboard.ts`, `feedback.ts`)
+> no longer resolve — they are kept as the record of what was reviewed, with
+> the current location annotated inline where it matters. The findings and
+> reasoning are unchanged.
+
 A review of the GlideComp UX based on the frontend code, the existing design
 docs (`information-architecture.md`, `ux-inventory.md`, and the since-removed
 `TODO.md`), and a full sweep of the UI surface.
@@ -20,13 +28,19 @@ the unfinished half of the information-architecture plan.
   `comp.ts:153`, `settings.ts:104`, and `dashboard.ts:222`. The analysis page
   already has a proper status-alert system (`analysis/main.ts:1806`) — the
   comp pages should match it. This also violates the CLAUDE.md rule to use
-  Basecoat components.
+  Basecoat components. *(✅ Done. Those pre-React modules are gone; the React
+  SPA uses the app-wide confirm dialog `src/react/rac/confirm.tsx` and the
+  `sonner` toaster `src/react/vendor/sonner.tsx`.)*
 - **Execute IA migration steps 3–7** from `information-architecture.md`:
   restructure comp detail as a sectioned page, move "Comp Score"/"GAP Config"
   out of the analysis sidebar, add a "View on Map" bridge from task detail,
   and route analysis under `/u/{username}/`. Steps 1–2 shipped; the remaining
   steps address the documented "8-tab overload" and "disconnected competition
-  flow" problems.
+  flow" problems. *(✅ Superseded and done: `docs/information-architecture.md`
+  now marks itself superseded by
+  [Information Architecture v2](2026-07-08-information-architecture-v2.md),
+  which is implemented — the comp page is the hub and navigation collapsed
+  around it.)*
 - **Add loading states.** Comp detail, profile, and settings show bare
   "Loading..." text. Skeleton placeholders would make slow networks feel less
   broken.
@@ -37,7 +51,10 @@ the unfinished half of the information-architecture plan.
   one") undersells the app. Make "Try a sample flight" a prominent,
   always-visible CTA and surface the command menu (`Cmd+K`) with a visible
   hint — power features like XContest import and map-provider switching are
-  invisible to anyone who doesn't open the menu.
+  invisible to anyone who doesn't open the menu. *(Half done: the empty state
+  now carries a "Try a sample flight" button —
+  `web/frontend/src/analysis/analysis-panel.ts:327` — but there is still no
+  visible `Cmd+K` hint.)*
 - **Multi-track / comparison mode is completely hidden.** Loading several
   IGCs silently enables the comp-score tab with no indication that this mode
   exists or is active. Add an explicit "compare flights" affordance and a
@@ -52,8 +69,9 @@ the unfinished half of the information-architecture plan.
   (~18k fixes) takes noticeable time; show a spinner or progress toast so
   users don't drop the file twice.
 - **Storage quota is invisible until it errors** (`dashboard.ts:217-222`
-  shows an `alert()` only on failure). Add a quota meter on the dashboard and
-  warn before the limit.
+  shows an `alert()` only on failure — pre-React path, since replaced by the
+  React dashboard). Add a quota meter on the dashboard and warn before the
+  limit.
 - **Task editor has no undo** — accidentally hitting "Clear all" destroys the
   task with no recovery (`task-editor.ts`). Either add an undo stack (one
   already exists for annotations) or a confirm + toast-with-undo.
@@ -65,17 +83,22 @@ the unfinished half of the information-architecture plan.
 Still open as of this review (`TODO.md` has since been removed; open work now
 lives in [GitHub issues](https://github.com/pokle/glidecomp/issues)):
 
-- Explain scores **on the map** — scoring decisions are explainable by design
-  principle, but the explanation isn't surfaced where users look.
+- ✅ Explain scores **on the map** — scoring decisions are explainable by
+  design principle, but the explanation isn't surfaced where users look.
+  *(Shipped: `web/frontend/src/react/comp/ScoreDetailMap.tsx` puts the map
+  alongside the report card at `/comp/:id/task/:id/pilot/:id`.)*
 - Glide segment visualization: bigger fonts, 1 km chevrons.
 - "Clear all storage" has no standalone UI — only via Delete Account, which
   is a scary path for a routine action.
 - The unclickable track segments bug is a real UX dead end — segments that
   respond to nothing feel broken even if event detection is technically the
   issue.
-- Link `/scoring.html` from the score/comp-score tabs — the GAP explainer
-  exists but users analyzing a score can't find it ("what are leading
-  points?" is one click too far away).
+- ✅ Link the GAP explainer from the score surfaces — it exists but users
+  analyzing a score can't find it ("what are leading points?" is one click
+  too far away). *(Shipped, at a different URL than this line guessed: there
+  is no `/scoring.html`; the guides are prerendered Astro pages —
+  `web/frontend/static/src/pages/scoring/gap.astro` at `/scoring/gap` — and
+  the report card deep-links them per section via each section's `docHref`.)*
 
 ## 5. Accessibility and mobile
 
@@ -91,12 +114,19 @@ lives in [GitHub issues](https://github.com/pokle/glidecomp/issues)):
 
 ## Suggested priority order
 
-1. ✅ Basecoat dialogs/toasts on comp pages (small effort, removes the most
-   jarring inconsistency) — implemented via `web/frontend/src/feedback.ts`
+1. ✅ Dialogs/toasts on comp pages (small effort, removes the most jarring
+   inconsistency) — originally implemented via `web/frontend/src/feedback.ts`;
+   that file was removed with the React SPA rewrite and the job now belongs to
+   `src/react/rac/confirm.tsx` (app-wide confirm) and
+   `src/react/vendor/sonner.tsx` (toaster)
 2. ✅ Loading/progress feedback (parse status, skeletons, quota meter) —
-   implemented alongside item 1
-3. Sample-flight + command-menu discoverability on the analysis empty state
-4. IA migration steps 3–5 (comp detail restructure, move comp tabs, "View on
-   Map")
+   implemented alongside item 1; the current loading family is
+   `src/react/rac/progress.tsx`
+3. ◐ Sample-flight + command-menu discoverability on the analysis empty state
+   — the sample-flight half shipped (`web/frontend/src/analysis/
+   analysis-panel.ts:327` renders a "Try a sample flight" button in the empty
+   state); the visible `Cmd+K` command-menu hint is still open
+4. ✅ IA migration steps 3–5 (comp detail restructure, move comp tabs, "View on
+   Map") — delivered by IA v2, see §1
 5. Task editor undo + clear-all-storage UI
 6. Aria/contrast pass on the non-analysis pages
