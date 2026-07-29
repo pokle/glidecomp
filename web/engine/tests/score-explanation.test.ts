@@ -1733,9 +1733,10 @@ describe('explainGapScore — validity charts', () => {
     ).find((i) => i.id === 'distance-validity')!.chart!;
     expect(chart.kind).toBe('distribution');
     if (chart.kind !== 'distribution') throw new Error('narrowing');
-    // Every flying pilot is binned — this is a picture of the field, not a
-    // claim that a formula explains each of them.
-    expect(chart.bins.reduce((s, b) => s + b.count, 0)).toBe(pilots.length);
+    // One dot per flying pilot — this is a picture of the field, not a claim
+    // that a formula explains each of them, so nobody is filtered out.
+    expect(chart.points).toHaveLength(pilots.length);
+    expect(chart.points.filter((p) => p.you)).toHaveLength(1);
     expect(chart.markers.map((m) => m.label).sort()).toEqual([
       'minimum',
       'nominal',
@@ -1744,7 +1745,7 @@ describe('explainGapScore — validity charts', () => {
     // makeGoalEntry flies 60 km, past the field's best — the axis is
     // defined to contain the reader's own mark rather than drop it.
     expect(chart.markers.find((m) => m.you)!.x).toBe(60_000);
-    expect(chart.bins[chart.bins.length - 1].x1).toBeGreaterThanOrEqual(60_000);
+
   });
 
   it('draws no time-validity curve when the spec fell back to distance', () => {

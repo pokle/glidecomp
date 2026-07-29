@@ -9,7 +9,7 @@
 import type { ScoreChart } from "@glidecomp/engine";
 import { ScoreCurve } from "./ScoreCurve";
 import { ValiditySparkline } from "./ValiditySparkline";
-import { DistributionBars } from "./DistributionBars";
+import { DistributionStrip } from "./DistributionStrip";
 
 export function ScoreChartView({ chart }: { chart: ScoreChart }) {
   switch (chart.kind) {
@@ -18,7 +18,7 @@ export function ScoreChartView({ chart }: { chart: ScoreChart }) {
     case "validity":
       return <ValiditySparkline chart={chart} />;
     case "distribution":
-      return <DistributionBars chart={chart} />;
+      return <DistributionStrip chart={chart} />;
     default:
       return null;
   }
