@@ -83,7 +83,9 @@ describe("buildScoresCsv", () => {
     expect(row[SCORES_CSV_COLUMNS.indexOf("task")]).toBe("Task 1");
     expect(row[SCORES_CSV_COLUMNS.indexOf("score")]).toBe("900");
     expect(row[SCORES_CSV_COLUMNS.indexOf("task_rank")]).toBe("1");
-    expect(row[SCORES_CSV_COLUMNS.indexOf("pilot_total_score")]).toBe("1650");
+    expect(row[SCORES_CSV_COLUMNS.indexOf("pilot_rank")]).toBe("1");
+    // No competition-total column: the total is a sum over the pilot's rows.
+    expect(SCORES_CSV_COLUMNS).not.toContain("pilot_total_score");
 
     // Every row carries the same column count — the thing a pivot needs most.
     for (const line of lines) {
@@ -179,8 +181,9 @@ describe("buildScoresCsv", () => {
     const status = SCORES_CSV_COLUMNS.indexOf("ftv_status");
     expect(rows.map((r) => r[counted])).toEqual(["900", "0"]);
     expect(rows.map((r) => r[status])).toEqual(["full", "discarded"]);
-    // SUM(counted_score) reproduces the published total.
-    expect(rows.reduce((s, r) => s + Number(r[counted]), 0)).toBe(900);
+    // SUM(counted_score) reproduces the published total — which is the only
+    // way to get it, there being no total column. `score` would give 1300.
+    expect(rows.reduce((s, r) => s + Number(r[counted]), 0)).toBe(p.total_score);
   });
 
   test("keeps a pilot with no scored task, with empty task cells", () => {

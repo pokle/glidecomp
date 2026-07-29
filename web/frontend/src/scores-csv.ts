@@ -9,12 +9,19 @@
  * In this shape "average score per task", "each pilot's best day", "class ×
  * task" are all one pivot away, and adding a task adds rows, not columns.
  *
- * The pilot-level facts (rank, competition total) repeat on each of that
- * pilot's rows, so a pivot aggregates them with MAX/AVERAGE rather than SUM.
- * `counted_score` is the per-TASK FTV-aware measure: under FTV it is what that
- * task actually contributed to the total (0 for a discarded task), and under
- * plain total scoring it equals `score` — so SUM(counted_score) over a pilot's
- * rows reproduces their `pilot_total_score` either way.
+ * There is deliberately NO competition-total column: the total is
+ * SUM(counted_score) over a pilot's rows, and a measure that must not be
+ * summed sitting beside ones that must is the thing people get wrong in a
+ * pivot. `counted_score` is the per-TASK FTV-aware measure — under FTV it is
+ * what that task actually contributed (0 for a discarded task), and under
+ * plain total scoring it equals `score` — so that sum is the published total
+ * under either method. `pilot_rank` is the one pilot-level column left (a
+ * standings position isn't derivable from the rows), and it repeats on each
+ * of that pilot's rows, so a pivot takes it with MAX rather than SUM.
+ *
+ * Known rounding drift: the columns carry the PUBLISHED (rounded) points, so a
+ * summed total can sit a point either side of the site's, which sums the
+ * unrounded scores and rounds once at the end.
  *
  * Ids appear as fully-qualified URLs, not bare sqids: a `wuhu` in a cell tells
  * a reader nothing and takes them nowhere, while the URL is both the identity
@@ -63,7 +70,6 @@ export const SCORES_CSV_COLUMNS = [
   "ftv_status",
   "score_url",
   "pilot_rank",
-  "pilot_total_score",
 ] as const;
 
 /** Blank task-side cells for a pilot with nothing scored yet. */
@@ -96,7 +102,7 @@ export function buildScoresCsv(
         pilot.comp_pilot_id,
         pilot.team_name ?? "",
       ];
-      const tail = [pilot.rank, Math.round(pilot.total_score)];
+      const tail = [pilot.rank];
 
       if (pilot.tasks.length === 0) {
         lines.push([...pilotCells, ...EMPTY_TASK_CELLS, ...tail].map(csvEscape).join(","));
