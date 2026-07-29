@@ -1,0 +1,98 @@
+# SSR for the public competition pages
+
+The eight public comp pages are server-rendered. This is the SEO strategy:
+crawlers and link-preview bots must see the text, not an empty `#root`.
+
+Current-state reference. For the original design reasoning see
+[2026-07-06-ssr-public-pages-plan.md](2026-07-06-ssr-public-pages-plan.md) and
+[2026-07-08-information-architecture-v2.md](2026-07-08-information-architecture-v2.md)
+§6 — both dated, so treat them as snapshots.
+
+## The routes
+
+All owned by the Pages Function `functions/comp/[[path]].ts` (`ROUTES`):
+
+| Route | Notes |
+|---|---|
+| `/comp` | |
+| `/comp/:id` | hub: merged task list + top-3 standings summary |
+| `/comp/:id/scores` | the canonical full-scores page; `?task=` deep-links the results-by-task view |
+| `/comp/:id/waypoints` | |
+| `/comp/:id/task/:id` | route + public top-3 results; the admin manage grid is client-only |
+| `/comp/:id/task/:id/pilot/:id` | the report card |
+| `/comp/:id/analysis` | field analysis, comp report |
+| `/comp/:id/analysis/task/:id` | field analysis, per-task chapter |
+
+A cold field-analysis report server-renders its pending notice and is noindexed
+**per request**, not shell-noindexed.
+
+`NOINDEX_SHELL_ROUTES` (checked *before* `ROUTES`) covers only two paths: the
+admin-only `/comp/:id/pilots` roster editor, and the superseded
+`/comp/:id/task/:id/analysis` URL, which the SPA redirects and so must reach the
+shell rather than 404.
+
+`public/_routes.json` hands `/comp*` and `/sitemap.xml` to Functions. The old
+`/comp* → /app` `_redirects` lines are gone.
+
+**Non-goals** — auth-gated pages, the analysis page and the 3D replay stay pure
+SPA.
+
+## How a request is served
+
+1. Run the route's loader (`src/react/loaders.ts`, one per route, parameterized
+   by a `FetchFn`) over the `COMPETITION_API` service binding, **forwarding the
+   visitor's cookie** so admins still get their `test` comps.
+2. Render the *same* React components the SPA uses — shared tree in
+   `src/react/routes.tsx`, rendered server-side by `entry-server.tsx`.
+3. Splice the markup into the `/app` shell with per-route `<title>`, description
+   and JSON-LD.
+4. Embed `window.__SSR_DATA__` for the client to hydrate from
+   (`entry-client.tsx` → `hydrateRoot`; `src/react/lib/initial-data.tsx` seeds
+   each page's state so the first render matches).
+
+**Deliberately no `<link rel="canonical">`** — iOS Safari's share sheet copies it
+instead of the address bar, and it goes stale after client-side navigation. The
+`glidecomp.pages.dev` prod alias is deduped by a 301 in
+`functions/_middleware.ts` instead, with the static content pages routed through
+it via `_routes.json` because `_redirects` can't match hosts.
+
+### Failure behaviour
+
+- Upstream 404/400 → a real 404 plus `noindex`. Hidden `test` comps 404
+  anonymously.
+- Any loader or render error → the plain SPA shell. **SSR can never make a page
+  less available than the pure-client version.**
+
+## `/comp/:id/scores.csv`
+
+The one non-HTML URL under `/comp`, served by the same Function: the scores
+page's downloadable twin, built from the same loader so the file can't disagree
+with the page. Built by the pure `src/scores-csv.ts`.
+
+- **Long form** — one row per pilot per task, ONE `score` column and a `task`
+  column, so it pivots. Never a column per task.
+- **Ids ship as fully-qualified URLs** — `comp_url`/`task_url`/`score_url`, built
+  from `lib/slug.ts` and absolute against the SERVING request's origin, so a
+  preview deploy's export links back into the preview. A bare sqid in a cell
+  takes a reader nowhere. `comp_pilot_id` is the one exception, kept as the
+  group-by-pilot key because a pilot has no page of their own.
+- `noindex` (the page is the indexable form), and cookie-forwarded like
+  everything else here.
+
+It is a real URL rather than a client-built blob because that is what makes
+Google Sheets' `IMPORTDATA` work — the "Open in Google Sheets" flow in
+`src/react/comp/ScoresDownload.tsx` hands the visitor that formula, and the sheet
+re-reads it after a re-score.
+
+Dev has no Functions, so a `scoresCsvDev` middleware in `vite.config.ts` mirrors
+it on :3000 using the same builder, rather than leaving the link 404ing where
+nobody would notice.
+
+## Verifying
+
+Dev serves the SPA shell, with no SSR. To actually exercise it:
+
+```
+bun run build && wrangler pages dev web/frontend/dist
+bun run test:e2e:ssr          # asserts clean hydration
+```
