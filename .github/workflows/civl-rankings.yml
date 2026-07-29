@@ -1,0 +1,90 @@
+name: CIVL Rankings
+
+# Import the CIVL/WPRS world pilot rankings from civlcomps.org into D1.
+#
+# CIVL publishes once a month but not on a fixed day, so this polls daily and
+# the script decides whether anything is actually worth fetching: a list whose
+# stored ranking_date is already in the current month is skipped with no HTTP
+# request at all, so on the ~30 quiet days a month this run costs civlcomps.org
+# nothing and finishes in seconds. See the header of
+# web/scripts/fetch-civl-rankings.ts.
+#
+# Deliberately separate from deploy.yml: a different trigger, a different
+# cadence, and it must never deploy anything. It also must never apply
+# migrations — deploy.yml owns that on master, so migration 0025 has to have
+# landed there before the first run can write.
+on:
+  schedule:
+    # 04:00 UTC daily. Scheduled workflows only fire on the default branch.
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+    inputs:
+      lists:
+        description: 'Space-separated list slugs to import (blank = all)'
+        required: false
+        default: ''
+      force:
+        description: 'Re-import even a month already stored'
+        type: boolean
+        required: false
+        default: false
+
+# Never let two runs write the same rows at once; a slow export must not be
+# cancelled by the next day's tick either.
+concurrency:
+  group: civl-rankings
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  import:
+    name: Import rankings
+    runs-on: ubuntu-latest
+    # A publication day fetches all ten lists, each an async export job on
+    # their side plus a deliberate pause between requests — PG XC alone (~6.9k
+    # pilots) took five minutes end to end. Generous, but far below the 6h
+    # default, so a wedged poll can't hold the concurrency group all day.
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # The script shells out to `bunx wrangler d1 execute --remote` itself
+      # (it has to fetch and parse before it knows what SQL to run), and
+      # wrangler reads both credentials from the environment — so there is no
+      # wrangler-action step here. These are the same two secrets deploy.yml
+      # uses for `d1 migrations apply --remote` against this same database,
+      # which is what establishes that the token carries D1 edit permission.
+      - name: Import CIVL rankings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Roughly human pace between requests to civlcomps.org.
+          REQUEST_DELAY_MS: '4000'
+          # Dispatch inputs go through the environment, never interpolated into
+          # the script — `${{ inputs.lists }}` in a run: block is a shell
+          # injection waiting for someone to type a backtick. The script
+          # rejects any slug not in its own LISTS registry as a second gate.
+          LISTS: ${{ inputs.lists }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          args=(--remote)
+          if [ "$FORCE" = "true" ]; then args+=(--force); fi
+          # Word-splitting is the point here: LISTS is a space-separated list
+          # of slugs, and each must become its own argument.
+          # shellcheck disable=SC2206
+          if [ -n "$LISTS" ]; then args+=($LISTS); fi
+          bun run civl-rankings -- "${args[@]}"
