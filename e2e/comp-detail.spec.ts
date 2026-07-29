@@ -275,6 +275,17 @@ test("scores page: Download menu saves a long-form CSV and offers the Sheets for
   await expect(dialog.locator("code")).toHaveText(
     `=IMPORTDATA("${BASE_URL}${compScoresCsvPath(compId, comp.name)}")`
   );
+  // Both routes out to Google are EXTERNAL urls. RAC hands hrefs to
+  // react-router's useHref, which resolved them against the current path and
+  // rendered /comp/<comp>/scores/https:/sheets.new — a 404 that only a click
+  // revealed. See rac/router.tsx and the RAC guide's gotcha #20.
+  for (const name of ["sheets.new", "New Google Sheet"]) {
+    await expect(dialog.getByRole("link", { name })).toHaveAttribute(
+      "href",
+      "https://sheets.new"
+    );
+  }
+
   // Escape closes it and focus returns to the button that opened the menu.
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);

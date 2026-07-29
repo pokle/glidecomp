@@ -12,7 +12,7 @@ perfectly good kit member when there's no behaviour to own (`rac/badge.tsx`,
 live in `src/react/vendor/`: today the `input-otp` sign-in field and the
 `sonner` toaster.
 
-Read the **gotchas** section before touching kit code — nineteen of them, each
+Read the **gotchas** section before touching kit code — twenty of them, each
 one something that cost real debugging. The rest of this doc is history: how
 the migration went, what was decided and why. It is worth keeping because the
 reasoning still applies to new UI.
@@ -483,6 +483,20 @@ Points worth knowing before you reach for one:
     label. If the hint is the only name the control has, it belongs in the
     accessible name (`aria-label`), and if it's prose, use `rac/popover` —
     tooltips are hover-only and dismiss before a sentence can be read.
+
+20. **An external URL in a RAC `href` is mangled by the router bridge.**
+    `RacRouterProvider` hands RAC react-router's `useHref`, and RAC writes
+    whatever comes back into the anchor — so `useHref("https://sheets.new")`
+    resolved that against the current path and rendered
+    `/comp/<comp>/scores/https:/sheets.new`. A 404 nobody sees until they click
+    it, because the anchor *looks* fine in the source. `rac/router.tsx` now
+    passes anything with a scheme (`https:`, `mailto:`, `tel:`) or a
+    protocol-relative `//` straight through, on both the `useHref` and
+    `navigate` sides, so a RAC `Link` / `LinkButton` / `MenuItem` may hold an
+    external href like any other. If you see a route that has swallowed a URL,
+    this is why. (Plain `<a>` elements were never affected — the provider only
+    touches RAC's own components, which is why the app's other outbound links
+    survived.)
 
 ## Verification playbook (all part of "done" for RAC work)
 
