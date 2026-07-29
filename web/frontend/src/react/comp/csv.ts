@@ -235,13 +235,30 @@ export function exportCsvContent(rows: ParsedRow[]): string {
   return [header, ...lines].join("\n") + "\n";
 }
 
+/**
+ * A leading `=`/`+`/`-`/`@`/tab/CR is a formula trigger in Excel/Sheets; a
+ * pilot or team name starting with one is prefixed with `'` so opening the
+ * exported file can never execute it (CSV/DDE formula injection).
+ */
 export function csvEscape(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "";
   const s = String(value);
-  if (/[",\n\r]/.test(s)) {
-    return `"${s.replace(/"/g, '""')}"`;
+  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  if (/[",\n\r]/.test(safe)) {
+    return `"${safe.replace(/"/g, '""')}"`;
   }
-  return s;
+  return safe;
+}
+
+/**
+ * The `'` `csvEscape` prefixes onto a formula-looking value is only meaningful
+ * to a spreadsheet app — reimporting our own export must not carry it through
+ * as a literal leading quote forever. Strips exactly the guard we would have
+ * added (a `'` immediately before `=`/`+`/`-`/`@`), so a genuinely apostrophe-
+ * led name is untouched.
+ */
+function stripFormulaGuard(value: string): string {
+  return /^'[=+\-@]/.test(value) ? value.slice(1) : value;
 }
 
 // ── CSV parsing ──────────────────────────────────────────────────────────────
@@ -308,12 +325,12 @@ export function parseImportedCsv(
       if (!key) continue;
       const value = cells[c].trim();
       if (key === "name") {
-        row.name = value;
+        row.name = stripFormulaGuard(value);
       } else if (key === "pilot_class") {
         // A blank class cell keeps the single-class default.
         if (value) row.pilot_class = value;
       } else {
-        (row as unknown as Record<string, unknown>)[key] = value || null;
+        (row as unknown as Record<string, unknown>)[key] = stripFormulaGuard(value) || null;
       }
     }
     if (!row.name) {
