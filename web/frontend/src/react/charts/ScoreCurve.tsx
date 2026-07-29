@@ -35,7 +35,7 @@
  * section's own item list remains the exact, complete data.
  */
 import { useMemo, useRef, useState } from "react";
-import type { ScoreChart, ScoreChartPilot } from "@glidecomp/engine";
+import type { ScoreCurveChart, ScoreChartPilot } from "@glidecomp/engine";
 import { cn } from "@/react/lib/utils";
 import { extent, linearScale, niceTicks } from "./scale";
 
@@ -100,7 +100,7 @@ function overlaps(a: PlacedLabel["box"], b: PlacedLabel["box"]): boolean {
 }
 
 /** Format an x value for a tick or a readout, by what the axis measures. */
-function formatX(unit: ScoreChart["xUnit"], v: number): string {
+function formatX(unit: ScoreCurveChart["xUnit"], v: number): string {
   switch (unit) {
     case "duration": {
       const s = Math.max(0, Math.round(v));
@@ -120,7 +120,7 @@ function formatX(unit: ScoreChart["xUnit"], v: number): string {
   }
 }
 
-export function ScoreCurve({ chart }: { chart: ScoreChart }) {
+export function ScoreCurve({ chart }: { chart: ScoreCurveChart }) {
   const { curve, pilots, xUnit, xLabel, caption } = chart;
 
   // Dots in curve order, so arrow keys walk left to right the way the eye

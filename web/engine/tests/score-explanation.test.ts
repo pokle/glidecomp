@@ -158,6 +158,14 @@ function makeClassContext(): ClassContextInput {
   };
 }
 
+/** A section's chart, narrowed to the curve variant (ScoreChart is a union
+ *  since the validity sparklines and the distance distribution joined it). */
+function curveChart(section: { chart?: { kind: string } }) {
+  const c = section.chart;
+  if (!c || c.kind !== 'curve') throw new Error(`expected a curve chart, got ${c?.kind}`);
+  return c as import('../src/score-explanation-types').ScoreCurveChart;
+}
+
 function section(explanation: ScoreExplanation, id: string) {
   const s = explanation.sections.find((sec) => sec.id === id);
   if (!s) throw new Error(`missing section ${id}`);
@@ -1539,7 +1547,7 @@ describe('explainGapScore — component charts', () => {
   }
 
   it('plots the time curve from the scoring function, with every pilot on it', () => {
-    const chart = section(chartsFor(chartContext()), 'time').chart!;
+    const chart = curveChart(section(chartsFor(chartContext()), 'time'));
     expect(chart.xUnit).toBe('duration');
     expect(chart.pilots).toHaveLength(4);
     expect(chart.omitted).toBe(0);
@@ -1554,14 +1562,14 @@ describe('explainGapScore — component charts', () => {
   });
 
   it('marks exactly one pilot as "you"', () => {
-    const chart = section(chartsFor(chartContext()), 'time').chart!;
+    const chart = curveChart(section(chartsFor(chartContext()), 'time'));
     const you = chart.pilots.filter((p) => p.you);
     expect(you).toHaveLength(1);
     expect(you[0].name).toBe('Charlie');
   });
 
   it('states in the caption that the curve is the formula, not a fit', () => {
-    const chart = section(chartsFor(chartContext()), 'time').chart!;
+    const chart = curveChart(section(chartsFor(chartContext()), 'time'));
     expect(chart.caption).toContain('is the time-points formula');
     expect(chart.caption).toContain('sitting exactly on it');
     expect(chart.caption).not.toContain('trend');
@@ -1572,7 +1580,7 @@ describe('explainGapScore — component charts', () => {
   it('omits a pilot the curve does not explain, and says how many', () => {
     const ctx = chartContext();
     ctx.pilots[1] = { ...ctx.pilots[1], time_points: ctx.pilots[1].time_points! * 0.8 };
-    const chart = section(chartsFor(ctx), 'time').chart!;
+    const chart = curveChart(section(chartsFor(ctx), 'time'));
     expect(chart.pilots).toHaveLength(3);
     expect(chart.omitted).toBe(1);
     expect(chart.caption).toContain('1 pilot is not shown');
@@ -1586,7 +1594,7 @@ describe('explainGapScore — component charts', () => {
   });
 
   it('plots arrival against position, sampling the §11.4 curve', () => {
-    const chart = section(chartsFor(chartContext()), 'arrival').chart!;
+    const chart = curveChart(section(chartsFor(chartContext()), 'arrival'));
     expect(chart.xUnit).toBe('position');
     expect(chart.pilots.map((p) => p.x)).toEqual([1, 2, 3, 4]);
     expect(chart.caption).toContain('by the clock');
@@ -1632,7 +1640,7 @@ describe('explainGapScore — component charts', () => {
       total_score: pointsFor(d),
     }));
 
-    const chart = section(
+    const chart = curveChart(section(
       explainGapScore({
         task: makeTask(),
         result: makeReentryResult(),
@@ -1647,7 +1655,7 @@ describe('explainGapScore — component charts', () => {
         params: { scoring: 'HG', useDistanceDifficulty: true, minimumDistance: 5_000 },
       }),
       'distance',
-    ).chart!;
+    ));
 
     // Every pilot explained — the reconstruction matches the published points.
     expect(chart.pilots).toHaveLength(dists.length);
@@ -1659,8 +1667,95 @@ describe('explainGapScore — component charts', () => {
   });
 
   it('draws the plain linear distance line when difficulty is off', () => {
-    const chart = section(chartsFor(chartContext()), 'distance').chart!;
+    const chart = curveChart(section(chartsFor(chartContext()), 'distance'));
     expect(chart.curve).toHaveLength(2);
     expect(chart.caption).toContain('straight line');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Validity charts — day facts, and the one factor that wants a distribution
+// ---------------------------------------------------------------------------
+
+describe('explainGapScore — validity charts', () => {
+  function validityItems(
+    inputs: ClassContextInput['validity_inputs'],
+    params: Parameters<typeof explainGapScore>[0]['params'] = { scoring: 'PG' },
+    pilots?: ClassContextInput['pilots'],
+  ) {
+    const ctx = makeClassContext();
+    ctx.validity_inputs = inputs;
+    if (pilots) ctx.pilots = pilots;
+    return section(
+      explainGapScore({
+        task: makeTask(),
+        result: makeReentryResult(),
+        entry: { ...makeGoalEntry(), comp_pilot_id: 'me' },
+        classContext: ctx,
+        params,
+      }),
+      'validity',
+    ).items;
+  }
+
+  it('gives launch and time validity a curve carrying exactly one point — the day', () => {
+    const items = validityItems(makeValidityInputs(), {
+      scoring: 'PG',
+      nominalTime: 90 * 60,
+    });
+    for (const id of ['launch-validity', 'time-validity']) {
+      const chart = items.find((i) => i.id === id)!.chart!;
+      expect(chart.kind).toBe('validity');
+      if (chart.kind !== 'validity') throw new Error('narrowing');
+      expect(chart.curve.length).toBeGreaterThan(10);
+      // A validity factor is a fact about the TASK: one point, not a field.
+      expect(chart.point.x).toBeGreaterThan(0);
+      expect(chart.point.x).toBeLessThanOrEqual(1);
+      expect(chart.curve.every((p) => p.x >= 0 && p.x <= 1)).toBe(true);
+    }
+  });
+
+  // Distance validity uses its ratio as-is, so its "curve" is the identity
+  // line. Drawing that would be ink pretending to be an explanation.
+  it('gives distance validity a distribution rather than a curve', () => {
+    const pilots = Array.from({ length: 8 }, (_, i) => ({
+      comp_pilot_id: i === 0 ? 'me' : `p${i}`,
+      pilot_name: `Pilot ${i}`,
+      flown_distance: 10_000 + i * 6_000,
+      speed_section_time: null,
+      made_goal: false,
+      reached_ess: false,
+    }));
+    const chart = validityItems(
+      makeValidityInputs(),
+      { scoring: 'PG', nominalDistance: 40_000, minimumDistance: 5_000 },
+      pilots,
+    ).find((i) => i.id === 'distance-validity')!.chart!;
+    expect(chart.kind).toBe('distribution');
+    if (chart.kind !== 'distribution') throw new Error('narrowing');
+    // Every flying pilot is binned — this is a picture of the field, not a
+    // claim that a formula explains each of them.
+    expect(chart.bins.reduce((s, b) => s + b.count, 0)).toBe(pilots.length);
+    expect(chart.markers.map((m) => m.label).sort()).toEqual([
+      'minimum',
+      'nominal',
+      'you',
+    ]);
+    // makeGoalEntry flies 60 km, past the field's best — the axis is
+    // defined to contain the reader's own mark rather than drop it.
+    expect(chart.markers.find((m) => m.you)!.x).toBe(60_000);
+    expect(chart.bins[chart.bins.length - 1].x1).toBeGreaterThanOrEqual(60_000);
+  });
+
+  it('draws no time-validity curve when the spec fell back to distance', () => {
+    const items = validityItems({ ...makeValidityInputs(), best_time: null });
+    expect(items.find((i) => i.id === 'time-validity')!.chart).toBeUndefined();
+  });
+
+  it('draws nothing at all on a payload with no validity inputs', () => {
+    const items = validityItems(undefined);
+    for (const id of ['launch-validity', 'time-validity']) {
+      expect(items.find((i) => i.id === id)!.chart).toBeUndefined();
+    }
   });
 });

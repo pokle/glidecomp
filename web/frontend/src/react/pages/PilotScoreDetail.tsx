@@ -67,7 +67,9 @@ import type {
   TrackQualityData,
 } from "../comp/types";
 import { Badge } from "@/react/rac/badge";
-import { ScoreCurve } from "@/react/charts/ScoreCurve";
+import { ScoreChartView } from "@/react/charts/ScoreChartView";
+import { ScoringGlossary } from "../components/ScoringGlossary";
+import { TaskInStandings } from "../comp/TaskInStandings";
 import type { MapFocus } from "../comp/ScoreDetailMap";
 import { useInitialData } from "../lib/initial-data";
 import { useUser } from "../lib/user";
@@ -817,10 +819,22 @@ export function PilotScoreDetail() {
             />
           ))}
           {data.entry.track_excluded ? <TrackValidityDocLink /> : null}
+          {/* Closes the loop from this task back to the competition. Loads
+              after hydration — see TaskInStandings for why it is not in the
+              SSR payload. */}
+          <TaskInStandings
+            compId={compId}
+            compName={data.comp.name}
+            taskId={taskId}
+            compPilotId={pilotId}
+          />
           <TrackDataCleaningNote
             cleaning={data.altitudeCleaning}
             timezone={data.comp.timezone}
           />
+          {/* Last on the page: a reader who needed a definition has met every
+              term by now, and one who didn't never has to see it. */}
+          <ScoringGlossary />
         </div>
       </div>
     </div>
@@ -1077,7 +1091,7 @@ function ExplanationSection({
       {/* The component's formula with the field on it, UNDER the arithmetic
           it illustrates: the numbers are the answer, the curve is the shape.
           Inline SVG, so it is in the server-rendered first paint. */}
-      {section.chart ? <ScoreCurve chart={section.chart} /> : null}
+      {section.chart ? <ScoreChartView chart={section.chart} /> : null}
     </section>
   );
 }
@@ -1100,6 +1114,11 @@ function ExplanationItem({
         ? "text-muted-foreground"
         : "";
 
+  // A sparkline belongs beside its row's number, not under its prose — it is
+  // an annotation on the figure. Anything larger (the distance distribution)
+  // is a figure in its own right and goes below the whole row.
+  const inlineChart = item.chart?.kind === "validity";
+
   const body = (
     <>
       <div className="flex items-baseline justify-between gap-3">
@@ -1109,15 +1128,19 @@ function ExplanationItem({
           ) : null}
           {item.text}
         </span>
-        {item.value ? (
-          <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
-            {item.value}
-          </span>
-        ) : null}
+        <span className="flex shrink-0 items-center gap-2">
+          {inlineChart ? <ScoreChartView chart={item.chart!} /> : null}
+          {item.value ? (
+            <span className="text-sm tabular-nums text-muted-foreground">
+              {item.value}
+            </span>
+          ) : null}
+        </span>
       </div>
       {item.detail ? (
         <p className="mt-0.5 text-xs text-muted-foreground">{item.detail}</p>
       ) : null}
+      {item.chart && !inlineChart ? <ScoreChartView chart={item.chart} /> : null}
     </>
   );
 

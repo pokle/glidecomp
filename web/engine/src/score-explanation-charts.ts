@@ -39,8 +39,10 @@ import type { GAPParameters } from './gap-scoring';
 import {
   calculateArrivalPoints,
   calculateDistanceDifficulty,
+  calculateLaunchValidity,
   calculateLeadingPoints,
   calculateSpeedFraction,
+  calculateTimeValidity,
   resolveTimePointsExponent,
   speedExponentValue,
 } from './gap-scoring';
@@ -51,6 +53,7 @@ import type {
   ScoreChart,
   ScoreChartPilot,
   ScoreChartPoint,
+  ScoreDistributionMarker,
   ScoreEntryInput,
 } from './score-explanation-types';
 
@@ -187,6 +190,7 @@ export function buildTimeChart(
   const you = placed.pilots.find((p) => p.you)!;
   const behind = you.x - bestTime;
   return {
+    kind: 'curve' as const,
     xLabel: 'Speed section time',
     xUnit: 'duration',
     curve,
@@ -246,6 +250,7 @@ export function buildLeadingChart(
   const you = placed.pilots.find((p) => p.you)!;
 
   return {
+    kind: 'curve' as const,
     xLabel: 'Leading coefficient (lower is better)',
     xUnit: 'coefficient',
     curve,
@@ -308,6 +313,7 @@ export function buildArrivalChart(
   const onePlace = you.x > 1 ? f(you.x - 1) - f(you.x) : 0;
 
   return {
+    kind: 'curve' as const,
     xLabel: 'Arrival order at the end of the speed section',
     xUnit: 'position',
     curve,
@@ -404,6 +410,7 @@ export function buildDistanceChart(
   const you = placed.pilots.find((p) => p.you)!;
 
   return {
+    kind: 'curve' as const,
     xLabel: 'Scored distance',
     xUnit: 'distance',
     curve,
@@ -417,5 +424,162 @@ export function buildDistanceChart(
         you.y,
       )} of ${fmtPoints(available)}.` +
       omittedSentence(placed.omitted),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Validity — day facts, not pilot facts
+// ---------------------------------------------------------------------------
+
+/**
+ * Samples along a validity curve. Fewer than a component curve: these are
+ * drawn sparkline-sized beside a table row, not at figure scale.
+ */
+const VALIDITY_SAMPLES = 40;
+
+/** Sample a validity cubic over its whole [0, 1] ratio domain. */
+function validityCurve(f: (ratio: number) => number): ScoreChartPoint[] {
+  return sampleCurve(0, 1, VALIDITY_SAMPLES, f);
+}
+
+/**
+ * Launch validity's curve, with this day's point on it.
+ *
+ * Reads: "the field cleared the threshold, so the day is worth its full
+ * value" — or, on a day much of the field sat out, exactly how far down the
+ * curve that put it. One point, because launch validity is a property of the
+ * task and not of any pilot.
+ */
+export function buildLaunchValidityChart(
+  classContext: ClassContextInput,
+  params: GAPParameters,
+): ScoreChart | null {
+  const vi = classContext.validity_inputs;
+  if (!vi || vi.num_present <= 0 || params.nominalLaunch <= 0) return null;
+  const ratio = Math.min(1, vi.num_flying / (vi.num_present * params.nominalLaunch));
+  return {
+    kind: 'validity',
+    curve: validityCurve((r) => calculateLaunchValidity(r, 1, 1)),
+    point: { x: ratio, y: classContext.task_validity.launch },
+    xLabel: 'share of the launch threshold met',
+    caption:
+      `Launch validity against how much of the field flew. ` +
+      `This day sat at ${pctOf(ratio)} of the threshold, worth ${pctOf(
+        classContext.task_validity.launch,
+      )}.`,
+  };
+}
+
+/**
+ * Time validity's curve, with this day's point on it.
+ *
+ * The curve is the answer to "how much does a short winning time cost?" — a
+ * question the percentage alone cannot settle, because the relationship is
+ * neither linear nor intuitive: a day run in three-quarters of the nominal
+ * time is still worth over 90%, while half nominal costs nearly a third.
+ */
+export function buildTimeValidityChart(
+  classContext: ClassContextInput,
+  params: GAPParameters,
+): ScoreChart | null {
+  const vi = classContext.validity_inputs;
+  if (!vi || params.nominalTime <= 0) return null;
+  // The spec falls back to a distance ratio when nobody completed the speed
+  // section. That is a different comparison on a different axis, so the chart
+  // would be labelling one thing and plotting another — draw nothing.
+  if (vi.best_time === null || vi.best_time <= 0) return null;
+  const ratio = Math.min(1, vi.best_time / params.nominalTime);
+  return {
+    kind: 'validity',
+    curve: validityCurve((r) => calculateTimeValidity(r, 0, 1, 1)),
+    point: { x: ratio, y: classContext.task_validity.time },
+    xLabel: 'share of the nominal task time',
+    caption:
+      `Time validity against how long the winning flight took. ` +
+      `This day ran to ${pctOf(ratio)} of the nominal time, worth ${pctOf(
+        classContext.task_validity.time,
+      )}.`,
+  };
+}
+
+/** A 0–1 factor as a whole-ish percentage, for a caption. */
+function pctOf(fraction: number): string {
+  return `${trimZeros((fraction * 100).toFixed(1), 0)}%`;
+}
+
+// ---------------------------------------------------------------------------
+// Distance validity — a distribution, not a curve
+// ---------------------------------------------------------------------------
+
+/** Target number of buckets across the field's distance range. */
+const DISTRIBUTION_BINS = 16;
+
+/**
+ * How far the field actually got, with the thresholds that judge it.
+ *
+ * Distance validity is the one factor whose curve says nothing: the S7F ratio
+ * is used as-is (clamped to 1), so plotting it would draw the identity
+ * function and call it an explanation. What the reader needs is the shape the
+ * ratio is computed FROM — how many pilots landed where — against the minimum
+ * distance below which a flight scores the minimum anyway, the nominal
+ * distance the day is measured against, and their own.
+ *
+ * Every flying pilot is binned, including those the component charts leave
+ * off: this is a picture of the field, not a claim that a formula explains
+ * each of them.
+ */
+export function buildDistanceValidityChart(
+  entry: ScoreEntryInput,
+  classContext: ClassContextInput,
+  params: GAPParameters,
+): ScoreChart | null {
+  const vi = classContext.validity_inputs;
+  const scored = classContext.pilots.filter((p) => !p.track_excluded);
+  if (scored.length < 4) return null;
+
+  const distances = scored.map((p) => p.flown_distance).filter((d) => Number.isFinite(d));
+  if (distances.length === 0) return null;
+  // The reader's own distance is folded into the axis extent, not just the
+  // field's. It should already be inside it — the entry is one of these
+  // pilots — but the "you" marker is the one mark that must never be dropped
+  // for falling off the end, so the axis is defined to contain it.
+  const best = Math.max(...distances, params.nominalDistance, entry.flown_distance);
+  if (best <= 0) return null;
+
+  const width = best / DISTRIBUTION_BINS;
+  const bins = Array.from({ length: DISTRIBUTION_BINS }, (_, i) => ({
+    x0: i * width,
+    x1: (i + 1) * width,
+    count: 0,
+  }));
+  for (const d of distances) {
+    // The final bucket is closed at the top so the best distance lands in it
+    // rather than falling off the end.
+    const i = Math.min(DISTRIBUTION_BINS - 1, Math.floor(d / width));
+    bins[i].count++;
+  }
+
+  const markers: ScoreDistributionMarker[] = [
+    { x: params.minimumDistance, label: 'minimum' },
+    { x: params.nominalDistance, label: 'nominal' },
+    { x: entry.flown_distance, label: 'you', you: true },
+  ].filter((m) => m.x > 0 && m.x <= best);
+
+  const beat = distances.filter((d) => d < entry.flown_distance).length;
+  return {
+    kind: 'distribution',
+    xLabel: 'Distance flown',
+    xUnit: 'distance',
+    bins,
+    markers,
+    caption:
+      `How far the field got — the spread distance validity is computed from. ` +
+      `${distances.length} pilots flew; you flew ${km(entry.flown_distance)}, ` +
+      `further than ${beat} of them.` +
+      (vi
+        ? ` The day averaged ${km(vi.mean_distance_over_minimum)} past the ${km(
+            params.minimumDistance,
+          )} minimum, against a ${km(params.nominalDistance)} nominal distance.`
+        : ''),
   };
 }

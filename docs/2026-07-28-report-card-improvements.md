@@ -4,10 +4,8 @@ Date: 2026-07-28
 Subject: `/comp/:id/task/:id/pilot/:id` — the pilot score details page ("report card")
 Reference page reviewed: [Rory Duncan, Task 1 (Open), Corryong Cup 2025](https://glidecomp.com/comp/corryong-cup-2025-wugh/task/task-1-open-mzet/pilot/rory-duncan-wgmy)
 
-Status: **largely implemented**, across three PRs off this review. What remains
-is marked ⬜ in "Suggested order" at the foot: the validity sparklines, the
-distance-validity distribution, the terminology/glossary pass, and the standings
-link.
+Status: **implemented**, across four PRs off this review. Every item in
+"Suggested order" at the foot has landed.
 
 ---
 
@@ -382,6 +380,13 @@ it explains. That makes "the winner got round in 71% of nominal, so the day is
 worth 90.2%" visible, and shows what would have had to change — without implying
 anything per-pilot.
 
+**As built**, only launch and time validity get one. Distance validity turned out
+not to curve at all: S7F uses its ratio as-is (clamped at 1), so the "curve"
+would be the identity line and drawing it would be ink pretending to be an
+explanation. It gets the distribution instead — which was already the plan for
+it, and is now the reason the sparklines and the histogram are two different
+components rather than one.
+
 **Distance validity is the exception, and it wants a different form entirely.**
 It is driven by the spread of the whole field's distances over the minimum, so
 the informative picture is not the formula but the **distribution**: a strip or
@@ -510,11 +515,11 @@ charts would bury the prose that currently carries it.
    `essTimeMs` are now published and the §11.4 formula substitutes like every
    other component); ✅ the leading curve; ✅ the arrival curve
 8. ✅ The distance-points curve, both cases (linear, and the HG difficulty
-   step function reconstructed from the field); ⬜ the validity sparklines, the
-   distance distribution
-9. ✅ Task distance + start-crossing reason + ESS/goal collapse; ⬜ the full
-   terminology/glossary pass
-10. ⬜ Standings link
+   step function reconstructed from the field); ✅ the validity sparklines and
+   the distance-validity distribution
+9. ✅ Task distance + start-crossing reason + ESS/goal collapse; ✅ the
+   terminology pass, as a collapsed glossary at the foot of the page
+10. ✅ Standings link
 
 Items 1, 3, 4 and 7 shared one API/payload change and one `SCORING_ENGINE_VERSION`
 bump (v28 — a payload roll, no behaviour change), so they shipped together.
