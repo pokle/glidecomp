@@ -67,6 +67,7 @@ import type {
   TrackQualityData,
 } from "../comp/types";
 import { Badge } from "@/react/rac/badge";
+import { ScoreCurve } from "@/react/charts/ScoreCurve";
 import type { MapFocus } from "../comp/ScoreDetailMap";
 import { useInitialData } from "../lib/initial-data";
 import { useUser } from "../lib/user";
@@ -1073,6 +1074,10 @@ function ExplanationSection({
           />
         ))}
       </div>
+      {/* The component's formula with the field on it, UNDER the arithmetic
+          it illustrates: the numbers are the answer, the curve is the shape.
+          Inline SVG, so it is in the server-rendered first paint. */}
+      {section.chart ? <ScoreCurve chart={section.chart} /> : null}
     </section>
   );
 }

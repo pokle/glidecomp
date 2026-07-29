@@ -4,9 +4,10 @@ Date: 2026-07-28
 Subject: `/comp/:id/task/:id/pilot/:id` — the pilot score details page ("report card")
 Reference page reviewed: [Rory Duncan, Task 1 (Open), Corryong Cup 2025](https://glidecomp.com/comp/corryong-cup-2025-wugh/task/task-1-open-mzet/pilot/rory-duncan-wgmy)
 
-Status: **partly implemented.** Everything except the charts landed in the first
-PR off this review; the Charts section below is still a proposal. Items are
-marked ✅ / ⬜ in "Suggested order" at the foot.
+Status: **largely implemented**, across three PRs off this review. What remains
+is marked ⬜ in "Suggested order" at the foot: the validity sparklines, the
+distance-validity distribution, the terminology/glossary pass, and the standings
+link.
 
 ---
 
@@ -400,6 +401,35 @@ Separately, a one-line strip of every class score in the task with your dot
 ringed answers "where am I in this field" faster than the rank number in the
 header does.
 
+### What was actually built
+
+One component, `charts/ScoreCurve.tsx`, drawn for four sections (distance, time,
+leading, arrival) from data the engine emits as `ScoreExplanationSection.chart`.
+Two decisions are worth recording because neither was in the original proposal:
+
+**The curve is sampled from the scorer's own functions.** `buildTimeChart` calls
+`calculateSpeedFraction`, `buildArrivalChart` calls `calculateArrivalPoints`, and
+so on — so "the curve is the formula" is not a claim in a caption, it is how the
+data was produced, and it is unit-testable.
+
+**A dot is plotted only if the curve provably explains it.** Each pilot's
+published points are checked against the function at their x; anyone who fails
+(an ESS-but-not-goal pilot carrying the §12.1 reduction, a goal pilot docked by a
+stopped task under §12.3.5) is counted and left off, and the caption says how
+many. Without this the "every dot sits exactly on it" claim would be false
+precisely for the pilots with the most surprising scores. Checking rather than
+special-casing also means a reduction nobody has thought of yet degrades to an
+honest omission instead of a wrong picture — and if the *viewing* pilot is the
+omitted one, the chart is suppressed entirely, because a chart whose whole job is
+to locate you is worse than nothing when it cannot.
+
+The distance chart draws only where distance points are the plain linear share.
+With HG distance difficulty on, the total is a linear half plus a difficulty half
+built from where the field landed out, which the engine does not expose as a
+function of distance — so the chart is withheld rather than drawn from the linear
+half and mislabelled. Exposing that curve would make it the most interesting of
+the four; its kinks are where the field landed.
+
 ### Conventions to inherit, and one to change
 
 `RankScatter` and `chart-utils.ts` have already settled the hard parts, and these
@@ -455,14 +485,15 @@ charts would bury the prose that currently carries it.
 4. ✅ **Goal-ratio / weights split** (same payload block, same section)
 5. ✅ **"Where the points went" comparison** — the gap bars are the chart half,
    still to come
-6. ⬜ **The time-points curve** — the single highest-value chart, and it needs no
-   payload change either: every pilot's speed-section time and time points are
+6. ✅ **The time-points curve** — the single highest-value chart, and it needed no
+   payload change: every pilot's speed-section time and time points were
    already in the class entries on the page
 7. ✅ Leading arithmetic; ✅ arrival arithmetic (the deferral in §3 is resolved —
    the scorer's `essPositionMap` was being discarded, so `arrivalPosition` and
    `essTimeMs` are now published and the §11.4 formula substitutes like every
-   other component); ⬜ the leading curve
-8. ⬜ The distance-points curve, the validity sparklines, the distance distribution
+   other component); ✅ the leading curve; ✅ the arrival curve
+8. ✅ The distance-points curve (linear case only — see below); ⬜ the validity
+   sparklines, the distance distribution
 9. ✅ Task distance + start-crossing reason + ESS/goal collapse; ⬜ the full
    terminology/glossary pass
 10. ⬜ Standings link

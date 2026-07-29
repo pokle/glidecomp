@@ -7,7 +7,11 @@ import {
   type ClassContextInput,
   type ScoreExplanation,
 } from '../src/score-explanation';
-import { calculateSpeedFraction } from '../src/gap-scoring';
+import {
+  calculateArrivalPoints,
+  calculateSpeedFraction,
+  speedExponentValue,
+} from '../src/gap-scoring';
 import type {
   TurnpointSequenceResult,
   CylinderCrossing,
@@ -1473,5 +1477,137 @@ describe('explainGapScore — arrival points', () => {
     expect(s.items.find((i) => i.id === 'arrival-field')!.text).toContain(
       '22 pilots reached the end of the speed section',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Component charts — the formula, with the field on it
+// ---------------------------------------------------------------------------
+
+describe('explainGapScore — component charts', () => {
+  /** A 5-pilot HG class with leading and arrival on, and known point values. */
+  function chartContext(): ClassContextInput {
+    const ctx = makeClassContext();
+    ctx.available_points = {
+      distance: 400, time: 500, leading: 100, arrival: 100, total: 1100,
+    };
+    ctx.validity_inputs = { ...makeValidityInputs(), num_reached_ess: 4 };
+    // Times chosen so the published points ARE the formula's value; the
+    // builders verify that themselves, which is the point of the fixture.
+    const mk = (
+      id: string, name: string, t: number, timePts: number,
+      pos: number | null, arrPts: number,
+    ) => ({
+      comp_pilot_id: id, pilot_name: name,
+      flown_distance: 60_000, speed_section_time: t,
+      made_goal: true, reached_ess: true,
+      total_score: 0, distance_points: 400, time_points: timePts,
+      leading_points: 0, arrival_points: arrPts,
+      arrival_position: pos, ess_time_ms: null,
+    });
+    const exp = speedExponentValue('5/6');
+    const best = 60 * 60;
+    const tOf = (t: number) => calculateSpeedFraction(t, best, exp) * 500;
+    ctx.pilots = [
+      mk('a', 'Alpha', best, tOf(best), 1, calculateArrivalPoints(1, 4, 100)),
+      mk('b', 'Bravo', 70 * 60, tOf(70 * 60), 2, calculateArrivalPoints(2, 4, 100)),
+      mk('c', 'Charlie', 80 * 60, tOf(80 * 60), 3, calculateArrivalPoints(3, 4, 100)),
+      mk('d', 'Delta', 95 * 60, tOf(95 * 60), 4, calculateArrivalPoints(4, 4, 100)),
+    ];
+    return ctx;
+  }
+
+  function chartsFor(ctx: ClassContextInput, meId = 'c') {
+    const me = ctx.pilots.find((p) => p.comp_pilot_id === meId)!;
+    const entry: ScoreEntryInput = {
+      ...makeGoalEntry(),
+      comp_pilot_id: meId,
+      speed_section_time: me.speed_section_time,
+      time_points: me.time_points!,
+      arrival_points: me.arrival_points!,
+      arrival_position: me.arrival_position,
+    };
+    const ex = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry,
+      classContext: ctx,
+      params: { scoring: 'HG', useArrival: true, useDistanceDifficulty: false },
+    });
+    return ex;
+  }
+
+  it('plots the time curve from the scoring function, with every pilot on it', () => {
+    const chart = section(chartsFor(chartContext()), 'time').chart!;
+    expect(chart.xUnit).toBe('duration');
+    expect(chart.pilots).toHaveLength(4);
+    expect(chart.omitted).toBe(0);
+    expect(chart.curve.length).toBeGreaterThan(10);
+    // Every dot is ON the curve — the claim the caption makes.
+    for (const p of chart.pilots) {
+      const near = chart.curve.reduce((a, c) =>
+        Math.abs(c.x - p.x) < Math.abs(a.x - p.x) ? c : a
+      );
+      expect(Math.abs(near.y - p.y)).toBeLessThan(2);
+    }
+  });
+
+  it('marks exactly one pilot as "you"', () => {
+    const chart = section(chartsFor(chartContext()), 'time').chart!;
+    const you = chart.pilots.filter((p) => p.you);
+    expect(you).toHaveLength(1);
+    expect(you[0].name).toBe('Charlie');
+  });
+
+  it('states in the caption that the curve is the formula, not a fit', () => {
+    const chart = section(chartsFor(chartContext()), 'time').chart!;
+    expect(chart.caption).toContain('is the time-points formula');
+    expect(chart.caption).toContain('sitting exactly on it');
+    expect(chart.caption).not.toContain('trend');
+  });
+
+  // The rule that keeps that claim true: a pilot whose published points carry
+  // a reduction the curve does not model is counted out, not drawn beside it.
+  it('omits a pilot the curve does not explain, and says how many', () => {
+    const ctx = chartContext();
+    ctx.pilots[1] = { ...ctx.pilots[1], time_points: ctx.pilots[1].time_points! * 0.8 };
+    const chart = section(chartsFor(ctx), 'time').chart!;
+    expect(chart.pilots).toHaveLength(3);
+    expect(chart.omitted).toBe(1);
+    expect(chart.caption).toContain('1 pilot is not shown');
+  });
+
+  // A chart whose whole job is to locate you is worse than none when it can't.
+  it('suppresses the chart entirely when the viewing pilot is the omitted one', () => {
+    const ctx = chartContext();
+    ctx.pilots[2] = { ...ctx.pilots[2], time_points: 1.5 };
+    expect(section(chartsFor(ctx), 'time').chart).toBeUndefined();
+  });
+
+  it('plots arrival against position, sampling the §11.4 curve', () => {
+    const chart = section(chartsFor(chartContext()), 'arrival').chart!;
+    expect(chart.xUnit).toBe('position');
+    expect(chart.pilots.map((p) => p.x)).toEqual([1, 2, 3, 4]);
+    expect(chart.caption).toContain('by the clock');
+  });
+
+  it('draws no chart for a component with no points on offer', () => {
+    const ctx = chartContext();
+    ctx.available_points = { ...ctx.available_points, arrival: 0 };
+    ctx.pilots = ctx.pilots.map((p) => ({ ...p, arrival_points: 0, arrival_position: null }));
+    const ex = chartsFor(ctx);
+    expect(ex.sections.find((s) => s.id === 'arrival')).toBeUndefined();
+  });
+
+  it('withholds the distance chart when HG difficulty makes it not a line', () => {
+    const ctx = chartContext();
+    const ex = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: { ...makeGoalEntry(), comp_pilot_id: 'c' },
+      classContext: ctx,
+      params: { scoring: 'HG', useDistanceDifficulty: true },
+    });
+    expect(section(ex, 'distance').chart).toBeUndefined();
   });
 });
