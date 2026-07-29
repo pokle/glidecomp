@@ -92,7 +92,7 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
   }
 
   if (classContext.available_points.arrival > 0 || entry.arrival_points > 0) {
-    sections.push(buildArrivalSection(entry, classContext, params));
+    sections.push(buildArrivalSection(entry, classContext, params, fmt));
   }
 
   const penalty = buildPenaltySection(entry, params.jumpTheGunFactor);

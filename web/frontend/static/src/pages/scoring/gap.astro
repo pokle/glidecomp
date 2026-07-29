@@ -527,9 +527,29 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             later arrivals get progressively less.
           </p>
           <p class="text-muted-foreground">
-            The first arrival receives roughly 100% of the available arrival points, while the
-            last arrival still receives about 20%. The curve is defined by a polynomial that
-            ensures even late arrivals get meaningful points.
+            <strong>The order is by the clock at ESS, not by speed.</strong> Pilots are ranked
+            on when they crossed the end of the speed section in wall-clock time — so a pilot
+            who took an earlier start gate can arrive ahead of a faster pilot on a later gate,
+            and take more arrival points for it. This surprises people, and it is not a bug:
+            arrival points reward <em>being there first</em>, which is what makes the race at
+            the front worth contesting. Speed is already paid for by time points.
+          </p>
+          <p class="text-muted-foreground">
+            The first arrival receives 100% of the available arrival points, and everyone else
+            who reaches ESS keeps at least about 20% — that floor is the constant term in the
+            curve below. The falloff in between is steep and front-loaded: arriving ahead of
+            half the field is worth about <strong>33%</strong> of the available points, not 50%.
+          </p>
+          <p class="text-muted-foreground">
+            With <em>ArrivalRatio</em> the fraction of the ESS field you arrived ahead of:
+          </p>
+          <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{ArrivalRatio} = 1 - \frac{\text{PositionAtESS} - 1}{\text{PilotsAtESS}}`)}></p>
+          <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{ArrivalFactor} = 0.2 + 0.037\,r + 0.13\,r^2 + 0.633\,r^3`)}></p>
+          <p class="text-muted-foreground">
+            The four coefficients sum to exactly 1, which is why the first arrival takes
+            precisely the full available points. Each pilot's own position, ESS time and
+            substituted arithmetic are on their score report card, and the whole field's
+            arrival order is the <strong>ESS</strong> column on the task's scores table.
           </p>
           <p class="text-muted-foreground">
             Arrival points are <strong>on by default</strong> for hang gliding and can be disabled

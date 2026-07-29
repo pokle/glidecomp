@@ -271,7 +271,15 @@
 //      optional and every consumer degrades without them, but the stale-first
 //      store would otherwise serve pre-change bodies for settled comps
 //      indefinitely — and a settled comp is exactly the one a pilot reads.
-export const SCORING_ENGINE_VERSION = 28;
+// v29: NO behaviour change — a second payload roll, same shape as v28. Each
+//      pilot's ESS arrival position and ESS time are now carried on
+//      PilotScore, so the report card can substitute the §11.4 arrival
+//      formula instead of asserting its output. The scorer computed the
+//      position all along (essPositionMap) and discarded it, which left
+//      arrival as the one component whose arithmetic could not be shown —
+//      and, more importantly, left unsaid that the order is by wall-clock
+//      time at ESS rather than by speed.
+export const SCORING_ENGINE_VERSION = 29;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -279,4 +287,4 @@ export const SCORING_ENGINE_VERSION = 28;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "6411f0d390a15fec196cc5144064d8512a56c524ff6658c263d59583d8c591e3";
+  "61158d654bd7fa448140e53b8b1e44dafcb46f4654b24e20207aab550967954f";

@@ -12,6 +12,7 @@ import type { TurnpointSequenceResult, TurnpointReaching } from './turnpoint-seq
 import type { GAPParameters } from './gap-scoring';
 import {
   DEFAULT_GAP_PARAMETERS,
+  calculateArrivalPoints,
   calculateSpeedFraction,
   resolveTimePointsExponent,
   speedExponentValue,
@@ -41,6 +42,7 @@ import {
   pctValidity,
   pctWeight,
   availableTotalDetail,
+  defaultFormatTime,
 } from './score-explanation-format';
 
 /** Human label for a task position: Takeoff / Start / TP3 / ESS / Goal. */
@@ -1156,40 +1158,150 @@ export function buildLeadingSection(
 }
 
 /**
- * Arrival points.
+ * Arrival points, with the arithmetic that produced them.
  *
- * Deliberately NOT given substituted arithmetic yet: the §11.4 cubic is a
- * function of arrival POSITION at the end of the speed section, and the
- * published payload carries no ESS arrival times to derive one from
- * (`speed_section_time` is a duration, and each pilot's clock starts at their
- * own gate). Printing a formula whose inputs we would have to guess would be
- * worse than the sentence it replaced. What we can state honestly is the size
- * of the group being ranked, which is the other half of the ratio.
+ * The §11.4 factor is a function of arrival POSITION at the end of the speed
+ * section, which the scorer computed and then discarded — leaving arrival as
+ * the one component the page could only assert. With `arrival_position` and
+ * `ess_time_ms` published it substitutes like every other component.
+ *
+ * The factor is evaluated with `calculateArrivalPoints` itself rather than a
+ * re-typed cubic, so the printed figure is provably the scorer's own function
+ * and the spec's coefficients live in exactly one place.
+ *
+ * Two things matter more here than the formula:
+ *
+ *  - **The order is by wall-clock time at ESS, not by speed.** A pilot on an
+ *    early start gate can cross ahead of a faster pilot on a later gate and
+ *    take more arrival points for it. Nothing on the site said so, and it is
+ *    the detail most likely to be disputed.
+ *  - **What one place was worth on this day.** The marginal value of moving up
+ *    one is exact, and varies enormously with position — near the front a
+ *    place is worth a lot, at the back almost nothing. That turns a bare
+ *    placing into something a pilot can weigh.
  */
 export function buildArrivalSection(
   entry: ScoreEntryInput,
   classContext: ClassContextInput,
   params: GAPParameters,
+  fmt: (d: Date) => string = defaultFormatTime,
 ): ScoreExplanationSection {
-  const atEss = classContext.pilots.filter((p) => p.reached_ess).length;
+  const ap = classContext.available_points;
+  // Prefer the published field size (it is the divisor the scorer used); fall
+  // back to counting, for payloads written before validity_inputs existed.
+  const atEss =
+    classContext.validity_inputs?.num_reached_ess ??
+    classContext.pilots.filter((p) => p.reached_ess).length;
+  const position = entry.arrival_position ?? null;
+  const items: ScoreExplanationItem[] = [];
+
+  items.push({
+    id: 'arrival',
+    text: 'Arrival points reward crossing the end of the speed section early relative to the other pilots who reached it.',
+    value: pts(entry.arrival_points),
+  });
+
+  if (position !== null && position > 0 && atEss > 0) {
+    // A tie is real: the order is resolved by array position when two pilots
+    // share a timestamp, which is not a fact about the flying. Say so rather
+    // than presenting an ordering the data does not support.
+    const tied =
+      entry.ess_time_ms != null &&
+      classContext.pilots.filter((p) => p.ess_time_ms === entry.ess_time_ms).length > 1;
+    items.push({
+      id: 'arrival-position',
+      text: `Reached the end of the speed section ${ordinal(position)} of ${atEss}`,
+      value: entry.ess_time_ms != null ? fmt(new Date(entry.ess_time_ms)) : undefined,
+      detail:
+        'The arrival order is by the clock at the end of the speed section, not by speed — an earlier start gate can put a slower pilot ahead of a faster one here.' +
+        (tied
+          ? ' Another pilot reached it on the same second; a tie is separated arbitrarily.'
+          : ''),
+    });
+
+    const factor = calculateArrivalPoints(position, atEss, 1);
+    const { availStr, decimals, reconciles } = reconcileWithAvailable(
+      ap.arrival, 3, 6, entry.arrival_points,
+      (d, avail) => Number(factor.toFixed(d)) * avail,
+    );
+    // The §12.1 factor is stated by buildArrivalEssNotGoalItems below; when it
+    // applies the printed product is the pre-reduction figure, so don't claim
+    // an equality the published points won't satisfy.
+    const reduced =
+      params.scoring === 'HG' && entry.reached_ess && !entry.made_goal &&
+      params.essNotGoalFactor < 1;
+    items.push({
+      id: 'arrival-formula',
+      text: 'Arrival points fall off steeply with each place',
+      value: pts(entry.arrival_points),
+      detail:
+        `arrival ratio = 1 − (${position} − 1) ÷ ${atEss} = ${trimZeros(
+          (1 - (position - 1) / atEss).toFixed(3),
+          2,
+        )}; arrival factor = 0.2 + 0.037·r + 0.13·r² + 0.633·r³ = ${trimZeros(
+          factor.toFixed(decimals),
+          3,
+        )}; × ${availStr} available ${
+          reduced || !reconciles ? '≈' : '='
+        } ${fmtPoints(entry.arrival_points)}`,
+    });
+
+    // What one place was worth here. The coefficients sum to 1, so first place
+    // takes everything available and the 0.2 constant floors everyone else —
+    // both worth stating, because "20% for last" is the shape of the curve.
+    if (position === 1) {
+      items.push({
+        id: 'arrival-shape',
+        text: 'First to the end of the speed section — the full available arrival points.',
+        emphasis: 'muted',
+      });
+    } else {
+      const onePlace =
+        calculateArrivalPoints(position - 1, atEss, ap.arrival) -
+        calculateArrivalPoints(position, atEss, ap.arrival);
+      const last = calculateArrivalPoints(atEss, atEss, ap.arrival);
+      items.push({
+        id: 'arrival-shape',
+        text: `One place earlier would have been worth ${fmtPoints(onePlace)} more points`,
+        detail: `The curve is front-loaded: first place takes all ${fmtPoints(
+          ap.arrival,
+        )} available, and everyone else who reaches the end of the speed section keeps at least ${fmtPoints(
+          last,
+        )} of them.`,
+        emphasis: 'muted',
+      });
+    }
+  } else if (atEss > 0) {
+    // No position published (an older cached payload) — state the half of the
+    // ratio we can stand behind rather than inventing the other.
+    items.push({
+      id: 'arrival-field',
+      text: `${atEss} pilot${atEss === 1 ? '' : 's'} reached the end of the speed section on this task; the points scale with where in that group you crossed it (FAI S7F §11.4).`,
+      emphasis: 'muted',
+    });
+  }
+
+  items.push(...buildArrivalEssNotGoalItems(entry, params));
+
   return {
     id: 'arrival',
     title: 'Arrival points',
     points: entry.arrival_points,
     docHref: '/scoring/gap#arrival-points',
-    items: [
-      {
-        id: 'arrival',
-        text: 'Arrival points reward crossing the end of the speed section early relative to the other pilots who reached it.',
-        value: pts(entry.arrival_points),
-        detail:
-          atEss > 0
-            ? `${atEss} pilot${atEss === 1 ? '' : 's'} reached the end of the speed section on this task; the points scale with where in that group you crossed it (FAI S7F §11.4).`
-            : undefined,
-      },
-      ...buildArrivalEssNotGoalItems(entry, params),
-    ],
+    items,
   };
+}
+
+/** 1 -> "1st", 2 -> "2nd", 11 -> "11th". */
+function ordinal(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1: return `${n}st`;
+    case 2: return `${n}nd`;
+    case 3: return `${n}rd`;
+    default: return `${n}th`;
+  }
 }
 
 /**
