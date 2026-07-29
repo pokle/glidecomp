@@ -7,7 +7,12 @@ import {
   type ClassContextInput,
   type ScoreExplanation,
 } from '../src/score-explanation';
-import { calculateSpeedFraction } from '../src/gap-scoring';
+import {
+  calculateArrivalPoints,
+  calculateDistanceDifficulty,
+  calculateSpeedFraction,
+  speedExponentValue,
+} from '../src/gap-scoring';
 import type {
   TurnpointSequenceResult,
   CylinderCrossing,
@@ -151,6 +156,14 @@ function makeClassContext(): ClassContextInput {
       { flown_distance: 42_000, speed_section_time: null, made_goal: false, reached_ess: false },
     ],
   };
+}
+
+/** A section's chart, narrowed to the curve variant (ScoreChart is a union
+ *  since the validity sparklines and the distance distribution joined it). */
+function curveChart(section: { chart?: { kind: string } }) {
+  const c = section.chart;
+  if (!c || c.kind !== 'curve') throw new Error(`expected a curve chart, got ${c?.kind}`);
+  return c as import('../src/score-explanation-types').ScoreCurveChart;
 }
 
 function section(explanation: ScoreExplanation, id: string) {
@@ -1473,5 +1486,277 @@ describe('explainGapScore — arrival points', () => {
     expect(s.items.find((i) => i.id === 'arrival-field')!.text).toContain(
       '22 pilots reached the end of the speed section',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Component charts — the formula, with the field on it
+// ---------------------------------------------------------------------------
+
+describe('explainGapScore — component charts', () => {
+  /** A 5-pilot HG class with leading and arrival on, and known point values. */
+  function chartContext(): ClassContextInput {
+    const ctx = makeClassContext();
+    ctx.available_points = {
+      distance: 400, time: 500, leading: 100, arrival: 100, total: 1100,
+    };
+    ctx.validity_inputs = { ...makeValidityInputs(), num_reached_ess: 4 };
+    // Times chosen so the published points ARE the formula's value; the
+    // builders verify that themselves, which is the point of the fixture.
+    const mk = (
+      id: string, name: string, t: number, timePts: number,
+      pos: number | null, arrPts: number,
+    ) => ({
+      comp_pilot_id: id, pilot_name: name,
+      flown_distance: 60_000, speed_section_time: t,
+      made_goal: true, reached_ess: true,
+      total_score: 0, distance_points: 400, time_points: timePts,
+      leading_points: 0, arrival_points: arrPts,
+      arrival_position: pos, ess_time_ms: null,
+    });
+    const exp = speedExponentValue('5/6');
+    const best = 60 * 60;
+    const tOf = (t: number) => calculateSpeedFraction(t, best, exp) * 500;
+    ctx.pilots = [
+      mk('a', 'Alpha', best, tOf(best), 1, calculateArrivalPoints(1, 4, 100)),
+      mk('b', 'Bravo', 70 * 60, tOf(70 * 60), 2, calculateArrivalPoints(2, 4, 100)),
+      mk('c', 'Charlie', 80 * 60, tOf(80 * 60), 3, calculateArrivalPoints(3, 4, 100)),
+      mk('d', 'Delta', 95 * 60, tOf(95 * 60), 4, calculateArrivalPoints(4, 4, 100)),
+    ];
+    return ctx;
+  }
+
+  function chartsFor(ctx: ClassContextInput, meId = 'c') {
+    const me = ctx.pilots.find((p) => p.comp_pilot_id === meId)!;
+    const entry: ScoreEntryInput = {
+      ...makeGoalEntry(),
+      comp_pilot_id: meId,
+      speed_section_time: me.speed_section_time,
+      time_points: me.time_points!,
+      arrival_points: me.arrival_points!,
+      arrival_position: me.arrival_position,
+    };
+    const ex = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry,
+      classContext: ctx,
+      params: { scoring: 'HG', useArrival: true, useDistanceDifficulty: false },
+    });
+    return ex;
+  }
+
+  it('plots the time curve from the scoring function, with every pilot on it', () => {
+    const chart = curveChart(section(chartsFor(chartContext()), 'time'));
+    expect(chart.xUnit).toBe('duration');
+    expect(chart.pilots).toHaveLength(4);
+    expect(chart.omitted).toBe(0);
+    expect(chart.curve.length).toBeGreaterThan(10);
+    // Every dot is ON the curve — the claim the caption makes.
+    for (const p of chart.pilots) {
+      const near = chart.curve.reduce((a, c) =>
+        Math.abs(c.x - p.x) < Math.abs(a.x - p.x) ? c : a
+      );
+      expect(Math.abs(near.y - p.y)).toBeLessThan(2);
+    }
+  });
+
+  it('marks exactly one pilot as "you"', () => {
+    const chart = curveChart(section(chartsFor(chartContext()), 'time'));
+    const you = chart.pilots.filter((p) => p.you);
+    expect(you).toHaveLength(1);
+    expect(you[0].name).toBe('Charlie');
+  });
+
+  it('states in the caption that the curve is the formula, not a fit', () => {
+    const chart = curveChart(section(chartsFor(chartContext()), 'time'));
+    expect(chart.caption).toContain('is the time-points formula');
+    expect(chart.caption).toContain('sitting exactly on it');
+    expect(chart.caption).not.toContain('trend');
+  });
+
+  // The rule that keeps that claim true: a pilot whose published points carry
+  // a reduction the curve does not model is counted out, not drawn beside it.
+  it('omits a pilot the curve does not explain, and says how many', () => {
+    const ctx = chartContext();
+    ctx.pilots[1] = { ...ctx.pilots[1], time_points: ctx.pilots[1].time_points! * 0.8 };
+    const chart = curveChart(section(chartsFor(ctx), 'time'));
+    expect(chart.pilots).toHaveLength(3);
+    expect(chart.omitted).toBe(1);
+    expect(chart.caption).toContain('1 pilot is not shown');
+  });
+
+  // A chart whose whole job is to locate you is worse than none when it can't.
+  it('suppresses the chart entirely when the viewing pilot is the omitted one', () => {
+    const ctx = chartContext();
+    ctx.pilots[2] = { ...ctx.pilots[2], time_points: 1.5 };
+    expect(section(chartsFor(ctx), 'time').chart).toBeUndefined();
+  });
+
+  it('plots arrival against position, sampling the §11.4 curve', () => {
+    const chart = curveChart(section(chartsFor(chartContext()), 'arrival'));
+    expect(chart.xUnit).toBe('position');
+    expect(chart.pilots.map((p) => p.x)).toEqual([1, 2, 3, 4]);
+    expect(chart.caption).toContain('by the clock');
+  });
+
+  it('draws no chart for a component with no points on offer', () => {
+    const ctx = chartContext();
+    ctx.available_points = { ...ctx.available_points, arrival: 0 };
+    ctx.pilots = ctx.pilots.map((p) => ({ ...p, arrival_points: 0, arrival_position: null }));
+    const ex = chartsFor(ctx);
+    expect(ex.sections.find((s) => s.id === 'arrival')).toBeUndefined();
+  });
+
+  // The HG difficulty half is a step function built from where the whole field
+  // landed out. It is reconstructed from the class context rather than taken
+  // from the payload, so the interesting assertion is that the reconstruction
+  // reproduces the published points — if it did not, placeField would omit
+  // every pilot and the chart would vanish. (The archive-wide check is
+  // web/scripts/audit-score-charts.ts, which runs the same path over every
+  // task in the comp library and demands zero unexplained pilots.)
+  it('draws the HG difficulty curve, reconstructed from where the field landed', () => {
+    const available = 400;
+    const dists = [60_000, 52_000, 41_000, 33_000, 21_000, 12_000, 7_000];
+    const goals = [true, false, false, false, false, false, false];
+    const difficulty = calculateDistanceDifficulty(dists, goals, 5_000);
+    const best = Math.max(...dists);
+    const pointsFor = (d: number) =>
+      ((0.5 * d) / best) * available + difficulty.fractionFor(d) * available;
+
+    const ctx = makeClassContext();
+    ctx.available_points = { ...ctx.available_points, distance: available };
+    ctx.pilots = dists.map((d, i) => ({
+      comp_pilot_id: `p${i}`,
+      pilot_name: `Pilot ${i}`,
+      flown_distance: d,
+      speed_section_time: null,
+      made_goal: goals[i],
+      reached_ess: goals[i],
+      distance_points: pointsFor(d),
+      time_points: 0,
+      leading_points: 0,
+      arrival_points: 0,
+      total_score: pointsFor(d),
+    }));
+
+    const chart = curveChart(section(
+      explainGapScore({
+        task: makeTask(),
+        result: makeReentryResult(),
+        entry: {
+          ...makeGoalEntry(),
+          comp_pilot_id: 'p3',
+          flown_distance: 33_000,
+          distance_points: pointsFor(33_000),
+          made_goal: false,
+        },
+        classContext: ctx,
+        params: { scoring: 'HG', useDistanceDifficulty: true, minimumDistance: 5_000 },
+      }),
+      'distance',
+    ));
+
+    // Every pilot explained — the reconstruction matches the published points.
+    expect(chart.pilots).toHaveLength(dists.length);
+    expect(chart.omitted).toBe(0);
+    // A step function needs real samples; the linear case is drawn with two.
+    expect(chart.curve.length).toBeGreaterThan(50);
+    expect(chart.caption).toContain('where the field landed out');
+    expect(chart.caption).toContain('§11.1.1');
+  });
+
+  it('draws the plain linear distance line when difficulty is off', () => {
+    const chart = curveChart(section(chartsFor(chartContext()), 'distance'));
+    expect(chart.curve).toHaveLength(2);
+    expect(chart.caption).toContain('straight line');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Validity charts — day facts, and the one factor that wants a distribution
+// ---------------------------------------------------------------------------
+
+describe('explainGapScore — validity charts', () => {
+  function validityItems(
+    inputs: ClassContextInput['validity_inputs'],
+    params: Parameters<typeof explainGapScore>[0]['params'] = { scoring: 'PG' },
+    pilots?: ClassContextInput['pilots'],
+  ) {
+    const ctx = makeClassContext();
+    ctx.validity_inputs = inputs;
+    if (pilots) ctx.pilots = pilots;
+    return section(
+      explainGapScore({
+        task: makeTask(),
+        result: makeReentryResult(),
+        entry: { ...makeGoalEntry(), comp_pilot_id: 'me' },
+        classContext: ctx,
+        params,
+      }),
+      'validity',
+    ).items;
+  }
+
+  it('gives launch and time validity a curve carrying exactly one point — the day', () => {
+    const items = validityItems(makeValidityInputs(), {
+      scoring: 'PG',
+      nominalTime: 90 * 60,
+    });
+    for (const id of ['launch-validity', 'time-validity']) {
+      const chart = items.find((i) => i.id === id)!.chart!;
+      expect(chart.kind).toBe('validity');
+      if (chart.kind !== 'validity') throw new Error('narrowing');
+      expect(chart.curve.length).toBeGreaterThan(10);
+      // A validity factor is a fact about the TASK: one point, not a field.
+      expect(chart.point.x).toBeGreaterThan(0);
+      expect(chart.point.x).toBeLessThanOrEqual(1);
+      expect(chart.curve.every((p) => p.x >= 0 && p.x <= 1)).toBe(true);
+    }
+  });
+
+  // Distance validity uses its ratio as-is, so its "curve" is the identity
+  // line. Drawing that would be ink pretending to be an explanation.
+  it('gives distance validity a distribution rather than a curve', () => {
+    const pilots = Array.from({ length: 8 }, (_, i) => ({
+      comp_pilot_id: i === 0 ? 'me' : `p${i}`,
+      pilot_name: `Pilot ${i}`,
+      flown_distance: 10_000 + i * 6_000,
+      speed_section_time: null,
+      made_goal: false,
+      reached_ess: false,
+    }));
+    const chart = validityItems(
+      makeValidityInputs(),
+      { scoring: 'PG', nominalDistance: 40_000, minimumDistance: 5_000 },
+      pilots,
+    ).find((i) => i.id === 'distance-validity')!.chart!;
+    expect(chart.kind).toBe('distribution');
+    if (chart.kind !== 'distribution') throw new Error('narrowing');
+    // One dot per flying pilot — this is a picture of the field, not a claim
+    // that a formula explains each of them, so nobody is filtered out.
+    expect(chart.points).toHaveLength(pilots.length);
+    expect(chart.points.filter((p) => p.you)).toHaveLength(1);
+    expect(chart.markers.map((m) => m.label).sort()).toEqual([
+      'minimum',
+      'nominal',
+      'you',
+    ]);
+    // makeGoalEntry flies 60 km, past the field's best — the axis is
+    // defined to contain the reader's own mark rather than drop it.
+    expect(chart.markers.find((m) => m.you)!.x).toBe(60_000);
+
+  });
+
+  it('draws no time-validity curve when the spec fell back to distance', () => {
+    const items = validityItems({ ...makeValidityInputs(), best_time: null });
+    expect(items.find((i) => i.id === 'time-validity')!.chart).toBeUndefined();
+  });
+
+  it('draws nothing at all on a payload with no validity inputs', () => {
+    const items = validityItems(undefined);
+    for (const id of ['launch-validity', 'time-validity']) {
+      expect(items.find((i) => i.id === id)!.chart).toBeUndefined();
+    }
   });
 });

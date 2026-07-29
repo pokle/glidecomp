@@ -4,9 +4,8 @@ Date: 2026-07-28
 Subject: `/comp/:id/task/:id/pilot/:id` — the pilot score details page ("report card")
 Reference page reviewed: [Rory Duncan, Task 1 (Open), Corryong Cup 2025](https://glidecomp.com/comp/corryong-cup-2025-wugh/task/task-1-open-mzet/pilot/rory-duncan-wgmy)
 
-Status: **partly implemented.** Everything except the charts landed in the first
-PR off this review; the Charts section below is still a proposal. Items are
-marked ✅ / ⬜ in "Suggested order" at the foot.
+Status: **implemented**, across four PRs off this review. Every item in
+"Suggested order" at the foot has landed.
 
 ---
 
@@ -381,6 +380,13 @@ it explains. That makes "the winner got round in 71% of nominal, so the day is
 worth 90.2%" visible, and shows what would have had to change — without implying
 anything per-pilot.
 
+**As built**, only launch and time validity get one. Distance validity turned out
+not to curve at all: S7F uses its ratio as-is (clamped at 1), so the "curve"
+would be the identity line and drawing it would be ink pretending to be an
+explanation. It gets the distribution instead — which was already the plan for
+it, and is now the reason the sparklines and the histogram are two different
+components rather than one.
+
 **Distance validity is the exception, and it wants a different form entirely.**
 It is driven by the spread of the whole field's distances over the minimum, so
 the informative picture is not the formula but the **distribution**: a strip or
@@ -399,6 +405,52 @@ give away*, and it puts every component's answer on one shared zero.
 Separately, a one-line strip of every class score in the task with your dot
 ringed answers "where am I in this field" faster than the rank number in the
 header does.
+
+### What was actually built
+
+One component, `charts/ScoreCurve.tsx`, drawn for four sections (distance, time,
+leading, arrival) from data the engine emits as `ScoreExplanationSection.chart`.
+Two decisions are worth recording because neither was in the original proposal:
+
+**The curve is sampled from the scorer's own functions.** `buildTimeChart` calls
+`calculateSpeedFraction`, `buildArrivalChart` calls `calculateArrivalPoints`, and
+so on — so "the curve is the formula" is not a claim in a caption, it is how the
+data was produced, and it is unit-testable.
+
+**A dot is plotted only if the curve provably explains it.** Each pilot's
+published points are checked against the function at their x; anyone who fails
+(an ESS-but-not-goal pilot carrying the §12.1 reduction, a goal pilot docked by a
+stopped task under §12.3.5) is counted and left off, and the caption says how
+many. Without this the "every dot sits exactly on it" claim would be false
+precisely for the pilots with the most surprising scores. Checking rather than
+special-casing also means a reduction nobody has thought of yet degrades to an
+honest omission instead of a wrong picture — and if the *viewing* pilot is the
+omitted one, the chart is suppressed entirely, because a chart whose whole job is
+to locate you is worse than nothing when it cannot.
+
+**The HG difficulty case turned out to be reachable.** `calculateDistanceDifficulty`
+already returns a `fractionFor(distance)` closure, so the total is a genuine
+function of distance after all: `0.5·(d ÷ best)·available + fractionFor(d)·available`.
+The chart builder reconstructs it from the class context — the same scored
+distances, goal flags and minimum distance the scorer used — and it is the most
+informative of the four, because its steep sections are literally the stretches
+few pilots got past.
+
+That reconstruction is not taken on trust. Every pilot is checked against it, so
+getting it wrong cannot draw a plausible-looking wrong picture — the dots stop
+matching and the chart suppresses itself. `web/scripts/audit-score-charts.ts`
+reads that signal across a whole comp library: **184 archive tasks, 4,762
+pilot-views, 4,727 distance charts drawn and zero unexplained pilots.** No spec
+reduction applies to distance points, so any omission there at all would mean the
+reconstruction is wrong; that is the assertion the script fails on.
+
+**Naming.** The subject is named rather than labelled "You" — the report card is
+public and read by everyone, not only by its pilot — alongside the three best at
+that component, the last, and the median (only when the field is big enough for
+"the middle one" to mean anything). Names are ranked by the component's own
+points, not the class standings, which is what makes the arrival chart's story
+legible: the pilot who won the day is not necessarily among the three named at
+the top of it.
 
 ### Conventions to inherit, and one to change
 
@@ -455,17 +507,19 @@ charts would bury the prose that currently carries it.
 4. ✅ **Goal-ratio / weights split** (same payload block, same section)
 5. ✅ **"Where the points went" comparison** — the gap bars are the chart half,
    still to come
-6. ⬜ **The time-points curve** — the single highest-value chart, and it needs no
-   payload change either: every pilot's speed-section time and time points are
+6. ✅ **The time-points curve** — the single highest-value chart, and it needed no
+   payload change: every pilot's speed-section time and time points were
    already in the class entries on the page
 7. ✅ Leading arithmetic; ✅ arrival arithmetic (the deferral in §3 is resolved —
    the scorer's `essPositionMap` was being discarded, so `arrivalPosition` and
    `essTimeMs` are now published and the §11.4 formula substitutes like every
-   other component); ⬜ the leading curve
-8. ⬜ The distance-points curve, the validity sparklines, the distance distribution
-9. ✅ Task distance + start-crossing reason + ESS/goal collapse; ⬜ the full
-   terminology/glossary pass
-10. ⬜ Standings link
+   other component); ✅ the leading curve; ✅ the arrival curve
+8. ✅ The distance-points curve, both cases (linear, and the HG difficulty
+   step function reconstructed from the field); ✅ the validity sparklines and
+   the distance-validity distribution
+9. ✅ Task distance + start-crossing reason + ESS/goal collapse; ✅ the
+   terminology pass, as a collapsed glossary at the foot of the page
+10. ✅ Standings link
 
 Items 1, 3, 4 and 7 shared one API/payload change and one `SCORING_ENGINE_VERSION`
 bump (v28 — a payload roll, no behaviour change), so they shipped together.

@@ -67,6 +67,10 @@ import type {
   TrackQualityData,
 } from "../comp/types";
 import { Badge } from "@/react/rac/badge";
+import { ScoreChartView } from "@/react/charts/ScoreChartView";
+import { TrackCleaningChart } from "@/react/charts/TrackCleaningChart";
+import { ScoringGlossary } from "../components/ScoringGlossary";
+import { TaskInStandings } from "../comp/TaskInStandings";
 import type { MapFocus } from "../comp/ScoreDetailMap";
 import { useInitialData } from "../lib/initial-data";
 import { useUser } from "../lib/user";
@@ -816,10 +820,23 @@ export function PilotScoreDetail() {
             />
           ))}
           {data.entry.track_excluded ? <TrackValidityDocLink /> : null}
+          {/* Closes the loop from this task back to the competition. Loads
+              after hydration — see TaskInStandings for why it is not in the
+              SSR payload. */}
+          <TaskInStandings
+            compId={compId}
+            compName={data.comp.name}
+            taskId={taskId}
+            compPilotId={pilotId}
+          />
           <TrackDataCleaningNote
             cleaning={data.altitudeCleaning}
             timezone={data.comp.timezone}
+            fixes={fixes}
           />
+          {/* Last on the page: a reader who needed a definition has met every
+              term by now, and one who didn't never has to see it. */}
+          <ScoringGlossary />
         </div>
       </div>
     </div>
@@ -979,17 +996,40 @@ function TrackValidityDocLink({ className = "" }: { className?: string }) {
  * barometric channel, or caught by vertical-speed limits). Rendered only
  * when something was actually repaired — a clean track needs no disclaimer.
  * Times are formatted in the comp's zone (SSR-deterministic).
+ *
+ * The list is the exact record and always renders. Once the tracklog the map
+ * needs has arrived, the same repairs are also drawn — raw GPS, raw barometer
+ * and the cleaned line the analysis used, the figure /scoring/data-cleaning
+ * explains — and each list entry becomes the control that zooms the chart to
+ * that stretch. Text first, picture second, on purpose: the chart is
+ * client-only (there are no fixes server-side), so the page's server-rendered
+ * content is unchanged.
  */
 function TrackDataCleaningNote({
   cleaning,
   timezone,
+  fixes,
 }: {
   cleaning: AltitudeCleaningData | null;
   timezone: string | null;
+  /** The parsed tracklog, once downloaded — null until then. */
+  fixes: IGCFix[] | null;
 }) {
+  // Unconditional: `cleaning` arrives with the SSR seed on some paths and a
+  // fetch on others, so this component must not choose a hook path by it.
+  const [selected, setSelected] = useState<number | null>(null);
   if (!cleaning || cleaning.repairedFixCount === 0) return null;
   const time = (ms: number) => formatTimeInZone(new Date(ms), timezone ?? undefined);
   const pct = (100 * cleaning.repairedFixCount) / cleaning.totalFixCount;
+  const charted = fixes != null && fixes.length > 1;
+  const entryText = (r: AltitudeCleaningData["ranges"][number]) =>
+    `${
+      r.startTimeMs === r.endTimeMs
+        ? time(r.startTimeMs)
+        : `${time(r.startTimeMs)}–${time(r.endTimeMs)}`
+    } · ${r.fixCount} fix${r.fixCount === 1 ? "" : "es"} · up to ${Math.round(
+      r.maxCorrectionMeters,
+    )} m off`;
   return (
     <section className="rounded-lg border p-4">
       <h2 className="font-semibold">Track data cleaning</h2>
@@ -1005,15 +1045,50 @@ function TrackDataCleaningNote({
           How data cleaning works
         </a>
       </p>
+      {charted ? (
+        <TrackCleaningChart
+          fixes={fixes}
+          ranges={cleaning.ranges}
+          selected={selected}
+          timezone={timezone}
+          onSelectRange={setSelected}
+        />
+      ) : null}
+      {charted ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          {selected === null ? (
+            "Pick a stretch below to zoom the chart to it."
+          ) : (
+            <button
+              type="button"
+              onClick={() => setSelected(null)}
+              className="cursor-pointer underline underline-offset-2"
+            >
+              Show the whole flight
+            </button>
+          )}
+        </p>
+      ) : null}
       <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-        {cleaning.ranges.map((r) => (
+        {cleaning.ranges.map((r, i) => (
           <li key={r.startIndex} className="tabular-nums">
-            {r.startTimeMs === r.endTimeMs
-              ? time(r.startTimeMs)
-              : `${time(r.startTimeMs)}–${time(r.endTimeMs)}`}
-            {" · "}
-            {r.fixCount} fix{r.fixCount === 1 ? "" : "es"}
-            {" · "}up to {Math.round(r.maxCorrectionMeters)} m off
+            {charted ? (
+              // Selecting an entry zooms the chart to it; selecting it again
+              // returns to the whole flight. aria-pressed rather than a link
+              // or a radio: it toggles what the figure beside it shows.
+              <button
+                type="button"
+                aria-pressed={i === selected}
+                onClick={() => setSelected(i === selected ? null : i)}
+                className={`cursor-pointer rounded text-left underline-offset-2 hover:underline ${
+                  i === selected ? "font-medium text-foreground underline" : ""
+                }`}
+              >
+                {entryText(r)}
+              </button>
+            ) : (
+              entryText(r)
+            )}
           </li>
         ))}
       </ul>
@@ -1073,6 +1148,10 @@ function ExplanationSection({
           />
         ))}
       </div>
+      {/* The component's formula with the field on it, UNDER the arithmetic
+          it illustrates: the numbers are the answer, the curve is the shape.
+          Inline SVG, so it is in the server-rendered first paint. */}
+      {section.chart ? <ScoreChartView chart={section.chart} /> : null}
     </section>
   );
 }
@@ -1095,6 +1174,11 @@ function ExplanationItem({
         ? "text-muted-foreground"
         : "";
 
+  // A sparkline belongs beside its row's number, not under its prose — it is
+  // an annotation on the figure. Anything larger (the distance distribution)
+  // is a figure in its own right and goes below the whole row.
+  const inlineChart = item.chart?.kind === "validity";
+
   const body = (
     <>
       <div className="flex items-baseline justify-between gap-3">
@@ -1104,15 +1188,19 @@ function ExplanationItem({
           ) : null}
           {item.text}
         </span>
-        {item.value ? (
-          <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
-            {item.value}
-          </span>
-        ) : null}
+        <span className="flex shrink-0 items-center gap-2">
+          {inlineChart ? <ScoreChartView chart={item.chart!} /> : null}
+          {item.value ? (
+            <span className="text-sm tabular-nums text-muted-foreground">
+              {item.value}
+            </span>
+          ) : null}
+        </span>
       </div>
       {item.detail ? (
         <p className="mt-0.5 text-xs text-muted-foreground">{item.detail}</p>
       ) : null}
+      {item.chart && !inlineChart ? <ScoreChartView chart={item.chart} /> : null}
     </>
   );
 

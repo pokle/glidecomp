@@ -60,7 +60,140 @@ export interface ScoreExplanationItem {
   emphasis?: 'normal' | 'muted' | 'warning';
   /** Where this happened — lets the UI pan a map to the evidence. */
   anchor?: ExplanationAnchor;
+  /**
+   * A small chart belonging to this row rather than to the whole section —
+   * the validity sparklines, and the distance distribution. Section charts
+   * explain a component; these explain one line of it, and are drawn inline
+   * at sparkline scale.
+   */
+  chart?: ScoreChart;
 }
+
+// ---------------------------------------------------------------------------
+// Charts
+// ---------------------------------------------------------------------------
+
+/** One sample of a scoring function, in data space. */
+export interface ScoreChartPoint {
+  x: number;
+  y: number;
+}
+
+/** One pilot's position on a component's scoring function. */
+export interface ScoreChartPilot {
+  /** Stable key within the chart (the API's comp_pilot_id where known). */
+  key: string;
+  name: string;
+  x: number;
+  /** The pilot's PUBLISHED points — never a recomputed value. */
+  y: number;
+  /** True for the pilot whose report card this is. */
+  you: boolean;
+}
+
+/** What the x axis measures, so a UI can format ticks without guessing. */
+export type ScoreChartXUnit = 'duration' | 'distance' | 'coefficient' | 'position';
+
+/**
+ * A point component's scoring function, with the field placed on it.
+ *
+ * This is NOT a fit. `curve` is the scorer's own function sampled, and every
+ * pilot in `pilots` has been checked to sit on it: their published points and
+ * the function's value at their x agree to within the published rounding.
+ * Anyone who does not (an ESS-but-not-goal pilot carrying the §12.1
+ * reduction, a goal pilot docked by a stopped task) is counted in `omitted`
+ * and left off, because a dot beside the curve would silently contradict the
+ * claim the curve makes. That check is what lets the caption say "every dot
+ * sits exactly on it" and be true.
+ */
+export interface ScoreCurveChart {
+  kind: 'curve';
+  /** Axis label for x, e.g. "Speed section time". */
+  xLabel: string;
+  xUnit: ScoreChartXUnit;
+  /** The scoring function, sampled left to right. */
+  curve: ScoreChartPoint[];
+  /** Every pilot the curve provably explains, including this one. */
+  pilots: ScoreChartPilot[];
+  /** Pilots whose published points the curve does not explain (see above). */
+  omitted: number;
+  /** The reading, in words — the figcaption and the accessible name. */
+  caption: string;
+}
+
+/**
+ * A validity factor's curve, with the DAY on it.
+ *
+ * Deliberately not a component chart: a validity factor is a fact about the
+ * task, not about a pilot, and it has exactly one point — the day's. Putting
+ * the field along it would be a category error, inviting every reader to
+ * find "their" validity on a curve none of their numbers feed.
+ *
+ * Drawn sparkline-sized beside the row it explains. Only the factors that
+ * genuinely curve get one: distance validity is the identity function on its
+ * ratio (S7F clamps it and stops), so its shape says nothing and its
+ * interesting content is the field's spread — see {@link ScoreDistributionChart}.
+ */
+export interface ScoreValidityChart {
+  kind: 'validity';
+  /** The S7F curve, x = the factor's ratio in [0, 1], y = validity in [0, 1]. */
+  curve: ScoreChartPoint[];
+  /** Where this day landed on it. */
+  point: ScoreChartPoint;
+  /** What the x axis measures, e.g. "share of the nominal time". */
+  xLabel: string;
+  caption: string;
+}
+
+/** One pilot's place on a distribution strip. */
+export interface ScoreDistributionPoint {
+  /** Stable key within the chart (the API's comp_pilot_id where known). */
+  key: string;
+  name: string;
+  x: number;
+  /** True for the pilot whose report card this is. */
+  you: boolean;
+}
+
+/** A labelled vertical reference on a distribution. */
+export interface ScoreDistributionMarker {
+  x: number;
+  label: string;
+  /** True for the viewing pilot's own position. */
+  you?: boolean;
+}
+
+/**
+ * How the field's distances were spread, with the parameters that judge them.
+ *
+ * Distance validity asks whether the field as a whole got far enough, and its
+ * formula is a ratio of areas — printing that arithmetic is honest but tells
+ * a reader nothing they can picture. The strip is the picture: one dot per
+ * pilot, against the minimum distance they must beat to score at all, the
+ * nominal distance the day is measured against, and their own.
+ *
+ * A strip of individual dots rather than binned bars, matching the takeoff
+ * lane on the field-analysis day profile. Bars force a bucket width, and at
+ * this scale the buckets read as an arbitrary grid rather than as the shape of
+ * the field — you see the container, not the data. One dot per pilot has no
+ * such parameter: where the field bunched, the dots overlap and darken, and
+ * "how many are near me" is answered by looking rather than by counting bars.
+ */
+export interface ScoreDistributionChart {
+  kind: 'distribution';
+  xLabel: string;
+  xUnit: ScoreChartXUnit;
+  /** Every flying pilot, one dot each. */
+  points: ScoreDistributionPoint[];
+  markers: ScoreDistributionMarker[];
+  caption: string;
+}
+
+/** Any chart an explanation can carry. */
+export type ScoreChart =
+  | ScoreCurveChart
+  | ScoreValidityChart
+  | ScoreDistributionChart;
 
 export type ScoreExplanationSectionId =
   | 'flight'
@@ -88,6 +221,12 @@ export interface ScoreExplanationSection {
    * the prose it complements and the two cannot drift apart.
    */
   docHref?: string;
+  /**
+   * This component's scoring function with the field on it. Optional
+   * throughout: a UI that can't draw is unaffected, and a section returns
+   * none when the curve would not explain this pilot's own points.
+   */
+  chart?: ScoreChart;
   items: ScoreExplanationItem[];
 }
 
@@ -107,6 +246,9 @@ export interface ScoreExplanation {
  * competition API's PilotScoreEntry can be passed straight through.
  */
 export interface ScoreEntryInput {
+  /** The API's stable per-pilot id — how the charts find this pilot among the
+   * class. Absent on payloads that predate the charts. */
+  comp_pilot_id?: string;
   made_goal: boolean;
   reached_ess: boolean;
   /** Scored distance in metres (minimum-distance floor already applied). */
@@ -190,6 +332,9 @@ export interface ValidityInputsInput {
  * arithmetic needs are required; the rest let the explainer compare this pilot
  * against the field, and are absent on payloads cached before they existed. */
 export interface ClassPilotInput {
+  /** The API's stable per-pilot id, used to tell this pilot apart from the
+   * rest of the field. Absent on payloads that predate the charts. */
+  comp_pilot_id?: string;
   flown_distance: number;
   speed_section_time: number | null;
   made_goal: boolean;
