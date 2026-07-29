@@ -60,6 +60,13 @@ export interface ScoreExplanationItem {
   emphasis?: 'normal' | 'muted' | 'warning';
   /** Where this happened — lets the UI pan a map to the evidence. */
   anchor?: ExplanationAnchor;
+  /**
+   * A small chart belonging to this row rather than to the whole section —
+   * the validity sparklines, and the distance distribution. Section charts
+   * explain a component; these explain one line of it, and are drawn inline
+   * at sparkline scale.
+   */
+  chart?: ScoreChart;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +106,8 @@ export type ScoreChartXUnit = 'duration' | 'distance' | 'coefficient' | 'positio
  * claim the curve makes. That check is what lets the caption say "every dot
  * sits exactly on it" and be true.
  */
-export interface ScoreChart {
+export interface ScoreCurveChart {
+  kind: 'curve';
   /** Axis label for x, e.g. "Speed section time". */
   xLabel: string;
   xUnit: ScoreChartXUnit;
@@ -112,6 +120,69 @@ export interface ScoreChart {
   /** The reading, in words — the figcaption and the accessible name. */
   caption: string;
 }
+
+/**
+ * A validity factor's curve, with the DAY on it.
+ *
+ * Deliberately not a component chart: a validity factor is a fact about the
+ * task, not about a pilot, and it has exactly one point — the day's. Putting
+ * the field along it would be a category error, inviting every reader to
+ * find "their" validity on a curve none of their numbers feed.
+ *
+ * Drawn sparkline-sized beside the row it explains. Only the factors that
+ * genuinely curve get one: distance validity is the identity function on its
+ * ratio (S7F clamps it and stops), so its shape says nothing and its
+ * interesting content is the field's spread — see {@link ScoreDistributionChart}.
+ */
+export interface ScoreValidityChart {
+  kind: 'validity';
+  /** The S7F curve, x = the factor's ratio in [0, 1], y = validity in [0, 1]. */
+  curve: ScoreChartPoint[];
+  /** Where this day landed on it. */
+  point: ScoreChartPoint;
+  /** What the x axis measures, e.g. "share of the nominal time". */
+  xLabel: string;
+  caption: string;
+}
+
+/** One bar of a distribution: a half-open [x0, x1) bucket and its count. */
+export interface ScoreDistributionBin {
+  x0: number;
+  x1: number;
+  count: number;
+}
+
+/** A labelled vertical reference on a distribution. */
+export interface ScoreDistributionMarker {
+  x: number;
+  label: string;
+  /** True for the viewing pilot's own position. */
+  you?: boolean;
+}
+
+/**
+ * How the field's distances were spread, with the parameters that judge them.
+ *
+ * Distance validity asks whether the field as a whole got far enough, and its
+ * formula is a ratio of areas — printing that arithmetic is honest but tells
+ * a reader nothing they can picture. The distribution is the picture: how many
+ * pilots landed where, against the minimum distance they must beat to score
+ * at all, the nominal distance the day is measured against, and their own.
+ */
+export interface ScoreDistributionChart {
+  kind: 'distribution';
+  xLabel: string;
+  xUnit: ScoreChartXUnit;
+  bins: ScoreDistributionBin[];
+  markers: ScoreDistributionMarker[];
+  caption: string;
+}
+
+/** Any chart an explanation can carry. */
+export type ScoreChart =
+  | ScoreCurveChart
+  | ScoreValidityChart
+  | ScoreDistributionChart;
 
 export type ScoreExplanationSectionId =
   | 'flight'

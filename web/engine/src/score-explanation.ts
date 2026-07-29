@@ -47,6 +47,9 @@ import {
   buildLeadingChart,
   buildArrivalChart,
   buildDistanceChart,
+  buildLaunchValidityChart,
+  buildTimeValidityChart,
+  buildDistanceValidityChart,
 } from './score-explanation-charts';
 import type {
   ScoreExplanation,
@@ -72,6 +75,11 @@ export type {
   ExplainOpenDistanceInput,
   ExplainManualFlightInput,
   ScoreChart,
+  ScoreCurveChart,
+  ScoreValidityChart,
+  ScoreDistributionChart,
+  ScoreDistributionBin,
+  ScoreDistributionMarker,
   ScoreChartPilot,
   ScoreChartPoint,
   ScoreChartXUnit,
@@ -94,6 +102,28 @@ function withChart(
 }
 
 /**
+ * Attach small charts to individual rows of a section.
+ *
+ * The validity section is a table of three factors and a total, and each
+ * factor wants its own sparkline — a section-level chart would have to
+ * explain all three at once, which is exactly the conflation the rows exist
+ * to avoid. Done here rather than inside buildValiditySection so the section
+ * builders stay free of the chart module.
+ */
+function withItemCharts(
+  section: ScoreExplanationSection,
+  charts: Record<string, ScoreExplanationSection['chart'] | null>,
+): ScoreExplanationSection {
+  return {
+    ...section,
+    items: section.items.map((item) => {
+      const chart = charts[item.id];
+      return chart ? { ...item, chart } : item;
+    }),
+  };
+}
+
+/**
  * Explain a GAP-scored pilot's result.
  *
  * The narrative uses the pilot's resolved turnpoint sequence; the point
@@ -107,7 +137,11 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
 
   const sections: ScoreExplanationSection[] = [
     buildFlightSection(task, result, entry, fmt),
-    buildValiditySection(classContext, params),
+    withItemCharts(buildValiditySection(classContext, params), {
+      'launch-validity': buildLaunchValidityChart(classContext, params),
+      'time-validity': buildTimeValidityChart(classContext, params),
+      'distance-validity': buildDistanceValidityChart(entry, classContext, params),
+    }),
     withChart(
       buildDistanceSection(entry, classContext, result, params),
       buildDistanceChart(entry, classContext, params),
@@ -304,7 +338,11 @@ export function explainManualFlightScore(
 
   const sections: ScoreExplanationSection[] = [
     buildManualFlightSection(task, geometry, entry),
-    buildValiditySection(classContext, params),
+    withItemCharts(buildValiditySection(classContext, params), {
+      'launch-validity': buildLaunchValidityChart(classContext, params),
+      'time-validity': buildTimeValidityChart(classContext, params),
+      'distance-validity': buildDistanceValidityChart(entry, classContext, params),
+    }),
     buildDistanceSection(entry, classContext, synthResult, params),
     buildTimeSection(entry, classContext, params, synthResult, defaultFormatTime),
   ];

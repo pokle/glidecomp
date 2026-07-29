@@ -179,7 +179,10 @@ function auditTask(label: string, compsRoot: string, dir: string, category: 'hg'
       leading: buildLeadingChart(entry, ctx),
       arrival: buildArrivalChart(entry, ctx),
     };
-    for (const [name, chart] of Object.entries(charts)) {
+    for (const [name, c] of Object.entries(charts)) {
+      // Every builder here returns the curve variant; ScoreChart is a union
+      // only because the validity sparklines and distribution share the type.
+      const chart = c && c.kind === 'curve' ? c : null;
       const t = tallies[name];
       t.pilots++;
       if (chart) {
