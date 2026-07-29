@@ -1,9 +1,9 @@
 /**
  * Competition detail page — the comp "hub" (IA v2 #277): a pilot bookmarks
- * this one URL and every job is served here or one click away. Today's-task
- * hero first, then tasks, inline competition scores, pilots, activity,
- * admins. Mutations that used to window.location.reload() instead bump a
- * refresh counter that re-runs the comp fetch.
+ * this one URL and every job is served here or one click away. Tasks (as a
+ * date → class tree), inline competition scores, pilots, activity, admins.
+ * Mutations that used to window.location.reload() instead bump a refresh
+ * counter that re-runs the comp fetch.
  *
  * Built on the RAC kit (src/react/rac/) like the task detail page — the
  * pilots editor keeps its Tabulator grid (see PilotsSection).
@@ -12,7 +12,7 @@ import { Fragment, useEffect, useId, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { Form } from "react-aria-components";
-import { Button, LinkButton } from "@/react/rac/button";
+import { Button } from "@/react/rac/button";
 import { Loading } from "@/react/rac/progress";
 import {
   Dialog,
@@ -26,12 +26,13 @@ import { Checkbox, CheckboxGroup } from "@/react/rac/checkbox";
 import { DatePicker } from "@/react/rac/date-picker";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
-import { useGoToSignIn, useAdminView, useUser } from "../lib/user";
+import { useAdminView, useUser } from "../lib/user";
 import {
   categoryLabel,
   formatTaskDate,
   formatTaskDateRange,
   scoringFormatLabel,
+  todayInZone,
 } from "../lib/format";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Disclosure } from "@/react/rac/disclosure";
@@ -50,12 +51,9 @@ import { ActivitySection } from "../comp/ActivitySection";
 import { CompScoresSummary } from "../comp/CompScoresSummary";
 import { CompSetupProgress } from "../comp/CompSetupProgress";
 import { SettingsDialog } from "../comp/SettingsDialog";
-import { TaskExportButtons } from "../comp/TaskExportButtons";
-import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 import { TaskDiagramOverlay } from "../comp/TaskDiagramOverlay";
 import {
   fetchWithRetry,
-  isPastCloseDate,
   type CompDetailData,
   type TaskSummary,
 } from "../comp/types";
@@ -66,7 +64,7 @@ export function CompDetail() {
   const { compId: compParam } = useParams<{ compId: string }>();
   // The route param may be a `${slug}-${id}` — the id is what the API needs.
   const compId = idFromSegment(compParam ?? "");
-  const { user, loading } = useUser();
+  const { user } = useUser();
   const location = useLocation();
   // SSR seed: the server ran loadCompDetail for this URL, so render the comp in
   // the first paint and hydrate the same markup. Null on client boot / SPA nav.
@@ -138,7 +136,7 @@ export function CompDetail() {
     );
   }
 
-  // The SSR seed (hero "today" + scores) applies only to the first, un-mutated
+  // The SSR seed ("today" + scores) applies only to the first, un-mutated
   // render; after a refresh the sections fetch fresh data themselves.
   const seeded = initial && refresh === 0 ? initial : null;
 
@@ -147,13 +145,12 @@ export function CompDetail() {
       compId={compId}
       comp={comp}
       user={user}
-      loading={loading}
       createOpen={createOpen}
       setCreateOpen={setCreateOpen}
       settingsOpen={settingsOpen}
       setSettingsOpen={setSettingsOpen}
       setRefresh={setRefresh}
-      heroToday={seeded?.today}
+      today={seeded?.today}
       initialScores={seeded?.scores ?? undefined}
       initialScoresEtag={seeded?.scoresEtag ?? undefined}
     />
@@ -164,27 +161,26 @@ function CompDetailView({
   compId,
   comp,
   user,
-  loading,
   createOpen,
   setCreateOpen,
   settingsOpen,
   setSettingsOpen,
   setRefresh,
-  heroToday,
+  today,
   initialScores,
   initialScoresEtag,
 }: {
   compId: string;
   comp: CompDetailData;
   user: ReturnType<typeof useUser>["user"];
-  loading: boolean;
   createOpen: boolean;
   setCreateOpen: (open: boolean) => void;
   settingsOpen: boolean;
   setSettingsOpen: (open: boolean) => void;
   setRefresh: React.Dispatch<React.SetStateAction<number>>;
-  /** SSR-computed "today" (comp tz) so the hero pick matches across hydration. */
-  heroToday?: string;
+  /** SSR-computed "today" (comp tz) so the section order matches across
+   *  hydration. Omitted on client navigations. */
+  today?: string;
   /** SSR-seeded whole-comp scores + ETag (first render only). */
   initialScores?: CompScores;
   initialScoresEtag?: string | null;
@@ -192,9 +188,6 @@ function CompDetailView({
   const isAdmin = useAdminView(
     user != null && comp.admins.some((a) => a.email === user.email)
   );
-  const compClosed = isPastCloseDate(comp.close_date);
-  const canSubmitTrack = user != null && !compClosed;
-  const canUploadOnBehalf = useCanUploadOnBehalf(compId, comp.open_igc_upload, isAdmin);
 
   const facts = [
     categoryLabel(comp.category),
@@ -206,11 +199,10 @@ function CompDetailView({
     facts.push(formatTaskDateRange(taskDates[0], taskDates[taskDates.length - 1]));
   }
 
-  const hero = pickHeroTasks(comp.tasks, comp.timezone, heroToday);
   // Once the last task date is behind us the visitor's job flips from "what
   // am I flying today?" to "who won?" — standings lead, tasks follow.
   // Derived from the loader-injected "today", so SSR and hydration agree.
-  const finished = hero?.label === "Latest task";
+  const finished = isCompFinished(comp.tasks, comp.timezone, today);
 
   const tasksSection = (
     // break-before-page: when printing, each major section starts a fresh page.
@@ -229,12 +221,9 @@ function CompDetailView({
       <ClassWarnings warnings={comp.class_coverage_warnings} tasks={comp.tasks} />
       <TasksList
         tasks={comp.tasks}
-        hero={hero}
+        pilotClasses={comp.pilot_classes}
         compId={compId}
         compName={comp.name}
-        canSubmitTrack={canSubmitTrack}
-        canUploadOnBehalf={canUploadOnBehalf}
-        signedOut={!user && !loading}
         isAdmin={isAdmin}
         onCreateTask={() => setCreateOpen(true)}
       />
@@ -368,198 +357,34 @@ function CompDetailView({
   );
 }
 
-interface HeroPick {
-  label: string;
-  date: string;
-  tasks: TaskSummary[];
-}
-
 /**
- * The hero shows the task a pilot needs *right now*: today's task in the
- * comp's timezone, else the next upcoming one, else the most recent. A day
- * can hold several tasks (classes flying different tasks) — show them all.
+ * True once every task date is behind us in the comp's own timezone — the
+ * comp has finished flying, so the page leads with the standings.
+ *
+ * The task list itself makes nothing of the calendar: every task is presented
+ * alike, whether it flew last year or flies tomorrow.
  */
-function pickHeroTasks(
+function isCompFinished(
   tasks: TaskSummary[],
   timezone: string | null,
-  /** SSR-computed "today" (comp tz); pass through so the hero pick is identical
+  /** SSR-computed "today" (comp tz); pass through so the verdict is identical
    *  server- and client-side on hydration. Omitted on client navigations. */
   injectedToday?: string
-): HeroPick | null {
-  if (tasks.length === 0) return null;
-  // en-CA formats as YYYY-MM-DD, matching task_date.
+): boolean {
+  if (tasks.length === 0) return false;
   let today: string;
   if (injectedToday) {
     today = injectedToday;
   } else {
+    // A comp carrying a timezone the runtime doesn't know would throw — fall
+    // back to the visitor's own zone rather than blanking the page.
     try {
-      today = new Intl.DateTimeFormat("en-CA", {
-        ...(timezone ? { timeZone: timezone } : {}),
-      }).format(new Date());
+      today = todayInZone(timezone);
     } catch {
-      today = new Intl.DateTimeFormat("en-CA").format(new Date());
+      today = todayInZone(null);
     }
   }
-  const dates = [...new Set(tasks.map((t) => t.task_date))].sort();
-  const date = dates.includes(today)
-    ? today
-    : (dates.find((d) => d > today) ?? dates[dates.length - 1]);
-  const label =
-    date === today ? "Today's task" : date > today ? "Next task" : "Latest task";
-  return { label, date, tasks: tasks.filter((t) => t.task_date === date) };
-}
-
-/**
- * Featured card button order is role-based, with ONE primary action and the
- * share/QR/download cluster folded into a single Share menu:
- *  - Comp/Super Admin: Edit route…, Task details, Submit track, Share ▾
- *  - Pilots (signed in, non-admin): Submit track, Task details, Share ▾
- *  - Unauthenticated / can't submit: Task details, Share ▾, Sign in
- * Whichever button ends up first is the primary (filled) button; a slot that's
- * hidden for this task (e.g. no route set yet) is skipped, promoting the next
- * one. Everything else (3D replay, map, per-pilot actions) lives one click
- * away on the task page — the hub stays scannable.
- */
-interface HeroSlot {
-  key: string;
-  visible: boolean;
-  render: (primary: boolean) => React.ReactNode;
-}
-
-function FeaturedTaskGroup({
-  hero,
-  compId,
-  compName,
-  canSubmitTrack,
-  canUploadOnBehalf,
-  signedOut,
-  isAdmin,
-}: {
-  hero: HeroPick;
-  compId: string;
-  compName: string;
-  canSubmitTrack: boolean;
-  canUploadOnBehalf: boolean;
-  signedOut: boolean;
-  isAdmin: boolean;
-}) {
-  const goToSignIn = useGoToSignIn();
-  return (
-    <div className="rounded-xl border bg-gradient-to-br from-muted to-card p-5">
-      <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-        {hero.label} · {formatTaskDate(hero.date)}
-      </p>
-      {hero.tasks.map((task) => {
-        const taskDetailsSlot: HeroSlot = {
-          key: "task-details",
-          visible: true,
-          render: (primary) => (
-            <LinkButton
-              variant={primary ? "default" : "outline"}
-              size="sm"
-              href={taskPath(compId, compName, task.task_id, task.name)}
-            >
-              Task details
-            </LinkButton>
-          ),
-        };
-        const editRouteSlot: HeroSlot = {
-          key: "edit-route",
-          visible: isAdmin,
-          render: (primary) => (
-            <LinkButton
-              variant={primary ? "default" : "ghost"}
-              size="sm"
-              href={`${taskPath(compId, compName, task.task_id, task.name)}#edit-route`}
-            >
-              Edit route…
-            </LinkButton>
-          ),
-        };
-        const submitTrackSlot: HeroSlot = {
-          key: "submit-track",
-          visible: canSubmitTrack,
-          render: (primary) => (
-            <SubmitTrackButton
-              compId={compId}
-              taskId={task.task_id}
-              canUploadOnBehalf={canUploadOnBehalf}
-              primary={primary}
-            />
-          ),
-        };
-        const shareSlot: HeroSlot = {
-          key: "share",
-          visible: task.has_xctsk,
-          render: () => (
-            <TaskExportButtons
-              compId={compId}
-              taskId={task.task_id}
-              taskName={task.name}
-              asMenu
-            />
-          ),
-        };
-        const signInSlot: HeroSlot = {
-          key: "sign-in",
-          visible: signedOut,
-          render: () => (
-            <Button
-              variant="outline"
-              size="sm"
-              onPress={() => goToSignIn(window.location.pathname)}
-            >
-              Sign in to submit your track
-            </Button>
-          ),
-        };
-
-        const slots: HeroSlot[] = isAdmin
-          ? [editRouteSlot, taskDetailsSlot, submitTrackSlot, shareSlot]
-          : canSubmitTrack
-            ? [submitTrackSlot, taskDetailsSlot, shareSlot]
-            : [taskDetailsSlot, shareSlot, signInSlot];
-
-        let primaryAssigned = false;
-        const buttons = slots
-          .filter((slot) => slot.visible)
-          .map((slot) => {
-            const primary = !primaryAssigned;
-            primaryAssigned = true;
-            return <Fragment key={slot.key}>{slot.render(primary)}</Fragment>;
-          });
-
-        return (
-          <div key={task.task_id} className="mt-2 flex flex-wrap items-start gap-x-4 gap-y-2 first:mt-1">
-            <div className="min-w-0 flex-1">
-              <h3 className="text-xl font-bold">
-                <Link
-                  className="underline-offset-4 hover:underline"
-                  to={taskPath(compId, compName, task.task_id, task.name)}
-                >
-                  {task.name}
-                </Link>{" "}
-                <span className="text-sm font-normal text-muted-foreground">
-                  {task.pilot_classes.join(", ")}
-                  {!task.has_xctsk ? " · route not set yet" : null}
-                </span>
-              </h3>
-              <div className="mt-3 flex flex-wrap gap-2">{buttons}</div>
-            </div>
-            {/* The day's task shape, right where a pilot looks first — and
-                tappable for the readable version, same as the rows below. */}
-            {task.route ? (
-              <TaskDiagramOverlay
-                task={task.route}
-                taskName={task.name}
-                size="sm"
-              />
-            ) : null}
-          </div>
-        );
-      })}
-    </div>
-  );
+  return tasks.every((t) => t.task_date < today);
 }
 
 function ClassWarnings({
@@ -627,31 +452,46 @@ function ClassWarnings({
 }
 
 /**
- * The task list, newest date first, with the hero date's group rendered as
- * the featured card IN PLACE — one list, no duplicate presentation of the
- * same task (the old page showed the hero tasks twice). Compact rows carry
- * only the link, setup badges and classes; every action (submit, share,
- * replay, map) lives on the task page or, for the featured group, on the
- * card itself.
+ * The tasks of a competition, grouped two levels deep: the flying day, and
+ * under it one link per pilot class flying that day. Every task is presented
+ * alike — whichever one is today's is not singled out, because on a hub a
+ * pilot bookmarks and returns to, "which day am I looking at?" is the question
+ * the page should answer, not "which day does the page think I want?".
+ *
+ * Class is the second level because it is what a pilot filters on: two classes
+ * routinely fly different tasks on the same day (an imported AirScore comp
+ * scores them as separate comps entirely — see the Corryong sample). A task
+ * flown by several classes appears under each of them; the row's link is the
+ * task, so the same destination is reachable from whichever class the reader
+ * came looking for.
+ *
+ * A day is a Disclosure over a plain list of links, NOT a RAC Tree. The tree
+ * was the first cut and it fit badly: a `treegrid` is one tab stop, so Tab
+ * skipped every task on the page and reaching one meant knowing to press Down
+ * then Right; its rows read as data cells rather than as navigation; and focus
+ * returning from a dialog landed on the row instead of the control that opened
+ * it. Those are all correct treegrid behaviours — the pattern is for
+ * hierarchical DATA GRIDS and for selection, and this is neither. It is six
+ * links with headings over them, so it is a list, and the links are in the tab
+ * order where a reader expects to find them.
+ *
+ * Rows carry only the link, the setup badges and the route glyph; every action
+ * (submit, share, replay, map) lives on the task page one tap away.
  */
 function TasksList({
   tasks,
-  hero,
+  pilotClasses,
   compId,
   compName,
-  canSubmitTrack,
-  canUploadOnBehalf,
-  signedOut,
   isAdmin,
   onCreateTask,
 }: {
   tasks: TaskSummary[];
-  hero: HeroPick | null;
+  /** The comp's declared classes, in the order the organizers listed them —
+   *  used to order the class rows within a day. */
+  pilotClasses: string[];
   compId: string;
   compName: string;
-  canSubmitTrack: boolean;
-  canUploadOnBehalf: boolean;
-  signedOut: boolean;
   isAdmin: boolean;
   onCreateTask: () => void;
 }) {
@@ -670,144 +510,165 @@ function TasksList({
     );
   }
 
+  const days = groupTasksByDateAndClass(tasks, pilotClasses);
+
+  return (
+    <div className="mt-3 divide-y rounded-lg border">
+      {days.map((day) => (
+        <Disclosure
+          key={day.date}
+          // Open by default: the grouping is here to make a long list of days
+          // scannable, not to hide any of them — and a day folded away takes
+          // its task links out of the printed page. (Print re-expands them
+          // anyway; see the kit's Disclosure.)
+          defaultExpanded
+          title={formatTaskDate(day.date)}
+          badge={
+            <span className="text-sm text-muted-foreground">
+              {day.taskCount} {day.taskCount === 1 ? "task" : "tasks"}
+            </span>
+          }
+          // The container draws the dividers, so each day drops its own top
+          // border; px/py put the trigger and its panel on one inset.
+          className="border-t-0 px-3 py-2.5"
+        >
+          <ul className="mt-1 space-y-0.5 text-sm">
+            {day.rows.map((row) => (
+              <li key={row.key} className="flex items-center gap-4">
+                <Link
+                  className="group/task min-w-0 flex-1 py-1"
+                  to={taskPath(compId, compName, row.task.task_id, row.task.name)}
+                >
+                  {row.pilotClass ? (
+                    <>
+                      <strong>{row.pilotClass}</strong>{" "}
+                      <span className="text-muted-foreground">·</span>{" "}
+                    </>
+                  ) : null}
+                  {/* The task name is underlined AT REST, not just on hover:
+                      hover-only underlining says nothing at all on a phone,
+                      where there is no hover, and this list is the page's main
+                      way into a task. The class prefix and the badges stay
+                      unmarked so one thing per row looks like the link, though
+                      the whole row-width anchor is the target. */}
+                  <span className="font-medium underline decoration-muted-foreground/40 underline-offset-4 group-hover/task:decoration-current">
+                    {row.task.name}
+                  </span>{" "}
+                  {!row.task.has_xctsk ? (
+                    <span className="text-muted-foreground">Route not set yet</span>
+                  ) : null}{" "}
+                  {row.task.missing_sss ? (
+                    <span
+                      className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-500"
+                      title="Scoring falls back — see Task Warnings above"
+                    >
+                      No SSS
+                    </span>
+                  ) : null}{" "}
+                  {row.task.missing_ess ? (
+                    <span
+                      className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-500"
+                      title="Scoring falls back — see Task Warnings above"
+                    >
+                      No ESS
+                    </span>
+                  ) : null}{" "}
+                  {row.task.line_goal ? (
+                    <span
+                      className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary"
+                      title="This task ends at a goal line perpendicular to the final leg"
+                    >
+                      Goal line
+                    </span>
+                  ) : null}
+                </Link>
+                {/* Tiny route glyph: enough to tell one day's task from
+                    another's at a glance, and tappable for the readable
+                    version — at this size the shape is all it can carry, so
+                    "which turnpoints is that?" is one press away instead of
+                    a page load. Nothing is reserved when a task has no
+                    route: the glyphs are right-aligned, so an empty box
+                    buys no alignment and only pads the row — which on a
+                    phone (or against a comp-api that predates the `route`
+                    field) turns the whole list into dead space. */}
+                {row.task.route ? (
+                  <TaskDiagramOverlay task={row.task.route} taskName={row.task.name} />
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </Disclosure>
+      ))}
+    </div>
+  );
+}
+
+interface TaskClassRow {
+  /** Unique across the whole tree — RAC keys every row by it. */
+  key: string;
+  /** Null for a task registered against no class at all (see below). */
+  pilotClass: string | null;
+  task: TaskSummary;
+  /** What typeahead and screen readers get for the row. */
+  textValue: string;
+}
+
+interface TaskDay {
+  date: string;
+  rows: TaskClassRow[];
+  /** Distinct tasks, which is smaller than `rows` when one task serves
+   *  several classes — the count a reader means by "tasks". */
+  taskCount: number;
+}
+
+/**
+ * Newest day first — the current one is what a returning visitor came for, so
+ * it lands at the top without being dressed up differently from the rest.
+ * Within a day, classes run in the order the comp declares them (an
+ * organizer's order carries meaning that alphabetical doesn't); a class the
+ * comp no longer lists still shows, sorted after the ones it does.
+ */
+function groupTasksByDateAndClass(
+  tasks: TaskSummary[],
+  pilotClasses: string[]
+): TaskDay[] {
+  const classOrder = new Map(pilotClasses.map((c, i) => [c, i]));
+  const rank = (cls: string) => classOrder.get(cls) ?? pilotClasses.length;
+
   const byDate = new Map<string, TaskSummary[]>();
   for (const task of tasks) {
     const list = byDate.get(task.task_date) ?? [];
     list.push(task);
     byDate.set(task.task_date, list);
   }
-  // Newest first: the current/latest task is what a visitor came for, and the
-  // featured (hero) date lands at or near the top of the list.
-  const groups = [...byDate.entries()].sort(([a], [b]) => (a < b ? 1 : -1));
 
-  return (
-    <div className="mt-3 space-y-5">
-      {groups.map(([date, dateTasks]) =>
-        hero && date === hero.date ? (
-          <FeaturedTaskGroup
-            key={date}
-            hero={hero}
-            compId={compId}
-            compName={compName}
-            canSubmitTrack={canSubmitTrack}
-            canUploadOnBehalf={canUploadOnBehalf}
-            signedOut={signedOut}
-            isAdmin={isAdmin}
-          />
-        ) : (
-          <div key={date}>
-            {/* Same label treatment as the featured card: the date is a group
-                heading, the indented rows underneath are the tasks. */}
-            <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-              {formatTaskDate(date)}
-            </h3>
-            {/* pr-5 matches the featured card's p-5, so every route glyph on
-                the page — the card's and the rows' — lines up on one right
-                edge instead of the card's sitting alone. */}
-            <ul className="mt-1.5 space-y-1 pr-5 pl-4 text-sm">
-              {dateTasks.map((task) => (
-                <li key={task.task_id} className="flex items-center gap-4">
-                  <div className="min-w-0 flex-1">
-                  <Link
-                    className="underline-offset-4 hover:underline"
-                    to={taskPath(compId, compName, task.task_id, task.name)}
-                  >
-                    <strong>{task.name}</strong>{" "}
-                    {!task.has_xctsk ? (
-                      <span className="text-muted-foreground">Route not set yet</span>
-                    ) : null}{" "}
-                    {task.missing_sss ? (
-                      <span
-                        className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-500"
-                        title="Scoring falls back — see Task Warnings above"
-                      >
-                        No SSS
-                      </span>
-                    ) : null}{" "}
-                    {task.missing_ess ? (
-                      <span
-                        className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-500"
-                        title="Scoring falls back — see Task Warnings above"
-                      >
-                        No ESS
-                      </span>
-                    ) : null}{" "}
-                    {task.line_goal ? (
-                      <span
-                        className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary"
-                        title="This task ends at a goal line perpendicular to the final leg"
-                      >
-                        Goal line
-                      </span>
-                    ) : null}{" "}
-                    <span className="text-muted-foreground">
-                      {task.pilot_classes.join(", ")}
-                    </span>
-                  </Link>
-                  </div>
-                  {/* Tiny route glyph: enough to tell one day's task from
-                      another's at a glance, and tappable for the readable
-                      version — at this size the shape is all it can carry, so
-                      "which turnpoints is that?" is one press away instead of
-                      a page load. Nothing is reserved when a task has no
-                      route: the glyphs are right-aligned, so an empty box
-                      buys no alignment and only pads the row — which on a
-                      phone (or against a comp-api that predates the `route`
-                      field) turns the whole list into dead space. */}
-                  {task.route ? (
-                    <TaskDiagramOverlay
-                      task={task.route}
-                      taskName={task.name}
-                    />
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </div>
+  return [...byDate.entries()]
+    .sort(([a], [b]) => (a < b ? 1 : -1))
+    .map(([date, dayTasks]) => {
+      const rows = dayTasks
+        .flatMap((task) =>
+          // A task with no classes at all still gets a row: an odd record is a
+          // reason to show a task plainly, never to drop it off the page.
+          (task.pilot_classes.length > 0 ? task.pilot_classes : [null]).map(
+            (pilotClass): TaskClassRow => ({
+              key: `${task.task_id}:${pilotClass ?? ""}`,
+              pilotClass,
+              task,
+              textValue: pilotClass ? `${pilotClass} · ${task.name}` : task.name,
+            })
+          )
         )
-      )}
-    </div>
-  );
-}
-
-/**
- * "Submit track" button (hero + task list) — opens the same SubmitTrackDialog
- * the task page uses, so submitting always shows who the track is for.
- */
-function SubmitTrackButton({
-  compId,
-  taskId,
-  canUploadOnBehalf,
-  primary = false,
-}: {
-  compId: string;
-  taskId: string;
-  canUploadOnBehalf: boolean;
-  /** Render as the primary action (role-based button order). */
-  primary?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <>
-      <Button
-        variant={primary ? "default" : "outline"}
-        size="sm"
-        onPress={() => setOpen(true)}
-      >
-        Submit track
-      </Button>
-      {open ? (
-        <SubmitTrackDialog
-          compId={compId}
-          taskId={taskId}
-          canUploadOnBehalf={canUploadOnBehalf}
-          onClose={() => setOpen(false)}
-          onUploaded={() => {}}
-        />
-      ) : null}
-    </>
-  );
+        .sort((a, b) => {
+          if (a.pilotClass === b.pilotClass) return 0;
+          if (a.pilotClass === null) return 1;
+          if (b.pilotClass === null) return -1;
+          return (
+            rank(a.pilotClass) - rank(b.pilotClass) ||
+            a.pilotClass.localeCompare(b.pilotClass)
+          );
+        });
+      return { date, rows, taskCount: dayTasks.length };
+    });
 }
 
 function CreateTaskDialog({

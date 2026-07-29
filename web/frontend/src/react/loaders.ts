@@ -110,8 +110,9 @@ export interface CompDetailLoaderData {
   /** null when scores are unavailable (no scored tasks yet, or a transient error). */
   scores: CompScores | null;
   scoresEtag: string | null;
-  /** "today" as YYYY-MM-DD in the comp timezone, computed server-side so the
-   *  today's-task hero selection is deterministic across server and client. */
+  /** "today" as YYYY-MM-DD in the comp timezone, computed server-side so that
+   *  "has this comp finished flying?" — which decides whether the standings or
+   *  the tasks lead the page — is deterministic across server and client. */
   today: string;
 }
 
@@ -129,8 +130,8 @@ export async function loadCompDetail(
     scores = (await scoresRes.json()) as CompScores;
     scoresEtag = scoresRes.headers.get("ETag");
   }
-  // Compute the hero's "today" here (needs the comp's own timezone) so it is a
-  // single value baked into the SSR HTML and reused by the client on hydration.
+  // Compute "today" here (it needs the comp's own timezone) so it is a single
+  // value baked into the SSR HTML and reused by the client on hydration.
   return { comp, scores, scoresEtag, today: todayInZone(comp.timezone) };
 }
 
