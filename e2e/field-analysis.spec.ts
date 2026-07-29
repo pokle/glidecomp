@@ -40,7 +40,26 @@ const RANKING_HEADING = /Which behaviours went with better results/;
 
 let analysisPath: string;
 
-test.beforeAll(async ({ playwright }) => {
+// ONE page load for the whole file. Every test here asserts CSS/ARIA
+// behaviour of an already-rendered report, and this is the heaviest page in
+// the app — loading it per test made this spec 76s of the E2E suite's 178s
+// (43%), eight loads' worth. So the tests share a single page and only ever
+// change the viewport, which the layout is built to respond to live (a
+// container query plus a ResizeObserver): resizing exercises the same code
+// path a reload would, without paying for the report again.
+//
+// The cost of sharing is that state leaks forward, which shapes two rules:
+// serial mode (so a failure skips the rest rather than reporting a cascade of
+// confusing failures against a page the previous test left mangled), and
+// every test leaves the page as it found it — beforeEach only undoes the one
+// thing that is invisible to the next test's own setup, the scroll position.
+// The first-paint assertion has to be the FIRST test for the same reason: it
+// is the only one that reads state nothing resets.
+test.describe.configure({ mode: "serial" });
+
+let page: Page;
+
+test.beforeAll(async ({ browser, playwright }) => {
   // Seeding plus the cold field-analysis compute can both take a while.
   test.setTimeout(300_000);
   const api = await playwright.request.newContext({ baseURL: FRONTEND_URL });
@@ -81,25 +100,50 @@ test.beforeAll(async ({ playwright }) => {
   }
 
   await api.dispose();
-});
 
-/** Open the report and wait for the ranking — not for the network to go idle. */
-async function openRanking(page: Page) {
+  // The one load. Wait on the ranking — never on the network going idle: a
+  // field-analysis page keeps a freshness poll in flight by design.
+  page = await browser.newPage();
   await page.goto(analysisPath, { waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: RANKING_HEADING }).waitFor();
-  const table = page.getByRole("grid", { name: "Behaviour ranking" });
-  await table.waitFor();
-  return table;
+  await ranking().waitFor();
+});
+
+test.afterAll(async () => {
+  await page?.close();
+});
+
+test.beforeEach(async () => {
+  // Tests that scroll leave the page scrolled; every other reset (viewport,
+  // selection, the fold toggle) is done by the test that needs it.
+  await page.evaluate(() => window.scrollTo(0, 0));
+});
+
+/** The ranking table. */
+function ranking() {
+  return page.getByRole("grid", { name: "Behaviour ranking" });
 }
 
 /** The selected-metric pane: the only labelled region holding the scatter. */
-function detailPane(page: Page) {
+function detailPane() {
   return page.locator('[role="region"][aria-labelledby]').filter({ has: page.locator("svg") }).first();
 }
 
-test("picking a row swaps the chart, and the top metric is charted first", async ({ page }) => {
-  const table = await openRanking(page);
-  const pane = detailPane(page);
+/**
+ * Resize and let the chart catch up. The plot is drawn from a box the
+ * ResizeObserver reports, so a measurement taken in the same tick as the
+ * resize reads the OLD geometry.
+ */
+async function setViewport(width: number, height: number) {
+  await page.setViewportSize({ width, height });
+  await page.waitForTimeout(400);
+}
+
+// FIRST, and must stay first: the only test here that reads first-paint state
+// (which metric the pane opens on), and the only one nothing resets.
+test("picking a row swaps the chart, and the top metric is charted first", async () => {
+  const table = ranking();
+  const pane = detailPane();
 
   const heading = pane.locator("h3").first();
   const first = (await heading.textContent())?.trim();
@@ -121,10 +165,10 @@ test("picking a row swaps the chart, and the top metric is charted first", async
   await expect(table.locator('tr[aria-selected="true"]')).toHaveCount(1);
 });
 
-test("wide: the chart sits beside the table, and the table still fits", async ({ page }) => {
-  await page.setViewportSize({ width: 1600, height: 1000 });
-  const table = await openRanking(page);
-  const pane = detailPane(page);
+test("wide: the chart sits beside the table, and the table still fits", async () => {
+  await setViewport(1600, 1000);
+  const table = ranking();
+  const pane = detailPane();
 
   const tableBox = (await table.boundingBox())!;
   const paneBox = (await pane.boundingBox())!;
@@ -143,10 +187,9 @@ test("wide: the chart sits beside the table, and the table still fits", async ({
   expect(overflow).toBeLessThanOrEqual(1);
 });
 
-test("narrow: the chart pins to the top while the table scrolls under it", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 780 });
-  await openRanking(page);
-  const pane = detailPane(page);
+test("narrow: the chart pins to the top while the table scrolls under it", async () => {
+  await setViewport(390, 780);
+  const pane = detailPane();
 
   await pane.scrollIntoViewIfNeeded();
   const before = (await pane.boundingBox())!;
@@ -160,10 +203,9 @@ test("narrow: the chart pins to the top while the table scrolls under it", async
   expect(after.y).toBeLessThanOrEqual(before.y + 1);
 });
 
-test("narrow: keyboard focus never lands behind the pinned chart", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 780 });
-  const table = await openRanking(page);
-  const rows = table.locator("tbody tr");
+test("narrow: keyboard focus never lands behind the pinned chart", async () => {
+  await setViewport(390, 780);
+  const rows = ranking().locator("tbody tr");
 
   // Start low and walk UP — the direction that drives a focused row under a
   // pane pinned to the top of the viewport.
@@ -183,15 +225,14 @@ test("narrow: keyboard focus never lands behind the pinned chart", async ({ page
   }
 });
 
-test("expanding the chart makes it very much bigger, in both orientations", async ({
-  page,
-}) => {
+test("expanding the chart makes it very much bigger, in both orientations", async () => {
   for (const [label, width, height] of [
     ["portrait", 390, 780],
     ["landscape", 780, 390],
   ] as const) {
-    await page.setViewportSize({ width, height });
-    await openRanking(page);
+    // The inline plot is re-measured after each resize, so both orientations
+    // compare like with like without reloading between them.
+    await setViewport(width, height);
 
     const inline = (await page.locator('svg[role="group"]').first().boundingBox())!;
     await page.getByRole("button", { name: /full screen$/ }).first().click();
@@ -214,11 +255,8 @@ test("expanding the chart makes it very much bigger, in both orientations", asyn
   }
 });
 
-test("the expanded chart stays open when you tap a dot, and returns focus on close", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 780 });
-  await openRanking(page);
+test("the expanded chart stays open when you tap a dot, and returns focus on close", async () => {
+  await setViewport(390, 780);
 
   const trigger = page.getByRole("button", { name: /full screen$/ }).first();
   await trigger.click();
@@ -239,10 +277,9 @@ test("the expanded chart stays open when you tap a dot, and returns focus on clo
   await expect(trigger).toBeFocused();
 });
 
-test("narrow: the chart can be folded away to read the table", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 780 });
-  await openRanking(page);
-  const pane = detailPane(page);
+test("narrow: the chart can be folded away to read the table", async () => {
+  await setViewport(390, 780);
+  const pane = detailPane();
   const toggle = page.getByRole("button", { name: /chart$/ });
 
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
