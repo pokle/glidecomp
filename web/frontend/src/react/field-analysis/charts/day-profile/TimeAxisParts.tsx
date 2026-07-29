@@ -6,7 +6,7 @@
  */
 import type { TimeAxis } from "./time-axis";
 import { W, PLOT_LEFT, PLOT_RIGHT } from "./shared";
-import { XAxisTitle } from "../AxisTitle";
+import { XAxisTitle } from "@/react/charts/AxisTitle";
 
 export function TimeGridColumns({
   axis,

@@ -30,6 +30,7 @@
 import type { ScoreDistributionChart } from "@glidecomp/engine";
 import { cn } from "@/react/lib/utils";
 import { linearScale, niceTicks } from "./scale";
+import { XAxisTitle } from "./AxisTitle";
 
 const W = 520;
 const H = 108;
@@ -204,14 +205,9 @@ export function DistributionStrip({ chart }: { chart: ScoreDistributionChart }) 
               </text>
             </g>
           ))}
-          <text
-            x={(plot.left + plot.right) / 2}
-            y={AXIS_TITLE_Y}
-            textAnchor="middle"
-            className="fill-current"
-          >
-            {xLabel} (km)
-          </text>
+          <XAxisTitle left={plot.left} right={plot.right} y={AXIS_TITLE_Y}>
+            {`${xLabel} (km)`}
+          </XAxisTitle>
         </g>
       </svg>
       <figcaption className="text-xs text-muted-foreground">{caption}</figcaption>

@@ -16,7 +16,7 @@ import { cn } from "@/react/lib/utils";
 import type { CategoricalReportSeries, FieldAnalysisReport } from "../types";
 import { usePilotHighlight } from "../PilotHighlightContext";
 import { formatTickValue, linearScale, niceTicks, spreadLabels } from "./chart-utils";
-import { XAxisTitle, YAxisTitle } from "./AxisTitle";
+import { XAxisTitle, YAxisTitle } from "@/react/charts/AxisTitle";
 import { unitWords } from "../units";
 
 const W = 560;

@@ -19,7 +19,7 @@ import { unitDisplay } from "../../units";
 import { formatTickValue, linearScale, niceTicks } from "../chart-utils";
 import type { TimeAxis } from "./time-axis";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
-import { ChartTitle } from "../AxisTitle";
+import { ChartTitle } from "@/react/charts/AxisTitle";
 import {
   PLOT_LEFT,
   PLOT_RIGHT,

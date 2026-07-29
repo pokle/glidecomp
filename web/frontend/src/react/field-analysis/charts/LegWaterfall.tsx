@@ -14,7 +14,7 @@ import { useMemo, useState } from "react";
 import { SimpleSelect } from "@/react/rac/select";
 import type { CategoricalReportSeries, FieldAnalysisReport } from "../types";
 import { linearScale } from "./chart-utils";
-import { XAxisTitle, YAxisTitle } from "./AxisTitle";
+import { XAxisTitle, YAxisTitle } from "@/react/charts/AxisTitle";
 
 const W = 560;
 const H = 268;

@@ -24,7 +24,7 @@ import { unitDisplay } from "../../units";
 import { formatTickValue, linearScale, niceTicks, quantileSorted } from "../chart-utils";
 import type { TimeAxis } from "./time-axis";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
-import { ChartTitle } from "../AxisTitle";
+import { ChartTitle } from "@/react/charts/AxisTitle";
 import { PLOT_LEFT, PLOT_RIGHT, W } from "./shared";
 
 const HOUR_MS = 3_600_000;

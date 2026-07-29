@@ -47,7 +47,7 @@ import {
   spreadLabels,
 } from "./chart-utils";
 import { notableExcludedRanks, notableRanksPhrase } from "../exclusions";
-import { XAxisTitle, YAxisTitle } from "./AxisTitle";
+import { XAxisTitle, YAxisTitle } from "@/react/charts/AxisTitle";
 
 const W = 560;
 /** The plot's viewBox width — the unit `minHeight` is expressed in, so a
