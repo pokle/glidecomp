@@ -10,6 +10,7 @@
  */
 import { Fragment, useEffect, useId, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
+import { NotFound } from "@/react/components/NotFound";
 import { Form } from "react-aria-components";
 import { Button, LinkButton } from "@/react/rac/button";
 import { Loading } from "@/react/rac/progress";
@@ -22,11 +23,10 @@ import {
 } from "@/react/rac/dialog";
 import { TextField, Label } from "@/react/rac/field";
 import { Checkbox, CheckboxGroup } from "@/react/rac/checkbox";
-import { RacConfirmProvider } from "@/react/rac/confirm";
-import { DatePicker } from "@/react/ui/date-picker";
+import { DatePicker } from "@/react/rac/date-picker";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
-import { goToSignIn, useAdminView, useUser } from "../lib/user";
+import { useGoToSignIn, useAdminView, useUser } from "../lib/user";
 import {
   categoryLabel,
   formatTaskDate,
@@ -63,14 +63,6 @@ import { useInitialData } from "../lib/initial-data";
 import type { CompDetailLoaderData, CompScores } from "../loaders";
 
 export function CompDetail() {
-  return (
-    <RacConfirmProvider>
-      <CompDetailContent />
-    </RacConfirmProvider>
-  );
-}
-
-function CompDetailContent() {
   const { compId: compParam } = useParams<{ compId: string }>();
   // The route param may be a `${slug}-${id}` — the id is what the API needs.
   const compId = idFromSegment(compParam ?? "");
@@ -96,6 +88,12 @@ function CompDetailContent() {
   }, [comp, location.hash]);
 
   useEffect(() => {
+    // Clear any previous verdict first. react-router keeps this component
+    // mounted when only the id in the path changes, so a "not found" left over
+    // from the old id would mask whatever the new one loads. That is not
+    // hypothetical: the 404 page's own "did you mean" links point back at this
+    // very route, so clicking one changed the URL and nothing else.
+    setNotFound(false);
     if (!compId) {
       setNotFound(true);
       return;
@@ -131,14 +129,7 @@ function CompDetailContent() {
   }, [compId, refresh]);
 
   if (notFound || !compId) {
-    return (
-      <div>
-        <p>Competition not found</p>
-        <Link className="underline underline-offset-4" to="/comp">
-          Back to Competitions
-        </Link>
-      </div>
-    );
+    return <NotFound title="Competition not found" />;
   }
 
   if (!comp) {
@@ -452,6 +443,7 @@ function FeaturedTaskGroup({
   signedOut: boolean;
   isAdmin: boolean;
 }) {
+  const goToSignIn = useGoToSignIn();
   return (
     <div className="rounded-xl border bg-gradient-to-br from-muted to-card p-5">
       <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">

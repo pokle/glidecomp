@@ -7,24 +7,23 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { EyeIcon, XIcon } from "lucide-react";
-import { Button } from "@/react/ui/button";
+import { Button, ToggleButton } from "@/react/rac/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/react/ui/dropdown-menu";
-import { Separator } from "@/react/ui/separator";
+  Menu,
+  MenuHeader,
+  MenuItem,
+  MenuSection,
+  MenuSeparator,
+  MenuTrigger,
+} from "@/react/rac/menu";
+import { Separator } from "@/react/rac/separator";
 import { cn } from "@/react/lib/utils";
 import { RacRouterProvider } from "@/react/rac/router";
 import { signOut } from "../../auth/client";
 import {
   DEV_SIGN_IN_ENABLED,
   signInAsDev,
-  goToSignIn,
+  useGoToSignIn,
   useUser,
   type PreviewRole,
 } from "../lib/user";
@@ -40,6 +39,7 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 export function Shell() {
   const { user, loading } = useUser();
+  const goToSignIn = useGoToSignIn();
   const navigate = useNavigate();
   useScrollRestoration();
   const flightsHref = user?.username ? `/u/${user.username}` : "/u/me";
@@ -97,17 +97,11 @@ export function Shell() {
             ) : !loading ? (
               <div className="flex items-center gap-2">
                 {DEV_SIGN_IN_ENABLED ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void signInAsDev()}
-                  >
+                  <Button variant="outline" onPress={() => void signInAsDev()}>
                     Sign in (dev)
                   </Button>
                 ) : null}
-                <Button type="button" onClick={() => goToSignIn()}>
-                  Sign in
-                </Button>
+                <Button onPress={() => goToSignIn()}>Sign in</Button>
               </div>
             ) : null}
           </div>
@@ -119,7 +113,13 @@ export function Shell() {
       <main
         id="main-content"
         tabIndex={-1}
-        className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6 pb-12 focus:outline-none"
+        // A page opts into a wider measure by putting `data-wide-page` on
+        // anything it renders. Only the task field-analysis report does: it
+        // spends 12rem of its width on the PageToc rail and then lays its
+        // ranking table out beside a chart, which does not fit inside 6xl.
+        // Without this its own `xl:max-w-[87rem]` was silently clamped here
+        // and the docs layout came out NARROWER than the plain one.
+        className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6 pb-12 focus:outline-none [&:has([data-wide-page])]:max-w-[89rem]"
       >
         <Outlet />
       </main>
@@ -186,38 +186,36 @@ function UserMenu({ name }: { name: string }) {
       .toUpperCase() || "?";
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <button
-            type="button"
-            aria-label="Account menu"
-            className="flex size-8 items-center justify-center rounded-full border bg-muted text-xs font-semibold hover:bg-accent"
-          />
-        }
+    <MenuTrigger>
+      <Button
+        aria-label="Account menu"
+        variant="ghost"
+        size="icon"
+        className="rounded-full border bg-muted text-xs font-semibold data-hovered:bg-accent"
       >
         {initials}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {/* Base UI's GroupLabel throws without a surrounding Group. */}
-        <DropdownMenuGroup>
-          <DropdownMenuLabel className="max-w-56 truncate font-normal text-muted-foreground">
-            {name}
-          </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => navigate("/settings")}>Settings</DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={async () => {
+      </Button>
+      <Menu placement="bottom end">
+        {/* The name labels the group, so it has to sit in a MenuSection —
+            a bare Header in the Menu is unlabelled decoration. */}
+        <MenuSection>
+          <MenuHeader className="max-w-56 truncate font-normal">{name}</MenuHeader>
+          <MenuSeparator />
+          {/* A real anchor: RacRouterProvider routes the click client-side,
+              and middle-click / open-in-new-tab still work. */}
+          <MenuItem href="/settings">Settings</MenuItem>
+          <MenuItem
+            onAction={async () => {
               await signOut();
               navigate("/");
               window.location.reload();
             }}
           >
             Sign out
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          </MenuItem>
+        </MenuSection>
+      </Menu>
+    </MenuTrigger>
   );
 }
 
@@ -246,20 +244,20 @@ function PreviewAsPill() {
 
   if (!open) {
     return (
-      <button
-        type="button"
+      <Button
         aria-label={`Preview as${active ? `: ${active.label}` : ""}. Click to change.`}
-        onClick={() => setOpen(true)}
+        variant="ghost"
+        onPress={() => setOpen(true)}
         className={cn(
-          "fixed right-3 bottom-3 z-50 flex items-center gap-1.5 rounded-full border py-1 pr-3 pl-2.5 text-xs font-medium shadow-lg print:hidden",
+          "fixed right-3 bottom-3 z-50 h-auto gap-1.5 rounded-full border py-1 pr-3 pl-2.5 text-xs font-medium shadow-lg print:hidden",
           previewing
-            ? "bg-primary text-primary-foreground"
-            : "bg-card text-muted-foreground hover:text-foreground"
+            ? "bg-primary text-primary-foreground data-hovered:bg-primary"
+            : "bg-card text-muted-foreground data-hovered:bg-card data-hovered:text-foreground"
         )}
       >
         <EyeIcon className="size-3.5" aria-hidden="true" />
         <span className="whitespace-nowrap">{previewing ? active?.label : "Preview as"}</span>
-      </button>
+      </Button>
     );
   }
 
@@ -271,29 +269,31 @@ function PreviewAsPill() {
     >
       <span className="mr-1 whitespace-nowrap text-muted-foreground">Preview as</span>
       {PREVIEW_ROLES.map(({ role, label }) => (
-        <button
+        // ToggleButton, not Button: each role is a pressed/unpressed state, and
+        // RAC renders the aria-pressed these were hand-rolling.
+        <ToggleButton
           key={role}
-          type="button"
-          aria-pressed={previewRole === role}
+          variant="ghost"
+          isSelected={previewRole === role}
+          onChange={() => setPreviewRole(role)}
           className={cn(
-            "rounded-full px-2.5 py-1 font-medium",
+            "h-auto rounded-full px-2.5 py-1 text-xs font-medium",
             previewRole === role
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:text-foreground"
+              ? "bg-primary text-primary-foreground data-hovered:bg-primary"
+              : "text-muted-foreground data-hovered:text-foreground"
           )}
-          onClick={() => setPreviewRole(role)}
         >
           {label}
-        </button>
+        </ToggleButton>
       ))}
-      <button
-        type="button"
+      <Button
         aria-label="Minimise preview switcher"
-        onClick={() => setOpen(false)}
-        className="ml-0.5 rounded-full p-1 text-muted-foreground hover:text-foreground"
+        variant="ghost"
+        onPress={() => setOpen(false)}
+        className="ml-0.5 size-auto rounded-full p-1 text-muted-foreground data-hovered:text-foreground"
       >
         <XIcon className="size-3.5" aria-hidden="true" />
-      </button>
+      </Button>
     </div>
   );
 }

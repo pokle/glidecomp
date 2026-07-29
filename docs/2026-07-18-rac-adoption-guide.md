@@ -1,26 +1,61 @@
 # React Aria Components (RAC) adoption — status, gotchas, and continuation guide
 
-**Audience:** agents/developers continuing the RAC exploration in later sessions.
-**Status (2026-07-21):** the task detail page (`/comp/:id/task/:id`) and every
-dialog it opens is fully converted to react-aria-components and verified
-(typecheck, unit tests, production build, SSR e2e suite green with clean
-hydration, headless admin drives with zero console errors). The route
-editor's turnpoint grid has since been rebuilt as a **GridList card list**
-(2026-07-18, see that section). RAC has since spread beyond the exploration
-page: the two field-analysis pages were built RAC-native, the comp list page
-converted (PR #401), **the comp detail page `/comp/:id` and every section and
-dialog it owns converted (2026-07-21** — sortable score tables, tabs, setup
-guide, Create Task, Settings, pilots section; new kit pieces `rac/tabs` and
-`rac/progress`; retired `ui/select` + `ui/combobox`), `rac/breadcrumbs` is
-the app-wide breadcrumb, `RacRouterProvider` is mounted globally in `Shell`,
-and shared chrome (`PageToc`, `Timestamp`) and the Dashboard's flights `Tree`
-use rac/ components. The waypoints page `/comp/:id/waypoints` converted
-(2026-07-21): RAC chrome + read-only table, and its hand-rolled editable
-grid **replaced with an inline Tabulator grid** per the policy below. The
-remaining pages still use the shadcn/Base UI kit in `src/react/ui/` — see
-the conversion map at the end of this doc. The decision so far: **keep going
-with RAC** — it earned its keep everywhere except editable tables, which are
-Tabulator's job (see the policy below).
+**Audience:** agents/developers working on the SPA's UI.
+
+**Status (2026-07-27): the migration is FINISHED.** Every page and dialog in
+the SPA is react-aria-components, `src/react/ui/` is deleted, and
+`src/react/one-kit.test.ts` fails the build if anything imports from it again.
+There is no `components.json` any more either, so `bunx shadcn add` is not the
+route to a missing component — add it to `rac/`. A static styled element is a
+perfectly good kit member when there's no behaviour to own (`rac/badge.tsx`,
+`rac/alert.tsx`). Thin wrappers over third-party widgets RAC doesn't provide
+live in `src/react/vendor/`: today the `input-otp` sign-in field and the
+`sonner` toaster.
+
+Read the **gotchas** section before touching kit code — twenty of them, each
+one something that cost real debugging. The rest of this doc is history: how
+the migration went, what was decided and why. It is worth keeping because the
+reasoning still applies to new UI.
+
+**How it went.** The exploration converted the task detail page first
+(2026-07-18), then the route editor's turnpoint grid to a **GridList card
+list**, then the field-analysis pages (built RAC-native), the comp list
+(PR #401), and — 2026-07-21 — the comp detail page with all its sections and
+dialogs, plus the waypoints page (whose hand-rolled editable table became an
+inline Tabulator grid per the policy below). That left the remaining work
+planned as six waves in
+[#483](https://github.com/pokle/glidecomp/issues/483), all landed 2026-07-27:
+
+1. **Shared chrome.** The global confirm became the RAC alertdialog — the
+   provider lives in `rac/confirm.tsx`, mounted app-wide by routes.tsx, which
+   leaves `lib/confirm.tsx` as context and types with no UI import at all.
+   That split is what lets any page call `useConfirm()` without importing a
+   kit, and it deleted the `RacConfirmProvider` wrappers three pages had been
+   carrying. `Shell` followed: account menu → `rac/menu` (Settings is a real
+   `href` anchor now, not a div calling navigate), sign-in buttons and the
+   super-admin preview pill → rac Button/ToggleButton. New: `rac/alert`,
+   `rac/separator`.
+2. **AdminCache, AdminUsers, Onboarding.** Small, no dialogs, no SSR. The
+   users table gained a `scrollLabel` focusable scroll region — seven columns
+   that a keyboard-only admin previously could not reach.
+3. **SignIn.** `input-otp` stayed (RAC has no one-time-code field) and moved
+   to `vendor/`.
+4. **Dashboard.** Tabs, `FileTrigger` for the hidden file inputs, and the
+   storage bar became a **Meter, not a ProgressBar** — quota used is a
+   measurement, not a task running to completion.
+5. **Settings.** The last two ui/ dialogs, both radio groups, the API-key
+   table. `ui/card` had exactly one consumer, so it became a local
+   `SettingsCard` helper rather than a kit component.
+6. **Teardown.** Fourteen dead files deleted, `date-picker` moved to `rac/`
+   (it was already RAC inside), `input-otp` + `sonner` to `vendor/`, the guard
+   test added, `components.json` removed.
+
+**The decision, in hindsight: RAC earned its keep.** The conversions kept
+finding real accessibility defects rather than just moving code — unreachable
+table columns, `title` attributes standing in for tooltips, focus dumped to
+the body mid-action by `disabled` swaps, a `role="progressbar"` on something
+that was never a task. The one place it did not earn its keep is editable
+tables, which are Tabulator's job.
 
 **Tabulator policy (2026-07-21, owner preference): editable tables are
 Tabulator, full stop.** The project owner prefers Tabulator for every
@@ -97,10 +132,25 @@ instance only exists a tick after mount, so gate anything that drives it on
   "measurement" distinction. Label row + thin track like ui/progress; pass a
   heading node as `label` and point `aria-labelledby` at it. Also the app's
   **loading-state family** — see the section below), `badge` (static span — RAC
-  has no presentational components), `confirm` (RacConfirmProvider — supplies
-  the same ConfirmContext as lib/confirm.tsx so `useConfirm()` inside a
-  wrapped subtree gets the RAC alertdialog), `router` (RacRouterProvider —
-  bridges RAC `href` links to react-router; SSR-safe).
+  has no presentational components), `alert` (static panel — `role="alert"`,
+  overridable to `role="status"` for a standing notice; the old ui/alert),
+  `separator` (RAC Separator + the ui/separator styling), `confirm`
+  (**ConfirmProvider — the app's only confirm provider**, mounted once in
+  routes.tsx; it supplies lib/confirm.tsx's ConfirmContext, so every
+  `useConfirm()` anywhere gets this RAC alertdialog), `menu` (Menu/MenuItem/
+  MenuSection/MenuHeader/MenuSeparator — a Header must sit inside a
+  MenuSection to name the group, and `placement` forwards to the popover),
+  `router` (RacRouterProvider — bridges RAC `href` links to react-router;
+  SSR-safe), `full-screen-sheet` (FullScreenSheet — the **full-bleed** modal,
+  `dialog`'s Modal being a centered panel whose overlay
+  padding/background/centering are not overridable. Render it when open and
+  not when closed: there is no `isOpen`, so a closed sheet costs nothing and a
+  lazily-imported one stays unimported. `dismissOnPress` makes the whole sheet
+  a close target and is **only** for content that is a picture — anything
+  interactive inside would dismiss on the way to being pressed; without it,
+  give the sheet an `autoFocus` Close button, since Escape alone isn't a
+  discoverable affordance. Callers: the waypoint QR, the task route glyph, the
+  field-analysis metric chart).
 - **Converted files:** `pages/TaskDetail.tsx` (page + EditTaskDialog +
   turnpoints table), `comp/TaskStandings.tsx`, `comp/RouteEditorDialog.tsx`
   (Tabulator grid → RAC **GridList** card list, see below — was a RAC Table),
@@ -113,7 +163,7 @@ instance only exists a tick after mount, so gate anything that drives it on
   dialog on the kit, plus a client-side SearchField filter over the loaded
   list; see gotcha #13), and — 2026-07-21 — the whole comp detail page:
   `pages/CompDetail.tsx` (hero LinkButtons, Create Task dialog on
-  Form/TextField/CheckboxGroup, RacConfirmProvider wrapper),
+  Form/TextField/CheckboxGroup),
   `comp/SettingsDialog.tsx` (kit Modal/Dialog; numeric GAP params became
   NumberFields holding numbers with NaN-as-blank), `comp/CompScoresSection.tsx`
   (rac tabs + sortable RAC-grid tables), `comp/ScoresSection.tsx` (onRowAction
@@ -133,8 +183,8 @@ instance only exists a tick after mount, so gate anything that drives it on
   Tooltip), and `rac/tree.tsx` in `pages/Dashboard.tsx` (the flights Tree —
   the rest of the Dashboard is still ui/).
   And — 2026-07-21 — the waypoints page: `pages/CompWaypoints.tsx` (RAC
-  buttons/FileTrigger/ToggleButton, read-only RAC table for non-admins,
-  RacConfirmProvider; the editable grid became an **inline Tabulator grid**
+  buttons/FileTrigger/ToggleButton, read-only RAC table for non-admins;
+  the editable grid became an **inline Tabulator grid**
   per the Tabulator policy — gotcha #16), `comp/WaypointDeviceExport.tsx`
   (rac Menu with href/onAction download items, ToggleButton QR toggle, rac
   Checkbox — retired `ui/checkbox`, file deleted), and `comp/FullScreenQR.tsx`
@@ -392,6 +442,62 @@ Points worth knowing before you reach for one:
     property will read the button as enabled. Assert `aria-disabled` and that
     the press handler never fired (what `rac/progress.test.ts` does).
 
+18. **A server-rejected value must be cleared on change, or the form can
+    never be submitted again.** RAC's default `validationBehavior` is
+    `"native"`, so `isInvalid` on a TextField is not merely an ARIA state —
+    RAC calls `setCustomValidity()` on the real input. The browser then blocks
+    `submit` outright, and your `onSubmit` handler (where you'd normally clear
+    the error) never runs. Onboarding hit this exactly: enter a taken
+    username, get "Username is already taken", type a free one — and Continue
+    silently does nothing, forever. Clear the server error in the field's
+    `onChange`, not in the submit handler:
+
+    ```tsx
+    onChange={(value) => { setUsernameValue(value); setUsernameError(null); }}
+    isInvalid={usernameError !== null}
+    errorMessage={usernameError ?? undefined}
+    ```
+
+    The Base UI version had no such trap — its `<FieldError>` was inert
+    markup — so this is a hazard the conversion *introduces*, and it is
+    invisible to typecheck, unit tests and a first-attempt click-through.
+    Drive the retry path. (The alternative, `validationBehavior="aria"`, drops
+    the native `required` enforcement too — only reach for it on a field with
+    no native constraints.)
+
+19. **RAC's `Button` has no `title` prop — that's the library refusing the
+    attribute, not an oversight.** A `title` hint is invisible to keyboard
+    users, unreliable for screen readers, and unreachable on touch, so RAC
+    simply doesn't type it. TypeScript catches every one at conversion time
+    (four on the Dashboard's row actions), and the fix is a `TooltipTrigger`
+    wrapper from `rac/tooltip.tsx`:
+
+    ```tsx
+    <TooltipTrigger>
+      <Button variant="outline" size="sm" onPress={…}>Download</Button>
+      <Tooltip>Download IGC</Tooltip>
+    </TooltipTrigger>
+    ```
+
+    Only for *supplementary* hints on a control that already has a visible
+    label. If the hint is the only name the control has, it belongs in the
+    accessible name (`aria-label`), and if it's prose, use `rac/popover` —
+    tooltips are hover-only and dismiss before a sentence can be read.
+
+20. **An external URL in a RAC `href` is mangled by the router bridge.**
+    `RacRouterProvider` hands RAC react-router's `useHref`, and RAC writes
+    whatever comes back into the anchor — so `useHref("https://sheets.new")`
+    resolved that against the current path and rendered
+    `/comp/<comp>/scores/https:/sheets.new`. A 404 nobody sees until they click
+    it, because the anchor *looks* fine in the source. `rac/router.tsx` now
+    passes anything with a scheme (`https:`, `mailto:`, `tel:`) or a
+    protocol-relative `//` straight through, on both the `useHref` and
+    `navigate` sides, so a RAC `Link` / `LinkButton` / `MenuItem` may hold an
+    external href like any other. If you see a route that has swallowed a URL,
+    this is why. (Plain `<a>` elements were never affected — the provider only
+    touches RAC's own components, which is why the app's other outbound links
+    survived.)
+
 ## Verification playbook (all part of "done" for RAC work)
 
 ```bash
@@ -519,93 +625,47 @@ mobile (today it's a fitted floating panel). The map now sits below the list
 (so it never obscures it), which made the earlier "collapsible map preview"
 idea unnecessary.
 
-## Converting other pages (recipe)
+## Adding or changing UI (recipe)
 
-1. `RacRouterProvider` is already mounted globally in `components/Shell.tsx` —
-   nothing to wrap for routing. Add `RacConfirmProvider` around the page only
-   if it uses `useConfirm` (TaskDetail and CompDetail do; the global
-   ConfirmProvider in `lib/confirm.tsx` is still the ui/ alert-dialog).
-   Providers are SSR-safe.
-2. Swap imports ui/ → rac/ mechanically: Button (`onClick`→`onPress`,
-   `disabled`→`isDisabled`), Dialog→Modal/Dialog (drop DialogClose for
-   `slot="close"`), Input+Field+useId→TextField (self-labelling), Base UI
-   Select→rac Select/SimpleSelect, checkbox groups→CheckboxGroup, hidden file
-   inputs→FileTrigger, `title=` hints→TooltipTrigger.
-3. Tables: read-only ones convert 1:1 (add `aria-label`; `isRowHeader` on one
-   column; row `id`s). Row-click navigation = `onRowAction` + a real AriaLink
-   in the name cell (keeps a crawlable anchor). Editable ones: prefer the
-   GridList card pattern above; if it must be a Table, use CellEditZone and
-   read gotchas #2/#3 first.
-4. Verify per the playbook; SSR pages additionally must pass `test:e2e:ssr`
+The migration is over, so this is now "how to build a page with the kit"
+rather than "how to convert one".
+
+1. Nothing to wrap: `RacRouterProvider` is mounted globally in
+   `components/Shell.tsx` and the global `ConfirmProvider` (`rac/confirm.tsx`,
+   mounted in routes.tsx) means `useConfirm()` already resolves to the RAC
+   alertdialog anywhere. Both are SSR-safe.
+2. Reach for the kit piece, not the DOM element: Button (`onPress`,
+   `isDisabled`, `isPending`), Modal/Dialog, TextField (self-labelling — no
+   `useId` plumbing), Select/SimpleSelect, CheckboxGroup, RadioGroup,
+   FileTrigger for file inputs, TooltipTrigger instead of `title=` (RAC's
+   Button has no `title` prop at all — see gotcha #19).
+3. Tables: read-only ones are Table/TableHeader/Column/Row/Cell — give the
+   Table an `aria-label`, one column `isRowHeader`, rows an `id`, and a
+   `scrollLabel` if it can overflow. Row-click navigation = `onRowAction` plus
+   a real AriaLink in the name cell (keeps a crawlable anchor).
+4. **Editable grids are Tabulator** (policy at the top of this doc). Inside a
+   dialog, give the kit `Dialog` an `id` and point Tabulator's
+   `popupContainer` at it. The shared theme is `comp/tabulator-grid.css`
+   (`gc-grid` container class).
+5. Measurement vs completion: `rac/meter` for a reading within a range,
+   `rac/progress` for a task running to completion. They document the split
+   from both sides.
+6. Verify per the playbook; SSR pages additionally must pass `test:e2e:ssr`
    before "done".
-5. **Editable grids are Tabulator** (policy at the top of this doc): convert
-   the shell around an existing grid and keep it; convert a hand-rolled
-   editable table TO Tabulator (gotcha #16 for the inline-on-page wiring).
-   Inside a dialog, give the kit `Dialog` an `id` and point Tabulator's
-   `popupContainer` at it — editor popups (e.g. the class list) render fine
-   inside the RAC modal, and focus containment doesn't fight the grid's
-   dynamically-created cell editors. The shared shadcn-token theme is
-   `comp/tabulator-grid.css` (`gc-grid` container class).
-6. Suggested order: Settings (its two API-key dialogs; last consumer of
-   `ui/radio-group`), Dashboard's remaining tabs/progress (rac/tabs and
-   rac/progress already exist), then the auth/onboarding/admin pages and the
-   app chrome (Shell user menu, global confirm). CompDetail and CompWaypoints
-   are done (2026-07-21), Competitions is done (PR #401); `/scores` is
-   retired (a redirect to `/comp/:id/scores` — nothing to convert). See the
-   conversion map below for the full inventory.
 
-## Conversion map (2026-07-21)
+## Where the UI lives (2026-07-27, post-migration)
 
-Which SPA pages are on which kit, and the dialogs/popups each still owns.
-"rac breadcrumbs only" means the page body is still ui/.
-
-> **Update (2026-07-23, comp/task page UX rework):** the components below are
-> unchanged kit-wise, but several moved host page — the map's "who owns what"
-> is stale where it disagrees with this note:
->
-> - New `pages/CompScoresPage.tsx` `/comp/:id/scores` (fully RAC) now hosts
->   `CompScoresSection`'s score views (`ScoresViews`/`useCompScores`) and the
->   embedded `ScoresSection`; the comp page keeps only the new
->   `CompScoresSummary` (RAC LinkButton + lists).
-> - New `pages/CompPilotsPage.tsx` `/comp/:id/pilots` (admin-only) now hosts
->   `PilotsSection` — Tabulator grid still kept by policy.
-> - `pages/Scores.tsx` redirect target is `/comp/:id/scores`, not the comp
->   page.
-> - Task page: new RAC `comp/TaskResults.tsx` (public top-3 podium +
->   your-submission line); `TaskStandings` is now the admin-only "Manage
->   pilots & tracks" grid. `TaskExportButtons` gained an `asMenu` variant
->   (rac Menu) used by the comp featured card.
-
-**Converted (RAC):**
-
-| Page | Notes |
+| Directory | What's in it |
 |---|---|
-| `pages/TaskDetail.tsx` `/comp/:id/task/:id` | Fully RAC, incl. every dialog it opens (EditTaskDialog, RouteEditorDialog + TurnpointDetailsDialog + XContest pop-up, SubmitTrackDialog, ManualFlightDialog, TaskExportButtons, AddWaypointDialog). Only ui/ import left is `date-picker` (itself RAC under the hood). |
-| `pages/Competitions.tsx` `/comp` | RAC since PR #401 — Link cards, create-comp dialog on the kit, SearchField filter. |
-| `pages/CompFieldAnalysis.tsx`, `pages/TaskFieldAnalysis.tsx` + `field-analysis/` | RAC-native from the start (table, meter, popover, disclosure, select, checkbox, badge). Residual `ui/alert` is presentational. |
-| `pages/PilotScoreDetail.tsx` | Bespoke narrative/map markup; kit pieces (breadcrumbs, Timestamp tooltip) are rac. No dialogs. Done. |
-| `pages/Scores.tsx` | Retired — pure redirect, nothing to convert. |
-| `pages/CompDetail.tsx` `/comp/:id` + its sections (2026-07-21) | Fully RAC: hero LinkButtons (the `/replay` link stays a plain `<a className={buttonVariants(...)}>` — non-SPA entry), Create Task dialog, `SettingsDialog` (NumberFields, rac SimpleSelect + select-like SearchableSelect), `CompScoresSection` (rac tabs + sortable RAC-grid tables), `ScoresSection`, `ActivitySection` (rac tabs), `CompSetupProgress` (rac ProgressBar), `PilotsSection` (RAC table + dialog shell). The pilots editor's **Tabulator grid is kept by policy** — only its chrome converted. Only ui/ import left is `date-picker` (itself RAC under the hood). |
-| `pages/CompWaypoints.tsx` `/comp/:id/waypoints` (2026-07-21) | RAC chrome (FileTrigger upload, ToggleButton add-from-map, RacConfirmProvider) around an **inline Tabulator grid** for admins (the hand-rolled editable `<table>` became Tabulator per the policy — gotcha #16); non-admins/crawlers get a read-only RAC table (SSR content preserved). `WaypointDeviceExport` → rac Menu/Checkbox/ToggleButton (retired `ui/checkbox`); `FullScreenQR` → RAC modal primitives. AddWaypointDialog was already RAC. |
+| `src/react/rac/` | **The kit.** One component family per file. Includes `date-picker` (RAC under the hood, lazy-loaded so it stays out of the SSR bundle) and two behaviour-free static pieces, `badge` and `alert`. |
+| `src/react/vendor/` | Thin wrappers over third-party widgets RAC doesn't provide: `input-otp` (the sign-in code field) and `sonner` (the toaster). Not a kit — don't grow it without a reason of that kind. |
+| `src/react/comp/`, `pages/`, `field-analysis/`, `weather/` | Feature code. Uses the kit; owns no primitives. Local one-page helpers are fine (`SettingsCard` in Settings.tsx, which is all `ui/card` ever was). |
+| Tabulator grids | Editable grids only, per the policy above: the comp pilots editor and the waypoints admin grid, both through `comp/TabulatorGrid.tsx`. |
+| `src/analysis/`, `src/replay/` | Vanilla TS entries — own styling, no React, deliberately outside all of this. |
+| `web/frontend/static/` | The prerendered Astro content pages. No framework by design. |
 
-**Not converted (ui/shadcn) — with their dialogs/popups:**
-
-| Page / surface | ui/ usage | Dialogs & popups still on ui/ |
-|---|---|---|
-| `pages/Settings.tsx` | card, dialog, field, input, radio-group, table, button | **"Create API key" dialog**; **"API key created" dialog**. Last consumer of `ui/radio-group` (rac/radio-group exists). |
-| `pages/Dashboard.tsx` (partial — rac Tree) | tabs, progress, button | No dialogs. Tabs/progress remain ui/. |
-| `pages/Onboarding.tsx`, `pages/SignIn.tsx` | button, field, input (+ input-otp on SignIn) | No dialogs. |
-| `pages/AdminUsers.tsx`, `pages/AdminCache.tsx` | table / button | No dialogs. |
-| `components/Shell.tsx` (app chrome) | button, dropdown-menu, separator | **User account DropdownMenu** → rac `menu`. |
-| `lib/confirm.tsx` (global ConfirmProvider in routes.tsx) | alert-dialog, button | The global confirm is still ui/; `rac/confirm.tsx` exists and serves the TaskDetail subtree. Swapping the global one retires `ui/alert-dialog`. |
-
-Shared ui/ leaf modules that only die with their last consumer:
-`ui/tabs` + `ui/progress` (Dashboard), `ui/table` (Settings, AdminUsers),
-`ui/card` (Settings), `ui/dropdown-menu` (Shell only), `ui/alert`
-(ScoreFreshness, field-analysis — could become a rac/ static component like
-badge). `ui/select` and `ui/combobox` died with the CompDetail conversion
-(deleted 2026-07-21); `ui/checkbox` died with the CompWaypoints conversion
-(deleted 2026-07-21).
+`src/react/one-kit.test.ts` enforces the first rule of this table: no
+`src/react/ui/` directory, and nothing importing from one.
 
 ## Reference
 

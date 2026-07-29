@@ -22,7 +22,9 @@
  * streams the map's "Loading map…" fallback and an empty grid container.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useInView } from "../lib/use-in-view";
+import { useParams } from "react-router-dom";
+import { NotFound } from "@/react/components/NotFound";
 import { FileTrigger, type SortDescriptor } from "react-aria-components";
 import { MapPinIcon } from "lucide-react";
 import {
@@ -37,7 +39,6 @@ import { Button, ToggleButton } from "@/react/rac/button";
 import { Loading } from "@/react/rac/progress";
 import { SearchField } from "@/react/rac/field";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
-import { RacConfirmProvider } from "@/react/rac/confirm";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
@@ -166,14 +167,6 @@ const PIN_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>';
 
 export function CompWaypoints() {
-  return (
-    <RacConfirmProvider>
-      <CompWaypointsContent />
-    </RacConfirmProvider>
-  );
-}
-
-function CompWaypointsContent() {
   const { compId: compParam } = useParams<{ compId: string }>();
   const compId = idFromSegment(compParam ?? "");
   const { user } = useUser();
@@ -198,6 +191,8 @@ function CompWaypointsContent() {
   const [saving, setSaving] = useState(false);
   const [fillingAlts, setFillingAlts] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  // Mapbox (764 KB) waits until the panel nears the viewport — see use-in-view.
+  const [mapRef, mapInView] = useInView<HTMLDivElement>();
   const [addMode, setAddMode] = useState(false);
   const [fitNonce, setFitNonce] = useState(0);
   // Fly-to-waypoint request from a grid row click (see `locate`).
@@ -229,6 +224,12 @@ function CompWaypointsContent() {
   rowsRef.current = rows;
 
   useEffect(() => {
+    // Clear any previous verdict first. react-router keeps this component
+    // mounted when only the id in the path changes, so a "not found" left over
+    // from the old id would mask whatever the new one loads. That is not
+    // hypothetical: the 404 page's own "did you mean" links point back at this
+    // very route, so clicking one changed the URL and nothing else.
+    setNotFound(false);
     if (!compId) return;
     // Seeded from SSR — skip the fetch. The seed is retired on any client-side
     // navigation (see lib/initial-data.tsx), so a return visit fetches fresh.
@@ -490,12 +491,7 @@ function CompWaypointsContent() {
 
   if (notFound) {
     return (
-      <main className="mx-auto max-w-md py-12">
-        <h1 className="text-2xl font-bold">Competition not found</h1>
-        <Link to="/comp" className="mt-4 inline-block underline">
-          Back to competitions
-        </Link>
-      </main>
+      <NotFound title="Competition not found" />
     );
   }
 
@@ -566,7 +562,15 @@ function CompWaypointsContent() {
         <div className="grid gap-4 lg:grid-cols-2">
           {/* Map */}
           <div className="order-1 lg:order-2 lg:sticky lg:top-4 lg:self-start">
-            <div className="h-64 overflow-hidden rounded border border-border sm:h-80 lg:h-[520px]">
+            <div
+              ref={mapRef}
+              className="h-64 overflow-hidden rounded border border-border sm:h-80 lg:h-[520px]"
+            >
+              {!mapInView ? (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  Loading map…
+                </div>
+              ) : (
               <Suspense
                 fallback={
                   <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -584,6 +588,7 @@ function CompWaypointsContent() {
                   onMapPick={(lat, lon, details) => openAdd(formatCoords(lat, lon), details)}
                 />
               </Suspense>
+              )}
             </div>
             {isAdmin ? (
               <div className="mt-2 flex items-center gap-2">

@@ -30,17 +30,27 @@ import { DEFAULT_GAP_PARAMETERS } from './gap-scoring';
 import type { TurnpointSequenceResult } from './turnpoint-sequence';
 import { km, pts, fmtPoints, duration, defaultFormatTime } from './score-explanation-format';
 import {
-  leadingVariantSentence,
-  leadingWeightDetail,
   buildFlightSection,
   buildValiditySection,
   buildDistanceSection,
   buildTimeSection,
+  buildLeadingSection,
+  buildArrivalSection,
   buildArrivalEssNotGoalItems,
+  buildComparisonSection,
   buildTotalSection,
   buildPenaltySection,
   buildManualFlightSection,
 } from './score-explanation-sections';
+import {
+  buildTimeChart,
+  buildLeadingChart,
+  buildArrivalChart,
+  buildDistanceChart,
+  buildLaunchValidityChart,
+  buildTimeValidityChart,
+  buildDistanceValidityChart,
+} from './score-explanation-charts';
 import type {
   ScoreExplanation,
   ScoreExplanationSection,
@@ -64,8 +74,54 @@ export type {
   OpenDistanceAnchorInfo,
   ExplainOpenDistanceInput,
   ExplainManualFlightInput,
+  ScoreChart,
+  ScoreCurveChart,
+  ScoreValidityChart,
+  ScoreDistributionChart,
+  ScoreDistributionPoint,
+  ScoreDistributionMarker,
+  ScoreChartPilot,
+  ScoreChartPoint,
+  ScoreChartXUnit,
 } from './score-explanation-types';
 export { turnpointLabel } from './score-explanation-sections';
+
+/**
+ * Attach a chart to a section, when there is one to attach.
+ *
+ * A null chart is the normal case, not a failure: a component whose curve
+ * would not explain this pilot's own points (the §12.1 or §12.3.5 reductions)
+ * deliberately gets no chart, and the section's prose still explains the
+ * score. See score-explanation-charts.ts.
+ */
+function withChart(
+  section: ScoreExplanationSection,
+  chart: ScoreExplanationSection['chart'] | null,
+): ScoreExplanationSection {
+  return chart ? { ...section, chart } : section;
+}
+
+/**
+ * Attach small charts to individual rows of a section.
+ *
+ * The validity section is a table of three factors and a total, and each
+ * factor wants its own sparkline — a section-level chart would have to
+ * explain all three at once, which is exactly the conflation the rows exist
+ * to avoid. Done here rather than inside buildValiditySection so the section
+ * builders stay free of the chart module.
+ */
+function withItemCharts(
+  section: ScoreExplanationSection,
+  charts: Record<string, ScoreExplanationSection['chart'] | null>,
+): ScoreExplanationSection {
+  return {
+    ...section,
+    items: section.items.map((item) => {
+      const chart = charts[item.id];
+      return chart ? { ...item, chart } : item;
+    }),
+  };
+}
 
 /**
  * Explain a GAP-scored pilot's result.
@@ -81,51 +137,46 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
 
   const sections: ScoreExplanationSection[] = [
     buildFlightSection(task, result, entry, fmt),
-    buildValiditySection(classContext),
-    buildDistanceSection(entry, classContext, result, params),
-    buildTimeSection(entry, classContext, params, result, fmt),
+    withItemCharts(buildValiditySection(classContext, params), {
+      'launch-validity': buildLaunchValidityChart(classContext, params),
+      'time-validity': buildTimeValidityChart(classContext, params),
+      'distance-validity': buildDistanceValidityChart(entry, classContext, params),
+    }),
+    withChart(
+      buildDistanceSection(entry, classContext, result, params),
+      buildDistanceChart(entry, classContext, params),
+    ),
+    withChart(
+      buildTimeSection(entry, classContext, params, result, fmt),
+      buildTimeChart(entry, classContext, params),
+    ),
   ];
 
   if (classContext.available_points.leading > 0 || entry.leading_points > 0) {
-    sections.push({
-      id: 'leading',
-      title: 'Leading points',
-      points: entry.leading_points,
-      items: [
-        {
-          id: 'leading',
-          text: 'Leading points reward flying out front during the speed section — the pilot with the best leading coefficient takes all available leading points, others fall off with the gap.',
-          value: pts(entry.leading_points),
-          detail: leadingWeightDetail(params),
-        },
-        {
-          id: 'leading-variant',
-          text: leadingVariantSentence(params.leadingFormula),
-          emphasis: 'muted',
-        },
-      ],
-    });
+    sections.push(
+      withChart(
+        buildLeadingSection(entry, classContext, params),
+        buildLeadingChart(entry, classContext),
+      ),
+    );
   }
 
   if (classContext.available_points.arrival > 0 || entry.arrival_points > 0) {
-    sections.push({
-      id: 'arrival',
-      title: 'Arrival points',
-      points: entry.arrival_points,
-      items: [
-        {
-          id: 'arrival',
-          text: 'Arrival points reward crossing the end of the speed section early relative to the other pilots who reached it.',
-          value: pts(entry.arrival_points),
-        },
-        ...buildArrivalEssNotGoalItems(entry, params),
-      ],
-    });
+    sections.push(
+      withChart(
+        buildArrivalSection(entry, classContext, params, fmt),
+        buildArrivalChart(entry, classContext),
+      ),
+    );
   }
 
   const penalty = buildPenaltySection(entry, params.jumpTheGunFactor);
   if (penalty) sections.push(penalty);
   sections.push(buildTotalSection(entry));
+  // After the total, deliberately: the reader needs their own arithmetic to
+  // add up before being shown what it cost them against the winner.
+  const comparison = buildComparisonSection(entry, classContext);
+  if (comparison) sections.push(comparison);
 
   let headline: string;
   if (entry.early_start_outcome === 'pg_launch_to_sss') {
@@ -287,16 +338,24 @@ export function explainManualFlightScore(
 
   const sections: ScoreExplanationSection[] = [
     buildManualFlightSection(task, geometry, entry),
-    buildValiditySection(classContext),
+    withItemCharts(buildValiditySection(classContext, params), {
+      'launch-validity': buildLaunchValidityChart(classContext, params),
+      'time-validity': buildTimeValidityChart(classContext, params),
+      'distance-validity': buildDistanceValidityChart(entry, classContext, params),
+    }),
     buildDistanceSection(entry, classContext, synthResult, params),
     buildTimeSection(entry, classContext, params, synthResult, defaultFormatTime),
   ];
 
   if (classContext.available_points.leading > 0 || entry.leading_points > 0) {
+    // Not buildLeadingSection: a manual flight has no track to measure a
+    // leading coefficient from, so there is no arithmetic to show and the
+    // reason for the zero is the whole explanation.
     sections.push({
       id: 'leading',
       title: 'Leading points',
       points: entry.leading_points,
+      docHref: '/scoring/gap#leading-points',
       items: [
         {
           id: 'leading',
@@ -308,24 +367,14 @@ export function explainManualFlightScore(
   }
 
   if (classContext.available_points.arrival > 0 || entry.arrival_points > 0) {
-    sections.push({
-      id: 'arrival',
-      title: 'Arrival points',
-      points: entry.arrival_points,
-      items: [
-        {
-          id: 'arrival',
-          text: 'Arrival points reward crossing the end of the speed section early relative to the other pilots who reached it.',
-          value: pts(entry.arrival_points),
-        },
-        ...buildArrivalEssNotGoalItems(entry, params),
-      ],
-    });
+    sections.push(buildArrivalSection(entry, classContext, params));
   }
 
   const penalty = buildPenaltySection(entry, params.jumpTheGunFactor);
   if (penalty) sections.push(penalty);
   sections.push(buildTotalSection(entry));
+  const comparison = buildComparisonSection(entry, classContext);
+  if (comparison) sections.push(comparison);
 
   const headline = geometry.madeGoal
     ? `Manual flight — made goal — ${fmtPoints(entry.total_score)} points`

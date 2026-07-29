@@ -28,6 +28,7 @@ import {
   NotFoundError,
   type FetchFn,
 } from "../../web/frontend/src/react/loaders";
+import { buildScoresCsv, scoresCsvFilename } from "../../web/frontend/src/scores-csv";
 import {
   idFromSegment,
   compPath,
@@ -39,9 +40,35 @@ import {
   pilotPath,
 } from "../../web/frontend/src/react/lib/slug";
 
+import type { AuthUser } from "../../web/frontend/src/auth/client";
+
 interface Env {
   COMPETITION_API: Fetcher;
+  AUTH_API: Fetcher;
   ASSETS: Fetcher;
+}
+
+/**
+ * Resolve the visitor from the forwarded cookie so the rendered page already
+ * knows who they are and the client can skip /api/auth/me entirely — it was
+ * two round trips on every page load, ~30% of all requests on a public page.
+ *
+ * Only called when a cookie is present: an anonymous visitor is signed out by
+ * definition, so the cacheable path stays free of an extra hop. `undefined`
+ * on failure means "unknown" and the client falls back to asking, so an auth
+ * blip can never render a signed-in visitor as signed out.
+ */
+async function fetchVisitor(env: Env, cookie: string): Promise<AuthUser | null | undefined> {
+  try {
+    const res = await env.AUTH_API.fetch(
+      new Request("https://auth.internal/api/auth/me", { headers: { Cookie: cookie } })
+    );
+    if (!res.ok) return undefined;
+    const body = (await res.json()) as { user: AuthUser | null };
+    return body.user ?? null;
+  } catch {
+    return undefined;
+  }
 }
 
 /** When present, the page's stale-first freshness — drives an age-based
@@ -357,6 +384,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return shellWithNoindex(env, url, 200);
   }
 
+  // The scores page's CSV twin — a real URL, not a client-side blob, so it can
+  // be linked, curl'd and pulled into a spreadsheet (Google Sheets IMPORTDATA).
+  const csvMatch = path.match(SCORES_CSV_PATTERN);
+  if (csvMatch) return scoresCsv(env, csvMatch[1], cookie, url.origin);
+
   const match = ROUTES.map((r) => ({ r, m: path.match(r.pattern) })).find((x) => x.m);
   // Not one of the SSR routes. Valid SPA-only /comp routes (the pilots roster,
   // the old task-analysis redirect) were already handled above via
@@ -366,10 +398,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   // + noindex, rather than the old soft-200 that made junk URLs look valid.
   if (!match || !match.m) return notFoundShell(env, url);
 
-  // Forward the cookie so the API answers exactly as it would for this visitor
-  // (admins see their test comps; everyone else gets the public view / 404).
-  const fetcher: FetchFn = (p, init) =>
-    env.COMPETITION_API.fetch(new Request(`https://comp.internal${p}`, mergeCookie(init, cookie)));
+  const fetcher = compFetcher(env, cookie);
+
+  // In flight alongside the loader — the render needs both, and neither
+  // depends on the other. An anonymous visitor resolves to null for free.
+  const visitorPromise: Promise<AuthUser | null | undefined> = cookie
+    ? fetchVisitor(env, cookie)
+    : Promise.resolve(null);
 
   let rendered: Rendered;
   try {
@@ -389,13 +424,16 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return canonicalRedirect(url.origin + rendered.canonicalPath + url.search, cookie);
   }
 
+  const user = await visitorPromise;
+  const ssrData = { path, data: rendered.data, user };
+
   let bodyHtml: string;
   try {
     // Render with the query string: it is part of the location the client
     // hydrates from, and pages read view state out of it (`?class=`, `?task=`).
-    // `initialData.path` stays the PATHNAME — useInitialData matches it against
+    // `ssrData.path` stays the PATHNAME — useInitialData matches it against
     // location.pathname, which a query-bearing string would never equal.
-    const stream = await render(path + url.search, { path, data: rendered.data });
+    const stream = await render(path + url.search, ssrData);
     bodyHtml = await new Response(stream as ReadableStream).text();
   } catch (err) {
     console.error("SSR render error for", path, err);
@@ -403,7 +441,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
 
   const template = await (await fetchShell(env, url)).text();
-  const html = injectSsr(template, path, bodyHtml, rendered.head, rendered.data);
+  const html = injectSsr(template, path, bodyHtml, rendered.head, ssrData);
 
   return new Response(html, {
     status: 200,
@@ -413,6 +451,82 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     },
   });
 };
+
+// ── scores CSV ───────────────────────────────────────────────────────────────
+
+/** `/comp/<slug>-<id>/scores.csv` — the scores page's downloadable twin. */
+const SCORES_CSV_PATTERN = /^\/comp\/([^/]+)\/scores\.csv$/;
+
+/**
+ * Serve the whole competition's scores as one long CSV (one row per pilot per
+ * task — see scores-csv.ts for why that shape). Built from the same loader the
+ * scores page renders from, so the file can never disagree with the page.
+ *
+ * A URL rather than a client-built blob because that is what makes it useful
+ * beyond a download: Google Sheets' IMPORTDATA reads it live, and it works with
+ * JS off. The visitor's cookie is forwarded like everywhere else here, so an
+ * admin can export a `test` comp and everyone else gets its 404. Never
+ * indexed — it is the page's data, and the page is the indexable form.
+ *
+ * The file's link columns are absolute against THIS request's origin, so an
+ * export taken from a preview deployment links back into that deployment
+ * rather than quietly sending the reader to production.
+ */
+async function scoresCsv(
+  env: Env,
+  segment: string,
+  cookie: string | null,
+  origin: string
+): Promise<Response> {
+  const compId = idFromSegment(segment);
+  let data: Awaited<ReturnType<typeof loadCompScores>>;
+  try {
+    data = await loadCompScores(compFetcher(env, cookie), compId);
+  } catch (err) {
+    if (err instanceof NotFoundError) return csvError(404, "Competition not found");
+    console.error("scores CSV error for", compId, err);
+    return csvError(503, "Scores are unavailable right now — please try again");
+  }
+
+  // No scored task yet → the header row alone. An empty export is a truthful
+  // answer; an error would make a legitimate URL look broken.
+  const csv = buildScoresCsv(data.scores ?? { comp_id: compId, tasks: [], standings: [] }, {
+    compName: data.comp.name,
+    origin,
+  });
+  return new Response(csv, {
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${scoresCsvFilename(data.comp.name)}"`,
+      "X-Robots-Tag": "noindex",
+      "Cache-Control": pageCacheControl(
+        cookie,
+        data.scores
+          ? { computedAt: data.scores.computed_at, stale: data.scores.stale }
+          : undefined
+      ),
+    },
+  });
+}
+
+function csvError(status: number, message: string): Response {
+  return new Response(`${message}\n`, {
+    status,
+    headers: { "Content-Type": "text/plain; charset=utf-8", "X-Robots-Tag": "noindex" },
+  });
+}
+
+/**
+ * A FetchFn onto the competition-api service binding that forwards the
+ * visitor's cookie, so the API answers exactly as it would for them (admins
+ * see their test comps; everyone else gets the public view / 404).
+ */
+function compFetcher(env: Env, cookie: string | null): FetchFn {
+  return (p, init) =>
+    env.COMPETITION_API.fetch(
+      new Request(`https://comp.internal${p}`, mergeCookie(init, cookie))
+    );
+}
 
 /**
  * Cache-Control for a rendered SSR page. Cookie-forwarded renders are
@@ -490,7 +604,7 @@ function injectSsr(
   path: string,
   bodyHtml: string,
   head: HeadTags,
-  data: unknown
+  ssrData: { path: string; data: unknown; user: AuthUser | null | undefined }
 ): string {
   const headTags =
     (head.noindex ? `<meta name="robots" content="noindex">\n` : "") +
@@ -507,7 +621,10 @@ function injectSsr(
 
   // __SSR_DATA__ must run before the client entry module (which sits after the
   // root div in app.html), so the client hydrates from the same loader data.
-  const ssrScript = `<script>window.__SSR_DATA__=${serialize({ path, data })}</script>`;
+  // JSON.stringify drops an `undefined` value entirely, which is exactly the
+  // encoding the client wants: no `user` key means "unknown, go and ask",
+  // distinct from `"user":null` meaning a known signed-out visitor.
+  const ssrScript = `<script>window.__SSR_DATA__=${serialize(ssrData)}</script>`;
   out = out.replace(
     '<div id="root"></div>',
     `<div id="root">${bodyHtml}</div>${ssrScript}`

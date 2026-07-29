@@ -3,6 +3,7 @@ import {
   slugify,
   slugSegment,
   idFromSegment,
+  nameSlugFromSegment,
   compPath,
   compScoresPath,
   compAnalysisPath,
@@ -57,6 +58,22 @@ describe("slugSegment / idFromSegment round-trip", () => {
     expect(idFromSegment("corryong-cup-2026-voqc")).toBe("voqc");
     expect(idFromSegment("task-3-open-zqfs")).toBe("zqfs");
     expect(idFromSegment("corryong-cup-2026-voqc".replace(/-/g, "%2D"))).toBe("voqc");
+  });
+
+  test("recovers the name slug — what a dead URL still says it wanted", () => {
+    expect(nameSlugFromSegment("corryong-cup-2026-voqc")).toBe("corryong-cup-2026");
+    expect(nameSlugFromSegment("task-3-open-zqfs")).toBe("task-3-open");
+    expect(nameSlugFromSegment("jane-doe-abcd")).toBe("jane-doe");
+    // A bare-id segment carries no name to recover.
+    expect(nameSlugFromSegment("voqc")).toBe("");
+    expect(nameSlugFromSegment("corryong-cup-2026-voqc".replace(/-/g, "%2D"))).toBe(
+      "corryong-cup-2026"
+    );
+  });
+
+  test("slug and id together reconstruct the segment", () => {
+    const seg = slugSegment("voqc", "Corryong Cup 2026");
+    expect(`${nameSlugFromSegment(seg)}-${idFromSegment(seg)}`).toBe(seg);
   });
 });
 

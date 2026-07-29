@@ -31,7 +31,7 @@ export async function render(
   // server, so there is nothing to carry there.
   const { pathname, search } = new URL(url, "http://ssr.local");
   return renderToReadableStream(
-    <AppProviders>
+    <AppProviders initialUser={initialData.user}>
       <StaticRouter location={pathname + search}>
         <InitialDataProvider value={initialData}>
           <AppRoutes />

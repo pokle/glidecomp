@@ -13,6 +13,7 @@
  */
 import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { NotFound } from "@/react/components/NotFound";
 import { Form } from "react-aria-components";
 import { xctaskTurnpointsToRecords, type XCTask } from "@glidecomp/engine";
 import { Badge } from "@/react/rac/badge";
@@ -29,8 +30,7 @@ import {
 import { TextField, Label, Description } from "@/react/rac/field";
 import { Checkbox, CheckboxGroup } from "@/react/rac/checkbox";
 import { Tag, TagGroup } from "@/react/rac/tag-group";
-import { RacConfirmProvider } from "@/react/rac/confirm";
-import { DatePicker, TimePicker } from "@/react/ui/date-picker";
+import { DatePicker, TimePicker } from "@/react/rac/date-picker";
 import { api } from "../../comp/api";
 import {
   formatInstant,
@@ -46,6 +46,8 @@ import { useAdminView, useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
 import { SectionHeader } from "../components/SectionHeader";
 import { WeatherSection } from "../weather/WeatherSection";
+import { useTaskWeather } from "../weather/use-task-weather";
+import { taskWindFromWeather, type TaskWind } from "../comp/task-wind";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { TaskResults } from "../comp/TaskResults";
 import { CompNameProvider } from "../comp/comp-name-context";
@@ -53,6 +55,7 @@ import { TaskStandings } from "../comp/TaskStandings";
 import { RouteEditorDialog } from "../comp/RouteEditorDialog";
 import { TurnpointsTable } from "../comp/TurnpointsTable";
 import { TaskDiagram } from "../comp/TaskDiagram";
+import { TaskStrip } from "../comp/TaskStrip";
 import { gateToHHMM, startConfigSummary } from "../comp/route-editor";
 import { useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 import {
@@ -70,14 +73,6 @@ import { useCanonicalPath } from "../lib/use-canonical-path";
 import { cn } from "../lib/utils";
 
 export function TaskDetail() {
-  return (
-    <RacConfirmProvider>
-      <TaskDetailContent />
-    </RacConfirmProvider>
-  );
-}
-
-function TaskDetailContent() {
   const { compId: compParam, taskId: taskParam } = useParams<{ compId: string; taskId: string }>();
   const compId = idFromSegment(compParam ?? "");
   const taskId = idFromSegment(taskParam ?? "");
@@ -109,6 +104,12 @@ function TaskDetailContent() {
   const [routeOpen, setRouteOpen] = useState(false);
 
   useEffect(() => {
+    // Clear any previous verdict first. react-router keeps this component
+    // mounted when only the id in the path changes, so a "not found" left over
+    // from the old id would mask whatever the new one loads. That is not
+    // hypothetical: the 404 page's own "did you mean" links point back at this
+    // very route, so clicking one changed the URL and nothing else.
+    setNotFound(false);
     if (!compId || !taskId) {
       setNotFound(true);
       return;
@@ -182,15 +183,17 @@ function TaskDetailContent() {
     isAdmin
   );
 
+  // Fetched ONCE here and handed down, rather than in each consumer: the
+  // weather section and the route views both want it, and the endpoint can
+  // schedule a background provider fetch, so asking twice is not free.
+  const weather = useTaskWeather(compId || null, taskId || null);
+  const wind = useMemo(
+    () => taskWindFromWeather(weather.data?.weather ?? null),
+    [weather.data]
+  );
+
   if (notFound || !compId || !taskId) {
-    return (
-      <div>
-        <p>Competition not found</p>
-        <Link className="underline underline-offset-4" to="/comp">
-          Back to Competitions
-        </Link>
-      </div>
-    );
+    return <NotFound title="Task not found" />;
   }
 
   if (!task) {
@@ -310,6 +313,7 @@ function TaskDetailContent() {
         xctsk={task.xctsk}
         taskDate={task.task_date}
         timezone={comp?.timezone ?? null}
+        wind={wind}
         isAdmin={isAdmin}
         onEditRoute={() => setRouteOpen(true)}
       />
@@ -321,6 +325,7 @@ function TaskDetailContent() {
       <WeatherSection
         compId={compId}
         taskId={taskId}
+        weather={weather}
         notes={task.weather_notes}
         isAdmin={isAdmin}
         compTimezone={comp?.timezone ?? null}
@@ -542,6 +547,7 @@ function TurnpointsSection({
   xctsk,
   taskDate,
   timezone,
+  wind,
   isAdmin,
   onEditRoute,
 }: {
@@ -549,6 +555,8 @@ function TurnpointsSection({
   taskDate: string;
   /** Comp-local IANA zone; gate times in the summary show comp-local when set. */
   timezone: string | null;
+  /** The day's modelled wind, once the weather lands. Null until then. */
+  wind: TaskWind | null;
   isAdmin: boolean;
   onEditRoute: () => void;
 }) {
@@ -588,8 +596,14 @@ function TurnpointsSection({
               onTurnpointHover={(tp) => setFocused(tp?.index ?? null)}
               onTurnpointSelect={(tp) => setFocused(tp.index)}
               highlightIndex={focused}
+              wind={wind}
             />
           </div>
+          {/* Two views of one route: the diagram is the shape on the ground,
+              the strip is the order and the winding with geography
+              straightened out. The table underneath is the numbers, and the
+              accessible equivalent for both. */}
+          <TaskStrip xctsk={xctsk} wind={wind} />
           <TurnpointsTable xctsk={xctsk} highlightIndex={focused} />
         </>
       ) : (

@@ -4,6 +4,7 @@ import { bodyLimit } from "hono/body-limit";
 import { MAX_BODY_BYTES } from "./igc-validation";
 import type { Env, AuthUser } from "./env";
 import { compRoutes } from "./routes/comp";
+import { lookupRoutes } from "./routes/lookup";
 import { taskRoutes } from "./routes/task";
 import { waypointsRoutes } from "./routes/waypoints";
 import { igcRoutes } from "./routes/igc";
@@ -18,6 +19,7 @@ import { userFilesRoutes } from "./routes/user-files";
 import { visualizationRoutes } from "./routes/visualization";
 import { adminRoutes } from "./routes/admin";
 import { cacheRoutes } from "./routes/cache";
+import { civlRankingsRoutes } from "./routes/civl-rankings";
 
 type Variables = {
   user: AuthUser;
@@ -93,6 +95,8 @@ const routes = app
   .route("/", pilotRoutes)
   .route("/", pilotStatusRoutes)
   .route("/", manualFlightRoutes)
+  // Ahead of compRoutes: /api/comp/lookup must win over /api/comp/:comp_id.
+  .route("/", lookupRoutes)
   .route("/", compRoutes)
   .route("/", taskRoutes)
   .route("/", waypointsRoutes)
@@ -102,7 +106,8 @@ const routes = app
   .route("/", auditRoutes)
   .route("/", userFilesRoutes)
   .route("/", adminRoutes)
-  .route("/", cacheRoutes);
+  .route("/", cacheRoutes)
+  .route("/", civlRankingsRoutes);
 
 export type AppType = typeof routes;
 

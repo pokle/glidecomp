@@ -4,45 +4,71 @@
  * (React port of profile.ts) with the account settings (React port of
  * settings.ts); each concern is its own separated card.
  */
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/react/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/react/ui/card";
+import { Form } from "react-aria-components";
+import { Button } from "@/react/rac/button";
 import {
   Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/react/ui/dialog";
-import { Field, FieldLabel, FieldLegend, FieldSet } from "@/react/ui/field";
-import { Input } from "@/react/ui/input";
-import { RadioGroup, RadioGroupItem } from "@/react/ui/radio-group";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/react/ui/table";
+  Modal,
+} from "@/react/rac/dialog";
+import { FieldGroup, TextField } from "@/react/rac/field";
+import { Loading } from "@/react/rac/progress";
+import { Radio, RadioGroup } from "@/react/rac/radio-group";
+import { Cell, Column, Row, Table, TableBody, TableHeader } from "@/react/rac/table";
+import { cn } from "@/react/lib/utils";
 import { api } from "../../comp/api";
 import { deleteAccount } from "../../auth/client";
 import { storage } from "../../analysis/storage";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
-import { goToSignIn, useUser } from "../lib/user";
+import { useGoToSignIn, useUser } from "../lib/user";
 import { type ThemePreference, useTheme } from "../lib/theme";
 import { setUnit, useUnits, type UnitPreferences } from "../lib/units";
+
+/**
+ * The page is a stack of separated panels. `ui/card` was a styled <div> with
+ * a grid header and this was its last consumer, so it lives here now — RAC has
+ * no card (there is no behaviour to own), and one local helper beats seven
+ * copies of the same markup.
+ */
+function SettingsCard({
+  title,
+  description,
+  action,
+  className,
+  children,
+}: {
+  title: React.ReactNode;
+  description?: React.ReactNode;
+  /** Right-aligned slot on the title row (the "Saved ✓" flash). */
+  action?: React.ReactNode;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      className={cn(
+        "flex flex-col gap-4 overflow-hidden rounded-xl bg-card p-4 text-sm text-card-foreground ring-1 ring-foreground/10",
+        className
+      )}
+    >
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-1">
+        <div className="grid gap-1">
+          <h2 className="text-base leading-snug font-medium">{title}</h2>
+          {description ? (
+            <div className="text-sm text-muted-foreground">{description}</div>
+          ) : null}
+        </div>
+        {action ? <div className="ml-auto shrink-0">{action}</div> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
 
 interface ApiKey {
   id: string;
@@ -84,6 +110,7 @@ function SavedFlash({ nonce }: { nonce: number }) {
 
 export function Settings() {
   const { user, loading, isSuperAdmin, previewRole } = useUser();
+  const goToSignIn = useGoToSignIn();
 
   useEffect(() => {
     document.title = "GlideComp - Settings";
@@ -97,7 +124,7 @@ export function Settings() {
         <div>
           <h1 className="text-2xl font-bold">Settings</h1>
           <p className="text-muted-foreground">Sign in to manage your account</p>
-          <Button type="button" className="mt-4" onClick={() => goToSignIn("/settings")}>
+          <Button className="mt-4" onPress={() => goToSignIn("/settings")}>
             Sign in
           </Button>
         </div>
@@ -133,24 +160,19 @@ function AccountSection() {
   ];
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Account</CardTitle>
-        <CardDescription>
-          You can sign in with Google or an emailed code — both use this address.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-[auto_1fr]">
-          {rows.map((row) => (
-            <div key={row.label} className="contents">
-              <dt className="text-sm text-muted-foreground">{row.label}</dt>
-              <dd className="text-sm font-medium break-all">{row.value}</dd>
-            </div>
-          ))}
-        </dl>
-      </CardContent>
-    </Card>
+    <SettingsCard
+      title="Account"
+      description="You can sign in with Google or an emailed code — both use this address."
+    >
+      <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-[auto_1fr]">
+        {rows.map((row) => (
+          <div key={row.label} className="contents">
+            <dt className="text-sm text-muted-foreground">{row.label}</dt>
+            <dd className="text-sm font-medium break-all">{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </SettingsCard>
   );
 }
 
@@ -165,48 +187,38 @@ const THEME_OPTIONS: { value: ThemePreference; label: string; description: strin
 function AppearanceSection() {
   const [theme, setTheme] = useTheme();
   const [savedNonce, setSavedNonce] = useState(0);
-  const idBase = useId();
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Appearance</CardTitle>
-        <CardDescription>
-          Choose how GlideComp looks on this device. Changes apply immediately.
-        </CardDescription>
-        <CardAction>
-          <SavedFlash nonce={savedNonce} />
-        </CardAction>
-      </CardHeader>
-      <CardContent>
-        <RadioGroup
-          value={theme}
-          onValueChange={(value) => {
-            setTheme(value as ThemePreference);
-            setSavedNonce((n) => n + 1);
-          }}
-          aria-label="Theme"
-          className="gap-3"
-        >
-          {THEME_OPTIONS.map((option) => {
-            const id = `${idBase}-${option.value}`;
-            return (
-              <label
-                key={option.value}
-                htmlFor={id}
-                className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 has-[[data-checked]]:border-primary has-[[data-checked]]:bg-accent/50"
-              >
-                <RadioGroupItem id={id} value={option.value} />
-                <div className="grid gap-0.5">
-                  <span className="text-sm font-medium leading-none">{option.label}</span>
-                  <span className="text-sm text-muted-foreground">{option.description}</span>
-                </div>
-              </label>
-            );
-          })}
-        </RadioGroup>
-      </CardContent>
-    </Card>
+    <SettingsCard
+      title="Appearance"
+      description="Choose how GlideComp looks on this device. Changes apply immediately."
+      action={<SavedFlash nonce={savedNonce} />}
+    >
+      {/* RAC's Radio IS the label, so the card styling goes on the Radio
+          itself rather than a wrapping <label> with htmlFor. */}
+      <RadioGroup
+        value={theme}
+        onChange={(value) => {
+          setTheme(value as ThemePreference);
+          setSavedNonce((n) => n + 1);
+        }}
+        aria-label="Theme"
+        className="gap-3"
+      >
+        {THEME_OPTIONS.map((option) => (
+          <Radio
+            key={option.value}
+            value={option.value}
+            className="w-full cursor-pointer gap-3 rounded-lg border p-3 data-selected:border-primary data-selected:bg-accent/50"
+          >
+            <span className="grid gap-0.5">
+              <span className="text-sm font-medium leading-none">{option.label}</span>
+              <span className="text-sm text-muted-foreground">{option.description}</span>
+            </span>
+          </Radio>
+        ))}
+      </RadioGroup>
+    </SettingsCard>
   );
 }
 
@@ -263,69 +275,46 @@ const UNIT_GROUPS: {
 function UnitsSection() {
   const units = useUnits();
   const [savedNonce, setSavedNonce] = useState(0);
-  const idBase = useId();
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Units</CardTitle>
-        <CardDescription>
-          How speeds, altitudes, climb rates and distances are displayed.
-          Changes apply immediately, and sync to your account when you're
-          signed in.
-        </CardDescription>
-        <CardAction>
-          <SavedFlash nonce={savedNonce} />
-        </CardAction>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-4">
-          {UNIT_GROUPS.map((group) => {
-            const labelId = `${idBase}-${group.key}-label`;
-            return (
-              <div
-                key={group.key}
-                className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2"
-              >
-                <div className="grid gap-0.5">
-                  <span id={labelId} className="text-sm font-medium leading-none">
-                    {group.label}
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    {group.description}
-                  </span>
-                </div>
-                <RadioGroup
-                  value={units[group.key]}
-                  onValueChange={(value) => {
-                    setUnit(group.key, value as UnitPreferences[typeof group.key]);
-                    setSavedNonce((n) => n + 1);
-                  }}
-                  aria-labelledby={labelId}
-                  className="flex flex-row gap-2"
+    <SettingsCard
+      title="Units"
+      description="How speeds, altitudes, climb rates and distances are displayed. Changes apply immediately, and sync to your account when you're signed in."
+      action={<SavedFlash nonce={savedNonce} />}
+    >
+      <div className="grid gap-4">
+        {UNIT_GROUPS.map((group) => (
+          // The group's own label + description ARE the RadioGroup's label
+          // and description slots now, so there is no aria-labelledby to wire.
+          <RadioGroup
+            key={group.key}
+            value={units[group.key]}
+            onChange={(value) => {
+              setUnit(group.key, value as UnitPreferences[typeof group.key]);
+              setSavedNonce((n) => n + 1);
+            }}
+            aria-label={group.label}
+            className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2"
+          >
+            <span className="grid gap-0.5">
+              <span className="text-sm font-medium leading-none">{group.label}</span>
+              <span className="text-sm text-muted-foreground">{group.description}</span>
+            </span>
+            <span className="flex flex-row gap-2">
+              {group.options.map((option) => (
+                <Radio
+                  key={option.value}
+                  value={option.value}
+                  className="cursor-pointer rounded-lg border px-3 py-1.5 font-medium data-selected:border-primary data-selected:bg-accent/50"
                 >
-                  {group.options.map((option) => {
-                    const id = `${idBase}-${group.key}-${option.value}`;
-                    return (
-                      <label
-                        key={option.value}
-                        htmlFor={id}
-                        className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 has-[[data-checked]]:border-primary has-[[data-checked]]:bg-accent/50"
-                      >
-                        <RadioGroupItem id={id} value={option.value} />
-                        <span className="text-sm font-medium leading-none">
-                          {option.label}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </RadioGroup>
-              </div>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
+                  {option.label}
+                </Radio>
+              ))}
+            </span>
+          </RadioGroup>
+        ))}
+      </div>
+    </SettingsCard>
   );
 }
 
@@ -365,7 +354,6 @@ function ProfileSection() {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ kind: "success" | "error"; message: string } | null>(null);
-  const idBase = useId();
   const confirm = useConfirm();
   const navigate = useNavigate();
 
@@ -499,84 +487,77 @@ function ProfileSection() {
   }
 
   const renderField = (field: (typeof PROFILE_FIELDS)[number]) => (
-    <Field
+    <TextField
       key={field.key}
+      label={field.label}
       // The display name reads better full-width above the paired contact rows.
       className={field.key === "name" ? "sm:col-span-2" : undefined}
-    >
-      <FieldLabel htmlFor={`${idBase}-${field.key}`}>{field.label}</FieldLabel>
-      <Input
-        id={`${idBase}-${field.key}`}
-        value={values[field.key]}
-        onChange={(e) => {
-          setValues((v) => ({ ...v, [field.key]: e.target.value }));
-          // A stale "Profile saved" next to re-edited fields reads as a lie.
-          setStatus(null);
-        }}
-        required={field.key === "name"}
-      />
-    </Field>
+      value={values[field.key]}
+      onChange={(value) => {
+        setValues((v) => ({ ...v, [field.key]: value }));
+        // A stale "Profile saved" next to re-edited fields reads as a lie.
+        setStatus(null);
+      }}
+      isRequired={field.key === "name"}
+    />
   );
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Profile</CardTitle>
-        <CardDescription>
-          Your pilot details, used when you register for competitions. Changes
-          take effect when you save.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {state === "loading" ? (
-          <p role="status" className="text-muted-foreground">
-            Loading…
-          </p>
-        ) : state === "error" ? (
-          <p role="alert">Failed to load profile</p>
-        ) : (
-          <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-            <FieldSet>
-              <FieldLegend variant="label">Name &amp; contact</FieldLegend>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {NAME_CONTACT_FIELDS.map(renderField)}
-              </div>
-            </FieldSet>
-
-            <FieldSet>
-              <FieldLegend variant="label">Pilot IDs</FieldLegend>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {ID_FIELDS.map(renderField)}
-              </div>
-            </FieldSet>
-
-            {status ? (
-              <p
-                role={status.kind === "error" ? "alert" : "status"}
-                className={
-                  status.kind === "error"
-                    ? "text-sm text-destructive"
-                    : "text-sm text-muted-foreground"
-                }
-              >
-                {status.message}
-              </p>
-            ) : null}
-
-            <div className="flex items-center gap-3">
-              <Button type="submit" disabled={saving || !dirty}>
-                {saving ? "Saving..." : "Save profile"}
-              </Button>
-              {/* The dirty hint doubles as the explanation for why Save is
-                  enabled; role=status so the state change is announced. */}
-              <span role="status" className="text-sm text-muted-foreground">
-                {dirty && !saving ? "Unsaved changes" : ""}
-              </span>
+    <SettingsCard
+      title="Profile"
+      description="Your pilot details, used when you register for competitions. Changes take effect when you save."
+    >
+      {state === "loading" ? (
+        <Loading>Loading your profile…</Loading>
+      ) : state === "error" ? (
+        <p role="alert">Failed to load profile</p>
+      ) : (
+        <Form onSubmit={handleSubmit} className="flex flex-col gap-6">
+          <FieldGroup label="Name &amp; contact">
+            <div className="grid gap-4 sm:grid-cols-2">
+              {NAME_CONTACT_FIELDS.map(renderField)}
             </div>
-          </form>
-        )}
-      </CardContent>
-    </Card>
+          </FieldGroup>
+
+          <FieldGroup label="Pilot IDs">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {ID_FIELDS.map(renderField)}
+            </div>
+          </FieldGroup>
+
+          {status ? (
+            <p
+              role={status.kind === "error" ? "alert" : "status"}
+              className={
+                status.kind === "error"
+                  ? "text-sm text-destructive"
+                  : "text-sm text-muted-foreground"
+              }
+            >
+              {status.message}
+            </p>
+          ) : null}
+
+          <div className="flex items-center gap-3">
+            {/* isDisabled for "nothing to save" (a standing state), isPending
+                for the save in flight — two different things, so both. */}
+            <Button
+              type="submit"
+              isDisabled={!dirty}
+              isPending={saving}
+              pendingLabel="Saving your profile"
+            >
+              Save profile
+            </Button>
+            {/* The dirty hint doubles as the explanation for why Save is
+                enabled; role=status so the state change is announced. */}
+            <span role="status" className="text-sm text-muted-foreground">
+              {dirty && !saving ? "Unsaved changes" : ""}
+            </span>
+          </div>
+        </Form>
+      )}
+    </SettingsCard>
   );
 }
 
@@ -590,7 +571,6 @@ function ApiKeysSection() {
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
-  const keyNameId = useId();
 
   const loadKeys = useCallback(async () => {
     setLoadError(null);
@@ -665,10 +645,10 @@ function ApiKeysSection() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>API keys</CardTitle>
-        <CardDescription>
+    <SettingsCard
+      title="API keys"
+      description={
+        <>
           Grant scoring agents programmatic access to your account. See the{" "}
           <a
             href="https://github.com/pokle/glidecomp/blob/master/docs/api.md"
@@ -679,12 +659,12 @@ function ApiKeysSection() {
             API documentation
           </a>{" "}
           for endpoints, examples, and rate limits.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+        </>
+      }
+    >
+      <div>
         <Button
-          type="button"
-          onClick={() => {
+          onPress={() => {
             setKeyName("");
             setCreateOpen(true);
           }}
@@ -697,77 +677,74 @@ function ApiKeysSection() {
             {loadError}
           </p>
         ) : keys === null ? (
-          <p role="status" className="mt-4 text-muted-foreground">
-            Loading API keys…
-          </p>
+          <Loading className="mt-4">Loading API keys…</Loading>
         ) : keys.length === 0 ? (
           <p className="mt-4 text-muted-foreground">No API keys yet.</p>
         ) : (
           <div className="mt-4 rounded-lg border">
-            <Table>
+            <Table aria-label="API keys">
               <TableHeader>
-                <TableRow>
-                  <TableHead>Label</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Last used</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
+                <Column isRowHeader>Label</Column>
+                <Column>Created</Column>
+                <Column>Last used</Column>
+                <Column>
+                  <span className="sr-only">Actions</span>
+                </Column>
               </TableHeader>
               <TableBody>
                 {keys.map((key) => (
-                  <TableRow key={key.id}>
-                    <TableCell>{key.name ?? <em>Unnamed</em>}</TableCell>
-                    <TableCell>{new Date(key.createdAt).toLocaleDateString()}</TableCell>
-                    <TableCell>
+                  <Row key={key.id} id={key.id}>
+                    <Cell>{key.name ?? <em>Unnamed</em>}</Cell>
+                    <Cell>{new Date(key.createdAt).toLocaleDateString()}</Cell>
+                    <Cell>
                       {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleDateString() : "Never"}
-                    </TableCell>
-                    <TableCell>
+                    </Cell>
+                    <Cell>
                       <Button
-                        type="button"
                         variant="outline"
                         size="sm"
-                        disabled={revokingId === key.id}
-                        onClick={() => handleRevoke(key.id)}
+                        isPending={revokingId === key.id}
+                        pendingLabel="Revoking this key"
+                        onPress={() => void handleRevoke(key.id)}
                       >
-                        {revokingId === key.id ? "Revoking..." : "Revoke"}
+                        Revoke
                       </Button>
-                    </TableCell>
-                  </TableRow>
+                    </Cell>
+                  </Row>
                 ))}
               </TableBody>
             </Table>
           </div>
         )}
-      </CardContent>
+      </div>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
+      <Modal isOpen={createOpen} onOpenChange={setCreateOpen}>
+        <Dialog>
           <DialogHeader>
             <DialogTitle>Create API key</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleCreate} className="flex flex-col gap-4">
-            <Field>
-              <FieldLabel htmlFor={keyNameId}>Label (optional)</FieldLabel>
-              <Input
-                id={keyNameId}
-                value={keyName}
-                onChange={(e) => setKeyName(e.target.value)}
-                placeholder="e.g. My scoring agent"
-                autoFocus
-              />
-            </Field>
+          <Form onSubmit={handleCreate} className="flex flex-col gap-4">
+            <TextField
+              label="Label (optional)"
+              value={keyName}
+              onChange={setKeyName}
+              placeholder="e.g. My scoring agent"
+              autoFocus
+            />
             <DialogFooter>
-              <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-              <Button type="submit" disabled={creating}>
-                {creating ? "Creating..." : "Create"}
+              <Button slot="close" variant="outline">
+                Cancel
+              </Button>
+              <Button type="submit" isPending={creating} pendingLabel="Creating the key">
+                Create
               </Button>
             </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+          </Form>
+        </Dialog>
+      </Modal>
 
-      <Dialog
-        open={createdKey !== null}
+      <Modal
+        isOpen={createdKey !== null}
         onOpenChange={(open) => {
           if (!open) {
             setCreatedKey(null);
@@ -775,20 +752,19 @@ function ApiKeysSection() {
           }
         }}
       >
-        <DialogContent>
+        <Dialog>
           <DialogHeader>
             <DialogTitle>API key created</DialogTitle>
-            <DialogDescription>
+            <p className="text-sm text-muted-foreground">
               Copy this key now — it won't be shown again.
-            </DialogDescription>
+            </p>
           </DialogHeader>
           <code className="block rounded-md border bg-muted px-3 py-2 font-mono text-sm break-all">
             {createdKey}
           </code>
           <DialogFooter>
             <Button
-              type="button"
-              onClick={() => {
+              onPress={() => {
                 void navigator.clipboard.writeText(createdKey ?? "").then(() => {
                   setCopied(true);
                   setTimeout(() => setCopied(false), 1500);
@@ -797,22 +773,20 @@ function ApiKeysSection() {
             >
               {copied ? "Copied!" : "Copy"}
             </Button>
-            <DialogClose render={<Button variant="outline" />}>Done</DialogClose>
+            <Button slot="close" variant="outline">
+              Done
+            </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </Card>
+        </Dialog>
+      </Modal>
+    </SettingsCard>
   );
 }
 
 function SuperadminSection() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Superadmin</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ul className="list-inside list-disc">
+    <SettingsCard title="Superadmin">
+      <ul className="list-inside list-disc">
           <li>
             <a href="/admin/users" className="underline underline-offset-4">
               Users
@@ -823,9 +797,8 @@ function SuperadminSection() {
               Cache
             </a>
           </li>
-        </ul>
-      </CardContent>
-    </Card>
+      </ul>
+    </SettingsCard>
   );
 }
 
@@ -856,23 +829,21 @@ function DangerZoneSection() {
   }
 
   return (
-    <Card className="border-destructive/40 ring-destructive/20">
-      <CardHeader>
-        <CardTitle>Danger zone</CardTitle>
-        <CardDescription>
-          Permanently delete your account and all associated data. This cannot be undone.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <SettingsCard
+      title="Danger zone"
+      description="Permanently delete your account and all associated data. This cannot be undone."
+      className="ring-destructive/20"
+    >
+      <div>
         <Button
-          type="button"
           variant="destructive"
-          disabled={deleting}
-          onClick={handleDeleteAccount}
+          isPending={deleting}
+          pendingLabel="Deleting your account"
+          onPress={() => void handleDeleteAccount()}
         >
-          {deleting ? "Deleting..." : "Delete account"}
+          Delete account
         </Button>
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsCard>
   );
 }

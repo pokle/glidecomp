@@ -11,25 +11,13 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-/* Atkinson Hyperlegible Next — the field-analysis pages' reading face (the
- * report is dense number-reading; the font is designed for exactly that).
- * Only the @font-face rules load here; browsers fetch the actual font files
- * on first use of the family, so pages that never use `font-hyperlegible`
- * pay nothing. The analysis map HUD already referenced this family. */
-@import "@fontsource/atkinson-hyperlegible-next/400.css";
-@import "@fontsource/atkinson-hyperlegible-next/500.css";
-@import "@fontsource/atkinson-hyperlegible-next/600.css";
-@import "@fontsource/atkinson-hyperlegible-next/700.css";
-
-/* Atkinson Hyperlegible Next — the app UI face (self-hosted via @fontsource,
-   font-display: swap). Only the weights the UI actually uses (400/500/600/700
-   + 400 italic); each file is subsetted by unicode-range so latin-ext is only
-   fetched when a page needs it. */
-@import "@fontsource/atkinson-hyperlegible-next/400.css";
-@import "@fontsource/atkinson-hyperlegible-next/400-italic.css";
-@import "@fontsource/atkinson-hyperlegible-next/500.css";
-@import "@fontsource/atkinson-hyperlegible-next/600.css";
-@import "@fontsource/atkinson-hyperlegible-next/700.css";
+/* Atkinson Hyperlegible Next — the app UI face and the field-analysis pages'
+   reading face (the report is dense number-reading; the font is designed for
+   exactly that). One variable file spans every weight the UI uses, so a page
+   fetches one woff2 rather than one per weight — see ../fonts.css. Only the
+   @font-face rules load here; browsers fetch the file on first use of the
+   family, and unicode-range keeps latin-ext off pages that don't need it. */
+@import "../fonts.css";
 
 @custom-variant dark (&:is(.dark *));
 

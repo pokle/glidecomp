@@ -3,11 +3,13 @@
  * Local IGC/XCTSK library backed by the same IndexedDB storage module the
  * (vanilla, imperative-map) analysis page uses.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/react/ui/tabs";
-import { Progress, ProgressLabel, ProgressValue } from "@/react/ui/progress";
-import { Button } from "@/react/ui/button";
+import { Tabs, TabList, Tab, TabPanel } from "@/react/rac/tabs";
+import { ProportionMeter } from "@/react/rac/meter";
+import { Button, buttonVariants } from "@/react/rac/button";
+import { FileTrigger } from "react-aria-components";
+import { Tooltip, TooltipTrigger } from "@/react/rac/tooltip";
 import { parseIGC, parseXCTask } from "@glidecomp/engine";
 import {
   storage,
@@ -17,7 +19,7 @@ import {
 } from "../../analysis/storage";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
-import { goToSignIn, useUser } from "../lib/user";
+import { useGoToSignIn, useUser } from "../lib/user";
 import { downloadFile, formatTaskDate, ordinal, relativeTime } from "../lib/format";
 import { compPath, taskPath, pilotPath } from "../lib/slug";
 import { api } from "../../comp/api";
@@ -32,6 +34,7 @@ const MAX_USER_BYTES = 200 * 1024 * 1024;
 export function Dashboard() {
   const { username } = useParams<{ username: string }>();
   const { user, loading, previewingSignedOut } = useUser();
+  const goToSignIn = useGoToSignIn();
   const navigate = useNavigate();
   const confirm = useConfirm();
 
@@ -70,7 +73,7 @@ export function Dashboard() {
       await refreshLists();
       setReady(true);
     })();
-  }, [user, loading, previewingSignedOut, username, navigate, refreshLists]);
+  }, [user, loading, previewingSignedOut, username, navigate, refreshLists, goToSignIn]);
 
   const handleFiles = useCallback(
     async (files: FileList | File[]) => {
@@ -147,7 +150,7 @@ export function Dashboard() {
         <p className="mt-2 text-muted-foreground">
           Your IGC track logs and tasks live in your account.
         </p>
-        <Button type="button" className="mt-4" onClick={() => goToSignIn(window.location.pathname)}>
+        <Button className="mt-4" onPress={() => goToSignIn(window.location.pathname)}>
           Sign in
         </Button>
       </section>
@@ -167,20 +170,18 @@ export function Dashboard() {
       <h2 className="mb-3 text-lg font-bold">Personal flights</h2>
 
       <Tabs
-        value={tab}
-        onValueChange={(value) => setTab(value as "tracks" | "tasks")}
+        selectedKey={tab}
+        onSelectionChange={(key) => setTab(key as "tracks" | "tasks")}
       >
         {/* The add-files action rides the tab row, right-aligned like the
             section actions on the comp/task pages. */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <TabsList>
-            <TabsTrigger value="tracks">
+          <TabList aria-label="Personal flights">
+            <Tab id="tracks">
               Tracks {tracks.length > 0 ? `(${tracks.length})` : ""}
-            </TabsTrigger>
-            <TabsTrigger value="tasks">
-              Tasks {tasks.length > 0 ? `(${tasks.length})` : ""}
-            </TabsTrigger>
-          </TabsList>
+            </Tab>
+            <Tab id="tasks">Tasks {tasks.length > 0 ? `(${tasks.length})` : ""}</Tab>
+          </TabList>
           <div className="ml-auto">
             {tab === "tracks" ? (
               <AddFilesButton accept=".igc" label="Add .igc track log" onFiles={handleFiles} />
@@ -190,7 +191,7 @@ export function Dashboard() {
           </div>
         </div>
 
-        <TabsContent value="tracks">
+        <TabPanel id="tracks">
           {tracks.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
               <p className="font-medium">No flight tracks yet</p>
@@ -213,48 +214,54 @@ export function Dashboard() {
                     {relativeTime(track.lastAccessedAt)}
                   </span>
                   <span className="ml-auto flex gap-2">
-                    <Button nativeButton={false}
-                      variant="outline"
-                      size="sm"
+                    {/* A plain anchor, not rac LinkButton: the analysis page is a
+                        separate Vite entry, and RacRouterProvider would try to
+                        route it client-side. */}
+                    <a
+                      href={`/analysis.html?storedTrack=${encodeURIComponent(track.id)}`}
                       title="View on the analysis map"
-                      render={
-                        <a href={`/analysis.html?storedTrack=${encodeURIComponent(track.id)}`} />
-                      }
+                      className={buttonVariants({ variant: "outline", size: "sm" })}
                     >
                       View
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      title="Download IGC"
-                      onClick={async () => {
-                        const stored = await storage.getTrack(track.id);
-                        if (stored)
-                          downloadFile(stored.filename, stored.content, "application/octet-stream");
-                      }}
-                    >
-                      Download
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      title="Remove track"
-                      onClick={async () => {
-                        const ok = await confirm({
-                          title: "Remove this flight?",
-                          message: `${track.name} will be deleted from your storage. Tracks already submitted to a competition stay with the competition.`,
-                          confirmLabel: "Remove",
-                          destructive: true,
-                        });
-                        if (!ok) return;
-                        await storage.deleteTrack(track.id);
-                        await refreshLists();
-                      }}
-                    >
-                      Remove
-                    </Button>
+                    </a>
+                    <TooltipTrigger>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onPress={async () => {
+                          const stored = await storage.getTrack(track.id);
+                          if (stored)
+                            downloadFile(
+                              stored.filename,
+                              stored.content,
+                              "application/octet-stream"
+                            );
+                        }}
+                      >
+                        Download
+                      </Button>
+                      <Tooltip>Download IGC</Tooltip>
+                    </TooltipTrigger>
+                    <TooltipTrigger>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onPress={async () => {
+                          const ok = await confirm({
+                            title: "Remove this flight?",
+                            message: `${track.name} will be deleted from your storage. Tracks already submitted to a competition stay with the competition.`,
+                            confirmLabel: "Remove",
+                            destructive: true,
+                          });
+                          if (!ok) return;
+                          await storage.deleteTrack(track.id);
+                          await refreshLists();
+                        }}
+                      >
+                        Remove
+                      </Button>
+                      <Tooltip>Remove track</Tooltip>
+                    </TooltipTrigger>
                   </span>
                 </li>
               ))}
@@ -263,9 +270,9 @@ export function Dashboard() {
           <p className="mt-3 text-sm text-muted-foreground">
             You can also drag and drop .igc files anywhere on this page.
           </p>
-        </TabsContent>
+        </TabPanel>
 
-        <TabsContent value="tasks">
+        <TabPanel id="tasks">
           {tasks.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
               <p className="font-medium">No competition tasks yet</p>
@@ -289,48 +296,54 @@ export function Dashboard() {
                     {relativeTime(task.lastAccessedAt)}
                   </span>
                   <span className="ml-auto flex gap-2">
-                    <Button nativeButton={false}
-                      variant="outline"
-                      size="sm"
+                    {/* A plain anchor, not rac LinkButton: the analysis page is a
+                        separate Vite entry, and RacRouterProvider would try to
+                        route it client-side. */}
+                    <a
+                      href={`/analysis.html?storedTask=${encodeURIComponent(task.id)}`}
                       title="View on the analysis map"
-                      render={
-                        <a href={`/analysis.html?storedTask=${encodeURIComponent(task.id)}`} />
-                      }
+                      className={buttonVariants({ variant: "outline", size: "sm" })}
                     >
                       View
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      title="Download XCTSK"
-                      onClick={async () => {
-                        const stored = await storage.getTask(task.id);
-                        if (stored)
-                          downloadFile(`${stored.id}.xctsk`, stored.rawJson, "application/xctsk+json");
-                      }}
-                    >
-                      Download
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      title="Remove task"
-                      onClick={async () => {
-                        const ok = await confirm({
-                          title: "Remove this task?",
-                          message: `${task.name} will be deleted from your storage.`,
-                          confirmLabel: "Remove",
-                          destructive: true,
-                        });
-                        if (!ok) return;
-                        await storage.deleteTask(task.id);
-                        await refreshLists();
-                      }}
-                    >
-                      Remove
-                    </Button>
+                    </a>
+                    <TooltipTrigger>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onPress={async () => {
+                          const stored = await storage.getTask(task.id);
+                          if (stored)
+                            downloadFile(
+                              `${stored.id}.xctsk`,
+                              stored.rawJson,
+                              "application/xctsk+json"
+                            );
+                        }}
+                      >
+                        Download
+                      </Button>
+                      <Tooltip>Download XCTSK</Tooltip>
+                    </TooltipTrigger>
+                    <TooltipTrigger>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onPress={async () => {
+                          const ok = await confirm({
+                            title: "Remove this task?",
+                            message: `${task.name} will be deleted from your storage.`,
+                            confirmLabel: "Remove",
+                            destructive: true,
+                          });
+                          if (!ok) return;
+                          await storage.deleteTask(task.id);
+                          await refreshLists();
+                        }}
+                      >
+                        Remove
+                      </Button>
+                      <Tooltip>Remove task</Tooltip>
+                    </TooltipTrigger>
                   </span>
                 </li>
               ))}
@@ -339,7 +352,7 @@ export function Dashboard() {
           <p className="mt-3 text-sm text-muted-foreground">
             You can also drag and drop .xctsk files anywhere on this page.
           </p>
-        </TabsContent>
+        </TabPanel>
       </Tabs>
 
       <StorageSection tracks={tracks} tasks={tasks} />
@@ -494,26 +507,18 @@ function AddFilesButton({
   label: string;
   onFiles: (files: FileList) => Promise<void>;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  // FileTrigger owns the hidden input and the click plumbing (and resets it
+  // between picks, so choosing the same file twice still fires).
   return (
-    <>
-      <input
-        ref={inputRef}
-        type="file"
-        accept={accept}
-        multiple
-        hidden
-        onChange={async (e) => {
-          if (e.target.files?.length) {
-            await onFiles(e.target.files);
-            if (inputRef.current) inputRef.current.value = "";
-          }
-        }}
-      />
-      <Button type="button" onClick={() => inputRef.current?.click()}>
-        {label}
-      </Button>
-    </>
+    <FileTrigger
+      acceptedFileTypes={[accept]}
+      allowsMultiple
+      onSelect={async (files) => {
+        if (files?.length) await onFiles(files);
+      }}
+    >
+      <Button>{label}</Button>
+    </FileTrigger>
   );
 }
 
@@ -562,10 +567,22 @@ function StorageSection({ tracks, tasks }: { tracks: StoredTrack[]; tasks: Store
     <section className="mt-10">
       <h2 className="text-lg font-bold">Storage</h2>
       {tracks.length > 0 || tasks.length > 0 ? (
-        <Progress value={Math.min(100, Math.max(1, fraction * 100))} className="mt-2 max-w-60">
-          <ProgressLabel className="sr-only">Storage</ProgressLabel>
-          <ProgressValue className="ml-auto">{() => parts.join(" · ")}</ProgressValue>
-        </Progress>
+        // A Meter, not a ProgressBar: quota used is a *measurement* within a
+        // known range, not a task running to completion (see rac/meter.tsx and
+        // rac/progress.tsx, which document the split from both sides). The
+        // floor of 1% keeps a nearly-empty bar visible.
+        <div className="mt-2 max-w-60">
+          <p className="text-right text-sm text-muted-foreground tabular-nums">
+            {parts.join(" · ")}
+          </p>
+          <ProportionMeter
+            className="mt-1"
+            value={Math.min(100, Math.max(1, fraction * 100))}
+            total={100}
+            label="Storage used"
+            valueLabel={parts.join(" · ")}
+          />
+        </div>
       ) : (
         <p className="mt-2 text-sm text-muted-foreground">Nothing stored yet.</p>
       )}

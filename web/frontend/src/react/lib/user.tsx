@@ -7,8 +7,9 @@
  * changing their real session. Presentation-only — the API still authenticates
  * the real superadmin, so nothing here grants or removes any actual access.
  */
-import { createContext, useContext, useEffect, useState } from "react";
-import { getCurrentUser, type AuthUser } from "../../auth/client";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { getCurrentUserOnce, type AuthUser } from "../../auth/client";
 import { safeNext } from "./safe-next";
 
 /**
@@ -65,18 +66,6 @@ const UserContext = createContext<UserState>({
   setPreviewRole: () => {},
 });
 
-/**
- * One /api/auth/me round trip per page load, shared across StrictMode's
- * double effect run. Two concurrent calls aren't just wasteful — under
- * load the local auth worker can answer one of them with user:null, and
- * whichever response lands last would win.
- */
-let mePromise: Promise<AuthUser | null> | null = null;
-function fetchCurrentUserOnce(): Promise<AuthUser | null> {
-  mePromise ??= getCurrentUser();
-  return mePromise;
-}
-
 /** One whoami round trip per page load, only made once a user is known. */
 let whoamiPromise: Promise<boolean> | null = null;
 function fetchIsSuperAdminOnce(): Promise<boolean> {
@@ -107,23 +96,38 @@ export function useAdminView(realIsAdmin: boolean): boolean {
  * into Google OAuth. Pass `next` (an internal path) to return the user where
  * they started after signing in.
  */
-export function goToSignIn(next?: string) {
-  // While a superadmin previews a signed-out/pilot view, "Sign in" means
-  // "back to my real self", not a real sign-in round trip.
-  if (readPreviewRole() !== "actual") {
-    writePreviewRole("actual");
-    window.location.reload();
-    return;
-  }
-  // Validate `next` down to a same-origin path with the same parser the
-  // browser uses (safeNext) — the naive startsWith("/") guard let a
-  // backslash-folded "/\\host" through (see safe-next.ts). Empty fallback so
-  // an off-origin `next` degrades to a plain /signin rather than a bogus link.
-  const validated = safeNext(next, "");
-  const target = validated
-    ? `/signin?next=${encodeURIComponent(validated)}`
-    : "/signin";
-  window.location.assign(target);
+export function useGoToSignIn(): (next?: string) => void {
+  const navigate = useNavigate();
+  return useCallback(
+    (next?: string) => {
+      // While a superadmin previews a signed-out/pilot view, "Sign in" means
+      // "back to my real self", not a real sign-in round trip. This one stays
+      // a real reload: the preview role is read out of sessionStorage at boot.
+      if (readPreviewRole() !== "actual") {
+        writePreviewRole("actual");
+        window.location.reload();
+        return;
+      }
+      // Validate `next` down to a same-origin path with the same parser the
+      // browser uses (safeNext) — the naive startsWith("/") guard let a
+      // backslash-folded "/\\host" through (see safe-next.ts). Empty fallback
+      // so an off-origin `next` degrades to a plain /signin rather than a
+      // bogus link.
+      const validated = safeNext(next, "");
+      // A client-side hop, not window.location: /signin is a route in this
+      // same SPA, so a real navigation threw away the loaded app and re-booted
+      // it — bundle re-parse, providers remounted, every boot fetch repeated.
+      //
+      // Safe in this direction only. The reverse (SignIn -> `next`, after a
+      // successful sign-in) must stay a full page load, because the current
+      // user is resolved once per page load and a client-side hop would carry
+      // the stale signed-out answer into the signed-in page. See SignIn.tsx.
+      navigate(
+        validated ? `/signin?next=${encodeURIComponent(validated)}` : "/signin"
+      );
+    },
+    [navigate]
+  );
 }
 
 /**
@@ -160,25 +164,48 @@ export async function signInAsDev(
   window.location.href = "/comp";
 }
 
-export function UserProvider({ children }: { children: React.ReactNode }) {
-  const [me, setMe] = useState<{ user: AuthUser | null; loading: boolean }>({
-    user: null,
-    loading: true,
-  });
+export function UserProvider({
+  children,
+  initialUser,
+}: {
+  children: React.ReactNode;
+  /**
+   * The visitor as the server already resolved them, for the server-rendered
+   * comp pages. `undefined` means "unknown" (a classic SPA boot) and triggers
+   * the round trip; `null` means a known signed-out visitor and does not.
+   * Distinguishing the two is the whole point — treating unknown as signed
+   * out would render the wrong chrome and then flip.
+   */
+  initialUser?: AuthUser | null;
+}) {
+  const knownUpFront = initialUser !== undefined;
+  const [me, setMe] = useState<{ user: AuthUser | null; loading: boolean }>(
+    // Seeded state must be identical on server and client or hydration
+    // mismatches: both read the same value out of __SSR_DATA__.
+    knownUpFront ? { user: initialUser ?? null, loading: false } : { user: null, loading: true }
+  );
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [previewRole, setPreviewRoleState] = useState<PreviewRole>(readPreviewRole);
 
   useEffect(() => {
     let cancelled = false;
-    fetchCurrentUserOnce().then((user) => {
-      if (cancelled) return;
-      setMe({ user, loading: false });
+    const settle = (user: AuthUser | null) => {
       if (user) {
         fetchIsSuperAdminOnce().then((isSuper) => {
           if (!cancelled) setIsSuperAdmin(isSuper);
         });
       }
-    });
+    };
+    if (knownUpFront) {
+      // The server already answered; asking again would undo the saving.
+      settle(initialUser ?? null);
+    } else {
+      getCurrentUserOnce().then((user) => {
+        if (cancelled) return;
+        setMe({ user, loading: false });
+        settle(user);
+      });
+    }
     return () => {
       cancelled = true;
     };

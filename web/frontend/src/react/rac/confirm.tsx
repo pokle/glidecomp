@@ -1,15 +1,17 @@
 /**
- * RAC-based confirm/alert provider. Supplies the SAME ConfirmContext as
- * lib/confirm.tsx, so wrapping a subtree in <RacConfirmProvider> makes every
- * useConfirm() inside it resolve to a react-aria-components alertdialog while
- * the rest of the app keeps the Base UI one. Promise API unchanged.
+ * The app's confirm/alert provider: supplies lib/confirm.tsx's ConfirmContext,
+ * so every `useConfirm()` in the app resolves to this react-aria-components
+ * alertdialog. Mounted once, app-wide, by routes.tsx — pages don't wrap
+ * themselves (they did while the global provider was still the Base UI one).
+ *
+ * SSR-safe: renders nothing until a dialog is actually requested.
  */
 import { useRef, useState } from "react";
 import { ConfirmContext, type ConfirmFn, type ConfirmOptions } from "../lib/confirm";
 import { Button } from "./button";
 import { Dialog, DialogFooter, DialogHeader, DialogTitle, Modal } from "./dialog";
 
-export function RacConfirmProvider({ children }: { children: React.ReactNode }) {
+export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [opts, setOpts] = useState<ConfirmOptions | null>(null);
   const resolveRef = useRef<(value: boolean) => void>(() => {});
 

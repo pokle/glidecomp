@@ -258,7 +258,28 @@
 //     Withholding a track changes numPresent, hence launch validity and every
 //     distance ratio on an affected task; tasks with no hard-failed track
 //     recompute identically.
-export const SCORING_ENGINE_VERSION = 27;
+// v28: NO behaviour change — a payload roll. The scored body now carries the
+//      transparency fields the score-details page needs to show its working:
+//      per-class `validity_inputs` (the field counts, best distance/time, goal
+//      ratio, weights and the mean distance over minimum that the validity and
+//      weight formulas were evaluated from), the fully-resolved `gap_params`
+//      the class was actually scored with (comp settings AND the task's own
+//      migration-0021 overrides, "auto" nominal distance already resolved),
+//      and each pilot's `leading_coefficient`. Every point on the page is
+//      unchanged; only what the page can explain about them changes.
+//      Bumped deliberately even though scoring is identical: the fields are
+//      optional and every consumer degrades without them, but the stale-first
+//      store would otherwise serve pre-change bodies for settled comps
+//      indefinitely — and a settled comp is exactly the one a pilot reads.
+// v29: NO behaviour change — a second payload roll, same shape as v28. Each
+//      pilot's ESS arrival position and ESS time are now carried on
+//      PilotScore, so the report card can substitute the §11.4 arrival
+//      formula instead of asserting its output. The scorer computed the
+//      position all along (essPositionMap) and discarded it, which left
+//      arrival as the one component whose arithmetic could not be shown —
+//      and, more importantly, left unsaid that the order is by wall-clock
+//      time at ESS rather than by speed.
+export const SCORING_ENGINE_VERSION = 29;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -266,4 +287,4 @@ export const SCORING_ENGINE_VERSION = 27;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "6411f0d390a15fec196cc5144064d8512a56c524ff6658c263d59583d8c591e3";
+  "61158d654bd7fa448140e53b8b1e44dafcb46f4654b24e20207aab550967954f";

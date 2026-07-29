@@ -1,9 +1,8 @@
 /** First-login onboarding — React port of onboarding.ts / onboarding.html. */
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/react/ui/button";
-import { Field, FieldError, FieldLabel } from "@/react/ui/field";
-import { Input } from "@/react/ui/input";
+import { Button } from "@/react/rac/button";
+import { TextField } from "@/react/rac/field";
 import { setUsername } from "../../auth/client";
 import { api } from "../../comp/api";
 import { useUser } from "../lib/user";
@@ -19,10 +18,6 @@ export function Onboarding() {
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const nameId = useId();
-  const usernameId = useId();
-  const civlIdInput = useId();
-  const safaIdInput = useId();
 
   useEffect(() => {
     document.title = "GlideComp - Welcome";
@@ -99,44 +94,43 @@ export function Onboarding() {
       <p className="text-muted-foreground">Set up your GlideComp account</p>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <Field>
-          <FieldLabel htmlFor={nameId}>Full name</FieldLabel>
-          <Input
-            id={nameId}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            maxLength={128}
-          />
-        </Field>
+        {/* RAC fields are self-labelling — the Label/Input/FieldError ids and
+            aria-describedby are wired by TextField, so no useId plumbing. */}
+        <TextField
+          label="Full name"
+          value={name}
+          onChange={setName}
+          isRequired
+          maxLength={128}
+        />
 
-        <Field>
-          <FieldLabel htmlFor={usernameId}>Username</FieldLabel>
-          <Input
-            id={usernameId}
-            value={username}
-            onChange={(e) => setUsernameValue(e.target.value)}
-            required
-            autoFocus
-          />
-          {usernameError ? <FieldError>{usernameError}</FieldError> : null}
-        </Field>
+        {/* The taken-username rejection comes back from the server. RAC's
+            default native validation turns `isInvalid` into a real custom
+            validity on the input, which blocks form submission — so the error
+            MUST be cleared as soon as the value changes, or fixing the
+            username still can't be submitted. */}
+        <TextField
+          label="Username"
+          value={username}
+          onChange={(value) => {
+            setUsernameValue(value);
+            setUsernameError(null);
+          }}
+          isRequired
+          autoFocus
+          isInvalid={usernameError !== null}
+          errorMessage={usernameError ?? undefined}
+        />
 
-        <Field>
-          <FieldLabel htmlFor={civlIdInput}>CIVL ID (optional)</FieldLabel>
-          <Input id={civlIdInput} value={civlId} onChange={(e) => setCivlId(e.target.value)} />
-        </Field>
+        <TextField label="CIVL ID (optional)" value={civlId} onChange={setCivlId} />
 
-        <Field>
-          <FieldLabel htmlFor={safaIdInput}>SAFA ID (optional)</FieldLabel>
-          <Input id={safaIdInput} value={safaId} onChange={(e) => setSafaId(e.target.value)} />
-        </Field>
+        <TextField label="SAFA ID (optional)" value={safaId} onChange={setSafaId} />
 
         {generalError ? <p role="alert">{generalError}</p> : null}
 
         <div>
-          <Button type="submit" disabled={submitting}>
-            {submitting ? "Saving..." : "Continue"}
+          <Button type="submit" isPending={submitting} pendingLabel="Saving your profile">
+            Continue
           </Button>
         </div>
       </form>

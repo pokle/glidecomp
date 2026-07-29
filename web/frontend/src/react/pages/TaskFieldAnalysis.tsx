@@ -25,11 +25,12 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
+import { NotFound } from "../components/NotFound";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Loading } from "@/react/rac/progress";
 import { Button, LinkButton } from "@/react/rac/button";
 import { SimpleSelect } from "@/react/rac/select";
-import { Alert, AlertDescription, AlertTitle } from "@/react/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { underCompAnalysis } from "../lib/crumbs";
 import { idFromSegment, taskPath, taskAnalysisPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
@@ -92,7 +93,7 @@ export function TaskFieldAnalysis() {
   const [etag, setEtag] = useState<string | null>(initial?.analysisEtag ?? null);
   const [task, setTask] = useState<TaskDetailData | null>(initial?.task ?? null);
   const [comp, setComp] = useState<CompDetailData | null>(initial?.comp ?? null);
-  const [status, setStatus] = useState<"loading" | "ready" | "forbidden" | "error">(
+  const [status, setStatus] = useState<"loading" | "ready" | "notFound" | "forbidden" | "error">(
     initial ? "ready" : "loading"
   );
   const [refreshing, setRefreshing] = useState(false);
@@ -137,7 +138,17 @@ export function TaskFieldAnalysis() {
       try {
         const res = await fetch(analysisUrl, { credentials: "include" });
         if (cancelled) return;
-        if (res.status === 404 || res.status === 401) {
+        // 404 = missing (or a test comp hidden from this visitor); 400 = an id
+        // sqid that doesn't decode at all. Both mean "no such page", and both
+        // are a dead id rather than a permissions verdict — the API never 401s
+        // here (routes/field-analysis.ts). Worth telling apart, because the 404
+        // page can rebuild the URL from its own slugs and "may not be published
+        // yet" cannot. Same rule as loaders.ts and PilotScoreDetail.
+        if (res.status === 404 || res.status === 400) {
+          setStatus("notFound");
+          return;
+        }
+        if (res.status === 401) {
           setStatus("forbidden");
           return;
         }
@@ -391,6 +402,10 @@ export function TaskFieldAnalysis() {
     );
   }
 
+  if (status === "notFound") {
+    return <NotFound title="Field analysis not found" />;
+  }
+
   if (status === "forbidden") {
     return (
       <div className="mx-auto max-w-6xl px-4 py-6 font-hyperlegible">
@@ -424,7 +439,10 @@ export function TaskFieldAnalysis() {
     // With a TOC, wide screens get the docs layout: a narrow left rail
     // column and the content column, centred together. Below xl (and on the
     // TOC-less error/pending states) this is exactly the old single column.
+    // `data-wide-page` is what lets the 87rem actually happen — Shell's
+    // <main> is 6xl otherwise, which the rail would eat a fifth of.
     <div
+      {...(tocItems.length > 0 ? { "data-wide-page": "" } : {})}
       className={cn(
         "mx-auto max-w-6xl px-4 py-6 font-hyperlegible",
         tocItems.length > 0 &&

@@ -7,7 +7,12 @@ import {
   type ClassContextInput,
   type ScoreExplanation,
 } from '../src/score-explanation';
-import { calculateSpeedFraction } from '../src/gap-scoring';
+import {
+  calculateArrivalPoints,
+  calculateDistanceDifficulty,
+  calculateSpeedFraction,
+  speedExponentValue,
+} from '../src/gap-scoring';
 import type {
   TurnpointSequenceResult,
   CylinderCrossing,
@@ -151,6 +156,14 @@ function makeClassContext(): ClassContextInput {
       { flown_distance: 42_000, speed_section_time: null, made_goal: false, reached_ess: false },
     ],
   };
+}
+
+/** A section's chart, narrowed to the curve variant (ScoreChart is a union
+ *  since the validity sparklines and the distance distribution joined it). */
+function curveChart(section: { chart?: { kind: string } }) {
+  const c = section.chart;
+  if (!c || c.kind !== 'curve') throw new Error(`expected a curve chart, got ${c?.kind}`);
+  return c as import('../src/score-explanation-types').ScoreCurveChart;
 }
 
 function section(explanation: ScoreExplanation, id: string) {
@@ -1067,5 +1080,683 @@ describe('explainGapScore — start gates & early starts', () => {
     const clamp = distance.items.find((i) => i.id === 'early-start-distance')!;
     expect(clamp.text).toContain('launch to the start cylinder');
     expect(clamp.emphasis).toBe('warning');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Day quality — the validity factors' own inputs
+//
+// Every other section on the page states a rule, names its inputs and prints
+// the arithmetic. Before these detail lines the validity section stated a rule
+// and asserted a percentage, which is the one figure a reader cannot check.
+// ---------------------------------------------------------------------------
+
+function makeValidityInputs(): NonNullable<ClassContextInput['validity_inputs']> {
+  return {
+    num_present: 48,
+    num_flying: 47,
+    num_in_goal: 12,
+    num_reached_ess: 15,
+    best_distance: 60_000,
+    best_time: 65 * 60,
+    goal_ratio: 12 / 47,
+    task_distance: 61_000,
+    mean_distance_over_minimum: 44_100,
+    weights: { distance: 0.442, time: 0.558, leading: 0, arrival: 0 },
+  };
+}
+
+describe('explainGapScore — day quality inputs', () => {
+  function validityFor(
+    inputs?: ClassContextInput['validity_inputs'],
+    params: Parameters<typeof explainGapScore>[0]['params'] = { scoring: 'PG' },
+  ) {
+    const ctx = makeClassContext();
+    ctx.validity_inputs = inputs;
+    return section(
+      explainGapScore({
+        task: makeTask(),
+        result: makeReentryResult(),
+        entry: makeGoalEntry(),
+        classContext: ctx,
+        params,
+      }),
+      'validity',
+    );
+  }
+
+  it('shows the launch-validity inputs: who flew, who was present, the nominal threshold', () => {
+    const item = validityFor(makeValidityInputs()).items.find(
+      (i) => i.id === 'launch-validity',
+    )!;
+    expect(item.detail).toContain('47 pilots flew out of 48 present');
+    expect(item.detail).toContain('96%');
+  });
+
+  it('shows the time-validity inputs: the winning time against the nominal time', () => {
+    const item = validityFor(makeValidityInputs(), {
+      scoring: 'PG',
+      nominalTime: 90 * 60,
+    }).items.find((i) => i.id === 'time-validity')!;
+    // The reported gap: the section named a "nominal time" it never showed,
+    // against a winning time that lived 200px down the page.
+    expect(item.detail).toContain('1:05:00');
+    expect(item.detail).toContain('1:30:00');
+    expect(item.detail).toContain('72.2% of nominal');
+  });
+
+  it('reworded: a SHORT winning time is what devalues the day, not a long one', () => {
+    const item = validityFor(makeValidityInputs()).items.find(
+      (i) => i.id === 'time-validity',
+    )!;
+    expect(item.text).toContain('quicker than the task was meant to take');
+    expect(item.text).not.toContain('long enough');
+  });
+
+  // The spec's ratio is min(1, best ÷ nominal), and printing the clamped
+  // "100% of nominal" next to a winning time visibly LONGER than nominal
+  // reads as an arithmetic error — which is exactly how it first shipped.
+  it('does not print a clamped percentage when the winning time beat nominal', () => {
+    const item = validityFor(makeValidityInputs(), {
+      scoring: 'PG',
+      nominalTime: 60 * 60,
+    }).items.find((i) => i.id === 'time-validity')!;
+    expect(item.detail).toContain('1:05:00');
+    expect(item.detail).toContain('as long as it was meant to');
+    expect(item.detail).not.toContain('100% of nominal');
+  });
+
+  it('compares distance instead when nobody completed the speed section', () => {
+    const inputs = { ...makeValidityInputs(), best_time: null };
+    const item = validityFor(inputs).items.find((i) => i.id === 'time-validity')!;
+    expect(item.detail).toContain('Nobody completed the speed section');
+    expect(item.detail).toContain('60.0 km');
+  });
+
+  it('shows the distance-validity inputs: the three nominals and the field spread', () => {
+    const item = validityFor(makeValidityInputs(), {
+      scoring: 'PG',
+      nominalDistance: 70_000,
+      nominalGoal: 0.2,
+      minimumDistance: 5_000,
+    }).items.find((i) => i.id === 'distance-validity')!;
+    expect(item.detail).toContain('70.0 km nominal distance');
+    expect(item.detail).toContain('20% nominal goal');
+    expect(item.detail).toContain('5.0 km minimum distance');
+    expect(item.detail).toContain('44.1 km past the minimum');
+  });
+
+  it('names the goal ratio and the weights behind the component split', () => {
+    const validity = validityFor(makeValidityInputs());
+    const split = validity.items.find((i) => i.id === 'available-split')!;
+    expect(split.text).toContain('12 of 47 pilots made goal');
+    expect(split.text).toContain('goal ratio of 0.26');
+    const weights = validity.items.find((i) => i.id === 'available-weights')!;
+    expect(weights.detail).toContain('distance 44.2%');
+    expect(weights.detail).toContain('time 55.8%');
+  });
+
+  it('links to the explainer — the page had no route to /scoring/gap at all', () => {
+    expect(validityFor(makeValidityInputs()).docHref).toBe('/scoring/gap#task-validity');
+  });
+
+  // The stale-first store keeps serving bodies written before these fields
+  // existed, so the section must fall back to exactly what it always showed.
+  it('degrades to the bare percentages when the payload predates validity_inputs', () => {
+    const validity = validityFor(undefined);
+    for (const id of ['launch-validity', 'distance-validity', 'time-validity']) {
+      const item = validity.items.find((i) => i.id === id)!;
+      expect(item.value).toBeDefined();
+      expect(item.detail).toBeUndefined();
+    }
+    expect(validity.items.find((i) => i.id === 'available-weights')).toBeUndefined();
+    expect(validity.items.find((i) => i.id === 'available-split')!.text).toBe(
+      'Split between the components by the goal ratio',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Reading the score against the field
+// ---------------------------------------------------------------------------
+
+describe('explainGapScore — where the points went', () => {
+  /** A class whose leader beat this pilot on time alone. */
+  function fieldContext(): ClassContextInput {
+    const ctx = makeClassContext();
+    ctx.pilots = [
+      {
+        flown_distance: 60_000, speed_section_time: 65 * 60,
+        made_goal: true, reached_ess: true,
+        pilot_name: 'Fast Pilot', rank: 1, total_score: 900,
+        distance_points: 400, time_points: 500,
+        leading_points: 0, arrival_points: 0,
+      },
+      {
+        flown_distance: 60_000, speed_section_time: 70 * 60,
+        made_goal: true, reached_ess: true,
+        pilot_name: 'Our Pilot', rank: 2, total_score: 780.5,
+        distance_points: 400, time_points: 380.5,
+        leading_points: 0, arrival_points: 0,
+      },
+    ];
+    return ctx;
+  }
+
+  function comparisonFor(ctx: ClassContextInput) {
+    return explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: makeGoalEntry(),
+      classContext: ctx,
+      params: { scoring: 'PG' },
+    }).sections.find((s) => s.id === 'comparison');
+  }
+
+  it('names the leader and the per-component gaps', () => {
+    const s = comparisonFor(fieldContext())!;
+    expect(s.summary).toContain('780.5');
+    expect(s.summary).toContain('900');
+    expect(s.items.find((i) => i.id === 'gap-distance')!.value).toBe('level');
+    expect(s.items.find((i) => i.id === 'gap-time')!.value).toBe('−119.5 pts');
+  });
+
+  it('says which component the gap actually is', () => {
+    const total = comparisonFor(fieldContext())!.items.find((i) => i.id === 'gap-total')!;
+    expect(total.text).toContain('Fast Pilot');
+    expect(total.value).toBe('−119.5 pts');
+    expect(total.detail).toBe('All of the gap is time.');
+  });
+
+  it('is omitted for the class leader — a table of zeroes is noise', () => {
+    const ctx = fieldContext();
+    ctx.pilots[0] = { ...ctx.pilots[0], total_score: 780.5, time_points: 380.5 };
+    expect(comparisonFor(ctx)).toBeUndefined();
+  });
+
+  it('is omitted when the payload carries no per-pilot point components', () => {
+    expect(comparisonFor(makeClassContext())).toBeUndefined();
+  });
+
+  it('ignores a withheld tracklog when picking the leader', () => {
+    const ctx = fieldContext();
+    ctx.pilots.push({
+      flown_distance: 0, speed_section_time: null, made_goal: false, reached_ess: false,
+      pilot_name: 'Bad Track', rank: 3, total_score: 0,
+      distance_points: 0, time_points: 0, leading_points: 0, arrival_points: 0,
+      track_excluded: { reasons: ['wrong day'] },
+    });
+    expect(comparisonFor(ctx)!.items.find((i) => i.id === 'gap-total')!.text).toContain(
+      'Fast Pilot',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Leading points — the arithmetic, not just the number
+// ---------------------------------------------------------------------------
+
+describe('explainGapScore — leading points', () => {
+  function leadingFor(lc: number | null, bestLc: number) {
+    const ctx = makeClassContext();
+    ctx.available_points = { ...ctx.available_points, leading: 100 };
+    ctx.pilots = ctx.pilots.map((p, i) => ({
+      ...p,
+      leading_coefficient: i === 0 ? bestLc : lc,
+    }));
+    const entry = { ...makeGoalEntry(), leading_points: 62.5, leading_coefficient: lc };
+    return section(
+      explainGapScore({
+        task: makeTask(),
+        result: makeReentryResult(),
+        entry,
+        classContext: ctx,
+        params: { scoring: 'PG', leadingFormula: 'weighted' },
+      }),
+      'leading',
+    );
+  }
+
+  it('prints the coefficient, the best in class, and the substituted formula', () => {
+    const s = leadingFor(1.284, 0.981);
+    expect(s.items.find((i) => i.id === 'leading-coefficient')!.value).toBe('1.284');
+    expect(s.items.find((i) => i.id === 'leading-coefficient')!.detail).toContain('0.981');
+    const formula = s.items.find((i) => i.id === 'leading-formula')!;
+    expect(formula.detail).toContain('LCbest');
+    expect(formula.detail).toContain('× 100 available');
+  });
+
+  it('says so plainly when the pilot holds the best coefficient', () => {
+    const s = leadingFor(0.981, 0.981);
+    expect(s.items.find((i) => i.id === 'leading-coefficient')!.detail).toContain(
+      'best in the class',
+    );
+    expect(s.items.find((i) => i.id === 'leading-formula')).toBeUndefined();
+  });
+
+  it('falls back to the plain sentence when no coefficient was published', () => {
+    const s = leadingFor(null, 0.981);
+    expect(s.items.find((i) => i.id === 'leading-coefficient')).toBeUndefined();
+    expect(s.items.find((i) => i.id === 'leading')!.value).toBe('62.5 pts');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Flight narrative repairs
+// ---------------------------------------------------------------------------
+
+describe('explainGapScore — flight narrative repairs', () => {
+  it('folds a co-located ESS and goal into one row', () => {
+    // An ESS ring around the goal cylinder: two task indices, one instant.
+    // Two rows printed the same time and the same crossing count twice.
+    const sss = reaching(1, 30, 'first_crossing');
+    const ess = reaching(3, 105, 'first_crossing');
+    const goal = { ...reaching(4, 105, 'first_crossing'), time: ess.time };
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: {
+        ...makeReentryResult(),
+        crossings: [crossing(1, 30, 'exit')],
+        sequence: [sss, reaching(2, 60, 'first_after_previous'), ess, goal],
+        sssReaching: sss,
+        essReaching: ess,
+      },
+      entry: makeGoalEntry(),
+      classContext: makeClassContext(),
+      params: { scoring: 'PG' },
+    });
+    const rows = section(explanation, 'flight').items.filter((i) =>
+      i.id.startsWith('reaching-'),
+    );
+    const merged = rows.find((r) => r.text.startsWith('ESS + Goal'))!;
+    expect(rows.filter((r) => r.value === merged.value)).toHaveLength(1);
+    // The surviving row keeps the ESS treatment it would otherwise have lost.
+    expect(merged.detail).toContain('Speed section completed in');
+  });
+
+  it('says why THIS start crossing scored, not just the general rule', () => {
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: makeGoalEntry(),
+      classContext: makeClassContext(),
+      params: { scoring: 'PG' },
+    });
+    const chosen = section(explanation, 'flight').items.find(
+      (i) => i.id === 'start-chosen',
+    )!;
+    // The scored start is the last crossing in this fixture.
+    expect(chosen.text).toContain('the last one made');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Arrival points — the last component that could only assert its output
+// ---------------------------------------------------------------------------
+
+describe('explainGapScore — arrival points', () => {
+  /** An HG class where 22 pilots reached ESS and ours came 7th. */
+  function arrivalFor(
+    position: number | null,
+    opts: { essTimeMs?: number | null; tie?: boolean } = {},
+  ) {
+    const ctx = makeClassContext();
+    ctx.available_points = { ...ctx.available_points, arrival: 100 };
+    ctx.validity_inputs = { ...makeValidityInputs(), num_reached_ess: 22 };
+    if (opts.tie) {
+      ctx.pilots = [
+        ...ctx.pilots,
+        {
+          flown_distance: 60_000, speed_section_time: 66 * 60,
+          made_goal: true, reached_ess: true, ess_time_ms: opts.essTimeMs ?? null,
+        },
+      ];
+    }
+    const entry: ScoreEntryInput = {
+      ...makeGoalEntry(),
+      // 7th of 22 -> factor 0.5545 -> 55.4 of 100 available.
+      arrival_points: 55.4,
+      arrival_position: position,
+      ess_time_ms: opts.essTimeMs ?? Date.UTC(2026, 0, 10, 5, 13, 40),
+    };
+    if (opts.tie) {
+      ctx.pilots = ctx.pilots.map((p, i) =>
+        i === 0 ? { ...p, ess_time_ms: entry.ess_time_ms } : p,
+      );
+    }
+    return section(
+      explainGapScore({
+        task: makeTask(),
+        result: makeReentryResult(),
+        entry,
+        classContext: ctx,
+        params: { scoring: 'HG', useArrival: true },
+      }),
+      'arrival',
+    );
+  }
+
+  it('prints the position, the ESS time, and the substituted §11.4 formula', () => {
+    const s = arrivalFor(7);
+    const pos = s.items.find((i) => i.id === 'arrival-position')!;
+    expect(pos.text).toBe('Reached the end of the speed section 7th of 22');
+    expect(pos.value).toContain('05:13:40');
+    const formula = s.items.find((i) => i.id === 'arrival-formula')!;
+    expect(formula.detail).toContain('1 − (7 − 1) ÷ 22');
+    expect(formula.detail).toContain('0.2 + 0.037·r + 0.13·r² + 0.633·r³');
+    expect(formula.detail).toContain('× 100 available');
+  });
+
+  // The single most disputable fact about arrival points, and nothing on the
+  // site said it before.
+  it('says the order is by the clock, not by speed', () => {
+    const pos = arrivalFor(7).items.find((i) => i.id === 'arrival-position')!;
+    expect(pos.detail).toContain('by the clock');
+    expect(pos.detail).toContain('not by speed');
+  });
+
+  it('prices one place, and states the floor everyone keeps', () => {
+    const shape = arrivalFor(7).items.find((i) => i.id === 'arrival-shape')!;
+    // af(6) − af(7) over 100 available, from the engine's own function.
+    expect(shape.text).toMatch(/^One place earlier would have been worth \d+(\.\d)? more points$/);
+    expect(shape.detail).toContain('first place takes all 100 available');
+    expect(shape.detail).toContain('at least');
+  });
+
+  it('says so plainly for the first pilot to ESS, with no counterfactual', () => {
+    const s = arrivalFor(1);
+    expect(s.items.find((i) => i.id === 'arrival-shape')!.text).toContain(
+      'First to the end of the speed section',
+    );
+  });
+
+  // Positions are resolved by array order when timestamps collide, which is
+  // not a fact about the flying — so it must not be presented as one.
+  it('discloses a tie rather than implying an order the data cannot support', () => {
+    const t = Date.UTC(2026, 0, 10, 5, 13, 40);
+    const pos = arrivalFor(7, { essTimeMs: t, tie: true }).items.find(
+      (i) => i.id === 'arrival-position',
+    )!;
+    expect(pos.detail).toContain('same second');
+  });
+
+  it('degrades to the field size when no position was published', () => {
+    const s = arrivalFor(null);
+    expect(s.items.find((i) => i.id === 'arrival-formula')).toBeUndefined();
+    expect(s.items.find((i) => i.id === 'arrival-field')!.text).toContain(
+      '22 pilots reached the end of the speed section',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Component charts — the formula, with the field on it
+// ---------------------------------------------------------------------------
+
+describe('explainGapScore — component charts', () => {
+  /** A 5-pilot HG class with leading and arrival on, and known point values. */
+  function chartContext(): ClassContextInput {
+    const ctx = makeClassContext();
+    ctx.available_points = {
+      distance: 400, time: 500, leading: 100, arrival: 100, total: 1100,
+    };
+    ctx.validity_inputs = { ...makeValidityInputs(), num_reached_ess: 4 };
+    // Times chosen so the published points ARE the formula's value; the
+    // builders verify that themselves, which is the point of the fixture.
+    const mk = (
+      id: string, name: string, t: number, timePts: number,
+      pos: number | null, arrPts: number,
+    ) => ({
+      comp_pilot_id: id, pilot_name: name,
+      flown_distance: 60_000, speed_section_time: t,
+      made_goal: true, reached_ess: true,
+      total_score: 0, distance_points: 400, time_points: timePts,
+      leading_points: 0, arrival_points: arrPts,
+      arrival_position: pos, ess_time_ms: null,
+    });
+    const exp = speedExponentValue('5/6');
+    const best = 60 * 60;
+    const tOf = (t: number) => calculateSpeedFraction(t, best, exp) * 500;
+    ctx.pilots = [
+      mk('a', 'Alpha', best, tOf(best), 1, calculateArrivalPoints(1, 4, 100)),
+      mk('b', 'Bravo', 70 * 60, tOf(70 * 60), 2, calculateArrivalPoints(2, 4, 100)),
+      mk('c', 'Charlie', 80 * 60, tOf(80 * 60), 3, calculateArrivalPoints(3, 4, 100)),
+      mk('d', 'Delta', 95 * 60, tOf(95 * 60), 4, calculateArrivalPoints(4, 4, 100)),
+    ];
+    return ctx;
+  }
+
+  function chartsFor(ctx: ClassContextInput, meId = 'c') {
+    const me = ctx.pilots.find((p) => p.comp_pilot_id === meId)!;
+    const entry: ScoreEntryInput = {
+      ...makeGoalEntry(),
+      comp_pilot_id: meId,
+      speed_section_time: me.speed_section_time,
+      time_points: me.time_points!,
+      arrival_points: me.arrival_points!,
+      arrival_position: me.arrival_position,
+    };
+    const ex = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry,
+      classContext: ctx,
+      params: { scoring: 'HG', useArrival: true, useDistanceDifficulty: false },
+    });
+    return ex;
+  }
+
+  it('plots the time curve from the scoring function, with every pilot on it', () => {
+    const chart = curveChart(section(chartsFor(chartContext()), 'time'));
+    expect(chart.xUnit).toBe('duration');
+    expect(chart.pilots).toHaveLength(4);
+    expect(chart.omitted).toBe(0);
+    expect(chart.curve.length).toBeGreaterThan(10);
+    // Every dot is ON the curve — the claim the caption makes.
+    for (const p of chart.pilots) {
+      const near = chart.curve.reduce((a, c) =>
+        Math.abs(c.x - p.x) < Math.abs(a.x - p.x) ? c : a
+      );
+      expect(Math.abs(near.y - p.y)).toBeLessThan(2);
+    }
+  });
+
+  it('marks exactly one pilot as "you"', () => {
+    const chart = curveChart(section(chartsFor(chartContext()), 'time'));
+    const you = chart.pilots.filter((p) => p.you);
+    expect(you).toHaveLength(1);
+    expect(you[0].name).toBe('Charlie');
+  });
+
+  it('states in the caption that the curve is the formula, not a fit', () => {
+    const chart = curveChart(section(chartsFor(chartContext()), 'time'));
+    expect(chart.caption).toContain('is the time-points formula');
+    expect(chart.caption).toContain('sitting exactly on it');
+    expect(chart.caption).not.toContain('trend');
+  });
+
+  // The rule that keeps that claim true: a pilot whose published points carry
+  // a reduction the curve does not model is counted out, not drawn beside it.
+  it('omits a pilot the curve does not explain, and says how many', () => {
+    const ctx = chartContext();
+    ctx.pilots[1] = { ...ctx.pilots[1], time_points: ctx.pilots[1].time_points! * 0.8 };
+    const chart = curveChart(section(chartsFor(ctx), 'time'));
+    expect(chart.pilots).toHaveLength(3);
+    expect(chart.omitted).toBe(1);
+    expect(chart.caption).toContain('1 pilot is not shown');
+  });
+
+  // A chart whose whole job is to locate you is worse than none when it can't.
+  it('suppresses the chart entirely when the viewing pilot is the omitted one', () => {
+    const ctx = chartContext();
+    ctx.pilots[2] = { ...ctx.pilots[2], time_points: 1.5 };
+    expect(section(chartsFor(ctx), 'time').chart).toBeUndefined();
+  });
+
+  it('plots arrival against position, sampling the §11.4 curve', () => {
+    const chart = curveChart(section(chartsFor(chartContext()), 'arrival'));
+    expect(chart.xUnit).toBe('position');
+    expect(chart.pilots.map((p) => p.x)).toEqual([1, 2, 3, 4]);
+    expect(chart.caption).toContain('by the clock');
+  });
+
+  it('draws no chart for a component with no points on offer', () => {
+    const ctx = chartContext();
+    ctx.available_points = { ...ctx.available_points, arrival: 0 };
+    ctx.pilots = ctx.pilots.map((p) => ({ ...p, arrival_points: 0, arrival_position: null }));
+    const ex = chartsFor(ctx);
+    expect(ex.sections.find((s) => s.id === 'arrival')).toBeUndefined();
+  });
+
+  // The HG difficulty half is a step function built from where the whole field
+  // landed out. It is reconstructed from the class context rather than taken
+  // from the payload, so the interesting assertion is that the reconstruction
+  // reproduces the published points — if it did not, placeField would omit
+  // every pilot and the chart would vanish. (The archive-wide check is
+  // web/scripts/audit-score-charts.ts, which runs the same path over every
+  // task in the comp library and demands zero unexplained pilots.)
+  it('draws the HG difficulty curve, reconstructed from where the field landed', () => {
+    const available = 400;
+    const dists = [60_000, 52_000, 41_000, 33_000, 21_000, 12_000, 7_000];
+    const goals = [true, false, false, false, false, false, false];
+    const difficulty = calculateDistanceDifficulty(dists, goals, 5_000);
+    const best = Math.max(...dists);
+    const pointsFor = (d: number) =>
+      ((0.5 * d) / best) * available + difficulty.fractionFor(d) * available;
+
+    const ctx = makeClassContext();
+    ctx.available_points = { ...ctx.available_points, distance: available };
+    ctx.pilots = dists.map((d, i) => ({
+      comp_pilot_id: `p${i}`,
+      pilot_name: `Pilot ${i}`,
+      flown_distance: d,
+      speed_section_time: null,
+      made_goal: goals[i],
+      reached_ess: goals[i],
+      distance_points: pointsFor(d),
+      time_points: 0,
+      leading_points: 0,
+      arrival_points: 0,
+      total_score: pointsFor(d),
+    }));
+
+    const chart = curveChart(section(
+      explainGapScore({
+        task: makeTask(),
+        result: makeReentryResult(),
+        entry: {
+          ...makeGoalEntry(),
+          comp_pilot_id: 'p3',
+          flown_distance: 33_000,
+          distance_points: pointsFor(33_000),
+          made_goal: false,
+        },
+        classContext: ctx,
+        params: { scoring: 'HG', useDistanceDifficulty: true, minimumDistance: 5_000 },
+      }),
+      'distance',
+    ));
+
+    // Every pilot explained — the reconstruction matches the published points.
+    expect(chart.pilots).toHaveLength(dists.length);
+    expect(chart.omitted).toBe(0);
+    // A step function needs real samples; the linear case is drawn with two.
+    expect(chart.curve.length).toBeGreaterThan(50);
+    expect(chart.caption).toContain('where the field landed out');
+    expect(chart.caption).toContain('§11.1.1');
+  });
+
+  it('draws the plain linear distance line when difficulty is off', () => {
+    const chart = curveChart(section(chartsFor(chartContext()), 'distance'));
+    expect(chart.curve).toHaveLength(2);
+    expect(chart.caption).toContain('straight line');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Validity charts — day facts, and the one factor that wants a distribution
+// ---------------------------------------------------------------------------
+
+describe('explainGapScore — validity charts', () => {
+  function validityItems(
+    inputs: ClassContextInput['validity_inputs'],
+    params: Parameters<typeof explainGapScore>[0]['params'] = { scoring: 'PG' },
+    pilots?: ClassContextInput['pilots'],
+  ) {
+    const ctx = makeClassContext();
+    ctx.validity_inputs = inputs;
+    if (pilots) ctx.pilots = pilots;
+    return section(
+      explainGapScore({
+        task: makeTask(),
+        result: makeReentryResult(),
+        entry: { ...makeGoalEntry(), comp_pilot_id: 'me' },
+        classContext: ctx,
+        params,
+      }),
+      'validity',
+    ).items;
+  }
+
+  it('gives launch and time validity a curve carrying exactly one point — the day', () => {
+    const items = validityItems(makeValidityInputs(), {
+      scoring: 'PG',
+      nominalTime: 90 * 60,
+    });
+    for (const id of ['launch-validity', 'time-validity']) {
+      const chart = items.find((i) => i.id === id)!.chart!;
+      expect(chart.kind).toBe('validity');
+      if (chart.kind !== 'validity') throw new Error('narrowing');
+      expect(chart.curve.length).toBeGreaterThan(10);
+      // A validity factor is a fact about the TASK: one point, not a field.
+      expect(chart.point.x).toBeGreaterThan(0);
+      expect(chart.point.x).toBeLessThanOrEqual(1);
+      expect(chart.curve.every((p) => p.x >= 0 && p.x <= 1)).toBe(true);
+    }
+  });
+
+  // Distance validity uses its ratio as-is, so its "curve" is the identity
+  // line. Drawing that would be ink pretending to be an explanation.
+  it('gives distance validity a distribution rather than a curve', () => {
+    const pilots = Array.from({ length: 8 }, (_, i) => ({
+      comp_pilot_id: i === 0 ? 'me' : `p${i}`,
+      pilot_name: `Pilot ${i}`,
+      flown_distance: 10_000 + i * 6_000,
+      speed_section_time: null,
+      made_goal: false,
+      reached_ess: false,
+    }));
+    const chart = validityItems(
+      makeValidityInputs(),
+      { scoring: 'PG', nominalDistance: 40_000, minimumDistance: 5_000 },
+      pilots,
+    ).find((i) => i.id === 'distance-validity')!.chart!;
+    expect(chart.kind).toBe('distribution');
+    if (chart.kind !== 'distribution') throw new Error('narrowing');
+    // One dot per flying pilot — this is a picture of the field, not a claim
+    // that a formula explains each of them, so nobody is filtered out.
+    expect(chart.points).toHaveLength(pilots.length);
+    expect(chart.points.filter((p) => p.you)).toHaveLength(1);
+    expect(chart.markers.map((m) => m.label).sort()).toEqual([
+      'minimum',
+      'nominal',
+      'you',
+    ]);
+    // makeGoalEntry flies 60 km, past the field's best — the axis is
+    // defined to contain the reader's own mark rather than drop it.
+    expect(chart.markers.find((m) => m.you)!.x).toBe(60_000);
+
+  });
+
+  it('draws no time-validity curve when the spec fell back to distance', () => {
+    const items = validityItems({ ...makeValidityInputs(), best_time: null });
+    expect(items.find((i) => i.id === 'time-validity')!.chart).toBeUndefined();
+  });
+
+  it('draws nothing at all on a payload with no validity inputs', () => {
+    const items = validityItems(undefined);
+    for (const id of ['launch-validity', 'time-validity']) {
+      expect(items.find((i) => i.id === id)!.chart).toBeUndefined();
+    }
   });
 });

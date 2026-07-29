@@ -4,6 +4,8 @@ import { readFileSync, existsSync, cpSync } from 'fs';
 import { execSync } from 'child_process';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { buildScoresCsv, scoresCsvFilename, type ScoresCsvInput } from './src/scores-csv';
+import { idFromSegment } from './src/react/lib/slug';
 
 // Where /api/* is proxied in dev: the dev-router Worker started by
 // `bun run dev:workers` (all Workers, one wrangler session — see
@@ -39,6 +41,59 @@ function workersCheck(): Plugin {
           `\n    • Start them:  bun run dev:workers   (or just \`bun run dev\`)\n`
         );
       })();
+    },
+  };
+}
+
+/**
+ * Dev stand-in for the /comp/:id/scores.csv Pages Function
+ * (functions/comp/[[path]].ts). Dev serves no Functions, so without this the
+ * scores page's Download → CSV link 404s on :3000 — and a link that only works
+ * in production is a link nobody tests. Same builder, same bytes; the visitor's
+ * cookie is forwarded so a hidden comp behaves as it does in prod.
+ */
+function scoresCsvDev(): Plugin {
+  return {
+    name: 'scores-csv-dev',
+    configureServer(server) {
+      server.middlewares.use((req: Connect.IncomingMessage, res: any, next) => {
+        const match = (req.url?.split('?')[0] ?? '').match(/^\/comp\/([^/]+)\/scores\.csv$/);
+        if (!match) return next();
+        const compId = idFromSegment(match[1]);
+        const headers = req.headers.cookie ? { cookie: req.headers.cookie } : undefined;
+        void (async () => {
+          try {
+            const [compRes, scoresRes] = await Promise.all([
+              fetch(`${DEV_API_ORIGIN}/api/comp/${compId}`, { headers }),
+              fetch(`${DEV_API_ORIGIN}/api/comp/${compId}/scores`, { headers }),
+            ]);
+            if (!compRes.ok) {
+              res.statusCode = compRes.status === 404 || compRes.status === 400 ? 404 : 502;
+              res.end('Competition not found\n');
+              return;
+            }
+            const comp = (await compRes.json()) as { name: string };
+            const scores = scoresRes.ok
+              ? ((await scoresRes.json()) as ScoresCsvInput)
+              : { comp_id: compId, tasks: [], standings: [] };
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader(
+              'Content-Disposition',
+              `attachment; filename="${scoresCsvFilename(comp.name)}"`
+            );
+            res.end(
+              buildScoresCsv(scores, {
+                compName: comp.name,
+                // Same rule as the Function: link back to where this came from.
+                origin: `http://${req.headers.host ?? 'localhost:3000'}`,
+              })
+            );
+          } catch {
+            res.statusCode = 502;
+            res.end(`API Workers not reachable at ${DEV_API_ORIGIN}\n`);
+          }
+        })();
+      });
     },
   };
 }
@@ -172,6 +227,7 @@ export default defineConfig({
     tailwindcss(),
     react(),
     workersCheck(),
+    scoresCsvDev(),
     sampleCompFiles(),
     copySampleComps(),
     {
@@ -182,6 +238,41 @@ export default defineConfig({
       name: 'inject-git-sha-meta',
       transformIndexHtml() {
         return [{ tag: 'meta', attrs: { name: 'git-sha', content: GIT_SHA }, injectTo: 'head' as const }];
+      },
+    },
+    {
+      // Preload the body face. It is declared in CSS (src/fonts.css), so
+      // without a hint the browser only learns the URL once the stylesheet has
+      // parsed — two serial round trips before any text can paint. The
+      // filename is content-hashed, so the name is only knowable from the
+      // finished bundle; hence a plugin rather than a literal in app.html.
+      // Build-only: in dev there is no bundle and the unhashed path is served
+      // directly, so the hint would be redundant.
+      //
+      // Only the `latin` upright file is preloaded. Preloading italic or
+      // latin-ext would download faces most pages never use, which costs more
+      // than the discovery it saves — unicode-range keeps them on demand.
+      name: 'preload-body-font',
+      enforce: 'post' as const,
+      transformIndexHtml(_html: string, ctx: { bundle?: Record<string, unknown> }) {
+        if (!ctx.bundle) return;
+        const file = Object.keys(ctx.bundle).find((f) =>
+          /atkinson-hyperlegible-next-latin-wght-normal-[^/]*\.woff2$/.test(f)
+        );
+        if (!file) return;
+        return [
+          {
+            tag: 'link',
+            attrs: {
+              rel: 'preload',
+              href: `/${file}`,
+              as: 'font',
+              type: 'font/woff2',
+              crossorigin: '',
+            },
+            injectTo: 'head' as const,
+          },
+        ];
       },
     },
     {
@@ -292,6 +383,16 @@ export default defineConfig({
     // web/scripts/dev-workers.sh for why there is only one target now.
     proxy: {
       '/api': { target: DEV_API_ORIGIN, changeOrigin: true },
+      // /civl-rankings.csv is a Pages Function in production
+      // (functions/civl-rankings.csv.ts), and Pages Functions don't run under
+      // `bun run dev`. Rewriting to the worker path it forwards to keeps the
+      // one public URL working in dev too, so verifying an import doesn't
+      // require a `wrangler pages dev` build.
+      '/civl-rankings.csv': {
+        target: DEV_API_ORIGIN,
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\//, '/api/'),
+      },
     },
   },
 });

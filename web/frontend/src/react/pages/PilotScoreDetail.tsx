@@ -2,6 +2,13 @@
  * Pilot score details — the explanation-first view of one pilot's score
  * for one task.
  *
+ * TERMINOLOGY (July 2026): the owner has started calling this page a
+ * pilot's "report card", and the homepage hero now shows the whole page
+ * scaled down under that name. Nothing in the code or the UI has been
+ * renamed — treat "report card" as the emerging user-facing term for
+ * this page and prefer it in new copy; if it sticks, the rename to make
+ * is the visible wording, not the route or the component.
+ *
  * Clicking a score anywhere in the app lands here. The page leads with
  * the explanation (the flight narrative and every step of the points
  * calculation) and treats the map as supporting evidence: clicking any
@@ -15,6 +22,7 @@
  * IGC is fetched separately, only to draw the track on the map.
  */
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { useInView } from "../lib/use-in-view";
 import { useParams } from "react-router-dom";
 import {
   explainGapScore,
@@ -47,6 +55,7 @@ import { retry } from "../lib/retry";
 import { idFromSegment, pilotPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { Timestamp } from "../components/Timestamp";
+import { NotFound } from "../components/NotFound";
 import type {
   AltitudeCleaningData,
   ClassScore,
@@ -58,6 +67,10 @@ import type {
   TrackQualityData,
 } from "../comp/types";
 import { Badge } from "@/react/rac/badge";
+import { ScoreChartView } from "@/react/charts/ScoreChartView";
+import { TrackCleaningChart } from "@/react/charts/TrackCleaningChart";
+import { ScoringGlossary } from "../components/ScoringGlossary";
+import { TaskInStandings } from "../comp/TaskInStandings";
 import type { MapFocus } from "../comp/ScoreDetailMap";
 import { useInitialData } from "../lib/initial-data";
 import { useUser } from "../lib/user";
@@ -112,8 +125,24 @@ function assertAnalysisMatchesScore(analysedDistance: number, scoredDistance: nu
 
 type DetailState =
   | { kind: "loading" }
-  | { kind: "error"; message: string }
+  | { kind: "error"; message: string; notFound?: boolean }
   | { kind: "ready"; data: DetailData };
+
+/**
+ * The comp, task or pilot in the URL doesn't resolve — as opposed to the page
+ * failing to load for some other reason. Worth separating, because a dead id is
+ * the one failure the 404 page can do something about: its slug still names what
+ * the visitor wanted, so it can offer the ids that exist now.
+ */
+class DetailNotFoundError extends Error {
+  readonly notFound = true;
+}
+
+/** True for the statuses that mean "no such thing": a real 404, or a 400 from
+ *  an id sqid that doesn't decode at all. */
+function isMissing(status: number): boolean {
+  return status === 404 || status === 400;
+}
 
 const ANCHOR_EVENT_TYPE: Record<ExplanationAnchor["kind"], FlightEventType> = {
   start: "start_reaching",
@@ -197,8 +226,14 @@ async function loadDetail(
     }),
   ]);
 
+  if (isMissing(compRes.status) || isMissing(taskRes.status))
+    throw new DetailNotFoundError("Task not found");
   if (!compRes.ok || !taskRes.ok) throw new Error("Task not found");
   if (!scoreRes.ok) throw new Error("Scores are not available for this task");
+  // A missing analysis means this pilot has no result on this task — either the
+  // id is dead or they never flew it. Both are "no such page", not a failure.
+  if (isMissing(analysisRes.status))
+    throw new DetailNotFoundError("No score for this pilot on this task");
   if (!analysisRes.ok)
     throw new Error("The analysis of the pilot's track is not available");
 
@@ -325,13 +360,22 @@ function buildDetailData(
     };
   }
 
-  // Resolve the exact parameter set the scorer used, so the explanation names
-  // the same formula and time-points exponent (issue #258): the official
-  // per-category defaults with the comp's saved gap_params merged over them,
-  // keeping the pre-#258 exponent for a comp that saved only a leadingFormula.
-  // nominalDistance is left off — the explainer derives points from the class
-  // context, not from it, and the stored value may be a nullable "auto".
+  // The exact parameter set the scorer used, so the explanation names the same
+  // formula, exponent and nominal values.
+  //
+  // ALWAYS prefer the published `cls.gap_params`: the scorer merges the TASK's
+  // own overrides (migration 0021 — imported AirScore comps publish a
+  // different formula per task) over the comp's, and it resolves an "auto"
+  // nominal distance against the route. Re-deriving from the comp record alone
+  // silently disagreed with both, so the page could print prose about a
+  // formula the task was not scored with, beside points that were correct.
+  //
+  // The fallback below is for score rows cached before gap_params was
+  // published — same derivation as before, including dropping the nullable
+  // "auto" nominalDistance, so those pages render exactly as they used to
+  // (the validity detail lines simply stay absent until revalidation).
   const params: Partial<GAPParameters> = (() => {
+    if (cls.gap_params) return cls.gap_params;
     const { nominalDistance: _nd, ...stored } = comp.gap_params ?? {};
     void _nd;
     // Pass the comp's creation time so the PG leading-weight default matches the
@@ -472,6 +516,7 @@ export function PilotScoreDetail() {
       return {
         kind: "error",
         message: err instanceof Error ? err.message : "Failed to load score details",
+        notFound: err instanceof DetailNotFoundError,
       };
     }
   });
@@ -480,6 +525,9 @@ export function PilotScoreDetail() {
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [mapExpanded, setMapExpanded] = useState(false);
+  // Mapbox (764 KB) waits until the map panel nears the viewport — the page's
+  // narrative is what the visitor came for. See lib/use-in-view.
+  const [mapRef, mapInView] = useInView<HTMLDivElement>();
   // Time scrubber: draw the track only up to this fix (null = whole flight).
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
   // Deep-link into the standalone analysis viewer, which loads the whole
@@ -533,6 +581,7 @@ export function PilotScoreDetail() {
           setState({
             kind: "error",
             message: err instanceof Error ? err.message : "Failed to load score details",
+            notFound: err instanceof DetailNotFoundError,
           });
       });
     return () => {
@@ -610,6 +659,12 @@ export function PilotScoreDetail() {
   }
 
   if (state.kind === "error") {
+    // A dead id gets the 404 page, which searches the URL's own slugs for the
+    // pilot/task/comp that exist now. Any other failure is a failure, not a
+    // wrong address, so it says what went wrong and keeps the breadcrumbs.
+    if (state.notFound) {
+      return <NotFound title="Page not found" message={`${state.message}.`} />;
+    }
     return (
       <div>
         {breadcrumbs}
@@ -670,12 +725,18 @@ export function PilotScoreDetail() {
           }
         >
           <div
+            ref={mapRef}
             className={`relative overflow-hidden ${
               mapExpanded
                 ? "min-h-0 w-full flex-1"
                 : "h-56 rounded-lg border sm:h-72 lg:h-[calc(100vh-8rem)]"
             }`}
           >
+            {!mapInView ? (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                Loading map...
+              </div>
+            ) : (
             <Suspense
               fallback={
                 <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -693,6 +754,7 @@ export function PilotScoreDetail() {
                 bestProgressRoute={data.bestProgressRoute}
               />
             </Suspense>
+            )}
             {/* Map controls, styled like the providers' own controls (white
                 regardless of theme) and kept clear of them: bottom-right, above
                 the attribution line. The analysis link opens the full track in
@@ -758,10 +820,23 @@ export function PilotScoreDetail() {
             />
           ))}
           {data.entry.track_excluded ? <TrackValidityDocLink /> : null}
+          {/* Closes the loop from this task back to the competition. Loads
+              after hydration — see TaskInStandings for why it is not in the
+              SSR payload. */}
+          <TaskInStandings
+            compId={compId}
+            compName={data.comp.name}
+            taskId={taskId}
+            compPilotId={pilotId}
+          />
           <TrackDataCleaningNote
             cleaning={data.altitudeCleaning}
             timezone={data.comp.timezone}
+            fixes={fixes}
           />
+          {/* Last on the page: a reader who needed a definition has met every
+              term by now, and one who didn't never has to see it. */}
+          <ScoringGlossary />
         </div>
       </div>
     </div>
@@ -921,17 +996,40 @@ function TrackValidityDocLink({ className = "" }: { className?: string }) {
  * barometric channel, or caught by vertical-speed limits). Rendered only
  * when something was actually repaired — a clean track needs no disclaimer.
  * Times are formatted in the comp's zone (SSR-deterministic).
+ *
+ * The list is the exact record and always renders. Once the tracklog the map
+ * needs has arrived, the same repairs are also drawn — raw GPS, raw barometer
+ * and the cleaned line the analysis used, the figure /scoring/data-cleaning
+ * explains — and each list entry becomes the control that zooms the chart to
+ * that stretch. Text first, picture second, on purpose: the chart is
+ * client-only (there are no fixes server-side), so the page's server-rendered
+ * content is unchanged.
  */
 function TrackDataCleaningNote({
   cleaning,
   timezone,
+  fixes,
 }: {
   cleaning: AltitudeCleaningData | null;
   timezone: string | null;
+  /** The parsed tracklog, once downloaded — null until then. */
+  fixes: IGCFix[] | null;
 }) {
+  // Unconditional: `cleaning` arrives with the SSR seed on some paths and a
+  // fetch on others, so this component must not choose a hook path by it.
+  const [selected, setSelected] = useState<number | null>(null);
   if (!cleaning || cleaning.repairedFixCount === 0) return null;
   const time = (ms: number) => formatTimeInZone(new Date(ms), timezone ?? undefined);
   const pct = (100 * cleaning.repairedFixCount) / cleaning.totalFixCount;
+  const charted = fixes != null && fixes.length > 1;
+  const entryText = (r: AltitudeCleaningData["ranges"][number]) =>
+    `${
+      r.startTimeMs === r.endTimeMs
+        ? time(r.startTimeMs)
+        : `${time(r.startTimeMs)}–${time(r.endTimeMs)}`
+    } · ${r.fixCount} fix${r.fixCount === 1 ? "" : "es"} · up to ${Math.round(
+      r.maxCorrectionMeters,
+    )} m off`;
   return (
     <section className="rounded-lg border p-4">
       <h2 className="font-semibold">Track data cleaning</h2>
@@ -947,15 +1045,50 @@ function TrackDataCleaningNote({
           How data cleaning works
         </a>
       </p>
+      {charted ? (
+        <TrackCleaningChart
+          fixes={fixes}
+          ranges={cleaning.ranges}
+          selected={selected}
+          timezone={timezone}
+          onSelectRange={setSelected}
+        />
+      ) : null}
+      {charted ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          {selected === null ? (
+            "Pick a stretch below to zoom the chart to it."
+          ) : (
+            <button
+              type="button"
+              onClick={() => setSelected(null)}
+              className="cursor-pointer underline underline-offset-2"
+            >
+              Show the whole flight
+            </button>
+          )}
+        </p>
+      ) : null}
       <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-        {cleaning.ranges.map((r) => (
+        {cleaning.ranges.map((r, i) => (
           <li key={r.startIndex} className="tabular-nums">
-            {r.startTimeMs === r.endTimeMs
-              ? time(r.startTimeMs)
-              : `${time(r.startTimeMs)}–${time(r.endTimeMs)}`}
-            {" · "}
-            {r.fixCount} fix{r.fixCount === 1 ? "" : "es"}
-            {" · "}up to {Math.round(r.maxCorrectionMeters)} m off
+            {charted ? (
+              // Selecting an entry zooms the chart to it; selecting it again
+              // returns to the whole flight. aria-pressed rather than a link
+              // or a radio: it toggles what the figure beside it shows.
+              <button
+                type="button"
+                aria-pressed={i === selected}
+                onClick={() => setSelected(i === selected ? null : i)}
+                className={`cursor-pointer rounded text-left underline-offset-2 hover:underline ${
+                  i === selected ? "font-medium text-foreground underline" : ""
+                }`}
+              >
+                {entryText(r)}
+              </button>
+            ) : (
+              entryText(r)
+            )}
           </li>
         ))}
       </ul>
@@ -987,6 +1120,23 @@ function ExplanationSection({
       {section.summary ? (
         <p className="mt-1 text-sm text-muted-foreground">{section.summary}</p>
       ) : null}
+      {/* The way out of this page for a reader who doesn't know GAP. The
+          explainer at /scoring/gap is written for exactly this person and,
+          until now, nothing on the report card linked to it — the only doc
+          links here fired when something had gone wrong with the track. The
+          accessible name carries the section, so a screen-reader user
+          scanning links doesn't hear "How this works" six times. */}
+      {section.docHref ? (
+        <p className="mt-1">
+          <a
+            href={section.docHref}
+            aria-label={`How ${section.title.toLowerCase()} works`}
+            className="text-xs text-muted-foreground underline underline-offset-2"
+          >
+            How this works
+          </a>
+        </p>
+      ) : null}
       <div className="mt-2 space-y-1">
         {section.items.map((item) => (
           <ExplanationItem
@@ -998,6 +1148,10 @@ function ExplanationSection({
           />
         ))}
       </div>
+      {/* The component's formula with the field on it, UNDER the arithmetic
+          it illustrates: the numbers are the answer, the curve is the shape.
+          Inline SVG, so it is in the server-rendered first paint. */}
+      {section.chart ? <ScoreChartView chart={section.chart} /> : null}
     </section>
   );
 }
@@ -1020,6 +1174,11 @@ function ExplanationItem({
         ? "text-muted-foreground"
         : "";
 
+  // A sparkline belongs beside its row's number, not under its prose — it is
+  // an annotation on the figure. Anything larger (the distance distribution)
+  // is a figure in its own right and goes below the whole row.
+  const inlineChart = item.chart?.kind === "validity";
+
   const body = (
     <>
       <div className="flex items-baseline justify-between gap-3">
@@ -1029,15 +1188,19 @@ function ExplanationItem({
           ) : null}
           {item.text}
         </span>
-        {item.value ? (
-          <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
-            {item.value}
-          </span>
-        ) : null}
+        <span className="flex shrink-0 items-center gap-2">
+          {inlineChart ? <ScoreChartView chart={item.chart!} /> : null}
+          {item.value ? (
+            <span className="text-sm tabular-nums text-muted-foreground">
+              {item.value}
+            </span>
+          ) : null}
+        </span>
       </div>
       {item.detail ? (
         <p className="mt-0.5 text-xs text-muted-foreground">{item.detail}</p>
       ) : null}
+      {item.chart && !inlineChart ? <ScoreChartView chart={item.chart} /> : null}
     </>
   );
 
