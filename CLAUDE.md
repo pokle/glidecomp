@@ -17,6 +17,8 @@ Cloudflare monorepo on the Workers Paid plan ($5/mo — includes paid-plan featu
 
 If `node_modules/` is missing or a dependency can't be resolved, run `bun install` before proceeding. Build commands are in `package.json` scripts. Key ones: `bun run dev`, `bun run test`, `bun run typecheck:all`.
 
+`bun run test:all` = `test` (the engine/airscore/dev-router/scripts `bun test` sweep, then `typecheck:all`) followed by **`test:workspaces`, which runs the three vitest suites — competition-api, auth-api, frontend — concurrently in one `bun run --filter` invocation**. They were chained with `&&` until July 2026, which cost ~20s a run for nothing: they share no state (both Worker pools are `@cloudflare/vitest-pool-workers` with in-memory storage and no `persist`, so the #477 two-Miniflare-processes-on-one-SQLite-file hazard does not apply here — that is a `wrangler dev` problem, not a vitest one). A failing suite still fails the whole invocation, so the gate is unchanged. Interleaved output is the cost; each line is prefixed with its package name, and `test:comp` / `test:auth` / `test:frontend` still run one suite on its own.
+
 **E2E tests (`bun run test:e2e`) on a fresh clone:**
 - Playwright browsers must be installed first: `bunx playwright install chromium` (CI uses `--with-deps`).
 - The auth worker needs `web/workers/auth-api/.dev.vars` (gitignored). Without it `BETTER_AUTH_URL` defaults to production, `isLocalDev()` is false, and `/api/auth/dev-login` 404s — every test fails at sign-in. The `test:e2e` script copies `.dev.vars.example` into place if the file is missing.
