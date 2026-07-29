@@ -30,13 +30,14 @@ import { DEFAULT_GAP_PARAMETERS } from './gap-scoring';
 import type { TurnpointSequenceResult } from './turnpoint-sequence';
 import { km, pts, fmtPoints, duration, defaultFormatTime } from './score-explanation-format';
 import {
-  leadingVariantSentence,
-  leadingWeightDetail,
   buildFlightSection,
   buildValiditySection,
   buildDistanceSection,
   buildTimeSection,
+  buildLeadingSection,
+  buildArrivalSection,
   buildArrivalEssNotGoalItems,
+  buildComparisonSection,
   buildTotalSection,
   buildPenaltySection,
   buildManualFlightSection,
@@ -81,51 +82,26 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
 
   const sections: ScoreExplanationSection[] = [
     buildFlightSection(task, result, entry, fmt),
-    buildValiditySection(classContext),
+    buildValiditySection(classContext, params),
     buildDistanceSection(entry, classContext, result, params),
     buildTimeSection(entry, classContext, params, result, fmt),
   ];
 
   if (classContext.available_points.leading > 0 || entry.leading_points > 0) {
-    sections.push({
-      id: 'leading',
-      title: 'Leading points',
-      points: entry.leading_points,
-      items: [
-        {
-          id: 'leading',
-          text: 'Leading points reward flying out front during the speed section — the pilot with the best leading coefficient takes all available leading points, others fall off with the gap.',
-          value: pts(entry.leading_points),
-          detail: leadingWeightDetail(params),
-        },
-        {
-          id: 'leading-variant',
-          text: leadingVariantSentence(params.leadingFormula),
-          emphasis: 'muted',
-        },
-      ],
-    });
+    sections.push(buildLeadingSection(entry, classContext, params));
   }
 
   if (classContext.available_points.arrival > 0 || entry.arrival_points > 0) {
-    sections.push({
-      id: 'arrival',
-      title: 'Arrival points',
-      points: entry.arrival_points,
-      items: [
-        {
-          id: 'arrival',
-          text: 'Arrival points reward crossing the end of the speed section early relative to the other pilots who reached it.',
-          value: pts(entry.arrival_points),
-        },
-        ...buildArrivalEssNotGoalItems(entry, params),
-      ],
-    });
+    sections.push(buildArrivalSection(entry, classContext, params, fmt));
   }
 
   const penalty = buildPenaltySection(entry, params.jumpTheGunFactor);
   if (penalty) sections.push(penalty);
   sections.push(buildTotalSection(entry));
+  // After the total, deliberately: the reader needs their own arithmetic to
+  // add up before being shown what it cost them against the winner.
+  const comparison = buildComparisonSection(entry, classContext);
+  if (comparison) sections.push(comparison);
 
   let headline: string;
   if (entry.early_start_outcome === 'pg_launch_to_sss') {
@@ -287,16 +263,20 @@ export function explainManualFlightScore(
 
   const sections: ScoreExplanationSection[] = [
     buildManualFlightSection(task, geometry, entry),
-    buildValiditySection(classContext),
+    buildValiditySection(classContext, params),
     buildDistanceSection(entry, classContext, synthResult, params),
     buildTimeSection(entry, classContext, params, synthResult, defaultFormatTime),
   ];
 
   if (classContext.available_points.leading > 0 || entry.leading_points > 0) {
+    // Not buildLeadingSection: a manual flight has no track to measure a
+    // leading coefficient from, so there is no arithmetic to show and the
+    // reason for the zero is the whole explanation.
     sections.push({
       id: 'leading',
       title: 'Leading points',
       points: entry.leading_points,
+      docHref: '/scoring/gap#leading-points',
       items: [
         {
           id: 'leading',
@@ -308,24 +288,14 @@ export function explainManualFlightScore(
   }
 
   if (classContext.available_points.arrival > 0 || entry.arrival_points > 0) {
-    sections.push({
-      id: 'arrival',
-      title: 'Arrival points',
-      points: entry.arrival_points,
-      items: [
-        {
-          id: 'arrival',
-          text: 'Arrival points reward crossing the end of the speed section early relative to the other pilots who reached it.',
-          value: pts(entry.arrival_points),
-        },
-        ...buildArrivalEssNotGoalItems(entry, params),
-      ],
-    });
+    sections.push(buildArrivalSection(entry, classContext, params));
   }
 
   const penalty = buildPenaltySection(entry, params.jumpTheGunFactor);
   if (penalty) sections.push(penalty);
   sections.push(buildTotalSection(entry));
+  const comparison = buildComparisonSection(entry, classContext);
+  if (comparison) sections.push(comparison);
 
   const headline = geometry.madeGoal
     ? `Manual flight — made goal — ${fmtPoints(entry.total_score)} points`

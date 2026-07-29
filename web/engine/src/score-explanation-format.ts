@@ -155,6 +155,17 @@ export function pctValidity(fraction: number, decimals: number): string {
   return `${trimZeros((fraction * 100).toFixed(percentDecimals), 0)}%`;
 }
 
+/**
+ * A weight fraction as a percentage, e.g. 0.4423 → "44.2%".
+ *
+ * One decimal, always: the weights are a split of one day and the reader is
+ * meant to see them add to 100%, which whole percents visibly fail to do
+ * often enough to look like a bug.
+ */
+export function pctWeight(fraction: number): string {
+  return `${(fraction * 100).toFixed(1)}%`;
+}
+
 /** The `1000 × launch × distance × time` equation for the points on offer. */
 export function availableTotalDetail(
   v: ClassContextInput['task_validity'],

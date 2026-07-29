@@ -133,6 +133,29 @@ export interface PilotScore {
   /** Leading coefficient value */
   leadingCoefficient: number;
   /**
+   * Where this pilot came in the ESS arrival order (1-based), the sole input
+   * to arrival points besides the size of the field that reached ESS.
+   *
+   * Ordered by WALL-CLOCK time at ESS, not by speed: a pilot on an early
+   * start gate can cross ESS ahead of a faster pilot on a later gate and
+   * take more arrival points for it. Published because the scorer's own
+   * ordering is otherwise unreproducible from the results — the report card
+   * had no way to substitute the §11.4 formula and could only assert its
+   * output.
+   *
+   * Absent when arrival points aren't scored (PG, or useArrival off) and for
+   * a pilot who never reached ESS.
+   */
+  arrivalPosition?: number;
+  /**
+   * Epoch milliseconds at which this pilot reached the end of the speed
+   * section, or null if they never did. The evidence behind
+   * {@link arrivalPosition}: with it a reader can check the order rather than
+   * take it on trust, and a tie (two pilots, one timestamp) becomes visible
+   * instead of presenting as a confident ordering the data cannot support.
+   */
+  essTimeMs?: number | null;
+  /**
    * Seconds the pilot started before the first start gate (§12.2), when an
    * early start was detected. Absent for normal starts.
    */
@@ -796,6 +819,10 @@ export function scoreFlights(
       totalScore: total,
       rank: 0, // assigned after sorting
       leadingCoefficient: leadingCoefficients[idx],
+      // Transparency for the §11.4 arithmetic: the position the arrival
+      // points were computed from, and the ESS time it was ordered by.
+      ...(position > 0 ? { arrivalPosition: position } : {}),
+      essTimeMs: f.essTimeMs,
       ...(f.earlyStartSeconds && f.earlyStartSeconds > 0
         ? { earlyStartSeconds: f.earlyStartSeconds }
         : {}),

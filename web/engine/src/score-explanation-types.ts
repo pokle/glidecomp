@@ -70,7 +70,8 @@ export type ScoreExplanationSectionId =
   | 'leading'
   | 'arrival'
   | 'penalty'
-  | 'total';
+  | 'total'
+  | 'comparison';
 
 export interface ScoreExplanationSection {
   id: ScoreExplanationSectionId;
@@ -79,6 +80,14 @@ export interface ScoreExplanationSection {
   summary?: string;
   /** The points this section contributed, when it is a point component. */
   points?: number;
+  /**
+   * Where the site's GAP explainer covers this section, e.g.
+   * `/scoring/gap#time-points`. A UI that has such a page renders it as a
+   * "how this works" link on the section header; one that doesn't (the CLI)
+   * ignores it. Kept here rather than in the UI so the anchor lives beside
+   * the prose it complements and the two cannot drift apart.
+   */
+  docHref?: string;
   items: ScoreExplanationItem[];
 }
 
@@ -121,6 +130,16 @@ export interface ScoreEntryInput {
   /** Stopped tasks (S7F §12.3.6): altitude-bonus metres folded into
    * flown_distance for a pilot still flying at the stop. */
   stopped_altitude_bonus?: number | null;
+  /** The pilot's leading coefficient (S7F §11.3), lower is better — the sole
+   * input to leading points. Null/absent when leading isn't scored, or on a
+   * payload cached before it was published. */
+  leading_coefficient?: number | null;
+  /** Position in the ESS arrival order (1-based) — with the size of the ESS
+   * field, the whole input to the §11.4 arrival formula. */
+  arrival_position?: number | null;
+  /** When the pilot reached ESS (epoch ms). What the arrival order is sorted
+   * by: wall-clock time, not speed. */
+  ess_time_ms?: number | null;
 }
 
 /**
@@ -135,6 +154,62 @@ export interface StoppedClassInput {
   stopped_validity: number;
   time_points_reduction: number;
   num_landed_before_stop: number;
+}
+
+/**
+ * The field-level numbers the validity and weight formulas were evaluated
+ * from, as published by the competition API (ClassScore.validity_inputs).
+ *
+ * Optional throughout the explainer: score rows cached before this existed
+ * are still served by the stale-first store, and every section that uses
+ * these must degrade to the bare percentages rather than fail.
+ */
+export interface ValidityInputsInput {
+  /** Pilots present at launch (flew + present-but-did-not-fly), S7F §9.1. */
+  num_present: number;
+  /** Pilots who flew — the launch-validity numerator. */
+  num_flying: number;
+  num_in_goal: number;
+  num_reached_ess: number;
+  /** Best scored distance in the class, metres. */
+  best_distance: number;
+  /** Best speed-section time in the class, seconds; null when nobody scored one. */
+  best_time: number | null;
+  /** numInGoal ÷ numFlying — the input to the weight split. */
+  goal_ratio: number;
+  /** The optimized task distance, metres. */
+  task_distance: number;
+  /** Mean of each flying pilot's distance over the minimum, metres. The
+   * distance-validity ratio's numerator, pre-divided by the pilot count. */
+  mean_distance_over_minimum: number;
+  /** The weight fractions the available points were split by (S7F §10). */
+  weights: { distance: number; time: number; leading: number; arrival: number };
+}
+
+/** One scored pilot in the class. The four fields the validity and best-in-class
+ * arithmetic needs are required; the rest let the explainer compare this pilot
+ * against the field, and are absent on payloads cached before they existed. */
+export interface ClassPilotInput {
+  flown_distance: number;
+  speed_section_time: number | null;
+  made_goal: boolean;
+  reached_ess: boolean;
+  pilot_name?: string;
+  rank?: number;
+  total_score?: number;
+  distance_points?: number;
+  time_points?: number;
+  leading_points?: number;
+  arrival_points?: number;
+  /** The pilot's leading coefficient (S7F §11.3), lower is better. */
+  leading_coefficient?: number | null;
+  /** Position in the ESS arrival order (1-based), or null. */
+  arrival_position?: number | null;
+  /** When the pilot reached ESS (epoch ms), or null — what the order sorts by. */
+  ess_time_ms?: number | null;
+  /** Set when a HARD data-quality check withheld this pilot's tracklog: they
+   * are seated at 0 and must not be read as a scored result. */
+  track_excluded?: { reasons: string[] } | null;
 }
 
 /** The pilot's class context — the field the score was computed against. */
@@ -155,12 +230,9 @@ export interface ClassContextInput {
     total: number;
   };
   /** Every scored pilot in the class (including this one). */
-  pilots: Array<{
-    flown_distance: number;
-    speed_section_time: number | null;
-    made_goal: boolean;
-    reached_ess: boolean;
-  }>;
+  pilots: ClassPilotInput[];
+  /** The numbers behind the validity factors and the weight split. */
+  validity_inputs?: ValidityInputsInput;
   /** Present when the task was scored as stopped (S7F §12.3). */
   stopped?: StoppedClassInput;
 }

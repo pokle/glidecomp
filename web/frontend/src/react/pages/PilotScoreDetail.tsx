@@ -356,13 +356,22 @@ function buildDetailData(
     };
   }
 
-  // Resolve the exact parameter set the scorer used, so the explanation names
-  // the same formula and time-points exponent (issue #258): the official
-  // per-category defaults with the comp's saved gap_params merged over them,
-  // keeping the pre-#258 exponent for a comp that saved only a leadingFormula.
-  // nominalDistance is left off — the explainer derives points from the class
-  // context, not from it, and the stored value may be a nullable "auto".
+  // The exact parameter set the scorer used, so the explanation names the same
+  // formula, exponent and nominal values.
+  //
+  // ALWAYS prefer the published `cls.gap_params`: the scorer merges the TASK's
+  // own overrides (migration 0021 — imported AirScore comps publish a
+  // different formula per task) over the comp's, and it resolves an "auto"
+  // nominal distance against the route. Re-deriving from the comp record alone
+  // silently disagreed with both, so the page could print prose about a
+  // formula the task was not scored with, beside points that were correct.
+  //
+  // The fallback below is for score rows cached before gap_params was
+  // published — same derivation as before, including dropping the nullable
+  // "auto" nominalDistance, so those pages render exactly as they used to
+  // (the validity detail lines simply stay absent until revalidation).
   const params: Partial<GAPParameters> = (() => {
+    if (cls.gap_params) return cls.gap_params;
     const { nominalDistance: _nd, ...stored } = comp.gap_params ?? {};
     void _nd;
     // Pass the comp's creation time so the PG leading-weight default matches the
@@ -1035,6 +1044,23 @@ function ExplanationSection({
       </div>
       {section.summary ? (
         <p className="mt-1 text-sm text-muted-foreground">{section.summary}</p>
+      ) : null}
+      {/* The way out of this page for a reader who doesn't know GAP. The
+          explainer at /scoring/gap is written for exactly this person and,
+          until now, nothing on the report card linked to it — the only doc
+          links here fired when something had gone wrong with the track. The
+          accessible name carries the section, so a screen-reader user
+          scanning links doesn't hear "How this works" six times. */}
+      {section.docHref ? (
+        <p className="mt-1">
+          <a
+            href={section.docHref}
+            aria-label={`How ${section.title.toLowerCase()} works`}
+            className="text-xs text-muted-foreground underline underline-offset-2"
+          >
+            How this works
+          </a>
+        </p>
       ) : null}
       <div className="mt-2 space-y-1">
         {section.items.map((item) => (

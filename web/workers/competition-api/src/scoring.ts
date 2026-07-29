@@ -76,6 +76,27 @@ export interface PilotScoreEntry {
    * flown_distance for a pilot still flying at the stop. Null otherwise. */
   stopped_altitude_bonus: number | null;
   /**
+   * The pilot's leading coefficient (S7F §11.3) — lower is better. It is the
+   * sole input to leading points, and without it the score-details page can
+   * only assert the points rather than show where they came from. Null when
+   * the competition doesn't score leading, and on an excluded pilot.
+   */
+  leading_coefficient: number | null;
+  /**
+   * Where the pilot came in the ESS arrival order (1-based) — with
+   * `validity_inputs.num_reached_ess`, the whole input to the §11.4 arrival
+   * formula. Null when arrival isn't scored or the pilot never reached ESS.
+   */
+  arrival_position: number | null;
+  /**
+   * When the pilot reached the end of the speed section (epoch ms), or null.
+   * This is what the arrival order is sorted by — WALL-CLOCK time, not speed
+   * — so publishing it lets a reader check the order rather than trust it,
+   * and makes a tie visible instead of implying an order the data can't
+   * support.
+   */
+  ess_time_ms: number | null;
+  /**
    * Set when this pilot's tracklog failed a HARD data-quality check
    * (track-quality.ts) and was withheld from scoring: they hold a place in
    * the standings at 0 rather than vanishing from the results. Null for every
@@ -102,11 +123,51 @@ export interface ClassStoppedInfo {
   num_landed_before_stop: number;
 }
 
+/**
+ * The field-level numbers the validity factors and the weight split were
+ * computed from — everything `calculateTaskValidity` and `calculateWeights`
+ * were handed, so a reader can check the percentages rather than take them
+ * on trust.
+ *
+ * GAP only: open distance hardcodes every validity at 1, so there is nothing
+ * to show and the field is absent.
+ */
+export interface ClassValidityInputs {
+  /** Pilots present at launch (flew + present-but-did-not-fly), S7F §9.1. */
+  num_present: number;
+  num_flying: number;
+  num_in_goal: number;
+  num_reached_ess: number;
+  best_distance: number;
+  best_time: number | null;
+  goal_ratio: number;
+  task_distance: number;
+  /** Mean of each flying pilot's distance over the minimum, metres — the
+   * distance-validity ratio's numerator, already divided by the pilot count. */
+  mean_distance_over_minimum: number;
+  weights: { distance: number; time: number; leading: number; arrival: number };
+}
+
 export interface ClassScore {
   pilot_class: string;
   task_validity: { launch: number; distance: number; time: number; task: number; stopped?: number };
   available_points: { distance: number; time: number; leading: number; arrival: number; total: number };
   pilots: PilotScoreEntry[];
+  /** The numbers behind `task_validity` and the available-points split. */
+  validity_inputs?: ClassValidityInputs;
+  /**
+   * The fully-resolved GAP parameters this class was actually scored with —
+   * per-category defaults, the comp's saved settings, and the task's own
+   * overrides (migration 0021), merged exactly as the scorer merged them,
+   * with "auto" nominal distance already resolved.
+   *
+   * Published so the score-details page can name the formula that scored the
+   * task instead of re-deriving one from the comp record alone: on an
+   * imported AirScore comp the two genuinely differ per task, and the page
+   * was printing prose about a formula the task wasn't scored with.
+   * Absent for open distance, which ignores GAP parameters entirely.
+   */
+  gap_params?: GAPParameters;
   /** Present when the task was scored as stopped (S7F §12.3). */
   stopped?: ClassStoppedInfo;
 }
@@ -492,6 +553,9 @@ function excludedPilotEntry(
     early_start_outcome: null,
     jump_the_gun_penalty: null,
     stopped_altitude_bonus: null,
+    leading_coefficient: null,
+    arrival_position: null,
+    ess_time_ms: null,
     track_excluded: { reasons: excluded.reasons },
   };
 }
@@ -519,7 +583,10 @@ function buildClassScore(
   // scoring. Appended AFTER the sort, so the scored field's ranks are exactly
   // what they would be if these tracks had never been uploaded, and the
   // withheld pilots take the places below them.
-  excluded: ExcludedPilot[] = []
+  excluded: ExcludedPilot[] = [],
+  // Transparency extras the GAP path supplies and the open-distance path does
+  // not (it has no validity story and ignores GAP parameters).
+  transparency?: { validity_inputs: ClassValidityInputs; gap_params: GAPParameters }
 ): ClassScore {
   const withPenalties = result.pilotScores.map((ps) => {
     const pilot = pilotMeta.get(ps.trackFile)!;
@@ -561,6 +628,16 @@ function buildClassScore(
     early_start_outcome: p.pilotScore.earlyStartOutcome ?? null,
     jump_the_gun_penalty: p.pilotScore.jumpTheGunPenalty ?? null,
     stopped_altitude_bonus: p.pilotScore.stoppedAltitudeBonus ?? null,
+    // Only meaningful where leading is scored; elsewhere the engine leaves it
+    // at 0 (or Infinity for a pilot with no valid start), and publishing that
+    // would invite the page to explain a number that decided nothing.
+    leading_coefficient:
+      transparency && transparency.gap_params.useLeading &&
+      Number.isFinite(p.pilotScore.leadingCoefficient)
+        ? p.pilotScore.leadingCoefficient
+        : null,
+    arrival_position: p.pilotScore.arrivalPosition ?? null,
+    ess_time_ms: p.pilotScore.essTimeMs ?? null,
     track_excluded: null,
   }));
 
@@ -573,6 +650,12 @@ function buildClassScore(
     task_validity: result.taskValidity,
     available_points: result.availablePoints,
     pilots,
+    ...(transparency
+      ? {
+          validity_inputs: transparency.validity_inputs,
+          gap_params: transparency.gap_params,
+        }
+      : {}),
     ...(result.stopped
       ? {
           stopped: {
@@ -1008,6 +1091,7 @@ export async function computeTaskScore(
     scoringTask,
     scoringFormat,
     gapParams,
+    fullGapParams,
     distanceOrigin,
     useLeading,
     leadingFormula,
@@ -1470,7 +1554,10 @@ export async function computeTaskScore(
       ])
     );
     classScores.push(
-      buildClassScore(pilotClass, result, pilotMeta, alphabet, excludedInClass)
+      buildClassScore(pilotClass, result, pilotMeta, alphabet, excludedInClass, {
+        gap_params: fullGapParams,
+        validity_inputs: validityInputs(result, fullGapParams),
+      })
     );
   }
 
@@ -1480,6 +1567,38 @@ export async function computeTaskScore(
     task_date: taskRow.task_date,
     scoring_format: scoringFormat,
     classes: classScores,
+  };
+}
+
+/**
+ * The validity/weight inputs for one scored class, from the engine result.
+ *
+ * `mean_distance_over_minimum` is recomputed here rather than read off the
+ * engine, but from the same array `calculateDistanceValidity` was handed:
+ * `PilotScore.flownDistance` is the scored distance with the minimum-distance
+ * floor already applied, which is exactly what the validity ran on.
+ */
+function validityInputs(
+  result: Pick<TaskScoreCore, "stats" | "weights" | "pilotScores">,
+  params: GAPParameters
+): ClassValidityInputs {
+  const s = result.stats;
+  const overMinimum = result.pilotScores.reduce(
+    (sum, p) => sum + Math.max(0, p.flownDistance - params.minimumDistance),
+    0
+  );
+  return {
+    num_present: s.numPresent,
+    num_flying: s.numFlying,
+    num_in_goal: s.numInGoal,
+    num_reached_ess: s.numReachedESS,
+    best_distance: s.bestDistance,
+    best_time: s.bestTime,
+    goal_ratio: s.goalRatio,
+    task_distance: s.taskDistance,
+    mean_distance_over_minimum:
+      s.numFlying > 0 ? overMinimum / s.numFlying : 0,
+    weights: result.weights,
   };
 }
 
