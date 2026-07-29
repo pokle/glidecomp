@@ -1376,3 +1376,102 @@ describe('explainGapScore — flight narrative repairs', () => {
     expect(chosen.text).toContain('the last one made');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Arrival points — the last component that could only assert its output
+// ---------------------------------------------------------------------------
+
+describe('explainGapScore — arrival points', () => {
+  /** An HG class where 22 pilots reached ESS and ours came 7th. */
+  function arrivalFor(
+    position: number | null,
+    opts: { essTimeMs?: number | null; tie?: boolean } = {},
+  ) {
+    const ctx = makeClassContext();
+    ctx.available_points = { ...ctx.available_points, arrival: 100 };
+    ctx.validity_inputs = { ...makeValidityInputs(), num_reached_ess: 22 };
+    if (opts.tie) {
+      ctx.pilots = [
+        ...ctx.pilots,
+        {
+          flown_distance: 60_000, speed_section_time: 66 * 60,
+          made_goal: true, reached_ess: true, ess_time_ms: opts.essTimeMs ?? null,
+        },
+      ];
+    }
+    const entry: ScoreEntryInput = {
+      ...makeGoalEntry(),
+      // 7th of 22 -> factor 0.5545 -> 55.4 of 100 available.
+      arrival_points: 55.4,
+      arrival_position: position,
+      ess_time_ms: opts.essTimeMs ?? Date.UTC(2026, 0, 10, 5, 13, 40),
+    };
+    if (opts.tie) {
+      ctx.pilots = ctx.pilots.map((p, i) =>
+        i === 0 ? { ...p, ess_time_ms: entry.ess_time_ms } : p,
+      );
+    }
+    return section(
+      explainGapScore({
+        task: makeTask(),
+        result: makeReentryResult(),
+        entry,
+        classContext: ctx,
+        params: { scoring: 'HG', useArrival: true },
+      }),
+      'arrival',
+    );
+  }
+
+  it('prints the position, the ESS time, and the substituted §11.4 formula', () => {
+    const s = arrivalFor(7);
+    const pos = s.items.find((i) => i.id === 'arrival-position')!;
+    expect(pos.text).toBe('Reached the end of the speed section 7th of 22');
+    expect(pos.value).toContain('05:13:40');
+    const formula = s.items.find((i) => i.id === 'arrival-formula')!;
+    expect(formula.detail).toContain('1 − (7 − 1) ÷ 22');
+    expect(formula.detail).toContain('0.2 + 0.037·r + 0.13·r² + 0.633·r³');
+    expect(formula.detail).toContain('× 100 available');
+  });
+
+  // The single most disputable fact about arrival points, and nothing on the
+  // site said it before.
+  it('says the order is by the clock, not by speed', () => {
+    const pos = arrivalFor(7).items.find((i) => i.id === 'arrival-position')!;
+    expect(pos.detail).toContain('by the clock');
+    expect(pos.detail).toContain('not by speed');
+  });
+
+  it('prices one place, and states the floor everyone keeps', () => {
+    const shape = arrivalFor(7).items.find((i) => i.id === 'arrival-shape')!;
+    // af(6) − af(7) over 100 available, from the engine's own function.
+    expect(shape.text).toMatch(/^One place earlier would have been worth \d+(\.\d)? more points$/);
+    expect(shape.detail).toContain('first place takes all 100 available');
+    expect(shape.detail).toContain('at least');
+  });
+
+  it('says so plainly for the first pilot to ESS, with no counterfactual', () => {
+    const s = arrivalFor(1);
+    expect(s.items.find((i) => i.id === 'arrival-shape')!.text).toContain(
+      'First to the end of the speed section',
+    );
+  });
+
+  // Positions are resolved by array order when timestamps collide, which is
+  // not a fact about the flying — so it must not be presented as one.
+  it('discloses a tie rather than implying an order the data cannot support', () => {
+    const t = Date.UTC(2026, 0, 10, 5, 13, 40);
+    const pos = arrivalFor(7, { essTimeMs: t, tie: true }).items.find(
+      (i) => i.id === 'arrival-position',
+    )!;
+    expect(pos.detail).toContain('same second');
+  });
+
+  it('degrades to the field size when no position was published', () => {
+    const s = arrivalFor(null);
+    expect(s.items.find((i) => i.id === 'arrival-formula')).toBeUndefined();
+    expect(s.items.find((i) => i.id === 'arrival-field')!.text).toContain(
+      '22 pilots reached the end of the speed section',
+    );
+  });
+});

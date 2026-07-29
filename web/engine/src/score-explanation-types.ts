@@ -134,6 +134,12 @@ export interface ScoreEntryInput {
    * input to leading points. Null/absent when leading isn't scored, or on a
    * payload cached before it was published. */
   leading_coefficient?: number | null;
+  /** Position in the ESS arrival order (1-based) — with the size of the ESS
+   * field, the whole input to the §11.4 arrival formula. */
+  arrival_position?: number | null;
+  /** When the pilot reached ESS (epoch ms). What the arrival order is sorted
+   * by: wall-clock time, not speed. */
+  ess_time_ms?: number | null;
 }
 
 /**
@@ -197,6 +203,10 @@ export interface ClassPilotInput {
   arrival_points?: number;
   /** The pilot's leading coefficient (S7F §11.3), lower is better. */
   leading_coefficient?: number | null;
+  /** Position in the ESS arrival order (1-based), or null. */
+  arrival_position?: number | null;
+  /** When the pilot reached ESS (epoch ms), or null — what the order sorts by. */
+  ess_time_ms?: number | null;
   /** Set when a HARD data-quality check withheld this pilot's tracklog: they
    * are seated at 0 and must not be read as a scored result. */
   track_excluded?: { reasons: string[] } | null;

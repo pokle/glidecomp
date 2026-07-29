@@ -360,7 +360,12 @@ good end and where you sat on it is more use than any sentence. Needs
 
 **Arrival points** — the §11.4 cubic, but its domain is *integer arrival position
 at ESS*, so the honest form is a small column chart with your column emphasized,
-not a curve with dots. Lowest value on the list (HG only, small point values).
+not a curve with dots. Now unblocked: `arrival_position` and `ess_time_ms` ship
+per pilot, so the whole order is plottable. Its value went UP once the data
+landed — the seeded Corryong task has the class winner (fastest through the
+speed section by ten minutes) sitting **3rd** on arrival, behind two pilots who
+took an earlier gate. A chart makes that inversion visible in a way the table
+cannot.
 
 ### Where it does *not* work — worth writing down
 
@@ -453,8 +458,10 @@ charts would bury the prose that currently carries it.
 6. ⬜ **The time-points curve** — the single highest-value chart, and it needs no
    payload change either: every pilot's speed-section time and time points are
    already in the class entries on the page
-7. ✅ Leading arithmetic (arrival's is deferred — see §3, the payload carries no
-   ESS arrival position to substitute); ⬜ the leading curve
+7. ✅ Leading arithmetic; ✅ arrival arithmetic (the deferral in §3 is resolved —
+   the scorer's `essPositionMap` was being discarded, so `arrivalPosition` and
+   `essTimeMs` are now published and the §11.4 formula substitutes like every
+   other component); ⬜ the leading curve
 8. ⬜ The distance-points curve, the validity sparklines, the distance distribution
 9. ✅ Task distance + start-crossing reason + ESS/goal collapse; ⬜ the full
    terminology/glossary pass

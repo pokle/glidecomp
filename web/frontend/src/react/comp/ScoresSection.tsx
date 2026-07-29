@@ -12,6 +12,7 @@ import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/ta
 import { Badge } from "@/react/rac/badge";
 import { api } from "../../comp/api";
 import { formatDuration } from "../lib/format";
+import { formatTimeInZone } from "../lib/time";
 import { formatDistance, useUnits } from "../lib/units";
 import { ScoreFreshness } from "./ScoreFreshness";
 import { pilotPath } from "../lib/slug";
@@ -138,6 +139,7 @@ export function ScoresSection({
               taskId={taskId}
               taskName={taskName}
               cls={cls}
+              timezone={timezone}
               showClassName={state.data.classes.length > 1}
               format={state.data.scoring_format === "open_distance" ? "open_distance" : "gap"}
             />
@@ -159,6 +161,7 @@ function ScoreClassTable({
   taskId,
   taskName,
   cls,
+  timezone,
   showClassName,
   format,
 }: {
@@ -166,6 +169,10 @@ function ScoreClassTable({
   taskId: string;
   taskName: string | null;
   cls: ClassScore;
+  /** Comp-local IANA zone. Passed explicitly (never the runtime default) —
+   * this page is server-rendered, so an ESS time formatted in the server's
+   * zone and then the viewer's would be a hydration mismatch. */
+  timezone: string | null;
   showClassName: boolean;
   format: ScoringFormat;
 }) {
@@ -176,6 +183,19 @@ function ScoreClassTable({
   const hasSpeed = cls.pilots.some((p) => p.speed_section_time !== null);
   const hasTimePoints = cls.pilots.some((p) => p.time_points !== 0);
   const hasLeadPoints = cls.pilots.some((p) => p.leading_points !== 0);
+  // Arrival points had no column at all: on an HG comp with arrival on they
+  // were folded silently into Total, so a pilot could not see the component
+  // and the columns visibly failed to add up.
+  const hasArrivalPoints = cls.pilots.some((p) => p.arrival_points !== 0);
+  // The ESS arrival order — the sole input to those points, and the whole
+  // field's copy of it. This table IS the full-field view, so the order
+  // belongs here rather than duplicated into every pilot's report card.
+  const hasArrivalOrder = cls.pilots.some((p) => p.arrival_position != null);
+  // The divisor the arrival formula used — prefer the published count over
+  // counting rows, so the tooltip's "N of M" matches the scorer's own M.
+  const essFieldSize =
+    cls.validity_inputs?.num_reached_ess ??
+    cls.pilots.filter((p) => p.reached_ess).length;
   const hasPenalties = cls.pilots.some((p) => p.penalty_points !== 0);
 
   const v = cls.task_validity;
@@ -209,9 +229,11 @@ function ScoreClassTable({
           {!isOpenDistance ? <Column>Goal</Column> : null}
           <Column className="text-right">Distance</Column>
           {hasSpeed ? <Column className="text-right">Speed</Column> : null}
+          {hasArrivalOrder ? <Column className="text-right">ESS</Column> : null}
           {!isOpenDistance ? <Column className="text-right">Dist Pts</Column> : null}
           {hasTimePoints ? <Column className="text-right">Time Pts</Column> : null}
           {hasLeadPoints ? <Column className="text-right">Lead Pts</Column> : null}
+          {hasArrivalPoints ? <Column className="text-right">Arr Pts</Column> : null}
           {hasPenalties ? <Column>Penalty</Column> : null}
           <Column className="text-right">Total</Column>
         </TableHeader>
@@ -254,6 +276,37 @@ function ScoreClassTable({
                       : "—"}
                   </Cell>
                 ) : null}
+                {hasArrivalOrder ? (
+                  // The arrival order, in the one place that shows the whole
+                  // field at once. Position and clock time together, because
+                  // the order is BY the clock — an earlier start gate can put
+                  // a slower pilot ahead of a faster one, and the two columns
+                  // side by side are what make that visible.
+                  <Cell className="text-right tabular-nums">
+                    {p.arrival_position != null ? (
+                      // Time first — it is the fact — with the position it
+                      // produced in parentheses. A bare margin between the two
+                      // looked fine but ran together in text extraction and
+                      // copy-paste ("317:07:55"), so the separator is real
+                      // characters, not spacing.
+                      <span
+                        title={`Reached the end of the speed section ${p.arrival_position} of ${essFieldSize}`}
+                      >
+                        {p.ess_time_ms != null
+                          ? formatTimeInZone(
+                              new Date(p.ess_time_ms),
+                              timezone ?? undefined
+                            )
+                          : ""}
+                        <span className="ml-1 text-muted-foreground">
+                          (#{p.arrival_position})
+                        </span>
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </Cell>
+                ) : null}
                 {!isOpenDistance ? (
                   <Cell className="text-right tabular-nums">
                     {/* Show the linear/difficulty split as a tooltip when HG
@@ -277,6 +330,11 @@ function ScoreClassTable({
                 {hasLeadPoints ? (
                   <Cell className="text-right tabular-nums">
                     {Math.round(p.leading_points)}
+                  </Cell>
+                ) : null}
+                {hasArrivalPoints ? (
+                  <Cell className="text-right tabular-nums">
+                    {Math.round(p.arrival_points)}
                   </Cell>
                 ) : null}
                 {hasPenalties ? (

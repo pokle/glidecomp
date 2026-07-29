@@ -83,6 +83,20 @@ export interface PilotScoreEntry {
    */
   leading_coefficient: number | null;
   /**
+   * Where the pilot came in the ESS arrival order (1-based) — with
+   * `validity_inputs.num_reached_ess`, the whole input to the §11.4 arrival
+   * formula. Null when arrival isn't scored or the pilot never reached ESS.
+   */
+  arrival_position: number | null;
+  /**
+   * When the pilot reached the end of the speed section (epoch ms), or null.
+   * This is what the arrival order is sorted by — WALL-CLOCK time, not speed
+   * — so publishing it lets a reader check the order rather than trust it,
+   * and makes a tie visible instead of implying an order the data can't
+   * support.
+   */
+  ess_time_ms: number | null;
+  /**
    * Set when this pilot's tracklog failed a HARD data-quality check
    * (track-quality.ts) and was withheld from scoring: they hold a place in
    * the standings at 0 rather than vanishing from the results. Null for every
@@ -540,6 +554,8 @@ function excludedPilotEntry(
     jump_the_gun_penalty: null,
     stopped_altitude_bonus: null,
     leading_coefficient: null,
+    arrival_position: null,
+    ess_time_ms: null,
     track_excluded: { reasons: excluded.reasons },
   };
 }
@@ -620,6 +636,8 @@ function buildClassScore(
       Number.isFinite(p.pilotScore.leadingCoefficient)
         ? p.pilotScore.leadingCoefficient
         : null,
+    arrival_position: p.pilotScore.arrivalPosition ?? null,
+    ess_time_ms: p.pilotScore.essTimeMs ?? null,
     track_excluded: null,
   }));
 

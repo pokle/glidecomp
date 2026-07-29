@@ -173,6 +173,13 @@ export interface PilotScoreEntry {
    * input to leading points. Null when leading isn't scored; absent on
    * payloads cached before it was published. */
   leading_coefficient?: number | null;
+  /** Position in the ESS arrival order (1-based) — with the ESS field size,
+   * the whole input to the §11.4 arrival formula. Null when arrival isn't
+   * scored or the pilot never reached ESS; absent on older payloads. */
+  arrival_position?: number | null;
+  /** When the pilot reached ESS (epoch ms). What the arrival order sorts by:
+   * wall-clock time, not speed. */
+  ess_time_ms?: number | null;
   /** Set when a HARD data-quality check withheld this pilot's tracklog from
    * scoring: they hold a place in the standings at 0 rather than vanishing.
    * Null/absent for every normally-scored pilot. */
