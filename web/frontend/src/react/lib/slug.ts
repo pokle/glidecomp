@@ -91,6 +91,15 @@ export function compScoresPath(id: string, name?: string | null): string {
   return `${compPath(id, name)}/scores`;
 }
 
+/**
+ * The scores page's CSV twin (served by the SSR Pages Function, not the SPA).
+ * A real, shareable URL rather than a blob: a spreadsheet can pull from it —
+ * see the "Open in Google Sheets" flow — and it works with JS off.
+ */
+export function compScoresCsvPath(id: string, name?: string | null): string {
+  return `${compScoresPath(id, name)}.csv`;
+}
+
 export function compWaypointsPath(id: string, name?: string | null): string {
   return `${compPath(id, name)}/waypoints`;
 }

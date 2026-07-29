@@ -4,6 +4,7 @@ import {
   compScoresPath,
   compAnalysisPath,
 } from "../web/frontend/src/react/lib/slug";
+import { SCORES_CSV_COLUMNS } from "../web/frontend/src/scores-csv";
 import { SAMPLE_COMP_NAME } from "../web/workers/competition-api/src/sample";
 
 /**
@@ -136,6 +137,31 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
       new RegExp(`/comp/[a-z0-9-]+-${compId}/task/[a-z0-9-]+-${taskId}/pilot/[a-z0-9-]+-${pilotId}`)
     );
     expect(html).toContain(`<title>Scores — ${compName} — GlideComp</title>`);
+  });
+
+  test("/comp/:id/scores.csv serves the standings as long-form CSV", async ({ request }) => {
+    const { compId, compName, taskId, pilotId, pilotName } = await discover(request);
+    const res = await request.get(`/comp/${compId}/scores.csv`);
+    expect(res.ok()).toBeTruthy();
+    expect(res.headers()["content-type"]).toContain("text/csv");
+    expect(res.headers()["content-disposition"]).toContain(".csv");
+    // Never indexed — the page is the indexable form of this data.
+    expect(res.headers()["x-robots-tag"]).toContain("noindex");
+
+    const [header, ...rows] = (await res.text()).trim().split("\n");
+    expect(header).toBe(SCORES_CSV_COLUMNS.join(","));
+    // Long form: one row per pilot per task, so the leading pilot has a row
+    // naming a task rather than a column per task.
+    const pilotRows = rows.filter((r) => r.includes(pilotId));
+    expect(pilotRows.length).toBeGreaterThan(0);
+    expect(pilotRows.some((r) => r.includes(taskId))).toBeTruthy();
+    expect(rows.some((r) => r.includes(pilotName))).toBeTruthy();
+    expect(rows.every((r) => r.includes(compName) || r.includes(`"${compName}"`))).toBeTruthy();
+  });
+
+  test("a missing comp's scores.csv is a 404, not an empty file", async ({ request }) => {
+    const res = await request.get("/comp/zzznope/scores.csv", { failOnStatusCode: false });
+    expect(res.status()).toBe(404);
   });
 
   test("task page shows the route and per-class scores", async ({ request }) => {

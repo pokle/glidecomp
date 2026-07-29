@@ -4,6 +4,8 @@ import { readFileSync, existsSync, cpSync } from 'fs';
 import { execSync } from 'child_process';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { buildScoresCsv, scoresCsvFilename, type ScoresCsvInput } from './src/scores-csv';
+import { idFromSegment } from './src/react/lib/slug';
 
 // Where /api/* is proxied in dev: the dev-router Worker started by
 // `bun run dev:workers` (all Workers, one wrangler session — see
@@ -39,6 +41,53 @@ function workersCheck(): Plugin {
           `\n    • Start them:  bun run dev:workers   (or just \`bun run dev\`)\n`
         );
       })();
+    },
+  };
+}
+
+/**
+ * Dev stand-in for the /comp/:id/scores.csv Pages Function
+ * (functions/comp/[[path]].ts). Dev serves no Functions, so without this the
+ * scores page's Download → CSV link 404s on :3000 — and a link that only works
+ * in production is a link nobody tests. Same builder, same bytes; the visitor's
+ * cookie is forwarded so a hidden comp behaves as it does in prod.
+ */
+function scoresCsvDev(): Plugin {
+  return {
+    name: 'scores-csv-dev',
+    configureServer(server) {
+      server.middlewares.use((req: Connect.IncomingMessage, res: any, next) => {
+        const match = (req.url?.split('?')[0] ?? '').match(/^\/comp\/([^/]+)\/scores\.csv$/);
+        if (!match) return next();
+        const compId = idFromSegment(match[1]);
+        const headers = req.headers.cookie ? { cookie: req.headers.cookie } : undefined;
+        void (async () => {
+          try {
+            const [compRes, scoresRes] = await Promise.all([
+              fetch(`${DEV_API_ORIGIN}/api/comp/${compId}`, { headers }),
+              fetch(`${DEV_API_ORIGIN}/api/comp/${compId}/scores`, { headers }),
+            ]);
+            if (!compRes.ok) {
+              res.statusCode = compRes.status === 404 || compRes.status === 400 ? 404 : 502;
+              res.end('Competition not found\n');
+              return;
+            }
+            const comp = (await compRes.json()) as { name: string };
+            const scores = scoresRes.ok
+              ? ((await scoresRes.json()) as ScoresCsvInput)
+              : { comp_id: compId, tasks: [], standings: [] };
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader(
+              'Content-Disposition',
+              `attachment; filename="${scoresCsvFilename(comp.name)}"`
+            );
+            res.end(buildScoresCsv(scores, comp.name));
+          } catch {
+            res.statusCode = 502;
+            res.end(`API Workers not reachable at ${DEV_API_ORIGIN}\n`);
+          }
+        })();
+      });
     },
   };
 }
@@ -172,6 +221,7 @@ export default defineConfig({
     tailwindcss(),
     react(),
     workersCheck(),
+    scoresCsvDev(),
     sampleCompFiles(),
     copySampleComps(),
     {

@@ -27,6 +27,7 @@ import {
   useCompScores,
 } from "../comp/CompScoresSection";
 import { ScoreFreshness } from "../comp/ScoreFreshness";
+import { ScoresDownload } from "../comp/ScoresDownload";
 import { fetchWithRetry, type CompDetailData } from "../comp/types";
 import { useInitialData } from "../lib/initial-data";
 import type { CompScoresLoaderData } from "../loaders";
@@ -115,16 +116,21 @@ export function CompScoresPage() {
           <h1 className="text-2xl font-bold">Scores</h1>
           <p className="text-sm text-muted-foreground">{comp.name}</p>
         </div>
-        {isAdmin && state.kind === "ready" && state.scores.standings.length > 0 ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onPress={() => void rescore()}
-            isPending={rescoring}
-            pendingLabel="Re-scoring"
-          >
-            Recompute scores
-          </Button>
+        {state.kind === "ready" && state.scores.standings.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <ScoresDownload compId={compId} compName={comp.name} isTestComp={comp.test} />
+            {isAdmin ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onPress={() => void rescore()}
+                isPending={rescoring}
+                pendingLabel="Re-scoring"
+              >
+                Recompute scores
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </div>
 

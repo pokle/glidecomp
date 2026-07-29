@@ -28,8 +28,10 @@
  *   always-ascending.
  */
 import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { test, expect, type Page } from "@playwright/test";
 import { FRONTEND_URL, SUPER_ADMIN } from "./fixtures/stack";
+import { compScoresCsvPath } from "../web/frontend/src/react/lib/slug";
 
 const BASE_URL = FRONTEND_URL;
 const COMP_NAME = "Corryong Cup 2026";
@@ -225,6 +227,49 @@ test("scores page: class tabs, top 3, results-by-task select, sorting", async ({
     panel.getByRole("grid", { name: `Scores — ${defaultClass}` })
   ).toHaveCount(0);
   await expect(swapped.locator("tbody tr").first()).toBeVisible();
+});
+
+test("scores page: Download menu saves a long-form CSV and offers the Sheets formula", async ({
+  page,
+}) => {
+  await page.goto(`/comp/${compId}/scores`);
+  const download = page.getByRole("button", { name: "Download" });
+  await expect(download).toBeVisible({ timeout: 15_000 });
+
+  // ── The CSV item is a real link, so this is a browser download, not a blob.
+  await download.click();
+  const [file] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("menuitem", { name: "CSV spreadsheet" }).click(),
+  ]);
+  expect(file.suggestedFilename()).toMatch(/\.csv$/);
+  const saved = await file.path();
+  const [header, ...rows] = readFileSync(saved, "utf-8").trim().split("\n");
+  // Long form: ONE score column and a task column — not a column per task.
+  expect(header.split(",")).toContain("task");
+  expect(header.split(",")).toContain("score");
+  expect(header).not.toContain(comp.tasks[0].name);
+  const columns = header.split(",").length;
+  expect(rows.length).toBeGreaterThan(1);
+  for (const row of rows.slice(0, 20)) {
+    // Quoted cells may hold commas; count only the separators outside quotes.
+    expect(row.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)).toHaveLength(columns);
+  }
+
+  // ── The Sheets route hands over an IMPORTDATA formula for the same URL.
+  await download.click();
+  await page.getByRole("menuitem", { name: /Google Sheets/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Open in Google Sheets" });
+  await expect(dialog).toBeVisible();
+  // The address bar has settled on the canonical `${slug}-${id}` by now, so
+  // the formula quotes that URL rather than the bare-id one we navigated to.
+  await expect(dialog.locator("code")).toHaveText(
+    `=IMPORTDATA("${BASE_URL}${compScoresCsvPath(compId, comp.name)}")`
+  );
+  // Escape closes it and focus returns to the button that opened the menu.
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(download).toBeFocused();
 });
 
 test("pilots page: read-only grid, Tabulator editor, list-editor popup, cancel discards", async ({
