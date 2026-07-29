@@ -9,6 +9,8 @@ import type { ClassStanding, PilotStanding, TaskInfo } from "./scores-views";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
+const ORIGIN = "https://glidecomp.test";
+
 function task(id: string, name: string, date = "2026-01-01"): TaskInfo {
   return { task_id: id, task_name: name, task_date: date, classes: ["open"] };
 }
@@ -67,7 +69,7 @@ describe("buildScoresCsv", () => {
         ],
         [task("t1", "Task 1"), task("t2", "Task 2", "2026-01-02")]
       ),
-      "Test Cup"
+      { compName: "Test Cup", origin: ORIGIN }
     );
 
     const lines = csv.trimEnd().split("\n");
@@ -79,7 +81,6 @@ describe("buildScoresCsv", () => {
     expect(row[SCORES_CSV_COLUMNS.indexOf("pilot_name")]).toBe("Ada");
     expect(row[SCORES_CSV_COLUMNS.indexOf("comp_pilot_id")]).toBe("p1");
     expect(row[SCORES_CSV_COLUMNS.indexOf("task")]).toBe("Task 1");
-    expect(row[SCORES_CSV_COLUMNS.indexOf("task_id")]).toBe("t1");
     expect(row[SCORES_CSV_COLUMNS.indexOf("score")]).toBe("900");
     expect(row[SCORES_CSV_COLUMNS.indexOf("task_rank")]).toBe("1");
     expect(row[SCORES_CSV_COLUMNS.indexOf("pilot_total_score")]).toBe("1650");
@@ -88,6 +89,51 @@ describe("buildScoresCsv", () => {
     for (const line of lines) {
       expect(cells(line)).toHaveLength(SCORES_CSV_COLUMNS.length);
     }
+  });
+
+  test("links every row back to the comp, the task and the score explanation", () => {
+    const csv = buildScoresCsv(
+      scores(
+        [
+          {
+            pilot_class: "open",
+            pilots: [pilot("Ada Lovelace", "p1", [{ task: "t1", score: 900, rank: 1 }])],
+          },
+        ],
+        [task("t1", "Task 1")]
+      ),
+      { compName: "Test Cup", origin: ORIGIN }
+    );
+    const row = cells(csv.trimEnd().split("\n")[1]);
+    // Canonical `${slug}-${id}` at every level — the same URLs the site serves.
+    expect(row[SCORES_CSV_COLUMNS.indexOf("comp_url")]).toBe(
+      `${ORIGIN}/comp/test-cup-abc`
+    );
+    expect(row[SCORES_CSV_COLUMNS.indexOf("task_url")]).toBe(
+      `${ORIGIN}/comp/test-cup-abc/task/task-1-t1`
+    );
+    expect(row[SCORES_CSV_COLUMNS.indexOf("score_url")]).toBe(
+      `${ORIGIN}/comp/test-cup-abc/task/task-1-t1/pilot/ada-lovelace-p1`
+    );
+    // The id is still in the cell — the URL ends in it — so it stays a key.
+    expect(row[SCORES_CSV_COLUMNS.indexOf("comp_pilot_id")]).toBe("p1");
+  });
+
+  test("an empty origin yields site-relative links, not '//' or 'undefined'", () => {
+    const csv = buildScoresCsv(
+      scores(
+        [
+          {
+            pilot_class: "open",
+            pilots: [pilot("Ada", "p1", [{ task: "t1", score: 900, rank: 1 }])],
+          },
+        ],
+        [task("t1", "Task 1")]
+      ),
+      { compName: "Test Cup", origin: "" }
+    );
+    const row = cells(csv.trimEnd().split("\n")[1]);
+    expect(row[SCORES_CSV_COLUMNS.indexOf("comp_url")]).toBe("/comp/test-cup-abc");
   });
 
   test("orders a pilot's rows by the comp's task order, not the pilot's", () => {
@@ -106,7 +152,7 @@ describe("buildScoresCsv", () => {
         ],
         [task("t1", "Task 1"), task("t2", "Task 2")]
       ),
-      "Test Cup"
+      { compName: "Test Cup", origin: ORIGIN }
     );
     const taskCol = SCORES_CSV_COLUMNS.indexOf("task");
     const names = csv.trimEnd().split("\n").slice(1).map((l) => cells(l)[taskCol]);
@@ -126,7 +172,7 @@ describe("buildScoresCsv", () => {
 
     const csv = buildScoresCsv(
       scores([{ pilot_class: "open", pilots: [p] }], [task("t1", "T1"), task("t2", "T2")]),
-      "Test Cup"
+      { compName: "Test Cup", origin: ORIGIN }
     );
     const rows = csv.trimEnd().split("\n").slice(1).map(cells);
     const counted = SCORES_CSV_COLUMNS.indexOf("counted_score");
@@ -140,7 +186,7 @@ describe("buildScoresCsv", () => {
   test("keeps a pilot with no scored task, with empty task cells", () => {
     const csv = buildScoresCsv(
       scores([{ pilot_class: "open", pilots: [pilot("Ada", "p1", [])] }], []),
-      "Test Cup"
+      { compName: "Test Cup", origin: ORIGIN }
     );
     const rows = csv.trimEnd().split("\n").slice(1).map(cells);
     expect(rows).toHaveLength(1);
@@ -163,7 +209,7 @@ describe("buildScoresCsv", () => {
         ],
         [task("t1", "Task 1, day one")]
       ),
-      "Test Cup"
+      { compName: "Test Cup", origin: ORIGIN }
     );
     const lines = csv.trimEnd().split("\n");
     expect(lines[1]).toContain('"Smith, ""Ace"""');
@@ -182,7 +228,7 @@ describe("buildScoresCsv", () => {
         ],
         [task("t1", "Task 1")]
       ),
-      "Test Cup"
+      { compName: "Test Cup", origin: ORIGIN }
     );
     const row = cells(csv.trimEnd().split("\n")[1]);
     expect(row[SCORES_CSV_COLUMNS.indexOf("score")]).toBe("900");

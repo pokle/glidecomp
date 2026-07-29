@@ -11,16 +11,23 @@
  *
  * The pilot-level facts (rank, competition total) repeat on each of that
  * pilot's rows, so a pivot aggregates them with MAX/AVERAGE rather than SUM.
- * `counted_score` is the FTV-aware measure: under FTV it is what the task
- * actually contributed to the total (0 for a discarded task), and under plain
- * total scoring it equals `score` — so SUM(counted_score) per pilot reproduces
- * the published total either way.
+ * `counted_score` is the per-TASK FTV-aware measure: under FTV it is what that
+ * task actually contributed to the total (0 for a discarded task), and under
+ * plain total scoring it equals `score` — so SUM(counted_score) over a pilot's
+ * rows reproduces their `pilot_total_score` either way.
  *
- * PURE (no React, no DOM) so both the download button and the Pages Function
- * that serves /comp/:id/scores.csv build the exact same bytes.
+ * Ids appear as fully-qualified URLs, not bare sqids: a `wuhu` in a cell tells
+ * a reader nothing and takes them nowhere, while the URL is both the identity
+ * (it ends in that same id) and the way back to the page it names. The one
+ * bare id kept is `comp_pilot_id` — it is what makes "group by pilot" safe
+ * when two pilots share a name, and unlike the others it has no page of its
+ * own (a pilot's page exists per task, which is `score_url`).
+ *
+ * PURE (no React, no DOM) so both the Pages Function that serves
+ * /comp/:id/scores.csv and its dev-server mirror build the exact same bytes.
  */
 import type { ClassStanding, TaskInfo } from "./scores-views";
-import { slugify } from "./react/lib/slug";
+import { compPath, pilotPath, slugify, taskPath } from "./react/lib/slug";
 
 /** The `/api/comp/:id/scores` fields this needs — CompScores satisfies it. */
 export interface ScoresCsvInput {
@@ -29,23 +36,38 @@ export interface ScoresCsvInput {
   standings: ClassStanding[];
 }
 
+export interface ScoresCsvOptions {
+  compName: string;
+  /**
+   * Origin the URL columns are absolute against, no trailing slash (e.g.
+   * "https://glidecomp.com"). Pass the serving request's own origin so a
+   * preview deploy's export links back to the preview. "" yields site-relative
+   * paths, which are still valid — just not clickable out of a spreadsheet.
+   */
+  origin: string;
+}
+
 export const SCORES_CSV_COLUMNS = [
   "competition",
-  "comp_id",
+  "comp_url",
   "pilot_class",
   "pilot_name",
   "comp_pilot_id",
   "team",
   "task",
-  "task_id",
+  "task_url",
   "task_date",
   "score",
   "task_rank",
   "counted_score",
   "ftv_status",
+  "score_url",
   "pilot_rank",
   "pilot_total_score",
 ] as const;
+
+/** Blank task-side cells for a pilot with nothing scored yet. */
+const EMPTY_TASK_CELLS = ["", "", "", "", "", "", "", ""];
 
 /**
  * Serialise the whole-comp standings as one long CSV: every class, every
@@ -55,15 +77,20 @@ export const SCORES_CSV_COLUMNS = [
  * A pilot with no scored task still gets a row — with the task columns empty —
  * because a roster that silently loses people is worse than a blank cell.
  */
-export function buildScoresCsv(scores: ScoresCsvInput, compName: string): string {
-  const taskNameById = new Map(scores.tasks.map((t) => [t.task_id, t.task_name]));
+export function buildScoresCsv(
+  scores: ScoresCsvInput,
+  { compName, origin }: ScoresCsvOptions
+): string {
+  const taskById = new Map(scores.tasks.map((t) => [t.task_id, t]));
+  const url = (path: string) => `${origin}${path}`;
+  const compUrl = url(compPath(scores.comp_id, compName));
   const lines = [SCORES_CSV_COLUMNS.join(",")];
 
   for (const cls of scores.standings) {
     for (const pilot of cls.pilots) {
       const pilotCells = [
         compName,
-        scores.comp_id,
+        compUrl,
         cls.pilot_class,
         pilot.pilot_name,
         pilot.comp_pilot_id,
@@ -72,7 +99,7 @@ export function buildScoresCsv(scores: ScoresCsvInput, compName: string): string
       const tail = [pilot.rank, Math.round(pilot.total_score)];
 
       if (pilot.tasks.length === 0) {
-        lines.push([...pilotCells, "", "", "", "", "", "", "", ...tail].map(csvEscape).join(","));
+        lines.push([...pilotCells, ...EMPTY_TASK_CELLS, ...tail].map(csvEscape).join(","));
         continue;
       }
 
@@ -82,20 +109,33 @@ export function buildScoresCsv(scores: ScoresCsvInput, compName: string): string
       const ordered = [
         ...scores.tasks.map((t) => byId.get(t.task_id)).filter((t) => t != null),
         // Anything the tasks list doesn't name (shouldn't happen) still ships.
-        ...pilot.tasks.filter((t) => !taskNameById.has(t.task_id)),
+        ...pilot.tasks.filter((t) => !taskById.has(t.task_id)),
       ];
 
       for (const entry of ordered) {
+        // A task the standings name but the task list doesn't can still be
+        // linked — the slug is decorative, the id is the identity.
+        const taskName = taskById.get(entry.task_id)?.task_name ?? "";
         lines.push(
           [
             ...pilotCells,
-            taskNameById.get(entry.task_id) ?? entry.task_id,
-            entry.task_id,
+            taskName || entry.task_id,
+            url(taskPath(scores.comp_id, compName, entry.task_id, taskName)),
             entry.task_date,
             Math.round(entry.score),
             entry.rank,
             Math.round(entry.ftv_counted_score ?? entry.score),
             entry.ftv_status ?? "",
+            url(
+              pilotPath(
+                scores.comp_id,
+                compName,
+                entry.task_id,
+                taskName,
+                pilot.comp_pilot_id,
+                pilot.pilot_name
+              )
+            ),
             ...tail,
           ]
             .map(csvEscape)

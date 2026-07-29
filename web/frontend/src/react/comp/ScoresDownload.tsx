@@ -116,7 +116,8 @@ export function ScoresDownload({
 
           <p className="text-sm text-muted-foreground">
             One row per pilot per task, with the task in its own column — ready
-            to pivot by pilot, task, class or team.
+            to pivot by pilot, task, class or team, and every row links back to
+            the score it came from.
           </p>
 
           <DialogFooter>

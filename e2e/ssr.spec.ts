@@ -157,6 +157,13 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(pilotRows.some((r) => r.includes(taskId))).toBeTruthy();
     expect(rows.some((r) => r.includes(pilotName))).toBeTruthy();
     expect(rows.every((r) => r.includes(compName) || r.includes(`"${compName}"`))).toBeTruthy();
+
+    // The link columns are absolute against THIS origin (so a preview
+    // deployment's export stays inside the preview) and they resolve.
+    const cells = pilotRows[0].split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+    const scoreUrl = cells[SCORES_CSV_COLUMNS.indexOf("score_url")];
+    expect(scoreUrl).toContain(`${new URL(res.url()).origin}/comp/`);
+    expect((await request.get(scoreUrl)).status()).toBe(200);
   });
 
   test("a missing comp's scores.csv is a 404, not an empty file", async ({ request }) => {

@@ -387,7 +387,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   // The scores page's CSV twin — a real URL, not a client-side blob, so it can
   // be linked, curl'd and pulled into a spreadsheet (Google Sheets IMPORTDATA).
   const csvMatch = path.match(SCORES_CSV_PATTERN);
-  if (csvMatch) return scoresCsv(env, csvMatch[1], cookie);
+  if (csvMatch) return scoresCsv(env, csvMatch[1], cookie, url.origin);
 
   const match = ROUTES.map((r) => ({ r, m: path.match(r.pattern) })).find((x) => x.m);
   // Not one of the SSR routes. Valid SPA-only /comp routes (the pilots roster,
@@ -467,11 +467,16 @@ const SCORES_CSV_PATTERN = /^\/comp\/([^/]+)\/scores\.csv$/;
  * JS off. The visitor's cookie is forwarded like everywhere else here, so an
  * admin can export a `test` comp and everyone else gets its 404. Never
  * indexed — it is the page's data, and the page is the indexable form.
+ *
+ * The file's link columns are absolute against THIS request's origin, so an
+ * export taken from a preview deployment links back into that deployment
+ * rather than quietly sending the reader to production.
  */
 async function scoresCsv(
   env: Env,
   segment: string,
-  cookie: string | null
+  cookie: string | null,
+  origin: string
 ): Promise<Response> {
   const compId = idFromSegment(segment);
   let data: Awaited<ReturnType<typeof loadCompScores>>;
@@ -485,10 +490,10 @@ async function scoresCsv(
 
   // No scored task yet → the header row alone. An empty export is a truthful
   // answer; an error would make a legitimate URL look broken.
-  const csv = buildScoresCsv(
-    data.scores ?? { comp_id: compId, tasks: [], standings: [] },
-    data.comp.name
-  );
+  const csv = buildScoresCsv(data.scores ?? { comp_id: compId, tasks: [], standings: [] }, {
+    compName: data.comp.name,
+    origin,
+  });
   return new Response(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

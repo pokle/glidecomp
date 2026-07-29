@@ -81,7 +81,13 @@ function scoresCsvDev(): Plugin {
               'Content-Disposition',
               `attachment; filename="${scoresCsvFilename(comp.name)}"`
             );
-            res.end(buildScoresCsv(scores, comp.name));
+            res.end(
+              buildScoresCsv(scores, {
+                compName: comp.name,
+                // Same rule as the Function: link back to where this came from.
+                origin: `http://${req.headers.host ?? 'localhost:3000'}`,
+              })
+            );
           } catch {
             res.statusCode = 502;
             res.end(`API Workers not reachable at ${DEV_API_ORIGIN}\n`);

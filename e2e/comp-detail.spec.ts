@@ -249,12 +249,21 @@ test("scores page: Download menu saves a long-form CSV and offers the Sheets for
   expect(header.split(",")).toContain("task");
   expect(header.split(",")).toContain("score");
   expect(header).not.toContain(comp.tasks[0].name);
-  const columns = header.split(",").length;
+  const columns = header.split(",");
   expect(rows.length).toBeGreaterThan(1);
+  // Quoted cells may hold commas; split only on separators outside quotes.
+  const split = (row: string) => row.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
   for (const row of rows.slice(0, 20)) {
-    // Quoted cells may hold commas; count only the separators outside quotes.
-    expect(row.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)).toHaveLength(columns);
+    expect(split(row)).toHaveLength(columns.length);
   }
+
+  // ── Ids ship as absolute URLs back into the site, and they resolve.
+  const first = split(rows[0]);
+  const cell = (name: string) => first[columns.indexOf(name)];
+  for (const name of ["comp_url", "task_url", "score_url"]) {
+    expect(cell(name), name).toMatch(new RegExp(`^${BASE_URL}/comp/`));
+  }
+  expect((await page.request.get(cell("score_url"))).status()).toBe(200);
 
   // ── The Sheets route hands over an IMPORTDATA formula for the same URL.
   await download.click();
