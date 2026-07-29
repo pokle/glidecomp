@@ -86,7 +86,13 @@ import {
   pilotPath,
   taskPath,
 } from '../frontend/src/react/lib/slug';
-import { matchExisting, pilotKey, taskSeedName } from './lib/seed-identity';
+import {
+  buildTrackedNameIndex,
+  matchExisting,
+  pilotKey,
+  taskSeedName,
+  trackLessPilotKey,
+} from './lib/seed-identity';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 /** Comp-folder root — override with GLIDECOMP_COMPS_DIR to seed from a
@@ -773,6 +779,12 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
   console.log(`  timezone ${tzOut.value ?? 'unresolved'}`);
 
   // One comp_pilot row per (class, pilot). First-seen name/id wins within a key.
+  //
+  // Two passes, because the two sources identify a pilot differently: an IGC
+  // filename carries their federation id, a published result row carries only a
+  // name. Every tracked pilot registers FIRST, so a track-less row can then join
+  // the row its own tracked days already have (buildTrackedNameIndex) instead of
+  // minting a second one for the same person. See seed-identity.ts.
   interface RegPilot { name: string; id: string | null; pilotClass: string }
   const registry = new Map<string, RegPilot>();
   for (const t of tasks) {
@@ -782,19 +794,32 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
         registry.set(key, { name: p.name, id: p.id, pilotClass: t.pilotClass });
       }
     }
-    // Track-less published pilots register too (keyed by name — the published
-    // rows carry no federation id).
+  }
+  const trackedByName = buildTrackedNameIndex(registry.values());
+  /** The comp_pilot a track-less published row belongs to (see seed-identity). */
+  const trackLessKey = (pilotClass: string, name: string) =>
+    trackLessPilotKey(pilotClass, name, trackedByName);
+  let merged = 0;
+  for (const t of tasks) {
     for (const p of t.trackless) {
-      const key = pilotKey(t.pilotClass, null, p.name);
-      if (!registry.has(key)) {
-        registry.set(key, { name: p.name, id: null, pilotClass: t.pilotClass });
+      const key = trackLessKey(t.pilotClass, p.name);
+      if (registry.has(key)) {
+        if (key !== pilotKey(t.pilotClass, null, p.name)) merged++;
+        continue;
       }
+      registry.set(key, { name: p.name, id: null, pilotClass: t.pilotClass });
     }
   }
   const perClass = manifest.classes
     .map((c) => `${c}: ${[...registry.values()].filter((p) => p.pilotClass === c).length}`)
     .join(', ');
   console.log(`  ${registry.size} pilot registrations (${perClass})`);
+  if (merged > 0) {
+    console.log(
+      `  ${merged} track-less published row(s) joined a pilot's own registration ` +
+        `(no tracklog that day — they are not a second pilot)`,
+    );
+  }
 
   const now = new Date().toISOString();
   const today = now.slice(0, 10);
@@ -1060,9 +1085,12 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
     const uploads: Array<{ key: string; gz: Buffer }> = [];
     const trackInserts: string[] = [];
     const scoredPilots: SeededTask['pilots'] = [];
+    /** comp_pilots with a real track in THIS task — see the track-less loop. */
+    const withTrack = new Set<number>();
     for (const p of t.pilots) {
       const compPilotId = cpByKey.get(pilotKey(t.pilotClass, p.id, p.name));
       if (compPilotId === undefined) continue;
+      withTrack.add(compPilotId);
       scoredPilots.push({ compPilotId, name: p.name });
       const key = `c/${compId}/t/${taskId}/${compPilotId}.igc`;
       uploads.push({ key, gz: p.gz });
@@ -1084,9 +1112,20 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
     // flight landed at the published distance along the optimised route
     // (+ a landed status), so the seeded field — and with it every pilot's
     // validity-scaled points — matches the field AirScore scored.
+    let duplicateRows = 0;
     for (const p of t.trackless) {
-      const compPilotId = cpByKey.get(pilotKey(t.pilotClass, null, p.name));
+      const compPilotId = cpByKey.get(trackLessKey(t.pilotClass, p.name));
       if (compPilotId === undefined) continue;
+      // The pilot already has a real tracklog for this task, so this published
+      // row is a duplicate registration of theirs, not a second flight (AirScore
+      // lists Christopher Sutton twice in Corryong 2026 floater T1 — once with a
+      // glider and a track, once blank at 0.01 km). Seeding it anyway would
+      // write a second flight + status for one comp_pilot in one task and trip
+      // the UNIQUE(task_id, comp_pilot_id) index.
+      if (withTrack.has(compPilotId)) {
+        duplicateRows++;
+        continue;
+      }
       scoredPilots.push({ compPilotId, name: p.name });
       if (p.kind === 'dnf') {
         trackInserts.push(
@@ -1110,9 +1149,14 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
     await store.exec(trackInserts);
     seededTasks.push({ taskId, taskName, pilots: scoredPilots });
     totalTracks += uploads.length;
-    const extras = t.trackless.length > 0 ? `, ${t.trackless.length} track-less published pilot(s)` : '';
+    const seededTrackLess = t.trackless.length - duplicateRows;
+    const extras = seededTrackLess > 0 ? `, ${seededTrackLess} track-less published pilot(s)` : '';
+    const dupes =
+      duplicateRows > 0
+        ? `, ${duplicateRows} duplicate published row(s) skipped (pilot already has a track here)`
+        : '';
     const how = reusedTaskId !== undefined ? 'rebuilt' : 'created';
-    console.log(`  ${how} ${taskName}: task_id=${taskId}, ${uploads.length} tracks${extras}`);
+    console.log(`  ${how} ${taskName}: task_id=${taskId}, ${uploads.length} tracks${extras}${dupes}`);
   }
 
   console.log(
